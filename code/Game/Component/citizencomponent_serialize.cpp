@@ -72,6 +72,10 @@
 // All scalar/Time/Bool/IBP primitives come from the shared engine_funcs.h globals
 // already initialized at startup.
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Mesh.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "Game/serialize_externals.h"
@@ -133,15 +137,10 @@ void ResizeCitizenExternalArray(int64_t* header, int newCount) {
         fn_MemFreeStatic(oldPtr);
 }
 
-typedef void (*fn_MeshInstance_Serialize_t)(void* meshInstance, void* serializer);
-fn_MeshInstance_Serialize_t s_fn_MeshInstance_Serialize = nullptr;
 bool s_resolved = false;
 
 void Resolve() {
     if (s_resolved) return;
-    void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152990));
-    if (slot && *slot)
-        s_fn_MeshInstance_Serialize = reinterpret_cast<fn_MeshInstance_Serialize_t>(*slot);
     s_resolved = true;
 }
 

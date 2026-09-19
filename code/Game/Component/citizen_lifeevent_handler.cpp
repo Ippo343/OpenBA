@@ -35,6 +35,10 @@
 // Retail callers of 0x140116dd0: CitizenComponent_Update (6 CALL sites) — already
 // resolving through the registry (citizencomponent.cpp s_fn_HandleLifeEvent).
 
+// graphics/Geometry.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Geometry.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
@@ -278,9 +282,8 @@ extern "C" void Entity_PlaceAtCell_7b20(void* tombCompV, int cell, float yawDeg)
     Math::Transform xform = Math::Transform::FromYawPitchOffset(yawF, pitch, terr);
     *reinterpret_cast<Math::Transform*>(modelIBP + 0x148) = xform;   // B.3.1 bridge (7-dword copy)
     *reinterpret_cast<float*>(modelIBP + 0x168) = yawDeg;
-    if (fn_Geometry_SetTransform)
-        fn_Geometry_SetTransform(reinterpret_cast<void*>(modelIBP + 0x28),
-                                 reinterpret_cast<void*>(modelIBP + 0x148));
+    reinterpret_cast<Graphics::Geometry*>(modelIBP + 0x28)
+        ->SetTransform(*reinterpret_cast<const Math::Transform*>(modelIBP + 0x148));   // B.3.5 bridge
 }
 
 // ---------------------------------------------------------------- 0x140046a90

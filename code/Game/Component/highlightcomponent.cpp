@@ -13,6 +13,10 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+// graphics/Scene.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Scene.h"
 #include "Component/highlightcomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -29,24 +33,14 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// Graphics::Scene::RemoveObject(scene, objectId) -- dispatch slot at 0x140151360
-typedef void (*fn_Scene_RemoveObject_t)(void* scene, uint32_t objectId);
-static fn_Scene_RemoveObject_t s_fn_Scene_RemoveObject = nullptr;
-
 #include <cstdlib>
 static bool s_initialized = false;
 
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    uintptr_t slot;
-
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    slot = ResolveAddr(Module::Exe, 0x140151360);
-    if (slot) s_fn_Scene_RemoveObject = reinterpret_cast<fn_Scene_RemoveObject_t>(
-        *reinterpret_cast<uintptr_t*>(slot));
 
     s_initialized = true;
 }
@@ -131,10 +125,10 @@ static void HighlightComponent_OnRemovedFromWorld(void* self) {
     if (*reinterpret_cast<void**>(s + 0x28) == nullptr) return;
     int32_t sceneId = *reinterpret_cast<int32_t*>(s + 0x120);
     if (sceneId < 0) return;
-    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton || !s_fn_Scene_RemoveObject) return;
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     void* scene = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x60);
     if (!scene) return;
-    s_fn_Scene_RemoveObject(scene, static_cast<uint32_t>(sceneId));
+    reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(static_cast<uint32_t>(sceneId));   // B.3.5 bridge
     *reinterpret_cast<int32_t*>(s + 0x120) = -1;
 }
 

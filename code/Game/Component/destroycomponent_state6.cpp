@@ -62,6 +62,11 @@
 // collapsed 2 -> 1 -> 0 over 8 rubble steps, empty crash log). BANISHED_LIVE_DESTROY_COLLAPSE
 // is now a kill-switch (=0) for A/B runs.
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/GraphicsMesh.h"
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
@@ -90,18 +95,12 @@ typedef void  (*fn_ModelNotify_t)(void* ownerEntity, int mode);        // 0x1400
 // into the exe (ENDGAME B.3.2 step 2: stride 0x10, align 8, zero tail) —
 // converted at its call site below.
 typedef void  (*fn_PickRebuild_t)(void* pickingComp);                  // 0x140128f50
-typedef void  (*fn_SetMesh_t)(void* meshInstance, void* mesh);         // slot 0x140151498
-typedef void* (*fn_GetMaterialList_t)(void* graphicsMesh, int setIdx); // slot 0x140152288
-typedef void  (*fn_SetMaterialInst_t)(void* meshInst, int idx, void* extPtr); // slot 0x140151408
 
 static fn_FindIBP_t         s_findModel     = nullptr;  // 0x140003f60 (ModelComponent)
 static fn_FindIBP_t         s_findStorage   = nullptr;  // 0x140006270 (StorageComponent)
 static fn_FindIBP_t         s_findPicking   = nullptr;  // 0x140026a30 (PickingComponent)
 static fn_ModelNotify_t     s_modelNotify   = nullptr;
 static fn_PickRebuild_t     s_pickRebuild   = nullptr;
-static fn_SetMesh_t         s_setMesh       = nullptr;
-static fn_GetMaterialList_t s_getMatList    = nullptr;
-static fn_SetMaterialInst_t s_setMatInst    = nullptr;
 static uint32_t*            s_tidDestroyDesc = nullptr;  // 0x1401c7628
 static uint32_t*            s_tidModelDesc   = nullptr;  // 0x1401c7a88
 static uint32_t*            s_tidDecalComp   = nullptr;  // 0x1401c7580
@@ -120,9 +119,6 @@ static void EnsureResolved() {
     s_findPicking   = reinterpret_cast<fn_FindIBP_t>(ResolveAddr(Module::Exe, 0x140026a30));
     s_modelNotify   = reinterpret_cast<fn_ModelNotify_t>(ResolveAddr(Module::Exe, 0x1400c2b70));
     s_pickRebuild   = reinterpret_cast<fn_PickRebuild_t>(ResolveAddr(Module::Exe, 0x140128f50));
-    s_setMesh       = reinterpret_cast<fn_SetMesh_t>(ReadSlot(0x140151498));
-    s_getMatList    = reinterpret_cast<fn_GetMaterialList_t>(ReadSlot(0x140152288));
-    s_setMatInst    = reinterpret_cast<fn_SetMaterialInst_t>(ReadSlot(0x140151408));
     s_tidDestroyDesc = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7628));
     s_tidModelDesc   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7a88));
     s_tidDecalComp   = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7580));
@@ -346,26 +342,21 @@ extern "C" void ModelComp_SetMaterialSet_125020(void* modelComp, int materialSet
     void* mesh = MeshFromModelDesc(modelDesc, variantIdx, modelVariant);
     if (!mesh) return;
 
-    if (!s_getMatList || !s_setMatInst) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            std::fprintf(stderr, "[Collapse] material re-point SKIPPED — dispatch slot %s "
-                                 "unregistered; the rubble keeps its intact materials\n",
-                         s_getMatList ? "0x140151408 (SetMaterialInstance)"
-                                      : "0x140152288 (GetMaterialList)");
-            std::fflush(stderr);
-        }
-        return;
-    }
-
-    void* list = s_getMatList(mesh, materialSetIdx);
+    // The two doors this used to go through are `GraphicsMesh::GetMaterialList`
+    // and `MeshInstance::SetMaterialInstance`; both are members now, so the
+    // readiness guard (and the "dispatch slot unregistered" warning it drove)
+    // has nothing left to test. The Array header is still read raw, exactly as
+    // retail does: GetMaterialList returns `*(mesh+0x70) + skin*0x10`, which is
+    // formed from a possibly-null buffer pointer, so the `!list` test stays.
+    const void* list = &reinterpret_cast<const Graphics::GraphicsMesh*>(mesh)
+                            ->GetMaterialList(materialSetIdx);   // B.3.5 bridge
     if (!list) return;
-    void** data = *reinterpret_cast<void***>(list);
-    int    n    = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(list) + 8);
+    void* const* data = *reinterpret_cast<void* const* const*>(list);
+    int    n    = *reinterpret_cast<const int*>(reinterpret_cast<uintptr_t>(list) + 8);
     if (!data || n <= 0) return;
     for (int i = 0; i < n; ++i)
-        s_setMatInst(reinterpret_cast<void*>(m + 0x28), i, data[i]);
+        reinterpret_cast<Graphics::MeshInstance*>(m + 0x28)
+            ->SetMaterialInstance(i, Graphics::ExternalPtrHandle{data[i]});   // B.3.5 bridge
 }
 
 // ============================================================
@@ -432,7 +423,8 @@ extern "C" void Destroy_RubbleStep_d5d0(void* destroyComp) {
             void* mesh = MeshFromModelDesc(modelDesc,
                                            *reinterpret_cast<int16_t*>(mc + 0x164),
                                            static_cast<int16_t>(next));
-            if (s_setMesh) s_setMesh(reinterpret_cast<void*>(mc + 0x28), mesh);
+            reinterpret_cast<Graphics::MeshInstance*>(mc + 0x28)
+                ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
             if (vt && vt[6]) reinterpret_cast<void (*)(void*)>(vt[6])(modelComp);
         }
         if (Milestone()) {

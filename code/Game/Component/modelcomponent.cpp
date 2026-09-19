@@ -14,6 +14,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "Component/modelcomponent_funcs.h"
 #include "scene_watch.h"
 #include "Object/internal_factory_audit.h"
@@ -28,34 +30,13 @@
 #include <cstring>
 #include <new>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+// graphics/*.h are included at the TOP of this file (before resolve.h) because
+// they pull runtime/types/volume/Volume.h, whose global-scope `struct Rectangle`
+// is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has been seen.
 
 // ============================================================
 // Resolved helpers
 // ============================================================
-
-// Graphics::MeshInstance::Serialize — dispatch slot at 0x140152990
-typedef void (*fn_MeshInstance_Serialize_t)(void* meshInstance, void* serializer);
-static fn_MeshInstance_Serialize_t s_fn_MeshInstance_Serialize = nullptr;
-
-// Graphics::MeshInstance::SetMesh — dispatch slot at 0x140151498
-typedef void (*fn_MeshInstance_SetMesh_t)(void* meshInstance, void* meshResource);
-static fn_MeshInstance_SetMesh_t s_fn_MeshInstance_SetMesh = nullptr;
-
-// Graphics::MeshInstance::IsAnimating — dispatch slot at 0x1401514b0
-typedef bool (*fn_MeshInstance_IsAnimating_t)(void* meshInstance);
-static fn_MeshInstance_IsAnimating_t s_fn_MeshInstance_IsAnimating = nullptr;
-
-// Graphics::Geometry::SetTransform — dispatch slot at 0x1401512e0
-typedef void (*fn_Geometry_SetTransform_t)(void* geometry, void* transform);
-static fn_Geometry_SetTransform_t s_fn_Geometry_SetTransform = nullptr;
-
-// Graphics::Scene::AddObject — dispatch slot at 0x140151370
-typedef uint32_t (*fn_Scene_AddObject_t)(void* scene, void* geometry);
-static fn_Scene_AddObject_t s_fn_Scene_AddObject = nullptr;
-
-// Graphics::Scene::RemoveObject — dispatch slot at 0x140151360
-typedef void (*fn_Scene_RemoveObject_t)(void* scene, uint32_t objectId);
-static fn_Scene_RemoveObject_t s_fn_Scene_RemoveObject = nullptr;
 
 // System::Time::Time(Time*, float) — dispatch slot at 0x140152b00
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
@@ -90,24 +71,6 @@ static void EnsureHelpers() {
     uintptr_t slot;
 
     // Dispatch slots — read function pointer from .rdata slot at runtime
-
-    slot = ResolveAddr(Module::Exe, 0x140152990);
-    if (slot) s_fn_MeshInstance_Serialize = *reinterpret_cast<fn_MeshInstance_Serialize_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151498);
-    if (slot) s_fn_MeshInstance_SetMesh = *reinterpret_cast<fn_MeshInstance_SetMesh_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x1401514b0);
-    if (slot) s_fn_MeshInstance_IsAnimating = *reinterpret_cast<fn_MeshInstance_IsAnimating_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x1401512e0);
-    if (slot) s_fn_Geometry_SetTransform = *reinterpret_cast<fn_Geometry_SetTransform_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151370);
-    if (slot) s_fn_Scene_AddObject = *reinterpret_cast<fn_Scene_AddObject_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151360);
-    if (slot) s_fn_Scene_RemoveObject = *reinterpret_cast<fn_Scene_RemoveObject_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
@@ -210,7 +173,7 @@ static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t mode
 // pass -1 to keep the original random pick over the group count.
 extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
     EnsureHelpers();
-    if (!modelComp || !s_fn_MeshInstance_SetMesh) return -1;
+    if (!modelComp) return -1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
     uintptr_t s = (uintptr_t)modelComp;
 
@@ -239,7 +202,8 @@ extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
 
     void* meshResource = GetMeshFromDescription(desc, variantIdx, modelVariant);
     if (!meshResource) return -1;
-    s_fn_MeshInstance_SetMesh((void*)(s + 0x28), meshResource);
+    reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
+        ->SetMesh(Graphics::ExternalPtrHandle{meshResource});   // B.3.5 bridge
     return variantIdx;
 }
 
@@ -281,16 +245,16 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
             void* desc = GetMultiObjDescription(s);
             void* meshResource = GetMeshFromDescription(
                 desc, *(int16_t*)(s + 0x164), modelVariant);
-            if (meshResource && s_fn_MeshInstance_SetMesh) {
-                s_fn_MeshInstance_SetMesh((void*)(s + 0x28), meshResource);
+            if (meshResource) {
+                reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
+                    ->SetMesh(Graphics::ExternalPtrHandle{meshResource});   // B.3.5 bridge
             }
         }
     }
 
     // Serialize MeshInstance sub-object
-    if (s_fn_MeshInstance_Serialize) {
-        s_fn_MeshInstance_Serialize((void*)(s + 0x28), serializer);
-    }
+    reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
+        ->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.5 bridge
 
     // Serialize bool flag: modelId >= 0
     bool hasModelId = (self->modelId >= 0);
@@ -343,11 +307,12 @@ void ModelComponent_Serialize(ModelComponent* self) {
 
     // If variant >= 0, set the mesh
     void* meshResource = nullptr;
-    if (modelVariant >= 0 && s_fn_MeshInstance_SetMesh) {
+    if (modelVariant >= 0) {
         meshResource = GetMeshFromDescription(
             desc, *(int16_t*)(s + 0x164), modelVariant);
         if (meshResource) {
-            s_fn_MeshInstance_SetMesh((void*)(s + 0x28), meshResource);
+            reinterpret_cast<Graphics::MeshInstance*>(s + 0x28)
+                ->SetMesh(Graphics::ExternalPtrHandle{meshResource});   // B.3.5 bridge
         }
     }
 
@@ -373,9 +338,8 @@ void ModelComponent_Draw(ModelComponent* self) {
         }
 
         // Set transform on the geometry sub-object
-        if (s_fn_Geometry_SetTransform) {
-            s_fn_Geometry_SetTransform((void*)(s + 0x28), (void*)(s + 0x148));
-        }
+        reinterpret_cast<Graphics::Geometry*>(s + 0x28)
+            ->SetTransform(*reinterpret_cast<const Math::Transform*>(s + 0x148));   // B.3.5 bridge
 
         // Call MeshInstance::Update with Time(0) via vtable +0x8
         if (s_fn_Time_Ctor) {
@@ -389,10 +353,11 @@ void ModelComponent_Draw(ModelComponent* self) {
         }
 
         // Add to scene
-        if (s_fn_Scene_AddObject && g_pGameWorldSingleton) {
+        if (g_pGameWorldSingleton) {
             void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
             if (scene) {
-                uint32_t id = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
+                uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
+                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(s + 0x28));   // B.3.5 bridge
                 *(uint32_t*)(s + 0x16c) = id;
                 SceneWatch_Note(id, (void*)(s + 0x28), "ModelComponent::Draw");
 #if defined(_DEBUG)
@@ -424,10 +389,11 @@ void ModelComponent_OnCreate(ModelComponent* self) {
 
     if (modelVariant >= 0 && modelId >= 0) {
         // Remove from scene
-        if (s_fn_Scene_RemoveObject && g_pGameWorldSingleton) {
+        if (g_pGameWorldSingleton) {
             void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
             if (scene) {
-                s_fn_Scene_RemoveObject(scene, (uint32_t)modelId);
+                reinterpret_cast<Graphics::Scene*>(scene)
+                    ->RemoveObject((uint32_t)modelId);   // B.3.5 bridge
             }
         }
 
@@ -485,8 +451,9 @@ void ModelComponent_OnRemove(ModelComponent* self, void* time) {
     }
 
     // Check if still animating
-    if (s_fn_MeshInstance_IsAnimating) {
-        bool animating = s_fn_MeshInstance_IsAnimating((void*)(s + 0x28));
+    {
+        bool animating = reinterpret_cast<const Graphics::MeshInstance*>(s + 0x28)
+                             ->IsAnimating();   // B.3.5 bridge
         if (!animating) {
             // Clear flag bit 2 (0x04) from flags at +0x20
             uint32_t oldFlags = *(uint32_t*)(s + 0x20);
@@ -512,11 +479,9 @@ void ModelComponent_OnRemove(ModelComponent* self, void* time) {
 void ModelComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[ModelComponent] Funcs resolved: SetMesh=%p IsAnim=%p SetTransform=%p "
-           "AddObj=%p RemoveObj=%p Helper2b70=%p EntityNotify=%p\n",
-           (void*)s_fn_MeshInstance_SetMesh, (void*)s_fn_MeshInstance_IsAnimating,
-           (void*)s_fn_Geometry_SetTransform,
-           (void*)s_fn_Scene_AddObject, (void*)s_fn_Scene_RemoveObject,
+    // The six Graphics doors this used to print are members now (B.3.5 caller
+    // batch I2); only the two exe helpers are still resolved pointers.
+    printf("[ModelComponent] Funcs resolved: Helper2b70=%p EntityNotify=%p\n",
            (void*)s_fn_ModelHelper_2b70, (void*)s_fn_EntityNotify);
 #endif
 }
