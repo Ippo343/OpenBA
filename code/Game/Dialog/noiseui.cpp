@@ -24,6 +24,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -210,8 +211,8 @@ void NoiseUI_GenerateNoise(void* self) {
     // Random is ~0xA60 bytes (Mersenne Twister state)
     uint8_t randomBuf[0xA80];
     fn_Random_Default_Ctor(randomBuf);
-    int seed1 = fn_Random_RandTol(randomBuf, 0x7ffffff);
-    int seed2 = fn_Random_RandTol(randomBuf, 0x7ffffff);
+    int seed1 = reinterpret_cast<System::Random*>(randomBuf)->RandTol(static_cast<int32_t>(0x7ffffff));   // B.3.4 bridge
+    int seed2 = reinterpret_cast<System::Random*>(randomBuf)->RandTol(static_cast<int32_t>(0x7ffffff));   // B.3.4 bridge
 
     // Create PerlinNoise (0x10 bytes)
     uint8_t noiseBuf[0x10];

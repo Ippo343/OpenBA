@@ -40,6 +40,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
+#include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
 #include <new>
 
 // ============================================================
@@ -1352,7 +1353,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
         }
     }
 
-    g_fn_Time_Serialize(self, serializer);
+    reinterpret_cast<System::Time*>(self)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Step 5: Serialize master array count
     int32_t masterCount = self->masterArray.count;
@@ -1423,7 +1424,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
 
             // Serialize entity's timestamp at +0x20 (System::Time)
             masterData = (uintptr_t)self->masterArray.data;
-            g_fn_Time_Serialize((void*)(*(int64_t*)(masterData + ibpOffset) + 0x20), serializer);
+            reinterpret_cast<System::Time*>((void*)(*(int64_t*)(masterData + ibpOffset) + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
             // Write back deserialized metadata to entity
             masterData = (uintptr_t)self->masterArray.data;

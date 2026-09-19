@@ -34,6 +34,7 @@
 #include "UpdateLoop.h"
 #include "LoaderLoop.h"
 #include "options.h"
+#include "system/Thread.h"   // ENDGAME B.3.4b System callers: System::Thread
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -90,7 +91,7 @@ void WaitForEngineLoader() {
     }
     if (s_wait) {
         printf("[EngineLoader] waiting for loader thread to finish (sync)...\n");
-        s_wait(g_pLoader);
+        reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
         printf("[EngineLoader] loader thread finished\n");
     }
 }

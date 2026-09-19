@@ -18,6 +18,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/String.h"
+#include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Random
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
@@ -1083,7 +1084,7 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
 
     uint32_t variant = 0;
     if (fn_Random_Rand && rng) {
-        variant = fn_Random_Rand(rng, meshCount);
+        variant = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(meshCount));   // B.3.4 bridge
     }
 
     // --- Set mesh from variant's mesh array ---

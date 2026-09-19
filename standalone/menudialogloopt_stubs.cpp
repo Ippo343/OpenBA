@@ -53,6 +53,7 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include <cstdio>
 #include <cstdint>
 #include "system/Filename.h"   // -Iruntime/types
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstring>
 
@@ -467,7 +468,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
     if (time && fn_Time_AsSeconds) {
-        float dt = fn_Time_AsSeconds(time);
+        float dt = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
         MenuDialogLoopT_UpdateCamera_PhaseA(self, dt);
     }
 

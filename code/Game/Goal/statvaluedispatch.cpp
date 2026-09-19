@@ -22,6 +22,7 @@
 #include "statvaluedispatch.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 
 // ============================================================
 // GameWorld accessor — *g_pGameWorldSingleton is the world object; the exe
@@ -685,7 +686,7 @@ static uint32_t Helper_8c50(uintptr_t self) {
 
     int* clock = *reinterpret_cast<int**>(World() + 0x128);
     int dayOfYear = clock[0];
-    float secs = fn_Time_AsSeconds ? fn_Time_AsSeconds(reinterpret_cast<void*>(clock + 2)) : 0.0f;
+    float secs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(clock + 2))->AsSeconds() : 0.0f;   // B.3.4 bridge
     float div = s_pDAT_14017225c ? *s_pDAT_14017225c : 1.0f;
     float mul = s_pDAT_1401721e4 ? *s_pDAT_1401721e4 : 0.0f;
     int frac = (int)((secs / div) * mul);

@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 
 // CitizenUI_UpdateIconDisplay_Impl and CitizenUI_BuildIconArray_Impl
 // are now in the shared header: Dialog/citizen_icon_helpers.h
@@ -343,7 +344,7 @@ found_happiness:
     fn_NumberElement_SetValueInt(self->numberYear, year);
 
     // --- Update month/season ---
-    float seconds = fn_Time_AsSeconds((void*)(timeData + 2));
+    float seconds = reinterpret_cast<const System::Time*>((void*)(timeData + 2))->AsSeconds();   // B.3.4 bridge
     uint32_t monthIdx = (uint32_t)((seconds / kSecondsPerYear) * kMonthsPerYear);
     if ((int)monthIdx > 11) monthIdx = 0;
 
