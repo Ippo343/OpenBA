@@ -137,10 +137,12 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Scene.h"
+#include "../../types/graphics/Camera.h"   // Graphics::Renderer, for Scene::AddDrawItems
 #include "wave9_lane_gfxd.h"
 
 using RtGraphics::Geometry;
@@ -456,101 +458,46 @@ void RtSceneGridReindex(Scene* self, int32_t id) {
 // two rows stay registered in array.cpp for the rest of the tree.
 
 // ============================================================================
-// Virtual dispatch helpers.
+// Virtual dispatch helpers — GONE, ENDGAME B.3.5 block F.
 //
-// Spelled once, so a wrong slot number cannot be written twice. The slot
-// numbers come from runtime/types/graphics/Geometry.h, which reads them out of
-// the nine-pointer vtable at 0x180154e60.
+// Three hand-inlined `(*(void***)p)[N]` call sites used to live here
+// (`VGetSubTransform` on slot 5, `VUpdateAttached` on slot 4, `VClean` on slot 8),
+// with a `VTable()` helper and the `RtGraphics::kVSlotGeometry*` enum. All three
+// are now ORDINARY VIRTUAL CALLS on a `Graphics::Geometry*`, made from the member
+// bodies at the bottom of this file, because `Graphics::Geometry` is a real class
+// with those five slots declared in retail order (block E, Geometry.h).
 //
-// EVERY ONE OF THESE LANDS IN THE DLL for an object the DLL's ctor built, and
-// in the subclass for a subclass. See the vtable-ownership note in the banner.
+// Slots 5 and 6 keep the OUT-PARAMETER signature `T* M(T* ret, args…)` — RULE
+// B5-12 as corrected by block E: GCC's ms_abi passes the hidden return pointer
+// BEFORE `this`, MSVC and every minted row pass `this` first, so a virtual that
+// retail returns by value must spell the slot explicitly in retail's order. A C++
+// by-value return there would write the result THROUGH `this`.
+//
+// The dispatch itself is unchanged in behaviour: an object the DLL's constructor
+// built wears the DLL's own `??_7Geometry@Graphics@@6B@`, so a virtual call on it
+// still lands in the DLL for a base Geometry and in the subclass for a subclass —
+// which is retail's dispatch and is the whole of the vtable-ownership note in this
+// file's banner. The enum `RtGraphics::kVSlot*` stays in Geometry.h; block E's
+// unit test (`tests/unit/graphics_geometry_abi_test.cpp` PART B) is what pins
+// that GCC's table and a minted `void*[]` are interchangeable slot for slot.
 // ============================================================================
-inline void** VTable(const Geometry* g) {
-    return *reinterpret_cast<void** const*>(g);
-}
-
-Transform* VGetSubTransform(const Geometry* self, Transform* ret, int node) {
-    using Fn = Transform* (*)(const Geometry*, Transform*, int);
-    return reinterpret_cast<Fn>(VTable(self)[RtGraphics::kVSlotGetSubTransform])(self, ret, node);
-}
-
-void VUpdateAttached(Geometry* self) {
-    using Fn = void (*)(Geometry*);
-    reinterpret_cast<Fn>(VTable(self)[RtGraphics::kVSlotUpdateAttached])(self);
-}
-
-bool VClean(Geometry* self) {
-    using Fn = bool (*)(Geometry*);
-    return reinterpret_cast<Fn>(VTable(self)[RtGraphics::kVSlotClean])(self);
-}
 
 // ============================================================================
-// Self-describing post-state predicates.
+// ENDGAME B.3.5 block F — the four post-state / replay-oracle helpers that used
+// to sit here are GONE: `PostCheck`, `RtFirstFailure`, `RtFirstByteDiff`,
+// `RtFirstIntDiff` and `GeometryFirstDiff`. Their last callers were the diff
+// sites inside the twelve door bodies, and those bodies have moved onto the
+// `Graphics::Geometry` and `Graphics::Scene` members below, where a door is one
+// line and there is nothing to compare against. Deleting them rather than
+// leaving them is not tidying: an unreferenced static in a translation unit is a
+// new `-Wunused-function` warning in both the debug and the perf build, which
+// B35's gate reads as a regression.
 //
-// A shadow verdict is only as good as its message: if the verdict is a
-// conjunction of N terms the message has to name all N, or a failure prints two
-// strings that agree and says nothing
-// (reference_shadow_predicate_must_name_its_failing_term.md — Wave 5's
-// RemoveMesh cost a whole extra integration run to that exact defect). Every
-// shadow site in this file goes through these helpers, which report the FIRST
-// failing term by name with its actual and expected value.
+// The self-describing-predicate DISCIPLINE they encoded is not lost — it lives in
+// `reference_shadow_predicate_must_name_its_failing_term.md` and in every shadow
+// site that still has one. `TransformDiffers` below survives because the ported
+// bodies themselves use it.
 // ============================================================================
-struct PostCheck {
-    const char* name;
-    long long   got;
-    long long   want;
-};
-
-// Returns the index of the first failing check, or -1 if all pass. Fills `a`
-// and `b` with a rendering of that one term (ours / expected).
-int RtFirstFailure(const PostCheck* checks, int n,
-                   char* a, size_t na, char* b, size_t nb) {
-    for (int i = 0; i < n; ++i) {
-        if (checks[i].got != checks[i].want) {
-            std::snprintf(a, na, "%s=%lld", checks[i].name, checks[i].got);
-            std::snprintf(b, nb, "%s=%lld", checks[i].name, checks[i].want);
-            return i;
-        }
-    }
-    return -1;
-}
-
-// Byte offset of the first difference between two buffers, or -1.
-long long RtFirstByteDiff(const void* x, const void* y, size_t n) {
-    const uint8_t* a = static_cast<const uint8_t*>(x);
-    const uint8_t* b = static_cast<const uint8_t*>(y);
-    for (size_t i = 0; i < n; ++i)
-        if (a[i] != b[i]) return static_cast<long long>(i);
-    return -1;
-}
-
-// Index of the first differing element between two int arrays, or -1.
-long long RtFirstIntDiff(const int32_t* x, const int32_t* y, int n) {
-    for (int i = 0; i < n; ++i)
-        if (x[i] != y[i]) return i;
-    return -1;
-}
-
-// ----------------------------------------------------------------------------
-// Geometry comparison for the replay oracles.
-//
-// A Geometry is 0xC0 self-contained bytes, so "did ours leave the object in the
-// state theirs would have?" is a byte comparison — EXCEPT for the two holes the
-// ctor never initialises (+0x14 and +0xbc, see Geometry.h). Those hold whatever
-// the allocation happened to contain, identically in both runs of a replay, but
-// they are excluded anyway so that a future body which starts writing one of
-// them is not silently blessed by this comparison.
-// ----------------------------------------------------------------------------
-long long GeometryFirstDiff(const Geometry* x, const Geometry* y) {
-    const uint8_t* a = reinterpret_cast<const uint8_t*>(x);
-    const uint8_t* b = reinterpret_cast<const uint8_t*>(y);
-    for (size_t i = 0; i < sizeof(Geometry); ++i) {
-        if (i >= 0x14 && i < 0x18) continue;   // _pad14
-        if (i >= 0xbc) continue;               // _padBC
-        if (a[i] != b[i]) return static_cast<long long>(i);
-    }
-    return -1;
-}
 
 // Transform equality exactly as retail spells it: three translation terms
 // first, then the four rotation terms, all `!=` on floats (so a NaN compares
@@ -580,12 +527,12 @@ inline bool TransformDiffers(const Transform* a, const Transform* b) {
 // element address that cannot be null and the re-read of `self->_attached._data`
 // on every iteration.
 // ----------------------------------------------------------------------------
-void DetachBody(Geometry* self, Geometry* child) {
+void DetachBody(::Graphics::Geometry* self, ::Graphics::Geometry* child) {
     int idx = 0;
     long long walked = 0;
     if (self->_attached.GetSize() <= 0) return;
 
-    Geometry** p = self->_attached.GetData();
+    ::Graphics::Geometry** p = self->_attached.GetData();
     while (*p != child) {
         ++walked;
         ++idx;
@@ -598,7 +545,7 @@ void DetachBody(Geometry* self, Geometry* child) {
         do {
             ++idx;
             if (idx < self->_attached.GetSize()) {
-                Geometry** slot = self->_attached.GetData() + off;
+                ::Graphics::Geometry** slot = self->_attached.GetData() + off;
                 if (slot != nullptr) *slot = slot[1];
             }
             ++off;
@@ -693,11 +640,32 @@ extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
 // afterwards would double-free the child array. What is checked is what
 // retail's body must leave behind.
 // ============================================================================
+// *** THIS DOOR KEEPS ITS BODY, AND THE MEMBER GOES ON DELEGATING INTO IT. ***
+// THREE independent reasons, all of them structural:
+//
+//  1. `Graphics::Geometry::~Geometry()` is PROTECTED (block E; ENDGAME §B.1
+//     decision 2 makes it non-virtual and a base's destructor protected), so a
+//     free function — which is what every registered door is — cannot call it.
+//     A `friend` declaration would be a change to block E's header, and a
+//     derived-class accessor cannot reach a protected base member through a
+//     pointer to the base either.
+//  2. The body's FIRST ACT is to re-stamp `??_7Geometry@Graphics@@6B@` over the
+//     object's vptr. On the real class the vptr is implicit and there is no
+//     member to assign; only the POD spells `_vtable`.
+//  3. `code/Game/Game/weather_particles.cpp:69` resolves this door BY ADDRESS
+//     (0x1800a41c0), so it must remain a callable free function whatever else
+//     happens.
+//
+// So `closure_batch2b.cpp`'s `Geometry::~Geometry()` stays the reverse delegation
+// block E wrote. It is one of the TWO of block E's seven that block F could not
+// flip; the other is the copy constructor, for the abstract-class reason recorded
+// there. Both are in block F's report.
 extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
 
     self->_vtable = RtGeometryVtable();
     while (self->_attached.GetSize() > 0)
-        DetachBody(self, self->_attached[0]);
+        DetachBody(reinterpret_cast<::Graphics::Geometry*>(self),                  // B.3.5 bridge
+                   reinterpret_cast<::Graphics::Geometry*>(self->_attached[0]));
     self->_attached.~Array();          // retail 0x18001bf50, ~Geometry's tail call
 
 }
@@ -719,14 +687,8 @@ extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
 // one, and the child no longer appears anywhere in the parent's array.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
-
-    const int32_t sizeBefore = self->_attached.GetSize();
-    bool wasPresent = false;
-    for (int32_t i = 0; i < sizeBefore; ++i)
-        if (self->_attached[i] == child) { wasPresent = true; break; }
-
-    DetachBody(self, child);
-
+    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
+        ->::Graphics::Geometry::Detach(reinterpret_cast<::Graphics::Geometry*>(child));
 }
 
 // ============================================================================
@@ -742,17 +704,8 @@ extern "C" void RtGraphics_Geometry_Detach(Geometry* self, Geometry* child) {
 //
 // ============================================================================
 extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform* xf) {
-
-    bool tailCall = false;
-    if (TransformDiffers(&self->_transform, xf)) {
-        self->_prevTransform = self->_transform;
-        self->_transform     = *xf;
-        self->_dirtyFlags   |= 3u;
-        tailCall = self->_attached.GetSize() > 0;
-    }
-
-    if (tailCall)
-        VUpdateAttached(self);   // retail: tail JMP through vtable slot 4
+    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
+        ->::Graphics::Geometry::SetTransform(*xf);
 }
 
 // ============================================================================
@@ -775,22 +728,8 @@ extern "C" void RtGraphics_Geometry_SetTransform(Geometry* self, const Transform
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int node) {
-
-    const int32_t sizeBefore = self->_attached.GetSize();
-
-    if (child->_attachParent != nullptr)
-        RtGraphics_Geometry_Detach(child->_attachParent, child);
-
-    Geometry* local = child;
-    // retail 0x18001f990 — SetSize(size + 1, &fill), the append idiom.
-    self->_attached.SetSize(self->_attached.GetSize() + 1, local);
-    child->_attachParent = self;
-    child->_attachNode   = node;
-
-    Transform sub;
-    Transform* p = VGetSubTransform(self, &sub, node);
-    RtGraphics_Geometry_SetTransform(child, p);
-
+    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
+        ->::Graphics::Geometry::Attach(reinterpret_cast<::Graphics::Geometry*>(child), node);
 }
 
 // ============================================================================
@@ -812,30 +751,15 @@ extern "C" void RtGraphics_Geometry_Attach(Geometry* self, Geometry* child, int 
 // ORACLE: post-state. Every child's transform must now equal the parent's
 // sub-transform for its node.
 // ============================================================================
+// ENDGAME B.3.5 block F: THE DELEGATION IS NOW THE NORMAL WAY ROUND. Block E's
+// `closure_batch2b.cpp` defined `Graphics::Geometry::UpdateAttached()` as a
+// reverse delegation INTO this door, because the body lived in this file and this
+// file was not block E's. It is block F's; the body has moved onto the member and
+// the door is the one-line qualified call it should always have been. Same for
+// slots 5, 6, 7 and 8 below.
 extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
-
-    int i = 0;
-    if (self->_attached.GetSize() > 0) {
-        do {
-            Geometry** data = self->_attached.GetData();
-            Geometry*  child = data[i];
-
-            Transform sub;
-            Transform* p = VGetSubTransform(self, &sub, child->_attachNode);
-
-            if (TransformDiffers(&child->_transform, p)) {
-                child->_prevTransform = child->_transform;
-                child->_transform     = *p;
-                child->_dirtyFlags   |= 3u;
-                if (child->_attached.GetSize() > 0)
-                    VUpdateAttached(child);
-            }
-            // Retail re-reads the array pointer here rather than reusing `data`.
-            VUpdateAttached(self->_attached[i]);
-            ++i;
-        } while (i < self->_attached.GetSize());
-    }
-
+    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
+        ->::Graphics::Geometry::UpdateAttached();
 }
 
 // ============================================================================
@@ -869,54 +793,8 @@ extern "C" void RtGraphics_Geometry_UpdateAttached(Geometry* self) {
 // from the same snapshot and be compared byte for byte, return value included.
 // ============================================================================
 extern "C" bool RtGraphics_Geometry_Clean(Geometry* self) {
-
-    Geometry before;
-
-    uint32_t f = self->_dirtyFlags;
-    bool changed = false;
-
-    if ((f & 1u) == 0) {
-        if ((f & 8u) != 0) {
-            self->_prevTransform = self->_transform;
-            self->_dirtyFlags &= ~8u;
-            changed = true;
-        }
-    } else {
-        self->_dirtyFlags = (f & ~1u) | 8u;
-        changed = true;
-    }
-
-    f = self->_dirtyFlags;
-    if ((f & 2u) == 0) {
-        if ((f & 0x10u) != 0) {
-            self->_prevWorldBounds = self->_worldBounds;
-            self->_dirtyFlags &= ~0x10u;
-            changed = true;
-        }
-        // (f & 0x10) == 0: nothing to do, and `changed` is NOT raised.
-    } else {
-        self->_dirtyFlags = (f & ~2u) | 0x10u;
-        // Retail copies the transform to a local before handing its address to
-        // the box helper; kept so the helper never sees the live object.
-        const Transform xf = self->_transform;
-        float box[6];
-        const float* world = RtBoxTransform(box, &xf,
-                                            reinterpret_cast<const float*>(&self->_localBounds));
-        self->_prevWorldBounds = self->_worldBounds;
-        self->_worldBounds.min.x = world[0];
-        self->_worldBounds.min.y = world[1];
-        self->_worldBounds.min.z = world[2];
-        self->_worldBounds.max.x = world[3];
-        self->_worldBounds.max.y = world[4];
-        self->_worldBounds.max.z = world[5];
-        changed = true;
-    }
-
-    f = self->_dirtyFlags;
-    if ((f & 4u) != 0) self->_dirtyFlags = (f & ~4u) | 0x20u;
-    else               self->_dirtyFlags = f & ~0x20u;
-
-    return changed;
+    return reinterpret_cast<::Graphics::Geometry*>(self)                    // B.3.5 bridge
+        ->::Graphics::Geometry::Clean();
 }
 
 // ============================================================================
@@ -931,19 +809,8 @@ extern "C" bool RtGraphics_Geometry_Clean(Geometry* self) {
 // ORACLE: FULL REPLAY. Self-contained, no callees, no allocation.
 // ============================================================================
 extern "C" void RtGraphics_Geometry_SetBounds(Geometry* self, const Box* box) {
-
-    Geometry before;
-
-    if (self->_localBounds.min.x != box->min.x ||
-        self->_localBounds.min.y != box->min.y ||
-        self->_localBounds.min.z != box->min.z ||
-        self->_localBounds.max.x != box->max.x ||
-        self->_localBounds.max.y != box->max.y ||
-        self->_localBounds.max.z != box->max.z) {
-        self->_localBounds = *box;
-        self->_dirtyFlags |= 2u;
-    }
-
+    reinterpret_cast<::Graphics::Geometry*>(self)                           // B.3.5 bridge
+        ->::Graphics::Geometry::SetBounds(*box);
 }
 
 // ============================================================================
@@ -958,8 +825,12 @@ extern "C" void RtGraphics_Geometry_SetBounds(Geometry* self, const Box* box) {
 // ORACLE: FULL. Pure read; both run into private buffers and the 0x1c bytes are
 // compared.
 // ============================================================================
+// NON-VIRTUAL, so the member returns BY VALUE and the door placement-news the
+// prvalue into the caller's slot (Geometry.h's B5-12 block: a virtual would have
+// to spell the out-parameter in retail order, a non-virtual must not).
 extern "C" Transform* RtGraphics_Geometry_GetTransform(const Geometry* self, Transform* ret) {
-    *ret = self->_transform;
+    new (ret) Transform(reinterpret_cast<const ::Graphics::Geometry*>(self)  // B.3.5 bridge
+                            ->::Graphics::Geometry::GetTransform());
     return ret;   // retail returns the hidden slot in RAX
 }
 
@@ -977,11 +848,12 @@ extern "C" Transform* RtGraphics_Geometry_GetTransform(const Geometry* self, Tra
 //
 // ORACLE: FULL. Pure read.
 // ============================================================================
+// VIRTUAL (slot 5), so the MEMBER carries the out-parameter in retail's order and
+// the door is a straight pass-through — RULE B5-12 as corrected by block E.
 extern "C" Transform* RtGraphics_Geometry_GetSubTransform(const Geometry* self,
                                                           Transform* ret, int node) {
-    (void)node;   // retail ignores it in the base body
-    *ret = self->_transform;
-    return ret;
+    return reinterpret_cast<const ::Graphics::Geometry*>(self)               // B.3.5 bridge
+        ->::Graphics::Geometry::GetSubTransform(ret, node);
 }
 
 // ============================================================================
@@ -1003,25 +875,8 @@ extern "C" Transform* RtGraphics_Geometry_GetSubTransform(const Geometry* self,
 // ============================================================================
 extern "C" Matrix* RtGraphics_Geometry_GetInstanceTransform(const Geometry* self, Matrix* ret,
                                                             int node, float t) {
-    (void)node;   // retail ignores it in the base body
-
-    const float py = self->_prevTransform.translation.y;
-    const float pz = self->_prevTransform.translation.z;
-    const float cx = self->_transform.translation.x;
-    const float cy = self->_transform.translation.y;
-    const float cz = self->_transform.translation.z;
-    const float px = self->_prevTransform.translation.x;
-
-    const Scalar s = { t };
-    Transform tmp;
-    RtQuaternionLerp(&self->_prevTransform.rotation, &tmp.rotation,
-                     &self->_transform.rotation, &s);
-    tmp.translation.x = px + (cx - px) * t;
-    tmp.translation.y = py + (cy - py) * t;
-    tmp.translation.z = pz + (cz - pz) * t;
-    RtTransformAsMatrix(&tmp, ret);
-
-    return ret;
+    return reinterpret_cast<const ::Graphics::Geometry*>(self)               // B.3.5 bridge
+        ->::Graphics::Geometry::GetInstanceTransform(ret, node, t);
 }
 
 // ============================================================================
@@ -1039,9 +894,14 @@ extern "C" Matrix* RtGraphics_Geometry_GetInstanceTransform(const Geometry* self
 // ============================================================================
 extern "C" int RtGraphics_Geometry_SetSharedInstanceData(const Geometry* self, void* context,
                                                          int node, float t) {
-    (void)context; (void)node; (void)t;
-    const int ours = 0;
-    return ours;
+    // The retail base body is `return 0;` and it touches nothing, including the
+    // Context — which is why handing the door's `void*` straight through as the
+    // reference the member declares costs nothing here. `Video::Context` is
+    // block D's class; this is the only bridge in the file that crosses a
+    // namespace block F does not own.
+    return reinterpret_cast<const ::Graphics::Geometry*>(self)               // B.3.5 bridge
+        ->::Graphics::Geometry::SetSharedInstanceData(
+            *reinterpret_cast<::Video::Context*>(context), node, t);
 }
 
 // ============================================================================
@@ -1123,14 +983,8 @@ extern "C" void RtGraphics_Scene_Dtor(Scene* self) {
 // cannot be replayed; what is checked is the node the returned id names.
 // ============================================================================
 extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) {
-
-    if (geo->_dirtyFlags != 0)
-        VClean(geo);
-
-    Geometry* local = geo;
-    const SceneObjectId id = RtSceneGridAdd(self, &local);
-
-    return id;
+    return reinterpret_cast<::Graphics::Scene*>(self)                        // B.3.5 bridge
+        ->::Graphics::Scene::AddObject(reinterpret_cast<::Graphics::Geometry*>(geo));
 }
 
 // ============================================================================
@@ -1155,21 +1009,8 @@ extern "C" SceneObjectId RtGraphics_Scene_AddObject(Scene* self, Geometry* geo) 
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
-
-    SceneNode* node = &self->_nodes[static_cast<int32_t>(id)];
-    const SceneObjectId local = id;
-
-    RtSceneGridUnthread(self, static_cast<int32_t>(id));
-
-    node->_object = nullptr;
-    node->_next   = 0;
-    node->_prev   = 0;
-    node->_cell   = -1;
-
-    const int32_t freeBefore = self->_freeIds.GetSize();
-    // retail 0x180023830 — SetSize(size + 1, &fill), the stride-4 append.
-    self->_freeIds.SetSize(self->_freeIds.GetSize() + 1, local);
-
+    reinterpret_cast<::Graphics::Scene*>(self)                               // B.3.5 bridge
+        ->::Graphics::Scene::RemoveObject(id);
 }
 
 // ============================================================================
@@ -1196,18 +1037,8 @@ extern "C" void RtGraphics_Scene_RemoveObject(Scene* self, SceneObjectId id) {
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
-
-    const int32_t countBefore = self->_globals.GetCount();
-
-    // ENDGAME B.3.2 step 2 — the inlined node-allocate + tail-append IS
-    // `LinkedList<Geometry*>::Add`: `NewNode` (retail 0x180032750) allocates
-    // sizeof(Node)=0x18 at alignment 8 and returns null on failure, and `Add`
-    // then takes the same two arms and writes through a null node on the
-    // non-empty one — retail's asymmetry, kept (see the FAITHFULLY UNGUARDED
-    // paragraph above). The only textual difference from what stood here is
-    // `NewNode`'s dead `element = T()` store, which is retail's own.
-    self->_globals.Add(geo);
-
+    reinterpret_cast<::Graphics::Scene*>(self)                               // B.3.5 bridge
+        ->::Graphics::Scene::AddGlobalObject(reinterpret_cast<::Graphics::Geometry*>(geo));
 }
 
 // ============================================================================
@@ -1223,18 +1054,8 @@ extern "C" void RtGraphics_Scene_AddGlobalObject(Scene* self, Geometry* geo) {
 // ORACLE: post-state.
 // ============================================================================
 extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) {
-
-    const int32_t countBefore = self->_globals.GetCount();
-
-    // ENDGAME B.3.2 step 2 — this search-unlink-free IS
-    // `LinkedList<Geometry*>::Remove`, retail 0x18007a010: the head test against
-    // the head captured BEFORE the walk, the four unlink arms in retail's order,
-    // the two link stores zeroed, the count decrement, and the tail call into
-    // 0x180009c30 (the allocator-lock Free whose first argument is ignored —
-    // which is why passing `self` here was harmless and why nothing is passed
-    // now). A miss is still silent.
-    self->_globals.Remove(geo);
-
+    reinterpret_cast<::Graphics::Scene*>(self)                               // B.3.5 bridge
+        ->::Graphics::Scene::RemoveGlobalObject(reinterpret_cast<::Graphics::Geometry*>(geo));
 }
 
 // ============================================================================
@@ -1260,35 +1081,536 @@ extern "C" void RtGraphics_Scene_RemoveGlobalObject(Scene* self, Geometry* geo) 
 // sites and by the scene watch, not here.
 // ============================================================================
 extern "C" void RtGraphics_Scene_Clean(Scene* self) {
+    reinterpret_cast<::Graphics::Scene*>(self)->::Graphics::Scene::Clean();  // B.3.5 bridge
+}
+
+// ============================================================================
+// Graphics::Scene::AddDrawItems(Renderer&) const
+// retail 0x1801023b0, ordinal 1545
+//   ?AddDrawItems@Scene@Graphics@@QEBAXAEAVRenderer@2@@Z
+//
+// PORTED BY BLOCK F. It is the PUBLIC entry and the only caller of the two
+// private `AEBA` halves, so with `AddCulledDrawItems` (cull.cpp) and
+// `AddGlobalDrawItems` (wave29_lane_gfxbody.cpp) already ported it was the last
+// unported `Scene` row with any body at all. Thirteen instructions, read as
+// disassembly this pass:
+//
+//   1801023c0  CALL 0x180102330            ; AddGlobalDrawItems(renderer)
+//   1801023c5  CMP dword ptr [RBX+0x48],0  ; renderer->_detailId
+//   1801023c9  JZ  0x1801023d6
+//   1801023d1  CALL 0x1801017a0            ; AddCulledDrawItems(renderer)
+//
+// The globals go in UNCONDITIONALLY and the grid walk is skipped entirely when
+// the renderer's detail id is zero. `[RBX+0x48]` is `Renderer::_detailId`, which
+// `?GetDetailId@Renderer@Graphics@@QEBAHXZ` (0x180018070) names — a THIRD reader
+// of that field in the same role, after `AddGlobalDrawItems` and `cull.cpp`.
+//
+// No registration existed for this address anywhere in the tree (checked across
+// runtime/, standalone/, code/, engine/ and dx11/) and nothing calls it yet, so
+// its `calls=` is 0 by construction rather than by accident
+// (reference_uncalled_port_is_not_verified.md).
+// ============================================================================
+extern "C" void RtGraphics_Scene_AddDrawItems(const Scene* self, void* renderer) {
+    reinterpret_cast<const ::Graphics::Scene*>(self)                         // B.3.5 bridge
+        ->::Graphics::Scene::AddDrawItems(*reinterpret_cast<::Graphics::Renderer*>(renderer));
+}
+
+// ############################################################################
+// ENDGAME B.3 step 5 (block F) — THE BODIES ABOVE, MOVED ONTO THE MEMBERS
+// ############################################################################
+//
+// This file held nineteen bodies split between TWO classes that two different
+// blocks own, which is why block E had to leave a debt here:
+//
+//   `Graphics::Geometry`  — BLOCK E's class (runtime/types/graphics/Geometry.h),
+//     but twelve of its bodies live in THIS file, which is block F's because it
+//     also holds `Graphics::Scene`. Block E therefore declared the class, and
+//     defined its copy constructor, destructor and five non-pure slots in
+//     `closure_batch2b.cpp` as delegations INTO these doors — the one place in
+//     block E where the direction was inverted, listed in its report as debt.
+//     FIVE OF THE SEVEN ARE FLIPPED HERE: `UpdateAttached` (slot 4),
+//     `GetSubTransform` (5), `GetInstanceTransform` (6),
+//     `SetSharedInstanceData` (7) and `Clean` (8) now have their bodies on the
+//     members and their doors are one-line qualified calls, and the five
+//     `Geometry::` definitions in `closure_batch2b.cpp` are gone. Block E's
+//     header needed no change, exactly as it predicted.
+//
+//     THE OTHER TWO CANNOT BE FLIPPED, and the reasons are structural:
+//       * `??0Geometry@Graphics@@QEAA@AEBV01@@Z` — `Graphics::Geometry` is
+//         ABSTRACT (slots 0,1,2,3 are pure; B35_RULES §2.2), so a door handed raw
+//         memory cannot placement-construct one, and the body it would call
+//         stamps a vtable through a `_vtable` member only the POD has. It stays
+//         where block E put it, in `closure_batch2b.cpp`, which is also where its
+//         registered body is — so that pair is at least in ONE file.
+//       * `??1Geometry@Graphics@@UEAA@XZ` — the destructor is PROTECTED
+//         (ENDGAME §B.1 decision 2 makes a base's destructor non-virtual and
+//         protected), so no free function can call it; its body also re-stamps
+//         the vptr through `_vtable`. Both are recorded at the door above.
+//
+//   `Graphics::Scene`     — BLOCK F's class (runtime/types/graphics/Scene.h).
+//     Seven bodies move onto it here, plus `AddDrawItems`, which block F read out
+//     of the DLL and ported this pass. Its constructor and destructor keep their
+//     doors (B4b-2, §11: `fn_Graphics_Scene_Ctor` has three call sites) and stay
+//     on the `RtGraphics::Scene` POD, because both call the unexported grid
+//     internals `scene_grid.cpp` ports against that POD.
+//
+// THE THREE HAND-INLINED `(*(void***)p)[N]` CALL SITES IN THIS FILE ARE GONE.
+// `VGetSubTransform` (slot 5), `VUpdateAttached` (slot 4) and `VClean` (slot 8)
+// were the file's own virtual-dispatch helpers; the member bodies below make
+// ordinary virtual calls on a `Graphics::Geometry*`. Slots 5 and 6 keep the
+// out-parameter signature RULE B5-12 requires (as corrected by block E: GCC's
+// ms_abi puts the hidden return pointer BEFORE `this`, MSVC and every minted row
+// put `this` first, so a virtual that retail returns by value must spell the slot
+// in retail's order). Nothing about WHICH body a dispatch reaches changes: an
+// object the DLL's constructor built still wears the DLL's own
+// `??_7Geometry@Graphics@@6B@`, which is the whole of this file's
+// vtable-ownership note.
+//
+// NAME-LOOKUP HYGIENE (B34B_RULES §7.2): inside `namespace Graphics` a bare
+// `Geometry`, `Scene`, `SceneNode` or `Renderer` binds the REAL CLASS, not the
+// `RtGraphics` POD the `using` declarations at the top of this file introduce at
+// global scope. Every POD spelling below is qualified `RtGraphics::`, and the
+// file-local helpers (`RtBoxTransform`, `RtQuaternionLerp`,
+// `RtTransformAsMatrix`, `RtSceneGrid*`, `DetachBody`, `TransformDiffers`, the
+// `k*` float constants) are reached by unqualified lookup falling through to the
+// global unnamed namespace — the arrangement B34_BRIEFS §A.2 records as the one
+// that works.
+//
+// RULE B5-7: nothing below adds a static initialiser, a lazy singleton or a
+// non-atomic first-call cache. `Scene` and `Scene::AddGlobalObject` run on the
+// `Engine::Loader` thread while the main thread is inside `Draw`. The
+// `static Fn fn` caches in the by-address forwarders predate block F, follow the
+// retry-a-miss contract, and are untouched.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::Detach(Geometry*)   retail 0x1800a3f20, ordinal 2216
+//
+// `self` is the PARENT and the argument the child, which is the opposite of what
+// the name suggests and is worth stating: `ActCt_HideTool`
+// (code/Game/Action/action_base_complete.cpp:414) already calls it that way.
+//
+// NOTE the mangling: `PEAV12@` (pointer), not the `AEAV12@` (reference)
+// docs/runtime_port/wave6_lanes.txt lists. There is no reference overload — the
+// two phantom names this file's banner describes.
+// ---------------------------------------------------------------------------
+void Geometry::Detach(Geometry* child) { DetachBody(this, child); }
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::SetTransform(const Math::Transform&)   retail 0x1800155a0
+//
+// Compare all seven floats; if any differs, roll the current transform into the
+// previous one, take the new one, raise the transform+bounds dirty bits, and —
+// only when this geometry has children — TAIL JMP through vtable slot 4
+// (`UpdateAttached`), which is an ordinary virtual call here. Retail's compare
+// order is translation first then rotation, and the `!=` is a float compare, so a
+// NaN in either always counts as changed.
+// ---------------------------------------------------------------------------
+void Geometry::SetTransform(const Math::Transform& xf) {
+    bool tailCall = false;
+    if (TransformDiffers(&_transform, &xf)) {
+        _prevTransform = _transform;
+        _transform     = xf;
+        _dirtyFlags   |= 3u;
+        tailCall = _attached.GetSize() > 0;
+    }
+
+    if (tailCall)
+        UpdateAttached();     // retail: tail JMP through vtable slot 4
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::Attach(Geometry*, int)   retail 0x1800a3fa0, ordinal 1631
+//
+// `self` is the PARENT, `child` the geometry being hooked onto node `node`.
+// Detach the child from whatever it was attached to, append it to this geometry's
+// array, record parent+node on the child, then push the parent's sub-transform
+// for that node into the child.
+//
+// Retail's inner calls are DIRECT (rel32) to its own `Detach` and `SetTransform`,
+// so these are direct member calls and not virtual ones. The `GetSubTransform`
+// call IS virtual (slot 5) and lands in the DLL for a base Geometry and in the
+// subclass for a subclass — retail's dispatch, not a gap.
+// ---------------------------------------------------------------------------
+void Geometry::Attach(Geometry* child, int node) {
+    if (child->_attachParent != nullptr)
+        child->_attachParent->Geometry::Detach(child);
+
+    Geometry* local = child;
+    // retail 0x18001f990 — SetSize(size + 1, &fill), the append idiom.
+    _attached.SetSize(_attached.GetSize() + 1, local);
+    child->_attachParent = this;
+    child->_attachNode   = node;
+
+    Math::Transform sub;
+    Math::Transform* p = GetSubTransform(&sub, node);   // VIRTUAL, slot 5
+    child->Geometry::SetTransform(*p);
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::UpdateAttached()   [VIRTUAL, slot 4]   retail 0x1800a4020
+//
+// For every attached child: ask this geometry (virtually, slot 5) for the
+// sub-transform of the child's node, and if it differs from the child's current
+// transform, roll and take it — `SetTransform`'s body INLINED, not a call to it —
+// raise the child's dirty bits, and recurse into the child if the child has
+// children of its own.
+//
+// Then, UNCONDITIONALLY, call the child's `UpdateAttached` (slot 4) again. That is
+// not a transcription slip: retail has the recursion both inside the
+// "transform changed" branch and once per iteration outside it, so a child with
+// children whose transform changed has its `UpdateAttached` invoked TWICE. The
+// second call is a no-op for a child with no children, which is the common case.
+// ---------------------------------------------------------------------------
+void Geometry::UpdateAttached() {
+    int i = 0;
+    if (_attached.GetSize() > 0) {
+        do {
+            Geometry** data  = _attached.GetData();
+            Geometry*  child = data[i];
+
+            Math::Transform sub;
+            Math::Transform* p = GetSubTransform(&sub, child->_attachNode);   // slot 5
+
+            if (TransformDiffers(&child->_transform, p)) {
+                child->_prevTransform = child->_transform;
+                child->_transform     = *p;
+                child->_dirtyFlags   |= 3u;
+                if (child->_attached.GetSize() > 0)
+                    child->UpdateAttached();                                  // slot 4
+            }
+            // Retail re-reads the array pointer here rather than reusing `data`.
+            _attached[i]->UpdateAttached();                                   // slot 4
+            ++i;
+        } while (i < _attached.GetSize());
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::Clean()   [VIRTUAL, slot 8]   retail 0x1800a4420
+//
+// The two-stage dirty-flag machine that gives the renderer a PREVIOUS transform
+// and a PREVIOUS world box to interpolate between for exactly one extra frame.
+// TWO-PHASE, AND THAT IS RETAIL ORDERING TO PRESERVE (docs/retail_bugs.md:18-23,
+// carried forward by B35_RULES §6.1):
+//
+//   transform:  bit 0 set -> clear it, set bit 3, report "changed"
+//               bit 0 clear, bit 3 set -> roll current into previous, clear
+//                                         bit 3, report "changed"
+//   bounds:     bit 1 set -> clear it, set bit 4, recompute the world box from
+//                            the local box and the current transform, rolling
+//                            the old world box into the previous one, and
+//                            report "changed"
+//               bit 1 clear, bit 4 set -> roll only, clear bit 4, report
+//                                         "changed"
+//   opacity:    bit 2 set -> clear it, set bit 5. DOES NOT affect the return
+//                            value — a pure opacity change is not a reason to
+//                            re-index the scene grid.
+//               bit 2 clear -> clear bit 5.
+//
+// Retail's transform branches contain seven dead self-assignment stores
+// (`this[0x84] = this[0x84]`, …) and the bounds branch six more. They are
+// omitted: they have no observable effect and reproducing them would only
+// obscure the machine.
+// ---------------------------------------------------------------------------
+bool Geometry::Clean() {
+    uint32_t f = _dirtyFlags;
+    bool changed = false;
+
+    if ((f & 1u) == 0) {
+        if ((f & 8u) != 0) {
+            _prevTransform = _transform;
+            _dirtyFlags &= ~8u;
+            changed = true;
+        }
+    } else {
+        _dirtyFlags = (f & ~1u) | 8u;
+        changed = true;
+    }
+
+    f = _dirtyFlags;
+    if ((f & 2u) == 0) {
+        if ((f & 0x10u) != 0) {
+            _prevWorldBounds = _worldBounds;
+            _dirtyFlags &= ~0x10u;
+            changed = true;
+        }
+        // (f & 0x10) == 0: nothing to do, and `changed` is NOT raised.
+    } else {
+        _dirtyFlags = (f & ~2u) | 0x10u;
+        // Retail copies the transform to a local before handing its address to
+        // the box helper; kept so the helper never sees the live object.
+        const Math::Transform xf = _transform;
+        float box[6];
+        const float* world = RtBoxTransform(box, &xf,
+                                            reinterpret_cast<const float*>(&_localBounds));
+        _prevWorldBounds = _worldBounds;
+        _worldBounds.min.x = world[0];
+        _worldBounds.min.y = world[1];
+        _worldBounds.min.z = world[2];
+        _worldBounds.max.x = world[3];
+        _worldBounds.max.y = world[4];
+        _worldBounds.max.z = world[5];
+        changed = true;
+    }
+
+    f = _dirtyFlags;
+    if ((f & 4u) != 0) _dirtyFlags = (f & ~4u) | 0x20u;
+    else               _dirtyFlags = f & ~0x20u;
+
+    return changed;
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::SetBounds(const Box&)   retail 0x180015700, ordinal 3836
+//
+// Compare six floats; if any differs, take the box and raise the bounds dirty
+// bit. The compare short-circuits in retail's own order (min.x, min.y, min.z,
+// max.x, max.y, max.z) — only observable through NaN, and preserved.
+// ---------------------------------------------------------------------------
+void Geometry::SetBounds(const ::Box& box) {
+    if (_localBounds.min.x != box.min.x ||
+        _localBounds.min.y != box.min.y ||
+        _localBounds.min.z != box.min.z ||
+        _localBounds.max.x != box.max.x ||
+        _localBounds.max.y != box.max.y ||
+        _localBounds.max.z != box.max.z) {
+        _localBounds = box;
+        _dirtyFlags |= 2u;
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::GetTransform() const   retail 0x180015800, ordinal 2979
+// NON-VIRTUAL, so the C++ by-value return is right and the door carries retail's
+// hidden slot. See Geometry.h's B5-12 block for why the same is NOT true of a
+// vtable slot.
+// ---------------------------------------------------------------------------
+Math::Transform Geometry::GetTransform() const { return _transform; }
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::GetSubTransform(Transform*, int) const  [VIRTUAL, slot 5]
+// retail 0x1800a43c0, ordinal 2949
+//
+// The BASE implementation IGNORES the node index and hands back the geometry's
+// own transform — a plain Geometry has no sub-nodes. Subclasses (MeshInstance in
+// particular) override it to look the node up in the mesh skeleton, which is why
+// `Attach` and `UpdateAttached` call it virtually.
+//
+// RULE B5-12, as corrected by block E: the hidden return slot is spelled OUT, in
+// retail's order (`this` in RCX, the caller's storage in RDX), and returned again
+// in RAX. It must never be "simplified" to `void` — that was the 2026-09-13
+// perf-only crash (`1a4200c3`), invisible at -O0.
+// ---------------------------------------------------------------------------
+Math::Transform* Geometry::GetSubTransform(Math::Transform* ret, int node) const {
+    (void)node;   // retail ignores it in the base body
+    *ret = _transform;
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::GetInstanceTransform(Matrix*, int, float) const
+//                                                            [VIRTUAL, slot 6]
+// retail 0x1800154a0, ordinal 2720
+//
+// `Math::Matrix` is 64 bytes and this is the slot index the 2026-09-13 perf-only
+// crash came through — RULE B5-12 again. The base body ignores the node index and
+// interpolates PREVIOUS -> CURRENT by `t`: the rotation through
+// `Quaternion::Lerp`, the translation as `prev + (cur - prev) * t` component by
+// component, in the order x, y, z as the disassembly spells it, then
+// `Transform::AsMatrix`.
+// ---------------------------------------------------------------------------
+Math::Matrix* Geometry::GetInstanceTransform(Math::Matrix* ret, int node, float t) const {
+    (void)node;   // retail ignores it in the base body
+
+    const float py = _prevTransform.translation.y;
+    const float pz = _prevTransform.translation.z;
+    const float cx = _transform.translation.x;
+    const float cy = _transform.translation.y;
+    const float cz = _transform.translation.z;
+    const float px = _prevTransform.translation.x;
+
+    const Scalar s = { t };
+    Math::Transform tmp;
+    RtQuaternionLerp(&_prevTransform.rotation, &tmp.rotation, &_transform.rotation, &s);
+    tmp.translation.x = px + (cx - px) * t;
+    tmp.translation.y = py + (cy - py) * t;
+    tmp.translation.z = pz + (cz - pz) * t;
+    RtTransformAsMatrix(&tmp, ret);
+
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Geometry::SetSharedInstanceData(Context&, int, float) const
+//                                                            [VIRTUAL, slot 7]
+// retail 0x180015590, ordinal 3965
+//
+// The whole retail body is `return 0;`. It is the base of an instanced-draw hook
+// that only MeshInstance and the particle geometries implement; the base
+// answering 0 is how "this geometry contributes no shared instance data" is
+// spelled. Nothing is touched, including the Context.
+// ---------------------------------------------------------------------------
+int Geometry::SetSharedInstanceData(Video::Context& context, int node, float t) const {
+    (void)context; (void)node; (void)t;
+    return 0;
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Scene::AddObject(Geometry*)   retail 0x180102670, ordinal 1575
+//
+// If the geometry has ANY dirty bit set, clean it first (VIRTUAL, slot 8) so the
+// grid insert sees a valid world box; then thread it into the grid and return the
+// node id.
+//
+// Note the test: retail reads `_dirtyFlags` as a whole int and compares it against
+// 0 — i.e. `NeedsCleaning()`, not `IsDirty()` (which masks with 7). A geometry
+// carrying only a "rolled" bit is cleaned here too.
+// ---------------------------------------------------------------------------
+Scene::ObjectId Scene::AddObject(Geometry* geometry) {
+    if (geometry->_dirtyFlags != 0)
+        geometry->Clean();                  // VIRTUAL, slot 8
+
+    Geometry* local = geometry;
+    // The grid insert reads `MOV RAX,[RSI]`, i.e. a POINTER TO the Geometry*,
+    // which is why retail spills its argument to a local first.
+    return RtSceneGridAdd(reinterpret_cast<RtGraphics::Scene*>(this),          // B.3.5 bridge
+                          reinterpret_cast<RtGraphics::Geometry* const*>(&local));
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Scene::RemoveObject(unsigned int)   retail 0x180102600, ordinal 3563
+//
+// Unthread node `id` from its cell, clear the node, and push the id onto the free
+// list. Retail computes the node address BEFORE the unthread call (it is in RBX
+// across it); same effect, since the unthread never reallocates.
+//
+// Retail does NOT range-check `id`, and neither does this — CLAUDE.md "Don't fix a
+// faithful crash with a null check": an out-of-range id here is an upstream bug
+// and a guard would hide it rather than restore the behaviour.
+//
+// THE +0x14 WORD IS DELIBERATELY NOT WRITTEN. Retail builds `{-1, ?}` on the
+// stack and stores it as one qword, where the high dword is an UNINITIALISED
+// local (disassembly 0x180102639-0x18010264b; Scene.h's Node banner). A port
+// cannot reproduce an indeterminate value, so it writes the half retail specifies
+// and leaves the other half alone.
+// ---------------------------------------------------------------------------
+void Scene::RemoveObject(ObjectId id) {
+    SceneNode* node = &_nodes[static_cast<int32_t>(id)];
+    const ObjectId local = id;
+
+    RtSceneGridUnthread(reinterpret_cast<RtGraphics::Scene*>(this),            // B.3.5 bridge
+                        static_cast<int32_t>(id));
+
+    node->_object = nullptr;
+    node->_next   = 0;
+    node->_prev   = 0;
+    node->_cell   = -1;
+
+    // retail 0x180023830 — SetSize(size + 1, &fill), the stride-4 append.
+    _freeIds.SetSize(_freeIds.GetSize() + 1, local);
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Scene::AddGlobalObject(Geometry*)   retail 0x180102540, ordinal 1559
+//
+// "Global" objects skip the grid entirely and are visited by every `Clean` and
+// every draw — the sun, the sky dome, the weather emitters. They live on a plain
+// doubly linked list whose nodes are 0x18 bytes {element, prev, next}, exactly
+// `Collection::LinkedList<Geometry*>::Node`.
+//
+// FAITHFULLY UNGUARDED: when the allocation fails, retail leaves the node null and
+// then, on the non-empty-list path, writes through it. The null check it does
+// perform only decides whether the node's own three fields get initialised. That
+// asymmetry is retail's, and reproducing it is the point (CLAUDE.md "Don't fix a
+// faithful crash with a null check") — the allocator does not fail in practice,
+// and a guard here would turn an allocation failure from a crash into a silently
+// corrupt list.
+//
+// RULE B5-7: this member runs on the `Engine::Loader` thread
+// (code/Game/Game/gameupdateloop_load.cpp:1654) while the main thread is in
+// `Draw`. The only lock it takes is the global `MemoryAllocator` critical section
+// that retail inlines here and that `LinkedList`'s node allocator reaches; nothing
+// is cached.
+// ---------------------------------------------------------------------------
+void Scene::AddGlobalObject(Geometry* geometry) {
+    _globals.Add(geometry);
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Scene::RemoveGlobalObject(Geometry*)  retail 0x1801024c0, ord 3555
+//
+// Linear search for the node holding `geometry`, unlink it (the four
+// head/tail/prev/next fixups in retail's own order), drop the count and free the
+// node under the allocator lock. A geometry that is not on the list is silently
+// ignored, which is why every one of our four call sites can call it
+// unconditionally.
+// ---------------------------------------------------------------------------
+void Scene::RemoveGlobalObject(Geometry* geometry) {
+    _globals.Remove(geometry);
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Scene::Clean()   retail 0x1801023f0, ordinal 1703
+//
+// The per-frame refresh. Walk every LIVE node (`_cell >= 0`; free slots are
+// skipped by a separate scanning loop retail writes twice, once before the main
+// loop and once at the bottom of it), and for each geometry that needs cleaning,
+// clean it (VIRTUAL, slot 8) and re-index its grid cell if `Clean` reported a
+// change. Then walk the global list and clean those too — WITHOUT re-indexing,
+// because global objects are not in the grid at all.
+//
+// Retail re-reads `_nodes._size` inside the loop on every iteration, so a `Clean`
+// that adds objects to the scene is seen. Transcribed that way.
+//
+// This is the function `standalone/scene_watch.h` exists for: it dispatches
+// through every live node's Geometry vtable, so a component freed while its scene
+// id is still registered is an "EXEC of <heap address>" here.
+// ---------------------------------------------------------------------------
+void Scene::Clean() {
     using List = Collection::LinkedList<Geometry*>;
 
-    int32_t count = self->_nodes.GetSize();
+    int32_t count = _nodes.GetSize();
     int32_t i = 0;
     if (count > 0) {
-        while (i < count && self->_nodes[i]._cell < 0) ++i;
+        while (i < count && _nodes[i]._cell < 0) ++i;
     }
     if (i < count) {
         do {
-            Geometry* geo = self->_nodes[i]._object;
-            if (geo->_dirtyFlags != 0 && VClean(geo))
-                RtSceneGridReindex(self, i);
+            Geometry* geo = _nodes[i]._object;
+            if (geo->_dirtyFlags != 0 && geo->Clean())          // VIRTUAL, slot 8
+                RtSceneGridReindex(reinterpret_cast<RtGraphics::Scene*>(this), i);  // B.3.5 bridge
 
-            count = self->_nodes.GetSize();
+            count = _nodes.GetSize();
             ++i;
             if (count <= i) break;
-            while (i < count && self->_nodes[i]._cell < 0) ++i;
+            while (i < count && _nodes[i]._cell < 0) ++i;
         } while (i < count);
     }
 
-    // ENDGAME B.3.2 step 2 — retail's `for (n = head; n; n = n->next)` over the
-    // global list, spelled through the iterator, which IS the bare node pointer.
-    for (List::Iterator it = self->_globals.GetFirst(); it != self->_globals.GetEnd(); ++it) {
+    // retail's `for (n = head; n; n = n->next)` over the global list, spelled
+    // through the iterator, which IS the bare node pointer.
+    for (List::Iterator it = _globals.GetFirst(); it != _globals.GetEnd(); ++it) {
         Geometry* geo = *it;
         if (geo->_dirtyFlags != 0)
-            VClean(geo);
+            geo->Clean();                                       // VIRTUAL, slot 8
     }
-
 }
+
+// ---------------------------------------------------------------------------
+// Graphics::Scene::AddDrawItems(Renderer&) const  retail 0x1801023b0, ord 1545
+// PORTED BY BLOCK F — see the door above for the disassembly and for why
+// `Renderer::_detailId` is the field the branch reads.
+// ---------------------------------------------------------------------------
+void Scene::AddDrawItems(Renderer& renderer) const {
+    AddGlobalDrawItems(renderer);
+    if (renderer._detailId != 0)
+        AddCulledDrawItems(renderer);
+}
+
+}  // namespace Graphics
 
 // ============================================================================
 // Registration.
@@ -1371,6 +1693,11 @@ int RtGraphicsSceneRegister() {
 
     RegisterRuntimeExport("?Clean@Scene@Graphics@@QEAAXXZ", (void*)&RtGraphics_Scene_Clean); ++count;
     RegisterRuntimeAddr(0x1801023f0, (void*)&RtGraphics_Scene_Clean);
+
+    // ENDGAME B.3.5 block F — the twentieth row, read out of the DLL this pass.
+    RegisterRuntimeExport("?AddDrawItems@Scene@Graphics@@QEBAXAEAVRenderer@2@@Z",
+                          (void*)&RtGraphics_Scene_AddDrawItems); ++count;
+    RegisterRuntimeAddr(0x1801023b0, (void*)&RtGraphics_Scene_AddDrawItems);
 
     return count;
 }

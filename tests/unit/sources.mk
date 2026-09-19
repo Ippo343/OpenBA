@@ -158,3 +158,23 @@ UNIT_TREE_SRCS +=
 # runtime/types/object/External.h, whose linkable half (external_class.cpp) is
 # already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block F — `Graphics::Camera`, `Graphics::Renderer`,
+# `Graphics::Scene` and the four Renderer array element types
+# (tests/unit/graphics_renderer_abi_test.cpp). NO TREE SOURCE IS LINKED, and
+# unlike block E's Geometry test there are no marker bodies either: none of the
+# seven classes is polymorphic, so there is no vtable for a translation unit to
+# emit and nothing forces a key function to exist here. Every body lives in
+# `runtime/src/graphics/{renderer,scene,cull,sun_camera,wave9_lane_gfxd,
+# wave29_lane_gfxbody,closure_batch2b}.cpp`, which stand on
+# `RegisterRuntimeExport` / `ResolveAddr` / `RT_EXPORT_ONCE` / `RT_DATA_SLOT` and
+# cannot link here (the same reason `external_class_doors.cpp` is kept out), and
+# writing marker bodies for members that already have real ones would be a second
+# definition. So the test is LAYOUT plus two ABI properties — RULE B5-4's trivial
+# copyability in both directions, and the `(this, ret)` retslot door shape on a
+# NON-virtual by-value return, which is the other half of block E's ms_abi
+# finding. `Math::Transform3` / `Math::Matrix` / `::Frustum` are the real classes
+# (runtime/src/math/ is already on this list), so the copies it checks are real.
+# The arithmetic in `Camera::IsMirrored`, `SunLight::GetSunCamera` and
+# `Scene::Clean` is verified by the real run.
+UNIT_TREE_SRCS +=

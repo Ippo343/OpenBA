@@ -72,12 +72,16 @@
 
 namespace {
 
-using RtGraphics::Camera;
-using RtGraphics::Geometry;
-using RtGraphics::Renderer;
-using RtGraphics::RendererDrawGroup;
-using RtGraphics::Scene;
-using RtGraphics::SceneNode;
+// ENDGAME B.3.5 block F: these five name the REAL `Graphics::` classes now — the
+// whole of this file's object surface (`Scene`, `Geometry`, `Renderer`,
+// `RendererDrawGroup`) is block E's or block F's, and the members below are
+// written against them. `RtGraphics::Camera` is not needed at all any more: the
+// two frusta come out of `RendererDrawGroup::_camera` / `_cullCamera`.
+using Graphics::Geometry;
+using Graphics::Renderer;
+using Graphics::RendererDrawGroup;
+using Graphics::Scene;
+using Graphics::SceneNode;
 
 // --- retail .rdata constants, lifted as raw bits ----------------------------
 //   0x180161694 = 0x3f000000    0.5f
@@ -317,30 +321,67 @@ extern "C" void RtGraphics_Scene_CullStackPushChildren(void* selfv, uint32_t mas
 // ============================================================================
 // ?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z — retail 0x1801017a0
 // ============================================================================
+// ENDGAME B.3.5 block F: the BODY MOVED to the private member
+// `Graphics::Scene::AddCulledDrawItems(Renderer&) const` at the bottom of this
+// file. The door keeps its name, both registrations and retail's ABI.
 extern "C" void RtGraphics_Scene_AddCulledDrawItems(const void* selfv, void* rendererv) {
-    const Scene* self     = static_cast<const Scene*>(selfv);
-    Renderer*    renderer = static_cast<Renderer*>(rendererv);
+    reinterpret_cast<const ::Graphics::Scene*>(selfv)                       // B.3.5 bridge
+        ->::Graphics::Scene::AddCulledDrawItems(
+            *reinterpret_cast<::Graphics::Renderer*>(rendererv));
+}
 
-    uint8_t* const group = reinterpret_cast<uint8_t*>(renderer->drawGroups._data) +
-                           static_cast<int64_t>(renderer->currentDrawGroup) * 0x1f0;
-    const RendererDrawGroup* g = reinterpret_cast<const RendererDrawGroup*>(group);
+// ############################################################################
+// ENDGAME B.3 step 5 (block F) — THE BODY, MOVED ONTO THE MEMBER
+// ############################################################################
+//
+// `?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z` is `AEBA` — a
+// PRIVATE const member that this DLL exports anyway
+// (reference_aeaa_is_private_not_unexported.md). `Scene.h` declares it PUBLIC and
+// records retail's access in a comment, because its registered door is a free
+// `extern "C"` function that has to call it — the same choice block E made for
+// `SunLight::CreateTargets` (`AEAA`). Access control is not ABI; the mangled name
+// the door registers is.
+//
+// FIVE THINGS THE CONVERSION MADE NAMEABLE, each previously a raw byte offset and
+// each now `static_assert`ed in Camera.h:
+//   group + 0x1bc  ->  `RendererDrawGroup::_materialTypeFlags`
+//                      (`?GetMaterialTypeFlags@Renderer@` 0x180017ff0 returns it)
+//   group + 0x0e0  ->  `_cullCamera`, and +0x144 is its `_cameraToWorld`
+//   group + 0x008  ->  `_camera`, and +0x6c is ITS `_cameraToWorld`
+//                      — the "OTHER camera" this file's banner describes, now a
+//                      named field with four independent witnesses
+//   group + 0x1b8  ->  `_shader`
+//   renderer+0x48  ->  `Renderer::_detailId` (`?GetDetailId@` 0x180018070)
+//
+// The two frusta are still copied through `::Frustum*` cursors rather than by
+// member name, because `Volume::Frustum::operator*` is reached through an export
+// door that takes pointers; the SOURCE of each copy is now a named member.
+// ############################################################################
 
-    const uint32_t passMask = g->passMask;                       // group +0x1bc
+namespace Graphics {
 
-    // The cull frustum, from cullCamera (group +0xe0) into world space.
-    Frustum cullFrustum;
-    FrustumTimes(reinterpret_cast<const Frustum*>(group + 0xe0), &cullFrustum,
-                 reinterpret_cast<const Transform3*>(group + 0x144));
+void Scene::AddCulledDrawItems(Renderer& rendererRef) const {
+    const Scene* self     = this;
+    Renderer*    renderer = &rendererRef;
+
+    const RendererDrawGroup* g = &renderer->_drawGroups[renderer->_currentDrawGroup];
+
+    const uint32_t passMask = g->_materialTypeFlags;             // group +0x1bc
+
+    // The cull frustum, from `_cullCamera` (group +0xe0) into world space.
+    ::Frustum cullFrustum;
+    FrustumTimes(&g->_cullCamera._frustum, &cullFrustum, &g->_cullCamera._cameraToWorld);
 
     // plane[0]'s normal, the direction the shadow-caster extension runs along.
     const float extX = cullFrustum.planes[0].x;
     const float extY = cullFrustum.planes[0].y;
     const float extZ = cullFrustum.planes[0].z;
 
-    // The shadow frustum, from the draw group's OTHER camera at group +0x08.
-    Frustum shadowFrustum;
-    FrustumTimes(reinterpret_cast<const Frustum*>(group + 0x08), &shadowFrustum,
-                 reinterpret_cast<const Transform3*>(group + 0x6c));
+    // The shadow frustum, from the draw group's OTHER camera, `_camera` at
+    // group +0x08. `BeginDrawGroup` fills it from its third argument and
+    // `?GetCamera@Renderer@` returns it; see Camera.h.
+    ::Frustum shadowFrustum;
+    FrustumTimes(&g->_camera._frustum, &shadowFrustum, &g->_camera._cameraToWorld);
 
     GeomList list = { nullptr, 0, 0 };
     ReserveVisibleList(&list);
@@ -352,7 +393,7 @@ extern "C" void RtGraphics_Scene_AddCulledDrawItems(const void* selfv, void* ren
 
     // `shader != 1` means "no shadow pass": objects go straight into the list
     // and the second frustum is never consulted.
-    const bool notShadow = (g->shader != 1);
+    const bool notShadow = (g->_shader != 1);
 
     while (st.top >= 0) {
         const int32_t t    = st.top;
@@ -389,7 +430,7 @@ extern "C" void RtGraphics_Scene_AddCulledDrawItems(const void* selfv, void* ren
                 Geometry* const  geo  = node._object;
 
                 if ((geo->_materialTypeFlags & passMask) != 0 &&
-                    geo->_detailId <= renderer->field_48) {
+                    geo->_detailId <= renderer->_detailId) {
 
                     unsigned int r = 0;
                     if (cullMask != 0) {
@@ -449,15 +490,21 @@ extern "C" void RtGraphics_Scene_AddCulledDrawItems(const void* selfv, void* ren
         RtGraphics_Scene_CullStackPushChildren(&st, (shadowMask << 16) | cullMask);
     }
 
+    // ENDGAME B.3.5 block F: this was a hand-inlined `(*(void***)geo)[3]` call
+    // with its own `AddFn` typedef and `RtGraphics::kVSlotAddDrawItems`. It is now
+    // an ORDINARY VIRTUAL CALL on a `Graphics::Geometry*` — slot 3, pure on the
+    // base, and `?AddDrawItems@SunLight@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z`
+    // (0x180106f50) is one of the overrides that confirmed both the index and the
+    // argument tuple (Geometry.h's enum comment).
     for (int32_t i = 0; i < list.size; ++i) {
         Geometry* geo = list.data[i];
-        using AddFn = void (*)(Geometry*, const Scene*, Renderer*);
-        void** vt = *reinterpret_cast<void***>(geo);
-        reinterpret_cast<AddFn>(vt[RtGraphics::kVSlotAddDrawItems])(geo, self, renderer);
+        geo->AddDrawItems(*self, *renderer);                     // VIRTUAL, slot 3
     }
 
     if (list.data != nullptr) RtMemFree(list.data);
 }
+
+}  // namespace Graphics
 
 int RtGraphicsCullRegister() {
     int n = 0;

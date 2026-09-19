@@ -329,50 +329,12 @@ inline void DrawItemSort(void* data, int count, void* scratch) {
 // reference_only_a_writer_names_a_field.md they are left UNNAMED here rather
 // than guessed, and they are read through a byte offset for that reason.
 // ============================================================================
+// ENDGAME B.3.5 block F: the BODY MOVED to the `Graphics::Scene` member at the
+// bottom of this file. The door keeps its name and its registration.
 void RtGraphics_Scene_AddGlobalDrawItems(const Scene* self, Renderer* renderer) {
-    ++g_addGlobal;
-
-    const int32_t groupIndex = renderer->currentDrawGroup;
-    const RendererDrawGroup* groups = renderer->drawGroups.GetData();
-    const uint8_t* groupBytes =
-        reinterpret_cast<const uint8_t*>(groups) +
-        static_cast<int64_t>(groupIndex) * 0x1f0;
-    const uint32_t passMask = *reinterpret_cast<const uint32_t*>(groupBytes + 0x1bc);
-
-    // `Renderer::field_48` — read ONCE per call in retail? No: retail re-reads
-    // `[rdi+0x48]` INSIDE the loop (0x180102378), once per surviving node.
-    // Hoisting it would be a different program if the virtual call can mutate
-    // it, so it is re-read here too.
-    //
-    // ENDGAME B.3.2 step 2 (callers) — `self->_globals` is a real
-    // `Collection::LinkedList<Geometry*>` member (Scene.h): the manual
-    // `node+0x00` (element) / `node+0x10` (next) walk becomes the Iterator,
-    // whose dereference IS the bare node's element (Collection.h's Iterator
-    // banner) and whose `operator++` IS the same `node = node->next` this loop
-    // did by hand. `obj`'s `+0x30`/`+0x28` fields and its vtable slot 3 stay
-    // raw byte reads: this lane found no writer to name either field
-    // (see the banner above), so there is nothing on `Geometry` to call.
-    using GlobalIter = Collection::LinkedList<RtGraphics::Geometry*>::Iterator;
-    for (GlobalIter it = self->_globals.GetFirst(); it; ++it) {
-        ++g_addGlobalVisited;
-        const uint8_t* obj = reinterpret_cast<const uint8_t*>(*it);
-
-        const uint32_t objMask = *reinterpret_cast<const uint32_t*>(obj + 0x30);
-        if ((objMask & passMask) != 0) {
-            const int32_t objKey = *reinterpret_cast<const int32_t*>(obj + 0x28);
-            if (objKey <= renderer->field_48) {
-                // vtable slot 3 — AddDrawItems(const Scene&, Renderer&).
-                using AddDrawItemsFn =
-                    void (*)(const void* obj, const Scene* scene, Renderer* r);
-                const uint8_t* const* vtbl =
-                    *reinterpret_cast<const uint8_t* const* const*>(obj);
-                AddDrawItemsFn fn = reinterpret_cast<AddDrawItemsFn>(
-                    const_cast<uint8_t*>(vtbl[3]));
-                fn(obj, self, renderer);
-                ++g_addGlobalEmitted;
-            }
-        }
-    }
+    reinterpret_cast<const ::Graphics::Scene*>(self)                     // B.3.5 bridge
+        ->::Graphics::Scene::AddGlobalDrawItems(
+            *reinterpret_cast<::Graphics::Renderer*>(renderer));
 }
 
 // ============================================================================
@@ -725,6 +687,62 @@ int RtGraphicsWave29GfxbodyRegister() {
 // ############################################################################
 
 namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?AddGlobalDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z  retail 0x180102330
+//
+// The "global" half of the scene — objects that skip the grid and are visited
+// every frame regardless of the cull. `AEBA`: a PRIVATE const member that this
+// DLL exports anyway, declared public on `Graphics::Scene` for the reason
+// Scene.h records (its registered door is a free function).
+//
+// WRITTEN-OPERAND SET: EMPTY outside the frame. The operand set PROVES the const
+// rather than trusting the `AEBA` in the name.
+//
+// THREE RAW BYTE READS THIS CONVERSION RETIRES. This lane wrote "TWO FIELDS OF
+// THE OBJECT ARE READ AND THIS LANE DOES NOT NAME EITHER", and left `obj+0x30`,
+// `obj+0x28` and `renderer+0x48` as byte reads per
+// reference_only_a_writer_names_a_field.md. All three are named now, from
+// WRITERS and from accessor exports rather than from more readers:
+//   obj + 0x30      `Geometry::_materialTypeFlags` — block E's class; retail's
+//                   `?GetMaterialTypeFlags@Geometry@` (0x1800157f0) returns it,
+//                   and `?GetMaterialTypeFlags@Renderer@` (0x180017ff0) returns
+//                   the draw group's `_materialTypeFlags` this ANDs against.
+//   obj + 0x28      `Geometry::_detailId` — `?GetDetailId@Geometry@`
+//                   (0x180015890), and the Geometry constructor writes 2 there.
+//   renderer + 0x48 `Renderer::_detailId` — `?GetDetailId@Renderer@`
+//                   (0x180018070) is `MOV EAX,[RCX+0x48]; RET`. Block F read it
+//                   this pass; see Camera.h correction 2.
+// So the `>` test is a DETAIL-LEVEL threshold on both sides, which is what this
+// lane suspected and could not name.
+//
+// The vtable slot 3 call is now an ORDINARY VIRTUAL CALL on a
+// `Graphics::Geometry*` (block E declared the slot; `cull.cpp`'s sibling loop
+// converted the same way).
+//
+// `Renderer::_detailId` is RE-READ INSIDE THE LOOP (`[rdi+0x48]` at
+// 0x180102378), once per surviving node, because the virtual call could in
+// principle mutate it. Hoisting it would be a different program.
+// ---------------------------------------------------------------------------
+void Scene::AddGlobalDrawItems(Renderer& rendererRef) const {
+    ++rtgfxbody29::g_addGlobal;
+
+    const Renderer* renderer = &rendererRef;
+    const uint32_t passMask =
+        renderer->_drawGroups[renderer->_currentDrawGroup]._materialTypeFlags;
+
+    for (auto it = _globals.GetFirst(); it; ++it) {
+        ++rtgfxbody29::g_addGlobalVisited;
+        Geometry* const obj = *it;
+
+        if ((obj->_materialTypeFlags & passMask) != 0) {
+            if (obj->_detailId <= renderer->_detailId) {       // re-read, per retail
+                obj->AddDrawItems(*this, rendererRef);         // VIRTUAL, slot 3
+                ++rtgfxbody29::g_addGlobalEmitted;
+            }
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
 // ?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z — retail 0x1801051d0.
