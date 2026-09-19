@@ -442,6 +442,18 @@ static_assert(FactoryTypeNodeOffsets::kRight         == 0x40, "type-map right");
 
 namespace rt { namespace io { struct Serializer; } }
 
+// B.3.4 STREAMS (5/6) — `ExternalFactory::SerializeReferenceTable` takes
+// retail's own `IO::Stream&`. A FORWARD DECLARATION and not an include of
+// runtime/types/io/Stream.h, deliberately: the parameter is a reference, so an
+// incomplete type is all the declaration needs, and this header is included by
+// most of runtime/src/object/. Pulling the whole IO stream family in here would
+// put `IO::Stream`, `IO::MemoryStream` and the Compressed branch into every one
+// of those translation units to satisfy one parameter — and, worse for section
+// 7.2, it would arm the bare-name grep hazard in files that have no other
+// reason to see those classes. The one file that forwards the call
+// (external_class_doors.cpp) includes Stream.h itself.
+namespace IO { class Stream; }
+
 namespace Object {
 
 // The one shared body, defined in runtime/src/object/external_ptr_serialize.cpp
@@ -898,10 +910,26 @@ public:
     const External* FindOrLoad(const System::Filename& path);  // 0x1800bf320
     void            Clean();                                   // 0x1800be310
     void            ForceUnload(const System::Filename& path);
-    // `SerializeReferenceTable` (0x1800bcb60) is deliberately NOT declared —
-    // its real parameter is `IO::Stream&`, which is B.3 step 4's type, and the
-    // ported entry point's second parameter is a file-local struct that cannot
-    // be named from another translation unit. See external_class_doors.cpp.
+
+    // ?SerializeReferenceTable@ExternalFactory@Object@@QEAAXAEAVStream@IO@@@Z
+    //   retail 0x1800bcb60 — DECLARED AS OF ENDGAME B.3.4 STREAMS (5/6).
+    //
+    // It was held back by a TYPE, not by a decision about the method: retail's
+    // parameter is `IO::Stream&`, and until block 4 there was no such class —
+    // only two independently declared duplicate PODs (`rt::io::Stream` in
+    // Serializer.h, which the ported entry point takes, and `RtIo::Stream` in
+    // Stream.h), neither of which could be named from another translation unit
+    // without dragging one header's private spelling into this one.
+    // `IO::Stream` now exists and replaces both (B34_RULES section 1.5.2), so
+    // the declaration below is finally retail's own signature.
+    //
+    // IT IS A FORWARDER, like every other member of the mutating half — see the
+    // banner above and external_class_doors.cpp. Its body tears down and
+    // rebuilds `_references`, the same tree the `ExternalFactory::Add`
+    // loader-thread AVL-rotate race runs in, and B34_BRIEFS section D binds it:
+    // the instruction sequence in external_reftable.cpp is untouched, with one
+    // extra (inlinable) call frame in front of it.
+    void            SerializeReferenceTable(IO::Stream& stream);
 
     // ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z
     //   retail 0x1800bec10 — a STATIC returning by value.

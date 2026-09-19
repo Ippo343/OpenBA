@@ -47,6 +47,11 @@
 #include <new>
 
 #include "../../types/object/External.h"
+#include "../../types/io/Stream.h"   // B.3.4 STREAMS (5/6): IO::Stream, the
+                                     // parameter of SerializeReferenceTable,
+                                     // and rt::io::Stream, the POD the ported
+                                     // entry point still takes. External.h only
+                                     // forward-declares the class on purpose.
 #include "../../funcs/rt_port.h"
 #include "../system/string.h"       // RtSystem::RtMemFree (~ExternalList)
 #include "../system/pod_bridge.h"
@@ -91,6 +96,13 @@ extern "C" bool  RtObject_ExternalList_Serialize(void* selfv, void* streamv);
 // external_add.cpp:219 — declared inside `namespace RtObject` but `extern "C"`,
 // so the C++ name lives here and the linker name is unqualified.
 extern "C" void RtObject_ExternalFactory_Add(ExternalFactory* self, External* external);
+// external_reftable.cpp:192 — C++ linkage inside `namespace RtObject`. Its
+// second parameter is spelled `rt::io::Stream` THERE (the file has a
+// `using rt::io::Stream;`), so it must be spelled the same way here or the
+// declaration names a different overload and the link fails. That POD is the
+// lane-A duplicate `IO::Stream` replaces; see the forwarder below.
+void RtObject_ExternalFactory_SerializeReferenceTable(ExternalFactory* self,
+                                                      rt::io::Stream* stream);
 }  // namespace RtObject
 
 namespace Object {
@@ -244,19 +256,48 @@ void ExternalFactory::Clean() {
 void ExternalFactory::ForceUnload(const System::Filename& path) {
     RtObject::RtObject_ExternalFactory_ForceUnload(Pod(this), PodF(path));
 }
-// `SerializeReferenceTable` (0x1800bcb60) IS NOT DECLARED ON THE CLASS, and the
-// reason is a type that is not a class yet rather than a decision about the
-// method: `RtObject_ExternalFactory_SerializeReferenceTable`'s second parameter
-// is `rt::io::Stream` — the DUPLICATE POD declared in
-// runtime/types/io/Serializer.h, the one `RtIo::Stream` (Stream.h) shadows —
-// so the entry point cannot be forwarded to without editing that file's
-// signature. Its real parameter is `IO::Stream&`.
+// ---------------------------------------------------------------------------
+// `SerializeReferenceTable` (0x1800bcb60) — LANDS HERE, B.3.4 STREAMS (5/6).
+// ---------------------------------------------------------------------------
+// The paragraph this replaces said the method was held back by a TYPE and not
+// by a decision about the method: retail's parameter is `IO::Stream&`, and
+// `RtObject_ExternalFactory_SerializeReferenceTable`'s second parameter is
+// `rt::io::Stream` — the DUPLICATE POD declared in runtime/types/io/Serializer.h,
+// the one `RtIo::Stream` (Stream.h) shadows. Block 3 landed `IO::Serializer`
+// but not `IO::Stream`; block 4 landed `IO::Stream` and it replaces BOTH PODs
+// (B34_RULES §1.5.2). So the signature is now spellable and the method lands.
 //
-// B.3.4 block 3 landed `IO::Serializer` and deleted `RtObject::SerializerLite`,
-// but it did NOT land `IO::Stream`: that is block 4 (STREAMS), which collapses
-// the two duplicate PODs into the one class (B34_RULES §1.5.2). So this method
-// still lands with the STREAM conversion and not before, and the registered
-// entry point is untouched — every caller of it still works.
+// IT FORWARDS, AND THAT IS THE POINT — TWICE OVER.
+//
+//  1. It is in the MUTATING HALF. Its body tears `_references` down
+//     (`ReferenceSubtreeFree`, then root = 0 and count = 0) and rebuilds it row
+//     by row through `rtrefset::Insert` — the SAME tree the
+//     `ExternalFactory::Add` loader-thread AVL-rotate race runs in. The file
+//     banner's rule applies unchanged: a real class changes the SPELLING of the
+//     tree mutation, never its timing.
+//  2. B34_BRIEFS §D binds it independently. `external_reftable.cpp` is on the
+//     loader-race path and its bodies stay byte-faithful — no lock, no retry,
+//     no reordering, no null check, and no silent removal of whatever makes the
+//     race reproduce. **This commit changes ZERO lines of external_reftable.cpp.**
+//
+// THE BRIDGE CAST is the class->POD direction, exactly like `Pod(this)`:
+// `IO::Stream` and `rt::io::Stream` are cross-asserted field for field and
+// `sizeof`-for-`sizeof` in runtime/types/io/Stream.h, so it is exact by
+// construction. It goes when the entry point itself takes `IO::Stream*`, which
+// is after the IO caller batches — the two PODs stay alive, trivially
+// destructible, until their last user converts (B33 §7).
+//
+// NO QUALIFIED CALL IS NEEDED ANYWHERE HERE. `Object::ExternalFactory` has NO
+// VTABLE (`??0ExternalFactory@Object@@` writes no vptr and the class has no
+// exported `??_7`), so the recursion hazard B34_BRIEFS §A.1 describes for the
+// stream classes cannot arise: there is no table to dispatch through and no
+// door for a virtual call to re-enter. Said out loud because a reader arriving
+// from the STREAMS commits will look for the `Class::` and wonder.
+void ExternalFactory::SerializeReferenceTable(IO::Stream& stream) {
+    RtObject::RtObject_ExternalFactory_SerializeReferenceTable(
+        Pod(this),
+        reinterpret_cast<rt::io::Stream*>(&stream));                 // B.3.4 bridge
+}
 
 // ?GetCompiledPath@ExternalFactory@Object@@SA?AVFilename@System@@AEBV34@@Z
 //   retail 0x1800bec10 — a STATIC returning by value, so RCX is the hidden
