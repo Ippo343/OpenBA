@@ -230,6 +230,26 @@ Every other hit of that constant is a comment (`audio_stream_win.cpp` ×5,
 > `RtSystem::Thread _thread;` and `System::Thread` keeps `virtual void Run() = 0;`. Nothing
 > constructs a `System::Thread` as a C++ object (B34_BRIEFS §A.4: abstract costs nothing), and
 > `sizeof` still works on an abstract class so every layout pin holds.
+>
+> **THE READING OF §A.3/§A.4 THIS SETTLES (coordinator ruling, 2026-09-19).**
+> §A.3's "a class held BY VALUE as a member needs a public non-virtual destructor" and §A.4's
+> "concrete where something holds the class by value" are about a **REAL CLASS holding a REAL
+> CLASS** — `IO::CompressedMemoryStream` holds an `IO::MemoryStream`, and both are converted, so
+> the enclosing class's implicit members must be able to reach the enclosed one's. **A POD
+> MIRROR HOLDING THE POD IS NOT THAT CASE AND DOES NOT TRIGGER THE RULE.** When the holder is
+> itself an unconverted POD, the correct move is the POD-to-POD spelling, and the class stays
+> whatever retail's table says it is. Stated once here so the next agent who meets a by-value
+> holder checks *what the holder is* before reaching for `= default` + `friend`.
+>
+> **The pins this rule owes, and they are in the header:** `sizeof` and every `offsetof`
+> asserted on the class, the same set asserted on the POD, and a **cross-assert of each against
+> the other**, so the two spellings can never drift. The class's +0x00 is the implicit vptr
+> where the POD's is the explicit `void* vtable` field — that is the one member that does not
+> cross-assert and the header says so at the assert.
+>
+> **Slot 1 is named from evidence, not guessed:** `rt_data_mint_tables.inc:3714` carries it as
+> `RT_MINT_NAMED "?OnCompleted@Thread@System@@UEAAXXZ"` @ 0x18000c590, so the declaration is
+> `virtual void OnCompleted();`. Only slot 0 needed the `Run` derivation (§1.1).
 
 **The POD's other users, by include graph (this is the sweep RULE B4b-1 demands):**
 `runtime/src/system/thread_win.cpp` (converted in the same commit) ·
@@ -322,12 +342,38 @@ Each is a minted 8-byte (or 0x2000-byte, for `_errorString`) storage cell in
 > `timer.cpp:164-172` (all five Timer statics, through `RT_DATA_SLOT`) and
 > `error.cpp:168-177` (all three Error statics).
 >
-> `standalone/rt_data_mint.cpp` is `b34-closing`'s file. **Therefore no class in 4b may take
-> its statics into C++ before that agent lands** — which means `Timer`, `Error` and
-> `Configuration` convert their FUNCTIONS in 4b and leave their STATICS as `RT_DATA_SLOT`
-> reads, with a one-line comment naming this rule. That is not a compromise; it is the same
-> "faithful partial beats a complete-looking deletion" call B34_RULES §3.1 made for
-> `IO::Serializer`'s slot calls.
+> **COORDINATOR RULING, 2026-09-19: THE REDIRECT IS NOT 4b WORK.** `Timer`, `Error` and
+> `Configuration` convert their **FUNCTIONS** in 4b and leave their **STATICS** as
+> `RT_DATA_SLOT` reads, each carrying a one-line comment naming this rule. That is not a
+> compromise; it is the same "faithful partial beats a complete-looking deletion" call
+> B34_RULES §3.1 made for `IO::Serializer`'s slot calls. The redirect is **OWED**, per row, at
+> the class-static conversion — the END of B.3, with the rest of the by-name readers — and the
+> debt is recorded here, per row, so nothing is dropped and nobody half-does it.
+
+### 4.1 The redirect debt, per row
+
+Each row below is **OWED a `MintStorageCell()` redirect at the class-static conversion (end of
+B.3)**, not in 4b. "Live by-name readers" is what must keep working the instant the static
+becomes a C++ member; every one was read this pass.
+
+| row | becomes | live by-name readers today | redirect owed |
+|---|---|---|---|
+| `?_ticksPerSecond@Timer@System@@0_JA` 0x1801fe720 | `static int64_t System::Timer::_ticksPerSecond` | `timer.cpp:164` | YES |
+| `?_secondsPerTick@Timer@System@@0NA` 0x1801fe728 | `static double System::Timer::_secondsPerTick` | `timer.cpp:166` | YES |
+| `?_systemTicksPerSecond@Timer@System@@0_JA` 0x1801fe730 | `static int64_t …::_systemTicksPerSecond` | `timer.cpp:168` | YES |
+| `?_systemInitialTick@Timer@System@@0_JA` 0x1801fe738 | `static int64_t …::_systemInitialTick` | `timer.cpp:170` | YES |
+| `?_systemSecondsPerTick@Timer@System@@0NA` 0x1801fe740 | `static double …::_systemSecondsPerTick` | `timer.cpp:172` | YES |
+| `?_errorString@Error@System@@0PADA` 0x1801fc720 | `static char System::Error::_errorString[0x2000]` | `error.cpp:168` | YES |
+| `?_stopApplication@Error@System@@0_NA` 0x1801fc70a | `static bool …::_stopApplication` | `error.cpp:171` | YES |
+| `?_hideDisplay@Error@System@@0_NA` 0x1801fc709 | `static bool …::_hideDisplay` | `error.cpp:177` | YES |
+| `?_singleton@Configuration@System@@0PEAV12@EA` 0x1801fc6f8 | `static Configuration* …::_singleton` | `engine_lifecycle.cpp:283` (the `RT_DATA_SLOT` accessor) | YES |
+| `?_singleton@MemoryAllocator@System@@0PEAV12@EA` 0x1801fc718 | `static MemoryAllocator* …::_singleton` | `allocator.cpp:664-668` `SingletonSlot()` | YES — **and not before §6's defer is lifted** |
+| `?_disableHandler@Debug@System@@0_NA` 0x1801fc708 | — | none (`System::Debug` is unported, §1) | **NO** — nothing to convert it to; the row simply stays |
+
+Note the `_errorString` row is 0x2000 bytes, not 8: a redirect must return the array's address,
+not a pointer to a pointer. `timer.cpp:124-142`'s own banner already explains why all five
+Timer statics must be published the same way at the same moment — splitting them is what that
+comment exists to prevent, so the five redirect **together or not at all**.
 
 ---
 
@@ -417,17 +463,24 @@ when `Construct()` runs relative to that install either freezes a pre-shim point
 `?_singleton@MemoryAllocator@System@@0PEAV12@EA` @ 0x1801fc718 is **our minted cell** —
 `rt_data_mint_tables.inc:4715` (`&kStorageBytes[14016]`, 8 bytes, "singleton pointer") and
 `cutover_manifest.inc:79` `CUTOVER_REQUIRED`. It is written by `rtalloc::Construct`
-(`allocator.cpp:653`) and **nulled by `rtalloc::Destruct`** (`allocator.cpp:658`), both through
+(`allocator.cpp:652`) and **nulled by `rtalloc::Destruct`** (`allocator.cpp:658-661`), both through
 `SingletonSlot()` → `RT_DATA_SLOT`. `engine_funcs.cpp:1369` and `standalone/main.cpp:720`
 dereference it once each at init.
 
-### 6.3 THE OPEN CRASH — a mechanism, from the code
+### 6.3 OPEN DEFECT — the allocator `LockEnter` crash, and a mechanism from the code
+
+> **STATUS: OPEN. Not fixed, not reproduced on demand, not to be null-checked.**
+> Recorded here verbatim at the coordinator's request (2026-09-19) with its file:line anchors,
+> because it is the one piece of 4b evidence that outlives 4b. Owner: the loader defect
+> (B34_BRIEFS §D / `[[project_menu_heap_crash]]`), **not** this step.
+> The diagnostic that would close it — printing `_singleton`'s value in the crash dump — is a
+> `standalone/` change and is scheduled by the coordinator after `b34-closing` lands.
 
 Reported: `RtObject_External_Load -> GraphicsMesh_Serialize -> String::Serialize -> SetLength
 -> rtalloc::MemAlloc -> LockEnter on a NULL lock`, 2 in 7 resave runs under heavy machine load,
 never since.
 
-**The unguarded deref is real and it is faithful.** `allocator.cpp:675-681`:
+**The unguarded deref is real and it is faithful.** `allocator.cpp:677-683`:
 
 ```cpp
 void* MemAlloc(uint64_t size, int align) {
@@ -505,13 +558,29 @@ Receiver-side only until `b34-closing` reports the 4a closing pass merged. Until
 | # | commit | files |
 |---|---|---|
 | 1 | this sheet | `docs/runtime_port/endgame_b/B34B_RULES.md` |
-| 2 | `System::CriticalSection` + `System::Thread` | `runtime/types/system/Thread.h`, `runtime/src/system/thread_win.cpp`, `runtime/types/engine/UpdateLoop.h`, `tests/unit/system_abi_test.cpp` (+ `sources.mk`) |
+| 2 | `System::CriticalSection` + `System::Thread` | `runtime/types/system/Thread.h`, `runtime/src/system/thread_win.cpp`, `runtime/types/engine/UpdateLoop.h`, `runtime/src/engine/loops.cpp` (one word, §7.1), `tests/unit/system_abi_test.cpp` + `system_abi_stubs.{cpp,h}` |
 | 3 | `System::Random`, `Color`, `Time`, `DateTime` | `runtime/types/system/Value.h`, `runtime/src/system/value_types.cpp`, the test |
 | 4 | `Configuration` / `Compression` / `Timer` / `CRC` / `Error` / `WideString` — **establish first whether each IS a class** (the `IO::TextCodec` precedent: four receiverless free functions, and nothing landed, which is a valid recorded outcome) | `runtime/src/system/{configuration,compression,timer,crc,error,widestring}.{cpp,h}`, `runtime/types/system/` as needed |
 | — | `System::MemoryAllocator` | **not converted**; §6 is the deliverable |
 | — | `IO::Serializer::Serialize(int64_t&)` + the `Time::Serialize` site | **after `b34-closing`**; §3 |
 
-Per-commit self-check is `B34_BRIEFS.md` §F minus the game-dir lock and the resave gate: the
+### 7.1 The forward-declaration tag, found at commit 2
+
+`runtime/src/engine/loops.cpp:123` forward-declares the door's parameter as
+`namespace System { struct Thread; }` and never includes `Thread.h`. Once `System::Thread` is a
+**class**, that is a struct/class tag mismatch — which **GCC accepts silently**, which is
+exactly why it is corrected rather than left working. The fix is one word and it is part of
+commit 2's file set; the door's signature and the cast at `:724` are unchanged, because the
+class keeps the POD's layout.
+
+> **RULE B4b-5.** A class conversion sweeps forward declarations as well as definitions. A
+> `struct X;` that now names a `class X` is not a build error on this toolchain and will not
+> announce itself — grep `namespace <NS> {` for a bare tag of every converted name before
+> committing, and do not rely on the compiler for this one.
+
+### 7.2 Per-commit self-check
+
+`B34_BRIEFS.md` §F minus the game-dir lock and the resave gate: the
 coordinator gates each reported hash on the merged tree. What the agent runs itself:
 `git merge main` · `standalone-debug` · `standalone-perf` (the real NDEBUG build; `standalone`
 shares an obj dir with `standalone-debug`) · `unit` · zero new warnings in changed files ·

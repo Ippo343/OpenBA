@@ -9,15 +9,37 @@
 // spelled `void*` (their real Win32 type, no header needed) so a `_posix` twin
 // can later give this same layout POSIX-native contents. The Win32-specific
 // code that interprets these fields lives in runtime/src/system/thread_win.cpp.
+//
+// ============================================================================
+// ENDGAME B.3.4b — THE PODs MOVED TO `RtSystem`. READ THIS BEFORE EDITING.
+// ============================================================================
+// This file used to declare the two PODs INSIDE `namespace System`, which made
+// them occupy the retail classes' own names. B.3.4b declares the real classes
+// (bottom of this file), so the PODs moved to `namespace RtSystem` — the
+// spelling this directory already uses for `RtSystem::String` (String.h) and
+// `RtSystem::Filename` (Filename.h). That is B34B_RULES.md's rule B4b-1:
+//
+//   * the POD is NOT deleted and does NOT get a destructor (B34_RULES §1.5
+//     rule 3 — giving a POD a destructor runs a second one, the
+//     `RtSystem::String` double-free lesson);
+//   * it stays trivially destructible and keeps every layout pin;
+//   * its users are swept by INCLUDE GRAPH, not by grep — after the rename the
+//     old spelling simply stops resolving, so the compiler finds them all.
+//
+// ⚠ THE GREP HAZARD IS NOW ARMED FOR `System` (B34_RULES §7.2). Inside any
+// `namespace System { ... }` block, a bare `Thread` or `CriticalSection` binds
+// the REAL CLASS, silently. Always spell the POD `RtSystem::Thread` /
+// `RtSystem::CriticalSection`.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // B.3.4b: the "CriticalSection has no vptr" pin
 
-namespace System {
+namespace RtSystem {
 
 // ----------------------------------------------------------------------------
-// System::CriticalSection
+// RtSystem::CriticalSection — the POD
 // ----------------------------------------------------------------------------
 // Retail (0x18000c5c0, ??0CriticalSection@System@@QEAA@XZ):
 //   InitializeCriticalSection(this);
@@ -35,7 +57,7 @@ static_assert(sizeof(CriticalSection) == 0x28,
               "CriticalSection must be exactly sizeof(CRITICAL_SECTION) on x64");
 
 // ----------------------------------------------------------------------------
-// System::Thread
+// RtSystem::Thread — the POD
 // ----------------------------------------------------------------------------
 // Retail is ALWAYS subclassed: the base vtable's slot 0 is _purecall
 // (0x18007ec28) and only slot 1 (OnCompleted, 0x18000c590) has a real base
@@ -66,6 +88,10 @@ static_assert(sizeof(CriticalSection) == 0x28,
 // Total base size 0x30. A derived class's own fields start at +0x30 (e.g. the
 // worker-queue Thread in keystone_a_gamedtor.cpp embeds a CriticalSection
 // there; the pathfinder's Thread subclass is 0x1f8 bytes total).
+//
+// THE POD KEEPS AN EXPLICIT `vtable` FIELD; THE CLASS DOES NOT. On the class
+// the compiler's own vptr occupies +0x00, which is why that one member is the
+// only field in this file with no cross-assert — see the class below.
 struct Thread {
     void*    vtable;      // +0x00
     uint32_t runFlags;    // +0x08
@@ -82,5 +108,208 @@ static_assert(offsetof(Thread, hStart)    == 0x18, "Thread::hStart offset");
 static_assert(offsetof(Thread, hStop)     == 0x20, "Thread::hStop offset");
 static_assert(offsetof(Thread, hFinished) == 0x28, "Thread::hFinished offset");
 static_assert(sizeof(Thread) == 0x30, "Thread base size");
+static_assert(std::is_trivially_destructible<Thread>::value,
+              "B34_RULES 1.5 rule 3: the POD stays trivially destructible");
+static_assert(std::is_trivially_destructible<CriticalSection>::value,
+              "B34_RULES 1.5 rule 3: the POD stays trivially destructible");
+
+}  // namespace RtSystem
+
+// ============================================================================
+// ENDGAME B.3.4b — the REAL `System::CriticalSection` and `System::Thread`.
+// ============================================================================
+//
+// Design: B34B_RULES.md rules B4b-1 (the name collision), B4b-2 (no real
+// ctor/dtor for either) and B4b-3 (Thread stays ABSTRACT and the POD mirror
+// holds the POD); B34_RULES.md §4.3 (the ctor/dtor door question) and §1.5
+// rule 3 (the POD stays); ENDGAME §B.1 decision 2 (no virtual destructor).
+//
+// *** NEITHER CLASS GETS A REAL CONSTRUCTOR OR DESTRUCTOR IN B.3.4b. ***
+// ----------------------------------------------------------------------------
+// `System::Thread`: B34_RULES §4.3's test — "would the member form change which
+// vtable a live object wears?" — answers YES at all four constructing sites,
+// and two of them are outside this step's file set entirely:
+//
+//   code/Game/Game/pathfinder_seed.cpp:142-148    stamps exe 0x14015ef18
+//   runtime/src/engine/singleton_ctors.cpp:448-450 builds IO::Persistence's
+//                                                  embedded Thread at +0x10 and
+//                                                  stamps 0x180155860 over it
+//   standalone/rt_data_mint.cpp:434-461            builds Engine::Loader's
+//                                                  static, stamps by NAME
+//   runtime/src/audio/audio_stream_win.cpp:303-341 builds Audio::Stream
+//
+// The two readers of the base table 0x180155f20 stay exactly as they are:
+// `thread_win.cpp`'s `RtSystemThreadVftable()` (by NAME, through RT_DATA_SLOT)
+// and `runtime/src/io/persistence_worker_win.cpp:585-589` (by ADDRESS).
+//
+// `System::CriticalSection` has no vtable at all, so §4.3 would PERMIT a real
+// ctor/dtor — and it still does not get one, for a different reason: two of its
+// three known embedders (`IO::Persistence`, `Audio::Stream`) call raw
+// `InitializeCriticalSection` / `SetCriticalSectionSpinCount(5000)` and never
+// reach the ctor door, so a real constructor would leave those two objects
+// constructed a second, different way. Retail's own scoped-lock shape is a
+// SEPARATE class, `System::StackCriticalSection` (??0 0x180034fa0 /
+// ??1 0x180034f90) — unported, unreferenced, and recorded in B34B_RULES §1 so
+// that nobody "modernises" this class into a lock_guard and calls it faithful.
+//
+// *** `System::Thread` IS ABSTRACT, AND THAT IS RULE B4b-3. ***
+// ----------------------------------------------------------------------------
+// `runtime/types/engine/UpdateLoop.h` holds a Thread BY VALUE inside the POD
+// `RtEngine::Loader`. B34_BRIEFS §A.3/§A.4 make a by-value-held class CONCRETE
+// — but that rule is about a REAL CLASS holding a REAL CLASS, where the
+// enclosing class's implicit members must reach the enclosed one's. A POD
+// MIRROR HOLDING THE POD IS NOT THAT CASE. Retail's slot 0 here is `_purecall`,
+// there is no registered body to delegate to, and inventing one is forbidden —
+// so `RtEngine::Loader` holds `RtSystem::Thread` and this class stays abstract.
+// Nothing constructs a `System::Thread` as a C++ object; `sizeof` works on an
+// abstract class, so every layout pin below holds.
+// ============================================================================
+
+namespace System {
+
+// ----------------------------------------------------------------------------
+// System::CriticalSection — 0x28 bytes, NO vtable.
+// ----------------------------------------------------------------------------
+class CriticalSection {
+public:
+    // ?Lock@CriticalSection@System@@QEAAXXZ     retail 0x18000c700
+    // ?Unlock@CriticalSection@System@@QEAAXXZ   retail 0x18000c6f0
+    // One Win32 call each; bodies in runtime/src/system/thread_win.cpp (`_win`,
+    // because EnterCriticalSection / LeaveCriticalSection need <windows.h>).
+    void Lock();
+    void Unlock();
+
+    // ---- the 0x28 bytes ----------------------------------------------------
+    // PUBLIC for the same reason `IO::Registry`'s four fields are: unconverted
+    // bodies reach the storage through a cast, and `offsetof` on it has to be
+    // well formed. The ctor/dtor doors cast this straight to LPCRITICAL_SECTION.
+    alignas(8) uint8_t _storage[0x28];
+};
+
+static_assert(sizeof(CriticalSection) == 0x28,
+              "System::CriticalSection is sizeof(CRITICAL_SECTION) on x64");
+static_assert(sizeof(CriticalSection) == sizeof(RtSystem::CriticalSection),
+              "the class and the POD stay interchangeable");
+static_assert(offsetof(CriticalSection, _storage)
+                  == offsetof(RtSystem::CriticalSection, _storage),
+              "alias _storage");
+static_assert(alignof(CriticalSection) == alignof(RtSystem::CriticalSection),
+              "alias alignment -- a CRITICAL_SECTION must stay 8-aligned");
+// Stated as assertions so a future `virtual` fails the build rather than the
+// boot: a vptr would make this 0x30 bytes and push the storage eight bytes
+// down, under doors that are registered BY NAME.
+static_assert(!std::is_polymorphic<CriticalSection>::value,
+              "System::CriticalSection must never acquire a vtable: retail has none");
+static_assert(std::is_standard_layout<CriticalSection>::value,
+              "the ctor/dtor doors reach the storage through a reinterpret_cast");
+static_assert(std::is_trivially_destructible<CriticalSection>::value,
+              "B4b-2: teardown is the registered ??1CriticalSection door, not an "
+              "implicit member destructor -- two would DeleteCriticalSection twice");
+
+// ----------------------------------------------------------------------------
+// System::Thread — vtable ??_7Thread@System@@6B@ 0x180155f20, 2 slots, 0x30.
+// ----------------------------------------------------------------------------
+// ⚠⚠ NOT CONSTRUCTIBLE IN B.3.4b — live objects are built by the ported ctor
+// door and wear the MINTED table; see B34_RULES §4.3 and B34B_RULES rule B4b-2.
+// The class is ABSTRACT, which makes `System::Thread t;` and `new System::Thread`
+// hard compile errors, so the rule is enforced by the compiler and not only by
+// this banner. ⚠⚠
+//
+// The two slots, from `standalone/rt_data_mint_tables.inc:3711-3717`:
+//   [0] +0x00  0x18007ec28 `_purecall`  -> pure here, see below
+//   [1] +0x08  0x18000c590  RT_MINT_NAMED ?OnCompleted@Thread@System@@UEAAXXZ
+class Thread {
+public:
+    // slot 0  +0x00 — PURE, because retail's own base table really is
+    // `_purecall` in this slot: there is no base body to port and none is
+    // invented. THE NAME IS EVIDENCE, NOT A GUESS: the one derived table this
+    // tree holds is `??_7Loader@Engine@@6B@`, whose slot-0 override is exported
+    // as `?Run@Loader@Engine@@UEAAXXZ` @ 0x1800dbfc0
+    // (standalone/rt_export_addrs.inc:3695), and runtime/types/engine/
+    // UpdateLoop.h:40 records that table as [0] Run 0x1800dbfc0, [1] 0x18000c590.
+    virtual void Run() = 0;
+
+    // slot 1  +0x08  0x18000c590  ?OnCompleted@Thread@System@@UEAAXXZ
+    // The shipped body is one instruction: `RET`. The base class's do-nothing
+    // hook, called from ThreadFunc's slot 1 once the work function returns.
+    //
+    // ⚠ THE DOOR MUST CALL THIS QUALIFIED. A live Thread wears the MINTED table
+    // whose slot 1 resolves back to `RtSystem_Thread_OnCompleted`, so an
+    // UNqualified virtual call inside that door would dispatch through the
+    // minted table into itself — infinite recursion, not delegation
+    // (B34_BRIEFS §A.1). thread_win.cpp writes
+    // `self->System::Thread::OnCompleted()`.
+    virtual void OnCompleted();
+
+    // ?Start@Thread@System@@QEAAXXZ          retail 0x1800ca610
+    // ?WaitForFinish@Thread@System@@QEAAXXZ  retail 0x1800ca5f0
+    // NON-virtual (there are only two slots in the table above and neither is
+    // one of these), so their doors call them plainly — no qualification needed
+    // and none of §A.1's recursion hazard.
+    void Start();
+    void WaitForFinish();
+
+    // ?ThreadFunc@Thread@System@@CAIPEAX@Z   retail 0x1800ca440
+    // The worker entry point handed to _beginthreadex. Retail's is `CA`, i.e.
+    // PRIVATE static; it is public here because the registered door calls it
+    // and access control is not ABI. `__stdcall` is what _beginthreadex's
+    // signature requires and is a no-op on x64, where there is one calling
+    // convention.
+    //
+    // ITS BODY KEEPS THE RAW SLOT CALLS, DELIBERATELY. It dispatches
+    // `vtable[0]` then re-loads the vtable and dispatches `vtable[1]`, on
+    // objects that wear a MINTED or a DERIVED table — `Engine::Loader`,
+    // `IO::Persistence`'s worker, `Audio::Stream`, the pathfinder. A C++
+    // virtual call there would be the §A.1 recursion for slot 1 and would not
+    // reach the derived slot 0 at all. Same call as B34_RULES §3.1's ruling for
+    // `IO::Serializer`: a faithful partial beats a complete-looking deletion.
+    static unsigned int __stdcall ThreadFunc(void* param);
+
+    // ---- the 0x30 bytes, at retail's offsets -------------------------------
+    // +0x00 is the COMPILER'S vptr — the one member the POD spells explicitly
+    // and this class does not, which is why `vtable` is the only field with no
+    // cross-assert below. PUBLIC for the same reason `IO::Stream`'s three are:
+    // the unconverted tree reads them through a cast to the POD, and `offsetof`
+    // on them has to be well formed.
+    uint32_t _runFlags;    // +0x08
+    uint32_t _pad0c;       // +0x0c
+    void*    _hThread;     // +0x10  HANDLE
+    void*    _hStart;      // +0x18  HANDLE
+    void*    _hStop;       // +0x20  HANDLE
+    void*    _hFinished;   // +0x28  HANDLE
+
+protected:
+    // ENDGAME decision 2's base shape: NON-virtual (Itanium spends two slots on
+    // a virtual destructor, which would push `OnCompleted` off slot 1 and
+    // silently mis-aim every reader of the minted table) and protected, because
+    // nothing deletes a Thread through this type. Teardown is the registered
+    // `??1Thread@System@@QEAA@XZ` door (0x1800ca590), which is a free function
+    // and stays one — B4b-2.
+    ~Thread() = default;
+};
+
+static_assert(sizeof(Thread) == 0x30, "System::Thread is 0x30 bytes");
+static_assert(sizeof(Thread) == sizeof(RtSystem::Thread),
+              "the class and the POD stay interchangeable");
+static_assert(std::is_polymorphic<Thread>::value,
+              "System::Thread MUST be polymorphic: +0x00 is the vptr the four "
+              "constructing sites stamp");
+static_assert(std::is_abstract<Thread>::value,
+              "B4b-3: abstract is what makes `System::Thread t;` a compile error, "
+              "and retail's slot 0 really is _purecall");
+static_assert(offsetof(Thread, _runFlags)  == 0x08, "Thread::runFlags @ +0x08");
+static_assert(offsetof(Thread, _pad0c)     == 0x0c, "the gap the ctor never writes");
+static_assert(offsetof(Thread, _hThread)   == 0x10, "Thread::hThread @ +0x10");
+static_assert(offsetof(Thread, _hStart)    == 0x18, "Thread::hStart @ +0x18");
+static_assert(offsetof(Thread, _hStop)     == 0x20, "Thread::hStop @ +0x20");
+static_assert(offsetof(Thread, _hFinished) == 0x28, "Thread::hFinished @ +0x28");
+// The cross-asserts. `vtable` has none on purpose: the POD spells +0x00 as a
+// field, the class lets the compiler own it.
+static_assert(offsetof(Thread, _runFlags)  == offsetof(RtSystem::Thread, runFlags),  "alias runFlags");
+static_assert(offsetof(Thread, _pad0c)     == offsetof(RtSystem::Thread, _pad0c),    "alias pad0c");
+static_assert(offsetof(Thread, _hThread)   == offsetof(RtSystem::Thread, hThread),   "alias hThread");
+static_assert(offsetof(Thread, _hStart)    == offsetof(RtSystem::Thread, hStart),    "alias hStart");
+static_assert(offsetof(Thread, _hStop)     == offsetof(RtSystem::Thread, hStop),     "alias hStop");
+static_assert(offsetof(Thread, _hFinished) == offsetof(RtSystem::Thread, hFinished), "alias hFinished");
 
 }  // namespace System
