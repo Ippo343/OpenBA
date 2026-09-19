@@ -460,6 +460,26 @@ static_assert(offsetof(Stream, _encoding)  == 0x10, "?SetEncoding@Stream@IO@@ wr
 // Compressed branch is the one with nine slots. Note that the SAME slot 7 is
 // `Open` on the FileStream branch (B34_RULES section 1.3); the two are not the
 // same slot meaning and `FileStream.h` says so again from its side.
+// ⚠⚠ NOT CONSTRUCTIBLE IN B.3.4 — live objects are built by the ported ctor
+// doors and wear the MINTED table; see B34_RULES section 4.3. ⚠⚠
+//
+// This class is CONCRETE (see the banner above: CompressedMemoryStream holds
+// one by value), and a concrete polymorphic class would otherwise have an
+// implicit PUBLIC default constructor — so `IO::MemoryStream ms;` would compile
+// and stamp GCC's vtable on an object the rest of the tree expects to be
+// wearing 0x1801555b0. That is the one thing section 4.3 forbids, and it would
+// produce no build error at all.
+//
+// So the default constructor is PROTECTED. `IO::MemoryStream ms;` and
+// `new IO::MemoryStream` are now COMPILE ERRORS, while the two things that must
+// keep working still do:
+//   * a probe SUBCLASS (tests/unit/io_vtable_abi_test.cpp PART G) reaches a
+//     protected constructor through inheritance;
+//   * `IO::CompressedMemoryStream`, which holds one BY VALUE, reaches it as a
+//     FRIEND. Without the friendship its own implicit constructor would be
+//     defined as deleted and its order probe could not be built.
+// It is `= default`, so the class stays trivially default-constructible and no
+// layout pin moves.
 class MemoryStream : public Stream {
 public:
     // slot 0  +0x00  0x1800242a0 — delegates to the registered thunk, see the
@@ -486,6 +506,10 @@ public:
     uint32_t _cursor;      // +0x24  position IN THE BUFFER
     uint32_t _size;        // +0x28  bytes valid in _data
     uint32_t _pad2c;       // +0x2C
+
+protected:
+    MemoryStream() = default;      // see the banner — NOT public on purpose
+    friend class CompressedMemoryStream;   // the by-value holder, +0x68
 };
 
 static_assert(sizeof(MemoryStream) == 0x30, "IO::MemoryStream is 0x30 bytes");

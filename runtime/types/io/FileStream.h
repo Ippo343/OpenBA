@@ -62,9 +62,10 @@
 #include <cstdint>
 #include <cstddef>
 
-#include "Stream.h"      // RtIo::Stream, RtIo::CompressedStream
+#include "Stream.h"      // RtIo::Stream, RtIo::CompressedStream, IO::Stream
 #include "FileSystem.h"  // RtIO::FileInfo   (note the capital O — a different
                          // namespace spelling, and both are long-standing)
+#include "../system/Filename.h"   // System::Filename — FileStream slot 7's argument
 
 namespace RtIo {
 
@@ -420,3 +421,148 @@ constexpr uintptr_t kAddrVtblVisitorStream        = 0x180155a20;  // ??_7Visitor
 constexpr size_t kFileStreamVtblOpenSlot = 7;
 
 }  // namespace RtIo
+
+// ===========================================================================
+// ENDGAME B.3.4 block 4 (STREAMS) — the REAL `IO::FileStream` and
+// `IO::BinaryFileStream`.
+// ===========================================================================
+//
+// Design: B34_RULES.md section 1.3 (the slot lists and the slot-7 trap),
+// section 4.1 (`NoteSlotDispatch` dies with this commit), section 4.3 (no real
+// constructors). Bodies: runtime/src/io/file_stream.cpp and file_stream_win.cpp.
+// The rules that govern the whole family are stated once, in Stream.h's
+// `namespace IO` banner; only what is specific to this pair is repeated here.
+//
+// ---------------------------------------------------------------------------
+// SLOT 7 IS `Open`, AND IT IS THE ONE PLACE THE FAMILY DISAGREES WITH ITSELF
+// ---------------------------------------------------------------------------
+// `IO::Stream` declares seven virtuals, so slot 7 is whatever the derived class
+// declares FIRST. On the MemoryStream / CompressedStream branch that is
+// `Close()`; here it is `Open(const System::Filename&)`. A port that dispatched
+// +0x38 on a FileStream expecting `Close` would call `Open` — same offset, same
+// table shape, completely different behaviour, and nothing would diagnose it.
+// The C++ declaration below is what now makes the two unmistakable.
+//
+// `IO::TextFileStream` then OVERLOADS `Open` across the base/derived boundary
+// (its own `(Filename, Format)` form is slot 8), which is why section 1.3's
+// rule names that one `OpenWithFormat` and leaves this one `Open`.
+//
+// ---------------------------------------------------------------------------
+// `_filename` STAYS A `char*`, AND THAT IS THE B33 DOUBLE-FREE RULE
+// ---------------------------------------------------------------------------
+// Retail's field is a `System::String` — which is exactly this one pointer. It
+// is NOT declared as one here, because a real `System::String` member would
+// give `IO::FileStream` a non-trivial implicit destructor that releases the
+// buffer, and the ported `~FileStream` door (0x1800aaab0, file_stream.cpp)
+// already releases it by hand at retail's position. Two releases is the
+// `RtSystem::String` double-free lesson (B33 section 7) with a different name
+// on it. The field converts when the ctor/dtor doors do, which section 4.3 puts
+// at the end of B.3, not in this step. Bodies reach it as a String through
+// `runtime/src/system/pod_bridge.h`, which is the one transitional seam.
+// ===========================================================================
+
+namespace IO {
+
+// ---------------------------------------------------------------------------
+// IO::FileStream — vtable 0x180154960, 8 slots, 0x50 bytes.
+// ---------------------------------------------------------------------------
+// ABSTRACT: slot 0 (0x18000c090) is left PURE because its body is the
+// by-address registration at file_stream.cpp, filling slot 0 of the live minted
+// table (rt_data_mint_tables.inc:2423), and nothing holds a `FileStream` by
+// value. `IO::BinaryFileStream` is the one that must be concrete.
+class FileStream : public Stream {
+public:
+    // slot 0  +0x00  0x18000c090 — PURE, body registered by address.
+    Stream* DeletingDtor(unsigned flags) override = 0;
+    // slot 1  +0x08  0x1800aab50 — an ADD-REF of `_filename`, not a copy.
+    System::String GetSource() const override;
+    bool     Write(int n, const void* src) override;   // slot 2 +0x10  0x1800aab90
+    bool     Read(int n, void* dst) override;          // slot 3 +0x18  0x1800aabf0
+    bool     SetCurrentPos(int pos) override;          // slot 4 +0x20  0x1800aac10
+    uint32_t GetCurrentPos() const override;           // slot 5 +0x28  0x1800aac50
+    uint32_t GetSize() const override;                 // slot 6 +0x30  0x1800aac60
+    // slot 7 +0x38 — FileStream's own first virtual. NOT `Close`.
+    virtual bool Open(const System::Filename& path);   //              0x1800aac70
+
+    // ---- the 0x50 bytes, at retail's offsets -------------------------------
+    char*          _filename;   // +0x18  a System::String — see the banner
+    RtIO::FileInfo _file;       // +0x20  0x30 bytes, RtIO::FileInfo
+
+protected:
+    ~FileStream() = default;    // decision 2's base shape: non-virtual
+};
+
+static_assert(sizeof(FileStream) == 0x50,
+              "sizeof(IO::FileStream) == 0x50 (eh_vector_dtor stride 0x180023d80)");
+static_assert(offsetof(FileStream, _filename) == 0x18,
+              "~FileStream 0x1800aaad4 releases +0x18");
+static_assert(offsetof(FileStream, _file) == 0x20,
+              "~FileStream passes this+0x20 to CloseFile; ?Write@FileStream's "
+              "+0x38/+0x2c pair and ?SaveText@External's epilogue agree");
+static_assert(offsetof(FileStream, _file) + offsetof(RtIO::FileInfo, cursor) == 0x2c,
+              "?GetCurrentPos@FileStream 0x1800aac50: `MOV EAX,[RCX+0x2c]; RET`");
+static_assert(offsetof(FileStream, _file) + offsetof(RtIO::FileInfo, size) == 0x28,
+              "?GetSize@FileStream 0x1800aac60: `MOV EAX,[RCX+0x28]; RET`");
+static_assert(offsetof(FileStream, _file) + offsetof(RtIO::FileInfo, winHandle) == 0x38,
+              "?Write@FileStream 0x1800aaba0: `MOV RCX,[RCX+0x38]` into WriteFile");
+
+// ---------------------------------------------------------------------------
+// IO::BinaryFileStream — vtable 0x1801554d0, 8 slots, 0x50 bytes.
+// ---------------------------------------------------------------------------
+// A `FileStream` AND NOTHING ELSE. It adds no field and overrides exactly ONE
+// slot: `??_7BinaryFileStream@` and `??_7FileStream@` are byte-identical in
+// slots 1..7 (re-verified from .rdata, B34_RULES section 1.3) and differ only
+// at slot 0, 0x180023d80 against 0x18000c090.
+//
+// THAT IS THE RETAIL FACT `file_stream.cpp`'s `NoteSlotDispatch` EXISTED FOR:
+// with two byte-identical tables a per-body counter could not say which row had
+// dispatched, so an `if (vptr == ours)` attendance counter stood in for the
+// answer. The question is answered STRUCTURALLY once the two classes exist —
+// there is one table per class, the compiler's — so section 4.1 retires the
+// whole instrument (the struct, the global, `OurBfsTable`, `NoteBfsStamp`,
+// `NoteSlotDispatch`, all seven call sites and `RtIoBfsPromoteCounters`) in
+// this commit rather than leaving it counting a constant.
+//
+// ⚠⚠ NOT CONSTRUCTIBLE IN B.3.4 — live objects are built by the ported ctor
+// doors and wear the MINTED table; see B34_RULES section 4.3. ⚠⚠
+//
+// It is CONCRETE because `IO::CompressedFileStream` holds one BY VALUE at
+// +0x68, and a member of abstract type is ill-formed. Concrete would otherwise
+// mean an implicit PUBLIC default constructor and therefore a silent
+// `IO::BinaryFileStream bfs;` stamping GCC's vtable, so the default constructor
+// is PROTECTED — exactly as `IO::MemoryStream`'s is, and for the same reason.
+// A probe subclass reaches it through inheritance; `CompressedFileStream`
+// reaches it as a FRIEND.
+class BinaryFileStream : public FileStream {
+public:
+    // slot 0 +0x00  0x180023d80 — the ONLY difference from FileStream's table.
+    Stream* DeletingDtor(unsigned flags) override;
+    // PUBLIC and non-virtual (B34_BRIEFS section A.3): CompressedFileStream
+    // holds one by value and its implicit destructor must be able to run this.
+    ~BinaryFileStream() = default;
+
+protected:
+    BinaryFileStream() = default;          // see the banner — NOT public
+    friend class CompressedFileStream;     // the by-value holder, +0x68
+};
+
+static_assert(sizeof(BinaryFileStream) == 0x50,
+              "IO::BinaryFileStream adds no field: same 0x50 as IO::FileStream");
+static_assert(sizeof(BinaryFileStream) == sizeof(FileStream),
+              "the class exists to swap slot 0, not to add state");
+
+// ---- the duplicate-POD cross-asserts (B34_RULES section 1.5.3) -------------
+static_assert(sizeof(FileStream) == sizeof(RtIo::FileStream),
+              "IO::FileStream and the RtIo::FileStream POD stay interchangeable");
+static_assert(sizeof(BinaryFileStream) == sizeof(RtIo::BinaryFileStream),
+              "IO::BinaryFileStream and its POD stay interchangeable");
+static_assert(offsetof(FileStream, _filename) ==
+                  offsetof(RtIo::FileStream, filename), "alias filename");
+static_assert(offsetof(FileStream, _file) ==
+                  offsetof(RtIo::FileStream, file), "alias file");
+static_assert(std::is_trivially_destructible<RtIo::FileStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+static_assert(std::is_trivially_destructible<RtIo::BinaryFileStream>::value,
+              "the POD must stay trivially destructible while both views are live");
+
+}  // namespace IO

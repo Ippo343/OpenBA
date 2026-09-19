@@ -147,6 +147,9 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileStream.h"
+#include <new>          // B.3.4 block 4: the GetSource door placement-constructs
+                       // retail's by-value String into the caller's raw slot
+
 #include "../../types/io/FileSystem.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
@@ -331,68 +334,33 @@ struct FileStreamCounters {
 FileStreamCounters g_fsc{};
 
 // ============================================================================
-// WAVE 20 LANE PROMOTE — the A/B EFFECT and the ATTENDANCE TIER for
-// `??_7BinaryFileStream@IO@@6B@`
+// WAVE 20 LANE PROMOTE'S `BfsPromoteCounters` IS GONE — B34_RULES section 4.1
 // ============================================================================
-// `??_7BinaryFileStream@` is promoted by standalone/reg_mint_promoted.cpp. Two
-// separate questions have to be answered separately, and merging them is how
-// "live-exercised" comes to read like "verified":
+// That struct, its global, `OurBfsTable()`, `NoteBfsStamp()`,
+// `NoteSlotDispatch()`, their seven call sites and the six-number exporter were
+// all deleted by ENDGAME B.3.4 block 4, in the commit that made
+// `IO::BinaryFileStream` a real class. They are not left counting zero and not
+// left counting a constant.
 //
-//   EFFECT      did the promotion change what our constructors STAMP?
-//               `ctorStamps` is the denominator (every stamp by either of the
-//               row's two stampers); `ctorStampedMint` is how many of those
-//               installed OUR minted table instead of the DLL's. With the row
-//               promoted the two must be EQUAL; with the kill switch set,
-//               `ctorStampedMint` must be ZERO and `ctorStamps` UNCHANGED.
-//               A/B on one variable, scored on applicable cases only.
+// WHAT THEY ASKED, AND WHY THE QUESTION NO LONGER EXISTS. `??_7FileStream@` and
+// `??_7BinaryFileStream@` are byte-identical in slots 1..7 and differ only at
+// slot 0, so a per-body counter could not say WHICH of the two promoted rows
+// had dispatched into a shared body; the instrument compared the live object's
+// vptr against the table our own constructors stamp, to separate the tiers.
 //
-//   ATTENDANCE  did anything DISPATCH through the table we stamped?
-//               `slotEntries` counts entries to the seven shared slot bodies;
-//               `slotViaMintBfs` counts the subset whose object carried OUR
-//               minted BinaryFileStream table at the moment of the call. THAT
-//               subset is the attendance number, and it is a different and
-//               weaker claim than "verified": it says a body ran through a
-//               table we published, not that its result was compared against
-//               anything (that is file_stream_slots_probe.cpp's job).
+// With `IO::FileStream` and `IO::BinaryFileStream` declared, that is answered
+// structurally: there is exactly one table per class, the compiler's, the two
+// are distinct types, and `p->Type()`-style identity is the standing rule
+// (B33 section 5). There is nothing to port forward.
 //
-// WHY THE VPTR TEST IS NEEDED AT ALL. `??_7FileStream@` and
-// `??_7BinaryFileStream@` share slots 1..7 BYTE FOR BYTE, so a plain
-// per-body counter cannot say which of the two tables dispatched, and only one
-// of the two rows is promoted. The test compares the object's live vptr
-// against the DLL's two table addresses, so the three tiers are separable.
+// Two of its six fields had already stopped meaning anything: the DLL-side
+// counter was never incremented once the DLL was removed, and the two ctor
+// counters could no longer differ — the stamp helper's own body said so ("the
+// minted table is the only table now").
 //
-// COST: two pointer compares on bodies that are entered a few thousand times a
-// run. The DLL addresses are resolved once into function-local statics.
+// `FileStreamCounters` and `SlotCounters` in this file are a DIFFERENT
+// instrument (plain per-body attendance, no vptr identity) and are untouched.
 // ============================================================================
-struct BfsPromoteCounters {
-    uint64_t ctorStamps, ctorStampedMint;
-    uint64_t slotEntries, slotViaMintBfs, slotViaDllBfs, slotViaOther;
-};
-BfsPromoteCounters g_bfsp{};
-
-// What OUR BinaryFileStream constructors actually stamp: the promoted minted
-// table, or (kill switch set, or the row never promoted) the DLL's own. This is
-// the SAME expression the constructor uses, so the two cannot drift apart.
-const void* OurBfsTable() {
-    return RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");
-}
-
-// POSITIVELY identify our minted table rather than concluding it by
-// elimination: `??_7TextFileStream@`'s slots 1 and 7 are these same two bodies,
-// so an "anything that is not the DLL's FileStream or BinaryFileStream table"
-// test would score a TextFileStream dispatch as attendance for this row.
-void NoteBfsStamp(const void* stamped) {
-    (void)stamped;
-    ++g_bfsp.ctorStamps;
-    ++g_bfsp.ctorStampedMint;   // the minted table is the only table now
-}
-
-void NoteSlotDispatch(const void* vptr) {
-    ++g_bfsp.slotEntries;
-    const void* ours = OurBfsTable();
-    if (vptr == ours) ++g_bfsp.slotViaMintBfs;
-    else              ++g_bfsp.slotViaOther;
-}
 
 
 // ============================================================================
@@ -616,7 +584,6 @@ extern "C" BinaryFileStream* RtIo_BinaryFileStream_Ctor(BinaryFileStream* self) 
     FileStreamCtorInline(&self->base);                                   // 1800a8219..70
     self->base.base.vptr =
         RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");        // 1800a8270
-    NoteBfsStamp(self->base.base.vptr);   // Wave 20 lane PROMOTE, stamper 1 of 2
 
     InstallEncoding(&self->base.base, 0x1801554a8);                       // 1800a827a..d8
 
@@ -1018,142 +985,38 @@ struct SlotCounters {
 };
 SlotCounters g_fss{};
 
-// ============================================================================
-// IO::FileStream::GetSource() const                      retail 0x1800aab50
-// ============================================================================
-// Returns a `System::String` BY VALUE, so RCX is `this` and **RDX is the hidden
-// return slot** (`reference_hidden_retslot_wild_write.md`). The whole body is
-// the String copy-constructor from `this->filename`:
-//
-//     *ret = nullptr;
-//     if (this->filename) { *ret = this->filename; ++refcount(this->filename); }
-//     return ret;
-//
-// IT IS AN ADD-REF, NOT A COPY. The caller receives the same buffer and owes it
-// a release. A port that duplicated the characters would be observably wrong to
-// anyone comparing pointers, and would leak.
-//
-// The `[RSP]` slot retail writes 0 then 1 into is the SEH unwind state for the
-// temporary, not a field of anything.
-// ============================================================================
+// ?GetSource@FileStream@IO@@UEBA?AVString@System@@XZ (0x1800aab50) — slot 1.
 extern "C" RtSystem::String* RtIo_FileStream_GetSource(const FileStream* self,
                                                        RtSystem::String* ret) {
-    ++g_fss.getSource;
-    NoteSlotDispatch(self->base.vptr);
-
-    ret->data = nullptr;                                  // 1800aab67
-    if (self->filename) {                                 // 1800aab6e
-        ret->data = self->filename;                       // 1800aab73
-        ++StringRefCount(ret->data);                      // 1800aab76
-        ++g_fss.getSourceNonNull;
-    }
-    return ret;                                           // 1800aab80
+    // Construct retail's by-value result directly INTO the caller's raw slot:
+    // `ret` is uninitialised memory, so this is a placement construction, not
+    // an assignment over a live String (which would release a string the caller
+    // never owned).
+    new (ret) System::String(
+        reinterpret_cast<const IO::FileStream*>(self)->IO::FileStream::GetSource());
+    return ret;
 }
 
-// ============================================================================
-// IO::FileStream::Read(int, void*)                       retail 0x1800aabf0
-// ============================================================================
-// SIX INSTRUCTIONS AND A TAIL-JUMP. The whole body is
-//
-//     return FileSystem::ReadFile(_singleton, &this->file, len, buf);
-//
-// and the argument shuffle is the only content: `len` arrives in EDX and has to
-// reach R8D, `buf` arrives in R8 and has to reach R9, because the callee takes
-// `this` in RCX and the FileInfo in RDX.
-//
-// **READS GO THROUGH FileSystem, WRITES DO NOT.** `?Write@FileStream@` calls
-// `WriteFile` directly (file_stream_win.cpp). That asymmetry is retail's, and
-// it is why only one of the two needed a `_win` file: reading a packed file has
-// to consult the package index, and `FileSystem::ReadFile` is where that lives.
-//
-// `?ReadFile@FileSystem@IO@@` is already ported and registered (Wave 9 lane
-// PKG2 rung 3), so it is called DIRECTLY here rather than through a door.
-// ============================================================================
+// ?Read@FileStream@IO@@UEAA_NHPEAX@Z (0x1800aabf0) — slot 3.
 extern "C" bool RtIo_FileStream_Read(FileStream* self, int32_t len, void* buf) {
-    ++g_fss.read;
-    NoteSlotDispatch(self->base.vptr);
-    const bool ok = RtIo_FileSystem_ReadFile(Fs(), &self->file, len, buf);  // 1800aac03
-    return ok;
+    return reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::Read(len, buf);
 }
 
-// ============================================================================
-// IO::FileStream::GetCurrentPos() const                  retail 0x1800aac50
-// IO::FileStream::GetSize() const                        retail 0x1800aac60
-// ============================================================================
-// One instruction each: `MOV EAX,[RCX+0x2c]` and `MOV EAX,[RCX+0x28]`.
-//
-// BOTH RETURN **UNSIGNED** (`UEBAIXZ`), while `FileInfo::cursor` and `::size`
-// are modelled `int32_t`. The bits are identical; the return TYPE is what the
-// caller's comparison sees, and a signed reading flips every test above 2GB.
-// The signature comes from the export directory, which is the only place it is
-// visible — a one-instruction body cannot show a return type.
-//
-// These two are also what `FileStream.h` used to PIN `FileInfo` at +0x20 (its
-// route 2), so they are the cheapest possible cross-check on that claim: if the
-// offset were wrong these would return the wrong field on every call, on a path
-// the package loader takes thousands of times per run.
-// ============================================================================
+// ?GetCurrentPos@FileStream@IO@@UEBAIXZ (0x1800aac50) — slot 5.
+// ?GetSize@FileStream@IO@@UEBAIXZ       (0x1800aac60) — slot 6.
 extern "C" uint32_t RtIo_FileStream_GetCurrentPos(const FileStream* self) {
-    ++g_fss.getPos;
-    NoteSlotDispatch(self->base.vptr);
-    return static_cast<uint32_t>(self->file.cursor);       // 1800aac50
+    return reinterpret_cast<const IO::FileStream*>(self)
+               ->IO::FileStream::GetCurrentPos();
 }
 
 extern "C" uint32_t RtIo_FileStream_GetSize(const FileStream* self) {
-    ++g_fss.getSize;
-    NoteSlotDispatch(self->base.vptr);
-    return static_cast<uint32_t>(self->file.size);         // 1800aac60
+    return reinterpret_cast<const IO::FileStream*>(self)->IO::FileStream::GetSize();
 }
 
-// ============================================================================
-// IO::FileStream::Open(Filename const&)                  retail 0x1800aac70
-// ============================================================================
-// THE READ TWIN OF `?Create@FileStream@`, and comparing the two is the clearest
-// statement of what each does. Same five steps, three differences:
-//
-//   | step                | Create (0x1800aa8f0)   | Open (0x1800aac70)      |
-//   |---------------------|------------------------|-------------------------|
-//   | 1. prepare          | CreatePath(_singleton) | *(nothing)*             |
-//   | 2. filename         | release/adopt          | release/adopt, IDENTICAL|
-//   | 3. direction (+0x8) | **1** (writing)        | **0** (reading)         |
-//   | 4. get the FileInfo | FileSystem::CreateFileW| FileSystem::**OpenFile**|
-//   | 5. return           | file.handle != -1      | file.handle != -1       |
-//
-// Step 2's SELF-ASSIGNMENT SHORT-CIRCUIT JUMPS PAST BOTH HALVES here too
-// (`CMP RAX,[RDX] ; JZ 0x1800aaccd` skips the release AND the adopt), and step
-// 4's temporary is destroyed in the same order — `_name1` (rsp+0x50) before
-// `_name0` (rsp+0x48).
-//
-// **Open does NOT call CreatePath.** Creating directories on the way to a file
-// you are about to READ would be wrong, and retail does not do it. Worth
-// stating because the two bodies are otherwise near-identical and a port
-// written by analogy from `Create` would add it.
-//
-// `?OpenFile@FileSystem@IO@@` is already ported and registered (Wave 9 lane
-// PKG2 rung 3) and returns a `FileInfo` BY VALUE — RDX is the hidden return
-// slot, R8 the Filename.
-// ============================================================================
+// ?Open@FileStream@IO@@UEAA_NAEBVFilename@System@@@Z (0x1800aac70) — slot 7,
+// and slot 7 on THIS branch is Open, not Close.
 extern "C" bool RtIo_FileStream_Open(FileStream* self, const Filename* path) {
-    ++g_fss.open;
-    NoteSlotDispatch(self->base.vptr);
-
-    // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
-    // `System::String::operator=` (0x1800c9810), as in Create above and for
-    // the same reasons — the short-circuit that jumps past BOTH halves is the
-    // class's, and Open does not normalise either.
-    reinterpret_cast<System::String&>(self->filename) = Sys(*path).AsString();
-
-    self->base.direction = 0;                             // 1800aaccd — READING
-
-    FileInfo tmp;                                          // not zero-initialised
-    RtIo_FileSystem_OpenFile(Fs(), &tmp, path);           // 1800aacdf
-    RtIo_FileInfo_Assign(&self->file, &tmp);              // 1800aacec
-    SysFile(tmp._name1).~Filename();                      // 1800aacf2  +0x28 first
-    SysFile(tmp._name0).~Filename();                      // 1800aad29  +0x20
-
-    const bool ok = (self->file.handle != -1);            // 1800aad60
-    if (ok) ++g_fss.openTrue;
-    return ok;
+    return reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::Open(Sys(*path));
 }
 
 // ============================================================================
@@ -1271,7 +1134,6 @@ extern "C" BinaryFileStream* RtIo_BinaryFileStream_CopyCtor(
 
     self->base.base.vptr =
         RT_DATA_SLOT(const void*, "??_7BinaryFileStream@IO@@6B@");            // 180023cfe
-    NoteBfsStamp(self->base.base.vptr);   // Wave 20 lane PROMOTE, stamper 2 of 2
     return self;                                                              // 180023d08
 }
 
@@ -1286,16 +1148,176 @@ void RtIoFileStreamSlotCounters(unsigned long long* out) {
     out[12]=g_fss.dtorArrayAbort; out[13]=g_fss.copyCtor;
 }
 
-// Wave 20 lane PROMOTE. Six numbers, printed by the same probe, because the
-// EFFECT of the promotion and the ATTENDANCE it buys are different claims and
-// a reader must not be able to see one without the other.
-void RtIoBfsPromoteCounters(unsigned long long* out) {
-    out[0]=g_bfsp.ctorStamps;    out[1]=g_bfsp.ctorStampedMint;
-    out[2]=g_bfsp.slotEntries;   out[3]=g_bfsp.slotViaMintBfs;
-    out[4]=g_bfsp.slotViaDllBfs; out[5]=g_bfsp.slotViaOther;
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileStream`'s member bodies — ENDGAME B.3.4 block 4 (STREAMS)
+// ============================================================================
+// A member of `IO::X` cannot be defined inside `namespace RtIO`: `IO` and
+// `RtIO` are siblings and C++ requires the definition to appear in an
+// ENCLOSING namespace (B34_BRIEFS section A.2). So the five bodies this file
+// owns open their own block here, and reach this file's helpers and counters by
+// their `RtIO::` qualification. The two Win32 slots (`Write`, `SetCurrentPos`)
+// are in file_stream_win.cpp, next to their own `<windows.h>`.
+//
+// The attendance counters are BUMPED IN THE MEMBER, not in the door, so they
+// keep counting entries to the BODY rather than entries to the door — which is
+// what they have always measured and what makes their numbers comparable
+// across this change.
+namespace IO {
+
+// ============================================================================
+// IO::FileStream::GetSource() const                      retail 0x1800aab50
+// ============================================================================
+// IT IS AN ADD-REF, NOT A COPY. The caller receives the same buffer and owes it
+// a release. A port that duplicated the characters would be observably wrong to
+// anyone comparing pointers, and would leak.
+//
+// Retail returns the `System::String` by value through a hidden slot in RDX;
+// here that is the compiler's business again and the member simply returns one.
+// The `[RSP]` slot retail writes 0 then 1 into is the SEH unwind state for the
+// temporary, not a field of anything.
+System::String FileStream::GetSource() const {
+    ++RtIO::g_fss.getSource;
+
+    System::String ret;                                   // 1800aab67: *ret = nullptr
+    if (_filename) {                                      // 1800aab6e
+        // The ADD-REF, spelled exactly as retail spells it and NOT through
+        // `String`'s copy constructor: two stores, the pointer and the
+        // refcount in front of it. `_data` is public during the migration
+        // (String.h) for exactly this kind of transcription.
+        ret._data = _filename;                                 // 1800aab73
+        ++RtSystem::StringRefCount(ret._data);                 // 1800aab76
+        ++RtIO::g_fss.getSourceNonNull;
+    }
+    return ret;                                           // 1800aab80
 }
 
-}  // namespace RtIO
+// ============================================================================
+// IO::FileStream::Read(int, void*)                       retail 0x1800aabf0
+// ============================================================================
+// SIX INSTRUCTIONS AND A TAIL-JUMP. The whole body is
+//
+//     return FileSystem::ReadFile(_singleton, &this->file, len, buf);
+//
+// and the argument shuffle is the only content: `len` arrives in EDX and has to
+// reach R8D, `buf` arrives in R8 and has to reach R9, because the callee takes
+// `this` in RCX and the FileInfo in RDX.
+//
+// **READS GO THROUGH FileSystem, WRITES DO NOT.** `?Write@FileStream@` calls
+// `WriteFile` directly (file_stream_win.cpp). That asymmetry is retail's, and
+// it is why only one of the two needed a `_win` file: reading a packed file has
+// to consult the package index, and `FileSystem::ReadFile` is where that lives.
+//
+// `?ReadFile@FileSystem@IO@@` is already ported and registered (Wave 9 lane
+// PKG2 rung 3), so it is called DIRECTLY here rather than through a door.
+bool FileStream::Read(int len, void* buf) {
+    ++RtIO::g_fss.read;
+    const bool ok = RtIo_FileSystem_ReadFile(RtIO::Fs(), &_file, len, buf);  // 1800aac03
+    return ok;
+}
+
+// ============================================================================
+// IO::FileStream::GetCurrentPos() const                  retail 0x1800aac50
+// IO::FileStream::GetSize() const                        retail 0x1800aac60
+// ============================================================================
+// One instruction each: `MOV EAX,[RCX+0x2c]` and `MOV EAX,[RCX+0x28]`.
+//
+// BOTH RETURN **UNSIGNED** (`UEBAIXZ`), while `FileInfo::cursor` and `::size`
+// are modelled `int32_t`. The bits are identical; the return TYPE is what the
+// caller's comparison sees, and a signed reading flips every test above 2GB.
+// The signature comes from the export directory, which is the only place it is
+// visible — a one-instruction body cannot show a return type.
+//
+// These two are also what `FileStream.h` used to PIN `FileInfo` at +0x20 (its
+// route 2), so they are the cheapest possible cross-check on that claim: if the
+// offset were wrong these would return the wrong field on every call, on a path
+// the package loader takes thousands of times per run.
+uint32_t FileStream::GetCurrentPos() const {
+    ++RtIO::g_fss.getPos;
+    return static_cast<uint32_t>(_file.cursor);            // 1800aac50
+}
+
+uint32_t FileStream::GetSize() const {
+    ++RtIO::g_fss.getSize;
+    return static_cast<uint32_t>(_file.size);              // 1800aac60
+}
+
+// ============================================================================
+// IO::FileStream::Open(Filename const&)                  retail 0x1800aac70
+// ============================================================================
+// THE READ TWIN OF `?Create@FileStream@`, and comparing the two is the clearest
+// statement of what each does. Same five steps, three differences:
+//
+//   | step                | Create (0x1800aa8f0)   | Open (0x1800aac70)      |
+//   |---------------------|------------------------|-------------------------|
+//   | 1. prepare          | CreatePath(_singleton) | *(nothing)*             |
+//   | 2. filename         | release/adopt          | release/adopt, IDENTICAL|
+//   | 3. direction (+0x8) | **1** (writing)        | **0** (reading)         |
+//   | 4. get the FileInfo | FileSystem::CreateFileW| FileSystem::**OpenFile**|
+//   | 5. return           | file.handle != -1      | file.handle != -1       |
+//
+// Step 2's SELF-ASSIGNMENT SHORT-CIRCUIT JUMPS PAST BOTH HALVES here too
+// (`CMP RAX,[RDX] ; JZ 0x1800aaccd` skips the release AND the adopt), and step
+// 4's temporary is destroyed in the same order — `_name1` (rsp+0x50) before
+// `_name0` (rsp+0x48).
+//
+// **Open does NOT call CreatePath.** Creating directories on the way to a file
+// you are about to READ would be wrong, and retail does not do it. Worth
+// stating because the two bodies are otherwise near-identical and a port
+// written by analogy from `Create` would add it.
+//
+// `?OpenFile@FileSystem@IO@@` is already ported and registered (Wave 9 lane
+// PKG2 rung 3) and returns a `FileInfo` BY VALUE — RDX is the hidden return
+// slot, R8 the Filename.
+//
+// THE POD CASTS ON `path` ARE THE `pod_bridge.h` SEAM, not a bridge this block
+// adds: `?OpenFile@FileSystem@IO@@`'s ported entry point still takes the
+// `RtSystem::Filename` POD, and it belongs to PACKAGE+FS's file set. Retail's
+// own signature is the class, which is what the declaration says.
+bool FileStream::Open(const System::Filename& path) {
+    ++RtIO::g_fss.open;
+    const RtSystem::Filename* podPath =
+        reinterpret_cast<const RtSystem::Filename*>(&path);
+
+    // ---- 1800aac92..1800aaccc: this->filename = *path -------------------
+    // `System::String::operator=` (0x1800c9810) — the short-circuit that jumps
+    // past BOTH halves is the class's, and Open does not normalise either.
+    reinterpret_cast<System::String&>(_filename) = path.AsString();
+
+    _direction = 0;                                       // 1800aaccd — READING
+
+    RtIO::FileInfo tmp;                                   // not zero-initialised
+    RtIo_FileSystem_OpenFile(RtIO::Fs(), &tmp, podPath);  // 1800aacdf
+    RtIo_FileInfo_Assign(&_file, &tmp);                   // 1800aacec
+    RtSystem::SysFile(tmp._name1).~Filename();            // 1800aacf2  +0x28 first
+    RtSystem::SysFile(tmp._name0).~Filename();            // 1800aad29  +0x20
+
+    const bool ok = (_file.handle != -1);                 // 1800aad60
+    if (ok) ++RtIO::g_fss.openTrue;
+    return ok;
+}
+
+// ============================================================================
+// IO::BinaryFileStream slot 0                            retail 0x180023d80
+// ============================================================================
+// The BODY is `RtIo_BinaryFileStream_DeletingDtor` above, registered by address
+// at 0x180023d80 and filling slot 0 of the live minted table
+// (rt_data_mint_tables.inc:1662). B34_RULES section 4.2 forbids retiring that
+// row in this step, so the override NAMES the existing door rather than
+// restating the thunk.
+//
+// It exists at all only because `IO::CompressedFileStream` holds a
+// `BinaryFileStream` BY VALUE at +0x68: a member of abstract type is
+// ill-formed, so this one slot cannot stay `= 0` the way `IO::FileStream`'s
+// does. Same shape, same reason, as `IO::MemoryStream`'s.
+Stream* BinaryFileStream::DeletingDtor(unsigned flags) {
+    return static_cast<BinaryFileStream*>(
+        RtIO::RtIo_BinaryFileStream_DeletingDtor(this, flags));
+}
+
+}  // namespace IO
+
 
 // ============================================================================
 // Registration for the seven slot bodies in this file.
