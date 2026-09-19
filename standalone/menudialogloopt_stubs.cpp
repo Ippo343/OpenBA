@@ -383,6 +383,14 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
 
 void Stub_Shutdown(UpdateLoop* self) {
     printf("[MenuDLT::Shutdown] self=%p\n", (void*)self);
+    // Retail MenuDLT::Shutdown (exe 0x14009b280) tears down the menu scene,
+    // renderer and SaveLoad (still skipped here — a leak, not a race), then
+    // DialogLoopT::Shutdown, then `Audio::Scene::StopAll(self+0xb30)` at
+    // 0x14009b41a. The StopAll is NOT skippable: it is what parks the streamed
+    // menu music's thread before the next LoaderLoop's Loader::Load remounts
+    // the packages under it (open defect (c): the stream thread faulting in
+    // FileSystem::ReadFile on `_packfiles[]`). See MenuDialogLoopT_StopMusic.
+    MenuDialogLoopT_StopMusic(self);
 }
 
 bool Stub_Update(UpdateLoop* self, void* time) {
