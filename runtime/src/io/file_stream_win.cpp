@@ -69,13 +69,34 @@ using RtIo::FileStream;
 uint64_t g_fsWrite = 0, g_fsWriteFull = 0;
 uint64_t g_fsSeek = 0, g_fsSeekPlatform = 0;
 
-// Wave 20 lane PROMOTE. Defined in file_stream.cpp beside the other five slot
-// bodies: it records WHICH TABLE the dispatched object was carrying, which is
-// the only way to tell a ??_7BinaryFileStream@ dispatch (the promoted row) from
-// a ??_7FileStream@ one, the two tables' slots 1..7 being byte-identical.
-// Declared here rather than in a header because neither file publishes one and
-// this lane does not add one for two call sites.
-void NoteSlotDispatch(const void* vptr);
+// (Wave 20 lane PROMOTE's vptr-identity counter used to be declared here and
+// called from both bodies below. It died WHOLE with `IO::BinaryFileStream` —
+// B34_RULES section 4.1, and file_stream.cpp says why.)
+
+// ?Write@FileStream@IO@@UEAA_NHPEBX@Z (0x1800aab90) — slot 2. The body is
+// `IO::FileStream::Write` below; the QUALIFIED call is what stops a live
+// object's minted slot 2 from dispatching back into this door.
+extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void* buf) {
+    return reinterpret_cast<IO::FileStream*>(self)->IO::FileStream::Write(len, buf);
+}
+
+// ?SetCurrentPos@FileStream@IO@@UEAA_NH@Z (0x1800aac10) — slot 4.
+extern "C" bool RtIo_FileStream_SetCurrentPos(FileStream* self, int32_t pos) {
+    return reinterpret_cast<IO::FileStream*>(self)
+               ->IO::FileStream::SetCurrentPos(pos);
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileStream`'s two WIN32 member bodies — ENDGAME B.3.4 block 4 (STREAMS)
+// ============================================================================
+// Slots 2 and 4 of ??_7FileStream@IO@@6B@ live here rather than in
+// file_stream.cpp because they are the two that talk to Win32 directly. The
+// other five members are next door; this block opens `namespace IO` after the
+// `RtIO` doors close, for the reason B34_BRIEFS section A.2 gives (a member of
+// `IO::X` cannot be defined inside the sibling namespace `RtIO`).
+namespace IO {
 
 // ============================================================================
 // IO::FileStream::Write(int, const void*)                retail 0x1800aab90
@@ -94,19 +115,17 @@ void NoteSlotDispatch(const void* vptr);
 //
 // THE CURSOR IS ADVANCED UNCONDITIONALLY, before the comparison (0x1800aabcc),
 // so it moves even on the short-write path.
-// ============================================================================
-extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void* buf) {
-    ++g_fsWrite;
-    NoteSlotDispatch(self->base.vptr);
+bool FileStream::Write(int len, const void* buf) {
+    ++RtIO::g_fsWrite;
 
     DWORD written = 0;                                          // 1800aabb8
-    ::WriteFile(reinterpret_cast<HANDLE>(self->file.winHandle), // 1800aaba5: [RCX+0x38]
+    ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),      // 1800aaba5: [RCX+0x38]
                 buf, static_cast<DWORD>(len), &written, nullptr);   // 1800aabc1
 
-    self->file.cursor += static_cast<int32_t>(written);         // 1800aabcc: ADD [RBX+0x2c]
+    _file.cursor += static_cast<int32_t>(written);              // 1800aabcc: ADD [RBX+0x2c]
 
     const bool ok = (static_cast<int32_t>(written) == len);     // 1800aabd5
-    if (ok) ++g_fsWriteFull;
+    if (ok) ++RtIO::g_fsWriteFull;
     return ok;
 }
 
@@ -129,26 +148,25 @@ extern "C" bool RtIo_FileStream_Write(FileStream* self, int32_t len, const void*
 //
 // `SetFilePointer(h, pos, nullptr, FILE_BEGIN)` — `FILE_BEGIN` is 0 and arrives
 // as `XOR R9D,R9D` at 0x1800aac2d, the high-order-word pointer as `XOR R8D,R8D`.
-// ============================================================================
-extern "C" bool RtIo_FileStream_SetCurrentPos(FileStream* self, int32_t pos) {
-    ++g_fsSeek;
-    NoteSlotDispatch(self->base.vptr);
+bool FileStream::SetCurrentPos(int pos) {
+    ++RtIO::g_fsSeek;
 
-    self->file.cursor = pos;                             // 1800aac1c — BEFORE the branch
+    _file.cursor = pos;                                  // 1800aac1c — BEFORE the branch
 
     // Unsigned: -1 and -2 take the Win32 path, a packed descriptor does not.
-    if (static_cast<uint32_t>(self->file.handle) <= 0xFFFFFFFDu) {  // 1800aac16/1f
+    if (static_cast<uint32_t>(_file.handle) <= 0xFFFFFFFDu) {   // 1800aac16/1f
         return true;                                     // 1800aac21
     }
 
-    ++g_fsSeekPlatform;
+    ++RtIO::g_fsSeekPlatform;
     const DWORD got = ::SetFilePointer(
-        reinterpret_cast<HANDLE>(self->file.winHandle),   // 1800aac29
+        reinterpret_cast<HANDLE>(_file.winHandle),        // 1800aac29
         pos, nullptr, FILE_BEGIN);                        // 1800aac33
     return static_cast<int32_t>(got) == pos;              // 1800aac39
 }
 
-}  // namespace RtIO
+}  // namespace IO
+
 
 int RtIoFileStreamWinRegister() {
     using namespace RtIO;

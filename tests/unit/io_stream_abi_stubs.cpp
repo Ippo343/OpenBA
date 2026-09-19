@@ -35,6 +35,7 @@
 // ============================================================================
 
 #include "runtime/types/io/Stream.h"
+#include "runtime/types/io/FileStream.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -66,5 +67,20 @@ bool     MemoryStream::SetCurrentPos(int)      { StubReached("MemoryStream::SetC
 uint32_t MemoryStream::GetCurrentPos() const   { StubReached("MemoryStream::GetCurrentPos"); }
 uint32_t MemoryStream::GetSize() const         { StubReached("MemoryStream::GetSize"); }
 void     MemoryStream::Close()                 { StubReached("MemoryStream::Close"); }
+
+// ---- IO::FileStream (runtime/src/io/file_stream.cpp + file_stream_win.cpp) --
+// Slot 0 is PURE on this class, so there is nothing to stub for it.
+System::String FileStream::GetSource() const     { StubReached("FileStream::GetSource"); }
+bool     FileStream::Write(int, const void*)     { StubReached("FileStream::Write"); }
+bool     FileStream::Read(int, void*)            { StubReached("FileStream::Read"); }
+bool     FileStream::SetCurrentPos(int)          { StubReached("FileStream::SetCurrentPos"); }
+uint32_t FileStream::GetCurrentPos() const       { StubReached("FileStream::GetCurrentPos"); }
+uint32_t FileStream::GetSize() const             { StubReached("FileStream::GetSize"); }
+bool     FileStream::Open(const System::Filename&) { StubReached("FileStream::Open"); }
+
+// ---- IO::BinaryFileStream --------------------------------------------------
+// Its ONE override, slot 0, whose real body is the registered thunk at
+// 0x180023d80 in file_stream.cpp.
+Stream* BinaryFileStream::DeletingDtor(unsigned) { StubReached("BinaryFileStream::DeletingDtor"); }
 
 }  // namespace IO

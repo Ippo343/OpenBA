@@ -70,6 +70,38 @@ which needs no instantiation. `sizeof` works on an abstract class, so the layout
 **Expect to use this same shape in STREAMS**: declare, pin, leave slot 0 pure, do not
 instantiate.
 
+**AMENDED AT STREAMS 2/6 (coordinator ruling), because A.3 and this section are in tension.**
+A class held BY VALUE as a member cannot be abstract — a member of abstract type is
+ill-formed, full stop — so "leave slot 0 pure" is not universal. The rule is:
+
+> **Abstract where nothing holds the class by value; concrete-with-a-delegating-slot-0 where
+> something does.**
+
+Concretely in STREAMS: `IO::MemoryStream` (inside `CompressedMemoryStream` at +0x68) and
+`IO::BinaryFileStream` (inside `CompressedFileStream` at +0x68) are **concrete**; `IO::Stream`,
+`FileStream`, `CompressedStream`, `CompressedMemoryStream`, `CompressedFileStream`,
+`TextFileStream` and `VisitorStream` stay abstract with slot 0 `= 0`. A concrete class's slot 0
+is a **one-line delegation to the deleting-dtor body that is already registered** (e.g.
+`RtIo_MemoryStream_DeletingDtor`, 0x1800242a0, in `iobase_vtables.cpp`): nothing is
+re-registered, re-implemented or retired, and §4.2 is untouched. Making one class concrete also
+forces every pure virtual it does NOT override to be real, which is why `IO::Stream::GetSource`
+carries its nine-instruction `return String()` body (MemoryStream's table inherits
+`IO::Stream`'s own 0x18000c6a0 at slot 1).
+
+**And the consequence you must close, because nothing else will.** A concrete polymorphic class
+has an implicit **public** default constructor, so `IO::MemoryStream ms;` would compile and
+stamp GCC's vtable on an object the rest of the tree expects to be wearing the minted one —
+exactly what §4.3 forbids, with no build error. So a concrete stream class gets:
+
+- a **loud banner**: "NOT CONSTRUCTIBLE IN B.3.4 — live objects are built by the ported ctor
+  doors and wear the MINTED table; see B34_RULES §4.3"; and
+- a **protected `= default` default constructor**, which makes `IO::X x;` and `new IO::X` hard
+  compile errors while leaving the two things that must work: a probe SUBCLASS reaches it
+  through inheritance, and the by-value holder reaches it as a **`friend`**. The friendship is
+  required, not tidiness — without it the holder's own implicit constructor is defined as
+  deleted and its order probe cannot be built. `= default` keeps the class trivially
+  default-constructible, so no layout pin moves.
+
 ### A.5 Verify the layout with a throwaway probe BEFORE wiring bodies
 
 Block 2 compiled a standalone file that did nothing but `static_assert` every `offsetof` and

@@ -500,6 +500,12 @@ move 4), and it dies WHOLE — the struct, the global, `OurBfsTable()`, `NoteBfs
 zero, and not left counting a constant. B33 §5 and NEXT_SESSION §2a both pre-committed to this;
 this sheet fixes the commit.
 
+**DONE at STREAMS 2/6.** All of it: the struct, the global, `OurBfsTable()`, `NoteBfsStamp()`,
+`NoteSlotDispatch()`, the seven call sites and the six-number exporter `RtIoBfsPromoteCounters()`
+(which had zero callers). `FileStreamCounters` and `SlotCounters` in the same file are a
+DIFFERENT instrument — plain per-body attendance, no vptr identity — and stay; their bumps moved
+onto the member bodies so they keep counting entries to the BODY, not to the door.
+
 **Why it is safe to delete rather than restate.** The question it answers —
 "did this dispatch arrive through our minted `BinaryFileStream` table?" — is answered
 structurally once `BinaryFileStream` is a class: there is exactly one table, the compiler's,
@@ -636,6 +642,33 @@ which vtable a live object wears while anything still reads the minted table. Pe
 members and a real declaration; it does not get a real constructor. Every construction site
 keeps stamping `RT_DATA_SLOT("??_7…@IO@@6B@")`.* A commit that gives a stream class a C++
 constructor is rejected on sight.
+
+**HOW THAT RULE IS ENFORCED BY THE COMPILER, added at STREAMS 2/6 (coordinator ruling).**
+The rule above is not self-enforcing, and the gap is specific: §4.2 says leave slot 0 pure, but
+a class held **by value** as a member cannot be abstract, so two of them must be concrete —
+`IO::MemoryStream` (inside `CompressedMemoryStream` at +0x68) and `IO::BinaryFileStream`
+(inside `CompressedFileStream` at +0x68). The shape is therefore:
+
+> **Abstract where nothing holds the class by value; concrete-with-a-delegating-slot-0 where
+> something does.** A concrete class's slot 0 delegates in one line to the deleting-dtor body
+> that is ALREADY registered — nothing re-registered, re-implemented or retired.
+
+But a concrete polymorphic class has an implicit **public** default constructor, so
+`IO::MemoryStream ms;` would compile, stamp GCC's vtable on a live object, and produce **no
+build error at all** — the precise failure this section exists to prevent. So every concrete
+stream class carries:
+
+1. a banner reading *"NOT CONSTRUCTIBLE IN B.3.4 — live objects are built by the ported ctor
+   doors and wear the MINTED table; see B34_RULES §4.3"*; and
+2. a **protected `= default` default constructor**, making `IO::X x;` and `new IO::X` compile
+   errors. A probe subclass still reaches it through inheritance, and the by-value holder
+   reaches it as a `friend` — which is required, because otherwise the holder's own implicit
+   constructor is defined as deleted. `= default` keeps the class trivially
+   default-constructible, so no layout pin moves.
+
+The coordinator additionally greps every STREAMS merge for `IO::<X>Stream <ident>;` and
+`new IO::<X>Stream` outside `tests/`. Belt and braces, because the compile error is the part
+that survives a future agent who has read neither sheet.
 
 **The construction sites, enumerated** — and the shape is not what "a `fn_*_Ctor` door" would
 suggest. Retail INLINES most of these constructors, so our port reproduces them as a stack
