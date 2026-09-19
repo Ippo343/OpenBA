@@ -77,6 +77,12 @@
 #include "dx11_seam.h"
 #include "VideoDX11Data.h"
 #include "dx11_backend_access.h"
+// ENDGAME B.3.5 block D2, RULE B5-3: the three real Runtime abstract bases whose
+// destructors the three scalar deleting dtors below call by qualified name.
+#include "video/CompanionData.h"
+// RULE B5-2: the real `Video::{Index,Vertex}Buffer`, which `GpuBufferOwner` below
+// is now an alias of rather than a two-field prefix view of both.
+#include "video/Buffers.h"
 
 #include "resolve.h"
 
@@ -217,14 +223,28 @@ inline void* VideoDeviceSingleton() { return *g_deps.videoDeviceSingleton; }
 // Adding a field here requires a decompiled read/write that proves it.
 // ============================================================
 
-// Video::VertexBuffer / Video::IndexBuffer.
-// Proven by VertexBufferData/IndexBufferData slots 1, 2, 3 and 6.
-struct GpuBufferOwner {
-    int32_t sizeBytes;   // +0x00  total byte size; 0 means "nothing to create"
-    uint8_t dynamic;     // +0x04  bool; selects D3D11_USAGE_DYNAMIC + CPU write
-};
-static_assert(offsetof(GpuBufferOwner, sizeBytes) == 0x00, "GpuBufferOwner::sizeBytes");
-static_assert(offsetof(GpuBufferOwner, dynamic)   == 0x04, "GpuBufferOwner::dynamic");
+// Video::VertexBuffer / Video::IndexBuffer — ENDGAME B.3.5 block D2, RULE B5-2:
+// COLLAPSED. This was a two-field prefix view of two classes at once, with no
+// `sizeof` assert because only the leading fields were known. Both classes are
+// real now (runtime/types/video/Buffers.h, 0x20 bytes each, every field named and
+// asserted), so the view is an ALIAS instead of a fifth description of the layout.
+//
+// IT ALIASES `Video::IndexBuffer` AND IS USED FOR BOTH, which is deliberate and
+// is what the shipped DLL does: retail's `{Index,Vertex}BufferData` slots 1, 2, 3
+// and 6 are ONE body each, shared between the two owner classes precisely because
+// the two are field-identical. The assert below is what makes that sharing a
+// checked fact rather than an assumption — if the two layouts ever diverged, this
+// file stops compiling instead of reading the wrong field for one of them.
+// `tests/unit/video_device_abi_test.cpp` restates the same equality at runtime.
+using GpuBufferOwner = ::Video::IndexBuffer;
+static_assert(sizeof(::Video::IndexBuffer) == sizeof(::Video::VertexBuffer) &&
+              offsetof(::Video::IndexBuffer, size) == offsetof(::Video::VertexBuffer, size) &&
+              offsetof(::Video::IndexBuffer, dynamic) == offsetof(::Video::VertexBuffer, dynamic) &&
+              offsetof(::Video::IndexBuffer, platformData) ==
+                  offsetof(::Video::VertexBuffer, platformData),
+              "one view for both owners is only sound while the two layouts are identical");
+static_assert(offsetof(GpuBufferOwner, size)    == 0x00, "GpuBufferOwner::size");
+static_assert(offsetof(GpuBufferOwner, dynamic) == 0x04, "GpuBufferOwner::dynamic");
 
 // Video::ConstantBuffer. Proven by ConstantBufferData slots 1, 2 and 3.
 struct ConstantBufferOwner {
@@ -363,7 +383,7 @@ void* BufferData_Lock(IndexBufferData* self, int32_t sizeBytes, int32_t* outByte
     const GpuBufferOwner* owner = reinterpret_cast<const GpuBufferOwner*>(self->indexBuffer);
 
     D3D11_MAP mapType;
-    if (self->writeCursor + sizeBytes > owner->sizeBytes) {
+    if (self->writeCursor + sizeBytes > owner->size) {
         mapType = D3D11_MAP_WRITE_DISCARD;         // 4
         self->writeCursor = 0;
     } else {
@@ -409,10 +429,10 @@ bool GpuBuffer_Create(void* selfBase, void* ownerPtr, void** outBuffer,
                       UINT bindFlags) {
     (void)selfBase;
     GpuBufferOwner* owner = reinterpret_cast<GpuBufferOwner*>(ownerPtr);
-    owner->sizeBytes = static_cast<int32_t>(sizeBytes);
+    owner->size = static_cast<int32_t>(sizeBytes);
     owner->dynamic   = dynamicByte;
 
-    if (owner->sizeBytes == 0) return true;
+    if (owner->size == 0) return true;
 
     const bool dynamic = (dynamicByte != 0);
 
@@ -467,16 +487,16 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
 
     // Order matters: the dynamic flag first, then the size.
     g_deps.SerializeBool(serializer, reinterpret_cast<bool*>(&owner->dynamic), nullptr);
-    g_deps.SerializeInt(serializer, &owner->sizeBytes, nullptr);
+    g_deps.SerializeInt(serializer, &owner->size, nullptr);
 
-    const int32_t sizeBytes = owner->sizeBytes;
+    const int32_t sizeBytes = owner->size;
     if (sizeBytes == 0) return;
 
     if (SerializerStreamMode(serializer) == 0) {
         // Load: read the payload into scratch memory and rebuild the buffer.
         void* scratch = g_deps.MemAlloc(static_cast<unsigned long long>(sizeBytes), 4);
-        g_deps.SerializeBytes(serializer, owner->sizeBytes, scratch, nullptr);
-        recreate(self, static_cast<uint32_t>(owner->sizeBytes), owner->dynamic, scratch);
+        g_deps.SerializeBytes(serializer, owner->size, scratch, nullptr);
+        recreate(self, static_cast<uint32_t>(owner->size), owner->dynamic, scratch);
         g_deps.MemFree(scratch);
         return;
     }
@@ -510,7 +530,7 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
 
     D3D11_MAPPED_SUBRESOURCE mapped;
     ctx->Map(staging, 0, D3D11_MAP_READ_WRITE, 0, &mapped);                      // 3
-    g_deps.SerializeBytes(serializer, owner->sizeBytes, mapped.pData, nullptr);
+    g_deps.SerializeBytes(serializer, owner->size, mapped.pData, nullptr);
     ctx->Unmap(staging, 0);
     staging->Release();
 
@@ -536,7 +556,7 @@ bool GpuBuffer_SetData(void* ownerPtr, void* buffer,
                        int32_t sizeBytes, int32_t offsetBytes, const void* src,
                        UINT dstSubresource) {
     const GpuBufferOwner* owner = reinterpret_cast<const GpuBufferOwner*>(ownerPtr);
-    if (owner->sizeBytes == 0) return true;
+    if (owner->size == 0) return true;
 
     g_deps.DeviceLock(VideoDeviceSingleton());
 
@@ -576,7 +596,12 @@ VertexBufferData* VertexBufferData_ScalarDeletingDtor(VertexBufferData* self, un
     self->buffer      = nullptr;
     self->writeCursor = 0;
     self->locked      = 0;
-    g_deps.VertexBufferDataDtor(self);
+    // RULE B5-3: a QUALIFIED NON-VIRTUAL call to the real Runtime base's
+    // destructor, never `DeletingDtor(0)` — that would re-enter this slot. The
+    // cast is the bridge the declared leave (RULE B5-8) requires: this class
+    // mirrors the base's two fields rather than deriving from it in C++.
+    reinterpret_cast<Video::VertexBufferData*>(self)
+        ->Video::VertexBufferData::~VertexBufferData();   // B.3.5 bridge
     if (flags & 1) g_deps.MemFree(self);
     return self;
 }
@@ -660,7 +685,9 @@ IndexBufferData* IndexBufferData_ScalarDeletingDtor(IndexBufferData* self, unsig
     self->buffer      = nullptr;
     self->writeCursor = 0;
     self->locked      = 0;
-    g_deps.IndexBufferDataDtor(self);
+    // RULE B5-3, as for VertexBufferData above.
+    reinterpret_cast<Video::IndexBufferData*>(self)
+        ->Video::IndexBufferData::~IndexBufferData();     // B.3.5 bridge
     if (flags & 1) g_deps.MemFree(self);
     return self;
 }
@@ -776,7 +803,9 @@ void ConstantBufferData_Destruct(ConstantBufferData* self) {
     // One qword store clears count and capacity together, exactly as compiled.
     self->bufferCount    = 0;
     self->bufferCapacity = 0;
-    g_deps.ConstantBufferDataDtor(self);
+    // RULE B5-3, as for the other two.
+    reinterpret_cast<Video::ConstantBufferData*>(self)
+        ->Video::ConstantBufferData::~ConstantBufferData();  // B.3.5 bridge
 }
 
 // 0x180001240 — slot 0: scalar deleting destructor.

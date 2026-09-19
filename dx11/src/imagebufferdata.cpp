@@ -143,6 +143,15 @@
 #include "VideoDX11Data.h"
 #include "resolve.h"
 
+// ENDGAME B.3.5 block C, RULE B5-3 — the real `Video::ImageBufferData` abstract
+// base (block A), so this file's destructor can call its base destructor as a
+// qualified non-virtual member call instead of resolving a mangled name.
+// B35_RULES 1.2: `dx11/` compiles with the shared include set
+// (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed. The
+// CONCRETE `*Data` classes and the 84-slot seam remain the declared leave of
+// RULE B5-8; only the Runtime-side base is a class.
+#include "video/CompanionData.h"
+
 #include <windows.h>
 #include <d3d11.h>
 
@@ -172,7 +181,11 @@ struct Imports {
     int   (*GetLevelCount)(void*);   // ?GetLevelCount@ImageBuffer@Video@@QEBAHXZ
     bool  (*IsRendered)(void*);      // ?IsRendered@ImageBuffer@Video@@QEBA_NXZ
     bool  (*IsGenerated)(void*);     // ?IsGenerated@ImageBuffer@Video@@QEBA_NXZ
-    void  (*BaseDtor)(void*);        // ??1ImageBufferData@Video@@UEAA@XZ
+    // ENDGAME B.3.5 block C, RULE B5-3: `void (*BaseDtor)(void*)` —
+    // `??1ImageBufferData@Video@@UEAA@XZ` — is GONE from this struct. It was
+    // spelling 9 of the nine caller bindings (RULE B5-14), a mangled name
+    // resolved into a table and called indirectly, one of dx11's 76 literals.
+    // The Runtime base is a real class now; see `Destructor` below.
     void* (*MemAlloc)(uint64_t, int);// ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z
     void  (*MemFree)(void*);         // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
     void** deviceSingleton;          // ?_singleton@Device@Video@@0PEAV12@EA
@@ -200,7 +213,6 @@ const Imports* GetImports() {
         g_im.GetLevelCount  = (int  (*)(void*))ResolveExport("?GetLevelCount@ImageBuffer@Video@@QEBAHXZ");
         g_im.IsRendered     = (bool (*)(void*))ResolveExport("?IsRendered@ImageBuffer@Video@@QEBA_NXZ");
         g_im.IsGenerated    = (bool (*)(void*))ResolveExport("?IsGenerated@ImageBuffer@Video@@QEBA_NXZ");
-        g_im.BaseDtor       = (void (*)(void*))ResolveExport("??1ImageBufferData@Video@@UEAA@XZ");
         g_im.MemAlloc       = (void* (*)(uint64_t, int))ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
         g_im.MemFree        = (void  (*)(void*))ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
         g_im.deviceSingleton = (void**)ResolveExport("?_singleton@Device@Video@@0PEAV12@EA");
@@ -390,7 +402,19 @@ void Destructor(ImageBufferData* self, const Imports* im) {
 
     ReleaseInterfaces(self);
 
-    im->BaseDtor(self);   // tail call in the original (JMP [0x1800133e0])
+    // ENDGAME B.3.5 block C, RULE B5-3. Was `im->BaseDtor(self)`, an indirect
+    // call through a resolved `??1ImageBufferData@Video@@UEAA@XZ` — a tail call in
+    // the original (JMP [0x1800133e0]). `Video::ImageBufferData` is now a real
+    // class (block A), so this is the MSVC derived-destructor idiom written as
+    // C++: a QUALIFIED non-virtual call on the base subobject, reached through the
+    // bridge cast because `VideoDX11::ImageBufferData` is still the declared leave
+    // of RULE B5-8 and does not inherit in C++.
+    //
+    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. the caller of
+    // this function. The base destructor is in no slot, which is exactly why the
+    // qualification is safe and the virtual call is not.
+    reinterpret_cast< ::Video::ImageBufferData*>(self)
+        -> ::Video::ImageBufferData::~ImageBufferData();   // B.3.5 bridge
 }
 
 // ============================================================

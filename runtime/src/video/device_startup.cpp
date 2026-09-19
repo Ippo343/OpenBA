@@ -95,6 +95,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
+#include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
 #include "../collection/set_avl.h"
 
 using RtVideo::Adapter;
@@ -382,9 +383,31 @@ extern "C" void* RtVideo_ArrayModeAssign(void* dstv, const void* srcv) {
 // adapter list our `EnumerateVideoModes` path should have built differently,
 // and that is the thing to find.
 // ============================================================================
-extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
-    const int32_t interfaceCount = self->interfaceCount;
-    if (interfaceCount == 0) return false;          // 0x1800f8852
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.5 block D2 — the three members whose real bodies live in a `_win`
+// twin that cannot include this header (PLAN §4.1 decision 1: no <windows.h>
+// under runtime/src/ outside a `_win` file). Each member is a one-line forward
+// into the `extern "C"` Win32 body, and the REGISTERED DOOR stays the `_win`
+// function: that is the one place in this block where the door is not a
+// delegation, and it is a platform-seam constraint rather than a choice. C++
+// callers — `Device::ValidateConfiguration` below is one — now reach them as
+// members.
+// ---------------------------------------------------------------------------
+int Video::Device::GetDefaultResolution(const Adapter& adapter) const {
+    return RtVideo_Device_GetDefaultResolution(const_cast<Video::Device*>(this), &adapter);
+}
+
+int Video::Device::SizeWindow(void* hwnd, unsigned msg, uint64_t wparam, int64_t lparam) {
+    return RtVideo_Device_SizeWindow(hwnd, msg, wparam, lparam);
+}
+
+int Video::Device::MoveWindow(void* hwnd, unsigned msg, uint64_t wparam, int64_t lparam) {
+    return RtVideo_Device_MoveWindow(hwnd, msg, wparam, lparam);
+}
+
+bool Video::Device::ValidateConfiguration() {
+    const int32_t ifaceTotal = interfaceCount;
+    if (ifaceTotal == 0) return false;              // 0x1800f8852
 
     Configuration* cfg = *ConfigSlot();
 
@@ -398,9 +421,9 @@ extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
     int32_t filter     = cfg->textureFilter;
 
     // 0x1800f8893: clamp the interface index into range.
-    if (ifaceIdx < 0 || ifaceIdx >= interfaceCount) ifaceIdx = 0;
+    if (ifaceIdx < 0 || ifaceIdx >= ifaceTotal) ifaceIdx = 0;
 
-    GraphicsInterface* iface = self->interfaceData + ifaceIdx;
+    GraphicsInterface* iface = interfaceData + ifaceIdx;
 
     // 0x1800f88b8: clamp the adapter index against THAT interface's list.
     if (adapterIdx < 0 || adapterIdx >= iface->adapterCount) adapterIdx = 0;
@@ -429,8 +452,8 @@ extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
     if (modeIdx == -1) {
         // 0x1800f8945: no match — ask the desktop what it is running and take
         // that mode's dimensions.
-        modeIdx = RtVideo_Device_GetDefaultResolution(self, adapter);
-        // `self` is passed because retail passes it (RCX = this at
+        modeIdx = Video::Device::GetDefaultResolution(*adapter);
+        // `this` is passed because retail passes it (RCX = this at
         // 0x1800f8942); the callee never reads it — 0x1800f7540's first act is
         // `MOV RDI,RDX`, and RCX is destroyed by the memset call two
         // instructions later.
@@ -491,7 +514,7 @@ extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
     // (0x1800f8a38) rather than reusing the one above. Nothing can have moved
     // it, but "nothing can have moved it" is a claim about code this lane does
     // not own, so the re-read stands (lane PICK §5).
-    adapter = (self->interfaceData + ifaceIdx)->adapterData + adapterIdx;
+    adapter = (interfaceData + ifaceIdx)->adapterData + adapterIdx;
 
     int32_t finalModeIdx = -1;
     {
@@ -526,16 +549,20 @@ extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
     if (cfg->reflectionDetail < 0) cfg->reflectionDetail = 0;
     else if (cfg->reflectionDetail > 2) cfg->reflectionDetail = 2;
 
-    self->adapterField2C   = adapter->field2C;      // 0x1800f8b26
-    self->adapterField30   = adapter->field30;      // 0x1800f8b2c
-    self->displayModeIndex = finalModeIdx;          // 0x1800f8b2f
-    self->refreshRateIndex = finalRefreshIdx;       // 0x1800f8b32
+    dxgiAdapterIndex = adapter->dxgiAdapterIndex;  // 0x1800f8b26
+    dxgiOutputIndex  = adapter->dxgiOutputIndex;   // 0x1800f8b2c
+    displayModeIndex = finalModeIdx;               // 0x1800f8b2f
+    refreshRateIndex = finalRefreshIdx;            // 0x1800f8b32
 
-    RtVideo_ArrayModeAssign(&self->modeData, &adapter->modeData);          // 0x1800f8b3d
-    RtVideo_ArrayBoolAssign(&self->multisampleData, &adapter->multisampleData); // 0x1800f8b4a
+    RtVideo_ArrayModeAssign(&modeData, &adapter->modeData);                // 0x1800f8b3d
+    RtVideo_ArrayBoolAssign(&multisampleData, &adapter->multisampleData);  // 0x1800f8b4a
 
-    self->maxAnisotropy = adapter->maxFilterLevel;  // 0x1800f8b52
+    maxAnisotropy = adapter->maxFilterLevel;  // 0x1800f8b52
     return true;
+}
+
+extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
+    return self->Video::Device::ValidateConfiguration();
 }
 
 // ============================================================================
@@ -557,8 +584,8 @@ extern "C" bool RtVideo_Device_ValidateConfiguration(Device* self) {
 // AL unconditionally). PlatformStartup catches that separately at 0x1800f838f
 // by re-reading the field. Faithful.
 // ============================================================================
-extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index) {
-    InterfaceSlot* slot = self->dllSlots + index;
+bool Video::Device::CreateVideoInterface(int index) {
+    InterfaceSlot* slot = dllSlots + index;
 
     if (slot->module == nullptr ||
         slot->createDeviceData == nullptr ||
@@ -574,24 +601,27 @@ extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index)
         return false;
     }
 
-    if (void* dd = self->deviceData) {
-        using DestroyFn = void (*)(void*);
-        using DeleteFn  = void (*)(void*, int);
-        void** vt = *reinterpret_cast<void***>(dd);
-        reinterpret_cast<DestroyFn>(vt[3])(dd);              // +0x18
-        dd = self->deviceData;                               // 0x1800f7980 re-read
-        if (dd) {
-            vt = *reinterpret_cast<void***>(dd);
-            reinterpret_cast<DeleteFn>(vt[0])(dd, 1);        // +0x00, flag 1
-        }
-        self->deviceData = nullptr;
+    // ENDGAME B.3.5: the two hand-inlined vtable dispatches became virtual calls
+    // on block A's real `Video::DeviceData` — slot 3 `Shutdown` (+0x18) and
+    // slot 0 `DeletingDtor` with the delete flag (+0x00). The receiver keeps its
+    // marked bridge cast because `deviceData` is a pinned `void*` field.
+    if (void* dd = deviceData) {
+        reinterpret_cast<Video::DeviceData*>(dd)->Shutdown();          // B.3.5 bridge
+        dd = deviceData;                                     // 0x1800f7980 re-read
+        if (dd)
+            (void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);  // B.3.5 bridge
+        deviceData = nullptr;
     }
 
-    self->activeInterface = index;                           // 0x1800f79a4
+    activeInterface = index;                                 // 0x1800f79a4
 
     using CreateFn = void* (*)(Device*);
-    self->deviceData = reinterpret_cast<CreateFn>(slot->createDeviceData)(self);
+    deviceData = reinterpret_cast<CreateFn>(slot->createDeviceData)(this);
     return true;                                             // 0x1800f79b7
+}
+
+extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index) {
+    return self->Video::Device::CreateVideoInterface(index);
 }
 
 // ============================================================================
@@ -619,11 +649,11 @@ extern "C" bool RtVideo_Device_CreateVideoInterface(Device* self, int32_t index)
 // The two message callbacks are registered only on the success path, and their
 // ids are 5 (WM_SIZE) and 0x232 (WM_EXITSIZEMOVE).
 // ============================================================================
-extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
+bool Video::Device::PlatformStartup() {
     // 0x1800f8266: the HWND comes from Application::_singleton[0].
-    self->windowHandle = *reinterpret_cast<void**>(*AppSlot());
+    windowHandle = *reinterpret_cast<void**>(*AppSlot());
 
-    if (!RtVideo_Device_ValidateConfiguration(self)) {
+    if (!Video::Device::ValidateConfiguration()) {
         // 0x1800f8283 — the shipped string at 0x1801589b0; see
         // CreateVideoInterface for why the text is ours.
         ErrorSetText("Video::Device::PlatformStartup: no usable video "
@@ -649,38 +679,34 @@ extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
         tried[cursor] = 1;                           // 0x1800f82f3
         cfg->interfaceIndex = idx;                   // 0x1800f82f6
 
-        (void)RtVideo_Device_ValidateConfiguration(self);   // result IGNORED
+        (void)Video::Device::ValidateConfiguration();      // result IGNORED
 
-        if (RtVideo_Device_CreateVideoInterface(self, idx)) {
-            void* dd = self->deviceData;
-            using BoolFn   = bool (*)(void*);
-            using VoidFn   = void (*)(void*);
-            using DeleteFn = void (*)(void*, int);
-            void** vt = *reinterpret_cast<void***>(dd);
+        if (Video::Device::CreateVideoInterface(idx)) {
+            // ENDGAME B.3.5: three hand-inlined `DeviceData` vtable dispatches
+            // became virtual calls on block A's real class — slot 2 `CreateDevice`
+            // (+0x10), slot 3 `Shutdown` (+0x18) and slot 0 `DeletingDtor`.
+            void* dd = deviceData;
 
-            if (reinterpret_cast<BoolFn>(vt[2])(dd)) {     // +0x10 — Create
+            if (reinterpret_cast<Video::DeviceData*>(dd)->CreateDevice()) {  // B.3.5 bridge
                 // ---- success path (0x1800f838f) --------------------------
-                if (self->deviceData == nullptr) break;    // re-read, then fail
-                const int32_t active = self->activeInterface;
+                if (deviceData == nullptr) break;         // re-read, then fail
+                const int32_t active = activeInterface;
                 if (active < 0) break;
                 cfg->interfaceIndex = active;
 
                 void* app = *AppSlot();
                 RtApp_RegisterMessageCallback(app, 5,
-                    reinterpret_cast<void*>(&RtVideo_Device_SizeWindow));
+                    reinterpret_cast<void*>(&Video::Device::SizeWindow));
                 RtApp_RegisterMessageCallback(app, 0x232,
-                    reinterpret_cast<void*>(&RtVideo_Device_MoveWindow));
+                    reinterpret_cast<void*>(&Video::Device::MoveWindow));
                 return true;
             }
 
             // ---- Create failed: tear the companion down and try the next ---
-            vt = *reinterpret_cast<void***>(self->deviceData);
-            reinterpret_cast<VoidFn>(vt[3])(self->deviceData);   // +0x18
-            if (void* d2 = self->deviceData) {
-                vt = *reinterpret_cast<void***>(d2);
-                reinterpret_cast<DeleteFn>(vt[0])(d2, 1);
-            }
-            self->deviceData = nullptr;
+            reinterpret_cast<Video::DeviceData*>(deviceData)->Shutdown();     // B.3.5 bridge
+            if (void* d2 = deviceData)
+                (void)reinterpret_cast<Video::DeviceData*>(d2)->DeletingDtor(1);  // B.3.5 bridge
+            deviceData = nullptr;
         }
 
         // 0x1800f8345: step DOWN, wrapping to 2.
@@ -696,10 +722,18 @@ extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
     return false;
 }
 
-extern "C" bool RtVideo_Device_Startup(Device* self) {
+bool Video::Device::Startup() {
     // 0x1800f7270: JMP 0x1800f8260. One instruction, no frame, no argument
     // shuffle — so this really is the same function under a second name.
-    return RtVideo_Device_PlatformStartup(self);
+    return Video::Device::PlatformStartup();
+}
+
+extern "C" bool RtVideo_Device_PlatformStartup(Device* self) {
+    return self->Video::Device::PlatformStartup();
+}
+
+extern "C" bool RtVideo_Device_Startup(Device* self) {
+    return self->Video::Device::Startup();
 }
 
 // ============================================================================
@@ -736,7 +770,7 @@ void UnregisterInline(rtsetavl::Set* set, unsigned id) {
 }
 }  // namespace
 
-extern "C" void RtVideo_Device_PlatformShutdown(Device* self) {
+void Video::Device::PlatformShutdown() {
     // 0x1800f83f6 / 0x1800f842f: the singleton is read, used, and RE-READ
     // between the two removals. Preserved — see buffers_win.cpp's note on the
     // same pattern in Device::Unlock.
@@ -751,26 +785,30 @@ extern "C" void RtVideo_Device_PlatformShutdown(Device* self) {
             static_cast<uint8_t*>(app) + 0x18), 0x232);        // WM_EXITSIZEMOVE
     }
 
-    // 0x1800f8464: release the DeviceData — Destroy (vtable +0x18), then the
-    // deleting dtor (vtable +0x00, flag 1), with the field re-read between and
-    // nulled after. The same two-step CreateVideoInterface uses.
-    if (void* dd = self->deviceData) {
-        using VoidFn   = void (*)(void*);
-        using DeleteFn = void (*)(void*, int);
-        void** vt = *reinterpret_cast<void***>(dd);
-        reinterpret_cast<VoidFn>(vt[3])(dd);
-        dd = self->deviceData;                                 // 0x1800f8476
-        if (dd) {
-            vt = *reinterpret_cast<void***>(dd);
-            reinterpret_cast<DeleteFn>(vt[0])(dd, 1);
-        }
-        self->deviceData = nullptr;                            // 0x1800f848c
+    // 0x1800f8464: release the DeviceData — Shutdown (vtable +0x18, slot 3), then
+    // the deleting dtor (vtable +0x00, flag 1), with the field re-read between and
+    // nulled after. The same two-step CreateVideoInterface uses. ENDGAME B.3.5:
+    // both are virtual calls on block A's real `Video::DeviceData` now.
+    if (void* dd = deviceData) {
+        reinterpret_cast<Video::DeviceData*>(dd)->Shutdown();              // B.3.5 bridge
+        dd = deviceData;                                       // 0x1800f8476
+        if (dd)
+            (void)reinterpret_cast<Video::DeviceData*>(dd)->DeletingDtor(1);  // B.3.5 bridge
+        deviceData = nullptr;                                  // 0x1800f848c
     }
 }
 
-extern "C" void RtVideo_Device_Shutdown(Device* self) {
+void Video::Device::Shutdown() {
     // 0x1800f7280: JMP 0x1800f83f0.
-    RtVideo_Device_PlatformShutdown(self);
+    Video::Device::PlatformShutdown();
+}
+
+extern "C" void RtVideo_Device_PlatformShutdown(Device* self) {
+    self->Video::Device::PlatformShutdown();
+}
+
+extern "C" void RtVideo_Device_Shutdown(Device* self) {
+    self->Video::Device::Shutdown();
 }
 
 // ============================================================================

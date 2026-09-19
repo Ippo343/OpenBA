@@ -113,3 +113,190 @@ static_assert(offsetof(ReflectionImageBuffer, _planeD) == 0x8c, "_planeD @ +0x8c
 constexpr uintptr_t kVtReflectionImageBuffer = 0x180155190ull;
 
 }  // namespace RtGraphics
+
+// ############################################################################
+// THE REAL CLASSES — `Graphics::GeneratedImageBuffer` and
+// `Graphics::ReflectionImageBuffer`. ENDGAME B.3.5 block C.
+//
+// The two PODs above STAY: `GeneratedImageBuffer`'s because it is the layout
+// `RtGraphics::ReflectionImageBuffer` and `RtGraphics::FrameCopyImageBuffer`
+// mirror by embedding `::ImageBuffer base`, and `FrameCopyImageBuffer`'s because
+// `runtime/src/graphics/wave23_lane_gfxbody.cpp` (block H1's) still uses it.
+// ############################################################################
+
+namespace Graphics {
+
+// ============================================================
+// Graphics::GeneratedImageBuffer — 0x70 bytes, TWELVE slots
+// (`??_7GeneratedImageBuffer@Graphics@@6B@` @ 0x180154f60, B35_SLOTS.md).
+//
+// *** ABSTRACT, and in retail too: slots 10 and 11 are `_purecall`
+// (0x18007ec28). That is what makes it the intermediate base of the branch
+// rather than a usable image type — it defines "an image something regenerates
+// per frame" and leaves BOTH the regeneration and the draw to a subclass.
+//
+// It inherits slots 6, 7, 8 (`Reconstruct`/`Destruct`/`Construct`) AND slot 9
+// (`Create`) from `Video::ImageBuffer` — its `??_7` holds 0x18001ea80 /
+// 0x18001eab0 / 0x18001eaa0 / 0x1800f2680, the base's own bodies — so none of
+// the four is redeclared here. It overrides 1, 2, 3 and 5 and adds 10 and 11.
+//
+// RULE B5-15, both literals COPIED from B35_SLOTS section 3 and both read
+// byte-wise: `?_TypeName@` (0x18001eda0) -> "GeneratedImageBuffer", NO
+// namespace, while `?_ParentTypeName@` (0x18001edb0) -> "Video::ImageBuffer",
+// WITH one. This class is the reason the rule is stated the way it is: the two
+// strings for ONE class disagree about namespacing, so neither can be derived
+// from the other or from the C++ base name.
+//
+// *** NOT CONSTRUCTIBLE IN B.3.5 *** and NO VIRTUAL DESTRUCTOR — the same two
+// statements `Video::ImageBuffer` carries, for the same two reasons. Its ctor
+// (0x1800a3e70) and dtor (0x1800a3e40) stay registered DOORS in
+// `runtime/src/graphics/imagebuffer_derived.cpp`: the ctor has to stamp the
+// MINTED `??_7GeneratedImageBuffer` address, and the dtor has to reach
+// `??1ImageBuffer@Video@@` which is still a door in block D2's `buffers.cpp`.
+// ============================================================
+class GeneratedImageBuffer : public Video::ImageBuffer {
+public:
+    // Slot 0's body (0x18001eee0) is a `runtime/src/object/deleting_dtor.cpp`
+    // table row and is defined in no translation unit, so it stays PURE — see
+    // `Video::ImageBuffer`'s slot-0 banner for why a non-pure declaration does
+    // not link.
+    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [ 0] 0x18001eee0
+    const char*   TypeName() const override;                  // [ 1] 0x18001ede0
+    uint32_t      Type() const override;                      // [ 2] 0x18001edc0
+    int32_t       GetFileVersion() const override;            // [ 3] 0x1800a3eb0 — `MOV EAX,0x7`
+    bool          Serialize(void* stream) override;           // [ 5] 0x1800a3ec0
+
+    // [10] and [11], `_purecall` in retail. `virtual`, not `override`: this
+    // branch INTRODUCES both (RULE B5-16's shape one level down from
+    // `Construct`). Their names come from the two concrete override sets, which
+    // is the only place a pure slot's name can be read from.
+    //
+    // BOTH ARE `const` (`UEBA`) AND BOTH SUBCLASSES WRITE `_generation` THROUGH
+    // THEM. Retail's own const-ness is transcribed and the write is spelled with
+    // a `const_cast` at the two sites, rather than making `_generation` mutable:
+    // the field is not logically mutable state, it is the latch the caller's
+    // generation counter is compared against, and hiding the cast in the
+    // declaration would hide that retail's signature and retail's body disagree.
+    virtual void Generate(void* context, int32_t generation) const = 0;   // [10]
+    virtual void Render(void* renderer, const void* scene, const void* camera,
+                        int32_t generation) const = 0;                    // [11]
+
+protected:
+    GeneratedImageBuffer() = default;   // see "NOT CONSTRUCTIBLE"
+    ~GeneratedImageBuffer();            // ??1… 0x1800a3e40 — door in imagebuffer_derived.cpp
+
+    // `IEBA` = PROTECTED const, not private. Neither is ported: nothing in the
+    // tree calls either, and they exist only as rows in
+    // `standalone/rt_export_addrs.inc`. They are the latch protocol the two
+    // subclasses' `Generate` arms would use.
+    bool BeginGeneration(int32_t generation) const;   // ?BeginGeneration@ — not ported
+    void EndGeneration(int32_t generation) const;     // ?EndGeneration@   — not ported
+
+    // RULE B5-15 — see the class banner.
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    static uint32_t      TypeId();
+    static Object::Base* CreateNewObject();
+    static Object::Base* CreateInPlaceObject(void* storage);
+    GeneratedImageBuffer(const GeneratedImageBuffer& other);            // ??0…AEBV01 — not ported
+    GeneratedImageBuffer& operator=(const GeneratedImageBuffer& other); // ??4…      — not ported
+
+    // ---- the 8 bytes GeneratedImageBuffer adds ----------------------------
+    // The ctor zeroes `_generation` (`MOV dword ptr [RBX+0x68],0x0` at
+    // 0x1800a3e96) and the dtor touches nothing of its own. `_pad6c` is NEVER
+    // WRITTEN by either body; it is the four bytes MSVC leaves before the
+    // 8-aligned tail of the derived classes. Recorded, not zeroed.
+    int32_t  _generation;   // +0x68
+    uint32_t _pad6c;        // +0x6c  never written
+};
+
+static_assert(sizeof(GeneratedImageBuffer) == 0x70,
+              "Graphics::GeneratedImageBuffer is 0x70 (0x18001eee0's MOV EDX,0x70)");
+static_assert(alignof(GeneratedImageBuffer) == 8, "qword-aligned");
+static_assert(sizeof(GeneratedImageBuffer) == sizeof(RtGraphics::GeneratedImageBuffer),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(GeneratedImageBuffer, _generation) == 0x68, "_generation @ +0x68");
+static_assert(offsetof(GeneratedImageBuffer, _generation)
+                  == offsetof(RtGraphics::GeneratedImageBuffer, _generation), "alias");
+
+// ============================================================
+// Graphics::ReflectionImageBuffer — 0x90 bytes, TWELVE slots
+// (`??_7ReflectionImageBuffer@Graphics@@6B@` @ 0x180155190, B35_SLOTS.md).
+//
+// Overrides 1, 2, 3, 5, 6, 7, 8, 10, 11 and INHERITS 4 (`External::Compile`) and
+// 9 (`?Create@ImageBuffer@Video@@`, whose address its slot 9 carries verbatim).
+// The inherited slot 9 is what B35_RULES 2.3 item 5 says of BOTH concretes; it
+// is true here and false of `FrameCopyImageBuffer`, which has its own `Create`
+// (see FrameCopyImageBuffer.h's banner for the byte evidence).
+//
+// `?_TypeName@` (0x180022190) -> "ReflectionImageBuffer", `?_ParentTypeName@`
+// (0x1800221a0) -> "GeneratedImageBuffer", NO namespace. RULE B5-15.
+// ============================================================
+class ReflectionImageBuffer : public GeneratedImageBuffer {
+public:
+    Object::Base*     DeletingDtor(unsigned flags) override = 0;   // [ 0] 0x180022600
+    const char*       TypeName() const override;                   // [ 1] 0x1800221d0
+    uint32_t          Type() const override;                       // [ 2] 0x1800221b0
+    int32_t           GetFileVersion() const override;             // [ 3] 0x1800a70a0 — 0x1007
+    bool              Serialize(void* stream) override;            // [ 5] 0x1800a6f00
+    Object::External* Reconstruct() override;                       // [ 6] 0x1800223e0
+    void              Destruct() override;                          // [ 7] 0x1800224c0
+    Object::External* Construct() override;                         // [ 8] 0x180022450
+    // [10] 0x1800a6ef0 — `RET`. Empty in the shipped build: a reflection image is
+    // produced by `Render` feeding a draw group, not by a blit
+    // (reference_retail_ships_empty_bodies.md).
+    void Generate(void* context, int32_t generation) const override;
+    // [11] 0x1800a6b80 — the one body in this family that does real work.
+    void Render(void* renderer, const void* scene, const void* camera,
+                int32_t generation) const override;
+
+protected:
+    ReflectionImageBuffer() = default;   // see GeneratedImageBuffer's banner
+    ~ReflectionImageBuffer();            // ??1… 0x1800a70b0 — door in imagebuffer_derived.cpp
+
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    static uint32_t      TypeId();
+    static Object::Base* CreateNewObject();
+    static Object::Base* CreateInPlaceObject(void* storage);
+    static void*         operator new(size_t size);             // ??2 — reached by name
+    static void*         operator new(size_t size, void* storage);
+    static void          operator delete(void* p);              // ??3
+    ReflectionImageBuffer(const ReflectionImageBuffer& other);            // not ported
+    ReflectionImageBuffer& operator=(const ReflectionImageBuffer& other); // not ported
+
+    // ---- the 0x20 bytes ReflectionImageBuffer adds ------------------------
+    // What the five fields are: the POD's banner above, which is the byte read.
+    // `_depth` is typed `Video::ImageBuffer*` now, which is what lets its
+    // teardown be `_depth->DeletingDtor(1)` instead of a hand-indexed slot 0;
+    // `_target` stays `void*` because `Video::RenderBuffer` is still a POD in
+    // `Device.h` and is block D2's to convert.
+    Video::ImageBuffer* _depth;    // +0x70  owned, usage = 1 (a DEPTH buffer)
+    void*               _target;   // +0x78  Video::RenderBuffer* (owned, colour = this)
+    float               _planeX;   // +0x80  ctor: 0 (lower half of one qword store)
+    float               _planeY;   // +0x84  ctor: 0 (upper half of it)
+    float               _planeZ;   // +0x88  ctor: 1.0f
+    float               _planeD;   // +0x8c  ctor: 0.0f
+};
+
+static_assert(sizeof(ReflectionImageBuffer) == 0x90,
+              "Graphics::ReflectionImageBuffer is 0x90 (0x180022600's MOV EDX,0x90)");
+static_assert(alignof(ReflectionImageBuffer) == 8, "qword-aligned");
+static_assert(sizeof(ReflectionImageBuffer) == sizeof(RtGraphics::ReflectionImageBuffer),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(ReflectionImageBuffer, _depth)  == 0x70, "_depth @ +0x70");
+static_assert(offsetof(ReflectionImageBuffer, _target) == 0x78, "_target @ +0x78");
+static_assert(offsetof(ReflectionImageBuffer, _planeX) == 0x80, "_planeX @ +0x80");
+static_assert(offsetof(ReflectionImageBuffer, _planeY) == 0x84, "_planeY @ +0x84");
+static_assert(offsetof(ReflectionImageBuffer, _planeZ) == 0x88, "_planeZ @ +0x88");
+static_assert(offsetof(ReflectionImageBuffer, _planeD) == 0x8c, "_planeD @ +0x8c");
+static_assert(offsetof(ReflectionImageBuffer, _depth)
+                  == offsetof(RtGraphics::ReflectionImageBuffer, _depth), "alias");
+static_assert(offsetof(ReflectionImageBuffer, _planeD)
+                  == offsetof(RtGraphics::ReflectionImageBuffer, _planeD), "alias");
+
+}  // namespace Graphics
