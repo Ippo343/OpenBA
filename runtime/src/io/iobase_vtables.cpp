@@ -435,22 +435,41 @@ extern "C" void* RtIo_Visitor_DeletingDtor(BinaryCodec* self, unsigned int flags
 // ===========================================================================
 // IO::VisitorStream — the null sink. Header §4.
 // ===========================================================================
+// ENDGAME B.3.4 STREAMS (4/6): the five stream slots are now members of the
+// REAL `IO::VisitorStream` (runtime/types/io/FileStream.h). The bodies moved
+// verbatim to the `namespace IO` block below; these five stay as the registered
+// doors, at the same addresses, under the same names, and delegate.
+//
+// THE `IO::VisitorStream::` QUALIFICATION IS LOAD-BEARING, not decoration
+// (B34_BRIEFS section A.1). A live VisitorStream wears the MINTED table
+// 0x180155a20, whose slots resolve back to these very doors, so an unqualified
+// virtual call here would dispatch through that table straight into this same
+// door — unbounded recursion, not delegation.
+//
+// NOTHING ELSE IN THIS FILE CHANGES. The constructor (0x1800bb090), the
+// destructor (0x1800bb040), the deleting-dtor thunk (0x18002bf80), the
+// `VtblVisitorStream()` / `RT_DATA_SLOT` stamp and all nine registration lines
+// are byte-identical: section 4.3 forbids a real constructor and section 4.2
+// forbids retiring the registration that fills the minted table's slot 0.
 extern "C" uint32_t RtIo_VisitorStream_GetSize(const VisitorStream* self) {
-    (void)self; return 0;                                      // 1800baff0
+    return reinterpret_cast<const IO::VisitorStream*>(self)
+               ->IO::VisitorStream::GetSize();
 }
 extern "C" uint32_t RtIo_VisitorStream_GetCurrentPos(const VisitorStream* self) {
-    (void)self; return 0;                                      // 1800bb000
+    return reinterpret_cast<const IO::VisitorStream*>(self)
+               ->IO::VisitorStream::GetCurrentPos();
 }
 extern "C" bool RtIo_VisitorStream_SetCurrentPos(VisitorStream* self, int32_t pos) {
-    (void)self; (void)pos; return true;                        // 1800bb010
+    return reinterpret_cast<IO::VisitorStream*>(self)
+               ->IO::VisitorStream::SetCurrentPos(pos);
 }
-// Returns true WITHOUT writing to `dst` — faithful, and the mechanism of the
-// whole reference-visit pass.
 extern "C" bool RtIo_VisitorStream_Read(VisitorStream* self, int32_t n, void* dst) {
-    (void)self; (void)n; (void)dst; return true;               // 1800bb020
+    return reinterpret_cast<IO::VisitorStream*>(self)
+               ->IO::VisitorStream::Read(n, dst);
 }
 extern "C" bool RtIo_VisitorStream_Write(VisitorStream* self, int32_t n, const void* src) {
-    (void)self; (void)n; (void)src; return true;               // 1800bb030
+    return reinterpret_cast<IO::VisitorStream*>(self)
+               ->IO::VisitorStream::Write(n, src);
 }
 
 // ??1VisitorStream@IO@@UEAA@XZ   0x1800bb040
@@ -507,6 +526,51 @@ extern "C" void RtIo_Modification_Dtor(RtIO::Modification* self) {
 }
 
 }  // namespace RtIo
+
+// ============================================================================
+// ENDGAME B.3.4 STREAMS (4/6) — the five `IO::VisitorStream` slot bodies.
+// ============================================================================
+// A member of `IO::X` cannot be defined inside `namespace RtIo` — `IO` and
+// `RtIo` are siblings, and C++ requires a member definition to appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2). So the bodies open
+// their own `namespace IO` block after the doors close, exactly as
+// memory_stream.cpp, file_stream.cpp and serialize_family.cpp do.
+//
+// These are the whole class: two instructions each, read out of .text, and
+// header section 4 above enumerates them with their raw bytes. `this` is never
+// touched by any of the five — retail's bodies do not even load RCX — so none
+// of them names it, and that absence is the null sink's definition rather than
+// an omission.
+//
+// `IO::VisitorStream::Write` is the class's KEY FUNCTION (the first non-inline,
+// non-pure virtual it declares), so GCC emits `vtable for IO::VisitorStream`
+// in THIS translation unit. That is why the host unit build needs the stub
+// copies in tests/unit/io_stream_abi_stubs.cpp: this file stands on the port
+// registry and cannot link into a host test.
+namespace IO {
+
+// ?Write@VisitorStream@IO@@UEAA_NHPEBX@Z   0x1800bb030   `mov al,1 ; ret`
+// IT ACCEPTS EVERY BYTE AND STORES NONE. This is the sink half of the
+// reference-visit pass; the Encoding at +0x10 is where the walk's only
+// observable effect happens.
+bool VisitorStream::Write(int, const void*) { return true; }
+
+// ?Read@VisitorStream@IO@@UEAA_NHPEAX@Z   0x1800bb020   `mov al,1 ; ret`
+// Returns true WITHOUT writing to `dst` — faithful, and the mechanism of the
+// whole reference-visit pass. A port that filled the buffer would be inventing
+// data retail never produces.
+bool VisitorStream::Read(int, void*) { return true; }
+
+// ?SetCurrentPos@VisitorStream@IO@@UEAA_NH@Z   0x1800bb010   `mov al,1 ; ret`
+bool VisitorStream::SetCurrentPos(int) { return true; }
+
+// ?GetCurrentPos@VisitorStream@IO@@UEBAIXZ   0x1800bb000   `xor eax,eax ; ret`
+uint32_t VisitorStream::GetCurrentPos() const { return 0; }
+
+// ?GetSize@VisitorStream@IO@@UEBAIXZ   0x1800baff0   `xor eax,eax ; ret`
+uint32_t VisitorStream::GetSize() const { return 0; }
+
+}  // namespace IO
 
 // ============================================================================
 // Registration

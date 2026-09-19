@@ -129,20 +129,19 @@ inline RtIO::FileSystem* Fs() {
     return slot ? *slot : nullptr;
 }
 
-// The two buffer-mode fields, reached by offset. See the header note on why
-// they are not spelled as members of `TextFileStream`.
-inline int32_t* TfsBufSize(TextFileStream* s) {
-    return reinterpret_cast<int32_t*>(reinterpret_cast<char*>(s) + 0x78);
-}
-inline int32_t* TfsBufCursor(TextFileStream* s) {
-    return reinterpret_cast<int32_t*>(reinterpret_cast<char*>(s) + 0x7c);
-}
-inline const int32_t* TfsBufSize(const TextFileStream* s) {
-    return reinterpret_cast<const int32_t*>(reinterpret_cast<const char*>(s) + 0x78);
-}
-inline const int32_t* TfsBufCursor(const TextFileStream* s) {
-    return reinterpret_cast<const int32_t*>(reinterpret_cast<const char*>(s) + 0x7c);
-}
+// THE FOUR `TfsBufSize` / `TfsBufCursor` OFFSET HELPERS ARE GONE — B.3.4
+// STREAMS (4/6). They existed because the `RtIo::TextFileStream` POD models
+// +0x78 as one `void* _unk78` while these bodies read an int32 SIZE at +0x78
+// and an int32 CURSOR at +0x7c, and Wave 20 deliberately reached past the POD
+// rather than edit a header other lanes' bodies compile against.
+//
+// `IO::TextFileStream` now DECLARES the pair (FileStream.h), pinned by exactly
+// the evidence these bodies supply — GetSize returns +0x78 or the inherited
+// FileInfo::size, GetCurrentPos returns +0x7c or the inherited FileInfo::cursor
+// — so the member bodies below spell `_bufSize` and `_bufCursor` and the
+// disagreement is RESOLVED rather than routed around. The POD is unchanged and
+// is cross-asserted against the pair in the header. Same eight bytes, one
+// fewer indirection, and nothing outside this file ever named the helpers.
 
 // ---------------------------------------------------------------------------
 // EFFECTIVENESS COUNTERS. `calls` alone cannot separate a body that ran from
@@ -217,23 +216,13 @@ uint64_t g_tfsAtt = 0;
 // return type.
 // ============================================================================
 extern "C" uint32_t RtIo_TextFileStream_GetSize(const TextFileStream* self) {
-    bool useBuffer = (self->buffer != nullptr);
-    if (g_tfsCtl == 1) { ++g_tfsAtt; useBuffer = false; }
-    if (useBuffer) {                                                // 1800ba8e0
-        ++g_tfs.getSizeBuffer;
-        return static_cast<uint32_t>(*TfsBufSize(self));            // 1800ba8e7  +0x78
-    }
-    ++g_tfs.getSizeFile;
-    return static_cast<uint32_t>(self->base.file.size);             // 1800ba8eb  +0x28
+    return reinterpret_cast<const IO::TextFileStream*>(self)
+               ->IO::TextFileStream::GetSize();
 }
 
 extern "C" uint32_t RtIo_TextFileStream_GetCurrentPos(const TextFileStream* self) {
-    if (self->buffer != nullptr) {                                  // 1800bac30
-        ++g_tfs.getPosBuffer;
-        return static_cast<uint32_t>(*TfsBufCursor(self));          // 1800bac37  +0x7c
-    }
-    ++g_tfs.getPosFile;
-    return static_cast<uint32_t>(self->base.file.cursor);           // 1800bac3b  +0x2c
+    return reinterpret_cast<const IO::TextFileStream*>(self)
+               ->IO::TextFileStream::GetCurrentPos();
 }
 
 // ============================================================================
@@ -271,21 +260,8 @@ extern "C" uint32_t RtIo_TextFileStream_GetCurrentPos(const TextFileStream* self
 // it; flagged for whoever owns it.
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void* buf) {
-    ++g_tfs.read;
-
-    int32_t* const cursor = TfsBufCursor(self);
-
-    // 1800ba90a..1800ba921. BOTH `len` and the cursor are sign-extended to 64
-    // bits (`MOVSLQ`) before the add, so a negative cursor addresses BACKWARDS
-    // from the buffer rather than wrapping to a huge positive offset.
-    std::memmove(buf,
-                 static_cast<const char*>(self->buffer) +
-                     static_cast<int64_t>(*cursor),
-                 static_cast<size_t>(static_cast<int64_t>(len)));   // 1800ba921
-
-    if (g_tfsCtl == 3) { ++g_tfsAtt; }
-    else               { *cursor += len; }                         // 1800ba926
-    return true;                                                   // 1800ba92e
+    return reinterpret_cast<IO::TextFileStream*>(self)
+               ->IO::TextFileStream::Read(len, buf);
 }
 
 // ============================================================================
@@ -320,30 +296,8 @@ extern "C" bool RtIo_TextFileStream_Read(TextFileStream* self, int32_t len, void
 // ignores the return would still be correctly positioned.
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t pos) {
-
-    if (self->buffer != nullptr) {                                 // 1800babd6
-        ++g_tfs.setPosBuffer;
-        const int32_t size = *TfsBufSize(self);
-        *TfsBufCursor(self) = pos;                                 // 1800babdf  +0x7c
-        bool ok = (pos >= 0) && (pos < size);                      // 1800babe2/e6
-        if (g_tfsCtl == 2) { ++g_tfsAtt; ok = (pos >= 0) && (pos <= size); }
-        return ok;
-    }
-
-    ++g_tfs.setPosFile;
-    self->base.file.cursor = pos;                                  // 1800bac02  +0x2c
-
-    // UNSIGNED — see the header note.
-    if (static_cast<uint32_t>(self->base.file.handle) <= 0xfffffffdu) {  // 1800babfe/05
-        return true;                                               // 1800bac07
-    }
-
-    ++g_tfs.setPosSeek;
-    const DWORD got = ::SetFilePointer(
-        reinterpret_cast<HANDLE>(self->base.file.winHandle),       // 1800bac0f  +0x38
-        pos, nullptr, FILE_BEGIN);                                 // 1800bac13/16
-    const bool ok = (static_cast<int32_t>(got) == pos);            // 1800bac1f
-    return ok;
+    return reinterpret_cast<IO::TextFileStream*>(self)
+               ->IO::TextFileStream::SetCurrentPos(pos);
 }
 
 // ============================================================================
@@ -405,39 +359,9 @@ extern "C" bool RtIo_TextFileStream_SetCurrentPos(TextFileStream* self, int32_t 
 extern "C" bool RtIo_TextFileStream_Create(TextFileStream* self, const Filename* path,
                                            int32_t requestedFormat,
                                            int32_t activeEncoding) {
-    ++g_tfs.create;
-
-    self->requestedFormat = requestedFormat;                 // 1800ba949  +0x68
-    self->activeEncoding  = activeEncoding;                  // 1800ba94d  +0x6c
-
-    if (!RtIo_FileStream_Create(&self->base, path)) {        // 1800ba951
-        ++g_tfs.createFailed;
-        return false;                                        // 1800ba95a
-    }
-
-    uint8_t bom[3] = { 0, 0, 0 };
-    int32_t bomLen = 0;
-    int32_t bomSelector = self->activeEncoding;              // 1800ba960  +0x6c
-    if (g_tfsCtl == 4) { ++g_tfsAtt; bomSelector = self->requestedFormat; }
-    switch (bomSelector) {                                   // 1800ba963..76
-        case 3:  bom[0] = 0xEF; bom[1] = 0xBB; bom[2] = 0xBF;  // 1800ba994
-                 bomLen = 3; break;
-        case 4:  bom[0] = 0xFF; bom[1] = 0xFE;                 // 1800ba985
-                 bomLen = 2; break;
-        case 5:  bom[0] = 0xFE; bom[1] = 0xFF;                 // 1800ba978
-                 bomLen = 2; break;
-        default: break;                                        // 0, 2, anything else
-    }
-
-    if (bomLen != 0) {
-        ++g_tfs.createBom;
-        DWORD written = 0;                                                    // 1800ba9c0
-        ::WriteFile(reinterpret_cast<HANDLE>(self->base.file.winHandle),      // 1800ba9ab
-                    bom, static_cast<DWORD>(bomLen), &written, nullptr);      // 1800ba9c9
-        self->base.file.cursor += static_cast<int32_t>(written);              // 1800ba9d3
-    }
-
-    return true;                                             // 1800ba9d6
+    return reinterpret_cast<IO::TextFileStream*>(self)->IO::TextFileStream::Create(
+        reinterpret_cast<const System::Filename&>(*path),   // B.3.4 bridge
+        requestedFormat, activeEncoding);
 }
 
 // ============================================================================
@@ -638,68 +562,8 @@ using FnMemFree  = void  (*)(void*);
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
                                           const void* buf) {
-    ++g_tfs.write;
-
-    int32_t srcFormat = self->requestedFormat;                  // 1800baa03  +0x68
-    const int32_t dstFormat = self->activeEncoding;             // 1800baa06  +0x6c
-
-    // ---- fast arm: no transcode -------------------------------------------
-    if (srcFormat == dstFormat) {                               // 1800baa15
-        ++g_tfs.writeDirect;
-        DWORD written = 0;                                      // 1800baa28
-        ::WriteFile(reinterpret_cast<HANDLE>(self->base.file.winHandle),  // 1800baa1a
-                    buf, static_cast<DWORD>(len), &written, nullptr);     // 1800baa30
-        self->base.file.cursor += static_cast<int32_t>(written);          // 1800baa3d
-        const bool ok = (static_cast<int32_t>(written) == len);           // 1800baa41
-        return ok;                                              // 1800baa48
-    }
-
-    // ---- slow arm: transcode ----------------------------------------------
-    ++g_tfs.writeTranscode;
-    const uint8_t* const begin = static_cast<const uint8_t*>(buf);
-    const uint8_t* const end   = begin + len;                   // 1800baa70
-    const uint8_t* p           = begin;
-
-    if (srcFormat == 6) {                                       // 1800baa74
-        srcFormat = TfsDetectFormat()(buf, len);                // 1800baa7e
-        p = begin + TfsBomSkip(srcFormat);                      // 1800baaac
-    }
-
-    // Pass 1 — MEASURE. Nothing is kept but the byte count.
-    int32_t outBytes = 0;
-    while (p < end) {                                           // 1800baab2
-        int32_t cp = -1;                                        // 1800baac0
-        int32_t consumed;
-        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800baacb
-            consumed = TfsDecodeOne()(srcFormat, p, end, &cp, srcFormat);  // 1800baae4
-        } else {
-            cp = -1; consumed = 1;                              // 1800baaf2
-        }
-        p += consumed;                                          // 1800baafc
-        if (cp >= 0) {                                          // 1800baaff
-            int32_t n = 0;
-            if (static_cast<uint32_t>(dstFormat) <= 5u)         // 1800bab03
-                n = TfsEncodeOne()(cp, &cp, dstFormat);         // 1800bab14
-            outBytes += n;                                      // 1800bab1d
-        }
-    }
-
-    // Pass 2 — CONVERT into a fresh block, write it, free it.
-    void* dst = RT_EXPORT_ONCE(FnMemAlloc,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
-            static_cast<size_t>(outBytes), 4);                  // 1800bab2d
-    TfsConvertText()(self->requestedFormat, 0, buf, len,        // 1800bab5d
-                     self->activeEncoding, 0, 0, dst, outBytes);
-
-    DWORD written = 0;                                          // 1800bab74
-    ::WriteFile(reinterpret_cast<HANDLE>(self->base.file.winHandle),  // 1800bab62
-                dst, static_cast<DWORD>(outBytes), &written, nullptr);  // 1800bab80
-    self->base.file.cursor += static_cast<int32_t>(written);    // 1800bab8d
-    RT_EXPORT_ONCE(FnMemFree,
-        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(dst);     // 1800bab94
-
-    const bool ok = (static_cast<int32_t>(written) == outBytes);  // 1800bab9e
-    return ok;
+    return reinterpret_cast<IO::TextFileStream*>(self)
+               ->IO::TextFileStream::Write(len, buf);
 }
 
 // ============================================================================
@@ -752,100 +616,12 @@ extern "C" bool RtIo_TextFileStream_Write(TextFileStream* self, int32_t len,
 // ============================================================================
 extern "C" bool RtIo_TextFileStream_Open(TextFileStream* self, const Filename* path,
                                          int32_t format) {
-    ++g_tfs.open;
-
-    if (!RtIo_FileStream_Open(&self->base, path)) {             // 1800ba652
-        ++g_tfs.openFailed;
-        return false;                                           // 1800ba659
-    }
-
-    const int32_t fileSize = self->base.file.size;              // 1800ba67f  +0x28
-    uint8_t* const raw = static_cast<uint8_t*>(
-        RT_EXPORT_ONCE(FnMemAlloc,
-            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
-                static_cast<size_t>(fileSize), 4));             // 1800ba690
-    self->base.file.cursor = 0;                                 // 1800ba699  +0x2c
-
-    // UNSIGNED: -1 and -2 seek, a packed descriptor does not (FileStream.h).
-    if (static_cast<uint32_t>(self->base.file.handle) > 0xFFFFFFFDu)  // 1800ba695 JBE
-        ::SetFilePointer(reinterpret_cast<HANDLE>(self->base.file.winHandle),
-                         0, nullptr, FILE_BEGIN);               // 1800ba6b6
-
-    RtIo_FileSystem_ReadFile(Fs(), &self->base.file, fileSize, raw);  // 1800ba6cd
-    if (self->base.file.handle != -1)                           // 1800ba6d2
-        RtIo_FileSystem_CloseFile(Fs(), &self->base.file);      // 1800ba6e3
-
-    const uint8_t* const rawEnd = raw + fileSize;               // 1800ba6f0
-
-    // ---- pass 1: MEASURE ---------------------------------------------------
-    int32_t srcFormat = TfsDetectFormat()(raw, fileSize);       // 1800ba6f4
-    const uint8_t* p  = raw + TfsBomSkip(srcFormat);            // 1800ba721
-
-    int32_t outBytes = 0;
-    while (p < rawEnd) {                                        // 1800ba727
-        int32_t cp = -1;                                        // 1800ba730
-        int32_t consumed;
-        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba73b
-            consumed = TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba754
-        } else {
-            cp = -1; consumed = 1;                              // 1800ba762
-        }
-        p += consumed;                                          // 1800ba76c
-        if (cp >= 0) {                                          // 1800ba76f
-            int32_t n = 0;
-            if (static_cast<uint32_t>(format) <= 5u)            // 1800ba773
-                n = TfsEncodeOne()(cp, &cp, format);            // 1800ba784
-            outBytes += n;                                      // 1800ba78d
-        }
-    }
-
-    // ---- install the buffer ------------------------------------------------
-    *TfsBufSize(self) = outBytes;                               // 1800ba7a4  +0x78
-    uint8_t* const buffer = static_cast<uint8_t*>(
-        RT_EXPORT_ONCE(FnMemAlloc,
-            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
-                static_cast<size_t>(outBytes), 4));             // 1800ba7a7
-    self->buffer = buffer;                                      // 1800ba7b1  +0x70
-    const int32_t bufSize = *TfsBufSize(self);                  // 1800ba7b5
-
-    // ---- pass 2: CONVERT ---------------------------------------------------
-    // DetectFormat is re-run on the same bytes — retail's, not a duplication.
-    srcFormat = TfsDetectFormat()(raw, fileSize);               // 1800ba7c4
-    p = raw + TfsBomSkip(srcFormat);                            // 1800ba7e4
-
-    uint8_t* out   = buffer;                                    // 1800ba7ec
-    int32_t written = 0;
-    while (p < rawEnd) {                                        // 1800ba7f2
-        int32_t cp = -1;                                        // 1800ba800
-        int32_t consumed;
-        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba80b
-            consumed = TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba827
-        } else {
-            cp = -1; consumed = 1;                              // 1800ba83c
-        }
-        p += consumed;                                          // 1800ba846
-        if (cp < 0) continue;                                   // 1800ba849
-
-        // Pass 2's OWN scratch — see note (a). Four bytes is the widest any
-        // table entry emits.
-        uint8_t scratch[4] = { 0, 0, 0, 0 };
-        int32_t n = 0;
-        if (static_cast<uint32_t>(format) <= 5u)                // 1800ba84d
-            n = TfsEncodeOne()(cp, scratch, format);            // 1800ba85b
-        written += n;                                           // 1800ba864
-        if (written > bufSize) continue;                        // 1800ba866  JG
-        if (buffer == nullptr) continue;                        // 1800ba86a
-        if (n > 0) {                                            // 1800ba872
-            std::memmove(out, scratch, static_cast<size_t>(n)); // 1800ba881
-            out += n;                                           // 1800ba886
-        }
-    }
-
-    RT_EXPORT_ONCE(FnMemFree,
-        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(raw);     // 1800ba89e
-    self->activeEncoding = format;                              // 1800ba8cc  +0x6c
-    return true;                                                // 1800ba8d0
+    return reinterpret_cast<IO::TextFileStream*>(self)
+               ->IO::TextFileStream::OpenWithFormat(
+                     reinterpret_cast<const System::Filename&>(*path),  // B.3.4 bridge
+                     format);
 }
+
 
 // ============================================================================
 // WAVE 29 LANE IOLANE — the three NON-VTABLE `TextFileStream` accessors
@@ -955,6 +731,376 @@ void RtIoTextFileStreamCounters(unsigned long long* out) {
 }
 
 }  // namespace RtIO
+
+// ============================================================================
+// ENDGAME B.3.4 STREAMS (4/6) — the seven `IO::TextFileStream` slot bodies.
+// ============================================================================
+// A member of `IO::X` cannot be defined inside `namespace RtIO` — `IO` and
+// `RtIO` are siblings, and C++ requires a member definition to appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2). So the bodies open
+// their own `namespace IO` block after the doors close, and reach this file's
+// helpers and counters as `RtIO::TfsDetectFormat`, `RtIO::g_tfs` and so on —
+// which works because a member of an enclosing namespace is reachable by
+// qualification from anywhere else in the same translation unit.
+//
+// SEVEN OF THE TEN SLOTS. Slot 0 is PURE (deleting_dtor.cpp's row 41), slot 1
+// is `IO::FileStream::GetSource` and slot 7 is `IO::FileStream::Open`, both
+// inherited and not overridden. So this file owns 2, 3, 4, 5, 6, 8 and 9.
+//
+// SLOT 8 IS `OpenWithFormat`, NOT `Open` — B34_RULES section 1.3. Slot 7 is the
+// base's `Open(const Filename&)` and slot 8 is this class's own
+// `Open(const Filename&, Format)`, so retail overloads `Open` ACROSS the
+// base/derived boundary with both entries live. Declaring the derived one
+// `Open` would HIDE the base's name at every inherited call site.
+//
+// THE COUNTERS ARE BUMPED IN THE MEMBER, NOT IN THE DOOR, so they keep counting
+// entries to the BODY rather than entries to the door — which is what they have
+// always measured and what makes their numbers comparable across this change.
+// The four negative-control perturbations (`g_tfsCtl` 1..4) move WITH their
+// bodies for the same reason: a control that perturbs a copy of the code
+// catches in a screen it cannot reach.
+//
+// `IO::TextFileStream::Write` is the class's KEY FUNCTION (the first non-inline,
+// non-pure virtual it declares), so GCC emits `vtable for IO::TextFileStream`
+// in THIS translation unit. That is why the host unit build needs the stub
+// copies in tests/unit/io_stream_abi_stubs.cpp: this file stands on the port
+// registry, the allocator and <windows.h> and cannot link into a host test.
+namespace IO {
+
+// ============================================================================
+// IO::TextFileStream::GetSize() const                    retail 0x1800ba8e0
+// IO::TextFileStream::GetCurrentPos() const              retail 0x1800bac30
+// ============================================================================
+// The banner above the doors has the six-instruction shape and the reason
+// neither has a `.pdata` entry. What changes here is only the spelling: the
+// two buffer-mode fields are members now (`_bufSize` at +0x78, `_bufCursor` at
+// +0x7c) instead of casts through `TfsBufSize` / `TfsBufCursor`, and the
+// inherited pair is `_file.size` / `_file.cursor` instead of
+// `self->base.file.*`. Same eight loads, same branch, same order.
+uint32_t TextFileStream::GetSize() const {
+    bool useBuffer = (_buffer != nullptr);
+    if (RtIO::g_tfsCtl == 1) { ++RtIO::g_tfsAtt; useBuffer = false; }
+    if (useBuffer) {                                                // 1800ba8e0
+        ++RtIO::g_tfs.getSizeBuffer;
+        return static_cast<uint32_t>(_bufSize);                     // 1800ba8e7  +0x78
+    }
+    ++RtIO::g_tfs.getSizeFile;
+    return static_cast<uint32_t>(_file.size);                       // 1800ba8eb  +0x28
+}
+
+uint32_t TextFileStream::GetCurrentPos() const {
+    if (_buffer != nullptr) {                                       // 1800bac30
+        ++RtIO::g_tfs.getPosBuffer;
+        return static_cast<uint32_t>(_bufCursor);                   // 1800bac37  +0x7c
+    }
+    ++RtIO::g_tfs.getPosFile;
+    return static_cast<uint32_t>(_file.cursor);                     // 1800bac3b  +0x2c
+}
+
+// ============================================================================
+// IO::TextFileStream::Read(int, void*)                   retail 0x1800ba900
+// ============================================================================
+// The door's banner has the three things this body does NOT do, and they are
+// all still true on the member: it does not branch on `_buffer`, it does not
+// bounds-check, and it always returns true. With `_buffer == 0` and
+// `_bufCursor == 0` it reads from address 0 — retail's, not ours, and NOT to be
+// guarded. The copy is `memmove`, not `memcpy`.
+bool TextFileStream::Read(int len, void* buf) {
+    ++RtIO::g_tfs.read;
+
+    // 1800ba90a..1800ba921. BOTH `len` and the cursor are sign-extended to 64
+    // bits (`MOVSLQ`) before the add, so a negative cursor addresses BACKWARDS
+    // from the buffer rather than wrapping to a huge positive offset.
+    std::memmove(buf,
+                 static_cast<const char*>(_buffer) +
+                     static_cast<int64_t>(_bufCursor),
+                 static_cast<size_t>(static_cast<int64_t>(len)));   // 1800ba921
+
+    if (RtIO::g_tfsCtl == 3) { ++RtIO::g_tfsAtt; }
+    else                     { _bufCursor += len; }                // 1800ba926
+    return true;                                                   // 1800ba92e
+}
+
+// ============================================================================
+// IO::TextFileStream::SetCurrentPos(int)                 retail 0x1800babd0
+// ============================================================================
+// The door's banner carries the two arms, the UNSIGNED `CMP ..,-3 ; JA`
+// discriminator and the `pos < size` (not `<=`) range test. All three are
+// transcribed unchanged; the file arm stays a TRANSCRIPTION of
+// `?SetCurrentPos@FileStream@IO@@` rather than a delegation to it, because
+// retail duplicates the code and delegating would attribute this slot's calls
+// to the other slot's counters.
+bool TextFileStream::SetCurrentPos(int pos) {
+
+    if (_buffer != nullptr) {                                      // 1800babd6
+        ++RtIO::g_tfs.setPosBuffer;
+        const int32_t size = _bufSize;
+        _bufCursor = pos;                                          // 1800babdf  +0x7c
+        bool ok = (pos >= 0) && (pos < size);                      // 1800babe2/e6
+        if (RtIO::g_tfsCtl == 2) {
+            ++RtIO::g_tfsAtt; ok = (pos >= 0) && (pos <= size);
+        }
+        return ok;
+    }
+
+    ++RtIO::g_tfs.setPosFile;
+    _file.cursor = pos;                                            // 1800bac02  +0x2c
+
+    // UNSIGNED — see the door's banner.
+    if (static_cast<uint32_t>(_file.handle) <= 0xfffffffdu) {      // 1800babfe/05
+        return true;                                               // 1800bac07
+    }
+
+    ++RtIO::g_tfs.setPosSeek;
+    const DWORD got = ::SetFilePointer(
+        reinterpret_cast<HANDLE>(_file.winHandle),                 // 1800bac0f  +0x38
+        pos, nullptr, FILE_BEGIN);                                 // 1800bac13/16
+    const bool ok = (static_cast<int32_t>(got) == pos);            // 1800bac1f
+    return ok;
+}
+
+// ============================================================================
+// IO::TextFileStream::Create(Filename const&, Format, Format)
+//                                                        retail 0x1800ba940
+// ============================================================================
+// SLOT 9. The door's banner has the back-reference argument that proves the
+// last two parameters are both FORMATS, the four-step body, and the BOM table
+// this body is the only reachable writer of. `_requestedFormat` and
+// `_activeEncoding` are members now; the selector is still `_activeEncoding`
+// ALONE, which is what negative control 4 exists to catch.
+//
+// `?Create@FileStream@IO@@` still takes the `RtIo::FileStream` POD (it belongs
+// to the lifecycle block in file_stream.cpp, not to this one), so the call
+// bridges through the POD view of `this` rather than changing the callee.
+bool TextFileStream::Create(const System::Filename& path,
+                            int32_t requestedFormat, int32_t activeEncoding) {
+    ++RtIO::g_tfs.create;
+    RtIO::TextFileStream* const self =
+        reinterpret_cast<RtIO::TextFileStream*>(this);             // B.3.4 bridge
+
+    _requestedFormat = requestedFormat;                      // 1800ba949  +0x68
+    _activeEncoding  = activeEncoding;                       // 1800ba94d  +0x6c
+
+    if (!RtIO::RtIo_FileStream_Create(
+            &self->base,
+            reinterpret_cast<const RtSystem::Filename*>(&path))) {  // 1800ba951
+        ++RtIO::g_tfs.createFailed;
+        return false;                                        // 1800ba95a
+    }
+
+    uint8_t bom[3] = { 0, 0, 0 };
+    int32_t bomLen = 0;
+    int32_t bomSelector = _activeEncoding;                   // 1800ba960  +0x6c
+    if (RtIO::g_tfsCtl == 4) { ++RtIO::g_tfsAtt; bomSelector = _requestedFormat; }
+    switch (bomSelector) {                                   // 1800ba963..76
+        case 3:  bom[0] = 0xEF; bom[1] = 0xBB; bom[2] = 0xBF;  // 1800ba994
+                 bomLen = 3; break;
+        case 4:  bom[0] = 0xFF; bom[1] = 0xFE;                 // 1800ba985
+                 bomLen = 2; break;
+        case 5:  bom[0] = 0xFE; bom[1] = 0xFF;                 // 1800ba978
+                 bomLen = 2; break;
+        default: break;                                        // 0, 2, anything else
+    }
+
+    if (bomLen != 0) {
+        ++RtIO::g_tfs.createBom;
+        DWORD written = 0;                                                    // 1800ba9c0
+        ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),                // 1800ba9ab
+                    bom, static_cast<DWORD>(bomLen), &written, nullptr);      // 1800ba9c9
+        _file.cursor += static_cast<int32_t>(written);                        // 1800ba9d3
+    }
+
+    return true;                                             // 1800ba9d6
+}
+
+// ============================================================================
+// IO::TextFileStream::Write(int, void const*)            retail 0x1800ba9f0
+// ============================================================================
+// SLOT 2, and TWO BODIES IN ONE — the door's banner has the discriminator, why
+// the two arms' return values are NOT comparable, and why the measure pass
+// deliberately encodes into the codepoint slot and throws the bytes away.
+// Unchanged here: only the field spellings moved onto members.
+bool TextFileStream::Write(int len, const void* buf) {
+    ++RtIO::g_tfs.write;
+
+    int32_t srcFormat = _requestedFormat;                       // 1800baa03  +0x68
+    const int32_t dstFormat = _activeEncoding;                  // 1800baa06  +0x6c
+
+    // ---- fast arm: no transcode -------------------------------------------
+    if (srcFormat == dstFormat) {                               // 1800baa15
+        ++RtIO::g_tfs.writeDirect;
+        DWORD written = 0;                                      // 1800baa28
+        ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),            // 1800baa1a
+                    buf, static_cast<DWORD>(len), &written, nullptr);     // 1800baa30
+        _file.cursor += static_cast<int32_t>(written);                    // 1800baa3d
+        const bool ok = (static_cast<int32_t>(written) == len);           // 1800baa41
+        return ok;                                              // 1800baa48
+    }
+
+    // ---- slow arm: transcode ----------------------------------------------
+    ++RtIO::g_tfs.writeTranscode;
+    const uint8_t* const begin = static_cast<const uint8_t*>(buf);
+    const uint8_t* const end   = begin + len;                   // 1800baa70
+    const uint8_t* p           = begin;
+
+    if (srcFormat == 6) {                                       // 1800baa74
+        srcFormat = RtIO::TfsDetectFormat()(buf, len);          // 1800baa7e
+        p = begin + RtIO::TfsBomSkip(srcFormat);                // 1800baaac
+    }
+
+    // Pass 1 — MEASURE. Nothing is kept but the byte count.
+    int32_t outBytes = 0;
+    while (p < end) {                                           // 1800baab2
+        int32_t cp = -1;                                        // 1800baac0
+        int32_t consumed;
+        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800baacb
+            consumed = RtIO::TfsDecodeOne()(srcFormat, p, end, &cp, srcFormat);  // 1800baae4
+        } else {
+            cp = -1; consumed = 1;                              // 1800baaf2
+        }
+        p += consumed;                                          // 1800baafc
+        if (cp >= 0) {                                          // 1800baaff
+            int32_t n = 0;
+            if (static_cast<uint32_t>(dstFormat) <= 5u)         // 1800bab03
+                n = RtIO::TfsEncodeOne()(cp, &cp, dstFormat);   // 1800bab14
+            outBytes += n;                                      // 1800bab1d
+        }
+    }
+
+    // Pass 2 — CONVERT into a fresh block, write it, free it.
+    void* dst = RT_EXPORT_ONCE(RtIO::FnMemAlloc,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+            static_cast<size_t>(outBytes), 4);                  // 1800bab2d
+    RtIO::TfsConvertText()(_requestedFormat, 0, buf, len,       // 1800bab5d
+                           _activeEncoding, 0, 0, dst, outBytes);
+
+    DWORD written = 0;                                          // 1800bab74
+    ::WriteFile(reinterpret_cast<HANDLE>(_file.winHandle),                // 1800bab62
+                dst, static_cast<DWORD>(outBytes), &written, nullptr);    // 1800bab80
+    _file.cursor += static_cast<int32_t>(written);              // 1800bab8d
+    RT_EXPORT_ONCE(RtIO::FnMemFree,
+        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(dst);     // 1800bab94
+
+    const bool ok = (static_cast<int32_t>(written) == outBytes);  // 1800bab9e
+    return ok;
+}
+
+// ============================================================================
+// IO::TextFileStream::OpenWithFormat(Filename const&, Format)
+//                                                        retail 0x1800ba640
+// ============================================================================
+// SLOT 8 — retail's `?Open@TextFileStream@IO@@UEAA_NAEBVFilename@System@@
+// W4Format@Text@4@@Z`, renamed per B34_RULES section 1.3 so it cannot be
+// confused with the slot-7 `Open` it overloads. The door's banner has the eight
+// steps, the three things a port from the shape gets wrong, and the note that
+// the overflow guard is retail's rather than a port's caution. All unchanged.
+//
+// THIS IS THE BODY THAT INSTALLS `_buffer` AND `_bufSize`, the two fields the
+// rest of the class branches on, and it CLOSES the file before returning —
+// which is why `Read` never touches the handle. `_requestedFormat` (+0x68) is
+// deliberately NOT written; only `_activeEncoding` (+0x6c) is, and only at the
+// very end.
+bool TextFileStream::OpenWithFormat(const System::Filename& path, int32_t format) {
+    ++RtIO::g_tfs.open;
+    RtIO::TextFileStream* const self =
+        reinterpret_cast<RtIO::TextFileStream*>(this);             // B.3.4 bridge
+
+    if (!RtIO::RtIo_FileStream_Open(
+            &self->base,
+            reinterpret_cast<const RtSystem::Filename*>(&path))) {  // 1800ba652
+        ++RtIO::g_tfs.openFailed;
+        return false;                                           // 1800ba659
+    }
+
+    const int32_t fileSize = _file.size;                        // 1800ba67f  +0x28
+    uint8_t* const raw = static_cast<uint8_t*>(
+        RT_EXPORT_ONCE(RtIO::FnMemAlloc,
+            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+                static_cast<size_t>(fileSize), 4));             // 1800ba690
+    _file.cursor = 0;                                           // 1800ba699  +0x2c
+
+    // UNSIGNED: -1 and -2 seek, a packed descriptor does not (FileStream.h).
+    if (static_cast<uint32_t>(_file.handle) > 0xFFFFFFFDu)      // 1800ba695 JBE
+        ::SetFilePointer(reinterpret_cast<HANDLE>(_file.winHandle),
+                         0, nullptr, FILE_BEGIN);               // 1800ba6b6
+
+    ::RtIo_FileSystem_ReadFile(RtIO::Fs(), &_file, fileSize, raw);  // 1800ba6cd
+    if (_file.handle != -1)                                     // 1800ba6d2
+        RtIO::RtIo_FileSystem_CloseFile(RtIO::Fs(), &_file);    // 1800ba6e3
+
+    const uint8_t* const rawEnd = raw + fileSize;               // 1800ba6f0
+
+    // ---- pass 1: MEASURE ---------------------------------------------------
+    int32_t srcFormat = RtIO::TfsDetectFormat()(raw, fileSize); // 1800ba6f4
+    const uint8_t* p  = raw + RtIO::TfsBomSkip(srcFormat);      // 1800ba721
+
+    int32_t outBytes = 0;
+    while (p < rawEnd) {                                        // 1800ba727
+        int32_t cp = -1;                                        // 1800ba730
+        int32_t consumed;
+        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba73b
+            consumed = RtIO::TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba754
+        } else {
+            cp = -1; consumed = 1;                              // 1800ba762
+        }
+        p += consumed;                                          // 1800ba76c
+        if (cp >= 0) {                                          // 1800ba76f
+            int32_t n = 0;
+            if (static_cast<uint32_t>(format) <= 5u)            // 1800ba773
+                n = RtIO::TfsEncodeOne()(cp, &cp, format);      // 1800ba784
+            outBytes += n;                                      // 1800ba78d
+        }
+    }
+
+    // ---- install the buffer ------------------------------------------------
+    _bufSize = outBytes;                                        // 1800ba7a4  +0x78
+    uint8_t* const buffer = static_cast<uint8_t*>(
+        RT_EXPORT_ONCE(RtIO::FnMemAlloc,
+            "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(
+                static_cast<size_t>(outBytes), 4));             // 1800ba7a7
+    _buffer = buffer;                                           // 1800ba7b1  +0x70
+    const int32_t bufSize = _bufSize;                           // 1800ba7b5
+
+    // ---- pass 2: CONVERT ---------------------------------------------------
+    // DetectFormat is re-run on the same bytes — retail's, not a duplication.
+    srcFormat = RtIO::TfsDetectFormat()(raw, fileSize);         // 1800ba7c4
+    p = raw + RtIO::TfsBomSkip(srcFormat);                      // 1800ba7e4
+
+    uint8_t* out   = buffer;                                    // 1800ba7ec
+    int32_t written = 0;
+    while (p < rawEnd) {                                        // 1800ba7f2
+        int32_t cp = -1;                                        // 1800ba800
+        int32_t consumed;
+        if (static_cast<uint32_t>(srcFormat) <= 5u) {           // 1800ba80b
+            consumed = RtIO::TfsDecodeOne()(srcFormat, p, rawEnd, &cp, srcFormat);  // 1800ba827
+        } else {
+            cp = -1; consumed = 1;                              // 1800ba83c
+        }
+        p += consumed;                                          // 1800ba846
+        if (cp < 0) continue;                                   // 1800ba849
+
+        // Pass 2's OWN scratch — see the door's note (a). Four bytes is the
+        // widest any table entry emits.
+        uint8_t scratch[4] = { 0, 0, 0, 0 };
+        int32_t n = 0;
+        if (static_cast<uint32_t>(format) <= 5u)                // 1800ba84d
+            n = RtIO::TfsEncodeOne()(cp, scratch, format);      // 1800ba85b
+        written += n;                                           // 1800ba864
+        if (written > bufSize) continue;                        // 1800ba866  JG
+        if (buffer == nullptr) continue;                        // 1800ba86a
+        if (n > 0) {                                            // 1800ba872
+            std::memmove(out, scratch, static_cast<size_t>(n)); // 1800ba881
+            out += n;                                           // 1800ba886
+        }
+    }
+
+    RT_EXPORT_ONCE(RtIO::FnMemFree,
+        "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(raw);     // 1800ba89e
+    _activeEncoding = format;                                   // 1800ba8cc  +0x6c
+    return true;                                                // 1800ba8d0
+}
+
+}  // namespace IO
 
 // ============================================================================
 // DEFERRED — the three slots NOT in this file, each with its own reason and its

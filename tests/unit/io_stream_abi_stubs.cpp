@@ -98,4 +98,31 @@ void CompressedMemoryStream::Close()     { StubReached("CompressedMemoryStream::
 void CompressedMemoryStream::PreCommit() { StubReached("CompressedMemoryStream::PreCommit"); }
 void CompressedFileStream::Close()       { StubReached("CompressedFileStream::Close"); }
 
+// ---- IO::TextFileStream (runtime/src/io/text_file_stream_win.cpp) ----------
+// Slot 0 is PURE on this class. Slots 1 and 7 are FileStream's, above. What is
+// left is the seven this class overrides or adds — note that slot 8 is
+// `OpenWithFormat`, NOT a second `Open`: retail overloads `Open` across the
+// base/derived boundary and B34_RULES section 1.3 gives the derived one its own
+// name so the two slots cannot be confused.
+bool     TextFileStream::Write(int, const void*) { StubReached("TextFileStream::Write"); }
+bool     TextFileStream::Read(int, void*)        { StubReached("TextFileStream::Read"); }
+bool     TextFileStream::SetCurrentPos(int)      { StubReached("TextFileStream::SetCurrentPos"); }
+uint32_t TextFileStream::GetCurrentPos() const   { StubReached("TextFileStream::GetCurrentPos"); }
+uint32_t TextFileStream::GetSize() const         { StubReached("TextFileStream::GetSize"); }
+bool     TextFileStream::OpenWithFormat(const System::Filename&, int32_t) {
+    StubReached("TextFileStream::OpenWithFormat");
+}
+bool     TextFileStream::Create(const System::Filename&, int32_t, int32_t) {
+    StubReached("TextFileStream::Create");
+}
+
+// ---- IO::VisitorStream (runtime/src/io/iobase_vtables.cpp) -----------------
+// The null sink. Slot 0 is PURE and slot 1 is IO::Stream's own GetSource, so
+// these five are the whole class.
+bool     VisitorStream::Write(int, const void*) { StubReached("VisitorStream::Write"); }
+bool     VisitorStream::Read(int, void*)        { StubReached("VisitorStream::Read"); }
+bool     VisitorStream::SetCurrentPos(int)      { StubReached("VisitorStream::SetCurrentPos"); }
+uint32_t VisitorStream::GetCurrentPos() const   { StubReached("VisitorStream::GetCurrentPos"); }
+uint32_t VisitorStream::GetSize() const         { StubReached("VisitorStream::GetSize"); }
+
 }  // namespace IO
