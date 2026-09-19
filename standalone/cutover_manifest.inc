@@ -47,8 +47,8 @@ CUTOVER_ROW("?_singleton@Configuration@Input@@0PEAV12@EA", CUTOVER_REQUIRED, tru
 CUTOVER_ROW("?_singleton@Device@Input@@0PEAV12@EA", CUTOVER_REQUIRED, true, 0x1801fe770ull, "Input", 11)
 // Object  NO-OP / DLL-PRESENT  doors=64  -- verdict is DLL-PRESENT only and 64 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("??_7Base@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154788ull, "Object", 64)
-// Object  NO-OP / DLL-PRESENT  doors=11  -- verdict is DLL-PRESENT only and 11 by-name door(s) would resolve NULL at cutover
-CUTOVER_ROW("??_7CompiledExternal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154a30ull, "Object", 11)
+// Object  NO-OP / DLL-PRESENT  doors=8  -- verdict is DLL-PRESENT only and 8 by-name door(s) would resolve NULL at cutover
+CUTOVER_ROW("??_7CompiledExternal@Object@@6B@", CUTOVER_REQUIRED, true, 0x180154a30ull, "Object", 8)
 // Object  NO-OP / DLL-PRESENT  doors=61  -- verdict is DLL-PRESENT only and 61 by-name door(s) would resolve NULL at cutover
 CUTOVER_ROW("??_7External@Object@@6B@", CUTOVER_REQUIRED, true, 0x1801547a0ull, "Object", 61)
 // Object  NO-OP / DLL-PRESENT  doors=3  -- tag states the verdict inverts at cutover
@@ -97,8 +97,8 @@ CUTOVER_ROW("??_7ConstantBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x18015
 CUTOVER_ROW("??_7ContextData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158b90ull, "Video", 2)
 // Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
 CUTOVER_ROW("??_7DeviceData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158c30ull, "Video", 2)
-// Video  NO-OP / PERMANENT  doors=3  -- NO-OP is permanent, but 3 by-name door(s) resolve NULL with no DLL loaded
-CUTOVER_ROW("??_7ImageBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158b50ull, "Video", 3)
+// Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
+CUTOVER_ROW("??_7ImageBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158b50ull, "Video", 2)
 // Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
 CUTOVER_ROW("??_7IndexBufferData@Video@@6B@", CUTOVER_REQUIRED, true, 0x180158af8ull, "Video", 2)
 // Video  NO-OP / PERMANENT  doors=2  -- NO-OP is permanent, but 2 by-name door(s) resolve NULL with no DLL loaded
