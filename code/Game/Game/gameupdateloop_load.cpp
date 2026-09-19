@@ -878,9 +878,9 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
 // GameUpdateLoop::Load (0x140096b00) — orchestration
 // ============================================================
 
-// World-build completion signal. GameUpdateLoop::Load runs on whichever thread
-// wins the single-owner race (our main-thread AsyncLoader OR the Runtime loader
-// thread spawned inside fn_DialogLoaderLoopT_Startup). The loading-screen loop
+// World-build completion signal. GameUpdateLoop::Load runs on the Runtime
+// Engine::Loader thread spawned inside fn_DialogLoaderLoopT_Startup -- the
+// only dispatcher there is (see the guard below). The loading-screen loop
 // (splash_loop_stubs.cpp) polls GameUpdateLoop_IsWorldBuilt(next) to hold the
 // loading screen up until the build genuinely finishes, so GameUpdateLoop::Draw
 // never renders a half-built world (torn scene reads) and the screen shows a
@@ -894,24 +894,25 @@ extern "C" bool GameUpdateLoop_IsWorldBuilt(void* loop) {
 }
 
 extern "C" void GameUpdateLoop_Load(void* loopVoid) {
-    // Single-owner build guard. The loop's Load (+0x30) is dispatched TWICE,
-    // concurrently, on the SAME GameUpdateLoop (confirmed 2026-06-17, two distinct
-    // tids reach here per game-load):
-    //   (1) our standalone AsyncLoader worker — Stub_Startup step 3 calls
-    //       AsyncLoader::StartAsyncLoad(next) → next->vtable[+0x30](next).
-    //   (2) the Runtime Engine::Loader thread — spawned INSIDE
-    //       fn_DialogLoaderLoopT_Startup's Loader::Load(m_nextLoop); after
-    //       UpdateLoop::LoadResources (fast, since GetResourceFilename returns null
-    //       with the preload off) Loader::Run dispatches m_nextLoop->Load.
-    // Both run identical idempotent build code, so the OUTCOME is correct whichever
-    // wins — but unguarded they double-spawn into the entity buckets (null entries
-    // → crash in EntityList_Update). The ideal fix (stop dispatcher #2 at its
-    // source) is blocked: nulling m_nextLoop across DialogLoaderLoopT::Startup
-    // crashes it (Startup derefs m_nextLoop for dialog creation, not just the
-    // loader) and its internal Loader::Load can't be cleanly intercepted. So we
-    // guard at the single shared dispatch TARGET — this function — which is the
-    // clean, safe equivalent: the first caller atomically claims the loop and
-    // builds it; any later concurrent dispatch for the same loop returns at once.
+    // Single-owner build guard — NOW AN ASSERTION, NOT A RACE FIX.
+    //
+    // ENDGAME B.3.4a closing, comment only. This block used to describe the
+    // loop's Load (+0x30) being dispatched TWICE, concurrently, on the SAME
+    // GameUpdateLoop (confirmed 2026-06-17, two distinct tids per game-load):
+    //   (1) our standalone AsyncLoader worker, from Stub_Startup step 3; and
+    //   (2) the Runtime Engine::Loader thread, spawned inside
+    //       fn_DialogLoaderLoopT_Startup's Loader::Load(m_nextLoop).
+    // Both ran identical idempotent build code, so the OUTCOME was correct
+    // whichever won, but unguarded they double-spawned into the entity buckets
+    // (null entries -> crash in EntityList_Update). The note that stopping
+    // dispatcher (1) at its source was "blocked" is obsolete.
+    //
+    // DISPATCHER (1) IS GONE. `standalone/async_loader.{h,cpp}` were deleted in
+    // 96c17f47 and `Engine::Loader` is the only dispatcher. So this guard no
+    // longer resolves a race; it ASSERTS that there is only one. A
+    // "[GUL::Load] redundant dispatch" line reappearing in the log means a
+    // SECOND DISPATCHER IS BACK -- treat it as a regression to find, not as the
+    // guard doing its job. It is kept for exactly that reason.
     static std::atomic<void*> s_loadingLoop{nullptr};
     unsigned long _tid = (unsigned long)GetCurrentThreadId();
     if (s_loadingLoop.exchange(loopVoid) == loopVoid) {

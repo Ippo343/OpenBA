@@ -459,6 +459,23 @@ bodies the save format runs through; if any single commit cannot produce three i
 
 ## §D. THE CONSTRAINT BOTH C AND E LIVE UNDER — the loader defect
 
+> **NOTE ADDED 2026-09-19 (ENDGAME B.3.4a closing). §D PREDATES THE LOADER FIX;
+> the measurements below stand, their attribution does not.** The "UNCHANGED tree
+> (block-0 exe)" this section measures was not an unchanged tree in the sense the
+> phrase implies — it was a tree with **TWO resource loaders** racing: our
+> standalone `AsyncLoader` and the Runtime `Engine::Loader`. `96c17f47` deleted
+> `standalone/async_loader.{h,cpp}` and made `Engine::Loader` the only
+> dispatcher, and the control measurement across that change was **0/24 failures
+> after against 4/12 before**. So the 2-of-6 NULL `HelpTopics.rsc` boots and the
+> teardown hang recorded here are, on the evidence, that race and not a defect of
+> `compressed_stream_read.cpp`. **THE RULE below is unchanged and still binds** —
+> the §D files stay byte-faithful, and the conversion must not add a lock, a
+> retry, an ordering change or a null check there — because a second dispatcher
+> returning is exactly what a "[GUL::Load] redundant dispatch" line in the log
+> would now mean (`gameupdateloop_load.cpp`'s guard is an assertion, not a fix).
+> This note is added rather than rewriting the section: the numbers were real and
+> a later reader needs to see both what was measured and what it turned out to be.
+
 **This is B33 §0 restated with a live, measured instance. It binds STREAMS and PACKAGE+FS.**
 
 A pre-existing, intermittent defect exists in the compressed-load path, measured by the

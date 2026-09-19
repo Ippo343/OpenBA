@@ -70,6 +70,7 @@
 #include "../../types/system/Filename.h"
 #include "../../src/system/pod_bridge.h"
 #include "../../funcs/rt_port.h"
+#include "../../types/io/FileSystem.h"   // ENDGAME B.3.4a closing: the member
 
 // ENDGAME B.3.1 step 2: three of the four Wave-2 lane-A entry points this file
 // forward-declared here are gone from this translation unit.
@@ -127,29 +128,63 @@ bool SameFilenameText(const Filename* a, const Filename* b) {
 // None of the three is ported today, so this changes nothing about which body
 // runs; it changes what happens when one of them IS ported, and what the
 // cutover failure looks like if none ever is.
-void ComputeSaveDirectory(Filename* ret) {
+// ENDGAME B.3.4a closing: the body moved verbatim into
+// `IO::FileSystem::GetSaveDirectory()` at the bottom of this file. The door
+// keeps its name and BOTH registrations and delegates, exactly as
+// `RtIo_FileSystem_GetDataDirectory` does (filesystem.cpp, commit cd4e8921).
+//
+// The return is BY VALUE, so `ret` IS retail's hidden return slot (RDX) and the
+// member's by-value return fills it through the same ABI — one construction,
+// exactly as before. No qualified `IO::` call is needed: `IO::FileSystem` has
+// no vtable at all (runtime/types/io/FileSystem.h), so B34_BRIEFS §A.1's
+// re-entry hazard cannot arise.
+//
+// `ComputeSaveDirectory(Filename*)`'s two placement-news become the member's
+// two `return` statements. That is the SAME construction into the SAME slot:
+// a by-value return with a hidden return slot constructs in place. The early
+// return on `hr != S_OK` is retail's `*(longlong*)in_RDX = 0`, i.e. the default
+// ctor, and stays the first arm.
+Filename* RtIo_FileSystem_GetSaveDirectory(const void* fsVoid, Filename* ret) {
+    new (ret) System::Filename(
+        reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetSaveDirectory());
+    return ret;
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// The member. Defined outside `namespace RtIO` because a member of `IO::X` must
+// appear in a namespace ENCLOSING the class (B34_BRIEFS §A.2); it reaches this
+// file's RtIO-scoped helpers as `RtIO::X`. Every POD is spelled `RtIO::` /
+// `RtSystem::` and every real class `System::` (B34_RULES §7.2).
+// ============================================================================
+namespace IO {
+
+System::Filename FileSystem::GetSaveDirectory() const {
+    // Retail's `this` is LOADED and never dereferenced — see the file banner,
+    // which read that off the disassembly rather than the decompile. The member
+    // therefore touches no field, and that is a fact about retail, not a gap.
+
     wchar_t buf[264];
     const HRESULT hr = SHGetFolderPathW(nullptr, CSIDL_PERSONAL, nullptr, 0, buf);
     if (hr != S_OK) {
-        RT_EXPORT_ONCE(fn_ErrorSetText_t, kNameErrorSetText)(
+        RT_EXPORT_ONCE(RtIO::fn_ErrorSetText_t, RtIO::kNameErrorSetText)(
             "FileSystem: Unable to retrive the Documents folder for saving!", true);
-        // `ret` is the hidden return slot: raw bytes, so retail's
-        // `*(longlong*)in_RDX = 0` is the default ctor (0x180006220), not a
-        // store through a live object.
-        new (ret) System::Filename();
-        return;
+        // Retail's `*(longlong*)in_RDX = 0` is the default ctor (0x180006220),
+        // not a store through a live object.
+        return System::Filename();
     }
 
-    WideStringHandle ws{nullptr};
-    RT_EXPORT_ONCE(fn_WideStringSet_t, kNameWideStringSet)(&ws, buf);
+    RtIO::WideStringHandle ws{nullptr};
+    RT_EXPORT_ONCE(RtIO::fn_WideStringSet_t, RtIO::kNameWideStringSet)(&ws, buf);
 
     // AsUTF8's hidden return slot is still POD-shaped (System::WideString is
     // not a B.3.1 class), so the value lands in a POD and is then STOLEN into
     // the class: the move ctor is a pure pointer steal, so `utf8Pod` is left
     // null and exactly one release happens, `utf8`'s destructor.
-    String utf8Pod{nullptr};
-    RT_EXPORT_ONCE(fn_WideStringAsUTF8_t, kNameWideStringAsUTF8)(&ws, &utf8Pod);
-    System::String utf8(std::move(Sys(utf8Pod)));
+    RtSystem::String utf8Pod{nullptr};
+    RT_EXPORT_ONCE(RtIO::fn_WideStringAsUTF8_t, RtIO::kNameWideStringAsUTF8)(&ws, &utf8Pod);
+    System::String utf8(std::move(RtSystem::Sys(utf8Pod)));
 
     System::String formatted = System::String::Format(
         "%s\\%s\\", utf8._data ? utf8._data : "", "Banished");
@@ -158,22 +193,18 @@ void ComputeSaveDirectory(Filename* ret) {
     // (0x18000c780): retail stores the formatted buffer's own pointer into the
     // return slot, bumps its refcount and normalises
     // (0x1800acfd0: `*(longlong*)in_RDX = lVar2; *(int*)(lVar2-4) += 1;`).
-    new (ret) System::Filename(formatted);
+    System::Filename result(formatted);
 
     // ~formatted and ~utf8 are retail's last two releases; only the WideString,
-    // whose class does not exist yet, is still released by hand.
+    // whose class does not exist yet, is still released by hand. It is released
+    // BEFORE the return for the same reason retail releases it before its
+    // epilogue: the order of the three releases is retail's, not ours.
     RtSystem::RtString_ReleaseInline(&ws);
+
+    return result;
 }
 
-Filename* RtIo_FileSystem_GetSaveDirectory(const void* fsVoid, Filename* ret) {
-    (void)fsVoid;   // retail's `this` is loaded but never dereferenced
-
-    ComputeSaveDirectory(ret);
-
-    return ret;
-}
-
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration — called from filesystem.cpp's RtIoFileSystemRegister(), which

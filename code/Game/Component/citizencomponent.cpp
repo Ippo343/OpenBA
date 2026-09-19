@@ -40,7 +40,16 @@ typedef void (*fn_Time_FromSeconds_t)(void* outTime, float seconds);
 static fn_Time_FromSeconds_t s_fn_Time_FromSeconds = nullptr;
 
 // System::Random::RandFloat(Random*) -> float
-// Dispatch slot at 0x140152a60.
+//
+// ENDGAME B.3.4a closing: this said "Dispatch slot at 0x140152a60" and that
+// was simply the wrong slot. 0x140152a60 is
+// `?Serialize@Serializer@IO@@QEAAXAEAMPEBD@Z` -- IO::Serializer::Serialize
+// (float&, const char*) -- which is why `engine_funcs.h` binds
+// `fn_Serializer_Serialize_Float` to it and B34_RULES 6.5(b) lists it as one
+// of the two ALIASED slots. The authority for this pointer's address is the
+// resolve site in EnsureHelpers, not this banner; the banner named a slot it
+// does not use, next to a paragraph about a pointer that was never assigned,
+// which is exactly the pair of mistakes that makes a comment worth deleting.
 // [2026-07-26] This was DECLARED and null-checked but NEVER ASSIGNED — the same class of
 // bug as the s_fn_FindPartner gap below. Both of its call sites silently took their
 // fallback constant instead of a random number:

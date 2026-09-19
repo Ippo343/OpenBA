@@ -154,8 +154,11 @@ void MenuDialogLoopT_TickAudio(void* time);
 //
 // Loading the music does NOT start playback — that happens in StartMusic below
 // (the original splits load (Load slot) from play (Startup slot)). Safe to call
-// on the AsyncLoader worker thread (it's a plain refcounted resource load like
-// Engine::DialogLoopT::Load).
+// off the main thread: it is a plain refcounted resource load, like
+// Engine::DialogLoopT::Load. (ENDGAME B.3.4a closing, comment only: this said
+// "on the AsyncLoader worker thread". Our standalone AsyncLoader was deleted in
+// 96c17f47 -- `Engine::Loader` is the only dispatcher now -- so the thread it
+// named no longer exists. The property being asserted is unchanged.)
 //
 // Returns true if the music External loaded (self+0xb88 non-null).
 bool MenuDialogLoopT_LoadMusic(void* self);

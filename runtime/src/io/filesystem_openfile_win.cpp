@@ -139,6 +139,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
+#include "../../types/io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../../src/system/string.h"
@@ -294,12 +295,31 @@ extern "C" FileInfo* RtIo_FileInfo_Assign(FileInfo* dst, const FileInfo* src) {
 // `return FileInfo(this->_fileInfo)`, where `_fileInfo` is the PackageFile's own
 // embedded FileInfo at +0xC0 — the same +0xC0 lane PKG's ClosePackages hands to
 // CloseFile, which is the independent confirmation of the offset.
+// ENDGAME B.3.4a closing: the body is now `IO::PackageFile::GetFileInfo()`
+// (runtime/types/io/PackageFile.h declares it; the definition is in
+// filesystem_packages.cpp beside GetFileName, in that file's existing
+// `namespace IO` block). This door keeps its name, its `extern "C"` linkage,
+// its signature and its registration, and delegates.
+//
+// *** THE QUALIFIED `IO::PackageFile::` IS LOAD-BEARING. *** `IO::PackageFile`
+// IS polymorphic (9 slots, B34_RULES section 1.4) -- unlike `IO::FileSystem`,
+// which is why the FileSystem doors in this file need no qualification.
+// GetFileInfo is non-virtual, so the qualification changes nothing today; it is
+// written anyway because the file's other PackageFile doors are qualified and a
+// mixed convention here is how B34_BRIEFS section A.1's re-entry hazard gets in
+// the day one of these becomes an override.
+//
+// The return is BY VALUE, so `ret` IS retail's hidden return slot (RDX) and the
+// member's by-value return fills it through the same ABI: one FileInfo copy
+// ctor, the same `RtIo_FileInfo_CopyCtor` as before, at the same point.
+//
+// Section D applies to this file: nothing added, removed or reordered on the
+// open/read path -- no lock, no retry, no positioned read, no null check.
 extern "C" FileInfo* RtIo_PackageFile_GetFileInfo(const PackageFileView* self,
                                                   FileInfo* ret) {
-    const FileInfo* const src = reinterpret_cast<const FileInfo*>(
-        reinterpret_cast<const uint8_t*>(self) + 0xC0);      // 18002541e
-    RtIo_FileInfo_CopyCtor(ret, src);                        // 180025428
-    return ret;                                              // 180025436
+    new (ret) FileInfo(
+        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileInfo());
+    return ret;
 }
 
 // ============================================================================

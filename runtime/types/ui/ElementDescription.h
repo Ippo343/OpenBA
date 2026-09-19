@@ -45,8 +45,18 @@
 // PROFILE build's Encoding vtable puts these somewhere else — see
 // runtime/types/object/Internal.h's warning):
 //
-//     +0x98  Serialize(uint&, const char*)      kEncSerializeUint
-//     +0xa0  Serialize(int&,  const char*)      kEncSerializeInt
+//     +0x98  Serialize(uint&, const char*)      rt::io::rw_vtbl::kScalarUInt
+//     +0xa0  Serialize(int&,  const char*)      rt::io::rw_vtbl::kScalarInt
+//
+// ENDGAME B.3.4a closing: those two rows used to be spelled
+// `RtObject::kEncSerializeUint` / `kEncSerializeInt`, constants that lived on
+// `RtObject::SerializerLite` -- a FOURTH declaration of IO::Serializer's 16
+// bytes. `IO::Serializer` is a real class since B.3.4 block 3, and
+// B34_RULES 3.3 retired `SerializerLite` and its three `kEnc*` constants in
+// the commit that landed it. THE OFFSETS ARE UNCHANGED -- a `static_assert`
+// tied the retired constants to the `rw_vtbl::kScalar*` ones precisely so
+// this substitution could never drift -- so the evidence this banner rests on
+// is exactly as strong as it was; only the spelling that names it still exists.
 //
 //   off   field           type      proven by
 //   ----  --------------  --------  --------------------------------------------
