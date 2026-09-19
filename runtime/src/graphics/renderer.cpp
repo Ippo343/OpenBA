@@ -66,6 +66,7 @@
 
 #include <cstdint>
 #include <cstring>
+#include <new>          // the retslot doors placement-new the member's prvalue
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
@@ -280,57 +281,32 @@ const Matrix kZUpToYUp = {{
 }  // namespace
 
 // ============================================================================
-// Graphics::Camera
+// Graphics::Camera — THE DOORS. Every body below MOVED onto a member of the real
+// `Graphics::Camera` (runtime/types/graphics/Camera.h); see the block at the
+// bottom of this file. Each door keeps its name, its registrations and retail's
+// ABI, and delegates with a QUALIFIED non-virtual call.
 // ============================================================================
 
 // ?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z — retail 0x1800fe5c0
-//
-// Copies the frustum in, then rebuilds the projection matrix from it.
-//
-// FAITHFULNESS DETAIL THAT LOOKS LIKE A TYPO AND IS NOT: retail copies the
-// frustum as 24 DWORDs (+0x00..+0x5f) plus a single BYTE at +0x60 — see the
-// MOVZX/MOV byte pair at 0x1800fe6ec — so the three alignment pad bytes at
-// +0x61..+0x63 of the DESTINATION are left as they were. The Camera ctor and
-// GetFrustum, by contrast, move +0x60 as a full dword and so do copy the pad.
-// A blanket `memcpy(..., sizeof(Frustum))` here would be a real deviation, and
-// the scratch-copy oracle below would report it as a divergence in the pad
-// bytes, which is precisely the kind of "harmless" difference that turns into a
-// mystery three waves later.
 extern "C" void RtGraphics_Camera_SetFrustum(Camera* self, const Frustum* frustum) {
-    Camera before;
-
-    // The `void*` cast is deliberate and is NOT a behaviour change: ENDGAME
-    // B.3.1 gave Math::Vector4 retail's zeroing default ctor, which makes
-    // Volume::Frustum non-trivially-default-constructible, and -Wclass-memaccess
-    // then objects that this DELIBERATELY partial copy (0x60 of 0x64 bytes —
-    // see the banner: SetFrustum must not carry the pad across) leaves four
-    // bytes unchanged. Copying through void* says "yes, on purpose".
-    std::memcpy(static_cast<void*>(&self->frustum), frustum, 0x60);
-    self->frustum.isOrthographic = frustum->isOrthographic;
-
-    const bool zeroToOne = RtVideoDeviceUsesZeroToOneDepth();
-    if (self->swapZUpToYUp) {
-        Matrix projection;
-        RtFrustumProjection(&self->frustum, &projection, zeroToOne);
-        RtMatrixMul(&kZUpToYUp, &self->projection, &projection);
-    } else {
-        RtFrustumProjection(&self->frustum, &self->projection, zeroToOne);
-    }
-
+    reinterpret_cast<::Graphics::Camera*>(self)                       // B.3.5 bridge
+        ->::Graphics::Camera::SetFrustum(*frustum);
 }
 
 // ??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z
 // — retail 0x1800fe960. Returns `this` in RAX like every MSVC constructor.
+//
+// THIS STAYS A CONSTRUCTOR DOOR, not a real C++ constructor (B4b-2, and
+// B35_RULES §11 names `fn_Graphics_Camera_Ctor` in its leave list). Its four
+// call sites in `code/Game` and `engine/funcs` keep working unchanged.
 //
 // Note the ordering retail chose and this reproduces: the projection matrix is
 // zeroed and the flag stored BEFORE SetFrustum runs, so SetFrustum's branch on
 // +0xd4 reads the value just written and its output overwrites the zeros.
 extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
                                           const Transform3* cameraToWorld, bool swapZUpToYUp) {
-    Camera before;
-
     // 25 dwords: the ctor DOES move +0x60 as a dword, so the frustum's pad
-    // bytes come across too. (SetFrustum, above, does not.)
+    // bytes come across too. (SetFrustum does not — see the member below.)
     std::memcpy(&self->frustum, frustum, sizeof(Frustum));
     std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
     // Was `memset(&self->projection, 0, sizeof(Matrix))`. ENDGAME B.3.1 made
@@ -344,49 +320,104 @@ extern "C" Camera* RtGraphics_Camera_Ctor(Camera* self, const Frustum* frustum,
     return self;
 }
 
+// ??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z — retail 0x180017c40.
+//
+// ALREADY PORTED, and NOT IN BLOCK F'S FILE SET: the body is
+// `RtGraphics_Camera_Assign` in `runtime/src/graphics/wave28_lane_gfxbody.cpp`,
+// which ported it because `BeginDrawGroup`'s reuse path is the tree's first
+// caller of it. Block F drafted a second copy of it here and DELETED it on the
+// link error, which is the duplicate-registration hazard
+// reference_grep_for_the_port_before_writing_it.md describes — an address grep
+// found only COMMENTS on 0x180017c40 because that file registers by NAME only
+// (its banner says "NO RegisterRuntimeAddr IN THIS FILE").
+//
+// Its body must stay where it is for the reason Camera.h's three-byte-deviation
+// banner gives: retail's `operator=` copies dwords +0x00..+0x5f, the BYTE at
+// +0x60, dwords +0x64..+0xd0 and the BYTE at +0xd4, leaving +0x61..+0x63 AND
+// +0xd5..+0xd7 untouched, and `Graphics::Camera::operator=` is `= default` — a
+// full 0xd8 memberwise copy — precisely so the class stays trivially copyable. A
+// defaulted assignment cannot express a partial copy, so the faithful body stays
+// in that door and every assignment the live engine makes goes through it.
+// wave28_lane_gfxbody.cpp reached the SAME conclusion about the ctor/assign
+// asymmetry independently; block F's reading of the disassembly agrees with it
+// instruction for instruction.
+
 // ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
 // — retail 0x1800feb00. Twelve dwords into +0x64.
 extern "C" void RtGraphics_Camera_SetCameraToWorld(Camera* self, const Transform3* cameraToWorld) {
-    Camera before;
-
-    std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
-
+    reinterpret_cast<::Graphics::Camera*>(self)                       // B.3.5 bridge
+        ->::Graphics::Camera::SetCameraToWorld(*cameraToWorld);
 }
 
 // ?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
-// — retail 0x1800fe560.
-//
-// FINDING, recorded because the name promises otherwise: this is
-// INSTRUCTION-FOR-INSTRUCTION the same function as SetCameraToWorld above —
-// twelve dwords into +0x64 and return. In a class with interpolated state a
-// "Snap" would also overwrite the PREVIOUS transform so the next Lerp does not
-// smear; `Graphics::Camera` has no previous-transform field for it to write, so
-// the distinction the two names draw does not exist in the shipped binary. They
-// are kept as two ports rather than one alias so that the diff oracle checks
-// each against its OWN export, and so a future divergence between them (a
-// different build, a modded DLL) would show up instead of being assumed away.
+// — retail 0x1800fe560. See the member for the "Snap == Set" finding.
 extern "C" void RtGraphics_Camera_SnapCameraToWorld(Camera* self, const Transform3* cameraToWorld) {
-    Camera before;
-
-    std::memcpy(&self->cameraToWorld, cameraToWorld, sizeof(Transform3));
-
+    reinterpret_cast<::Graphics::Camera*>(self)                       // B.3.5 bridge
+        ->::Graphics::Camera::SnapCameraToWorld(*cameraToWorld);
 }
 
 // ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ — retail 0x1800fe3e0.
 //
-// HIDDEN RETURN SLOT. `Volume::Frustum` has a user-declared constructor, so MSVC
-// returns it by memory: RCX = this, RDX = the caller's slot, RAX = that same
-// pointer back. Declaring this without the slot would make it a wild write that
-// still returns the right answer, with RAX pointing at the memory it just
-// corrupted (reference_hidden_retslot_wild_write.md). The two exe call sites
-// already spell the slot out (code/Game/Component/frustumoutlineelement.cpp:97,
+// HIDDEN RETURN SLOT, and the door keeps it: RCX = this, RDX = the caller's
+// slot, RAX = that same pointer back. Declaring it without the slot would be a
+// wild write that still returns the right answer, with RAX pointing at the
+// memory it just corrupted (reference_hidden_retslot_wild_write.md). The two exe
+// call sites already spell the slot out
+// (code/Game/Component/frustumoutlineelement.cpp:97,
 // code/Game/Game/weather_particle_draw.cpp:85), so this signature matches them.
 //
-// Retail moves 25 dwords, so the frustum's three pad bytes travel too.
+// The member returns BY VALUE, which is correct for a NON-VIRTUAL member — the
+// class has no vtable at all, so both ends of every member call are this same
+// GCC (Geometry.h's B5-12 block, as amended by block E, for why a VIRTUAL
+// by-value return would NOT be safe). The door placement-news the prvalue into
+// the caller's storage, which is 25 dwords either way: retail moves +0x60 as a
+// full dword, so the frustum's three pad bytes travel too, and so does a C++
+// `Frustum` copy.
 extern "C" Frustum* RtGraphics_Camera_GetFrustum(const Camera* self, Frustum* ret) {
-    std::memcpy(ret, &self->frustum, sizeof(Frustum));
-
+    new (ret) Frustum(reinterpret_cast<const ::Graphics::Camera*>(self)   // B.3.5 bridge
+                          ->::Graphics::Camera::GetFrustum());
     return ret;
+}
+
+// ?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@XZ — 0x180017e70.
+// PORTED BY BLOCK F. Twelve dwords out of +0x64 into the hidden slot, RAX = RDX.
+extern "C" Transform3* RtGraphics_Camera_GetCameraToWorld(const Camera* self, Transform3* ret) {
+    new (ret) Transform3(reinterpret_cast<const ::Graphics::Camera*>(self)  // B.3.5 bridge
+                             ->::Graphics::Camera::GetCameraToWorld());
+    return ret;
+}
+
+// ?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@M@Z — 0x180017e10.
+// PORTED BY BLOCK F, and kept as its OWN door rather than aliased to the one
+// above: the two retail bodies are instruction for instruction identical and the
+// `float` never appears in either, so a future divergence should show up rather
+// than be assumed away. See the member.
+extern "C" Transform3* RtGraphics_Camera_GetCameraToWorldAtT(const Camera* self, Transform3* ret,
+                                                             float t) {
+    new (ret) Transform3(reinterpret_cast<const ::Graphics::Camera*>(self)  // B.3.5 bridge
+                             ->::Graphics::Camera::GetCameraToWorld(t));
+    return ret;
+}
+
+// ?GetProjection@Camera@Graphics@@QEBA?AVMatrix@Math@@XZ — retail 0x180017ed0.
+// PORTED BY BLOCK F. Sixteen dwords out of +0x94 into the hidden slot.
+extern "C" Matrix* RtGraphics_Camera_GetProjection(const Camera* self, Matrix* ret) {
+    new (ret) Matrix(reinterpret_cast<const ::Graphics::Camera*>(self)      // B.3.5 bridge
+                         ->::Graphics::Camera::GetProjection());
+    return ret;
+}
+
+// ?IsMirrored@Camera@Graphics@@QEBA_NXZ — retail 0x1800fe480. PORTED BY BLOCK F.
+extern "C" bool RtGraphics_Camera_IsMirrored(const Camera* self) {
+    return reinterpret_cast<const ::Graphics::Camera*>(self)                // B.3.5 bridge
+        ->::Graphics::Camera::IsMirrored();
+}
+
+// ?SetZUp@Camera@Graphics@@QEAAX_N@Z — retail 0x1800fe550. PORTED BY BLOCK F.
+// `MOV byte ptr [RCX+0xd4],DL; RET` — which is how block F learned retail's own
+// name for the byte the POD calls `swapZUpToYUp`.
+extern "C" void RtGraphics_Camera_SetZUp(Camera* self, bool zUp) {
+    reinterpret_cast<::Graphics::Camera*>(self)->::Graphics::Camera::SetZUp(zUp);  // B.3.5 bridge
 }
 
 // ============================================================================
@@ -401,9 +432,13 @@ extern "C" Frustum* RtGraphics_Camera_GetFrustum(const Camera* self, Frustum* re
 // so retail's behaviour does not depend on the value — but our object would stop
 // being byte-identical to the DLL's, and the scratch oracle below would report
 // a divergence on whatever the two buffers happened to contain.
+// THIS STAYS A CONSTRUCTOR DOOR (B4b-2; B35_RULES §11's leave list names
+// `fn_Graphics_Renderer_Ctor`), and it operates on the `RtGraphics` POD on
+// purpose: a real `Graphics::Renderer` constructor with a member-initialiser
+// list is exactly what RULE B5-13 forbids, because the list would have to
+// mention `_shaderDetail` (+0x3c) and `_pad_4c` (+0x4c) or leave a reader
+// wondering why it does not.
 extern "C" Renderer* RtGraphics_Renderer_Ctor(Renderer* self) {
-    Renderer before;
-
     self->scenes._data        = nullptr;
     self->scenes._size        = 0;
     self->scenes._capacity    = 0;
@@ -450,22 +485,105 @@ extern "C" void RtGraphics_Renderer_Dtor(Renderer* self) {
                          self->drawables._capacity == 0;
 }
 
-// ?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ — retail 0x180017f90.
-// `&_drawGroups[_currentDrawGroup].cullCamera`. Pure address arithmetic: no
-// bounds check in retail, and none added here (CLAUDE.md — a guard retail lacks
-// does not restore the behaviour, it skips it).
-extern "C" const Camera* RtGraphics_Renderer_GetCullCamera(Renderer* self) {
-    const Camera* ours = &self->drawGroups[self->currentDrawGroup].cullCamera;
+// ============================================================================
+// Graphics::Renderer — the thirteen accessor doors.
+//
+// All thirteen bodies MOVED onto members of the real `Graphics::Renderer`; each
+// door delegates with a QUALIFIED non-virtual call. ELEVEN OF THE THIRTEEN ARE
+// NEW PORTS BY BLOCK F, read as disassembly out of the retail DLL this pass —
+// every one is a one-to-six-instruction accessor and the whole set is tabulated
+// in Camera.h's block-F banner. They close nine of the eleven unported rows on
+// this class; the four big bodies (`Draw`, `BeginDrawGroup`, `AddDrawItem`,
+// `DrawItemList`) and the copy ctor / `operator=` stay in the DLL.
+//
+// NONE OF THE FIVE INDEXED ACCESSORS BOUNDS-CHECKS, and none is given a check
+// here: retail has none, and a guard retail lacks does not restore the
+// behaviour, it skips it (CLAUDE.md).
+// ============================================================================
 
-    return ours;
+// ?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ — retail 0x180017f90.
+extern "C" const Camera* RtGraphics_Renderer_GetCullCamera(Renderer* self) {
+    return reinterpret_cast<const Camera*>(                               // B.3.5 bridge
+        &reinterpret_cast<::Graphics::Renderer*>(self)
+             ->::Graphics::Renderer::GetCullCamera());
+}
+
+// ?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z — retail 0x180017fd0.
+extern "C" const Camera* RtGraphics_Renderer_GetCullCameraAt(Renderer* self, int group) {
+    return reinterpret_cast<const Camera*>(                               // B.3.5 bridge
+        &reinterpret_cast<::Graphics::Renderer*>(self)
+             ->::Graphics::Renderer::GetCullCamera(group));
+}
+
+// ?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ — retail 0x180017f70.
+extern "C" const Camera* RtGraphics_Renderer_GetCamera(Renderer* self) {
+    return reinterpret_cast<const Camera*>(                               // B.3.5 bridge
+        &reinterpret_cast<::Graphics::Renderer*>(self)
+             ->::Graphics::Renderer::GetCamera());
+}
+
+// ?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z — retail 0x180017fb0.
+extern "C" const Camera* RtGraphics_Renderer_GetCameraAt(Renderer* self, int group) {
+    return reinterpret_cast<const Camera*>(                               // B.3.5 bridge
+        &reinterpret_cast<::Graphics::Renderer*>(self)
+             ->::Graphics::Renderer::GetCamera(group));
+}
+
+// ?GetSceneGroup@Renderer@Graphics@@QEBAAEBUSceneGroup@12@H@Z — 0x180018090.
+// `_sceneGroups._data + index*0x110`, and the export that gave block F retail's
+// own name for the 0x110 element type (Camera.h correction 6).
+extern "C" const void* RtGraphics_Renderer_GetSceneGroup(const Renderer* self, int index) {
+    return &reinterpret_cast<const ::Graphics::Renderer*>(self)           // B.3.5 bridge
+                ->::Graphics::Renderer::GetSceneGroup(index);
 }
 
 // ?GetShader@Renderer@Graphics@@QEBAHXZ — retail 0x180018010.
-// `_drawGroups[_currentDrawGroup].shader`.
 extern "C" int RtGraphics_Renderer_GetShader(const Renderer* self) {
-    const int ours = self->drawGroups[self->currentDrawGroup].shader;
+    return reinterpret_cast<const ::Graphics::Renderer*>(self)            // B.3.5 bridge
+        ->::Graphics::Renderer::GetShader();
+}
 
-    return ours;
+// ?GetMaterialTypeFlags@Renderer@Graphics@@QEBAIXZ — retail 0x180017ff0.
+extern "C" uint32_t RtGraphics_Renderer_GetMaterialTypeFlags(const Renderer* self) {
+    return reinterpret_cast<const ::Graphics::Renderer*>(self)            // B.3.5 bridge
+        ->::Graphics::Renderer::GetMaterialTypeFlags();
+}
+
+// ?GetCurrentSceneGroup@Renderer@Graphics@@QEBAHXZ — retail 0x180018030.
+extern "C" int RtGraphics_Renderer_GetCurrentSceneGroup(const Renderer* self) {
+    return reinterpret_cast<const ::Graphics::Renderer*>(self)            // B.3.5 bridge
+        ->::Graphics::Renderer::GetCurrentSceneGroup();
+}
+
+// ?GetAlphaT@Renderer@Graphics@@QEBAMXZ — retail 0x180018040.
+extern "C" float RtGraphics_Renderer_GetAlphaT(const Renderer* self) {
+    return reinterpret_cast<const ::Graphics::Renderer*>(self)            // B.3.5 bridge
+        ->::Graphics::Renderer::GetAlphaT();
+}
+
+// ?SetShaderDetail@Renderer@Graphics@@QEAAXH@Z — retail 0x180018050.
+extern "C" void RtGraphics_Renderer_SetShaderDetail(Renderer* self, int detail) {
+    reinterpret_cast<::Graphics::Renderer*>(self)                         // B.3.5 bridge
+        ->::Graphics::Renderer::SetShaderDetail(detail);
+}
+
+// ?GetShaderDetail@Renderer@Graphics@@QEBAHXZ — retail 0x180018060.
+extern "C" int RtGraphics_Renderer_GetShaderDetail(const Renderer* self) {
+    return reinterpret_cast<const ::Graphics::Renderer*>(self)            // B.3.5 bridge
+        ->::Graphics::Renderer::GetShaderDetail();
+}
+
+// ?GetDetailId@Renderer@Graphics@@QEBAHXZ — retail 0x180018070.
+extern "C" int RtGraphics_Renderer_GetDetailId(const Renderer* self) {
+    return reinterpret_cast<const ::Graphics::Renderer*>(self)            // B.3.5 bridge
+        ->::Graphics::Renderer::GetDetailId();
+}
+
+// ?GetFrameIndex@Renderer@Graphics@@QEBAHXZ — retail 0x180018080.
+// The export that corrects the POD's `contextSerial` (Camera.h correction 1).
+extern "C" int RtGraphics_Renderer_GetFrameIndex(const Renderer* self) {
+    return reinterpret_cast<const ::Graphics::Renderer*>(self)            // B.3.5 bridge
+        ->::Graphics::Renderer::GetFrameIndex();
 }
 
 // ============================================================================
@@ -596,6 +714,222 @@ extern "C" void RtGraphics_MaterialInstance_AddTexture(MaterialInstance* self,
 
 }
 
+// ############################################################################
+// ENDGAME B.3 step 5 (block F) — THE BODIES ABOVE, MOVED ONTO THE MEMBERS
+// ############################################################################
+//
+// `Graphics::Camera` and `Graphics::Renderer` are real C++ classes as of block F
+// (`runtime/types/graphics/Camera.h`). Nineteen bodies move here: nine of
+// `Camera`'s thirteen exports and ten of `Renderer`'s twenty-five, of which
+// eleven `Renderer` accessors plus `Camera::GetCameraToWorld` ×2,
+// `GetProjection`, `IsMirrored` and `SetZUp` are NEW PORTS read out of the
+// retail DLL by block F. Every registered door above kept its name and its
+// address and became a one-line delegation with a QUALIFIED non-virtual call.
+//
+// The qualification is not decoration even on a NON-POLYMORPHIC class: it is
+// what B34_BRIEFS §A.1 requires uniformly, and here it also documents that the
+// door is calling THE MEMBER and not re-entering itself through the registry.
+//
+// WHAT DID **NOT** MOVE, and why:
+//
+//  * `??0Camera(const Frustum&, const Transform3&, bool)` (0x1800fe960) and
+//    `??0Renderer()` / `??1Renderer()` (0x180105180 / 0x1800180a0). ENDGAME §B.1
+//    decision 2, B4b-2 and B35_RULES §11's leave list keep all three as DOORS:
+//    `fn_Graphics_Camera_Ctor` and `fn_Graphics_Renderer_Ctor` are named there.
+//    The Renderer constructor additionally MUST NOT become a member-initialiser
+//    list, because RULE B5-13 requires +0x3c and +0x4c stay unwritten.
+//  * `??4Camera@` (0x180017c40). Its retail body is a PARTIAL copy that leaves
+//    +0x61..+0x63 and +0xd5..+0xd7 alone, and `Graphics::Camera::operator=` is
+//    `= default` (Camera.h's three-byte-deviation banner) precisely so the class
+//    stays trivially copyable. A defaulted assignment cannot express a partial
+//    copy, so the faithful body stays in the door — which is where every copy
+//    the live engine makes goes.
+//  * The three `MaterialInstance` doors at the bottom of this file.
+//    `Graphics::MaterialInstance` is BLOCK G's class, converted concurrently.
+//    UNTOUCHED, and listed in block F's report.
+//
+// NAME-LOOKUP HYGIENE (B34B_RULES §7.2): inside `namespace Graphics` below, a
+// bare `Camera` or `Renderer` binds the REAL CLASS, not the `RtGraphics` POD the
+// `using` declarations at the top of this file introduce at global scope. The
+// file-local helpers (`RtFrustumProjection`, `RtMatrixMul`,
+// `RtVideoDeviceUsesZeroToOneDepth`, `kZUpToYUp`) are reached by unqualified
+// lookup falling through to the global unnamed namespace, which is the
+// arrangement B34_BRIEFS §A.2 records as the one that works.
+//
+// RULE B5-7: nothing below adds a static initialiser, a lazy singleton or a
+// non-atomic first-call cache. `Camera` and `Renderer` are constructed on the
+// `Engine::Loader` thread while the main thread is inside `Draw`. The one cache
+// in this file, `RtVideoDeviceUsesZeroToOneDepth`'s `static void** singletonSlot`,
+// predates block F, is a pointer to an exported DATA cell rather than a value,
+// and is left exactly as it was.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?SetFrustum@Camera@Graphics@@QEAAXAEBVFrustum@Volume@@@Z   retail 0x1800fe5c0
+//
+// Copies the frustum in, then rebuilds the projection matrix from it.
+//
+// FAITHFULNESS DETAIL THAT LOOKS LIKE A TYPO AND IS NOT: retail copies the
+// frustum as 24 DWORDs (+0x00..+0x5f) plus a single BYTE at +0x60 — see the
+// MOVZX/MOV byte pair at 0x1800fe6ec — so the three alignment pad bytes at
+// +0x61..+0x63 of the DESTINATION are left as they were. The Camera constructor
+// and `GetFrustum`, by contrast, move +0x60 as a full dword and so do copy the
+// pad. A blanket `memcpy(..., sizeof(Frustum))` here would be a real deviation.
+// ---------------------------------------------------------------------------
+void Camera::SetFrustum(const ::Frustum& frustum) {
+    // The `void*` cast is deliberate and is NOT a behaviour change: ENDGAME
+    // B.3.1 gave Math::Vector4 retail's zeroing default ctor, which makes
+    // `Frustum` non-trivially-default-constructible, and -Wclass-memaccess then
+    // objects that this DELIBERATELY partial copy (0x60 of 0x64 bytes) leaves
+    // four bytes unchanged. Copying through void* says "yes, on purpose".
+    std::memcpy(static_cast<void*>(&_frustum), &frustum, 0x60);
+    _frustum.isOrthographic = frustum.isOrthographic;
+
+    const bool zeroToOne = RtVideoDeviceUsesZeroToOneDepth();
+    if (_zUp) {
+        Matrix projection;
+        RtFrustumProjection(&_frustum, &projection, zeroToOne);
+        RtMatrixMul(&kZUpToYUp, &_projection, &projection);
+    } else {
+        RtFrustumProjection(&_frustum, &_projection, zeroToOne);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// ?SetCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z   0x1800feb00
+// Twelve dwords into +0x64. `Transform3::operator=` is `= default`, i.e. the
+// same 0x30-byte field copy retail's `memcpy` is.
+// ---------------------------------------------------------------------------
+void Camera::SetCameraToWorld(const Math::Transform3& cameraToWorld) {
+    _cameraToWorld = cameraToWorld;
+}
+
+// ---------------------------------------------------------------------------
+// ?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z  0x1800fe560
+//
+// FINDING, recorded because the name promises otherwise: this is
+// INSTRUCTION-FOR-INSTRUCTION `SetCameraToWorld` above — twelve dwords into
+// +0x64 and return. In a class with interpolated state a "Snap" would also
+// overwrite the PREVIOUS transform so the next Lerp does not smear;
+// `Graphics::Camera` has no previous-transform field for it to write, so the
+// distinction the two names draw does not exist in the shipped binary. Kept as
+// two members rather than one alias so each door checks against its OWN export
+// and a future divergence (a different build, a modded DLL) would show up
+// instead of being assumed away. `Camera::GetCameraToWorld`'s two overloads are
+// the same finding a second time (Camera.h's banner).
+// ---------------------------------------------------------------------------
+void Camera::SnapCameraToWorld(const Math::Transform3& cameraToWorld) {
+    _cameraToWorld = cameraToWorld;
+}
+
+// ---------------------------------------------------------------------------
+// ?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ   retail 0x1800fe3e0
+// Twenty-five dwords out of +0x00 — the pad travels. NON-VIRTUAL, so the C++
+// by-value return is right; the door carries retail's hidden slot.
+// ---------------------------------------------------------------------------
+::Frustum Camera::GetFrustum() const { return _frustum; }
+
+// ---------------------------------------------------------------------------
+// ?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@XZ  0x180017e70
+// ?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@M@Z 0x180017e10
+//
+// Both bodies are twelve `MOV EAX,[RCX+0x64+4i] / MOV [RDX+4i],EAX` pairs and
+// `MOV RAX,RDX`. THE FLOAT NEVER APPEARS IN THE SECOND BODY — see
+// `SnapCameraToWorld`'s finding note above, and Camera.h's banner.
+// ---------------------------------------------------------------------------
+Math::Transform3 Camera::GetCameraToWorld() const { return _cameraToWorld; }
+
+Math::Transform3 Camera::GetCameraToWorld(float t) const {
+    (void)t;   // retail's 0x180017e10 ignores it — not an omission
+    return _cameraToWorld;
+}
+
+// ---------------------------------------------------------------------------
+// ?GetProjection@Camera@Graphics@@QEBA?AVMatrix@Math@@XZ   retail 0x180017ed0
+// Sixteen dwords out of +0x94.
+// ---------------------------------------------------------------------------
+Math::Matrix Camera::GetProjection() const { return _projection; }
+
+// ---------------------------------------------------------------------------
+// ?SetZUp@Camera@Graphics@@QEAAX_N@Z   retail 0x1800fe550
+// `MOV byte ptr [RCX+0xd4],DL; RET`.
+// ---------------------------------------------------------------------------
+void Camera::SetZUp(bool zUp) { _zUp = zUp ? 1 : 0; }
+
+// ---------------------------------------------------------------------------
+// ?IsMirrored@Camera@Graphics@@QEBA_NXZ   retail 0x1800fe480
+//
+// The SIGN of the camera-to-world basis determinant, computed as
+// `dot(axisZ, axisX x axisY)` and answered as `0.0f > det` (`COMISS XMM0,XMM11`
+// with XMM0 zeroed by `XORPS`, then `SETA AL`) — so a NaN determinant answers
+// FALSE, which is retail's behaviour and is preserved by the ordinary spelling.
+//
+// TRANSCRIBED IN RETAIL'S ASSOCIATION, term by term, because a re-grouped float
+// sum flips exactly at the sign change this function tests
+// (reference_moved_term_hides_where_terms_cancel.md). Read off the SSE schedule
+// at 0x1800fe484..0x1800fe53e: the three cross terms first, then
+// `(axisZ.y*cy + axisZ.x*cx) + axisZ.z*cz` in that bracketing — `axisZ.y` FIRST,
+// which is not the order a reader would write.
+//
+// Retail also spills XMM7..XMM11 over a 0x58-byte frame; that is register
+// allocation, not object state, and is not reproduced.
+// ---------------------------------------------------------------------------
+bool Camera::IsMirrored() const {
+    const Math::Vector3& ax = _cameraToWorld.axisX;
+    const Math::Vector3& ay = _cameraToWorld.axisY;
+    const Math::Vector3& az = _cameraToWorld.axisZ;
+
+    const float cx = ax.z * ay.y - ax.y * ay.z;
+    const float cy = ax.x * ay.z - ay.x * ax.z;
+    const float cz = ay.x * ax.y - ax.x * ay.y;
+
+    const float det = (az.y * cy + az.x * cx) + az.z * cz;
+    return 0.0f > det;
+}
+
+// ---------------------------------------------------------------------------
+// Graphics::Renderer — the thirteen accessors.
+//
+// The five indexed ones are pure address arithmetic with no bounds check, in
+// retail and here. `_drawGroups[i]` and `_sceneGroups[i]` are
+// `Collection::Array<T>::operator[]`, which is `_data[index]` — the same
+// `IMUL / ADD [RCX+0x10]` pair retail emits, now named.
+// ---------------------------------------------------------------------------
+float Renderer::GetAlphaT() const { return _alphaT; }
+
+const Camera& Renderer::GetCamera() const {
+    return _drawGroups[_currentDrawGroup]._camera;              // group + 0x08
+}
+const Camera& Renderer::GetCamera(int group) const {
+    return _drawGroups[group]._camera;
+}
+const Camera& Renderer::GetCullCamera() const {
+    return _drawGroups[_currentDrawGroup]._cullCamera;          // group + 0xe0
+}
+const Camera& Renderer::GetCullCamera(int group) const {
+    return _drawGroups[group]._cullCamera;
+}
+
+int      Renderer::GetCurrentSceneGroup() const { return _currentSceneGroup; }
+int      Renderer::GetDetailId() const          { return _detailId; }
+int      Renderer::GetFrameIndex() const        { return _frameIndex; }
+int      Renderer::GetShaderDetail() const      { return _shaderDetail; }
+void     Renderer::SetShaderDetail(int detail)  { _shaderDetail = detail; }
+
+uint32_t Renderer::GetMaterialTypeFlags() const {
+    return _drawGroups[_currentDrawGroup]._materialTypeFlags;   // group + 0x1bc
+}
+int Renderer::GetShader() const {
+    return _drawGroups[_currentDrawGroup]._shader;              // group + 0x1b8
+}
+const RendererSceneEntry& Renderer::GetSceneGroup(int index) const {
+    return _sceneGroups[index];                                 // _data + i*0x110
+}
+
+}  // namespace Graphics
+
 // ============================================================================
 // Registration
 // ============================================================================
@@ -631,6 +965,40 @@ int RtGraphicsRendererRegister() {
                           (void*)&RtGraphics_Camera_GetFrustum); ++count;
     RegisterRuntimeAddr(0x1800fe3e0, (void*)&RtGraphics_Camera_GetFrustum);
 
+    // --- Graphics::Camera, the FIVE exports block F added -------------------
+    // With these, ALL THIRTEEN of the class's exports are ported: five here from
+    // wave 6 lane F, two in wave9_lane_gfxd.cpp (the two constructors), ONE —
+    // `operator=` — in wave28_lane_gfxbody.cpp, and these five. Every address
+    // below was checked for a pre-existing `RegisterRuntime*` across runtime/,
+    // standalone/, code/, engine/ and dx11/ (a duplicate is last-binding-wins and
+    // silently turns one body into dead code,
+    // reference_grep_for_the_port_before_writing_it.md) — AND the address grep
+    // was not enough: `operator=` came back with comments only, because
+    // wave28_lane_gfxbody.cpp registers it by NAME and never by address. It took
+    // a link error to find. Sized by the EXPORT LIST, not by the grep.
+    RegisterRuntimeExport("?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@XZ",
+                          (void*)&RtGraphics_Camera_GetCameraToWorld); ++count;
+    RegisterRuntimeAddr(0x180017e70, (void*)&RtGraphics_Camera_GetCameraToWorld);
+
+    RegisterRuntimeExport("?GetCameraToWorld@Camera@Graphics@@QEBA?AVTransform3@Math@@M@Z",
+                          (void*)&RtGraphics_Camera_GetCameraToWorldAtT); ++count;
+    RegisterRuntimeAddr(0x180017e10, (void*)&RtGraphics_Camera_GetCameraToWorldAtT);
+
+    RegisterRuntimeExport("?GetProjection@Camera@Graphics@@QEBA?AVMatrix@Math@@XZ",
+                          (void*)&RtGraphics_Camera_GetProjection); ++count;
+    RegisterRuntimeAddr(0x180017ed0, (void*)&RtGraphics_Camera_GetProjection);
+
+    RegisterRuntimeExport("?IsMirrored@Camera@Graphics@@QEBA_NXZ",
+                          (void*)&RtGraphics_Camera_IsMirrored); ++count;
+    RegisterRuntimeAddr(0x1800fe480, (void*)&RtGraphics_Camera_IsMirrored);
+
+    RegisterRuntimeExport("?SetZUp@Camera@Graphics@@QEAAX_N@Z",
+                          (void*)&RtGraphics_Camera_SetZUp); ++count;
+    RegisterRuntimeAddr(0x1800fe550, (void*)&RtGraphics_Camera_SetZUp);
+
+    // ??4Camera@ (0x180017c40) is registered in wave28_lane_gfxbody.cpp. NOT
+    // duplicated here — see the note above its door.
+
     // --- Graphics::Renderer (4 of the 6 rows this lane owns) ----------------
     RegisterRuntimeExport("??0Renderer@Graphics@@QEAA@XZ",
                           (void*)&RtGraphics_Renderer_Ctor); ++count;
@@ -647,6 +1015,53 @@ int RtGraphicsRendererRegister() {
     RegisterRuntimeExport("?GetShader@Renderer@Graphics@@QEBAHXZ",
                           (void*)&RtGraphics_Renderer_GetShader); ++count;
     RegisterRuntimeAddr(0x180018010, (void*)&RtGraphics_Renderer_GetShader);
+
+    // --- Graphics::Renderer, the ELEVEN accessors block F added -------------
+    // All eleven are one to six instructions, read as disassembly this pass, and
+    // all eleven addresses came back with zero pre-existing registrations.
+    RegisterRuntimeExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z",
+                          (void*)&RtGraphics_Renderer_GetCullCameraAt); ++count;
+    RegisterRuntimeAddr(0x180017fd0, (void*)&RtGraphics_Renderer_GetCullCameraAt);
+
+    RegisterRuntimeExport("?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ",
+                          (void*)&RtGraphics_Renderer_GetCamera); ++count;
+    RegisterRuntimeAddr(0x180017f70, (void*)&RtGraphics_Renderer_GetCamera);
+
+    RegisterRuntimeExport("?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z",
+                          (void*)&RtGraphics_Renderer_GetCameraAt); ++count;
+    RegisterRuntimeAddr(0x180017fb0, (void*)&RtGraphics_Renderer_GetCameraAt);
+
+    RegisterRuntimeExport("?GetSceneGroup@Renderer@Graphics@@QEBAAEBUSceneGroup@12@H@Z",
+                          (void*)&RtGraphics_Renderer_GetSceneGroup); ++count;
+    RegisterRuntimeAddr(0x180018090, (void*)&RtGraphics_Renderer_GetSceneGroup);
+
+    RegisterRuntimeExport("?GetMaterialTypeFlags@Renderer@Graphics@@QEBAIXZ",
+                          (void*)&RtGraphics_Renderer_GetMaterialTypeFlags); ++count;
+    RegisterRuntimeAddr(0x180017ff0, (void*)&RtGraphics_Renderer_GetMaterialTypeFlags);
+
+    RegisterRuntimeExport("?GetCurrentSceneGroup@Renderer@Graphics@@QEBAHXZ",
+                          (void*)&RtGraphics_Renderer_GetCurrentSceneGroup); ++count;
+    RegisterRuntimeAddr(0x180018030, (void*)&RtGraphics_Renderer_GetCurrentSceneGroup);
+
+    RegisterRuntimeExport("?GetAlphaT@Renderer@Graphics@@QEBAMXZ",
+                          (void*)&RtGraphics_Renderer_GetAlphaT); ++count;
+    RegisterRuntimeAddr(0x180018040, (void*)&RtGraphics_Renderer_GetAlphaT);
+
+    RegisterRuntimeExport("?SetShaderDetail@Renderer@Graphics@@QEAAXH@Z",
+                          (void*)&RtGraphics_Renderer_SetShaderDetail); ++count;
+    RegisterRuntimeAddr(0x180018050, (void*)&RtGraphics_Renderer_SetShaderDetail);
+
+    RegisterRuntimeExport("?GetShaderDetail@Renderer@Graphics@@QEBAHXZ",
+                          (void*)&RtGraphics_Renderer_GetShaderDetail); ++count;
+    RegisterRuntimeAddr(0x180018060, (void*)&RtGraphics_Renderer_GetShaderDetail);
+
+    RegisterRuntimeExport("?GetDetailId@Renderer@Graphics@@QEBAHXZ",
+                          (void*)&RtGraphics_Renderer_GetDetailId); ++count;
+    RegisterRuntimeAddr(0x180018070, (void*)&RtGraphics_Renderer_GetDetailId);
+
+    RegisterRuntimeExport("?GetFrameIndex@Renderer@Graphics@@QEBAHXZ",
+                          (void*)&RtGraphics_Renderer_GetFrameIndex); ++count;
+    RegisterRuntimeAddr(0x180018080, (void*)&RtGraphics_Renderer_GetFrameIndex);
 
     // --- Graphics::MaterialInstance (3 of the 5 rows this lane owns) --------
     RegisterRuntimeExport("??0MaterialInstance@Graphics@@QEAA@XZ",

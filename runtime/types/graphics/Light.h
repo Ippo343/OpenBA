@@ -55,6 +55,11 @@
 #include "Geometry.h"                       // Graphics::Geometry (the base)
 #include "../volume/Volume.h"               // ::Frustum, Box
 #include "../math/Math.h"                   // Math::Vector4
+// ENDGAME B.3.5 block F: `SpotLight::GetSpotCamera` returns `Graphics::Camera`
+// BY VALUE, and a by-value return needs the COMPLETE type. Block E recorded the
+// declaration as a comment because `Camera` was still a POD; this is that debt
+// paid. Camera.h does not include this header, so there is no cycle.
+#include "Camera.h"                         // Graphics::Camera (by value)
 
 namespace Graphics {
 
@@ -267,11 +272,17 @@ public:
 
     // `?GetSpotCamera@SpotLight@Graphics@@QEBA?AVCamera@2@AEAVRenderer@2@@Z`
     // @ 0x180105fb0 — a HIDDEN-RETSLOT export (B35_RULES §2.5: it returns
-    // `Graphics::Camera`, 0xd8, BY VALUE). NOT PORTED; declared, undefined.
-    // Returning `Camera` by value needs the complete type, so the declaration
-    // waits for block F: spelled as a comment rather than as a member that
-    // would force this header to include Camera.h. Recorded here so the block
-    // that converts `Camera` knows to add it.
+    // `Graphics::Camera`, 0xd8, BY VALUE). NOT PORTED anywhere in the tree and
+    // no caller: DECLARED here, deliberately UNDEFINED.
+    //
+    // ENDGAME B.3.5 BLOCK F added this line. Block E left it as a comment
+    // because `Graphics::Camera` was still a POD; the class exists now
+    // (Camera.h), this header includes it, and the declaration is the real one.
+    // NON-VIRTUAL, so the by-value return is correct C++ (the member is never
+    // reached through a slot); whoever ports it writes a door with retail's
+    // `(this, ret, renderer)` order, exactly as `sun_camera.cpp` does for
+    // `SunLight::GetSunCamera`.
+    Camera GetSpotCamera(Renderer& renderer) const;  // 0x180105fb0  not ported
     //
     // `?CreateTargets@SpotLight@Graphics@@AEAAXXZ` @ 0x180106050 is PRIVATE
     // (`AEAA`) and this DLL exports its private members

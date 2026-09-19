@@ -430,33 +430,11 @@ void RtGraphics_Scene_AddGlobalDrawItems(const Scene* self, Renderer* renderer) 
 // per-frame or per-group tag, and is NOT enough to settle the name. Left as
 // `field_38`.
 // ============================================================================
+// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::AddLight` at the
+// bottom of this file. The door keeps its name and its registration.
 void RtGraphics_Renderer_AddLight(Renderer* self, const void* light) {
-    ++g_addLight;
-
-    // The index this light will occupy — read BEFORE the append.
-    int32_t lightIndex = self->drawables.GetSize();
-
-    // ENDGAME B.3.2 step 2 (callers) — `entry` is a `RendererSceneEntry*` and
-    // `drawableIds` is its real `Collection::Array<int32_t>` member
-    // (runtime/types/graphics/Camera.h); 0x180023830 (kSpec_Fill4) is
-    // trait-equivalent for int32_t (both trivially copyable/destructible), so
-    // this becomes a member call rather than a by-address SetSize.
-    uint8_t* scenes = reinterpret_cast<uint8_t*>(self->scenes.GetData());
-    RendererSceneEntry* entry = reinterpret_cast<RendererSceneEntry*>(
-        scenes + static_cast<int64_t>(self->currentScene) * 0x110);
-
-    entry->drawableIds.SetSize(entry->drawableIds.GetSize() + 1, lightIndex);
-
-    // TWELVE of sixteen bytes written on purpose — see the banner. Deliberately
-    // NOT value-initialised: `_pad0c` must stay whatever the frame held, which
-    // is what retail appends.
-    RendererDrawable rec;
-    rec.object = const_cast<void*>(light);
-    rec.value = self->field_38;
-
-    // retail 0x180063a80, kSpec_Fill16 — trait-equivalent: RendererDrawable is
-    // a plain POD (Camera.h).
-    self->drawables.SetSize(self->drawables.GetSize() + 1, rec);
+    reinterpret_cast<::Graphics::Renderer*>(self)->::Graphics::Renderer::AddLight(  // B.3.5 bridge
+        reinterpret_cast<const ::Graphics::Light*>(light));
 }
 
 // ============================================================================
@@ -508,28 +486,11 @@ void RtGraphics_Renderer_AddLight(Renderer* self, const void* light) {
 // (`LEA R8,[RSP+0x38]`, which is the RDX home of this frame) used as scratch.
 // It is NOT an output anyone reads. A `uint64_t` local serves.
 // ============================================================================
+// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::EndDrawGroup` at
+// the bottom of this file. The door keeps its name and its registration.
 void RtGraphics_Renderer_EndDrawGroup(Renderer* self, int group) {
-    ++g_endDrawGroup;
-
-    uint64_t scratch = 0;   // retail passes its own unread RDX home slot
-    for (int64_t i = 0; i < 3; ++i) {
-        const int64_t idx = self->currentDrawGroup;          // re-read, per retail
-        // The `((idx*0x1f)+0x1c+i)<<4` byte arithmetic lands on
-        // `&drawGroups[idx].items[i]` (Camera.h: items @ +0x1c0, stride 0x10 =
-        // sizeof(Array<RendererDrawItem>), group stride 0x1f0 = 0x1f*0x10) —
-        // named directly rather than recomputed from raw offsets.
-        Collection::Array<RtGraphics::RendererDrawItem>& list = self->drawGroups[idx].items[i];
-
-        const int32_t n = list.GetSize();
-        if (n > 0) {
-            if (n > 1) {                                     // both tests, per retail
-                void* data = list.GetData();
-                DrawItemSort(data, n, &scratch);
-                ++g_endDrawSorted;
-            }
-        }
-    }
-    self->currentDrawGroup = group;
+    reinterpret_cast<::Graphics::Renderer*>(self)                        // B.3.5 bridge
+        ->::Graphics::Renderer::EndDrawGroup(group);
 }
 
 // ============================================================================
@@ -731,6 +692,119 @@ int RtGraphicsWave29GfxbodyRegister() {
 }
 
 }  // namespace rtgfxbody29
+
+// ############################################################################
+// ENDGAME B.3 step 5 (block F) — THE TWO `Renderer` BODIES, MOVED ONTO MEMBERS
+// ############################################################################
+//
+// `Graphics::Renderer` is a real C++ class as of block F
+// (`runtime/types/graphics/Camera.h`), so `AddLight` and `EndDrawGroup` move onto
+// it and their doors above become one-line QUALIFIED delegations. The attendance
+// counters move WITH the bodies, so a C++ caller is counted exactly as a
+// by-name caller is; `RtGraphicsWave29GfxbodySummary()` is unchanged.
+//
+// `Scene::AddGlobalDrawItems` and `Animation::GetRootPoseAtTime` do NOT move
+// here: the first lands with `Graphics::Scene` in block F's next commit, and the
+// second belongs to `Graphics::Animation`, which is BLOCK H1's class — its
+// header already carries the declaration and says the door in this file is "not
+// ours". Both are listed in block F's report.
+//
+// TWO FIELD NAMES THIS CONVERSION SETTLES, both recorded as open by the banner at
+// the top of this file:
+//   * `Renderer::field_38`, which `AddLight` stores into every drawable entry,
+//     is DRAW GROUPS USED THIS FRAME. This lane wrote "consistent with a
+//     per-frame or per-group tag, and is NOT enough to settle the name"; block F
+//     settled it from the WRITER — `BeginDrawGroup` (0x180104fd0) reads +0x38 as
+//     the index of the group it opens, compares it against `_drawGroups._size`
+//     and increments it (`INC dword ptr [RDI+0x38]` at 0x18010509e). That also
+//     closes B35_RULES §13 item 10 and confirms `standalone/scene_watch.h:73`.
+//   * `Renderer::field_48`, which `AddGlobalDrawItems` compares an object's
+//     +0x28 against, is the DETAIL ID: `?GetDetailId@Renderer@Graphics@@QEBAHXZ`
+//     (0x180018070) is `MOV EAX,[RCX+0x48]; RET`. The object-side +0x28 is
+//     `Geometry::_detailId`, which block E already named.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z — retail 0x1801051d0.
+//
+// Appends the light to the renderer's drawable array AND records its index in
+// the CURRENT SCENE GROUP's id list, in that order — and the order is
+// load-bearing, because the index recorded is the array size BEFORE the append.
+//
+// *** THE 12-OF-16 NOTE, AND IT IS THE WRITE-WIDTH TRAP IN THIS BODY. *** The
+// drawable record is SIXTEEN bytes (`RendererDrawable`) and retail writes only
+// TWELVE of them: `MOV [RSP+0x20],RBX` (the Light*) and `MOV [RSP+0x28],EAX`
+// (the int). `RendererDrawable::_pad0c` is NEVER WRITTEN, and the SetSize helper
+// copies all sixteen bytes regardless, so retail stores UNINITIALISED STACK into
+// the array on every append. SO THIS PORT MUST NOT ZERO-INITIALISE THE RECORD:
+// `RendererDrawable rec;` with two assignments is FAITHFUL; `rec{}` is not
+// (reference_oracle_must_not_compare_unwritten_bytes.md).
+// ---------------------------------------------------------------------------
+void Renderer::AddLight(const Light* light) {
+    ++rtgfxbody29::g_addLight;
+
+    // The index this light will occupy — read BEFORE the append.
+    const int32_t lightIndex = _drawables.GetSize();
+
+    // retail 0x180023830 (kSpec_Fill4) — trait-equivalent for int32_t.
+    RendererSceneEntry& entry = _sceneGroups[_currentSceneGroup];
+    entry._drawableIds.SetSize(entry._drawableIds.GetSize() + 1, lightIndex);
+
+    RendererDrawable rec;                      // NOT value-initialised — banner
+    rec._object = light;
+    rec._value  = _drawGroupsUsed;             // retail: MOV EAX,[RDI+0x38]
+
+    // retail 0x180063a80, kSpec_Fill16 — trait-equivalent: RendererDrawable is
+    // a plain POD (Camera.h).
+    _drawables.SetSize(_drawables.GetSize() + 1, rec);
+}
+
+// ---------------------------------------------------------------------------
+// ?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z — retail 0x180104f50.
+//
+// Closes the CURRENT draw group by sorting each of its three per-pass item
+// lists, then makes the argument the current group. WRITTEN-OPERAND SET:
+// EXACTLY rdi+0x34..0x37 — four bytes, `_currentDrawGroup`, and nothing else on
+// `this`.
+//
+// TWO DETAILS THAT A "TIDY" PORT LOSES:
+//  1. `_currentDrawGroup` is RE-READ INSIDE THE LOOP (`MOVSXD RCX,[RDI+0x34]` at
+//     0x180104f70) and only assigned AFTER it. Hoisting the read is equivalent
+//     ONLY because the sort cannot reach back into the Renderer — an assumption
+//     about a 0x2306-byte unexported callee this lane has NOT verified. So it is
+//     re-read here, matching the listing, and the assumption is not taken.
+//  2. Retail tests the count TWICE: `TEST EDX,EDX / JLE` then `CMP EDX,1 / JLE`.
+//     The first test is redundant. Reproduced rather than folded.
+//
+// The third sort argument is a pointer to EIGHT BYTES OF THE CALLER'S OWN HOME
+// SLOT (`LEA R8,[RSP+0x38]`, this frame's RDX home) used as scratch. It is NOT an
+// output anyone reads; a `uint64_t` local serves.
+// ---------------------------------------------------------------------------
+void Renderer::EndDrawGroup(int group) {
+    ++rtgfxbody29::g_endDrawGroup;
+
+    uint64_t scratch = 0;   // retail passes its own unread RDX home slot
+    for (int64_t i = 0; i < 3; ++i) {
+        const int64_t idx = _currentDrawGroup;               // re-read, per retail
+        // retail's `((idx*0x1f)+0x1c+i)<<4` byte arithmetic lands on
+        // `&_drawGroups[idx]._items[i]` — named directly.
+        Collection::Array<RendererDrawItem>& list = _drawGroups[idx]._items[i];
+
+        const int32_t n = list.GetSize();
+        if (n > 0) {
+            if (n > 1) {                                     // both tests, per retail
+                void* data = list.GetData();
+                rtgfxbody29::DrawItemSort(data, n, &scratch);
+                ++rtgfxbody29::g_endDrawSorted;
+            }
+        }
+    }
+    _currentDrawGroup = group;
+}
+
+}  // namespace Graphics
 
 int RtGraphicsWave29GfxbodyRegister() {
     return rtgfxbody29::RtGraphicsWave29GfxbodyRegister();
