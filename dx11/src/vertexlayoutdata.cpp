@@ -38,6 +38,11 @@
 #include "dx11_seam.h"
 #include "dx11_backend_access.h"
 
+// ENDGAME B.3.5 block A, RULE B5-3 — the real `Video::VertexLayoutData`
+// abstract base, so this file's destructor can call its base destructor as a
+// qualified non-virtual member call instead of resolving a mangled name.
+#include "video/CompanionData.h"
+
 #include <cstdio>
 
 namespace VideoDX11 {
@@ -101,10 +106,20 @@ static void* VertexLayoutData_Dtor(VertexLayoutData* self, unsigned flags) {
 
     Dx11Release(self->inputLayout);
 
-    static Dx11BaseDtor_t base = reinterpret_cast<Dx11BaseDtor_t>(
-        Dx11ResolveRuntimeImport("??1VertexLayoutData@Video@@UEAA@XZ",
-                                 0x180013328));
-    if (base) base(self);
+    // ENDGAME B.3.5 block A, RULE B5-3. Was a `Dx11ResolveRuntimeImport
+    // ("??1VertexLayoutData@Video@@UEAA@XZ", 0x180013328)` + indirect call —
+    // spelling 9 of the nine caller bindings (RULE B5-14), one of dx11's 76
+    // mangled-name literals. `Video::VertexLayoutData` is now a real class, so
+    // this is the MSVC derived-destructor idiom written as C++: a QUALIFIED
+    // non-virtual call on the base subobject, reached through the bridge cast
+    // because `VideoDX11::VertexLayoutData` is still the declared leave of RULE
+    // B5-8 and does not inherit in C++.
+    //
+    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this
+    // function. The base destructor is in no slot, which is exactly why the
+    // qualification is safe and the virtual call is not.
+    reinterpret_cast< ::Video::VertexLayoutData*>(self)
+        -> ::Video::VertexLayoutData::~VertexLayoutData();   // B.3.5 bridge
 
     if (flags & 1) Dx11MemFree(self);
     return self;
@@ -168,12 +183,15 @@ static void VertexLayoutData_Bind(VertexLayoutData* self,
 // slots and Banished's layouts are single digits), and "reproduce a stack
 // overflow exactly" is not a useful fidelity goal.
 static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
-    const VertexLayoutOwner* owner =
-        static_cast<const VertexLayoutOwner*>(self->vertexLayout);
+    // ENDGAME B.3.5 block A: was `const VertexLayoutOwner*`, a partial view in
+    // dx11_backend_access.h. `Video::VertexLayout` is now a real class
+    // (runtime/types/video/VertexLayout.h) and this is the same four offsets.
+    const Video::VertexLayout* owner =
+        static_cast<const Video::VertexLayout*>(self->vertexLayout);
 
-    if (owner->signature.GetSize() == 0) return;
+    if (owner->_signature.GetSize() == 0) return;
 
-    int count = owner->elements.GetSize();
+    int count = owner->_elements.GetSize();
     if (count > kMaxInputElements) {
         fprintf(stderr,
                 "[Dx11] VertexLayoutData::PlatformCreate: %d elements exceeds "
@@ -186,8 +204,8 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
     // hands the raw stack buffer to D3D11 with that same count.
     D3D11_INPUT_ELEMENT_DESC descs[kMaxInputElements];
 
-    const VertexLayoutElement* elems =
-        owner->elements.GetData();   // B.3.2: was a cast off a void*
+    const Video::VertexLayout::Element* elems =
+        owner->_elements.GetData();   // B.3.2: was a cast off a void*
 
     for (int i = 0; i < count; ++i) {
         // No range check on `format` — the original indexes its 9-entry table
@@ -196,8 +214,12 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
         descs[i].SemanticIndex        = static_cast<UINT>(
                                             static_cast<uint8_t>(i));
         descs[i].Format               = kElementFormat[elems[i].format];
-        descs[i].InputSlot            = elems[i].stream;
-        descs[i].AlignedByteOffset    = elems[i].byteOffset;
+        // `MOVZX ...,word` in the original: `stream` and `offset` are int32
+        // fields and only their low 16 bits reach D3D11. The former
+        // `VertexLayoutElement` view spelled both as `uint16_t`, which hid the
+        // truncation inside the type; with the real class it is explicit here.
+        descs[i].InputSlot            = static_cast<uint16_t>(elems[i].stream);
+        descs[i].AlignedByteOffset    = static_cast<uint16_t>(elems[i].offset);
         descs[i].InputSlotClass       = D3D11_INPUT_PER_VERTEX_DATA;  // 0
         descs[i].InstanceDataStepRate = 0;
     }
@@ -208,8 +230,8 @@ static void VertexLayoutData_PlatformCreate(VertexLayoutData* self) {
         // only on the clamped path above, where passing the unclamped value
         // would hand D3D11 descriptors we never wrote.
         static_cast<UINT>(count),
-        owner->signature.GetData(),
-        static_cast<SIZE_T>(owner->signature.GetSize()),
+        owner->_signature.GetData(),
+        static_cast<SIZE_T>(owner->_signature.GetSize()),
         reinterpret_cast<ID3D11InputLayout**>(&self->inputLayout));
 }
 
