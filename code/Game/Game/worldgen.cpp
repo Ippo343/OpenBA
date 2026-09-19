@@ -47,6 +47,7 @@
 #include <cstring>
 #include <cstdlib>
 #include <cmath>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Reused helpers from sibling reimpl TUs (already registered/defined)
@@ -244,12 +245,12 @@ static void wg_BaseHeightmap_e5d0(int32_t* hf) {
     }
 
     void* rng = p + HF_RANDOM;
-    int s1 = fn_Random_RandTol(rng, 0xffffff);
-    int s2 = fn_Random_RandTol(rng, 0xffffff);
+    int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
+    int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     uint8_t pn1[0x100] = {};
     fn_PerlinNoise_Ctor(pn1, kHalf, kOctaves, s2, s1);          // persist 0.5
-    int s3 = fn_Random_RandTol(rng, 0xffffff);
-    int s4 = fn_Random_RandTol(rng, 0xffffff);
+    int s3 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
+    int s4 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     uint8_t pn2[0x100] = {};
     fn_PerlinNoise_Ctor(pn2, kQuarter, kOctaves, s4, s3);       // persist 0.25
 
@@ -415,8 +416,8 @@ static void* wg_BlendTexture_cf440(int32_t* hf) {
 
     // Perlin for the rock scatter: persist 0.25, octaves 4.0, two RandTol seeds.
     // (ctor arg order mirrors e5d0: seeds passed (second, first).)
-    int s1 = fn_Random_RandTol(rng, 0xffffff);
-    int s2 = fn_Random_RandTol(rng, 0xffffff);
+    int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
+    int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0xffffff);   // B.3.4b bridge
     uint8_t pn[0x100] = {};
     fn_PerlinNoise_Ctor(pn, kCoord, kCfOctaves, s2, s1);
 

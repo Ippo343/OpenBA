@@ -56,6 +56,7 @@
 #include <cstring>
 #include <cmath>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 namespace {
 
@@ -153,8 +154,8 @@ void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
 
     if (kf == 0 || kf == 0x18) {
         if (fn_Random_Rand && fn_PerlinNoise_Ctor) {
-            uint32_t s1 = fn_Random_Rand(rng, 0xffffffffu);
-            uint32_t s2 = fn_Random_Rand(rng, 0xffffffffu);
+            uint32_t s1 = reinterpret_cast<System::Random*>(rng)->Rand(0xffffffffu);   // B.3.4b bridge
+            uint32_t s2 = reinterpret_cast<System::Random*>(rng)->Rand(0xffffffffu);   // B.3.4b bridge
             uint8_t pn[0x10];
             fn_PerlinNoise_Ctor(pn, kPerlinPersist, kPerlinOctaves, (int)s2, (int)s1);
             std::memcpy(w + 0x34, pn, 0x10);
@@ -162,8 +163,8 @@ void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
         float accInt = 0.0f, accType = 0.0f;
         if (s_fnRandFloatTol) {
             for (int k = 0; k < 12; ++k) {
-                accInt  += s_fnRandFloatTol(rng) * k1_12;   // -> w+0x48
-                accType += s_fnRandFloatTol(rng) * k1_12;   // -> w+0x30
+                accInt  += reinterpret_cast<System::Random*>(rng)->RandFloatTol() * k1_12;   // -> w+0x48  B.3.4b bridge
+                accType += reinterpret_cast<System::Random*>(rng)->RandFloatTol() * k1_12;   // -> w+0x30  B.3.4b bridge
             }
         }
         *reinterpret_cast<float*>(w + 0x30) =
@@ -171,7 +172,7 @@ void WeatherTypeStateMachine(uint8_t* w, uint8_t* gw, float sec) {
         *reinterpret_cast<float*>(w + 0x48) = accInt * *reinterpret_cast<float*>(c + 0x104);
     }
 
-    float randf = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
+    float randf = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
     *reinterpret_cast<int*>(w + 0x10) = 0;
     do {
         int type = *reinterpret_cast<int*>(w + 0x10);
@@ -195,9 +196,9 @@ bool SpawnChance(uint8_t* timer, const float* p, void* rng) {
     float p1 = p[1];
     if (p1 <= 0.0f) { *reinterpret_cast<int64_t*>(timer) = 0; return false; }
     float scale = p[0] * 12.0f * 300.0f;   // DAT_1401721b8 * DAT_140172234
-    float elapsed = fn_Time_AsSeconds ? fn_Time_AsSeconds(timer) : 0.0f;
+    float elapsed = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(timer)->AsSeconds() : 0.0f;   // B.3.4b bridge
     *reinterpret_cast<int64_t*>(timer) = 0;
-    float r = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
+    float r = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
     return r < elapsed / (scale * p1);
 }
 
@@ -222,7 +223,7 @@ extern "C" void Weather_ResetTime_Reimpl(void* weatherSelf, void* time) {
     if (!gw || !fn_Time_AsSeconds) return;
     void* timeObj = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x128);
     if (!timeObj) return;
-    float sec = fn_Time_AsSeconds(reinterpret_cast<uint8_t*>(timeObj) + 8);
+    float sec = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(timeObj) + 8)->AsSeconds();   // B.3.4b bridge
 
     EnsureSimResolved();
 

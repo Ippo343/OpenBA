@@ -97,6 +97,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <vector>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 namespace {
 
@@ -224,7 +225,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
     int month = 0;
     if (void* dayCounter = *reinterpret_cast<void**>(gw + 0x128)) {
         if (fn_Time_AsSeconds) {
-            float secs = fn_Time_AsSeconds(reinterpret_cast<uint8_t*>(dayCounter) + 8);
+            float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<uint8_t*>(dayCounter) + 8)->AsSeconds();   // B.3.4b bridge
             int m = static_cast<int>((secs / kSecondsPerYear) * kMonthsPerYear);
             month = (m > 11) ? 0 : m;   // faithful: >11 wraps to 0, not to 11
         }
@@ -257,7 +258,7 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
     } else {
         void* rng = *reinterpret_cast<void**>(gw + 0xd8);
         if (!fn_Random_Rand || !rng) return;
-        pick = static_cast<int>(fn_Random_Rand(rng, static_cast<uint32_t>(n)));
+        pick = static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(n)));   // B.3.4b bridge
         // Don't immediately repeat the last track: step one past it, wrapping.
         if (matches[static_cast<size_t>(pick)] == *reinterpret_cast<uint64_t*>(mp + 0x10)) {
             ++pick;

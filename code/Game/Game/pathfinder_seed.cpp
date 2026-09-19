@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
 
 // A* / pathfinder helpers (reimplemented + registered elsewhere) — call directly by name.
 extern void Pf_WorkerApplyCmd_a6430(int64_t self, uint32_t* cmd, void* ctxA, void* ctxB);   // 0x1400a6430
@@ -70,7 +71,7 @@ static void Pf_WorkerLoop_a6360(void* selfV) {
     int64_t  self = reinterpret_cast<int64_t>(selfV);
     int count = *reinterpret_cast<int*>(p + 0x70);
     while (count > 0) {
-        if (s_fn_CSLock) s_fn_CSLock(p + 0x30);
+        if (s_fn_CSLock) reinterpret_cast<System::CriticalSection*>(p + 0x30)->Lock();   // B.3.4b bridge
         uint64_t* node  = *reinterpret_cast<uint64_t**>(p + 0x68);    // head
         uint64_t  cmdLo = node[0];                                    // cmd {type, arg1}
         uint64_t  cmdHi = node[1];                                    // cmd {arg2, arg3}
@@ -84,7 +85,7 @@ static void Pf_WorkerLoop_a6360(void* selfV) {
         *reinterpret_cast<int*>(p + 0x70) = *reinterpret_cast<int*>(p + 0x70) - 1;
         if (s_fn_MemFree) s_fn_MemFree(node);
         uint64_t cmd[2] = { cmdLo, cmdHi };
-        if (s_fn_CSUnlock) s_fn_CSUnlock(p + 0x30);
+        if (s_fn_CSUnlock) reinterpret_cast<System::CriticalSection*>(p + 0x30)->Unlock();   // B.3.4b bridge
         Pf_WorkerApplyCmd_a6430(self, reinterpret_cast<uint32_t*>(cmd), nullptr, nullptr);
         count = *reinterpret_cast<int*>(p + 0x70);
     }

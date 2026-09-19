@@ -36,6 +36,7 @@
 #include <cmath>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
@@ -1257,7 +1258,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
         // Step 4b: AchievementManager::Update with scaled time
         TRACE("[GameUpdateLoop::Update] calling AchievementManager::Update...\n");
         {
-            float seconds = fn_Time_AsSeconds(time);
+            float seconds = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
             int64_t scaledTime[1];
             // AchClock_TimeScale() is 1.0 unless BANISHED_ACH_TIME_SCALE is set, so
             // this is retail's `seconds * speedMultiplier` unchanged by default. This
@@ -1489,7 +1490,7 @@ post_simulation:
         }
 
         if (fn_GUL_AudioSceneUpdate && fn_Time_Ctor_Seconds && fn_CalcWindFactor) {
-            float seconds = fn_Time_AsSeconds(time);
+            float seconds = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
             int64_t scaledTime[1];
             fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMul * (*g_fAudioTimeScale));
             float windFactor = fn_CalcWindFactor(scaledTime);
@@ -1717,8 +1718,8 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         int64_t engineFrameTime = *(int64_t*)((uintptr_t)engine + 0x68);
 
-        float gameSeconds = fn_Time_AsSeconds((void*)&self->m_gameTime);
-        float frameSeconds = fn_Time_AsSeconds((void*)&engineFrameTime);
+        float gameSeconds = reinterpret_cast<const System::Time*>((void*)&self->m_gameTime)->AsSeconds();   // B.3.4b bridge
+        float frameSeconds = reinterpret_cast<const System::Time*>((void*)&engineFrameTime)->AsSeconds();   // B.3.4b bridge
         fn_Video_Context_SetTime(videoCtx, gameSeconds + frameSeconds * alpha);
     }
     TRACE("[GameUpdateLoop::Draw] video context time set\n");

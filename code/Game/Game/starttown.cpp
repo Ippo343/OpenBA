@@ -36,6 +36,7 @@
 #include "stress_harness.h"                     // BANISHED_STRESS targets (standalone/)
 #include <chrono>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 extern "C" void MapComponent_ReportDc20Evictions(const char* tag);  // keystone_a_map.cpp
 #include <cstdint>
 #include <cstdio>
@@ -628,7 +629,7 @@ static int SeedAgriPool(uint8_t* sc, uint8_t* townMgr, void* rng,
     if (!pool || size <= 0 || count <= 0) return 0;
     int added = 0;
     for (int i = 0; i < count; ++i) {
-        uint32_t idx = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, (uint32_t)size)
+        uint32_t idx = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)size)   // B.3.4b bridge
                                                : (uint32_t)(i % size);
         uint8_t* entry = pool + (size_t)idx * POOLENTRY_STRIDE;
         void* tmpl = StartTown_ResolveTemplate(entry);
@@ -1745,7 +1746,7 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     void* rng = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
                               ? *(void**)((uint8_t*)*g_pGameWorldSingleton + 0xd8) : nullptr;
                     if (rng && fn_Random_Rand && groupCount > 1)
-                        variantIdx = (int)fn_Random_Rand(rng, groupCount);
+                        variantIdx = (int)reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(groupCount));   // B.3.4b bridge
                     int subCount = *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10);
                     // Retail passes construction frame 0 here (XOR R8D,R8D at 0x1400a2677,
                     // disassembly-verified) and lets the instant-build path inside the
@@ -4412,7 +4413,7 @@ static int StartTown_SpawnCitizens(uint8_t* startConfig, void* entityList,
         // Children: Rand(0.._maxChildCount) — alternating gender, child scale (0.66).
         int kids = 0;
         if (rng && fn_Random_Rand && maxChildren >= 0)
-            kids = (int)fn_Random_Rand(rng, maxChildren + 1);
+            kids = (int)reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(maxChildren + 1));   // B.3.4b bridge
         for (int c = 0; c < kids; ++c) {
             uint8_t* kid = nullptr;
             {
@@ -4936,7 +4937,7 @@ static void StartTown_GrowthInitResource(void* entity, uint32_t tidGrowth, void*
     // Sibling links populated only when GrowthComponent::Startup ran (LIVE build).
     if (!*(void**)(s + 0x28) || !*(void**)(s + 0x30) || !*(void**)(s + 0x38))
         return;   // inert → faithful no-op (matches the rest of the inert spawn path)
-    const float progress = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.0f;
+    const float progress = (rng && fn_Random_RandFloat) ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
     ActCNR_SetGrowthProgress_120db0((int64_t)gIBP, progress);
 }
 
@@ -5038,8 +5039,8 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
     {
         uint8_t throwaway[0x100];
         for (int i = 0; i < 3; ++i) {
-            int t1 = fn_Random_RandTol(rng, 0x7ffffff);
-            int t2 = fn_Random_RandTol(rng, 0x7ffffff);
+            int t1 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
+            int t2 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
             fn_PerlinNoise_Ctor(throwaway, uvScale, uvScale, t2, t1);
         }
     }
@@ -5096,8 +5097,8 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         // but only Ctor into the buffer for the first MAX_VARIANTS. Trees have < 8 groups.
         if (hasVariants && variantCount > 0) {
             for (int vi = 0; vi < variantCount; ++vi) {
-                int vs1 = fn_Random_RandTol(rng, 0x7ffffff);
-                int vs2 = fn_Random_RandTol(rng, 0x7ffffff);
+                int vs1 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
+                int vs2 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
                 if (vi < MAX_VARIANTS)
                     fn_PerlinNoise_Ctor(vPerlin[vi], vFreqX, vFreqY, vs2, vs1);
             }
@@ -5105,8 +5106,8 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
         if (variantCount > MAX_VARIANTS) variantCount = MAX_VARIANTS;
 
         // Scatter Perlin — built AFTER the variant Perlins, matching a12b0's draw order.
-        int s1 = fn_Random_RandTol(rng, 0x7ffffff);
-        int s2 = fn_Random_RandTol(rng, 0x7ffffff);
+        int s1 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
+        int s2 = reinterpret_cast<System::Random*>(rng)->RandTol(0x7ffffff);   // B.3.4b bridge
         uint8_t perlin[0x100] = {};
         fn_PerlinNoise_Ctor(perlin, persist, octaves, s2, s1);
 
@@ -5123,7 +5124,7 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
             for (int x = 0; x < dim; ++x) {
                 float p = fn_PerlinNoise_Generate(perlin, (float)x * scale, (float)y * scale);
                 if (threshold > p * 0.5f + 0.5f) continue;
-                if (fn_Random_RandFloat(rng) > density) continue;
+                if (reinterpret_cast<System::Random*>(rng)->RandFloat() > density) continue;   // B.3.4b bridge
 
                 const int idx = dim * y + x;
                 if (*(void**)(cells + (size_t)idx * CELL_STRIDE + CELL_OCCUPANT)) continue;  // occupied
@@ -5184,12 +5185,12 @@ static int StartTown_SpawnResources(uint8_t* startConfig, void* world,
                         if (vThresh <= v * 0.5f + 0.5f) break;
                         variantIdx = 0;
                     }
-                    if (fn_Random_Rand(rng, (uint32_t)vOverrideDenom) == 0)
-                        variantIdx = (int)fn_Random_Rand(rng, (uint32_t)variantCount);
+                    if (reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)vOverrideDenom) == 0)   // B.3.4b bridge
+                        variantIdx = (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)variantCount);   // B.3.4b bridge
                     void* groupArray = *(void**)((uint8_t*)modelDesc + 0x20);
                     int subCount = groupArray
                         ? *(int32_t*)((uint8_t*)groupArray + (int64_t)variantIdx * 0x18 + 0x10) : 0;
-                    int modelVariant = (subCount > 0) ? (int)fn_Random_Rand(rng, (uint32_t)subCount) : 0;
+                    int modelVariant = (subCount > 0) ? (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)subCount) : 0;   // B.3.4b bridge
                     ApplyResourceModelVariant(ent, tidModel, (int16_t)variantIdx, (int16_t)modelVariant);
                 }
 

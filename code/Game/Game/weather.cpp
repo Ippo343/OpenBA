@@ -18,6 +18,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <new>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Weather::Dtor (vtable +0x00) — Scalar deleting destructor
@@ -169,13 +170,13 @@ void Weather_Serialize(Weather* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->transitionTime, nullptr);   // B.3.4 bridge
 
     // Color ambientColor (+0x60)  — member function: this=color, arg=serializer
-    s_fn_Color_Serialize(&self->ambientColor, serializer);
+    reinterpret_cast<System::Color*>(&self->ambientColor)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
 
     // Color lightColor (+0x64)
-    s_fn_Color_Serialize(&self->lightColor, serializer);
+    reinterpret_cast<System::Color*>(&self->lightColor)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
 
     // Color fogColor (+0x68)
-    s_fn_Color_Serialize(&self->fogColor, serializer);
+    reinterpret_cast<System::Color*>(&self->fogColor)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
 
     // float fogNear (+0x6C) — declared float: cast dropped
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->fogNear, nullptr);   // B.3.4 bridge

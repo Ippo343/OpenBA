@@ -45,6 +45,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ----------------------------------------------------------------------------
 // Shared resize helper (sub_3a00 == 4B-stride {data,count,cap} resize).
@@ -226,8 +227,8 @@ extern "C" void wg_f390_erosion(void* hfv) {
 
     for (int it = 0; it < iters; ++it) {
         // Start cell in [1, dim-1] (Rand(dim-1) -> [0, dim-2], +1).
-        int col = (int)fn_Random_Rand(rng, (uint32_t)(dim - 1)) + 1;
-        int row = (int)fn_Random_Rand(rng, (uint32_t)(dim - 1)) + 1;
+        int col = (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(dim - 1)) + 1;   // B.3.4b bridge
+        int row = (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(dim - 1)) + 1;   // B.3.4b bridge
 
         while (true) {
             float* hm = *(float**)(p + HF_HEIGHTMAP);   // re-read base each step (matches disasm)

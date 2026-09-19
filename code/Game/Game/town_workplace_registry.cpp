@@ -23,6 +23,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // Already-ported Keystone-A insert wrapper (0x140017230). Returns param_2 (&out);
 // *out = the found/created node. p4 = the empty array record {data=0, count/cap=0}.
@@ -190,7 +191,7 @@ extern "C" void TownRegistry_ShuffleProfessionList(int64_t townMgr, uint64_t pro
     if (!rng || !fn_Random_Rand) return;
 
     for (int64_t i = 0; i < static_cast<int>(count); ++i) {
-        uint32_t j = fn_Random_Rand(rng, count);
+        uint32_t j = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
         if (static_cast<uint32_t>(i) == j) continue;
         int64_t base = static_cast<int64_t>(found[1]);       // +0x08 array data
         int64_t tmp = *reinterpret_cast<int64_t*>(base + i * 8);

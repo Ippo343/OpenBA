@@ -110,6 +110,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Externs for already-ported/registered sibling functions
@@ -641,8 +642,8 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         if (s_extArr) s_extArr(ser, count, reinterpret_cast<long long>(*reinterpret_cast<void**>(base + 0x120)), nullptr);
     }
 
-    g_fn_Time_Serialize(base + 0x190, ser);
-    g_fn_Time_Serialize(base + 0x198, ser);
+    reinterpret_cast<System::Time*>(base + 0x190)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(base + 0x198)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     // "Stats" int-assoc array at +0x150.
     SerializeIntAssocArray(base + 0x150, ser);
@@ -701,7 +702,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
                 reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x00), nullptr);   // B.3.4 bridge
                 reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x04), nullptr);   // B.3.4 bridge
                 reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x08), nullptr);   // B.3.4 bridge
-                g_fn_Time_Serialize(entry + 0x0C, ser);
+                reinterpret_cast<System::Time*>(entry + 0x0C)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
                 entry += 0x20;
             }
         }
@@ -722,14 +723,14 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
             for (int32_t i = 0; i < sumCount; ++i) {
                 reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x08), nullptr);   // B.3.4 bridge
                 reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x04), nullptr);   // B.3.4 bridge
-                g_fn_Time_Serialize(entry + 0x00, ser);
+                reinterpret_cast<System::Time*>(entry + 0x00)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
                 entry += 0x10;
             }
         }
     }
 
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(base + 0x1a8), nullptr);   // B.3.4 bridge
-    g_fn_Time_Serialize(base + 0x1a0, ser);
+    reinterpret_cast<System::Time*>(base + 0x1a0)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1) {   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(base + 0x1ac), nullptr);   // B.3.4 bridge

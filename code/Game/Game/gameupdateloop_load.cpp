@@ -41,6 +41,7 @@
 #include "rt_port.h"                        // RT_DATA_SLOT (never caches a null resolve)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -662,11 +663,11 @@ static void* Reimpl_FUN_140093f60(void* selfMem) {
     uint32_t seed1 = 0, seed2 = 0;
     if (fn_Random_Default_Ctor) {
         fn_Random_Default_Ctor(rng1);
-        seed1 = s_fn_Random_RandFull ? s_fn_Random_RandFull(rng1)
-                : (fn_Random_Rand ? fn_Random_Rand(rng1, 0xffffffffu) : 0u);
+        seed1 = s_fn_Random_RandFull ? reinterpret_cast<System::Random*>(rng1)->Rand()   // B.3.4b bridge
+                : (fn_Random_Rand ? reinterpret_cast<System::Random*>(rng1)->Rand(0xffffffffu) : 0u);   // B.3.4b bridge
         fn_Random_Default_Ctor(rng2);
-        seed2 = s_fn_Random_RandFull ? s_fn_Random_RandFull(rng2)
-                : (fn_Random_Rand ? fn_Random_Rand(rng2, 0xffffffffu) : 0u);
+        seed2 = s_fn_Random_RandFull ? reinterpret_cast<System::Random*>(rng2)->Rand()   // B.3.4b bridge
+                : (fn_Random_Rand ? reinterpret_cast<System::Random*>(rng2)->Rand(0xffffffffu) : 0u);   // B.3.4b bridge
     }
     if (fn_PerlinNoise_Ctor)
         fn_PerlinNoise_Ctor((void*)(p + 0x34), 0.25f, 4.0f, (int)seed2, (int)seed1);

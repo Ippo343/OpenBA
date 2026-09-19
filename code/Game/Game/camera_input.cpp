@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 
@@ -129,7 +130,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     if (!pc) return;
 
     int64_t timeObj = timeTicks;
-    const float dt = fn_Time_AsSeconds(&timeObj);
+    const float dt = reinterpret_cast<const System::Time*>(&timeObj)->AsSeconds();   // B.3.4b bridge
 
     // ── yaw: keyboard rotate (ids 9/10) + middle-mouse drag (id 7 + mouseDeltaX id 2) ──
     float yaw = *(float*)(pc + 0x28);

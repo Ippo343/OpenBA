@@ -67,6 +67,7 @@
 #include <cstddef>
 #include <cmath>
 #include <new>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // Kept from the diagnosis pass: it separates the two failures that both end in a null
 // ExternalPtr. Factory never called => External::Load found no type at all. Factory
@@ -321,7 +322,7 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
         p->age = 0;
 
         int64_t life = 0;
-        f.timeCtor(&life, ResF(res, 0x60) + f.randFloatTol(f.rng) * ResF(res, 0x64));
+        f.timeCtor(&life, ResF(res, 0x60) + reinterpret_cast<System::Random*>(f.rng)->RandFloatTol() * ResF(res, 0x64));   // B.3.4b bridge
         p->lifetime = life;
 
         p->alpha = p->prevAlpha = 0.0f;                 // retail: one 8-byte zero at +0x40
@@ -335,7 +336,7 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
         p->pos[1] = p->prevPos[1] = z.y;
         p->pos[2] = p->prevPos[2] = z.z;
 
-        p->angle = p->prevAngle = f.randFloatTol(f.rng) * 180.0f;
+        p->angle = p->prevAngle = reinterpret_cast<System::Random*>(f.rng)->RandFloatTol() * 180.0f;   // B.3.4b bridge
         p->size  = p->prevSize  = ResF(res, 0x68);      // _particleStartSize
     }
 
@@ -353,7 +354,7 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
     const float startAlpha    = cStart[3] / 255.0f;
     const float endAlpha      = cEnd[3]   / 255.0f;
 
-    const float dtSec = f.asSeconds(dtPtr);
+    const float dtSec = reinterpret_cast<const System::Time*>(dtPtr)->AsSeconds();   // B.3.4b bridge
 
     // The whole funnel rotates: +0xd8 accumulates degrees at the resource's spin rate.
     const float spin = *reinterpret_cast<float*>(inst + 0xd8) + dtSec * ResF(res, 0x54);  // _funnelSpin
@@ -380,7 +381,7 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
         TornadoParticle* p = &pool->items[i];
         p->age += dt;
 
-        const float t = f.asSeconds(&p->age) / f.asSeconds(&p->lifetime);
+        const float t = reinterpret_cast<const System::Time*>(&p->age)->AsSeconds() / reinterpret_cast<const System::Time*>(&p->lifetime)->AsSeconds();   // B.3.4b bridge
 
         // Lateral swirl: a cosine wobble that grows with age, biased so young
         // particles start inside the funnel (the -0.33 is retail's).
@@ -426,7 +427,7 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
 
         // Retail recomputes the age ratio here; the age has not changed since, so it is
         // the same value of t, reused as the colour/alpha interpolant.
-        const float u = f.asSeconds(&p->age) / f.asSeconds(&p->lifetime);
+        const float u = reinterpret_cast<const System::Time*>(&p->age)->AsSeconds() / reinterpret_cast<const System::Time*>(&p->lifetime)->AsSeconds();   // B.3.4b bridge
 
         float sz = rad * sizeScale;
         if (sizeFloor > sz)      sz = sizeFloor;
@@ -447,9 +448,9 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
 
         // Alpha envelope: fade in over resource +0x80, then fade out over +0x88
         // measured backwards from death. Retail computes BOTH and picks with a compare.
-        const float   fadeInT  = f.asSeconds(&p->age) / f.asSeconds(ResB(res, 0x80));
+        const float   fadeInT  = reinterpret_cast<const System::Time*>(&p->age)->AsSeconds() / reinterpret_cast<const System::Time*>(ResB(res, 0x80))->AsSeconds();   // B.3.4b bridge
         const int64_t outAge   = fadeOutTicks - p->lifetime + p->age;
-        const float   fadeOutT = f.asSeconds(&outAge) / f.asSeconds(ResB(res, 0x88));
+        const float   fadeOutT = reinterpret_cast<const System::Time*>(&outAge)->AsSeconds() / reinterpret_cast<const System::Time*>(ResB(res, 0x88))->AsSeconds();   // B.3.4b bridge
 
         float env = (1.0f < fadeInT) ? (1.0f - fadeOutT) : fadeInT;
         if (env > 1.0f)      env = 1.0f;
@@ -548,10 +549,10 @@ bool Tornado_Serialize(void* self, void* stream) {
     for (int k = 0; k < 9; ++k)
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + kFirstFloats[k]), nullptr);   // B.3.4 bridge
 
-    fn_System_Color_Serialize(s + 0x74, ser);   // start tint
-    fn_System_Color_Serialize(s + 0x78, ser);   // end tint
-    g_fn_Time_Serialize(s + 0x80, ser);         // fade in
-    g_fn_Time_Serialize(s + 0x88, ser);         // fade out
+    reinterpret_cast<System::Color*>(s + 0x74)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // start tint  B.3.4b bridge
+    reinterpret_cast<System::Color*>(s + 0x78)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // end tint  B.3.4b bridge
+    reinterpret_cast<System::Time*>(s + 0x80)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));         // fade in  B.3.4b bridge
+    reinterpret_cast<System::Time*>(s + 0x88)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));         // fade out  B.3.4b bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x54), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x70), nullptr);   // B.3.4 bridge

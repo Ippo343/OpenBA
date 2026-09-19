@@ -38,6 +38,7 @@
 #include <cstdint>
 #include <cmath>
 #include <cstdio>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Heightfield scratch-struct offsets (blueprint §1.1; matches worldgen.cpp).
@@ -376,7 +377,7 @@ static void coastline_Subdivide_cc510(void* self, void** arrPtr, int lo, int hi,
         bool innerOK = false;
         float eHi[2], eLo[2];
         while (!innerOK) {
-            float t = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * limB * kMidAmp_0_666;
+            float t = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * limB * kMidAmp_0_666;   // B.3.4b bridge
             candX = nX * t + midX;
             candY = nY * t + midY;
 
@@ -463,7 +464,7 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         int lastIdx = cand._size - 1;
         float* pLast = (float*)(base + (size_t)lastIdx * PATHPT_STRIDE);
 
-        uint32_t which = s_Rand1 ? s_Rand1(rng, 3) : 0;
+        uint32_t which = s_Rand1 ? reinterpret_cast<System::Random*>(rng)->Rand(3) : 0;   // B.3.4b bridge
         float spanHalf = span * kHalf;
         // Disasm cases (CONCAT44 packing):
         //  case 0: local_f8 = (ull)(uint)(span*0.5) << 0x20  -> x=0, y=span*0.5
@@ -485,8 +486,8 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         // midpoint: random jitter, both lanes RandFloatTol * span * 0.125.
         // disasm: CONCAT44(jx, jy) -> low dword=jy (x lane), high dword=jx (y lane).
         midIdx = cand._size >> 1;
-        float jx = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * span * kJitter_0_125;
-        float jy = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * span * kJitter_0_125;
+        float jx = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * span * kJitter_0_125;   // B.3.4b bridge
+        float jy = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * span * kJitter_0_125;   // B.3.4b bridge
         float* pMid = (float*)(base + (size_t)midIdx * PATHPT_STRIDE);
         pMid[0] = jy;
         pMid[1] = jx;
@@ -500,14 +501,14 @@ static int coastline_TryPlacePath_cc850(void* self, int nPts, float span,
         int bi = (int)branchSel;
         int srcCount = *(int*)(outerData + (size_t)bi * 16 + 8);
         int q = (srcCount + ((srcCount >> 31) & 3)) >> 2;
-        int pick = s_Rand2 ? s_Rand2(rng, q, q * 3) : q;
+        int pick = s_Rand2 ? reinterpret_cast<System::Random*>(rng)->Rand(q, q * 3) : q;   // B.3.4b bridge
         uint8_t* srcVec = *(uint8_t**)(outerData + (size_t)bi * 16);
         __builtin_memcpy((uint8_t*)cand._data, srcVec + (size_t)pick * PATHPT_STRIDE, 8); // point[0] = src[pick].xy
 
-        float rf = (s_RandFloatTol ? s_RandFloatTol(rng) : 0.0f) * span * kHalf;
+        float rf = (s_RandFloatTol ? reinterpret_cast<System::Random*>(rng)->RandFloatTol() : 0.0f) * span * kHalf;   // B.3.4b bridge
         int lastIdx = cand._size - 1;
         float* pLast = (float*)((uint8_t*)cand._data + (size_t)lastIdx * PATHPT_STRIDE);
-        uint32_t which = s_Rand1 ? s_Rand1(rng, 4) : 0;
+        uint32_t which = s_Rand1 ? reinterpret_cast<System::Random*>(rng)->Rand(4) : 0;   // B.3.4b bridge
         // Retail CONCAT44 packing (verified 0x1400cc850, param_9>=0 block):
         //  which0: (x=rf,        y=span*0.5)   which1: (x=span*0.5,  y=rf)
         //  which2: (x=span*-0.5, y=rf)         which3: (x=rf,        y=span*-0.5)

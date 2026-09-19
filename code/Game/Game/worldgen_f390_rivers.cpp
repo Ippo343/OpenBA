@@ -56,6 +56,7 @@
 #include <cstdint>
 #include <cstring>
 #include <cmath>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // ============================================================
 // Heightfield scratch-struct field offsets (verified, blueprint §1.1).
@@ -298,7 +299,7 @@ extern "C" void wg_f390_rivers(void* hfp) {
     for (int i = 0; i < count1; ++i) {
         int   minE = sizeRow[5];              // +0x14
         int   maxE = sizeRow[6];              // +0x18
-        float fE    = fn_Random_RandFloat(rng) * (float)(maxE - minE) + (float)minE;
+        float fE    = reinterpret_cast<System::Random*>(rng)->RandFloat() * (float)(maxE - minE) + (float)minE;   // B.3.4b bridge
         float draw1 = fn_Random_RandFloatTol(rng);
         float draw2 = fn_Random_RandFloatTol(rng);
         float off   = (float)center - (float)(int)fE;
@@ -313,7 +314,7 @@ extern "C" void wg_f390_rivers(void* hfp) {
     for (int i = 0; i < count2; ++i) {
         int   minE = sizeRow[2];              // +0x08
         int   maxE = sizeRow[3];              // +0x0c
-        float fE    = fn_Random_RandFloat(rng) * (float)(maxE - minE) + (float)minE;
+        float fE    = reinterpret_cast<System::Random*>(rng)->RandFloat() * (float)(maxE - minE) + (float)minE;   // B.3.4b bridge
         float draw1 = fn_Random_RandFloatTol(rng);
         float draw2 = fn_Random_RandFloatTol(rng);
         float off   = (float)center - (float)(int)fE;

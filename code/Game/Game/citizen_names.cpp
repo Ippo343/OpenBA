@@ -37,13 +37,14 @@
 #include <cstring>
 #include <cstdlib>
 #include <cstdio>
+#include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 
 // System::Random::Rand(int min, int max)  (Runtime 0x1800c7d70) returns
 //   min + Rand() % ((max - min) + 1)   -- inclusive [min, max].
 // Built from the (self, N) overload we already resolve (fn_Random_Rand = Rand()%N).
 static inline int RandRange(void* rng, int lo, int hi) {
     if (hi < lo) return lo;
-    return lo + (int)fn_Random_Rand(rng, (uint32_t)(hi - lo + 1));
+    return lo + (int)reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)(hi - lo + 1));   // B.3.4b bridge
 }
 
 // Faithful port of FUN_1400a4880: one 4-gram Markov walk. Writes a C-string into
@@ -56,7 +57,7 @@ static void MarkovGenerate(uintptr_t db, void* rng, int minLen, int maxLen, char
     if (!table || recCount <= 0 || !startArr || startCnt == 0) { out[0] = 0; return; }
 
     // --- Seed: pick a random starting 4-gram and copy it into out[0..3] ---
-    uint32_t s = fn_Random_Rand(rng, startCnt);
+    uint32_t s = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(startCnt));   // B.3.4b bridge
     uint16_t startIdx = *(uint16_t*)(startArr + (uintptr_t)(int)s * 2);
     if ((int)startIdx >= recCount) { out[0] = 0; return; }
     uint32_t seedKey = *(uint32_t*)(table + (uintptr_t)startIdx * 0xc);
@@ -112,7 +113,7 @@ static void MarkovGenerate(uintptr_t db, void* rng, int minLen, int maxLen, char
         // of the low 27 bits, so a single popcount + one Rand call is faithful.
         int total = __builtin_popcount(mask & 0x07FFFFFFu);
         if (total <= 0) return;
-        uint32_t pick = fn_Random_Rand(rng, (uint32_t)total);
+        uint32_t pick = reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)total);   // B.3.4b bridge
         int chosenBit = 0;
         uint32_t seen = 0;
         for (int bit = 0; bit < 0x1b; ++bit) {
