@@ -32,6 +32,12 @@
 // see code/Game/Game/serialize_image_upload.cpp for the sibling single-buffer
 // upload this mirrors.
 
+// ENDGAME B.3.5 batch K1: the runtime type headers come FIRST. Neither reaches
+// runtime/types/volume/Volume.h, but the house rule (a runtime type header ahead of
+// resolve.h's <windows.h>, whose <wingdi.h> `Rectangle()` hides Volume.h's global
+// `struct Rectangle`) is kept so a later include change cannot break it silently.
+#include "video/ImageBuffer.h"
+#include "video/Device.h"
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
@@ -41,17 +47,11 @@
 
 namespace {
 
-// ImageBuffer::Create — dispatched through the custom vtable's +0x48 slot
-// (index 9). Signature copied verbatim from serialize_image_upload.cpp.
-typedef bool (*fn_ImageBuffer_Create_t)(void* self, int imageType, int usage,
-                                        int format, unsigned int mipLevels,
-                                        int width, int height, int filterMode,
-                                        int addrU, int addrV, int addrW,
-                                        void* mipData);
-
+// ENDGAME B.3.5 batch K1: the `fn_ImageBuffer_Create_t` slot typedef and the
+// `kCreateSlot` (+0x48) offset went with the hand-inlined slot read below, which is a
+// virtual call on `Video::ImageBuffer` now.
 constexpr int kImageBufferSize  = 0x68;
 constexpr int kImageBufferAlign = 8;
-constexpr int kCreateSlot       = 0x48;   // bytes into vtable
 
 // Allocate + Create one ImageBuffer, store it at mapObj+dstOff, then upload the
 // raw pixel array at mapObj+srcOff into it. Returns the buffer (or null).
@@ -64,20 +64,25 @@ void* CreateAndUploadOne(uint8_t* map, int dstOff, int srcOff, int width,
     *reinterpret_cast<uintptr_t*>(img) = g_NoiseUI_ImageBufferVtable;  // override vtable
     *reinterpret_cast<void**>(map + dstOff) = img;
 
-    uintptr_t vtable = *reinterpret_cast<uintptr_t*>(img);
-    fn_ImageBuffer_Create_t fnCreate =
-        *reinterpret_cast<fn_ImageBuffer_Create_t*>(vtable + kCreateSlot);
-    if (!fnCreate) { if (trace) printf("[Minimap] %s: vtable+0x48 (Create) null\n", tag); return img; }
-
-    bool ok = fnCreate(img, /*imageType*/0, /*usage*/2, /*format*/5, /*mip*/0,
-                       width, width, /*filterMode*/1, 1, 1, 1, nullptr);
+    // B.3.5 bridge — kCreateSlot (0x48) / 8 == slot 9 of `Video::ImageBuffer`, which IS
+    // `Create` (B35_RULES 2.3 item 5). PROVED receiver: 0x68 bytes (== sizeof) out of
+    // MemAlloc, run through `??0ImageBuffer@Video@@`, then stamped with the exe's own
+    // NoiseUI ImageBuffer vtable — so the virtual call reads that live table at exactly
+    // the +0x48 the slot read did. The `fnCreate == null` test was a read of the SLOT,
+    // not an object test, and goes with the slot read.
+    bool ok = reinterpret_cast<Video::ImageBuffer*>(img)->Create(
+        /*imageType*/0, /*usage*/2, /*format*/5, /*mip*/0u,
+        width, width, /*filterMode*/1, 1, 1, 1, nullptr);   // B.3.5 bridge
 
     // Upload the raw pixel array (mapObj+srcOff) into the texture.
     void* pixels = *reinterpret_cast<void**>(map + srcOff);
     void* device = *g_pVideoDeviceSingleton;
-    fn_VideoDevice_Lock(device);
-    if (pixels) fn_ImageBuffer_CopyToTexture(img, pixels, width, width);
-    fn_VideoDevice_Unlock(*g_pVideoDeviceSingleton);
+    reinterpret_cast<Video::Device*>(device)->Lock();   // B.3.5 bridge
+    if (pixels)
+        reinterpret_cast<Video::ImageBuffer*>(img)
+            ->CopyToTexture(pixels, width, width);     // B.3.5 bridge
+    reinterpret_cast<Video::Device*>(*g_pVideoDeviceSingleton)
+        ->Unlock();                                    // B.3.5 bridge
 
     if (trace)
         printf("[Minimap] %s: img=%p createOk=%d pixels=%p w=%d uploaded\n",

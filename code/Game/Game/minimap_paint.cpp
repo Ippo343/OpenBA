@@ -87,12 +87,10 @@ namespace {
 //       B35_RULES section 11: no Video/Graphics class has a real ctor or dtor).
 //   s_Frustum_Ortho_Ctor  — a Volume::Frustum constructor, not a member of any
 //       Video/Graphics class.
-//   fn_Graphics_Renderer_Draw  — `Graphics::Renderer::Draw` is DECLARED in
-//       Camera.h but DEFINED NOWHERE: its body is still the door in
-//       runtime/src/graphics/wave27_lane_gfxbig.cpp. Converting it would be a
-//       link error, which is the proof the brief asks for.
 //   fn_ImageBuffer_Ctor — a CTOR door. (`CopyFromTexture` was on this list until
-//       block D2's buffers.cpp landed the member; it is converted now.)
+//       block D2's buffers.cpp landed the member; it is converted now. So was
+//       `Graphics::Renderer::Draw`, until the fragment pass moved its body onto the
+//       member — batch K1 converted it.)
 typedef void* (*fn_RenderBuffer_Ctor_t)(void* self);
 typedef void  (*fn_RenderBuffer_Dtor_t)(void* self);
 typedef void* (*fn_Frustum_Ortho_Ctor_t)(void* self, bool ortho, const void* near_,
@@ -129,7 +127,7 @@ bool ResolveFuncs() {
            fn_ImageBuffer_Ctor && g_NoiseUI_ImageBufferVtable &&
            fn_Graphics_Camera_Ctor &&
            fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor &&
-           fn_Graphics_Renderer_Draw &&
+           // B.3.5 batch K1: the Renderer::Draw readiness term went with its door.
            g_pVideoConfigSingleton;
 
     if (!s_ok) {
@@ -301,9 +299,12 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     reinterpret_cast<Graphics::Scene*>(scene)->AddGlobalObject(
         reinterpret_cast<Graphics::Geometry*>(sunLight));    // B.3.5 bridge
     reinterpret_cast<Graphics::Scene*>(scene)->Clean();      // B.3.5 bridge
-    // NOT converted: `Graphics::Renderer::Draw` is declared in Camera.h and
-    // defined nowhere yet — its body is still the door in wave27_lane_gfxbig.cpp.
-    fn_Graphics_Renderer_Draw(renderer, context, 0.0f, scene, camera);
+    // B.3.5 bridge — CONVERTED in batch K1: `Graphics::Renderer::Draw` is DEFINED now
+    // (runtime/src/graphics/wave27_lane_gfxbig.cpp:567 is the door delegating to it).
+    reinterpret_cast<Graphics::Renderer*>(renderer)->Draw(
+        *reinterpret_cast<Video::Context*>(context), 0.0f,
+        *reinterpret_cast<const Graphics::Scene*>(scene),
+        *reinterpret_cast<const Graphics::Camera*>(camera));   // B.3.5 bridge
     reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
         reinterpret_cast<Graphics::Geometry*>(sunLight));    // B.3.5 bridge
     reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(

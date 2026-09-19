@@ -53,6 +53,7 @@
 // and the hand-inlined vtable +0x48 dispatch below is its slot 9 (`Create`).
 // ImageBuffer.h pulls no Volume.h, so include order against <windows.h> is free.
 #include "video/ImageBuffer.h"
+#include "video/Device.h"       // ENDGAME B.3.5 batch K1 — Video::Device::{Lock,Unlock}
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -122,16 +123,15 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         return;
     }
 
-    if (!fn_ImageBuffer_Ctor || !fn_ImageBuffer_CopyToTexture ||
-        !fn_VideoDevice_Lock || !fn_VideoDevice_Unlock) {
+    // ENDGAME B.3.5 batch K1: the CopyToTexture / Device::Lock / Device::Unlock terms
+    // left this aggregate with their call sites. `fn_ImageBuffer_Ctor` is a CTOR door
+    // and stays (B4b-2).
+    if (!fn_ImageBuffer_Ctor) {
         static bool s_warned = false;
         if (!s_warned) {
-            printf("[sub_c780] Runtime primitives unresolved (Ctor=%p CopyToTex=%p "
-                   "Lock=%p Unlock=%p) — skipping (cascade-safe no-op)\n",
-                   (void*)fn_ImageBuffer_Ctor,
-                   (void*)fn_ImageBuffer_CopyToTexture,
-                   (void*)fn_VideoDevice_Lock,
-                   (void*)fn_VideoDevice_Unlock);
+            printf("[sub_c780] Runtime primitives unresolved (Ctor=%p) — "
+                   "skipping (cascade-safe no-op)\n",
+                   (void*)fn_ImageBuffer_Ctor);
             fflush(stdout);
             s_warned = true;
         }
@@ -245,7 +245,7 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
 
     // (7) Lock the device, copy heightmap bytes -> texture, unlock.
     void* device = *g_pVideoDeviceSingleton;
-    fn_VideoDevice_Lock(device);
+    reinterpret_cast<Video::Device*>(device)->Lock();   // B.3.5 bridge
 
     void* heightmapBytes = *reinterpret_cast<void**>(selfBytes + kHeightmapBytesOffset);
     printf("[sub_c780] CopyToTexture(img=%p, bytes=%p, w=%d, h=%d)\n",
@@ -257,12 +257,13 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
                hb[8], hb[9], hb[10], hb[11], hb[12], hb[13], hb[14], hb[15]);
     }
     fflush(stdout);
-    fn_ImageBuffer_CopyToTexture(img, heightmapBytes, width, width);
+    reinterpret_cast<Video::ImageBuffer*>(img)
+        ->CopyToTexture(heightmapBytes, width, width);   // B.3.5 bridge
 
     // Re-fetch — original disassembly reads `[0x140151a80]` then `[RAX]` again
     // for the Unlock call; preserves the same indirection level we used above.
     void* deviceForUnlock = *g_pVideoDeviceSingleton;
-    fn_VideoDevice_Unlock(deviceForUnlock);
+    reinterpret_cast<Video::Device*>(deviceForUnlock)->Unlock();   // B.3.5 bridge
 
     {
         const uint64_t* iq = reinterpret_cast<const uint64_t*>(img);

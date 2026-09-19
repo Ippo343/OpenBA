@@ -513,11 +513,23 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
 }
 
 // Retail slot 3 (0x1400d2370): call the base GetFileVersion through dispatch slot
-// 0x1401527c0, then OR in bit 0. Args are forwarded untouched, so forward two.
-uint32_t Tornado_GetFileVersion(void* self, void* a2) {
-    typedef uint32_t (*base_t)(void*, void*);
-    base_t base = reinterpret_cast<base_t>(s_baseVtable[3]);
-    return (base ? base(self, a2) : 0u) | 1u;
+// 0x1401527c0, then OR in bit 0.
+//
+// ENDGAME B.3.5 batch K1. The base call is `Graphics::Particle::GetFileVersion`, and
+// it is spelled QUALIFIED for the same reason geometry_draw.cpp's five trampolines are:
+// this function IS slot 3 of the Tornado table, so an unqualified virtual call would
+// dispatch straight back into it. `s_baseVtable[3]` was the same address — the table is
+// captured from a live Particle's vptr, and the receiver is a PROVED
+// `Graphics::Particle` (Tornado_Build runs `??0Particle@Graphics@@` on it).
+// ARITY: `?GetFileVersion@Particle@Graphics@@UEBAHXZ` takes NO argument, so `a2` — which
+// the old typedef forwarded as a hedge against Ghidra dropping a parameter — is not
+// passed. The mangled name is the authority, and retail's slot-3 body
+// (`MOV EAX,0x1000; RET`) reads nothing but its return constant.
+uint32_t Tornado_GetFileVersion(void* self, void* /*a2*/) {
+    return static_cast<uint32_t>(
+               reinterpret_cast<const Graphics::Particle*>(self)
+                   ->Graphics::Particle::GetFileVersion())   // B.3.5 bridge
+           | 1u;
 }
 
 // Retail slot 5 (0x1400d2210). Faithful, in retail order -- and the ORDER IS THE
@@ -532,9 +544,12 @@ uint32_t Tornado_GetFileVersion(void* self, void* a2) {
 //
 // Returns true (retail sets al=1).
 bool Tornado_Serialize(void* self, void* stream) {
-    typedef void (*baseSer_t)(void*, void*);
-    baseSer_t base = reinterpret_cast<baseSer_t>(s_baseVtable[5]);
-    if (base) base(self, stream);            // retail discards the base return
+    // ENDGAME B.3.5 batch K1 — same shape as Tornado_GetFileVersion above: a QUALIFIED
+    // non-virtual call to the base body, because this function IS slot 5 of the Tornado
+    // table. `?Serialize@Particle@Graphics@@UEAA_NAEAVStream@IO@@@Z` returns bool and
+    // retail discards it, so the result is discarded here too.
+    (void)reinterpret_cast<Graphics::Particle*>(self)
+        ->Graphics::Particle::Serialize(stream);   // B.3.5 bridge
 
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     alignas(8) uint8_t ser[32] = {};

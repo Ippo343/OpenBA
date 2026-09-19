@@ -1719,8 +1719,8 @@ static int StartTown_SpawnStructures(uint8_t* startConfig, void* entityList,
                     // old approximation dropped (it assumed ModelComponent_Draw would push it
                     // later). Without this the Geometry/MeshInstance at +0x28 (and its derived
                     // world-pos +0x158) never picks up the +0x148 matrix, leaving it stale/0.
-                    if (fn_Geometry_SetTransform)
-                        fn_Geometry_SetTransform((void*)(mc + 0x28), (void*)(mc + 0x148));
+                    reinterpret_cast<Graphics::Geometry*>(mc + 0x28)->SetTransform(
+                        *reinterpret_cast<const Math::Transform*>(mc + 0x148));   // B.3.5 bridge
                 }
             }
         }

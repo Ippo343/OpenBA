@@ -65,8 +65,12 @@
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::ImageBuffer is a real class
 // and `SaveImageToFile` is its class static. ImageBuffer.h pulls no Volume.h, so
 // it is safe after resolve.h's <windows.h> here.
+// ENDGAME B.3.5 batch K1 adds FrameCopyImageBuffer.h for Create/Generate. Its chain
+// (GeneratedImageBuffer.h -> ImageBuffer.h) reaches no Volume.h either, so the
+// after-resolve.h placement this file already uses still holds.
 #include "resolve.h"
 #include "video/ImageBuffer.h"
+#include "graphics/FrameCopyImageBuffer.h"
 #include "engine_funcs.h"
 #include "io/FileSystem.h"      // ENDGAME B.3.4a closing 4/4
 #include "system/Filename.h"
@@ -169,6 +173,10 @@ bool ResolveFuncs() {
 
     s_pFileSystemSingleton = (void**)ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA");
 
+    // ENDGAME B.3.5 batch K1: `s_FCIB_Create` / `s_FCIB_Generate` KEEP their resolves
+    // and their two terms here, even though both call sites converted — the
+    // [TakeScreenshot] printf below still reports the pointers, so the converted call
+    // was not the cache's last user (the same reason `s_SaveImageToFile` stayed).
     s_ok = s_MemAlloc && s_MemFree && s_FCIB_Ctor && s_FCIB_Dtor && s_FCIB_Create &&
            s_FCIB_Generate && s_StrPlusCStr &&
            s_StrPlusStr && s_StrFormat && s_StrDtor && s_Filename_Ctor &&
@@ -236,8 +244,16 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
 
     // Retail's literal arg list: (imageType=0, usage=4, format=5, mip=0x100,
     // width, height, filterMode=1, addressMode 1,1,1, initialData=nullptr).
-    s_FCIB_Create(frameCopy, 0, 4, 5, 0x100u, width, height, 1, 1, 1, 1, nullptr);
-    s_FCIB_Generate(frameCopy, videoCtx, 1);
+    // B.3.5 bridge — both are MEMBERS of `Graphics::FrameCopyImageBuffer` now
+    // (block GC moved the bodies into wave23_lane_gfxbody.cpp's `namespace Graphics`
+    // block; FrameCopyImageBuffer.h:151/156 declare them). They are VIRTUALS the class
+    // overrides ([9] 0x1800a3b70 and [10] 0x1800a3b20), and the receiver wears the
+    // Runtime vptr the ctor door installed — departure (1) above is exactly why — so
+    // the virtual call lands on the same two bodies the exported names did.
+    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)->Create(
+        0, 4, 5, 0x100u, width, height, 1, 1, 1, 1, nullptr);   // B.3.5 bridge
+    reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(frameCopy)
+        ->Generate(videoCtx, 1);   // B.3.5 bridge
 
     // --- <saveDir>\Screenshots\Screenshot<N>.bmp, first N that does not exist --
     StringHandle saveDir{};   // Filename, from GetSaveDirectory

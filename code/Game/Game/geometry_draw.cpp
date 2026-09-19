@@ -16,11 +16,19 @@
 //
 // The 9-slot vtable in serialize_arrays.cpp points at the functions defined here.
 
+// ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
+// runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
+// <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "graphics/Geometry.h"
+#include "graphics/Camera.h"     // Graphics::Camera, Graphics::Renderer
+#include "graphics/Material.h"   // Graphics::MaterialInstance
+#include "video/Context.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
 #include <cstdint>
+#include <new>
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
@@ -90,18 +98,16 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     }
     ++s_calls;
 
-    // Cascade: every Runtime primitive needed must be wired.
-    if (!fn_Renderer_GetCullCamera ||
-        !fn_Geometry_GetTransform ||
-        !fn_Camera_GetFrustum || !fn_Frustum_MulTransform3 ||
-        !fn_Frustum_Contains || !fn_Renderer_AddDrawItem ||
-        !fn_Renderer_GetShader) {
+    // Cascade: every Runtime primitive needed must be wired. ENDGAME B.3.5 batch K1:
+    // the five Video/Graphics terms (GetCullCamera, Geometry::GetTransform,
+    // Camera::GetFrustum, Renderer::AddDrawItem, Renderer::GetShader) left this
+    // aggregate with their call sites; the two Volume::Frustum terms stay, because
+    // `Volume::Frustum` is not a Video/Graphics class and its doors are untouched.
+    if (!fn_Frustum_MulTransform3 || !fn_Frustum_Contains) {
         static bool s_warned = false;
         if (!s_warned) {
-            printf("[Geometry::CollectDraw] Runtime draw primitives unwired — "
-                   "terrain will not render. Renderer=%p AddDrawItem=%p "
-                   "Frustum=%p\n",
-                   (void*)fn_Renderer_GetCullCamera, (void*)fn_Renderer_AddDrawItem,
+            printf("[Geometry::CollectDraw] Volume::Frustum primitives unwired — "
+                   "terrain will not render. Frustum=%p\n",
                    (void*)fn_Frustum_Contains);
             fflush(stdout);
             s_warned = true;
@@ -117,7 +123,8 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
 
     // 1. Capture cull camera world transform as a Transform3 (camera+0x64
     //    holds the camera-to-world Transform3, 48 bytes).
-    void* camera = fn_Renderer_GetCullCamera(renderer);
+    const void* camera = &reinterpret_cast<Graphics::Renderer*>(renderer)
+                              ->GetCullCamera();   // B.3.5 bridge
     Math::Transform3 cameraTransform3;
     if (camera) {
         cameraTransform3 = *reinterpret_cast<const Math::Transform3*>(
@@ -126,17 +133,29 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
 
     // 2. Compute geometry-space frustum:
     //    frustum_local = (camera_frustum * cameraToWorld * geometry_inverseTransform)
-    Math::Transform selfTransform;
-    fn_Geometry_GetTransform(self, &selfTransform);
+    // B.3.5 bridge — `?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ` is a
+    // hidden-retslot door (B5-12) and `Graphics::Geometry::GetTransform` is NON-VIRTUAL,
+    // so the door body moves to the call site: exactly ONE construction, into the same
+    // caller storage the door was handed.
+    const Math::Transform selfTransform =
+        reinterpret_cast<const Graphics::Geometry*>(self)->GetTransform();   // B.3.5 bridge
     Math::Transform  selfInvTransform  = selfTransform.Inverse();
     Math::Transform3 selfInvTransform3 = selfInvTransform.AsTransform3();
 
     // Get camera frustum, then transform it into geometry space.
-    uint8_t cameraFrustumBuf[256] = {0};   // Frustum size unknown; 256 is a safe upper bound
+    // B.3.5: `alignas` added because the retslot door's caller storage is now
+    // placement-new'd into as a real `Volume::Frustum` (0x64 bytes of float). The
+    // retail door wrote the same bytes here through RDX.
+    alignas(16) uint8_t cameraFrustumBuf[256] = {0};   // 256 is a safe upper bound
     uint8_t worldFrustumBuf[256]  = {0};
     uint8_t localFrustumBuf[256]  = {0};
     if (camera) {
-        fn_Camera_GetFrustum(camera, cameraFrustumBuf);
+        // B.3.5 bridge — `?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ` is a
+        // hidden-retslot door; `Graphics::Camera::GetFrustum` is NON-VIRTUAL and returns
+        // `::Frustum` by value, so ONE construction into the SAME caller storage.
+        ::new (static_cast<void*>(cameraFrustumBuf))
+            ::Frustum(reinterpret_cast<const Graphics::Camera*>(camera)
+                          ->GetFrustum());   // B.3.5 bridge
     }
     // worldFrustum = cameraFrustum * cameraTransform3
     fn_Frustum_MulTransform3(cameraFrustumBuf, worldFrustumBuf, &cameraTransform3);
@@ -175,15 +194,18 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
             uint32_t r = fn_Frustum_Contains(localFrustumBuf, box, 0x3F);
             if (r != 0x40) {
                 uint16_t key2 = static_cast<uint16_t>((i << 6) | j);
-                fn_Renderer_AddDrawItem(renderer, self, matInst0, materialKey,
-                                        key2, 0.0f, uvScale, 1, nullptr, 0);
+                reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+                    reinterpret_cast<const Graphics::Geometry*>(self),
+                    reinterpret_cast<const Graphics::MaterialInstance*>(matInst0),
+                    materialKey, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
             }
         }
     }
 
     // 5. If the renderer's shader != 1 (i.e., not shadow-only pass), emit
     //    the auxiliary draw items for the SoA arrays.
-    int shader = fn_Renderer_GetShader(renderer);
+    int shader = reinterpret_cast<const Graphics::Renderer*>(renderer)
+                     ->GetShader();   // B.3.5 bridge
     if (shader == 1) return;
 
     // --- WATER overlay (standalone): emit the flat sea-level water mesh (built
@@ -202,8 +224,10 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     for (int idx = 0; idx < count1C8; ++idx) {
         uint16_t key1 = static_cast<uint16_t>(idx | 0x3900);
         uint16_t key2 = static_cast<uint16_t>(idx | 0x6000);
-        fn_Renderer_AddDrawItem(renderer, self, matInst1, key1, key2,
-                                0.0f, uvScale, 1, nullptr, 0);
+        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+            reinterpret_cast<const Graphics::Geometry*>(self),
+            reinterpret_cast<const Graphics::MaterialInstance*>(matInst1),
+            key1, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
     }
 
     int count1D8 = *reinterpret_cast<int32_t*>(selfBytes + 0x1D8);
@@ -211,8 +235,10 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     for (int idx = 0; idx < count1D8; ++idx) {
         uint16_t key1 = static_cast<uint16_t>(idx | 0x4000);
         uint16_t key2 = static_cast<uint16_t>(idx | 0x8000);
-        fn_Renderer_AddDrawItem(renderer, self, matInst2, key1, key2,
-                                0.0f, uvScale, 1, nullptr, 0);
+        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+            reinterpret_cast<const Graphics::Geometry*>(self),
+            reinterpret_cast<const Graphics::MaterialInstance*>(matInst2),
+            key1, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
     }
 
     // 0x1F0 — array of 0x60-byte structs at +0x1F0 (count +0x1F8).
@@ -240,8 +266,10 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
         uint16_t key1 = (elemBytes[0x5D] != 0) ? 3 : 1;
         uint16_t key2 = static_cast<uint16_t>(idx | 0x2000);
         void* mat = reinterpret_cast<void*>(elem[0]);
-        fn_Renderer_AddDrawItem(renderer, self, mat, key1, key2, 0.0f, uvScale,
-                                1, nullptr, 0);
+        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+            reinterpret_cast<const Graphics::Geometry*>(self),
+            reinterpret_cast<const Graphics::MaterialInstance*>(mat),
+            key1, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
     }
 
     // 0x200 — same struct layout, count at +0x208. Differs in: filter is
@@ -265,8 +293,10 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
 
         uint16_t key2 = static_cast<uint16_t>(idx | 0x4000);
         void* mat = reinterpret_cast<void*>(elem[0]);
-        fn_Renderer_AddDrawItem(renderer, self, mat, 2, key2, 0.0f, uvScale,
-                                1, nullptr, 0);
+        reinterpret_cast<Graphics::Renderer*>(renderer)->AddDrawItem(
+            reinterpret_cast<const Graphics::Geometry*>(self),
+            reinterpret_cast<const Graphics::MaterialInstance*>(mat),
+            2, key2, 0.0f, uvScale, 1, nullptr, 0);   // B.3.5 bridge
     }
 }
 
@@ -293,8 +323,10 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
 
     auto* selfBytes = reinterpret_cast<uint8_t*>(self);
 
-    if (!fn_InterpolatedState_Transform_Lerp ||
-        !fn_Context_SetTransform || !fn_Context_SetColor) {
+    // ENDGAME B.3.5 batch K1: the two `Video::Context` terms left this aggregate with
+    // their call sites. `fn_InterpolatedState_Transform_Lerp` stays — there is no
+    // `Graphics::InterpolatedState<T>` class in runtime/types/graphics at all.
+    if (!fn_InterpolatedState_Transform_Lerp) {
         static bool s_warned = false;
         if (!s_warned) {
             printf("[Geometry::ItemDraw] Runtime context primitives unwired — "
@@ -314,7 +346,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     // 2. Convert to Matrix and SetTransform(0, matrix).
     //    ?AsMatrix@Transform@Math@@QEBA?AVMatrix@2@XZ  retail 0x18001e5f0
     Math::Matrix matrixBuf = lerpedTransform.AsMatrix();
-    fn_Context_SetTransform(context, 0, &matrixBuf);
+    reinterpret_cast<Video::Context*>(context)
+        ->SetTransform(0, matrixBuf);   // B.3.5 bridge
 
     // 3. SetColor(1,1,1, lerp(uvScaleA, uvScaleB)).
     //    Layout from disasm: local_78/74/70 = 1.0f, local_6c = lerp result.
@@ -326,7 +359,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     float uvB = *reinterpret_cast<float*>(selfBytes + 0x7C);
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     color[3] = (uvScale - param5) * uvA + param5 * uvB;
-    fn_Context_SetColor(context, color);
+    reinterpret_cast<Video::Context*>(context)->SetColor(
+        *reinterpret_cast<const Math::Vector4*>(color));   // B.3.5 bridge
 
     // 4. Branch on the high 3 bits (0xE000) of param6.
     uint32_t key = param6 & 0xFFFF1FFFu;     // local index
@@ -335,12 +369,12 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     // Helper: indexed draw via per-element vert+idx pointers (used by 0x2000
     // and 0x4000 branches).
     auto IndexedDrawFromElem = [&](uint8_t* elem) {
-        if (!fn_Context_BeginIndexedVertices || !fn_Context_EndIndexedVertices) return;
         int32_t  vertCount = *reinterpret_cast<int32_t*>(elem + 0x10);
         int32_t  vertStride = 0x14;             // hardcoded in original
         int32_t  idxCount  = *reinterpret_cast<int32_t*>(elem + 0x20);
-        bool     ok = fn_Context_BeginIndexedVertices(context, vertCount,
-                                                       vertStride, idxCount);
+        bool     ok = reinterpret_cast<Video::Context*>(context)
+                          ->BeginIndexedVertices(vertCount, vertStride,
+                                                 idxCount);   // B.3.5 bridge
         if (!ok) return;
 
         // Memcpy vert data into context->stagingVertBuf at context+0x20E0,
@@ -357,7 +391,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
         std::memcpy(*pStageIdx, *reinterpret_cast<void**>(elem + 0x18), idxBytes);
         *pStageIdx = reinterpret_cast<uint8_t*>(*pStageIdx) + idxBytes;
 
-        fn_Context_EndIndexedVertices(context, 0);
+        reinterpret_cast<Video::Context*>(context)
+            ->EndIndexedVertices(0);   // B.3.5 bridge
     };
 
     if (mode == 0x2000) {
@@ -379,8 +414,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     // 4-int per-element pulls from a child array.
     auto SetVB_BindIB_DrawIndexedFromArray = [&](void* vb, void* ibField,
                                                  uint8_t* indexedArrayBase) {
-        if (!fn_Context_SetVertexBuffer || !fn_Context_DrawIndexed) return;
-        fn_Context_SetVertexBuffer(context, vb, 0, 0, 0x10);
+        reinterpret_cast<Video::Context*>(context)
+            ->SetVertexBuffer(vb, 0, 0, 0x10);   // B.3.5 bridge
 
         // If context's bound IB != ourIB, dirty the bind.
         void**    pCtxIB        = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x1B8);
@@ -400,7 +435,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
         // DrawIndexed(context, primType=0, b, c, a, d, 1)
         // Original order at LAB_1400aed0e: (param_2, 0, iVar7, iVar8, iVar9, iVar10, 1)
         //   iVar7 = arr[1], iVar8 = arr[2], iVar9 = arr[0], iVar10 = arr[3].
-        fn_Context_DrawIndexed(context, 0, b, c, a, d, 1);
+        reinterpret_cast<Video::Context*>(context)
+            ->DrawIndexed(0, b, c, a, d, 1);   // B.3.5 bridge
     };
 
     if (mode == 0x8000) {
@@ -424,8 +460,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
         // Water overlay chunk — same chunk draw as terrain but from the water
         // VB/IB (+0x160/+0x180) and WITHOUT the height-image bind (the water
         // material binds its own _water_/_reflection_/_frame_ textures).
-        if (!fn_Context_SetVertexBuffer || !fn_Context_DrawIndexed) return;
-        fn_Context_SetVertexBuffer(context, selfBytes + 0x160, 0, 0, 0x10);
+        reinterpret_cast<Video::Context*>(context)
+            ->SetVertexBuffer(selfBytes + 0x160, 0, 0, 0x10);   // B.3.5 bridge
 
         void**    pCtxIB       = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x1B8);
         int32_t*  pCtxIBOffset = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x1C0);
@@ -445,7 +481,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
         int32_t row = static_cast<int32_t>((key >> 6) & 0x3F);
         int32_t col = static_cast<int32_t>(key & 0x3F);
         int32_t start = (chunksPerSide * row + col) * scale;
-        fn_Context_DrawIndexed(context, 0, start, scale, 0, primCount, 1);
+        reinterpret_cast<Video::Context*>(context)
+            ->DrawIndexed(0, start, scale, 0, primCount, 1);   // B.3.5 bridge
         return;
     }
 
@@ -456,13 +493,11 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     //   compute primCount = chunkSize*chunkSize*6, scaled by self+0xD4
     //   start = ((gridSize/chunkSize)*((key>>6)&0x3F) + (key&0x3F)) * (self+0xD4)
     //   DrawIndexed(context, 0, 0, primCount, 0, start, 1)
-    if (!fn_Context_SetImageBuffer || !fn_Context_SetVertexBuffer ||
-        !fn_Context_DrawIndexed) {
-        return;
-    }
     void* imgBuf = *reinterpret_cast<void**>(selfBytes + 0x148);
-    fn_Context_SetImageBuffer(context, imgBuf, 6);
-    fn_Context_SetVertexBuffer(context, selfBytes + 0x100, 0, 0, 0x10);
+    reinterpret_cast<Video::Context*>(context)
+        ->SetImageBuffer(imgBuf, 6);                              // B.3.5 bridge
+    reinterpret_cast<Video::Context*>(context)
+        ->SetVertexBuffer(selfBytes + 0x100, 0, 0, 0x10);          // B.3.5 bridge
 
     void**    pCtxIB        = reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(context) + 0x1B8);
     int32_t*  pCtxIBOffset  = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(context) + 0x1C0);
@@ -485,7 +520,8 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
 
     // Original arg order at LAB_1400aed0e:
     //   DrawIndexed(ctx, 0, iVar7=start, iVar8=scale, iVar9=0, iVar10=primCount, 1)
-    fn_Context_DrawIndexed(context, 0, start, scale, 0, primCount, 1);
+    reinterpret_cast<Video::Context*>(context)
+        ->DrawIndexed(0, start, scale, 0, primCount, 1);   // B.3.5 bridge
 }
 
 // ============================================================
@@ -499,40 +535,52 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
 // applicable, R8/R9/stack=remaining args) since the ABI is identical for
 // "trampoline that tail-calls another fn with same signature".
 
+// ENDGAME B.3.5 batch K1. All five call the MEMBER, and all five spell it
+// QUALIFIED — `->Graphics::Geometry::X(...)` — which is NOT a stylistic choice.
+// Slots 4..8 are VIRTUAL on `Graphics::Geometry`, and these five functions ARE the
+// five slots of this file's hand-built derived vtable. An unqualified
+// `geom->UpdateAttached()` would dispatch back through that table into this same
+// function and recurse until the stack is gone. The qualified form is the non-virtual
+// call to Geometry's own body, which is exactly the address the removed
+// `fn_Geometry_*` globals held (`?UpdateAttached@Geometry@Graphics@@UEAAXXZ` and
+// siblings). The old `if (fn_...)` tests were readiness tests on those pointers and
+// go with them; the members always exist.
+
 // +0x20 — Graphics::Geometry::UpdateAttached (no args, no return)
 extern "C" void GeomDraw_UpdateAttached(void* self) {
-    if (fn_Geometry_UpdateAttached) fn_Geometry_UpdateAttached(self);
+    reinterpret_cast<Graphics::Geometry*>(self)
+        ->Graphics::Geometry::UpdateAttached();   // B.3.5 bridge
 }
 
 // +0x28 — Graphics::Geometry::GetSubTransform (member fn, hidden retval)
 //
-// Signature: Math::Transform GetSubTransform(int idx) const
-// Lowered: (this, retval, idx)
+// Signature in retail AND in C++: `Math::Transform* GetSubTransform(Math::Transform*
+// ret, int node) const` — the hidden return slot is spelled OUT, in retail's order
+// (`this`, then the caller's storage), per B5-12 and its COORDINATOR AMENDMENT: a
+// by-value C++ return is WRONG for a VIRTUAL here, because GCC's ms_abi passes the
+// hidden pointer FIRST and MSVC (and every minted row) passes `this` first.
 extern "C" void* GeomDraw_GetSubTransform(void* self, void* retval, int idx) {
-    if (fn_Geometry_GetSubTransform) {
-        return fn_Geometry_GetSubTransform(self, retval, idx);
-    }
-    return retval;
+    return reinterpret_cast<const Graphics::Geometry*>(self)
+        ->Graphics::Geometry::GetSubTransform(
+            static_cast<Math::Transform*>(retval), idx);   // B.3.5 bridge
 }
 
 // +0x30 — Graphics::Geometry::GetInstanceTransform (member fn, hidden retval)
 extern "C" void* GeomDraw_GetInstanceTransform(void* self, void* retval, int idx, float t) {
-    if (fn_Geometry_GetInstanceTransform) {
-        return fn_Geometry_GetInstanceTransform(self, retval, idx, t);
-    }
-    return retval;
+    return reinterpret_cast<const Graphics::Geometry*>(self)
+        ->Graphics::Geometry::GetInstanceTransform(
+            static_cast<Math::Matrix*>(retval), idx, t);   // B.3.5 bridge
 }
 
 // +0x38 — Graphics::Geometry::SetSharedInstanceData (returns int)
 extern "C" int GeomDraw_SetSharedInstanceData(void* self, void* context, int idx, float t) {
-    if (fn_Geometry_SetSharedInstanceData) {
-        return fn_Geometry_SetSharedInstanceData(self, context, idx, t);
-    }
-    return 0;
+    return reinterpret_cast<const Graphics::Geometry*>(self)
+        ->Graphics::Geometry::SetSharedInstanceData(
+            *reinterpret_cast<Video::Context*>(context), idx, t);   // B.3.5 bridge
 }
 
 // +0x40 — Graphics::Geometry::Clean (returns bool)
 extern "C" bool GeomDraw_Clean(void* self) {
-    if (fn_Geometry_Clean) return fn_Geometry_Clean(self);
-    return false;
+    return reinterpret_cast<Graphics::Geometry*>(self)
+        ->Graphics::Geometry::Clean();   // B.3.5 bridge
 }
