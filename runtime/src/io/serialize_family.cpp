@@ -278,31 +278,35 @@ inline void SerializeArray(int slot, void* self, int32_t count, T* arr) {
 
 // ?GetVersion@BinaryReader@IO@@UEBAHXZ   0x180023930   MOV EAX,[RCX+0x28]; RET
 extern "C" int32_t RtIo_BinaryReader_GetVersion(BinaryCodec* self) {
-    return self->version;
+    return reinterpret_cast<const IO::BinaryReader*>(self)
+        ->IO::BinaryReader::GetVersion();
 }
 
 // ?Skip@BinaryReader@IO@@UEAAXXZ   0x1800a83f0
 // Seek to word20 + word24 == one past the end of the current record.
 extern "C" void RtIo_BinaryReader_Skip(BinaryCodec* self) {
-    void* s = self->base.stream;
-    const int32_t end = self->word24 + self->word20;
-    reinterpret_cast<StreamSeekFn>(VSlot(s, kStreamSetPos))(s, end);
+    reinterpret_cast<IO::BinaryReader*>(self)->IO::BinaryReader::Skip();
 }
 
 // The eleven scalar slots and the eleven array slots.
 //
 // SUFFIX is only there to make eleven distinct C++ symbols; MANGLED in the
 // registration table is what actually names the slot.
+// B.3.4 block 2: the BODIES moved to IO::BinaryReader's methods (bottom of this
+// file); these two doors keep their addresses and registrations and DELEGATE.
+// The call is QUALIFIED so it is non-virtual — a live BinaryReader wears the
+// MINTED table 0x1801552e0 whose slots resolve back to these very doors, so a
+// virtual call here would recurse into itself. Same argument as encoding.cpp's.
 #define RT_SERIAL_READER_PAIR(SUFFIX, T, SCALAR_SLOT, ARRAY_SLOT)              \
     extern "C" void RtIo_BinaryReader_Ser##SUFFIX(                             \
             BinaryCodec* self, T* value, const char* name) {                   \
-        (void)name;                     /* CLOBBERED by retail before use */   \
-        StreamMove(kStreamRead, self->base.stream, (int32_t)sizeof(T), value); \
+        reinterpret_cast<IO::BinaryReader*>(self)                              \
+            ->IO::BinaryReader::Serialize##SUFFIX(*value, name);               \
     }                                                                          \
     extern "C" void RtIo_BinaryReader_SerArr##SUFFIX(                          \
             BinaryCodec* self, int32_t count, T* arr, const char* name) {      \
-        (void)name;                     /* dropped, not forwarded -- see (3) */\
-        SerializeArray<T>(SCALAR_SLOT, self, count, arr);                      \
+        reinterpret_cast<IO::BinaryReader*>(self)                              \
+            ->IO::BinaryReader::Serialize##SUFFIX##Array(count, arr, name);    \
     }                                                                          \
     static_assert(sizeof(T) == (SCALAR_SLOT == rw::kScalarChar   ? 1 :         \
                                 SCALAR_SLOT == rw::kScalarBool   ? 1 :         \
@@ -337,8 +341,8 @@ RT_SERIAL_READER_PAIR(SChar,  signed char,        rw::kScalarSChar,  rw::kArrayS
 // Stream::Read(size, buf) wants them, which is why retail emits no marshalling.
 extern "C" void RtIo_BinaryReader_SerializeBytes(BinaryCodec* self, int32_t count,
                                                  void* buf, const char* name) {
-    (void)name;
-    StreamMove(kStreamRead, self->base.stream, count, buf);
+    reinterpret_cast<IO::BinaryReader*>(self)
+        ->IO::BinaryReader::SerializeBytes(count, buf, name);
 }
 
 // ===========================================================================
@@ -348,25 +352,27 @@ extern "C" void RtIo_BinaryReader_SerializeBytes(BinaryCodec* self, int32_t coun
 
 // ?GetVersion@BinaryWriter@IO@@UEBAHXZ   0x180023ab0
 extern "C" int32_t RtIo_BinaryWriter_GetVersion(BinaryCodec* self) {
-    return self->version;
+    return reinterpret_cast<const IO::BinaryWriter*>(self)
+        ->IO::BinaryWriter::GetVersion();
 }
 
 // ?Skip@BinaryWriter@IO@@UEAAXXZ   0x1800a8b00   — a bare RET. A writer has
 // nothing ahead of the cursor to skip over.
 extern "C" void RtIo_BinaryWriter_Skip(BinaryCodec* self) {
-    (void)self;
+    reinterpret_cast<IO::BinaryWriter*>(self)->IO::BinaryWriter::Skip();
 }
 
+// B.3.4 block 2 — same delegation shape as the reader's, same reason.
 #define RT_SERIAL_WRITER_PAIR(SUFFIX, T, SCALAR_SLOT, ARRAY_SLOT)              \
     extern "C" void RtIo_BinaryWriter_Ser##SUFFIX(                             \
             BinaryCodec* self, T* value, const char* name) {                   \
-        (void)name;                                                            \
-        StreamMove(kStreamWrite, self->base.stream, (int32_t)sizeof(T), value);\
+        reinterpret_cast<IO::BinaryWriter*>(self)                              \
+            ->IO::BinaryWriter::Serialize##SUFFIX(*value, name);               \
     }                                                                          \
     extern "C" void RtIo_BinaryWriter_SerArr##SUFFIX(                          \
             BinaryCodec* self, int32_t count, T* arr, const char* name) {      \
-        (void)name;                                                            \
-        SerializeArray<T>(SCALAR_SLOT, self, count, arr);                      \
+        reinterpret_cast<IO::BinaryWriter*>(self)                              \
+            ->IO::BinaryWriter::Serialize##SUFFIX##Array(count, arr, name);    \
     }                                                                          \
     static_assert((ARRAY_SLOT) == (SCALAR_SLOT) - 0x58,                        \
                   "writer " #SUFFIX ": array slot == scalar slot - 0x58")
@@ -386,20 +392,20 @@ RT_SERIAL_WRITER_PAIR(SChar,  signed char,   rw::kScalarSChar,  rw::kArraySChar)
 // is the ordinary case, since the dispatch is virtual and slot-based either way.
 extern "C" void RtIo_BinaryWriter_SerArrUInt(BinaryCodec* self, int32_t count,
                                              uint32_t* arr, const char* name) {
-    (void)name;
-    SerializeArray<uint32_t>(rw::kScalarUInt, self, count, arr);
+    reinterpret_cast<IO::BinaryWriter*>(self)
+        ->IO::BinaryWriter::SerializeUIntArray(count, arr, name);
 }
 extern "C" void RtIo_BinaryWriter_SerArrInt(BinaryCodec* self, int32_t count,
                                             int32_t* arr, const char* name) {
-    (void)name;
-    SerializeArray<int32_t>(rw::kScalarInt, self, count, arr);
+    reinterpret_cast<IO::BinaryWriter*>(self)
+        ->IO::BinaryWriter::SerializeIntArray(count, arr, name);
 }
 
 // ?SerializeBytes@BinaryWriter@IO@@UEAAXHPEAXPEBD@Z   0x1800a9070
 extern "C" void RtIo_BinaryWriter_SerializeBytes(BinaryCodec* self, int32_t count,
                                                  void* buf, const char* name) {
-    (void)name;
-    StreamMove(kStreamWrite, self->base.stream, count, buf);
+    reinterpret_cast<IO::BinaryWriter*>(self)
+        ->IO::BinaryWriter::SerializeBytes(count, buf, name);
 }
 
 // ===========================================================================
@@ -428,12 +434,129 @@ extern "C" void RtIo_Visitor_SerArray(void* self, int32_t count, void* arr,
 }
 
 // ?GetVersion@Visitor@IO@@UEBAHXZ   0x18002b670   MOV EAX,[RCX+0x20]; RET
-// +0x20. See the trap note in the header block.
+// +0x20. See the trap note in the header block. The class reads the SAME
+// offset, pinned by its own static_assert in Serializer.h.
 extern "C" int32_t RtIo_Visitor_GetVersion(Visitor* self) {
-    return self->version;
+    return reinterpret_cast<const IO::Visitor*>(self)->IO::Visitor::GetVersion();
 }
 
 }  // namespace RtIo
+
+// ===========================================================================
+// ENDGAME B.3.4 block 2 — the 73 bodies, as IO::BinaryReader's and
+// IO::BinaryWriter's methods.
+// ===========================================================================
+// Byte-for-byte what the doors above held before block 2; only the enclosing
+// declaration changed. Three things here are load-bearing and are reproduced,
+// not tidied:
+//
+//   * THE SCALAR BODIES IGNORE `name`. Retail CLOBBERS R8 (which held it) with
+//     the value pointer before the tail jump. The binary format carries no
+//     field names; a reader depends entirely on ORDER.
+//   * THE ARRAY BODIES DROP `name` AND PASS nullptr to the elements. They do
+//     not forward the array's own name.
+//   * THE ARRAY DISPATCH IS VIRTUAL AND THE VTABLE IS RELOADED EACH ITERATION,
+//     through `RtIo::SerializeArray`'s raw `VSlot(self, slot)` — NOT through a
+//     C++ virtual call on `this`. That is deliberate: these objects wear the
+//     MINTED table, and keeping the raw slot read means the loop observes a
+//     mid-array re-stamp exactly as retail's does. A subclass overriding only
+//     the scalar slot still gets its override honoured for arrays.
+//
+// `Visitor`'s 24 bodies are `= {}` inline in the header: the shipped bodies are
+// three bytes of `RET` each, and giving each its own out-of-line function would
+// invent distinctions the binary does not make.
+namespace IO {
+
+#define RT_RW_READER_BODY(METHOD, T)                                           \
+    void BinaryReader::Serialize##METHOD(T& v, const char* name) {             \
+        (void)name;                 /* CLOBBERED by retail before use */       \
+        RtIo::StreamMove(RtIo::kStreamRead, stream, (int32_t)sizeof(T), &v);   \
+    }                                                                          \
+    void BinaryReader::Serialize##METHOD##Array(int count, T* arr,             \
+                                                const char* name) {            \
+        (void)name;                 /* dropped, not forwarded */               \
+        RtIo::SerializeArray<T>(rt::io::rw_vtbl::kScalar##METHOD, this,        \
+                                count, arr);                                   \
+    }
+
+#define RT_RW_WRITER_BODY(METHOD, T)                                           \
+    void BinaryWriter::Serialize##METHOD(T& v, const char* name) {             \
+        (void)name;                                                            \
+        RtIo::StreamMove(RtIo::kStreamWrite, stream, (int32_t)sizeof(T), &v);  \
+    }                                                                          \
+    void BinaryWriter::Serialize##METHOD##Array(int count, T* arr,             \
+                                                const char* name) {            \
+        (void)name;                                                            \
+        RtIo::SerializeArray<T>(rt::io::rw_vtbl::kScalar##METHOD, this,        \
+                                count, arr);                                   \
+    }
+
+RT_RW_READER_BODY(Char,   char)
+RT_RW_READER_BODY(Bool,   bool)
+RT_RW_READER_BODY(Float,  float)
+RT_RW_READER_BODY(UInt64, uint64_t)
+RT_RW_READER_BODY(Int64,  int64_t)
+RT_RW_READER_BODY(UInt,   uint32_t)
+RT_RW_READER_BODY(Int,    int32_t)
+RT_RW_READER_BODY(UShort, uint16_t)
+RT_RW_READER_BODY(Short,  int16_t)
+RT_RW_READER_BODY(UChar,  unsigned char)
+RT_RW_READER_BODY(SChar,  signed char)
+
+RT_RW_WRITER_BODY(Char,   char)
+RT_RW_WRITER_BODY(Bool,   bool)
+RT_RW_WRITER_BODY(Float,  float)
+RT_RW_WRITER_BODY(UInt64, uint64_t)
+RT_RW_WRITER_BODY(Int64,  int64_t)
+RT_RW_WRITER_BODY(UInt,   uint32_t)
+RT_RW_WRITER_BODY(Int,    int32_t)
+RT_RW_WRITER_BODY(UShort, uint16_t)
+RT_RW_WRITER_BODY(Short,  int16_t)
+RT_RW_WRITER_BODY(UChar,  unsigned char)
+RT_RW_WRITER_BODY(SChar,  signed char)
+
+#undef RT_RW_READER_BODY
+#undef RT_RW_WRITER_BODY
+
+// ?Skip@BinaryReader@IO@@UEAAXXZ   0x1800a83f0
+// word20 + word24 is the ONE-PAST-THE-END position of the current record, so
+// Skip is "abandon the rest of this record and jump to the next".
+void BinaryReader::Skip() {
+    void* s = stream;
+    const int32_t end = word24 + word20;
+    reinterpret_cast<RtIo::StreamSeekFn>(RtIo::VSlot(s, RtIo::kStreamSetPos))(s, end);
+}
+
+// The count comes straight through: (int, void*) already sit where
+// Stream::Read/Write(size, buf) want them, which is why retail emits no
+// marshalling for these two.
+void BinaryReader::SerializeBytes(int count, void* buf, const char* name) {
+    (void)name;
+    RtIo::StreamMove(RtIo::kStreamRead, stream, count, buf);
+}
+void BinaryWriter::SerializeBytes(int count, void* buf, const char* name) {
+    (void)name;
+    RtIo::StreamMove(RtIo::kStreamWrite, stream, count, buf);
+}
+
+// SLOT 0 IS DELIBERATELY LEFT PURE, AND THE THREE CLASSES ARE THEREFORE STILL
+// ABSTRACT. Their deleting-destructor bodies live in
+// runtime/src/io/iobase_vtables.cpp, registered by address at 0x180023a10 /
+// 0x180023b50 / 0x18002b710, and B34_RULES §4.2 forbids retiring any of the
+// fourteen IO deleting-dtor registrations in this step: each one FILLS slot 0
+// of a LIVE minted table, so deleting it would publish an abort trap into every
+// object wearing that table. Writing an override here would either duplicate a
+// body that is already registered elsewhere (two spellings, guaranteed drift)
+// or invert the door->class arrow for one slot out of twenty-six.
+//
+// Abstract costs nothing here: NOTHING constructs one of these as a C++ object.
+// Every instance is MemAlloc'd by an Encoding factory and stamped with the
+// minted table, and the classes are only ever reached through a
+// `reinterpret_cast` + qualified call, which needs no instantiation. Slot 0
+// becomes a real override when the deleting-dtor work lands with the stream
+// classes, not before.
+
+}  // namespace IO
 
 // ============================================================================
 // Registration — both doors for all 73.
