@@ -1,20 +1,38 @@
 # `System` rest — B.3.4b inventory (read-only)
 
-> **COORDINATOR BANNER (2026-09-18) — READ BEFORE USING ANY NUMBER IN THIS FILE.**
-> Treat this document as a MAP, not as evidence. The coordinator's spot-check of the `Thread`
-> and allocator sections found FIVE errors (and confirmed three facts: the `Thread` vtable row
-> is `rt_data_mint_tables.inc:4024`, it has 2 slots, and no `rt_factories_*` row names it). The
-> rest of the file was NOT checked. The five: (1) `Thread`'s ctor/dtor verdict reasoned from a "DLL
-> present" route that ENDGAME A.1 deleted; (2) "zero `CUTOVER_REQUIRED` System rows" — there are
-> ELEVEN (§2); (3) the `MemoryAllocator` singleton described as "the DLL's own global" — it is
-> our minted cell; (4) a by-address stamper of the `Thread` vtable
-> (`persistence_worker_win.cpp:587`) omitted under "the only stamp door in the tree";
-> (5) a wrong path for `audio_stream_win.cpp`. All five are corrected in place and marked.
+> **BANNER (2026-09-18/19) - READ BEFORE USING ANY NUMBER IN THIS FILE. WHO VERIFIED WHAT.**
+> Treat this document as a MAP, not as evidence. Two different parties corrected it, and the
+> word "coordinator" means two different things below, so they are named explicitly here:
+>
+> **A. The B.3.4 STEP COORDINATOR (the session that gates merges) verified these five itself,
+> against the source, and nothing else in this file:** (1) `Thread`'s ctor/dtor verdict reasoned
+> from a "DLL present" route that ENDGAME A.1 deleted; (2) "zero `CUTOVER_REQUIRED` System
+> rows" - there are ELEVEN (section 2); (3) the `MemoryAllocator` singleton described as "the
+> DLL's own global" - it is our minted cell (`rt_data_mint_tables.inc:4715`,
+> `cutover_manifest.inc:79`); (4) a by-address stamper of the `Thread` vtable
+> (`persistence_worker_win.cpp:587`) omitted under "the only stamp door in the tree"; (5) a
+> wrong path for `audio_stream_win.cpp` (it is `runtime/src/audio/`). It also confirmed three
+> facts: the `Thread` vtable row is `rt_data_mint_tables.inc:4024`, it has 2 slots, and no
+> `rt_factories_*` row names it.
+>
+> **B. The INVENTORY'S OWN INTEGRATING AGENT (which calls itself "this coordinator" in the
+> Method section - it means coordinator of its sub-agents) made four more corrections in a
+> second pass. The step coordinator has NOT checked any of them:** (6) section 4.2's per-file
+> allocator-cache count was wrong three times (3 files, then 24+19 / 51-55, then a `grep -rl`
+> union of 31/26); the text now adopts a per-line-verified 12-file / 17-call-site table; (7)
+> `fn_MemZeroFill` is resolved unconditionally (`engine_funcs.cpp:3647`) and simply never
+> called, not "never resolved"; (8) `rtcoll::DoorAlloc`/`DoorFree` has one caller outside
+> `runtime/src/collection/` (`runtime/src/io/modification.cpp:202,205`); (9) "DLL" wording
+> cleaned up. Its claim that `grep -n DLL` now has no unexplained hit is NOT true: the `Color`
+> row of the construction-site table still says "outside the DLL's own exported ... ctors"
+> (harmless - it means retail's export table - but unexplained).
+>
 > It was also written under a disclosed process failure (two sub-agents overwrote the
-> deliverable; see Method). **Consequence: every "zero", "none", "no caller" and "unreached"
-> claim below is UNVERIFIED until the 4b owner re-derives it by mangled name AND by retail
-> address. None of them authorises a deletion.** Counts of CALL sites came from a lexer and are
-> more trustworthy than the structural claims, but re-measure before sizing a batch.
+> deliverable directly; see Method). A number that was wrong three times in one afternoon is
+> the standing example. **Consequence: every "zero", "none", "no caller" and "unreached" claim
+> below is UNVERIFIED until the 4b owner re-derives it by mangled name AND by retail address.
+> None of them authorises a deletion.** CALL-site counts came from a lexer and are more
+> trustworthy than the structural claims, but re-measure before sizing a batch.
 
 Written 2026-09-18, on main `90a06e35`, for ENDGAME B.3.4 step 4b: everything under
 `@System@@` except `String`/`Filename` (real classes since B.3.1) and except `IO`
@@ -152,7 +170,8 @@ Source: `standalone/rt_data_mint_tables.inc:3711-3717`.
   inference.
 - Every real constructing call site immediately **overwrites** the base stamp with its own
   derived vtable right after the base ctor returns (`singleton_ctors.cpp:450`,
-  `runtime/src/audio/audio_stream_win.cpp:342` — `Audio::Stream` is a `Thread` subclass
+  `runtime/src/audio/audio_stream_win.cpp:342` — confirmed the only copy of this file in the
+  tree, `code/Game/Audio/` does not exist — `Audio::Stream` is a `Thread` subclass
   embedded in `Audio::Device`'s singleton, per `singleton_ctors.cpp:691`
   `Ctor_AudioDevice` — `pathfinder_seed.cpp:148`, `rt_data_mint.cpp:461`).
 
@@ -215,8 +234,8 @@ forward is Thread's promotion question above, already route-scoped.
 | `Time` | `fn_Time_Ctor_Float` (111 CALL via engine_funcs.h) + at least 21 additional bypass-cache CALL sites (§5.7) | pervasive across `code/Game/` | stack local, one per use |
 | `Timer` | no instance — stateless | `timer.cpp` | n/a |
 | `DateTime` | no explicit C++ construction anywhere — it's an opaque FILETIME, never given a named type; only produced as a return value by `FileSystem::GetFileTimeStamp` (`runtime/src/io/filesystem_timestamp_win.cpp`, IO-owned, not touched) and consumed by pointer at `code/Game/Dialog/saveloaddialog.cpp:322` | n/a | value passed by pointer, never named |
-| `Color` | no construction site found anywhere in `code/` or `runtime/` outside the DLL's own exported (but never `RegisterRuntimeExport`-ed) ctors; values are read/written as raw `uint32_t` fields embedded in other structs (`menuscene.cpp`'s ambient/sun/sky colors, `tornado.cpp`'s tint fields, `mapdescription.cpp`) | n/a | raw field, not a constructed object in-tree |
-| `Configuration` | `RtSystem_Configuration_Ctor` (`runtime/src/engine/engine_lifecycle.cpp:305`, retail 0x1800c51b0), called once from `RtEngine_Engine_Startup`; dtor at `engine_lifecycle.cpp:888` inside `Engine::Shutdown` | one construction per process | singleton, backed by DLL's own `?_singleton@Configuration@System@@` @ 0x1801fc6f8 |
+| `Color` | no construction site found anywhere in `code/` or `runtime/` outside retail's exported (but never `RegisterRuntimeExport`-ed) ctors — a fact about the retail export table, not a live DLL: `Runtime-x64.dll` is never loaded (ENDGAME A.1); values are read/written as raw `uint32_t` fields embedded in other structs (`menuscene.cpp`'s ambient/sun/sky colors, `tornado.cpp`'s tint fields, `mapdescription.cpp`) | n/a | raw field, not a constructed object in-tree |
+| `Configuration` | `RtSystem_Configuration_Ctor` (`runtime/src/engine/engine_lifecycle.cpp:305`, retail 0x1800c51b0), called once from `RtEngine_Engine_Startup`; dtor at `engine_lifecycle.cpp:888` inside `Engine::Shutdown` | one construction per process | singleton, backed by the retail singleton address `?_singleton@Configuration@System@@` @ 0x1801fc6f8 — a `CUTOVER_REQUIRED` minted storage cell (`cutover_manifest.inc:77`, §2), not a live DLL global |
 | `Compression` | `CompressedStream::Create` (`runtime/src/io/compressed_stream_write.cpp:686-690`, IO-owned file — evidence only, not this step's to convert): allocates 8 bytes, calls `??0Compression@System@@QEAA@XZ` on it, stores the result at `self->compression` | one per `CompressedStream` | heap, one-per-owner, NOT a singleton |
 | `Crc` | no instance — one static function | `crc.cpp` | n/a |
 | `Error` | no instance — free functions over named data slots (`_errorString`, `_stopApplication`, `_hideDisplay`) | `error.cpp` | n/a, process-wide statics |
@@ -232,8 +251,8 @@ forward is Thread's promotion question above, already route-scoped.
 |---|---|---|---|---|---|---|
 | `fn_MemAlloc` (member) | `void*(void* self, uint64_t size, int align)` | `ResolveAddr(Module::Runtime, 0x1800c6e60)` (`engine_funcs.cpp:1370-1371`) = `?Allocate@MemoryAllocator@System@@QEAAPEAX_KH@Z` | 0x1800c6e60 | 524 | 292 | 85 |
 | `fn_MemAllocStatic` (static) | `void*(uint64_t size, int align)` | `ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")` (`engine_funcs.cpp:2665-2666`) | 0x1800c7a50 | 16 | 3 | 18 |
-| `s_fn_MemAllocSA` (per-file cache of the SAME static export) | same as above, resolved independently | `ResolveExport` by the same mangled name, or `ResolveAddr(…, 0x140152b60)` for the exe dispatch slot | same body as `fn_MemAllocStatic` | not separately tallied — see §4.2, 31 files (re-verified) | — | — |
-| `fn_MemZeroFill` | — | declared, never resolved to anything live | — | **0 everywhere, including guards** | 0 | 0 |
+| `s_fn_MemAllocSA` (per-file cache of the SAME static export) | same as above, resolved independently | `ResolveExport` by the same mangled name, or `ResolveAddr(…, 0x140152b60)` for the exe dispatch slot | same body as `fn_MemAllocStatic` | not separately tallied — see §4.2, 12 files / 17 CALL sites (per-line verified, superseding two earlier wrong counts) | — | — |
+| `fn_MemZeroFill` | — | resolved unconditionally at `engine_funcs.cpp:3647` (`ResolveAddr(Module::Exe, 0x14003f010)`) — a live resolution, just never invoked | 0x14003f010 | **0 everywhere, including guards** — dead code, not an unresolved pointer | 0 | 0 |
 
 **The two headline surfaces reach DIFFERENT retail bodies.** `fn_MemAlloc` calls the raw
 member `Allocate` (0x1800c6e60), which per `allocator.cpp:1157-1165`/`1216-1229` **takes no
@@ -268,59 +287,58 @@ confused with either.
 | `fn_MemFree` | lambda thunk, discards arg 1, calls `fn_MemFreeStatic` | 0x1800c7ad0 (via forwarding) | 6 | 4 | 0 |
 | `fn_MemFreeStatic` | `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` | 0x1800c7ad0 | **616** (highest-volume pointer in the whole System family) | 364 | 27 |
 
-### 4.2 The per-file cache swarm is much larger than the seed 3-file claim — RE-VERIFIED
+### 4.2 The per-file cache swarm — SUPERSEDED again; the 12-file table is the one to trust
 
-The seed ground truth ("3 `code/Game` files cache `s_fn_MemAllocSA`") is **wrong** —
-`citizenai_leisure.cpp` does not belong (its `NodeAlloc()` calls the shared **member**
-`fn_MemAlloc` directly, no cache) and the real population is far larger. Two independent
-sub-agent passes then produced two DIFFERENT wrong counts in opposite directions (24+19
-files from a dual-anchor grep with an unstated bug, 51-55 files from a separate heuristic
-name-matching script that over-matched unrelated local names) — so this coordinator pass
-re-ran the two anchors directly, fresh, scoped to `code/` only:
+**This number moved four times before it settled, and the moves are worth recording because
+the LAST move is a methodology lesson, not just a bigger dataset.** The seed ground truth ("3
+`code/Game` files cache `s_fn_MemAllocSA`") was wrong — `citizenai_leisure.cpp` does not
+belong (its `NodeAlloc()` calls the shared **member** `fn_MemAlloc` directly, no cache),
+confirmed independently in both the earlier sub-agent pass and the committed pass below. Two
+sub-agent passes then produced two different, larger, wrong counts (24+19 files from a
+dual-anchor grep with an unstated bug; 51-55 files from a heuristic name-matching script that
+over-matched unrelated local names). This coordinator's OWN first attempt at fixing it —
+`grep -rl` for the mangled name or the dispatch-slot address, unioned — produced 31 files
+alloc-side / 26 free-side. **That grep-union number is itself wrong, and superseded here**:
+`grep -rl` matches ANY occurrence of the string in a file — a dead IAT-fallback comment, a
+IAT-fallback constant `0x1401527e8` sitting near an unrelated address, an aliasing assignment
+that never re-resolves, a IAT fallback that resolves but is never called — none of which is a
+confirmed CALL site. It counts files that MENTION the surface, not files with a live private
+cache with a real call.
 
-```
-grep -rl 'MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z' code/   -> 15 files
-grep -rl '0x140152b60'                                  code/   -> 27 files (25 code + 2 header/dup)
-union                                                             -> 31 files
-grep -rl 'MemFree@MemoryAllocator@System@@SAXPEAX@Z'    code/   -> 12 files
-grep -rl '0x140152b68'                                  code/   -> 22 files
-union                                                             -> 26 files
-```
+**The version committed to main (`3104070d`) did the work properly** — per-file, per-line,
+with the resolve site and every call site individually read and cited, and it is what this
+section now reports as authoritative:
 
-**Verified: 31 distinct files on the alloc side, 26 on the free side (code/ only; this does
-not additionally sweep `engine/`/`standalone/`, where the allocator-surface sub-agent
-separately found `engine/funcs/{engine_funcs.cpp,engine_funcs.h}` and
-`standalone/{address_registry,async_loader,redzone_alloc,redzone_alloc.h,reg_code_lane1,
-reg_keystone_a_removal}.cpp` referencing the same two mangled names/addresses — those are
-largely the legitimate resolution/registration/instrumentation sites, not per-file caches,
-and were not re-triaged file-by-file here).** Every one of the 31+26 declares its own
-`typedef` + `static …_t s_…_ = nullptr;` (or a family-specific prefix — `HW_`, `MW_`, `TrW_`,
-`WAP_`, … — the naming is NOT consistent enough for one pointer name to cover them) and
-resolves the identical mangled export or dispatch-slot address independently, bypassing
-`engine_funcs.h` entirely. Full file lists (alloc union, 31):
+| file | var | resolve line | call sites | count |
+|---|---|---|---|---|
+| `code/Game/Action/action_pf_astar.cpp` | `s_fn_MemAllocSA` | :126 | :827 | 1 |
+| `code/Game/Action/keystone_a_zone.cpp` | `s_fn_MemAllocSA` | :76 | :90 | 1 |
+| `code/Game/Work/tradework_serialize.cpp` | `s_memAlloc` | :52,54-55 | :85,112 | 2 |
+| `code/Game/Work/gatherrawmaterials.cpp` | `s_fn_MemAlloc` | :264-268 (IAT fallback 0x1401527e8) | :885 | 1 |
+| `code/Game/Player/tool_base_highlight.cpp` | `s_MemAlloc` | :146 | :225,267 | 2 |
+| `code/Game/Work/foresterwork.cpp` | `s_fn_MemAlloc` | :269-270 | :1167 | 1 |
+| `code/Game/Action/action_pf_geom.cpp` | `s_memAlloc` | :52-54 | :555 | 1 |
+| `code/Game/Work/pickup.cpp` | `s_x_memAlloc` | :370-372 | :413/415,553 | 2 |
+| `code/Game/Player/tool_base_highlight_tess.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :69-71 | **none** | 0 (resolved but dead) |
+| `code/Game/Component/keystone_a_restree.cpp` | `s_memAlloc` (+wrapper `MemAlloc()`) | :70,72-76 | :122,154 | 2 |
+| `code/Game/Component/wellcomponent.cpp` | `s_fn_MemAllocStatic` | :239-240 | :313 | 1 |
+| `code/Game/Player/tool_base_trade.cpp` | `s_memAlloc` | :54-56 | :353,383,404 | 3 |
 
-`code/Game/Action/{action_pf_astar,action_pf_geom,keystone_a_zone}.cpp`,
-`code/Game/Component/{cemeterycomponent,citizenai_growup,keystone_a_restree,
-terraformcomponent,wellcomponent}.cpp`, `code/Game/Dialog/tradeui_leaves.cpp`,
-`code/Game/Game/w2_takescreenshot.cpp`, `code/Game/Player/{keystone_a_removalcalcpath,
-placementtool,tool_base_highlight,tool_base_highlight_tess,tool_base_render,
-tool_base_trade}.cpp`, `code/Game/Work/{foresterwork,gatherrawmaterials,
-marketwork_bst_a9f0,marketwork_bst_afb0,marketwork_bst_b290,pickup,tradework,
-tradework_serialize,work_act_clear,work_act_consume,work_act_hunt,work_act_path,
-work_act_perform,work_act_rawmat,work_base_actionctor}.cpp`.
+**12 files, 17 real call sites, 11 live + 1 dead resolve** (`tool_base_highlight_tess.cpp`
+resolves the export but never calls the cached pointer). Not a fourth independent surface —
+every one of these re-resolves the same static export (`0x1800c7a50`) `fn_MemAllocStatic`
+already reaches. One more wrinkle the per-line read caught that a bare grep cannot:
+`code/Game/Work/tradework.cpp:129` (`s_fn_MemAlloc = reinterpret_cast<TrW_MemAlloc_t>(
+fn_MemAllocStatic);`) does not RE-RESOLVE anything — it aliases the already-resolved
+`fn_MemAllocStatic` pointer, so its 2 calls (`:313,725`) are the SAME pointer, not a 13th
+private cache, even though a name-only sweep would flag it as one.
 
-(Free union, 26, overlaps heavily but is not identical — e.g. `pathfinder_seed.cpp` and
-`coll_bridge.h` appear only on the free side; `cleararea.cpp`, `geometry_draw.cpp`,
-`tool_base_toolui.cpp`, `tutorialinstance.cpp`, `unreg_lane1_mapgenerator_dtorbody.cpp`,
-`work_leaf_market.cpp` appear only on the free side too — not enumerated a second time here,
-re-run the grep above to reproduce.)
-
-This is the single biggest correction this inventory makes to any seed number, and it
-changed twice under sub-agent re-measurement before this pass settled it by direct
-reproduction. **A batch that gives `MemoryAllocator` a real class must find and repoint (or
-explicitly decide to leave alone) all 31+26 of these files**, or they remain invisible
-duplicate resolutions of the class's own export. Treat any *other* file count in this
-document that was not re-run the same way as provisional in the same manner.
+**A batch that gives `MemoryAllocator` a real class must find and repoint (or explicitly
+decide to leave alone) these 12 files** (13 counting the `tradework.cpp` alias, which needs
+no new resolution, only a repoint). Any wider file count quoted anywhere else for this
+surface — including this document's own earlier "31+26" and the sub-agent passes' "24+19"/
+"51-55" — should be treated as an unverified upper bound produced by string-matching, not a
+caller list, and discarded in favor of the table above.
 
 ### 4.3 `standalone/alloc_stats.cpp` — a consumer, not a bypass
 
@@ -337,7 +355,13 @@ linked observers of the same allocator, not independent paths.
 ### 4.4 Door design interaction (already settled, restated for this inventory)
 
 `runtime/src/collection/alloc_door.cpp`'s `rtcoll::DoorAlloc`/`DoorFree` re-read exe
-dispatch slots `0x140152b60`/`0x140152b68` **every call**, specifically so
+dispatch slots `0x140152b60`/`0x140152b68` **every call**. **Correction: this section
+previously implied the callers are confined to `runtime/src/collection/` — they are not.**
+Confirmed callers: `runtime/src/collection/{array.cpp:174,185, avl_trees.cpp:174,181,
+introsort.cpp:380, linkedlist.cpp:174,179, set_avl.cpp:412, set_avl_e24.cpp:365,
+set_avl_pathid.cpp:137,140, set_core.cpp:78}` **plus one caller outside that directory,
+`runtime/src/io/modification.cpp:202,205`** (IO-owned, cited here as evidence only). The
+slots are re-read rather than cached specifically so
 `RedzoneAlloc_Install()` (which runs after `EngineFuncsInit()`) can rewrite those slots'
 contents post-boot (`standalone/redzone_alloc.cpp:340-348`). **Anyone converting
 `MemoryAllocator`'s ctor/dtor to real C++ must not change which object address
@@ -359,8 +383,14 @@ table, not an ABI-pinned retail struct.
 
 ### 4.6 Zero-CALL in this family
 
-Only `fn_MemZeroFill` — 0 CALL, 0 GUARD, 0 CACHED, confirmed by a fresh scan; declared and
-never referenced anywhere else.
+Only `fn_MemZeroFill` — 0 CALL, 0 GUARD, 0 CACHED, confirmed by a fresh scan. **Correction:**
+an earlier draft of this section called it "declared, never resolved to anything live" —
+wrong. It IS resolved, unconditionally, at `engine/funcs/engine_funcs.cpp:3647`
+(`ResolveAddr(Module::Exe, 0x14003f010)`); the resolution is simply never followed by a call
+anywhere in the tree. Dead code with a live pointer, not an unresolved pointer — the
+distinction matters for a closing pass deciding whether the resolution line itself is safe
+to delete (it is, once the pointer variable is gone too) versus whether something might read
+it indirectly (checked: no).
 
 ---
 
@@ -648,11 +678,12 @@ risk:
    first, despite being conceptually simple, because of that blast radius.
 7. **Batch S7 — `MemoryAllocator`**: explicitly OUT of B.3.4b scope per B34_RULES §6.5(c)
    (already deferred once from B.3.4 IO) — 1,146+ CALL sites, a settled door design
-   (`alloc_door.cpp`) that must not be disturbed, and the 31+26-file cache swarm (§4.2,
-   re-verified this pass) that needs its own sweep before anyone touches the class.
-   **Recommend deferring past B.3.4b too**, as its own step with its own coordinator, exactly
-   as B34_RULES already argued for B.3.4 proper — nothing here changes that judgment, it only
-   sharpens the file count.
+   (`alloc_door.cpp`) that must not be disturbed, and the 12-file/17-call-site private-cache
+   surface (§4.2, per-line verified, superseding two earlier wrong file counts) plus
+   `rtcoll::DoorAlloc`/`DoorFree`'s own 9-file caller list (§4.4) that need their own sweep
+   before anyone touches the class. **Recommend deferring past B.3.4b too**, as its own step
+   with its own coordinator, exactly as B34_RULES already argued for B.3.4 proper — nothing
+   here changes that judgment, it only sharpens the file counts.
 8. **Batch S8 — `Compression`**: small (3 exports, 4 real callers, all inside IO's files) —
    could ride along with whichever IO block converts `CompressedStream`, since its only
    construction site and both call sites are physically inside `runtime/src/io/`. Flag for
