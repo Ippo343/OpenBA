@@ -280,61 +280,92 @@ public:
     // OVERRIDES it, and `Graphics::ReflectionImageBuffer` inherits it again
     // (B35_RULES 2.3 item 5, read from the three slot lists).
     //
-    // PURE ON PURPOSE, for slot 0's reason and `IO::Stream::DeletingDtor`'s: the
-    // body is the registered door `Video_ImageBuffer_Create` in
-    // `runtime/src/video/buffers.cpp`, which is ENDGAME B.3.5 block D2's file and
-    // is defined in no translation unit as a member. A non-pure declaration puts
-    // an undefined symbol in this class's emitted vtable and the exe does not
-    // link (seen, not predicted). Being pure changes nothing at a CALL SITE: a
-    // virtual call reads the live object's vptr, which is the MINTED table, and
-    // that slot has a body. It becomes a member when block D2 converts
-    // `buffers.cpp`, and no header edit is needed for that — only `= 0` coming
-    // off this line.
+    // NO LONGER PURE — ENDGAME B.3.5 block VC (the fragment pass). Block C wrote
+    // `= 0` here for one reason only: the body was the registered door
+    // `Video_ImageBuffer_Create` in `runtime/src/video/buffers.cpp` and was
+    // defined in no translation unit AS A MEMBER, so a non-pure declaration put
+    // an undefined symbol in this class's emitted vtable and the exe did not
+    // link. `buffers.cpp` has now moved the body onto this member, so the symbol
+    // exists and the `= 0` comes off exactly as that banner said it would.
+    //
+    // SLOT 0 STAYS PURE and so the class stays ABSTRACT in C++: its body is a
+    // table row in `runtime/src/object/deleting_dtor.cpp`, which B35_RULES 11
+    // keeps for the whole of step 5. Nothing is therefore instantiable by
+    // accident, and no live object wears GCC's table — the ctor door stamps the
+    // minted `??_7ImageBuffer@Video@@6B@`.
     virtual bool Create(ImageType type, Usage usage, Format format, uint32_t flags,
                         int32_t width, int32_t height, FilterMode filter,
                         AddressMode addressU, AddressMode addressV,
-                        AddressMode addressW, LevelArray* levels) = 0;
+                        AddressMode addressW, LevelArray* levels);
 
     // ---- the exported non-virtual members --------------------------------
     // Every `?…@ImageBuffer@Video@@` in the shipped export table is declared
     // here, ported or not, so no later block has to edit this header
-    // (BLOCK_BRIEF "the shape"). None of them is DEFINED in this block: the
-    // bodies are the registered doors in `runtime/src/video/buffers.cpp`,
-    // `dynamic_resources.cpp` and `video_resources.cpp`, which belong to block
-    // D2, and they become member definitions when that block converts them.
-    // Declaring them undefined is safe because nothing calls them THROUGH the
-    // class yet — `dx11/src/imagebufferdata.cpp` still reaches the nine it uses
-    // by mangled name, which is the door deciding, as it must while the body
-    // lives behind one.
-    int32_t Width() const;                 // 0x1800f2530 — reads the live device size for bits 8/9
-    int32_t Height() const;                // 0x1800f24e0 — ditto
-    int32_t GetLevelCount() const;         // 0x1800f2420
-    Format  GetFormat() const;             // 0x1800f2500 — `?AW4`, an ENUM by value: EAX, NOT a retslot
-    bool    HasMipMaps() const;            // 0x1800f2440
-    bool    Is2D() const;                  // 0x1800f2410
-    bool    IsCube() const;                // 0x1800f2470
-    bool    IsCompressed() const;          // 0x1800f2480
-    bool    IsColorBuffer() const;         // 0x1800f2450
-    bool    IsDepthBuffer() const;         // 0x1800f24c0
-    bool    IsDynamic() const;             // 0x1800f24d0
-    bool    IsGenerated() const;           // 0x1800f24a0
-    bool    IsRenderBuffer() const;        // 0x1800f2460
-    bool    IsRendered() const;            // 0x1800f2490
-    bool    IsShadowMap() const;           // 0x1800f24b0
-    bool    IsAliasedColor() const;        // 0x1800f2430
-    bool    IsAliasedDepth() const;        // 0x1800f24f0
-    bool    CanDownsample() const;         // 0x1800f2400
-    bool    ClearEdgeAlpha() const;        // 0x1800f23f0
-    bool    ClearEdgeColor() const;        // 0x1800f23e0
-    void    AliasDefaultColorBuffer();     // 0x1800f2ef0
-    void    AliasDefaultDepthBuffer();     // 0x1800f2f60
-    void    Bind(void* context, int32_t slot) const;   // 0x1800f3300
-    bool    CopyToTexture(void* dst, int32_t width, int32_t height);   // 0x1800f3380
-    bool    CopyFromTexture(void* src, int32_t width, int32_t height); // 0x1800f33a0
-    void    Recreate();                    // 0x1800f2fd0
-    void    Release();                     // 0x1800f2ea0
-    ImageBufferData*       GetData();      // 0x1800f2560 — the non-const overload
-    const ImageBufferData* GetData() const;// 0x1800f2570 — `QEBA`, the const one
+    // (BLOCK_BRIEF "the shape").
+    //
+    // ENDGAME B.3.5 block VC (the fragment pass) MOVED THE PORTED BODIES ONTO
+    // THESE MEMBERS. Block C had to leave them declared-undefined because the
+    // bodies lived in `runtime/src/video/buffers.cpp`, `dynamic_resources.cpp`
+    // and `video_resources.cpp` — block D2's file set. Those three files are
+    // converted now and the doors are one-line QUALIFIED delegations. The
+    // members marked `not ported` below still have no body anywhere in the tree
+    // and nothing calls them; that is unchanged.
+    int32_t Width() const;                 // 0x1800f2530 — buffers.cpp; live device size for bits 8/9
+    int32_t Height() const;                // 0x1800f24e0 — buffers.cpp; ditto
+    int32_t GetLevelCount() const;         // 0x1800f2420 — buffers.cpp
+    // ========================================================================
+    // ADDRESS CORRECTION, ENDGAME B.3.5 block VC — 23 of the addresses in this
+    // section and below were WRONG, and the instrument that found them is the
+    // shipped export directory itself (`tools/pe_exports.py` over
+    // `C:/GOG Games/Banished/Runtime-x64.dll`, every `*ImageBuffer@Video@@`
+    // symbol dumped with its RVA and re-based to 0x180000000). Every address
+    // that was wrong sat in the 0x1800f23e0..0x1800f2570 band or the
+    // 0x1800f2ba0..0x1800f3100 band, and NOT ONE address in either band is an
+    // ImageBuffer export at all — so the old comments named nothing. The eleven
+    // that were right are exactly the eleven that a registration in
+    // `buffers.cpp` / `dynamic_resources.cpp` / `video_resources.cpp` also
+    // spells, i.e. the ones a pefile check had already been run against
+    // (`reference_resolveexport_phantom_names.md` is the rule those three files
+    // follow and this header did not).
+    //
+    // NOTHING BEHAVIOURAL CHANGED with the fix: every one of the corrected rows
+    // is an unported member, so no door and no registration named the bad
+    // address. It is a documentation defect, and the reason it is worth this
+    // banner is that the next block to port one of these would have registered
+    // `RegisterRuntimeAddr` on a number out of a comment.
+    // ========================================================================
+    Format  GetFormat() const;             // 0x18001eb50 — `?AW4`, an ENUM by value: EAX, NOT a retslot
+    bool    HasMipMaps() const;            // 0x18001eac0 — buffers.cpp (GetLevelCount's gate)
+    bool    Is2D() const;                  // 0x18001eb30 — not ported
+    bool    IsCube() const;                // 0x18001eb40 — not ported
+    bool    IsCompressed() const;          // 0x1800f2480 — buffers.cpp
+    bool    IsColorBuffer() const;         // 0x1800f24b0 — not ported
+    bool    IsDepthBuffer() const;         // 0x1800f24c0 — buffers.cpp
+    bool    IsDynamic() const;             // 0x1800f24d0 — buffers.cpp
+    bool    IsGenerated() const;           // 0x1800f24a0 — buffers.cpp
+    bool    IsRenderBuffer() const;        // 0x1800f2460 — buffers.cpp
+    bool    IsRendered() const;            // 0x1800f2490 — buffers.cpp
+    bool    IsShadowMap() const;           // 0x18001eb20 — not ported
+    bool    IsAliasedColor() const;        // 0x18001eb00 — not ported
+    bool    IsAliasedDepth() const;        // 0x18001eb10 — not ported
+    bool    CanDownsample() const;         // 0x18001ead0 — not ported
+    bool    ClearEdgeAlpha() const;        // 0x18001eae0 — not ported
+    bool    ClearEdgeColor() const;        // 0x18001eaf0 — not ported
+    void    AliasDefaultColorBuffer();     // 0x1800f3470 — not ported
+    void    AliasDefaultDepthBuffer();     // 0x1800f3340 — not ported
+    void    Bind(void* context, int32_t slot) const;   // 0x1800f3360 — not ported
+    bool    CopyToTexture(void* dst, int32_t width, int32_t height);   // 0x1800f3380 — buffers.cpp
+    bool    CopyFromTexture(void* src, int32_t width, int32_t height); // 0x1800f33a0 — buffers.cpp
+    void    Recreate();                    // 0x1800f33f0 — video_resources.cpp
+    void    Release();                     // 0x1800f33c0 — not ported
+    // `?GetData@ImageBuffer@Video@@` IS NOT IN THE SHIPPED EXPORT TABLE, under
+    // either mangling, and the two addresses previously claimed here
+    // (0x1800f2560 / 0x1800f2570) are not exports either. The pair is kept
+    // DECLARED because `dx11/` reads `_data` at +0x60 and a later block may want
+    // the accessor, but the "exported member" claim is withdrawn: they are
+    // either inlined everywhere or they do not exist.
+    ImageBufferData*       GetData();      // not exported — the non-const overload
+    const ImageBufferData* GetData() const;// not exported — `QEBA`, the const one
 
     // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z
     //   0x1800f2840. STATIC — it takes no `this`; the body is
@@ -343,9 +374,11 @@ public:
                                 int32_t height, uint32_t* pixels);
     // ?ReleaseDynamic@ / ?RecreateDynamic@ — STATIC, they walk the
     // `?_firstSurface@ImageBuffer@Video@@` intrusive list. Bodies in
-    // `dynamic_resources.cpp` (block D2).
-    static void ReleaseDynamic();          // 0x1800f3100
-    static void RecreateDynamic();         // 0x1800f30c0
+    // `dynamic_resources.cpp`, moved onto these members by block VC.
+    // Addresses corrected — see the banner above; `dynamic_resources.cpp` had
+    // the right pair all along (ordinals 3537 / 3523).
+    static void ReleaseDynamic();          // 0x1800f2e80
+    static void RecreateDynamic();         // 0x1800f2d90
 
     // `??0ImageBuffer@Video@@QEAA@AEBV01@@Z` (0x18001eb80) and
     // `??4ImageBuffer@Video@@QEAAAEAV01@AEBV01@@Z` (0x18001ec50) are REAL,
@@ -355,32 +388,60 @@ public:
     // alias `_data`, a singly-owned `ImageBufferData*`, and share `_sourceName`
     // without bumping its refcount) for whatever those two do.
     ImageBuffer(const ImageBuffer& other);              // 0x18001eb80 — not ported
-    ImageBuffer& operator=(const ImageBuffer& other);   // 0x18001ec50 — not ported
+    ImageBuffer& operator=(const ImageBuffer& other);   // 0x18001ec30 — not ported
+                                                        //   (was 0x18001ec50; the
+                                                        //   export table says ec30)
 
     // The static reflection companions retail emits.
     static uint32_t      TypeId();                              // 0x18001e8f0
     static Object::Base* CreateNewObject();                     // rt_factories_video.inc
     static Object::Base* CreateInPlaceObject(void* storage);    // rt_factories_video.inc
-    static void*         operator new(size_t size);             // ??2 — reached by name
+    // ??2ImageBuffer@Video@@SAPEAX_K@Z 0x18001e910 — the body moved onto this
+    // member by block VC; the door is `runtime/src/video/context_ctor.cpp`'s
+    // `RtVideo_ImageBuffer_OperatorNew`, which keeps its name and both rows.
+    static void*         operator new(size_t size);
+    // ??2ImageBuffer@Video@@SAPEAX_KPEAX@Z 0x18001e980 — not ported.
     static void*         operator new(size_t size, void* storage);
-    static void          operator delete(void* p);              // ??3 — closure_batch2b.cpp
+    // ??3ImageBuffer@Video@@SAXPEAX@Z 0x18001e990 — NOT PORTED, and the previous
+    // attribution to `closure_batch2b.cpp` was wrong: that file holds
+    // `Video::ShaderProgram`'s blob-array helper and a `Volume::Frustum` leaf,
+    // and no `??3ImageBuffer@Video@@` body or registration exists anywhere in
+    // the tree. (0x180006a10 — the address `context_lifecycle.cpp` registers —
+    // is NOT this: it is the shared unexported guarded free that IO, Save,
+    // Input, Object and Engine all reach by address.)
+    static void          operator delete(void* p);
+
+    // ---- PUBLIC BY NECESSITY, ENDGAME B.3.5 block VC ----------------------
+    // `~ImageBuffer` is non-virtual and PROTECTED in retail, and the two platform
+    // halves are PRIVATE (`AEAA`) — yet all three are exported by name and keep
+    // registered `extern "C"`-style doors in `runtime/src/video/buffers.cpp`, and
+    // a door is a free function that cannot name a protected member. They are
+    // therefore public, exactly as `Video::VertexLayout` made the same three
+    // public in b35-B and for the same reason. The CONSTRUCTOR stays protected.
+    //
+    // ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610) — NON-virtual, in no slot;
+    // reached by `DeletingDtor` (the deleting_dtor.cpp row) and by `Destruct`.
+    ~ImageBuffer();
+    void PlatformConstruct();                  // 0x1800f2f40 (was 0x1800f2ba0) — buffers.cpp
+    void PlatformDestruct();                   // 0x1800f3020 (was 0x1800f2c40) — buffers.cpp
 
 protected:
     // The registered doors over the protected surface. See the banner on the
     // forward declaration above `namespace RtVideo`.
     friend struct ::ImageBufferDoorAccess;
 
-    // See the "NOT CONSTRUCTIBLE" banner.
+    // See the "NOT CONSTRUCTIBLE" banner. THE CONSTRUCTOR STAYS PROTECTED — that
+    // is the property that matters, and it is what keeps a stray
+    // `Video::ImageBuffer ib;` from stamping GCC's table.
     ImageBuffer() = default;
 
-    // ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610), body in `buffers.cpp`.
-    // NON-virtual; reached by `DeletingDtor` and by `Destruct`.
-    ~ImageBuffer();
-
-    // The four private platform halves (`AEAA` = private, not unexported).
-    void PlatformConstruct();                  // 0x1800f2ba0
-    void PlatformDestruct();                   // 0x1800f2c40
-    bool PlatformCreate(LevelArray* levels);   // 0x1800f2c90
+    // ?PlatformCreate@ (private in retail, `AEAA`) and ?PlatformSerialize@ stay
+    // behind the friend holder: `PlatformSerialize` has a registered door and one
+    // in-class caller, both of which reach it through `ImageBufferDoorAccess`
+    // (B34_BRIEFS A.4 — friend the holder rather than widen the access, so the
+    // header keeps saying what retail says).
+    // Addresses corrected from the export table — see the banner above.
+    bool PlatformCreate(LevelArray* levels);   // 0x1800f3110 (was 0x1800f2c90) — not ported
     void PlatformSerialize(IO::Serializer& serializer);   // 0x1800f3130
 
     // RULE B5-15: both literals are COPIED from B35_SLOTS section 3, read

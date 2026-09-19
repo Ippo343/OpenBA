@@ -106,6 +106,7 @@
 // render context (Clear, the shader-time constants, the viewport, _frameIndex),
 // so the layout has to be the asserted one rather than raw byte offsets.
 #include "../../types/video/Context.h"
+#include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::ContextData
 #include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_Fill8Z bridge
 
 // ----------------------------------------------------------------------------
@@ -1037,8 +1038,6 @@ using SleepThreadFn       = void (*)(void*, int);
 using UiDrawFn            = void (*)(void*, void*);
 using UiCloseDialogFn     = void (*)(void*, void*);
 using LoadResourcesFn     = void (*)(void*);
-using CtxResetFn          = void (*)(void*);
-using CtxClearResourcesFn = void (*)(void*);
 using CurrentTimeTicksFn  = int64_t (*)();
 
 // The Video::Context backend object hangs off Context::_contextData (+0x2160).
@@ -1047,14 +1046,15 @@ using CurrentTimeTicksFn  = int64_t (*)();
 // ports below reproduce that dispatch rather than calling the wrapper, because
 // the wrapper is exactly those three instructions and nothing else
 // (runtime/types/video/Context.h documents all nine).
-using CdClearFn         = void (*)(void*, unsigned, unsigned, float, int);
-using CdBeginCommandsFn = bool (*)(void*);
-using CdEndCommandsFn   = void (*)(void*);
-using CdFinishFn        = void (*)(void*);
-
-inline void* CtxDataOf(RtVideo::Context* ctx) { return ctx->_contextData; }
-inline void* CdSlot(void* cd, int index) {
-    return reinterpret_cast<void**>(*reinterpret_cast<void**>(cd))[index];
+// ENDGAME B.3.5: the four hand-inlined slot calls below now go through the real
+// abstract `Video::ContextData` (runtime/types/video/CompanionData.h), whose 20
+// pure slots are declared in retail order — slot 1 `BeginCommands`, 2
+// `EndCommands`, 3 `Finish`, 4 `Clear`. The receiver is PROVED: it is
+// `Video::Context::_contextData` (+0x2160), which the header types as
+// `ContextData*`. The CONCRETE `*Data` subclass and the dx11 seam stay as they
+// are (B35_RULES section 11); only the dispatch converts.
+inline Video::ContextData* CtxDataOf(RtVideo::Context* ctx) {
+    return reinterpret_cast<Video::ContextData*>(ctx->_contextData);   // B.3.5 bridge
 }
 
 // MainLoop::_singleton: NOT redefined here. `MainLoopSingleton()` already exists
@@ -1171,8 +1171,8 @@ extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* /*self*/, float /*dt*/) {
     RtEngine::MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
-    void* cd = CtxDataOf(ctx);
-    reinterpret_cast<CdClearFn>(CdSlot(cd, 4))(cd, 7u, 0u, 1.0f, 0);
+    Video::ContextData* cd = CtxDataOf(ctx);
+    cd->Clear(7u, 0u, 1.0f, 0);
 }
 
 // ---- ?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800dafc0  ord 4045 -----
@@ -1240,8 +1240,8 @@ extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float /
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
 
-    void* cd = CtxDataOf(ctx);
-    reinterpret_cast<CdClearFn>(CdSlot(cd, 4))(cd, 7u, 0u, 1.0f, 0);
+    Video::ContextData* cd = CtxDataOf(ctx);
+    cd->Clear(7u, 0u, 1.0f, 0);
 
     const float secs = TicksToSeconds(self->_base._elapsedTicks);
 
@@ -1283,8 +1283,8 @@ extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float /*dt*/) {
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
 
-    void* cd = CtxDataOf(ctx);
-    reinterpret_cast<CdClearFn>(CdSlot(cd, 4))(cd, 7u, 0xff808080u, 1.0f, 0);
+    Video::ContextData* cd = CtxDataOf(ctx);
+    cd->Clear(7u, 0xff808080u, 1.0f, 0);
 
     static UiDrawFn uiDraw = reinterpret_cast<UiDrawFn>(
         ResolveExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z"));
@@ -1390,9 +1390,9 @@ extern "C" void RtEngine_Loader_Run(Loader* self) {
 extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
 
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(self->_context);
-    void* cd = CtxDataOf(ctx);
+    Video::ContextData* cd = CtxDataOf(ctx);
 
-    if (!reinterpret_cast<CdBeginCommandsFn>(CdSlot(cd, 1))(cd)) {
+    if (!cd->BeginCommands()) {
         // The device is gone. Tell the current loop, drop the dirty flag, and
         // hard-reset the context — then RETURN: nothing else in the frame runs.
         using DrawFailedFn = void (*)(void*);
@@ -1402,18 +1402,14 @@ extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
 
         RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(self->_context);
         self->_contextDirty = 0;
-        static CtxResetFn reset = reinterpret_cast<CtxResetFn>(
-            ResolveExport("?Reset@Context@Video@@QEAAXXZ"));
-        reset(c);
+        reinterpret_cast<Video::Context*>(c)->Reset();        // B.3.5 bridge
         return;
     }
 
     if (self->_contextDirty) {
         RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(self->_context);
         self->_contextDirty = 0;
-        static CtxClearResourcesFn clearRes = reinterpret_cast<CtxClearResourcesFn>(
-            ResolveExport("?ClearResources@Context@Video@@QEAAXXZ"));
-        clearRes(c);
+        reinterpret_cast<Video::Context*>(c)->ClearResources();  // B.3.5 bridge
     }
 
     {
@@ -1449,8 +1445,8 @@ extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
 
     {
         RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(self->_context);
-        void* cd2 = CtxDataOf(c);
-        reinterpret_cast<CdEndCommandsFn>(CdSlot(cd2, 2))(cd2);
+        Video::ContextData* cd2 = CtxDataOf(c);
+        cd2->EndCommands();
     }
 
     RtVideo::Context* last = reinterpret_cast<RtVideo::Context*>(self->_context);
@@ -1461,9 +1457,9 @@ extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
     if (RtEngine::MainLoop* g = MainLoopSingleton())
         g->_frameUpdateTime = nowTicks() - g->_frameStartTicks;
 
-    void* cd3 = CtxDataOf(last);
+    Video::ContextData* cd3 = CtxDataOf(last);
     ++last->_frameIndex;
-    reinterpret_cast<CdFinishFn>(CdSlot(cd3, 3))(cd3);
+    cd3->Finish();
 }
 
 // ============================================================================

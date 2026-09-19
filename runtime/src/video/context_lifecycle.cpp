@@ -58,6 +58,10 @@
 #include "../../types/video/Buffers.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/Device.h"
+// ENDGAME B.3.5 block VC — `Video::{Context,ConstantBuffer,ImageBuffer}Data`'s
+// slot names, and `Video::ImageBuffer` for the two default images' slot 0.
+#include "../../types/video/CompanionData.h"
+#include "../../types/video/ImageBuffer.h"
 
 // ENDGAME B.3.5 block D1. `?ClearResources@` MOVED onto `Video::Context`; its
 // door keeps its name and both its rows. THE TWO DESTRUCTORS DO NOT MOVE and
@@ -82,21 +86,19 @@ using RtVideo::RenderBuffer;
 void RtVideoDeviceLock(void** deviceSingleton);
 void RtVideoDeviceUnlock(void** deviceSingleton);
 
-// Ported siblings in buffers.cpp (Wave 6 lane C / Wave 9 lane W). Retail's dtor
-// reaches these by direct near CALL; ours reaches the C++ symbols, so no
-// resolver sits on the path at all.
-void Video_IndexBuffer_PlatformDestruct(IndexBuffer* self);
-void Video_VertexBuffer_PlatformDestruct(VertexBuffer* self);
-// ...and the THIRD sibling, added by Wave 20 Phase 0c. This file used to carry
-// its own `extern "C"` copy of RenderBuffer::PlatformDestruct. Two distinct
-// bodies under one export name link happily (different linkage), and because
-// RtVideoContextLifecycleRegister runs AFTER RtVideoBuffersRegister, the copy
-// won both doors and lane C's body -- the instrumented one, the one the
-// BufferClass probe drives -- was shadowed dead code that the census still
-// counted as ported. The two were behaviourally equivalent (same companion
-// release, same lock, same double head-fixup, same non-nulling of +0x28), so
-// nothing was ever observably wrong; it was one edit away from being wrong.
-void Video_RenderBuffer_PlatformDestruct(RenderBuffer* self);
+// The three `Platform*` siblings live in buffers.cpp (Wave 6 lane C / Wave 9
+// lanes W and GFX2). Retail's dtor reaches them by direct near CALL; ours reaches
+// the C++ MEMBERS — ENDGAME B.3.5 block VC — so no resolver and no free-function
+// door sits on the path at all, and the three `extern` declarations that used to
+// be here are gone.
+//
+// (Wave 20 Phase 0c's warning is kept because it is still the reason there is
+// exactly one body: this file used to carry its own copy of
+// `RenderBuffer::PlatformDestruct`, and because RtVideoContextLifecycleRegister
+// runs AFTER RtVideoBuffersRegister, the copy won both doors and lane C's
+// instrumented body was shadowed dead code the census still counted as ported.
+// The two were behaviourally equivalent, so nothing was ever observably wrong;
+// it was one edit away from being wrong.)
 
 // Declared locally rather than by including standalone/resolve.h, which drags
 // in <windows.h> — PLAN §4.1 decision 1 keeps runtime/src/ platform-neutral
@@ -140,11 +142,12 @@ void MemFree(void* p) {
 // released this way. The deref is UNGUARDED past the null test retail already
 // makes, exactly as retail leaves it.
 // ---------------------------------------------------------------------------
-inline void DeletingDtor(void* obj) {
-    using Fn = void* (*)(void*, int);
-    Fn slot0 = *reinterpret_cast<Fn*>(*reinterpret_cast<void**>(obj));
-    slot0(obj, 1);
-}
+// ENDGAME B.3.5 block VC — the free-function `DeletingDtor(void*)` helper is
+// GONE. Its three call sites in `~Context` are virtual `DeletingDtor(1)` calls on
+// `Video::ContextData` and `Video::ImageBuffer`, both of which declare slot 0
+// under that exact name, and `~ConstantBuffer` makes the same call on
+// `Video::ConstantBufferData`.
+// ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
 // The System::String release the ConstantBuffer dtor and 0x18001cfc0 both
@@ -274,7 +277,12 @@ extern "C" void RtVideo_ConstEntryArrayDtor(void* arr) {
 extern "C" void Video_ConstantBuffer_Dtor(void* selfRaw) {
     Video::ConstantBuffer* self = static_cast<Video::ConstantBuffer*>(selfRaw);
 
-    if (void* companion = self->_platformData) DeletingDtor(companion);
+    // ENDGAME B.3.5 block VC: a virtual slot-0 call on block A's real
+    // `Video::ConstantBufferData`. `_platformData` is a pinned `void*` at +0x40
+    // (dx11 reads it), so the receiver takes one marked bridge cast.
+    if (void* companion = self->_platformData)
+        reinterpret_cast<Video::ConstantBufferData*>(companion)       // B.3.5 bridge
+            ->DeletingDtor(1);
 
     StringPairArrayDtor(&self->_constantData);
 
@@ -287,20 +295,50 @@ extern "C" void Video_ConstantBuffer_Dtor(void* selfRaw) {
 // ============================================================================
 // A class `operator delete`: `if (p) { Enter(alloc CS); Free(_singleton, p);
 // Leave; }`. Byte-for-byte the same body as 0x180018500 (Video::Context's own
-// operator delete) and 0x180006a10 (the buffers'). Our 0x1800c7ad0 MemFree is
-// that composition, with the null test inside it, which is why the pointer is
-// handed over unguarded exactly as retail's `TEST RCX,RCX; JZ ret` allows.
+// operator delete) and 0x180006a10. Our 0x1800c7ad0 MemFree is that composition,
+// with the null test inside it, which is why the pointer is handed over
+// unguarded exactly as retail's `TEST RCX,RCX; JZ ret` allows.
+//
+// ENDGAME B.3.5 block VC: the body is `Video::RenderBuffer::operator delete`, a
+// STATIC member (which changes no triviality trait, so `Device.h`'s
+// `is_trivially_copyable<RenderBuffer>` assert still holds and still proves it).
+// The door keeps its name and both rows.
 // ============================================================================
-extern "C" void Video_RenderBuffer_OperatorDelete(void* p) {
+void Video::RenderBuffer::operator delete(void* p) {
     MemFree(p);
 }
 
-// The same body at its two other addresses. They are DISTINCT FUNCTIONS in the
-// image (three separate `operator delete` instantiations that the compiler did
-// not fold), so each needs its own address registration; sharing one C++ body
-// is safe only because the three are provably identical instruction sequences.
+extern "C" void Video_RenderBuffer_OperatorDelete(void* p) {
+    Video::RenderBuffer::operator delete(p);
+}
+
+// `??3Context@Video@@SAXPEAX@Z` (0x180018500) stays a FREE FUNCTION and not
+// `Video::Context::operator delete`: `Context.h` declares none of the eight
+// lifecycle spellings, on purpose, and that header — not this file — is where
+// the decision lives. It is a distinct function in the image from the one above.
 extern "C" void Video_Context_OperatorDelete(void* p) { MemFree(p); }
-extern "C" void Video_Buffer_OperatorDelete(void* p)  { MemFree(p); }
+
+// ============================================================================
+// 0x180006a10 — ATTRIBUTION CORRECTED, ENDGAME B.3.5 block VC.
+// ============================================================================
+// This was called `Video_Buffer_OperatorDelete` and described as "the buffers'"
+// third `operator delete` instantiation. IT IS NOT A `Video::` MEMBER AT ALL. It
+// is UNEXPORTED — there is no `??3{Index,Vertex,Image}Buffer@Video@@` in the
+// shipped export directory that resolves here — and it is the tree's shared
+// guarded object free, reached by `ResolveAddr(Module::Runtime, 0x180006a10)`
+// from at least eight files outside Video: `io/file_stream.cpp`,
+// `io/compressed_stream_release.cpp`, `io/binary_writer.cpp`,
+// `io/iobase_vtables.cpp`, `input/keymap_save.cpp`, `object/deleting_dtor.cpp`
+// (its scalar/array MemFree target), `engine/closure_batch2b.cpp` and
+// `engine/engine_platform.cpp`. b35-D1 measured about a hundred callers across
+// IO / Save / Graphics.
+//
+// ONLY THE NAME AND THIS COMMENT CHANGE. The registration below is untouched:
+// this remains the one body at that address, `~Context` still frees its three
+// buffer sub-objects through it (which is retail — retail's ~Context calls
+// 0x180006a10 and NOT 0x180018500 for them), and every other caller keeps
+// landing here through the registry-first address door.
+extern "C" void Rt_GuardedObjectFree(void* p) { MemFree(p); }
 
 // ============================================================================
 // ?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ — retail 0x1800f4400, ord 3369
@@ -425,26 +463,41 @@ extern "C" void RtVideo_Context_ClearResources(Context* self) {
 // identical, but the call is by address to a different function and is
 // registered as such.
 // ============================================================================
+// ENDGAME B.3.5 block VC: the seven sub-object releases are direct calls. The
+// three `Platform*` free functions became qualified member calls, `operator
+// delete` is `Video::RenderBuffer`'s member, and the three `DeletingDtor(p)`
+// hand-inlined slot-0 dispatches are VIRTUAL CALLS on block A's
+// `Video::ContextData` and on `Video::ImageBuffer` — which is what retail's
+// `MOV RAX,[RCX] / MOV EDX,1 / CALL [RAX]` is, slot 0 with the deleting flag. The
+// free-function `DeletingDtor` helper is kept for nothing else and is gone.
 extern "C" void RtVideo_Context_Dtor(Context* self) {
-    if (self->_contextData) DeletingDtor(self->_contextData);
+    // B.3.5 bridge — `_contextData` is a pinned `void*` at +0x2160.
+    if (self->_contextData)
+        reinterpret_cast<Video::ContextData*>(self->_contextData)->DeletingDtor(1);
 
     if (void* p = self->_dynamicVertexBuffer) {
-        Video_VertexBuffer_PlatformDestruct(static_cast<VertexBuffer*>(p));
-        Video_Buffer_OperatorDelete(p);
+        reinterpret_cast<Video::VertexBuffer*>(p)                      // B.3.5 bridge
+            ->Video::VertexBuffer::PlatformDestruct();
+        Rt_GuardedObjectFree(p);
     }
     if (void* p = self->_dynamicIndexBuffer) {
-        Video_IndexBuffer_PlatformDestruct(static_cast<IndexBuffer*>(p));
-        Video_Buffer_OperatorDelete(p);
+        reinterpret_cast<Video::IndexBuffer*>(p)                       // B.3.5 bridge
+            ->Video::IndexBuffer::PlatformDestruct();
+        Rt_GuardedObjectFree(p);
     }
-    if (void* p = self->_defaultColorImage) DeletingDtor(p);
-    if (void* p = self->_defaultDepthImage) DeletingDtor(p);
+    if (void* p = self->_defaultColorImage)
+        reinterpret_cast<Video::ImageBuffer*>(p)->DeletingDtor(1);     // B.3.5 bridge
+    if (void* p = self->_defaultDepthImage)
+        reinterpret_cast<Video::ImageBuffer*>(p)->DeletingDtor(1);     // B.3.5 bridge
     if (void* p = self->_defaultRenderBuffer) {
-        Video_RenderBuffer_PlatformDestruct(static_cast<RenderBuffer*>(p));
-        Video_RenderBuffer_OperatorDelete(p);
+        reinterpret_cast<Video::RenderBuffer*>(p)                      // B.3.5 bridge
+            ->Video::RenderBuffer::PlatformDestruct();
+        Video::RenderBuffer::operator delete(p);
     }
     if (void* p = self->_dynamicInstanceBuffer) {
-        Video_VertexBuffer_PlatformDestruct(static_cast<VertexBuffer*>(p));
-        Video_Buffer_OperatorDelete(p);
+        reinterpret_cast<Video::VertexBuffer*>(p)                      // B.3.5 bridge
+            ->Video::VertexBuffer::PlatformDestruct();
+        Rt_GuardedObjectFree(p);
     }
 
     Video_ConstantBuffer_Dtor(&self->_lightConstants);
@@ -621,7 +674,9 @@ int RtVideoContextLifecycleRegister() {
     RegisterRuntimeExport("??3Context@Video@@SAXPEAX@Z",
                           (void*)&Video_Context_OperatorDelete); ++n;
     RegisterRuntimeAddr(0x180018500, (void*)&Video_Context_OperatorDelete);
-    RegisterRuntimeAddr(0x180006a10, (void*)&Video_Buffer_OperatorDelete);
+    // 0x180006a10 — the SHARED unexported guarded free, not a `Video::` member.
+    // See the banner on `Rt_GuardedObjectFree`; the row is unchanged.
+    RegisterRuntimeAddr(0x180006a10, (void*)&Rt_GuardedObjectFree);
 
     return n;
 }

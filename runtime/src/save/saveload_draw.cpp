@@ -194,8 +194,10 @@
 #include "../../types/math/Math.h"
 #include "../../types/volume/Volume.h"
 #include "../../types/video/Context.h"
+#include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::ContextData
 #include "../../types/video/Device.h"
 #include "../../types/video/ImageBuffer.h"
+#include "../../types/graphics/FrameCopyImageBuffer.h"  // ENDGAME B.3.5
 #include "../../types/graphics/Camera.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
@@ -329,14 +331,11 @@ void ArrayBindingSetSize(ArrayHeader* a, uint32_t newSize, const MaterialBinding
 
 using OpNewFn      = void* (*)(uint64_t);
 using VoidThisFn   = void  (*)(void*);
-using RbCreateFn   = bool  (*)(void*, const void*, const void*);
 // ENDGAME B.3.1 step 2: the String::Set door typedef is gone with its one call
 // site — it is `diffuse.Set("diffuse")` now.
 using SheetSetFn   = void  (*)(void*, int32_t, int32_t, const char**, const char**, bool);
 using AddSpriteInfoFn = void (*)(void*, const char**, const char**, int32_t, int32_t, int32_t, int32_t);
 using CameraCtorFn = void  (*)(void*, const Frustum*, const Transform3*, bool);  // return ignored, see above
-using SetCameraFn  = void  (*)(Context*, const Matrix*, const Matrix*);
-using SetTransformFn = void (*)(Context*, int32_t, const Matrix*);
 using SpriteCtxFn  = void  (*)(UI::SpriteContext*);
 using AddSpriteDrawFn = void (*)(UI::SpriteContext*, const UI::SpriteDraw*);
 
@@ -455,22 +454,26 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     // 0x100 — ImageBuffer flag bit 8, "size = the device's size" — and 5/6 are
     // the device's backbuffer dimensions. See banner note 2 for the
     // decompiler's fabricated qword here.
-    using Create11Fn = void (*)(void*, int32_t, int32_t, int32_t, uint32_t, int32_t, int32_t,
-                                int32_t, int32_t, int32_t, int32_t, void*);
-    (*reinterpret_cast<Create11Fn*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(frameCopy)) + 0x48))(
-            frameCopy, 0, 4, 5, 0x100,
-            device->backBufferWidth, device->backBufferHeight, 1, 1, 1, 1, nullptr);
+    // ENDGAME B.3.5: +0x48 is slot 9, and the receiver is PROVED — the op-new and
+    // ctor two statements up are FrameCopyImageBuffer's own, so the static type is
+    // `Graphics::FrameCopyImageBuffer`, which OVERRIDES slot 9 (its own
+    // 0x1800a3b70, not `Video::ImageBuffer`'s 0x1800f2680). The eleven parameter
+    // types come from the export-table entry, unchanged.
+    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)->Create(
+        0, 4, 5, 0x100u,
+        device->backBufferWidth, device->backBufferHeight,
+        1, 1, 1, 1, nullptr);                                // B.3.5 bridge
 
     // vtable[0x50] is `?Generate@FrameCopyImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z`
     // — `void Generate(Video::Context&, int) const`. TWO parameters plus `this`.
     // That is banner note 1 confirmed a SECOND, independent way: the export
     // table says three arguments and Ghidra's C printed two, so the finding does
     // not rest on my reading of the disassembly alone.
-    using GenerateFn = void (*)(void*, Context*, int32_t);
-    (*reinterpret_cast<GenerateFn*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(frameCopy)) + 0x50))(
-            frameCopy, ctx, 1);
+    // +0x50 is slot 10, introduced by `Graphics::GeneratedImageBuffer` and
+    // overridden here: `void Generate(Video::Context&, int) const`. Three
+    // arguments including `this`, which is banner note 1.
+    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(frameCopy)
+        ->Generate(ctx, 1);                                  // B.3.5 bridge
 
     // ---- the offscreen colour target --------------------------------------
     ImageBuffer* target = nullptr;
@@ -482,10 +485,13 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
             target = static_cast<ImageBuffer*>(p);
         }
     }
-    (*reinterpret_cast<Create11Fn*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(target)) + 0x48))(
-            target, 0, 0, 5, 0,
-            self->_captureWidth, self->_captureHeight, 1, 1, 1, 1, nullptr);
+    // Same slot 9, but the proved static type here is plain `Video::ImageBuffer`
+    // (the op-new and ctor above are `??2ImageBuffer@Video@@` /
+    // `??0ImageBuffer@Video@@`), so this reaches ImageBuffer's own 0x1800f2680.
+    reinterpret_cast<Video::ImageBuffer*>(target)->Create(
+        0, 0, 5, 0u,
+        self->_captureWidth, self->_captureHeight,
+        1, 1, 1, 1, nullptr);                                // B.3.5 bridge
 
     // ---- the render buffer ------------------------------------------------
     // Three qword zero stores, then `PlatformConstruct`. The zeroing is INSIDE
@@ -497,12 +503,13 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
             reinterpret_cast<uint64_t*>(p)[0] = 0;
             reinterpret_cast<uint64_t*>(p)[1] = 0;
             reinterpret_cast<uint64_t*>(p)[2] = 0;
-            RT_EXPORT_ONCE(VoidThisFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(p);
+            reinterpret_cast<Video::RenderBuffer*>(p)
+                ->PlatformConstruct();                       // B.3.5 bridge
             renderBuffer = p;
         }
     }
-    RT_EXPORT_ONCE(RbCreateFn, "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z")(
-        renderBuffer, target, nullptr);
+    reinterpret_cast<Video::RenderBuffer*>(renderBuffer)->Create(
+        reinterpret_cast<const Video::ImageBuffer*>(target), nullptr);  // B.3.5 bridge
 
     // ---- save the viewport, and letterbox ---------------------------------
     const Viewport savedViewport = ctx->_viewport;
@@ -664,13 +671,13 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     // Clear, through the backend: contextData->vtable[0x20](this, 1, 0xffff6000, 1.0f, 0).
     // The colour argument is an int (`MOV R8D,0xffff6000`), the depth a float in
     // XMM3, and the fifth a DWORD 0 in the shadow space.
-    {
-        void* cd = ctx->_contextData;
-        using ClearFn = void (*)(void*, int32_t, uint32_t, float, int32_t);
-        (*reinterpret_cast<ClearFn*>(
-            reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(cd)) + 0x20))(
-                cd, 1, 0xffff6000u, 1.0f, 0);
-    }
+    // ENDGAME B.3.5: +0x20 is slot 4 of the real abstract `Video::ContextData`,
+    // `Clear(unsigned flags, unsigned color, float depth, int stencil)`. The
+    // receiver is PROVED — it is `Video::Context::_contextData` (+0x2160), which
+    // Context.h types as `ContextData*`. The concrete subclass and the dx11 seam
+    // stay as they are (B35_RULES section 11).
+    reinterpret_cast<Video::ContextData*>(ctx->_contextData)
+        ->Clear(1u, 0xffff6000u, 1.0f, 0);                   // B.3.5 bridge
 
     // ---- the orthographic camera ------------------------------------------
     // Six planes and an "orthographic" flag, all literals except the two that
@@ -715,8 +722,7 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     Matrix projection;
     std::memcpy(&projection, &camera.projection, sizeof(Matrix));
 
-    RT_EXPORT_ONCE(SetCameraFn, "?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z")(
-        ctx, &view, &projection);
+    reinterpret_cast<Video::Context*>(ctx)->SetCamera(view, projection);  // B.3.5 bridge
 
     // ---- the sprite context, constructed inline ---------------------------
     // A stack object whose constructor retail inlined. See the banner for the
@@ -756,8 +762,7 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
         // alone is the memset, and -Wclass-memaccess is not tripped.
         Matrix identity;
         identity.m[0] = 1.0f; identity.m[5] = 1.0f; identity.m[10] = 1.0f; identity.m[15] = 1.0f;
-        RT_EXPORT_ONCE(SetTransformFn, "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z")(
-            ctx, 0, &identity);
+        reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, identity);  // B.3.5 bridge
     }
     sc._scale = 1.0f;   // written a second time, after SetTransform
 
@@ -842,7 +847,8 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     (*reinterpret_cast<DeletingDtorFn*>(*reinterpret_cast<void**>(frameCopy)))(frameCopy, 1);
 
     if (renderBuffer != nullptr) {
-        RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(renderBuffer);
+        reinterpret_cast<Video::RenderBuffer*>(renderBuffer)
+            ->PlatformDestruct();                            // B.3.5 bridge
         RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(renderBuffer);
     }
 

@@ -155,6 +155,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
+#include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp — the linker
@@ -290,15 +291,13 @@ enum : size_t {
     kSpriteStride     = 0x0038,
 };
 
-// ContextData vtable byte offsets. Both are pinned twice over: once as the
-// offset the exported one-line thunk jumps through, and once by dx11/'s own
-// slot table (dx11/src/contextdata.cpp:37-38).
-enum : size_t {
-    kCdBeginVertices = 0x70,   // bool (ContextData*, int vertexCount, int stride)
-    kCdEndVertices   = 0x78,   // void (ContextData*, int primitiveType)
-};
-typedef bool (*BeginVerticesFn)(void*, int32_t, int32_t);
-typedef void (*EndVerticesFn)(void*, int32_t);
+// ENDGAME B.3.5: the two ContextData byte offsets are gone. +0x70 and +0x78 are
+// slots 14 (`BeginVertices(int,int)`) and 15 (`EndVertices(int)`) of the real
+// abstract `Video::ContextData`, declared in retail order in CompanionData.h and
+// pinned there against dx11's own slot table (dx11/src/contextdata.cpp:37-38).
+// The receiver is PROVED: it is `Video::Context::_contextData` at +0x2160. The
+// CONCRETE `*Data` subclass and the 84-slot seam are a declared leave for step 5
+// (B35_RULES section 11); only the dispatch converts.
 
 // The dirty bit `Flush` ORs in when the scissor changed (0x18011badf).
 const uint32_t kDirtyScissor = 0x400;
@@ -323,10 +322,12 @@ inline void* VideoDeviceData() {
     return Field<void*>(device, 0x100);
 }
 
+// ENDGAME B.3.5: slot 5 of the real abstract `Video::DeviceData`. The retail
+// name is not recoverable, so CompanionData.h calls it `Slot5()` and records
+// what dx11's override returns; the receiver is PROVED (it is `Device+0x100`,
+// the DeviceData the singleton owns).
 inline float DeviceHalfPixel(void* deviceData) {
-    void** vt = *reinterpret_cast<void***>(deviceData);
-    typedef float (*Fn)(void*);
-    return reinterpret_cast<Fn>(vt[5])(deviceData);
+    return reinterpret_cast<Video::DeviceData*>(deviceData)->Slot5();  // B.3.5 bridge
 }
 
 // One vertex into the live buffer.
@@ -384,11 +385,9 @@ void FlushBody(SpriteContext* self, float halfPixel,
         const int32_t n = (count < chunkCap) ? count : chunkCap;
         count -= n;
 
-        void*  cd   = Field<void*>(self->_context, kCtxContextData);
-        void** cdvt = *reinterpret_cast<void***>(cd);
-        const bool ok = reinterpret_cast<BeginVerticesFn>(
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(cdvt) + kCdBeginVertices))(
-                cd, n * vertsPer, 0x20);
+        Video::ContextData* cd = reinterpret_cast<Video::ContextData*>(
+            Field<void*>(self->_context, kCtxContextData));
+        const bool ok = cd->BeginVertices(n * vertsPer, 0x20);   // B.3.5 bridge
 
         if (!ok) {
             // 0x18011bc0d/0x18011bc0f: the chunk's records are SKIPPED and
@@ -510,12 +509,10 @@ void FlushBody(SpriteContext* self, float halfPixel,
         base += n;
 
         // 0x18011c5c5..0x18011c5e3. `_context` and `+0x2160` are re-read.
-        void*  cd2   = Field<void*>(self->_context, kCtxContextData);
-        void** cdvt2 = *reinterpret_cast<void***>(cd2);
+        Video::ContextData* cd2 = reinterpret_cast<Video::ContextData*>(
+            Field<void*>(self->_context, kCtxContextData));
         const int32_t prim = isLine ? 2 : 0;
-        reinterpret_cast<EndVerticesFn>(
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(cdvt2) + kCdEndVertices))(
-                cd2, prim);
+        cd2->EndVertices(prim);                                  // B.3.5 bridge
     }
 
     // --- 0x18011c674..0x18011c685 ------------------------------------------
