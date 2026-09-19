@@ -115,42 +115,13 @@ static int StriCmpAscii(const char* a, const char* b) {
 // DIFF: full oracle. Read-only on both sides (PlatformExists stats a file,
 // no mutation).
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
+// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
+// both registrations and delegates. No qualified `IO::` call is needed:
+// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
+// B34_BRIEFS section A.1's re-entry hazard cannot arise.
 bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
-    const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
-
-    // RT_EXPORT_ONCE, not bare the raw DLL door and not the raw DLL door.
-    //
-    // The _ONCE half is the original reason and still holds: these two calls
-    // are on the NORMAL path, not inside a diff guard, and bare the raw DLL door is
-    // GetProcAddress -- an export-table binary search by string under the
-    // loader lock on EVERY call. Two of them in the body of a function the
-    // quicksave path calls per file is the Wave 2 perf-gate defect exactly
-    // (WAVE3_LANE_P.md): it cost 5.6 points of sim time from inside
-    // System::Time and was invisible to both profilers because it lands in
-    // ntdll self time.
-    //
-    // WAVE 9 LANE V2, 2026-09-07 changed only the DOOR. These two calls ARE
-    // Exists's logic, so they are a REAL DEPENDENCY, and the raw door resolves
-    // to NULL with Runtime-x64.dll absent. Note rawdoor_audit did NOT report
-    // these: its resolve-and-call regex is per-line and here the argument list
-    // opens on the following line. Found by a paren-matching re-scan, not by
-    // the checker.
-    //
-    // The diff line below stays on the raw DLL door deliberately -- it is the oracle,
-    // it must reach the SHIPPED body, and it only evaluates under the guard.
-    bool ours;
-    if (fs->existsInPackfileGate != 0 &&
-        RT_EXPORT_ONCE(fn_Exists_t,
-            "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(fs, path)) {
-        ours = true;
-    } else if (fs->platformExistsGate == 0) {
-        ours = false;
-    } else {
-        ours = RT_EXPORT_ONCE(fn_Exists_t,
-            "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z")(fs, path);
-    }
-
-    return ours;
+    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->Exists(*path);
 }
 
 // ============================================================================
@@ -172,16 +143,18 @@ bool RtIo_FileSystem_Exists(const void* fsVoid, const Filename* path) {
 // (same shared string), which is exactly what this proves: our AddRef landed
 // on the DLL's own live dataDirectory buffer, not a stale or wrong one.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
+// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
+// both registrations and delegates. No qualified `IO::` call is needed:
+// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
+// B34_BRIEFS section A.1's re-entry hazard cannot arise.
+//
+// The return is BY VALUE, so `ret` IS retail's hidden return slot (RDX); the
+// member's by-value return fills it through the same ABI, so the door
+// constructs the member's result into it -- one AddRef, exactly as before.
 Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
-    const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
-
-    // ENDGAME B.3.1 step 2: retail's copy ctor, spelled as itself. `ret` is the
-    // hidden return slot — raw, uninitialised bytes — so the object is placement-
-    // constructed into it, which is exactly what the CALL at 0x180007c06 does.
-    // `dataDirectory` is a `RtSystem::String` member of the not-yet-converted
-    // `IO::FileSystem`, so it comes through the one transitional bridge.
-    new (ret) System::Filename(SysFile(fs->dataDirectory));
-
+    new (ret) System::Filename(
+        reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetDataDirectory());
     return ret;
 }
 
@@ -199,13 +172,14 @@ Filename* RtIo_FileSystem_GetDataDirectory(const void* fsVoid, Filename* ret) {
 //
 // DIFF: full oracle, same reasoning as GetDataDirectory.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
+// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
+// both registrations and delegates. No qualified `IO::` call is needed:
+// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
+// B34_BRIEFS section A.1's re-entry hazard cannot arise.
 Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) {
-    const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
-
-    // ENDGAME B.3.1 step 2, as GetDataDirectory above. `sourceDirectory` is
-    // FileSystem+0x00, which is why retail's `MOV RDX,RCX` passes `this` itself.
-    new (ret) System::Filename(SysFile(fs->sourceDirectory));
-
+    new (ret) System::Filename(
+        reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetSourceDirectory());
     return ret;
 }
 
@@ -230,55 +204,13 @@ Filename* RtIo_FileSystem_GetSourceDirectory(const void* fsVoid, Filename* ret) 
 //
 // DIFF: full oracle. Read-only on both sides.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 4: the body is now a member of the real
+// `IO::FileSystem`, at the bottom of this file. The door keeps its name and
+// both registrations and delegates. No qualified `IO::` call is needed:
+// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
+// B34_BRIEFS section A.1's re-entry hazard cannot arise.
 uint32_t RtIo_FileSystem_GetPackfileId(const void* fsVoid, const Filename* path) {
-    const FileSystem* fs = static_cast<const FileSystem*>(fsVoid);
-
-    uint32_t ours = 0;
-
-    const char* pathData = path->data;
-    const int pathLen = pathData ? StringLength(pathData) : 0;
-    const char* dataDirData = fs->dataDirectory.data;
-    const int dataDirLen = dataDirData ? StringLength(dataDirData) : 0;
-
-    if (dataDirLen < pathLen) {
-        // Relative path = pathData + dataDirLen (a suffix of the SAME buffer,
-        // not a copy yet — String::Set below is what allocates the copy).
-        // ENDGAME B.3.1 step 2: `Filename relPath(pathData + dataDirLen)` is
-        // exactly retail's Set-then-AdjustDelimiters pair (the Filename
-        // const char* ctor, 0x180026cf0). RAII replaces the manual release at
-        // the bottom of the block.
-        System::Filename relPath(pathData + dataDirLen);
-
-        const char* str1 = relPath._data;
-        PackfileIndexNode* node = fs->packfileIndexRoot;
-        PackfileIndexNode* found = nullptr;
-        while (node) {
-            const char* key = node->key;
-            bool condA;
-            if (!key) condA = true;
-            else if (!str1) condA = false;
-            else condA = StriCmpAscii(str1, key) >= 0;
-
-            if (condA) {
-                bool condB;
-                if (!str1) condB = true;
-                else if (!key) condB = false;
-                else condB = StriCmpAscii(key, str1) >= 0;
-
-                if (condB) { found = node; break; }
-                node = node->right;
-            } else {
-                node = node->left;
-            }
-        }
-
-        if (found)
-            ours = fs->packfiles[found->packIndex]->packfileId;
-
-        // (relPath's release is ~Filename now — retail's own 0x1800ab0f2.)
-    }
-
-    return ours;
+    return reinterpret_cast<const IO::FileSystem*>(fsVoid)->GetPackfileId(*path);
 }
 
 // ============================================================================
@@ -313,6 +245,133 @@ int RtIo_Modification_Find(const void* modVoid, const Filename* path) {
 // than moving to modification.cpp. It lives in filesystem.cpp because this is
 // where the door and its registration have always been.
 namespace IO {
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::FileSystem`'s member bodies (PARTIAL)
+// ============================================================================
+// Only the four members whose doors live in THIS file. The other fifteen are
+// still free functions in the eight sibling `filesystem*.cpp` files, nine of
+// them on the OPEN/READ path B34_BRIEFS section D binds; runtime/types/io/
+// FileSystem.h's banner lists exactly which and where.
+//
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); this block reaches
+// this file's `RtIO`-scoped helpers as `RtIO::X`, which works for its `static`
+// members too in this same translation unit. Every POD is spelled `RtIO::` or
+// `RtSystem::` and every real class `System::` (B34_RULES section 7.2).
+//
+// NO ADDED NULL GUARDS ANYWHERE BELOW. This file's own banner already records
+// that Exists, GetPackfileId and Find deref fields unguarded because retail
+// does; the move changes nothing about that.
+
+bool FileSystem::Exists(const RtSystem::Filename& pathRef) const {
+    const RtSystem::Filename* const path = &pathRef;
+
+    // RT_EXPORT_ONCE, not bare the raw DLL door and not the raw DLL door.
+    //
+    // The _ONCE half is the original reason and still holds: these two calls
+    // are on the NORMAL path, not inside a diff guard, and bare the raw DLL door is
+    // GetProcAddress -- an export-table binary search by string under the
+    // loader lock on EVERY call. Two of them in the body of a function the
+    // quicksave path calls per file is the Wave 2 perf-gate defect exactly
+    // (WAVE3_LANE_P.md): it cost 5.6 points of sim time from inside
+    // System::Time and was invisible to both profilers because it lands in
+    // ntdll self time.
+    //
+    // WAVE 9 LANE V2, 2026-09-07 changed only the DOOR. These two calls ARE
+    // Exists's logic, so they are a REAL DEPENDENCY, and the raw door resolves
+    // to NULL with Runtime-x64.dll absent. Note rawdoor_audit did NOT report
+    // these: its resolve-and-call regex is per-line and here the argument list
+    // opens on the following line. Found by a paren-matching re-scan, not by
+    // the checker.
+    //
+    // The diff line below stays on the raw DLL door deliberately -- it is the oracle,
+    // it must reach the SHIPPED body, and it only evaluates under the guard.
+    bool ours;
+    if (_existsInPackfileGate != 0 &&
+        RT_EXPORT_ONCE(RtIO::fn_Exists_t,
+            "?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z")(this, path)) {
+        ours = true;
+    } else if (_platformExistsGate == 0) {
+        ours = false;
+    } else {
+        ours = RT_EXPORT_ONCE(RtIO::fn_Exists_t,
+            "?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z")(this, path);
+    }
+
+    return ours;
+}
+
+System::Filename FileSystem::GetDataDirectory() const {
+
+    // ENDGAME B.3.1 step 2: retail's copy ctor, spelled as itself. `ret` is the
+    // hidden return slot — raw, uninitialised bytes — so the object is placement-
+    // constructed into it, which is exactly what the CALL at 0x180007c06 does.
+    // `dataDirectory` is a `RtSystem::String` member of the not-yet-converted
+    // `IO::FileSystem`, so it comes through the one transitional bridge.
+    return System::Filename(RtIO::SysFile(_dataDirectory));
+
+}
+
+System::Filename FileSystem::GetSourceDirectory() const {
+
+    // ENDGAME B.3.1 step 2, as GetDataDirectory above. `sourceDirectory` is
+    // FileSystem+0x00, which is why retail's `MOV RDX,RCX` passes `this` itself.
+    return System::Filename(RtIO::SysFile(_sourceDirectory));
+
+}
+
+uint32_t FileSystem::GetPackfileId(const RtSystem::Filename& pathRef) const {
+    const RtSystem::Filename* const path = &pathRef;
+
+    uint32_t ours = 0;
+
+    const char* pathData = path->data;
+    const int pathLen = pathData ? RtIO::StringLength(pathData) : 0;
+    const char* dataDirData = _dataDirectory.data;
+    const int dataDirLen = dataDirData ? RtIO::StringLength(dataDirData) : 0;
+
+    if (dataDirLen < pathLen) {
+        // Relative path = pathData + dataDirLen (a suffix of the SAME buffer,
+        // not a copy yet — String::Set below is what allocates the copy).
+        // ENDGAME B.3.1 step 2: `Filename relPath(pathData + dataDirLen)` is
+        // exactly retail's Set-then-AdjustDelimiters pair (the Filename
+        // const char* ctor, 0x180026cf0). RAII replaces the manual release at
+        // the bottom of the block.
+        System::Filename relPath(pathData + dataDirLen);
+
+        const char* str1 = relPath._data;
+        RtIO::PackfileIndexNode* node = _packfileIndexRoot;
+        RtIO::PackfileIndexNode* found = nullptr;
+        while (node) {
+            const char* key = node->key;
+            bool condA;
+            if (!key) condA = true;
+            else if (!str1) condA = false;
+            else condA = RtIO::StriCmpAscii(str1, key) >= 0;
+
+            if (condA) {
+                bool condB;
+                if (!str1) condB = true;
+                else if (!key) condB = false;
+                else condB = RtIO::StriCmpAscii(key, str1) >= 0;
+
+                if (condB) { found = node; break; }
+                node = node->right;
+            } else {
+                node = node->left;
+            }
+        }
+
+        if (found)
+            ours = _packfiles[found->packIndex]->packfileId;
+
+        // (relPath's release is ~Filename now — retail's own 0x1800ab0f2.)
+    }
+
+    return ours;
+}
+
 
 // ?Find@Modification@IO@@QEBAHAEBVFilename@System@@@Z       retail 0x1800aea10
 //

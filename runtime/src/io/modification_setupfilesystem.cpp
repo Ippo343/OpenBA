@@ -422,7 +422,14 @@ void Modification::SetupFileSystem() {
     static void* extFactorySingCache   = nullptr;
     static void* factorySingletonCache = nullptr;
 
-    FileSystem* const fs = *reinterpret_cast<FileSystem**>(RtResolveCached(
+    // *** `RtIO::` IN FULL, AND THE COMPILER IS WHY. *** This body lives in a
+    // `namespace IO` block (B34_BRIEFS section A.2), and since B.3.4 PACKAGE+FS
+    // commit 4 a bare `FileSystem` there binds to the REAL CLASS
+    // `IO::FileSystem` instead of to the POD the five field reads below use.
+    // That is B34_RULES section 7.2's grep hazard; it presents as a build error
+    // rather than a silent rebind, which is exactly why the rule says to spell
+    // the POD namespace out.
+    RtIO::FileSystem* const fs = *reinterpret_cast<RtIO::FileSystem**>(RtResolveCached(
         "?_singleton@FileSystem@IO@@0PEAV12@EA", &fsSingletonCache));
     void* const extFactory = *reinterpret_cast<void**>(RtResolveCached(
         "?_singleton@ExternalFactory@Object@@0PEAV12@EA", &extFactorySingCache));

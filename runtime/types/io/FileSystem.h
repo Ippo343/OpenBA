@@ -22,8 +22,10 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // B.3.4 PACKAGE+FS: the "IO::FileSystem has no vptr" pins
 
 #include "../system/String.h"
+#include "../system/Filename.h"   // B.3.4: IO::FileSystem returns System::Filename by value
 
 namespace RtIO {
 
@@ -321,3 +323,136 @@ static_assert(offsetof(FileSystem, packfileIndexRoot)    == 0x40, "see field com
 static_assert(offsetof(FileSystem, packfileIndexCount)   == 0x48, "see field comment");
 
 }  // namespace RtIO
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 4 — the REAL `IO::FileSystem`, PARTIAL
+// ============================================================================
+//
+// Design: B34_RULES.md §1.5 rule 1, §4.3; B34_BRIEFS.md §E.4.
+//
+// *** IT HAS NO VTABLE. *** There is no `??_7FileSystem@IO@@6B@` in the retail
+// export table, no row for it in `standalone/rt_data_mint_tables.inc` and no
+// `deleting_dtor.cpp` row; every exported member is `QEAA`/`QEBA`/`AEBA`. So,
+// like `IO::Serializer`, `IO::Registry` and `IO::Modification`, converting a
+// member here cannot change which table any live object wears.
+//
+// *** THIS DECLARATION IS DELIBERATELY PARTIAL, AND SO IS THE CONVERSION. ***
+// `IO::FileSystem` has nineteen registered members spread over nine files, and
+// nine of them sit on the OPEN and READ path that B34_BRIEFS §D binds to
+// byte-faithfulness while a separate agent root-causes an intermittent NULL
+// resource there. Those bodies are NOT moved in this commit. What IS declared
+// below is the four members whose doors live in `runtime/src/io/filesystem.cpp`
+// and whose bodies are pure reads — plus the whole LAYOUT, which is the part
+// the next owner needs before it can move anything else.
+//
+// STILL FREE FUNCTIONS, by file, for whoever finishes this class:
+//   filesystem_openfile_win.cpp   OpenFile, PlatformOpenFile        §D BINDING
+//   filesystem_packages.cpp       LoadPackages, ClosePackages,
+//                                 PackageFile::GetFileName/GetFileInfo §D BINDING
+//   filesystem_createfile_win.cpp CreatePath, CloseFile, PlatformCloseFile, ReadFile
+//   filesystem_find_win.cpp       the find/enumerate helpers
+//   filesystem_setupdirs_win.cpp  SetupDirectories, GetRootDirectory,
+//                                 GetSaveDirectory
+//   filesystem_startup.cpp        Startup
+//   filesystem_timestamp_win.cpp  GetFileTimeStamp
+//   filesystem_win.cpp            the platform helpers
+//   iobase_vtables.cpp            ??1FileSystem@IO@@  — NOT in PACKAGE+FS's
+//                                 file set; the destructor does not convert
+//
+// *** THE TWO CACHED SINGLETON POINTERS (§E.4) ARE NOT RECONCILED HERE, AND
+// *** THAT IS ON PURPOSE. *** `engine/funcs/engine_funcs.h` caches the same
+// exported data symbol `?_singleton@FileSystem@IO@@0PEAV12@EA` (0x1801fc6a8)
+// TWICE — `g_pFileSystemSingleton` and `g_pFileSystemSingleton2`, the latter
+// annotated "separate exref for GetDataDirectory calls". A real
+// `FileSystem::Get()` has to reconcile them, and `engine/funcs/` is NOT in this
+// block's file set, so no `Get()` is declared: inventing one here would create
+// a third spelling of a pointer that already has two. Whoever adds it must
+// check BOTH cells, not assume one.
+//
+// *** THE THREE `RtSystem::String` MEMBERS STAY PODs. *** +0x00, +0x08 and
+// +0x10 are `sourceDirectory` / `dataDirectory` / `packDirectory`, and
+// `??1FileSystem@IO@@` — whose door is in `iobase_vtables.cpp`, outside this
+// file set — releases them by hand. Retyping them to `System::String` would add
+// an implicit destructor that runs IN ADDITION to that body (the B31
+// `RtSystem::String` double-free), and the precondition "the class's own dtor
+// body is in your file set" is not met. They are reached through
+// `pod_bridge.h`'s `Sys()` / `SysFile()` at each use, exactly as before.
+// ============================================================================
+
+namespace IO {
+
+class FileSystem {
+public:
+    // ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z        0x1800ab310
+    bool Exists(const RtSystem::Filename& path) const;
+
+    // ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x180007bd0
+    System::Filename GetDataDirectory() const;
+
+    // ?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x180007b90
+    // Retail's `MOV RDX,RCX` passes `this` ITSELF to the Filename copy ctor,
+    // which is only possible because FileSystem+0x00 IS a String/Filename
+    // object. That is the strongest pin this header has on +0x00.
+    System::Filename GetSourceDirectory() const;
+
+    // ?GetPackfileId@FileSystem@IO@@QEBAIAEBVFilename@System@@@Z  0x1800ab050
+    uint32_t GetPackfileId(const RtSystem::Filename& path) const;
+
+    // ---- the pinned fields, at retail's offsets ---------------------------
+    // PUBLIC for the same reason `IO::Serializer`'s two are: the fifteen
+    // unconverted bodies across `runtime/src/io/` and the exe-side probes reach
+    // these offsets through `RtIO::FileSystem`, and `offsetof` on them has to be
+    // well formed for the pins below. Field-for-field with the POD above, whose
+    // per-offset evidence comments are not repeated here.
+    RtSystem::String   _sourceDirectory;       // +0x00
+    RtSystem::String   _dataDirectory;         // +0x08
+    RtSystem::String   _packDirectory;         // +0x10
+    uint8_t            _existsInPackfileGate;  // +0x18
+    uint8_t            _platformExistsGate;    // +0x19
+    uint8_t            _unknown1A[0x20 - 0x1A];
+    RtIO::PackageFileView**  _packfiles;       // +0x20
+    int32_t            _packfileCount;         // +0x28
+    int32_t            _packfileCapacity;      // +0x2c
+    RtSystem::String*  _userPackFilenames;     // +0x30
+    int32_t            _userPackFilenameCount; // +0x38
+    int32_t            _unknown3C;             // +0x3C
+    RtIO::PackfileIndexNode* _packfileIndexRoot; // +0x40
+    int32_t            _packfileIndexCount;    // +0x48
+};
+
+// The POD carries no `sizeof` assert because its tail is opaque padding and
+// nothing pins the total size; the class inherits that honestly. A class MAY
+// keep opaque padding, but it may never invent a field and may never shrink or
+// grow the struct — so every offset below is the POD's, cross-asserted.
+static_assert(sizeof(FileSystem) == sizeof(RtIO::FileSystem),
+              "IO::FileSystem and the RtIO::FileSystem POD describe the same bytes");
+static_assert(offsetof(FileSystem, _sourceDirectory)      == 0x00, "GetSourceDirectory's `(Filename*)this`");
+static_assert(offsetof(FileSystem, _dataDirectory)        == 0x08, "GetDataDirectory's `this+8`");
+static_assert(offsetof(FileSystem, _packDirectory)        == 0x10, "GetPackDirectory 0x180007c10");
+static_assert(offsetof(FileSystem, _existsInPackfileGate) == 0x18, "Exists' `CMP byte [RCX+0x18],0`");
+static_assert(offsetof(FileSystem, _platformExistsGate)   == 0x19, "Exists' `CMP byte [RBX+0x19],0`");
+static_assert(offsetof(FileSystem, _packfiles)            == 0x20, "GetPackfileId's `*(this+0x20)`");
+static_assert(offsetof(FileSystem, _packfileCount)        == 0x28, "the packfile Array's size");
+static_assert(offsetof(FileSystem, _packfileCapacity)     == 0x2c, "LoadPackages 0x1800ab5d4/5f0");
+static_assert(offsetof(FileSystem, _userPackFilenames)    == 0x30, "the user pack filenames");
+static_assert(offsetof(FileSystem, _userPackFilenameCount) == 0x38, "AreUserPackFilesEnabled 0x1800acfc0");
+static_assert(offsetof(FileSystem, _packfileIndexRoot)    == 0x40, "GetPackfileId's `*(this+0x40)`");
+static_assert(offsetof(FileSystem, _packfileIndexCount)   == 0x48, "ClosePackages 0x1800abbf0");
+
+static_assert(offsetof(FileSystem, _sourceDirectory) == offsetof(RtIO::FileSystem, sourceDirectory), "alias");
+static_assert(offsetof(FileSystem, _dataDirectory)   == offsetof(RtIO::FileSystem, dataDirectory),   "alias");
+static_assert(offsetof(FileSystem, _packDirectory)   == offsetof(RtIO::FileSystem, packDirectory),   "alias");
+static_assert(offsetof(FileSystem, _existsInPackfileGate) == offsetof(RtIO::FileSystem, existsInPackfileGate), "alias");
+static_assert(offsetof(FileSystem, _platformExistsGate)   == offsetof(RtIO::FileSystem, platformExistsGate),   "alias");
+static_assert(offsetof(FileSystem, _packfiles)       == offsetof(RtIO::FileSystem, packfiles),       "alias");
+static_assert(offsetof(FileSystem, _packfileCount)   == offsetof(RtIO::FileSystem, packfileCount),   "alias");
+static_assert(offsetof(FileSystem, _packfileIndexRoot) == offsetof(RtIO::FileSystem, packfileIndexRoot), "alias");
+static_assert(offsetof(FileSystem, _packfileIndexCount) == offsetof(RtIO::FileSystem, packfileIndexCount), "alias");
+
+static_assert(!std::is_polymorphic<FileSystem>::value,
+              "IO::FileSystem must never acquire a vtable: retail has none for it, and a "
+              "vptr would push every field eight bytes down under nineteen doors");
+static_assert(std::is_standard_layout<FileSystem>::value,
+              "the doors reach these fields through a reinterpret_cast");
+
+}  // namespace IO
