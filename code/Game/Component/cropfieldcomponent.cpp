@@ -28,20 +28,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(this, bool*, name)
-typedef void (*fn_Serializer_SerializeBool_t)(void* self, bool* value, const char* name);
-static fn_Serializer_SerializeBool_t s_fn_Serializer_SerializeBool = nullptr;
-
-// IO::Serializer::Serialize(this, int*, name)
-typedef void (*fn_Serializer_SerializeInt_t)(void* self, int* value, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
 // FUN_14011aa20 — validate entity references
 typedef void (*fn_ValidateEntityRefs_t)(uintptr_t self);
 static fn_ValidateEntityRefs_t s_fn_ValidateEntityRefs = nullptr;
@@ -65,19 +51,6 @@ static void EnsureHelpers() {
 
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
-
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_Serializer_SerializeBool = *reinterpret_cast<fn_Serializer_SerializeBool_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(slot);
 
     s_fn_ValidateEntityRefs = reinterpret_cast<fn_ValidateEntityRefs_t>(
         ResolveAddr(Module::Exe, 0x14011aa20));
@@ -114,19 +87,10 @@ static fn_FindComp_BS_local_t s_fn_FindComp_BS_local = nullptr;
 typedef bool (*fn_Base_IsA_t)(void* obj, uint32_t typeId);
 static fn_Base_IsA_t s_fn_Base_IsA = nullptr;
 
-// IO::Serializer::Serialize(int*) dispatch slot at 0x140152ac8 (already loaded as
-// s_fn_Serializer_SerializeInt) and Serialize(bool*) at 0x140152a58 (SerializeBool).
-// Object::InternalBasePtr::Serialize at dispatch slot 0x140152aa0.
-// NOT 0x140152a90 -- that is the InternalBasePtr CTOR. Retail
-// CropFieldComponent_helper_36c0 (0x1400336c0) disassembles to ac8, ac8,
-// aa0, a98, aa0, a98, a58; 0x140152a90 appears nowhere in it. Reading the
-// ctor slot here left s_fn_IBP_Serialize2 NULL (that slot is unregistered
-// and has no fallback), so BOTH InternalBasePtr::Serialize calls per
-// entity-ref entry were skipped on BOTH legs -- 13 bytes plus a nested
-// PersistObject payload dropped per entry.
-typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize2 = nullptr;
-
+// Retail CropFieldComponent_helper_36c0 (0x1400336c0) disassembles to the
+// dispatch slots ac8, ac8, aa0, a98, aa0, a98, a58 — i.e. two Serialize(int&),
+// two InternalBasePtr::Serialize with an IsDerivedFrom check after each, and one
+// Serialize(bool&). All of those are real C++ members now.
 // Type-id globals consulted by the helpers.
 static uint32_t* s_pTypeId_ComponentEntity = nullptr;  // DWORD_1401c5d70
 static uint32_t* s_pTypeId_BuildStateComp = nullptr;   // DAT_1401c7b30
@@ -152,8 +116,6 @@ static void EnsureCropExtras() {
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140151410);
     if (slot) s_fn_Base_IsA = *reinterpret_cast<fn_Base_IsA_t*>(slot);
     if (!s_fn_Base_IsA) s_fn_Base_IsA = reinterpret_cast<fn_Base_IsA_t>(fn_IsA);
-    slot = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (slot) s_fn_IBP_Serialize2 = *reinterpret_cast<fn_IBP_Serialize_t*>(slot);
     s_pTypeId_ComponentEntity = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5d70));
     s_pTypeId_BuildStateComp = reinterpret_cast<uint32_t*>(
@@ -264,24 +226,21 @@ void CropFieldComponent_SerializeEntityList(void* serializer, int count, uintptr
     if (count <= 0) return;
     uintptr_t entry = arrayPtr;
     for (int i = 0; i < count; i++) {
-        if (s_fn_Serializer_SerializeInt) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 0), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 4), nullptr);   // B.3.4 bridge
-        }
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 0), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(int*)(entry + 4), nullptr);   // B.3.4 bridge
         // IBP #1 -> ComponentEntity
-        if (s_fn_IBP_Serialize2) reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 8))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 8) != nullptr && s_pTypeId_ComponentEntity &&
             !fn_IsDerivedFrom(*(void**)(entry + 8), *s_pTypeId_ComponentEntity)) {
             *(uint64_t*)(entry + 8) = 0;
         }
         // IBP #2 -> BuildStateComponent
-        if (s_fn_IBP_Serialize2) reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>((void*)(entry + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*(void**)(entry + 0x10) != nullptr && s_pTypeId_BuildStateComp &&
             !fn_IsDerivedFrom(*(void**)(entry + 0x10), *s_pTypeId_BuildStateComp)) {
             *(uint64_t*)(entry + 0x10) = 0;
         }
-        if (s_fn_Serializer_SerializeBool)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)(entry + 0x18), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)(entry + 0x18), nullptr);   // B.3.4 bridge
         entry += 0x20;
     }
 }
@@ -310,18 +269,12 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
 
     // Empty serializer block (version 0, immediately destroyed)
     alignas(8) uint8_t emptySerializer[24];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(emptySerializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(emptySerializer)->~Serializer();   // B.3.4 bridge
 
     // Main serializer block (version 0)
     alignas(8) uint8_t serializer[16];
-    if (s_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Validate entity references
     if (s_fn_ValidateEntityRefs) {
@@ -329,10 +282,8 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
     }
 
     // Serialize cropFlags as two bools (+0x48 and +0x49)
-    if (s_fn_Serializer_SerializeBool) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x49), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*(bool*)((uintptr_t)self + 0x49), nullptr);   // B.3.4 bridge
 
     // Serialize InternalBasePtr array at +0x50
     if (s_fn_SerializeIBPArray) {
@@ -342,9 +293,7 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
     // Serialize entity count from +0x60
     int entityCount = *(int*)((uintptr_t)self + 0x60);
     int countBuf = entityCount;
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(countBuf, nullptr);   // B.3.4 bridge
 
     // On load, resize the entity list to the count just read.
     // ⚠ IO::Serializer +0x08 is m_encoding (a POINTER, never 0) — testing it as
@@ -366,9 +315,7 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
         s_fn_SerializeEntityList(serializer, countBuf, entityArray);
     }
 
-    if (s_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

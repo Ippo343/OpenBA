@@ -139,19 +139,13 @@ typedef char (*fn_AC_TryEnrolInSchool_t)(void* citizen, int64_t* exclIBP);
 static fn_AC_TryEnrolInSchool_t s_fn_AC_TryEnrolInSchool = nullptr;
 
 // Slot-3 (Shutdown/Serialize) helpers — see AttendanceComponent_SerializeSlot below.
-// Component_Serialize 0x1401189b0; the three IO::Serializer dispatch slots; the queue
+// Component_Serialize 0x1401189b0; the queue
 // array grow 0x1400032e0; and DWORD_1401c7158, the CitizenComponent type id the
 // per-entry filter tests against.
 typedef void  (*fn_Component_Serialize_t)(void* self, void* stream);
-typedef void* (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*fn_Serializer_Dtor_t)(void* self);
-typedef void  (*fn_Serializer_SerializeInt_t)(void* self, void* field, const char* name);
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 static fn_Component_Serialize_t     s_fn_Component_Serialize     = nullptr;
-static fn_Serializer_Ctor_t         s_fn_Serializer_Ctor         = nullptr;
-static fn_Serializer_Dtor_t         s_fn_Serializer_Dtor         = nullptr;
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
 static uint32_t*                    s_pTId_CitizenComponent      = nullptr;  // 0x1401c7158
 
 static bool s_acHelpersResolved = false;
@@ -161,12 +155,6 @@ static void EnsureAcHelpers() {
         ResolveAddr(Module::Exe, 0x1401189b0));
     s_pTId_CitizenComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ad8))
-        s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ad0))
-        s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(s);
-    if (uintptr_t s = ResolveAddr(Module::Exe, 0x140152ac8))
-        s_fn_Serializer_SerializeInt = *reinterpret_cast<fn_Serializer_SerializeInt_t*>(s);
     s_pTId_JobHost = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c80e0));
     s_fn_AC_115a50 = reinterpret_cast<fn_AC_115a50_t>(ResolveAddr(Module::Exe, 0x140115a50));
     s_fn_AC_59b0   = reinterpret_cast<fn_AC_59b0_t>(ResolveAddr(Module::Exe, 0x1401159b0));
@@ -443,8 +431,6 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
 
     if (s_fn_Component_Serialize) s_fn_Component_Serialize(selfP, stream);
 
-    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
-
     // Empty block — retail opens and closes a Serializer with nothing in it.
     alignas(8) uint8_t empty[24];
     ::new (static_cast<void*>(empty)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -454,7 +440,7 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int32_t count = *reinterpret_cast<int32_t*>(self + 0x30);
-    if (s_fn_Serializer_SerializeInt) reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
 
     // The queue array has to be grown to the deserialized count before the
     // per-entry loop writes into it.
@@ -472,7 +458,7 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
 
     int64_t* q = *reinterpret_cast<int64_t**>(self + 0x28);
     for (int32_t i = 0; i < count && q; ++i, ++q) {
-        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>(q)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
         if (*q == 0) continue;
         // Value check, not just pointer: a registered-but-unfilled slot reads 0 and
         // IsDerivedFrom(x, 0) would drop every attendee.

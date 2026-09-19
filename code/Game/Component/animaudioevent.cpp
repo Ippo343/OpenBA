@@ -69,16 +69,14 @@ static void* AnimAudioEvent_CtorImpl(void* mem) {
 extern "C" void AnimAudioEvent_Serialize(void* self, void* stream) {
     if (!self) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor) return;
     alignas(8) uint8_t serBuf[24];
     ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // +0x20 external audio reference (stream-identical generic external-ptr serialize)
     if (fn_ExternalPtr_BuildSerialize)
         fn_ExternalPtr_BuildSerialize(s + OFF_REF, serBuf);
     // +0x28 float
-    if (fn_Serializer_Serialize_Float)
-        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*(float*)(s + OFF_FLOAT), nullptr);   // B.3.4 bridge
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();                                       // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*(float*)(s + OFF_FLOAT), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();                                       // B.3.4 bridge
 }
 
 extern "C" void* AnimAudioEvent_Dtor(void* self, uint32_t flags) {
