@@ -255,6 +255,19 @@ static_assert(offsetof(FileInfo, winHandle)  == 0x18,
 static_assert(offsetof(FileInfo, _name0)     == 0x20, "OpenFile: MOV [RBP-0x10],0");
 static_assert(offsetof(FileInfo, _name1)     == 0x28, "OpenFile: MOV [RBP-0x8],0");
 
+// ---- Collection::Array<System::Filename>, as FindFiles' out-parameter ------
+// DECLARED, NOT DEFINED, and deliberately so. The 16-byte {_data,_size,
+// _capacity} header is DEFINED in runtime/src/io/filesystem_find_win.cpp, with
+// its own three `static_assert`s pinned to 0x180026880's instructions, and that
+// file reaches it through `rtcoll::AsArray<&kSpec_Filename>` — a HAND-DERIVED
+// element spec that deliberately does NOT match
+// `rtcoll::SpecFor<System::Filename>()` (see the note at `kSpec_Filename`).
+// Naming `Collection::Array<System::Filename>` in the declaration below would
+// invite exactly the silent substitution that comment forbids, so
+// `IO::FileSystem::FindFiles` takes a pointer to this incomplete type instead —
+// which is all the declaration needs and all the retail signature pins.
+struct FilenameArray;
+
 // ---- IO::FileSystem --------------------------------------------------------
 // Full-size fields at +0x00/+0x08 are RtSystem::String, NOT RtSystem::Filename:
 // retail casts the pointer at the call site (`(Filename*)(this+8)`), it never
@@ -346,18 +359,35 @@ static_assert(offsetof(FileSystem, packfileIndexCount)   == 0x48, "see field com
 // the next owner needs before it can move anything else.
 //
 // STILL FREE FUNCTIONS, by file, for whoever finishes this class:
-//   filesystem_openfile_win.cpp   OpenFile, PlatformOpenFile        §D BINDING
-//   filesystem_packages.cpp       LoadPackages, ClosePackages,
-//                                 PackageFile::GetFileName/GetFileInfo §D BINDING
-//   filesystem_find_win.cpp       the find/enumerate helpers        §D BINDING
-//   filesystem_win.cpp            the platform helpers (GetSaveDirectory)
+//   filesystem_win.cpp            GetSaveDirectory — the one platform helper
+//                                 left; it is a `FileSystem` member and it is
+//                                 NOT converted, because nothing else in that
+//                                 file is and the commit that takes it should
+//                                 take the file whole.
+// Everything else in `runtime/src/io/filesystem*.cpp` is a member of the class
+// below. The NON-`IO::FileSystem` bodies that share those files stay free
+// functions on purpose: `RtIo_FileInfo_CopyCtor` / `RtIo_FileInfo_Assign` are
+// `FileInfo`'s, and `RtIo_PackageFile_GetFileInfo` / `RtIo_PackageFile_GetFileName`
+// are `IO::PackageFile`'s — a POLYMORPHIC class whose conversion is its own
+// commit with its own qualified-call rule (B34_BRIEFS §A.1).
 //
 // *** COMMIT 5a UPDATE (second PACKAGE+FS owner). *** The four NON-§D files are
 // converted: `filesystem_setupdirs_win.cpp` (SetupDirectories, GetRootDirectory),
 // `filesystem_startup.cpp` (Startup), `filesystem_timestamp_win.cpp`
 // (GetFileTimeStamp) and `filesystem_createfile_win.cpp` (CreatePath,
 // PlatformCreateFile, CreateFileW, PlatformCloseFile, CloseFile and the
-// DESTRUCTOR). The list above is what is LEFT.
+// DESTRUCTOR).
+//
+// *** COMMIT 5b UPDATE. *** The three §D-BOUND files are converted too, as a
+// SEPARATE commit and with their bodies moved VERBATIM — identical control
+// flow, identical callees, identical statement order:
+// `filesystem_openfile_win.cpp` (OpenFile, ReadFile, PlatformOpenFile),
+// `filesystem_packages.cpp` (GetPackDirectory, LoadPackages, ClosePackages) and
+// `filesystem_find_win.cpp` (ExistsInPackfile, PlatformExists, FindFiles). No
+// lock, no retry, no positioned read and no null check was added there, and
+// nothing that makes the path spin was removed: the two-loader race
+// (LOADER_READ_SPIN.md) is a known defect with its own pending fix.
+// The list above is what is LEFT.
 //
 // *** AND ONE FACT IN THE COMMIT-4 BANNER WAS WRONG, CORRECTED HERE. *** It said
 // `??1FileSystem@IO@@` lives in `iobase_vtables.cpp` and is outside PACKAGE+FS's
@@ -472,6 +502,56 @@ public:
     RtIO::FileInfo* CreateFileW(RtIO::FileInfo* ret, const RtSystem::Filename& path);
     // ?CloseFile@FileSystem@IO@@QEAAXAEAUFileInfo@12@@Z            0x1800accc0
     void CloseFile(RtIO::FileInfo& info);
+    // ---- commit 5b: the members whose doors live in the THREE §D-BOUND files
+    // B34_BRIEFS §D binds `filesystem_openfile_win.cpp`, `filesystem_packages.cpp`
+    // and `filesystem_find_win.cpp` to byte-faithfulness while the two-loader
+    // race (LOADER_READ_SPIN.md) has its own pending fix. These nine bodies
+    // moved VERBATIM — identical control flow, identical callees, identical
+    // statement order. No lock, no retry, no positioned read and no null check
+    // was added, and nothing that makes the path spin was removed.
+
+    // -- filesystem_openfile_win.cpp ----------------------------------------
+    // ?OpenFile@FileSystem@IO@@QEAA?AUFileInfo@12@AEBVFilename@System@@@Z
+    //                                                             0x1800ac880
+    // Retail returns FileInfo by value; the member keeps the out-parameter for
+    // the same reason `CreateFileW` does — see that declaration.
+    RtIO::FileInfo* OpenFile(RtIO::FileInfo* ret, const RtSystem::Filename& name);
+    // ?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z       0x1800ace00
+    // RECURSIVE (0x1800ace7e re-enters itself with the containing package's
+    // FileInfo). `ReadFile` is a plain function name in <windows.h>, not a
+    // macro, so the member name does not collide; the Win32 call inside the
+    // body is spelled `::ReadFile` and always was.
+    bool ReadFile(RtIO::FileInfo& fi, int32_t n, void* dst);
+    // ?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBVFilename@System@@@Z
+    //                                                             0x1800adce0
+    // `AEAA`, private in retail, public here for the door reason above.
+    bool PlatformOpenFile(RtIO::FileInfo& fi, const RtSystem::Filename& name);
+
+    // -- filesystem_packages.cpp --------------------------------------------
+    // ?GetPackDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ  0x180007c10
+    System::Filename GetPackDirectory() const;
+    // ?ClosePackages@FileSystem@IO@@QEAAXXZ                        0x1800abab0
+    void ClosePackages();
+    // ?LoadPackages@FileSystem@IO@@QEAAXXZ                         0x1800ab460
+    void LoadPackages();
+
+    // -- filesystem_find_win.cpp --------------------------------------------
+    // ?ExistsInPackfile@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z 0x1800ab180
+    bool ExistsInPackfile(const RtSystem::Filename& path) const;
+    // ?PlatformExists@FileSystem@IO@@AEBA_NAEBVFilename@System@@@Z   0x1800adc70
+    // `AEBA`, private in retail; the `QEBA` spelling is not an export at all
+    // and would resolve NULL forever. Public here for the door reason above.
+    bool PlatformExists(const RtSystem::Filename& path) const;
+    // ?FindFiles@FileSystem@IO@@QEBAXAEBVString@System@@0_NAEAV?$Array@VFilename@System@@@Collection@@@Z
+    //                                                             0x1800ad7a0
+    // The out-parameter is `RtIO::FilenameArray`, declared incomplete above;
+    // that comment says why it is not `Collection::Array<System::Filename>`.
+    // The two String parameters keep the POD spelling the registered door has,
+    // because the door IS this body and the recursion lives in the file-local
+    // `FindFilesImpl`, which is where the class spellings already are.
+    void FindFiles(const RtSystem::String& dir, const RtSystem::String& pattern,
+                   bool recursive, RtIO::FilenameArray* out) const;
+
     // ??1FileSystem@IO@@QEAA@XZ                                    0x1800ac6d0
     // A REAL destructor — see the banner. It is `QEAA`, non-virtual, and the
     // class has no vtable, so converting it cannot change what any live object

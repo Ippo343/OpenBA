@@ -305,14 +305,61 @@ extern "C" FileInfo* RtIo_PackageFile_GetFileInfo(const PackageFileView* self,
 // ============================================================================
 // ?PlatformOpenFile@FileSystem@IO@@AEAA_NAEAUFileInfo@12@AEBV…@Z  0x1800adce0
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 5b: the three IO::FileSystem bodies in this
+// file move onto the class VERBATIM; the doors keep their names, their
+// `extern "C"` linkage, their signatures and every registration line, and
+// delegate in one line each. No qualified `IO::` call is needed: IO::FileSystem
+// has no vtable at all, so B34_BRIEFS section A.1's re-entry hazard cannot
+// arise. This file is bound by B34_BRIEFS section D — nothing was added,
+// removed or reordered, and in particular NO lock, NO retry, NO positioned read
+// and NO null check was introduced on the open/read path. The two-loader race
+// LOADER_READ_SPIN.md describes has its own pending fix and it is not this one.
 extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
                                                  const Filename* name) {
-    (void)self;                          // retail never reads `this` here
+    return reinterpret_cast<IO::FileSystem*>(self)->PlatformOpenFile(*fi, *name);
+}
+
+extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
+                                         int32_t n, void* dst) {
+    return reinterpret_cast<IO::FileSystem*>(self)->ReadFile(*fi, n, dst);
+}
+
+extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
+                                              const Filename* name) {
+    return reinterpret_cast<IO::FileSystem*>(self)->OpenFile(ret, *name);
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileSystem`'s member bodies for this file — B34_BRIEFS section D BINDING
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
+// this translation unit's `RtIO`-scoped names — including the
+// anonymous-namespace helpers `PathStrICmp`, `StrLenOf` and `WideStringCtorFn`
+// — as `RtIO::X`. Every POD is spelled `RtIO::` or `RtSystem::` and every real
+// class `System::` (B34_RULES section 7.2).
+//
+// *** VERBATIM. *** Identical control flow, identical callees, identical
+// statement order, identical comments. The only changes are the receiver's
+// spelling (`self->field` to `_field`) and three call sites that were ALREADY
+// direct calls within this file and are now direct MEMBER calls of the same
+// bodies: ReadFile's recursion into itself (0x1800ace7e) and OpenFile's call to
+// PlatformOpenFile (0x1800acace). Neither ever went through a resolve door, so
+// neither changes which body runs.
+namespace IO {
+
+bool FileSystem::PlatformOpenFile(RtIO::FileInfo& fiRef,
+                                  const RtSystem::Filename& nameRef) {
+    RtIO::FileInfo* const fi = &fiRef;
+    const RtSystem::Filename* const name = &nameRef;
+    // retail never reads `this` here
 
     // An empty FileInfo, assigned over the caller's — retail builds it on the
     // stack and calls FileInfo::operator= rather than clearing in place, which
     // is what releases whatever the caller's Strings were holding.
-    FileInfo blank;                      // 1800add08..1800add30
+    RtIO::FileInfo blank;                // 1800add08..1800add30
     blank.handle     = -1;
     blank.size       = 0;
     blank.cursor     = 0;
@@ -326,16 +373,16 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
     blank._unk04     = 0;                // retail leaves this whatever the stack
     blank._pad14     = 0;                // held; see §4 — zeroed here only so the
                                          // value we copy out is defined.
-    RtIo_FileInfo_Assign(fi, &blank);    // 1800add3f
+    RtIO::RtIo_FileInfo_Assign(fi, &blank);    // 1800add3f
     // ~blank, reverse order. FileInfo is not a converted class, so its two
     // Filename members are destroyed by hand — one release each, as retail.
-    SysFile(blank._name1).~Filename();   // 1800add45
-    SysFile(blank._name0).~Filename();   // 1800add75
+    RtIO::SysFile(blank._name1).~Filename();   // 1800add45
+    RtIO::SysFile(blank._name0).~Filename();   // 1800add75
 
     // WideString ws(*name); CreateFileW(ws, ...). The ctor is lane FS's port.
     struct { void* data; } ws = { nullptr };                 // 1800add98
-    RT_EXPORT_ONCE(WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
-        &ws, reinterpret_cast<const String*>(name));         // 1800addad
+    RT_EXPORT_ONCE(RtIO::WideStringCtorFn, "??0WideString@System@@QEAA@AEBVString@1@@Z")(
+        &ws, reinterpret_cast<const RtSystem::String*>(name));  // 1800addad
 
     // 1800addb3..1800addd7 — the argument block, transcribed rather than named
     // from habit: dwDesiredAccess 0x80000000 (GENERIC_READ), dwShareMode 1
@@ -346,7 +393,8 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
                                    0x80000000u, 1u, nullptr, 3u, 0x80u, nullptr);
     fi->winHandle = reinterpret_cast<int64_t>(h);            // 1800adddd
 
-    RtString_ReleaseInline(reinterpret_cast<String*>(&ws));  // 1800adde1
+    RtIO::RtString_ReleaseInline(
+        reinterpret_cast<RtSystem::String*>(&ws));           // 1800adde1
 
     // `LEA RAX,[RCX-1] ; CMP RAX,-3 ; JA fail` — an UNSIGNED test that rejects
     // exactly two values, INVALID_HANDLE_VALUE (-1) and NULL (0). Spelled as
@@ -367,8 +415,8 @@ extern "C" bool RtIo_FileSystem_PlatformOpenFile(FileSystem* self, FileInfo* fi,
 // ============================================================================
 // ?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z      retail 0x1800ace00
 // ============================================================================
-extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
-                                         int32_t n, void* dst) {
+bool FileSystem::ReadFile(RtIO::FileInfo& fiRef, int32_t n, void* dst) {
+    RtIO::FileInfo* const fi = &fiRef;
 
     // UNSIGNED: -1 and -2 both fall through to the loose path (§1).
     if (static_cast<uint32_t>(fi->handle) > 0xFFFFFFFDu) {   // 1800ace23  JA
@@ -384,10 +432,10 @@ extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
     // The pack index is the TOP BYTE of the tag (§1).
     const uint32_t packIndex =
         static_cast<uint32_t>(reinterpret_cast<const uint8_t*>(&fi->handle)[3]);
-    PackageFileView* const pkg = self->packfiles[packIndex];  // 1800ace31/39
+    RtIO::PackageFileView* const pkg = _packfiles[packIndex]; // 1800ace31/39
 
-    FileInfo pack;
-    RtIo_PackageFile_GetFileInfo(pkg, &pack);                // 1800ace3d
+    RtIO::FileInfo pack;
+    RtIO::RtIo_PackageFile_GetFileInfo(pkg, &pack);          // 1800ace3d
 
     const int32_t abs = fi->baseOffset + fi->cursor;         // 1800ace43/46
     bool ok;
@@ -400,13 +448,13 @@ extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
                   FILE_BEGIN)) == abs);                      // 1800ace61/67
     }
     if (ok) {
-        ok = RtIo_FileSystem_ReadFile(self, &pack, n, dst);  // 1800ace7e — ITSELF
+        ok = ReadFile(pack, n, dst);                         // 1800ace7e — ITSELF
         if (ok) fi->cursor += n;                             // 1800ace87
     }
 
     // ~pack — the two Filenames released in REVERSE order, +0x28 then +0x20.
-    SysFile(pack._name1).~Filename();                        // 1800acea1
-    SysFile(pack._name0).~Filename();                        // 1800aceda
+    RtIO::SysFile(pack._name1).~Filename();                  // 1800acea1
+    RtIO::SysFile(pack._name0).~Filename();                  // 1800aceda
 
     return ok;                                               // 1800acf07
 }
@@ -417,10 +465,11 @@ extern "C" bool RtIo_FileSystem_ReadFile(FileSystem* self, FileInfo* fi,
 // A FileInfo-RETURNING member, so the hidden return slot is the SECOND argument
 // (RCX = this, RDX = ret) and RAX is the slot on the way out — `MOV RAX,RDI` at
 // 0x1800acc2b. Getting that wrong is reference_hidden_retslot_wild_write.md.
-extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
-                                              const Filename* name) {
+RtIO::FileInfo* FileSystem::OpenFile(RtIO::FileInfo* ret,
+                                     const RtSystem::Filename& nameRef) {
+    const RtSystem::Filename* const name = &nameRef;
 
-    FileInfo lf;                                             // 1800ac8b3..
+    RtIO::FileInfo lf;                                       // 1800ac8b3..
     lf.handle     = -1;
     lf.size       = 0;
     lf.cursor     = 0;
@@ -437,15 +486,15 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
 
     bool emitted = false;
 
-    const int32_t nameLen = StrLenOf(name->data);            // 1800ac8e2
-    const int32_t dirLen  = StrLenOf(self->dataDirectory.data);  // 1800ac8f2
+    const int32_t nameLen = RtIO::StrLenOf(name->data);      // 1800ac8e2
+    const int32_t dirLen  = RtIO::StrLenOf(_dataDirectory.data); // 1800ac8f2
     if (nameLen > dirLen) {                                  // 1800ac904  JLE skips
         // Strip the data-directory prefix; the packfile index is keyed on the
         // remainder, which is what LoadPackages inserted.
         // The BST walk. Same tree and same comparator as lane PKG's IndexFind,
         // and the same null asymmetries: a null on EITHER side stops the descent
         // rather than comparing.
-        PackfileIndexNode* node = self->packfileIndexRoot;   // 1800ac938
+        RtIO::PackfileIndexNode* node = _packfileIndexRoot;  // 1800ac938
         {
             // Set-then-AdjustDelimiters IS the Filename const char* ctor,
             // ??0Filename@System@@QEAA@PEBD@Z (0x180026cf0); the inner scope is
@@ -455,12 +504,12 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
             while (node != nullptr) {                        // 1800ac98c
                 const char* const nk = node->key;            // 1800ac945
                 if (nk != nullptr && key._data != nullptr &&
-                    PathStrICmp(key._data, nk) < 0) {        // 1800ac955  JNS skips
+                    RtIO::PathStrICmp(key._data, nk) < 0) {  // 1800ac955  JNS skips
                     node = node->left;                       // 1800ac962  +0x18
                     continue;
                 }
                 if (key._data != nullptr && nk != nullptr &&
-                    PathStrICmp(nk, key._data) < 0) {        // 1800ac978
+                    RtIO::PathStrICmp(nk, key._data) < 0) {  // 1800ac978
                     node = node->right;                      // 1800ac985  +0x20
                     continue;
                 }
@@ -468,12 +517,12 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
             }
         }                                                    // ~key  1800ac991
 
-        if (node != nullptr && self->existsInPackfileGate != 0) {   // 1800ac9bf
+        if (node != nullptr && _existsInPackfileGate != 0) {  // 1800ac9bf
             lf.handle = static_cast<int32_t>(
                 (node->packIndex << 24) | node->fileIndex);  // 1800ac9c5..d1
-            const PackageFileView* const pkg = self->packfiles[node->packIndex];
-            const PackageFileEntry* const e =
-                static_cast<const PackageFileEntry*>(pkg->entries) + node->fileIndex;
+            const RtIO::PackageFileView* const pkg = _packfiles[node->packIndex];
+            const RtIO::PackageFileEntry* const e =
+                static_cast<const RtIO::PackageFileEntry*>(pkg->entries) + node->fileIndex;
             lf.size       = static_cast<int32_t>(e->size);   // 1800ac9ee  +0xc
             lf.baseOffset = static_cast<int32_t>(e->offset); // 1800aca0c  +0x8
             lf.cursor     = 0;                               // 1800aca13
@@ -482,7 +531,7 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
     }
 
     if (!emitted) {
-        if (self->platformExistsGate == 0) {                 // 1800aca1e
+        if (_platformExistsGate == 0) {                      // 1800aca1e
             ret->handle     = -1;                            // 1800aca28
             ret->size       = 0;
             ret->cursor     = 0;
@@ -492,7 +541,7 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
             new (&ret->_name0) System::Filename();
             new (&ret->_name1) System::Filename();
             ret->winHandle  = -1;                            // 1800aca4c
-        } else if (!RtIo_FileSystem_PlatformOpenFile(self, &lf, name)) {  // 1800acace
+        } else if (!PlatformOpenFile(lf, *name)) {           // 1800acace
             ret->handle     = -1;                            // 1800acadb
             ret->size       = 0;
             ret->cursor     = 0;
@@ -516,18 +565,18 @@ extern "C" FileInfo* RtIo_FileSystem_OpenFile(FileSystem* self, FileInfo* ret,
         // The copy ctor (0x1800067d0) into the raw return slot, as retail's two
         // CALLs. It AddRefs, which is why ~lf below is still exactly one
         // release per name and not a drop to zero.
-        new (&ret->_name0) System::Filename(SysFile(lf._name0));  // 1800acbae
-        new (&ret->_name1) System::Filename(SysFile(lf._name1));  // 1800acbbc
+        new (&ret->_name0) System::Filename(RtIO::SysFile(lf._name0));  // 1800acbae
+        new (&ret->_name1) System::Filename(RtIO::SysFile(lf._name1));  // 1800acbbc
     }
 
     // ~lf, reverse order.
-    SysFile(lf._name1).~Filename();                          // 1800acbc9
-    SysFile(lf._name0).~Filename();                          // 1800acbfa
+    RtIO::SysFile(lf._name1).~Filename();                    // 1800acbc9
+    RtIO::SysFile(lf._name0).~Filename();                    // 1800acbfa
 
     return ret;                                              // 1800acc2b
 }
 
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration
