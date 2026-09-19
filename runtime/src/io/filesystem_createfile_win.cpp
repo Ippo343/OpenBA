@@ -253,36 +253,14 @@ FsCreateCounters g_fcc{};
 //     touches no field — which is why `?Create@FileStream@` can and does call
 //     it on the singleton rather than on anything of its own.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
+// `IO::FileSystem::CreatePath`, at the bottom of this file. The door keeps its
+// name, its signature (file_stream.cpp forward-declares and calls it) and both
+// registration lines, and delegates. No qualified `IO::` call is needed:
+// `IO::FileSystem` has no vtable at all (runtime/types/io/FileSystem.h), so
+// B34_BRIEFS section A.1's re-entry hazard cannot arise.
 bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
-    ++g_fcc.createPath;
-    (void)self;   // detail 4 — retail reads no field of `this`
-
-    // Retail passes the Filename straight into String's members, which is what
-    // AsString() spells (Filename.h).
-    const System::String& src = Sys(*path).AsString();
-    const int32_t len = src.GetLength();                    // 1800ae459
-
-    int32_t created = 0;
-    for (int32_t i = 0; i < len; ++i) {                     // 1800ae467/62e
-        const char c = src._data[i];                        // 1800ae473
-        if (c != '\\' && c != '/') continue;                // 1800ae477/47d
-
-        // Detail 3, in class terms: SubString (0x1800c9230) builds a temporary,
-        // Filename(const String&) (0x18000c780) adopts it into a SECOND slot and
-        // normalises that, and the temporary is released at the end of the full
-        // expression — retail's 0x1800ae4c3, in the same place.
-        System::Filename dir(src.SubString(0, i));          // 1800ae489..4bd
-
-        WideStr w{};                                        // 1800ae53f
-        w.data = nullptr;
-        WideFromString(&w, &dir.AsString());
-        ::CreateDirectoryW(w.data, nullptr);                // 1800ae54a — result DISCARDED
-        ++created; ++g_fcc.createPathDirs;
-        WideRelease(&w);                                    // 1800ae551..5bd
-        // ~dir is retail's release at 0x1800ae5bd.
-    }
-
-    return true;                                            // 1800ae637: MOV AL,1
+    return reinterpret_cast<const IO::FileSystem*>(self)->CreatePath(*path);
 }
 
 // ============================================================================
@@ -317,10 +295,114 @@ bool RtIo_FileSystem_CreatePath(const FileSystem* self, const Filename* path) {
 // unexported literal, and a transcription of it is a guess no static check
 // could catch. The bytes are quoted so a reader can see the door was verified.
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
+// `IO::FileSystem::PlatformCreateFile`, at the bottom of this file. Same door
+// rules as CreatePath above; this one is `AEAA` (private) in retail and keeps
+// its own registration pair, which is why the member is public
+// (runtime/types/io/FileSystem.h says so at the declaration).
 bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
                                         const Filename* path) {
-    ++g_fcc.platCreate;
-    (void)self;
+    return reinterpret_cast<IO::FileSystem*>(self)->PlatformCreateFile(*info, *path);
+}
+
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the remaining four doors of this file,
+// gathered here so every one of them is a single delegating line and the
+// retail bodies are all in the one `namespace IO` block below. Each keeps its
+// name, its signature — `CreateFileW` keeps the (self, hidden-return-slot,
+// path) form and `CloseFile` is called cross-file by file_stream.cpp,
+// text_file_stream_win.cpp, persistence_saveinfo_job.cpp and
+// persistence_worker_win.cpp — and its registration lines, unchanged.
+FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
+                                      const Filename* path) {
+    return reinterpret_cast<IO::FileSystem*>(self)->CreateFileW(ret, *path);
+}
+
+void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
+    reinterpret_cast<IO::FileSystem*>(self)->PlatformCloseFile(*info);
+}
+
+void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
+    reinterpret_cast<IO::FileSystem*>(self)->CloseFile(*info);
+}
+
+// `??1FileSystem@IO@@QEAA@XZ` — the door for a REAL C++ destructor now. The
+// explicit `->~FileSystem()` is the whole delegation; nothing else destroys an
+// `IO::FileSystem`, because nothing in the tree ever holds one by value (the
+// live object is the one the singleton data symbol points at, constructed by
+// retail's still-unported 0x1800ac7c0).
+void RtIo_FileSystem_Dtor(FileSystem* self) {
+    reinterpret_cast<IO::FileSystem*>(self)->~FileSystem();
+}
+
+// Read by file_stream_cutover_probe.cpp, which prints attendance beside the
+// door verdicts so a reader cannot see one without the other.
+void RtIoFileSystemCreateFileCounters(unsigned long long* out) {
+    out[0]=g_fcc.createPath;   out[1]=g_fcc.createPathDirs;
+    out[2]=g_fcc.createFileW;  out[3]=g_fcc.platCreate;
+    out[4]=g_fcc.createOk;     out[5]=g_fcc.createFail;
+    out[6]=g_fcc.closeFile;    out[7]=g_fcc.platClose;
+    out[8]=g_fcc.closeRenamed; out[9]=g_fcc.fsDtor;
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// `IO::FileSystem`'s member bodies for this file
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); these bodies reach
+// this translation unit's `RtIO`-scoped names — the anonymous-namespace
+// helpers `WideStr`/`WideFromString`/`WideRelease`/`PodArrayDtor`, the
+// attendance counters `g_fcc`, and the `using`-ed System names — as `RtIO::X`.
+// Every POD is spelled `RtIO::` or `RtSystem::` and every real class `System::`
+// (B34_RULES section 7.2).
+//
+// NOTHING IN ANY OF THE SIX BODIES CHANGED but the spelling of the receiver and
+// of the two cross-body calls (`CloseFile` to `PlatformCloseFile`, `CreateFileW`
+// to `PlatformCreateFile`, both now member calls rather than door calls —
+// neither ever went through a resolve door). Same Win32 calls, same order, same
+// discarded results, same early-out positions, same counter bumps, same
+// destructor order.
+namespace IO {
+
+bool FileSystem::CreatePath(const RtSystem::Filename& pathRef) const {
+    const RtSystem::Filename* const path = &pathRef;
+    ++RtIO::g_fcc.createPath;
+    // detail 4 — retail reads no field of `this`
+
+    // Retail passes the Filename straight into String's members, which is what
+    // AsString() spells (Filename.h).
+    const System::String& src = RtIO::Sys(*path).AsString();
+    const int32_t len = src.GetLength();                    // 1800ae459
+
+    int32_t created = 0;
+    for (int32_t i = 0; i < len; ++i) {                     // 1800ae467/62e
+        const char c = src._data[i];                        // 1800ae473
+        if (c != '\\' && c != '/') continue;                // 1800ae477/47d
+
+        // Detail 3, in class terms: SubString (0x1800c9230) builds a temporary,
+        // Filename(const String&) (0x18000c780) adopts it into a SECOND slot and
+        // normalises that, and the temporary is released at the end of the full
+        // expression — retail's 0x1800ae4c3, in the same place.
+        System::Filename dir(src.SubString(0, i));          // 1800ae489..4bd
+
+        RtIO::WideStr w{};                                  // 1800ae53f
+        w.data = nullptr;
+        RtIO::WideFromString(&w, &dir.AsString());
+        ::CreateDirectoryW(w.data, nullptr);                // 1800ae54a — result DISCARDED
+        ++created; ++RtIO::g_fcc.createPathDirs;
+        RtIO::WideRelease(&w);                              // 1800ae551..5bd
+        // ~dir is retail's release at 0x1800ae5bd.
+    }
+
+    return true;                                          // 1800ae637: MOV AL,1
+}
+
+bool FileSystem::PlatformCreateFile(RtIO::FileInfo& infoRef,
+                                    const RtSystem::Filename& pathRef) {
+    RtIO::FileInfo* const info = &infoRef;
+    const RtSystem::Filename* const path = &pathRef;
+    ++RtIO::g_fcc.platCreate;
 
     wchar_t tempDir[MAX_PATH];
     ::GetTempPathW(MAX_PATH, tempDir);                       // 1800ade91/96
@@ -340,7 +422,7 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
 
     const uint64_t probe = static_cast<uint64_t>(info->winHandle) - 1;
     if (probe > static_cast<uint64_t>(-3)) {                 // 1800adee9..f0
-        ++g_fcc.createFail;
+        ++RtIO::g_fcc.createFail;
         return false;                                        // 1800adffa
     }
 
@@ -350,34 +432,35 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
     // Both WideString entry points are ported; the two temporaries are released
     // in retail's order (the UTF-8 String first, then the WideString).
     {
-        WideStr w{};  w.data = nullptr;                      // 1800adefc
-        using WideSetFn = void (*)(WideStr*, const wchar_t*);
+        RtIO::WideStr w{};  w.data = nullptr;                // 1800adefc
+        using WideSetFn = void (*)(RtIO::WideStr*, const wchar_t*);
         RT_EXPORT_ONCE(WideSetFn, "?Set@WideString@System@@QEAAXPEB_W@Z")(
             &w, tempFile);                                   // 1800adf0f
 
         // AsUTF8's hidden return slot is still POD-shaped (System::WideString
         // is not a B.3.1 class), so the value lands in a POD and the move ctor
         // steals it: `utf8Pod` is left null, so ~utf8 is the one release.
-        String utf8Pod{};  utf8Pod.data = nullptr;           // 1800adf15
-        using AsUtf8Fn = String* (*)(const WideStr*, String*);
+        RtSystem::String utf8Pod{};  utf8Pod.data = nullptr; // 1800adf15
+        using AsUtf8Fn = RtSystem::String* (*)(const RtIO::WideStr*,
+                                               RtSystem::String*);
         RT_EXPORT_ONCE(AsUtf8Fn, "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ")(
             &w, &utf8Pod);                                   // 1800adf21
-        System::String utf8(std::move(Sys(utf8Pod)));
+        System::String utf8(std::move(RtIO::Sys(utf8Pod)));
 
         // adopt-then-AdjustDelimiters == Filename(const String&), 0x18000c780.
         System::Filename norm(utf8);                         // 1800adf27..47
         // Filename::operator=(const Filename&), 0x180006770. `_name0` is a
         // `RtSystem::String` member of the not-yet-converted FileInfo.
-        SysFile(info->_name0) = norm;                        // 1800adf58
+        RtIO::SysFile(info->_name0) = norm;                  // 1800adf58
 
         // ~norm (0x1800adf5e) and ~utf8 (0x1800adf93) are the destructors now.
-        WideRelease(&w);                                     // 1800adfc0..ea
+        RtIO::WideRelease(&w);                               // 1800adfc0..ea
     }
 
     // the CALLER's path -> _name1
-    SysFile(info->_name1) = Sys(*path);                      // 1800adfea/f1
+    RtIO::SysFile(info->_name1) = RtIO::Sys(*path);          // 1800adfea/f1
 
-    ++g_fcc.createOk;
+    ++RtIO::g_fcc.createOk;
     return true;                                             // 1800adff6
 }
 
@@ -398,9 +481,10 @@ bool RtIo_FileSystem_PlatformCreateFile(FileSystem* self, FileInfo* info,
 // -2 only on the success path — so the information is carried by the field, not
 // by the bool.
 // ============================================================================
-FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
-                                      const Filename* path) {
-    ++g_fcc.createFileW;
+RtIO::FileInfo* FileSystem::CreateFileW(RtIO::FileInfo* ret,
+                                        const RtSystem::Filename& pathRef) {
+    const RtSystem::Filename* const path = &pathRef;
+    ++RtIO::g_fcc.createFileW;
 
     ret->handle      = -1;          // 1800acc6c
     ret->size        = 0;           // 1800acc72 (qword +0x08, covers cursor)
@@ -414,9 +498,9 @@ FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
     ret->winHandle   = -1;          // 1800acc91
     // +0x04 deliberately untouched, exactly as in ??0FileStream's prologue.
 
-    RtIo_FileSystem_PlatformCreateFile(self, ret, path);   // 1800acca4 — result discarded
+    PlatformCreateFile(*ret, *path);         // 1800acca4 — result discarded
 
-    return ret;                                            // 1800acca9
+    return ret;                              // 1800acca9
 }
 
 // ============================================================================
@@ -443,9 +527,9 @@ FileInfo* RtIo_FileSystem_CreateFileW(FileSystem* self, FileInfo* ret,
 //     AND `AdjustDelimiters` on an empty string, which is what retail does; a
 //     bare `= nullptr` would leak both buffers.
 // ============================================================================
-void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
-    ++g_fcc.platClose;
-    (void)self;
+void FileSystem::PlatformCloseFile(RtIO::FileInfo& infoRef) {
+    RtIO::FileInfo* const info = &infoRef;
+    ++RtIO::g_fcc.platClose;
 
     if (info->winHandle == -1) return;                       // 1800ae03d/41
 
@@ -455,33 +539,33 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
     if (!info->_name0.data) return;                          // 1800ae059/5f
     if (RtSystem::StringLength(info->_name0.data) == 0) return;  // 1800ae065/69
 
-    ++g_fcc.closeRenamed;
+    ++RtIO::g_fcc.closeRenamed;
 
     // 3. delete the destination
     {
-        WideStr w{};  w.data = nullptr;
-        WideFromString(&w, &Sys(info->_name1));              // 1800ae07b
+        RtIO::WideStr w{};  w.data = nullptr;
+        RtIO::WideFromString(&w, &RtIO::Sys(info->_name1));  // 1800ae07b
         ::DeleteFileW(w.data);                               // 1800ae084 — discarded
-        WideRelease(&w);                                     // 1800ae08d..b9
+        RtIO::WideRelease(&w);                               // 1800ae08d..b9
     }
 
     // 4. move the temp over it. Retail builds the DESTINATION wide string
     //    FIRST (0x1800ae0c1, over _name1) and the SOURCE second (0x1800ae0d1,
     //    over _name0), then calls MoveFileW(source, destination).
     {
-        WideStr dst{};  dst.data = nullptr;
-        WideFromString(&dst, &Sys(info->_name1));            // 1800ae0c1
-        WideStr src{};  src.data = nullptr;
-        WideFromString(&src, &Sys(info->_name0));            // 1800ae0d1
+        RtIO::WideStr dst{};  dst.data = nullptr;
+        RtIO::WideFromString(&dst, &RtIO::Sys(info->_name1));// 1800ae0c1
+        RtIO::WideStr src{};  src.data = nullptr;
+        RtIO::WideFromString(&src, &RtIO::Sys(info->_name0));// 1800ae0d1
         ::MoveFileW(src.data, dst.data);                     // 1800ae0dd — discarded
-        WideRelease(&src);                                   // 1800ae0e4..111  (src first)
-        WideRelease(&dst);                                   // 1800ae111..13e
+        RtIO::WideRelease(&src);                             // 1800ae0e4..111  (src first)
+        RtIO::WideRelease(&dst);                             // 1800ae111..13e
     }
 
     // 5. clear both, through Filename::operator= from a null temporary
     //    (0x180006770); the temporary's own destructor is a no-op on null.
-    SysFile(info->_name0) = System::Filename();              // 1800ae13e/14b
-    SysFile(info->_name1) = System::Filename();              // 1800ae151/15e
+    RtIO::SysFile(info->_name0) = System::Filename();        // 1800ae13e/14b
+    RtIO::SysFile(info->_name1) = System::Filename();        // 1800ae151/15e
 }
 
 // ============================================================================
@@ -502,12 +586,13 @@ void RtIo_FileSystem_PlatformCloseFile(FileSystem* self, FileInfo* info) {
 // it is why filesystem_openfile_win.cpp's oracle already excludes +0x04
 // (`reference_oracle_must_not_compare_unwritten_bytes.md`).
 // ============================================================================
-void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
-    ++g_fcc.closeFile;
+void FileSystem::CloseFile(RtIO::FileInfo& infoRef) {
+    RtIO::FileInfo* const info = &infoRef;
+    ++RtIO::g_fcc.closeFile;
 
-    RtIo_FileSystem_PlatformCloseFile(self, info);   // 1800accde
+    PlatformCloseFile(*info);                        // 1800accde
 
-    FileInfo fresh;                                  // NOT zero-initialised: see above
+    RtIO::FileInfo fresh;                            // NOT zero-initialised: see above
     fresh.handle      = -1;                          // 1800acce3
     fresh.size        = 0;                           // 1800accec (qword)
     fresh.cursor      = 0;
@@ -519,10 +604,10 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
     new (&fresh._name1) System::Filename();          // 1800acd07
     fresh.winHandle   = -1;                          // 1800acd0b
 
-    RtIo_FileInfo_Assign(info, &fresh);              // 1800acd1a
+    ::RtIo_FileInfo_Assign(info, &fresh);            // 1800acd1a
 
-    SysFile(fresh._name1).~Filename();               // 1800acd20  +0x28 first
-    SysFile(fresh._name0).~Filename();               // 1800acd50  +0x20
+    RtIO::SysFile(fresh._name1).~Filename();         // 1800acd20  +0x28 first
+    RtIO::SysFile(fresh._name0).~Filename();         // 1800acd50  +0x20
 
     // ---- NOT PART OF THE PORT ------------------------------------------
     // A one-shot trigger for file_stream_slots_probe.cpp, which needs a LIVE
@@ -558,49 +643,46 @@ void RtIo_FileSystem_CloseFile(FileSystem* self, FileInfo* info) {
 // (`reference_a_written_recipe_can_be_wrong.md` is exactly this shape — two
 // destructors that look interchangeable and are not).
 // ============================================================================
-void RtIo_FileSystem_Dtor(FileSystem* self) {
-    ++g_fcc.fsDtor;
+// THE THREE `RtSystem::String` MEMBERS STAY PODs, and it is THIS BODY that is
+// the reason. Retyping +0x00/+0x08/+0x10 to `System::String` would give
+// `~FileSystem()` three IMPLICIT member destructors running IN ADDITION to the
+// three explicit releases below — the B31 `RtSystem::String` double-free,
+// reached from the other direction. The releases stay explicit and by hand,
+// exactly as retail's three inlined idioms are.
+FileSystem::~FileSystem() {
+    ++RtIO::g_fcc.fsDtor;
 
     // Step 1. The tree object is (root, count) at +0x40/+0x48; retail passes
     // its ADDRESS as `this` and the root as the node.
-    void* tree = &self->packfileIndexRoot;
-    static SubtreeFreeFn subtreeFree = nullptr;
-    if (!subtreeFree) subtreeFree = reinterpret_cast<SubtreeFreeFn>(
+    void* tree = &_packfileIndexRoot;
+    static RtIO::SubtreeFreeFn subtreeFree = nullptr;
+    if (!subtreeFree) subtreeFree = reinterpret_cast<RtIO::SubtreeFreeFn>(
         ResolveAddr(Module::Runtime, 0x180008340));
-    subtreeFree(tree, self->packfileIndexRoot);       // 1800ac6ff
+    subtreeFree(tree, _packfileIndexRoot);            // 1800ac6ff
 
-    self->packfileIndexRoot  = nullptr;               // 1800ac706
-    self->packfileIndexCount = 0;                     // 1800ac709
+    _packfileIndexRoot  = nullptr;                    // 1800ac706
+    _packfileIndexCount = 0;                          // 1800ac709
 
     // Step 3 — Array<Filename>, ported by modification.cpp and registered.
-    static ArrayFilenameDtorFn fnArrayDtor = nullptr;
-    if (!fnArrayDtor) fnArrayDtor = reinterpret_cast<ArrayFilenameDtorFn>(
+    static RtIO::ArrayFilenameDtorFn fnArrayDtor = nullptr;
+    if (!fnArrayDtor) fnArrayDtor = reinterpret_cast<RtIO::ArrayFilenameDtorFn>(
         ResolveAddr(Module::Runtime, 0x1800098d0));
-    fnArrayDtor(&self->userPackFilenames);            // 1800ac710
+    fnArrayDtor(&_userPackFilenames);                 // 1800ac710
 
     // Step 4 — the POD array free, our own copy. See the note above.
-    PodArrayDtor(reinterpret_cast<PodArray*>(&self->packfiles));  // 1800ac71a
+    RtIO::PodArrayDtor(
+        reinterpret_cast<RtIO::PodArray*>(&_packfiles));  // 1800ac71a
 
     // Step 5
-    // The three path fields are `RtSystem::String` members of the not-yet-
-    // converted IO::FileSystem, so ~String is invoked on them explicitly; it is
-    // the same inlined release retail emits at each of the three addresses.
-    Sys(self->packDirectory).~String();               // 1800ac720  +0x10
-    Sys(self->dataDirectory).~String();               // 1800ac74a  +0x08
-    Sys(self->sourceDirectory).~String();             // 1800ac775  +0x00
+    // The three path fields are `RtSystem::String` members, so ~String is
+    // invoked on them explicitly; it is the same inlined release retail emits
+    // at each of the three addresses.
+    RtIO::Sys(_packDirectory).~String();              // 1800ac720  +0x10
+    RtIO::Sys(_dataDirectory).~String();              // 1800ac74a  +0x08
+    RtIO::Sys(_sourceDirectory).~String();            // 1800ac775  +0x00
 }
 
-// Read by file_stream_cutover_probe.cpp, which prints attendance beside the
-// door verdicts so a reader cannot see one without the other.
-void RtIoFileSystemCreateFileCounters(unsigned long long* out) {
-    out[0]=g_fcc.createPath;   out[1]=g_fcc.createPathDirs;
-    out[2]=g_fcc.createFileW;  out[3]=g_fcc.platCreate;
-    out[4]=g_fcc.createOk;     out[5]=g_fcc.createFail;
-    out[6]=g_fcc.closeFile;    out[7]=g_fcc.platClose;
-    out[8]=g_fcc.closeRenamed; out[9]=g_fcc.fsDtor;
-}
-
-}  // namespace RtIO
+}  // namespace IO
 
 // ============================================================================
 // Registration — BY NAME *AND* BY ADDRESS for every row.

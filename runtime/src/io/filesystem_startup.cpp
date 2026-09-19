@@ -94,11 +94,37 @@ void** ConfigurationSingletonSlot() {
 // opened and indexed) -- a replay would open every package twice. The shadow
 // below checks the two gate bytes, which are the only thing this body writes
 // that nothing else in it wrote, plus a did-work counter.
+//
+// ENDGAME B.3.4 PACKAGE+FS commit 5a: the body is now
+// `IO::FileSystem::Startup()`, below. The door keeps its name, its `extern "C"`
+// linkage and both registration lines, and delegates. No qualified `IO::` call
+// is needed: `IO::FileSystem` has no vtable at all
+// (runtime/types/io/FileSystem.h), so B34_BRIEFS section A.1's re-entry hazard
+// cannot arise.
 extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
+    return reinterpret_cast<IO::FileSystem*>(self)->Startup();
+}
 
-    RT_EXPORT_ONCE(VoidThisFn, "?SetupDirectories@FileSystem@IO@@QEAAXXZ")(self);
+// ============================================================================
+// `IO::FileSystem::Startup` — the member body
+// ============================================================================
+// Defined in `namespace IO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2). The two file-local
+// helpers it needs live in this translation unit's GLOBAL anonymous namespace,
+// so they are reached as `::ConfigurationSingletonSlot` / `::VoidThisFn` /
+// `::MapFindFn` — spelled with the `::` on purpose, so a future reader cannot
+// mistake them for members.
+//
+// NOTHING ELSE CHANGED. Same callees in the same order, same two RT_EXPORT_ONCE
+// doors, the same unguarded Configuration dereference, the same single `return
+// true`. `self->field` became `_field`; that is the whole of the diff.
+namespace IO {
 
-    self->existsInPackfileGate = 1;
+bool FileSystem::Startup() {
+
+    RT_EXPORT_ONCE(::VoidThisFn, "?SetupDirectories@FileSystem@IO@@QEAAXXZ")(this);
+
+    _existsInPackfileGate = 1;
 
     // ENDGAME B.3.1 step 2: retail's `String::Set(&tmp, "onlypkg")`
     // (0x1800abc79, the literal at 0x1801556e8) followed by the dtor at
@@ -123,19 +149,21 @@ extern "C" bool RtIo_FileSystem_Startup(FileSystem* self) {
     // and runtime/src/system/configuration.cpp registers that address, so this
     // reaches OUR port both today and at cutover.
     bool found = false;
-    if (void** cfgSlot = ConfigurationSingletonSlot()) {
+    if (void** cfgSlot = ::ConfigurationSingletonSlot()) {
         void* map = static_cast<uint8_t*>(*cfgSlot) + 0x10;
-        found = reinterpret_cast<MapFindFn>(
+        found = reinterpret_cast<::MapFindFn>(
                     ResolveAddr(Module::Runtime, 0x18002ace0))(map, &tmp) != nullptr;
     }
 
-    if (found) self->platformExistsGate = 0;
+    if (found) _platformExistsGate = 0;
 
-    RT_EXPORT_ONCE(VoidThisFn, "?LoadPackages@FileSystem@IO@@QEAAXXZ")(self);
+    RT_EXPORT_ONCE(::VoidThisFn, "?LoadPackages@FileSystem@IO@@QEAAXXZ")(this);
 
 
     return true;
 }
+
+}  // namespace IO
 
 // ============================================================================
 // Registration
