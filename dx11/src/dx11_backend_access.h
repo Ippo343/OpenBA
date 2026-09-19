@@ -33,6 +33,9 @@
 // (`-Iruntime/types -Iruntime/funcs`), so no Makefile change is needed and this
 // is the fifth `runtime/types` header dx11 includes.
 #include "video/VertexLayout.h"
+// ENDGAME B.3.5 block B — the real `Video::ShaderProgram` / `VertexProgram` /
+// `PixelProgram`, which replace this file's former `ShaderProgramOwner` view.
+#include "video/ShaderProgram.h"
 #include "VideoDX11Data.h"
 #include "dx11_seam.h"   // Vt / VtGhidraAddr, used by Dx11VtableAddress
 #include "resolve.h"
@@ -164,15 +167,20 @@ static_assert(offsetof(RtByteCodeBlob, _capacity) == 0x0C, "Array::_capacity @ +
 // i.e. ShaderProgram+0x40 is a Collection::Array<Collection::Array<uint8>> —
 // one compiled byte-code blob per shader permutation, at most 4 of which the
 // DX11 backend ever creates.
-struct ShaderProgramOwner {
-    uint8_t        opaque00[0x40];  // +0x00  parameters, constants, textures, ...
-    RtByteCodeList byteCode;        // +0x40  Array<Array<uint8>>, one blob per permutation
-};
-static_assert(offsetof(ShaderProgramOwner, byteCode) == 0x40,
-              "Video::ShaderProgram byte-code array @ +0x40 (0x1800041a0)");
-// The count the loop compares against is byteCode.length at +0x48.
-static_assert(offsetof(ShaderProgramOwner, byteCode) + offsetof(RtByteCodeBlob, _size) == 0x48,
-              "Video::ShaderProgram permutation count @ +0x48 (0x1800041a0)");
+// ENDGAME B.3.5 block B, RULE B5-2.1 — `ShaderProgramOwner` IS GONE. It was a
+// partial, offset-pinned view (`opaque00[0x40]` + `byteCode` @ +0x40) of a
+// Runtime-side class that is now real: `Video::ShaderProgram`
+// (runtime/types/video/ShaderProgram.h), where the same two offsets are pinned
+// by the same 0x1800041a0 reads plus the Runtime-side evidence, and where
+// `byteCode` is spelled `_byteCode` as retail's own accessors name it. Its two
+// users in `dx11/src/shaderprograms.cpp` name `Video::ShaderProgram` directly —
+// exactly the way B.3.2 step 2 replaced this file's private `RtArray` POD with
+// the real `Collection::Array<T>` (see the note above `RtByteCodeBlob`) and the
+// way block A retired `VertexLayoutOwner`.
+//
+// The view's two `static_assert`s are not lost: they are
+// `offsetof(ShaderProgram, _byteCode) == 0x40` and the `_size` sum == 0x48 in
+// that header, alongside the retail `sizeof` of 0x50 the view could not state.
 
 // The DX11 backend creates at most this many shader permutations, regardless of
 // how many byte-code blobs the program actually carries: the loop in

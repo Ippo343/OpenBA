@@ -55,6 +55,13 @@
 #include "dx11_seam.h"
 #include "dx11_backend_access.h"
 
+// ENDGAME B.3.5 block B, RULE B5-3 — the real `Video::VertexProgramData` /
+// `PixelProgramData` abstract bases (block A), so the two destructors below can
+// call their base destructor as a qualified non-virtual member call instead of
+// resolving a mangled name. The twelve CONCRETE `*Data` classes in this
+// directory and the 84-slot seam remain the declared leave of RULE B5-8.
+#include "video/CompanionData.h"
+
 namespace VideoDX11 {
 
 // ============================================================
@@ -81,10 +88,20 @@ static void* VertexProgramData_Dtor(VertexProgramData* self, unsigned flags) {
     for (int i = 0; i < kShaderVariantCount; ++i)
         Dx11Release(self->variants[i]);
 
-    static Dx11BaseDtor_t base = reinterpret_cast<Dx11BaseDtor_t>(
-        Dx11ResolveRuntimeImport("??1VertexProgramData@Video@@UEAA@XZ",
-                                 0x180013318));
-    if (base) base(self);
+    // ENDGAME B.3.5 block B, RULE B5-3. Was a `Dx11ResolveRuntimeImport
+    // ("??1VertexProgramData@Video@@UEAA@XZ", 0x180013318)` + indirect call —
+    // spelling 9 of the nine caller bindings (RULE B5-14), one of dx11's 76
+    // mangled-name literals. `Video::VertexProgramData` is a real class now, so
+    // this is the MSVC derived-destructor idiom written as C++: a QUALIFIED
+    // non-virtual call on the base subobject, reached through the bridge cast
+    // because `VideoDX11::VertexProgramData` is the declared leave of RULE B5-8
+    // and does not inherit in C++.
+    //
+    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this
+    // function. The base destructor is in no slot, which is why the
+    // qualification is safe and the virtual call is not.
+    reinterpret_cast< ::Video::VertexProgramData*>(self)
+        -> ::Video::VertexProgramData::~VertexProgramData();   // B.3.5 bridge
 
     if (flags & 1) Dx11MemFree(self);
     return self;
@@ -128,14 +145,19 @@ static bool VertexProgramData_PlatformCreate(VertexProgramData* self) {
     ID3D11Device* device = Dx11Device();
 
     for (int i = 0; i < kShaderVariantCount; ++i) {
-        const ShaderProgramOwner* owner =
-            static_cast<const ShaderProgramOwner*>(self->vertexProgram);
-        if (i >= owner->byteCode.GetSize()) continue;
+        // ENDGAME B.3.5 block B: was `const ShaderProgramOwner*`, a partial
+        // view in dx11_backend_access.h. `Video::ShaderProgram` is a real class
+        // now and this is the same two offsets. The owner is a
+        // `Video::VertexProgram`; the fields read here are its ShaderProgram
+        // base's, which is what made the view's offsets base-class offsets.
+        const Video::ShaderProgram* owner =
+            static_cast<const Video::ShaderProgram*>(self->vertexProgram);
+        if (i >= owner->_byteCode.GetSize()) continue;
 
         // ENDGAME B.3.2 step 2 — `byteCode` is the real
         // `Collection::Array<Collection::Array<uint8_t>>`; the element read that
         // needed a cast off a `void*` is now `operator[]`.
-        const RtByteCodeBlob* blobs = owner->byteCode.GetData();
+        const RtByteCodeBlob* blobs = owner->_byteCode.GetData();
         HRESULT hr = device->CreateVertexShader(
             blobs[i].GetData(),
             static_cast<SIZE_T>(blobs[i].GetSize()),
@@ -187,10 +209,11 @@ static void* PixelProgramData_Dtor(PixelProgramData* self, unsigned flags) {
     for (int i = 0; i < kShaderVariantCount; ++i)
         Dx11Release(self->variants[i]);
 
-    static Dx11BaseDtor_t base = reinterpret_cast<Dx11BaseDtor_t>(
-        Dx11ResolveRuntimeImport("??1PixelProgramData@Video@@UEAA@XZ",
-                                 0x180013358));
-    if (base) base(self);
+    // RULE B5-3, as in VertexProgramData_Dtor above: was
+    // `Dx11ResolveRuntimeImport("??1PixelProgramData@Video@@UEAA@XZ",
+    // 0x180013358)` + an indirect call.
+    reinterpret_cast< ::Video::PixelProgramData*>(self)
+        -> ::Video::PixelProgramData::~PixelProgramData();      // B.3.5 bridge
 
     if (flags & 1) Dx11MemFree(self);
     return self;
@@ -204,14 +227,15 @@ static bool PixelProgramData_PlatformCreate(PixelProgramData* self) {
     ID3D11Device* device = Dx11Device();
 
     for (int i = 0; i < kShaderVariantCount; ++i) {
-        const ShaderProgramOwner* owner =
-            static_cast<const ShaderProgramOwner*>(self->pixelProgram);
-        if (i >= owner->byteCode.GetSize()) continue;
+        // B.3.5 block B, as in VertexProgramData_PlatformCreate above.
+        const Video::ShaderProgram* owner =
+            static_cast<const Video::ShaderProgram*>(self->pixelProgram);
+        if (i >= owner->_byteCode.GetSize()) continue;
 
         // ENDGAME B.3.2 step 2 — `byteCode` is the real
         // `Collection::Array<Collection::Array<uint8_t>>`; the element read that
         // needed a cast off a `void*` is now `operator[]`.
-        const RtByteCodeBlob* blobs = owner->byteCode.GetData();
+        const RtByteCodeBlob* blobs = owner->_byteCode.GetData();
         HRESULT hr = device->CreatePixelShader(
             blobs[i].GetData(),
             static_cast<SIZE_T>(blobs[i].GetSize()),

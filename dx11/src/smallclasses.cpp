@@ -49,6 +49,13 @@
 #include "dx11_seam.h"
 #include "dx11_backend_access.h"
 
+// ENDGAME B.3.5 block B, RULE B5-3 — the real `Video::VideoProgramData` abstract
+// base (block A), so VideoProgramData_Dtor below can call its base destructor as a
+// qualified non-virtual member call instead of resolving a mangled name. The
+// CONCRETE `*Data` classes in this directory and the 84-slot seam remain the
+// declared leave of RULE B5-8.
+#include "video/CompanionData.h"
+
 namespace VideoDX11 {
 
 // ============================================================
@@ -66,10 +73,21 @@ namespace VideoDX11 {
 static void* VideoProgramData_Dtor(VideoProgramData* self, unsigned flags) {
     self->vptr = Dx11VtableAddress(Vt::VideoProgramData);
 
-    static Dx11BaseDtor_t base = reinterpret_cast<Dx11BaseDtor_t>(
-        Dx11ResolveRuntimeImport("??1VideoProgramData@Video@@UEAA@XZ",
-                                 0x180013498));
-    if (base) base(self);
+    // ENDGAME B.3.5 block B, RULE B5-3. Was a `Dx11ResolveRuntimeImport
+    // ("??1VideoProgramData@Video@@UEAA@XZ", 0x180013498)` + indirect call —
+    // spelling 9 of the nine caller bindings (RULE B5-14), one of dx11's 76
+    // mangled-name literals. `Video::VideoProgramData` is a real class (block A),
+    // so this is the MSVC derived-destructor idiom written as C++: a QUALIFIED
+    // non-virtual call on the base subobject, reached through the bridge cast
+    // because `VideoDX11::VideoProgramData` is the declared leave of RULE B5-8 and
+    // does not inherit in C++.
+    //
+    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this function.
+    //
+    // RenderBufferData_Dtor below is UNCHANGED and is block D2's — this commit
+    // touches only the VideoProgramData half of this file.
+    reinterpret_cast< ::Video::VideoProgramData*>(self)
+        -> ::Video::VideoProgramData::~VideoProgramData();   // B.3.5 bridge
 
     if (flags & 1) Dx11MemFree(self);
     return self;

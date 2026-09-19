@@ -18,17 +18,36 @@
 // factory steps call (rt_factories_video.inc), ~VideoProgram (0x1800f4650) and
 // the three private Platform* helpers.
 //
-// Layout (sizeof 0x48, from CreateNewObject's Allocate(0x48, 8)):
-//   +0x00  Object::External             (0x20)
-//   +0x20  ExternalPtr<VertexLayout>    _vertexLayout
-//   +0x28  ExternalPtr<VertexProgram>   _vertexProgram
-//   +0x30  ExternalPtr<PixelProgram>    _pixelProgram
-//   +0x38  ExternalPtr<RenderState>     _renderState
-//   +0x40  VideoProgramData*            _data   (dx11/: our DeviceData slot 0x90 creates it)
+// ============================================================================
+// ENDGAME B.3.5 BLOCK B — THE BODIES MOVED INTO THE MEMBERS, AND THIS FILE'S
+// LOCAL `struct VideoProgram` IS GONE
+// ============================================================================
+// `Video::VideoProgram` is a real C++ class in the NEW
+// runtime/types/video/VideoProgram.h, which this block had to AUTHOR: B35_RULES
+// 13.3 listed this layout as one where the size was verified and the FIELDS were
+// not. The header carries the retail evidence for all five offsets — the four
+// exported getters, the ctor's five stores, SetupShaders's context/dirty-bit
+// pairing and Serialize's four per-T instantiations, four independent agreements.
 //
-// ctor == Construct minus the null test: three vtable stamps, zero +0x08..+0x3f,
-// then PlatformConstruct: `_data = Device::_singleton->deviceData ? deviceData->
-// vtable[0x90/8](deviceData, this) : nullptr`.
+// *** ITS PARENT IS `Object::External` DIRECTLY — NOT CompiledExternal, NOT
+// ShaderProgram. *** That is B35_RULES 2.1's headline trap and the reason
+// VideoProgram converts LAST and on its own (section 10 move 4). The ctor at
+// 0x1800f45b0 stamps Base, External and VideoProgram and NEVER
+// ??_7CompiledExternal@Object@@6B@, which ??0ShaderProgram and ??0VertexLayout
+// both do; `?_ParentTypeName@VideoProgram@Video@@` says "Object::External".
+//
+// Each body below is a member, defined in the `namespace Video` block at the
+// bottom (B34_BRIEFS A.2), and each registered DOOR is a one-line QUALIFIED
+// non-virtual delegation through a `reinterpret_cast` bridge — qualified because a
+// live VideoProgram wears the MINTED table whose slots resolve back to these very
+// doors (B34_BRIEFS A.1). Nothing is unregistered; the ctor door stays a ctor door
+// (B4b-2: it writes the MINTED vptr).
+//
+// One runtime-internal binding retires:
+// `RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self)` — the base
+// destructor is the destructor CHAIN now, which is what retail's tail-JMP to
+// 0x1800bc950 at the end of 0x1800f4650 is (spelling 3).
+//
 // Serialize: build the {stream, readerWriter} pair, serialize the four
 // ExternalPtrs (four 748-byte instantiations, object/external_ptr_serialize.cpp),
 // then if any of them is non-null and we are reading, PlatformCreate =
@@ -42,24 +61,14 @@
 #include "../../../standalone/resolve.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
+#include "../../types/video/VideoProgram.h"
 
 namespace {
-
-struct VideoProgram {
-    RtObject::External base;            // +0x00
-    void* _vertexLayout;                // +0x20
-    void* _vertexProgram;               // +0x28
-    void* _pixelProgram;                // +0x30
-    void* _renderState;                 // +0x38
-    void* _data;                        // +0x40  Video::VideoProgramData*
-};
-static_assert(sizeof(VideoProgram) == 0x48, "Video::VideoProgram is 0x48 bytes");
-static_assert(offsetof(VideoProgram, _vertexLayout) == 0x20, "+0x20");
-static_assert(offsetof(VideoProgram, _data) == 0x40, "+0x40");
 
 using rt::io::Serializer;
 using rt::io::Stream;
 using rt::io::ReaderWriter;
+using Video::VideoProgram;
 
 void* BaseVTable()         { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
 void* ExternalVTable()     { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
@@ -88,82 +97,170 @@ Fn RtAddr(uintptr_t ghidra) {
     return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
 }
 
-// ?PlatformConstruct@VideoProgram@Video@@AEAAXXZ (0x1800f47a0), also the tail
-// of the ctor and of Construct.
-void PlatformConstruct(VideoProgram* self) {
-    void* dd = DeviceData();
-    if (dd == nullptr) { self->_data = nullptr; return; }
-    using CreateFn = void* (*)(void* deviceData, void* program);
-    void** vt = *reinterpret_cast<void***>(dd);
-    self->_data = reinterpret_cast<CreateFn>(vt[kDeviceDataCreateVideoProgramData / 8])(dd, self);
-}
-// ?PlatformCreate@VideoProgram@Video@@AEAAXXZ (0x1800f4810): _data->vtable[1](_data)
-void PlatformCreate(VideoProgram* self) {
-    using Fn = void (*)(void*);
-    void** vt = *reinterpret_cast<void***>(self->_data);
-    reinterpret_cast<Fn>(vt[1])(self->_data);
-}
-// ?PlatformDestruct@VideoProgram@Video@@AEAAXXZ (0x1800f47f0): _data->vtable[0](_data, 1)
-void PlatformDestruct(VideoProgram* self) {
-    if (self->_data == nullptr) return;
-    using Fn = void (*)(void*, int);
-    void** vt = *reinterpret_cast<void***>(self->_data);
-    reinterpret_cast<Fn>(vt[0])(self->_data, 1);
-}
-
+// ??0VideoProgram@Video@@QEAA@XZ (0x1800f45b0) — the ctor DOOR's body, which
+// `Construct` (0x18004edf0) repeats behind a null test. THREE vtable stamps: Base,
+// External, VideoProgram. There is no CompiledExternal stamp and adding one would
+// be the trap this class is famous for.
 void ConstructBody(VideoProgram* self) {
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();
     *vp = ExternalVTable();
-    self->base._path.data      = nullptr;   // +0x08
-    self->base._refs._data     = nullptr;   // +0x10
-    self->base._refs._size     = 0;         // +0x18
-    self->base._refs._capacity = 0;
+    self->_path.data      = nullptr;   // +0x08
+    self->_refs._data     = nullptr;   // +0x10
+    self->_refs._size     = 0;         // +0x18
+    self->_refs._capacity = 0;
     *vp = VideoProgramVTable();
     self->_vertexLayout  = nullptr;         // +0x20
     self->_vertexProgram = nullptr;         // +0x28
     self->_pixelProgram  = nullptr;         // +0x30
     self->_renderState   = nullptr;         // +0x38
-    PlatformConstruct(self);                // +0x40
+    self->Video::VideoProgram::PlatformConstruct();   // +0x40
 }
 
 }  // namespace
 
-extern "C" uint32_t RtVideo_VideoProgram_Type(const void*) {
-    uint32_t v = 0; std::memcpy(&v, VideoProgramTypeInfo(), sizeof v); return v;
+// ---------------------------------------------------------------------------
+// The registered doors. Each is one line over the member of the same name.
+// ---------------------------------------------------------------------------
+extern "C" uint32_t RtVideo_VideoProgram_Type(const void* selfv) {
+    return reinterpret_cast<const VideoProgram*>(selfv)
+               ->Video::VideoProgram::Type();                      // B.3.5 bridge
 }
-extern "C" const char* RtVideo_VideoProgram_TypeName(const void*) {
-    const char* v = nullptr; std::memcpy(&v, VideoProgramTypeInfo() + 8, sizeof v); return v;
+extern "C" const char* RtVideo_VideoProgram_TypeName(const void* selfv) {
+    return reinterpret_cast<const VideoProgram*>(selfv)
+               ->Video::VideoProgram::TypeName();                  // B.3.5 bridge
 }
-extern "C" int32_t RtVideo_VideoProgram_GetFileVersion(const void*) { return 1; }
+extern "C" int32_t RtVideo_VideoProgram_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const VideoProgram*>(selfv)
+               ->Video::VideoProgram::GetFileVersion();            // B.3.5 bridge
+}
 
 extern "C" void* RtVideo_VideoProgram_Ctor(void* selfv) {
-    ConstructBody(static_cast<VideoProgram*>(selfv));
+    ConstructBody(reinterpret_cast<VideoProgram*>(selfv));         // B.3.5 bridge
     return selfv;
 }
 extern "C" void* RtVideo_VideoProgram_Construct(void* selfv) {
+    // RETAIL'S NULL TEST STAYS IN THE DOOR (BLOCK_BRIEF "the shape"): `this` is
+    // `nonnull` to the compiler, so the same test inside the member is both a
+    // -Wnonnull-compare warning and an optimisation GCC may delete.
     if (selfv == nullptr) return nullptr;
-    ConstructBody(static_cast<VideoProgram*>(selfv));
-    return selfv;
+    return reinterpret_cast<VideoProgram*>(selfv)
+               ->Video::VideoProgram::Construct();                 // B.3.5 bridge
 }
 extern "C" void* RtVideo_VideoProgram_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<VideoProgram*>(selfv));
-    return selfv;
+    return reinterpret_cast<VideoProgram*>(selfv)
+               ->Video::VideoProgram::Reconstruct();               // B.3.5 bridge
 }
 extern "C" void RtVideo_VideoProgram_Destruct(void* selfv) {
-    CallSlot0(selfv, 0);
+    reinterpret_cast<VideoProgram*>(selfv)
+        ->Video::VideoProgram::Destruct();                         // B.3.5 bridge
 }
+// ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650)
 extern "C" void RtVideo_VideoProgram_Dtor(void* selfv) {
-    VideoProgram* self = static_cast<VideoProgram*>(selfv);
-    *reinterpret_cast<void**>(self) = VideoProgramVTable();
-    PlatformDestruct(self);
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
+    reinterpret_cast<VideoProgram*>(selfv)
+        ->Video::VideoProgram::~VideoProgram();                    // B.3.5 bridge
+}
+extern "C" bool RtVideo_VideoProgram_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<VideoProgram*>(selfv)
+               ->Video::VideoProgram::Serialize(streamv);          // B.3.5 bridge
 }
 
-extern "C" bool RtVideo_VideoProgram_Serialize(void* selfv, void* streamv) {
-    VideoProgram* self = static_cast<VideoProgram*>(selfv);
+// ============================================================================
+// THE MEMBER BODIES — `Video::VideoProgram::*`. At `namespace Video` scope and
+// AFTER the anonymous namespace (B34_BRIEFS A.2).
+// ============================================================================
+namespace Video {
+
+// slot 1 — the `_typeInfo` record's +0x08 (`BaseTypeInfo::name`, CONTENT-only).
+const char* VideoProgram::TypeName() const {
+    const char* v = nullptr; std::memcpy(&v, VideoProgramTypeInfo() + 8, sizeof v); return v;
+}
+// slot 2 — the record's +0x00, 0xFFFFFFFF until Factory::Startup.
+uint32_t VideoProgram::Type() const {
+    uint32_t v = 0; std::memcpy(&v, VideoProgramTypeInfo(), sizeof v); return v;
+}
+// slot 3 — 0x1800f46a0 is `MOV EAX,1 ; RET`.
+int32_t VideoProgram::GetFileVersion() const { return 1; }
+
+// slot 8 — 0x18004edf0, the ctor body; retail's leading `TEST RCX,RCX / JZ` lives
+// in the DOOR. `virtual`, not `override`: this branch introduces the slot (B5-16).
+Object::External* VideoProgram::Construct() {
+    ConstructBody(this);
+    return this;
+}
+
+// slot 6 — 0x18004edd0. On why the slot-0 call is `CallSlot0` and not
+// `DeletingDtor(0)`: our slot 0 is declared PURE (the body is deleting_dtor.cpp's
+// table-driven one, registered by address and kept by B35_RULES 11), so the C++
+// spelling would be a virtual call on an abstract class that GCC may fold to
+// `__cxa_pure_virtual`. `CallSlot0` reads the object's ACTUAL — minted — table.
+Object::External* VideoProgram::Reconstruct() {
+    CallSlot0(this, 0);
+    ConstructBody(this);
+    return this;
+}
+// slot 7 — 0x18004ee00.
+void VideoProgram::Destruct() { CallSlot0(this, 0); }
+
+// ??1VideoProgram@Video@@UEAA@XZ (0x1800f4650), read as disassembly:
+//   1800f4666  LEA RAX,[0x180157a70] / MOV [RCX],RAX     the vtable stamp
+//   1800f4670  MOV RCX,[RCX+0x40] / TEST / JE            PlatformDestruct, inlined
+//   1800f4681  CALL [RAX]  with EDX=1                      _data slot 0, flags=1
+//   ...        tail-JMP ~External (0x1800bc950)
+// The stamp is written out by hand, naming the MINTED address, because GCC's own
+// vptr store at the top of a polymorphic destructor names GCC's table while the
+// mint rows and the rest of the tree expect the minted one. The tail-JMP is the
+// destructor CHAIN: `~External()` is a real member
+// (runtime/src/object/external_class.cpp). There are no arrays of our own to tear
+// down — the four fields are trivially destructible `ExternalPtr<T>`s and retail
+// does not release them here either.
+VideoProgram::~VideoProgram() {
+    *reinterpret_cast<void**>(this) = VideoProgramVTable();
+    this->Video::VideoProgram::PlatformDestruct();
+}
+
+// The four getters, 0x18004ee10 .. 0x18004ee40, each `MOV RAX,[RCX+off]` into the
+// caller's return slot. On why none of them has a door, and what a door would have
+// to do about the hidden slot, see the header.
+Object::ExternalPtr<VertexLayout>  VideoProgram::GetVertexLayout() const  { return _vertexLayout; }
+Object::ExternalPtr<VertexProgram> VideoProgram::GetVertexProgram() const { return _vertexProgram; }
+Object::ExternalPtr<PixelProgram>  VideoProgram::GetPixelProgram() const  { return _pixelProgram; }
+Object::ExternalPtr<RenderState>   VideoProgram::GetRenderState() const   { return _renderState; }
+// 0x18004ee50 — `MOV RAX,[RCX+0x40]; RET`, no return slot.
+const void* VideoProgram::GetData() const { return _data; }
+
+// ?PlatformConstruct@VideoProgram@Video@@AEAAXXZ (0x1800f47a0), also the tail of
+// the ctor and of Construct. DeviceData slot 18 (+0x90).
+void VideoProgram::PlatformConstruct() {
+    void* dd = DeviceData();
+    if (dd == nullptr) { _data = nullptr; return; }
+    using CreateFn = void* (*)(void* deviceData, void* program);
+    void** vt = *reinterpret_cast<void***>(dd);
+    _data = reinterpret_cast<CreateFn>(vt[kDeviceDataCreateVideoProgramData / 8])(dd, this);
+}
+// ?PlatformCreate@VideoProgram@Video@@AEAAXXZ (0x1800f4810): _data->vtable[1](_data)
+void VideoProgram::PlatformCreate() {
+    using Fn = void (*)(void*);
+    void** vt = *reinterpret_cast<void***>(_data);
+    reinterpret_cast<Fn>(vt[1])(_data);
+}
+// ?PlatformDestruct@VideoProgram@Video@@AEAAXXZ (0x1800f47f0): _data->vtable[0](_data, 1)
+void VideoProgram::PlatformDestruct() {
+    if (_data == nullptr) return;
+    using Fn = void (*)(void*, int);
+    void** vt = *reinterpret_cast<void***>(_data);
+    reinterpret_cast<Fn>(vt[0])(_data, 1);
+}
+
+// slot 5 — ?Serialize@VideoProgram@Video@@UEAA_NAEAVStream@IO@@@Z (0x1800f46b0).
+//
+// The four per-T `ExternalPtr<T>::Serialize` instantiations are reached by ADDRESS
+// because each is its own 748-byte body in retail and ours are ported in
+// object/external_ptr_serialize.cpp under those addresses. The ORDER is the field
+// order and the four addresses are NOT interchangeable: each one loads its own
+// `_typeInfo`, so swapping two would look up a VertexProgram resource under
+// VertexLayout's type id.
+bool VideoProgram::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };
@@ -175,14 +272,14 @@ extern "C" bool RtVideo_VideoProgram_Serialize(void* selfv, void* streamv) {
     ser.readerWriter = rw;
 
     using ExtPtrSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<ExtPtrSerFn>(0x180055090ull)(&self->_vertexLayout,  &ser);   // ExternalPtr<VertexLayout>
-    RtAddr<ExtPtrSerFn>(0x1800542a0ull)(&self->_vertexProgram, &ser);   // ExternalPtr<VertexProgram>
-    RtAddr<ExtPtrSerFn>(0x180055380ull)(&self->_pixelProgram,  &ser);   // ExternalPtr<PixelProgram>
-    RtAddr<ExtPtrSerFn>(0x180055670ull)(&self->_renderState,   &ser);   // ExternalPtr<RenderState>
+    RtAddr<ExtPtrSerFn>(0x180055090ull)(&_vertexLayout,  &ser);   // ExternalPtr<VertexLayout>
+    RtAddr<ExtPtrSerFn>(0x1800542a0ull)(&_vertexProgram, &ser);   // ExternalPtr<VertexProgram>
+    RtAddr<ExtPtrSerFn>(0x180055380ull)(&_pixelProgram,  &ser);   // ExternalPtr<PixelProgram>
+    RtAddr<ExtPtrSerFn>(0x180055670ull)(&_renderState,   &ser);   // ExternalPtr<RenderState>
 
-    if ((self->_vertexLayout || self->_vertexProgram || self->_pixelProgram || self->_renderState)
+    if ((_vertexLayout.Get() || _vertexProgram.Get() || _pixelProgram.Get() || _renderState.Get())
         && stream->direction == 0) {
-        PlatformCreate(self);                       // retail derefs _data unguarded
+        this->Video::VideoProgram::PlatformCreate();   // retail derefs _data unguarded
     }
     if (rw != nullptr) {
         using DeleteFn = void (*)(ReaderWriter*, int);
@@ -190,6 +287,8 @@ extern "C" bool RtVideo_VideoProgram_Serialize(void* selfv, void* streamv) {
     }
     return true;
 }
+
+}  // namespace Video
 
 int RtVideoProgramRegister() {
     int n = 0;

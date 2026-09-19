@@ -104,6 +104,34 @@
 // is asserted from the call site, not assumed from the types.
 // ============================================================================
 
+// ============================================================================
+// ENDGAME B.3.5 BLOCK B — THE BODY MOVED INTO THE MEMBER
+// ============================================================================
+// `?SetupShaders@VideoProgram@Video@@` is now
+// `Video::VideoProgram::SetupShaders(void*)`, a member of the real class in the
+// new runtime/types/video/VideoProgram.h, and the registered door is a one-line
+// QUALIFIED non-virtual delegation through a `reinterpret_cast` bridge.
+//
+// THE LOCAL `struct VideoProgramPartial` IS GONE. It pinned four offsets of a
+// class that had no header anywhere in the tree, with no `sizeof` assert because
+// the rest was unknown; the header now pins all five and asserts the 0x48, and the
+// four offsets this file proved — by WHICH Context slot each field feeds and WHICH
+// dirty bit it raises — are cited there as one of its four independent agreements.
+//
+// THE ORACLE SCAFFOLDING IS GONE TOO, and that is a warning fix, not a loss.
+// `Capture`, `Restore` and the unused `pre` were the restore-and-replay harness
+// described below; the replay call itself was removed when the port closed, leaving
+// three functions and a variable that nothing used — three warnings in both builds,
+// on a file this block touches. The METHOD stays written down here, which is the
+// part that has to survive.
+//
+// `Video::Context` is block D1's class and is still the 0x2168-byte POD
+// `RtVideo::Context` today, so the member takes a `void*` and casts. Inside
+// `namespace Video` the POD is spelled with its `RtVideo::` qualifier, as
+// B34_BRIEFS A.7 requires now that this file opens that namespace: a bare
+// `Context` there would bind to a class.
+// ============================================================================
+
 #include <cstdio>
 #include <cstddef>
 #include <cstdint>
@@ -111,67 +139,15 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
+#include "../../types/video/VideoProgram.h"
 
 namespace {
-
-// ----------------------------------------------------------------------------
-// Video::VideoProgram, PARTIAL. Only the four words this function reads are
-// pinned; the class is larger and the rest is deliberately not invented here,
-// so there is no `sizeof` assert to be wrong. Offsets 0x20..0x38 are proven by
-// the destination/bit pairing in the banner.
-// ----------------------------------------------------------------------------
-struct VideoProgramPartial {
-    uint8_t _head[0x20];        // 0x00 .. 0x1f  not read by SetupShaders
-    void*   _vertexLayout;      // 0x20
-    void*   _vertexProgram;     // 0x28
-    void*   _pixelProgram;      // 0x30
-    void*   _renderState;       // 0x38
-};
-static_assert(offsetof(VideoProgramPartial, _vertexLayout)  == 0x20, "VideoProgram::_vertexLayout");
-static_assert(offsetof(VideoProgramPartial, _vertexProgram) == 0x28, "VideoProgram::_vertexProgram");
-static_assert(offsetof(VideoProgramPartial, _pixelProgram)  == 0x30, "VideoProgram::_pixelProgram");
-static_assert(offsetof(VideoProgramPartial, _renderState)   == 0x38, "VideoProgram::_renderState");
 
 // The video-program dirty bit. Context.h's prose names it ("0x00000100 VIDEO
 // program ?SetVideoProgram@ 0x18001a040", from WAVE 9 lane CTX reading
 // ?BindResources@'s arms) but its enum does not carry an enumerator, so it is
 // spelled here rather than added to a header three other lanes include.
 constexpr uint32_t kDirtyVideoProgram = 0x00000100u;
-
-// The six Context words this function can touch, in one struct so the snapshot,
-// the restore and the compare cannot drift apart.
-struct Touched {
-    uint32_t dirty;
-    void*    vertexLayout;
-    void*    renderState;
-    void*    vertexProgram;
-    void*    pixelProgram;
-    void*    videoProgram;
-};
-
-Touched Capture(const RtVideo::Context* ctx) {
-    // Value-initialised: `dirty` is 32 bits and `vertexLayout` is pointer-
-    // aligned, so bytes +0x4..+0x7 are PADDING. the diff oracle compares the
-    // whole struct, and uninitialised padding reported 47,280 "divergences"
-    // in 68,377 calls (2026-09-12) that were stack garbage, not the port.
-    Touched t{};
-    t.dirty         = ctx->_dirty;
-    t.vertexLayout  = ctx->_vertexLayout;
-    t.renderState   = ctx->_renderState;
-    t.vertexProgram = ctx->_vertexProgram;
-    t.pixelProgram  = ctx->_pixelProgram;
-    std::memcpy(&t.videoProgram, ctx->_pixelConstantStaging, sizeof(void*));
-    return t;
-}
-
-void Restore(RtVideo::Context* ctx, const Touched& t) {
-    ctx->_dirty         = t.dirty;
-    ctx->_vertexLayout  = t.vertexLayout;
-    ctx->_renderState   = t.renderState;
-    ctx->_vertexProgram = t.vertexProgram;
-    ctx->_pixelProgram  = t.pixelProgram;
-    std::memcpy(ctx->_pixelConstantStaging, &t.videoProgram, sizeof(void*));
-}
 
 // One compare-then-OR-then-store, retail's idiom, for a pointer slot.
 inline void Apply(RtVideo::Context* ctx, void** slot, void* value, uint32_t bit) {
@@ -181,16 +157,26 @@ inline void Apply(RtVideo::Context* ctx, void** slot, void* value, uint32_t bit)
     }
 }
 
-using SetupShadersFn = void (*)(const void*, void*);
-
-// Kept inside the anonymous namespace with the types it takes: a function with
-// EXTERNAL linkage whose parameter type has INTERNAL linkage is ill-formed in
-// principle and a -Wsubobject-linkage warning in practice. Nothing outside this
+// ----------------------------------------------------------------------------
+// The registered door. Kept inside the anonymous namespace: nothing outside this
 // file needs the symbol -- the registry takes its ADDRESS, not its name.
-void Video_VideoProgram_SetupShaders(const VideoProgramPartial* self,
-                                     RtVideo::Context* ctx) {
+// ----------------------------------------------------------------------------
+void Video_VideoProgram_SetupShaders(const void* selfv, void* ctxv) {
+    reinterpret_cast<const Video::VideoProgram*>(selfv)
+        ->Video::VideoProgram::SetupShaders(ctxv);                  // B.3.5 bridge
+}
 
-    Touched pre{};
+}  // namespace
+
+// ============================================================================
+// THE MEMBER BODY — `Video::VideoProgram::SetupShaders`. At `namespace Video`
+// scope and AFTER the anonymous namespace (B34_BRIEFS A.2); `Apply` and
+// `kDirtyVideoProgram` stay reachable by unqualified name.
+// ============================================================================
+namespace Video {
+
+void VideoProgram::SetupShaders(void* ctxv) const {
+    RtVideo::Context* ctx = static_cast<RtVideo::Context*>(ctxv);
 
     // Context+0x200 is `_videoProgram`, a POINTER that lives in the first eight
     // bytes of the `_pixelConstantStaging` array — see the WAVE 9 LANE CTX note
@@ -199,20 +185,19 @@ void Video_VideoProgram_SetupShaders(const VideoProgramPartial* self,
     // suitably aligned for a void* if the header is ever re-divided.
     void* videoProgramSlot = nullptr;
     std::memcpy(&videoProgramSlot, ctx->_pixelConstantStaging, sizeof(void*));
-    if (videoProgramSlot != static_cast<const void*>(self)) {
+    if (videoProgramSlot != static_cast<const void*>(this)) {
         ctx->_dirty |= kDirtyVideoProgram;
-        void* me = const_cast<VideoProgramPartial*>(self);
+        void* me = const_cast<VideoProgram*>(this);
         std::memcpy(ctx->_pixelConstantStaging, &me, sizeof(void*));
     }
 
-    Apply(ctx, &ctx->_vertexLayout,  self->_vertexLayout,  RtVideo::kDirtyVertexLayout);
-    Apply(ctx, &ctx->_vertexProgram, self->_vertexProgram, RtVideo::kDirtyVertexProgram);
-    Apply(ctx, &ctx->_pixelProgram,  self->_pixelProgram,  RtVideo::kDirtyPixelProgram);
-    Apply(ctx, &ctx->_renderState,   self->_renderState,   RtVideo::kDirtyRenderState);
-
+    Apply(ctx, &ctx->_vertexLayout,  _vertexLayout.Get(),  RtVideo::kDirtyVertexLayout);
+    Apply(ctx, &ctx->_vertexProgram, _vertexProgram.Get(), RtVideo::kDirtyVertexProgram);
+    Apply(ctx, &ctx->_pixelProgram,  _pixelProgram.Get(),  RtVideo::kDirtyPixelProgram);
+    Apply(ctx, &ctx->_renderState,   _renderState.Get(),   RtVideo::kDirtyRenderState);
 }
 
-}  // namespace
+}  // namespace Video
 
 // ----------------------------------------------------------------------------
 // Registration. The mangled name is spelled as a LITERAL at the
