@@ -347,7 +347,6 @@ fn_ImageBuffer_CopyFromTexture_t fn_ImageBuffer_CopyFromTexture = nullptr;
 // Phase F: Dialog/UI Runtime functions
 // ============================================================
 fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation = nullptr;
-fn_Time_AsSeconds_t fn_Time_AsSeconds = nullptr;
 fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor = nullptr;
 fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation = nullptr;
 void** g_pSaveLoadSingleton = nullptr;
@@ -504,8 +503,6 @@ uint32_t* g_TypeId_HelpButtonElem = nullptr;
 
 // NewGameDialog support
 void** g_pNewGameSettings = nullptr;
-fn_Random_Rand_t fn_Random_Rand = nullptr;
-fn_Random_RandFloat_t fn_Random_RandFloat = nullptr;
 // fn_GenerateTownName — REMOVED, now reimplemented in newgamedialog.cpp
 fn_NameDB_GenerateName_t fn_NameDB_GenerateName = nullptr;
 uint32_t* g_TypeId_NameDatabase = nullptr;
@@ -725,7 +722,6 @@ uintptr_t g_NoiseUI_ImageBufferVtable = 0;
 fn_PerlinNoise_Ctor_t fn_PerlinNoise_Ctor = nullptr;
 fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
 // Random default ctor: uses existing fn_Random_Default_Ctor
-fn_Random_RandTol_t fn_Random_RandTol = nullptr;
 // --- ModDialog::Slot4 support ---
 fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
 fn_MaterialInstance_SetMaterial_t fn_MaterialInstance_SetMaterial = nullptr;
@@ -1031,7 +1027,6 @@ fn_IBPTreeRemove_t fn_IBPTreeRemove = nullptr;
 // code/Game/Entity/entitylist.cpp). Used when the exe AVL tree is unmapped.
 extern "C" void* IBPTreeInsert_CppImpl(void*, void*, void*);
 extern "C" void  IBPTreeRemove_CppImpl(void*, void*);
-g_fn_Time_Serialize_t g_fn_Time_Serialize = nullptr;
 fn_BucketTreeSerialize_t fn_BucketTreeSerialize = nullptr;
 
 // === CitizenBehavior Path dependencies (Agent C) ===
@@ -1169,7 +1164,6 @@ fn_Geometry_Init_t fn_Geometry_Init = nullptr;
 fn_Graphics_Geometry_Ctor_t fn_Graphics_Geometry_Ctor = nullptr;
 fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor = nullptr;
 fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor = nullptr;
-fn_System_Color_Serialize_t     fn_System_Color_Serialize     = nullptr;
 
 fn_Array_Resize_t fn_Array_Resize_Stride20 = nullptr;
 fn_Array_Resize_t fn_Array_Resize_Stride08 = nullptr;
@@ -1812,9 +1806,6 @@ bool EngineFuncsInit() {
     fn_ImageElement_SetRotation = reinterpret_cast<fn_ImageElement_SetRotation_t>(
         ResolveExport("?SetRotation@ImageElement@UI@@QEAAXM@Z"));
 
-    fn_Time_AsSeconds = reinterpret_cast<fn_Time_AsSeconds_t>(
-        ResolveExport("?AsSeconds@Time@System@@QEBAMXZ"));
-
     fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
 
@@ -2446,10 +2437,6 @@ bool EngineFuncsInit() {
 
     // --- NewGameDialog support ---
     g_pNewGameSettings = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401c3de0));
-    fn_Random_Rand = reinterpret_cast<fn_Random_Rand_t>(
-        ResolveExport("?Rand@Random@System@@QEAAII@Z"));
-    fn_Random_RandFloat = reinterpret_cast<fn_Random_RandFloat_t>(
-        ResolveExport("?RandFloat@Random@System@@QEAAMXZ"));
     // fn_GenerateTownName — REIMPLEMENTED, now resolve inner helpers
     fn_NameDB_GenerateName = reinterpret_cast<fn_NameDB_GenerateName_t>(
         ResolveAddr(Module::Exe, 0x1400a4b30));
@@ -3017,8 +3004,6 @@ bool EngineFuncsInit() {
     fn_PerlinNoise_Generate = reinterpret_cast<fn_PerlinNoise_Generate_t>(
         ResolveExport("?Generate@PerlinNoise@Utility@@QEBAMMM@Z"));
     // Random default ctor — already resolved as fn_Random_Default_Ctor above
-    fn_Random_RandTol = reinterpret_cast<fn_Random_RandTol_t>(
-        ResolveExport("?RandTol@Random@System@@QEAAHH@Z"));
 
     // --- DebugUI helpers ---
     // Weather_ResetTime (exe 0x1400944e0)
@@ -3870,15 +3855,12 @@ bool EngineFuncsInit() {
         fn_IBPTreeInsert = reinterpret_cast<fn_IBPTreeInsert_t>(&IBPTreeInsert_CppImpl);
     if (!fn_IBPTreeRemove)
         fn_IBPTreeRemove = reinterpret_cast<fn_IBPTreeRemove_t>(&IBPTreeRemove_CppImpl);
-    g_fn_Time_Serialize = reinterpret_cast<g_fn_Time_Serialize_t>(
-        ResolveExport("?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z"));
     fn_BucketTreeSerialize = reinterpret_cast<fn_BucketTreeSerialize_t>(
         ResolveAddr(Module::Exe, 0x140021ba0));
 #ifdef _DEBUG
     printf("[EngineFuncs] EntityList deps resolved:\n");
     printf("  IBPTreeInsert       = %p\n", (void*)fn_IBPTreeInsert);
     printf("  IBPTreeRemove       = %p\n", (void*)fn_IBPTreeRemove);
-    printf("  Time::Serialize     = %p\n", (void*)g_fn_Time_Serialize);
     printf("  BucketTreeSerialize = %p\n", (void*)fn_BucketTreeSerialize);
 #endif
 
@@ -3929,8 +3911,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0VertexBuffer@Video@@QEAA@XZ"));
     fn_Video_IndexBuffer_Ctor = reinterpret_cast<fn_Video_IndexBuffer_Ctor_t>(
         ResolveExport("??0IndexBuffer@Video@@QEAA@XZ"));
-    fn_System_Color_Serialize = reinterpret_cast<fn_System_Color_Serialize_t>(
-        ResolveExport("?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z"));
     // Serializer::Serialize(float&) was resolved here until ENDGAME B.3.4a
     // closing 2d; it was 0-CALL.
 
@@ -4024,7 +4004,6 @@ bool EngineFuncsInit() {
     printf("  Graphics_Geometry_Ctor  = %p\n", (void*)fn_Graphics_Geometry_Ctor);
     printf("  Video_VertexBuffer_Ctor = %p\n", (void*)fn_Video_VertexBuffer_Ctor);
     printf("  Video_IndexBuffer_Ctor  = %p\n", (void*)fn_Video_IndexBuffer_Ctor);
-    printf("  System_Color_Serial     = %p\n", (void*)fn_System_Color_Serialize);
     printf("  Array_Resize_S20/S08/S14= %p / %p / %p\n",
         (void*)fn_Array_Resize_Stride20,
         (void*)fn_Array_Resize_Stride08,

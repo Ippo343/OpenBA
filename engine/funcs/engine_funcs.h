@@ -13,6 +13,8 @@
 #include "math/Math.h"
 #include "system/String.h"
 #include "system/Filename.h"
+#include "system/Value.h"      // ::System::Random — the inline bodies below were
+                               // the last callers of the fn_Random_* door pointers.
 #include "ui/UserInterface.h"   // UI::UserInterface::_dialogs (LinkedList walk below)
 // ENDGAME B.3.3 step 7: the inline bodies below were the last callers of the
 // `fn_ExternalFactory_*` / `fn_Factory_*` / `fn_InternalBasePtr_Ctor` pointers.
@@ -1052,10 +1054,9 @@ extern fn_OrchardGetGrowth_t fn_OrchardGetGrowth;
 typedef void (*fn_ImageElement_SetRotation_t)(void* self, float angle);
 extern fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation;
 
-// Time::AsSeconds(this) -> float — converts tick count to seconds
-// ?AsSeconds@Time@System@@QEBAMXZ (0x180007900, ordinal 1620)
-typedef float (*fn_Time_AsSeconds_t)(void* time);
-extern fn_Time_AsSeconds_t fn_Time_AsSeconds;
+// Time::AsSeconds — REMOVED, ENDGAME B.3.4b System closing (0 CALLs).
+// Callers use System::Time::AsSeconds(); the Runtime export
+// ?AsSeconds@Time@System@@QEBAMXZ (0x180007900, ordinal 1620) stays registered.
 
 // SaveLoad::~SaveLoad(this) — destructor (clears _singleton, releases refs)
 // ??1SaveLoad@Save@@QEAA@XZ (0x1800c3c90, ordinal 666)
@@ -2073,16 +2074,10 @@ extern void** g_GoalDialog_Vtable;  // 0x14015beb0
 //   +0x30: disaster combo index
 extern void** g_pNewGameSettings;  // DAT_1401c3de0
 
-// System::Random::Rand(this, maxVal) -> uint
-// ?Rand@Random@System@@QEAAII@Z (ordinal 3442, 0x1800c8040)
-typedef uint32_t (*fn_Random_Rand_t)(void* self, uint32_t maxVal);
-extern fn_Random_Rand_t fn_Random_Rand;
-
-// System::Random::RandFloat(this) -> float
-// ?RandFloat@Random@System@@QEAAMXZ (ordinal 3444, Runtime 0x1800c7d40)
-// Returns a uniform float in [0.0, 1.0).
-typedef float (*fn_Random_RandFloat_t)(void* self);
-extern fn_Random_RandFloat_t fn_Random_RandFloat;
+// System::Random::Rand(uint) and ::RandFloat() — REMOVED, ENDGAME B.3.4b System
+// closing (0 CALLs). Callers use the members on System::Random (system/Value.h);
+// the Runtime exports ?Rand@Random@System@@QEAAII@Z (ordinal 3442, 0x1800c8040)
+// and ?RandFloat@Random@System@@QEAAMXZ (ordinal 3444, 0x1800c7d40) stay bound.
 
 // System::Random::RandFloatTol(this) -> float in [-1.0, 1.0). Defined as an
 // extern "C" link shim in code/Game/Game/worldgen_f390_shims.cpp (lazily resolves
@@ -2104,7 +2099,8 @@ inline uint32_t fn_GetCurrentProductIndex(void* component) {
         float totalWeight = 0.0f;
         for (int i = 0; i < count; i++) totalWeight += weights[i];
         void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
-        float randVal = fn_Random_RandFloat(randomPtr);
+        // B.3.4b bridge: ?RandFloat@Random@System@@QEAAMXZ (0x1800c7d40).
+        float randVal = reinterpret_cast<System::Random*>(randomPtr)->RandFloat();
         float accum = 0.0f;
         for (int i = 0; i < count; i++) {
             accum += weights[i];
@@ -2789,9 +2785,9 @@ extern fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate;
 
 // System::Random::Random() — default ctor (seeds from time), uses fn_Random_Default_Ctor
 
-// System::Random::RandTol(int) -> int — returns random in [-range, +range]
-typedef int (*fn_Random_RandTol_t)(void* self, int range);
-extern fn_Random_RandTol_t fn_Random_RandTol;
+// System::Random::RandTol(int) — REMOVED, ENDGAME B.3.4b System closing
+// (0 CALLs). Callers use System::Random::RandTol(); the Runtime export
+// ?RandTol@Random@System@@QEAAHH@Z stays bound.
 
 // ============================================================
 // DebugUI support
@@ -3343,7 +3339,10 @@ inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop
 inline void* GetLoadingSoundString(void* retStr) {
     uint8_t rng[2520];  // System::Random is large (~2512 bytes)
     fn_Random_Default_Ctor(rng);
-    uint32_t variant = fn_Random_Rand(rng, 12);
+    // B.3.4b bridge: the uint overload ?Rand@Random@System@@QEAAII@Z (exe slot
+    // 0x1401512e8, Runtime 0x1800c8040) — `12u` picks it over Rand() and
+    // Rand(int,int). The ctor door above STAYS (B.3.4b keeps ctor/dtor doors).
+    uint32_t variant = reinterpret_cast<System::Random*>(rng)->Rand(12u);
     // BANISHED_MENU_SCENE pins every random front-end pick, this one included:
     // the loading image it selects stays resident and is numbered into the
     // save's reference table, so an unpinned pick shifts every reference id
@@ -5363,9 +5362,9 @@ extern fn_IBPTreeInsert_t fn_IBPTreeInsert;
 typedef void (*fn_IBPTreeRemove_t)(void* treeRootPtr, void* node);
 extern fn_IBPTreeRemove_t fn_IBPTreeRemove;
 
-// System::Time::Serialize(this, Serializer&)
-typedef void (*g_fn_Time_Serialize_t)(void* self, void* serializer);
-extern g_fn_Time_Serialize_t g_fn_Time_Serialize;
+// System::Time::Serialize(Serializer&) — REMOVED, ENDGAME B.3.4b System closing
+// (0 CALLs). Callers use System::Time::Serialize(); the Runtime export
+// ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z stays bound.
 
 // EntityList bucket+tree serialization helper (0x140021ba0)
 typedef void (*fn_BucketTreeSerialize_t)(void* serializer, void* unused, void* bucketsPtr);
@@ -5445,11 +5444,9 @@ extern fn_Video_VertexBuffer_Ctor_t fn_Video_VertexBuffer_Ctor;
 typedef void (*fn_Video_IndexBuffer_Ctor_t)(void* self);
 extern fn_Video_IndexBuffer_Ctor_t fn_Video_IndexBuffer_Ctor;
 
-// System::Color::Serialize — Runtime export (4-byte ARGB color).
-// Slot in exe is 0x140151ee0; mangled name
-// `?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z`.
-typedef void (*fn_System_Color_Serialize_t)(void* color, void* serializer);
-extern fn_System_Color_Serialize_t fn_System_Color_Serialize;
+// System::Color::Serialize — REMOVED, ENDGAME B.3.4b System closing (0 CALLs).
+// Callers use System::Color::Serialize(); exe slot 0x140151ee0 stays registered
+// and the export `?Serialize@Color@System@@QEAAXAEAVSerializer@IO@@@Z` stays bound.
 
 // IO::Serializer::Serialize(float&) — REMOVED, ENDGAME B.3.4a closing 2d
 // (0 CALLs). Slot 0x140152a60 stays registered in address_registry.cpp.
