@@ -400,6 +400,22 @@ namespace IO {
 // pinned by `??0Stream@IO@@QEAA@XZ` (0x1800b99d0). Nothing moves.
 class Stream {
 public:
+    // The retail spelling of the direction enum. ENDGAME B.3.4 callers batch H.
+    // The enum itself is declared at `IO` scope in Serializer.h, because
+    // `IO::Serializer::GetDirection()` must name it and Serializer.h cannot
+    // include this header back without making the pair cyclic. Re-exporting it
+    // as a member typedef is what keeps `IO::Stream::Direction` — the name
+    // ?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ mangles — spellable at
+    // every use site.
+    using Direction = ::IO::Direction;
+
+    // ?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ   0x180006200
+    // The WHOLE shipped body is `MOV EAX,dword ptr [RCX + 0x8]; RET`. NON-
+    // virtual (there is no slot for it in the 7-slot table above) and const,
+    // exactly as retail's `QEBA` says. Stated inline here for the same reason
+    // `GetSource` is: two transcriptions of one load is not a divergence risk.
+    Direction GetDirection() const { return static_cast<Direction>(_direction); }
+
     // slot 0  +0x00  0x18000c610 — PURE ON PURPOSE. The body is the registered
     // `RT_DELDTOR` row in `deleting_dtor.cpp` that fills slot 0 of the LIVE
     // minted table 0x1801549a0; section 4.2 keeps it until the last stamper of
@@ -543,6 +559,20 @@ static_assert(std::is_trivially_destructible<RtIo::Stream>::value,
               "the PODs must stay trivially destructible while both views are live");
 static_assert(std::is_trivially_destructible<rt::io::Stream>::value,
               "the PODs must stay trivially destructible while both views are live");
+
+// ENDGAME B.3.4 callers batch H — the direction enum and the pre-existing
+// constant are ONE fact in two spellings, so tie them together rather than
+// leave a future reader to notice they agree. `rt::io::kDirectionReading` has
+// call sites of its own (serializer_class.cpp's constructor picks the
+// CreateReader slot with it) and STAYS; this is what stops the two drifting.
+static_assert(static_cast<int32_t>(::IO::kReading) == rt::io::kDirectionReading,
+              "IO::kReading and rt::io::kDirectionReading are the same retail 0");
+static_assert(static_cast<int32_t>(::IO::kWriting) == 1,
+              "?Create@CompressedStream@IO@@ 0x1800aa4b0 opens with *(dword*)(this+8) = 1");
+static_assert(sizeof(Stream::Direction) == 4,
+              "?GetDirection@Stream@IO@@ 0x180006200 returns EAX, a 4-byte enum");
+static_assert(std::is_same<Stream::Direction, ::IO::Direction>::value,
+              "IO::Stream::Direction must stay the IO-scope enum, not a copy");
 
 static_assert(sizeof(MemoryStream) == sizeof(RtIo::MemoryStream),
               "IO::MemoryStream and the RtIo::MemoryStream POD stay interchangeable");

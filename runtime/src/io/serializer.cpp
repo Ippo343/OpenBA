@@ -88,9 +88,14 @@
 // has no row for any of them) and an uncalled port is an unverified port:
 //   ?Skip@Serializer@IO@@              0x1800070a0  rw vtable +0x10
 //   ?GetStream@Serializer@IO@@         0x18000a0a0  `MOV RAX,[RCX]; RET`
-//   ?GetDirection@Serializer@IO@@      0x180006210  stream->direction
 //   Serialize(char&) 0x18007c3e0 (rw +0x70), and the int64/uint64 scalar and
 //   array forms.
+//
+// CORRECTED, ENDGAME B.3.4 callers batch H: `?GetDirection@Serializer@IO@@`
+// (0x180006210) WAS on that list and is now PORTED — see the GetDirection door
+// below. It was invisible to the call-surface census because the exe INLINES
+// it, so its ~37 uses across code/Game are hand-written `MOV RAX,[ser];
+// CMP dword [RAX+8]` transcriptions rather than calls.
 //
 // The two char-array forms ARE ported despite having no ResolveExport site,
 // because two exe PE-import slots are imports of them and are read by
@@ -264,6 +269,31 @@ const Encoding* RtSerializer_GetEncoding(Serializer* self) {
 }
 
 // ============================================================================
+// GetDirection — FULL ORACLE       ENDGAME B.3.4 callers batch H
+// ============================================================================
+// Retail 0x180006210 is `MOV RAX,[RCX]; MOV EAX,[RAX+0x8]; RET` — two loads,
+// no dispatch, no side effect, so diffing it is free. It answers with the
+// STREAM's direction; `IO::Stream`'s own 0x180006200 is the one-load form of
+// the same field and is stated inline on the class (runtime/types/io/Stream.h).
+//
+// The banner at the top of this file listed GetDirection under "NOT PORTED,
+// because our tree does not call them (call_surface_20260906.csv has no row
+// for any of them) and an uncalled port is an unverified port". That was true
+// when it was written. It stopped being true when the B.3.4 caller batches
+// measured ~37 hand-written copies of exactly these two loads across
+// code/Game — the exe INLINES the member at every one of them (e.g.
+// Application-x64.exe 0x1400da960 and 0x1400ed3c5, both `MOV RAX,[RSP+ser];
+// CMP dword ptr [RAX + 0x8],0x0`), which is why they never showed up as calls.
+// The banner's line 91 is corrected in place above.
+//
+// The door returns `int32_t`, not the enum, because that is what every caller
+// that could reach this door already takes; the enum is the C++ spelling and
+// the ABI is EAX either way.
+int32_t RtSerializer_GetDirection(Serializer* self) {
+    return static_cast<int32_t>(Ser(self)->GetDirection());
+}
+
+// ============================================================================
 // ctor — SHADOW ORACLE (the original is NOT run; it would move the cursor)
 // ============================================================================
 // Retail 0x1800b9960, transcribed instruction for instruction:
@@ -385,8 +415,18 @@ int RtIoSerializerRegister() {
     RegisterRuntimeExport("?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ", (void*)&RtSerializer_GetEncoding);
     RegisterRuntimeExport("??0Serializer@IO@@QEAA@AEAVStream@1@H@Z",     (void*)&RtSerializer_Ctor);
     RegisterRuntimeExport("??1Serializer@IO@@QEAA@XZ",                   (void*)&RtSerializer_Dtor);
+    // ENDGAME B.3.4 callers batch H — the 23rd door. Registered by NAME and by
+    // ADDRESS: the name is what `tools/runtime_census.py` reads (a LITERAL
+    // mangled string at a `RegisterRuntimeExport(` call), and the address is
+    // what a by-address resolver finds, exactly as iobase_vtables.cpp does for
+    // `RtIo_Stream_GetSource`. No exe dispatch slot imports this member, so no
+    // row in standalone/address_registry.cpp moves and
+    // `tools/dispatch_slot_map.py --check` is unaffected.
+    RegisterRuntimeExport("?GetDirection@Serializer@IO@@QEAA?AW4Direction@Stream@2@XZ",
+                          (void*)&RtSerializer_GetDirection);
+    RegisterRuntimeAddr(0x180006210, (void*)&RtSerializer_GetDirection);
 
-    const int total = 22;
+    const int total = 23;
     printf("[RtIO/Serializer] %d exports registered\n", total);
     return total;
 }
