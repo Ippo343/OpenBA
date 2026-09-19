@@ -82,6 +82,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include <cstdio>
@@ -935,7 +936,7 @@ extern "C" void DiseaseComponent_Serialize(DiseaseComponent* self, void* stream)
     }
     // Version-0 saves predate the registry, so re-run OnAdded (vtable +0x30 = slot 6).
     if (s_serGetVer && reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0 &&   // B.3.4 bridge
-        *reinterpret_cast<int32_t*>((uintptr_t)stream + 8) == 0) {
+        static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         void** vt = *reinterpret_cast<void***>(self);
         typedef void (*fn_slot6_t)(void*);
         if (vt && vt[6]) reinterpret_cast<fn_slot6_t>(vt[6])(self);

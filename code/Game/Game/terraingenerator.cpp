@@ -161,8 +161,7 @@ static void EnsureInit() {
 static inline int GetSerializerVersion(void* serializer) {
     // serializer[0] = pointer to encoding object
     // encoding+8 = version
-    void* encoding = *reinterpret_cast<void**>(serializer);
-    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(encoding) + 8);
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 // ============================================================

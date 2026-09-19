@@ -15,6 +15,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -84,7 +85,7 @@ void TerraformComponent_Shutdown(TerraformComponent* self, void* stream) {
 
     // If loading, resize the Vector3 array
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    if (*(int*)((uintptr_t)stream + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x28))
             .SetSize(static_cast<int>(localCount));
     }

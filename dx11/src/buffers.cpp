@@ -266,6 +266,13 @@ constexpr int kConstantEntryOffsetField= 0x14;
 //   anything -> same as 1 but WITHOUT the CopyResource, so whatever is mapped is
 //   else        undefined memory. Most plausibly a size-counting pass, but that
 //               is a guess and is not relied on here.
+// ENDGAME B.3.4 callers batch H LEFT THIS ONE ALONE. It is the same
+// `IO::Serializer::GetDirection()` (retail 0x180006210) that the batch
+// converted 61 times elsewhere, but this translation unit includes no
+// runtime/types header at all — only dx11's own and <windows.h>/<d3d11.h> —
+// so converting it would mean pulling `runtime/types/io/Serializer.h` into the
+// VideoDX11 replacement for one expression. That is a module-boundary
+// decision, not a caller batch's. Reported instead.
 inline int32_t SerializerStreamMode(void* serializer) {
     uint8_t* stream = *reinterpret_cast<uint8_t**>(serializer);
     return *reinterpret_cast<int32_t*>(stream + 8);

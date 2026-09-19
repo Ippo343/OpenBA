@@ -138,7 +138,7 @@ inline int SerializerInner(void* serializer) {
     if (!serializer) return -1;
     void* streamPtr = *reinterpret_cast<void**>(serializer);
     if (!streamPtr) return -1;
-    return *reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(streamPtr) + 8);
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 // Hard-pinned dispatch via shared globals — when the slot itself isn't

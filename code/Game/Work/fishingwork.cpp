@@ -866,10 +866,9 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
 
     // If loading (serializer mode == 0 at *(int*)(serializer[0] + 8)):
     // resize the IBP array at +0x48 to the deserialized count
-    uintptr_t serPtr = *(uintptr_t*)serializer;
     // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
     // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp).
-    if (*(int*)(serPtr + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         GameColl::AsArray<GameColl::Ptr8>((void*)(selfAddr + 0x48)).SetSize(citizenCount);
     }
 
@@ -900,12 +899,11 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&spotCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the int array at +0x58
-    serPtr = *(uintptr_t*)serializer;
     // B.3.2 bridge: FUN_1400021d0 == Collection::Array<int32>::SetSize (retail
     // FishingWork_Shutdown calls it at 1400ea9ef). I32NoInit — a grown tail is left as
     // the allocation found it, like retail. Safe: the resize runs only when loading and
     // the bulk int read below writes all spotCount spot states from the stream.
-    if (*(int*)(serPtr + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x58)).SetSize(spotCount);
     }
 

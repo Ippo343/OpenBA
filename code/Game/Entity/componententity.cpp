@@ -298,8 +298,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     }
 
     // Check if loading (encoding mode == 0)
-    uintptr_t serInner = *(uintptr_t*)serializer;
-    int encodingMode = *(int*)(serInner + 0x08);
+    int encodingMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
     // On load: resize component array to match serialized count
     if (encodingMode == 0) {

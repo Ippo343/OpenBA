@@ -77,6 +77,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <new>
 
 
@@ -643,7 +644,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
     alignas(8) uint8_t serializerBuf[24];
     if (g_fn_Serializer_Ctor) ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
-    bool saving = (*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(stream) + 8) == 1);
+    bool saving = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 1);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     if (saving) {
         Goals_SavePrepass_8270(selfV);
     }
@@ -662,7 +663,7 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
         reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<uint32_t*>(self + 0x08), nullptr);   // B.3.4 bridge
     }
 
-    bool loading = (*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(stream) + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     if (loading) {
         int32_t* workCountRoot = *reinterpret_cast<int32_t**>(self + 0x10);
 

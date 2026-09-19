@@ -194,8 +194,7 @@ void StatusIconComponent_Shutdown(StatusIconComponent* self, void* stream) {
 
     // On load: write value back to field
     // Check serializer direction: *(int*)(serializer[0] + 8) == 0 means loading
-    int64_t serFirst = *(int64_t*)serializer;
-    if (*(int32_t*)(serFirst + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         *(uint32_t*)(s + 0xF0) = iconVal;
     }
 

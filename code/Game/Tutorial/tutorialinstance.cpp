@@ -141,8 +141,7 @@ void TutorialInstance_Serialize(void* self, void* stream) {
 
     // 3. On load: adjust currentStep backwards if steps are not completed
     //    The serializer's encoding mode at *(serializer[0]+8) == 0 means "reading"
-    uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
-    if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // Loading from save -- check if current step needs adjustment
         void* tutDef = *reinterpret_cast<void**>(s + 0x30);
         int32_t step = *reinterpret_cast<int32_t*>(s + 0x10);

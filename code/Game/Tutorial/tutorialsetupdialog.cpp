@@ -196,8 +196,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count1), nullptr);   // B.3.4 bridge
 
     // On load (serializer mode == 0): resize 1st vector to the loaded count
-    void* serializerBase = *(void**)serializer;
-    if (*(int*)((uintptr_t)serializerBase + 0x8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         fn_StringArray_Resize((void*)(s + 0x20), (int)count1);
     }
 
@@ -214,8 +213,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count2), nullptr);   // B.3.4 bridge
 
     // On load: resize 2nd vector
-    serializerBase = *(void**)serializer;
-    if (*(int*)((uintptr_t)serializerBase + 0x8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         fn_StringArray_Resize((void*)(s + 0x30), (int)count2);
     }
 
@@ -246,8 +244,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     // On load: resolve the external resource by name (FUN_14001b1d0).
     // Checks factory revision stamp at param+8 vs factory+8; if changed,
     // does Find+IsDerivedFrom(BuildComponent), stores result at param+0x10.
-    serializerBase = *(void**)serializer;
-    if (*(int*)((uintptr_t)serializerBase + 0x8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         void* namePtr = (void*)(s + 0x58);   // System::String at self+0x58
         void* factory = *g_pExternalFactorySingleton;
         if (*(int32_t*)((uintptr_t)namePtr + 8) != *(int32_t*)((uintptr_t)factory + 8)) {

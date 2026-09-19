@@ -54,6 +54,7 @@
 #include "resolve.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <new>
 
@@ -279,7 +280,7 @@ extern "C" void GameGrid_Serialize_9f100(void* selfPtr, void* stream) {
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cellCount, nullptr);   // B.3.4 bridge
     }
 
-    bool isSaving = *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(stream) + 8) != 0;
+    bool isSaving = static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) != 0;   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     if (!isSaving) {
         GameGrid_ResizeCellArray_aa90(reinterpret_cast<int64_t*>(header), cellCount);
     }

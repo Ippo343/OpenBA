@@ -264,8 +264,7 @@ void BuildStructure_Serialize(BuildStructure* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     // Check if loading: first qword of serializer -> *(int*)(ptr + 8) == 0 means loading
-    int64_t serFirst = *(int64_t*)serBuf;
-    if (*(int32_t*)(serFirst + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         fn_DynArray_Resize(&self->field_50, count);
     }
 

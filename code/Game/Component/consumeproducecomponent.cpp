@@ -13,6 +13,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -158,7 +159,7 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
         int version = reinterpret_cast<IO::Serializer*>(serBuf)->GetVersion();   // B.3.4 bridge
         if (version == 0 && self->consumeResourceId < 0) {
             // Check if we're loading (stream direction == 0)
-            if (*(int*)((uintptr_t)stream + 8) == 0) {
+            if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
                 self->consumeResourceId = 0;
             }
         }

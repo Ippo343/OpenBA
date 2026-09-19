@@ -465,7 +465,7 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
     // Same defect as WorkPlaceComponent (21b3b33); see
     // reference_serializer_plus8_is_encoding_not_loading_flag.
     const uintptr_t acStream = *reinterpret_cast<uintptr_t*>(ser);
-    if (acStream && *reinterpret_cast<int32_t*>(acStream + 8) == 0) {
+    if (acStream && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
         GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(self + 0x28)).SetSize(count);
     }

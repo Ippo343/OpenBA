@@ -128,7 +128,7 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
         // (that is the field-dispatch object). Reading the wrong field mis-gates the
         // External resolve.
         void* reader = *(void**)(serializerBuf + 0);
-        if (reader && *(int*)((uintptr_t)reader + 0x8) == 0) {
+        if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_ResolveExternalPtr) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x48));
             }
@@ -142,7 +142,7 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
         reinterpret_cast<System::String*>(s + 0x60)->Serialize(serializerBuf);
 
         void* reader = *(void**)(serializerBuf + 0);
-        if (reader && *(int*)((uintptr_t)reader + 0x8) == 0) {
+        if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_ResolveExternalPtr) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x60));
             }

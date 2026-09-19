@@ -211,7 +211,7 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
 
         // On load: resolve external by name
         void* serializerBase = *(void**)serializer;
-        if (serializerBase && *(int32_t*)((uintptr_t)serializerBase + 0x8) == 0) {
+        if (serializerBase && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
         }
 
@@ -227,7 +227,7 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
 
         // On load: resolve external by name
         void* serializerBase = *(void**)serializer;
-        if (serializerBase && *(int32_t*)((uintptr_t)serializerBase + 0x8) == 0) {
+        if (serializerBase && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             TutRestrict_ResolveRefOrLoad((void*)(s + 0x50));
         }
 

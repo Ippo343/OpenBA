@@ -137,7 +137,7 @@ extern "C" void NameDatabase_Serialize(void* self, void* stream) {
     // Loading when the serializer's stream mode field (stream+8) == 0.
     auto isLoading = [&]() -> bool {
         void* s0 = *(void**)ser;
-        return s0 && *(int*)((uint8_t*)s0 + 8) == 0;
+        return s0 && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     };
 
     // --- array1: stride 0xc (3 fields/elem) ---
