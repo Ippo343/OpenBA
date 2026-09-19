@@ -100,6 +100,9 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/graphics/Animation.h"   // Graphics::AnimationEvent -- block GC
+#include "../../types/graphics/Material.h"    // Graphics::MaterialInstance -- ditto
+#include "../../types/graphics/Particle.h"    // Graphics::Particle -- ditto
 
 extern "C" uint32_t    RtGraphics_AnimationEvent_Type(const void*);
 extern "C" const char* RtGraphics_AnimationEvent_TypeName(const void*);
@@ -157,58 +160,75 @@ const char* ReadTypeName(const uint8_t* node) {
 
 }  // namespace
 
-// ---- ??_7AnimationEvent@Graphics@@6B@  slots 2 and 1 -----------------------
+// ############################################################################
+// ENDGAME B.3.5 block GC item 4 -- THE FORWARDING DIRECTION IS THE NORMAL ONE NOW.
+//
+// All three classes this file serves are real C++ classes as of B.3.5
+// (`Graphics::AnimationEvent` block H1, `Graphics::MaterialInstance` block G,
+// `Graphics::Particle` block H2). Until this commit the BODIES lived in the
+// `extern "C"` doors below and the MEMBERS forwarded INTO them -- five members
+// across `animation.cpp` and `wave27_lane_gfxpart.cpp` spelled
+// `return RtGraphics_X_TypeName(this);`. That is the inverted direction: a C++
+// call went member -> free function -> node read, so the member was not the body
+// and a reader could not tell which spelling was authoritative.
+//
+// Now the member IS the body (below, in this file's `namespace Graphics` block,
+// beside the byte decode that is its evidence) and each door is a one-line
+// QUALIFIED non-virtual delegation. Nothing about the registrations changes:
+// every one keeps its name AND its address door, for the reason the registration
+// banner gives.
+//
+// THREE MEMBERS THAT WERE DECLARED AND NEVER DEFINED ARE DEFINED HERE.
+// `MaterialInstance::Type`, `::TypeName` and `::GetFileVersion` are slots 2, 1
+// and 3 of `??_7MaterialInstance@Graphics@@6B@`; `Material.h` declared all three
+// and no translation unit defined any of them. That linked only because the class
+// is abstract (slot 0 is pure) so GCC never emitted its vtable -- i.e. the gap was
+// invisible rather than harmless. They are members now, from the same node reads
+// the doors were already doing.
+//
+// `this` IS READ BY NONE OF THE EIGHT, and the member spelling does not change
+// that: the encodings in this file's banner have no RCX operand at all. The
+// members are `const` and touch no field.
+// ############################################################################
 
 extern "C" uint32_t RtGraphics_AnimationEvent_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(AnimationEventTypeInfo());
-    return ours;
+    return reinterpret_cast<const Graphics::AnimationEvent*>(self)        // B.3.5 bridge
+               ->Graphics::AnimationEvent::Type();
 }
 
 extern "C" const char* RtGraphics_AnimationEvent_TypeName(const void* self) {
-    const char* const ours = ReadTypeName(AnimationEventTypeInfo());
-    return ours;
+    return reinterpret_cast<const Graphics::AnimationEvent*>(self)        // B.3.5 bridge
+               ->Graphics::AnimationEvent::TypeName();
 }
 
-// ---- ??_7MaterialInstance@Graphics@@6B@  slots 2, 1 and 3 ------------------
-
 extern "C" uint32_t RtGraphics_MaterialInstance_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(MaterialInstanceTypeInfo());
-    return ours;
+    return reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
+               ->Graphics::MaterialInstance::Type();
 }
 
 extern "C" const char* RtGraphics_MaterialInstance_TypeName(const void* self) {
-    const char* const ours = ReadTypeName(MaterialInstanceTypeInfo());
-    return ours;
+    return reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
+               ->Graphics::MaterialInstance::TypeName();
 }
 
-// `MOV EAX,4 ; RET`. A literal, not a read: the on-disk serialised format
-// version of a Graphics::MaterialInstance. Faithful means returning 4, NOT
-// deriving it from anything in our tree — a derived spelling would silently
-// track OUR format if this class's Serialize is ever revised, and retail's
-// does not.
 extern "C" int32_t RtGraphics_MaterialInstance_GetFileVersion(const void* self) {
-    const int32_t ours = 4;
-    return ours;
+    return reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
+               ->Graphics::MaterialInstance::GetFileVersion();
 }
-
-// ---- ??_7Particle@Graphics@@6B@  slots 2, 1 and 3 --------------------------
 
 extern "C" uint32_t RtGraphics_Particle_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(ParticleTypeInfo());
-    return ours;
+    return reinterpret_cast<const Graphics::Particle*>(self)              // B.3.5 bridge
+               ->Graphics::Particle::Type();
 }
 
 extern "C" const char* RtGraphics_Particle_TypeName(const void* self) {
-    const char* const ours = ReadTypeName(ParticleTypeInfo());
-    return ours;
+    return reinterpret_cast<const Graphics::Particle*>(self)              // B.3.5 bridge
+               ->Graphics::Particle::TypeName();
 }
 
-// `MOV EAX,0x1000 ; RET` — 4096, and it is NOT the same constant as
-// MaterialInstance's 4. The two were decoded separately and the difference is
-// the reason each is written as its own literal here.
 extern "C" int32_t RtGraphics_Particle_GetFileVersion(const void* self) {
-    const int32_t ours = 0x1000;
-    return ours;
+    return reinterpret_cast<const Graphics::Particle*>(self)              // B.3.5 bridge
+               ->Graphics::Particle::GetFileVersion();
 }
 
 // ============================================================================
@@ -259,3 +279,48 @@ int RtGraphicsTypeInfoAccessorsRegister() {
 
     return n;
 }
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block GC -- THE EIGHT SLOT BODIES, AS MEMBERS.
+//
+// Their own `namespace Graphics { }` block (B34_BRIEFS A.2). The helpers are in
+// this file's GLOBAL unnamed namespace, so unqualified lookup reaches them.
+// The byte decode for every one of the eight is in this file's top banner and is
+// unchanged -- only the spelling of the entry point moved.
+// ############################################################################
+
+namespace Graphics {
+
+// ---- ??_7AnimationEvent@Graphics@@6B@  slots 2 and 1 -----------------------
+// [2] ?Type@     0x1800116d0  `MOV EAX,[?_typeInfo@AnimationEvent@ + 0]; RET`
+// [1] ?TypeName@ 0x1800116f0  `MOV RAX,[?_typeInfo@AnimationEvent@ + 8]; RET`
+//     `BaseTypeInfo::name` is CONTENT-only, never compared by pointer
+//     (reference_basetypeinfo_name_is_content_only.md).
+uint32_t    AnimationEvent::Type() const     { return ReadTypeId(AnimationEventTypeInfo()); }
+const char* AnimationEvent::TypeName() const { return ReadTypeName(AnimationEventTypeInfo()); }
+
+// ---- ??_7MaterialInstance@Graphics@@6B@  slots 2, 1 and 3 ------------------
+// [2] ?Type@     0x1800027f0
+// [1] ?TypeName@ 0x180002810
+uint32_t    MaterialInstance::Type() const     { return ReadTypeId(MaterialInstanceTypeInfo()); }
+const char* MaterialInstance::TypeName() const { return ReadTypeName(MaterialInstanceTypeInfo()); }
+
+// [3] ?GetFileVersion@ 0x180103a60 -- `MOV EAX,4 ; RET`. A LITERAL, not a read:
+// the on-disk serialised format version of a Graphics::MaterialInstance.
+// Faithful means returning 4, NOT deriving it from anything in our tree -- a
+// derived spelling would silently track OUR format if this class's Serialize is
+// ever revised, and retail's does not.
+int32_t MaterialInstance::GetFileVersion() const { return 4; }
+
+// ---- ??_7Particle@Graphics@@6B@  slots 2, 1 and 3 --------------------------
+// [2] ?Type@     0x18001ff10
+// [1] ?TypeName@ 0x18001ff30
+uint32_t    Particle::Type() const     { return ReadTypeId(ParticleTypeInfo()); }
+const char* Particle::TypeName() const { return ReadTypeName(ParticleTypeInfo()); }
+
+// [3] ?GetFileVersion@ 0x180104080 -- `MOV EAX,0x1000 ; RET`, 4096, and it is NOT
+// the same constant as MaterialInstance's 4. The two were decoded separately and
+// that difference is why each is written as its own literal.
+int32_t Particle::GetFileVersion() const { return 0x1000; }
+
+}  // namespace Graphics

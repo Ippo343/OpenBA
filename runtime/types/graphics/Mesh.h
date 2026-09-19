@@ -509,6 +509,17 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined -
     // Each is one to a dozen instructions in retail over offsets this header
     // already pins. Declared so no later block or caller batch edits this file.
+    //
+    // *** TWO OF THE MEMBERS UNDER THIS HEADING ARE PORTED, AND THE HEADING WAS
+    // *** STALE. Corrected by ENDGAME B.3.5 block GC, 2026-09-19:
+    //   `Serialize`  (0x1800ff680) is a MEMBER, in `wave28_lane_gfxbody.cpp` —
+    //                block G moved it and recorded that this note was stale but
+    //                belonged to block E's header, so it left it for a closing
+    //                pass. This is that pass.
+    //   `GetBones`   (0x180100070) is a MEMBER, in
+    //                `animationstate_transforms.cpp` — block GC moved it.
+    // Both keep their registered doors, which delegate. Every OTHER declaration
+    // under this heading really is undefined on purpose.
     ExternalPtrHandle GetMesh() const;                       // 0x180016a20
     int      GetNodeCount() const;                           // 0x180016a30
     void     SetVisualScale(const Math::Vector4& scale);     // 0x180016fa0
