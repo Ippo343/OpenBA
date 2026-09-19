@@ -340,7 +340,13 @@ inline void SerializerEncodingVCall(void* serializer, int vtableOffset, void* fi
 }
 ```
 This is a raw `(*(void***)x)[N]` slot call wrapped as a one-line helper — exactly the pattern
-§4 asked to find. **39 call sites across 22 files**, all `code/Game/Component/*description.cpp`
+§4 asked to find. ~~39 call sites~~ **37 call sites across 22 files**
+(**CORRECTED 2026-09-18 by B.3.4 step 1**: a non-comment recount of `SerializerEncodingVCall(`
+reads 38 lines, of which one is the inline DEFINITION at `engine/funcs/engine_funcs.h`; the
+37 call lines are `tradedescription.cpp` 5, `createbridgedescription.cpp` 5,
+`toolbar.cpp`/`terraformdescription`/`populationdescription`/`happinessdescription`/
+`fishingdescription`/`createplaceddescription`/`consumeproducedescription` 2 each, and 13
+files with 1 each), all `code/Game/Component/*description.cpp`
 (20 files, mostly one call each; `createbridgedescription.cpp` and `tradedescription.cpp` have
 5 each) plus `code/Game/Game/toolbar.cpp` (2). Representative:
 ```
@@ -408,7 +414,18 @@ surface, not zero.
 
 Rows in `standalone/address_registry.cpp` / `standalone/reg_*.cpp` that correspond to the
 pointers above (verified against `tools/dispatch_slot_map.py`'s inputs by grepping the same
-files it reads — not run, per the read-only mandate):
+files it reads — not run, per the read-only mandate).
+
+> **ADDED 2026-09-18 by B.3.4 step 1 (`B34_RULES.md` §6.5g): these rows STAY, for the whole of
+> B.** `standalone/address_registry.cpp:1628-1645` is a contiguous block of **14**
+> `RegisterDispatchSlot` rows bound to `RtSerializer_*`: 0x140152ac8 (int), 0x140152a60
+> (float), 0x140152a58 (bool), 0x140152410 + 0x140152418 (uchar, the second a NameDB alias),
+> 0x140152a50 (uint), 0x140152a48 (GetVersion), 0x140152488 (ushort[]), 0x140151278 (int[]),
+> 0x1401523f8 (short[]), 0x140152490 + 0x140152400 (uchar[]), 0x140152618 + 0x140152478
+> (SerializeBytes). **They are PE IMPORT SLOTS** — retail-shaped exe code reads them; they are
+> not our call sites and they do not retire when a caller converts. Converting
+> `IO::Serializer` to a real class changes the TARGET's spelling, never the row.
+> `tools/dispatch_slot_map.py --check` must stay at zero mismatches across every commit.
 
 | slot address | target | corresponds to |
 |---|---|---|
@@ -473,6 +490,14 @@ while the IO design question is still open.
    `fn_Ser_Slot_SerInt_AC8` are both `0x140152ac8`. A real `Serializer` class needs to collapse
    these to one name before conversion or two call-site batches will independently "finish"
    the same member.
+   > **DISPOSITION 2026-09-18 by B.3.4 step 1 (`B34_RULES.md` §6.5b): collapse BOTH before
+   > caller batch A starts, as the owner's own separately-gated commit — this is the one piece
+   > of caller work that must NOT wait for the `IO::Serializer` class.** 0x140152ac8: convert
+   > the 28 `fn_Ser_Slot_SerInt_AC8` sites (mostly
+   > `code/Game/Component/tradecomponent_serialize.cpp`) to `g_fn_Serialize_Int`, then delete
+   > the `fn_Ser_SerInt_t` typedef, extern, initialiser and its guard conjunct in
+   > `code/Game/Game/gamegrid_serialize.cpp`. 0x140152a60: `fn_Ser_Slot_SerFloat_A60` is
+   > already **zero-CALL**, so it just dies with the other twelve zero-callers.
 4. **`fn_Persistence_SetBool`/`SetInt` and all four `fn_ModEntry_*`/`fn_ModArrayCopy` pointers
    are zero-CALL** despite living in the same header blocks as heavily-used siblings — likely
    candidates for the "delete with their typedefs" bucket the B.3.3 closing pass used, but
