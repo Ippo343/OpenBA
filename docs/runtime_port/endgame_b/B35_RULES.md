@@ -604,6 +604,19 @@ found no other `void` port.
 > debug build. The wider rule: a door for any of the 60 hidden-retslot exports (§2.5)
 > placement-news the member's prvalue into the caller's slot and returns that pointer; a caller
 > converts only as "the door body moved to the call site" (`B34B_RULES` §2d).
+>
+> **COORDINATOR AMENDMENT (block E, measured 2026-09-19): the "BY VALUE in C++" sentence above is
+> WRONG for VIRTUALS.** GCC's ms_abi passes the hidden return pointer FIRST (RCX) and `this`
+> second (RDX) for a member function; MSVC — and every minted row — passes `this` in RCX and the
+> return slot in RDX. A by-value virtual therefore writes the result THROUGH `this` when called
+> from a retail-shaped caller (block E's first unit test segfaulted exactly so). **A virtual that
+> retail returns by value is declared with the out-parameter spelled in retail order:
+> `T* M(T* ret, args…) const`** (`Geometry.h` B5-12 block; `tests/unit/graphics_geometry_abi_test.cpp`
+> PART C pins both halves). NON-virtual by-value members are unaffected as long as they are only
+> reached by C++ callers or through a door that placement-news the prvalue. Also from block E:
+> §2.5's "eighteen `ExternalPtr<T>` getters are retslot" is DOUBTFUL — the diffed ports pass
+> `ExternalPtr` in a register, i.e. MSVC treats it as trivially copyable, and an 8-byte trivially
+> copyable class returns in RAX. Settle per getter from its retail prologue before writing a door.
 
 ### 6.1 Also carried forward (from STATUS.md and the inventory, same sweep)
 
