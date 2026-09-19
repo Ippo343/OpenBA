@@ -34,6 +34,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -271,7 +272,7 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
     } else {
         void* random = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xd8);
-        float r = (s_fn_RandFloatTol && random) ? s_fn_RandFloatTol(random) : 0.0f;
+        float r = (s_fn_RandFloatTol && random) ? reinterpret_cast<System::Random*>(random)->RandFloatTol() : 0.0f;   // B.3.4b bridge
         *reinterpret_cast<float*>(s + 0x478) =
             r * (s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.0f) + (s_pDAT_17214c ? *s_pDAT_17214c : 0.0f);
     }

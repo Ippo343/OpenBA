@@ -24,6 +24,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 
 namespace {
@@ -590,7 +591,7 @@ int Pf_PastureTargetPick_53ca0(uintptr_t param_1, int param_2) {
         if (uVar16 != 0) {
             uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
             void* randomObj = *reinterpret_cast<void**>(game + 0xd8);
-            uint32_t uVar4r = s_rand(randomObj, uVar16);
+            uint32_t uVar4r = reinterpret_cast<System::Random*>(randomObj)->Rand(static_cast<uint32_t>(uVar16));   // B.3.4b bridge
             int picked = *reinterpret_cast<int*>((int64_t)pvVar5 + (int64_t)(int)uVar4r * 4);
             int64_t lVar8b = *reinterpret_cast<int64_t*>(param_1 + 0x28);
             int cellSize = *reinterpret_cast<int*>(lVar8b + 0x28);

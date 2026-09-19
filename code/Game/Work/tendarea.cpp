@@ -19,6 +19,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -326,7 +327,7 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
         s_fn_FindComp_AreaCrop(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
 
         uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x60);
-        randIdx = s_fn_Random_Rand(rng, areaSize);
+        randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(areaSize));   // B.3.4b bridge
 
         workFlag = 1;
         targetCell = *(int*)((int64_t)(int)randIdx * 0x20 + *(int64_t*)(areaCompIBP + 0x58));
@@ -336,7 +337,7 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
         s_fn_FindComp_AreaOrchard(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
 
         uint32_t areaSize = *(uint32_t*)(areaCompIBP + 0x58);
-        randIdx = s_fn_Random_Rand(rng, areaSize);
+        randIdx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(areaSize));   // B.3.4b bridge
 
         workFlag = 2;
         targetCell = *(int*)(*(int64_t*)(areaCompIBP + 0x50) + (int64_t)(int)randIdx * 0x28);

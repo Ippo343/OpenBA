@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include "Object/factory_registration.h"   // GetTypeIdByName (drop-spot occupancy dump)
 #include <cstdio>
@@ -423,8 +424,8 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 // Inner do-while: generate valid position within radius + bounds
                 do {
                     do {
-                        rx = fn_Random_RandTol(randPtr, radius);
-                        ry = fn_Random_RandTol(randPtr, radius);
+                        rx = reinterpret_cast<System::Random*>(randPtr)->RandTol(radius);   // B.3.4b bridge
+                        ry = reinterpret_cast<System::Random*>(randPtr)->RandTol(radius);   // B.3.4b bridge
                         targetX = citizenGridY + rx;
                         targetY = citizenGridX + ry;
                     } while (radiusSq < ry * ry + rx * rx);

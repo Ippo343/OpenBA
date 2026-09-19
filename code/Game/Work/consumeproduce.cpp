@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include "Component/coll_bridge.h"
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 #include "redzone_alloc.h"   // RedzoneAlloc_PrintBacktrace (wild-write diagnostic)
 #include <cstdio>
 #include <cstdint>
@@ -555,7 +556,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
         // --- Pick random empty output slot ---
         void* randomPtr = *(void**)(gameWorld + 0xd8);
-        uint32_t startSlot = fn_Random_Rand(randomPtr, (uint32_t)self->field_60);
+        uint32_t startSlot = reinterpret_cast<System::Random*>(randomPtr)->Rand((uint32_t)self->field_60);   // B.3.4b bridge
         int totalSlots = self->field_60;
         uint32_t slot = startSlot;
 

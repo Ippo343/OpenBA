@@ -22,6 +22,7 @@
 #include <windows.h>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
 
@@ -302,8 +303,8 @@ void WorkBase_Serialize_f7400(void* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2) {   // B.3.4 bridge
         if (g_fn_Time_Serialize) {
-            g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x30), ser);
-            g_fn_Time_Serialize(reinterpret_cast<void*>(s + 0x38), ser);
+            reinterpret_cast<System::Time*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+            reinterpret_cast<System::Time*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
         }
         reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
     }

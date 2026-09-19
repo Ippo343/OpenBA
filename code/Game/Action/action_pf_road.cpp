@@ -36,6 +36,7 @@
 #include <cstdlib>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (M-D scoped finder fallback)
 #include "Component/coll_bridge.h"
+#include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 namespace {
 
@@ -731,7 +732,7 @@ int Pf_PickReachableCell_edb0(int64_t param_1, uint32_t param_2, float* param_3)
     if (s_fn_FindCompPos) s_fn_FindCompPos(*reinterpret_cast<int64_t*>(param_1 + 0x10), &posIBP);
 
     uint32_t cnt = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
-    uint32_t rnd = s_fn_RandomRand ? s_fn_RandomRand(*reinterpret_cast<void**>(GameWorld() + 0xd8), cnt) : 0;
+    uint32_t rnd = s_fn_RandomRand ? reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(cnt)) : 0;   // B.3.4b bridge
 
     float pos[3] = {0, 0, 0};   // local_28/24/20
     if (s_fn_EntityResolvePos)
@@ -796,7 +797,7 @@ int Pf_EntityAnchorCell_7fb0(void* param_1IBP, float* param_2) {
             int n2 = s_fn_PosCount ? s_fn_PosCount(posIBP, 0) : 0;
             if (1 < n2) {
                 uint32_t n3 = s_fn_PosCount ? static_cast<uint32_t>(s_fn_PosCount(posIBP, 0)) : 0;
-                if (s_fn_RandomRand) s_fn_RandomRand(*reinterpret_cast<void**>(GameWorld() + 0xd8), n3); // result discarded
+                if (s_fn_RandomRand) reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(GameWorld() + 0xd8))->Rand(static_cast<uint32_t>(n3)); // result discarded  // B.3.4b bridge
             }
             float pos[3] = {0, 0, 0};   // local_28/24/20
             if (s_fn_EntityResolvePos)
