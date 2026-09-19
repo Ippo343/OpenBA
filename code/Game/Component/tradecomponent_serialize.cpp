@@ -432,7 +432,7 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
 
     // +0x78: Time.
-    if (g_fn_Time_Serialize) reinterpret_cast<System::Time*>(At(self, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(At(self, 0x78))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     // +0x71: bool.
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x71)), nullptr);   // B.3.4 bridge

@@ -57,10 +57,6 @@ static fn_Scene_AddObject_t s_fn_Scene_AddObject = nullptr;
 typedef void (*fn_Scene_RemoveObject_t)(void* scene, uint32_t objectId);
 static fn_Scene_RemoveObject_t s_fn_Scene_RemoveObject = nullptr;
 
-// System::Random::Rand — dispatch slot at 0x1401512e8
-typedef uint32_t (*fn_Random_Rand_t)(void* random, uint32_t range);
-static fn_Random_Rand_t s_fn_Random_Rand = nullptr;
-
 // System::Time::Time(Time*, float) — dispatch slot at 0x140152b00
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
 static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
@@ -112,9 +108,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x140151360);
     if (slot) s_fn_Scene_RemoveObject = *reinterpret_cast<fn_Scene_RemoveObject_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x1401512e8);
-    if (slot) s_fn_Random_Rand = *reinterpret_cast<fn_Random_Rand_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
@@ -217,7 +210,7 @@ static void* GetMeshFromDescription(void* desc, int16_t variantIdx, int16_t mode
 // pass -1 to keep the original random pick over the group count.
 extern "C" int ModelComponent_RandomizeVariant(void* modelComp, int forceIdx) {
     EnsureHelpers();
-    if (!modelComp || !s_fn_MeshInstance_SetMesh || !s_fn_Random_Rand) return -1;
+    if (!modelComp || !s_fn_MeshInstance_SetMesh) return -1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
     uintptr_t s = (uintptr_t)modelComp;
 
@@ -336,7 +329,7 @@ void ModelComponent_Serialize(ModelComponent* self) {
 
     // If description +0x38 (byte flag) is set, randomize the variant index
     if (*(uint8_t*)(d + 0x38) != 0) {
-        if (g_pGameWorldSingleton && *g_pGameWorldSingleton && s_fn_Random_Rand) {
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* randomPtr = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
             uint32_t range = *(uint32_t*)(d + 0x28);
             uint32_t randVal = reinterpret_cast<System::Random*>(randomPtr)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge

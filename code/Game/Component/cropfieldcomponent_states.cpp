@@ -372,7 +372,7 @@ static char CropField_State2PerFrame(void* self, void* sm, void* /*time*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
-    if (!fn_Time_AsSeconds || !s_fTempMin || !s_fYearSeconds || !s_fYearMonths) return 1;
+    if (!s_fTempMin || !s_fYearSeconds || !s_fYearMonths) return 1;
 
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     const uintptr_t seasonMgr = *reinterpret_cast<uintptr_t*>(gw + 0x128);
@@ -460,7 +460,7 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
     }
 
     void* rng = *reinterpret_cast<void**>(gw + 0xd8);
-    if (rng && fn_Random_Rand) {
+    if (rng) {
         for (int i = 0; i < count; ++i) {
             const uint32_t j = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
             if (static_cast<uint32_t>(i) != j) {
@@ -555,7 +555,7 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     if (*reinterpret_cast<char*>(comp + 0x48) == 0) return 1;
     if (*reinterpret_cast<char*>(comp + 0x49) == 0) return 1;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 1;
-    if (!s_fTempMin || !s_fYearSeconds || !s_fYearMonths || !s_fRipe || !fn_Time_AsSeconds)
+    if (!s_fTempMin || !s_fYearSeconds || !s_fYearMonths || !s_fRipe)
         return 1;
 
     const uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);

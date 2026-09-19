@@ -263,7 +263,7 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
     }
 
     // 6. appearance variant 0..7 — faithful (Rand()+Rand())&7 (two draws; (a%8+b%8)&7==(a+b)&7)
-    if (fn_Random_Rand && rng)
+    if (rng)
         *reinterpret_cast<uint32_t*>(p + 0x34) = (reinterpret_cast<System::Random*>(rng)->Rand(8u) + reinterpret_cast<System::Random*>(rng)->Rand(8u)) & 7;   // B.3.4b bridge
 
     // 7. employment: unemployed unless forced or the world "start-employed" flag (bit 9) is set

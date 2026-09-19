@@ -270,13 +270,11 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
 // resource ids from desc+0x38 (0x18 stride -> 0xc stride).
 typedef void (*fn_TC_ResizeNames_t)(int64_t* field, int count);   // 0x14000e760
 typedef void (*fn_TC_ResizeItems_t)(int64_t* field, int count);   // 0x14000e8d0
-typedef uint32_t (*fn_TC_Rand_t)(void* random, int n);            // slot 0x1401512e8
 typedef void* (*fn_TC_GenName_t)(void* outStr, void* random, char which);  // 0x1400a4c60
 typedef void (*fn_TC_StrAssign_t)(void* dst, void* src);          // slot 0x1401514c0
 typedef void (*fn_TC_StrDtor_t)(void* str);                       // slot 0x140152af0
 static fn_TC_ResizeNames_t s_tc_ResizeNames = nullptr;
 static fn_TC_ResizeItems_t s_tc_ResizeItems = nullptr;
-static fn_TC_Rand_t       s_tc_Rand = nullptr;
 static fn_TC_GenName_t    s_tc_GenName = nullptr;
 static fn_TC_StrAssign_t  s_tc_StrAssign = nullptr;
 static fn_TC_StrDtor_t    s_tc_StrDtor = nullptr;
@@ -288,8 +286,6 @@ static void EnsureTradeSetupHelpers() {
     s_tc_ResizeItems = reinterpret_cast<fn_TC_ResizeItems_t>(ResolveAddr(Module::Exe, 0x14000e8d0));
     s_tc_GenName     = reinterpret_cast<fn_TC_GenName_t>(ResolveAddr(Module::Exe, 0x1400a4c60));
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401512e8);
-    if (slot) s_tc_Rand = *reinterpret_cast<fn_TC_Rand_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x1401514c0);
     if (slot) s_tc_StrAssign = *reinterpret_cast<fn_TC_StrAssign_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152af0);
@@ -315,7 +311,7 @@ void TradeComponent_Setup(void* selfP) {
     int nameCount = *(int*)(self + 0x38);
     void* random = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0xd8);
     for (int i = 0; i < nameCount; i++) {
-        uint32_t r = s_tc_Rand ? reinterpret_cast<System::Random*>(random)->Rand(2u) : 0;   // B.3.4b bridge
+        uint32_t r = reinterpret_cast<System::Random*>(random)->Rand(2u);   // B.3.4b bridge
         uint8_t strBuf[8] = {0};
         if (s_tc_GenName) s_tc_GenName(strBuf, random, (char)(r == 0));
         void* dst = (void*)((int64_t)i * 0x20 + *(int64_t*)(self + 0x30));

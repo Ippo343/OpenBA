@@ -397,7 +397,7 @@ extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
     if (count == 0) return;
     uintptr_t w = World();
     uintptr_t arr = PastureAnimals(pasture);
-    if (!w || !arr || !fn_Random_Rand) return;
+    if (!w || !arr) return;
 
     void* rng = *reinterpret_cast<void**>(w + 0xd8);
     uint32_t idx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
@@ -638,7 +638,7 @@ void PastureProduce(void* self) {
             // Position the pile on the cell with a random quarter-turn:
             // CreateRawMaterial_helper_9760(comp, cell, RandTol(rng,2) * 90.0f).
             const float quarter = s_pQuarterTurn ? *s_pQuarterTurn : 90.0f;
-            int roll = fn_Random_RandTol ? reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(w + 0xd8))->RandTol(2) : 0;   // B.3.4b bridge
+            int roll = reinterpret_cast<System::Random*>(*reinterpret_cast<void**>(w + 0xd8))->RandTol(2);   // B.3.4b bridge
             s_PlaceAtCell(reinterpret_cast<int64_t>(rawComp), placedCell,
                           static_cast<float>(roll) * quarter);
         }

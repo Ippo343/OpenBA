@@ -40,10 +40,6 @@ static fn_ResizeResidentArray_t s_fn_ResizeResidentArray = nullptr;
 typedef void (*fn_SerializeResidentArray_t)(void* serializer, int count, void* arrayPtr);
 static fn_SerializeResidentArray_t s_fn_SerializeResidentArray = nullptr;
 
-// System::Time::Serialize — dispatch slot at 0x140152a08
-typedef void (*fn_Time_Serialize_t)(void* timeObj, void* serializer);
-static fn_Time_Serialize_t s_fn_Time_Serialize = nullptr;
-
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -74,10 +70,6 @@ static void EnsureHelpers() {
 
     s_fn_SerializeResidentArray = reinterpret_cast<fn_SerializeResidentArray_t>(
         ResolveAddr(Module::Exe, 0x140037c50));
-
-    // System::Time::Serialize via dispatch slot
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_fn_Time_Serialize = *reinterpret_cast<fn_Time_Serialize_t*>(slot);
 
     // IsDerivedFrom via dispatch slot
     slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -153,9 +145,7 @@ void ResidenceComponent_Shutdown(ResidenceComponent* self, void* stream) {
     }
 
     // Serialize Time at +0x48
-    if (s_fn_Time_Serialize) {
-        reinterpret_cast<System::Time*>((void*)((uintptr_t)self + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serBuf2));   // B.3.4b bridge
-    }
+    reinterpret_cast<System::Time*>((void*)((uintptr_t)self + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serBuf2));   // B.3.4b bridge
 
     reinterpret_cast<IO::Serializer*>(serBuf2)->~Serializer();                                       // B.3.4 bridge
 }
@@ -446,9 +436,9 @@ void ResidenceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[ResidenceComponent] Funcs resolved: Component_Serialize=%p "
-           "ResizeArray=%p SerializeArray=%p TimeSer=%p Init=%p Register=%p\n",
+           "ResizeArray=%p SerializeArray=%p Init=%p Register=%p\n",
            (void*)s_fn_Component_Serialize, (void*)s_fn_ResizeResidentArray,
-           (void*)s_fn_SerializeResidentArray, (void*)s_fn_Time_Serialize,
+           (void*)s_fn_SerializeResidentArray,
            (void*)s_fn_ResidenceInit, (void*)s_fn_RegisterEntity);
 #endif
 }

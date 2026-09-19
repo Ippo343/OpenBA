@@ -146,7 +146,7 @@ void CitizenComp_helper_17a0(int64_t selfV) {
     int32_t threshold  = desc ? *reinterpret_cast<int32_t*>(desc + 0x118) : 0;
     float   perUnitSec = desc ? *reinterpret_cast<float*>(desc + 0x11c)   : 0.0f;
     float budgetSecs = perUnitSec * (s_pDAT_17225c ? *s_pDAT_17225c : 3600.0f);
-    float elapsed = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(p + 0x218)->AsSeconds() : 0.0f;   // B.3.4b bridge
+    float elapsed = reinterpret_cast<const System::Time*>(p + 0x218)->AsSeconds();   // B.3.4b bridge
     if (*counter < threshold && elapsed <= budgetSecs) return;
 
     *counter = threshold;

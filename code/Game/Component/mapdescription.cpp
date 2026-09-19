@@ -54,9 +54,6 @@ static void MapDescription_Init(void* self) {
 // ============================================================
 void MapDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_System_Color_Serialize) {
-        return;
-    }
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // enum @ +0x20 via the serializer's encoding vtable +0x98 dispatch
