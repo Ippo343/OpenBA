@@ -110,6 +110,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
+#include "../../types/system/Configuration.h"   // ENDGAME B.3.4b SYSTEM (4c)
 // RtString_GetLength / RtSystem_String_SubString / RtString_ReleaseInline, the
 // three already-ported String primitives the two Parse bodies below need.
 // Spelled "./string.h" rather than "string.h": this file lives in the same
@@ -122,6 +123,13 @@
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
+// ⚠ B34_RULES §7.2 / rule B4b-5, AND IT BITES IN THIS FILE SPECIFICALLY. This
+// using-declaration makes a bare `String` at GLOBAL scope mean the POD
+// `RtSystem::String`. Inside a `System::Configuration` member body, unqualified
+// lookup reaches `namespace System` BEFORE the global scope, so the same bare
+// `String` there binds `System::String` — the CLASS — silently, because the two
+// are the same eight bytes. Every member body below therefore spells
+// `RtSystem::String` in full wherever it means the POD.
 using RtSystem::String;
 
 namespace {
@@ -249,14 +257,31 @@ extern "C" void* RtSystem_ConfigMap_Find(void* map, const String* wanted) {
 // precisely because of §2: on an empty command line the post-condition is
 // "returned without touching the map", and the check reads the map's ROOT,
 // which this body never writes.
+// ENDGAME B.3.4b SYSTEM (4c): the door delegates; the body is the member below.
 extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* cmd) {
+    static_cast<System::Configuration*>(self)->SetCommandLine(RtSystem::Sys(*cmd));
+}
 
-    void* map = static_cast<uint8_t*>(self) + 0x10;
+// ============================================================================
+// ENDGAME B.3.4b SYSTEM (4c) — the `System::Configuration` member BODIES.
+// ============================================================================
+// Defined at GLOBAL scope with qualified names rather than inside a
+// `namespace System { ... }` block — rule B4b-5 and the using-declaration trap
+// noted at the top of this file. Every body is the one that used to sit in the
+// door of the same name, moved VERBATIM; the edits are `self + 0xNN` becoming a
+// named field, the hidden return slots becoming ordinary by-value returns, and
+// the POD bridges that the class parameters make unnecessary.
+// ============================================================================
+
+void System::Configuration::SetCommandLine(const System::String& cmd) {
+
+    void* map = &_mapRoot;
     MapNode* rootBefore = *static_cast<MapNode**>(map);
 
-    // ENDGAME B.3.1 step 2: `cmd` is the registered entry point's POD
-    // parameter, so it reaches the class through the one bridge (pod_bridge.h).
-    const System::String& src = RtSystem::Sys(*cmd);
+    // ENDGAME B.3.4b: the B.3.1 step-2 bridge is gone from this body — `cmd` IS
+    // the class now, because the parameter is. The POD-to-class conversion
+    // moved up into the door.
+    const System::String& src = cmd;
 
     int pos = 0;
     char* d = src._data;
@@ -279,7 +304,8 @@ extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* 
                             // and Configuration is not converted yet. Same
                             // eight bytes; the callee constructs into this
                             // hidden return slot.
-                            reinterpret_cast<String*>(&key), &pos, cmd);
+                            reinterpret_cast<RtSystem::String*>(&key), &pos,
+                            reinterpret_cast<const RtSystem::String*>(&cmd));
 
                     // GetLength (0x1800063c0) returns 0 for a null buffer, so
                     // it IS retail's two-part null-or-empty test. The break
@@ -290,7 +316,8 @@ extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* 
                     System::String val;
                     RT_EXPORT_ONCE(ParseFn,
                         "?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z")(
-                            reinterpret_cast<String*>(&val), &pos, cmd);
+                            reinterpret_cast<RtSystem::String*>(&val), &pos,
+                            reinterpret_cast<const RtSystem::String*>(&cmd));
 
                     // 0x1800c4829. The insert is UNEXPORTED, so it goes by address
                     // and — unlike every other dependency in this lane — a miss here
@@ -310,8 +337,8 @@ extern "C" void RtSystem_Configuration_SetCommandLine(void* self, const String* 
                     reinterpret_cast<MapInsertFn>(
                         ResolveAddr(Module::Runtime, 0x18002a090))(
                             map, &node,
-                            reinterpret_cast<const String*>(&key),
-                            reinterpret_cast<const String*>(&val));
+                            reinterpret_cast<const RtSystem::String*>(&key),
+                            reinterpret_cast<const RtSystem::String*>(&val));
                 }
 
                 if (pos >= len) break;
@@ -421,28 +448,32 @@ bool SameString(const String* a, const String* b) {
 // ?ParseValue@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z  0x1800c4930
 //
 // Skip blanks, then take the run up to the next blank.
+// A HIDDEN-RETSLOT DOOR: `ret` is the caller's RAW BYTES, so the member's
+// prvalue is placement-CONSTRUCTED into it and the door returns that slot,
+// which is retail's `MOV RAX,R14`.
 extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
                                                      const String* src) {
-    const int posIn = *pos;
+    new (RtSystem::Sys(ret)) System::String(
+        System::Configuration::ParseValue(*pos, RtSystem::Sys(*src)));
+    return ret;
+}
 
-    // ENDGAME B.3.1 step 2: `src` and `ret` are the registered entry point's
-    // POD parameters, so both reach the class through the one bridge
-    // (pod_bridge.h). `GetLength` is re-evaluated per iteration, as retail's
-    // 0x1800063c0 call in the loop head is.
-    const System::String& s = RtSystem::Sys(*src);
+System::String System::Configuration::ParseValue(int& pos, const System::String& src) {
+    const int posIn = pos;
 
-    while (*pos < s.GetLength() && IsBlank(s._data[*pos]))
-        ++*pos;
+    // ENDGAME B.3.4b: the B.3.1 step-2 bridges are gone — `src` IS the class
+    // and the return is an ordinary by-value return. `GetLength` is
+    // re-evaluated per iteration, as retail's 0x1800063c0 call in the loop head
+    // is.
+    const System::String& s = src;
 
-    const int start = *pos;                                  // 0x1800c4992
+    while (pos < s.GetLength() && IsBlank(s._data[pos]))
+        ++pos;
 
-    while (*pos < s.GetLength() && !IsBlank(s._data[*pos]))
-        ++*pos;
+    const int start = pos;                                   // 0x1800c4992
 
-    // `ret` is the hidden return slot — raw bytes — so SubString's result is
-    // placement-constructed into it (a move: the prvalue is dead afterwards, so
-    // there is no AddRef/Release pair retail did not spend).
-    new (RtSystem::Sys(ret)) System::String(s.SubString(start, *pos - 1)); // inclusive
+    while (pos < s.GetLength() && !IsBlank(s._data[pos]))
+        ++pos;
 
     // ORACLE. Pure in the only sense that matters: given `src` and an input
     // `pos` it writes a fresh String and a new `pos` and touches no process
@@ -454,57 +485,60 @@ extern "C" String* RtSystem_Configuration_ParseValue(String* ret, int* pos,
     // EFFECTIVENESS CONTROL: how many calls actually consumed input. A run
     // whose ParseValue rows are all `work=0` has proved nothing, however green
     // (reference_probe_needs_an_effectiveness_control.md).
-    return ret;
+    return s.SubString(start, pos - 1);                      // inclusive
 }
 
 // ?ParseCommand@Configuration@System@@CA?AVString@2@AEAHAEBV32@@Z  0x1800c4a00
 //
 // Skip blanks, scan to '/', and if there is one take the run after it up to a
 // blank or ':'. If there is no '/', return an empty String.
+// A HIDDEN-RETSLOT DOOR, exactly as ParseValue's above.
 extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
                                                        const String* src) {
-    const int posIn = *pos;
+    new (RtSystem::Sys(ret)) System::String(
+        System::Configuration::ParseCommand(*pos, RtSystem::Sys(*src)));
+    return ret;
+}
 
-    // ENDGAME B.3.1 step 2, exactly as ParseValue above.
-    const System::String& s = RtSystem::Sys(*src);
+System::String System::Configuration::ParseCommand(int& pos, const System::String& src) {
+    const int posIn = pos;
 
-    while (*pos < s.GetLength() && IsBlank(s._data[*pos]))
-        ++*pos;
+    // ENDGAME B.3.4b, exactly as ParseValue above.
+    const System::String& s = src;
 
-    while (*pos < s.GetLength() && s._data[*pos] != '/')
-        ++*pos;
+    while (pos < s.GetLength() && IsBlank(s._data[pos]))
+        ++pos;
+
+    while (pos < s.GetLength() && s._data[pos] != '/')
+        ++pos;
 
     // 0x1800c4a92. Unguarded by design — detail 2 above. When the scan ran off
     // the end this reads the NUL, which is not '/', so the empty return is
     // taken, which is precisely what retail does.
-    if (s._data[*pos] != '/') {
-        // detail 3: retail's `*ret = 0` IS the default ctor (0x180006760),
-        // placement-constructed because `ret` is the raw hidden return slot.
-        new (RtSystem::Sys(ret)) System::String();
-        return ret;
+    if (s._data[pos] != '/') {
+        // detail 3: retail's `*ret = 0` IS the default ctor (0x180006760). It
+        // is an empty prvalue now; the DOOR is what places it in the slot.
+        return System::String();
     }
-    ++*pos;                                                  // step over the '/'
+    ++pos;                                                   // step over the '/'
 
-    while (*pos < s.GetLength() && IsBlank(s._data[*pos]))
-        ++*pos;
+    while (pos < s.GetLength() && IsBlank(s._data[pos]))
+        ++pos;
 
-    const int start = *pos;                                  // 0x1800c4ad2
+    const int start = pos;                                   // 0x1800c4ad2
 
-    while (*pos < s.GetLength() &&
-           s._data[*pos] != ' ' && s._data[*pos] != ':')
-        ++*pos;
+    while (pos < s.GetLength() &&
+           s._data[pos] != ' ' && s._data[pos] != ':')
+        ++pos;
 
     // 0x1800c4b02. `end` is where the run stopped. The DELIMITER is CONSUMED
     // (pos = end + 1) but is NOT part of the returned string. Reading
     // src->data[end] is the second unguarded read of detail 2.
-    const int end = *pos;
+    const int end = pos;
     if (s._data[end] == ' ' || s._data[end] == ':')
-        *pos = end + 1;
+        pos = end + 1;
 
-    new (RtSystem::Sys(ret)) System::String(s.SubString(start, end - 1)); // inclusive
-
-
-    return ret;
+    return s.SubString(start, end - 1);                      // inclusive
 }
 
 // ============================================================================
@@ -569,22 +603,38 @@ extern "C" String* RtSystem_Configuration_ParseCommand(String* ret, int* pos,
 // idiom so the refcount ends where our body left it. Without that release a
 // diff run leaks one reference per call and no buffer in the configuration map
 // could ever be freed.
+// A HIDDEN-RETSLOT DOOR. The three-register shape above is preserved exactly:
+// the door takes the slot, placement-news the member's prvalue into it and
+// returns it (`MOV RAX,RSI`).
 extern "C" String* RtSystem_Configuration_GetCommandLineString(
         void* self, String* ret, const String* key) {
+    new (RtSystem::Sys(ret)) System::String(
+        static_cast<const System::Configuration*>(self)
+            ->GetCommandLineString(RtSystem::Sys(*key)));
+    return ret;
+}
 
+System::String System::Configuration::GetCommandLineString(
+        const System::String& key) const {
+
+    // The find takes the MAP, not `this` — `configuration + 0x10`, whose first
+    // qword is the root — which is why it is not a member of this class.
+    void* map = const_cast<void*>(static_cast<const void*>(&_mapRoot));
     MapNode* node = static_cast<MapNode*>(
-        RtSystem_ConfigMap_Find(static_cast<uint8_t*>(self) + 0x10, key));
+        RtSystem_ConfigMap_Find(map,
+            reinterpret_cast<const RtSystem::String*>(&key)));
 
     // 0x1800c533b: the found node's VALUE, and the temporary's reference.
     char* temp = (node != nullptr) ? node->value : nullptr;
     if (temp != nullptr) ++RtSystem::StringRefCount(temp);
 
     // 0x1800c537f: the slot is zeroed FIRST and unconditionally, then adopted.
-    // ENDGAME B.3.1 step 2: `ret` is the hidden return slot, so the zero is the
-    // default ctor placement-constructed into it; `Adopt` is String's own
-    // private AddRef half, reached through the transitional accessor.
-    System::String* out = new (RtSystem::Sys(ret)) System::String();
-    System::StringPrivateAccess::Adopt(*out, temp);
+    // ENDGAME B.3.4b: the hidden slot is the compiler's business now, so the
+    // zero is an ordinary default-constructed local and the DOOR is what places
+    // the result in the caller's slot. `Adopt` is String's own private AddRef
+    // half, reached through the transitional accessor.
+    System::String out;
+    System::StringPrivateAccess::Adopt(out, temp);
 
     // 0x1800c53a9 / 0x1800c53d5: the temporary dies. Through the class's own
     // destructor, so the freeing branch's dangling-pointer asymmetry (String.h)
@@ -599,7 +649,7 @@ extern "C" String* RtSystem_Configuration_GetCommandLineString(
     // EFFECTIVENESS CONTROL. A run in which every lookup MISSED has exercised
     // the null arm only and said nothing about the arm that matters; `work`
     // counts the hits (reference_probe_needs_an_effectiveness_control.md).
-    return ret;
+    return out;
 }
 
 // ============================================================================
@@ -660,6 +710,10 @@ extern "C" String* RtSystem_Configuration_GetCommandLineString(
 // this name through RT_EXPORT_ONCE, i.e. through a DOOR, so registering moves
 // that call to this body, and `work` counts the objects actually destroyed.
 extern "C" void RtSystem_Configuration_Dtor(void* self) {
+    static_cast<System::Configuration*>(self)->~Configuration();
+}
+
+System::Configuration::~Configuration() {
 
     typedef void (*CleanupFn)(void*);
 
@@ -674,12 +728,12 @@ extern "C" void RtSystem_Configuration_Dtor(void* self) {
     // 0x1800c518f -- the string->string map at +0x10.
     if (CleanupFn setClear = reinterpret_cast<CleanupFn>(
             ResolveAddr(Module::Runtime, 0x18000f7d0)))
-        setClear(static_cast<uint8_t*>(self) + 0x10);
+        setClear(&_mapRoot);
 
     // 0x1800c519d -- the tail call, on `this` itself.
     if (CleanupFn arrayDtor = reinterpret_cast<CleanupFn>(
             ResolveAddr(Module::Runtime, 0x180010ab0)))
-        arrayDtor(self);
+        arrayDtor(static_cast<void*>(this));
 
 }
 

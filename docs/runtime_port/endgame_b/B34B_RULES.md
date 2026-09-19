@@ -213,7 +213,7 @@ class had to be tested rather than assumed.
 | `System::Timer` | **class, ALL-STATIC** | 6 × `SA`, 3 × `CA`, 5 × `0…A`, 1 × `QEAA` (`operator=`) | SYSTEM (4) |
 | `System::CRC` | **class, ALL-STATIC** | 2 × `SA` (`Compute`), 1 × `0PAIA` (`_crcTable`) | SYSTEM (4) |
 | `System::Error` | **class, ALL-STATIC** | 3 × `SA`, 3 × `0…A` | SYSTEM (4) |
-| `System::Configuration` | **class with instance state** | 5 × `QEAA` over `this+0x10` (a map) and `this+0x20` | not yet |
+| `System::Configuration` | **class with instance state** | 5 × `QEAA` over `this+0x10` (a map) and `this+0x20` | SYSTEM (4c) |
 | `System::Compression` | **class with instance state** | `??0` + `QEAA Compress`; an 8-byte heap instance | SYSTEM (4b) |
 | `System::WideString` | **class with instance state** | one `wchar_t* data`; 6 × `QEAA`, 1 × `AEAA`, 1 × `SA` | SYSTEM (4a) |
 | `System::MemoryAllocator` | **class with instance state** | 0x670 bytes | deferred, §6 |
@@ -294,6 +294,51 @@ identical code onto scratch". The oracles died at cutover; the two bodies are th
 Token tally: `DecompressBody` 2→0, `CompressBody` 2→0, `self` 7→5 (exactly `CompressBody`'s
 signature and its one dereference, which became `this` / `_table`), and **every other token in
 the file is unmoved**, branch counters included.
+
+### 1.5 SYSTEM (4c) — `System::Configuration`, and a CORRECTION to §1.1
+
+**Verdict: a class with instance state**, 0x30 bytes. Nine class-scoped manglings across the
+ported surface: three `QEAA`/`QEBA` instance members, two `CA` private statics, three `SA`
+public statics and a `QEAA` constructor.
+
+> **CORRECTION to §1.1.** That section says the constructor `??0Configuration@System@@QEAA@XZ`
+> (0x1800c51b0) "is called through `RT_EXPORT_ONCE` from
+> `runtime/src/engine/engine_lifecycle.cpp:305` but is registered **NOWHERE**". **That is
+> wrong.** It is registered twice, by NAME and by ADDRESS, at
+> `runtime/src/engine/engine_lifecycle.cpp:995-996`, and its body is at `:322` in the same
+> file. (`standalone/reg_mint_promoted.cpp:3026`'s `RT_UNPROMOTABLE` note for
+> `?_singleton@Configuration@System@@` still says "the writer `??0Configuration@System@@` is
+> unported", which is stale for the same reason and is recorded here rather than edited —
+> `standalone/` is another owner's file set.)
+
+| converted | not converted, and why |
+|---|---|
+| `SetCommandLine`, `GetCommandLineString`, `~Configuration`, `ParseCommand`, `ParseValue`, `GetVersionString`, `CurrentVersion` — **seven bodies moved onto members**, split across `configuration.cpp` and `value_types.cpp` exactly as their registrations are | **the constructor.** Ported and registered, but in `runtime/src/engine/engine_lifecycle.cpp`, reading a file-local `ConfigurationSingletonSlot()`. Splitting a declaration from its body across two owners is how a merge loses one half — §3's own sequencing argument. The class declares no constructor; that door still writes all six slots by hand. |
+| | **`?CurrentBuildId@` 0x1800c4c60.** The one ported member left as a free door, and it is an ABI question, not a gap: retail calls `String::Set` on the hidden return slot **without zeroing it first**, where every other String-returning body in this class placement-constructs it. A by-value member plus a placement-newing door would zero the slot instead — either the faithful reading (MSVC inlined `Set`, proved `data` null, folded the store away) or a behaviour change on a slot the caller did not zero. `value_types.cpp` already decided "left exactly as retail spells it"; 4b does not overturn a prior decision on inference. **OWED** once someone reads 0x1800c4c60's prologue. |
+| | **`?_singleton@Configuration@System@@0PEAV12@EA` 0x1801fc6f8** — rule B4b-4, debt tabled in §4.1. Stays an `RT_DATA_SLOT` read at `engine_lifecycle.cpp:283`. |
+| | the 22 unported exports (`?Startup@`, `?Shutdown@`, `?IsCommandSet@`, `?AddCommandLine@`, `?Get@` 0x18000da70, the Language/Platform/Build accessors, the three ResourceParameter members): no body, no registration, an uncalled port is an unverified port. |
+
+**Not a member, and it stays that way: the map find at 0x18002ace0.** It takes the MAP
+(`configuration + 0x10`), not `this`, and §1.1 already records its by-address row as the map
+helper rather than a Configuration export. It stays `RtSystem_ConfigMap_Find`.
+
+**THE §7.2 GREP HAZARD BITES HARDEST IN THIS FILE, AND IN A NEW WAY.**
+`configuration.cpp` carries `using RtSystem::String;` at global scope, so a bare `String` there
+means the **POD**. Inside a `System::Configuration` member body, unqualified lookup reaches
+`namespace System` BEFORE the global scope, so the same bare `String` binds **the class** —
+silently, because the two are the same eight bytes. Every member body spells
+`RtSystem::String` in full where it means the POD, and the using-declaration now carries a
+comment saying why. *This is the first place in `System` where the hazard is a
+using-declaration rather than a namespace block, and it will recur in any converted file that
+has one.*
+
+**A TRAIT TRAP, RECORDED SO IT IS NOT REDISCOVERED.**
+`std::is_trivially_default_constructible` **cannot** be used to pin "this class declares no
+constructor" once the class has a real destructor: GCC (and libstdc++'s `__is_trivially_*`)
+fold the destructor's triviality into `is_trivially_constructible`, so the trait reads FALSE
+for a reason unrelated to the constructor. The header asserts
+`is_default_constructible` plus `!is_trivially_destructible` and states the strong claim in a
+comment. (`System::Compression` is unaffected: it has a constructor and no destructor.)
 
 ---
 
