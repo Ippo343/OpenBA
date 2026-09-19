@@ -89,6 +89,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 namespace {
 
@@ -125,13 +126,57 @@ void** SlotVideoConfig() { return RT_DATA_SLOT(void**, "?_singleton@Configuratio
 
 }  // namespace
 
-extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* ret,
-                                                    void* rendererv) {
-    const SunLight* self     = static_cast<const SunLight*>(selfv);
-    Renderer*       renderer = static_cast<Renderer*>(rendererv);
+// ############################################################################
+// ENDGAME B.3 step 5 (block F) — THE BODY MOVED ONTO THE MEMBER
+// ############################################################################
+//
+// `runtime/types/graphics/SunLight.h` now DECLARES
+// `Camera SunLight::GetSunCamera(Renderer&) const` — the one line block E
+// recorded as a comment and left for this block, because a by-value return needs
+// the COMPLETE type and `Graphics::Camera` was still a POD. The body below is
+// that member; the registered door keeps its name, both registrations and
+// retail's `(this, ret, renderer)` ABI, and delegates.
+//
+// TWO THINGS THE CONVERSION MADE NAMEABLE that this file had to spell as raw
+// offsets before, and both are now `static_assert`ed in Camera.h:
+//   * `renderer->drawGroups._data` + 0x08 is `_drawGroups[0]._camera`. The
+//     banner above derived "a draw group holds two Cameras exactly 0xd8 apart"
+//     from this function's own reads; block F confirmed it from the writer side
+//     (`BeginDrawGroup` 0x180104fd0 runs `Camera::operator=` on group+0x08 and
+//     group+0xe0) and from `?GetCamera@Renderer@Graphics@@QEAAAEBVCamera@2@H@Z`
+//     (0x180017fb0), which RETURNS group+0x08 as a `const Camera&`.
+//   * group + 0x6c is that Camera's `_cameraToWorld` (+0x08 + 0x64).
+// So the twelve floats this body walks as `m[0..11]` are
+// `_drawGroups[0]._camera._cameraToWorld`, and the `Frustum` it copies out is
+// `_drawGroups[0]._camera._frustum`. They are still read through the float
+// cursor `m`, because the arithmetic below is transcribed in retail's operand
+// order and re-spelling it as `axisX.x` per term would invite a reader to
+// re-group a float sum (reference_moved_term_hides_where_terms_cancel.md).
+//
+// THE ONE PLACE THIS MEMBER IS NOT A STRAIGHT MOVE. Retail constructs the result
+// DIRECTLY IN THE HIDDEN RETURN SLOT (`MOV RCX,R12` immediately before
+// `CALL 0x1800fe960`). A C++ member returning by value cannot do that here,
+// because `??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z`
+// is a registered DOOR and NOT a real C++ constructor — RULE B5-4 ("ctor doors
+// stay doors") and B35_RULES §11's leave list keep it that way, so
+// `return Camera(f, xf, true);` is not available. The member therefore runs the
+// door into zeroed local storage and returns a copy of it, which is ONE extra
+// 0xd8 trivially-copyable blit per shadow-map camera (twice a frame at most) and
+// leaves `Camera::_pad_d5` — the three bytes at +0xd5..+0xd7 that NO Camera body
+// in the DLL writes — reading back as ZERO where retail leaves the caller's own
+// content. Recorded rather than hidden; nothing reads those bytes (Camera.h).
+// ############################################################################
 
-    // Draw group ZERO's camera at group+0x08. See the banner.
-    const uint8_t* const group = reinterpret_cast<const uint8_t*>(renderer->drawGroups._data);
+namespace Graphics {
+
+Camera SunLight::GetSunCamera(Renderer& renderer) const {
+    const SunLight* const self     = this;
+    Renderer* const       renderer_ = &renderer;
+
+    // Draw group ZERO's camera at group+0x08 — `_drawGroups[0]._camera`. See
+    // the banner: there is no `* 0x1f0`, so it is always group zero.
+    const uint8_t* const group =
+        reinterpret_cast<const uint8_t*>(renderer_->_drawGroups.GetData());
 
     Frustum viewFrustum;
     std::memcpy(&viewFrustum, group + 0x08, sizeof(Frustum));
@@ -319,9 +364,35 @@ extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* r
     f.planes[5] = { kZero,  kZero, kOne,   w     };
     f.isOrthographic = true;
 
+    // The constructor DOOR, into zeroed local storage — see the banner's "one
+    // place this member is not a straight move". The zero-fill is deliberate:
+    // it makes `_pad_d5` deterministic instead of an indeterminate read.
+    alignas(Camera) unsigned char slot[sizeof(Camera)] = {};
     RT_EXPORT_ONCE(CameraCtorFn,
         "??0Camera@Graphics@@QEAA@AEBVFrustum@Volume@@AEBVTransform3@Math@@_N@Z")
-        (ret, &f, &xf, true);
+        (reinterpret_cast<RtGraphics::Camera*>(slot), &f, &xf, true);   // B.3.5 bridge
+    return *reinterpret_cast<const Camera*>(slot);
+}
+
+}  // namespace Graphics
+
+// ============================================================================
+// ?GetSunCamera@SunLight@Graphics@@QEBA?AVCamera@2@AEAVRenderer@2@@Z
+// — retail 0x180107010. THE DOOR.
+//
+// Keeps retail's ABI exactly as the banner at the top of this file derives it:
+// RCX = this (SunLight*), RDX = the Camera return slot, R8 = Renderer&, and RAX
+// carries the slot back. The member returns BY VALUE, which is correct for a
+// NON-VIRTUAL member — `Graphics::SunLight`'s slot list does not contain this
+// function — and C++17's guaranteed elision constructs the prvalue straight into
+// the caller's storage, so the placement-new below is not a second copy.
+// ============================================================================
+extern "C" Camera* RtGraphics_SunLight_GetSunCamera(const void* selfv, Camera* ret,
+                                                    void* rendererv) {
+    new (reinterpret_cast<::Graphics::Camera*>(ret)) ::Graphics::Camera(  // B.3.5 bridge
+        reinterpret_cast<const ::Graphics::SunLight*>(selfv)
+            ->::Graphics::SunLight::GetSunCamera(
+                *reinterpret_cast<::Graphics::Renderer*>(rendererv)));
     return ret;
 }
 
