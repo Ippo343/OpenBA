@@ -127,10 +127,6 @@ bool CreateNaturalResource_ResolveFuncs() {
               fn_ObjectInternal_Dtor && fn_InternalBasePtr_DeletePtr &&
               fn_MemFreeStatic &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
-              fn_InternalBasePtr_Serialize &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int &&
-              g_fn_Serializer_GetVersion &&
               g_pGameWorldSingleton && fn_MemAlloc && g_pMemAllocSingleton;
 
 #ifdef _DEBUG

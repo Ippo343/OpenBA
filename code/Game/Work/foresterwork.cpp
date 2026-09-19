@@ -32,11 +32,6 @@
 
 // Work::Serialize base
 typedef void  (*FW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor
-typedef void  (*FW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*FW_Serializer_Dtor_t)(void* self);
-// IO::Serializer::Serialize for int
-typedef void  (*FW_SerializeInt_t)(void* self, void* field, const char* name);
 // BST serialization
 typedef void  (*FW_BST_Serialize_t)(void* bstRoot, void* serializer);
 // FUN_1400f7100 -- validate work entity
@@ -114,9 +109,6 @@ static FW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static FW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
 static FW_Random_RandTol_t             s_fn_Random_RandTol = nullptr;
 static FW_Work_Serialize_t            s_fn_Work_Serialize = nullptr;
-static FW_Serializer_Ctor_t           s_fn_Serializer_Ctor = nullptr;
-static FW_Serializer_Dtor_t           s_fn_Serializer_Dtor = nullptr;
-static FW_SerializeInt_t              s_fn_SerializeInt = nullptr;
 static FW_BST_Serialize_t             s_fn_BST_Serialize = nullptr;
 static FW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
 static FW_MemAlloc_t                  s_fn_MemAlloc = nullptr;
@@ -249,19 +241,6 @@ bool ForesterWork_ResolveFuncs() {
     s_vtable_Work = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140161a80));
 
-    // Dispatch slots (indirect through IAT)
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<FW_Serializer_Ctor_t*>(iatSerCtor);
-
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<FW_Serializer_Dtor_t*>(iatSerDtor);
-
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerInt)
-        s_fn_SerializeInt = *reinterpret_cast<FW_SerializeInt_t*>(iatSerInt);
-
     // MemAlloc / MemFree / RandTol — resolve via the canonical Runtime exports. The exe IAT
     // dispatch slots these used (0x1401527e8/0x1401527f0/0x1401512f0) are UNREGISTERED in the
     // standalone exe (ResolveAddr -> 0, so *slot never ran and these stayed null, failing
@@ -329,8 +308,7 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_CitizenAI_RegisterWork && s_fn_CitizenAI_LongTermPlan &&
               s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
               s_fn_Random_RandTol &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_SerializeInt && s_fn_BST_Serialize &&
+              s_fn_Work_Serialize && s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_MemAlloc && s_fn_MemFreeFunc &&
               s_fn_BSTRemove && s_fn_BSTFindRemove &&
               s_fn_CancelAllWork && s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
@@ -382,9 +360,6 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_StorageQueryCount) printf("  MISSING: s_fn_StorageQueryCount\n");
         if (!s_fn_Random_RandTol) printf("  MISSING: s_fn_Random_RandTol\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: s_fn_Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: s_fn_Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: s_fn_Serializer_Dtor\n");
-        if (!s_fn_SerializeInt) printf("  MISSING: s_fn_SerializeInt\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: s_fn_BST_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: s_fn_ValidateEntity\n");
         if (!s_fn_MemAlloc) printf("  MISSING: s_fn_MemAlloc\n");

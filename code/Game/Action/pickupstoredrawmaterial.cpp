@@ -95,10 +95,8 @@ bool PickupStoredRawMaterial_ResolveFuncs() {
               s_typeId_1401c7158 && s_typeId_RawMatDesc && s_typeId_StorageComp &&
               g_TypeId_ComponentEntity &&
               fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && fn_InternalBasePtr_Serialize &&
-              fn_ExternalPtr_BuildSerialize &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int;
+              fn_IsDerivedFrom &&
+              fn_ExternalPtr_BuildSerialize;
 
 #ifdef _DEBUG
     printf("[PickupStoredRawMaterial] ResolveFuncs: SubItem=%p AddItem=%p Resize16=%p\n",

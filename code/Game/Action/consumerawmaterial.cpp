@@ -78,11 +78,7 @@ bool ConsumeRawMaterial_ResolveFuncs() {
               s_fn_ArrayResize16 &&
               g_TypeId_ComponentEntity && g_pGameWorldSingleton &&
               fn_IsDerivedFrom &&
-              fn_InternalBasePtr_Serialize &&
-              fn_ExternalPtr_BuildSerialize &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int &&
-              g_fn_Serializer_GetVersion;
+              fn_ExternalPtr_BuildSerialize;
 
 #ifdef _DEBUG
     printf("[ConsumeRawMaterial] ResolveFuncs: SubItem=%p GetResCat=%p Resize16=%p\n",

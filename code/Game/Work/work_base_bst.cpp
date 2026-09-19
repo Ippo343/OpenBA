@@ -281,14 +281,14 @@ void WorkBST_BSTFindRemove_25520(uintptr_t* root, void* keyIBP) {
 // Caller: void fn(void* bstRoot, void* serializer).
 void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
     int count = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(root) + 8);
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
     bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     uint32_t citTid = g_TypeId_CitizenComponent_FC ? *g_TypeId_CitizenComponent_FC : 0;
 
     if (loading) {
         for (int i = 0; i < count; i++) {
             uintptr_t keyIBP = 0;
-            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+            reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (keyIBP != 0 && fn_IsDerivedFrom && citTid &&
                 !fn_IsDerivedFrom(reinterpret_cast<void*>(keyIBP), citTid))
                 keyIBP = 0;
@@ -305,7 +305,7 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
     do { pIVar3 = pIVar6; pIVar6 = *reinterpret_cast<uintptr_t*>(pIVar3 + 0x10); } while (pIVar6 != 0);  // leftmost
 joined:
     while ((pIVar6 = pIVar3) != 0) {
-        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(pIVar6)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>(pIVar6)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*reinterpret_cast<uintptr_t*>(pIVar6) != 0 && fn_IsDerivedFrom && citTid &&
             !fn_IsDerivedFrom(*reinterpret_cast<void**>(pIVar6), citTid))
             *reinterpret_cast<uintptr_t*>(pIVar6) = 0;

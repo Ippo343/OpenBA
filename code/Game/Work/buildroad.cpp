@@ -32,14 +32,6 @@ static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 // Work::Serialize(this, stream) — base class serialize at 0x1400f7400
 static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
 
-// IO::Serializer ctor/dtor/getversion — via IAT
-static void (*s_fn_Serializer_Ctor)(void* self, void* stream, int version) = nullptr;
-static void (*s_fn_Serializer_Dtor)(void* self) = nullptr;
-static int  (*s_fn_Serializer_GetVersion)(void* self) = nullptr;
-
-// Object::InternalBasePtr::Serialize(this, serializer) — via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* basePtr, void* serializer) = nullptr;
-
 // FUN_1400f7100 — Work::ValidateTask helper (checks if assigned task still valid)
 static uint8_t (*s_fn_Work_ValidateTask)(void* self, void* param2, void* ibp, void** outTask) = nullptr;
 
@@ -67,20 +59,6 @@ bool BuildRoad_ResolveFuncs() {
     s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1400f7400));
 
-    // IO::Serializer ctor/dtor via IAT
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerCtor) s_fn_Serializer_Ctor = *reinterpret_cast<void(**)(void*, void*, int)>(iatSerCtor);
-    if (iatSerDtor) s_fn_Serializer_Dtor = *reinterpret_cast<void(**)(void*)>(iatSerDtor);
-
-    // IO::Serializer::GetVersion — correct IAT slot verified from original disasm
-    uintptr_t iatGetVer = ResolveAddr(Module::Exe, 0x140152a48);
-    if (iatGetVer) s_fn_Serializer_GetVersion = *reinterpret_cast<int(**)(void*)>(iatGetVer);
-
-    // InternalBasePtr::Serialize via IAT at 0x140152aa0
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // fn_ExternalPtr_BuildSerialize (FUN_140002340) — already in engine_funcs.h
 
     // Work::ValidateTask (FUN_1400f7100)
@@ -96,24 +74,22 @@ bool BuildRoad_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401c7158));
 
     bool ok = s_fn_ObjectInternal_Ctor && s_fn_ObjectInternal_Dtor &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_Serializer_GetVersion && s_fn_IBP_Serialize &&
+              s_fn_Work_Serialize &&
               fn_ExternalPtr_BuildSerialize && s_fn_Work_ValidateTask &&
               s_fn_TaskListCleanup && s_typeId_1401c7158 &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
-              g_fn_Serialize_Int && g_pGameWorldSingleton;
+              g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[BuildRoad] ResolveFuncs: ObjCtor=%p ObjDtor=%p WorkSer=%p SerCtor=%p SerDtor=%p\n",
+    printf("[BuildRoad] ResolveFuncs: ObjCtor=%p ObjDtor=%p WorkSer=%p\n",
            (void*)s_fn_ObjectInternal_Ctor, (void*)s_fn_ObjectInternal_Dtor,
-           (void*)s_fn_Work_Serialize, (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor);
-    printf("[BuildRoad]   GetVer=%p IBPSer=%p ExtBuildSer=%p ValidateTask=%p TaskClean=%p\n",
-           (void*)s_fn_Serializer_GetVersion, (void*)s_fn_IBP_Serialize,
+           (void*)s_fn_Work_Serialize);
+    printf("[BuildRoad]   ExtBuildSer=%p ValidateTask=%p TaskClean=%p\n",
            (void*)fn_ExternalPtr_BuildSerialize, (void*)s_fn_Work_ValidateTask,
            (void*)s_fn_TaskListCleanup);
-    printf("[BuildRoad]   typeId=%p SerInt=%p GameWorld=%p\n",
-           (void*)s_typeId_1401c7158, (void*)g_fn_Serialize_Int,
+    printf("[BuildRoad]   typeId=%p GameWorld=%p\n",
+           (void*)s_typeId_1401c7158,
            g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
     if (!ok) printf("[BuildRoad] ERROR: some function pointers not resolved!\n");
 #endif

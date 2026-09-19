@@ -57,9 +57,6 @@ typedef bool  (*HuW_Map_CanPathTo_t)(int* mapGrid, uint32_t pathType, uint32_t d
 
 // Work::Serialize
 typedef void  (*HuW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor
-typedef void* (*HuW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*HuW_Serializer_Dtor_t)(void* self);
 // BST serialization
 typedef void  (*HuW_BST_Serialize_t)(void* bstRoot, void* serializer);
 
@@ -102,8 +99,6 @@ static HuW_Map_FindNearestPassable_t    s_fn_Map_FindNearestPassable = nullptr;
 static HuW_Map_CanPathTo_t              s_fn_Map_CanPathTo = nullptr;
 static HuW_Entity_GetGridCell_t         s_fn_Entity_GetGridCell = nullptr;
 static HuW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
-static HuW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
-static HuW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
 static HuW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
 static HuW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
 static HuW_MemAlloc_t                   s_fn_MemAlloc = nullptr;
@@ -199,14 +194,6 @@ bool HuntWork_ResolveFuncs() {
     if (iatRandTol)
         s_fn_Random_RandTol = *reinterpret_cast<HuW_Random_RandTol_t*>(iatRandTol);
 
-    // Serializer ctor/dtor from dispatch slots
-    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtorSlot)
-        s_fn_Serializer_Ctor = *reinterpret_cast<HuW_Serializer_Ctor_t*>(iatSerCtorSlot);
-    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtorSlot)
-        s_fn_Serializer_Dtor = *reinterpret_cast<HuW_Serializer_Dtor_t*>(iatSerDtorSlot);
-
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -244,8 +231,7 @@ bool HuntWork_ResolveFuncs() {
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Hunt &&
               s_fn_GetAreaComponent && s_fn_Map_CalcDistance &&
               s_fn_Map_FindNearestPassable && s_fn_Map_CanPathTo &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor &&
-              s_fn_Serializer_Dtor && s_fn_BST_Serialize &&
+              s_fn_Work_Serialize && s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
@@ -276,8 +262,6 @@ bool HuntWork_ResolveFuncs() {
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");

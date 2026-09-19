@@ -32,9 +32,6 @@
 
 // Work::Serialize
 typedef void  (*TrW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor
-typedef void* (*TrW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*TrW_Serializer_Dtor_t)(void* self);
 // BST serialization (extended BST at 0x14002c8a0)
 typedef void  (*TrW_BST_Serialize_t)(void* bstRoot, void* serializer);
 // BST find-and-remove by key (TradeWork_impl_c690 at 0x14002c690)
@@ -58,8 +55,6 @@ typedef void* (*TrW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
 typedef uint32_t (*TrW_Slot4_Original_t)(void* self, void* citizenIBP, void* param3);
 
 static TrW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
-static TrW_Serializer_Ctor_t         s_fn_Serializer_Ctor = nullptr;
-static TrW_Serializer_Dtor_t         s_fn_Serializer_Dtor = nullptr;
 static TrW_BST_Serialize_t           s_fn_BST_Serialize = nullptr;
 static TrW_BSTFindRemove_t           s_fn_BSTFindRemove = nullptr;
 static TrW_BSTRemove_t               s_fn_BSTRemove = nullptr;
@@ -107,11 +102,6 @@ bool TradeWork_ResolveFuncs() {
     s_fn_FindSubEntity = reinterpret_cast<TrW_FindSubEntity_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
 
-    // Dispatch slots (indirect through .rdata)
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor) s_fn_Serializer_Ctor = *reinterpret_cast<TrW_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor) s_fn_Serializer_Dtor = *reinterpret_cast<TrW_Serializer_Dtor_t*>(iatSerDtor);
     // WRONG SLOTS (fixed 2026-08-21). These used to read exe dispatch slots
     // 0x140151460 / 0x140151468 as MemAlloc / MemFree. 0x140151460 is NOT MemAlloc —
     // it is Graphics::Geometry::GetTransform, verified from the disassembly at
@@ -141,7 +131,7 @@ bool TradeWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
+    bool ok = s_fn_Work_Serialize &&
               s_fn_BST_Serialize && s_fn_BSTFindRemove && s_fn_BSTRemove &&
               s_fn_CancelAllWork && s_fn_ValidateEntity &&
               s_fn_MemAlloc && s_fn_MemFree &&
@@ -154,8 +144,6 @@ bool TradeWork_ResolveFuncs() {
     printf("[TradeWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");

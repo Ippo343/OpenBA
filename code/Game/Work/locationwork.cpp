@@ -29,11 +29,6 @@
 
 // Work::Serialize base
 typedef void  (*LW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor
-typedef void* (*LW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*LW_Serializer_Dtor_t)(void* self);
-// InternalBasePtr::Serialize
-typedef void  (*LW_InternalBasePtr_Serialize_t)(void* basePtr, void* serializer);
 
 // Entity_FindComponent_Storage (0x140006270)
 typedef void* (*LW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
@@ -85,9 +80,6 @@ typedef void (*LW_Internal_Dtor_t)(void* self);
 typedef void (*LW_MemFreeStatic_t)(void* ptr);
 
 static LW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
-static LW_Serializer_Ctor_t            s_fn_Serializer_Ctor = nullptr;
-static LW_Serializer_Dtor_t            s_fn_Serializer_Dtor = nullptr;
-static LW_InternalBasePtr_Serialize_t  s_fn_InternalBasePtr_Serialize = nullptr;
 
 static LW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static LW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
@@ -131,19 +123,6 @@ bool LocationWork_ResolveFuncs() {
     // Work::Serialize
     s_fn_Work_Serialize = reinterpret_cast<LW_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
-
-    // IO::Serializer ctor/dtor from dispatch slots
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<LW_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<LW_Serializer_Dtor_t*>(iatSerDtor);
-
-    // InternalBasePtr::Serialize via dispatch slot
-    uintptr_t iatBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatBPSer)
-        s_fn_InternalBasePtr_Serialize = *reinterpret_cast<LW_InternalBasePtr_Serialize_t*>(iatBPSer);
 
     // Entity component finders
     s_fn_FindComp_Storage = reinterpret_cast<LW_FindComp_Storage_t>(
@@ -196,8 +175,7 @@ bool LocationWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_InternalBasePtr_Serialize &&
+    bool ok = s_fn_Work_Serialize &&
               s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Position &&
               s_fn_FindWalkablePos && s_fn_FindWalkablePosSub &&
@@ -213,9 +191,6 @@ bool LocationWork_ResolveFuncs() {
     printf("[LocationWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_InternalBasePtr_Serialize) printf("  MISSING: InternalBasePtr_Serialize\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");

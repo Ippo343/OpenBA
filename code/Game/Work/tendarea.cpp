@@ -31,10 +31,6 @@
 
 // Work::Serialize
 typedef void  (*TAW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor/Serialize
-typedef void* (*TAW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*TAW_Serializer_Dtor_t)(void* self);
-typedef void  (*TAW_Serializer_Serialize_t)(void* self, int* value, const char* name);
 // BST serialization (simple BST at 0x1400296b0)
 typedef void  (*TAW_BST_Serialize_t)(void* bstRoot, void* serializer);
 // BST find-and-remove by key (CitizenAI_impl_5520 at 0x140025520)
@@ -81,9 +77,6 @@ typedef void* (*TAW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 typedef int   (*TAW_StorageQueryCount_t)(void* storageComp);
 
 static TAW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
-static TAW_Serializer_Ctor_t         s_fn_Serializer_Ctor = nullptr;
-static TAW_Serializer_Dtor_t         s_fn_Serializer_Dtor = nullptr;
-static TAW_Serializer_Serialize_t    s_fn_Serializer_Serialize = nullptr;
 static TAW_BST_Serialize_t           s_fn_BST_Serialize = nullptr;
 static TAW_BSTFindRemove_t           s_fn_BSTFindRemove = nullptr;
 static TAW_BSTRemove_t               s_fn_BSTRemove = nullptr;
@@ -175,13 +168,6 @@ bool TendArea_ResolveFuncs() {
     s_fn_StorageQueryCount = reinterpret_cast<TAW_StorageQueryCount_t>(
         ResolveAddr(Module::Exe, 0x14012cf10));
 
-    // Dispatch slots (indirect through .rdata)
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor) s_fn_Serializer_Ctor = *reinterpret_cast<TAW_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor) s_fn_Serializer_Dtor = *reinterpret_cast<TAW_Serializer_Dtor_t*>(iatSerDtor);
-    uintptr_t iatSerSer = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerSer) s_fn_Serializer_Serialize = *reinterpret_cast<TAW_Serializer_Serialize_t*>(iatSerSer);
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -214,8 +200,7 @@ bool TendArea_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_Serializer_Serialize && s_fn_BST_Serialize &&
+    bool ok = s_fn_Work_Serialize && s_fn_BST_Serialize &&
               s_fn_BSTFindRemove && s_fn_BSTRemove && s_fn_CancelAllWork &&
               s_fn_ValidateEntity && s_fn_MemAlloc &&
               // s_fn_MemFree is deliberately NOT required. It comes from the IAT dispatch
@@ -246,9 +231,6 @@ bool TendArea_ResolveFuncs() {
     printf("[TendArea] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_Serializer_Serialize) printf("  MISSING: Serializer_Serialize\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");

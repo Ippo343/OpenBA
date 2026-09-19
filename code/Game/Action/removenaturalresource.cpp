@@ -47,9 +47,6 @@ static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 // Object::InternalBasePtr::DeletePtr — clears entity ref during dtor
 static void (*s_fn_IBP_DeletePtr)(void* self) = nullptr;
 
-// Object::InternalBasePtr::Serialize(this, serializer) — via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* basePtr, void* serializer) = nullptr;
-
 // FUN_1400052c0 — FindComponent by type DAT_1401c7b30 (NaturalResourceComponent)
 // RCX=entity, RDX=outIBP
 typedef void* (*s_fn_FindNRComp_t)(void* entity, void* outIBP);
@@ -89,10 +86,6 @@ bool RemoveNaturalResource_ResolveFuncs() {
     // InternalBasePtr::DeletePtr
     s_fn_IBP_DeletePtr = (void(*)(void*))fn_InternalBasePtr_DeletePtr;
 
-    // InternalBasePtr::Serialize via IAT at 0x140152aa0
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // FUN_1400052c0 — FindComponent (NaturalResourceComponent)
     s_fn_FindNRComp = (s_fn_FindNRComp_t)ResolveAddr(Module::Exe, 0x1400052c0);
 
@@ -117,20 +110,19 @@ bool RemoveNaturalResource_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401c60c0));
 
     bool ok = s_fn_ObjectInternal_Dtor && s_fn_IBP_DeletePtr &&
-              s_fn_IBP_Serialize && s_fn_FindNRComp &&
+              s_fn_FindNRComp &&
               s_fn_NotifyEntityChanged && s_fn_RemoveNatRes &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
               s_typeId_NatResDescription &&
               s_vtable_RemoveNaturalResource && s_vtable_Action &&
               s_typeInfo_RemoveNaturalResource &&
               fn_IsDerivedFrom &&
-              fn_MemFreeStatic && g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_pGameWorldSingleton;
+              fn_MemFreeStatic && g_pGameWorldSingleton;
 
 #ifdef _DEBUG
-    printf("[RemoveNaturalResource] ResolveFuncs: ObjDtor=%p IBPDel=%p IBPSer=%p FindNR=%p\n",
+    printf("[RemoveNaturalResource] ResolveFuncs: ObjDtor=%p IBPDel=%p FindNR=%p\n",
            (void*)s_fn_ObjectInternal_Dtor, (void*)s_fn_IBP_DeletePtr,
-           (void*)s_fn_IBP_Serialize, (void*)s_fn_FindNRComp);
+           (void*)s_fn_FindNRComp);
     printf("[RemoveNaturalResource]   NotifyChanged=%p RemoveNR=%p typeId7158=%p NRDesc=%p\n",
            (void*)s_fn_NotifyEntityChanged, (void*)s_fn_RemoveNatRes,
            (void*)s_typeId_1401c7158, (void*)s_typeId_NatResDescription);

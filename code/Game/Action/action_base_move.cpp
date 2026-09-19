@@ -119,18 +119,11 @@ void* ActMv_FindComponentFamily_12d0(uintptr_t entity, void* retIBP) {
 //   0x140152a58 Serializer::Serialize(bool*) -> local resolve
 //   0x140151238 String::Serialize            -> System::String::Serialize (B.3.1)
 //   0x1401c70b0 type-ID                       -> local resolve (NOT in engine_funcs.h)
-static void (*s_fn_SerUInt_a50)(void* ser, void* field, const char* name) = nullptr;
-static void (*s_fn_SerBool_a58)(void* ser, void* field, const char* name) = nullptr;
 static const uint32_t* s_pTid_1c70b0 = nullptr;
 static bool s_extSerResolved = false;
 
 static void EnsureExtSerFuncs() {
     if (s_extSerResolved) return;
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152a50);
-    if (slot) s_fn_SerUInt_a50 = *reinterpret_cast<void(**)(void*, void*, const char*)>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_SerBool_a58 = *reinterpret_cast<void(**)(void*, void*, const char*)>(slot);
     s_pTid_1c70b0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70b0));
     s_extSerResolved = true;
 }
@@ -142,11 +135,9 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
 
     // GetEncoding -> encoding->vtable[+0x10](encoding) == 3 ?
     int encType = -1;
-    if (fn_Serializer_GetEncoding) {
-        void* enc = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
-        if (enc)
-            encType = (*reinterpret_cast<int(**)(void*)>(*reinterpret_cast<uintptr_t*>(enc) + 0x10))(enc);
-    }
+    void* enc = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
+    if (enc)
+        encType = (*reinterpret_cast<int(**)(void*)>(*reinterpret_cast<uintptr_t*>(enc) + 0x10))(enc);
 
     if (encType == 3) {
         // Read-only text path: drop the External; re-resolve by its current path.
@@ -186,10 +177,10 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         int streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (*pSlot != 0 && streamFlag == 0 && refId == 0xffffffff) {
             // Special case: present but no ref id and writing -> just serialize the (-1) id.
-            if (s_fn_SerUInt_a50) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
             // (no write-back)
         } else {
-            if (s_fn_SerUInt_a50) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
             if ((int)refId != -1) {
                 streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
                 if (streamFlag == 0 && factory) {
@@ -202,7 +193,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     } else {
         // Reference mode off: bool "present" flag then the path String.
         uint8_t present = (*pSlot != 0) ? 1 : 0;
-        if (s_fn_SerBool_a58) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
         if (present != 0) {
             if (*pSlot != 0) {
                 System::Filename pathBuf =

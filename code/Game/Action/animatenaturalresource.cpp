@@ -22,9 +22,6 @@
 // (NOT in engine_funcs.h — AnimateNaturalResource-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::Serialize(this, serializer) — via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
-
 // FUN_1400052c0 — get NaturalResourceComponent from entity
 static void* (*s_fn_GetNRComp)(void* entity, void* outIBP) = nullptr;
 
@@ -49,10 +46,6 @@ static bool s_funcs_resolved = false;
 bool AnimateNaturalResource_ResolveFuncs() {
     if (s_funcs_resolved) return true;
 
-    // IBP::Serialize via IAT
-    uintptr_t iatIBPSer = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iatIBPSer) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatIBPSer);
-
     // Component lookup functions
     s_fn_GetNRComp = reinterpret_cast<void*(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x1400052c0));
@@ -68,16 +61,14 @@ bool AnimateNaturalResource_ResolveFuncs() {
     // TypeInfo
     s_TypeId_ComponentEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
 
-    bool ok = s_fn_IBP_Serialize && s_fn_GetNRComp && s_fn_SetAnimIndex &&
+    bool ok = s_fn_GetNRComp && s_fn_SetAnimIndex &&
               s_fn_GetModelComp && s_fn_IsAnimating && s_TypeId_ComponentEntity &&
               fn_IsDerivedFrom &&
-              fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int;
+              fn_InternalBasePtr_DeletePtr && fn_ObjectInternal_Dtor && fn_MemFreeStatic;
 
 #ifdef _DEBUG
-    printf("[AnimateNaturalResource] ResolveFuncs: IBPSer=%p GetNR=%p SetAnim=%p GetModel=%p IsAnim=%p\n",
-           (void*)s_fn_IBP_Serialize, (void*)s_fn_GetNRComp,
+    printf("[AnimateNaturalResource] ResolveFuncs: GetNR=%p SetAnim=%p GetModel=%p IsAnim=%p\n",
+           (void*)s_fn_GetNRComp,
            (void*)s_fn_SetAnimIndex, (void*)s_fn_GetModelComp,
            (void*)s_fn_IsAnimating);
     if (!ok) printf("[AnimateNaturalResource] ERROR: some function pointers not resolved!\n");

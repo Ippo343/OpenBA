@@ -41,11 +41,6 @@
 
 // Work::Serialize
 typedef void  (*MW_Work_Serialize_t)(void* self, void* stream);
-// IO::Serializer ctor/dtor
-typedef void* (*MW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*MW_Serializer_Dtor_t)(void* self);
-// IO::Serializer::GetVersion
-typedef int   (*MW_Serializer_GetVersion_t)(void* serializer);
 // CitizenAI_impl_96b0 -- simple BST serialization (v0 format)
 typedef void  (*MW_BST_Serialize_Simple_t)(void* bstRoot, void* serializer);
 // MarketWork_helper_b290 -- market BST serialization (v1 format)
@@ -89,9 +84,6 @@ typedef void  (*MW_Internal_Dtor_t)(void* self);
 typedef int   (*MW_Slot4_Original_t)(void* self, void* param2, void* param3);
 
 static MW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
-static MW_Serializer_Ctor_t         s_fn_Serializer_Ctor = nullptr;
-static MW_Serializer_Dtor_t         s_fn_Serializer_Dtor = nullptr;
-static MW_Serializer_GetVersion_t   s_fn_Serializer_GetVersion = nullptr;
 static MW_BST_Serialize_Simple_t    s_fn_BST_Serialize_Simple = nullptr;
 static MW_MarketBST_Serialize_t     s_fn_MarketBST_Serialize = nullptr;
 static MW_MarketBST_InsertData_t    s_fn_MarketBST_InsertData = nullptr;
@@ -167,28 +159,6 @@ bool MarketWork_ResolveFuncs() {
     s_fn_SimpleBSTCleanup = reinterpret_cast<MW_SimpleBSTCleanup_t>(
         ResolveAddr(Module::Exe, 0x140014c30));
 
-    // Dispatch slots (indirect through .rdata)
-    uintptr_t iatSerCtorSlot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtorSlot)
-        s_fn_Serializer_Ctor = *reinterpret_cast<MW_Serializer_Ctor_t*>(iatSerCtorSlot);
-    uintptr_t iatSerDtorSlot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtorSlot)
-        s_fn_Serializer_Dtor = *reinterpret_cast<MW_Serializer_Dtor_t*>(iatSerDtorSlot);
-
-    // IO::Serializer::GetVersion dispatch slot.
-    //
-    // This read 0x140151510 until 2026-09-05. That slot is NOT GetVersion -- it is
-    // "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A", a DATA export, and it is
-    // legitimately registered as such by reg_element_typeids.cpp. So the "function
-    // pointer" was a valid pointer to a BaseTypeInfo object and calling it was an EXEC
-    // of Runtime .data (fault address Runtime+0x1FAE78) the first time a save caught a
-    // MarketWork in the goals tree. Every other GetVersion user in the project already
-    // used 0x140152a48; confirm with tools/dispatch_slot_map.py 0x140152a48.
-    // Same shape as the note in ambientemittercomponent.cpp.
-    uintptr_t iatSerGetVer = ResolveAddr(Module::Exe, 0x140152a48);
-    if (iatSerGetVer)
-        s_fn_Serializer_GetVersion = *reinterpret_cast<MW_Serializer_GetVersion_t*>(iatSerGetVer);
-
     // Static MemAlloc/MemFree. These previously read exe dispatch slots 0x140151460 /
     // 0x140151468; 0x140151460 is NOT MemAlloc, it is Graphics::Geometry::GetTransform
     // (see placementtool.cpp:78). Since that slot is registered, the pointer was
@@ -209,8 +179,6 @@ bool MarketWork_ResolveFuncs() {
 
     // Verify critical pointers
     bool ok = s_fn_Work_Serialize &&
-              s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_Serializer_GetVersion &&
               s_fn_BST_Serialize_Simple &&
               s_fn_MarketBST_Serialize &&
               s_fn_MarketBST_InsertData &&
@@ -229,9 +197,6 @@ bool MarketWork_ResolveFuncs() {
     printf("[MarketWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_Serializer_GetVersion) printf("  MISSING: Serializer_GetVersion\n");
         if (!s_fn_BST_Serialize_Simple) printf("  MISSING: BST_Serialize_Simple\n");
         if (!s_fn_MarketBST_Serialize) printf("  MISSING: MarketBST_Serialize\n");
         if (!s_fn_MarketBST_InsertData) printf("  MISSING: MarketBST_InsertData\n");

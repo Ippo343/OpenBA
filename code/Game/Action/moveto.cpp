@@ -44,30 +44,6 @@
 // (NOT in engine_funcs.h -- MoveTo-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::Serialize -- via IAT at 0x140152aa0
-static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
-
-// IO::Serializer ctor/dtor/getversion -- via IAT
-static void (*s_fn_Serializer_Ctor)(void* self, void* stream, int version) = nullptr;
-static void (*s_fn_Serializer_Dtor)(void* self) = nullptr;
-static int  (*s_fn_Serializer_GetVersion)(void* self) = nullptr;
-
-// IO::Serializer::Serialize(bool*) via IAT at 0x140152a58
-static void (*s_fn_Serialize_Bool)(void* ser, void* field, const char* name) = nullptr;
-
-// IO::Serializer::Serialize(int*) via IAT at 0x140152ac8
-static void (*s_fn_Serialize_Int)(void* ser, void* field, const char* name) = nullptr;
-
-// IO::Serializer::Serialize(uint*) via IAT at 0x140152a50
-static void (*s_fn_Serialize_UInt)(void* ser, void* field, const char* name) = nullptr;
-
-// IO::Serializer::Serialize(float*) via IAT at 0x140152a60
-static void (*s_fn_Serialize_Float)(void* ser, void* field, const char* name) = nullptr;
-
-// IO::Serializer::Serialize(int count, int* array, name) via IAT at 0x140151278
-// Array serialization: serializer, count, array_ptr, name
-static void (*s_fn_Serialize_IntArray)(void* ser, int count, void* array, const char* name) = nullptr;
-
 // ENDGAME B.3.1 step 2: Math::Vector3::Serialize was read from the IAT slot at
 // 0x140152a68; it is now a direct member call on Math::Vector3.
 
@@ -160,32 +136,6 @@ bool MoveTo_ResolveFuncs() {
 
     uintptr_t iat;
 
-    // IBP::Serialize via IAT at 0x140152aa0
-    iat = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (iat) s_fn_IBP_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iat);
-
-    // Serializer ctor/dtor via IAT
-    iat = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iat) s_fn_Serializer_Ctor = *reinterpret_cast<void(**)(void*, void*, int)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iat) s_fn_Serializer_Dtor = *reinterpret_cast<void(**)(void*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152a48);
-    if (iat) s_fn_Serializer_GetVersion = *reinterpret_cast<int(**)(void*)>(iat);
-
-    // Serialize overloads via IAT
-    iat = ResolveAddr(Module::Exe, 0x140152a58);
-    if (iat) s_fn_Serialize_Bool = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iat) s_fn_Serialize_Int = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152a50);
-    if (iat) s_fn_Serialize_UInt = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-    iat = ResolveAddr(Module::Exe, 0x140152a60);
-    if (iat) s_fn_Serialize_Float = *reinterpret_cast<void(**)(void*, void*, const char*)>(iat);
-
-    // Array serialize via IAT at 0x140151278
-    iat = ResolveAddr(Module::Exe, 0x140151278);
-    if (iat) s_fn_Serialize_IntArray = *reinterpret_cast<void(**)(void*, int, void*, const char*)>(iat);
-
     // ExternalPtr serialize (FUN_140022970)
     s_fn_ExternalPtr_Serialize = reinterpret_cast<void(*)(void*, void*)>(
         ResolveAddr(Module::Exe, 0x140022970));
@@ -237,11 +187,7 @@ bool MoveTo_ResolveFuncs() {
     s_fMinDistSq = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401720d4));
     s_fHalfCell = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
-    bool ok = s_fn_IBP_Serialize &&
-              s_fn_Serializer_Ctor && s_fn_Serializer_Dtor && s_fn_Serializer_GetVersion &&
-              s_fn_Serialize_Bool && s_fn_Serialize_Int && s_fn_Serialize_UInt &&
-              s_fn_Serialize_Float && s_fn_Serialize_IntArray &&
-              s_fn_ExternalPtr_Serialize &&
+    bool ok = s_fn_ExternalPtr_Serialize &&
               s_fn_IsDerivedFrom &&
               s_fn_Sqrtf && s_fn_SetAnimation &&
               s_fn_BridgeQuery && s_fn_PathSetup && s_fn_UpdateFacing &&
@@ -251,14 +197,7 @@ bool MoveTo_ResolveFuncs() {
               g_pGameWorldSingleton && g_fUVScale;
 
 #ifdef _DEBUG
-    printf("[MoveTo] ResolveFuncs: IBPSer=%p SerCtor=%p SerDtor=%p\n",
-           (void*)s_fn_IBP_Serialize,
-           (void*)s_fn_Serializer_Ctor, (void*)s_fn_Serializer_Dtor);
-    printf("[MoveTo]   GetVer=%p Bool=%p Int=%p UInt=%p Float=%p IntArr=%p\n",
-           (void*)s_fn_Serializer_GetVersion, (void*)s_fn_Serialize_Bool,
-           (void*)s_fn_Serialize_Int, (void*)s_fn_Serialize_UInt,
-           (void*)s_fn_Serialize_Float, (void*)s_fn_Serialize_IntArray);
-    printf("[MoveTo]   ExtPtrSer=%p IsDerived=%p\n",
+    printf("[MoveTo] ResolveFuncs: ExtPtrSer=%p IsDerived=%p\n",
            (void*)s_fn_ExternalPtr_Serialize, (void*)s_fn_IsDerivedFrom);
     printf("[MoveTo]   Sqrt=%p SetAnim=%p BridgeQ=%p PathSetup=%p UpdFace=%p\n",
            (void*)s_fn_Sqrtf, (void*)s_fn_SetAnimation,

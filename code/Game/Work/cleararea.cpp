@@ -48,19 +48,6 @@ static fn_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
 typedef void (*fn_Work_Serialize_t)(void* self, void* stream);
 static fn_Work_Serialize_t s_fn_Work_Serialize = nullptr;
 
-// IO::Serializer ctor/dtor
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_Serialize_Bool_t)(void* self, void* field, const char* name);
-static fn_Serialize_Bool_t s_fn_Serialize_Bool = nullptr;
-
-typedef int (*fn_Serializer_GetVersion_t)(void* self);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // BST serialization helpers
 // ClearArea_helper_9c10: serializes tree at +0x48 (InternalBasePtr BST)
 typedef void (*fn_BST_Serialize_IBP_t)(void* bst, void* serializer);
@@ -118,16 +105,6 @@ static bool ResolveAll() {
     // Work base serialize
     s_fn_Work_Serialize = reinterpret_cast<fn_Work_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400f7400));
-
-    // IO::Serializer (IAT slots)
-    uintptr_t iatCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatCtor) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(iatCtor);
-    if (iatDtor) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(iatDtor);
-
-    // IO::Serializer::Serialize(bool) and GetVersion from globals
-    s_fn_Serialize_Bool = reinterpret_cast<fn_Serialize_Bool_t>((void*)g_fn_Serialize_Bool);
-    s_fn_Serializer_GetVersion = reinterpret_cast<fn_Serializer_GetVersion_t>((void*)g_fn_Serializer_GetVersion);
 
     // BST serialization
     s_fn_BST_Serialize_IBP = reinterpret_cast<fn_BST_Serialize_IBP_t>(

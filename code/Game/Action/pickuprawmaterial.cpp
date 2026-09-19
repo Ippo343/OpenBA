@@ -88,9 +88,7 @@ bool PickupRawMaterial_ResolveFuncs() {
               s_fn_EntityFlagSet &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
               g_pGameWorldSingleton &&
-              fn_IsDerivedFrom &&
-              fn_InternalBasePtr_Serialize &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor && g_fn_Serialize_Bool;
+              fn_IsDerivedFrom;
 
 #ifdef _DEBUG
     printf("[PickupRawMaterial] ResolveFuncs: FC7c80=%p AddItem=%p FlagSet=%p\n",

@@ -109,20 +109,6 @@ static HA_FindPosComp_t s_fn_FindPosComp = nullptr;
 typedef void (*HA_Work_Serialize_t)(void* self, void* stream);
 static HA_Work_Serialize_t s_fn_Work_Serialize = nullptr;
 
-// Serializer ctor/dtor via IAT
-typedef void (*HA_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void (*HA_Serializer_Dtor_t)(void* self);
-static HA_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-static HA_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// Serializer::Serialize(ser, intBuf, name) for int fields
-typedef void (*HA_Serializer_SerializeInt_t)(void* ser, int* buf, const char* name);
-static HA_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-// Serializer::Serialize(ser, count, boolBuf, name) for bool array
-typedef void (*HA_Serializer_SerializeBoolArray_t)(void* ser, int count, void* buf, const char* name);
-static HA_Serializer_SerializeBoolArray_t s_fn_Serializer_SerializeBoolArray = nullptr;
-
 // Resize byte array (FUN_14000a590)
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
@@ -207,19 +193,6 @@ bool HarvestArea_ResolveFuncs() {
     if (iatInternalDtor)
         s_fn_ObjectInternal_Dtor = *reinterpret_cast<HA_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
-    // Dispatch slot IATs
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<HA_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<HA_Serializer_Dtor_t*>(iatSerDtor);
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerInt)
-        s_fn_Serializer_SerializeInt = *reinterpret_cast<HA_Serializer_SerializeInt_t*>(iatSerInt);
-    s_fn_Serializer_SerializeBoolArray = reinterpret_cast<HA_Serializer_SerializeBoolArray_t>(
-        s_fn_Serializer_SerializeInt); // same fn, different usage (count, buf, name)
-
     // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
     // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
     // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
@@ -252,8 +225,7 @@ bool HarvestArea_ResolveFuncs() {
               s_fn_ShowTool_Action_Ctor4 &&
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_BST_RecursiveFree &&
+              s_fn_Work_Serialize && s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_CropDesc && s_fHalfCellOffset &&
@@ -282,8 +254,6 @@ bool HarvestArea_ResolveFuncs() {
         if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
         if (!s_fn_FindPosComp) printf("  MISSING: FindPosComp\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
         if (!s_fn_BST_RecursiveFree) printf("  MISSING: BST_RecursiveFree\n");
     }
 #endif
@@ -929,10 +899,11 @@ void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
     //     1400ed3ed  CALL qword ptr [0x140151458]
     // 0x140151458 is `?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z`
     // (address_registry.cpp:1163), the four-parameter (int n, bool*, const char*)
-    // array door at rw_vtbl::kArrayBool. It is NOT 0x140152ac8, which is what
-    // `s_fn_Serializer_SerializeBoolArray` is aliased onto above — that is the
-    // THREE-parameter `Serialize(int&)` scalar door, so the old call put the
-    // COUNT in the register the scalar body dereferences as `int*`.
+    // array door at rw_vtbl::kArrayBool. It is NOT 0x140152ac8, which is what the
+    // old `s_fn_Serializer_SerializeBoolArray` alias (removed with its door in the
+    // B.3.4a closing sweep) pointed at — that is the THREE-parameter
+    // `Serialize(int&)` scalar door, so the old call put the COUNT in the register
+    // the scalar body dereferences as `int*`.
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(
         cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
 

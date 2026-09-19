@@ -74,10 +74,6 @@ typedef uint8_t (*HO_ValidateTask_t)(uintptr_t self, uintptr_t param2, void* ibp
 typedef void  (*HO_TaskCancel_t)(void* taskList);
 typedef void* (*HO_FindPosComp_t)(uintptr_t entity, void* outIBP);
 typedef void  (*HO_Work_Serialize_t)(void* self, void* stream);
-typedef void  (*HO_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*HO_Serializer_Dtor_t)(void* self);
-typedef void  (*HO_Serializer_SerializeInt_t)(void* ser, int* buf, const char* name);
-typedef void  (*HO_Serializer_SerializeBoolArray_t)(void* ser, int count, void* buf, const char* name);
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
@@ -105,10 +101,6 @@ static HO_ValidateTask_t s_fn_ValidateTask = nullptr;
 static HO_TaskCancel_t s_fn_TaskCancel = nullptr;
 static HO_FindPosComp_t s_fn_FindPosComp = nullptr;
 static HO_Work_Serialize_t s_fn_Work_Serialize = nullptr;
-static HO_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-static HO_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-static HO_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-static HO_Serializer_SerializeBoolArray_t s_fn_Serializer_SerializeBoolArray = nullptr;
 static HO_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
 static HO_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
 static HO_MemAlloc_t s_fn_MemAlloc = nullptr;
@@ -188,19 +180,6 @@ bool HarvestOrchard_ResolveFuncs() {
     if (iatInternalDtor)
         s_fn_ObjectInternal_Dtor = *reinterpret_cast<HO_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
-    // Dispatch slot IATs
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<HO_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<HO_Serializer_Dtor_t*>(iatSerDtor);
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerInt)
-        s_fn_Serializer_SerializeInt = *reinterpret_cast<HO_Serializer_SerializeInt_t*>(iatSerInt);
-    s_fn_Serializer_SerializeBoolArray = reinterpret_cast<HO_Serializer_SerializeBoolArray_t>(
-        s_fn_Serializer_SerializeInt);
-
     // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
     // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
     // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
@@ -240,8 +219,7 @@ bool HarvestOrchard_ResolveFuncs() {
               s_fn_FindComp_RawMaterial && s_fn_OrchardHarvest_Ctor &&
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_BST_RecursiveFree &&
+              s_fn_Work_Serialize && s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_OrchardDesc && s_typeId_DescComp && s_fHalfCellOffset &&
@@ -276,8 +254,6 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(s_fn_TaskCancel, "TaskCancel");
         HO_MISS(s_fn_FindPosComp, "FindPosComp");
         HO_MISS(s_fn_Work_Serialize, "Work_Serialize");
-        HO_MISS(s_fn_Serializer_Ctor, "Serializer_Ctor (slot 0x140152ad8)");
-        HO_MISS(s_fn_Serializer_Dtor, "Serializer_Dtor (slot 0x140152ad0)");
         HO_MISS(s_fn_BST_RecursiveFree, "BST_RecursiveFree");
         HO_MISS(fn_InternalBasePtr_Ctor, "fn_InternalBasePtr_Ctor");
         HO_MISS(fn_IsDerivedFrom, "fn_IsDerivedFrom");
@@ -845,7 +821,8 @@ void HarvestOrchard_Serialize_Impl(HarvestOrchard* self, void* stream) {
     //     1400edf3d  CALL qword ptr [0x140151458]
     // 0x140151458 is the four-parameter (int n, bool*, const char*) array door,
     // not the three-parameter `Serialize(int&)` scalar door 0x140152ac8 that
-    // `s_fn_Serializer_SerializeBoolArray` is aliased onto above. See
+    // the old `s_fn_Serializer_SerializeBoolArray` alias pointed at (removed with
+    // its door in the B.3.4a closing sweep). See
     // harvestarea.cpp for the full argument.
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(
         cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)

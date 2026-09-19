@@ -91,17 +91,6 @@ static POW_FindSubEntity_t s_fn_FindSubEntity = nullptr;
 typedef void (*POW_Work_Serialize_t)(void* self, void* stream);
 static POW_Work_Serialize_t s_fn_Work_Serialize = nullptr;
 
-typedef void* (*POW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*POW_Serializer_Dtor_t)(void* self);
-static POW_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-static POW_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*POW_Serializer_SerializeInt_t)(void* ser, int* buf, const char* name);
-static POW_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-typedef void (*POW_Serializer_SerializeBoolArray_t)(void* ser, int count, void* buf, const char* name);
-static POW_Serializer_SerializeBoolArray_t s_fn_Serializer_SerializeBoolArray = nullptr;
-
 typedef void (*POW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
 static POW_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;
 
@@ -174,20 +163,6 @@ bool PlantOrchard_ResolveFuncs() {
     s_fn_OrchardRefresh = reinterpret_cast<POW_OrchardRefresh_t>(
         ResolveAddr(Module::Exe, 0x140051830));
 
-    // Dispatch slots
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<POW_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<POW_Serializer_Dtor_t*>(iatSerDtor);
-
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerInt)
-        s_fn_Serializer_SerializeInt = *reinterpret_cast<POW_Serializer_SerializeInt_t*>(iatSerInt);
-    s_fn_Serializer_SerializeBoolArray = reinterpret_cast<POW_Serializer_SerializeBoolArray_t>(
-        s_fn_Serializer_SerializeInt);
-
     // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
     // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
     // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
@@ -210,8 +185,6 @@ bool PlantOrchard_ResolveFuncs() {
               s_fn_BST_Serialize && s_fn_BST_RecursiveFree &&
               s_fn_ValidateTask && s_fn_TaskCancel &&
               s_fn_FindSubEntity && s_fn_Work_Serialize &&
-              s_fn_Serializer_Ctor && s_fn_Serializer_Dtor &&
-              s_fn_Serializer_SerializeInt &&
               s_fn_ExternalRef_Serialize && s_fn_OrchardRefresh &&
               fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
@@ -237,9 +210,6 @@ bool PlantOrchard_ResolveFuncs() {
         if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_Serializer_SerializeInt) printf("  MISSING: Serializer_SerializeInt\n");
         if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
         if (!s_fn_OrchardRefresh) printf("  MISSING: OrchardRefresh\n");
         // The seven conditions below were in the `ok` expression but not in this list, so a

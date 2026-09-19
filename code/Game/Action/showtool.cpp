@@ -26,9 +26,6 @@
 // (NOT in engine_funcs.h -- ShowTool-specific helpers)
 // ============================================================
 
-// Object::InternalBasePtr::Serialize -- via export
-static void (*s_fn_IBP_Serialize)(void* ibp, void* serializer) = nullptr;
-
 // FUN_1401176e0 -- hide tool on entity
 static void (*s_fn_HideTool)(void* entity) = nullptr;
 
@@ -133,9 +130,6 @@ bool ShowTool_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1401176e0));
     s_fn_ShowToolOnEntity = reinterpret_cast<void(*)(void*, int)>(
         ResolveAddr(Module::Exe, 0x1401173b0));
-    s_fn_IBP_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveExport("?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z"));
-
     // Carry-model dispatch slots (values filled by the runtime into exe .rdata slots;
     // resolve the slot address, then deref to the fn ptr). Optional for the core action
     // methods — each is null-guarded at the call site in ShowTool_ShowCarried — so they
@@ -159,16 +153,13 @@ bool ShowTool_ResolveFuncs() {
         s_slot_GeomAttach = reinterpret_cast<fn_GeomAttach_t>(ResolveAddr(Module::Runtime, 0x1800a3fa0));
 
     bool ok = s_TypeInfo_ShowToolEntity &&
-              s_fn_HideTool && s_fn_ShowToolOnEntity && s_fn_IBP_Serialize &&
-              g_fn_Serializer_Ctor && g_fn_Serializer_Dtor &&
-              g_fn_Serialize_Bool && g_fn_Serialize_Int &&
+              s_fn_HideTool && s_fn_ShowToolOnEntity &&
               fn_IsDerivedFrom;
 
 #ifdef _DEBUG
     printf("[ShowTool] ResolveFuncs: HideTool=%p ShowTool=%p TypeInfo=%p\n",
            (void*)s_fn_HideTool,
            (void*)s_fn_ShowToolOnEntity, (void*)s_TypeInfo_ShowToolEntity);
-    printf("[ShowTool]   IBPSer=%p\n", (void*)s_fn_IBP_Serialize);
     if (!ok) printf("[ShowTool] ERROR: some function pointers not resolved!\n");
 #endif
 
