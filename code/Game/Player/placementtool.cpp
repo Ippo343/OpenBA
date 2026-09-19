@@ -1083,7 +1083,7 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     void* rng = *(void**)(gameWorld + 0xd8);
 
     uint32_t variant = 0;
-    if (fn_Random_Rand && rng) {
+    if (rng) {
         variant = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(meshCount));   // B.3.4 bridge
     }
 

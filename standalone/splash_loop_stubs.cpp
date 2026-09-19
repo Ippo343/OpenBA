@@ -70,7 +70,6 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     if (!self->m_dialogInstance) { TipBail("m_dialogInstance==null", self); return; }
     if (!fn_DialogInstance_FindElement)  { TipBail("fn_DialogInstance_FindElement", nullptr); return; }
     if (!fn_StringTable_GetCount)        { TipBail("fn_StringTable_GetCount", nullptr); return; }
-    if (!fn_Random_Rand)                 { TipBail("fn_Random_Rand", nullptr); return; }
     if (!fn_UIString_Ctor_Index)         { TipBail("fn_UIString_Ctor_Index", nullptr); return; }
     if (!fn_TextElement_SetText)         { TipBail("fn_TextElement_SetText", nullptr); return; }
 

@@ -686,7 +686,7 @@ static uint32_t Helper_8c50(uintptr_t self) {
 
     int* clock = *reinterpret_cast<int**>(World() + 0x128);
     int dayOfYear = clock[0];
-    float secs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(clock + 2))->AsSeconds() : 0.0f;   // B.3.4 bridge
+    float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(clock + 2))->AsSeconds();   // B.3.4 bridge
     float div = s_pDAT_14017225c ? *s_pDAT_14017225c : 1.0f;
     float mul = s_pDAT_1401721e4 ? *s_pDAT_1401721e4 : 0.0f;
     int frac = (int)((secs / div) * mul);

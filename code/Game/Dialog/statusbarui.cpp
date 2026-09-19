@@ -699,7 +699,7 @@ bool Ready() {
           fn_Element_Child && fn_Element_ChildCount && fn_Element_SetElementId &&
           fn_Element_SetFlagsOnOff && fn_TextElement_SetParameter &&
           fn_TextElement_SetText && fn_NumberElement_SetValueInt &&
-          fn_UIString_Ctor && fn_Time_AsSeconds && fn_IsDerivedFrom &&
+          fn_UIString_Ctor && fn_IsDerivedFrom &&
           fn_InternalBasePtr_Ctor &&
           fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
         return false;

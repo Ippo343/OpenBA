@@ -101,7 +101,6 @@ static void* Lane4_KeyMap_BuildKeyName(void* /*keyMapContainer*/, void* retval,
 // them for the same reason).
 // ------------------------------------------------------------------
 static int Lane4_Game_GetMonthFromTime(void* weatherMgr) {
-    if (!fn_Time_AsSeconds) return 0;
     float seconds = reinterpret_cast<const System::Time*>(
         reinterpret_cast<uintptr_t>(weatherMgr) + 8)->AsSeconds();   // B.3.4b bridge
     int month = static_cast<int>((seconds / 3600.0f) * 12.0f);

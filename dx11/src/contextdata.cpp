@@ -200,9 +200,6 @@ struct Imports {
     void* (*IndexBufferLock)(void*, int, int*);       // ?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z    0x180013420
     void  (*IndexBufferUnlock)(void*);                // ?Unlock@IndexBuffer@Video@@QEAAXXZ          0x180013418
 
-    void  (*ErrorSetText)(const char*, bool);         // ?SetText@Error@System@@SAXPEBD_N@Z      0x180013460
-    void  (*ErrorDisplay)();                          // ?Display@Error@System@@SAXXZ            0x180013458
-
     void** configSingleton;                           // ?_singleton@Configuration@Video@@0PEAV12@EA 0x180013480
 
     // NOT a Runtime import: VideoDX11's own DeviceData swap-chain resize helper
@@ -243,8 +240,6 @@ const Imports* GetImports() {
             { (void**)&g_im.VertexBufferUnlock,    "?Unlock@VertexBuffer@Video@@QEAAXXZ",                           0x180013428 },
             { (void**)&g_im.IndexBufferLock,       "?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z",                      0x180013420 },
             { (void**)&g_im.IndexBufferUnlock,     "?Unlock@IndexBuffer@Video@@QEAAXXZ",                            0x180013418 },
-            { (void**)&g_im.ErrorSetText,          "?SetText@Error@System@@SAXPEBD_N@Z",                            0x180013460 },
-            { (void**)&g_im.ErrorDisplay,          "?Display@Error@System@@SAXXZ",                                  0x180013458 },
             { (void**)&g_im.configSingleton,       "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
         };
         for (const Entry& e : table)

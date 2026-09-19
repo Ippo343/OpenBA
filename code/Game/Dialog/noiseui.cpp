@@ -191,7 +191,7 @@ static float NoiseUI_ReadSliderFloat(uintptr_t sliderPtr) {
 
 void NoiseUI_GenerateNoise(void* self) {
     if (!fn_PerlinNoise_Ctor || !fn_PerlinNoise_Generate ||
-        !fn_Random_Default_Ctor || !fn_Random_RandTol)
+        !fn_Random_Default_Ctor)
         return;
 
     uintptr_t s = (uintptr_t)self;

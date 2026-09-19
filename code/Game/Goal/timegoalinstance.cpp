@@ -28,10 +28,6 @@
 typedef void (*fn_GoalInstancePersist_t)(void* self, void* stream);
 static fn_GoalInstancePersist_t s_fn_GoalInstancePersist = nullptr;
 
-// System::Time::Serialize — dispatch slot at 0x140152aa8
-typedef void (*fn_TimeSerialize_t)(void* time, void* serializer);
-static fn_TimeSerialize_t s_fn_TimeSerialize = nullptr;
-
 // fn_InternalBasePtr_Ctor — dispatch slot at 0x140152a90
 typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
 static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
@@ -48,10 +44,6 @@ static fn_GoalInstanceUpdate_t s_fn_GoalInstanceUpdate = nullptr;
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// System::Time::AsSeconds — dispatch slot at 0x140151318
-typedef float (*fn_TimeAsSeconds_t)(void* time);
-static fn_TimeAsSeconds_t s_fn_TimeAsSeconds = nullptr;
-
 // TypeInfo_TimeGoal — type ID at 0x1401c62e8
 static uint32_t* s_TypeInfo_TimeGoal = nullptr;
 
@@ -66,9 +58,6 @@ static void EnsureHelpers() {
     slot = ResolveAddr(Module::Exe, 0x140152868);
     if (slot) s_fn_GoalInstancePersist = *reinterpret_cast<fn_GoalInstancePersist_t*>(slot);
 
-    slot = ResolveAddr(Module::Exe, 0x140152aa8);
-    if (slot) s_fn_TimeSerialize = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152a90);
     if (slot) s_fn_IBPCtor = *reinterpret_cast<fn_IBPCtor_t*>(slot);
 
@@ -80,9 +69,6 @@ static void EnsureHelpers() {
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151318);
-    if (slot) s_fn_TimeAsSeconds = *reinterpret_cast<fn_TimeAsSeconds_t*>(slot);
 
     s_TypeInfo_TimeGoal = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c62e8);
 
@@ -129,9 +115,7 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize elapsed time (+0x20) via System::Time::Serialize
-    if (s_fn_TimeSerialize) {
-        reinterpret_cast<System::Time*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
-    }
+    reinterpret_cast<System::Time*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
@@ -208,10 +192,7 @@ int TimeGoalInstance_Slot6(TimeGoalInstance* self) {
     }
 
     // Convert elapsed time to seconds
-    float elapsedSeconds = 0.0f;
-    if (s_fn_TimeAsSeconds) {
-        elapsedSeconds = reinterpret_cast<const System::Time*>((void*)(s + 0x20))->AsSeconds();   // B.3.4 bridge
-    }
+    float elapsedSeconds = reinterpret_cast<const System::Time*>((void*)(s + 0x20))->AsSeconds();   // B.3.4 bridge
 
     // Compare against required time
     if (timeGoal) {
