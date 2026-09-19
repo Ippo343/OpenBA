@@ -204,8 +204,11 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     for (int i = 0; i < conflictCount; i++) {
         void** conflictArray = *(void***)(m + 0x70);
+        // Find(const Filename&) takes the ADDRESS of the array element (retail
+        // 0x14006ddee: `LEA RDX,[RAX + RCX*8]` on the array base, not a MOV of
+        // the slot's value) — &conflictArray[i], not conflictArray[i].
         int cIdx = reinterpret_cast<const IO::Modification*>(modification)
-                       ->Find(*reinterpret_cast<const RtSystem::Filename*>(conflictArray[i]));   // B.3.4 bridge
+                       ->Find(*reinterpret_cast<const RtSystem::Filename*>(&conflictArray[i]));   // B.3.4 bridge
         void* cMod = const_cast<RtIO::Mod*>(
             &reinterpret_cast<const IO::Modification*>(modification)->GetModification(cIdx));   // B.3.4 bridge
         uintptr_t cm = (uintptr_t)cMod;
@@ -262,8 +265,10 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
             for (int i = 0; i < conflictCount; i++) {
                 void** cArray = *(void***)(m + 0x70);
+                // Same address-vs-value fix as above (retail 0x14006dfd7:
+                // `LEA RDX,[RAX + RCX*8]`) — &cArray[i], not cArray[i].
                 int cIdx = reinterpret_cast<const IO::Modification*>(modification)
-                               ->Find(*reinterpret_cast<const RtSystem::Filename*>(cArray[i]));   // B.3.4 bridge
+                               ->Find(*reinterpret_cast<const RtSystem::Filename*>(&cArray[i]));   // B.3.4 bridge
                 void* cMod = const_cast<RtIO::Mod*>(
                     &reinterpret_cast<const IO::Modification*>(modification)->GetModification(cIdx));   // B.3.4 bridge
 
