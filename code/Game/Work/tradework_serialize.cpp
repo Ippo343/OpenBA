@@ -183,7 +183,7 @@ extern "C" void* TradeWork_Insert_c710(int64_t* param_1, void** param_2, int64_t
 extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
     // Serialize the node count (read or write).
     int32_t count = *reinterpret_cast<int32_t*>(reinterpret_cast<int64_t>(param_1) + 0x08);
-    if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(param_2, &count, nullptr);
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(param_2, &count, nullptr);
 
     bool readMode = (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(param_2) + 8) == 0);
 
@@ -204,8 +204,8 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
                 rec[0] = 0;
             }
             // int payload at record +0x10.
-            if (fn_Ser_Slot_SerInt_AC8)
-                fn_Ser_Slot_SerInt_AC8(param_2, reinterpret_cast<int32_t*>(&rec[2]), nullptr);
+            if (g_fn_Serialize_Int)
+                g_fn_Serialize_Int(param_2, reinterpret_cast<int32_t*>(&rec[2]), nullptr);
             // ExternalPtr at record +0x08 (0x140002340 = fn_ExternalPtr_BuildSerialize).
             if (fn_ExternalPtr_BuildSerialize)
                 fn_ExternalPtr_BuildSerialize(&rec[1], param_2);
@@ -235,8 +235,8 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
                                   g_tid_TradeWork_CitizenComponent)) {
                 *reinterpret_cast<int64_t*>(node) = 0;
             }
-            if (fn_Ser_Slot_SerInt_AC8)
-                fn_Ser_Slot_SerInt_AC8(param_2,
+            if (g_fn_Serialize_Int)
+                g_fn_Serialize_Int(param_2,
                                        reinterpret_cast<int32_t*>(node + 0x10), nullptr);
             if (fn_ExternalPtr_BuildSerialize)
                 fn_ExternalPtr_BuildSerialize(reinterpret_cast<void*>(node + 0x08), param_2);

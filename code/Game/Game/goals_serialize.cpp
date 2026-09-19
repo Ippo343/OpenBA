@@ -391,7 +391,7 @@ extern "C" void Goals_SavePrepass_8270(void* selfV) {
 extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serializer) {
     EnsureDeps();
     int32_t count = static_cast<int32_t>(treeField[1]);
-    if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &count, nullptr);
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &count, nullptr);
 
     bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
     if (loading) {
@@ -403,7 +403,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
             // overwrites the single root node instead of building the tree.
             int32_t* root = reinterpret_cast<int32_t*>(treeField[0]);
             int32_t key = 0;
-            if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &key, nullptr);
+            if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &key, nullptr);
             void* payload = nullptr;
             if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&payload, serializer);
             if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
@@ -463,7 +463,7 @@ extern "C" void Goals_SingleTree_Serialize_d340(int64_t* treeField, void* serial
     } else {
         uint8_t* root = *reinterpret_cast<uint8_t**>(treeField);
         for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
-            if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, reinterpret_cast<int32_t*>(node), nullptr);
+            if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, reinterpret_cast<int32_t*>(node), nullptr);
             if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(node + 0x08, serializer);
             void* payload = *reinterpret_cast<void**>(node + 0x08);
             if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
@@ -487,12 +487,12 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
     int64_t* slot = arrayBase;
     for (int32_t s = 0; s < count; ++s, slot += 2) {
         int32_t slotCount = static_cast<int32_t>(slot[1]);
-        if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &slotCount, nullptr);
+        if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &slotCount, nullptr);
 
         if (loading) {
             for (int32_t i = 0; i < slotCount; ++i) {
                 int32_t key = 0;
-                if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &key, nullptr);
+                if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &key, nullptr);
                 void* payload = nullptr;
                 if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&payload, serializer);
                 if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
@@ -552,7 +552,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
         } else {
             uint8_t* root = reinterpret_cast<uint8_t*>(slot[0]);
             for (uint8_t* node = BstLeftmostB(root); node; node = BstNextB(node)) {
-                if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, reinterpret_cast<int32_t*>(node), nullptr);
+                if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, reinterpret_cast<int32_t*>(node), nullptr);
                 if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(node + 0x08, serializer);
                 void* payload = *reinterpret_cast<void**>(node + 0x08);
                 if (payload != nullptr && fn_IsDerivedFrom && !fn_IsDerivedFrom(payload, g_tid_Work)) {
@@ -569,7 +569,7 @@ extern "C" void Goals_TreeArray_Serialize_d060(void* serializer, int32_t count, 
 extern "C" void Goals_WorkTree_Serialize_d5f0(int64_t* treeField, void* serializer) {
     EnsureDeps();
     int32_t count = static_cast<int32_t>(treeField[1]);
-    if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(serializer, &count, nullptr);
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &count, nullptr);
 
     bool loading = (*reinterpret_cast<int32_t*>(*reinterpret_cast<uint8_t**>(serializer) + 8) == 0);
     if (loading) {
@@ -652,9 +652,9 @@ extern "C" void Goals_Serialize_f9240(void* selfV, void* stream, void* /*p3*/, i
     Goals_TreeArray_Serialize_d060(serializerBuf, slotCount, reinterpret_cast<int64_t*>(self + 0x30), outParam);
     Goals_WorkTree_Serialize_d5f0(reinterpret_cast<int64_t*>(self + 0x120), serializerBuf);
 
-    if (fn_Ser_Slot_SerInt_AC8) {
-        fn_Ser_Slot_SerInt_AC8(serializerBuf, reinterpret_cast<int32_t*>(self + 0x00), nullptr);
-        fn_Ser_Slot_SerInt_AC8(serializerBuf, reinterpret_cast<int32_t*>(self + 0x04), nullptr);
+    if (g_fn_Serialize_Int) {
+        g_fn_Serialize_Int(serializerBuf, reinterpret_cast<int32_t*>(self + 0x00), nullptr);
+        g_fn_Serialize_Int(serializerBuf, reinterpret_cast<int32_t*>(self + 0x04), nullptr);
     }
     if (fn_Serializer_Serialize_Uint) {
         fn_Serializer_Serialize_Uint(serializerBuf, reinterpret_cast<uint32_t*>(self + 0x08), nullptr);
