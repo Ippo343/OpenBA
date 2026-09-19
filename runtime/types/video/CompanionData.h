@@ -25,6 +25,11 @@
 #include <cstdint>
 #include <cstddef>
 
+// ENDGAME B.3.5 block D1: the real `Video::ConstantBuffer`. The partial view
+// that used to sit in this file (head[0x38] + device + platformData) is gone —
+// see the alias below.
+#include "ConstantBuffer.h"
+
 namespace RtVideo {
 
 // ----------------------------------------------------------------------------
@@ -47,33 +52,34 @@ static_assert(offsetof(CompanionData, vtable) == 0x00, "CompanionData::vtable at
 static_assert(offsetof(CompanionData, owner) == 0x08, "CompanionData::owner at +0x08");
 
 // ----------------------------------------------------------------------------
-// Video::ConstantBuffer — the fields ??0ConstantBuffer@Video@@QEAA@PEAVDevice@1@@Z
-// (0x1800eedf0) writes. Only two of them are read by this lane's one ported
-// member (`Bind`), but the whole ctor is transcribed so the two offsets are
-// anchored in something checkable rather than asserted in isolation:
+// Video::ConstantBuffer — MOVED, ENDGAME B.3.5 block D1 (B4b-1 / RULE B5-2).
 //
-//   1800eee08  MOV [RCX],RAX        \  RAX = 0
-//   1800eee0b  MOV [RCX+0x08],RAX    |
-//   1800eee0f  MOV [RCX+0x10],-1     |  ctor constants
-//   1800eee17  MOV [RCX+0x18],AL     |
-//   1800eee1a  MOV [RCX+0x1c],RAX    |  (deliberately unaligned in retail)
-//   1800eee1e  MOV [RCX+0x28],RAX    |
-//   1800eee22  MOV [RCX+0x30],RAX   /
+// This file used to carry a partial view of the class: `head[0x38]` plus
+// `device` @+0x38 and `platformData` @+0x40, the two fields `Bind` reads, with
+// no `sizeof` assert because the ctor's last write is at +0x40. It was one of
+// FOUR views of the same 0x48 bytes (the others: `ConstantBufferOpaque` in
+// Context.h, ten `constexpr` offsets in constant_buffer.cpp, and dx11's
+// `ConstantBufferOwner`). The real class now lives in
+// `runtime/types/video/ConstantBuffer.h`, with its interior read out of retail's
+// one-line accessors — which closes B35_RULES section 13 item 4 — and this is an
+// ALIAS so that `runtime/src/video/companion_data.cpp` (block A's file) keeps
+// compiling unchanged. There is now ONE definition instead of two.
+//
+// The ctor transcription that used to be here is in ConstantBuffer.h's banner,
+// alongside the accessor that names each field:
+//
+//   1800eee08  MOV [RCX],RAX        \  RAX = 0   -> _prefix
+//   1800eee0b  MOV [RCX+0x08],RAX    |           -> _typeName
+//   1800eee0f  MOV [RCX+0x10],-1     |  a QWORD: _ordinalIndex AND _uploadIndex
+//   1800eee17  MOV [RCX+0x18],AL     |           -> _bindToVertex (a BYTE)
+//   1800eee1a  MOV [RCX+0x1c],RAX    |  unaligned: _registerCount + _bankStride
+//   1800eee1e  MOV [RCX+0x28],RAX    |           -> _constantData
+//   1800eee22  MOV [RCX+0x30],RAX   /            -> _constantCount/_capacity
 //   1800eee26  MOV [RCX+0x38],RDX      device
 //   1800eee3c  CALL [RAX+0x58]         Device::CreateConstantBufferData(this)
 //   1800eee3f  MOV [RBX+0x40],RAX      platformData
-//
-// No `sizeof` assertion: the ctor's last write is at +0x40, so 0x48 is a lower
-// bound and nothing in the shipped binary pins the total. Asserting a guessed
-// size would be a static_assert that cannot fail for the right reason.
 // ----------------------------------------------------------------------------
-struct ConstantBuffer {
-    uint8_t  head[0x38];    // +0x00..+0x37  name/prefix Strings, indices, flags — not read here
-    void*    device;        // +0x38  Video::Device* (ctor's second parameter)
-    void*    platformData;  // +0x40  dx11::ConstantBufferData*, from Device vtable +0x58
-};
-static_assert(offsetof(ConstantBuffer, device) == 0x38, "ConstantBuffer::device at +0x38");
-static_assert(offsetof(ConstantBuffer, platformData) == 0x40, "ConstantBuffer::platformData at +0x40");
+using ConstantBuffer = ::Video::ConstantBuffer;
 
 // ----------------------------------------------------------------------------
 // `Video::ImageBufferData`'s POD view, MOVED HERE from
