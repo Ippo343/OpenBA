@@ -997,25 +997,40 @@ static void* RtGraphics_EdgeMesh_EdgeVertex_Ctor(void* self, const void* a, cons
 //    Graphics@@@Object@@000@Z
 //   retail 0x1800a2760, ordinal 3910
 //
-// Four stores — and THE MIDDLE TWO ARE CROSSED. Retail writes arg1 to +0x28,
+// Four stores — and THE MIDDLE TWO LOOK CROSSED. Retail writes arg1 to +0x28,
 // arg2 to +0x38, arg3 to +0x30 and arg4 to +0x40. That is not a decompiler
-// artefact (the four MOVs name their source registers explicitly) and it is not
-// something to tidy up: EdgeMeshInstance::SetMesh reads the same four slots and
-// would see a different assignment if this were "corrected". Reproduced as
-// shipped; the note is repeated in runtime/types/graphics/Mesh.h so a reader of
-// either file meets it.
+// artefact (the four MOVs name their source registers explicitly).
+//
+// *** ENDGAME B.3.5 BLOCK G: NOTHING IS CROSSED, AND THE FOUR GETTERS SAY SO. ***
+//     ?GetMaskMaterial@     0x180012ef0  MOV RAX,[RCX+0x28]
+//     ?GetSkinMaskMaterial@ 0x180012f10  MOV RAX,[RCX+0x30]
+//     ?GetEdgeMaterial@     0x180012f00  MOV RAX,[RCX+0x38]
+//     ?GetSkinEdgeMaterial@ 0x180012f20  MOV RAX,[RCX+0x40]
+// The FIELDS are laid out (mask, skinMask, edge, skinEdge) — each skin variant
+// next to its base — and the ARGUMENTS come in as (mask, edge, skinMask,
+// skinEdge). Two groupings of the same four things; no crossing to reproduce and
+// nothing to warn a future reader about. The member below names all four
+// parameters, so the pairing is visible at the call site instead of being a note.
 //
 // ORACLE: FULL by replay — four idempotent stores.
+//
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::EdgeMesh::SetMaterials`.
 // ============================================================================
 static void RtGraphics_EdgeMesh_SetMaterials(void* self, ExternalPtr m0, ExternalPtr m1,
                                              ExternalPtr m2, ExternalPtr m3) {
-
-    EdgeMesh* em = reinterpret_cast<EdgeMesh*>(self);
-    em->_material0 = m0;    // +0x28  <- arg 1
-    em->_material2 = m1;    // +0x38  <- arg 2
-    em->_material1 = m2;    // +0x30  <- arg 3   (crossed, see above)
-    em->_material3 = m3;    // +0x40  <- arg 4
-
+    // The four `RtGraphics::ExternalPtr` handles and the four
+    // `Object::ExternalPtr<MaterialInstance>`s are the same eight bytes; the door
+    // keeps the POD spelling its registration was written with.
+    reinterpret_cast<Graphics::EdgeMesh*>(self)                     // B.3.5 bridge
+        ->Graphics::EdgeMesh::SetMaterials(
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m0.p)),
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m1.p)),
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m2.p)),
+            Object::ExternalPtr<Graphics::MaterialInstance>(
+                static_cast<Graphics::MaterialInstance*>(m3.p)));
 }
 
 // ============================================================================
@@ -2979,6 +2994,30 @@ int32_t GraphicsMesh::GetNodeIndexFromName(const char* name) const {
     }
 
     return ours;
+}
+
+// ---------------------------------------------------------------------------
+// ?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@
+//  Graphics@@@Object@@000@Z                              retail 0x1800a2760
+//
+// Retail's four stores are arg1 -> +0x28, arg2 -> +0x38, arg3 -> +0x30,
+// arg4 -> +0x40, and the four exported getters name those four offsets
+// mask / edge / skinMask / skinEdge — see the door's banner above. Written out
+// with the parameters named, which is the same four stores and no longer needs a
+// warning attached.
+//
+// `EdgeMeshInstance::SetMesh` reads the four back in the order +0x38, +0x28,
+// +0x40, +0x30 when it ORs their material type flags; that is edge, mask,
+// skinEdge, skinMask, and it is unaffected by this spelling.
+// ---------------------------------------------------------------------------
+void EdgeMesh::SetMaterials(Object::ExternalPtr<MaterialInstance> mask,
+                            Object::ExternalPtr<MaterialInstance> edge,
+                            Object::ExternalPtr<MaterialInstance> skinMask,
+                            Object::ExternalPtr<MaterialInstance> skinEdge) {
+    _maskMaterial     = mask;       // +0x28  <- arg 1
+    _edgeMaterial     = edge;       // +0x38  <- arg 2
+    _skinMaskMaterial = skinMask;   // +0x30  <- arg 3
+    _skinEdgeMaterial = skinEdge;   // +0x40  <- arg 4
 }
 
 }  // namespace Graphics

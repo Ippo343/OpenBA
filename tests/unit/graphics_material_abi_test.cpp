@@ -151,6 +151,12 @@ struct GraphicsMeshProbe final : Graphics::GraphicsMesh {
     }
 };
 
+struct EdgeMeshProbe final : Graphics::EdgeMesh {
+    Object::Base* DeletingDtor(unsigned) override {
+        Note(this, kDeletingDtor / 8); return this;
+    }
+};
+
 // The eight slots whose signature is plain machine words. `Compile` takes a
 // `const System::Filename&` (one pointer) and returns a four-byte `?AW4` enum in
 // EAX with NO hidden return slot (B35_RULES section 2.5 excludes `?AW4`), so it
@@ -525,6 +531,143 @@ UNIT_TEST(graphics_graphicsmesh_aliases_lane_es_mesh_h_overlays) {
              (int)offsetof(RtGraphics::VideoBufferHeader, _deviceData));
 }
 
+// ---------------------------------------------------------------------------
+// Graphics::EdgeMesh — the ONE class of block G's four with its OWN slot 4.
+// ---------------------------------------------------------------------------
+UNIT_TEST(graphics_edgemesh_slot_order_is_retails) {
+    EdgeMeshProbe probe;
+    void* raw = static_cast<void*>(&probe);
+
+    CheckExternalFamilySlots(raw);
+    CheckNineDistinctSlots(raw);
+
+    // *** SLOT 4 IS ITS OWN, AND THAT IS THE ASYMMETRY THIS TEST EXISTS FOR. ***
+    // `?Compile@EdgeMesh@Graphics@@` (0x1800a21c0) is `MOV EAX,1 ; RET` and
+    // `?Compile@External@Object@@` (0x1800066e0) also answers 1, so a table that
+    // wrongly INHERITED slot 4 would behave identically and the mistake would
+    // never surface. The only thing that can see it is the pointer.
+    BareExternalProbe bare;
+    CHECK(VTableOf(raw)[kCompile / 8] !=
+          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+
+    // And the marker proves the override is EdgeMesh's body, not something that
+    // merely differs.
+    Reset();
+    using CompFn = uint32_t (*)(void*, const void*);
+    const uint32_t r = SlotAt<CompFn>(raw, kCompile)(raw, nullptr);
+    CHECK_EQ(g_lastMark, kCompile / 8);
+    CHECK_EQ((int)r, 1);
+
+    // …while the other three DO inherit it.
+    MaterialProbe mat;
+    GraphicsMeshProbe gm;
+    MaterialInstanceProbe mi;
+    CHECK(VTableOf(static_cast<void*>(&mat))[kCompile / 8] ==
+          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(VTableOf(static_cast<void*>(&gm))[kCompile / 8] ==
+          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    CHECK(VTableOf(static_cast<void*>(&mi))[kCompile / 8] ==
+          VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+
+    CHECK(static_cast<void*>(static_cast<Object::External*>(&probe)) == raw);
+    CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::EdgeMesh>::value));
+}
+
+UNIT_TEST(graphics_edgemesh_layout) {
+    CHECK_EQ((int)sizeof(Graphics::EdgeMesh), 0x180);
+    CHECK_EQ((int)alignof(Graphics::EdgeMesh), 8);
+    CHECK_EQ((int)sizeof(Graphics::EdgeMesh), (int)sizeof(RtGraphics::EdgeMesh));
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _reserved20), (int)sizeof(Object::External));
+    CHECK(std::is_abstract<Graphics::EdgeMesh>::value);
+
+    // The four material slots, as retail's four getters name them.
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _maskMaterial),     0x28);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinMaskMaterial), 0x30);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeMaterial),     0x38);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinEdgeMaterial), 0x40);
+
+    // The four buffer pairs, as retail's eight `LEA RAX,[RCX+off]` getters name
+    // them. THREE OF THE FOUR WERE NAMED BY GUESS in `RtGraphics::EdgeMesh`
+    // (`_edgeVerts` is the SKIN pair, `_capVerts` is the EDGE pair,
+    // `_extraVerts` is the EDGE-SKIN pair), so the cross-asserts are the point.
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _vertexBuffer),         0x48);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _indexBuffer),          0x68);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinVertexBuffer),     0x88);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinIndexBuffer),      0xa8);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeVertexBuffer),     0xc8);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeIndexBuffer),      0xe8);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinVertexBuffer), 0x108);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinIndexBuffer),  0x128);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _triangleLists),        0x148);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeLists),            0x158);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _aabb),                 0x168);
+
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinVertexBuffer),
+             (int)offsetof(RtGraphics::EdgeMesh, _edgeVerts));
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeVertexBuffer),
+             (int)offsetof(RtGraphics::EdgeMesh, _capVerts));
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinVertexBuffer),
+             (int)offsetof(RtGraphics::EdgeMesh, _extraVerts));
+
+    // The eight offsets `EdgeMesh::Serialize` dispatches through are each
+    // header+0x08 — the `_deviceData` qword. Retail's step 7 order is
+    // 0x70, 0x50, 0xb0, 0x90, 0xf0, 0xd0, 0x130, 0x110, i.e. INDEX before VERTEX
+    // in each pair; the member now spells that with named fields, so the
+    // arithmetic is asserted here.
+    const int dd = (int)offsetof(RtGraphics::VideoBufferHeader, _deviceData);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _indexBuffer) + dd,          0x70);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _vertexBuffer) + dd,         0x50);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinIndexBuffer) + dd,      0xb0);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _skinVertexBuffer) + dd,     0x90);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeIndexBuffer) + dd,      0xf0);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeVertexBuffer) + dd,     0xd0);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinIndexBuffer) + dd,  0x130);
+    CHECK_EQ((int)offsetof(Graphics::EdgeMesh, _edgeSkinVertexBuffer) + dd, 0x110);
+
+    // The two nested vertex records are ALIASES of the PODs, not copies.
+    CHECK_EQ((int)sizeof(Graphics::EdgeMesh::TriangleVertex), 8);
+    CHECK_EQ((int)sizeof(Graphics::EdgeMesh::EdgeVertex),     16);
+    CHECK((std::is_same<Graphics::EdgeMesh::TriangleVertex,
+                        RtGraphics::TriangleVertex>::value));
+    CHECK((std::is_same<Graphics::EdgeMesh::EdgeVertex,
+                        RtGraphics::EdgeVertex>::value));
+    // They stay TRIVIALLY COPYABLE on purpose: they are vertex data that retail
+    // bulk-copies, and giving either a real constructor would change that.
+    CHECK(std::is_trivially_copyable<Graphics::EdgeMesh::TriangleVertex>::value);
+    CHECK(std::is_trivially_copyable<Graphics::EdgeMesh::EdgeVertex>::value);
+
+    // A write through the CLASS is visible at the bytes every
+    // `reinterpret_cast` in mesh.cpp and edgemesh_vtable.cpp reads.
+    EdgeMeshProbe probe;
+    probe._triangleLists._size = 9;
+    probe._edgeLists._size     = 4;
+    const uint8_t* bytes =
+        reinterpret_cast<const uint8_t*>(static_cast<Graphics::EdgeMesh*>(&probe));
+    CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x150), 9);
+    CHECK_EQ(*reinterpret_cast<const int32_t*>(bytes + 0x160), 4);
+}
+
+// RULE B5-16 across all four classes at once: nine slots each, `Construct` at
+// +0x40, and `Object::External`'s own table stops at eight.
+UNIT_TEST(graphics_block_g_all_four_introduce_construct_at_slot8) {
+    MaterialProbe mat;
+    MaterialInstanceProbe mi;
+    GraphicsMeshProbe gm;
+    EdgeMeshProbe em;
+    void* all[4] = { &mat, &mi, &gm, &em };
+
+    for (int c = 0; c < 4; ++c) {
+        Reset();
+        using PtrFn = void* (*)(void*);
+        SlotAt<PtrFn>(all[c], kConstruct)(all[c]);
+        CHECK_EQ(g_lastMark, kConstruct / 8);
+        CHECK(g_lastSelf == all[c]);
+        // And slot 8 is distinct from all of slots 0..7 in that same table.
+        for (int i = 0; i < 8; ++i)
+            CHECK(VTableOf(all[c])[i] != VTableOf(all[c])[kConstruct / 8]);
+    }
+}
+
 }  // namespace
 
 // ############################################################################
@@ -565,5 +708,19 @@ Object::External* GraphicsMesh::Reconstruct() { Note(this, kReconstruct / 8); re
 void        GraphicsMesh::Destruct() { Note(this, kDestruct / 8); }
 Object::External* GraphicsMesh::Construct() { Note(this, kConstruct / 8); return this; }
 GraphicsMesh::~GraphicsMesh() {}
+
+const char* EdgeMesh::TypeName() const { Note(this, kTypeName / 8); return "EdgeMesh"; }
+uint32_t    EdgeMesh::Type() const { Note(this, kType / 8); return 0u; }
+int32_t     EdgeMesh::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 2; }
+// The ONE marker in this file that stands for an OVERRIDE of slot 4 rather than
+// an inherited body. It answers retail's 1, which the slot-order test reads back.
+Object::External::CompileResult EdgeMesh::Compile(const System::Filename&) {
+    Note(this, kCompile / 8); return 1u;
+}
+bool        EdgeMesh::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+Object::External* EdgeMesh::Reconstruct() { Note(this, kReconstruct / 8); return this; }
+void        EdgeMesh::Destruct() { Note(this, kDestruct / 8); }
+Object::External* EdgeMesh::Construct() { Note(this, kConstruct / 8); return this; }
+EdgeMesh::~EdgeMesh() {}
 
 }  // namespace Graphics
