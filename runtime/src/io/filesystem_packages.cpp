@@ -301,6 +301,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileSystem.h"
+#include "../../types/io/PackageFile.h"   // ENDGAME B.3.4a closing: the two members
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"
@@ -533,13 +534,19 @@ extern "C" Filename* RtIo_FileSystem_GetPackDirectory(const FileSystem* self, Fi
 //
 // ORACLE: full replay onto a scratch Filename, same reasoning as
 // GetPackDirectory. Pure; reads `this` and writes only the return slot.
+// ENDGAME B.3.4a closing: the body is now `IO::PackageFile::GetFileName(int)`,
+// defined in this file's `namespace IO` block below. The door keeps its name,
+// its `extern "C"` linkage, its signature and its registration, and delegates.
+// The qualified `IO::PackageFile::` is written for the reason the eight virtual
+// doors in package_file.cpp spell it: PackageFile IS polymorphic.
+//
+// Section D applies: nothing added, removed or reordered, and in particular no
+// bounds check -- retail has none and the caller (LOOP 3 below) bounds the index
+// with entryCount itself, so the unguarded read is load-bearing and stays.
 extern "C" Filename* RtIo_PackageFile_GetFileName(const PackageFileView* self,
                                                   Filename* ret, int index) {
-
-    const System::Filename* entry = reinterpret_cast<const System::Filename*>(
-        static_cast<const uint8_t*>(self->entries) + static_cast<int64_t>(index) * 16);
-    new (ret) System::Filename(*entry);   // the copy ctor, 0x1800067d0
-
+    new (ret) System::Filename(
+        reinterpret_cast<const IO::PackageFile*>(self)->IO::PackageFile::GetFileName(index));
     return ret;
 }
 
@@ -943,6 +950,36 @@ void FileSystem::LoadPackages() {
     found.count = 0;
 
 
+}
+
+// ============================================================================
+// ENDGAME B.3.4a closing: the two IO::PackageFile bodies that lived in
+// FileSystem's files. Both move VERBATIM -- same control flow, same callees,
+// same order. Keyword/callee tally, door body vs member body:
+//   GetFileInfo: 1 copy construction of the +0xc0 FileInfo, 0 branches,
+//                0 other callees, 0 bounds checks -- before and after.
+//   GetFileName: 1 sign-extended index (`static_cast<int64_t>`), 1 stride-16
+//                scale off `_entries` (+0xb0), 1 System::Filename copy ctor,
+//                0 branches, 0 bounds checks -- before and after.
+// Every POD is spelled `RtIO::` and every real class `System::`
+// (B34_RULES section 7.2).
+// ============================================================================
+
+RtIO::FileInfo PackageFile::GetFileInfo() const {
+    // 18002541e `LEA RDX,[RCX+0xc0]`: the EMBEDDED FileInfo, not a pointer
+    // field. 180025428 is the FileInfo copy ctor, 180025436 the return.
+    return _file;
+}
+
+System::Filename PackageFile::GetFileName(int index) const {
+    // 180025475 `MOVSXD RDX,R8D ; SHL RDX,0x4 ; ADD RDX,[RCX+0xb0]`. The MOVSXD
+    // is a SIGN extension, which is what the int64_t cast spells -- Ghidra's C
+    // prints it as a zero extension and that cost Wave 6 three defects. It only
+    // matters for a negative index, which retail never passes; it is written as
+    // int64 anyway because that is what the instruction says.
+    const System::Filename* entry = reinterpret_cast<const System::Filename*>(
+        static_cast<const uint8_t*>(_entries) + static_cast<int64_t>(index) * 16);
+    return *entry;   // the copy ctor, 0x1800067d0
 }
 
 }  // namespace IO

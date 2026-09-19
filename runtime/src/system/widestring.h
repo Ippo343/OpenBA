@@ -1,30 +1,26 @@
 #pragma once
 // ============================================================================
-// runtime/src/system/widestring.h — System::WideString, Wave 9 lane FS
+// runtime/src/system/widestring.h — the registered `System::WideString` doors
 // ============================================================================
-// WideString is System::String over wchar_t: ONE pointer, the SAME allocation
-// header (int32 length in CHARACTERS at data-8, int32 refcount at data-4,
-// characters at data+0), and the SAME release idiom including its asymmetry.
-// Pinned by ?SetLength@WideString@System@@AEAAXH@Z (0x1800ca9b0):
-//     MemAlloc(8 + (len+1)*2, 4); data = block+8; data[-8]=len; data[-4]=1
+// ENDGAME B.3.4b SYSTEM (4a): the LAYOUT and the class moved to
+// `runtime/types/system/WideString.h`, which is where a type header belongs and
+// where `tests/unit/system_abi_test.cpp` can reach it. This file keeps exactly
+// what it always was for its three includers (platform_startup_win.cpp,
+// application_win.cpp, updateloop_loadresources.cpp, value_types.cpp): the POD
+// spelling and the free-function doors, whose names, signatures and
+// registration rows are unchanged. The doors now DELEGATE to the class members;
+// see the bodies in widestring.cpp.
 //
-// Modelled as its own struct rather than a typedef of String so a caller
-// cannot pass one where the other belongs; the two are cast into each other
-// deliberately and only inside widestring.cpp.
+// ⚠ `WideString` here is `RtSystem::WideString`, the POD. Inside a
+// `namespace System { ... }` block the same bare name binds the real CLASS —
+// B34_RULES §7.2's grep hazard, armed for this name.
 // ============================================================================
 
 #include <cstddef>
 #include "../../types/system/String.h"
+#include "../../types/system/WideString.h"
 
 namespace RtSystem {
-
-struct WideString {
-    wchar_t* data;   // +0x00 — block + 8, or null for "no buffer"
-};
-static_assert(sizeof(WideString) == 8, "System::WideString must be 8 bytes");
-static_assert(sizeof(wchar_t) == 2,
-              "WideString is UTF-16: this port assumes a 2-byte wchar_t, which "
-              "is what both MSVC and MinGW give on Windows");
 
 // ?SetLength@WideString@System@@AEAAXH@Z          0x1800ca9b0  (PRIVATE: AEAA)
 void        RtSystem_WideString_SetLength(WideString* self, int len);

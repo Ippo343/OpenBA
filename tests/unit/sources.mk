@@ -114,3 +114,18 @@ UNIT_TREE_SRCS += runtime/src/object/internal_class.cpp
 # it. A mirror tests itself. Same split as type_reflection.cpp (B.3.3 step 3).
 # No other tree source is needed: the file's only include is the layout header.
 UNIT_TREE_SRCS += runtime/src/io/serializer_class.cpp
+
+# ENDGAME B.3.4b SYSTEM (4) — the REAL `System::CRC` (tests/unit/system_abi_test.cpp
+# PART F). crc.cpp is the ONE file of the six this step converts that can link
+# into a host test: its only includes are `rt_port.h` and the new
+# `runtime/types/system/Crc.h`, its two registration calls are stubbed by
+# tests/unit/rt_port_stub.cpp, and `System::CRC::Compute` is a pure function
+# over a locally-generated table with no platform call and no registry lookup.
+#
+# So this is the one B.3.4b class whose test is BEHAVIOURAL rather than
+# layout-only: PART F runs the standard CRC-32 check vector through the real
+# ported member. `timer.cpp` (QueryPerformanceCounter + the five RT_DATA_SLOT
+# statics), `error.cpp` (<windows.h>, MessageBoxW, three RT_DATA_SLOT statics),
+# `thread_win.cpp` and `value_types.cpp` all stand on the platform or the
+# registry and stay verified by the real run.
+UNIT_TREE_SRCS += runtime/src/system/crc.cpp

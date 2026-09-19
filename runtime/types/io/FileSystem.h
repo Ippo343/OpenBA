@@ -419,8 +419,12 @@ static_assert(offsetof(FileSystem, packfileIndexCount)   == 0x48, "see field com
 //
 // *** THE THREE `RtSystem::String` MEMBERS STAY PODs. *** +0x00, +0x08 and
 // +0x10 are `sourceDirectory` / `dataDirectory` / `packDirectory`, and
-// `??1FileSystem@IO@@` — whose door is in `iobase_vtables.cpp`, outside this
-// file set — releases them by hand. Retyping them to `System::String` would add
+// `??1FileSystem@IO@@` — whose door is `RtIo_FileSystem_Dtor` in
+// `filesystem_createfile_win.cpp`, which registers 0x1800ac6d0 there
+// (ENDGAME B.3.4a closing: this line still said "in `iobase_vtables.cpp`,
+// outside this file set", which the banner 30 lines above already corrects in
+// terms — `iobase_vtables.cpp` contains no occurrence of the string
+// "FileSystem" at all) — releases them by hand. Retyping them to `System::String` would add
 // an implicit destructor that runs IN ADDITION to that body (the B31
 // `RtSystem::String` double-free), and the precondition "the class's own dtor
 // body is in your file set" is not met. They are reached through
@@ -436,6 +440,15 @@ public:
 
     // ?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x180007bd0
     System::Filename GetDataDirectory() const;
+
+    // ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x1800acfd0
+    // ENDGAME B.3.4a closing: the last FileSystem member to move. Unlike the
+    // two directory getters above it reads NO field of `this` at all — retail
+    // loads the pointer and never dereferences it (filesystem_win.cpp's banner
+    // proves that from the disassembly, not the decompile) — so the body is a
+    // SHGetFolderPathW call, not a copy ctor. `const` matches retail's `QEBA`;
+    // the by-value Filename return is the hidden-retslot ABI, as above.
+    System::Filename GetSaveDirectory() const;
 
     // ?GetSourceDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ 0x180007b90
     // Retail's `MOV RDX,RCX` passes `this` ITSELF to the Filename copy ctor,

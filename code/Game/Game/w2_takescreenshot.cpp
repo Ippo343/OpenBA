@@ -64,6 +64,9 @@
 
 #include "resolve.h"
 #include "engine_funcs.h"
+#include "io/FileSystem.h"      // ENDGAME B.3.4a closing 4/4
+#include "system/Filename.h"
+#include <new>
 
 #include <cstdint>
 #include <cstdio>
@@ -92,11 +95,11 @@ typedef bool (*FCIB_Create_t)(void* self, int imageType, int usage, int format,
 // ?Generate@FrameCopyImageBuffer@Graphics@@UEBAX AEAVContext@Video@@ H @Z
 typedef void (*FCIB_Generate_t)(const void* self, void* videoContext, int flag); // 0x1401520b8
 
-// ?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ       // 0x1401520c0
-// Member with non-trivial return: RCX=this, RDX=retbuf(Filename, 8 bytes).
-typedef void* (*FS_GetSaveDirectory_t)(const void* self, void* retFilename);
-// ?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z              // 0x1401520d0
-typedef bool  (*FS_Exists_t)(const void* self, const void* filename);
+// ENDGAME B.3.4a closing 4/4: the GetSaveDirectory and Exists door typedefs,
+// their file-statics, their resolver lines, their two `s_ok` conjuncts and
+// their two diagnostic `%p`s are gone TOGETHER with the calls they served --
+// both are `IO::FileSystem` members now. The dispatch slots 0x1401520c0 /
+// 0x1401520d0 stay bound in the address registry (B34_RULES 6.5(g)).
 
 // ??HSystem@@YA?AVString@0@AEBV10@PEBD@Z  — FREE operator+(String, char const*)
 // RCX = return buffer, RDX = lhs, R8 = cstr.                        // 0x140151a08
@@ -122,8 +125,6 @@ FCIB_Ctor_t           s_FCIB_Ctor         = nullptr;
 FCIB_Dtor_t           s_FCIB_Dtor         = nullptr;
 FCIB_Create_t         s_FCIB_Create       = nullptr;
 FCIB_Generate_t       s_FCIB_Generate     = nullptr;
-FS_GetSaveDirectory_t s_GetSaveDirectory  = nullptr;
-FS_Exists_t           s_Exists            = nullptr;
 StrPlusCStr_t         s_StrPlusCStr       = nullptr;
 StrPlusStr_t          s_StrPlusStr        = nullptr;
 StrFormat_t           s_StrFormat         = nullptr;
@@ -152,8 +153,6 @@ bool ResolveFuncs() {
         "W4Format@45@IHHW4FilterMode@45@W4AddressMode@45@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z");
     s_FCIB_Generate    = (FCIB_Generate_t)      ResolveExport(
         "?Generate@FrameCopyImageBuffer@Graphics@@UEBAXAEAVContext@Video@@H@Z");
-    s_GetSaveDirectory = (FS_GetSaveDirectory_t)ResolveExport("?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ");
-    s_Exists           = (FS_Exists_t)          ResolveExport("?Exists@FileSystem@IO@@QEBA_NAEBVFilename@System@@@Z");
     s_StrPlusCStr      = (StrPlusCStr_t)        ResolveExport("??HSystem@@YA?AVString@0@AEBV10@PEBD@Z");
     s_StrPlusStr       = (StrPlusStr_t)         ResolveExport("??HSystem@@YA?AVString@0@AEBV10@0@Z");
     s_StrFormat        = (StrFormat_t)          ResolveExport("?Format@String@System@@SA?AV12@PEBDZZ");
@@ -167,7 +166,7 @@ bool ResolveFuncs() {
     s_pFileSystemSingleton = (void**)ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA");
 
     s_ok = s_MemAlloc && s_MemFree && s_FCIB_Ctor && s_FCIB_Dtor && s_FCIB_Create &&
-           s_FCIB_Generate && s_GetSaveDirectory && s_Exists && s_StrPlusCStr &&
+           s_FCIB_Generate && s_StrPlusCStr &&
            s_StrPlusStr && s_StrFormat && s_StrDtor && s_Filename_Ctor &&
            s_Filename_CtorStr && s_Filename_Assign && s_Filename_Dtor &&
            s_SaveImageToFile && s_pFileSystemSingleton &&
@@ -176,12 +175,12 @@ bool ResolveFuncs() {
 
     if (!s_ok) {
         printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
-                    "  alloc=%p free=%p ctor=%p dtor=%p create=%p gen=%p savedir=%p exists=%p\n"
+                    "  alloc=%p free=%p ctor=%p dtor=%p create=%p gen=%p\n"
                     "  s+c=%p s+s=%p fmt=%p ~str=%p fn()=%p fn(s)=%p fn==%p ~fn=%p save=%p fs=%p\n"
                     "  copyFromTex=%p device=%p mainloop=%p\n",
                     (void*)s_MemAlloc, (void*)s_MemFree, (void*)s_FCIB_Ctor, (void*)s_FCIB_Dtor,
-                    (void*)s_FCIB_Create, (void*)s_FCIB_Generate, (void*)s_GetSaveDirectory,
-                    (void*)s_Exists, (void*)s_StrPlusCStr, (void*)s_StrPlusStr, (void*)s_StrFormat,
+                    (void*)s_FCIB_Create, (void*)s_FCIB_Generate,
+                    (void*)s_StrPlusCStr, (void*)s_StrPlusStr, (void*)s_StrFormat,
                     (void*)s_StrDtor, (void*)s_Filename_Ctor, (void*)s_Filename_CtorStr,
                     (void*)s_Filename_Assign, (void*)s_Filename_Dtor, (void*)s_SaveImageToFile,
                     (void*)s_pFileSystemSingleton, (void*)fn_ImageBuffer_CopyFromTexture,
@@ -240,7 +239,14 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     StringHandle base{};      // Filename: saveDir + "\Screenshots\Screenshot"
     StringHandle path{};      // Filename: the candidate being tested
 
-    s_GetSaveDirectory(fileSys, &saveDir);
+    // ENDGAME B.3.4a closing: onto IO::FileSystem::GetSaveDirectory, which
+    // became a member in this same commit. `saveDir` stays a raw StringHandle
+    // and is still released by `s_Filename_Dtor` below, because that is what
+    // the door did: it filled the 8 raw bytes of a hidden return slot. The
+    // member's by-value return fills the same slot through the same ABI, so
+    // the construction/release pairing and its ORDER are unchanged.
+    ::new (&saveDir) System::Filename(
+        reinterpret_cast<const IO::FileSystem*>(fileSys)->GetSaveDirectory());   // B.3.4 bridge
     s_StrPlusCStr(&joined, &saveDir, "\\Screenshots\\Screenshot");   // exe 0x14015e520
     s_Filename_CtorStr(&base, &joined);
     s_StrDtor(&joined);
@@ -260,7 +266,8 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
         ++index;
         s_StrDtor(&full);
         s_StrDtor(&suffix);
-    } while (s_Exists(fileSys, &path));
+    } while (reinterpret_cast<const IO::FileSystem*>(fileSys)->Exists(
+                 *reinterpret_cast<const RtSystem::Filename*>(&path)));   // B.3.4 bridge
 
     // --- Read the pixels back and write the file -----------------------------
     unsigned int* pixels = reinterpret_cast<unsigned int*>(

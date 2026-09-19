@@ -36,6 +36,7 @@
 
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
+#include "../../types/system/WideString.h"   // ENDGAME B.3.4b SYSTEM (4a)
 
 namespace RtSystem {
 
@@ -44,6 +45,16 @@ inline System::String&       Sys(String& s)        { return reinterpret_cast<Sys
 inline const System::String& Sys(const String& s)  { return reinterpret_cast<const System::String&>(s); }
 inline System::String*       Sys(String* s)        { return reinterpret_cast<System::String*>(s); }
 inline const System::String* Sys(const String* s)  { return reinterpret_cast<const System::String*>(s); }
+
+// ---- WideString (ENDGAME B.3.4b SYSTEM (4a)) -------------------------------
+// The same transitional cast one type over. `RtSystem::WideString` is the POD
+// three `runtime/src/` files still hold by value and seed through the ctor
+// door; `System::WideString` is the class the doors now delegate to. Both are
+// one `wchar_t*`, pinned field for field in WideString.h.
+inline System::WideString&       Sys(WideString& w)       { return reinterpret_cast<System::WideString&>(w); }
+inline const System::WideString& Sys(const WideString& w) { return reinterpret_cast<const System::WideString&>(w); }
+inline System::WideString*       Sys(WideString* w)       { return reinterpret_cast<System::WideString*>(w); }
+inline const System::WideString* Sys(const WideString* w) { return reinterpret_cast<const System::WideString*>(w); }
 
 // ---- Filename -------------------------------------------------------------
 inline System::Filename&       Sys(Filename& f)       { return reinterpret_cast<System::Filename&>(f); }
