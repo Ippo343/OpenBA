@@ -60,6 +60,7 @@
 #include "resolve.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "io/Modification.h"   // ENDGAME B.3.4a closing: the hoisted GetCount()
 
 #include <cstdint>
 #include <cstdio>
@@ -378,9 +379,13 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     uint8_t ibp[8] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
     fn_UI_AddDialog(ui, ibp);
-    printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg,
-                fn_Modification_GetCount ?
-                    fn_Modification_GetCount(*g_ppModificationSingleton) : -1);
+    // ENDGAME B.3.4a closing: the count was computed INSIDE the printf argument
+    // list, where the perf build strips it (reference_perf_build_strips_printf_
+    // arguments). Hoisted to a local first, then converted; the `? :` guard went
+    // with the door pointer it tested.
+    const int modCount =
+        reinterpret_cast<const IO::Modification*>(*g_ppModificationSingleton)->GetCount();   // B.3.4 bridge
+    printf("[ModDialog] opened + AddDialog'd (dlg=%p mods=%d)\n", dlg, modCount);
 }
 
 // ===========================================================================

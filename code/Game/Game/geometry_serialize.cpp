@@ -43,6 +43,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include <new>               // ENDGAME B.3.4a closing: placement-new of IO::Serializer
 #include <cstdint>
 #include <cstdio>
 
@@ -141,30 +142,19 @@ inline int SerializerInner(void* serializer) {
     return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
-// Hard-pinned dispatch via shared globals — when the slot itself isn't
-// available, fall back to the global Serializer ctor/dtor pointers from
-// engine_funcs.cpp (resolved via ResolveExport).
+// ENDGAME B.3.4a closing: these two were a two-stage door — the 0x140152ad8 /
+// 0x140152ad0 dispatch slot first, then the g_fn_Serializer_Ctor/Dtor globals,
+// then a one-shot "local serializer stays uninitialized" warning if BOTH were
+// null. `IO::Serializer` is a real class now, so there is no door left to be
+// null and no third branch to take: the ctor warning and its `s_warned` latch
+// are deleted because the state they reported cannot occur, not because the
+// warning was noisy. The dtor's fallback chain had no else arm at all.
 void CallSerializerCtor(void* localSer, void* stream, int version) {
-    static FnSerCtor_t cached = nullptr;
-    static bool tried = false;
-    FnSerCtor_t fn = ResolveSlot(kSlot_SerCtor, cached, tried, "Serializer::ctor");
-    if (fn) { fn(localSer, stream, version); return; }
-    if (g_fn_Serializer_Ctor) { g_fn_Serializer_Ctor(localSer, stream, version); return; }
-    static bool s_warned = false;
-    if (!s_warned) {
-        printf("[Geometry::Serialize] no Serializer::ctor — local serializer "
-               "stays uninitialized (downstream calls may misbehave)\n");
-        fflush(stdout);
-        s_warned = true;
-    }
+    ::new (localSer) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), version);   // B.3.4 bridge
 }
 
 void CallSerializerDtor(void* localSer) {
-    static FnSerDtor_t cached = nullptr;
-    static bool tried = false;
-    FnSerDtor_t fn = ResolveSlot(kSlot_SerDtor, cached, tried, "Serializer::dtor");
-    if (fn) { fn(localSer); return; }
-    if (g_fn_Serializer_Dtor) { g_fn_Serializer_Dtor(localSer); return; }
+    reinterpret_cast<IO::Serializer*>(localSer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

@@ -18,7 +18,8 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
+#include "io/Serializer.h"     // ENDGAME B.3.4 caller batch C
+#include "object/Internal.h"   // ENDGAME B.3.4a closing: InternalBasePtr::Serialize
 #include <cstdint>
 
 // ============================================================
@@ -287,7 +288,7 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
     if (loading) {
         for (int i = 0; i < count; i++) {
             uintptr_t keyIBP = 0;
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&keyIBP, serializer);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&keyIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             if (keyIBP != 0 && fn_IsDerivedFrom && citTid &&
                 !fn_IsDerivedFrom(reinterpret_cast<void*>(keyIBP), citTid))
                 keyIBP = 0;
@@ -304,7 +305,7 @@ void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer) {
     do { pIVar3 = pIVar6; pIVar6 = *reinterpret_cast<uintptr_t*>(pIVar3 + 0x10); } while (pIVar6 != 0);  // leftmost
 joined:
     while ((pIVar6 = pIVar3) != 0) {
-        if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(pIVar6), serializer);
+        if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(pIVar6)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         if (*reinterpret_cast<uintptr_t*>(pIVar6) != 0 && fn_IsDerivedFrom && citTid &&
             !fn_IsDerivedFrom(*reinterpret_cast<void**>(pIVar6), citTid))
             *reinterpret_cast<uintptr_t*>(pIVar6) = 0;
