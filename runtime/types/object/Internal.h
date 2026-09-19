@@ -535,6 +535,26 @@ public:
     // the parameter is the `void*` every C caller already passes.
     virtual void Persist(void* stream);
 
+    // ?Clone@Internal@Object@@QEAAPEAV12@XZ   retail 0x1800bfb10, ord 1716
+    //
+    // NON-VIRTUAL (`QEAA`) and it appears in no vtable — not in
+    // `??_7Internal@Object@@6B@`'s four slots and not anywhere else. It is a
+    // SERIALIZE ROUND-TRIP DEEP COPY: ask the Factory for a fresh object of
+    // this object's own type, write `this` into a 0x1000-byte MemoryStream,
+    // copy those bytes into a second one, and read the new object back out of
+    // it. Both streams are then destroyed and the new object is returned.
+    //
+    // It returns NULL when the freshly created object does not derive from
+    // `Internal` — and it then calls slot 3 ON THAT NULL before returning it,
+    // which is retail's and is transcribed rather than guarded. See the body.
+    //
+    // PORTED AT ENDGAME B.3.4 STREAMS (6/6). It had been genuinely unported —
+    // no registration by name or by address, no stub, no TODO — and this
+    // header's `Persist` neighbour plus internal_class.cpp's banner were the
+    // only two places that said so. Its stated blocker was `IO::MemoryStream`,
+    // which B34_RULES §6.5(e) already recorded as satisfied.
+    Internal* Clone();
+
     int32_t  GetFactoryIndex() const { return _factoryIndex; }
     uint32_t GetGeneration()   const { return _generation; }
 
