@@ -57,6 +57,12 @@
 // consumes only the base fields and leaves the remaining 15 (9+2 floats, 2 Colors,
 // 2 Times) of every Tornado.rsc body unread, so the load fails and stores null.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::ParticleInstance (and its
+// Graphics::Geometry base) are real classes. FIRST in the block on purpose —
+// "resolve.h" pulls <windows.h>, whose <wingdi.h> declares a global `Rectangle`
+// FUNCTION that hides `Volume::Rectangle`'s class name inside Volume.h's own
+// static_asserts (Geometry.h includes Volume.h).
+#include "graphics/ParticleInstance.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -219,6 +225,11 @@ typedef void   (*fn_TimeCtor_t)(void* retTime, float seconds);
 typedef void*  (*fn_BoxExtend_t)(const void* box, void* ret, const float* v3);
 typedef void   (*fn_SetBounds_t)(void* geometry, const void* box);
 
+// ENDGAME B.3.5: `baseUpdate` and `setBounds` are no longer CALLED — both sites
+// now call the members. The two fields, their resolves, the `f.ok` aggregate and
+// the UNRESOLVED fprintf below still READ the pointers as a diagnostic, so the
+// cache is not dead and is not removed here (the closing pass takes it with the
+// remaining three non-Graphics doors).
 struct TornadoInstFuncs {
     fn_PIUpdate_t     baseUpdate;
     fn_IsDerived_t    isDerived;
@@ -272,7 +283,10 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
 
     // Base ParticleInstance::Update is the frame gate: it returns false when this
     // instance has already been stepped this frame.
-    if (!f.baseUpdate(self)) return;
+    // B.3.5 bridge — ?Update@ParticleInstance@Graphics@@QEAA_NXZ, the NON-VIRTUAL
+    // `bool Update()` (ParticleInstance.h's name-hiding note: the arg-less
+    // overload, not slot 1's `Update(const Time&)`).
+    if (!reinterpret_cast<Graphics::ParticleInstance*>(self)->Update()) return;   // B.3.5 bridge
 
     void*        resource = *reinterpret_cast<void**>(inst + 0xc0);
     TornadoPool* pool     = *reinterpret_cast<TornadoPool**>(inst + 0xc8);
@@ -455,7 +469,11 @@ void TornadoInstance_Update(void* self, const int64_t* dtPtr) {
         p->alpha = p->prevAlpha = env * la.v;
     }
 
-    f.setBounds(self, pool);
+    // B.3.5 bridge — ?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z. The
+    // door took `(void* geometry, const void* box)` and retail hands it the pool
+    // pointer: the accumulated `Volume::Box` is the pool's first 0x18 bytes.
+    reinterpret_cast<Graphics::Geometry*>(self)->SetBounds(
+        *reinterpret_cast<const ::Box*>(pool));   // B.3.5 bridge
 
     // Outcome trace, budgeted. "the swirl is running" is not observable from the
     // absence of a crash: a pool that never spawns, a period that came out infinite

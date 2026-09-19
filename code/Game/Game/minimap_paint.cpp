@@ -38,6 +38,15 @@
 //   yaw=0 pitch=-90deg (straight down), world position (0,0,100).
 //   fog start=1000 end=1001 color(1,1,1,1); clear color 0xff000000 then 0xffff00ff.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::{Camera,Scene},
+// Video::{Context,RenderBuffer,ImageBuffer} are real classes. These headers go
+// AHEAD of "resolve.h" — resolve.h pulls <windows.h>, whose <wingdi.h> declares
+// a global `Rectangle` FUNCTION that hides `Volume::Rectangle`'s class name
+// inside Volume.h's own static_asserts (Camera.h and Geometry.h include Volume.h).
+#include "graphics/Camera.h"
+#include "graphics/Scene.h"
+#include "video/Context.h"       // also brings Video::{Device,RenderBuffer,Viewport}
+#include "video/ImageBuffer.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "options.h"
@@ -54,40 +63,49 @@ extern "C" void Minimap_CreateAndUpload(void* mapObj);
 namespace {
 
 // --- New Runtime primitives (not in engine_funcs; self-resolved once) ---
+//
+// ENDGAME B.3.5 Video/Graphics caller batch: TWELVE doors left this file, and
+// the caches, their typedefs, their resolves, their `s_ok` terms and their
+// diagnostic `%p`s went with them:
+//   ?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z
+//   ?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z
+//   ?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z
+//   ?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z
+//   ?Clear@Context@Video@@QEAAXIIMH@Z
+//   ?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z
+//   ?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z
+//   ?Reset@Context@Video@@QEAAXXZ
+//   ?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z
+//   fn_Video_Context_SetFog / fn_Graphics_Scene_AddGlobalObject /
+//   fn_Graphics_Scene_Clean  (engine_funcs globals — the GLOBALS stay, only
+//   their call sites here converted), plus the hand-inlined ImageBuffer vtable
+//   +0x48 `Create` slot in MakeRenderTargetBuffer.
+//
+// What is STILL a door, and why:
+//   s_RenderBuffer_Ctor / s_RenderBuffer_Dtor / s_Renderer_Dtor / s_Scene_Dtor
+//   and fn_Graphics_{Camera,Renderer,Scene}_Ctor  — CTOR/DTOR doors (B4b-2,
+//       B35_RULES section 11: no Video/Graphics class has a real ctor or dtor).
+//   s_Frustum_Ortho_Ctor  — a Volume::Frustum constructor, not a member of any
+//       Video/Graphics class.
+//   fn_Graphics_Renderer_Draw  — `Graphics::Renderer::Draw` is DECLARED in
+//       Camera.h but DEFINED NOWHERE: its body is still the door in
+//       runtime/src/graphics/wave27_lane_gfxbig.cpp. Converting it would be a
+//       link error, which is the proof the brief asks for.
+//   fn_ImageBuffer_Ctor — a CTOR door. (`CopyFromTexture` was on this list until
+//       block D2's buffers.cpp landed the member; it is converted now.)
 typedef void* (*fn_RenderBuffer_Ctor_t)(void* self);
-typedef bool  (*fn_RenderBuffer_Create_t)(void* self, void* colorBuf, void* depthBuf);
 typedef void  (*fn_RenderBuffer_Dtor_t)(void* self);
 typedef void* (*fn_Frustum_Ortho_Ctor_t)(void* self, bool ortho, const void* near_,
                                           const void* far_, const void* s3,
                                           const void* s4, const void* s5, const void* s6);
-typedef void  (*fn_Camera_SnapToWorld_t)(void* cam, void* transform3);
-typedef void  (*fn_Context_SetCamera_t)(void* ctx, void* viewMatrix, void* projMatrix);
-typedef void  (*fn_Context_SetViewport_t)(void* ctx, void* viewport);
-typedef void  (*fn_Context_Clear_t)(void* ctx, unsigned flags, unsigned color, float depth, int stencil);
-typedef void  (*fn_Context_SetRenderBuffer_t)(void* ctx, void* rb);
-typedef void  (*fn_Context_Reset_t)(void* ctx);
 typedef void  (*fn_Renderer_Dtor_t)(void* self);
 typedef void  (*fn_Scene_Dtor_t)(void* self);
-typedef void  (*fn_Scene_RemoveGlobalObject_t)(void* scene, void* geometry);
-// ImageBuffer::Create dispatched through the custom vtable's +0x48 slot.
-typedef bool  (*fn_ImageBuffer_Create_t)(void* self, int imageType, int usage, int format,
-                                         unsigned mipLevels, int width, int height,
-                                         int filterMode, int addrU, int addrV, int addrW, void* mipData);
 
 fn_RenderBuffer_Ctor_t         s_RenderBuffer_Ctor      = nullptr;
-fn_RenderBuffer_Create_t       s_RenderBuffer_Create    = nullptr;
 fn_RenderBuffer_Dtor_t         s_RenderBuffer_Dtor      = nullptr;
 fn_Frustum_Ortho_Ctor_t        s_Frustum_Ortho_Ctor     = nullptr;
-fn_Camera_SnapToWorld_t        s_Camera_SnapToWorld     = nullptr;
-fn_Context_SetCamera_t         s_Context_SetCamera      = nullptr;
-fn_Context_SetViewport_t       s_Context_SetViewport    = nullptr;
-fn_Context_Clear_t             s_Context_Clear          = nullptr;
-fn_Context_SetRenderBuffer_t   s_Context_SetRenderBuffer = nullptr;
-fn_Context_SetRenderBuffer_t   s_Context_SetDefaultRenderBuffer = nullptr;
-fn_Context_Reset_t             s_Context_Reset          = nullptr;
 fn_Renderer_Dtor_t             s_Renderer_Dtor          = nullptr;
 fn_Scene_Dtor_t                s_Scene_Dtor             = nullptr;
-fn_Scene_RemoveGlobalObject_t  s_Scene_RemoveGlobalObject = nullptr;
 
 bool s_resolved = false;
 bool s_ok       = false;
@@ -97,43 +115,30 @@ bool ResolveFuncs() {
     s_resolved = true;
 
     s_RenderBuffer_Ctor    = (fn_RenderBuffer_Ctor_t)   ResolveExport("??0RenderBuffer@Video@@QEAA@XZ");
-    s_RenderBuffer_Create  = (fn_RenderBuffer_Create_t) ResolveExport("?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z");
     s_RenderBuffer_Dtor    = (fn_RenderBuffer_Dtor_t)   ResolveExport("??1RenderBuffer@Video@@QEAA@XZ");
     s_Frustum_Ortho_Ctor   = (fn_Frustum_Ortho_Ctor_t)  ResolveExport("??0Frustum@Volume@@QEAA@_NAEBVScalar@Math@@11111@Z");
-    s_Camera_SnapToWorld   = (fn_Camera_SnapToWorld_t)  ResolveExport("?SnapCameraToWorld@Camera@Graphics@@QEAAXAEBVTransform3@Math@@@Z");
-    s_Context_SetCamera    = (fn_Context_SetCamera_t)   ResolveExport("?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z");
-    s_Context_SetViewport  = (fn_Context_SetViewport_t) ResolveExport("?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z");
-    s_Context_Clear        = (fn_Context_Clear_t)       ResolveExport("?Clear@Context@Video@@QEAAXIIMH@Z");
-    s_Context_SetRenderBuffer = (fn_Context_SetRenderBuffer_t) ResolveExport("?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z");
-    s_Context_SetDefaultRenderBuffer = (fn_Context_SetRenderBuffer_t) ResolveExport("?SetDefaultRenderBuffer@Context@Video@@QEAAXPEAVRenderBuffer@2@@Z");
-    s_Context_Reset        = (fn_Context_Reset_t)       ResolveExport("?Reset@Context@Video@@QEAAXXZ");
     s_Renderer_Dtor        = (fn_Renderer_Dtor_t)       ResolveExport("??1Renderer@Graphics@@QEAA@XZ");
     s_Scene_Dtor           = (fn_Scene_Dtor_t)          ResolveExport("??1Scene@Graphics@@QEAA@XZ");
-    s_Scene_RemoveGlobalObject = (fn_Scene_RemoveGlobalObject_t) ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z");
 
-    s_ok = s_RenderBuffer_Ctor && s_RenderBuffer_Create && s_RenderBuffer_Dtor &&
-           s_Frustum_Ortho_Ctor && s_Camera_SnapToWorld &&
-           s_Context_SetCamera && s_Context_SetViewport &&
-           s_Context_Clear && s_Context_SetRenderBuffer && s_Context_SetDefaultRenderBuffer &&
-           s_Context_Reset && s_Renderer_Dtor && s_Scene_Dtor && s_Scene_RemoveGlobalObject &&
+    s_ok = s_RenderBuffer_Ctor && s_RenderBuffer_Dtor &&
+           s_Frustum_Ortho_Ctor &&
+           s_Renderer_Dtor && s_Scene_Dtor &&
            // engine_funcs primitives this port relies on:
            fn_MemAlloc && g_pMemAllocSingleton && fn_MemFreeStatic &&
-           fn_ImageBuffer_Ctor && g_NoiseUI_ImageBufferVtable && fn_ImageBuffer_CopyFromTexture &&
+           // B.3.5: the CopyFromTexture readiness term went with its door.
+           fn_ImageBuffer_Ctor && g_NoiseUI_ImageBufferVtable &&
            fn_Graphics_Camera_Ctor &&
-           fn_Video_Context_SetFog && fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor &&
-           fn_Graphics_Renderer_Draw && fn_Graphics_Scene_AddGlobalObject && fn_Graphics_Scene_Clean &&
+           fn_Graphics_Renderer_Ctor && fn_Graphics_Scene_Ctor &&
+           fn_Graphics_Renderer_Draw &&
            g_pVideoConfigSingleton;
 
     if (!s_ok) {
         printf("[MinimapPaint] primitives unresolved — terrain paint disabled\n"
-               "  RB(ctor=%p create=%p dtor=%p) Frustum=%p Snap=%p\n"
-               "  Ctx(cam=%p vp=%p clr=%p srb=%p sdrb=%p reset=%p) Rdtor=%p Sdtor=%p Rmv=%p vcfg=%p\n",
-               (void*)s_RenderBuffer_Ctor, (void*)s_RenderBuffer_Create, (void*)s_RenderBuffer_Dtor,
-               (void*)s_Frustum_Ortho_Ctor, (void*)s_Camera_SnapToWorld,
-               (void*)s_Context_SetCamera, (void*)s_Context_SetViewport,
-               (void*)s_Context_Clear, (void*)s_Context_SetRenderBuffer, (void*)s_Context_SetDefaultRenderBuffer,
-               (void*)s_Context_Reset, (void*)s_Renderer_Dtor, (void*)s_Scene_Dtor,
-               (void*)s_Scene_RemoveGlobalObject, (void*)g_pVideoConfigSingleton);
+               "  RB(ctor=%p dtor=%p) Frustum=%p Rdtor=%p Sdtor=%p vcfg=%p\n",
+               (void*)s_RenderBuffer_Ctor, (void*)s_RenderBuffer_Dtor,
+               (void*)s_Frustum_Ortho_Ctor,
+               (void*)s_Renderer_Dtor, (void*)s_Scene_Dtor,
+               (void*)g_pVideoConfigSingleton);
         fflush(stdout);
     }
     return s_ok;
@@ -146,11 +151,15 @@ void* MakeRenderTargetBuffer(int width, int usage, int format) {
     if (!img) return nullptr;
     fn_ImageBuffer_Ctor(img);
     *reinterpret_cast<uintptr_t*>(img) = g_NoiseUI_ImageBufferVtable;
-    uintptr_t vt = *reinterpret_cast<uintptr_t*>(img);
-    fn_ImageBuffer_Create_t create = *reinterpret_cast<fn_ImageBuffer_Create_t*>(vt + 0x48);
-    if (create)
-        create(img, /*imageType*/0, usage, format, /*mip*/0, width, width,
-               /*filterMode*/1, 1, 1, 1, nullptr);
+    // B.3.5 bridge — the hand-inlined `*(vtable + 0x48)` dispatch is slot 9 of
+    // `Video::ImageBuffer`, i.e. `Create` (B35_RULES 2.3 item 5). The receiver is
+    // a PROVED ImageBuffer: 0x68 bytes (sizeof) from MemAlloc, run through
+    // `??0ImageBuffer@Video@@`, then given the exe's own NoiseUI vtable — so the
+    // virtual call reads that live table at exactly the same +0x48 it read before.
+    reinterpret_cast<Video::ImageBuffer*>(img)->Create(
+        /*type*/0, usage, format, /*flags*/0u, width, width,
+        /*filter*/1, /*addressU*/1, /*addressV*/1, /*addressW*/1,
+        /*levels*/nullptr);   // B.3.5 bridge
     return img;
 }
 
@@ -188,7 +197,9 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
 
     void* renderBuffer = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
     if (renderBuffer) s_RenderBuffer_Ctor(renderBuffer);
-    bool rbOk = s_RenderBuffer_Create(renderBuffer, colorBuf, depthBuf);
+    bool rbOk = reinterpret_cast<Video::RenderBuffer*>(renderBuffer)->Create(
+        reinterpret_cast<const Video::ImageBuffer*>(colorBuf),
+        reinterpret_cast<const Video::ImageBuffer*>(depthBuf));   // B.3.5 bridge
     (void)rbOk;
 
     // --- Orthographic top-down camera ---
@@ -226,20 +237,22 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
 
     Math::Transform3 transform3 =
         reinterpret_cast<const Math::Transform*>(transform)->AsTransform3();
-    s_Camera_SnapToWorld(camera, &transform3);
+    reinterpret_cast<Graphics::Camera*>(camera)->SnapCameraToWorld(transform3);   // B.3.5 bridge
 
     // View matrix from the camera's cameraToWorld transform (cam+0x64); projection
     // matrix is stored at cam+0x94 — exactly the raw reads FUN_1400a5140 inlines.
     Math::Matrix viewMatrix =
         reinterpret_cast<const Math::Transform3*>(camera + 0x64)->AsMatrix();
-    s_Context_SetCamera(context, &viewMatrix, camera + 0x94);
+    reinterpret_cast<Video::Context*>(context)->SetCamera(
+        viewMatrix, *reinterpret_cast<const Math::Matrix*>(camera + 0x94));   // B.3.5 bridge
 
     // Viewport {x=0, y=0, w=width, h=width}.
     int32_t viewport[4] = { 0, 0, width, width };
-    s_Context_SetViewport(context, viewport);
+    reinterpret_cast<Video::Context*>(context)->SetViewport(
+        *reinterpret_cast<const Video::Viewport*>(viewport));   // B.3.5 bridge
 
     const float clearDepth = g_fUVScale ? *g_fUVScale : 1.0f; // DAT_14017214c == 1.0
-    s_Context_Clear(context, 1, 0xff000000, clearDepth, 0);
+    reinterpret_cast<Video::Context*>(context)->Clear(1, 0xff000000, clearDepth, 0);   // B.3.5 bridge
 
     // Redirect rendering to the off-screen buffer (saving the current + default).
     uint8_t* ctx = reinterpret_cast<uint8_t*>(context);
@@ -251,15 +264,16 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     fn_Graphics_Renderer_Ctor(renderer);
     fn_Graphics_Scene_Ctor(scene);
 
-    s_Context_SetDefaultRenderBuffer(context, renderBuffer);
-    s_Context_SetRenderBuffer(context, renderBuffer);
-    s_Context_Clear(context, 7, 0xffff00ff, clearDepth, 0);
+    reinterpret_cast<Video::Context*>(context)->SetDefaultRenderBuffer(renderBuffer);   // B.3.5 bridge
+    reinterpret_cast<Video::Context*>(context)->SetRenderBuffer(renderBuffer);          // B.3.5 bridge
+    reinterpret_cast<Video::Context*>(context)->Clear(7, 0xffff00ff, clearDepth, 0);    // B.3.5 bridge
 
     // Fog + context flags matching the retail minimap render setup.
     float fogColor[4] = { 1.0f, 1.0f, 1.0f, 1.0f };
     const float fogStart = 1000.0f;  // DAT_140172248
     const float fogEnd   = 1001.0f;  // DAT_14017224c
-    fn_Video_Context_SetFog(context, fogStart, fogEnd, fogColor);
+    reinterpret_cast<Video::Context*>(context)->SetFog(
+        fogStart, fogEnd, *reinterpret_cast<const Math::Vector4*>(fogColor));   // B.3.5 bridge
 
     *reinterpret_cast<float*>(ctx + 0x3b8) = 0.0f;
     *reinterpret_cast<float*>(ctx + 0x3bc) = 0.0f;
@@ -282,24 +296,32 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     }
 
     // Render the terrain (worldGeom) + sun/lighting (sunLight) top-down.
-    fn_Graphics_Scene_AddGlobalObject(scene, worldGeom);
-    fn_Graphics_Scene_AddGlobalObject(scene, sunLight);
-    fn_Graphics_Scene_Clean(scene);
+    reinterpret_cast<Graphics::Scene*>(scene)->AddGlobalObject(
+        reinterpret_cast<Graphics::Geometry*>(worldGeom));   // B.3.5 bridge
+    reinterpret_cast<Graphics::Scene*>(scene)->AddGlobalObject(
+        reinterpret_cast<Graphics::Geometry*>(sunLight));    // B.3.5 bridge
+    reinterpret_cast<Graphics::Scene*>(scene)->Clean();      // B.3.5 bridge
+    // NOT converted: `Graphics::Renderer::Draw` is declared in Camera.h and
+    // defined nowhere yet — its body is still the door in wave27_lane_gfxbig.cpp.
     fn_Graphics_Renderer_Draw(renderer, context, 0.0f, scene, camera);
-    s_Scene_RemoveGlobalObject(scene, sunLight);
-    s_Scene_RemoveGlobalObject(scene, worldGeom);
+    reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
+        reinterpret_cast<Graphics::Geometry*>(sunLight));    // B.3.5 bridge
+    reinterpret_cast<Graphics::Scene*>(scene)->RemoveGlobalObject(
+        reinterpret_cast<Graphics::Geometry*>(worldGeom));   // B.3.5 bridge
 
     if (videoConfig)
         *reinterpret_cast<int32_t*>(videoConfig + 0x34) = savedCfg;
 
     // Restore the previous render buffers.
-    s_Context_SetRenderBuffer(context, savedRenderBuffer);
-    s_Context_SetDefaultRenderBuffer(context, savedDefaultBuffer);
+    reinterpret_cast<Video::Context*>(context)->SetRenderBuffer(savedRenderBuffer);          // B.3.5 bridge
+    reinterpret_cast<Video::Context*>(context)->SetDefaultRenderBuffer(savedDefaultBuffer);  // B.3.5 bridge
 
     // Read the rendered color back into the minimap terrain pixel array (+0x18).
     void* terrainPixels = *reinterpret_cast<void**>(map + 0x18);
     if (colorBuf && terrainPixels)
-        fn_ImageBuffer_CopyFromTexture(colorBuf, terrainPixels, width, width);
+        // B.3.5 bridge — ?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z.
+        reinterpret_cast<Video::ImageBuffer*>(colorBuf)->CopyFromTexture(
+            terrainPixels, width, width);   // B.3.5 bridge
 
     // Free the temporary render surfaces.
     if (renderBuffer) {
@@ -313,7 +335,7 @@ extern "C" void Minimap_PaintTerrain(void* minimap, void* context,
     // arrays — shared tail with minimap_upload.cpp (ports FUN_1400a4e80 + uploads).
     Minimap_CreateAndUpload(minimap);
 
-    s_Context_Reset(context);
+    reinterpret_cast<Video::Context*>(context)->Reset();   // B.3.5 bridge
     s_Scene_Dtor(scene);
     s_Renderer_Dtor(renderer);
 

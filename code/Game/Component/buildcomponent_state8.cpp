@@ -28,6 +28,10 @@
 // Faithful offset-by-offset port of the Ghidra decompilations. All exe-internal helpers
 // are resolved guarded; if one is unavailable the step is skipped.
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
@@ -185,8 +189,8 @@ static void BC8_SetMeshFrame(uintptr_t meshElem, int frame) {
     if (frame >= 0) {
         void* modelDesc = BC8_MeshModelDesc(meshElem);
         void* framePtr = BC8_MeshFramePtr(meshElem, modelDesc, frame);
-        if (fn_Graphics_MeshInstance_SetMesh)
-            fn_Graphics_MeshInstance_SetMesh(reinterpret_cast<void*>(meshElem + 0x28), framePtr);
+        reinterpret_cast<Graphics::MeshInstance*>(meshElem + 0x28)
+            ->SetMesh(Graphics::ExternalPtrHandle{framePtr});   // B.3.5 bridge
         ((SlotV_t)(*reinterpret_cast<uintptr_t*>((uint8_t*)vt + 0x30)))(reinterpret_cast<void*>(meshElem));
     }
 }

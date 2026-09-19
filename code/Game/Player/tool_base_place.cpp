@@ -12,6 +12,11 @@
 // are reimplemented + registered here. The rest are documented as DEFER in
 // reg_player_place.cpp with the exact unregistered sub-callee.
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -60,8 +65,9 @@ void PlacementToolPlace_FlipVariant_d960(void* selfp) {
     uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
     void* scene = *reinterpret_cast<void**>(gameWorld + 0x60);
 
-    if (fn_SceneRemoveObject && scene) {
-        fn_SceneRemoveObject(scene, static_cast<uint32_t>(sceneObj));
+    if (scene) {
+        reinterpret_cast<Graphics::Scene*>(scene)
+            ->RemoveObject(static_cast<uint32_t>(sceneObj));   // B.3.5 bridge
     }
 
     // Re-select mesh for the new variant (last entry of its sub-array).
@@ -72,14 +78,15 @@ void PlacementToolPlace_FlipVariant_d960(void* selfp) {
     void* mesh = *reinterpret_cast<void**>(subArray + static_cast<int64_t>(subCount - 1) * 8);
 
     void* meshInstance = *reinterpret_cast<void**>(self + 0x68);
-    if (fn_Graphics_MeshInstance_SetMesh && meshInstance) {
-        fn_Graphics_MeshInstance_SetMesh(meshInstance, mesh);
+    if (meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
+            ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
+        reinterpret_cast<Graphics::MeshInstance*>(meshInstance)
+            ->UpdateHierarchy();   // B.3.5 bridge
     }
-    if (fn_MeshInstance_UpdateHierarchy && meshInstance) {
-        fn_MeshInstance_UpdateHierarchy(meshInstance);
-    }
-    if (fn_SceneAddObject && scene && meshInstance) {
-        uint32_t newId = fn_SceneAddObject(scene, meshInstance);
+    if (scene && meshInstance) {
+        uint32_t newId = reinterpret_cast<Graphics::Scene*>(scene)
+            ->AddObject(reinterpret_cast<Graphics::Geometry*>(meshInstance));   // B.3.5 bridge
         *reinterpret_cast<uint32_t*>(self + 0x60) = newId;
     }
 }

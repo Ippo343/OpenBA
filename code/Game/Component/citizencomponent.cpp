@@ -12,6 +12,11 @@
 // Vtable at 0x140162580.
 // Decompiled from Application-x64.exe using Ghidra.
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "Component/citizencomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "options.h"
@@ -1785,9 +1790,8 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
                 if (*reinterpret_cast<int32_t*>(param_1 + 0x20) == 0)
                     *reinterpret_cast<uint32_t*>(param_1 + 0x20) = 0xffffffff;
             } else if (-1 < (int)*reinterpret_cast<uint32_t*>(param_1 + 0x20)) {
-                if (fn_SceneRemoveObject)
-                    fn_SceneRemoveObject(*reinterpret_cast<void**>(gw + 0x60),
-                                         *reinterpret_cast<uint32_t*>(param_1 + 0x20));
+                reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
+                    ->RemoveObject(*reinterpret_cast<uint32_t*>(param_1 + 0x20));   // B.3.5 bridge
                 *reinterpret_cast<uint32_t*>(param_1 + 0x20) = 0xffffffff;
             }
             uint32_t before = *reinterpret_cast<uint32_t*>(param_1 + 4);
@@ -1798,10 +1802,8 @@ void CitizenComp_FUN_14012c3f0(int64_t* param_1, uint8_t flagIndex, char value) 
             int32_t* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
             if (inited && settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
                 (int)param_1[0x20] < 0) {
-                uint32_t id = fn_Graphics_Scene_AddObject
-                                  ? fn_Graphics_Scene_AddObject(*reinterpret_cast<void**>(gw + 0x60),
-                                                                reinterpret_cast<void*>(param_1 + 5))
-                                  : 0xffffffff;
+                uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
+                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(param_1 + 5));   // B.3.5 bridge
                 *reinterpret_cast<uint32_t*>(param_1 + 0x20) = id;
                 SceneWatch_Note(id, reinterpret_cast<void*>(param_1 + 5), "StatusIcon(12c3f0)::Add");
             }

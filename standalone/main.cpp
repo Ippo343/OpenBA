@@ -10,6 +10,10 @@
 // stubs. As the address registry fills in, more gameplay systems come alive.
 
 
+// ENDGAME B.3.5: Video::Context, ahead of the <windows.h> that "resolve.h"
+// pulls in — <wingdi.h> declares a FUNCTION named Rectangle, which breaks
+// Volume.h's Volume::Rectangle (B35 caller brief, the <windows.h> trap).
+#include "video/Context.h"
 #include "options.h"
 #include "resolve.h"
 #include "engine_funcs.h"
@@ -1123,9 +1127,9 @@ static void ForceVideoContextReset(const char* tag) {
     if (!g_pMainLoopSingleton || !*g_pMainLoopSingleton) return;
     uint8_t* ml = reinterpret_cast<uint8_t*>(*g_pMainLoopSingleton);
     void* ctx = *reinterpret_cast<void**>(ml + 0x10);
-    if (!ctx || !fn_VideoCtx_Reset) return;
+    if (!ctx) return;
     *(ml + 0x18) = 0;  // engine clears m_videoContextDirty before Reset
-    fn_VideoCtx_Reset(ctx);
+    reinterpret_cast<::Video::Context*>(ctx)->Reset();  // B.3.5 bridge
     printf("[CtxReset %s] Video::Context::Reset(ctx=%p) — FSE refocus recovery\n",
            tag, ctx);
     fflush(stdout);

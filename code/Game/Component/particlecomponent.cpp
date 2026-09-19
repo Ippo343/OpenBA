@@ -13,6 +13,13 @@
 // and control flow logic is reimplemented.
 //
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
+#include "graphics/GraphicsMesh.h"
+#include <new>
 #include "Component/particlecomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "scene_watch.h"
@@ -58,8 +65,6 @@ typedef void (*fn_EmitterTick_t)(void* self, int index);
 static fn_EmitterTick_t s_fn_EmitterTick = nullptr;
 
 // Graphics::Scene::RemoveObject
-typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objectId);
-static fn_SceneRemoveObject_t s_fn_SceneRemoveObject = nullptr;
 
 // FUN_1400c3470 — entity flag update
 typedef void (*fn_EntityFlagUpdate_t)(void* entity);
@@ -227,9 +232,9 @@ void ParticleComponent_OnCreate(ParticleComponent* self) {
         // Remove scene object if valid
         uint32_t objId = *(uint32_t*)(geoEntry + 8);
         if ((int)objId >= 0) {
-            if (s_fn_SceneRemoveObject && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+            if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
                 void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
-                s_fn_SceneRemoveObject(scene, objId);
+                reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(objId);   // B.3.5 bridge
             }
             *(uint32_t*)(geoEntry + 8) = 0xFFFFFFFF;
         }
@@ -335,15 +340,6 @@ static_assert(sizeof(PCGeoEntry) == 0x18, "PCGeoEntry stride");
 //   +0x18 Time t0 prewarm, +0x20 Time t1 fadeDuration
 
 // --- extra resolved deps for the ports ---
-// MeshInstance::GetNodeToWorld — member returning Transform by value:
-// RCX=this, RDX=retbuf, R8D=nodeIndex (dispatch slot 0x140152998).
-typedef void* (*fn_GetNodeToWorld_t)(void* meshInstance, void* retTransform, int nodeIndex);
-static fn_GetNodeToWorld_t s_fn_GetNodeToWorld = nullptr;
-
-// Graphics::GraphicsMesh::GetNodeIndexFromName(mesh, nameChars) — slot 0x140152970.
-typedef int (*fn_GetNodeIdxFromName_t)(void* mesh, const char* name);
-static fn_GetNodeIdxFromName_t s_fn_GetNodeIdxFromName = nullptr;
-
 // FindComponent helpers (exe): 0x140003f60 = ModelComponent, 0x140004680 = MapComponent.
 // (entity, retbuf IBP) — retbuf[0] receives the component pointer (or 0).
 typedef void* (*fn_PCFindComponent_t)(uintptr_t entity, void* retIBP);
@@ -469,14 +465,17 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
         // Mesh-node lookup by emitter name (e.g. a "smoke" node in the building mesh)
         void* mesh = *(void**)((uintptr_t)model + 0xe8);
         char* name = *(char**)(elem + 8);
-        if (mesh && name && *(int32_t*)(name - 8) != 0 && s_fn_GetNodeIdxFromName) {
-            int n = s_fn_GetNodeIdxFromName(mesh, name);
+        if (mesh && name && *(int32_t*)(name - 8) != 0) {
+            int n = reinterpret_cast<const Graphics::GraphicsMesh*>(mesh)
+                        ->GetNodeIndexFromName(name);   // B.3.5 bridge
             if (n >= 0) {
-                if (s_fn_GetNodeToWorld) {
-                    float ntw[7] = {0, 0, 0, 1, 0, 0, 0};
-                    s_fn_GetNodeToWorld((uint8_t*)model + 0x28, ntw, n);
-                    pos[0] = ntw[4]; pos[1] = ntw[5]; pos[2] = ntw[6];
-                }
+                // GetNodeToWorld is a hidden-retslot door in retail; the door body
+                // moves to the call site as ONE construction into the same storage.
+                float ntw[7] = {0, 0, 0, 1, 0, 0, 0};
+                ::new (static_cast<void*>(ntw)) Math::Transform(
+                    reinterpret_cast<const Graphics::MeshInstance*>((uint8_t*)model + 0x28)
+                        ->GetNodeToWorld(n));   // B.3.5 bridge
+                pos[0] = ntw[4]; pos[1] = ntw[5]; pos[2] = ntw[6];
                 followIdx = n;
             }
         }
@@ -484,7 +483,8 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
 
     // Final placement: identity rotation + computed position
     float finalTf[7] = {0, 0, 0, PC_UVScale(), pos[0], pos[1], pos[2]};
-    if (fn_Geometry_SetTransform) fn_Geometry_SetTransform(ge->geo, finalTf);
+    reinterpret_cast<Graphics::Geometry*>(ge->geo)
+        ->SetTransform(*reinterpret_cast<const Math::Transform*>(finalTf));   // B.3.5 bridge
 
     // Configure the instance from its ParticleSystem resource (vtable+0x48)
     void* res = *(void**)(elem + 0);
@@ -521,9 +521,11 @@ extern "C" void ParticleComponent_StopEmitter(ParticleComponent* self, int index
     if (!geoArr) return;
     PCGeoEntry* ge = &geoArr[index];
     if (ge->sceneId >= 0) {
-        if (s_fn_SceneRemoveObject && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
-            if (scene) s_fn_SceneRemoveObject(scene, (uint32_t)ge->sceneId);
+            if (scene)
+                reinterpret_cast<Graphics::Scene*>(scene)
+                    ->RemoveObject((uint32_t)ge->sceneId);   // B.3.5 bridge
         }
         ge->sceneId = -1;
     }
@@ -555,8 +557,9 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
 
     void* scene = (g_pGameWorldSingleton && *g_pGameWorldSingleton)
                   ? *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60) : nullptr;
-    if (ge->sceneId >= 0 && scene && s_fn_SceneRemoveObject)
-        s_fn_SceneRemoveObject(scene, (uint32_t)ge->sceneId);
+    if (ge->sceneId >= 0 && scene)
+        reinterpret_cast<Graphics::Scene*>(scene)
+            ->RemoveObject((uint32_t)ge->sceneId);   // B.3.5 bridge
 
     ParticleComponent_Place(self, index);
     if (!ge->geo || !scene) return;
@@ -568,9 +571,9 @@ extern "C" void ParticleComponent_StartEmitter(ParticleComponent* self, int inde
         typedef void (*fn_geoUpdate_t)(void*, void*);
         ((fn_geoUpdate_t)vt[1])(ge->geo, &zeroTime);
     }
-    if (fn_Graphics_Scene_AddObject)
     {
-        ge->sceneId = (int32_t)fn_Graphics_Scene_AddObject(scene, ge->geo);
+        ge->sceneId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
+            ->AddObject(reinterpret_cast<Graphics::Geometry*>(ge->geo));   // B.3.5 bridge
         SceneWatch_Note((uint32_t)ge->sceneId, ge->geo, "ParticleComponent");
     }
 
@@ -704,12 +707,17 @@ extern "C" void ParticleComponent_UpdateTick(ParticleComponent* self, void* time
                         *reinterpret_cast<Math::Transform*>(tf) = ypo * modelTf;   // B.3.1 bridge
                         have = true;
                     }
-                } else if (s_fn_GetNodeToWorld) {
-                    s_fn_GetNodeToWorld((uint8_t*)model + 0x28, tf, ge->nodeIdx);
+                } else {
+                    // Retail retslot door, body moved to the call site: exactly one
+                    // construction into `tf`, the same storage the door wrote.
+                    ::new (static_cast<void*>(tf)) Math::Transform(
+                        reinterpret_cast<const Graphics::MeshInstance*>((uint8_t*)model + 0x28)
+                            ->GetNodeToWorld(ge->nodeIdx));   // B.3.5 bridge
                     have = true;
                 }
-                if (have && fn_Geometry_SetTransform)
-                    fn_Geometry_SetTransform(ge->geo, tf);
+                if (have)
+                    reinterpret_cast<Graphics::Geometry*>(ge->geo)
+                        ->SetTransform(*reinterpret_cast<const Math::Transform*>(tf));   // B.3.5 bridge
             }
         }
 
@@ -806,17 +814,7 @@ void ParticleComponent_InitFuncs() {
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
-    s_fn_SceneRemoveObject = reinterpret_cast<fn_SceneRemoveObject_t>(
-        ResolveExport("?RemoveObject@Scene@Graphics@@QEAAXI@Z"));
-
     // --- deps for the full helper-closure ports ---
-    slot = ResolveAddr(Module::Exe, 0x140152970);   // GraphicsMesh::GetNodeIndexFromName
-    if (slot) s_fn_GetNodeIdxFromName = *reinterpret_cast<fn_GetNodeIdxFromName_t*>(slot);
-    if (!s_fn_GetNodeIdxFromName)                    // SA: slot unregistered — use the export
-        s_fn_GetNodeIdxFromName = reinterpret_cast<fn_GetNodeIdxFromName_t>(
-            ResolveExport("?GetNodeIndexFromName@GraphicsMesh@Graphics@@QEBAHPEBD@Z"));
-    s_fn_GetNodeToWorld = reinterpret_cast<fn_GetNodeToWorld_t>(
-        ResolveExport("?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AVTransform@Math@@H@Z"));
     s_fn_FindComp_Model = reinterpret_cast<fn_PCFindComponent_t>(
         ResolveAddr(Module::Exe, 0x140003f60));   // FindComponent(ModelComponent)
     s_fn_FindComp_Map = reinterpret_cast<fn_PCFindComponent_t>(

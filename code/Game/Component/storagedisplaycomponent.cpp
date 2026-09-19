@@ -14,6 +14,11 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "Component/storagedisplaycomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -75,10 +80,6 @@ static uint32_t SDD_RawMatDescTypeId() {
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// Graphics::Scene::RemoveObject(scene, objectId) via dispatch slot 0x140151360
-typedef void (*fn_Scene_RemoveObject_t)(void* scene, uint32_t objectId);
-static fn_Scene_RemoveObject_t s_fn_Scene_RemoveObject = nullptr;
-
 // FUN_140004680 — FindComponent (MapComponent type)
 typedef void* (*fn_FindComponent_Map_t)(uintptr_t entity, void* retval);
 static fn_FindComponent_Map_t s_fn_FindComponent_Map = nullptr;
@@ -90,10 +91,6 @@ static fn_MeshArrayResize_t s_fn_MeshArrayResize = nullptr;
 // CharacterComponent_impl_f3e0 — map tile to world position
 typedef void (*fn_TileToWorld_t)(void* mapInfo, float* outPos, float* inPos, char param4, void* param5);
 static fn_TileToWorld_t s_fn_TileToWorld = nullptr;
-
-// Graphics::Geometry::SetTransform — via dispatch slot 0x1401512e0
-typedef void (*fn_SetTransform_t)(void* geometry, void* transform);
-static fn_SetTransform_t s_fn_SetTransform = nullptr;
 
 // Entity_FindComponent_Storage — find StorageComponent on entity
 typedef void* (*fn_FindComponent_Storage_t)(uintptr_t entity, void* retval);
@@ -120,11 +117,6 @@ static void EnsureHelpers() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140151360);
-    if (slot) s_fn_Scene_RemoveObject = *reinterpret_cast<fn_Scene_RemoveObject_t*>(slot);
-
     s_fn_FindComponent_Map = reinterpret_cast<fn_FindComponent_Map_t>(
         ResolveAddr(Module::Exe, 0x140004680));
 
@@ -134,9 +126,6 @@ static void EnsureHelpers() {
     s_fn_TileToWorld = reinterpret_cast<fn_TileToWorld_t>(
         ResolveAddr(Module::Exe, 0x14009f3e0));  // CharacterComponent_impl_f3e0 tile->world (CALL @140056869 in StorageDisplayComponent::Draw)
 
-
-    slot = ResolveAddr(Module::Exe, 0x1401512e0);
-    if (slot) s_fn_SetTransform = *reinterpret_cast<fn_SetTransform_t*>(slot);
 
     // Entity_FindComponent_Storage (0x140006270) — finds the entity's StorageComponent
     // (type DWORD_1401c7e78). Verified in the real Update disassembly at 0x1400563e0:
@@ -306,9 +295,8 @@ void StorageDisplayComponent_Draw(StorageDisplayComponent* self) {
             *reinterpret_cast<const Math::Scalar*>(&yawBits), offset);   // B.3.1 bridge
 
         // Apply transform to geometry
-        if (s_fn_SetTransform) {
-            s_fn_SetTransform((void*)(displayArray + (uintptr_t)i * 0x128), &transform);
-        }
+        reinterpret_cast<Graphics::Geometry*>(displayArray + (uintptr_t)i * 0x128)
+            ->SetTransform(transform);   // B.3.5 bridge
 
     }
 }
@@ -328,7 +316,7 @@ void StorageDisplayComponent_OnCreate(StorageDisplayComponent* self) {
     int count = *(int*)(selfAddr + 0x30);
     uintptr_t arrayBase = *(uintptr_t*)(selfAddr + 0x28);
 
-    if (!s_pGameState || !*s_pGameState || !s_fn_Scene_RemoveObject) return;
+    if (!s_pGameState || !*s_pGameState) return;
 
     // Get the graphics scene from game state
     uintptr_t gameState = (uintptr_t)*s_pGameState;
@@ -339,7 +327,7 @@ void StorageDisplayComponent_OnCreate(StorageDisplayComponent* self) {
         uint32_t sceneId = *(uint32_t*)(entry + 0x120);
 
         if ((int32_t)sceneId >= 0) {
-            s_fn_Scene_RemoveObject(scene, sceneId);
+            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(sceneId);   // B.3.5 bridge
             *(uint32_t*)(entry + 0x120) = 0xFFFFFFFF; // Reset to -1
         }
     }
@@ -590,26 +578,13 @@ void StorageDisplayComponent_MeshArrayResize(void* arrayBase, int newCount) {
 // self+0x28 = display array (0x128 stride), self+0x30 = count. Scene id at entry+0x120,
 // current mesh at entry+0xc0. param_4==0 => remove the object; otherwise pick the LOD
 // mesh nearest the requested fraction and (re)add it to the scene.
-typedef void (*fn_SDC_SceneRemove_t)(void* scene, uint32_t objId);
 typedef void* (*fn_SDC_EntityHelperCbd0_t)(void* param4, void* retbuf);
-typedef void (*fn_SDC_SetMesh_t)(void* meshInstance, int64_t meshPtr);
-typedef uint32_t (*fn_SDC_SceneAdd_t)(void* scene, void* geometry);
-static fn_SDC_SceneRemove_t      s_fn_SDC_SceneRemove = nullptr;
 static fn_SDC_EntityHelperCbd0_t s_fn_SDC_Cbd0 = nullptr;
-static fn_SDC_SetMesh_t          s_fn_SDC_SetMesh = nullptr;
-static fn_SDC_SceneAdd_t         s_fn_SDC_SceneAdd = nullptr;
 static bool s_sdcSlotHelpersResolved = false;
 static void EnsureSlotHelpers() {
     if (s_sdcSlotHelpersResolved) return;
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140151360);
-    if (slot) s_fn_SDC_SceneRemove = *reinterpret_cast<fn_SDC_SceneRemove_t*>(slot);
     s_fn_SDC_Cbd0 = reinterpret_cast<fn_SDC_EntityHelperCbd0_t>(
         ResolveAddr(Module::Exe, 0x14000cbd0));
-    slot = ResolveAddr(Module::Exe, 0x140151498);
-    if (slot) s_fn_SDC_SetMesh = *reinterpret_cast<fn_SDC_SetMesh_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151370);
-    if (slot) s_fn_SDC_SceneAdd = *reinterpret_cast<fn_SDC_SceneAdd_t*>(slot);
     s_sdcSlotHelpersResolved = true;
 }
 
@@ -660,7 +635,7 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
     if (materialType == 0) {
         uint32_t objId = *(uint32_t*)(arrBase + 0x120 + off);
         if ((int32_t)objId >= 0) {
-            if (s_fn_SDC_SceneRemove) s_fn_SDC_SceneRemove(scene, objId);
+            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(objId);   // B.3.5 bridge
             *(uint32_t*)(arrBase + 0x120 + off) = 0xffffffff;
         }
         return;
@@ -692,11 +667,13 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
         if (*(int64_t*)(arrBase + 0xc0 + off) == meshPtr) {
             return;   // already showing this mesh (steady-state early-out)
         }
-        if (s_fn_SDC_SceneRemove) s_fn_SDC_SceneRemove(scene, objId);
+        reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject(objId);   // B.3.5 bridge
     }
-    if (s_fn_SDC_SetMesh) s_fn_SDC_SetMesh((void*)(arrBase + off), meshPtr);
+    reinterpret_cast<Graphics::MeshInstance*>(arrBase + off)
+        ->SetMesh(Graphics::ExternalPtrHandle{reinterpret_cast<void*>(meshPtr)});   // B.3.5 bridge
     void* geom = (void*)(arrBase + off);
-    uint32_t newId = s_fn_SDC_SceneAdd ? s_fn_SDC_SceneAdd(scene, geom) : 0xffffffff;
+    uint32_t newId = reinterpret_cast<Graphics::Scene*>(scene)
+        ->AddObject(reinterpret_cast<Graphics::Geometry*>(geom));   // B.3.5 bridge
     *(uint32_t*)((uintptr_t)geom + 0x120) = newId;
 
 }
@@ -707,10 +684,12 @@ void StorageDisplayComponent_SetDisplayMesh(uintptr_t self, int index, float fra
 void StorageDisplayComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
+    // Scene::RemoveObject is a member now (B.3.5 caller batch I2), so it is no
+    // longer a pointer this can print.
     printf("[StorageDisplayComponent] Funcs resolved: Component_Serialize=%p "
-           "Scene_RemoveObject=%p FindComponent_Map=%p MeshArrayResize=%p "
+           "FindComponent_Map=%p MeshArrayResize=%p "
            "SetDisplayMesh=%p pGameState=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Scene_RemoveObject,
+           (void*)s_fn_Component_Serialize,
            (void*)s_fn_FindComponent_Map, (void*)s_fn_MeshArrayResize,
            (void*)s_fn_SetDisplayMesh, (void*)s_pGameState);
 #endif

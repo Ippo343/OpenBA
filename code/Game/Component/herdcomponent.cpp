@@ -23,6 +23,10 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+// graphics/Mesh.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Mesh.h"
 #include "Component/herdcomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -125,8 +129,6 @@ typedef void* (*fn_FindModelComp_t)(int64_t entity, void* outIbp);        // 0x1
 static fn_FindModelComp_t s_fn_FindModelComp = nullptr;
 typedef void (*fn_ModelSetTransform_t)(int64_t model, const void* pos, float yaw); // 0x140003870
 static fn_ModelSetTransform_t s_fn_ModelSetTransform = nullptr;
-typedef void (*fn_MeshInstance_SetMesh_t)(void* meshInstance, void* mesh); // slot 0x140151498
-static fn_MeshInstance_SetMesh_t s_fn_MeshInstance_SetMesh = nullptr;
 typedef void (*fn_ModelHelper2b70_t)(int64_t ownerIbp, int arg);          // 0x1400c2b70
 static fn_ModelHelper2b70_t s_fn_ModelHelper2b70 = nullptr;
 typedef void (*fn_MarkEntityDirty_t)(void* entity);                       // 0x1400c3470
@@ -142,10 +144,9 @@ static fn_DynArray8_EraseByValue_t s_fn_DynArray8_EraseByValue = nullptr;
 static bool s_herdExtraInit = false;
 static void EnsureHerdExtras() {
     if (s_herdExtraInit) return;
-    uintptr_t slot;
     s_fn_ComponentEntity_CopyCtor = reinterpret_cast<fn_ComponentEntity_CopyCtor_t>(
         ResolveAddr(Module::Exe, 0x1400c3720));
-    slot = ResolveAddr(Module::Exe, 0x140152a30);            // Math::Vector3::Vector3
+    uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a30);  // Math::Vector3::Vector3
     if (slot) s_fn_Vec3Ctor_local = *reinterpret_cast<fn_Vec3Ctor_local_t*>(slot);
     s_fn_CharComp_f3e0 = reinterpret_cast<fn_CharComp_f3e0_t>(
         ResolveAddr(Module::Exe, 0x14009f3e0));
@@ -168,8 +169,6 @@ static void EnsureHerdExtras() {
         ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_ModelSetTransform = reinterpret_cast<fn_ModelSetTransform_t>(
         ResolveAddr(Module::Exe, 0x140003870));
-    slot = ResolveAddr(Module::Exe, 0x140151498);            // Graphics::MeshInstance::SetMesh
-    if (slot) s_fn_MeshInstance_SetMesh = *reinterpret_cast<fn_MeshInstance_SetMesh_t*>(slot);
     s_fn_ModelHelper2b70 = reinterpret_cast<fn_ModelHelper2b70_t>(
         ResolveAddr(Module::Exe, 0x1400c2b70));
     s_fn_MarkEntityDirty = reinterpret_cast<fn_MarkEntityDirty_t>(
@@ -343,11 +342,12 @@ void HerdComponent_Helper7400(int64_t animalComp, void* pos, float yaw, char pos
                 int meshIdx = *(int16_t*)(model + 0x166);
                 int v2 = *(int16_t*)(model + 0x164);
                 uintptr_t table2 = md2 ? *(uintptr_t*)((uintptr_t)md2 + 0x20) : 0;
-                if (table2 && s_fn_MeshInstance_SetMesh) {
+                if (table2) {
                     uintptr_t meshList = *(uintptr_t*)(table2 + (int64_t)v2 * 0x18 + 0x8);
                     void* mesh = meshList
                         ? *(void**)(meshList + (int64_t)meshIdx * 8) : nullptr;
-                    s_fn_MeshInstance_SetMesh((void*)(model + 0x28), mesh);
+                    reinterpret_cast<Graphics::MeshInstance*>(model + 0x28)
+                        ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
                 }
 
                 uintptr_t vt = *(uintptr_t*)model;

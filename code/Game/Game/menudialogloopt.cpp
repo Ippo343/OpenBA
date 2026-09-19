@@ -17,6 +17,19 @@
 // but is correct for an MVP scene background.
 
 #include "Game/menudialogloopt_funcs.h"
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::{Camera,Scene,Geometry,
+// MeshInstance,GraphicsMesh,SunLight,ParticleSystemInstance} and Video::Context
+// are real classes. These go AHEAD of "resolve.h" — resolve.h pulls
+// <windows.h>, whose <wingdi.h> declares a global `Rectangle` FUNCTION that
+// hides `Volume::Rectangle`'s class name inside Volume.h's own static_asserts
+// (Camera.h and Geometry.h include Volume.h).
+#include "graphics/Camera.h"
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"                // MeshInstance
+#include "graphics/GraphicsMesh.h"
+#include "graphics/SunLight.h"
+#include "graphics/ParticleInstance.h"    // ParticleSystemInstance
+#include "video/Context.h"
 #include "options.h"
 #include "MenuScene.h"
 #include "engine_funcs.h"
@@ -163,7 +176,9 @@ static void* MenuScene_Helper_8800(void* transformObj) {
 // we use the simple fovX = aspect * fovY frustum and skip the ultrawide clamp.
 // This matches the original's behavior for aspect <= 16/9.
 static void MenuScene_Helper_8660(void* transformObj, float fovY_deg, float nearZ, float farZ) {
-    if (!fn_Volume_Frustum_Ctor || !fn_Graphics_Camera_SetFrustum ||
+    // B.3.5: the `!fn_Graphics_Camera_SetFrustum` readiness term went with the
+    // door; the Frustum ctor door and the two singleton object tests stay.
+    if (!fn_Volume_Frustum_Ctor ||
         !g_pVideoConfigSingleton || !*g_pVideoConfigSingleton) {
         return;
     }
@@ -187,7 +202,8 @@ static void MenuScene_Helper_8660(void* transformObj, float fovY_deg, float near
 
     // Camera lives at transform+0x34.
     void* cameraObj = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(transformObj) + 0x34);
-    fn_Graphics_Camera_SetFrustum(cameraObj, frustumBuf);
+    reinterpret_cast<Graphics::Camera*>(cameraObj)->SetFrustum(
+        *reinterpret_cast<const ::Frustum*>(frustumBuf));   // B.3.5 bridge
 }
 
 // Mirror of MenuScene_helper_a3a0 (exe 0x14001a3a0) — copy 13 dwords + Camera::operator=
@@ -291,7 +307,8 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     // Defensive bound check on meshIdx — keeps id arrays in sync if a future
     // serializer regression ever produces an out-of-range index.
     if (meshIdx < 0 || meshIdx >= meshArrCount) {
-        uint32_t id0 = fn_Graphics_Scene_AddObject(scene, inst);
+        uint32_t id0 = reinterpret_cast<Graphics::Scene*>(scene)->AddObject(
+            reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
         AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id0);
         *outSkippedBadIdx = true;
         return 0;
@@ -299,7 +316,8 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
 
     // SetMesh(meshArray[meshIdx]) — value passed is the 8-byte ExternalPtr.
     void* meshExtPtr = meshArr[meshIdx];
-    fn_Graphics_MeshInstance_SetMesh(inst, meshExtPtr);
+    reinterpret_cast<Graphics::MeshInstance*>(inst)->SetMesh(
+        Graphics::ExternalPtrHandle{meshExtPtr});   // B.3.5 bridge
 
     // Geometry::SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem.pos)).
     // FromYawPitchOffset is `static Transform FromYawPitchOffset(Scalar& yaw,
@@ -320,7 +338,7 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
     };
     Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
         yaw, pitch, *reinterpret_cast<const Math::Vector3*>(offset));
-    fn_Geometry_SetTransform(inst, &transformBuf);
+    reinterpret_cast<Graphics::Geometry*>(inst)->SetTransform(transformBuf);   // B.3.5 bridge
 
     // Copy 3 dwords + scale into MeshInstance fields. Last value is g_fUVScale
     // (exe DAT_14017214c, hardcoded 1.0f to skip an extra ResolveAddr).
@@ -331,9 +349,16 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
 
     // Iterate GetMaterialList(matIdx) and SetMaterialInstance per slot.
     int32_t matSlots = 0;
-    if (fn_Graphics_GraphicsMesh_GetMaterialList && fn_Graphics_MeshInstance_SetMaterialInstance &&
-        meshExtPtr) {
-        void* matList = fn_Graphics_GraphicsMesh_GetMaterialList(meshExtPtr, matIdx);
+    // B.3.5: the two door-readiness terms went with their doors; `meshExtPtr` is
+    // an object test and stays.
+    if (meshExtPtr) {
+        // B.3.5 bridge — `?GetMaterialList@GraphicsMesh@Graphics@@…H@Z` @0x1800126c0,
+        // the ONE-ARG overload (the arg-less 0x1800126b0 twin returns element 0).
+        // The door took the 8-byte ExternalPtr VALUE as `this`, so the receiver is
+        // that same value reinterpreted; the member returns a REFERENCE where the
+        // door returned its address.
+        const void* matList = &reinterpret_cast<const Graphics::GraphicsMesh*>(meshExtPtr)
+                                   ->GetMaterialList(matIdx);   // B.3.5 bridge
         if (matList) {
             // ENDGAME B.3.2 step 2: `?GetMaterialList@GraphicsMesh@Graphics@@`
             // returns `const Collection::Array<Object::ExternalPtr<
@@ -350,23 +375,26 @@ static int32_t MenuDialogLoopT_PhaseB_ProcessElement(
             // The `mats.GetData()` term is the old `&& matData`, kept because
             // nothing here proves GetSize() is 0 whenever _data is null.
             for (int32_t m = 0; m < mats.GetSize() && mats.GetData(); ++m) {
-                fn_Graphics_MeshInstance_SetMaterialInstance(inst, m, mats[m]);
+                reinterpret_cast<Graphics::MeshInstance*>(inst)->SetMaterialInstance(
+                    m, Graphics::ExternalPtrHandle{mats[m]});   // B.3.5 bridge
             }
             matSlots = mats.GetSize();
         }
     }
 
     // Vtable+0x08 (Update) with Time(0).
+    // B.3.5 bridge — slot 1 of `Graphics::Geometry` IS `Update(const Time&)`
+    // (Geometry.h's measured slot list). The receiver is a PROVED MeshInstance:
+    // 0x120 bytes (sizeof) from MemAlloc, run through `??0MeshInstance@Graphics@@`
+    // above, so the virtual call reads the same vptr the hand-inlined slot read.
     uint8_t timeBuf[8] = {};
     fn_Time_Ctor_Float(timeBuf, 0.0f);
-    void** vtable = *reinterpret_cast<void***>(inst);
-    if (vtable && vtable[1]) {
-        using fn_t = void (*)(void* self, void* time);
-        reinterpret_cast<fn_t>(vtable[1])(inst, timeBuf);
-    }
+    reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+        *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.5 bridge
 
     // 4. Scene::AddObject + append id.
-    uint32_t id = fn_Graphics_Scene_AddObject(scene, inst);
+    uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)->AddObject(
+        reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
     AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id);
 
     return matSlots;
@@ -390,16 +418,14 @@ void MenuDialogLoopT_PhaseB_InitState(MenuDialogLoopT_PhaseBState* state,
     state->matSlotsTotal  = 0;
 
     if (!self || !menuScene || !scene) return;
+    // B.3.5: SetMesh / Scene::AddObject / Geometry::SetTransform are members now,
+    // so their readiness terms and their `%p`s are gone. The MeshInstance CTOR
+    // door, MemoryAllocator and the Time ctor stay.
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_Graphics_MeshInstance_Ctor ||
-        !fn_Graphics_MeshInstance_SetMesh || !fn_Graphics_Scene_AddObject ||
-        !fn_Geometry_SetTransform ||
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseB] missing required fn ptrs "
-               "(MICtor=%p MISetM=%p AddObj=%p GeomSetT=%p TimeC=%p) — skipping\n",
+               "(MICtor=%p TimeC=%p) — skipping\n",
                (void*)fn_Graphics_MeshInstance_Ctor,
-               (void*)fn_Graphics_MeshInstance_SetMesh,
-               (void*)fn_Graphics_Scene_AddObject,
-               (void*)fn_Geometry_SetTransform,
                (void*)fn_Time_Ctor_Float);
         return;
     }
@@ -503,16 +529,14 @@ void MenuDialogLoopT_LoadStaticMeshes_PhaseB(void* self, void* menuScene, void* 
 //   elem+0x10 = particle resource index (int32 into MenuScene+0x60 array)
 void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* scene) {
     if (!menuScene || !scene) return;
+    // B.3.5: Scene::AddObject and Geometry::SetTransform are members now; the
+    // ParticleSystemInstance CTOR door and the Time ctor stay.
     if (!fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_Graphics_ParticleSystemInstance_Ctor ||
-        !fn_Graphics_Scene_AddObject ||
-        !fn_Geometry_SetTransform ||
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::PhaseC] missing required fn ptrs "
-               "(PSICtor=%p AddObj=%p GeomSetT=%p TimeC=%p) — skipping\n",
+               "(PSICtor=%p TimeC=%p) — skipping\n",
                (void*)fn_Graphics_ParticleSystemInstance_Ctor,
-               (void*)fn_Graphics_Scene_AddObject,
-               (void*)fn_Geometry_SetTransform,
                (void*)fn_Time_Ctor_Float);
         return;
     }
@@ -548,14 +572,13 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
         int32_t resIdx = *reinterpret_cast<const int32_t*>(elem + 0x10);
         void* particleResource = resArr[resIdx];
 
-        // particle.vtable[+0x48](particle, particleResource) — SetParticleSystem
-        // (or whatever slot 9 is on the runtime ParticleSystemInstance vtable).
-        void** vtable = *reinterpret_cast<void***>(inst);
-
-        if (vtable && vtable[9]) {
-            using fn_set_t = void (*)(void* self, void* res);
-            reinterpret_cast<fn_set_t>(vtable[9])(inst, particleResource);
-        }
+        // B.3.5 bridge — the hand-inlined `vtable[9]` IS
+        // `?SetParticle@ParticleInstance@Graphics@@` @0x180104a00 (slot 9,
+        // ParticleInstance.h's measured slot list). The receiver is a PROVED
+        // ParticleSystemInstance: 0xe0 bytes (sizeof) from MemAlloc, run through
+        // `??0ParticleSystemInstance@Graphics@@` just above.
+        reinterpret_cast<Graphics::ParticleSystemInstance*>(inst)->SetParticle(
+            Graphics::ExternalPtrHandle{particleResource});   // B.3.5 bridge
 
         // SetTransform(FromYawPitchOffset(yaw, pitch=0, offset=elem[0..0xb])).
         float yaw   = *reinterpret_cast<const float*>(elem + 0x0c);
@@ -567,21 +590,20 @@ void MenuDialogLoopT_LoadParticles_PhaseC(void* self, void* menuScene, void* sce
         };
         Math::Transform transformBuf = Math::Transform::FromYawPitchOffset(
             yaw, pitch, *reinterpret_cast<const Math::Vector3*>(offset));
-        fn_Geometry_SetTransform(inst, &transformBuf);
+        reinterpret_cast<Graphics::Geometry*>(inst)->SetTransform(transformBuf);   // B.3.5 bridge
 
-        // Initial Update(Time(0)).
+        // Initial Update(Time(0)) — slot 1 of Graphics::Geometry.
         uint8_t timeBuf[8] = {};
         fn_Time_Ctor_Float(timeBuf, 0.0f);
-        if (vtable && vtable[1]) {
-            using fn_upd_t = void (*)(void* self, void* time);
-            reinterpret_cast<fn_upd_t>(vtable[1])(inst, timeBuf);
-        }
+        reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+            *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.5 bridge
 
         // 4. Append to particle-only array (+0xbd0) — drives per-frame Update.
         AppendToDynArray<void*>(self, MenuDLTOff::partInstArr_bd0, inst);
 
         // 5. Scene::AddObject + append id.
-        uint32_t id = fn_Graphics_Scene_AddObject(scene, inst);
+        uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)->AddObject(
+            reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
         AppendToDynArray<uint32_t>(self, MenuDLTOff::sceneIdArr_bf0, id);
         ++added;
     }
@@ -610,11 +632,11 @@ void MenuDialogLoopT_TickParticles(void* self, void* time) {
     for (int32_t i = 0; i < count; ++i) {
         void* inst = arr[i];
         if (!inst) continue;
-        void** vtable = *reinterpret_cast<void***>(inst);
-        if (vtable && vtable[1]) {
-            using fn_t = void (*)(void* self, void* time);
-            reinterpret_cast<fn_t>(vtable[1])(inst, time);
-        }
+        // B.3.5 bridge — slot 1 of Graphics::Geometry is `Update(const Time&)`.
+        // Retail reads the +0xbd0 array AS `Geometry**` (the banner above quotes
+        // exe 0x14009b6e0 doing exactly that), so the receiver is proved.
+        reinterpret_cast<Graphics::Geometry*>(inst)->Update(
+            *reinterpret_cast<const System::Time*>(time));   // B.3.5 bridge
     }
 
     // Match retail MenuDLT::Update ordering (exe 0x14009b6e0):
@@ -623,12 +645,11 @@ void MenuDialogLoopT_TickParticles(void* self, void* time) {
     // make every shared-emit-state instance early-return on its first update;
     // and skipping Scene::Clean leaves Geometry dirty bits set, causing the
     // Renderer to read stale bounds/transforms each frame (visible flicker).
-    if (fn_Graphics_ParticleInstance_IncrementInstanceIndex) {
-        fn_Graphics_ParticleInstance_IncrementInstanceIndex();
-    }
+    // B.3.5 bridge — a CLASS STATIC, so there is no receiver at all.
+    Graphics::ParticleInstance::IncrementInstanceIndex();   // B.3.5 bridge
     void* scene = Field<void*>(self, 0xba0);
-    if (scene && fn_Graphics_Scene_Clean) {
-        fn_Graphics_Scene_Clean(scene);
+    if (scene) {
+        reinterpret_cast<Graphics::Scene*>(scene)->Clean();   // B.3.5 bridge
     }
 }
 
@@ -650,7 +671,7 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     if (!fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_Graphics_Renderer_Ctor || !fn_Graphics_Scene_Ctor ||
         !fn_Graphics_SunLight_Ctor || !fn_Graphics_MeshInstance_Ctor ||
-        !fn_Graphics_MeshInstance_SetMesh || !fn_Graphics_Scene_AddGlobalObject ||
+        // B.3.5: SetMesh and Scene::AddGlobalObject are members now.
         !fn_Time_Ctor_Float) {
         printf("[MenuDLT::LoadScene] missing required fn pointers — bailing out\n");
         return false;
@@ -745,21 +766,20 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
     // --- SetMesh from MenuScene+0x70 (the GraphicsMesh ExternalPtr) ---
     void* meshExt = Field<void*>(menuScene, 0x70);
     if (mainMesh && meshExt) {
-        fn_Graphics_MeshInstance_SetMesh(mainMesh, meshExt);
+        reinterpret_cast<Graphics::MeshInstance*>(mainMesh)->SetMesh(
+            Graphics::ExternalPtrHandle{meshExt});   // B.3.5 bridge
     }
 
     // --- Time(0.0f) construction + Update vtable[+0x08] dispatch on the MeshInstance ---
     if (mainMesh) {
         uint8_t timeBuf[8] = {};
         fn_Time_Ctor_Float(timeBuf, 0.0f);
-        // Call vtable[+0x08] — typically Update(Time*) for the default Runtime
-        // MeshInstance vtable. (Original code uses the overridden vtable but the
-        // base Runtime vtable still has a valid Update slot here.)
-        void** vtable = *reinterpret_cast<void***>(mainMesh);
-        if (vtable && vtable[1]) {
-            using fn_t = void (*)(void* self, void* time);
-            reinterpret_cast<fn_t>(vtable[1])(mainMesh, timeBuf);
-        }
+        // B.3.5 bridge — slot 1 of Graphics::Geometry is `Update(const Time&)`.
+        // (Original code uses the overridden vtable but the base Runtime vtable
+        // still has a valid Update slot here; the virtual call reads whichever
+        // vptr the object carries, exactly as the hand-inlined slot did.)
+        reinterpret_cast<Graphics::Geometry*>(mainMesh)->Update(
+            *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.5 bridge
     }
 
     // --- Capture scene Geometry pointer (MenuScene+0x28 = Geometry*) ---
@@ -776,9 +796,10 @@ bool MenuDialogLoopT_LoadSceneA1(void* self) {
 
     // --- Add to global scene list (terrain Geometry, SunLight, MeshInstance) ---
     if (gScene) {
-        if (sceneGeom) fn_Graphics_Scene_AddGlobalObject(gScene, sceneGeom);
-        if (sunLight)  fn_Graphics_Scene_AddGlobalObject(gScene, sunLight);
-        if (mainMesh)  fn_Graphics_Scene_AddGlobalObject(gScene, mainMesh);
+        Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(gScene);   // B.3.5 bridge
+        if (sceneGeom) gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(sceneGeom));  // B.3.5 bridge
+        if (sunLight)  gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(sunLight));   // B.3.5 bridge
+        if (mainMesh)  gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(mainMesh));   // B.3.5 bridge
     }
 
     // --- Copy transform from MenuScene+0x88 into our Transform at self+0xbb8 ---
@@ -841,8 +862,10 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
     void* menuScene = Field<void*>(self, MenuDLTOff::menuSceneExt_b90);
     if (!menuScene || !context) return;
 
-    if (!fn_Graphics_SunLight_Set ||
-        !fn_Video_Context_SetFog || !fn_Graphics_Renderer_Draw) {
+    // B.3.5: SunLight::Set and Context::SetFog are members now. Only
+    // `Graphics::Renderer::Draw` is still a door — it is declared in Camera.h and
+    // DEFINED NOWHERE (its body is wave27_lane_gfxbig.cpp's door).
+    if (!fn_Graphics_Renderer_Draw) {
         printf("[MenuDLT::DrawScene] missing fn pointers — skipping\n");
         return;
     }
@@ -903,7 +926,10 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
 
     // Original arg order: SunLight::Set(self, dir, sunVec4, ambientVec4) — R8 is
     // sun, R9 is ambient.
-    fn_Graphics_SunLight_Set(sunLight, &dirVec, sunColorVec, ambientVec);
+    reinterpret_cast<Graphics::SunLight*>(sunLight)->Set(
+        dirVec,
+        *reinterpret_cast<const Math::Vector4*>(sunColorVec),
+        *reinterpret_cast<const Math::Vector4*>(ambientVec));   // B.3.5 bridge
 
     // Push sky color into Video::Context+0x3b8/+0x288 and OR fog-enable bits.
     // Original disasm:
@@ -927,7 +953,8 @@ void MenuDialogLoopT_DrawScene_PhaseA(void* self, float alpha, void* context) {
 
     float fogStart = *reinterpret_cast<float*>(ms + 0x1A0);
     float fogEnd   = *reinterpret_cast<float*>(ms + 0x1A4);
-    fn_Video_Context_SetFog(context, fogStart, fogEnd, fogColor);
+    reinterpret_cast<Video::Context*>(context)->SetFog(
+        fogStart, fogEnd, *reinterpret_cast<const Math::Vector4*>(fogColor));   // B.3.5 bridge
 
     // Mirror the small write the original does into Renderer+0x3C from
     // VideoConfig+0x30. This is a per-frame copy of some video setting.

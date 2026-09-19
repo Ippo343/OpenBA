@@ -10,6 +10,11 @@
 //   OnRemove (0x140125c40) — Complex animation/path logic
 //
 
+// graphics/Mesh.h comes FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// function once <windows.h> has been seen (via resolve.h), which turns
+// Volume.h's own `sizeof(Rectangle)` assert into a hard error.
+#include "graphics/Mesh.h"   // ENDGAME B.3.5 caller batch I2
 #include "Component/naturalresourcecomponent_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -29,10 +34,6 @@ static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 // Entity_ClearPathQueue(entity, outIBP)
 typedef void (*fn_ClearPathQueue_t)(void* entity, void* outIBP);
 static fn_ClearPathQueue_t s_fn_ClearPathQueue = nullptr;
-
-// Graphics::MeshInstance::IsAnimating(meshInstance) -> bool
-typedef bool (*fn_IsAnimating_t)(void* meshInstance);
-static fn_IsAnimating_t s_fn_IsAnimating = nullptr;
 
 // FUN_1400c3470 — entity flag update helper
 typedef void (*fn_EntityFlagUpdate_t)(void* entity);
@@ -90,10 +91,8 @@ void NaturalResourceComponent_OnRemove(NaturalResourceComponent* self) {
     // CheckPtr on model IBP
 
     // Check if mesh is animating
-    if (s_fn_IsAnimating) {
-        bool isAnimating = s_fn_IsAnimating((void*)(modelIBP + 0x28));
-        if (isAnimating) return;
-    }
+    bool isAnimating = reinterpret_cast<Graphics::MeshInstance*>(modelIBP + 0x28)->IsAnimating();   // B.3.5 bridge
+    if (isAnimating) return;
 
     // Clear bit 2 of flags (+0x20)
     uint32_t oldFlags = *(uint32_t*)(selfAddr + 0x20);
@@ -181,8 +180,6 @@ void NaturalResourceComponent_InitFuncs() {
 
     s_fn_ClearPathQueue = reinterpret_cast<fn_ClearPathQueue_t>(
         ResolveAddr(Module::Exe, 0x140005200));  // Entity_ClearPathQueue used in decomp
-    s_fn_IsAnimating = reinterpret_cast<fn_IsAnimating_t>(
-        ResolveExport("?IsAnimating@MeshInstance@Graphics@@QEBA_NXZ"));
     s_fn_EntityFlagUpdate = reinterpret_cast<fn_EntityFlagUpdate_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
     s_fn_ReassignResource = reinterpret_cast<fn_ReassignResource_t>(

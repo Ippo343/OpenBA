@@ -40,6 +40,10 @@
 // so the lifetime gate above is now driven by a real particle system finishing rather
 // than by a dormant one.
 
+// graphics/Mesh.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Mesh.h"
 #include "Component/tornadocomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "options.h"
@@ -110,12 +114,10 @@ typedef bool  (*fn_FireBurning_t)(void* fireComp);                             /
 typedef bool  (*fn_FireIgnite_t)(void* fireComp, void* time);                  // 0x14011e7b0
 typedef void  (*fn_FireIgniteFinish_t)(void* fireComp);                        // 0x14011ea10
 typedef void  (*fn_CitizenLifeEvent_t)(void* citizenComp, int event, const char* p); // 0x140116dd0
-typedef bool  (*fn_MeshIsAnimating_t)(void* meshInstance);                     // slot 0x1401514b0
 typedef void* (*fn_Map_RadiusQuery_t)(float* map, void** out, float* pos, float* radius,
                                       int typeId, void* outArr);               // 0x140092990
 
 // Graphics leaf reached through the exe's own .rdata dispatch slot.
-typedef void  (*fn_GeometrySetTransform_t)(void* geometry, void* transform);       // 0x1401512e0
 
 struct Helpers {
     fn_ComponentSerialize_t   componentSerialize   = nullptr;
@@ -140,10 +142,8 @@ struct Helpers {
     fn_FireIgnite_t           fireIgnite           = nullptr;
     fn_FireIgniteFinish_t     fireIgniteFinish     = nullptr;
     fn_CitizenLifeEvent_t     citizenLifeEvent     = nullptr;
-    fn_MeshIsAnimating_t      meshIsAnimating      = nullptr;
     fn_Map_RadiusQuery_t      radiusQuery          = nullptr;
 
-    fn_GeometrySetTransform_t geometrySetTransform = nullptr;
 };
 
 Helpers g_h;
@@ -264,8 +264,6 @@ void TornadoComponent_InitFuncs() {
         std::fflush(stderr);
     }
 
-    g_h.meshIsAnimating      = ResolveSlotPtr<fn_MeshIsAnimating_t>(0x1401514b0);
-    g_h.geometrySetTransform = ResolveSlotPtr<fn_GeometrySetTransform_t>(0x1401512e0);
 
     TORNADO_TRACE("init: fire lane %s (e690=%p e7b0=%p ea10=%p) — the building arm is "
                   "%s until the fire lane lands\n",
@@ -459,9 +457,9 @@ static void Tornado_StrikeEntityCounted(int64_t unusedFirstArg, void* entityIbp,
         int64_t meshIbp = 0;
         if (g_h.clearPathQueue) { g_h.clearPathQueue(entity, &meshIbp); }
         const bool animating =
-            (g_h.meshIsAnimating && meshIbp)
-                ? g_h.meshIsAnimating(reinterpret_cast<void*>(
-                      static_cast<uintptr_t>(meshIbp) + 0x28))
+            meshIbp
+                ? reinterpret_cast<const Graphics::MeshInstance*>(
+                      static_cast<uintptr_t>(meshIbp) + 0x28)->IsAnimating()   // B.3.5 bridge
                 : false;
         if (!animating) {
             *reinterpret_cast<int32_t*>(static_cast<uintptr_t>(natResComp) + 0x28) = 0;
@@ -931,7 +929,7 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
         transform.translation.y = *reinterpret_cast<float*>(s + 0x5c);
         transform.translation.z = *reinterpret_cast<float*>(s + 0x60);
         void* geometry = *reinterpret_cast<void**>(*reinterpret_cast<uintptr_t*>(pc + 0x38));
-        if (g_h.geometrySetTransform) g_h.geometrySetTransform(geometry, &transform);
+        reinterpret_cast<Graphics::Geometry*>(geometry)->SetTransform(transform);   // B.3.5 bridge
     }
 
     // --- move the audio emitters and refresh the volume ---
