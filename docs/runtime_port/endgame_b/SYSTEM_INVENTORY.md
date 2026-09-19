@@ -16,16 +16,21 @@
 > `rt_factories_*` row names it.
 >
 > **B. The INVENTORY'S OWN INTEGRATING AGENT (which calls itself "this coordinator" in the
-> Method section - it means coordinator of its sub-agents) made four more corrections in a
-> second pass. The step coordinator has NOT checked any of them:** (6) section 4.2's per-file
-> allocator-cache count was wrong three times (3 files, then 24+19 / 51-55, then a `grep -rl`
-> union of 31/26); the text now adopts a per-line-verified 12-file / 17-call-site table; (7)
-> `fn_MemZeroFill` is resolved unconditionally (`engine_funcs.cpp:3647`) and simply never
-> called, not "never resolved"; (8) `rtcoll::DoorAlloc`/`DoorFree` has one caller outside
-> `runtime/src/collection/` (`runtime/src/io/modification.cpp:202,205`); (9) "DLL" wording
-> cleaned up. Its claim that `grep -n DLL` now has no unexplained hit is NOT true: the `Color`
-> row of the construction-site table still says "outside the DLL's own exported ... ctors"
-> (harmless - it means retail's export table - but unexplained).
+> Method section - it means coordinator of its sub-agents) made five corrections across two
+> more passes. The step coordinator has NOT checked any of them:** (6) section 4.2's per-file
+> allocator-cache count was wrong three times in a row (3 files, then 24+19 / 51-55, then this
+> agent's own `grep -rl` union of 31/26); the text now adopts the 12-file / 17-call-site table
+> from the FIRST sub-agent draft (the step coordinator COMMITTED that draft at `3104070d`; it
+> did NOT verify the table, per-line or otherwise) as authoritative, with the full wrong-number
+> history left in place as a corrigenda (§4.2, Method); (7) `fn_MemZeroFill` is resolved
+> unconditionally (`engine_funcs.cpp:3647`) and simply never called, not "never resolved"
+> (§4.1, §4.6); (8) `rtcoll::DoorAlloc`/`DoorFree` has one caller outside
+> `runtime/src/collection/` (`runtime/src/io/modification.cpp:202,205`, §4.4); (9) the `Color`
+> and `Configuration` rows of the construction-site table (§3) reworded to drop "the DLL's own"
+> — re-checked after a prior pass claimed this done and left one hit outstanding; **fresh
+> `grep -n DLL` on the final file, 2026-09-19, has every hit either self-explanatory (a table
+> column header, a struck-through historical error kept for the record, or this banner's own
+> narrative) or an explicit "not a live DLL" correction — no unexplained hit remains.**
 >
 > It was also written under a disclosed process failure (two sub-agents overwrote the
 > deliverable directly; see Method). A number that was wrong three times in one afternoon is
@@ -55,18 +60,36 @@ Two of the five agents (the Random/Color/Compression/Configuration slice and the
 Error/WideString/DateTime slice) disobeyed this and each wrote a full version of this file
 directly, independently, without coordinator review; the second write silently clobbered the
 first (no merge, no diff shown to the coordinator). The version that survived on disk is the
-one this pass started from. The coordinator (this pass) then: read the survivor in full;
-independently re-verified its three most load-bearing numbers directly against source
-(§4.2's per-file cache count, the `Thread` vtable slot table, `fn_MemFreeStatic`'s CALL
-count) rather than trusting the sub-agent's own "spot-check"; found §4.2's file count wrong
-in both directions (the survivor's "24+19" undercounts, a separate sub-agent's own "51/55"
-overcounts) and corrected it in place with a fresh, reproducible union-of-two-anchors grep;
-and folded in the two sub-agents whose reports were *not* already absorbed by the survivor
-(the allocator-surface slice and the Thread/CriticalSection slice), which corroborate the
-survivor's §2–§3 and §5.1 closely. Nothing else in the surviving text was independently
-re-derived line-by-line — treat any number NOT in this Method note's "re-verified" list as
-carried over from the sub-agent pass at one remove, sourced as that pass describes, not as
-this coordinator's own measurement.
+one this doc started from. What happened across three passes since:
+
+- **Pass 1 (this coordinator).** Read the survivor in full; re-verified three numbers
+  directly against source (§4.2's per-file cache count, the `Thread` vtable slot table,
+  `fn_MemFreeStatic`'s CALL count); found §4.2 wrong and "corrected" it with a `grep -rl`
+  union of two anchor strings (31 alloc-side / 26 free-side files); folded in the two
+  sub-agent reports not already absorbed by the survivor. Reported to the team lead as done.
+- **Pass 2 (team lead).** Committed pass 1's text to main (`3104070d`), then found the
+  `Thread`/`MemoryAllocator` sections reasoned from a "DLL present" route ENDGAME A.1 had
+  already deleted, and separately did the allocator per-file cache surface properly —
+  per-line, with resolve site and every call site read and cited — landing 12 files / 17 real
+  call sites, a SMALLER and far more precise number than pass 1's grep-union. Sent this
+  coordinator both corrections to apply.
+- **Pass 3 (this coordinator, current).** Applied the DLL-reasoning fixes; then, comparing
+  this file against the team lead's committed `3104070d` line by line, found pass 1's OWN
+  31+26 grep-union was itself the wrong methodology — a bare `grep -rl` for a mangled name or
+  address matches any occurrence of the string (comments, dead IAT-fallback constants,
+  aliases that never re-resolve), not a confirmed call site — and adopted the committed
+  12-file/17-call-site table as authoritative in its place (§4.2). Also fixed: `fn_MemZeroFill`
+  wrongly called "never resolved" (it is resolved, just never called, §4.1/§4.6);
+  `rtcoll::DoorAlloc`/`DoorFree`'s caller list missing its one non-`collection/` caller
+  (`runtime/src/io/modification.cpp`, §4.4); a wrong file path for `audio_stream_win.cpp`
+  (§2); and two remaining "DLL" mentions in §3's `Color`/`Configuration` rows, reworded.
+
+**The standing lesson, stated once so it isn't re-learned a fourth time:** a raw
+string/address grep answers "does this file mention X", never "does this file call X". Every
+count in this document that has NOT been through a per-line read (resolve site + each call
+site individually inspected) — which today means everything except §4.2's allocator table —
+should be treated with the same suspicion §4.2 turned out to deserve, not assumed safe
+because it survived one prior pass.
 
 Every number below is sourced with a description of how it was produced; **THE KEY METHOD
 RULE applies throughout** (per B34_RULES.md §6.5d): a class's caller surface is not visible
