@@ -38,7 +38,9 @@
 
 #include "../../types/math/Math.h"
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/GeneratedImageBuffer.h"
 #include "../../types/graphics/Material.h"
+#include "../../types/graphics/Scene.h"
 
 using RtGraphics::MaterialInstance;
 using RtGraphics::Renderer;
@@ -235,42 +237,27 @@ Transform* RtGraphics_InterpolatedStateTransform_Lerp(const void* self,
 //     (0x180102e83), not hoisted, so a slot-58 handler that appends a texture
 //     is seen. Hoisting it would change behaviour in exactly that case.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::MaterialInstance::RenderTextures`, at the bottom of this file. The
+// door keeps its name and both its registrations (by name and at 0x180102df0).
+//
+// THE DEAD EFFECTIVENESS CONTROL IS GONE. The body opened with
+// `const bool didWork = (hasRenderedTexture != 0) && (textures._size > 0);` and
+// NOTHING ever read it — no counter, no printf, no summary line, and a repo-wide
+// grep for `didWork` found this one declaration and no consumer. It was a
+// warning, not a measurement, so it is deleted rather than carried into the
+// member (the block brief's "dead scaffolding nobody reads" arm).
 void RtGraphics_MaterialInstance_RenderTextures(const MaterialInstance* self,
                                                 void* renderer,
                                                 const void* scene,
                                                 const void* camera,
                                                 int arg) {
-
-    // Effectiveness control: how many calls got past BOTH early-outs and could
-    // have dispatched anything at all. A green `calls=` column on a site that
-    // always returned at 0x180102e0c would mean nothing
-    // (reference_probe_needs_an_effectiveness_control.md).
-    const bool didWork = (self->hasRenderedTexture != 0) && (self->textures._size > 0);
-
-    if (self->hasRenderedTexture == 0)
-        return;
-    if (self->textures._size <= 0)
-        return;
-
-    const uint32_t typeId = GeneratedImageBufferTypeId();
-
-    for (int32_t i = 0; i < self->textures._size; ++i) {
-        const uint8_t* entry =
-            reinterpret_cast<const uint8_t*>(self->textures._data) +
-            static_cast<int64_t>(i) * 0x10;
-        void* obj = *reinterpret_cast<void* const*>(entry + 8);
-
-        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 5)
-            continue;
-        if (!CallIsDerivedFrom(obj, typeId))
-            continue;
-        if (obj == nullptr)      // retail's order: after the deref above
-            continue;
-
-        void** vt = *reinterpret_cast<void***>(obj);
-        using Slot58 = void (*)(void*, void*, const void*, const void*, int);
-        reinterpret_cast<Slot58>(vt[0x58 / 8])(obj, renderer, scene, camera, arg);
-    }
+    reinterpret_cast<const Graphics::MaterialInstance*>(self)      // B.3.5 bridge
+        ->Graphics::MaterialInstance::RenderTextures(
+            *reinterpret_cast<Graphics::Renderer*>(renderer),      // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Scene*>(scene),      // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Camera*>(camera),    // B.3.5 bridge
+            arg);
 }
 
 // ============================================================================
@@ -446,3 +433,60 @@ int RtGraphicsWave9GfxRegister() {
 
     return n;
 }
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block GC — the member bodies whose live doors are the
+// functions above. Their own `namespace Graphics { }` block (B34_BRIEFS A.2:
+// `Graphics` and `RtGraphics` are siblings, so a member body cannot live inside
+// the `Rt*` one). This file's helpers are in the GLOBAL unnamed namespace, so
+// unqualified lookup from here reaches them.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?RenderTextures@MaterialInstance@Graphics@@QEBAXAEAVRenderer@2@AEBVScene@2@
+//                AEBVCamera@2@H@Z            retail 0x180102df0
+//
+// The door's banner above carries the transcription evidence and the two
+// faithful uglinesses; both survive here unchanged — the `+0x2c` read still
+// happens BEFORE the null test, and the loop bound is still re-read.
+//
+// TWO RAW BINDINGS BECAME TYPED ONES (block GC item 6):
+//  * `textures._data + i*0x10`, then `+0x08`, is `_textures._data[i].image` —
+//    the same two offsets, now held by `Material.h`'s own asserts.
+//  * the hand-inlined `(*(void***)obj)[0x58/8]` is slot ELEVEN of
+//    `Graphics::GeneratedImageBuffer`, which block C made a real class:
+//    `Render(renderer, scene, camera, generation)`. It stays a VIRTUAL call, so
+//    it still dispatches through whatever table the object wears — the minted
+//    one for every object alive today — and 0x58/8 == 11 is checked against
+//    GeneratedImageBuffer.h's slot list rather than asserted here.
+//    `IsDerivedFrom(GeneratedImageBuffer)` is what licenses the cast, and it is
+//    the test retail itself makes one line earlier.
+// ---------------------------------------------------------------------------
+void MaterialInstance::RenderTextures(Renderer& renderer, const Scene& scene,
+                                      const Camera& camera, int32_t arg) const {
+    if (_hasRenderedTexture == 0)
+        return;
+    if (_textures._size <= 0)
+        return;
+
+    const uint32_t typeId = GeneratedImageBufferTypeId();
+
+    for (int32_t i = 0; i < _textures._size; ++i) {
+        void* obj = _textures._data[i].image;
+
+        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 5)
+            continue;
+        if (!CallIsDerivedFrom(obj, typeId))
+            continue;
+        if (obj == nullptr)      // retail's order: after the deref above
+            continue;
+
+        // Slot 11 (0x58/8) — a virtual call on the real class.
+        reinterpret_cast<const GeneratedImageBuffer*>(obj)          // B.3.5 bridge
+            ->Render(&renderer, &scene, &camera, arg);
+    }
+}
+
+}  // namespace Graphics

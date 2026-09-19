@@ -666,11 +666,15 @@ extern "C" MaterialInstance* RtGraphics_MaterialInstance_Ctor(MaterialInstance* 
 // whole in RDX; there is no reference to dereference. Retail does not touch a
 // refcount here — the caller's ExternalPtr and the member end up sharing one,
 // which is why BuildParameters can read `_material` back without owning it.
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto `Graphics::MaterialInstance`. The
+// door keeps its name and both registrations. Its `MaterialInstance before;` was
+// the residue of a diff oracle nothing reads any more — one default-constructed
+// POD, never written to, never compared, never printed — and it is deleted.
 extern "C" void RtGraphics_MaterialInstance_SetMaterial(MaterialInstance* self, void* material) {
-    MaterialInstance before;
-
-    self->material = material;
-
+    reinterpret_cast<::Graphics::MaterialInstance*>(self)              // B.3.5 bridge
+        ->::Graphics::MaterialInstance::SetMaterial(
+            Object::ExternalPtr<::Graphics::Material>(
+                reinterpret_cast<::Graphics::Material*>(material)));   // B.3.5 bridge
 }
 
 // ?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z
@@ -691,27 +695,19 @@ extern "C" void RtGraphics_MaterialInstance_SetMaterial(MaterialInstance* self, 
 // release memory the real MaterialInstance still points at. the diff oracle
 // therefore checks what our own call can prove: the size went up by exactly one
 // and the new tail element holds the two values we were handed.
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto `Graphics::MaterialInstance`.
+// `const int32_t sizeBefore = …` was the post-state oracle's capture and had no
+// reader left — it was one of the two `-Wunused-variable` warnings this file
+// carried — so it is deleted with the rest of the scaffolding. The ORACLE
+// paragraph above stays, because it records WHY a scratch-copy replay is
+// destructive here, which is still true of the member.
 extern "C" void RtGraphics_MaterialInstance_AddTexture(MaterialInstance* self,
                                                        const void* name, void* image) {
-    const int32_t sizeBefore = self->textures.GetSize();
-
-    MaterialTexture local;
-    local.name = nullptr;
-    char* data = *static_cast<char* const*>(name);   // System::String is one pointer
-    if (data) {
-        ++*reinterpret_cast<int32_t*>(data - 4);
-        local.name = data;
-    }
-    local.image = image;
-
-    RtArraySetSizeTexturePairs(self,
-                               static_cast<uint32_t>(self->textures.GetSize() + 1), &local);
-
-    if (local.name) {
-        int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);
-        if (--*refCount == 0) RtMemFree(local.name - 8);
-    }
-
+    reinterpret_cast<::Graphics::MaterialInstance*>(self)              // B.3.5 bridge
+        ->::Graphics::MaterialInstance::AddTexture(
+            *static_cast<const RtSystem::String*>(name),
+            Object::ExternalPtr<Video::ImageBuffer>(
+                reinterpret_cast<Video::ImageBuffer*>(image)));         // B.3.5 bridge
 }
 
 // ############################################################################
@@ -926,6 +922,57 @@ int Renderer::GetShader() const {
 }
 const RendererSceneEntry& Renderer::GetSceneGroup(int index) const {
     return _sceneGroups[index];                                 // _data + i*0x110
+}
+
+// ============================================================================
+// ENDGAME B.3.5 block GC — the two `Graphics::MaterialInstance` bodies this file
+// still owned. Block F left all three MaterialInstance doors alone because the
+// class was block G's and was converting concurrently; block G then ran out of
+// budget before reaching them.
+//
+// THE CTOR DOOR STAYS A DOOR and is NOT one of the two. `??0MaterialInstance`
+// (0x180103980) stamps three MINTED vtables in sequence, which is right for every
+// object that reaches it and is exactly what B4b-2 and B35_RULES section 11 keep
+// as a door; a member constructor would emit GCC's table instead. Its banner
+// above is the per-class vtable-stamping argument and is unchanged.
+// ============================================================================
+
+// ?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z
+// retail 0x180103340 — ONE STORE, and no refcount traffic: the caller's handle
+// and the member end up sharing one reference, which is why `BuildParameters`
+// can read `_material` back without owning it. The door's banner has the rest.
+void MaterialInstance::SetMaterial(Object::ExternalPtr<Material> material) {
+    _material = material;
+}
+
+// ?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z
+// retail 0x180103350 — see the door's banner for the refcount accounting and for
+// why the array helper is bridged rather than the field retyped.
+//
+// `_textures` is spelled through `RtArraySetSizeTexturePairs`, which takes the
+// POD: the element spec here is `kSpec_StringExt`, one of the twelve
+// hand-derived-only rows, so the field's own trait-derived `SetSizeFill` would
+// run a bitwise copy with no refcount bump. That bridge is the reason this body
+// cannot simply say `_textures.SetSize(…)`, and it is stated at the helper.
+void MaterialInstance::AddTexture(const RtSystem::String& name,
+                                  Object::ExternalPtr<Video::ImageBuffer> image) {
+    MaterialTexture local;
+    local.name = nullptr;
+    char* data = name.data;                          // System::String is one pointer
+    if (data) {
+        ++*reinterpret_cast<int32_t*>(data - 4);
+        local.name = data;
+    }
+    local.image = image.Get();
+
+    RtArraySetSizeTexturePairs(reinterpret_cast<RtGraphics::MaterialInstance*>(this),
+                               static_cast<uint32_t>(_textures.GetSize() + 1),
+                               &local);              // B.3.5 bridge
+
+    if (local.name) {
+        int32_t* refCount = reinterpret_cast<int32_t*>(local.name - 4);
+        if (--*refCount == 0) RtMemFree(local.name - 8);
+    }
 }
 
 }  // namespace Graphics

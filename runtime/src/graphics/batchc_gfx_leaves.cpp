@@ -95,10 +95,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/GeneratedImageBuffer.h"  // ENDGAME B.3.5 block GC
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
 #include "../../types/graphics/Material.h"
 #include "../../types/graphics/Mesh.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/video/Context.h"           // ENDGAME B.3.5 block GC
 
 // standalone/resolve.h is deliberately NOT included: it drags in <windows.h>,
 // whose <wingdi.h> declares a function called `Rectangle` and whose <windef.h>
@@ -277,32 +279,20 @@ extern "C" void RtGraphics_Particle_Dtor(void* selfv);
 // body afterwards would render a second time. the diff oracle is the effectiveness
 // control — almost every call returns at the +0x24 test.
 // ############################################################################
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::MaterialInstance::GenerateTextures`, in this file's existing
+// `namespace Graphics` block below. The door keeps its name and both its
+// registrations (by name and at 0x180102eb0).
+//
+// THE DEAD EFFECTIVENESS CONTROL IS GONE, for the same reason its sibling's was
+// in wave9_lane_gfx.cpp: `const bool didWork = …` had no reader anywhere in the
+// tree. The banner above still calls it "the diff oracle", and that sentence was
+// describing a variable nothing printed.
 extern "C" void RtGraphics_MaterialInstance_GenerateTextures(const void* selfv,
                                                              void* ctx, int32_t arg) {
-    const MaterialInstance* self = static_cast<const MaterialInstance*>(selfv);
-
-    const bool didWork = (self->hasRenderTexture != 0) && (self->textures._size > 0);
-
-    if (self->hasRenderTexture == 0) {
-        return;
-    }
-
-    for (int32_t i = 0; i < self->textures._size; ++i) {
-        const uint8_t* entry =
-            reinterpret_cast<const uint8_t*>(self->textures._data) +
-            static_cast<int64_t>(i) * 0x10;
-        void* obj = *reinterpret_cast<void* const*>(entry + 8);
-
-        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 4)
-            continue;
-        if (obj == nullptr)                      // retail's order: after the deref
-            continue;
-
-        void** vt = *reinterpret_cast<void***>(obj);
-        using Slot50 = void (*)(void*, void*, int32_t);
-        reinterpret_cast<Slot50>(vt[0x50 / 8])(obj, ctx, arg);
-    }
-
+    reinterpret_cast<const Graphics::MaterialInstance*>(selfv)      // B.3.5 bridge
+        ->Graphics::MaterialInstance::GenerateTextures(
+            *reinterpret_cast<Video::Context*>(ctx), arg);          // B.3.5 bridge
 }
 
 // ############################################################################
@@ -796,6 +786,42 @@ void SerializeBufferSlot(void* obj, Serializer* sub) {
 // and the perf build is a gate item for this commit.
 // ############################################################################
 namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?GenerateTextures@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z
+// retail 0x180102eb0 — ENDGAME B.3.5 block GC. The evidence, the two faithful
+// uglinesses and the oracle note are in the door's banner above.
+//
+// TWO RAW BINDINGS BECAME TYPED ONES (item 6), exactly as in the sibling
+// `RenderTextures`: the `textures._data + i*0x10` then `+0x08` walk is
+// `_textures._data[i].image`, and the hand-inlined `(*(void***)obj)[0x50/8]` is
+// slot TEN of `Graphics::GeneratedImageBuffer` — `Generate(context, generation)`
+// — still dispatched VIRTUALLY, so an object wearing the minted table is reached
+// the same way it was. 0x50/8 == 10 is checked against
+// GeneratedImageBuffer.h's slot list.
+//
+// NOTE THE ASYMMETRY WITH ITS SIBLING, WHICH IS RETAIL'S: `RenderTextures` tests
+// `_textures._size <= 0` before the loop and this one does NOT — it goes
+// straight from the `+0x24` test into the loop, whose own bound then ends it.
+// ---------------------------------------------------------------------------
+void MaterialInstance::GenerateTextures(Video::Context& context, int32_t arg) const {
+    if (_hasRenderTexture == 0) {
+        return;
+    }
+
+    for (int32_t i = 0; i < _textures._size; ++i) {
+        void* obj = _textures._data[i].image;
+
+        if (*reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(obj) + 0x2c) != 4)
+            continue;
+        if (obj == nullptr)                      // retail's order: after the deref
+            continue;
+
+        // Slot 10 (0x50/8) — a virtual call on the real class.
+        reinterpret_cast<const GeneratedImageBuffer*>(obj)           // B.3.5 bridge
+            ->Generate(&context, arg);
+    }
+}
 
 void GraphicsMesh::PlatformSerialize(IO::Serializer& serializer) {
     // The ported bodies in this file speak the `rt::io::Serializer` POD; the

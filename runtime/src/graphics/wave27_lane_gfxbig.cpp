@@ -359,151 +359,31 @@ constexpr uint32_t kTexDescCount  = 0x28;
 constexpr uint32_t kConDescData   = 0x30;
 constexpr uint32_t kConDescCount  = 0x38;
 
-inline uint8_t* PassObject(const MaterialInstance* m, int32_t pass) {
-    // MOV RAX,[R15+0x28] / MOV RCX,[RAX+0x28] / MOV RAX,[RSI+RCX*1]
+// ENDGAME B.3.5 block GC: the receiver is the REAL `Graphics::MaterialInstance`
+// and the three-step chain is spelled with the two real classes' own members —
+// `_material` (`ExternalPtr<Material>` by value, +0x28) then that `Material`'s
+// `_passes` array (+0x28). Retail's `MOV RAX,[R15+0x28] / MOV RCX,[RAX+0x28] /
+// MOV RAX,[RSI+RCX*1]` is unchanged; only the spelling is, and `Material.h`'s
+// `static_assert`s now hold the offsets.
+inline uint8_t* PassObject(const Graphics::MaterialInstance* m, int32_t pass) {
     // Re-read from `this` on EVERY use in retail (five separate reloads inside
     // the two inner loops), so it is a function rather than a hoisted local.
-    uint8_t* const material = *reinterpret_cast<uint8_t* const*>(&m->material);
-    uint8_t* const passes   = *reinterpret_cast<uint8_t**>(material + 0x28);
-    return *reinterpret_cast<uint8_t**>(passes + static_cast<int64_t>(pass) * 8);
+    return reinterpret_cast<uint8_t*>(                            // B.3.5 bridge
+        m->_material.Get()->_passes._data[pass].Get());
 }
 
 }  // namespace
 
+// ENDGAME B.3.5 block GC: THE BODY MOVED to
+// `Graphics::MaterialInstance::BuildParameters`, at the bottom of this file. The
+// door keeps its name, its registration and both counters.
 extern "C" void RtGraphics_MaterialInstance_BuildParameters(void* self) {
     Attend("MaterialInstance::BuildParameters", g_buildParamCalls);
-
-    MaterialInstance* const m = static_cast<MaterialInstance*>(self);
-
-    // MOV RDX,[RCX+0x28] / TEST RDX,RDX / JZ epilogue. The early return skips
-    // the whole function INCLUDING the +0x24/+0x25 accumulation block.
-    uint8_t* const material = *reinterpret_cast<uint8_t* const*>(&m->material);
-    if (material == nullptr) return;
-
-    m->shaderClass = *reinterpret_cast<const uint32_t*>(material + 0x20);
-
-    // Array<MaterialParameterSet>::SetSize(material->passCount). 0x180060d30.
-    RtCollection_Array_MaterialParameterSet_SetSize(
-        &m->parameters, *reinterpret_cast<const int32_t*>(material + kPassDesc));
-
-    // CMP [R15+0x38],R8D / JLE — the bound is `_parameters._size`, and it is
-    // RE-READ at the bottom of the loop (0x1801038fe), not hoisted.
-    for (int32_t pass = 0; pass < m->parameters.GetSize(); ++pass) {
-        uint8_t* const desc0 = *reinterpret_cast<uint8_t**>(PassObject(m, pass) + kPassDesc);
-
-        // ---- textures -----------------------------------------------------
-        // `desc ? desc->count : 0` — retail's own null arm (XOR EAX,EAX at
-        // 0x180103475), computed ONCE per pass and then used as a DOWN counter.
-        const int32_t texCount =
-            desc0 ? *reinterpret_cast<const int32_t*>(desc0 + kTexDescCount) : 0;
-        for (int32_t i = 0; i < texCount; ++i) {
-            uint8_t* const desc =
-                *reinterpret_cast<uint8_t**>(PassObject(m, pass) + kPassDesc);
-            uint8_t* const recs = *reinterpret_cast<uint8_t**>(desc + kTexDescData);
-            if (recs[static_cast<int64_t>(i) * 0x10 + 0xc] != 0) continue;   // skip flag
-
-            String name;
-            name.data = nullptr;
-            RT_EXPORT_ONCE(GetNameFn,
-                "?GetTextureName@Material@Graphics@@QEBA?AVString@System@@HH@Z")(
-                    material, &name, pass, i);
-
-            MaterialBinding v;
-            v.sourceIndex = RT_EXPORT_ONCE(FindFn,
-                "?FindTexture@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z")(
-                    m, &name);
-
-            // The release is retail's inlined String::Release, byte for byte:
-            // decrement the refcount at data-4, and on zero rewind to data-8 and
-            // free. RtString_ReleaseInline (runtime/src/system/string.cpp:132) IS
-            // that sequence, including the asymmetry where the freeing branch
-            // leaves `data - 8` in the slot and the sharing branch nulls it.
-            //
-            // ONE INSTRUCTION DIFFERS AND IT CANNOT FIRE: retail tests
-            // `data - 8 == 0` before freeing (the ZF of `SUB RDI,0x8` at
-            // 0x1801034f5), which is true only if `data == 8`. The shared body
-            // instead relies on the null test inside 0x1800c7ad0. Recorded rather
-            // than quietly treated as identical.
-            RtSystem::RtString_ReleaseInline(&name);
-
-            // The shader slot is read AFTER the call, through a FRESHLY RELOADED
-            // chain (0x180103546..0x18010355f). Retail reloads because
-            // FindTexture takes a non-const `this` and could in principle move
-            // the material's arrays; transcribed unhoisted for that reason.
-            uint8_t* const recs2 = *reinterpret_cast<uint8_t**>(
-                *reinterpret_cast<uint8_t**>(PassObject(m, pass) + kPassDesc) + kTexDescData);
-            v.shaderSlot =
-                *reinterpret_cast<const int32_t*>(recs2 + static_cast<int64_t>(i) * 0x10 + 8);
-
-            // `_parameters._data` is RE-READ here (MOV RSI,[RBP] at 0x180103563)
-            // rather than kept from the top of the pass loop.
-            MaterialParameterSet* const set = &m->parameters[pass];
-            // retail 0x1801035c4, kSpec_Binding8 — trait-equivalent:
-            // MaterialBinding (Material.h) is a plain POD, so
-            // SpecFor<MaterialBinding>() is the same {8-byte copy, no init,
-            // no destroy, align 4} shape.
-            set->textures.SetSize(set->textures.GetSize() + 1, v);
-            ++g_buildParamBinds;
-        }
-
-        // ---- constants ----------------------------------------------------
-        uint8_t* const desc1 = *reinterpret_cast<uint8_t**>(PassObject(m, pass) + kPassDesc);
-        const int32_t conCount =
-            desc1 ? *reinterpret_cast<const int32_t*>(desc1 + kConDescCount) : 0;
-        for (int32_t i = 0; i < conCount; ++i) {
-            // NO SKIP FLAG on this arm — see the kConDescData note above.
-            String name;
-            name.data = nullptr;
-            RT_EXPORT_ONCE(GetNameFn,
-                "?GetConstantName@Material@Graphics@@QEBA?AVString@System@@HH@Z")(
-                    material, &name, pass, i);
-
-            MaterialBinding v;
-            v.sourceIndex = RT_EXPORT_ONCE(FindFn,
-                "?FindConstant@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z")(
-                    m, &name);
-            RtSystem::RtString_ReleaseInline(&name);
-
-            uint8_t* const recs2 = *reinterpret_cast<uint8_t**>(
-                *reinterpret_cast<uint8_t**>(PassObject(m, pass) + kPassDesc) + kConDescData);
-            v.shaderSlot =
-                *reinterpret_cast<const int32_t*>(recs2 + static_cast<int64_t>(i) * 0x10 + 8);
-
-            MaterialParameterSet* const set = &m->parameters[pass];
-            // retail 0x1801037ec, kSpec_Binding8 — trait-equivalent, same as
-            // the textures arm above.
-            set->constants.SetSize(set->constants.GetSize() + 1, v);
-            ++g_buildParamBinds;
-        }
-    }
-
-    // ---- the render-texture latches ---------------------------------------
-    // See the banner: +0x24 is cleared and recomputed, +0x25 is only ever OR'd
-    // into. Both are stored back INSIDE the loop on every iteration, and the
-    // texture's `image` pointer is RE-READ between the two tests (`MOV RAX,[RCX]`
-    // at both 0x180103930 and 0x180103940). All three quirks transcribed.
-    m->hasRenderTexture = 0;
-    const int32_t texN = m->textures._size;
-    if (texN <= 0) return;
-
-    uint8_t  acc24 = 0;
-    uint8_t  acc25 = m->hasRenderedTexture;      // NOT reset — retail's asymmetry
-    uint8_t* p     = reinterpret_cast<uint8_t*>(m->textures._data) + 8;
-    for (int32_t k = 0; k < texN; ++k) {
-        const uint8_t* img = *reinterpret_cast<uint8_t**>(p);
-        acc24 = static_cast<uint8_t>(
-            acc24 | (*reinterpret_cast<const int32_t*>(img + 0x2c) == 4 ? 1 : 0));
-        m->hasRenderTexture = acc24;
-
-        img = *reinterpret_cast<uint8_t**>(p);                 // re-read
-        acc25 = static_cast<uint8_t>(
-            acc25 | (*reinterpret_cast<const int32_t*>(img + 0x2c) == 5 ? 1 : 0));
-        m->hasRenderedTexture = acc25;
-
-        p += 0x10;
-    }
+    reinterpret_cast<Graphics::MaterialInstance*>(self)            // B.3.5 bridge
+        ->Graphics::MaterialInstance::BuildParameters();
 }
 
+// The BODY is at the bottom of this file, as `Graphics::MaterialInstance::BuildParameters`.
 // ============================================================================
 // §3.  ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z
 //      retail 0x180104bb0, ordinal 2258. 920 bytes / 191 instructions.
@@ -1261,3 +1141,153 @@ void RtGraphicsWave27GfxbigSummary() {
 extern "C" int RtGraphicsWave27GfxbigRegisterC() { return rtgfxbig::RtGraphicsWave27GfxbigRegister(); }
 void RtGraphicsWave27GfxbigSummary() { rtgfxbig::RtGraphicsWave27GfxbigSummary(); }
 int  RtGraphicsWave27GfxbigRegister() { return rtgfxbig::RtGraphicsWave27GfxbigRegister(); }
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block GC -- the member bodies whose live doors are the
+// `extern "C"` functions above.
+//
+// Their own `namespace Graphics { }` block, because a member definition has to
+// appear in a namespace ENCLOSING the class and `Graphics` / `RtGraphics` are
+// siblings (B34_BRIEFS A.2). Every file-local helper here lives in
+// `rtgfxbig`'s own unnamed namespace, NOT the global one, so unqualified lookup
+// does not reach it from `namespace Graphics` -- each is spelled `rtgfxbig::`,
+// the trap wave28_lane_gfxbody.cpp:957 records.
+//
+// The transcription banners stay beside the doors above; only the spelling of
+// the receiver changed.
+// ############################################################################
+
+namespace Graphics {
+
+// ?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ   retail 0x1801033e0
+void MaterialInstance::BuildParameters() {
+    // MOV RDX,[RCX+0x28] / TEST RDX,RDX / JZ epilogue. The early return skips
+    // the whole function INCLUDING the +0x24/+0x25 accumulation block.
+    Graphics::Material* const material = _material.Get();
+    if (material == nullptr) return;
+
+    _shaderClass = static_cast<uint32_t>(material->_type);      // material+0x20
+
+    // Array<RtGraphics::MaterialParameterSet>::SetSize(material->passCount). 0x180060d30.
+    // `material + 0x30` is `Material::_passes._size` — the pass COUNT, which is
+    // why `rtgfxbig::kPassDesc` and the pass object's own +0x30 share a number.
+    rtgfxbig::RtCollection_Array_MaterialParameterSet_SetSize(
+        &_parameters, material->_passes.GetSize());
+
+    // CMP [R15+0x38],R8D / JLE — the bound is `_parameters._size`, and it is
+    // RE-READ at the bottom of the loop (0x1801038fe), not hoisted.
+    for (int32_t pass = 0; pass < _parameters.GetSize(); ++pass) {
+        uint8_t* const desc0 = *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc);
+
+        // ---- textures -----------------------------------------------------
+        // `desc ? desc->count : 0` — retail's own null arm (XOR EAX,EAX at
+        // 0x180103475), computed ONCE per pass and then used as a DOWN counter.
+        const int32_t texCount =
+            desc0 ? *reinterpret_cast<const int32_t*>(desc0 + rtgfxbig::kTexDescCount) : 0;
+        for (int32_t i = 0; i < texCount; ++i) {
+            uint8_t* const desc =
+                *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc);
+            uint8_t* const recs = *reinterpret_cast<uint8_t**>(desc + rtgfxbig::kTexDescData);
+            if (recs[static_cast<int64_t>(i) * 0x10 + 0xc] != 0) continue;   // skip flag
+
+            RtSystem::String name;
+            name.data = nullptr;
+            // B.3.5 block GC item 6: two `RT_EXPORT_ONCE` edges onto classes that
+            // are now real become direct QUALIFIED member calls. `GetTextureName`
+            // keeps the out-parameter spelled, which is the member's own signature
+            // and retail's argument order (block G's banner in
+            // wave28_lane_gfxbody.cpp says why the member does not return by value).
+            material->Graphics::Material::GetTextureName(&name, pass, i);
+
+            RtGraphics::MaterialBinding v;
+            v.sourceIndex = this->Graphics::MaterialInstance::FindTexture(name);
+
+            // The release is retail's inlined RtSystem::String::Release, byte for byte:
+            // decrement the refcount at data-4, and on zero rewind to data-8 and
+            // free. RtString_ReleaseInline (runtime/src/system/string.cpp:132) IS
+            // that sequence, including the asymmetry where the freeing branch
+            // leaves `data - 8` in the slot and the sharing branch nulls it.
+            //
+            // ONE INSTRUCTION DIFFERS AND IT CANNOT FIRE: retail tests
+            // `data - 8 == 0` before freeing (the ZF of `SUB RDI,0x8` at
+            // 0x1801034f5), which is true only if `data == 8`. The shared body
+            // instead relies on the null test inside 0x1800c7ad0. Recorded rather
+            // than quietly treated as identical.
+            RtSystem::RtString_ReleaseInline(&name);
+
+            // The shader slot is read AFTER the call, through a FRESHLY RELOADED
+            // chain (0x180103546..0x18010355f). Retail reloads because
+            // FindTexture takes a non-const `this` and could in principle move
+            // the material's arrays; transcribed unhoisted for that reason.
+            uint8_t* const recs2 = *reinterpret_cast<uint8_t**>(
+                *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc) + rtgfxbig::kTexDescData);
+            v.shaderSlot =
+                *reinterpret_cast<const int32_t*>(recs2 + static_cast<int64_t>(i) * 0x10 + 8);
+
+            // `_parameters._data` is RE-READ here (MOV RSI,[RBP] at 0x180103563)
+            // rather than kept from the top of the pass loop.
+            RtGraphics::MaterialParameterSet* const set = &_parameters[pass];
+            // retail 0x1801035c4, kSpec_Binding8 — trait-equivalent:
+            // MaterialBinding (Material.h) is a plain POD, so
+            // SpecFor<MaterialBinding>() is the same {8-byte copy, no init,
+            // no destroy, align 4} shape.
+            set->textures.SetSize(set->textures.GetSize() + 1, v);
+            ++rtgfxbig::g_buildParamBinds;
+        }
+
+        // ---- constants ----------------------------------------------------
+        uint8_t* const desc1 = *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc);
+        const int32_t conCount =
+            desc1 ? *reinterpret_cast<const int32_t*>(desc1 + rtgfxbig::kConDescCount) : 0;
+        for (int32_t i = 0; i < conCount; ++i) {
+            // NO SKIP FLAG on this arm — see the kConDescData note above.
+            RtSystem::String name;
+            name.data = nullptr;
+            // block GC item 6, as in the textures arm above.
+            material->Graphics::Material::GetConstantName(&name, pass, i);
+
+            RtGraphics::MaterialBinding v;
+            v.sourceIndex = this->Graphics::MaterialInstance::FindConstant(name);
+            RtSystem::RtString_ReleaseInline(&name);
+
+            uint8_t* const recs2 = *reinterpret_cast<uint8_t**>(
+                *reinterpret_cast<uint8_t**>(rtgfxbig::PassObject(this, pass) + rtgfxbig::kPassDesc) + rtgfxbig::kConDescData);
+            v.shaderSlot =
+                *reinterpret_cast<const int32_t*>(recs2 + static_cast<int64_t>(i) * 0x10 + 8);
+
+            RtGraphics::MaterialParameterSet* const set = &_parameters[pass];
+            // retail 0x1801037ec, kSpec_Binding8 — trait-equivalent, same as
+            // the textures arm above.
+            set->constants.SetSize(set->constants.GetSize() + 1, v);
+            ++rtgfxbig::g_buildParamBinds;
+        }
+    }
+
+    // ---- the render-texture latches ---------------------------------------
+    // See the banner: +0x24 is cleared and recomputed, +0x25 is only ever OR'd
+    // into. Both are stored back INSIDE the loop on every iteration, and the
+    // texture's `image` pointer is RE-READ between the two tests (`MOV RAX,[RCX]`
+    // at both 0x180103930 and 0x180103940). All three quirks transcribed.
+    _hasRenderTexture = 0;
+    const int32_t texN = _textures._size;
+    if (texN <= 0) return;
+
+    uint8_t  acc24 = 0;
+    uint8_t  acc25 = _hasRenderedTexture;     // NOT reset — retail's asymmetry
+    uint8_t* p     = reinterpret_cast<uint8_t*>(_textures._data) + 8;
+    for (int32_t k = 0; k < texN; ++k) {
+        const uint8_t* img = *reinterpret_cast<uint8_t**>(p);
+        acc24 = static_cast<uint8_t>(
+            acc24 | (*reinterpret_cast<const int32_t*>(img + 0x2c) == 4 ? 1 : 0));
+        _hasRenderTexture = acc24;
+
+        img = *reinterpret_cast<uint8_t**>(p);                 // re-read
+        acc25 = static_cast<uint8_t>(
+            acc25 | (*reinterpret_cast<const int32_t*>(img + 0x2c) == 5 ? 1 : 0));
+        _hasRenderedTexture = acc25;
+
+        p += 0x10;
+    }
+}
+
+}  // namespace Graphics

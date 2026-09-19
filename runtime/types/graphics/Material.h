@@ -384,6 +384,14 @@ public:
     int32_t FindConstant(const RtSystem::String& name) const;     // 0x180102f40  wave28
     int32_t FindTexture(const RtSystem::String& name) const;      // 0x180103020  wave28
     void    BuildParameters();                                    // 0x1801033e0  wave27
+    // Bodies in `runtime/src/graphics/renderer.cpp`, moved onto the members by
+    // block GC. Both take `Object::ExternalPtr<T>` BY VALUE, as retail does: the
+    // handle is 8 bytes and trivially copyable, so it arrives in a register and
+    // there is NO hidden return slot and no reference to dereference. Neither
+    // touches a refcount on the handle itself (`AddTexture` refcounts the NAME).
+    void    SetMaterial(Object::ExternalPtr<Material> material);   // 0x180103340  renderer
+    void    AddTexture(const RtSystem::String& name,
+                       Object::ExternalPtr<Video::ImageBuffer> image);  // 0x180103350  renderer
 
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     int32_t GetType() const;                               // 0x180002b60  reads _shaderClass
@@ -399,9 +407,10 @@ public:
     Object::ExternalPtr<Video::ImageBuffer> GetTexture(const RtSystem::String& name) const; // 0x180103120
     void SetTexture(const RtSystem::String& name,
                     Object::ExternalPtr<Video::ImageBuffer> image);   // 0x180103180
-    void AddTexture(const RtSystem::String& name,
-                    Object::ExternalPtr<Video::ImageBuffer> image);   // 0x180103350
-    void SetMaterial(Object::ExternalPtr<Material> material);         // 0x180103340
+    // `AddTexture` (0x180103350) and `SetMaterial` (0x180103340) were listed here
+    // as unported; they are NOT — both have registered, ported doors in
+    // `renderer.cpp` and are declared with the ported members above. Corrected by
+    // block GC, 2026-09-19.
 
     MaterialInstance(const MaterialInstance& src);          // 0x180002ba0  not ported
     MaterialInstance& operator=(const MaterialInstance& src);// 0x180002c80  not ported
