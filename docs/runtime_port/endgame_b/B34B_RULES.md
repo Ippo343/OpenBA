@@ -559,7 +559,31 @@ Receiver-side only until `b34-closing` reports the 4a closing pass merged. Until
 |---|---|---|
 | 1 | this sheet | `docs/runtime_port/endgame_b/B34B_RULES.md` |
 | 2 | `System::CriticalSection` + `System::Thread` | `runtime/types/system/Thread.h`, `runtime/src/system/thread_win.cpp`, `runtime/types/engine/UpdateLoop.h`, `runtime/src/engine/loops.cpp` (one word, §7.1), `tests/unit/system_abi_test.cpp` + `system_abi_stubs.{cpp,h}` |
-| 3 | `System::Random`, `Color`, `Time`, `DateTime` | `runtime/types/system/Value.h`, `runtime/src/system/value_types.cpp`, the test |
+| 3 | `System::Random`, `Color`, `Time`, `DateTime` | `runtime/types/system/Value.h`, `runtime/src/system/value_types.cpp`, `tests/unit/system_abi_test.cpp` (PART E) |
+
+### 7.0 `System::Time` — resolved, and it cost nothing outside `runtime/`
+
+The coordinator's condition at commit 2 was: declare the class in
+`runtime/types/system/` with a cross-assert against the shared POD **and zero edits outside
+`runtime/`**, or leave `Time` for after the closing pass. **The condition is met**, so `Time`
+landed with commit 3. The facts that decide it:
+
+- **Who owns the POD.** `struct Time { int64_t ticks; }` is `engine/types/common.h:12-15`,
+  with its own `sizeof == 8` assert. `runtime/types/math/Math.h` includes that header, so it
+  reaches most of the tree. B.3.3 step 6B deliberately de-duplicated it there (it used to be
+  declared in `Value.h` as well, and any TU including both failed with `redefinition of
+  'struct Time'`). **It is not moved and not touched.**
+- **The layout.** One `int64_t` at +0x00, pinned by `??0Time@System@@QEAA@M@Z` (0x1800078c0),
+  which writes one qword. `System::Time` is a NEW name in a NEW namespace over the same eight
+  bytes, cross-asserted `sizeof` and `offsetof` against `::Time`.
+- **Which spelling the callers use.** All three doors are `void*` in `engine_funcs.h`:
+  `fn_Time_Ctor_Float` (:1827), `fn_Time_AsSeconds` (:1083), `g_fn_Time_Serialize` (:5475). A
+  whole-tree sweep for the C++ spelling `System::Time` returns **comments only** under
+  `code/Game`. So no caller has a type dependency on either spelling.
+
+Net: the class is declared in `Value.h`, the three bodies moved onto members in
+`value_types.cpp`, and **no file outside `runtime/` changed**. The 132 `fn_Time_Ctor_Float`
+caller sites and the int64 `Serialize` overload are still gated behind the 4a closing pass.
 | 4 | `Configuration` / `Compression` / `Timer` / `CRC` / `Error` / `WideString` — **establish first whether each IS a class** (the `IO::TextCodec` precedent: four receiverless free functions, and nothing landed, which is a valid recorded outcome) | `runtime/src/system/{configuration,compression,timer,crc,error,widestring}.{cpp,h}`, `runtime/types/system/` as needed |
 | — | `System::MemoryAllocator` | **not converted**; §6 is the deliverable |
 | — | `IO::Serializer::Serialize(int64_t&)` + the `Time::Serialize` site | **after `b34-closing`**; §3 |

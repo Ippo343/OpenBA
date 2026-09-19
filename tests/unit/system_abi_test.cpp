@@ -58,6 +58,7 @@
 #include "system_abi_stubs.h"
 
 #include "../../runtime/types/system/Thread.h"
+#include "../../runtime/types/system/Value.h"   // B.3.4b SYSTEM (3), PART E
 
 #include <cstddef>
 #include <cstdint>
@@ -276,6 +277,115 @@ UNIT_TEST(the_qualified_call_suppresses_dispatch_and_reaches_the_class_body) {
 
     CHECK_EQ(g_freeOnCompletedCalls, 0);                    // did NOT dispatch
     CHECK_EQ(g_systemStub_OnCompletedCalls, before + 1);    // reached the body
+}
+
+// ===========================================================================
+// PART E — B.3.4b SYSTEM (3): the value types.
+// ===========================================================================
+// `System::Random`, `Time`, `Color` and `DateTime` have NO vtable, so there is
+// no slot order to pin and nothing here resembles PARTS C and D. What there IS
+// to pin is the thing a build can get wrong silently: that each class is the
+// same bytes as the POD the unconverted tree still reads through a cast, and
+// that none of them acquires a vptr, a virtual, or a destructor.
+//
+// NO MEMBER IS CALLED HERE, deliberately. Their bodies live in
+// `runtime/src/system/value_types.cpp`, which includes <windows.h> and stands
+// on the port registry (`RT_EXPORT_ONCE` for `Timer::TicksToSeconds`,
+// `String::Format`, the two DateTime siblings) and cannot link into a host test
+// — the same reason `object_ptr_test.cpp` and `set_test.cpp` are header-only.
+// The MT19937 draw, the tick conversion and the three date formats are verified
+// by the real run. This part is layout, and layout is what a static_assert can
+// carry but a deleted static_assert cannot report.
+
+UNIT_TEST(system_random_is_0x9c4_bytes_and_aliases_the_global_pod) {
+    CHECK_EQ(sizeof(System::Random), static_cast<size_t>(2500));
+    CHECK_EQ(sizeof(System::Random), sizeof(::Random));
+    CHECK_EQ(offsetof(System::Random, _index), static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::Random, _mt),    static_cast<size_t>(0x04));
+    CHECK_EQ(offsetof(System::Random, _index), offsetof(::Random, index));
+    CHECK_EQ(offsetof(System::Random, _mt),    offsetof(::Random, mt));
+    CHECK(!std::is_polymorphic<System::Random>::value);
+    CHECK(std::is_standard_layout<System::Random>::value);
+    CHECK(std::is_trivially_destructible<System::Random>::value);
+
+    // B4b-2, and for Random the reason is specific: `Object::InternalFactory`
+    // holds a `::Random` BY VALUE at +0x20 (runtime/types/object/Internal.h)
+    // while `Ctor_InternalFactory` seeds it through the
+    // `??0Random@System@@QEAA@XZ` door. A real constructor here would seed the
+    // object factory's RNG twice from two different `time(nullptr)` values the
+    // moment anyone re-spells that member — a determinism change with no build
+    // error. This assertion is what makes adding one fail the test suite.
+    CHECK(std::is_trivially_default_constructible<System::Random>::value);
+}
+
+UNIT_TEST(system_time_is_8_bytes_over_the_shared_global_struct_Time) {
+    // `::Time` is `engine/types/common.h`'s, shared with the exe tree, and is
+    // NOT moved by B.3.4b (rule B4b-1 does not fire: the POD never occupied the
+    // class's name). `System::Time` is a new name over the same eight bytes.
+    CHECK_EQ(sizeof(System::Time), static_cast<size_t>(8));
+    CHECK_EQ(sizeof(System::Time), sizeof(::Time));
+    CHECK_EQ(offsetof(System::Time, _ticks), static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::Time, _ticks), offsetof(::Time, ticks));
+    CHECK(!std::is_polymorphic<System::Time>::value);
+    CHECK(std::is_standard_layout<System::Time>::value);
+    // The ~132 `fn_Time_Ctor_Float` sites build these in RAW BYTE BUFFERS and
+    // convert as placement-new; a non-trivial default constructor or a
+    // destructor would change what those buffers cost.
+    CHECK(std::is_trivially_default_constructible<System::Time>::value);
+    CHECK(std::is_trivially_destructible<System::Time>::value);
+}
+
+UNIT_TEST(system_color_is_4_bytes_and_aliases_the_global_pod) {
+    CHECK_EQ(sizeof(System::Color), static_cast<size_t>(4));
+    CHECK_EQ(sizeof(System::Color), sizeof(::Color));
+    CHECK_EQ(offsetof(System::Color, _value), static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::Color, _value), offsetof(::Color, value));
+    CHECK(!std::is_polymorphic<System::Color>::value);
+    CHECK(std::is_standard_layout<System::Color>::value);
+    CHECK(std::is_trivially_destructible<System::Color>::value);
+}
+
+UNIT_TEST(system_datetime_is_a_filetime_two_dwords_not_an_int64) {
+    // The one class in Value.h that had NO POD at all — the header used to say
+    // "`this` IS A FILETIME, 8 opaque bytes" and every body took `const void*`.
+    // A FILETIME is {DWORD dwLowDateTime; DWORD dwHighDateTime;}, so it is
+    // 4-ALIGNED. Spelling it `uint64_t` would compile, would keep sizeof at 8,
+    // and would silently raise alignof to 8 — which is why alignment is
+    // asserted here and not only size.
+    CHECK_EQ(sizeof(System::DateTime), static_cast<size_t>(8));
+    CHECK_EQ(alignof(System::DateTime), static_cast<size_t>(4));
+    CHECK_EQ(offsetof(System::DateTime, _lowDateTime),  static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::DateTime, _highDateTime), static_cast<size_t>(0x04));
+    CHECK(!std::is_polymorphic<System::DateTime>::value);
+    CHECK(std::is_standard_layout<System::DateTime>::value);
+    CHECK(std::is_trivially_destructible<System::DateTime>::value);
+}
+
+UNIT_TEST(the_value_classes_write_the_same_bytes_the_pods_read) {
+    // The live mixed state, as PART D does for Thread: written through the POD
+    // spelling (what the unconverted tree does) and read back through the
+    // class, and the reverse. This is the whole coexistence claim for a class
+    // with no vtable.
+    ::Random pod{};
+    pod.index = 42;
+    pod.mt[0] = 0xdeadbeefu;
+    pod.mt[623] = 0x0badc0deu;
+    System::Random* asClass = reinterpret_cast<System::Random*>(&pod);
+    CHECK_EQ(asClass->_index, 42);
+    CHECK_EQ(asClass->_mt[0], 0xdeadbeefu);
+    CHECK_EQ(asClass->_mt[623], 0x0badc0deu);
+    asClass->_index = 7;
+    CHECK_EQ(pod.index, 7);
+
+    ::Color cpod{};
+    cpod.value = 0xff3366ccu;   // AARRGGBB as a uint32, per Value.h's banner
+    System::Color* cAsClass = reinterpret_cast<System::Color*>(&cpod);
+    CHECK_EQ(cAsClass->_value, cpod.value);
+
+    ::Time tpod{};
+    tpod.ticks = 0x0123456789abcdefLL;
+    System::Time* tAsClass = reinterpret_cast<System::Time*>(&tpod);
+    CHECK_EQ(tAsClass->_ticks, 0x0123456789abcdefLL);
 }
 
 UNIT_TEST(the_pod_and_the_class_agree_about_which_bytes_the_fields_are) {
