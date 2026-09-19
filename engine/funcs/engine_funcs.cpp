@@ -1250,9 +1250,9 @@ fn_TradeWork_impl_04d0_t fn_TradeWork_impl_04d0 = nullptr;  // 0x1400b04d0
 fn_TradeWork_impl_f1a0_t fn_TradeWork_impl_f1a0 = nullptr;  // 0x1400af1a0
 
 // M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
-fn_Ser_SerInt_t       fn_Ser_Slot_SerInt_AC8       = nullptr;  // 0x140152ac8
+// `SerInt_AC8` and `SerFloat_A60` retired in ENDGAME B.3.4 step 0; see the
+// banner on the typedef block in engine_funcs.h for why.
 fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410      = nullptr;  // 0x140152410
-fn_Ser_SerFloat_t     fn_Ser_Slot_SerFloat_A60     = nullptr;  // 0x140152a60
 fn_Ser_SerUShortArr_t fn_Ser_Slot_SerUShortArr_488 = nullptr;  // 0x140152488
 fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8  = nullptr;  // 0x1401523f8
 fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400  = nullptr;  // 0x140152400
@@ -4239,12 +4239,12 @@ bool EngineFuncsInit() {
     // M3.5 Path B session 8 — promoted IO::Serializer dispatch slots.
     {
         void** sp;
-        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152ac8));
-        if (sp && *sp) fn_Ser_Slot_SerInt_AC8 = reinterpret_cast<fn_Ser_SerInt_t>(*sp);
+        // 0x140152ac8 and 0x140152a60 are no longer read here: their pointers
+        // were aliases of g_fn_Serialize_Int / fn_Serializer_Serialize_Float and
+        // retired in ENDGAME B.3.4 step 0. The SLOTS stay bound in
+        // standalone/address_registry.cpp:1628-1629 (PE imports).
         sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152410));
         if (sp && *sp) fn_Ser_Slot_SerByte_410 = reinterpret_cast<fn_Ser_SerByte_t>(*sp);
-        sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152a60));
-        if (sp && *sp) fn_Ser_Slot_SerFloat_A60 = reinterpret_cast<fn_Ser_SerFloat_t>(*sp);
         sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152488));
         if (sp && *sp) fn_Ser_Slot_SerUShortArr_488 = reinterpret_cast<fn_Ser_SerUShortArr_t>(*sp);
         sp = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401523f8));
@@ -4258,9 +4258,7 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] M3.5 Path B session 8 (Geometry::Serialize) resolved\n");
     printf("  TradeWork_impl_04d0     = %p\n", (void*)fn_TradeWork_impl_04d0);
     printf("  TradeWork_impl_f1a0     = %p\n", (void*)fn_TradeWork_impl_f1a0);
-    printf("  Ser slot SerInt_AC8     = %p\n", (void*)fn_Ser_Slot_SerInt_AC8);
     printf("  Ser slot SerByte_410    = %p\n", (void*)fn_Ser_Slot_SerByte_410);
-    printf("  Ser slot SerFloat_A60   = %p\n", (void*)fn_Ser_Slot_SerFloat_A60);
     printf("  Ser slot SerUShortArr   = %p\n", (void*)fn_Ser_Slot_SerUShortArr_488);
     printf("  Ser slot SerSizedRaw_3F8= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_3F8);
     printf("  Ser slot SerSizedRaw_400= %p\n", (void*)fn_Ser_Slot_SerSizedRaw_400);

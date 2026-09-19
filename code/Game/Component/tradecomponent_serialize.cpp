@@ -218,15 +218,15 @@ void* TradeBst_NewNode(uint64_t key, int64_t value, void* parent) {
 // tree (saving, no mutation).
 void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     int32_t count = *reinterpret_cast<int32_t*>(At(treeHdr, 0x08));
-    if (fn_Ser_Slot_SerInt_AC8) fn_Ser_Slot_SerInt_AC8(ser, &count, nullptr);
-    if (!fn_Ser_Slot_SerInt_AC8) return;
+    if (g_fn_Serialize_Int) g_fn_Serialize_Int(ser, &count, nullptr);
+    if (!g_fn_Serialize_Int) return;
 
     if (Loading(ser)) {
         for (int32_t i = 0; i < count; ++i) {
             uint64_t key = 0;
             if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(&key, ser);
             int64_t value = 0;
-            fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(&value), nullptr);
+            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(&value), nullptr);
 
             uint8_t* root = *reinterpret_cast<uint8_t**>(treeHdr);
             if (!root) {
@@ -272,7 +272,7 @@ void TradeComp_BstSerialize(void* treeHdr, void* ser) {
     while (uint8_t* l = *reinterpret_cast<uint8_t**>(n + 0x18)) n = l;
     while (n) {
         if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(n, ser);
-        fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(n + 0x08), nullptr);
+        g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(n + 0x08), nullptr);
 
         uint8_t* r = *reinterpret_cast<uint8_t**>(n + 0x20);
         if (r) {
@@ -349,7 +349,7 @@ extern "C" void TradeStock_SeedForTest(void* tradeComp, void* resourceEntity, in
 extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     if (!self || !stream) return;
     if (fn_ComponentBase_Serialize) fn_ComponentBase_Serialize(self, stream);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_Ser_Slot_SerInt_AC8) return;
+    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
 
     // Retail 0x14005bd50 opens TWO Serializer scopes: an EMPTY one that is
     // constructed and immediately destroyed (the controller-section stub), and
@@ -375,27 +375,27 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
 
     // +0x50/+0x58: ComponentRef table, stride 0x10 {ComponentRef, int, int}.
     int32_t refCount = *reinterpret_cast<int32_t*>(At(self, 0x58));
-    fn_Ser_Slot_SerInt_AC8(ser, &refCount, nullptr);
+    g_fn_Serialize_Int(ser, &refCount, nullptr);
     if (Loading(ser) && fn_SummaryArray_Init)
         fn_SummaryArray_Init(At(self, 0x50), refCount);
     {
         uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x50));
         for (int32_t i = 0; i < refCount && elem; ++i, elem += 0x10) {
             if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(elem + 0x0, ser);
-            fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
-            fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(elem + 0xc), nullptr);
+            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
+            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0xc), nullptr);
         }
     }
 
     // +0x2c: selected-merchant index.
-    fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(At(self, 0x2c)), nullptr);
+    g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(At(self, 0x2c)), nullptr);
 
     // +0x60: AVL tree, ComponentRef -> int.
     TradeComp_BstSerialize(At(self, 0x60), ser);
 
     // +0x30/+0x38: trade-name array, stride 0x20.
     int32_t nameCount = *reinterpret_cast<int32_t*>(At(self, 0x38));
-    fn_Ser_Slot_SerInt_AC8(ser, &nameCount, nullptr);
+    g_fn_Serialize_Int(ser, &nameCount, nullptr);
     if (Loading(ser))
         TradeComponent_ResizeNames(reinterpret_cast<int64_t*>(At(self, 0x30)), nameCount);
     {
@@ -403,7 +403,7 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
         for (int32_t i = 0; i < nameCount && elem; ++i, elem += 0x20) {
             reinterpret_cast<System::String*>(elem + 0x0)->Serialize(ser);   // B.3.1 bridge
             int32_t innerCount = *reinterpret_cast<int32_t*>(elem + 0x18);
-            fn_Ser_Slot_SerInt_AC8(ser, &innerCount, nullptr);
+            g_fn_Serialize_Int(ser, &innerCount, nullptr);
             // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
             // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
             if (Loading(ser))
@@ -411,26 +411,26 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
             if (fn_ExternalRefArray_Serialize)
                 fn_ExternalRefArray_Serialize(ser, innerCount,
                     *reinterpret_cast<void**>(elem + 0x10), nullptr);
-            fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
+            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
         }
     }
 
     // +0x40/+0x48: item table, stride 0xc {resourceId(enum), index, spare}.
     int32_t itemCount = *reinterpret_cast<int32_t*>(At(self, 0x48));
-    fn_Ser_Slot_SerInt_AC8(ser, &itemCount, nullptr);
+    g_fn_Serialize_Int(ser, &itemCount, nullptr);
     if (Loading(ser))
         TradeComponent_ResizeItems(reinterpret_cast<int64_t*>(At(self, 0x40)), itemCount);
     {
         uint8_t* elem = *reinterpret_cast<uint8_t**>(At(self, 0x40));
         for (int32_t i = 0; i < itemCount && elem; ++i, elem += 0xc) {
             SerializeEnumField(ser, elem + 0x0);
-            fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
-            fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(elem + 0x4), nullptr);
+            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x8), nullptr);
+            g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(elem + 0x4), nullptr);
         }
     }
 
     // +0x28: plain int.
-    fn_Ser_Slot_SerInt_AC8(ser, reinterpret_cast<int32_t*>(At(self, 0x28)), nullptr);
+    g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(At(self, 0x28)), nullptr);
 
     // +0x78: Time.
     if (g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0x78), ser);

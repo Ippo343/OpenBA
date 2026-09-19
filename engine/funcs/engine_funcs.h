@@ -5901,15 +5901,27 @@ extern fn_TradeWork_impl_f1a0_t fn_TradeWork_impl_f1a0;  // 0x1400af1a0  M3.5 Pa
 //
 // All slots verified by Ghidra MCP: `disassemble_function 0x1400b04d0 CALL`.
 // M3.5 Path B session 8
-typedef void (*fn_Ser_SerInt_t      )(void* serializer, int32_t* field, const char* name);
+//
+// ENDGAME B.3.4 step 0 — TWO OF THESE WERE ALIASES AND ARE GONE.
+// `fn_Ser_Slot_SerInt_AC8` (0x140152ac8) and `g_fn_Serialize_Int` named the SAME
+// retail dispatch slot by two routes: the former read the slot's contents
+// (`ResolveAddr(Module::Exe, 0x140152ac8)` then `*sp`), the latter resolves the
+// mangled export `?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z` — and
+// `standalone/address_registry.cpp:1628` binds that slot to the same
+// `RtSerializer_Serialize_Int` the export resolves to. Likewise
+// `fn_Ser_Slot_SerFloat_A60` (0x140152a60) aliased `fn_Serializer_Serialize_Float`.
+// Two names for one member meant two caller batches could independently "finish"
+// it, so B34_RULES.md §6.5(b) collapses them BEFORE the caller batches start:
+// the 28 `SerInt_AC8` call sites moved to `g_fn_Serialize_Int` (a pure token
+// rename — the two typedefs differ only in spelling `int32_t*` vs `void*` for
+// argument 2 and are ABI-identical), and `SerFloat_A60` was already zero-CALL.
+// THE DISPATCH-SLOT ROWS THEMSELVES STAY BOUND (B34_RULES §6.5(g)): they are PE
+// import slots that retail-shaped exe code reads, not our call sites.
 typedef void (*fn_Ser_SerByte_t     )(void* serializer, uint8_t* field, const char* name);
-typedef void (*fn_Ser_SerFloat_t    )(void* serializer, float*   field, const char* name);
 typedef void (*fn_Ser_SerUShortArr_t)(void* serializer, int32_t count, uint16_t* data, const char* name);
 typedef void (*fn_Ser_SerSizedRaw_t )(void* serializer, int32_t bytes, void* ptr, const char* name);
 typedef void (*fn_Ser_SerByteArr_t  )(void* serializer, int32_t count, void* ptr, const char* name);
-extern fn_Ser_SerInt_t       fn_Ser_Slot_SerInt_AC8;       // 0x140152ac8  M3.5 Path B session 8
 extern fn_Ser_SerByte_t      fn_Ser_Slot_SerByte_410;      // 0x140152410  M3.5 Path B session 8
-extern fn_Ser_SerFloat_t     fn_Ser_Slot_SerFloat_A60;     // 0x140152a60  M3.5 Path B session 8
 extern fn_Ser_SerUShortArr_t fn_Ser_Slot_SerUShortArr_488; // 0x140152488  M3.5 Path B session 8
 extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_3F8;  // 0x1401523f8  M3.5 Path B session 8
 extern fn_Ser_SerSizedRaw_t  fn_Ser_Slot_SerSizedRaw_400;  // 0x140152400  M3.5 Path B session 8

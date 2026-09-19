@@ -75,8 +75,8 @@ char Serialize(void* self, void* stream) {
     uint8_t* c = reinterpret_cast<uint8_t*>(self);
     uint8_t serializer[24];
     g_fn_Serializer_Ctor(serializer, stream, 0);
-    if (fn_Ser_Slot_SerInt_AC8)
-        fn_Ser_Slot_SerInt_AC8(serializer, reinterpret_cast<int32_t*>(c + 0x20), nullptr);
+    if (g_fn_Serialize_Int)
+        g_fn_Serialize_Int(serializer, reinterpret_cast<int32_t*>(c + 0x20), nullptr);
     g_fn_Serializer_Dtor(serializer);
     return 1;
 }
