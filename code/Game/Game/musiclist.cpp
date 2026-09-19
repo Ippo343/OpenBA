@@ -35,8 +35,10 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 static constexpr uintptr_t kVtableAddr = 0x14015ee40;
 static constexpr int       kSize       = 0x30;
@@ -198,11 +200,11 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
     if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !g_fn_Serialize_Int) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int count = *(int*)(s + 0x28);
-    g_fn_Serialize_Int(ser, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge (cast dropped: count is int)
 
     // Loading when the serializer's stream-mode field == 0. The original reads
     // *(int*)(local_20[0] + 8), i.e. DEREFERENCE the serializer's first qword
@@ -224,11 +226,11 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
             // ORDER IS LOAD-BEARING: float@+0x08, float@+0x0c, int@+0x10,
             // int@+0x14, then String@+0x00.
             if (fn_Serializer_Serialize_Float)
-                fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(elem + 0x08), nullptr);
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(elem + 0x08), nullptr);   // B.3.4 bridge
             if (fn_Serializer_Serialize_Float)
-                fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(elem + 0x0c), nullptr);
-            g_fn_Serialize_Int(ser, elem + 0x10, nullptr);
-            g_fn_Serialize_Int(ser, elem + 0x14, nullptr);
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(elem + 0x0c), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(elem + 0x10), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(elem + 0x14), nullptr);   // B.3.4 bridge
             // +0x00 is an Object::External REFERENCE (the track's audio resource),
             // NOT a String. The original element serializer (exe FUN_1400019a0) is
             // the templated ExternalPtr::Serialize (encoding/ref-mode aware: reads a
@@ -243,7 +245,7 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
         }
     }
 
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

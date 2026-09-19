@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -358,7 +359,7 @@ void MG_Resize(void* header, int newCount, int stride) {
 // resizing only on the load leg. Returns the count to iterate.
 int MG_SerializeCount(void* serializer, void* header, void* countField, int stride) {
     int n = *(int32_t*)countField;
-    if (g_fn_Serialize_Int) g_fn_Serialize_Int(serializer, &n, nullptr);
+    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(n, nullptr);   // B.3.4 bridge (cast dropped: n is int)
     if (MG_IsLoading(serializer)) MG_Resize(header, n, stride);
     return n;
 }
@@ -378,21 +379,21 @@ void MG_ReadRefPool(void* serializer, void* header, void* countField) {
 void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     EnsureFuncsResolved();
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int ||
         !g_fn_Serialize_Bool || !fn_Serializer_Serialize_Float || !fn_ExternalPtr_Serialize2) {
         return;  // missing a Runtime serialize primitive — can't proceed
     }
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // --- scalar header (order matches Easy.rsc: _stringTable,_name,_description,
     //     _exposed,_startAreaSize,_citizenRadius,_citizen) ---
     fn_ExternalPtr_Serialize2(s + 0x20, serializer);   // +0x20 _stringTable ref
     reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);       // +0x28 _name
     reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);       // +0x30 _description
-    g_fn_Serialize_Bool(serializer, s + 0x38, nullptr);// +0x38 _exposed
-    g_fn_Serialize_Int(serializer, s + 0x3c, nullptr); // +0x3c _startAreaSize (townSize)
-    fn_Serializer_Serialize_Float(serializer, &self->scale, nullptr);     // +0x40 _citizenRadius
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge  +0x38 _exposed
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge  +0x3c _startAreaSize (townSize)
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->scale, nullptr);   // B.3.4 bridge (cast dropped: self->scale is float)  +0x40 _citizenRadius
     reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
@@ -400,8 +401,8 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
         const int n = MG_SerializeCount(serializer, s + 0x60, s + 0x68, 8);
         uint8_t* e = *(uint8_t**)(s + 0x60);
         for (int i = 0; e && i < n; ++i, e += 8) {
-            g_fn_Serialize_Bool(serializer, e, nullptr);        // _educated
-            g_fn_Serialize_Int(serializer, e + 4, nullptr);     // _maxChildCount
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(e), nullptr);        // B.3.4 bridge  _educated
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 4), nullptr);     // B.3.4 bridge  _maxChildCount
         }
     }
 
@@ -415,11 +416,11 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
         uint8_t* e = *(uint8_t**)(s + 0x80);
         for (int i = 0; e && i < n; ++i, e += 0x30) {   // FUN_14001b6c0, in place
             reinterpret_cast<System::String*>(e)->Serialize(serializer);            // _structure ref name
-            g_fn_Serialize_Int(serializer, e + 0x18, nullptr);  // _offsetX
-            g_fn_Serialize_Int(serializer, e + 0x1c, nullptr);  // _offsetY
-            g_fn_Serialize_Int(serializer, e + 0x20, nullptr);  // _width
-            g_fn_Serialize_Int(serializer, e + 0x24, nullptr);  // _height
-            g_fn_Serialize_Int(serializer, e + 0x28, nullptr);  // _rotation
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x18), nullptr);  // B.3.4 bridge  _offsetX
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x1c), nullptr);  // B.3.4 bridge  _offsetY
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x20), nullptr);  // B.3.4 bridge  _width
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x24), nullptr);  // B.3.4 bridge  _height
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x28), nullptr);  // B.3.4 bridge  _rotation
         }
     }
 
@@ -431,30 +432,30 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     MG_ReadRefPool(serializer, s + 0xd0, s + 0xd8);
 
     // --- scalar tail (cull counts, initial resource counts, livestock params) ---
-    g_fn_Serialize_Int(serializer, s + 0xe0, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0xe4, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0xe8, nullptr);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0xec), nullptr);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0xf0), nullptr);
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0xf4), nullptr);
-    g_fn_Serialize_Int(serializer, s + 0xf8, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0xfc, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x100, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x104, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x108, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x10c, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x110, nullptr);
-    g_fn_Serialize_Int(serializer, s + 0x114, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xe0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xe4), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xe8), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0xec), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0xf0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0xf4), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xf8), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0xfc), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x100), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x104), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x108), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x10c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x110), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x114), nullptr);   // B.3.4 bridge
 
     // --- env template refs + interleaved scalars (EXACT stream order) ---
     reinterpret_cast<System::String*>(s + 0x118)->Serialize(serializer);       // descRef1 (terrain)
     reinterpret_cast<System::String*>(s + 0x138)->Serialize(serializer);       // descRef2 (climate)
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x130), nullptr); // terrainAmplitude
-    g_fn_Serialize_Int(serializer, s + 0x150, nullptr); // chunkSize
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x130), nullptr);   // B.3.4 bridge  terrainAmplitude
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x150), nullptr);   // B.3.4 bridge  chunkSize
     reinterpret_cast<System::String*>(s + 0x158)->Serialize(serializer);       // descRef3 (vegetation)
-    fn_Serializer_Serialize_Float(serializer, (float*)(s + 0x170), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x170), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return;
 }
 

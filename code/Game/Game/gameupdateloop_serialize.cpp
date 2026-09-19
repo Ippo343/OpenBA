@@ -58,6 +58,7 @@
 #include <cstring>
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -327,30 +328,30 @@ extern "C" void EventLog_Serialize_952c0(void* selfVoid, void* stream) {
     EnsureResolved();
     uintptr_t self = (uintptr_t)selfVoid;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 1);
-    if (s_fn_Ser_BoolArr) s_fn_Ser_BoolArr(ser, 6, (void*)(self + 0x10), nullptr);
-    if (g_fn_Serializer_GetVersion(ser) > 0) {
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
+    if (s_fn_Ser_BoolArr) reinterpret_cast<IO::Serializer*>(ser)->Serialize(6, reinterpret_cast<bool*>(self + 0x10), nullptr);   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
         uint32_t total = *(uint32_t*)(self + 0x20);
         uint32_t capped = (int)total > 200 ? 200u : total;
         int skip = (int)(total - capped);
         if (skip < 0) skip = 0;
-        g_fn_Serialize_Int(ser, &capped, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(&capped), nullptr);   // B.3.4 bridge
         if (!IsSaving(stream)) {
             EventLog_Resize_199a0((void*)(self + 0x18), (int)capped);
         }
         for (int i = skip; i < *(int*)(self + 0x20); i++) {
             uint8_t* e = *(uint8_t**)(self + 0x18) + (size_t)i * 0x28;
-            g_fn_Serialize_Int(ser, e, nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e), nullptr);   // B.3.4 bridge
             reinterpret_cast<System::String*>(e + 0x8)->Serialize(ser);
-            g_fn_Serialize_Int(ser, e + 0x10, nullptr);
-            g_fn_Serialize_Int(ser, e + 0x14, nullptr);
-            g_fn_Serialize_Int(ser, e + 0x18, nullptr);
-            g_fn_Serialize_Int(ser, e + 0x1c, nullptr);
-            g_fn_Serialize_Int(ser, e + 0x20, nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x10), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x14), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x18), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x1c), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x20), nullptr);   // B.3.4 bridge
         }
     }
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -368,39 +369,39 @@ extern "C" void WeatherSim_Serialize_93c90(void* selfVoid, void* stream) {
     EnsureResolved();
     uintptr_t self = (uintptr_t)selfVoid;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     if (s_fn_EnvPtrSer_192a0) s_fn_EnvPtrSer_192a0((void*)(self + 0x00), ser);
     else Reimpl_ExternalPtr_Serialize_EnvironmentDesc((void*)(self + 0x00), ser);
     s_fn_CfgSer_194a0((void*)(self + 0x08), ser);
 
-    g_fn_Serialize_Int(ser, (void*)(self + 0x10), nullptr);
-    g_fn_Serialize_Int(ser, (void*)(self + 0x14), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x18), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x10), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x14), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x18), nullptr);   // B.3.4 bridge
     // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360
     reinterpret_cast<Math::Vector4*>(self + 0x1c)->Serialize(ser);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x2c), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x30), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x44), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x48), nullptr);
-    g_fn_Serialize_Int(ser, (void*)(self + 0x4c), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x2c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x44), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x4c), nullptr);   // B.3.4 bridge
 
     int slotCount = *(int*)(self + 0x58);
     for (int i = 0; i < slotCount; i++) {
         void** slot = (void**)(*(uintptr_t*)(self + 0x50) + (size_t)i * 8);
         bool active = (*slot != nullptr);
-        g_fn_Serialize_Bool(ser, &active, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(active, nullptr);   // B.3.4 bridge
         if (active) {
             if (!IsSaving(stream)) {
                 WeatherEffect_SetEnabled(selfVoid, i, 1);
             }
             uint8_t* geo = (uint8_t*)*slot;
-            fn_Serializer_Serialize_Float(ser, (float*)(geo + 0xc4), nullptr);
-            fn_Serializer_Serialize_Float(ser, (float*)(geo + 0xc0), nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(geo + 0xc4), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(geo + 0xc0), nullptr);   // B.3.4 bridge
         }
     }
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -428,7 +429,7 @@ extern "C" void GoalRefTree_Serialize_e2e0(void* treeVoid, void* serializer) {
     uintptr_t tree = (uintptr_t)treeVoid;
 
     int count = *(int*)(tree + 0x8);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
     void* stream = *(void**)serializer;   // Serializer+0x00 = stream
     if (*(int*)((uintptr_t)stream + 8) == 0) {
@@ -437,9 +438,9 @@ extern "C" void GoalRefTree_Serialize_e2e0(void* treeVoid, void* serializer) {
             struct { void* ref; int a; int b; bool used; } rec;
             rec.ref = nullptr; rec.a = 0; rec.b = 0; rec.used = false;
             s_fn_BuildCompRefSer(&rec.ref, serializer);
-            g_fn_Serialize_Int(serializer, &rec.a, nullptr);
-            g_fn_Serialize_Int(serializer, &rec.b, nullptr);
-            g_fn_Serialize_Bool(serializer, &rec.used, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(rec.a, nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(rec.b, nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(rec.used, nullptr);   // B.3.4 bridge
             void* outNode = nullptr;
             s_fn_GoalTreeInsert(treeVoid, &outNode, &rec.ref);
         }
@@ -451,9 +452,9 @@ extern "C" void GoalRefTree_Serialize_e2e0(void* treeVoid, void* serializer) {
         while (*(uintptr_t*)(cur + 0x20)) cur = *(uintptr_t*)(cur + 0x20);
         while (cur) {
             s_fn_BuildCompRefSer((void*)cur, serializer);
-            g_fn_Serialize_Int(serializer, (void*)(cur + 0x8), nullptr);
-            g_fn_Serialize_Int(serializer, (void*)(cur + 0xc), nullptr);
-            g_fn_Serialize_Bool(serializer, (void*)(cur + 0x10), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0x8), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0xc), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(cur + 0x10), nullptr);   // B.3.4 bridge
             // in-order successor
             uintptr_t next = *(uintptr_t*)(cur + 0x28);
             if (next) {
@@ -485,7 +486,7 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
     if (!s_tidCompEnt) s_tidCompEnt = ::Object::GetTypeIdByName("ComponentEntity");
 
     int count = *(int*)(tree + 0x8);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
     void* stream = *(void**)serializer;
     if (*(int*)((uintptr_t)stream + 8) == 0) {
@@ -496,9 +497,9 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
             bool used = false;
             fn_InternalBasePtr_Serialize(&key, serializer);
             if (key && s_tidCompEnt && !fn_IsDerivedFrom(key, s_tidCompEnt)) key = nullptr;
-            g_fn_Serialize_Int(serializer, &a, nullptr);
-            g_fn_Serialize_Int(serializer, &b, nullptr);
-            g_fn_Serialize_Bool(serializer, &used, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(a, nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(b, nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(used, nullptr);   // B.3.4 bridge
 
             auto makeNode = [&](uintptr_t parent) -> uintptr_t {
                 uint8_t* n = (uint8_t*)fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
@@ -556,9 +557,9 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
             fn_InternalBasePtr_Serialize((void*)cur, serializer);
             if (*(void**)cur && s_tidCompEnt && !fn_IsDerivedFrom(*(void**)cur, s_tidCompEnt))
                 *(void**)cur = nullptr;
-            g_fn_Serialize_Int(serializer, (void*)(cur + 0x8), nullptr);
-            g_fn_Serialize_Int(serializer, (void*)(cur + 0xc), nullptr);
-            g_fn_Serialize_Bool(serializer, (void*)(cur + 0x10), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0x8), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(cur + 0xc), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(cur + 0x10), nullptr);   // B.3.4 bridge
             uintptr_t next = *(uintptr_t*)(cur + 0x28);
             if (next) {
                 while (*(uintptr_t*)(next + 0x20)) next = *(uintptr_t*)(next + 0x20);
@@ -586,20 +587,20 @@ extern "C" void EntityUI_Serialize_102920(void* selfVoid, void* stream) {
     EnsureResolved();
     uintptr_t self = (uintptr_t)selfVoid;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 2);
-    g_fn_Serialize_Bool(ser, (void*)(self + 0x30), nullptr);
-    g_fn_Serialize_Int(ser, (void*)(self + 0x34), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x3c), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x40), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(self + 0x44), nullptr);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(self + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x34), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x3c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x40), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(self + 0x44), nullptr);   // B.3.4 bridge
     GoalRefTree_Serialize_e2e0((void*)(self + 0x50), ser);
-    if (g_fn_Serializer_GetVersion(ser) > 0) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
         IbpTree_Serialize_e470((void*)(self + 0x60), ser);
     }
-    if (g_fn_Serializer_GetVersion(ser) > 1) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1) {   // B.3.4 bridge
         uint32_t count = *(uint32_t*)(self + 0x78);
-        g_fn_Serialize_Int(ser, &count, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
         if (!IsSaving(stream)) {
             CamViewArray_Resize_e000((void*)(self + 0x70), (int)count);
         }
@@ -607,13 +608,13 @@ extern "C" void EntityUI_Serialize_102920(void* selfVoid, void* stream) {
             uint8_t* e = *(uint8_t**)(self + 0x70) + (size_t)i * 0x1c;
             // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
             reinterpret_cast<Math::Vector3*>(e)->Serialize(ser);
-            fn_Serializer_Serialize_Float(ser, (float*)(e + 0xc), nullptr);
-            fn_Serializer_Serialize_Float(ser, (float*)(e + 0x10), nullptr);
-            fn_Serializer_Serialize_Float(ser, (float*)(e + 0x14), nullptr);
-            g_fn_Serialize_Bool(ser, e + 0x18, nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(e + 0xc), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(e + 0x10), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(e + 0x14), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x18), nullptr);   // B.3.4 bridge
         }
     }
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -627,27 +628,27 @@ extern "C" void Minimap_Serialize_a57f0(void* selfVoid, void* stream) {
     EnsureResolved();
     uintptr_t self = (uintptr_t)selfVoid;
 
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // overlay array (+0x28) first — matches the retail order
     int n = *(int*)(self + 0x30);
-    g_fn_Serialize_Int(ser, &n, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, nullptr);   // B.3.4 bridge
     if (!IsSaving(stream)) s_fn_IntArrResize((void*)(self + 0x28), n);
-    if (s_fn_Ser_UintArr) s_fn_Ser_UintArr(ser, n, *(void**)(self + 0x28), nullptr);
+    if (s_fn_Ser_UintArr) reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x28)), nullptr);   // B.3.4 bridge
 
     // terrain array (+0x18)
     n = *(int*)(self + 0x20);
-    g_fn_Serialize_Int(ser, &n, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, nullptr);   // B.3.4 bridge
     if (!IsSaving(stream)) s_fn_IntArrResize((void*)(self + 0x18), n);
-    if (s_fn_Ser_UintArr) s_fn_Ser_UintArr(ser, n, *(void**)(self + 0x18), nullptr);
+    if (s_fn_Ser_UintArr) reinterpret_cast<IO::Serializer*>(ser)->Serialize(n, reinterpret_cast<unsigned int*>(*(void**)(self + 0x18)), nullptr);   // B.3.4 bridge
 
-    g_fn_Serialize_Int(ser, (void*)(self + 0x4), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x4), nullptr);   // B.3.4 bridge
 
     if (!IsSaving(stream)) {
         Minimap_CreateAndUpload(selfVoid);
     }
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -715,7 +716,7 @@ extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
     uintptr_t hdr = (uintptr_t)bucketsPtr;
     for (int b = 0; b < 5; b++, hdr += 0x10) {
         int count = *(int*)(hdr + 0x8);
-        g_fn_Serialize_Int(serializer, &count, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
         if (*(int*)((uintptr_t)*(void**)serializer + 8) == 0) {
             // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8
             // align 8, new tail zeroed. Element is the 8-byte InternalBasePtr slot.
@@ -757,8 +758,8 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     fflush(stderr);
 
     s_fn_EnableRefMode(extFactory, true);
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 3);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
     s_fn_SerializeRefTable(extFactory, stream);
     // --- Preload every external the save references, with reference mode OFF ---
     //
@@ -841,16 +842,16 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     s_fn_CfgSer_19ec0((void*)(self + 0x40), ser);
     s_fn_CfgSer_1a0c0((void*)(self + 0x48), ser);
 
-    g_fn_Serialize_Int(ser, (void*)(self + 0x30), nullptr);
-    g_fn_Serialize_Int(ser, (void*)(self + 0x34), nullptr);
-    if (g_fn_Serializer_GetVersion(ser) > 0)
-        fn_Serializer_Serialize_Uint(ser, (uint32_t*)(self + 0xd0), nullptr);
-    if (g_fn_Serializer_GetVersion(ser) > 2)
-        g_fn_Serialize_Int(ser, (void*)(self + 0x15c), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x34), nullptr);   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0)   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(uint32_t*)(self + 0xd0), nullptr);   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2)   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(self + 0x15c), nullptr);   // B.3.4 bridge
 
     s_fn_Random_Serialize(*(void**)(self + 0xd8), ser);
     reinterpret_cast<System::String*>(self + 0x28)->Serialize(ser);
-    g_fn_Serialize_Bool(ser, (void*)(self + 0x158), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(self + 0x158), nullptr);   // B.3.4 bridge
 
 
     // NB: a diagnostic stand-in for this call (AchIbpPeek, below) established
@@ -894,14 +895,14 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // Day counter (+0x128): { int day; Time accumulated } — version-0 section.
     {
         uint8_t* dc = *(uint8_t**)(self + 0x128);
-        uint8_t ser0[24];
-        g_fn_Serializer_Ctor(ser0, stream, 0);
-        g_fn_Serialize_Int(ser0, dc, nullptr);
+        alignas(8) uint8_t ser0[24];
+        ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser0)->Serialize(*reinterpret_cast<int*>(dc), nullptr);   // B.3.4 bridge
         g_fn_Time_Serialize(dc + 0x8, ser0);
-        g_fn_Serializer_Dtor(ser0);
+        reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
     }
 
-    if (g_fn_Serializer_GetVersion(ser) > 1)
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1)   // B.3.4 bridge
         EventLog_Serialize_952c0(*(void**)(self + 0x138), stream);
     WeatherSim_Serialize_93c90(*(void**)(self + 0x130), stream);
     Minimap_Serialize_a57f0(*(void**)(self + 0x148), stream);
@@ -910,7 +911,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
 
     if (intFactory) s_fn_ClearPersist(intFactory);
     s_fn_EnableRefMode(extFactory, false);
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 
     fprintf(stderr, "[GUL::Serialize] %s DONE\n", IsSaving(stream) ? "SAVE" : "LOAD");
     fflush(stderr);

@@ -61,10 +61,12 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
 #include <cstddef>
 #include <cmath>
+#include <new>
 
 // Kept from the diagnosis pass: it separates the two failures that both end in a null
 // ExternalPtr. Factory never called => External::Load found no type at all. Factory
@@ -540,22 +542,22 @@ bool Tornado_Serialize(void* self, void* stream) {
     }
 
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t  ser[32] = {};
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[32] = {};
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     static const int kFirstFloats[9] = { 0x48, 0x4c, 0x50, 0x58, 0x5c, 0x60, 0x64, 0x68, 0x6c };
     for (int k = 0; k < 9; ++k)
-        fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(s + kFirstFloats[k]), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + kFirstFloats[k]), nullptr);   // B.3.4 bridge
 
     fn_System_Color_Serialize(s + 0x74, ser);   // start tint
     fn_System_Color_Serialize(s + 0x78, ser);   // end tint
     g_fn_Time_Serialize(s + 0x80, ser);         // fade in
     g_fn_Time_Serialize(s + 0x88, ser);         // fade out
 
-    fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(s + 0x54), nullptr);
-    fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(s + 0x70), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x54), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x70), nullptr);   // B.3.4 bridge
 
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 
     // Outcome, once. The ctor defaults are 4.0 / 20.0 / 5.0 at +0x48/+0x4c/+0x50; if the
     // .rsc body was really read these become its values (Tornado.rsc: 20 / 75 / 26).

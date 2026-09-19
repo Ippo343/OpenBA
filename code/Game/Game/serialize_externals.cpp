@@ -22,6 +22,7 @@
 #include "Object/factory_registration.h"
 #include "Game/serialize_externals.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External / ExternalFactory
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
 
@@ -91,7 +92,8 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
         }
     }
 
-    void* encoding = fn_Serializer_GetEncoding(serializer);
+    void* encoding = const_cast<IO::Encoding*>(
+        &reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!encoding) return;
     using EncodingStateFn = int (*)(void*);
     EncodingStateFn getStateFn = reinterpret_cast<EncodingStateFn>(
@@ -133,7 +135,7 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
 
         bool needsLoad = false;
         if (!*refField || serializerInner != 0 || refId != 0xFFFFFFFFu) {
-            fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
             if (refId != 0xFFFFFFFFu) {
                 if (serializerInner == 0) {
                     System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
@@ -142,7 +144,7 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
                 needsLoad = true;
             }
         } else {
-            fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
         }
 
         if (needsLoad) {
@@ -160,7 +162,7 @@ void ExternalPtrSerializeGeneric(void** refField, void* serializer,
         }
     } else {
         bool hasRef = (*refField != nullptr);
-        g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasRef, nullptr);   // B.3.4 bridge
         if (hasRef) {
             if (*refField) {
                 System::Filename pathBuf =

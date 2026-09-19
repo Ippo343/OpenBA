@@ -15,8 +15,10 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -192,8 +194,8 @@ void Profession_Serialize(Profession* self, void* stream) {
     }
 
     // Stack-allocated serializer (24 bytes)
-    uint8_t serializer[24];
-    s_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize ExternalPtr fields
     if (s_fn_ExternalPtr_Serialize2) {
@@ -210,24 +212,29 @@ void Profession_Serialize(Profession* self, void* stream) {
 
     // Serialize numeric fields
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serializer, &self->field48, nullptr);     // +0x48
+        // field48 declared int32_t == int door type: cast dropped
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->field48, nullptr);     // +0x48   // B.3.4 bridge
     }
     if (s_fn_Serialize_Bool) {
-        s_fn_Serialize_Bool(serializer, &self->field4C, nullptr);    // +0x4C
-        s_fn_Serialize_Bool(serializer, &self->field4D, nullptr);    // +0x4D
+        // field4C/field4D declared uint8_t, not exactly bool: cast kept
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4C), nullptr);    // +0x4C   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4D), nullptr);    // +0x4D   // B.3.4 bridge
     }
     if (s_fn_Serialize_Float) {
-        s_fn_Serialize_Float(serializer, &self->skillMult1, nullptr); // +0x54
-        s_fn_Serialize_Float(serializer, &self->skillMult2, nullptr); // +0x58
+        // skillMult1/2 declared float == float door type: cast dropped
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult1, nullptr); // +0x54   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult2, nullptr); // +0x58   // B.3.4 bridge
     }
     if (s_fn_Serialize_Int) {
-        s_fn_Serialize_Int(serializer, &self->priority, nullptr);     // +0x50
+        // priority declared int32_t == int door type: cast dropped
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->priority, nullptr);     // +0x50   // B.3.4 bridge
     }
     if (s_fn_Serialize_Bool) {
-        s_fn_Serialize_Bool(serializer, &self->isAvailable, nullptr); // +0x4E
+        // isAvailable declared uint8_t, not exactly bool: cast kept
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAvailable), nullptr); // +0x4E   // B.3.4 bridge
     }
 
-    s_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

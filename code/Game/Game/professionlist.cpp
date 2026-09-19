@@ -17,9 +17,11 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — must precede the
                                 // `namespace Object { ... }` forward decl below
                                 // (NAMESPACE HAZARD: spell ::Object::X everywhere)
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
 
 // ============================================================
 // Local function pointers resolved at init time
@@ -168,8 +170,8 @@ int ProfessionList_Serialize(ProfessionList* self, void* stream) {
     }
 
     // Stack-allocated serializer (24 bytes)
-    uint8_t serializer[24];
-    s_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize four ExternalPtr<Profession> references
     if (s_fn_ExternalPtrProf_Serialize) {
@@ -179,7 +181,7 @@ int ProfessionList_Serialize(ProfessionList* self, void* stream) {
         s_fn_ExternalPtrProf_Serialize(&self->profRef4, serializer);  // +0x48
     }
 
-    s_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return 1;
 }
 

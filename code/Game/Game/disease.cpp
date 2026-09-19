@@ -25,7 +25,9 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
+#include <new>
 
 static const uintptr_t kDiseaseVtable = 0x14015e190;
 
@@ -87,19 +89,20 @@ void Disease_Serialize(void* self, void* stream) {
     if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
 
-    uint8_t serializer[24];
-    s_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     if (s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
     // B.3.1 bridge: Disease is still an untyped byte struct.
     reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);
     if (s_fn_Serialize_Float) {
-        s_fn_Serialize_Float(serializer, (float*)(s + 0x30), nullptr);
-        s_fn_Serialize_Float(serializer, (float*)(s + 0x34), nullptr);
-        s_fn_Serialize_Float(serializer, (float*)(s + 0x38), nullptr);
-        s_fn_Serialize_Float(serializer, (float*)(s + 0x3c), nullptr);
-        s_fn_Serialize_Float(serializer, (float*)(s + 0x40), nullptr);
+        // Untyped byte struct: field pointers are uint8_t*, not float — cast kept.
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x38), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x40), nullptr);   // B.3.4 bridge
     }
-    s_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

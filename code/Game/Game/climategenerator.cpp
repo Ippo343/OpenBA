@@ -29,8 +29,10 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved once)
@@ -113,8 +115,8 @@ void ClimateGenerator_Cleanup(ClimateGenerator* self) {
 void ClimateGenerator_Serialize(ClimateGenerator* self, void* stream) {
     EnsureInit();
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (g_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize ExternalPtr at +0x20
     if (fn_ExternalPtr_Serialize2)
@@ -123,32 +125,33 @@ void ClimateGenerator_Serialize(ClimateGenerator* self, void* stream) {
     // Serialize String at +0x28
     reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(serializer);
 
-    // Serialize bool at +0x30
+    // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
     if (g_fn_Serialize_Bool)
-        g_fn_Serialize_Bool(serializer, reinterpret_cast<uint8_t*>(self) + 0x30, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x30), nullptr);   // B.3.4 bridge
 
     // Serialize float fields: temperatureBase(+0x34), tempVariation(+0x38),
-    // precipitation(+0x3C), windSpeed(+0x40)
+    // precipitation(+0x3C), windSpeed(+0x40) — all declared float: cast dropped
     if (s_fn_Serialize_Float) {
-        s_fn_Serialize_Float(serializer, &self->temperatureBase, nullptr);
-        s_fn_Serialize_Float(serializer, &self->tempVariation, nullptr);
-        s_fn_Serialize_Float(serializer, &self->precipitation, nullptr);
-        s_fn_Serialize_Float(serializer, &self->windSpeed, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->temperatureBase, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->tempVariation, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->precipitation, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->windSpeed, nullptr);   // B.3.4 bridge
     }
 
-    // Serialize climate data block: 0x30 (48) floats = 0xC0 bytes at +0x44
+    // Serialize climate data block: 0x30 (48) floats = 0xC0 bytes at +0x44 — declared
+    // uint8_t[0xC0]: reinterpret to float* per the float-array door
     if (s_fn_SerializeBulk)
-        s_fn_SerializeBulk(serializer, 0x30, self->_climateData, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(0x30, reinterpret_cast<float*>(self->_climateData), nullptr);   // B.3.4 bridge
 
-    // Serialize float fields at end: field104(+0x104), field108(+0x108), field10C(+0x10C)
+    // Serialize float fields at end: field104(+0x104), field108(+0x108), field10C(+0x10C) — declared float: cast dropped
     if (s_fn_Serialize_Float) {
-        s_fn_Serialize_Float(serializer, &self->_field104, nullptr);
-        s_fn_Serialize_Float(serializer, &self->_field108, nullptr);
-        s_fn_Serialize_Float(serializer, &self->_field10C, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field104, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field108, nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field10C, nullptr);   // B.3.4 bridge
     }
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

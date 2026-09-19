@@ -42,6 +42,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
 
@@ -208,7 +209,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     FnIndexCreate_t  ibCreate  = ResolveSlot(kSlot_IndexBufCreate,   s_ibCreate,  t_ibCreate,  "IndexBuffer::Create");
 
     auto serIntField = [&](void* field) {
-        if (serInt) serInt(serializer, reinterpret_cast<int32_t*>(field), nullptr);
+        if (serInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
     };
 
     RZ_CHECK("geom 04d0 entry");
@@ -239,7 +240,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     }
     if (serUSArr) {
         uint16_t* arr16 = *reinterpret_cast<uint16_t**>(selfBytes + 0xD8);
-        if (arr16) serUSArr(serializer, local_count, arr16, nullptr);
+        if (arr16) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, arr16, nullptr);   // B.3.4 bridge
     }
 
     RZ_CHECK("geom 04d0 after step3 (+0xD8 uint16 heightmap arr)");
@@ -275,35 +276,35 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
     }
     // Serialize raw heightmap bytes.
     if (serByteArr && heightBuf && byteCount > 0) {
-        serByteArr(serializer, byteCount, heightBuf, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->SerializeBytes(byteCount, heightBuf, nullptr);   // B.3.4 bridge
     } else if (fn_Serializer_SerializeBulk && heightBuf && byteCount > 0) {
         // Fallback to the SerializeBulk variant from engine_funcs.
-        fn_Serializer_SerializeBulk(serializer, byteCount, heightBuf, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(byteCount, reinterpret_cast<unsigned char*>(heightBuf), nullptr);   // B.3.4 bridge
     }
 
     RZ_CHECK("geom 04d0 after step5 (sub_c1e0 mesh build + heightBuf)");
 
     // ---- Step 6: Version-gated mesh-vert/idx buffer block. ----
-    int version = getVer ? getVer(serializer) : 6;
+    int version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 6;   // B.3.4 bridge
     if (version < 3) {
         // OLD format: bool + uint count + raw bytes for both vert + idx buffers.
         bool flag = false;
         int32_t cnt = 0;
-        if (serBool) serBool(serializer, &flag, nullptr);
+        if (serBool) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(flag, nullptr);   // B.3.4 bridge
         serIntField(&cnt);
         // Mesh-vertex resize (16-byte stride): cnt >> 4.
         Reimpl_Array_Resize_Stride16B(selfBytes + 0x1A0, cnt >> 4);
         if (serByteArr) {
             void* vertData = *reinterpret_cast<void**>(selfBytes + 0x1A0);
-            if (vertData) serByteArr(serializer, cnt, vertData, nullptr);
+            if (vertData) reinterpret_cast<IO::Serializer*>(serializer)->SerializeBytes(cnt, vertData, nullptr);   // B.3.4 bridge
         }
-        if (serBool) serBool(serializer, &flag, nullptr);
+        if (serBool) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(flag, nullptr);   // B.3.4 bridge
         serIntField(&cnt);
         // Index buffer resize (uint16 stride): cnt >> 1.
         Reimpl_Array_Resize_Stride02(selfBytes + 0x1B0, cnt >> 1);
         if (serByteArr) {
             void* idxData = *reinterpret_cast<void**>(selfBytes + 0x1B0);
-            if (idxData) serByteArr(serializer, cnt, idxData, nullptr);
+            if (idxData) reinterpret_cast<IO::Serializer*>(serializer)->SerializeBytes(cnt, idxData, nullptr);   // B.3.4 bridge
         }
     } else {
         // NEW format: per-element loops.
@@ -327,11 +328,11 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
                 uint8_t* p = vbase + 0xC;
                 for (int i = 0; i < vcount; ++i) {
                     if (rawA) {
-                        rawA(serializer, 4, p - 0xC, nullptr);
-                        rawA(serializer, 2, p - 4, nullptr);
+                        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(p - 0xC), nullptr);   // B.3.4 bridge
+                        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(2, reinterpret_cast<short*>(p - 4), nullptr);     // B.3.4 bridge
                     }
                     if (rawB) {
-                        rawB(serializer, 4, p, nullptr);
+                        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<unsigned char*>(p), nullptr);   // B.3.4 bridge
                     }
                     p += 0x10;
                 }
@@ -345,7 +346,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         }
         if (serUSArr) {
             uint16_t* iarr = *reinterpret_cast<uint16_t**>(selfBytes + 0x1B0);
-            if (iarr) serUSArr(serializer, icount, iarr, nullptr);
+            if (iarr) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(icount, iarr, nullptr);   // B.3.4 bridge
         }
     }
 
@@ -478,7 +479,7 @@ void TradeWork_impl_04d0_Body(void* self, void* stream) {
         FnSerIntArr_t serIntArr = ResolveSlot(0x140151278, s_serIntArr, t_serIntArr, "Serialize_IntArr");
         if (serIntArr) {
             int32_t* iarr = *reinterpret_cast<int32_t**>(selfBytes + 0x220);
-            if (iarr) serIntArr(serializer, c, iarr, nullptr);
+            if (iarr) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(c, iarr, nullptr);   // B.3.4 bridge
         }
     }
 
@@ -580,7 +581,7 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
     FnGetVer_t getVer = ResolveSlot(kSlot_GetVer, s_getVer, t_getVer, "GetVersion");
 
     auto serIntField = [&](void* field) {
-        if (serInt) serInt(serializer, reinterpret_cast<int32_t*>(field), nullptr);
+        if (serInt) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(field), nullptr);   // B.3.4 bridge
     };
 
     RZ_CHECK("geom f1a0 entry");
@@ -613,7 +614,7 @@ void TradeWork_impl_f1a0_Body(void* self, void* stream) {
     }
 
     // ---- Step 4: Version 0-2 backfill into +0x210 from +0x200. ----
-    int version = getVer ? getVer(serializer) : 4;
+    int version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 4;   // B.3.4 bridge
     if (version < 3 && SerializerInner(serializer) == 0) {
         int32_t srcCount = *reinterpret_cast<int32_t*>(selfBytes + 0x208);
         if (fn_Array_Resize_Stride08) {
