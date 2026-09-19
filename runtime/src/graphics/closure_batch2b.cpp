@@ -137,6 +137,135 @@ extern "C" void* RtGraphics_Geometry_CopyCtor(void* self, const void* src) {
     return self;   // MOV RAX,RDI — retail returns `this`
 }
 
+// ############################################################################
+// ENDGAME B.3 step 5 (block E) — the real `Graphics::Geometry`'s C++ surface
+// ############################################################################
+//
+// `runtime/types/graphics/Geometry.h` now declares the real class. This file is
+// the Geometry file in block E's file set, so it carries the two things the
+// class needs in order to LINK:
+//
+//   1. the copy constructor RULE B5-10 requires be explicit (below), and
+//   2. definitions for Geometry's five NON-PURE virtual slots (4..8).
+//
+// (2) is needed because a constructor definition on a polymorphic class emits
+// the vptr store, which makes GCC emit `vtable for Graphics::Geometry` in this
+// translation unit, which needs an address for every non-pure slot. The pure
+// ones (0, 1, 2, 3) resolve to `__cxa_pure_virtual`, exactly as retail's resolve
+// to `_purecall`.
+//
+// *** THE DIRECTION OF DELEGATION IS INVERTED HERE, AND ONLY HERE. ***
+// Everywhere else in block E the body MOVES onto the member and the registered
+// door becomes a one-line qualified call. These six bodies cannot move, because
+// all six live in `runtime/src/graphics/scene.cpp` — the file that also holds
+// `Graphics::Scene`, which is BLOCK F's class and therefore block F's file, and
+// the brief forbids touching it. So the doors keep their bodies and their
+// registrations and the members delegate INTO them. Every one of the six flips
+// to the normal direction, with no header change, in the commit that converts
+// `scene.cpp`; that is the whole of the debt this creates and it is listed in
+// block E's report.
+//
+// No `reinterpret_cast` here crosses a layout boundary: `RtGraphics::Geometry`
+// and `Graphics::Geometry` are asserted field for field and size for size in
+// Geometry.h, which is what licenses the cast (B33_RULES' minted-versus-GCC
+// argument, one level down).
+// ############################################################################
+
+// The six doors, all defined in runtime/src/graphics/scene.cpp. Declared here
+// rather than in a shared header for the reason this file's `GeometryVtable`
+// banner gives: a second `extern` of something file-local is the link-time
+// coincidence this tree has been bitten by, and these six are `extern "C"` and
+// global, so the linker checks these declarations against the definitions.
+extern "C" void       RtGraphics_Geometry_Dtor(RtGraphics::Geometry* self);
+extern "C" void       RtGraphics_Geometry_UpdateAttached(RtGraphics::Geometry* self);
+extern "C" Transform* RtGraphics_Geometry_GetSubTransform(const RtGraphics::Geometry* self,
+                                                         Transform* ret, int node);
+extern "C" Matrix*    RtGraphics_Geometry_GetInstanceTransform(const RtGraphics::Geometry* self,
+                                                              Matrix* ret, int node, float t);
+extern "C" int        RtGraphics_Geometry_SetSharedInstanceData(const RtGraphics::Geometry* self,
+                                                               void* context, int node, float t);
+extern "C" bool       RtGraphics_Geometry_Clean(RtGraphics::Geometry* self);
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// RULE B5-10 — `??0Geometry@Graphics@@QEAA@AEBV01@@Z`, 0x180015b60.
+//
+// Declared explicitly in Geometry.h and NEVER `= default`: the registered body
+// above zeroes the nested `Array<Geometry*>` header and then runs retail's DEEP
+// `Array<Geometry*>::operator=` over it, where `= default` would bitwise-copy a
+// heap pointer and give one buffer two owners. Four POD mirrors embed these
+// bytes by value and `Collection::Array` copies of MeshInstance /
+// EdgeMeshInstance / the particle instances / SunLight all reach it.
+//
+// GCC stores `vtable for Graphics::Geometry` on entry to this constructor and
+// the door's first statement then stores `??_7Geometry@Graphics@@6B@` over it —
+// which is retail's own store, in retail's own position (its first instruction
+// after the prologue is `LEA RAX,[0x180154e60]; MOV [RDI],RAX`). The members
+// not named in an initialiser list are default-initialised first; for
+// `_attached` that is `Array()`'s three zero stores, which the door then repeats
+// before the deep assign, so the final bytes are identical either way.
+// ---------------------------------------------------------------------------
+Geometry::Geometry(const Geometry& src) {
+    RtGraphics_Geometry_CopyCtor(this, &src);   // B.3.5 bridge
+}
+
+// [4] 0x1800a4020  ?UpdateAttached@Geometry@Graphics@@UEAAXXZ
+void Geometry::UpdateAttached() {
+    RtGraphics_Geometry_UpdateAttached(reinterpret_cast<RtGraphics::Geometry*>(this));  // B.3.5 bridge
+}
+
+// [5] 0x1800a43c0  ?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z
+//
+// RULE B5-12, as CORRECTED by this block — read Geometry.h's B5-12 block first.
+// The hidden return slot arrives in RDX with `this` in RCX, which is MSVC's
+// order and NOT the order GCC uses for a C++ by-value return (GCC puts the slot
+// FIRST, before `this`). So the slot's signature spells the out-parameter
+// explicitly, in retail's order, and returns it again — and it must never be
+// "simplified" to `void`, which was the 2026-09-13 perf-only crash.
+Math::Transform* Geometry::GetSubTransform(Math::Transform* ret, int node) const {
+    return RtGraphics_Geometry_GetSubTransform(                           // B.3.5 bridge
+        reinterpret_cast<const RtGraphics::Geometry*>(this), ret, node);
+}
+
+// [6] 0x1800154a0  ?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z
+// RULE B5-12 again, with `Math::Matrix` (0x40 bytes). This is the slot index
+// the 2026-09-13 perf-only crash came through.
+Math::Matrix* Geometry::GetInstanceTransform(Math::Matrix* ret, int node, float t) const {
+    return RtGraphics_Geometry_GetInstanceTransform(                      // B.3.5 bridge
+        reinterpret_cast<const RtGraphics::Geometry*>(this), ret, node, t);
+}
+
+// [7] 0x180015590  ?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z
+// The retail base body is `return 0;` and it touches nothing, including the
+// Context — which is why passing the reference straight through as the `void*`
+// the door still takes costs nothing here.
+int Geometry::SetSharedInstanceData(Video::Context& context, int node, float t) const {
+    return RtGraphics_Geometry_SetSharedInstanceData(                     // B.3.5 bridge
+        reinterpret_cast<const RtGraphics::Geometry*>(this),
+        reinterpret_cast<void*>(&context), node, t);
+}
+
+// [8] 0x1800a4420  ?Clean@Geometry@Graphics@@UEAA_NXZ
+// Two-phase, and that is RETAIL ORDERING TO PRESERVE (docs/retail_bugs.md:18-23,
+// carried forward by B35_RULES §6.1). Nothing about it changes here.
+bool Geometry::Clean() {
+    return RtGraphics_Geometry_Clean(reinterpret_cast<RtGraphics::Geometry*>(this));  // B.3.5 bridge
+}
+
+// `??1Geometry@Graphics@@UEAA@XZ`, 0x1800a41c0. NON-VIRTUAL (ENDGAME decision
+// 2) and `protected`, so it is not in the vtable and the linker only needs it
+// once a derived destructor is defined. It is defined here anyway, as the same
+// reverse delegation, because it is the one member of this class that a derived
+// class's destructor CANNOT avoid — and a missing definition would surface as an
+// undefined reference in whichever later block defines one, a long way from the
+// cause.
+Geometry::~Geometry() {
+    RtGraphics_Geometry_Dtor(reinterpret_cast<RtGraphics::Geometry*>(this));  // B.3.5 bridge
+}
+
+}  // namespace Graphics
+
 // ============================================================================
 // 0x18001be60  the 0x1f0-byte "draw group" copy constructor
 //
