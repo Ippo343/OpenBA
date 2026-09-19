@@ -68,6 +68,10 @@
 // now a KILL-SWITCH (=0), not an opt-in. Proven: the hull sails its route and both dock
 // gates fire at their exact retail thresholds.
 
+// graphics/Geometry.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Geometry.h"
 #include "Component/controller_state_table.h"
 #include "Component/component_factory_base.h"
 #include "Component/coll_bridge.h"
@@ -106,7 +110,6 @@ typedef void     (*fn_MarkRemoval_t)(int64_t entity);
 typedef void*    (*fn_XformFromYPO_t)(void* out, const float* yaw, const float* pitch,
                                       const void* offset);
 typedef void*    (*fn_XformAssign_t)(void* dst, const void* src);
-typedef void     (*fn_GeomSetXform_t)(void* geom, const void* xform);
 
 fn_Find_t           s_FindModel      = nullptr;   // 0x140003f60
 fn_Find_t           s_FindCharacter  = nullptr;   // 0x1400012d0
@@ -123,7 +126,6 @@ fn_SMTick_t         s_SMTick         = nullptr;   // 0x1400a9660
 fn_MarkRemoval_t    s_MarkRemoval    = nullptr;   // 0x1400c2ea0
 fn_XformFromYPO_t   s_XformFromYPO   = nullptr;   // slot 0x140151288
 fn_XformAssign_t    s_XformAssign    = nullptr;   // slot 0x140151280
-fn_GeomSetXform_t   s_GeomSetXform   = nullptr;   // slot 0x1401512e0
 
 // Float constants, by address (retail reads them from .rdata, so do we).
 const float* s_fArrive      = nullptr;   // 0x140172180  waypoint arrival radius
@@ -172,7 +174,6 @@ void Resolve() {
     s_TimeCtor       = reinterpret_cast<fn_TimeCtor_t>(Slot(0x140152b00));
     s_XformFromYPO   = reinterpret_cast<fn_XformFromYPO_t>(Slot(0x140151288));
     s_XformAssign    = reinterpret_cast<fn_XformAssign_t>(Slot(0x140151280));
-    s_GeomSetXform   = reinterpret_cast<fn_GeomSetXform_t>(Slot(0x1401512e0));
 
     s_fArrive     = Flt(0x140172180);
     s_fPointSpace = Flt(0x14017219c);
@@ -498,7 +499,7 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
         const Vec3* wp = reinterpret_cast<const Vec3*>(boat + 0x50);
         Vec3 dir = { wp->x - route[0], wp->y - route[1], wp->z - 0.0f };
         const uintptr_t model = *reinterpret_cast<uintptr_t*>(boat + 0x30);
-        if (model && s_V3Heading && s_XformFromYPO && s_XformAssign && s_GeomSetXform) {
+        if (model && s_V3Heading && s_XformFromYPO && s_XformAssign) {
             const float yaw   = s_V3Heading(&dir);
             const float pitch = 0.0f;
             // ⚠ The OFFSET is route[0], not the origin (R9 = [RBP-0x21] at 0x1400455db,
@@ -510,8 +511,8 @@ extern "C" char BoatCtrl_State0_Enter(void* selfV) {
             s_XformFromYPO(xform, &yaw, &pitch, &offset);
             s_XformAssign(reinterpret_cast<void*>(model + 0x148), xform);
             *reinterpret_cast<float*>(model + 0x168) = yaw;
-            s_GeomSetXform(reinterpret_cast<void*>(model + 0x28),
-                           reinterpret_cast<const void*>(model + 0x148));
+            reinterpret_cast<Graphics::Geometry*>(model + 0x28)
+                ->SetTransform(*reinterpret_cast<const Math::Transform*>(model + 0x148));   // B.3.5 bridge
         }
     }
 

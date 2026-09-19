@@ -10,6 +10,10 @@
 // Each function is a 1:1 port of the decompiled+disassembled exe helper; do not
 // "improve" behavior.
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -51,10 +55,8 @@ void ToolTile_SetTransformFromYaw_3870(uintptr_t self, const void* offset, float
         for (int i = 0; i < 7; i++) dst[i] = src[i];
     }
     *reinterpret_cast<float*>(self + 0x168) = yaw;
-    if (fn_Geometry_SetTransform) {
-        fn_Geometry_SetTransform(reinterpret_cast<void*>(self + 0x28),
-                                 reinterpret_cast<void*>(self + 0x148));
-    }
+    reinterpret_cast<Graphics::Geometry*>(self + 0x28)
+        ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x148));   // B.3.5 bridge
 }
 
 // ============================================================
@@ -227,8 +229,6 @@ static void* ToolTile_FindModelComponentScoped(long long entity) {
 // time OnAddedPass -> ModelComponent::Draw submits the finished mesh to the scene.
 // modelDesc layout: +0x20 group array, +0x28 group count; each group is 0x18 bytes
 // with sub-count at +0x10 and sub-mesh array ptr at +0x08 (indexed by modelVariant).
-static void (*s_fn_tileSetMesh)(void*, void*) = nullptr;   // MeshInstance::SetMesh (slot 0x140151498)
-static bool s_tileMeshInit = false;
 // Set the placed building's ModelComponent build frame (+0x166) and SetMesh it so the
 // register-time OnAddedPass renders it. `foundation`:
 //   false -> LAST sub-mesh (finished building) — used when the live construction pipeline
@@ -237,11 +237,6 @@ static bool s_tileMeshInit = false;
 //            BANISHED_LIVE_BUILDCTRL is on: the BuildComponent state machine then drives
 //            the model up through the build stages to completion (organic construction).
 static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
-    if (!s_tileMeshInit) {
-        s_tileMeshInit = true;
-        uintptr_t sl = ResolveAddr(Module::Exe, 0x140151498);
-        if (sl) s_fn_tileSetMesh = *reinterpret_cast<void(**)(void*, void*)>(sl);
-    }
     if (!modelComp) return;
     uint8_t* m = reinterpret_cast<uint8_t*>(modelComp);
     void* modelDesc = *reinterpret_cast<void**>(m + 0x18);
@@ -266,8 +261,9 @@ static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
     void* mesh = nullptr;
     uint8_t* subArr = *reinterpret_cast<uint8_t**>(group + 0x08);
     if (subArr) mesh = *reinterpret_cast<void**>(subArr + static_cast<int64_t>(modelVariant) * 8);
-    if (mesh && s_fn_tileSetMesh) {
-        s_fn_tileSetMesh(reinterpret_cast<void*>(m + 0x28), mesh);
+    if (mesh) {
+        reinterpret_cast<Graphics::MeshInstance*>(m + 0x28)
+            ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
         // Re-apply the placement yaw after the mesh swap. Retail's model-variant
         // setters (FUN_1401253d0/FUN_140125240) run a detach(+0x38)→SetMesh→Draw(+0x30)
         // cycle, and ModelComponent::Draw (0x140125xxx) re-applies the +0x148 Transform
@@ -278,9 +274,8 @@ static void ToolTile_SetPlacedModel(long long modelComp, bool foundation) {
         // → the built building loses the rotation the ghost showed. +0x148 already holds
         // the yaw (SetTransformFromYaw_3870 wrote it at fd650 before this call), so push
         // it onto the MeshInstance geometry directly — exactly what Draw would do.
-        if (fn_Geometry_SetTransform)
-            fn_Geometry_SetTransform(reinterpret_cast<void*>(m + 0x28),
-                                     reinterpret_cast<void*>(m + 0x148));
+        reinterpret_cast<Graphics::Geometry*>(m + 0x28)
+            ->SetTransform(*reinterpret_cast<const Math::Transform*>(m + 0x148));   // B.3.5 bridge
     }
 
 }

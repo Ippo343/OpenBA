@@ -42,6 +42,11 @@
 //
 
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Mesh.h"
+#include <new>
 #include "engine_funcs.h"
 #include "options.h"
 #include "perf_terrain.h"
@@ -260,11 +265,9 @@ static fn_sub8660_t     s_fn_18660  = nullptr;   // CharacterComponent_sub_8660 
 // (RCX=this, RDX=retbuf, R8=other); Scalar::Max is a const member returning Scalar by
 // value (RCX=this, RDX=retbuf, R8=other). Verified vs disasm at 0x14010967b/0x14010968b/
 // 0x140109802.
-typedef void* (*fn_rootAnimOff_t)(void* meshInstance, void* retVec3);   // [0x140152960]
 typedef void  (*fn_vec3Dot_t)(void* thisVec, void* retScalar, void* other); // [0x140151298]
 typedef void* (*fn_vec3Ctor_t)(void* self, float x, float y, float z); // [0x140152a30]
 typedef void  (*fn_transformAssign_t)(void* dst, void* src);          // [0x140151280]
-typedef void  (*fn_geomSetXform_t)(void* geom, void* xform);          // [0x1401512e0]
 typedef void  (*fn_transformCtor_t)(void* self, void* src);          // [0x140151418]
 typedef void  (*fn_pickSetXform_t)(void* scene, uint32_t id, void* xform); // [0x1401529a8]
 typedef void* (*fn_scalarMax_t)(void* thisScalar, void* retScalar, void* other); // [0x140151e78]
@@ -306,11 +309,9 @@ static inline void* InlScalarMax(const void* a, void* ret, const void* b) {
     return ret;
 }
 
-static fn_rootAnimOff_t     s_slot_rootAnim = nullptr;
 static fn_vec3Dot_t         s_slot_dot      = nullptr;
 static fn_vec3Ctor_t        s_slot_vec3     = nullptr;
 static fn_transformAssign_t s_slot_xfAssign = nullptr;
-static fn_geomSetXform_t    s_slot_geomXf   = nullptr;
 static fn_transformCtor_t   s_slot_xfCtor   = nullptr;
 static fn_pickSetXform_t    s_slot_pickXf   = nullptr;
 static fn_scalarMax_t       s_slot_max      = nullptr;
@@ -361,11 +362,9 @@ static void EnsureTailInit() {
     s_fn_132010 = reinterpret_cast<fn_f1_t>(ResolveAddr(Module::Exe, 0x140132010));
     s_fn_9f3e0  = reinterpret_cast<fn_gridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
     s_fn_18660  = reinterpret_cast<fn_sub8660_t>(ResolveAddr(Module::Exe, 0x140018660));
-    s_slot_rootAnim = reinterpret_cast<fn_rootAnimOff_t>(ResolveSlot(0x140152960));
     s_slot_dot      = reinterpret_cast<fn_vec3Dot_t>(ResolveSlot(0x140151298));
     s_slot_vec3     = reinterpret_cast<fn_vec3Ctor_t>(ResolveSlot(0x140152a30));
     s_slot_xfAssign = reinterpret_cast<fn_transformAssign_t>(ResolveSlot(0x140151280));
-    s_slot_geomXf   = reinterpret_cast<fn_geomSetXform_t>(ResolveSlot(0x1401512e0));
     s_slot_xfCtor   = reinterpret_cast<fn_transformCtor_t>(ResolveSlot(0x140151418));
     s_slot_pickXf   = reinterpret_cast<fn_pickSetXform_t>(ResolveSlot(0x1401529a8));
     s_slot_max      = reinterpret_cast<fn_scalarMax_t>(ResolveSlot(0x140151e78));
@@ -505,9 +504,13 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     // this = MeshInstance::RootAnimationOffset(model+0x28) (Vector3 by-value into retbuf);
     // speed = sqrt(this.Dot(this)) * self+0x38 — magnitude of the root-motion offset.
     float rootAnimVec[4] = { 0.0f, 0.0f, 0.0f, 0.0f };
-    if (s_slot_rootAnim && model)
-        s_slot_rootAnim(reinterpret_cast<void*>(*reinterpret_cast<int64_t*>(self + 0x68) + 0x28),
-                        rootAnimVec);
+    if (model)
+        // Retail retslot door; its body moves to the call site as exactly one
+        // construction into the SAME storage the door wrote (the 4th float stays 0).
+        ::new (static_cast<void*>(rootAnimVec)) Math::Vector3(
+            reinterpret_cast<const Graphics::MeshInstance*>(
+                *reinterpret_cast<int64_t*>(self + 0x68) + 0x28)
+                ->RootAnimationOffset());   // B.3.5 bridge
     float dotOut = 0.0f;
     InlV3Dot(rootAnimVec, &dotOut, rootAnimVec);   // was s_slot_dot (Runtime call)
     // PERF (2026-09-05): 0x140132010 is our own WorkImpl_Sqrtf_132010 (= sqrtf); the
@@ -606,7 +609,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
     // skips the push: nothing draws it, the frustum margin (6 units, ~12 frames of pan)
     // updates it before it can enter the view, and PerfX pushes model+0x148 for every
     // culled model when the sim pauses.
-    bool pushGeom = s_slot_geomXf != nullptr;
+    bool pushGeom = true;   // was a Geometry::SetTransform door-readiness test
     if (pushGeom) {
         if (rootOnly != 0) {
             if (PerfX::GeomXfLastOnly()) { pushGeom = false; PerfX::Count(PerfX::kCntGeomXfSkipped); }
@@ -615,7 +618,8 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
         }
     }
     if (pushGeom)
-        s_slot_geomXf(reinterpret_cast<void*>(model + 0x28), reinterpret_cast<void*>(model + 0x148));
+        reinterpret_cast<Graphics::Geometry*>(model + 0x28)
+            ->SetTransform(*reinterpret_cast<const Math::Transform*>(model + 0x148));   // B.3.5 bridge
 
     // ---- movement trace (proves the transform write moves the mesh) --------
     if (MoveTickTraceOn()) {

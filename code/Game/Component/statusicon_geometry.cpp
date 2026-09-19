@@ -15,6 +15,13 @@
 //
 // Ported faithfully from Application-x64.exe (Ghidra), verified against the disassembly.
 
+// video/Context.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+// NOTE: the Geometry SUBCLASS in this file is an EXE-PHASE class (it names
+// Geometry's retail vtable 0x180154e60 and hand-builds its own); it is NOT
+// converted. Only the calls it makes INTO Video::Context members are.
+#include "video/Context.h"
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -33,21 +40,11 @@ static const float kHalf      = 0.5f;
 
 // ---- Resolved Runtime engine functions ----
 typedef void* (*fn_Lerp_t)(void* self, void* retbuf, const float* t);              // InterpolatedState<Transform>::Lerp
-typedef void  (*fn_CtxSetTransform_t)(void* ctx, int slot, const void* matrix);    // Context::SetTransform
-typedef void  (*fn_CtxSetColor_t)(void* ctx, const void* v4);                      // Context::SetColor
-typedef bool  (*fn_CtxBeginIV_t)(void* ctx, int vcount, int stride, int icount);   // Context::BeginIndexedVertices
-typedef void  (*fn_CtxAddVerts_t)(void* ctx, int count, const void* data);         // Context::AddVertices
-typedef void  (*fn_CtxEndIV_t)(void* ctx, int primType);                           // Context::EndIndexedVertices
 typedef void  (*fn_GetUVs_t)(void* sheet, int idx, float* u0, float* v0, float* u1, float* v1); // SpriteSheet::GetUVs
 // cc!=0 camera-constant-screen-size projection uses the Math:: classes directly
 // (Transform3::Inverse / AsMatrix, Matrix::operator*(Matrix|Vector4)).
 
 static fn_Lerp_t              s_Lerp           = nullptr;
-static fn_CtxSetTransform_t   s_SetTransform   = nullptr;
-static fn_CtxSetColor_t       s_SetColor       = nullptr;
-static fn_CtxBeginIV_t        s_BeginIV        = nullptr;
-static fn_CtxAddVerts_t       s_AddVerts       = nullptr;
-static fn_CtxEndIV_t          s_EndIV          = nullptr;
 static fn_GetUVs_t            s_GetUVs         = nullptr;
 static bool                   s_resolved       = false;
 
@@ -55,16 +52,6 @@ static void EnsureDrawFuncs() {
     if (s_resolved) return;
     s_Lerp = reinterpret_cast<fn_Lerp_t>(ResolveExport(
         "?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z"));
-    s_SetTransform = reinterpret_cast<fn_CtxSetTransform_t>(ResolveExport(
-        "?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
-    s_SetColor = reinterpret_cast<fn_CtxSetColor_t>(ResolveExport(
-        "?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z"));
-    s_BeginIV = reinterpret_cast<fn_CtxBeginIV_t>(ResolveExport(
-        "?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z"));
-    s_AddVerts = reinterpret_cast<fn_CtxAddVerts_t>(ResolveExport(
-        "?AddVertices@Context@Video@@QEAAXHPEBX@Z"));
-    s_EndIV = reinterpret_cast<fn_CtxEndIV_t>(ResolveExport(
-        "?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z"));
     s_GetUVs = reinterpret_cast<fn_GetUVs_t>(ResolveExport(
         "?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z"));
     s_resolved = true;
@@ -122,11 +109,11 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
     //    used by the cc!=0 camera-constant-screen-size projection below.
     Math::Transform xf;              // Lerp retbuf; .translation is the billboard origin
     bool haveXf = false;
-    if (s_Lerp && s_SetTransform) {
+    if (s_Lerp) {
         s_Lerp(g + 0x84, &xf, &t);
         haveXf = true;
         Math::Matrix mat = xf.AsMatrix();
-        s_SetTransform(ctx, 0, &mat);
+        reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, mat);   // B.3.5 bridge
     }
 
     // 2) Color = (1,1,1, lerp(geom+0x80, geom+0x7c, t)). geom+0x7c/+0x80 hold the
@@ -134,7 +121,8 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
     float alpha = (kUVScale - t) * *reinterpret_cast<float*>(g + 0x80)
                 + t           * *reinterpret_cast<float*>(g + 0x7c);
     float color4[4] = { 1.0f, 1.0f, 1.0f, alpha };
-    if (s_SetColor) s_SetColor(ctx, color4);
+    reinterpret_cast<Video::Context*>(ctx)
+        ->SetColor(*reinterpret_cast<const Math::Vector4*>(color4));   // B.3.5 bridge
 
     // 3) Count active sprites; begin the indexed-vertex batch (n quads).
     int      spriteCount = *reinterpret_cast<int*>(g + 0xc4);
@@ -143,7 +131,8 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
     for (int i = 0; i < spriteCount && i < 32; ++i)
         if (activeMask & (1u << i)) ++n;
 
-    if (!s_BeginIV || !s_BeginIV(ctx, n * 4, 0x20, n * 6)) {
+    if (!reinterpret_cast<Video::Context*>(ctx)
+             ->BeginIndexedVertices(n * 4, 0x20, n * 6)) {   // B.3.5 bridge
         return;
     }
 
@@ -223,7 +212,7 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
         vtx[3].z = center[2] - right[2] - up[2];
         vtx[3].color = 0xffffffffu; vtx[3].u = u0; vtx[3].v = v1;
 
-        if (s_AddVerts) s_AddVerts(ctx, 4, vtx);
+        reinterpret_cast<Video::Context*>(ctx)->AddVertices(4, vtx);   // B.3.5 bridge
 
         // 6 indices: base, base+1, base+2, base, base+2, base+3.
         short* ip = *reinterpret_cast<short**>(reinterpret_cast<uint8_t*>(ctx) + 0x20f0);
@@ -242,7 +231,7 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
         ++emitted;
     }
 
-    if (s_EndIV) s_EndIV(ctx, 0);
+    reinterpret_cast<Video::Context*>(ctx)->EndIndexedVertices(0);   // B.3.5 bridge
 
 
 }

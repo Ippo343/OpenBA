@@ -10,6 +10,11 @@
 // Wave 5 (Player) round 2 — ray/screen-to-cell sub-batch. Each function is a 1:1 port
 // of the decompiled exe helper; do not "improve" behavior.
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Camera.h"
+#include <new>
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -247,8 +252,11 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
 
     // Camera = camHolder + 0x34. GetFrustum returns a Frustum (112 bytes) by value.
     void* camera = reinterpret_cast<void*>(camHolder + 0x34);
+    // Camera::GetFrustum is a hidden-retslot door in retail; the door body moves
+    // to the call site as exactly ONE construction into the same caller storage.
     alignas(16) uint8_t frustum[112];
-    if (fn_Camera_GetFrustum) fn_Camera_GetFrustum(camera, frustum);
+    ::new (static_cast<void*>(frustum)) ::Frustum(
+        reinterpret_cast<const Graphics::Camera*>(camera)->GetFrustum());   // B.3.5 bridge
 
     // origin = xform * Vector3(0,0,0).  (Vector3(Scalar=0) broadcasts 0 to all lanes.)
     Math::Vector3 zeroVec((Math::Scalar(0.0f)));

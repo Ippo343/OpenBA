@@ -10,6 +10,11 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "Component/workplacecomponent_funcs.h"
 #include "Component/coll_bridge.h"
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
@@ -268,9 +273,10 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     //     scene node behind the `EXEC of <heap>` in Scene::Clean.
     if ((int)mesh[0x1e] == 0) {
         if ((int)*(uint32_t*)(mesh + 0x20) >= 0) {
-            if (fn_SceneRemoveObject && g_pGameWorldSingleton)
-                fn_SceneRemoveObject(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60),
-                                     *(uint32_t*)(mesh + 0x20));
+            if (g_pGameWorldSingleton)
+                reinterpret_cast<Graphics::Scene*>(
+                    *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60))
+                    ->RemoveObject(*(uint32_t*)(mesh + 0x20));   // B.3.5 bridge
             *(uint32_t*)(mesh + 0x20) = 0xffffffff;
         }
         uint32_t old4 = *(uint32_t*)(mesh + 4);
@@ -280,9 +286,10 @@ void WorkplaceComponent_Detach(int64_t comp, void* workerIbp) {
     } else {
         if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
             ((uint8_t*)*g_pGameSettingsPtr)[0xc] != '\0' && (int)mesh[0x20] < 0) {
-            if (fn_SceneAddObject && g_pGameWorldSingleton) {
-                uint32_t id = fn_SceneAddObject(*(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60),
-                                                (void*)(mesh + 5));
+            if (g_pGameWorldSingleton) {
+                uint32_t id = reinterpret_cast<Graphics::Scene*>(
+                    *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60))
+                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(mesh + 5));   // B.3.5 bridge
                 *(uint32_t*)(mesh + 0x20) = id;
                 SceneWatch_Note(id, (void*)(mesh + 5), "WorkPlaceComponent carry-mesh");
             }

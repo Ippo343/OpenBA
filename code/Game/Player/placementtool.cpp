@@ -12,6 +12,12 @@
 //
 // Decompiled from Application-x64.exe.
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
+#include <new>
 #include "Player/placementtool_funcs.h"
 #include "PlacementTool.h"
 #include "Tool.h"
@@ -31,15 +37,6 @@
 // IAT slot addresses verified against Ghidra disassembly of OnKey/Serialize.
 // ============================================================
 
-// Graphics::Scene::RemoveObject — IAT dispatch slot [0x140151360]
-typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objectId);
-static fn_SceneRemoveObject_t s_fn_SceneRemoveObject = nullptr;
-
-// Graphics::Scene::AddObject — IAT dispatch slot [0x140151370]
-// Verified from Serialize disasm at 0x1400fdfd9: CALL [0x140151370]
-typedef uint32_t (*fn_SceneAddObject_t)(void* scene, void* geometry);
-static fn_SceneAddObject_t s_fn_SceneAddObject = nullptr;
-
 // HighlightRemove — direct call at 0x1400b0d00
 typedef void (*fn_HighlightRemove_t)(void* highlightMgr, int overlayId);
 static fn_HighlightRemove_t s_fn_HighlightRemove = nullptr;
@@ -57,24 +54,10 @@ static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
 typedef bool (*fn_KeyMapPressed_t)(void* keyMap, int slot, int keyId);
 static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
 
-// Graphics::Geometry::SetTransform — IAT dispatch slot [0x1401512e0]
-// Verified from Serialize disasm at 0x1400fe011: CALL [0x1401512e0]
-typedef void (*fn_GeomSetTransform_t)(void* geometry, void* transform);
-static fn_GeomSetTransform_t s_fn_GeomSetTransform = nullptr;
-
-// Graphics::MeshInstance::UpdateHierarchy — IAT dispatch slot [0x140152888]
-// Verified from Serialize disasm at 0x1400fe01b: CALL [0x140152888]
-typedef void (*fn_MeshUpdateHier_t)(void* mesh);
-static fn_MeshUpdateHier_t s_fn_MeshUpdateHier = nullptr;
-
-// Graphics::Geometry::GetTransform — IAT dispatch slot [0x140151460]
-// Verified from Serialize disasm at 0x1400fe1b5: CALL [0x140151460]
 // 🔑 Returns Math::Transform BY VALUE (member fn, hidden retbuf ABI: RCX=this,
 // RDX=retbuf). MUST be called with a retbuf — calling it (mesh) with no retbuf leaves
 // RDX garbage and the fn writes the Transform through it → hard-fault (WRITE into
 // Runtime code). Signature: void GetTransform(Geometry* this, Transform* retbuf).
-typedef void (*fn_GeomGetTransform_t)(void* geometry, void* retbuf);
-static fn_GeomGetTransform_t s_fn_GeomGetTransform = nullptr;
 
 // PlacementTool_sub_d960 — mirror/flip handler at 0x1400fd960
 typedef void (*fn_sub_d960_t)(void* self);
@@ -157,8 +140,6 @@ static void EnsureFuncs() {
     };
 
     // IAT slots verified against Serialize/OnKey disassembly
-    s_fn_SceneRemoveObject = (fn_SceneRemoveObject_t)resolveIAT(0x140151360);
-    s_fn_SceneAddObject    = (fn_SceneAddObject_t)resolveIAT(0x140151370);
     s_fn_CloseDialog       = (fn_CloseDialog_t)resolveIAT(0x140151550);
     s_fn_IBP_Ctor          = (fn_IBP_Ctor_t)resolveIAT(0x140152a90);
     // These IAT dispatch slots are unregistered in standalone (→ null). The resolved
@@ -179,13 +160,6 @@ static void EnsureFuncs() {
     // same one the working camera-input path uses).
     if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
         s_fn_KeyMapPressed = reinterpret_cast<fn_KeyMapPressed_t>(fn_KeyMap_Pressed);
-    s_fn_GeomSetTransform  = (fn_GeomSetTransform_t)resolveIAT(0x1401512e0);
-    s_fn_MeshUpdateHier    = (fn_MeshUpdateHier_t)resolveIAT(0x140152888);
-    s_fn_GeomGetTransform  = (fn_GeomGetTransform_t)resolveIAT(0x140151460);
-    // GeomGetTransform (0x140151460) is registered; keep an export fallback.
-    if (!s_fn_GeomGetTransform)
-        s_fn_GeomGetTransform = reinterpret_cast<fn_GeomGetTransform_t>(
-            ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
 
     // Direct exe function addresses
     s_fn_HighlightRemove   = (fn_HighlightRemove_t)ResolveAddr(Module::Exe, 0x1400b0d00);
@@ -292,8 +266,9 @@ void PlacementTool_Shutdown2_Impl(PlacementTool* self) {
     // Remove scene object if added (sceneObjectIdx >= 0)
     if ((int)self->sceneObjectIdx >= 0) {
         void* scene = *(void**)(GetGameWorld() + 0x60);
-        if (s_fn_SceneRemoveObject && scene) {
-            s_fn_SceneRemoveObject(scene, self->sceneObjectIdx);
+        if (scene) {
+            reinterpret_cast<Graphics::Scene*>(scene)
+                ->RemoveObject(self->sceneObjectIdx);   // B.3.5 bridge
         }
     }
 
@@ -530,8 +505,9 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         // --- Invalid / inactive: remove scene object and highlight ---
         if ((int)self->sceneObjectIdx >= 0) {
             void* scene = *(void**)(gameWorld + 0x60);
-            if (s_fn_SceneRemoveObject && scene) {
-                s_fn_SceneRemoveObject(scene, self->sceneObjectIdx);
+            if (scene) {
+                reinterpret_cast<Graphics::Scene*>(scene)
+                    ->RemoveObject(self->sceneObjectIdx);   // B.3.5 bridge
             }
             self->sceneObjectIdx = -1;
         }
@@ -574,8 +550,9 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     // Add scene object if not yet added
     if ((int)self->sceneObjectIdx < 0) {
         void* scene = *(void**)(gameWorld + 0x60);
-        if (s_fn_SceneAddObject && scene && self->meshInstance) {
-            self->sceneObjectIdx = (int)s_fn_SceneAddObject(scene, self->meshInstance);
+        if (scene && self->meshInstance) {
+            self->sceneObjectIdx = (int)reinterpret_cast<Graphics::Scene*>(scene)
+                ->AddObject(reinterpret_cast<Graphics::Geometry*>(self->meshInstance));   // B.3.5 bridge
         }
     }
 
@@ -609,12 +586,14 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
         }
     }
 
-    if (s_fn_GeomSetTransform && self->meshInstance) {
-        s_fn_GeomSetTransform(self->meshInstance, localTransform);
+    if (self->meshInstance) {
+        reinterpret_cast<Graphics::Geometry*>(self->meshInstance)
+            ->SetTransform(*reinterpret_cast<const Math::Transform*>(localTransform));   // B.3.5 bridge
     }
 
-    if (s_fn_MeshUpdateHier && self->meshInstance) {
-        s_fn_MeshUpdateHier(self->meshInstance);
+    if (self->meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+            ->UpdateHierarchy();   // B.3.5 bridge
     }
 
     // Tile validity check via helper at 0x14009d580
@@ -704,8 +683,11 @@ void PlacementTool_Serialize_Impl(PlacementTool* self, void* /*param2*/, char pa
     uint8_t meshTransformBuf[96];
     memset(meshTransformBuf, 0, sizeof(meshTransformBuf));
     void* meshTransform = nullptr;
-    if (s_fn_GeomGetTransform && mesh) {
-        s_fn_GeomGetTransform(mesh, meshTransformBuf);
+    if (mesh) {
+        // Retail retslot door; the body moves to the call site as exactly ONE
+        // construction into the SAME storage the door wrote.
+        ::new (static_cast<void*>(meshTransformBuf)) Math::Transform(
+            reinterpret_cast<const Graphics::Geometry*>(mesh)->GetTransform());   // B.3.5 bridge
         meshTransform = meshTransformBuf;
     }
 
@@ -1101,13 +1083,15 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     uintptr_t subArray = *(uintptr_t*)(entryBase + 0x8);
     void* mesh = *(void**)(subArray + (int64_t)(subCount - 1) * 8);
 
-    if (s_fn_MeshInstanceSetMesh && self->meshInstance) {
-        s_fn_MeshInstanceSetMesh(self->meshInstance, mesh);
+    if (self->meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+            ->SetMesh(Graphics::ExternalPtrHandle{mesh});   // B.3.5 bridge
     }
 
     // --- Update hierarchy ---
-    if (s_fn_MeshUpdateHier && self->meshInstance) {
-        s_fn_MeshUpdateHier(self->meshInstance);
+    if (self->meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+            ->UpdateHierarchy();   // B.3.5 bridge
     }
 
     // Store variant index
@@ -1456,11 +1440,6 @@ extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell
         return 0;
     }
 
-    fprintf(stderr, "[Preview] fns: SceneAddObject=%p GeomSetTransform=%p "
-            "MeshUpdateHier=%p\n",
-            (void*)s_fn_SceneAddObject,
-            (void*)s_fn_GeomSetTransform, (void*)s_fn_MeshUpdateHier);
-    fflush(stderr);
 
     int startCol, startRow, endCol, endRow;
     float pos[3] = {0.0f, 0.0f, 0.0f};
@@ -1476,8 +1455,9 @@ extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell
     //    working ModelComponent render path uses).
     uintptr_t gameWorld = GetGameWorld();
     void* scene = *(void**)(gameWorld + 0x60);
-    if ((int)self->sceneObjectIdx < 0 && s_fn_SceneAddObject && scene && self->meshInstance) {
-        self->sceneObjectIdx = (int)s_fn_SceneAddObject(scene, self->meshInstance);
+    if ((int)self->sceneObjectIdx < 0 && scene && self->meshInstance) {
+        self->sceneObjectIdx = (int)reinterpret_cast<Graphics::Scene*>(scene)
+            ->AddObject(reinterpret_cast<Graphics::Geometry*>(self->meshInstance));   // B.3.5 bridge
     }
 
     // 2) Build the placement transform from yaw + cursor world offset (the fix:
@@ -1496,8 +1476,12 @@ extern "C" int PlacementTool_HarnessPreviewAtCell(void* toolSelf, int centerCell
             "%.2f %.2f %.2f %.2f\n",
             xf[0], xf[1], xf[2], xf[3], xf[4], xf[5], xf[6], xf[7], xf[8], xf[9], xf[10], xf[11]);
 
-    if (s_fn_GeomSetTransform && self->meshInstance) s_fn_GeomSetTransform(self->meshInstance, localTransform);
-    if (s_fn_MeshUpdateHier && self->meshInstance)   s_fn_MeshUpdateHier(self->meshInstance);
+    if (self->meshInstance) {
+        reinterpret_cast<Graphics::Geometry*>(self->meshInstance)
+            ->SetTransform(*reinterpret_cast<const Math::Transform*>(localTransform));   // B.3.5 bridge
+        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+            ->UpdateHierarchy();   // B.3.5 bridge
+    }
 
     bool degenerate = (xf[0] == 0.0f && xf[1] == 0.0f && xf[2] == 0.0f &&
                        xf[4] == 0.0f && xf[5] == 0.0f && xf[6] == 0.0f);
