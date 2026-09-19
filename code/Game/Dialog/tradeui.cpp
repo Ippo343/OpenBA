@@ -42,6 +42,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 
 // Dispatch slot addresses for element type IDs used in Serialize inner loops
@@ -1707,14 +1709,14 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
     uint32_t sortIndex = *(uint32_t*)(*(uintptr_t*)(s + 0x140) + 0x118);
 
     // Create serializer
-    uint64_t serializer[3] = {0, 0, 0};
-    g_fn_Serializer_Ctor(serializer, stream, 1);
+    alignas(8) uint64_t serializer[3] = {0, 0, 0};
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Only serialize if version > 0 (newer save format)
-    int version = g_fn_Serializer_GetVersion(serializer);
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        g_fn_Serialize_Int(serializer, (int*)&sortIndex, nullptr);
-        g_fn_Serialize_Int(serializer, &tabIndex, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((int*)&sortIndex), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&tabIndex), nullptr);   // B.3.4 bridge
     }
 
     // On load (mode == 0), restore tab and combo state
@@ -1728,7 +1730,7 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
     }
 
     // Destroy serializer
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

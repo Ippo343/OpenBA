@@ -22,6 +22,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // Local function pointers resolved once
@@ -92,22 +94,22 @@ void TutorialSetupCamera_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     // Create serializer
-    uint8_t serializer[32];
+    alignas(8) uint8_t serializer[32];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize 4 int32 fields
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x20), nullptr); // cameraX
-        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x24), nullptr); // cameraChunkRow
-        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x28), nullptr); // cameraY
-        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x2C), nullptr); // cameraChunkCol
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge  cameraX
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge  cameraChunkRow
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge  cameraY
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge  cameraChunkCol
     }
 
     // Destroy serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

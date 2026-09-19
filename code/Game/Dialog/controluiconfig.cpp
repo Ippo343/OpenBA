@@ -42,6 +42,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 namespace {
 
@@ -80,13 +82,13 @@ char Serialize(void* self, void* stream) {
     EnsureResolved();
     if (!self || !g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return 1;
     uint8_t* c = reinterpret_cast<uint8_t*>(self);
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     if (g_fn_Serialize_Int)
-        g_fn_Serialize_Int(serializer, reinterpret_cast<int32_t*>(c + 0x20), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(c + 0x20), nullptr);   // B.3.4 bridge
     if (s_fn_Type_Serialize)
         s_fn_Type_Serialize(c + 0x24, serializer);
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     return 1;
 }
 

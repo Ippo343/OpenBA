@@ -18,6 +18,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // TutorialSetupGameSpeed::Slot8/Apply (vtable +0x40, 0x1400e2d60)
@@ -98,23 +100,23 @@ void* TutorialSetupGameSpeed_Dtor(void* self, uint32_t flags) {
 void TutorialSetupGameSpeed_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
-    uint8_t ser[32];
+    alignas(8) uint8_t ser[32];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(ser, stream, 0);
+        ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize speed (+0x20) -- int
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(ser, (void*)(s + 0x20), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
     }
 
     // Serialize _field24 (+0x24) -- bool
     if (g_fn_Serialize_Bool) {
-        g_fn_Serialize_Bool(ser, (void*)(s + 0x24), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);   // B.3.4 bridge
     }
 
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(ser);
+        reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
     }
 }
 

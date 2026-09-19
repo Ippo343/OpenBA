@@ -17,6 +17,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // TutorialGoalGameSpeed::Check (vtable +0x40, 0x1400df150)
@@ -80,27 +82,27 @@ void TutorialGoalGameSpeed_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     // Base class serialize
-    uint8_t ser0[32];
+    alignas(8) uint8_t ser0[32];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(ser0, stream, 0);
+        ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(ser0);
+        reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
     }
 
     // Serialize our fields
-    uint8_t ser[32];
+    alignas(8) uint8_t ser[32];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(ser, stream, 0);
+        ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize targetSpeed (+0x20) — int
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(ser, (void*)(s + 0x20), nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
     }
 
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(ser);
+        reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
     }
 }
 

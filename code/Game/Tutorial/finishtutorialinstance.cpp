@@ -20,6 +20,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // No class-level resolved state needed — all resolved lazily in individual functions.
 // Slot4/Slot5 use function pointers from engine_funcs.h (resolved at startup).
@@ -50,9 +52,9 @@ void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
     }
 
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize InternalBasePtr at +0x20
@@ -93,7 +95,7 @@ void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
 
     // Destroy Serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

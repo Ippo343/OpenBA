@@ -16,6 +16,8 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // TutorialSetup::Dtor (vtable +0x00, 0x140028390)
@@ -58,11 +60,11 @@ void TutorialSetup_Serialize(void* self, void* stream) {
 
     // Create and immediately destroy a serializer
     // This establishes the version for derived classes that call base first
-    uint8_t serializer[32]; // Serializer is ~24-32 bytes
+    alignas(8) uint8_t serializer[32]; // Serializer is ~24-32 bytes
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }

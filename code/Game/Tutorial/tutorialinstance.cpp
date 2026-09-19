@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved lazily)
@@ -120,9 +122,9 @@ void TutorialInstance_Serialize(void* self, void* stream) {
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (s_fn_Serializer_Ctor) {
-        s_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     } else {
         return;
     }
@@ -134,7 +136,7 @@ void TutorialInstance_Serialize(void* self, void* stream) {
 
     // 2. Serialize int32_t currentStep at +0x10
     if (s_fn_Serializer_SerializeInt) {
-        s_fn_Serializer_SerializeInt(serializer, reinterpret_cast<void*>(s + 0x10), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x10), nullptr);   // B.3.4 bridge
     }
 
     // 3. On load: adjust currentStep backwards if steps are not completed
@@ -169,7 +171,7 @@ void TutorialInstance_Serialize(void* self, void* stream) {
 
     // Destroy serializer
     if (s_fn_Serializer_Dtor) {
-        s_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

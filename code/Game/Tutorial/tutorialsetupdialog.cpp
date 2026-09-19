@@ -35,6 +35,8 @@
 #include "resolve.h"
 #include "collection/Collection.h"
 #include <cstdint>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // TutorialSetupDialog::Slot3 (vtable +0x18, exe 0x1400e2be0): MOV EAX,6; RET
@@ -186,12 +188,12 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     // Create the serializer on the stack (24 bytes for Serializer object)
-    uint8_t serializer[24];
-    fn_SerializerCtor_local(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize 1st string vector count at +0x28
     uint32_t count1 = *(uint32_t*)(s + 0x28);
-    fn_SerializeInt_local(serializer, &count1, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count1), nullptr);   // B.3.4 bridge
 
     // On load (serializer mode == 0): resize 1st vector to the loaded count
     void* serializerBase = *(void**)serializer;
@@ -209,7 +211,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
 
     // Serialize 2nd string vector count at +0x38
     uint32_t count2 = *(uint32_t*)(s + 0x38);
-    fn_SerializeInt_local(serializer, &count2, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count2), nullptr);   // B.3.4 bridge
 
     // On load: resize 2nd vector
     serializerBase = *(void**)serializer;
@@ -232,7 +234,7 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     fn_SerializeExternalPtr((void*)(s + 0x50), serializer);
 
     // Serialize int32 at +0x48
-    fn_SerializeInt_local(serializer, (void*)(s + 0x48), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
 
     // Temporary Filename retail's compiler emitted as this scope's guard.
     System::Filename tempFilename;
@@ -262,10 +264,10 @@ uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
     }
 
     // Serialize int32 at +0x70
-    fn_SerializeInt_local(serializer, (void*)(s + 0x70), nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x70), nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    fn_SerializerDtor_local(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 
     return 1;
 }

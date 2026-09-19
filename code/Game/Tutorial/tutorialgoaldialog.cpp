@@ -13,6 +13,8 @@
 #include "system/Filename.h"
 #include <cstdint>
 #include <cstdio>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved once)
@@ -102,13 +104,13 @@ uint64_t TutorialGoalDialog_Shutdown(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     // First serializer block: version check (create + immediately destroy)
-    uint8_t serializer1[24];
-    s_fn_Serializer_Ctor(serializer1, stream, 0);
-    s_fn_Serializer_Dtor(serializer1);
+    alignas(8) uint8_t serializer1[24];
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Second serializer block: actual serialization
-    uint8_t serializer2[16];
-    s_fn_Serializer_Ctor(serializer2, stream, 0);
+    alignas(8) uint8_t serializer2[16];
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize dialog name string at +0x20
     reinterpret_cast<System::String*>(s + 0x20)->Serialize(serializer2);
@@ -128,7 +130,7 @@ uint64_t TutorialGoalDialog_Shutdown(void* self, void* stream) {
     }
 
     // Cleanup
-    s_fn_Serializer_Dtor(serializer2);
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 
     return 1;
 }

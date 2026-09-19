@@ -38,6 +38,8 @@
 #include <cstdlib>
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // Resolved function pointers (exe-internal, resolved lazily)
@@ -1326,9 +1328,9 @@ void EntityList_FlagAggregation(void* entity) {
 
 void EntityList_Serialize(EntityList* self, void* stream) {
     // Step 1: Construct Serializer (local buffer, 0x18 bytes)
-    uint8_t serializerBuf[0x18];
+    alignas(8) uint8_t serializerBuf[0x18];
     void* serializer = serializerBuf;
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Step 2: Flush staging arrays
     EntityList_PreUpdate(self);
@@ -1354,7 +1356,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     // Step 5: Serialize master array count
     int32_t masterCount = self->masterArray.count;
     int32_t serializedCount = masterCount;
-    g_fn_Serialize_Int(serializer, &serializedCount, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&serializedCount), nullptr);   // B.3.4 bridge
 
     // On load (mode == 0): resize master array to deserialized count
     void* serializerInner = *(void**)serializer;
@@ -1408,8 +1410,8 @@ void EntityList_Serialize(EntityList* self, void* stream) {
         }
     }
     if (s_serIntArr) {
-        s_serIntArr(serializer, 5, self->processCount, nullptr);
-        s_serIntArr(serializer, 5, self->cursor, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->processCount), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->cursor), nullptr);   // B.3.4 bridge
     }
 
     // Step 8: Per-entity metadata serialization
@@ -1431,9 +1433,9 @@ void EntityList_Serialize(EntityList* self, void* stream) {
             int32_t bucketId = (int32_t)*(int8_t*)(*(int64_t*)(masterData + ibpOffset) + 0x1F);
 
             // Serialize the three metadata fields
-            g_fn_Serialize_Int(serializer, &masterIdxField, nullptr);
-            g_fn_Serialize_Int(serializer, (int32_t*)&bucketIdxField, nullptr);
-            g_fn_Serialize_Int(serializer, &bucketId, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&masterIdxField), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((int32_t*)&bucketIdxField), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&bucketId), nullptr);   // B.3.4 bridge
 
             // Serialize entity's timestamp at +0x20 (System::Time)
             masterData = (uintptr_t)self->masterArray.data;
@@ -1457,5 +1459,5 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     }
 
     // Step 9: Destroy Serializer
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }

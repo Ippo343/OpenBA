@@ -30,6 +30,7 @@
 #include <new>
 #include <cstdint>
 #include <cstring>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 
 // ============================================================
 // Resolved helpers
@@ -88,9 +89,9 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
     }
 
     // Create serializer (stack-local, 24 bytes: [0]=?, [8]=serializerPtr)
-    uint8_t serializerBuf[24];
+    alignas(8) uint8_t serializerBuf[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializerBuf, stream, 0);
+        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Get the serializer's vtable dispatch for enum serialization
@@ -113,12 +114,12 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
 
     // Serialize fixedValue (+0x3c) via Serialize_Int
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializerBuf, (void*)(s + 0x3c), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge
     }
 
     // Serialize requireOtherGoalsMet (+0x40) via Serialize_Bool
     if (g_fn_Serialize_Bool) {
-        g_fn_Serialize_Bool(serializerBuf, (void*)(s + 0x40), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // B.3.4 bridge
     }
 
     // Serialize statA string (+0x48) via String::Serialize
@@ -169,12 +170,12 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
 
     // Serialize statSubType (+0x7c) via Serialize_Int
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializerBuf, (void*)(s + 0x7c), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x7c), nullptr);   // B.3.4 bridge
     }
 
     // Destroy serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializerBuf);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
     }
 }
 

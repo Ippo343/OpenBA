@@ -18,6 +18,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // Vtable pointer (resolved at runtime)
 static void* s_vtable_TutorialImage = nullptr;
@@ -88,19 +90,19 @@ void TutorialImage_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     // Create Serializer on stack (24 bytes), version=0
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize imageWidth at +0x28
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, (void*)(s + 0x28), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
     }
 
     // Serialize imageHeight at +0x2C
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, (void*)(s + 0x2C), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
     }
 
     // Serialize ExternalPtr (imageRef) at +0x20
@@ -110,7 +112,7 @@ void TutorialImage_Serialize(void* self, void* stream) {
 
     // Destroy Serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

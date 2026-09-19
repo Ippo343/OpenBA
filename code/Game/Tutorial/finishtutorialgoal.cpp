@@ -16,6 +16,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // Vtable pointer for FinishTutorialGoal (resolved at runtime)
 static void* s_vtable_FinishTutorialGoal = nullptr;
@@ -71,9 +73,9 @@ int FinishTutorialGoal_Slot5(FinishTutorialGoal* self, void* stream) {
     }
 
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize the tutorial External* at +0x30
@@ -83,7 +85,7 @@ int FinishTutorialGoal_Slot5(FinishTutorialGoal* self, void* stream) {
 
     // Destroy Serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 
     return 1;

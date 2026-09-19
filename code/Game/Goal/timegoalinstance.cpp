@@ -16,6 +16,8 @@
 #include "resolve.h"
 #include <cstdio>
 #include <cstdint>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <new>
 
 // ============================================================
 // Resolved helpers
@@ -122,9 +124,9 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
     }
 
     // Create serializer
-    uint8_t serializerBuf[24];
+    alignas(8) uint8_t serializerBuf[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializerBuf, stream, 0);
+        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize elapsed time (+0x20) via System::Time::Serialize
@@ -134,7 +136,7 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
 
     // Destroy serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializerBuf);
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
     }
 }
 

@@ -30,6 +30,7 @@
 #include <cstring>
 #include <new>
 #include <cstdlib>
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 
 // ============================================================
 // Local function pointers resolved once
@@ -188,17 +189,17 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     // Create serializer on stack
-    uint8_t serializer[32];
+    alignas(8) uint8_t serializer[32];
     if (g_fn_Serializer_Ctor)
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize 5 int32 fields: +0x20, +0x24, +0x28, +0x2C, +0x30
     if (s_fn_SerializeInt) {
-        s_fn_SerializeInt(serializer, (void*)(s + 0x20), nullptr);
-        s_fn_SerializeInt(serializer, (void*)(s + 0x24), nullptr);
-        s_fn_SerializeInt(serializer, (void*)(s + 0x28), nullptr);
-        s_fn_SerializeInt(serializer, (void*)(s + 0x2C), nullptr);
-        s_fn_SerializeInt(serializer, (void*)(s + 0x30), nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
     }
 
     // Serialize ExternalRef1 (tool restriction) at +0x38
@@ -235,7 +236,7 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
 
     // Destroy serializer
     if (g_fn_Serializer_Dtor)
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
