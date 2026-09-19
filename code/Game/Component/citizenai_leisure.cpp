@@ -70,6 +70,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -358,7 +359,7 @@ static int64_t* CitizenAI_State_Leisure_sub_99d0(int64_t param_1, int64_t* param
         } while (idx < listCount);
 
         if (matchCount != 0) {
-            uint32_t pick = fn_Random_Rand ? fn_Random_Rand(Rng(), static_cast<uint32_t>(matchCount)) : 0;
+            uint32_t pick = fn_Random_Rand ? reinterpret_cast<System::Random*>(Rng())->Rand(static_cast<uint32_t>(matchCount)) : 0;   // B.3.4b bridge
             int64_t* chosen = reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(curArr) + static_cast<uint64_t>(pick) * 8);
             int64_t node = *chosen;
             *param_2 = 0;
@@ -417,7 +418,7 @@ extern "C" uint64_t CitizenAI_State_Leisure(int64_t param_1) {
     int64_t* local_res20 = *reinterpret_cast<int64_t**>(local_a8 + CellArrayBase(piVar5));  // target node
 
     {
-        float fVar39 = fn_Random_RandFloat ? fn_Random_RandFloat(pRVar6) : 0.0f;
+        float fVar39 = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(pRVar6)->RandFloat() : 0.0f;   // B.3.4b bridge
         if (fVar39 < kRandThresh) {
             int64_t nullIBP = 0;
             if (fn_InternalBasePtr_Ctor) new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -566,7 +567,7 @@ LAB_14010a846:
         }
         // pick (rand%count)-th in-order node; its key (+0x00) is local_res20.
         if (static_cast<int>(local_d0) > 0) {
-            uint32_t pick = fn_Random_Rand ? fn_Random_Rand(pRVar6, local_d0) : 0;
+            uint32_t pick = fn_Random_Rand ? reinterpret_cast<System::Random*>(pRVar6)->Rand(static_cast<uint32_t>(local_d0)) : 0;   // B.3.4b bridge
             int64_t* node = local_d8; int64_t* chosen = local_d8;
             while (node != nullptr) { chosen = node; node = reinterpret_cast<int64_t*>(node[2]); }
             for (uint32_t s = pick; s > 0; --s) {
@@ -723,7 +724,7 @@ LAB_14010ae8a:
 
         uint64_t uVar41 = 0;
         if (local_c0 != 0) {
-            uint32_t pick = fn_Random_Rand ? fn_Random_Rand(pRVar6, local_c0) : 0;
+            uint32_t pick = fn_Random_Rand ? reinterpret_cast<System::Random*>(pRVar6)->Rand(static_cast<uint32_t>(local_c0)) : 0;   // B.3.4b bridge
             int64_t* node = local_c8; int64_t* puVar21 = local_c8;
             while (node != nullptr) { puVar21 = node; node = reinterpret_cast<int64_t*>(node[2]); }
             for (uint32_t s = pick; s > 0; --s) {
@@ -756,8 +757,8 @@ LAB_14010ae8a:
                 local_a0 = out3[0]; local_9c = out3[1]; local_98 = out3[2];
             }
             // random offset within a disk.
-            float fVar39 = (s_randFloatTol ? s_randFloatTol(pRVar6) : 0.0f) * kDiskScale;
-            float fVar40 = (s_randFloatTol ? s_randFloatTol(pRVar6) : 0.0f);
+            float fVar39 = (s_randFloatTol ? reinterpret_cast<System::Random*>(pRVar6)->RandFloatTol() : 0.0f) * kDiskScale;   // B.3.4b bridge
+            float fVar40 = (s_randFloatTol ? reinterpret_cast<System::Random*>(pRVar6)->RandFloatTol() : 0.0f);   // B.3.4b bridge
             float off[4] = { fVar40 * kDiskScale, fVar39, 0.0f, 0.0f };
             float dest[4] = { local_a0 + off[0], local_9c + off[1], local_98 + off[2], 0.0f };
 
@@ -770,7 +771,7 @@ LAB_14010ae8a:
             int64_t local_res18 = entIBP;
 
             int64_t local_a8h = *self;   // holder citizen (PlayAnimation self IBP)
-            float fVar39t = s_randFloatTol ? s_randFloatTol(pRVar6) : 0.0f;
+            float fVar39t = s_randFloatTol ? reinterpret_cast<System::Random*>(pRVar6)->RandFloatTol() : 0.0f;   // B.3.4b bridge
             if (s_playAnim) s_playAnim(&local_a8h, &local_res18, reinterpret_cast<uint32_t*>(dest),
                                        fVar39t * kAgeMult + kAnimTimeBase,
                                        static_cast<uint32_t>(static_cast<unsigned char>(cVar12)));

@@ -22,6 +22,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <new>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -379,7 +380,7 @@ extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
     uint8_t* timer = *reinterpret_cast<uint8_t**>(comp + 0x28);
     int n = *reinterpret_cast<int*>(comp + 0x30);
     for (int i = 0; i < n && timer && s_fn_TimeSerialize; ++i, timer += 8)
-        s_fn_TimeSerialize(timer, ser);
+        reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     if (Loading(stream)) {
         void* desc = *reinterpret_cast<void**>(comp + 0x18);
@@ -539,7 +540,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     if (!templ) { ++g_doSpawn.noTemplate; return; }
 
     // Density roll
-    float roll = s_sc_RandFloat ? s_sc_RandFloat(random) : 1.0f;
+    float roll = s_sc_RandFloat ? reinterpret_cast<System::Random*>(random)->RandFloat() : 1.0f;   // B.3.4b bridge
     float density = s_sc_pUVScale ? (*s_sc_pUVScale / (float)*(int*)((uintptr_t)templ + 0x48)) : 0.0f;
     if (roll > density) { ++g_doSpawn.densityRoll; return; }
 
@@ -551,8 +552,8 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     int16_t baseY = *(int16_t*)(mapComp + 0x2a);
 
     int tol = *(int*)((uintptr_t)templ + 0x4c);
-    int x = baseX + (s_sc_RandTol ? s_sc_RandTol(random, tol) : 0);
-    int y = baseY + (s_sc_RandTol ? s_sc_RandTol(random, tol) : 0);
+    int x = baseX + (s_sc_RandTol ? reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
+    int y = baseY + (s_sc_RandTol ? reinterpret_cast<System::Random*>(random)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
     if (x < 0 || y < 0) { ++g_doSpawn.offMap; return; }
     int mapSize = *grid;
     if (x >= mapSize || y >= mapSize) { ++g_doSpawn.offMap; return; }
@@ -617,7 +618,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
         if (p2 && *(int64_t*)p2 != 0) {
             int64_t b3 = 0;
             void* p3 = s_sc_FindLinkB ? s_sc_FindLinkB(entityIbp, &b3) : nullptr;
-            float rf = s_sc_RandFloat ? s_sc_RandFloat(random) : 0.0f;
+            float rf = s_sc_RandFloat ? reinterpret_cast<System::Random*>(random)->RandFloat() : 0.0f;   // B.3.4b bridge
             if (p3 && s_sc_SetOrient) s_sc_SetOrient(*(int64_t*)p3, rf);
         }
     }

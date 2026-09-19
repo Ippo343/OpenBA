@@ -78,6 +78,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -576,7 +577,7 @@ extern "C" uint64_t CitizenAI_State_GrowUp(int64_t param_1) {
     if (chosen < 0) {
         // System::Random::Rand(GW+0xd8, eligible)
         void* rng = *reinterpret_cast<void**>(GW() + 0xd8);
-        chosen = fn_Random_Rand ? fn_Random_Rand(rng, eligible) : 0;
+        chosen = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(eligible)) : 0;   // B.3.4b bridge
     }
 
     // second pass: locate the chosen eatable row, build the eat (Ctor11) action.

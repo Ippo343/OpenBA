@@ -56,6 +56,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -261,7 +262,7 @@ void AnimalComponent_Startup(AnimalComponent* self) {
         return;
     }
 
-    float tol = fn_Random_RandFloatTol(rng);
+    float tol = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
     At<float>(self, 0x48) = tol * At<float>(desc, 0x2c) + At<float>(desc, 0x28);
 }
 
@@ -421,8 +422,8 @@ void AnimalComponent_SetWanderTimer(AnimalComponent* self, uint32_t animId, floa
     void* rng = Rng();
     if (!rng) return;
 
-    const float r1 = fn_Random_RandFloatTol(rng);
-    const float r0 = fn_Random_RandFloatTol(rng);
+    const float r1 = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
+    const float r0 = fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */;
     const Math::Vector3 src(r0, r1, 0.0f);
 
     Math::Vector3 dir = src.Normalize();
@@ -466,7 +467,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
     if (!self || !deltaTime) return;
 
     // ---- 1. aging + death ------------------------------------------------
-    const float dtSeconds = fn_Time_AsSeconds ? fn_Time_AsSeconds(deltaTime) : 0.0f;
+    const float dtSeconds = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds()   /* B.3.4b bridge */ : 0.0f;
     const float prevAge = At<float>(self, 0x44);
     const float age = dtSeconds * AgeRate() + prevAge;
     At<float>(self, 0x44) = age;
@@ -541,7 +542,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
             }
         } else {
             const float interval = At<float>(desc, 0x34);
-            const float roll = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(rng) : 0.0f;
+            const float roll = (rng && fn_Random_RandFloat) ? reinterpret_cast<System::Random*>(rng)->RandFloat()   /* B.3.4b bridge */ : 0.0f;
             seconds = (roll * interval + interval) * HoursToSec();
         }
 
@@ -642,7 +643,7 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
         if (!repath) {
             // NOTE: retail keeps the roll in the same register it later passes as
             // the idle-animation id, so a non-zero roll becomes the wander dir.
-            wanderDir = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, 4) : 1;
+            wanderDir = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(4u)   /* B.3.4b bridge */ : 1;
             repath = (wanderDir == 0);
         }
 
@@ -677,9 +678,9 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                 const int d = *g;
                 if (d <= 0) return;
 
-                const uint32_t ry = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, At<short>(self, 0x3e)) : 0;
+                const uint32_t ry = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(self, 0x3e)))   /* B.3.4b bridge */ : 0;
                 const short   by = At<short>(self, 0x3a);
-                const uint32_t rx = (rng && fn_Random_Rand) ? fn_Random_Rand(rng, At<short>(self, 0x3c)) : 0;
+                const uint32_t rx = (rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(At<short>(self, 0x3c)))   /* B.3.4b bridge */ : 0;
                 const int candidate =
                     static_cast<int>(rx) + At<short>(self, 0x38) +
                     (static_cast<int>(ry) + static_cast<int>(by)) * d;
@@ -695,8 +696,8 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
                 dest[1] = world[1];
                 dest[2] = world[2];
 
-                const float jy = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
-                const float jx = rng ? fn_Random_RandFloatTol(rng) : 0.0f;
+                const float jy = rng ? fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */ : 0.0f;
+                const float jx = rng ? fn_Random_RandFloatTol(rng)   /* B.3.4b bridge */ : 0.0f;
                 dest[0] += jx * jitter;
                 dest[1] += jy * jitter;
 
@@ -767,12 +768,12 @@ void AnimalComponent_Update(AnimalComponent* self, int64_t* deltaTime) {
             }
 
             // No walkable destination after 100 tries — idle and try again later.
-            wanderDir = ((rng && fn_Random_Rand) ? fn_Random_Rand(rng, 3) : 0) + 1;
+            wanderDir = ((rng && fn_Random_Rand) ? reinterpret_cast<System::Random*>(rng)->Rand(3u)   /* B.3.4b bridge */ : 0) + 1;
         }
     }
 
     const float retry = At<float>(desc, 0x40);
-    const float roll = (rng && fn_Random_RandFloat) ? fn_Random_RandFloat(Rng()) : 0.0f;
+    const float roll = (rng && fn_Random_RandFloat) ? reinterpret_cast<System::Random*>(Rng())->RandFloat()   /* B.3.4b bridge */ : 0.0f;
     AnimalComponent_SetWanderTimer(self, wanderDir, roll * retry + retry);
 }
 

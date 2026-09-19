@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -153,7 +154,7 @@ void ResidenceComponent_Shutdown(ResidenceComponent* self, void* stream) {
 
     // Serialize Time at +0x48
     if (s_fn_Time_Serialize) {
-        s_fn_Time_Serialize((void*)((uintptr_t)self + 0x48), serBuf2);
+        reinterpret_cast<System::Time*>((void*)((uintptr_t)self + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serBuf2));   // B.3.4b bridge
     }
 
     reinterpret_cast<IO::Serializer*>(serBuf2)->~Serializer();                                       // B.3.4 bridge

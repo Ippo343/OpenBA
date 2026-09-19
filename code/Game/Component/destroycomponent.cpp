@@ -19,6 +19,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -107,7 +108,7 @@ void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<bool*>(&self->destroyFlags), nullptr);   // B.3.4 bridge
 
     if (s_fn_Time_Serialize) {
-        s_fn_Time_Serialize((void*)&self->field48, serializer2);
+        reinterpret_cast<System::Time*>((void*)&self->field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
     }
 
     reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge

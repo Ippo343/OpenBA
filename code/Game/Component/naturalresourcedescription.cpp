@@ -31,6 +31,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 constexpr uintptr_t kVtableAddr    = 0x140163e90;
@@ -115,8 +116,8 @@ void NaturalResourceDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x64), nullptr);   // B.3.4 bridge
 
     // +0x68, +0x70 System::Time::Serialize
-    g_fn_Time_Serialize(s + 0x68, serializer);
-    g_fn_Time_Serialize(s + 0x70, serializer);
+    reinterpret_cast<System::Time*>(s + 0x68)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(s + 0x70)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
 
     // +0x80 enum through the UINT door (the same dispatch StatGoal uses).
     // `serializer + 8` was the READERWRITER, not an Encoding, and vtable +0x98

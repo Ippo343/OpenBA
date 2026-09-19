@@ -30,6 +30,7 @@
 #include <new>
 
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName (SA type-id fallback)
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -197,7 +198,7 @@ void ParticleComponent_Draw(ParticleComponent* self) {
         uintptr_t timeAddr = descArr2 + ((uintptr_t)i * 5 + 4) * 8;
         float timeSecs = 0.0f;
         if (s_fn_TimeAsSeconds)
-            timeSecs = s_fn_TimeAsSeconds((void*)timeAddr);
+            timeSecs = reinterpret_cast<const System::Time*>((void*)timeAddr)->AsSeconds();   // B.3.4b bridge
 
         // Set emitter timing: uvScale / timeSecs
         *(float*)(geoEntry + 0x10) = uvScale / timeSecs;
@@ -604,7 +605,7 @@ extern "C" void ParticleComponent_StartEmitterFade(ParticleComponent* self, int 
     PCGeoEntry* ge = &geoArr[index];
 
     uint8_t* elem = *(uint8_t**)((uintptr_t)desc + 0x28) + (size_t)index * 0x28;
-    float t1 = s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(elem + 0x20) : 1.0f;
+    float t1 = s_fn_TimeAsSeconds ? reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds() : 1.0f;   // B.3.4b bridge
     ge->fadeRate = PC_UVScale() / t1;
 
     if (ge->geo) {
@@ -723,7 +724,7 @@ extern "C" void ParticleComponent_UpdateTick(ParticleComponent* self, void* time
             uintptr_t g = (uintptr_t)ge->geo;
             float op = *(float*)(g + 0x7c);
             if (ge->fadeRate != 0.0f) {
-                float dt = s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(time) : 0.0f;
+                float dt = s_fn_TimeAsSeconds ? reinterpret_cast<const System::Time*>(time)->AsSeconds() : 0.0f;   // B.3.4b bridge
                 op += dt * ge->fadeRate;
                 if (op > uvScale) {
                     ge->fadeRate = 0.0f;
@@ -773,7 +774,7 @@ extern "C" void ParticleComponent_Event(ParticleComponent* self, int eventCode) 
         if (eventCode == 2) {
             ParticleComponent_StartEmitterFade(self, i);
         } else if (eventCode == 3) {
-            float t1 = s_fn_TimeAsSeconds ? s_fn_TimeAsSeconds(elem + 0x20) : 1.0f;
+            float t1 = s_fn_TimeAsSeconds ? reinterpret_cast<const System::Time*>(elem + 0x20)->AsSeconds() : 1.0f;   // B.3.4b bridge
             geoArr[i].fadeRate = -(PC_UVScale() / t1);
         }
     }

@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // 1. SortByPriority (0x14002fe10)
@@ -481,7 +482,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         float* pf1 = reinterpret_cast<float*>(cz + 0x80);
         float c1721fc = s_pf_1721fc ? *s_pf_1721fc : 0.0f;
         if ((*pf1 <= fv1 && fv1 != *pf1) &&
-            (fn_Time_AsSeconds && fn_Time_AsSeconds(base + 0xc0) > c1721fc)) {
+            (fn_Time_AsSeconds && reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c1721fc)) {   // B.3.4b bridge
             leisure = true;
         }
         if (!leisure) {
@@ -491,14 +492,14 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
             float* pf2 = reinterpret_cast<float*>(cz + 0x80);
             float c172234 = s_pf_172234 ? *s_pf_172234 : 0.0f;
             if ((*pf2 <= fv2 && fv2 != *pf2) &&
-                (fn_Time_AsSeconds && fn_Time_AsSeconds(base + 0xc0) > c172234)) {
+                (fn_Time_AsSeconds && reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c172234)) {   // B.3.4b bridge
                 leisure = true;
             }
         }
         if (!leisure) {
             // OR AsSeconds(self.acc) > DAT_172254
             float c172254 = s_pf_172254 ? *s_pf_172254 : 0.0f;
-            if (fn_Time_AsSeconds && fn_Time_AsSeconds(base + 0xc0) > c172254) leisure = true;
+            if (fn_Time_AsSeconds && reinterpret_cast<const System::Time*>(base + 0xc0)->AsSeconds() > c172254) leisure = true;   // B.3.4b bridge
         }
         // id 0xc both ways; only the priority differs (2 when tripped, 0 otherwise).
         AppendCandidate(outList, 0xc, leisure ? 2 : 0);
@@ -613,8 +614,7 @@ void CitizenAI_BuildCandidateStateList(void* selfV, int64_t* outList, char param
         int64_t off = 0;
         int i = 0;
         do {
-            uint32_t r = fn_Random_Rand ? fn_Random_Rand(rng,
-                *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(outList) + 8)) : (uint32_t)i;
+            uint32_t r = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(outList) + 8))) : (uint32_t)i;   // B.3.4b bridge
             if (r != (uint32_t)i) {
                 int64_t buf = outList[0];
                 int64_t roff = (int64_t)(int)r * 0xc;

@@ -44,6 +44,7 @@
 #include <cstdint>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 
@@ -82,14 +83,14 @@ extern "C" void CitizenAIComponent_Serialize(void* self, void* stream) {
     uint8_t* timer = At(self, 0x40);
     if (version < 5) {
         for (int i = 0; i < 14; ++i, timer += 8)
-            if (g_fn_Time_Serialize) g_fn_Time_Serialize(timer, ser);
+            if (g_fn_Time_Serialize) reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
         if (fn_Time_Ctor_Float) {
             fn_Time_Ctor_Float(At(self, 0xb0), 0.0f);
             fn_Time_Ctor_Float(At(self, 0xb8), 0.0f);
         }
     } else {
         for (int i = 0; i < 16; ++i, timer += 8)
-            if (g_fn_Time_Serialize) g_fn_Time_Serialize(timer, ser);
+            if (g_fn_Time_Serialize) reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     }
 
     version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
@@ -100,9 +101,9 @@ extern "C" void CitizenAIComponent_Serialize(void* self, void* stream) {
     version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
     if (version > 1) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
     version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    if (version > 2 && g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0xc0), ser);
+    if (version > 2 && g_fn_Time_Serialize) reinterpret_cast<System::Time*>(At(self, 0xc0))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
     version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    if (version > 3 && g_fn_Time_Serialize) g_fn_Time_Serialize(At(self, 0xc8), ser);
+    if (version > 3 && g_fn_Time_Serialize) reinterpret_cast<System::Time*>(At(self, 0xc8))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }

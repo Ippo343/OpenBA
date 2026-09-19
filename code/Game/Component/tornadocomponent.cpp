@@ -57,6 +57,7 @@
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // EventLog::AddEvent (0x140095580) — already ported in code/Game/Game/eventlog.cpp.
 // Reused rather than re-inlined: retail's Startup builds the same 0x28-byte record
@@ -310,7 +311,7 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
         }
     }
 
-    if (g_h.timeSerialize) g_h.timeSerialize(reinterpret_cast<void*>(s + 0x28), serializer);
+    if (g_h.timeSerialize) reinterpret_cast<System::Time*>(reinterpret_cast<void*>(s + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
     reinterpret_cast<Math::Vector3*>(s + 0x58)->Serialize(serializer);   // B.3.1 bridge
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
@@ -351,7 +352,7 @@ extern "C" void Tornado_PathFractal_58980(void* self, float* path, int lo, int h
 
     void* gw = GameWorld();
     void* rng = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xd8) : nullptr;
-    const float r = rng ? fn_Random_RandFloat(rng) : 0.0f;
+    const float r = rng ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
 
     const int mid = (lo + hi) >> 1;
     float* m = path + static_cast<ptrdiff_t>(mid) * 3;
@@ -586,7 +587,7 @@ extern "C" void Tornado_DamageTick_58040(TornadoComponent* self, const int64_t* 
     // Random point within the scatter radius: angle in [-pi, pi], radius scaled by
     // RandFloat. Z is a genuine hard zero here (`XORPS XMM4,XMM4` at 0x140058110).
     const float angle = fn_Random_RandFloatTol(rng) * kHalfCircleDeg * kDegToRad;
-    const float frac  = fn_Random_RandFloat(rng);
+    const float frac  = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     const float scatter = static_cast<float>(*reinterpret_cast<int32_t*>(d + 0x34));
 
     // The Vector3 ctor argument order (XMM1/XMM2/XMM3 at 0x140058121) puts sin on X
@@ -723,10 +724,10 @@ void TornadoComponent_Serialize(TornadoComponent* self) {
     uint32_t ax = 0, ay = 0, bx = 0, by = 0;
     int tries = 0;
     do {
-        ax = fn_Random_Rand(rng, *map);
-        ay = fn_Random_Rand(rng, *map);
-        bx = fn_Random_Rand(rng, *map);
-        by = fn_Random_Rand(rng, *map);
+        ax = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        ay = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        bx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
+        by = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(*map));   // B.3.4b bridge
         if (tries > 99) break;
         ++tries;
     } while (static_cast<int>((bx - ax) * (bx - ax) + (by - ay) * (by - ay)) < minSep * minSep);
@@ -907,7 +908,7 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
     }
 
     // --- integrate the position ---
-    const float secs = fn_Time_AsSeconds ? fn_Time_AsSeconds(const_cast<int64_t*>(dt)) : 0.0f;
+    const float secs = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(const_cast<int64_t*>(dt))->AsSeconds() : 0.0f;   // B.3.4b bridge
     const float step = secs * *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(desc) + 0x20);
     // Math::Vector3::operator+= (slot 0x1401514b8), inlined: a componentwise add
     // with no side effects.
@@ -1032,7 +1033,7 @@ extern "C" void Tornado_ParticleReverse_53720(void* particleComp, int index) {
     uintptr_t geoArray = *reinterpret_cast<uintptr_t*>(p + 0x38);
     uintptr_t entries  = *reinterpret_cast<uintptr_t*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
     const float duration = fn_Time_AsSeconds
-        ? fn_Time_AsSeconds(reinterpret_cast<void*>(entries + static_cast<uintptr_t>(index) * 0x28 + 0x20))
+        ? reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(entries + static_cast<uintptr_t>(index) * 0x28 + 0x20))->AsSeconds()   // B.3.4b bridge
         : 1.0f;
     const float rate = 1.0f / duration;
     uint32_t bits = *reinterpret_cast<const uint32_t*>(&rate);

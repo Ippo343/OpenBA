@@ -48,6 +48,7 @@
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
 
@@ -601,7 +602,7 @@ extern "C" void CitizenComp_CatchDisease(void* self) {
         CitizenComp_IntArrayResize(&cum, cum.count + 1, &bits);
     }
 
-    float target = fn_Random_RandFloat(rng) * total;
+    float target = reinterpret_cast<System::Random*>(rng)->RandFloat() * total;   // B.3.4b bridge
     float prev = 0.0f;
     int picked = -1;
     for (int i = 0; i < count; i++) {
@@ -646,7 +647,7 @@ extern "C" void CitizenComp_SpreadDisease(void* self) {
     if (!disease) return;
 
     void* rng = *(void**)((uintptr_t)gw + 0xd8);
-    float contagionRoll = fn_Random_RandFloat(rng);
+    float contagionRoll = reinterpret_cast<System::Random*>(rng)->RandFloat();   // B.3.4b bridge
     float contagion = *(float*)((uintptr_t)disease + 0x34);
     if (contagionRoll > contagion) {
         if (PlagueTraceOn())
@@ -714,7 +715,7 @@ extern "C" char CitizenComp_RecoverOrDie(void* self) {
     void* gw = GameWorld();
     if (!self || !gw || !fn_Random_RandFloat) return 1;
 
-    float r = fn_Random_RandFloat(*(void**)((uintptr_t)gw + 0xd8));
+    float r = reinterpret_cast<System::Random*>(*(void**)((uintptr_t)gw + 0xd8))->RandFloat();   // B.3.4b bridge
     u8* desc = *(u8**)(s + 0x288);
     float mult = (*(int64_t*)(s + 0x228) != 0) ? *(float*)(desc + 0x128) : 1.0f;
     void* disease = *(void**)(s + 0x68);
@@ -787,11 +788,11 @@ extern "C" char CitizenComp_UpdateHealth(void* self, int64_t* dt) {
             PlagueCensusTick();
             return 1;
         }
-        float elapsed = fn_Time_AsSeconds ? fn_Time_AsSeconds(s + 0x60) : 0.0f;
+        float elapsed = fn_Time_AsSeconds ? reinterpret_cast<const System::Time*>(s + 0x60)->AsSeconds() : 0.0f;   // B.3.4b bridge
         *(int64_t*)(s + 0x60) = 0;
         float denom = A * MonthsPerYear() * SecsPerMonth() * B;
         float ratio = elapsed / denom;
-        float r = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
+        float r = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
         s_rollChanceSum += (double)ratio;
         if (ratio > s_rollChanceMax) s_rollChanceMax = ratio;
         // [Plague] ROLL-INPUTS -- diagnostic only. The census reported meanChance and

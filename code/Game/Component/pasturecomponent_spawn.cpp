@@ -48,6 +48,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 extern "C" void Pasture_BindAnimal(void* animalComp, void* pastureIBP);
 
@@ -215,8 +216,8 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
             int16_t y0 = *reinterpret_cast<int16_t*>(mc + 0x2a);
             int16_t fw = *reinterpret_cast<int16_t*>(mc + 0x2c);
             int16_t fh = *reinterpret_cast<int16_t*>(mc + 0x2e);
-            uint32_t dx = fn_Random_Rand ? fn_Random_Rand(rng, (uint32_t)fw) : 0;
-            uint32_t dy = fn_Random_Rand ? fn_Random_Rand(rng, (uint32_t)fh) : 0;
+            uint32_t dx = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)fw) : 0;   // B.3.4b bridge
+            uint32_t dy = fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand((uint32_t)fh) : 0;   // B.3.4b bridge
             int* grid = *reinterpret_cast<int**>(w + 0xf8);
             float jitterY = fn_Random_RandFloatTol(rng);
             float jitterX = fn_Random_RandFloatTol(rng);
@@ -252,7 +253,7 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     }
     bool female = true;
     if (total != 0) {
-        float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.5f;
+        float roll = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.5f;   // B.3.4b bridge
         female = roll < (static_cast<float>(flagged) / static_cast<float>(total));
     }
 
@@ -272,7 +273,7 @@ extern "C" void Pasture_SpawnLivestock(void* pasture, void* parentAnimalIBP) {
     if (animalIBP) {
         float phase = 0.0f;
         if (parentAnimalIBP && *reinterpret_cast<int64_t*>(parentAnimalIBP) == 0)
-            phase = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
+            phase = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
         *reinterpret_cast<float*>(static_cast<uintptr_t>(animalIBP) + 0x44) = phase;
         if (s_AnimalBehav) s_AnimalBehav(reinterpret_cast<void*>(animalIBP));
     }
@@ -408,7 +409,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
 
     // Retail seeds the alternating sex from ONE Rand(2) before the loop and flips it every
     // iteration, so a group of 8 comes out 4/4 rather than 8 independent coin flips.
-    bool female = (fn_Random_Rand ? fn_Random_Rand(rng, 2) : 0u) == 0u;
+    bool female = (fn_Random_Rand ? reinterpret_cast<System::Random*>(rng)->Rand(2u) : 0u) == 0u;   // B.3.4b bridge
 
     const float offX      = *reinterpret_cast<float*>(sc + 0xec);
     const float offY      = *reinterpret_cast<float*>(sc + 0xf0);
@@ -464,7 +465,7 @@ extern "C" int StartTown_SpawnStartingHerd(void* startConfig, const float* centr
         if (animalIBP) {
             // +0x44 = animation/behaviour phase, randomised so the herd doesn't move in lockstep.
             *reinterpret_cast<float*>(static_cast<uintptr_t>(animalIBP) + 0x44) =
-                fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 0.0f;
+                fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 0.0f;   // B.3.4b bridge
             if (s_AnimalBehav) s_AnimalBehav(reinterpret_cast<void*>(animalIBP));
         }
 

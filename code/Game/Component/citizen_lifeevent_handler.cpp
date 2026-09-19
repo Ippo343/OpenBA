@@ -43,6 +43,7 @@
 #include <cstdio>
 #include <cmath>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ---------------------------------------------------------------- resolved deps
 typedef void*    (*fn_FindCompPos_2ed0_t)(uintptr_t comp, void* outIBP);            // 0x140002ed0
@@ -155,7 +156,7 @@ extern "C" uint32_t Cemetery_PickFreeSlot_6c60(void* cemCompV) {
     int count = *reinterpret_cast<int*>(self + 0x50);
     if (count <= 0) return 0xffffffffu;
     void* rng = *reinterpret_cast<void**>(world + 0xd8);
-    int idx = fn_Random_Rand ? static_cast<int>(fn_Random_Rand(rng, static_cast<uint32_t>(count))) : 0;
+    int idx = fn_Random_Rand ? static_cast<int>(reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count))) : 0;   // B.3.4b bridge
     int64_t map = *reinterpret_cast<int64_t*>(world + 0xf8);
     uint32_t tid = s_tid_Tombstone ? *s_tid_Tombstone : 0;
     for (int tries = 0; tries < count; tries++) {

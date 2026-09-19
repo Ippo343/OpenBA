@@ -68,6 +68,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace { struct OrchardCtrlTag {}; }
 using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
@@ -448,7 +449,7 @@ int OrchardCurrentMonth() {
     uintptr_t cal = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x128);
     if (!cal) return 0;
-    const float secs = fn_Time_AsSeconds(reinterpret_cast<void*>(cal + 8));
+    const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(cal + 8))->AsSeconds();   // B.3.4b bridge
     return static_cast<int>(secs / kSecondsPerYear * kMonthsPerYear);
 }
 

@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -169,7 +170,7 @@ void RawMaterialComponent_Shutdown(RawMaterialComponent* self, void* stream) {
 
     // Serialize field38 (Time accumulator)
     if (s_fn_Time_Serialize) {
-        s_fn_Time_Serialize(&self->field38, serializerBuf);
+        reinterpret_cast<System::Time*>(&self->field38)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4b bridge
     }
 
     // Version >= 2: serialize field30

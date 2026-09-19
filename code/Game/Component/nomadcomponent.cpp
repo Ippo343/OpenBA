@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -92,7 +93,7 @@ void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
 
     // Serialize Time at +0x48
     if (s_fn_Time_Serialize)
-        s_fn_Time_Serialize((void*)(selfAddr + 0x48), serializer2);
+        reinterpret_cast<System::Time*>((void*)(selfAddr + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
 
     reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
 }

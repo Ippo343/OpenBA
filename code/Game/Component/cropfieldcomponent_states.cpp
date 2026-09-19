@@ -68,6 +68,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // Work reimpl resolvers — see the note in CF_MakeAreaWork.
 bool PlantArea_ResolveFuncs();
@@ -380,7 +381,7 @@ static char CropField_State2PerFrame(void* self, void* sm, void* /*time*/) {
 
     if (*reinterpret_cast<float*>(weather + 0x18) < *s_fTempMin) return 1;
 
-    const float secs = fn_Time_AsSeconds(reinterpret_cast<void*>(seasonMgr + 8));
+    const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(seasonMgr + 8))->AsSeconds();   // B.3.4b bridge
     const int v = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
     if (v < 0) return 1;
     if (static_cast<uint32_t>(v - 3) > 8u)
@@ -461,7 +462,7 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
     void* rng = *reinterpret_cast<void**>(gw + 0xd8);
     if (rng && fn_Random_Rand) {
         for (int i = 0; i < count; ++i) {
-            const uint32_t j = fn_Random_Rand(rng, static_cast<uint32_t>(count));
+            const uint32_t j = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count));   // B.3.4b bridge
             if (static_cast<uint32_t>(i) != j) {
                 uint8_t t = marks[i]; marks[i] = marks[j]; marks[j] = t;
             }
@@ -566,7 +567,7 @@ static char CropField_State10PerFrame(void* self, void* sm, void* /*time*/) {
     int  monthDbg = -1;
     const float temp = *reinterpret_cast<float*>(weather + 0x18);
     if (temp >= *s_fTempMin) {
-        const float secs = fn_Time_AsSeconds(reinterpret_cast<void*>(seasonMgr + 8));
+        const float secs = reinterpret_cast<const System::Time*>(reinterpret_cast<void*>(seasonMgr + 8))->AsSeconds();   // B.3.4b bridge
         monthDbg = static_cast<int>((secs / *s_fYearSeconds) * *s_fYearMonths);
         if (static_cast<uint32_t>(monthDbg - 6) <= 5u) { harvestNow = true; }
     }

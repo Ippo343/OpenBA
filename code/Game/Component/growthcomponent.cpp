@@ -27,6 +27,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // ============================================================
 // Resolved helpers
@@ -258,7 +259,7 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
     uintptr_t resourceMgr = *reinterpret_cast<uintptr_t*>(world + 0xF8);
 
     // Compute time delta in seconds
-    float dtSeconds = fn_Time_AsSeconds(deltaTime);
+    float dtSeconds = reinterpret_cast<const System::Time*>(deltaTime)->AsSeconds();   // B.3.4b bridge
 
     // Accumulate growth
     float newGrowth = currentGrowth + dtSeconds * growthRate * tempModifier;
@@ -290,7 +291,7 @@ void GrowthComponent_Update(GrowthComponent* self, int64_t* deltaTime) {
                 // Accumulate spawn timer at comp+0x40
                 *reinterpret_cast<int64_t*>(comp + 0x40) += *deltaTime;
 
-                float spawnTimerSec = fn_Time_AsSeconds(reinterpret_cast<int64_t*>(comp + 0x40));
+                float spawnTimerSec = reinterpret_cast<const System::Time*>(reinterpret_cast<int64_t*>(comp + 0x40))->AsSeconds();   // B.3.4b bridge
                 float spawnInterval = static_cast<float>(
                     *reinterpret_cast<int32_t*>(config + 0x50)) * fSixty;
 
@@ -617,7 +618,7 @@ void GrowthComponent_Startup(GrowthComponent* self) {
         uintptr_t world = WorldSingleton();
         if (s_fn_RandFloatTol && world) {
             void* rng = *reinterpret_cast<void**>(world + 0xd8);
-            r = s_fn_RandFloatTol(rng);
+            r = reinterpret_cast<System::Random*>(rng)->RandFloatTol();   // B.3.4b bridge
         }
         *reinterpret_cast<float*>(comp + 0x4c) = r * range + minScale;
     }
@@ -698,7 +699,7 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     // world flag bit 10 must be clear
     if ((*reinterpret_cast<uint32_t*>(world + 0xD0) >> 10 & 1) != 0) return;
 
-    float roll = fn_Random_RandFloat ? fn_Random_RandFloat(rng) : 1.0f;
+    float roll = fn_Random_RandFloat ? reinterpret_cast<System::Random*>(rng)->RandFloat() : 1.0f;   // B.3.4b bridge
     float uvScale = s_fUVScale ? *s_fUVScale : 1.0f;
     int spawnChanceDenom = *reinterpret_cast<int*>(cfg + 0x48);
     if (spawnChanceDenom == 0) return;
@@ -711,8 +712,8 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     int16_t baseY = *reinterpret_cast<int16_t*>(resIBP + 0x2a);
 
     int tol = *reinterpret_cast<int*>(cfg + 0x4c);
-    int x = (int)baseX + (fn_Random_RandTol ? fn_Random_RandTol(rng, tol) : 0);
-    int y = (int)baseY + (fn_Random_RandTol ? fn_Random_RandTol(rng, tol) : 0);
+    int x = (int)baseX + (fn_Random_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
+    int y = (int)baseY + (fn_Random_RandTol ? reinterpret_cast<System::Random*>(rng)->RandTol(static_cast<int32_t>(tol)) : 0);   // B.3.4b bridge
     if (!(x >= 0 && y >= 0 && x < *mapW && y < *mapW)) return;
 
     float inst248 = s_fInst248 ? *s_fInst248 : 0.0f;
@@ -779,7 +780,7 @@ void GrowthComponent_SpawnSubResource(void* growthComp, void* config) {
     typedef uint32_t (*fn_Rand_t)(void* self, uint32_t n);
     static fn_Rand_t s_fn_Rand =
         reinterpret_cast<fn_Rand_t>(ResolveExport("?Rand@Random@System@@QEAAII@Z"));
-    if (s_fn_Rand) roll2 = s_fn_Rand(rng, range);
+    if (s_fn_Rand) roll2 = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(range));   // B.3.4b bridge
     if (s_fn_SetVariant) s_fn_SetVariant(variantWrite, variantSeed, (short)roll2);
 
     int64_t regArg = newIBP;

@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 // Clean C++ name generator (code/Game/Game/citizen_names.cpp) — replaces the retail
 // name-gen chain (FUN_1400a4c60/a4b30/a4880) that 0x140117080 would otherwise call.
@@ -263,7 +264,7 @@ void CitizenComp_DeferredInit_117080(int64_t selfV, void* pos, uint32_t gender,
 
     // 6. appearance variant 0..7 — faithful (Rand()+Rand())&7 (two draws; (a%8+b%8)&7==(a+b)&7)
     if (fn_Random_Rand && rng)
-        *reinterpret_cast<uint32_t*>(p + 0x34) = (fn_Random_Rand(rng, 8) + fn_Random_Rand(rng, 8)) & 7;
+        *reinterpret_cast<uint32_t*>(p + 0x34) = (reinterpret_cast<System::Random*>(rng)->Rand(8u) + reinterpret_cast<System::Random*>(rng)->Rand(8u)) & 7;   // B.3.4b bridge
 
     // 7. employment: unemployed unless forced or the world "start-employed" flag (bit 9) is set
     int64_t desc = *reinterpret_cast<int64_t*>(p + 0x288);
