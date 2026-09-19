@@ -28,26 +28,9 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_Serialize_Int_t)(void* serializer, int* value, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
-// IO::Serializer::GetVersion(this) -- dispatch slot
-typedef int (*fn_Serializer_GetVersion_t)(void* serializer);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // FUN_1400019a0(InternalBasePtr*, serializer) -- serialize InternalBasePtr
 typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
 static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
-// IO::Serializer::Serialize(float*, name)
-typedef void (*fn_Serialize_Float_t)(void* serializer, float* value, const char* name);
-static fn_Serialize_Float_t s_fn_Serialize_Float = nullptr;
 
 // FUN_140001770(array_ptr_field, new_count) -- resize emitter array
 typedef void (*fn_ResizeEmitterArray_t)(void* arrayField, int newCount);
@@ -160,7 +143,6 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (!s_fn_Serializer_Ctor) return;
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     uintptr_t selfAddr = (uintptr_t)self;
@@ -170,8 +152,7 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
 
     // Read count from +0x40 into local, serialize it
     uint32_t localCount = *(uint32_t*)(selfAddr + 0x40);
-    if (s_fn_Serialize_Int)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading (stream mode == 0), resize emitter array
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -181,7 +162,7 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
 
     // Serialize each emitter entry: InternalBasePtr(8) + uint(4) + float(4) = 16 bytes per entry
     // Array base at +0x38 (ptr). Entries: float* pfVar4 starts at array+4
-    if ((int)localCount > 0 && s_fn_IBP_Serialize && s_fn_Serialize_Int && s_fn_Serialize_Float) {
+    if ((int)localCount > 0 && s_fn_IBP_Serialize) {
         void* arrayBase = *(void**)(selfAddr + 0x38);
         // Each entry is 16 bytes. Loop pointer starts at +4 (the float field).
         // Layout per entry: [uint(4)][InternalBasePtr(8, at +4)][float(4, at +12)]...
@@ -200,19 +181,16 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
     }
 
     // Version-gated: if version==0, resize from building data
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-        if (version == 0) {
-            void* building = GetBuildingData(self);
-            if (building && s_fn_ResizeEmitterArray) {
-                int buildingCount = *(int*)((uintptr_t)building + 0x30);
-                s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), buildingCount);
-            }
+    int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
+    if (version == 0) {
+        void* building = GetBuildingData(self);
+        if (building && s_fn_ResizeEmitterArray) {
+            int buildingCount = *(int*)((uintptr_t)building + 0x30);
+            s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), buildingCount);
         }
     }
 
-    if (s_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -300,26 +278,6 @@ void AmbientEmitterComponent_InitFuncs() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
-    // Serialize(float&) is dispatch slot 0x140152a60. It was 0x140152470 here —
-    // an address that is not a dispatch slot at all, so the pointer stayed NULL
-    // and the guarded per-entry loop below silently read NOTHING. Confirmed
-    // against the retail CALL sites in 0x140042f30: ctor ad8, Vector3 a68,
-    // count ac8, ExternalPtr 0x1400019a0, entry uint a50, entry float a60,
-    // GetVersion a48, dtor ad0. (Third garbled address found in this one file.)
-    slot = ResolveAddr(Module::Exe, 0x140152a60);
-    if (slot) s_fn_Serialize_Float = *reinterpret_cast<fn_Serialize_Float_t*>(slot);
-
     // Math::Vector3::Serialize is now the class member (was a Runtime export here;
     // before that it was wrongly pointed at exe 0x14014efd0 = FloorComponent_RegisterType,
     // an unrelated type-registration thunk — a dropped/garbled-address caller bug.)
@@ -333,12 +291,6 @@ void AmbientEmitterComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x140001770));
 
     // (Building ambient audio setup is now the clean AmbientEmitterAudioSetup_Reimpl.)
-
-    // IO::Serializer::GetVersion -- read from the registered dispatch slot
-    // 0x140152a48 (same slot decalcomponent.cpp uses). Was wrongly pointed at
-    // exe 0x14014ef90 = FishingDescription_Register — a garbled-address caller bug.
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
 
     // (Building-description type id is now resolved lazily + standalone-safe via
     // EnsureEmitterDescTid / GetBuildingData.)

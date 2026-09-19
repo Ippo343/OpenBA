@@ -1111,7 +1111,7 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
     // Re-read all settings from persistence
     void* persistence = g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr;
-    if (fn_Persistence_ReadSettings && persistence)
+    if (persistence)
         reinterpret_cast<IO::Persistence*>(persistence)->ReadSettings();   // B.3.4 bridge
 
     // Re-read game settings from persistence
@@ -1146,7 +1146,7 @@ void OptionsDialog_OnApply(OptionsDialog* self) {
     OptionsDialog_ApplyGameSettings(self);
 
     // Write all settings to disk
-    if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_WriteSettings)
+    if (g_pPersistenceSingleton && *g_pPersistenceSingleton)
         reinterpret_cast<const IO::Persistence*>(*g_pPersistenceSingleton)->WriteSettings();   // B.3.4 bridge
 }
 
@@ -1173,7 +1173,7 @@ void OptionsDialog_OnOk(OptionsDialog* self) {
 
 void OptionsDialog_OnCancel(OptionsDialog* self) {
     // Reload persistence settings from disk
-    if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_ReadSettings)
+    if (g_pPersistenceSingleton && *g_pPersistenceSingleton)
         reinterpret_cast<IO::Persistence*>(*g_pPersistenceSingleton)->ReadSettings();   // B.3.4 bridge
 
     // Re-register default input bindings and load saved config
@@ -1193,7 +1193,7 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
     }
 
     // Reload persistence settings again (for audio config)
-    if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_ReadSettings)
+    if (g_pPersistenceSingleton && *g_pPersistenceSingleton)
         reinterpret_cast<IO::Persistence*>(*g_pPersistenceSingleton)->ReadSettings();   // B.3.4 bridge
 
     // Reinitialize audio from saved config

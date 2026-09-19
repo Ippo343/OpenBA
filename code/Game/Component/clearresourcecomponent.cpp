@@ -24,12 +24,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 static bool s_initialized = false;
 
 // ============================================================
@@ -47,17 +41,13 @@ void ClearResourceComponent_Shutdown(ClearResourceComponent* self, void* stream)
 
     // First empty serializer block (version 0)
     alignas(8) uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Second empty serializer block (version 0)
     alignas(8) uint8_t serializer2[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -69,20 +59,11 @@ void ClearResourceComponent_InitFuncs() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[ClearResourceComponent] Funcs resolved: CompSerialize=%p Ctor=%p Dtor=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_Serializer_Dtor);
+    printf("[ClearResourceComponent] Funcs resolved: CompSerialize=%p\n",
+           (void*)s_fn_Component_Serialize);
 #endif
 }
 

@@ -26,21 +26,6 @@
 typedef void (*fn_ParentShutdown_t)(void* self, void* stream);
 static fn_ParentShutdown_t s_fn_ParentShutdown = nullptr;
 
-// IO::Serializer ctor/dtor via dispatch slots
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(int*) — dispatch slot at 0x140152ac8
-typedef void (*fn_Serialize_Int_t)(void* serializer, int* value, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
-// IO::Serializer::GetVersion — dispatch slot at 0x140152a48
-typedef int (*fn_Serializer_GetVersion_t)(void* self);
-static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
-
 // FUN_140023a00 IS Collection::Array<float>::SetSize (ENDGAME B.3.2 step 2), but
 // with a derived row that DEVIATES from the header's zero-tail assumption: the
 // ported body (ConsumeProduceComponent_ResizeArray below) has NO else-arm write
@@ -51,10 +36,6 @@ static fn_Serializer_GetVersion_t s_fn_Serializer_GetVersion = nullptr;
 // Both resolved-pointer names below pointed at this same address and are gone;
 // the function is KEPT (still registered by reg_component_economy.cpp for
 // other callers) and this file's own two call sites now call it directly.
-
-// IO::Serializer::Serialize(float array) — dispatch slot at 0x140151ea8
-typedef void (*fn_Serialize_FloatArray_t)(void* self, int count, float* array, const char* name);
-static fn_Serialize_FloatArray_t s_fn_Serialize_FloatArray = nullptr;
 
 // DWORD_1401c7388 — ConsumeProduceDescription type ID
 static uint32_t* s_TypeId_ConsumeProduceDescription = nullptr;
@@ -72,21 +53,6 @@ static void EnsureHelpers() {
         ResolveAddr(Module::Exe, 0x14012b4a0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_fn_Serializer_GetVersion = *reinterpret_cast<fn_Serializer_GetVersion_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151ea8);
-    if (slot) s_fn_Serialize_FloatArray = *reinterpret_cast<fn_Serialize_FloatArray_t*>(slot);
-
     // ConsumeProduceDescription type ID at 0x1401c7388
     s_TypeId_ConsumeProduceDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7388));
@@ -116,26 +82,20 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
         s_fn_ParentShutdown(self, stream);
     }
 
-    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
-
     // Create versioned serializer (version 1)
     alignas(8) uint8_t serBuf[24];
     int64_t* pSerData = (int64_t*)serBuf;
     ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
 
     // Serialize consumeResourceId at +0x50
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeResourceId, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeResourceId, nullptr);   // B.3.4 bridge
 
     // Copy consume count to local (original uses local_res8, NOT direct field access).
     // On load, the resize function reads +0x60 internally as old count to decide
     // whether reallocation is needed. Writing directly to +0x60 before resize would
     // make old == new, causing resize to skip reallocation.
     int localCount = self->consumeCount;
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // On load (direction == 0): resize array if needed
     if (*(int*)(pSerData[0] + 8) == 0) {
@@ -145,23 +105,17 @@ void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* strea
     }
 
     // Serialize float array using local count and rates pointer
-    if (s_fn_Serialize_FloatArray) {
-        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, self->consumeRates, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(localCount, self->consumeRates, nullptr);   // B.3.4 bridge
 
     // Serialize consumeState at +0x68
-    if (s_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeState, nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(self->consumeState, nullptr);   // B.3.4 bridge
 
     // Version-0 migration: on load, if consumeResourceId < 0, reset to 0
-    if (s_fn_Serializer_GetVersion) {
-        int version = reinterpret_cast<IO::Serializer*>(serBuf)->GetVersion();   // B.3.4 bridge
-        if (version == 0 && self->consumeResourceId < 0) {
-            // Check if we're loading (stream direction == 0)
-            if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-                self->consumeResourceId = 0;
-            }
+    int version = reinterpret_cast<IO::Serializer*>(serBuf)->GetVersion();   // B.3.4 bridge
+    if (version == 0 && self->consumeResourceId < 0) {
+        // Check if we're loading (stream direction == 0)
+        if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+            self->consumeResourceId = 0;
         }
     }
 
@@ -311,8 +265,6 @@ void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
         s_compSer = reinterpret_cast<fn_CompSer_t>(ResolveAddr(Module::Exe, 0x1401189b0));
     if (s_compSer) s_compSer(self, stream);
 
-    if (!s_fn_Serializer_Ctor || !s_fn_Serializer_Dtor) return;
-
     // Empty version-0 block
     alignas(8) uint8_t ser0[24];
     ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -323,15 +275,7 @@ void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // bool serialize: reuse the int-serialize dispatch is wrong; use the serializer
     // vtable bool path via the dedicated dispatch slot 0x140152a58.
-    {
-        typedef void (*fn_SerBool_t)(void* ser, bool* field, const char* name);
-        static fn_SerBool_t s_serBool = nullptr;
-        if (!s_serBool) {
-            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152a58);
-            if (slot) s_serBool = *reinterpret_cast<fn_SerBool_t*>(slot);
-        }
-        if (s_serBool) reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 }
 
@@ -342,12 +286,8 @@ void ConsumeProduceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     printf("[ConsumeProduceComponent] Funcs resolved: ParentShutdown=%p "
-           "Ctor=%p Dtor=%p SerInt=%p GetVer=%p SerFloat=%p "
            "TypeId=%p IsDerived=%p\n",
-           (void*)s_fn_ParentShutdown, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_Serializer_Dtor, (void*)s_fn_Serialize_Int,
-           (void*)s_fn_Serializer_GetVersion,
-           (void*)s_fn_Serialize_FloatArray,
+           (void*)s_fn_ParentShutdown,
            (void*)s_TypeId_ConsumeProduceDescription,
            (void*)s_fn_IsDerivedFrom_dispatch);
 #endif

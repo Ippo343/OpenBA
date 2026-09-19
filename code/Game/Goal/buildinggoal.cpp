@@ -101,21 +101,15 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize requireAll (bool at +0x30)
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x30), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x30), nullptr);   // B.3.4 bridge
 
     // Serialize entry count
     int entryCount = *(int*)(s + 0x40);
     uint32_t countLocal = (uint32_t)entryCount;
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&countLocal), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&countLocal), nullptr);   // B.3.4 bridge
 
     // Check if loading (encoding mode == 0 means loading)
     int encodingMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -154,9 +148,7 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
     }
 
     // Destroy Serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 
     return 1;
 }

@@ -40,8 +40,7 @@ static void CaptureBoxDescription_Init(void* self) {
 
 void CaptureBoxDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ElementDescription_Serialize || !g_fn_Serializer_Ctor ||
-        !g_fn_Serializer_Dtor || !fn_ExternalPtr_Serialize) {
+    if (!fn_ElementDescription_Serialize || !fn_ExternalPtr_Serialize) {
         return;
     }
     fn_ElementDescription_Serialize(self, stream);           // base

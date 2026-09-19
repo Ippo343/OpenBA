@@ -1056,6 +1056,24 @@ stay a LITERAL address or the census goes blind to it.
   binds it to the REAL CLASS, silently. **Inside `namespace IO`, always spell the POD
   `RtIo::X` / `rt::io::X` / `RtIO::X`.** And remember there are two `Stream` PODs (§1.5.2).
 
+  **THE GREP, WIDENED — ENDGAME B.3.4a closing.** The check to run is not "grep for
+  `Stream`": it is **any BARE stream/serializer/filesystem class name inside a
+  `namespace IO {` block, outside `tests/`** — i.e. `Stream`, `MemoryStream`,
+  `FileStream`, `BinaryFileStream`, `TextFileStream`, `VisitorStream`,
+  `CompressedStream`, `CompressedMemoryStream`, `CompressedFileStream`,
+  `CompressedCopyFileStream`, `Serializer`, `Encoding`, `ReaderWriter`, `PackageFile`,
+  `FileSystem`, `Modification`, `Persistence`, `Registry`, `TextCodec`, `Filename`,
+  `String`, `FileInfo`. It **fired three times** during this step and **every time it
+  was a compile error, not a silent bind** — which is the reassuring half of the
+  finding and the reason it is a check and not a panic.
+
+  **And the POD namespace spelling is NOT uniform**, which is what makes a naive
+  find-and-replace wrong: it is **`RtIO`** in `runtime/types/io/FileSystem.h` and
+  **`RtIo`** in `Persistence.h`, `Registry.h` and `Stream.h` — same project, same
+  directory, two capitalisations. Plus `rt::io::` for the `Serializer.h` family.
+  Always copy the spelling from the header that declares the POD you mean; do not
+  infer it from the file next to it.
+
 ### 7.3 Worked call shapes
 
 ```cpp

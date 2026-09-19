@@ -26,23 +26,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// IO::Serializer::Serialize(bool*, name) -- serializes a bool
-typedef void (*fn_Serialize_Bool_t)(void* serializer, bool* value, const char* name);
-static fn_Serialize_Bool_t s_fn_Serialize_Bool = nullptr;
-
-typedef void (*fn_Serialize_Int_t)(void* serializer, int* value, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
-// IO::Serializer::Serialize(count, array, name) -- bulk int array serialization
-typedef void (*fn_Serialize_IntArray_t)(void* serializer, int count, int* array, const char* name);
-static fn_Serialize_IntArray_t s_fn_Serialize_IntArray = nullptr;
-
 // The +0x30 int array. ENDGAME B.3.2 step 2: FUN_1400021d0 IS
 // `Collection::Array<int32>::SetSize`, MSVC-monomorphised into the exe, so the
 // resolved pointer is gone and the member call takes its place.
@@ -76,17 +59,14 @@ void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
         s_fn_Component_Serialize(self, stream);
 
     alignas(8) uint8_t serializer[24];
-    if (!s_fn_Serializer_Ctor) return;
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize isEnabled bool at +0x28
-    if (s_fn_Serialize_Bool)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(selfAddr + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(selfAddr + 0x28), nullptr);   // B.3.4 bridge
 
     // Read count from +0x38, serialize it
     int localCount = *(int*)(selfAddr + 0x38);
-    if (s_fn_Serialize_Int)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If loading (stream mode == 0), resize array at +0x30
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -101,11 +81,9 @@ void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
 
     // Bulk-serialize int array
     int* arrayPtr = *(int**)(selfAddr + 0x30);
-    if (s_fn_Serialize_IntArray)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, arrayPtr, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, arrayPtr, nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================
@@ -140,25 +118,8 @@ void AutoPickupComponent_InitFuncs() {
 
     uintptr_t slot;
 
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // Serialize bool -- dispatch slot at 0x140152a58
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_fn_Serialize_Bool = *reinterpret_cast<fn_Serialize_Bool_t*>(slot);
-
-    // Bulk int array serialization -- dispatch slot at 0x140151278
-    slot = ResolveAddr(Module::Exe, 0x140151278);
-    if (slot) s_fn_Serialize_IntArray = *reinterpret_cast<fn_Serialize_IntArray_t*>(slot);
 
     s_TypeId_AutoPickupDesc = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c3fe8));

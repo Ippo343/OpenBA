@@ -80,12 +80,11 @@ uint32_t GetTypeId(void*) {
 // vtable idx5 (0x14005fb70) — read the command id and the target component type.
 char Serialize(void* self, void* stream) {
     EnsureResolved();
-    if (!self || !g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return 1;
+    if (!self) return 1;
     uint8_t* c = reinterpret_cast<uint8_t*>(self);
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (g_fn_Serialize_Int)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(c + 0x20), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(c + 0x20), nullptr);   // B.3.4 bridge
     if (s_fn_Type_Serialize)
         s_fn_Type_Serialize(c + 0x24, serializer);
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge

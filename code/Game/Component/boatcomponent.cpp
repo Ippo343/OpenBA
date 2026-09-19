@@ -28,22 +28,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_Serialize_Int_t)(void* serializer, int* value, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
-typedef void (*fn_Serialize_Float_t)(void* serializer, float* value, const char* name);
-static fn_Serialize_Float_t s_fn_Serialize_Float = nullptr;
-
-// Object::InternalBasePtr::Serialize -- dispatch slot at 0x140152aa0
-typedef void (*fn_IBP_Serialize_t)(void* ibp, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
 // IsDerivedFrom dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
@@ -85,19 +69,15 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
 
     // Empty serializer block (format compat)
     alignas(8) uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
 
     // Main serializer block
     alignas(8) uint8_t serializer[24];
-    if (!s_fn_Serializer_Ctor) return;
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x28 (entity ref)
-    if (s_fn_IBP_Serialize)
-        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate +0x28 against ComponentEntity type
     if (*(void**)(selfAddr + 0x28) != nullptr) {
@@ -113,12 +93,10 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
     reinterpret_cast<Math::Vector3*>(selfAddr + 0x40)->Serialize(serializer);   // B.3.1 bridge
 
     // Serialize float at +0x4c
-    if (s_fn_Serialize_Float)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(selfAddr + 0x4c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(selfAddr + 0x4c), nullptr);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x30
-    if (s_fn_IBP_Serialize)
-        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x30))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate +0x30 against type 0x1401c7a50
     if (*(void**)(selfAddr + 0x30) != nullptr) {
@@ -131,8 +109,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
     }
 
     // Serialize InternalBasePtr at +0x38
-    if (s_fn_IBP_Serialize)
-        reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
 
     // Validate +0x38 against type 0x1401c7078
     if (*(void**)(selfAddr + 0x38) != nullptr) {
@@ -148,13 +125,11 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
     reinterpret_cast<Math::Vector3*>(selfAddr + 0x50)->Serialize(serializer);   // B.3.1 bridge
 
     // Serialize int at +0x70 (dock ID)
-    if (s_fn_Serialize_Int)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x70), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x70), nullptr);   // B.3.4 bridge
 
     // Serialize Vector3 array at +0x60 (count at +0x68)
     uint32_t localCount = *(uint32_t*)(selfAddr + 0x68);
-    if (s_fn_Serialize_Int)
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize array
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -172,8 +147,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
         }
     }
 
-    if (s_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -237,21 +211,6 @@ void BoatComponent_InitFuncs() {
 
     uintptr_t slot;
 
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a60);
-    if (slot) s_fn_Serialize_Float = *reinterpret_cast<fn_Serialize_Float_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (slot) s_fn_IBP_Serialize = *reinterpret_cast<fn_IBP_Serialize_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
@@ -266,8 +225,8 @@ void BoatComponent_InitFuncs() {
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[BoatComponent] Funcs resolved: CompSerialize=%p IBP_Serialize=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_IBP_Serialize);
+    printf("[BoatComponent] Funcs resolved: CompSerialize=%p\n",
+           (void*)s_fn_Component_Serialize);
 #endif
 }
 

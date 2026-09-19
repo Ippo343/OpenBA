@@ -91,19 +91,13 @@ void TutorialImage_Serialize(void* self, void* stream) {
 
     // Create Serializer on stack (24 bytes), version=0
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize imageWidth at +0x28
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
 
     // Serialize imageHeight at +0x2C
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
 
     // Serialize ExternalPtr (imageRef) at +0x20
     if (s_fn_ExternalPtr_SerializeImage) {
@@ -111,9 +105,7 @@ void TutorialImage_Serialize(void* self, void* stream) {
     }
 
     // Destroy Serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

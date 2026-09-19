@@ -55,7 +55,6 @@ static uint32_t UpgradeUIConfig_GetTypeId(void*) {
 
 // vtable +0x28 (0x140086fb0): deserialize the target-template reference.
 static void UpgradeUIConfig_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     ExternalPtrSerializeGeneric(

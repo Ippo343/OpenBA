@@ -29,19 +29,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-typedef void (*fn_Serialize_Int_t)(void* serializer, int* value, const char* name);
-static fn_Serialize_Int_t s_fn_Serialize_Int = nullptr;
-
-// Bulk int array serialization -- dispatch slot at 0x140151278
-typedef void (*fn_Serialize_IntArray_t)(void* serializer, int count, int* array, const char* name);
-static fn_Serialize_IntArray_t s_fn_Serialize_IntArray = nullptr;
-
 // FUN_1400021d0 was Collection::Array<int32>::SetSize monomorphised into the
 // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
 
@@ -97,19 +84,15 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
 
     // Empty serializer block (controller compat stub)
     alignas(8) uint8_t serializer1[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
 
     // Serialize tile index array
     alignas(8) uint8_t serializer2[24];
-    if (!s_fn_Serializer_Ctor) return;
     ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     int localCount = *(int*)(selfAddr + 0x50);
-    if (s_fn_Serialize_Int)
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If reading, resize array
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -122,11 +105,9 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
 
     // Bulk-serialize all int elements
     int* array = *(int**)(selfAddr + 0x48);
-    if (s_fn_Serialize_IntArray)
-        reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, array, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, array, nullptr);   // B.3.4 bridge
 
-    if (s_fn_Serializer_Dtor)
-        reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -326,18 +307,6 @@ void CemeteryComponent_InitFuncs() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_fn_Serialize_Int = *reinterpret_cast<fn_Serialize_Int_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151278);
-    if (slot) s_fn_Serialize_IntArray = *reinterpret_cast<fn_Serialize_IntArray_t*>(slot);
 
     s_fn_ListAdd = reinterpret_cast<fn_ListAdd_t>(
         ResolveAddr(Module::Exe, 0x140002cc0));

@@ -146,45 +146,10 @@ void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags) {
 //
 // Returns 1 (true) always.
 //
-// Serializer/String/Filename functions are resolved via exref dispatch table
-// at startup (in ResolveTutorialSetupDialogFuncs). StringArray_Resize,
-// SerializeExternalPtr, and ResolveExternalByName come from engine_funcs.h.
-
-// IO::Serializer::Serializer(this, stream, mode) — via exref 0x140152ad8
-typedef void (*fn_SerializerCtor_t)(void* self, void* stream, int mode);
-static fn_SerializerCtor_t fn_SerializerCtor_local = nullptr;
-
-// IO::Serializer::~Serializer(this) — via exref 0x140152ad0
-typedef void (*fn_SerializerDtor_t)(void* self);
-static fn_SerializerDtor_t fn_SerializerDtor_local = nullptr;
-
-// IO::Serializer::Serialize(this, int* field, const char* name) — via exref 0x140152ac8
-typedef void (*fn_SerializeInt_t)(void* self, void* field, const char* name);
-static fn_SerializeInt_t fn_SerializeInt_local = nullptr;
-
-// System::String::Serialize(this, serializer) — via exref 0x140151238
-
-static bool s_serializerFuncsResolved = false;
-
-static void ResolveSerializerFuncs() {
-    if (s_serializerFuncsResolved) return;
-
-    // Resolve via exref table entries in exe .rdata
-    // Each exref is a void* slot filled at startup with the resolved runtime function ptr.
-    auto loadExref = [](uintptr_t addr) -> void* {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, addr));
-        return (slot && *slot) ? *slot : nullptr;
-    };
-
-    fn_SerializerCtor_local  = (fn_SerializerCtor_t) loadExref(0x140152ad8);
-    fn_SerializerDtor_local  = (fn_SerializerDtor_t) loadExref(0x140152ad0);
-    fn_SerializeInt_local    = (fn_SerializeInt_t)   loadExref(0x140152ac8);
-
-    s_serializerFuncsResolved = true;
-}
+// StringArray_Resize, SerializeExternalPtr and ResolveExternalByName come from
+// engine_funcs.h.
 
 uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream) {
-    ResolveSerializerFuncs();
     uintptr_t s = (uintptr_t)self;
 
     // Create the serializer on the stack (24 bytes for Serializer object)

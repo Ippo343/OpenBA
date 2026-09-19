@@ -125,9 +125,7 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
 
     // Create serializer
     alignas(8) uint8_t serializerBuf[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize elapsed time (+0x20) via System::Time::Serialize
     if (s_fn_TimeSerialize) {
@@ -135,9 +133,7 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
     }
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
