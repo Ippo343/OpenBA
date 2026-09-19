@@ -342,6 +342,34 @@ class ReaderWriter;
 class Serializer;
 class Stream;
 
+// ---------------------------------------------------------------------------
+// `IO::Stream::Direction` — the 4-byte enum retail's TWO exported GetDirection
+// members return. ENDGAME B.3.4 callers batch H.
+// ---------------------------------------------------------------------------
+// Retail spells it NESTED in `IO::Stream`; the mangling says so on both
+// exports:
+//   ?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ        0x180006200
+//   ?GetDirection@Serializer@IO@@QEAA?AW4Direction@Stream@2@XZ  0x180006210
+// It is declared HERE, at `IO` scope, for one mechanical reason and not a
+// design one: `IO::Serializer::GetDirection()` has to name the type, this
+// header only FORWARD-declares `Stream` (Stream.h includes this one, and
+// reversing that would make the pair cyclic — see the banner on `class
+// Stream;` above), and a nested name needs a complete class. So the enum lives
+// at `IO` scope and `IO::Stream` re-exports it as a member typedef
+// (`using Direction = ::IO::Direction;` in Stream.h), which keeps
+// `IO::Stream::Direction` spelling the retail name at every use site. Same
+// 4 bytes, same values, no layout moves.
+//
+// 0 == reading is not a convention we chose: `?Create@CompressedStream@IO@@`
+// (0x1800aa4b0, the WRITE path) opens with `*(dword*)(this+8) = 1` and
+// `?Open@CompressedStream@IO@@` (0x1800aa560, the READ path) with `= 0`, and
+// `IO::Serializer`'s constructor takes the CreateReader slot when the field is
+// 0 (serializer_class.cpp).
+enum Direction : int32_t {
+    kReading = 0,
+    kWriting = 1,
+};
+
 class Encoding {
 public:
     virtual bool IsBinary() const = 0;                            // slot 0 +0x00
@@ -787,6 +815,22 @@ public:
 
     // ?GetVersion@Serializer@IO@@QEBAHXZ               0x1800070b0  +0x08
     int GetVersion() const;
+
+    // ?GetDirection@Serializer@IO@@QEAA?AW4Direction@Stream@2@XZ  0x180006210
+    // `MOV RAX,[RCX]; MOV EAX,[RAX+0x8]; RET` — two loads, no dispatch, no
+    // side effect: it answers with the STREAM's direction, not anything of
+    // this Serializer's own. NON-const, exactly as retail's `QEAA` says.
+    //
+    // ENDGAME B.3.4 callers batch H. serializer.cpp's banner used to list this
+    // under "NOT PORTED, because our tree does not call them"; that was true
+    // when it was written and stopped being true when the caller batches
+    // measured ~37 hand-written copies of these same two loads across
+    // code/Game. Retail's exe inlines it at every one of those sites (e.g.
+    // Application-x64.exe 0x1400da960 and 0x1400ed3c5, both
+    // `MOV RAX,[RSP+ser]; CMP dword ptr [RAX + 0x8],0x0`), which is why the
+    // sites look hand-written: they are transcriptions of the inlined form of
+    // an export that has existed all along.
+    Direction GetDirection();
 
     // ?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ 0x180006290
     // `MOV RAX,[RCX]; MOV RAX,[RAX+0x10]; RET` — two loads, no dispatch. It

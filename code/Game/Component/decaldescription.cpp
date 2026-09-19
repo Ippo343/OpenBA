@@ -81,7 +81,7 @@ extern "C" void DecalDescription_Serialize(void* self, void* stream) {
     // --- refArray (External* pool) at +0x28 ---
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);            // refCount   // B.3.4 bridge
     int refCount = *(int32_t*)(s + 0x30);
-    bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (loading) {
         uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(s + 0x28, refCount, 8));
         for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;

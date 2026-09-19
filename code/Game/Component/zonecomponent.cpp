@@ -22,6 +22,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <new>
 
 // ============================================================
@@ -94,7 +95,7 @@ void ZoneComponent_Shutdown(ZoneComponent* self, void* stream) {
 
     if (s_fn_Serializer_GetVersion) {
         int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
-        if (version == 0 && *(int*)((uintptr_t)stream + 8) == 0) {
+        if (version == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
             void* entityPtr = self->owner;
             if (s_pGameState && *s_pGameState && s_fn_ZoneMapAdd) {
                 void* zoneMap = *(void**)((uintptr_t)*s_pGameState + 0xF0);

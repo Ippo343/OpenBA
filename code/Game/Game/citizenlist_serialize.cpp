@@ -122,8 +122,7 @@ namespace {
 // Serializer mode helper
 // ------------------------------------------------------------
 inline bool SerializerLoading(void* serializer) {
-    void* inner = *reinterpret_cast<void**>(serializer);
-    return *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(inner) + 8) == 0;
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 // ------------------------------------------------------------

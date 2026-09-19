@@ -124,7 +124,7 @@ uint64_t TutorialGoalDialog_Shutdown(void* self, void* stream) {
     reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer2);
 
     // If loading (serializer mode at +0x08 == 0), resolve external by name
-    int serializerMode = *(int*)(*(uintptr_t*)serializer2 + 0x8);
+    int serializerMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer2)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (serializerMode == 0) {
         ResolveExternalByName_Impl((void*)(s + 0x28));
     }

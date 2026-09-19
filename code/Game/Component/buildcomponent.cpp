@@ -116,8 +116,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count1, nullptr);   // B.3.4 bridge
 
     // On load: resize array
-    int64_t serFirst = *(int64_t*)ser1;
-    if (*(int32_t*)(serFirst + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
         GameColl::ArrayAt<GameColl::Ptr8>(s, 0x58).SetSize(count1);
@@ -145,8 +144,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(count2, nullptr);   // B.3.4 bridge
 
     // On load: resize array2
-    serFirst = *(int64_t*)ser1;
-    if (*(int32_t*)(serFirst + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser1)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte InternalBasePtr slot serialized below (byte-copy, zeroing).
         GameColl::ArrayAt<GameColl::Ptr8>(s, 0x68).SetSize(count2);

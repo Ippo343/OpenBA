@@ -118,7 +118,7 @@ void Resolve() {
 // True when the serializer is READING (retail: *(int*)(stream + 8) == 0,
 // reached through the serializer's first field).
 inline bool Loading(void* ser) {
-    return *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(ser) + 8) == 0;
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 // Serialize one InternalBasePtr and apply retail's post-load type validation

@@ -33,7 +33,7 @@ namespace {
 
 inline int SerializerMode(void* serializer) {
     // *(int*)(*(Serializer**)serializer + 8): 0 = loading, 1 = saving.
-    return *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
+    return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 inline int EncodingType(void* serializer) {

@@ -67,7 +67,7 @@ void CreateRemovalDescription_Serialize(void* self, void* stream) {
 
     // On load (stream mode == 0): resize the heap ExternalPtr array at +0x28.
     void* serField0 = *(void**)serializer;
-    if (serField0 && *(int*)((uintptr_t)serField0 + 8) == 0) {
+    if (serField0 && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte ExternalPtr slot the ExternalRefArray serializer walks below.
         GameColl::ArrayAt<GameColl::Ptr8>(s, 0x28).SetSize(count);

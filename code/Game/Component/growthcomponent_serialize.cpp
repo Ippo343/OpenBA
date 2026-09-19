@@ -128,7 +128,7 @@ extern "C" void GrowthComponent_Serialize2(void* self, void* stream) {
     // Everything above is retail 0x1401207c0 field-for-field. What follows is a
     // deliberate, load-only repair -- see below for why it cannot be avoided.
     const bool loading =
-        (*reinterpret_cast<int32_t*>(*reinterpret_cast<uintptr_t*>(ser) + 8) == 0);
+        (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 

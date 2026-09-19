@@ -212,8 +212,7 @@ void Tutorial_Serialize(void* self, void* stream) {
     }
 
     // 2. On load: resize steps array
-    uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
-    if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // Reading mode — resize array to match deserialized count
         if (s_fn_DynArrayResize) {
             s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x28), localCount);

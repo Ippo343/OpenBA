@@ -31,6 +31,7 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -96,7 +97,7 @@ void InteractDescription_Serialize(void* self, void* stream) {
     // false -> the use/build/create node lists never built -> ChildSum(interact)==0
     // -> d5d0 found no access point -> the eat/food search rejected every barn
     // (Economy Brick M-D root cause #3).
-    bool loading = (*(int*)((uintptr_t)stream + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     void* ext = *(void**)(s + 0x20);
     if (loading && ext) {
         uint8_t* children = *(uint8_t**)((uintptr_t)ext + 0x30);

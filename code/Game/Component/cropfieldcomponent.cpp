@@ -354,7 +354,7 @@ void CropFieldComponent_Shutdown(CropFieldComponent* self, void* stream) {
     // Same defect as WorkPlaceComponent (21b3b33); see
     // reference_serializer_plus8_is_encoding_not_loading_flag.
     const uintptr_t cfStream = *(uintptr_t*)serializer;
-    if (cfStream && *(int*)(cfStream + 8) == 0) {
+    if (cfStream && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (s_fn_ResizeEntityList) {
             s_fn_ResizeEntityList((void*)((uintptr_t)self + 0x58), countBuf);
         }

@@ -112,8 +112,7 @@ void CemeteryComponent_Shutdown(CemeteryComponent* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If reading, resize array
-    uintptr_t serializerObj = *(uintptr_t*)serializer2;
-    if (*(int*)(serializerObj + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer2)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
         // here at 14004763a. I32NoInit — a grown tail is left as the allocation found
         // it, like retail. Safe: this arm runs only when reading, and the bulk int

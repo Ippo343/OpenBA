@@ -424,8 +424,7 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Check if loading (stream+8 == 0 means loading)
-    uintptr_t serStreamPtr = *(uintptr_t*)serializerBuf;
-    bool isLoading = (*(int*)(serStreamPtr + 8) == 0);
+    bool isLoading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
     // --- Serialize first int array count (+0x50) ---
     int count50 = self->field_50;

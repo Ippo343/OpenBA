@@ -321,8 +321,7 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
 
     // Get the serializer's internal stream ptr (at offset +0x00)
     // Check if loading (stream+8 == 0 means loading)
-    uintptr_t serStreamPtr = *(uintptr_t*)serializerBuf;
-    bool isLoading = (*(int*)(serStreamPtr + 8) == 0);
+    bool isLoading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
     // --- Serialize IBP array count (+0x60) ---
     // Use a local copy like the original does (original serializes into a stack local,

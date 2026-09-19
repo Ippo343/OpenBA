@@ -183,7 +183,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
                 reinterpret_cast<const ::Object::External*>(*pSlot));  // B.3.3 bridge
         }
         // Stream-dirty flag = *(serializer+0)->[+8]. (RAX=[RBX]; [RAX+8])
-        int streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
+        int streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (*pSlot != 0 && streamFlag == 0 && refId == 0xffffffff) {
             // Special case: present but no ref id and writing -> just serialize the (-1) id.
             if (s_fn_SerUInt_a50) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
@@ -191,7 +191,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
         } else {
             if (s_fn_SerUInt_a50) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
             if ((int)refId != -1) {
-                streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
+                streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
                 if (streamFlag == 0 && factory) {
                     System::Filename pathBuf = efactory->GetPathForReferenceId(refId);
                     fnLocal = pathBuf;
@@ -217,7 +217,7 @@ void ActMv_ExternalPtrSerialize_22970(void* extPtrSlot, void* serializer) {
     }
 
     if (didFind) {
-        int streamFlag = *reinterpret_cast<int*>(*reinterpret_cast<uintptr_t*>(serializer) + 8);
+        int streamFlag = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (streamFlag == 0) {
             void* found = nullptr;
             if (g_pExternalFactorySingleton && *g_pExternalFactorySingleton)

@@ -412,7 +412,7 @@ void ResidenceComponent_SerializeResidentArray(void* serializer, int count, void
         if (s_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(innerCount, nullptr);   // B.3.4 bridge
         // On load (serializer internal +8 == 0): resize the inner array
         // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-        if (*(int*)(*(int64_t*)serializer + 8) == 0) {
+        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             GameColl::AsArray<GameColl::Ptr8>((void*)entry).SetSize(innerCount);
         }
         uintptr_t inner = (uintptr_t)entry[0];

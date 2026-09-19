@@ -368,7 +368,7 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
     // old check pass on save too; benign only because resize-to-same-count is
     // a no-op).
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-    if (*(int*)(*(uintptr_t*)serializer + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         GameColl::AsArray<GameColl::Ptr8>((void*)&self->field30).SetSize(countBuf);
     }
 

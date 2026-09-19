@@ -261,8 +261,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         }
         // On load: check if reading (serializer->encoding->mode == 0)
-        uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
-        if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
+        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             // Reading: resize the array
             if (s_fn_DynArrayResize) {
                 s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x40), localCount);
@@ -282,8 +281,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
         if (s_fn_Serializer_SerializeInt) {
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         }
-        uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
-        if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
+        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_DynArrayResize) {
                 s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x50), localCount);
             }
@@ -301,8 +299,7 @@ void TutorialStep_Serialize(void* self, void* stream) {
         if (s_fn_Serializer_SerializeInt) {
             reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
         }
-        uintptr_t serPtr = *reinterpret_cast<uintptr_t*>(serializer);
-        if (*reinterpret_cast<int32_t*>(serPtr + 8) == 0) {
+        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_DynArrayResize) {
                 s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x60), localCount);
             }

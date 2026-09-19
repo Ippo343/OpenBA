@@ -45,6 +45,7 @@
 #include <new>          // placement new, for the BaseTypeInfo ctor shim
 
 #include "../../types/object/TypeInfo.h"
+#include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 #include "../../funcs/rt_port.h"
 
 // ----------------------------------------------------------------------------
@@ -329,13 +330,14 @@ void* RtObject_Factory_CreateObject(const void* factory, uint32_t typeId) {
 // non-null. Read it as "this port executed N times", NOT as "this port agrees
 // with the DLL N times".
 // ============================================================================
+// ENDGAME B.3.4 callers batch H: the hand-inlined slot call became the member.
+// `serializer + 8` is the READERWRITER (this file already named it `rw`, which
+// is the one site in the tree that did) and +0x98 is rw_vtbl::kScalarUInt, so
+// the member is IO::Serializer::Serialize(unsigned int&) — an Object::Type is
+// the 4-byte type id and `self` was already the field pointer. The old third
+// argument `0` was the ignored `const char* name`.
 void RtObject_Type_Serialize(void* self, void* serializer) {
-
-    void*  rw = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
-    void** vt = *reinterpret_cast<void***>(rw);
-
-
-    reinterpret_cast<void (*)(void*, void*, int)>(vt[0x98 / 8])(rw, self, 0);
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(self), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 
 // ============================================================================

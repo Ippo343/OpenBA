@@ -14,6 +14,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -80,7 +81,7 @@ void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
 
     // If loading (stream+8 == 0), resize array
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-    if (*(int*)((uintptr_t)stream + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)self + 0x48))
             .SetSize(localCount);
     }
@@ -107,7 +108,7 @@ void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((uintptr_t)self + 0x58), nullptr);   // B.3.4 bridge
 
     // On load: compact array — remove null entries
-    if (*(int*)((uintptr_t)stream + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         int count = *(int*)((uintptr_t)self + 0x50);
         for (int i = 0; i < count; /* no increment */) {
             void* arr = *(void**)((uintptr_t)self + 0x48);

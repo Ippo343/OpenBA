@@ -187,7 +187,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
     int32_t count = *reinterpret_cast<int32_t*>(reinterpret_cast<int64_t>(param_1) + 0x08);
     if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(param_2)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
-    bool readMode = (*reinterpret_cast<int*>(*reinterpret_cast<int64_t*>(param_2) + 8) == 0);
+    bool readMode = (static_cast<int>(reinterpret_cast<IO::Serializer*>(param_2)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
     if (readMode) {
         // ---- read: deserialize `count` records, rebuild the tree ----

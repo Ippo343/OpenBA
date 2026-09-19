@@ -32,6 +32,7 @@
 #include "../../types/math/Math.h"
 #include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
+#include "../../types/io/Serializer.h"   // ENDGAME B.3.4 callers batch H
 #include "vector.h"
 
 namespace {
@@ -114,17 +115,16 @@ Vector2 Vector2::Normalize(Scalar& mag) const {
 
 // ?Serialize@Vector2@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18005ff40
 // NOT diffable: mutates the live IO::Serializer stream (reads or writes bytes
-// from/into it). Ported byte-faithfully as a raw vtable call because
-// IO::Serializer itself is Wave 4 and not yet a typed struct here:
-// `*(this+8)` is the Serializer's Stream*, and slot +0x28 on the Stream's
-// vtable is "serialize N floats starting at this pointer" (retail passes the
-// float count as arg 2: 2/3/4 for Vector2/3/4).
+// from/into it).
+//
+// ENDGAME B.3.4 callers batch H. This used to be a hand-inlined slot call, and
+// its comment called `serializer + 8` "the Serializer's Stream*". It is not:
+// the Stream is at Serializer+0x00 and +0x08 is the READERWRITER, whose vtable
+// +0x28 is rw_vtbl::kArrayFloat — "serialize N floats", which is why the count
+// (2/3/4 for Vector2/3/4) is arg 2. The old three-argument form left the
+// ignored `const char* name` register unset; passing nullptr is wire-identical.
 void Vector2::Serialize(void* serializer) {
-    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
-    void* vtbl = *reinterpret_cast<void**>(stream);
-    using SerializeFloatsFn = void(*)(void*, int, void*);
-    SerializeFloatsFn fn = *reinterpret_cast<SerializeFloatsFn*>(reinterpret_cast<char*>(vtbl) + 0x28);
-    fn(stream, 2, this);
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(2, reinterpret_cast<float*>(this), nullptr);   // B.3.4 bridge  (0x28 = float-array door)
 }
 
 // ============================================================
@@ -213,11 +213,7 @@ Vector3 Vector3::Normalize() const {
 // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 3.
 void Vector3::Serialize(void* serializer) {
-    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
-    void* vtbl = *reinterpret_cast<void**>(stream);
-    using SerializeFloatsFn = void(*)(void*, int, void*);
-    SerializeFloatsFn fn = *reinterpret_cast<SerializeFloatsFn*>(reinterpret_cast<char*>(vtbl) + 0x28);
-    fn(stream, 3, this);
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(3, reinterpret_cast<float*>(this), nullptr);   // B.3.4 bridge  (0x28 = float-array door)
 }
 
 // ============================================================
@@ -231,11 +227,7 @@ void Vector3::Serialize(void* serializer) {
 // ?Serialize@Vector4@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x18001d360 — see the Vector2
 // Serialize comment above; NOT diffable, same vtable-slot pattern, count = 4.
 void Vector4::Serialize(void* serializer) {
-    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
-    void* vtbl = *reinterpret_cast<void**>(stream);
-    using SerializeFloatsFn = void(*)(void*, int, void*);
-    SerializeFloatsFn fn = *reinterpret_cast<SerializeFloatsFn*>(reinterpret_cast<char*>(vtbl) + 0x28);
-    fn(stream, 4, this);
+    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<float*>(this), nullptr);   // B.3.4 bridge  (0x28 = float-array door)
 }
 
 }  // namespace Math

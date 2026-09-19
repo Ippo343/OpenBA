@@ -140,7 +140,7 @@ void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
     // If loading (serializer stream mode == 0), resolve toolbar
     void* innerStream = *(void**)(serializerBuf2 + 0x00);
     if (innerStream) {
-        int streamMode = *(int*)(reinterpret_cast<uint8_t*>(innerStream) + 0x08);
+        int streamMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf2)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (streamMode == 0) {
             // Resolve toolbar from the string
             if (s_fn_ResolveToolbar)

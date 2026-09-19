@@ -47,6 +47,7 @@
 #include "resolve.h"
 #include "math/Math.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A residual
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <new>
 #include <cstdint>
 #include <cstdio>
@@ -310,7 +311,7 @@ void TornadoComponent_Shutdown(TornadoComponent* self, void* stream) {
 
     // stream+8 == 0 means "loading": grow the array before reading the waypoints.
     // B.3.2 bridge: FUN_14000d030 is Collection::Array<Vector3>::SetSize(n)
-    if (*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(stream) + 8) == 0)
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0)   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         GameColl::AsArray<GameColl::Vec3>(reinterpret_cast<void*>(s + 0x40)).SetSize(pathCount);
 
     uint8_t* pVec = *reinterpret_cast<uint8_t**>(s + 0x40);

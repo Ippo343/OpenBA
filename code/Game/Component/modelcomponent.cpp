@@ -298,8 +298,7 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
     }
 
     // On load: if model variant >= 0, restore mesh from description
-    int64_t serFirst = *(int64_t*)serializer;
-    if (*(int32_t*)(serFirst + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         int16_t modelVariant = *(int16_t*)(s + 0x166);
         if (modelVariant >= 0) {
             void* desc = GetMultiObjDescription(s);
@@ -321,8 +320,7 @@ void ModelComponent_Shutdown(ModelComponent* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasModelId, nullptr);   // B.3.4 bridge
 
     // On load: if flag was set, call vtable Draw (+0x30) to re-register in scene
-    serFirst = *(int64_t*)serializer;
-    if (*(int32_t*)(serFirst + 8) == 0 && hasModelId) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0 && hasModelId) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // Call vtable slot +0x30 (Draw) on self
         typedef void (*fn_VtableDraw_t)(void*);
         fn_VtableDraw_t drawFn = *(fn_VtableDraw_t*)(*(uintptr_t*)s + 0x30);

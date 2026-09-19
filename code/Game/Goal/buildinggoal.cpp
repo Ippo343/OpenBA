@@ -118,8 +118,7 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
     }
 
     // Check if loading (encoding mode == 0 means loading)
-    uintptr_t serPtr = *(uintptr_t*)serializer;
-    int encodingMode = *(int*)(serPtr + 0x08);
+    int encodingMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     if (encodingMode == 0) {
         // Loading: resize the entry array (0x14001b340, ported as Goal_RefArray_Resize).
         // Was a guarded raw resolve of an unregistered address, i.e. a silent no-op:

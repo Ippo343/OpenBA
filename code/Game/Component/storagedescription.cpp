@@ -29,14 +29,11 @@
 namespace {
 constexpr uintptr_t kVtable = 0x1401647a0;
 
-// The Serializer enum dispatch (serializer vtable +0x98): void(self, int* field, const char*).
+// The enum field, through the UINT door. `serializerBuf + 8` was the
+// READERWRITER (IO::Serializer::_readerWriter), not an Encoding, and its
+// vtable +0x98 is rw_vtbl::kScalarUInt.
 void SerializeEnum(uint8_t* serializerBuf, void* field) {
-    void* serObj = *(void**)(serializerBuf + 8);
-    if (!serObj) return;
-    typedef void (*fn_t)(void* self, void* field, const char* name);
-    void* vt = *(void**)serObj;
-    fn_t fn = *(fn_t*)((uintptr_t)vt + 0x98);
-    if (fn) fn(serObj, field, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(field), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 
 // Fresh-load alloc for a dyn-array header {ptr@0,count@8,cap@0xC}; returns buffer.
@@ -94,7 +91,7 @@ extern "C" void StorageDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge (volumeCount)
     int count = *(int32_t*)(s + 0x38);
 
-    bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     uint8_t* e;
     if (loading) {
         e = reinterpret_cast<uint8_t*>(AllocArray(s + 0x30, count, 0x10));

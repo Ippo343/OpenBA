@@ -237,7 +237,7 @@ namespace {
 // is its mode — 0 means loading. NOT serializer+8, which is the encoding.
 bool MG_IsLoading(void* serializer) {
     void* stream = *(void**)serializer;
-    return stream && *(int32_t*)((uint8_t*)stream + 8) == 0;
+    return stream && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
 // Faithful port of the exe's three array-resize helpers: FUN_14001b270 (stride 8,

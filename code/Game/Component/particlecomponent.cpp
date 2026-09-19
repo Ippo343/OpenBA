@@ -22,6 +22,7 @@
 #include "resolve.h"
 #include "perf_experimental.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -147,7 +148,7 @@ void ParticleComponent_Shutdown(ParticleComponent* self, void* stream) {
 
     // If loading, resize bool array
     // B.3.2 bridge: FUN_14000a590 is Collection::Array<uint8_t>::SetSize(n)
-    if (*(int*)((uintptr_t)stream + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x28)).SetSize(localCount);
     }
 

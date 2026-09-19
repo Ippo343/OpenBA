@@ -94,23 +94,14 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
         ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
-    // Get the serializer's vtable dispatch for enum serialization
-    // The serializer object is at serializerBuf+8 (pointer to actual serializer)
-    void* serializerObj = *(void**)(serializerBuf + 8);
-
-    if (serializerObj) {
-        // Serialize statTypeA, statTypeB, comparisonType via vtable +0x98
-        // Signature: void serialize_enum(this, void* field, const char* name)
-        typedef void (*fn_SerializeEnum_t)(void* self, void* field, const char* name);
-        void* vtable = *(void**)serializerObj;
-        fn_SerializeEnum_t serializeEnum = *(fn_SerializeEnum_t*)((uintptr_t)vtable + 0x98);
-
-        if (serializeEnum) {
-            serializeEnum(serializerObj, (void*)(s + 0x30), nullptr);  // statTypeA
-            serializeEnum(serializerObj, (void*)(s + 0x34), nullptr);  // statTypeB
-            serializeEnum(serializerObj, (void*)(s + 0x38), nullptr);  // comparisonType
-        }
-    }
+    // statTypeA / statTypeB / comparisonType, each through the UINT door.
+    // `serializerBuf + 8` was the READERWRITER (IO::Serializer::_readerWriter),
+    // not "the actual serializer" and not an Encoding, and its vtable +0x98 is
+    // rw_vtbl::kScalarUInt. Retail 0x1400da8e2 is the same three loads with no
+    // test of either the object or the slot.
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x30), nullptr);   // B.3.4 bridge  (0x98 = uint door)  statTypeA
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x34), nullptr);   // B.3.4 bridge  (0x98 = uint door)  statTypeB
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x38), nullptr);   // B.3.4 bridge  (0x98 = uint door)  comparisonType
 
     // Serialize fixedValue (+0x3c) via Serialize_Int
     if (g_fn_Serialize_Int) {
@@ -137,7 +128,7 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
         // (that is the field-dispatch object). Reading the wrong field mis-gates the
         // External resolve.
         void* reader = *(void**)(serializerBuf + 0);
-        if (reader && *(int*)((uintptr_t)reader + 0x8) == 0) {
+        if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_ResolveExternalPtr) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x48));
             }
@@ -151,22 +142,15 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
         reinterpret_cast<System::String*>(s + 0x60)->Serialize(serializerBuf);
 
         void* reader = *(void**)(serializerBuf + 0);
-        if (reader && *(int*)((uintptr_t)reader + 0x8) == 0) {
+        if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             if (s_fn_ResolveExternalPtr) {
                 s_fn_ResolveExternalPtr((void*)(s + 0x60));
             }
         }
     }
 
-    // Serialize statFlags (+0x78) via vtable +0x98
-    if (serializerObj) {
-        typedef void (*fn_SerializeEnum_t)(void* self, void* field, const char* name);
-        void* vtable = *(void**)serializerObj;
-        fn_SerializeEnum_t serializeEnum = *(fn_SerializeEnum_t*)((uintptr_t)vtable + 0x98);
-        if (serializeEnum) {
-            serializeEnum(serializerObj, (void*)(s + 0x78), nullptr);
-        }
-    }
+    // statFlags (+0x78), the same UINT door. Retail 0x1400da9bb.
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x78), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize statSubType (+0x7c) via Serialize_Int
     if (g_fn_Serialize_Int) {

@@ -186,6 +186,19 @@ int Serializer::GetVersion() const {
     return reinterpret_cast<Fn>(::RwSlot(rw, rw_vtbl::kGetVersion))(rw);
 }
 
+// 0x180006210 — `MOV RAX,[RCX]; MOV EAX,[RAX+0x8]; RET`. Two loads, no
+// dispatch, no side effect, and — like `GetEncoding` — it answers about the
+// STREAM, not about this Serializer. Faithfully UNGUARDED: retail dereferences
+// `_stream` with no null test here, and so does every one of the ~37 caller
+// sites this member replaces (they are transcriptions of the exe's INLINED
+// copy of these same two loads).
+//
+// ENDGAME B.3.4 callers batch H. serializer.cpp's banner listed this under
+// "NOT PORTED, because our tree does not call them"; the tree calls it now.
+Direction Serializer::GetDirection() {
+    return static_cast<Direction>(_stream->_direction);
+}
+
 // 0x180006290 — `MOV RAX,[RCX]; MOV RAX,[RAX+0x10]; RET`. Two loads, no
 // dispatch, no side effect. It answers with the STREAM's encoding policy
 // object, which is a different class from this Serializer's ReaderWriter.

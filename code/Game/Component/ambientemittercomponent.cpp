@@ -174,8 +174,7 @@ void AmbientEmitterComponent_Shutdown(AmbientEmitterComponent* self, void* strea
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading (stream mode == 0), resize emitter array
-    uintptr_t serializerObj = *(uintptr_t*)serializer;
-    if (*(int*)(serializerObj + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (s_fn_ResizeEmitterArray)
             s_fn_ResizeEmitterArray((void*)(selfAddr + 0x38), (int)localCount);
     }

@@ -157,8 +157,7 @@ void BoatComponent_Shutdown(BoatComponent* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize array
-    uintptr_t serializerObj = *(uintptr_t*)serializer;
-    if (*(int*)(serializerObj + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2 bridge: exe 0x14000d030 IS Collection::Array<Vector3>::SetSize(n).
         GameColl::AsArray<GameColl::Vec3>((void*)(selfAddr + 0x60)).SetSize((int)localCount);
     }

@@ -39,6 +39,7 @@
 #include <windows.h>   // QueryPerformanceCounter for the BANISHED_SAVE_TIMING probe
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <new>
 
 // ============================================================
@@ -1337,7 +1338,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     EntityList_PostUpdateStaging(self);
 
     // Step 3: On save (stream+0x08 == 1), process removal list
-    if (*(int32_t*)((uintptr_t)stream + 0x08) == 1) {
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 1) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         int32_t removalCount = self->removalList.count;
         if (removalCount > 0) {
             for (int64_t i = 0; i < removalCount; i++) {
@@ -1359,8 +1360,7 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&serializedCount), nullptr);   // B.3.4 bridge
 
     // On load (mode == 0): resize master array to deserialized count
-    void* serializerInner = *(void**)serializer;
-    if (*(int32_t*)((uintptr_t)serializerInner + 0x08) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte entity InternalBasePtr (byte-copy).
         GameColl::AsArray<GameColl::Ptr8>(&self->masterArray).SetSize(serializedCount);

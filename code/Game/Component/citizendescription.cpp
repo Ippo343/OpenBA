@@ -140,7 +140,7 @@ void CitizenDescription_Serialize(void* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge (local temp, mirrors local_res8)
         // If loading (serializer version field == 0) resize the array to `count`.
         void* serObj = *reinterpret_cast<void**>(serializer);  // local_20[0]
-        bool loading = serObj && (*reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(serObj) + 8) == 0);
+        bool loading = serObj && (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (loading) {
             // B.3.2 bridge: exe 0x140001bb0 IS Collection::Array<void*>::SetSize(n).
             GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(s + 0x138)).SetSize(count);

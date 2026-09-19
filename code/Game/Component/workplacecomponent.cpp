@@ -912,7 +912,7 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     // across saves because it is stream content, not heap garbage) which it used
     // to index its id map out of bounds -> ACCESS_VIOLATION on load.
     const uintptr_t serStream = *(uintptr_t*)serializer;
-    const bool loadingLeg = serStream && (*(int*)(serStream + 8) == 0);
+    const bool loadingLeg = serStream && (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
     if (loadingLeg) {
         GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)self + 0x58)).SetSize(countBuf);

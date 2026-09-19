@@ -89,8 +89,7 @@ void AutoPickupComponent_Shutdown(AutoPickupComponent* self, void* stream) {
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
     // If loading (stream mode == 0), resize array at +0x30
-    uintptr_t serializerObj = *(uintptr_t*)serializer;
-    if (*(int*)(serializerObj + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // B.3.2 bridge: +0x30 is the { int32* data; int32 size; int32 capacity }
         // header; AutoPickupComponent is not a real class yet (§B.2). I32NoInit — exe
         // 0x1400021d0 (called here at 140044a40) copies only the old prefix and leaves a

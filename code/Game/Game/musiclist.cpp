@@ -213,7 +213,7 @@ extern "C" void MusicList_Serialize(void* self, void* stream) {
     // the resize is skipped, entries.data stays null, and the per-element read
     // below faults (dst = elem+0x08 = 0x8 when elem == null).
     void* serState = *(void**)ser;
-    if (serState && *(int*)((uint8_t*)serState + 8) == 0 && s_resize) {
+    if (serState && static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0 && s_resize) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         s_resize(s + 0x20, count);   // &entries header
     }
 

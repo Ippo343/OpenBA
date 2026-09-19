@@ -12,6 +12,7 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -97,7 +98,7 @@ void OrchardComponent_Shutdown(OrchardComponent* self, void* stream) {
     if (s_fn_SerializeInt)
         reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
 
-    if (*(int*)((uintptr_t)stream + 8) == 0 && s_fn_ResizeRefArray) {
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0 && s_fn_ResizeRefArray) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
         s_fn_ResizeRefArray((void*)(selfAddr + 0x50), localCount);
     }
 

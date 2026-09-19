@@ -531,17 +531,14 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     // Encoding state. Slot vtable+0x10 returns 3 for "saving in
     // export-by-path" mode where we walk existing pointers through GetPath +
     // FindOrLoad without serializing anything.
-    void* encoding = const_cast<IO::Encoding*>(
+    IO::Encoding* encoding = const_cast<IO::Encoding*>(
         &reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!encoding) return;
-    using EncodingStateFn = int (*)(void*);
-    EncodingStateFn getStateFn = nullptr;
-    {
-        void* vtable = *reinterpret_cast<void**>(encoding);
-        getStateFn = reinterpret_cast<EncodingStateFn>(
-            *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(vtable) + 0x10));
-    }
-    int encState = getStateFn ? getStateFn(encoding) : 0;
+    // Encoding vtable +0x10 is slot 2 == IO::Encoding::GetKind() (B34_RULES
+    // §1.1: the Encoding table has NO destructor slot, so IsBinary/IsText/
+    // GetKind are slots 0/1/2). Unlike `serializer + 8`, this really IS the
+    // Encoding, so the member call is the same dispatch, not a different one.
+    int encState = encoding->GetKind();   // B.3.4 bridge  (+0x10 = Encoding::GetKind)
 
     // Each element of arrayBase is an External* slot (8 bytes).
     auto* slots = reinterpret_cast<void**>(arrayBase);

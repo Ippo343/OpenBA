@@ -73,7 +73,7 @@ extern "C" void HighlightDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);            // groupCount   // B.3.4 bridge
     int count = *(int32_t*)(s + 0x28);
 
-    bool loading = (*(int32_t*)(*(uintptr_t*)ser + 8) == 0);
+    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
     uint8_t* e;
     if (loading) {
         e = reinterpret_cast<uint8_t*>(AllocArray(s + 0x20, count, 0x10));

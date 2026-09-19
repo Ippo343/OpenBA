@@ -116,17 +116,10 @@ void TutorialImageInputKey_Serialize(void* self, void* stream) {
     if (g_fn_Serializer_Ctor)
         ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // Get the internal stream pointer from the serializer (at offset +0x08 in serializer)
-    void* innerStream = *(void**)(serializerBuf2 + 0x08);
-    if (innerStream) {
-        // Call virtual method at vtable +0x98 on the stream: Serialize(stream, &field, nullptr)
-        void** streamVtable = *(void***)innerStream;
-        typedef void (*fn_StreamSerialize_t)(void* stream, void* field, void* name);
-        fn_StreamSerialize_t streamSerialize = reinterpret_cast<fn_StreamSerialize_t>(
-            streamVtable[0x98 / 8]);
-        if (streamSerialize)
-            streamSerialize(innerStream, p + 0x30, nullptr);
-    }
+    // +0x30 (inputId) through the UINT door. Serializer+0x08 is NOT "the
+    // internal stream": the Stream is at Serializer+0x00, and +0x08 is the
+    // READERWRITER, whose vtable +0x98 is rw_vtbl::kScalarUInt.
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->Serialize(*reinterpret_cast<unsigned int*>(p + 0x30), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     if (g_fn_Serializer_Dtor)
         reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge

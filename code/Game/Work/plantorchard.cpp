@@ -697,7 +697,7 @@ void PlantOrchard_Serialize_Impl(PlantOrchard* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(cellCountBuf), nullptr);   // B.3.4 bridge
 
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
-    if (*(int*)(*(uintptr_t*)serializerBuf + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 

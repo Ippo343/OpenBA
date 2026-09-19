@@ -356,6 +356,25 @@ extern "C" void* RtIo_Stream_GetSource(const void* self, void** ret) {
 }
 
 // ===========================================================================
+// ?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ   0x180006200
+// ===========================================================================
+// ENDGAME B.3.4 callers batch H. The WHOLE shipped body is
+// `MOV EAX,dword ptr [RCX + 0x8]; RET` — NON-virtual (there is no slot for it
+// in Stream's 7-slot table), const, and it reads `_direction` with no null
+// test, which the door reproduces. The member itself is stated inline on
+// `IO::Stream` (runtime/types/io/Stream.h); this is only its registered entry
+// point, put here beside `RtIo_Stream_GetSource` because this file is where
+// `IO::Stream`'s doors live.
+//
+// The door returns `int32_t` rather than the enum for the same reason
+// `RtSerializer_GetDirection` does: a by-address caller takes the raw dword,
+// and the ABI is EAX either way.
+extern "C" int32_t RtIo_Stream_GetDirection(const void* self) {
+    return static_cast<int32_t>(
+        reinterpret_cast<const IO::Stream*>(self)->GetDirection());
+}
+
+// ===========================================================================
 // MemoryStream vector deleting destructor   0x1800242a0   — vtable slot 0
 // ===========================================================================
 // ~MemoryStream ITSELF WAS ALREADY IN THE TREE and this lane nearly rewrote it.
@@ -591,6 +610,12 @@ int RtIoBaseVtablesRegister() {
     RegisterRuntimeExport("?GetSource@Stream@IO@@UEBA?AVString@System@@XZ",
                           (void*)&RtIo_Stream_GetSource); ++n;
     RegisterRuntimeAddr(0x18000c6a0, (void*)&RtIo_Stream_GetSource);
+
+    // ENDGAME B.3.4 callers batch H — by NAME (what runtime_census.py reads)
+    // and by ADDRESS, the same pair the GetSource row above uses.
+    RegisterRuntimeExport("?GetDirection@Stream@IO@@QEBA?AW4Direction@12@XZ",
+                          (void*)&RtIo_Stream_GetDirection); ++n;
+    RegisterRuntimeAddr(0x180006200, (void*)&RtIo_Stream_GetDirection);
 
     // ---- MemoryStream ------------------------------------------------------
     // ??1MemoryStream is lane W's, registered in compressedstream.cpp:963.

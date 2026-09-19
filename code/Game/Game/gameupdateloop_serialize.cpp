@@ -431,8 +431,7 @@ extern "C" void GoalRefTree_Serialize_e2e0(void* treeVoid, void* serializer) {
     int count = *(int*)(tree + 0x8);
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
-    void* stream = *(void**)serializer;   // Serializer+0x00 = stream
-    if (*(int*)((uintptr_t)stream + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // LOAD: read `count` records, insert each
         for (int i = 0; i < count; i++) {
             struct { void* ref; int a; int b; bool used; } rec;
@@ -488,8 +487,7 @@ extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
     int count = *(int*)(tree + 0x8);
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
 
-    void* stream = *(void**)serializer;
-    if (*(int*)((uintptr_t)stream + 8) == 0) {
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         // LOAD
         for (int i = 0; i < count; i++) {
             void* key = nullptr;

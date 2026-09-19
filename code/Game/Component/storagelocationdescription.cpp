@@ -19,13 +19,11 @@
 namespace {
 constexpr uintptr_t kVtable = 0x140164910;
 
+// The enum field, through the UINT door. `serializerBuf + 8` was the
+// READERWRITER (IO::Serializer::_readerWriter), not an Encoding, and its
+// vtable +0x98 is rw_vtbl::kScalarUInt.
 void SerializeEnum(uint8_t* serializerBuf, void* field) {
-    void* serObj = *(void**)(serializerBuf + 8);
-    if (!serObj) return;
-    typedef void (*fn_t)(void* self, void* field, const char* name);
-    void* vt = *(void**)serObj;
-    fn_t fn = *(fn_t*)((uintptr_t)vt + 0x98);
-    if (fn) fn(serObj, field, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(field), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 } // namespace
 
