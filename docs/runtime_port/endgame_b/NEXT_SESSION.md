@@ -6,11 +6,12 @@ it) when the session it describes has started.
 ## 0. Sync (5 minutes)
 
 - `git log --oneline -8`, `git worktree list`, `git branch --no-merged main` (expect none).
-- Step 5 ran about 25 worktree agents. Prune the merged worktrees under `.claude/worktrees/`
-  (check each is clean; `git worktree remove` without `--force`, `git branch -d`): they slow
-  every unscoped grep and a stale one is where an agent's "zero hits" comes from. Step 5's
-  branches are all `b35-*` and all merged. Leftover branches that are NOT this plan's:
-  `endgame-a3`, `wave29/base`, `defects-open-5`.
+- `git worktree list` should show only the main tree (step 5's ~21 agent worktrees and their
+  `b35-*` branches were pruned at the close, 2026-09-19). If agent worktrees have reappeared under
+  `.claude/worktrees/`, prune the merged ones (check each is clean; `git worktree remove` without
+  `--force`, `git branch -d`): they slow every unscoped grep and a stale one is where an agent's
+  "zero hits" comes from. Leftover branches that are NOT this plan's: `endgame-a3`,
+  `wave29/base`, `defects-open-5` (merged; can go, local and `origin`).
 - Greps over `standalone/` or `tests/` exclude `standalone/build*/` and `tests/unit/build/`.
 - Open Ghidra (all four programs) BEFORE launching an agent that needs it. `switch_program`
   is GLOBAL state: every agent asserts `get_current_program_info` before each read batch
