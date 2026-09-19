@@ -60,6 +60,7 @@
 #include "../../runtime/types/system/Thread.h"
 #include "../../runtime/types/system/Value.h"   // B.3.4b SYSTEM (3), PART E
 #include "../../runtime/types/system/WideString.h"  // B.3.4b SYSTEM (4a), PART G
+#include "../../runtime/types/system/Compression.h" // B.3.4b SYSTEM (4b), PART H
 #include "../../runtime/types/system/Timer.h"   // B.3.4b SYSTEM (4), PART F
 #include "../../runtime/types/system/Crc.h"
 #include "../../runtime/types/system/Error.h"
@@ -546,4 +547,40 @@ UNIT_TEST(a_widestring_written_through_the_pod_reads_back_through_the_class) {
 
     asClass->_data = nullptr;          // what the sharing branch of Release does
     CHECK(pod.data == nullptr);
+}
+
+// ===========================================================================
+// PART H — B.3.4b SYSTEM (4b): `System::Compression`.
+// ===========================================================================
+// The one 4b class whose live instance is a HEAP object and whose size is
+// pinned by a call site rather than by a POD: both constructors in the tree do
+// `MemAlloc(8, 4)` and hand those eight bytes to the `??0` door
+// (`runtime/src/io/compressed_stream_write.cpp:629-633` and
+// `runtime/src/save/saveload_meta.cpp:395-398`). Neither file can be told the
+// class grew, so `sizeof == 8` is not a tidiness assert — it is the contract
+// with two allocations that are out of this step's file set.
+//
+// Nothing is constructed here: the constructor allocates 0x40000 bytes through
+// the port registry's MemoryAllocator door, so `compression.cpp` does not link
+// on the host. The codec itself was verified against the shipped DLL by the
+// Wave-9 / Wave-22 oracles and is verified today by every package the game
+// loads.
+
+UNIT_TEST(system_compression_is_one_pointer_and_must_stay_eight_bytes) {
+    CHECK_EQ(sizeof(System::Compression), static_cast<size_t>(8));
+    CHECK_EQ(offsetof(System::Compression, _table), static_cast<size_t>(0x00));
+    CHECK(!std::is_polymorphic<System::Compression>::value);
+    CHECK(std::is_standard_layout<System::Compression>::value);
+
+    // `??1Compression@System@@` (0x1800c4170) is unported ON PURPOSE: the live
+    // teardown is inlined into `IO::CompressedStream::Release`, which frees the
+    // 0x40000 table and then the object itself through MemFree. A destructor
+    // here would be a second, private opinion about a teardown that already
+    // happens somewhere else — and it would run on top of it.
+    CHECK(std::is_trivially_destructible<System::Compression>::value);
+
+    // The constructor IS ported and IS registered, so the class is not
+    // default-constructible-by-accident in the trivial sense: the door
+    // placement-news it, which is what makes the 0x40000 table appear.
+    CHECK(!std::is_trivially_default_constructible<System::Compression>::value);
 }

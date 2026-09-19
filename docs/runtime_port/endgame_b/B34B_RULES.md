@@ -214,7 +214,7 @@ class had to be tested rather than assumed.
 | `System::CRC` | **class, ALL-STATIC** | 2 × `SA` (`Compute`), 1 × `0PAIA` (`_crcTable`) | SYSTEM (4) |
 | `System::Error` | **class, ALL-STATIC** | 3 × `SA`, 3 × `0…A` | SYSTEM (4) |
 | `System::Configuration` | **class with instance state** | 5 × `QEAA` over `this+0x10` (a map) and `this+0x20` | not yet |
-| `System::Compression` | **class with instance state** | `??0` + `QEAA Compress`; an 8-byte heap instance | not yet |
+| `System::Compression` | **class with instance state** | `??0` + `QEAA Compress`; an 8-byte heap instance | SYSTEM (4b) |
 | `System::WideString` | **class with instance state** | one `wchar_t* data`; 6 × `QEAA`, 1 × `AEAA`, 1 × `SA` | SYSTEM (4a) |
 | `System::MemoryAllocator` | **class with instance state** | 0x670 bytes | deferred, §6 |
 | `System::Debug` | class, but **nothing ported** | one `0_NA` static, no function anywhere | nothing to do |
@@ -266,6 +266,34 @@ The layout moved from `runtime/src/system/widestring.h` to
 **`runtime/types/system/WideString.h`**, which is where a type header belongs and where the
 unit test can reach it; `widestring.h` keeps the POD spelling and the eight door declarations
 for its four includers, so no include changes.
+
+### 1.4 SYSTEM (4b) — `System::Compression`: what converted, what did not, and why
+
+**Verdict: a class with instance state.** `??0Compression@System@@QEAA@XZ` (0x1800c41a0) and
+`?Compress@…@QEAAHPEBXIPEAXI@Z` (0x1800c4230) carry `this`; `?Decompress@…@SAHPEBXIPEAXI@Z`
+(0x1800c4660) is an `SA` public static hung off the same class. Three class-scoped manglings,
+so not the `TextCodec` shape.
+
+| converted | not converted, and why |
+|---|---|
+| the constructor, `Compress` and `Decompress` — **all three ported bodies moved onto members** | `??1Compression@System@@` 0x1800c4170: **unported on purpose.** The live teardown is INLINED into `?Release@CompressedStream@IO@@` (`compressed_stream_release.cpp:104-113`, retail 0x1800aa1f3..0x1800aa26f), which frees the 0x40000 table and then the 8-byte object through `MemFree`. A real destructor would be a second opinion about a teardown that already happens, running on top of it. The class stays **trivially destructible**, asserted. |
+| | `?First@` / `?Next@` / `?Index@` (0x180023e20/e30/e40), retail's three private statics: unported, uncalled, undeclared. |
+
+**THE 8 BYTES ARE PINNED BY A CALL SITE, NOT BY A POD.** There was no POD — the type was
+`void*` at every door and `*static_cast<uint32_t**>(self)` inside the body — so `Compression.h`
+has a `sizeof`/`offsetof` pair and no cross-assert. `sizeof == 8` is a contract with two
+allocations that are **outside this step's file set and cannot be told the class grew**:
+`runtime/src/io/compressed_stream_write.cpp:629-633` and
+`runtime/src/save/saveload_meta.cpp:395-398` both do `MemAlloc(8, 4)` and hand the raw bytes
+to the `??0` door BY NAME. The door placement-news into them and returns `self`, which is
+retail's `MOV RAX,RCX` and is what both sites store. Neither file changes.
+
+**Two free functions were DELETED and are declared here rather than absorbed into a rename:**
+`DecompressBody` and `CompressBody`, the wrappers that existed "so the oracle can run the
+identical code onto scratch". The oracles died at cutover; the two bodies are the members now.
+Token tally: `DecompressBody` 2→0, `CompressBody` 2→0, `self` 7→5 (exactly `CompressBody`'s
+signature and its one dereference, which became `this` / `_table`), and **every other token in
+the file is unmoved**, branch counters included.
 
 ---
 
