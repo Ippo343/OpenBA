@@ -411,29 +411,40 @@ void Video_RenderBuffer_Bind(const RenderBuffer* self, void* context) {
 // (CLAUDE.md "Don't fix a faithful crash with a null check") — it is retail
 // relying on Recreate never being called with no device, and a guard would skip
 // the recreate rather than restore it.
-void Video_ImageBuffer_Recreate(::ImageBuffer* self) {
+// ENDGAME B.3.5 block VC — the body is `Video::ImageBuffer::Recreate()`. Two
+// hand-inlined dispatches became virtual calls on block A's real classes: the
+// `ddvt[10]` factory is `Video::DeviceData::CreateImageBufferData` (slot 10,
+// +0x50) and `vt[1]`/`vt[2]`/`vt[3]` are `Video::ImageBufferData`'s
+// `AttachColorBuffer` / `AttachDepthBuffer` / `Create`. The `Device::_singleton`
+// read stays an `RT_DATA_SLOT` (RULE B4b-4).
+void Video::ImageBuffer::Recreate() {
     void** devSlot = DeviceSingletonSlot();
     uint8_t* dev = devSlot ? static_cast<uint8_t*>(*devSlot) : nullptr;
-    void* dd = dev ? *reinterpret_cast<void**>(dev + offsetof(Device, deviceData)) : nullptr;
+    // B.3.5 bridge — `Device::deviceData` is a pinned `void*` field.
+    Video::DeviceData* dd = dev
+        ? reinterpret_cast<Video::DeviceData*>(
+              *reinterpret_cast<void**>(dev + offsetof(Device, deviceData)))
+        : nullptr;
 
-    void* pd = nullptr;
+    Video::ImageBufferData* pd = nullptr;
     if (dd) {
-        void** ddvt = *reinterpret_cast<void***>(dd);
-        pd = reinterpret_cast<void* (*)(void*, void*)>(ddvt[10])(dd, self);
+        // B.3.5 bridge — the factory slot's retail return type is `void*`.
+        pd = reinterpret_cast<Video::ImageBufferData*>(dd->CreateImageBufferData(this));
     }
-    self->platformData = pd;
+    _data = pd;
 
-    const uint32_t f = self->flags;
-    void** vt = *reinterpret_cast<void***>(pd);
-    if ((f >> 4) & 1u) {
-        reinterpret_cast<void (*)(void*)>(vt[1])(pd);
-        return;
-    }
-    if ((f >> 5) & 1u) {
-        reinterpret_cast<void (*)(void*)>(vt[2])(pd);
-        return;
-    }
-    reinterpret_cast<void (*)(void*, void*)>(vt[3])(pd, nullptr);
+    // FAITHFUL UNGUARDED DEREF: when `dd` is null, `pd` is null and retail
+    // dispatches through it immediately. Reading `_flags` once reproduces retail
+    // loading it before the factory call.
+    const uint32_t f = _flags;
+    if ((f >> 4) & 1u) { pd->AttachColorBuffer(); return; }
+    if ((f >> 5) & 1u) { pd->AttachDepthBuffer(); return; }
+    (void)pd->Create(nullptr);
+}
+
+void Video_ImageBuffer_Recreate(::ImageBuffer* self) {
+    reinterpret_cast<Video::ImageBuffer*>(self)
+        ->Video::ImageBuffer::Recreate();                       // B.3.5 bridge
 }
 
 // ============================================================================

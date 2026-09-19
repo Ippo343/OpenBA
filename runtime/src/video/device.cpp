@@ -488,11 +488,20 @@ bool Video_RenderBuffer_Create(RenderBuffer* self,
 // not resolve, and a name-only registration would leave that fallback on the
 // DLL (WAVE3_LANE_A.md §6's lesson).
 // ============================================================================
+// ENDGAME B.3.5 block VC — THE SECOND OF THE TWO DOORS block A LEFT BEHIND (the
+// other was `??1ImageBufferData@Video@@` in `buffers.cpp`). All twelve `~XData()`
+// bodies live in `runtime/src/video/companion_data.cpp`; ten of the twelve doors
+// became one-line delegations there and these two were left because their doors
+// are in other blocks' files. The duplicate vptr store and the duplicate
+// `ResolveExport("??_7RenderStateData@Video@@6B@")` are gone with it.
+//
+// The QUALIFICATION is load-bearing: a live `RenderStateData` wears dx11's
+// vtable, whose slot 0 is `dx11/src/renderstatedata.cpp`'s scalar deleting
+// destructor — the very function that CALLS this door as its base-dtor step. An
+// unqualified virtual call would dispatch straight back into it (RULE B5-3).
 void Video_RenderStateData_Dtor(void* self) {
-
-    static void* vtable = ResolveExport("??_7RenderStateData@Video@@6B@");
-    *reinterpret_cast<void**>(self) = vtable;
-
+    reinterpret_cast<Video::RenderStateData*>(self)
+        ->Video::RenderStateData::~RenderStateData();               // B.3.5 bridge
 }
 
 // ============================================================================

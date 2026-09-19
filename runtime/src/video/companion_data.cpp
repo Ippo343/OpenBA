@@ -325,35 +325,66 @@ RT_COMPANION_DTOR_BODY(RenderStateData)
 // calling Lock twice or Unlock on an already-unlocked buffer is exactly the
 // mutate-twice trap WAVE9.md describes for Audio::Scene::Pause.
 // ============================================================================
+// ENDGAME B.3.5 block VC — A FRAGMENT THE BLOCKS MISSED BETWEEN THEM. These four
+// are `Video::{Index,Vertex}Buffer`'s members, declared in
+// `runtime/types/video/Buffers.h` (block D2's header, where they still read
+// "NOT PORTED"); the BODIES have been in this file, block A's, since Wave 6 lane
+// C. Neither block owned the edge, so all four stayed doors with the logic in
+// them while their class was real. They are members now, at `namespace Video`
+// scope below, and the four doors are one-line QUALIFIED non-virtual delegations.
+//
+// The hand-inlined `+0x18` / `+0x20` dispatches went with the move: they are
+// slots 3 and 4 of block A's own real `Video::{Index,Vertex}BufferData`, which
+// `CompanionData.h` names `Lock` and `Unlock` — the same two byte offsets,
+// spelled as the slots they are, with the index checked by the compiler. Both
+// companion classes declare an identical pair, which is why retail shares one
+// body per slot between the two owners.
+//
+// `outByteOffset` is an `int&` in retail's mangling (`AEAH`), so the member takes
+// a reference and the door keeps the pointer the registered ABI passes — the
+// pointer-to-reference step moved into the door, where the ABI is, exactly as
+// `ImageBuffer::SaveImageToFile`'s `Filename&` did.
 void* Video_IndexBuffer_Lock(IndexBuffer* self, int count, int* outOffset) {
-    using Fn = void* (*)(void*, int, int*);
-    Fn slot = *reinterpret_cast<Fn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x18);
-    void* ours = slot(self->platformData, count, outOffset);
-    return ours;
+    return self->Video::IndexBuffer::Lock(count, *outOffset);
 }
 
 void Video_IndexBuffer_Unlock(IndexBuffer* self) {
-    using Fn = void (*)(void*);
-    Fn slot = *reinterpret_cast<Fn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x20);
-    slot(self->platformData);
+    self->Video::IndexBuffer::Unlock();
 }
 
 void* Video_VertexBuffer_Lock(VertexBuffer* self, int count, int* outOffset) {
-    using Fn = void* (*)(void*, int, int*);
-    Fn slot = *reinterpret_cast<Fn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x18);
-    void* ours = slot(self->platformData, count, outOffset);
-    return ours;
+    return self->Video::VertexBuffer::Lock(count, *outOffset);
 }
 
 void Video_VertexBuffer_Unlock(VertexBuffer* self) {
-    using Fn = void (*)(void*);
-    Fn slot = *reinterpret_cast<Fn*>(
-        static_cast<uint8_t*>(*reinterpret_cast<void**>(self->platformData)) + 0x20);
-    slot(self->platformData);
+    self->Video::VertexBuffer::Unlock();
 }
+
+namespace Video {
+
+void* IndexBuffer::Lock(int sizeBytes, int& outByteOffset) {
+    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
+    return reinterpret_cast<Video::IndexBufferData*>(platformData)
+               ->Lock(sizeBytes, &outByteOffset);
+}
+
+void IndexBuffer::Unlock() {
+    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
+    reinterpret_cast<Video::IndexBufferData*>(platformData)->Unlock();
+}
+
+void* VertexBuffer::Lock(int sizeBytes, int& outByteOffset) {
+    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
+    return reinterpret_cast<Video::VertexBufferData*>(platformData)
+               ->Lock(sizeBytes, &outByteOffset);
+}
+
+void VertexBuffer::Unlock() {
+    // B.3.5 bridge — platformData is a pinned void* field at +0x08.
+    reinterpret_cast<Video::VertexBufferData*>(platformData)->Unlock();
+}
+
+}  // namespace Video
 
 // ============================================================================
 // Video::ConstantBuffer::Bind  —  0x1800eef70

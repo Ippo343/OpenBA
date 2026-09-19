@@ -37,6 +37,9 @@
 // already ported in element.cpp) writes.
 // ============================================================================
 #include "element_common.h"
+// ENDGAME B.3.5 block VC: `Video::Viewport`, which replaces this file's local
+// duplicate of its four fields (RULE B5-2's duplicate-view collapse).
+#include "../../types/video/Context.h"
 
 using namespace rtuielem;
 
@@ -70,8 +73,14 @@ using PaddedSizeFn      = void  (*)(void* self, int* w, int* h);
 // returns the PREVIOUS scissor by value through the hidden slot in RDX.
 using SetScissorFn      = void* (*)(void* ctx, void* outOld, const void* in);
 
-struct Viewport { int32_t x, y, w, h; };
-static_assert(sizeof(Viewport) == 16, "SetScissor's value type is four dwords");
+// ENDGAME B.3.5 block VC: the local `struct Viewport { int32_t x, y, w, h; }`
+// duplicate view is GONE and this is the REAL `Video::Viewport`
+// (runtime/types/video/Context.h), which b35-D1 made a real class and whose own
+// banner names this line as one of the two remaining duplicates owed to the
+// closing pass. Field-identical, so the collapse is a rename of two fields
+// (`w`/`h` -> `width`/`height`) and nothing else; the header's four `offsetof`
+// asserts and its `sizeof == 0x10` replace the one assert that was here.
+using Viewport = ::Video::Viewport;
 
 }  // namespace
 
@@ -154,8 +163,8 @@ extern "C" void RtUi_ClipRegionElement_Draw(const void* selfv, void* ctx, uint8_
     Viewport rect;
     rect.x = I32c(self, kElemLayoutLeft);
     rect.y = I32c(self, kElemLayoutTop);
-    rect.w = (I32c(self, kElemLayoutRight)  - rect.x) + 1;
-    rect.h = (I32c(self, kElemLayoutBottom) - rect.y) + 1;
+    rect.width  = (I32c(self, kElemLayoutRight)  - rect.x) + 1;
+    rect.height = (I32c(self, kElemLayoutBottom) - rect.y) + 1;
 
     Viewport saved;
     const auto setScissor = RtAddr<SetScissorFn>(0x18011d050ull);
