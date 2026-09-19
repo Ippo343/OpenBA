@@ -452,8 +452,8 @@ extern "C" void* RtVideo_Adapter_Ctor(void* selfv) {
     Adapter* self = static_cast<Adapter*>(selfv);
     uint8_t* p = static_cast<uint8_t*>(selfv);
     for (int off = 0; off < 0x28; off += 8) *reinterpret_cast<uint64_t*>(p + off) = 0;
-    *reinterpret_cast<int64_t*>(p + 0x28) = -1;          // maxFilterLevel AND field2C
-    *reinterpret_cast<int32_t*>(p + 0x30) = -1;          // field30
+    *reinterpret_cast<int64_t*>(p + 0x28) = -1;          // maxFilterLevel AND dxgiAdapterIndex
+    *reinterpret_cast<int32_t*>(p + 0x30) = -1;          // dxgiOutputIndex
     return self;
 }
 
@@ -477,9 +477,9 @@ extern "C" void* RtVideo_Adapter_CopyCtor(void* dstv, const void* srcv) {
     *reinterpret_cast<uint64_t*>(&dst->multisampleCount) = 0;
     RtVideo_ArrayBoolAssign(&dst->multisampleData, &src->multisampleData);
 
-    dst->maxFilterLevel = src->maxFilterLevel;   // +0x28
-    dst->field2C        = src->field2C;          // +0x2c
-    dst->field30        = src->field30;          // +0x30
+    dst->maxFilterLevel   = src->maxFilterLevel;   // +0x28
+    dst->dxgiAdapterIndex = src->dxgiAdapterIndex; // +0x2c
+    dst->dxgiOutputIndex  = src->dxgiOutputIndex;  // +0x30
     return dst;
 }
 

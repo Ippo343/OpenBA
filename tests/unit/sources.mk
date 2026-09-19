@@ -142,3 +142,20 @@ UNIT_TREE_SRCS += runtime/src/system/crc.cpp
 # runtime/types/object/External.h, whose linkable half (external_class.cpp) is
 # already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block D2 — the Video::Device / Configuration / RenderBuffer /
+# {Index,Vertex}Buffer ABI proof (tests/unit/video_device_abi_test.cpp).
+# NO tree sources link, and the reason is per-file rather than general:
+# `runtime/src/video/device.cpp` stands on `RT_DATA_SLOT` and two
+# `IO::Persistence` accessors, `device_startup.cpp` on the exe's `ResolveAddr`,
+# the Application singleton and the AVL set, `video_interfaces_win.cpp` plus the
+# three `_win` twins on <windows.h>, and `buffers.cpp` / `dynamic_resources.cpp` /
+# `video_resources.cpp` on the port registry and dx11's live vtables. So the test
+# checks the nine real classes' `sizeof`/`offsetof`/`alignof` directly (no
+# definition and no instantiation needed), asserts the old POD spellings are the
+# SAME TYPE rather than a second layout, and proves the two CODEGEN shapes the
+# block's doors rely on — the qualified non-virtual call on a receiver that was
+# never constructed as a C++ object, and the hidden-return-slot door of RULE B5-12
+# as amended — on mirror classes declared in the test, exactly as
+# tests/unit/io_vtable_abi_test.cpp does with `TestReaderWriter`.
+UNIT_TREE_SRCS +=

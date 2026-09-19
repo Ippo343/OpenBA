@@ -549,10 +549,10 @@ bool Video::Device::ValidateConfiguration() {
     if (cfg->reflectionDetail < 0) cfg->reflectionDetail = 0;
     else if (cfg->reflectionDetail > 2) cfg->reflectionDetail = 2;
 
-    adapterField2C   = adapter->field2C;      // 0x1800f8b26
-    adapterField30   = adapter->field30;      // 0x1800f8b2c
-    displayModeIndex = finalModeIdx;          // 0x1800f8b2f
-    refreshRateIndex = finalRefreshIdx;       // 0x1800f8b32
+    dxgiAdapterIndex = adapter->dxgiAdapterIndex;  // 0x1800f8b26
+    dxgiOutputIndex  = adapter->dxgiOutputIndex;   // 0x1800f8b2c
+    displayModeIndex = finalModeIdx;               // 0x1800f8b2f
+    refreshRateIndex = finalRefreshIdx;            // 0x1800f8b32
 
     RtVideo_ArrayModeAssign(&modeData, &adapter->modeData);                // 0x1800f8b3d
     RtVideo_ArrayBoolAssign(&multisampleData, &adapter->multisampleData);  // 0x1800f8b4a

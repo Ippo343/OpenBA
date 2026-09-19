@@ -77,6 +77,9 @@
 #include "dx11_seam.h"
 #include "VideoDX11Data.h"
 #include "dx11_backend_access.h"
+// ENDGAME B.3.5 block D2, RULE B5-3: the three real Runtime abstract bases whose
+// destructors the three scalar deleting dtors below call by qualified name.
+#include "video/CompanionData.h"
 
 #include "resolve.h"
 
@@ -576,7 +579,12 @@ VertexBufferData* VertexBufferData_ScalarDeletingDtor(VertexBufferData* self, un
     self->buffer      = nullptr;
     self->writeCursor = 0;
     self->locked      = 0;
-    g_deps.VertexBufferDataDtor(self);
+    // RULE B5-3: a QUALIFIED NON-VIRTUAL call to the real Runtime base's
+    // destructor, never `DeletingDtor(0)` — that would re-enter this slot. The
+    // cast is the bridge the declared leave (RULE B5-8) requires: this class
+    // mirrors the base's two fields rather than deriving from it in C++.
+    reinterpret_cast<Video::VertexBufferData*>(self)
+        ->Video::VertexBufferData::~VertexBufferData();   // B.3.5 bridge
     if (flags & 1) g_deps.MemFree(self);
     return self;
 }
@@ -660,7 +668,9 @@ IndexBufferData* IndexBufferData_ScalarDeletingDtor(IndexBufferData* self, unsig
     self->buffer      = nullptr;
     self->writeCursor = 0;
     self->locked      = 0;
-    g_deps.IndexBufferDataDtor(self);
+    // RULE B5-3, as for VertexBufferData above.
+    reinterpret_cast<Video::IndexBufferData*>(self)
+        ->Video::IndexBufferData::~IndexBufferData();     // B.3.5 bridge
     if (flags & 1) g_deps.MemFree(self);
     return self;
 }
@@ -776,7 +786,9 @@ void ConstantBufferData_Destruct(ConstantBufferData* self) {
     // One qword store clears count and capacity together, exactly as compiled.
     self->bufferCount    = 0;
     self->bufferCapacity = 0;
-    g_deps.ConstantBufferDataDtor(self);
+    // RULE B5-3, as for the other two.
+    reinterpret_cast<Video::ConstantBufferData*>(self)
+        ->Video::ConstantBufferData::~ConstantBufferData();  // B.3.5 bridge
 }
 
 // 0x180001240 — slot 0: scalar deleting destructor.

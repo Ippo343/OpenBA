@@ -283,8 +283,20 @@ public:
         int32_t      multisampleCount;  // +0x20  Array<bool>::_size              (inferred; ctor zeroes)
         int32_t      multisampleCap;    // +0x24  Array<bool>::_capacity          (inferred; ctor zeroes)
         int32_t      maxFilterLevel;    // +0x28  ctor = -1; ValidateConfiguration clamps out-param 8 to it
-        int32_t      field2C;           // +0x2C  ctor = -1 (same qword store); meaning not recovered
-        int32_t      field30;           // +0x30  ctor = -1; meaning not recovered
+        // +0x2C / +0x30 — MEANING RECOVERED by ENDGAME B.3.5 block D2, from the
+        // OTHER side of the seam. Wave 6 lane B could only say "ctor = -1,
+        // meaning not recovered" from the Runtime bodies, which merely copy the
+        // pair into Device+0x14/+0x18. `dx11/src/devicedata.cpp`'s
+        // `DeviceData_EnumerateInterfaces` is the WRITER, and it writes the DXGI
+        // enumeration coordinates: `rec.dxgiAdapterIndex = adapterIndex` from
+        // `IDXGIFactory1::EnumAdapters1`'s loop counter and `rec.dxgiOutputIndex =
+        // outputIndex` from `IDXGIAdapter1::EnumOutputs`'s. The shipped plugin's
+        // slot 1 did the same, and `Device::PlatformStartup`'s later
+        // `adapter->EnumOutputs(Device+kOutputIndex)` reads the copy back — which
+        // is what makes the pair a coordinate rather than a flag. The -1 default
+        // is "no adapter/output chosen yet".
+        int32_t      dxgiAdapterIndex;  // +0x2C  ctor = -1 (same qword store as +0x28)
+        int32_t      dxgiOutputIndex;   // +0x30  ctor = -1
         int32_t      field34;           // +0x34  not written by the ctor; tail padding or an unrecovered field
     };
 
@@ -513,16 +525,17 @@ public:
     // +0x10..+0x1B named by Wave 9 lane VID2 from
     // ?ValidateConfiguration@Device@Video@@QEAA_NXZ (0x1800f8830), the only
     // writer of all three; it writes them together at 0x1800f8b23..0x1800f8b32:
-    //     [this+0x14] = adapter->field2C            (0x1800f8b26)
-    //     [this+0x18] = adapter->field30            (0x1800f8b2c)
+    //     [this+0x14] = adapter->dxgiAdapterIndex   (0x1800f8b26)
+    //     [this+0x18] = adapter->dxgiOutputIndex    (0x1800f8b2c)
     //     [this+0x0c] = the matched display-mode index   (0x1800f8b2f)
     //     [this+0x10] = the matched refresh-rate index   (0x1800f8b32)
-    // The two adapter fields are the ones ??0Adapter@ initialises to -1 and
-    // whose meaning is still unrecovered (see Adapter::field2C / field30
-    // above). Naming them here records WHERE they land, not what they mean.
+    // The two adapter fields were "meaning not recovered" until B.3.5 block D2
+    // read the WRITER on dx11's side — see Adapter::dxgiAdapterIndex /
+    // dxgiOutputIndex above. `dx11/src/devicedata.cpp` reads THESE two copies
+    // back (its `Dev::kOutputIndex` is +0x18) to re-find the output it enumerated.
     int32_t           refreshRateIndex;    // +0x10  index into the chosen mode's refresh list, or -1
-    int32_t           adapterField2C;      // +0x14  copied verbatim from Adapter+0x2C
-    int32_t           adapterField30;      // +0x18  copied verbatim from Adapter+0x30
+    int32_t           dxgiAdapterIndex;    // +0x14  copied verbatim from Adapter+0x2C
+    int32_t           dxgiOutputIndex;     // +0x18  copied verbatim from Adapter+0x30
     int32_t           gap1C;               // +0x1C  ctor-zeroed; no writer found
     DisplayMode*      modeData;            // +0x20  Array<DisplayMode>::_data      (ApplyChangedSettings)
     int32_t           modeCount;           // +0x28  Array<DisplayMode>::_size      (ApplyChangedSettings)
@@ -805,8 +818,8 @@ static_assert(offsetof(Video::Device::Adapter, multisampleData) == 0x18, "Adapte
 static_assert(offsetof(Video::Device::Adapter, multisampleCount) == 0x20, "Adapter::multisampleCount");
 static_assert(offsetof(Video::Device::Adapter, multisampleCap) == 0x24, "Adapter::multisampleCap");
 static_assert(offsetof(Video::Device::Adapter, maxFilterLevel) == 0x28, "Adapter::maxFilterLevel");
-static_assert(offsetof(Video::Device::Adapter, field2C) == 0x2C, "Adapter::field2C");
-static_assert(offsetof(Video::Device::Adapter, field30) == 0x30, "Adapter::field30");
+static_assert(offsetof(Video::Device::Adapter, dxgiAdapterIndex) == 0x2C, "Adapter::dxgiAdapterIndex");
+static_assert(offsetof(Video::Device::Adapter, dxgiOutputIndex) == 0x30, "Adapter::dxgiOutputIndex");
 static_assert(offsetof(Video::Device::Adapter, field34) == 0x34, "Adapter::field34");
 
 // ---- Video::Device::GraphicsInterface ----
@@ -837,8 +850,9 @@ static_assert(offsetof(Video::Device, backBufferWidth) == 0x04, "Device::backBuf
 static_assert(offsetof(Video::Device, backBufferHeight) == 0x08, "Device::backBufferHeight");
 static_assert(offsetof(Video::Device, displayModeIndex) == 0x0C, "Device::displayModeIndex");
 static_assert(offsetof(Video::Device, refreshRateIndex) == 0x10, "Device::refreshRateIndex");
-static_assert(offsetof(Video::Device, adapterField2C)   == 0x14, "Device::adapterField2C");
-static_assert(offsetof(Video::Device, adapterField30)   == 0x18, "Device::adapterField30");
+static_assert(offsetof(Video::Device, dxgiAdapterIndex) == 0x14, "Device::dxgiAdapterIndex");
+static_assert(offsetof(Video::Device, dxgiOutputIndex)  == 0x18,
+              "Device::dxgiOutputIndex — must match dx11/src/devicedata.cpp Dev::kOutputIndex");
 static_assert(offsetof(Video::Device, modeData) == 0x20, "Device::modeData");
 static_assert(offsetof(Video::Device, modeCount) == 0x28, "Device::modeCount");
 static_assert(offsetof(Video::Device, modeCapacity) == 0x2C, "Device::modeCapacity");
