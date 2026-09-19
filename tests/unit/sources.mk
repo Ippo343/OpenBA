@@ -158,3 +158,21 @@ UNIT_TREE_SRCS +=
 # runtime/types/object/External.h, whose linkable half (external_class.cpp) is
 # already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 step 5 block G -- the REAL Graphics material/mesh resource
+# classes (tests/unit/graphics_material_abi_test.cpp): `Graphics::Material`,
+# `MaterialInstance`, `GraphicsMesh` and `EdgeMesh`. NO TREE SOURCE IS LINKED,
+# for block H1's reason one line up: every body lives in
+# `runtime/src/graphics/material.cpp`, `graphicsmesh_vtable.cpp`,
+# `edgemesh_vtable.cpp`, `mesh.cpp` and the wave-lane files, all of which stand
+# on `RegisterRuntimeExport` / `RT_DATA_SLOT` / `ResolveAddr` and cannot link
+# here. The four classes' out-of-line key-function bodies are therefore defined
+# AT THE BOTTOM OF THE TEST FILE as markers, which is what lets GCC emit their
+# vtables in that translation unit so the probes can raw-call every slot. The
+# test is an ABI test -- slot order (including that slot 4 is INHERITED
+# `?Compile@External@Object@@` on three of the four and EdgeMesh's OWN body on
+# the fourth), sizes, offsets and the class/POD cross-asserts -- so marker
+# bodies are the right bodies. `Object::External` / `Object::CompiledExternal`
+# come through runtime/types/object/External.h, whose linkable half
+# (external_class.cpp) is already on this list.
+UNIT_TREE_SRCS +=
