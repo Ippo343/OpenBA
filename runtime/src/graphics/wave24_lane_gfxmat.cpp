@@ -173,6 +173,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Material.h"
+#include "../../types/graphics/Mesh.h"              // ENDGAME B.3.5 block G
+#include "../../types/graphics/AnimationManager.h"  // ENDGAME B.3.5 block G
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -273,28 +275,33 @@ using Slot0Fn = void* (*)(void* self, int flag);
 // them separately (`hasRenderTexture` / `hasRenderedTexture`) and this body is
 // the writer that proves the split: a dword store would have clobbered +0x26.
 // ---------------------------------------------------------------------------
-void ConstructBody(RtGraphics::MaterialInstance* self) {
+// ENDGAME B.3.5 block G: retyped to the real `Graphics::MaterialInstance`. IT
+// STAYS A FREE HELPER AND DOES NOT BECOME A CONSTRUCTOR (B4b-2): the three vptr
+// stores name the MINTED tables, which is right for every object that reaches
+// this body, and a member constructor would stamp GCC's instead.
+void ConstructBody(Graphics::MaterialInstance* self) {
     // Caller-visible effect only; the null test is retail's own.
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();
     *vp = ExternalVTable();
-    self->external_08 = nullptr;
-    self->external_10 = nullptr;
-    self->external_18 = nullptr;
+    self->_path.data      = nullptr;              // +0x08  Object::External's
+    self->_refs._data     = nullptr;              // +0x10  three zeroed qwords
+    self->_refs._size     = 0;                    // +0x18  (one qword with cap)
+    self->_refs._capacity = 0;
     *vp = MaterialInstanceVTable();
-    self->shaderClass        = 0;
-    self->hasRenderTexture   = 0;
-    self->hasRenderedTexture = 0;
-    self->material           = nullptr;
-    self->parameters._data     = nullptr;
-    self->parameters._size     = 0;
-    self->parameters._capacity = 0;
-    self->constants._data      = nullptr;
-    self->constants._size      = 0;
-    self->constants._capacity  = 0;
-    self->textures._data       = nullptr;
-    self->textures._size       = 0;
-    self->textures._capacity   = 0;
+    self->_shaderClass        = 0;                // dword at +0x20
+    self->_hasRenderTexture   = 0;                // the WORD at +0x24 is TWO
+    self->_hasRenderedTexture = 0;                // separate bytes, not an int
+    self->_material           = nullptr;          // +0x28
+    self->_parameters._data     = nullptr;
+    self->_parameters._size     = 0;
+    self->_parameters._capacity = 0;
+    self->_constants._data      = nullptr;
+    self->_constants._size      = 0;
+    self->_constants._capacity  = 0;
+    self->_textures._data       = nullptr;
+    self->_textures._size       = 0;
+    self->_textures._capacity   = 0;
 }
 
 // ---------------------------------------------------------------------------
@@ -358,13 +365,14 @@ void PrepareArena(uint8_t* arena) {
 // The four `??_7MaterialInstance@Graphics@@6B@` slot bodies.
 // ---------------------------------------------------------------------------
 
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::MaterialInstance::Construct`.
+// The door keeps its name, its address, its counter AND retail's own null test,
+// which is where retail put it.
 extern "C" void* RtGraphics_MaterialInstance_Construct(void* selfv) {
     ++g_constructCalls;
-
-
     if (!selfv) return nullptr;                 // retail's own null test
-    ConstructBody(reinterpret_cast<RtGraphics::MaterialInstance*>(selfv));
-    return selfv;
+    return reinterpret_cast<Graphics::MaterialInstance*>(selfv)      // B.3.5 bridge
+               ->Graphics::MaterialInstance::Construct();
 }
 
 // ?Destruct@MaterialInstance@Graphics@@UEAAXXZ, retail 0x180002b50, slot 7.
@@ -377,10 +385,8 @@ extern "C" void* RtGraphics_MaterialInstance_Construct(void* selfv) {
 // (rel32 = 0) a registration reaches every caller there is.
 extern "C" void RtGraphics_MaterialInstance_Destruct(void* selfv) {
     ++g_destructCalls;
-
-
-    void** vp = reinterpret_cast<void**>(selfv);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
+    reinterpret_cast<Graphics::MaterialInstance*>(selfv)             // B.3.5 bridge
+        ->Graphics::MaterialInstance::Destruct();
 }
 
 // ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ,
@@ -392,14 +398,12 @@ extern "C" void RtGraphics_MaterialInstance_Destruct(void* selfv) {
 // No null test — unlike Construct. That asymmetry is retail's and is kept:
 // reconstructing a null faults here exactly as it faults in the DLL
 // (CLAUDE.md, "Don't fix a faithful crash with a null check").
+// NO null test, unlike Construct one slot over. That asymmetry is retail's and
+// is kept: reconstructing a null faults here exactly as it faults in the DLL.
 extern "C" void* RtGraphics_MaterialInstance_Reconstruct(void* selfv) {
     ++g_reconstructCalls;
-
-
-    void** vp = reinterpret_cast<void**>(selfv);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
-    ConstructBody(reinterpret_cast<RtGraphics::MaterialInstance*>(selfv));
-    return selfv;
+    return reinterpret_cast<Graphics::MaterialInstance*>(selfv)      // B.3.5 bridge
+               ->Graphics::MaterialInstance::Reconstruct();
 }
 
 // ---------------------------------------------------------------------------
@@ -523,16 +527,58 @@ Fn RtAddr(uintptr_t ghidra) {
 
 }  // namespace
 
-extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv) {
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::MaterialInstance::Serialize`,
+// below. Every `self->x` became `x`, the six `RT_GFXMAT_CORRUPT` negative
+// controls came with it unchanged (the macro is at file scope), and the two
+// stride literals are still `sizeof()` of the header's element types so a stride
+// error stays a compile error rather than a heap walk.
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// The three lifecycle slots, 8 / 7 / 6. Bodies moved here from the doors above;
+// `ConstructBody` stays a free helper because its three vptr stores name the
+// MINTED tables (B4b-2 -- see its banner).
+// ---------------------------------------------------------------------------
+
+// [8] ?Construct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180002ad0
+//     The null test is retail's and lives in the DOOR, which is where retail put
+//     it (`TEST RCX,RCX ; JZ -> return 0`).
+Object::External* MaterialInstance::Construct() {
+    ConstructBody(this);
+    return this;
+}
+
+// [7] ?Destruct@MaterialInstance@Graphics@@UEAAXXZ 0x180002b50
+//     `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]` -- EIGHT BYTES, then CC padding,
+//     which means this row can NEVER be detoured (the smallest inline detour this
+//     tree installs is twelve). A registration is its only door. Slot 0 is
+//     dispatched VIRTUALLY on purpose: a subclass's deleting destructor is what
+//     has to run.
+void MaterialInstance::Destruct() {
+    void** vp = reinterpret_cast<void**>(this);
+    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
+}
+
+// [6] ?Reconstruct@MaterialInstance@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180002a50
+//     Slot 0 with flag 0 (destroy IN PLACE, not free), then byte-for-byte the
+//     Construct body. NO null test, unlike Construct one slot over; retail's
+//     asymmetry, kept.
+Object::External* MaterialInstance::Reconstruct() {
+    void** vp = reinterpret_cast<void**>(this);
+    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
+    ConstructBody(this);
+    return this;
+}
+
+bool MaterialInstance::Serialize(void* streamv) {
     ++g_matSerCalls;
 
-    RtGraphics::MaterialInstance* self = reinterpret_cast<RtGraphics::MaterialInstance*>(selfv);
     RtIoStream* localStream = reinterpret_cast<RtIoStream*>(streamv);
     RtIoSerializer ser = { localStream, nullptr };          // [RSP+0x28], [RSP+0x30]
     void* enc = MakeEncoding(&ser);
 
     // The ExternalPtr<Material> at +0x28.
-    RtAddr<SerExtPtrFn>(0x180061100ull)(&self->material, &ser);
+    RtAddr<SerExtPtrFn>(0x180061100ull)(&_material, &ser);
 
     // Control 2 is THE documented retail-vs-profile Encoding offset trap turned
     // into a negative control: a port written from the profile decompile would
@@ -540,20 +586,20 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
     const size_t encInt = RT_GFXMAT_CORRUPT(2) ? 0xb8 : kEncSerializeInt;
 
     // --- textures, stride 0x10 --------------------------------------------
-    int32_t n = self->textures._size;
+    int32_t n = _textures._size;
     reinterpret_cast<EncodeIntFn>(VSlot(enc, encInt))(enc, &n, 0);
     if (localStream->mode == 0)
         RtAddr<ArraySetSizeFn>(RT_GFXMAT_CORRUPT(1) ? 0x1800616c0ull : 0x180061880ull)(
-            &self->textures, n);
+            &_textures, n);
     {
-        uint8_t* p = reinterpret_cast<uint8_t*>(self->textures._data);
+        uint8_t* p = reinterpret_cast<uint8_t*>(_textures._data);
         const size_t stride = RT_GFXMAT_CORRUPT(3)
                                   ? sizeof(RtGraphics::MaterialConstant)
                                   : sizeof(RtGraphics::MaterialTexture);
         // Control 6 is the EFFECTIVENESS control and MUST NOT FIRE: retail
         // latches the bound in EDI, nothing under the loop can resize the
         // array, so a re-read is genuinely unobservable here.
-        for (int32_t i = 0; i < (RT_GFXMAT_CORRUPT(6) ? self->textures._size : n); ++i) {
+        for (int32_t i = 0; i < (RT_GFXMAT_CORRUPT(6) ? _textures._size : n); ++i) {
             RtAddr<SerStringFn>(0x1800c9930ull)(p, &ser);
             RtAddr<SerExtPtrFn>(0x18005d0f0ull)(p + 8, &ser);
             p += stride;                                     // static_asserted 0x10
@@ -562,13 +608,13 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
     }
 
     // --- constants, stride 0x18 -------------------------------------------
-    n = self->constants._size;
+    n = _constants._size;
     reinterpret_cast<EncodeIntFn>(VSlot(enc, encInt))(enc, &n, 0);
     if (localStream->mode == 0)
         RtAddr<ArraySetSizeFn>(RT_GFXMAT_CORRUPT(1) ? 0x180061880ull : 0x1800616c0ull)(
-            &self->constants, n);
+            &_constants, n);
     {
-        uint8_t* p = reinterpret_cast<uint8_t*>(self->constants._data);
+        uint8_t* p = reinterpret_cast<uint8_t*>(_constants._data);
         for (int32_t i = n; i > 0; --i) {
             RtAddr<SerStringFn>(0x1800c9930ull)(p, &ser);
             reinterpret_cast<EncodeFloatsFn>(VSlot(enc, kEncSerializeFloats))(
@@ -593,7 +639,7 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
     // registry-first, so this call site needed no change to follow the port.
     if (!RT_GFXMAT_CORRUPT(4)) {
         using BuildParamsFn = void (*)(void*);
-        RT_EXPORT_ONCE(BuildParamsFn, "?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ")(self);
+        RT_EXPORT_ONCE(BuildParamsFn, "?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ")(this);
     }
 
     if (enc) reinterpret_cast<EncDtorFn>(VSlot(enc, kEncScalarDtor))(enc, 1);
@@ -601,6 +647,13 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
     // Attendance and an effectiveness count. NOT a comparison — see the header
     // block: the replay for this body lives in tools/gfxmat24_probe/.
     return true;
+}
+
+}  // namespace Graphics
+
+extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<Graphics::MaterialInstance*>(selfv)        // B.3.5 bridge
+               ->Graphics::MaterialInstance::Serialize(streamv);
 }
 
 // ---------------------------------------------------------------------------
@@ -620,30 +673,50 @@ extern "C" bool RtGraphics_MaterialInstance_Serialize(void* selfv, void* streamv
 // `MOV RAX,[RDI] ; CMP dword [RAX+8],0`, and a decompile that drops one of
 // those two derefs reads as `ser->mode`.
 //
-// `self+0xc8` / `self+0xd0` / `self+0xd8` are MeshInstance fields this lane does
-// NOT name. runtime/types/graphics/ has no MeshInstance layout that reaches
-// 0xd8 and inventing one from a single body would be a guess in a header whose
-// contract is that it is not; the offsets are used as raw byte offsets and said
-// so. reference_a_writer_beats_readers_agreeing_on_a_sign.md cuts the other way
-// here: ONE body is not enough to name a field.
+// `self+0xc8` / `self+0xd0` / `self+0xd8` WERE "MeshInstance fields this lane
+// does not name", and the comment that stood here said naming them from one body
+// would be a guess. THEY ARE NAMED NOW, by somebody else and from other bodies:
+// `Mesh.h` (Wave 6 lane E, then ENDGAME B.3.5 block E's real class) pins
+// `_materials` at +0xc8 with its `_size` at +0xd0 and `_animation` at +0xd8, all
+// from `??0MeshInstance@` and `IsAnimating`. So this body is retyped onto
+// `Graphics::MeshInstance` and the three offsets become three field names.
+//
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::MeshInstance::Serialize` —
+// block E's class, declared in `Mesh.h` and left declared-undefined there. NO
+// HEADER EDIT WAS NEEDED; `Mesh.h`'s "exported, NOT PORTED" comment beside the
+// declaration is STALE and belongs to the closing pass, not to a concurrent
+// block's diff.
 // ---------------------------------------------------------------------------
-extern "C" void RtGraphics_MeshInstance_Serialize(void* selfv, void* serv) {
+namespace Graphics {
+
+void MeshInstance::Serialize(IO::Serializer& serializer) {
     ++g_meshSerCalls;
 
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
-    RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(serv);
+    // The lane's two-field views of the serializer pair; the same bytes the real
+    // `IO::Serializer` describes.
+    RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(&serializer);  // B.3.5 bridge
 
-    RtAddr<MeshSubSerFn>(0x1800fe250ull)(self + 0xd8, ser);
+    RtAddr<MeshSubSerFn>(0x1800fe250ull)(&_animation, ser);       // +0xd8
 
-    int32_t n = *reinterpret_cast<int32_t*>(self + 0xd0);
+    int32_t n = _materials._size;                                 // +0xd0
     void* enc = ser->encoding;
     reinterpret_cast<EncodeIntFn>(VSlot(enc, kEncSerializeInt))(enc, &n, 0);
 
+    // `ser->stream->mode`, one deref deeper than MaterialInstance::Serialize's —
+    // the disassembly is `MOV RAX,[RDI] ; CMP dword [RAX+8],0`, and a decompile
+    // that drops one of those two derefs reads as `ser->mode`.
     if (ser->stream->mode == 0)
-        RtAddr<ArraySetSizeFn>(0x18005cc60ull)(self + 0xc8, n);
+        RtAddr<ArraySetSizeFn>(0x18005cc60ull)(&_materials, n);    // +0xc8
 
-    RtAddr<MeshSerElemFn>(0x18005d4a0ull)(ser, n, *reinterpret_cast<void**>(self + 0xc8));
+    RtAddr<MeshSerElemFn>(0x18005d4a0ull)(ser, n, _materials._data);
+}
 
+}  // namespace Graphics
+
+extern "C" void RtGraphics_MeshInstance_Serialize(void* selfv, void* serv) {
+    reinterpret_cast<Graphics::MeshInstance*>(selfv)                   // B.3.5 bridge
+        ->Graphics::MeshInstance::Serialize(
+            *reinterpret_cast<IO::Serializer*>(serv));                 // B.3.5 bridge
 }
 
 // ---------------------------------------------------------------------------
@@ -678,26 +751,39 @@ extern "C" void RtGraphics_MeshInstance_Serialize(void* selfv, void* serv) {
 // residual that turned out to be stale in the OTHER direction: the body named
 // as the answer is not the answer).
 // ---------------------------------------------------------------------------
-extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
+// ENDGAME B.3.5 block G: BODY MOVED to `Graphics::AnimationManager::Serialize` —
+// block H1's class, declared in `AnimationManager.h:297` and left
+// declared-undefined there because this file holds the live body. No header edit
+// was needed. `_instances` is the `Array` at +0x00, which is why the SetSize call
+// passes the object itself: `&_instances == this`.
+namespace Graphics {
+
+void AnimationManager::Serialize(IO::Serializer& s) {
     ++g_animSerCalls;
 
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
-    RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(serv);
+    RtIoSerializer* ser = reinterpret_cast<RtIoSerializer*>(&s);   // B.3.5 bridge
 
     RtIoStream* localStream = ser->stream;
     RtIoSerializer localSer = { localStream, nullptr };     // [RSP+0x28], [RSP+0x30]
     void* enc = MakeEncoding(&localSer);
 
-    int32_t n = *reinterpret_cast<int32_t*>(self + 8);
+    int32_t n = _instances._size;                           // +0x08
     reinterpret_cast<EncodeIntFn>(VSlot(enc, kEncSerializeInt))(enc, &n, 0);
 
     if (localStream->mode == 0)
-        RtAddr<ArraySetSizeFn>(0x18005c3d0ull)(self, n);
+        RtAddr<ArraySetSizeFn>(0x18005c3d0ull)(&_instances, n);  // +0x00 == this
 
-    RtAddr<AnimSerElemFn>(0x18005c660ull)(&localSer, n, *reinterpret_cast<void**>(self));
+    RtAddr<AnimSerElemFn>(0x18005c660ull)(&localSer, n, _instances._data);
 
     if (enc) reinterpret_cast<EncDtorFn>(VSlot(enc, kEncScalarDtor))(enc, 1);
+}
 
+}  // namespace Graphics
+
+extern "C" void RtGraphics_AnimationManager_Serialize(void* selfv, void* serv) {
+    reinterpret_cast<Graphics::AnimationManager*>(selfv)                // B.3.5 bridge
+        ->Graphics::AnimationManager::Serialize(
+            *reinterpret_cast<IO::Serializer*>(serv));                  // B.3.5 bridge
 }
 
 // ============================================================================

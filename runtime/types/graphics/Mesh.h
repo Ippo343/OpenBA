@@ -33,6 +33,9 @@
 // namespace across two translation units is an ODR violation, and the drift
 // between them would be invisible until a field moved.
 #include "Geometry.h"                       // RtGraphics::Geometry (lane D)
+// ENDGAME B.3.5 block G: the real `Graphics::EdgeMesh` at the bottom of this
+// file derives from `Object::External` and holds four `Object::ExternalPtr<T>`.
+#include "../object/External.h"
 
 namespace RtGraphics {
 
@@ -311,17 +314,28 @@ struct EdgeMesh {
     void*   _externalB;              // +0x10  Object::External, ctor: 0
     void*   _externalC;              // +0x18  Object::External, ctor: 0
     void*   _reserved20;             // +0x20  ctor: 0 (no lane-E body reads it)
-    ExternalPtr _material0;          // +0x28  SetMaterials arg 1
-    ExternalPtr _material1;          // +0x30  SetMaterials arg 3  <-- see note
-    ExternalPtr _material2;          // +0x38  SetMaterials arg 2  <-- see note
-    ExternalPtr _material3;          // +0x40  SetMaterials arg 4
+    // ENDGAME B.3.5 block G: RETAIL'S OWN GETTERS NAME ALL TWELVE OF THESE, and
+    // three of the four buffer pairs were named by guess here. The POD keeps its
+    // names because bodies outside block G's file set read them; the REAL class
+    // at the bottom of this file uses the getters' names and cross-asserts every
+    // offset, and the mapping is written out in its banner. Read this pass:
+    //   +0x28 ?GetMaskMaterial@     +0x30 ?GetSkinMaskMaterial@
+    //   +0x38 ?GetEdgeMaterial@     +0x40 ?GetSkinEdgeMaterial@
+    //   +0x48/+0x68   ?GetVertexBuffer@         / ?GetIndexBuffer@
+    //   +0x88/+0xa8   ?GetSkinVertexBuffer@     / ?GetSkinIndexBuffer@
+    //   +0xc8/+0xe8   ?GetEdgeVertexBuffer@     / ?GetEdgeIndexBuffer@
+    //   +0x108/+0x128 ?GetEdgeSkinVertexBuffer@ / ?GetEdgeSkinIndexBuffer@
+    ExternalPtr _material0;          // +0x28  SetMaterials arg 1 = the MASK material
+    ExternalPtr _material1;          // +0x30  SetMaterials arg 3 = SKIN MASK  <-- see note
+    ExternalPtr _material2;          // +0x38  SetMaterials arg 2 = EDGE       <-- see note
+    ExternalPtr _material3;          // +0x40  SetMaterials arg 4 = SKIN EDGE
     VideoBufferHeader _triVerts;     // +0x48  vertex buffer
     VideoBufferHeader _triIndices;   // +0x68  index buffer
-    VideoBufferHeader _edgeVerts;    // +0x88
+    VideoBufferHeader _edgeVerts;    // +0x88   -- actually the SKIN pair
     VideoBufferHeader _edgeIndices;  // +0xa8
-    VideoBufferHeader _capVerts;     // +0xc8
+    VideoBufferHeader _capVerts;     // +0xc8   -- actually the EDGE pair
     VideoBufferHeader _capIndices;   // +0xe8
-    VideoBufferHeader _extraVerts;   // +0x108
+    VideoBufferHeader _extraVerts;   // +0x108  -- actually the EDGE-SKIN pair
     VideoBufferHeader _extraIndices; // +0x128
     Collection::Array<uint8_t> _triangleLists;  // +0x148 data, +0x150 size, +0x154 capacity
     Collection::Array<uint8_t> _edgeLists;      // +0x158 data, +0x160 size, +0x164 capacity
@@ -350,6 +364,20 @@ static_assert(offsetof(EdgeMesh, _bounds)        == 0x168, "EdgeMesh bounds @ +0
 // preserves the operands), so the port reproduces it exactly rather than
 // "fixing" it. EdgeMeshInstance::SetMesh reads the four slots back in the order
 // +0x38, +0x28, +0x40, +0x30 when it ORs their material type flags.
+//
+// *** AND ENDGAME B.3.5 BLOCK G CAN NOW SAY WHY, SO IT IS NOT A CROSSING AT
+// ALL. *** The four exported getters name the four slots (each one instruction
+// plus a hidden-retslot store, disassembled this pass):
+//     ?GetMaskMaterial@     0x180012ef0  MOV RAX,[RCX+0x28]
+//     ?GetSkinMaskMaterial@ 0x180012f10  MOV RAX,[RCX+0x30]
+//     ?GetEdgeMaterial@     0x180012f00  MOV RAX,[RCX+0x38]
+//     ?GetSkinEdgeMaterial@ 0x180012f20  MOV RAX,[RCX+0x40]
+// So the FIELDS are grouped (mask, edge) x (base, skin) with SKIN adjacent to
+// its base — mask, skinMask, edge, skinEdge — while the ARGUMENTS are grouped
+// the other way round: mask, edge, skinMask, skinEdge. Two orderings of the same
+// four things, each internally consistent. Nothing is crossed and nothing needs
+// "reproducing exactly"; the port is simply right either way, and the shape is
+// no longer an anomaly a future reader has to be warned about.
 
 // ============================================================================
 // Graphics::EdgeMeshInstance — 0xd0 bytes.
@@ -631,5 +659,265 @@ static_assert(offsetof(EdgeMeshInstance, _mesh)     == 0xc0, "EdgeMeshInstance::
 static_assert(offsetof(EdgeMeshInstance, _followed) == 0xc8, "EdgeMeshInstance::_followed @ +0xc8");
 static_assert(offsetof(EdgeMeshInstance, _mesh) == sizeof(Geometry),
               "EdgeMeshInstance's own fields begin at the end of the Geometry base");
+
+}  // namespace Graphics
+
+// ############################################################################
+// ENDGAME B.3 step 5 (block G) — `Graphics::EdgeMesh`, the REAL C++ class
+//
+// This is BLOCK G's class, appended beside block E's two instance classes above
+// and touching neither. The `RtGraphics::EdgeMesh` POD keeps living (B4b-1:
+// `RtGraphics` is a SIBLING of `Graphics`, so nothing has to move) and has users
+// outside block G's file set; every offset is cross-asserted so the two cannot
+// drift.
+//
+// PARENT `Object::External`, read from
+// `?_ParentTypeName@EdgeMesh@Graphics@@CAPEBDXZ` @0x180012c60 -> "Object::External"
+// (B35_SLOTS.md section 3), and corroborated by `??0EdgeMesh@Graphics@@QEAA@XZ`
+// (0x1800a2830), whose stamps are Base -> External -> EdgeMesh with NO
+// `CompiledExternal` step — unlike `GraphicsMesh`, which is a `CompiledExternal`
+// and stamps four. The two sit in the same header and in the same block, so that
+// asymmetry is asserted in `tests/unit/graphics_material_abi_test.cpp` rather
+// than trusted.
+//
+// *** EdgeMesh IS THE ONE CLASS OF BLOCK G'S FOUR WITH ITS OWN `Compile`. ***
+// Slot 4 is `?Compile@EdgeMesh@Graphics@@` @0x1800a21c0 (`MOV EAX,1 ; RET`),
+// where `Material`, `MaterialInstance` and `GraphicsMesh` all inherit
+// `?Compile@External@Object@@` @0x1800066e0. Both bodies return 1, so getting it
+// backwards is SILENT — which is why the unit test compares the slot-4 POINTER
+// against a bare `Object::External` leaf's and requires EdgeMesh's to DIFFER.
+//
+// RULE B5-15 — the two literals, COPIED from B35_SLOTS.md and recorded, not
+// used. No `_typeInfo` row is retired (B35_RULES section 11); slots 1/2 keep
+// reading `?_typeInfo@EdgeMesh@Graphics@@0VBaseTypeInfo@Object@@A` (0x1801f99b0).
+//     ?_TypeName@EdgeMesh@Graphics@@       -> "EdgeMesh"
+//     ?_ParentTypeName@EdgeMesh@Graphics@@ -> "Object::External"
+//
+// ABSTRACT (B34_BRIEFS A.4 as amended): nothing holds an `EdgeMesh` BY VALUE as
+// a C++ member, and slot 0's body (0x1800134b0) is a row in
+// `runtime/src/object/deleting_dtor.cpp` that B35_RULES section 11 forbids
+// retiring, so slot 0 stays `= 0`.
+//
+// NO REAL CONSTRUCTOR (B4b-2): `??0EdgeMesh@Graphics@@QEAA@XZ` (0x1800a2830) is a
+// registered door in `runtime/src/graphics/mesh.cpp` that open-codes the base
+// chain as vptr stamps naming the MINTED tables, then builds the four
+// (VertexBuffer, IndexBuffer) pairs through
+// `Video::{Vertex,Index}Buffer::PlatformConstruct`. A member constructor would
+// stamp GCC's tables into an object the mint owns.
+//
+// ⚠ ZERO CALLERS ON A PLAIN RUN, AND THAT IS NOT VERIFICATION.
+//   `edgemesh_vtable.cpp`'s banner already says it: the selection-outline chain
+//   (`standalone/address_registry.cpp`, `RegisterPlayerRenderBatch`) is the only
+//   consumer of `EdgeMesh` and it is gated default-OFF on
+//   `BANISHED_SELECTION_OUTLINE`. A run that does not set that variable exercises
+//   none of these bodies. The conversion below is a layout-and-slot change with a
+//   static gate and a unit test behind it; the bodies themselves are as verified
+//   as they were before it, which is to say by that one gated route.
+// ############################################################################
+
+// Classes other blocks own; taken by reference / pointer under their real retail
+// names. `Video::Context` is already forward-declared by Geometry.h.
+namespace Video { class IndexBuffer; class VertexBuffer; }
+
+namespace Graphics {
+
+class MaterialInstance;   // block G  (runtime/types/graphics/Material.h)
+
+// ============================================================================
+// Graphics::EdgeMesh — 0x180 bytes, NINE slots, `Object::External`.
+//
+// `??_7EdgeMesh@Graphics@@6B@` @ 0x180154c70, read as `.rdata` qwords
+// (B35_SLOTS.md:52-61):
+//
+//   [0] +0x00  0x1800134b0  (unexported) the vector deleting dtor
+//   [1] +0x08  0x180012c90  ?TypeName@…
+//   [2] +0x10  0x180012c70  ?Type@…
+//   [3] +0x18  0x1800a23d0  ?GetFileVersion@…  (`MOV EAX,2 ; RET`)
+//   [4] +0x20  0x1800a21c0  ?Compile@EdgeMesh@Graphics@@  — ITS OWN, see above
+//   [5] +0x28  0x1800a21d0  ?Serialize@…
+//   [6] +0x30  0x180012e10  ?Reconstruct@…
+//   [7] +0x38  0x180012e40  ?Destruct@…
+//   [8] +0x40  0x180012e30  ?Construct@…  — INTRODUCED HERE (RULE B5-16)
+//
+// THE FIELD NAMES ARE RETAIL'S GETTERS', NOT THE POD'S. Twelve one-instruction
+// exports name all twelve non-trivial fields, and three of the four buffer pairs
+// were named by guess in the POD above (`_edgeVerts` is the SKIN pair,
+// `_capVerts` is the EDGE pair, `_extraVerts` is the EDGE-SKIN pair). Every
+// offset is cross-asserted against the POD below, so the rename cannot move a
+// byte.
+// ============================================================================
+class EdgeMesh : public Object::External {
+public:
+    // The two nested vertex records, 8 and 16 bytes. Both are `RtGraphics`'
+    // (pinned by their own constructors, see the POD section above) and are
+    // ALIASED here rather than re-declared: B31_RULES asks for the retail NAME,
+    // not for a second copy of the bytes that can drift from the first.
+    using TriangleVertex = RtGraphics::TriangleVertex;
+    using EdgeVertex     = RtGraphics::EdgeVertex;
+
+    // ---- the nine slots, in measured retail order --------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x1800134b0
+
+    const char* TypeName() const override;                 // [1] 0x180012c90
+    uint32_t    Type() const override;                     // [2] 0x180012c70
+    int32_t     GetFileVersion() const override;           // [3] 0x1800a23d0
+    // *** ITS OWN, not `Object::External`'s. *** `MOV EAX,1 ; RET`, six bytes,
+    // reading NEITHER `this` NOR the `Filename&` (no RCX, no RDX operand).
+    CompileResult Compile(const System::Filename& path) override;  // [4] 0x1800a21c0
+    bool        Serialize(void* stream) override;           // [5] 0x1800a21d0
+    Object::External* Reconstruct() override;               // [6] 0x180012e10
+    void        Destruct() override;                        // [7] 0x180012e40
+    virtual Object::External* Construct();                  // [8] 0x180012e30 — B5-16
+
+    // ---- PORTED non-virtual members ---------------------------------------
+    // Bodies in `runtime/src/graphics/mesh.cpp`; the doors keep their
+    // registrations and delegate.
+    //
+    // `?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@
+    //  Graphics@@@Object@@000@Z` 0x1800a2760. THE ARGUMENT ORDER IS
+    // (mask, edge, skinMask, skinEdge) and the FIELD order is
+    // (mask, skinMask, edge, skinEdge) — see the POD's note; the parameters are
+    // named so the pairing is visible at every call site.
+    void SetMaterials(Object::ExternalPtr<MaterialInstance> mask,
+                      Object::ExternalPtr<MaterialInstance> edge,
+                      Object::ExternalPtr<MaterialInstance> skinMask,
+                      Object::ExternalPtr<MaterialInstance> skinEdge);   // 0x1800a2760
+
+    // `?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0H
+    //  PEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z` 0x1800a23e0 — PORTED.
+    // Twenty-two arguments. The door in `mesh.cpp` carries the whole signature
+    // and its own transcription notes; the member is declared here in the door's
+    // shape so no caller batch has to edit this header, and it is deliberately
+    // left to the door (a twenty-two-parameter member declaration copied by hand
+    // is a liability, and nothing in the tree calls it as a member).
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    // The eight buffer getters. Each is `LEA RAX,[RCX + <off>]` and nothing
+    // else, disassembled this pass — which is what names the four pairs.
+    const Video::IndexBuffer&  GetIndexBuffer() const;            // 0x180012e50  +0x68
+    const Video::VertexBuffer& GetVertexBuffer() const;           // 0x180012e60  +0x48
+    const Video::IndexBuffer&  GetSkinIndexBuffer() const;        // 0x180012e70  +0xa8
+    const Video::VertexBuffer& GetSkinVertexBuffer() const;       // 0x180012e80  +0x88
+    const Video::IndexBuffer&  GetEdgeIndexBuffer() const;        // 0x180012e90  +0xe8
+    const Video::VertexBuffer& GetEdgeVertexBuffer() const;       // 0x180012ea0  +0xc8
+    const Video::IndexBuffer&  GetEdgeSkinIndexBuffer() const;    // 0x180012eb0  +0x128
+    const Video::VertexBuffer& GetEdgeSkinVertexBuffer() const;   // 0x180012ec0  +0x108
+
+    const Collection::Array<uint8_t>& GetTriangleLists() const;   // 0x180012ed0  +0x148
+    const Collection::Array<uint8_t>& GetEdgeLists() const;       // 0x180012ee0  +0x158
+    const ::Box& GetAABB() const;                                 // 0x180012f30  +0x168
+
+    // The four material getters. Each is two instructions plus a HIDDEN RETSLOT
+    // store (`MOV RAX,[RCX+off] ; MOV [RDX],RAX ; MOV RAX,RDX ; RET`), which is
+    // four more measurements settling the COORDINATOR AMENDMENT's open question
+    // about `ExternalPtr<T>`: retail DOES return them through a slot. The C++
+    // members return by value, per the amendment's second half — none is a
+    // vtable slot, so both ends of a C++ call are this same GCC.
+    Object::ExternalPtr<MaterialInstance> GetMaskMaterial() const;      // 0x180012ef0  +0x28
+    Object::ExternalPtr<MaterialInstance> GetSkinMaskMaterial() const;  // 0x180012f10  +0x30
+    Object::ExternalPtr<MaterialInstance> GetEdgeMaterial() const;      // 0x180012f00  +0x38
+    Object::ExternalPtr<MaterialInstance> GetSkinEdgeMaterial() const;  // 0x180012f20  +0x40
+
+    EdgeMesh(const EdgeMesh& src);                          // 0x180012f70  not ported
+    EdgeMesh& operator=(const EdgeMesh& src);               // 0x180013230  not ported
+
+    static uint32_t TypeId();                               // 0x180012c80  not ported
+    // The reflection block's five statics; each goes through
+    // `System::MemoryAllocator`, which B35_RULES section 11 keeps as a door for
+    // the whole of step 5.
+    static void* operator new(std::size_t bytes);            // 0x180012ca0
+    static void* operator new(std::size_t bytes, void* place);// 0x180012d10
+    static void  operator delete(void* p);                   // 0x180012d20
+    static Object::Base* CreateNewObject();                  // 0x180012d80
+    static Object::Base* CreateInPlaceObject(void* place);   // 0x180012e00
+
+protected:
+    // NOT retail's 0x1800a2830 — see the banner. `= default` keeps the class
+    // trivially default-constructible so no layout pin moves.
+    EdgeMesh() = default;
+
+    // `??1EdgeMesh@Graphics@@UEAA@XZ` @ 0x1800a2780. NON-VIRTUAL (decision 2),
+    // DEFINED EMPTY: `RtGraphics_EdgeMesh_Dtor` in
+    // `runtime/src/graphics/batchc_gfx_leaves.cpp` keeps its hand-written body,
+    // which stamps the MINTED table, runs the eight
+    // `Video::{Vertex,Index}Buffer::PlatformDestruct` calls in retail's order and
+    // frees the two list arrays. A compiler-emitted chain would stamp GCC's
+    // tables and would not run the eight platform destructs at all.
+    ~EdgeMesh();
+
+public:
+    // ---- the 0x160 bytes EdgeMesh adds after Object::External ---------------
+    // PUBLIC for the reason `Object::External`'s are: unconverted bodies reach
+    // them at these offsets through a cast. The four buffer pairs are spelled
+    // with the POD's `VideoBufferHeader`, which is in this same header and is
+    // already the pinned description of those 0x20 bytes.
+    void* _reserved20;                                    // +0x20  ctor 0; no body reads it
+    Object::ExternalPtr<MaterialInstance> _maskMaterial;      // +0x28  ?GetMaskMaterial@
+    Object::ExternalPtr<MaterialInstance> _skinMaskMaterial;  // +0x30  ?GetSkinMaskMaterial@
+    Object::ExternalPtr<MaterialInstance> _edgeMaterial;      // +0x38  ?GetEdgeMaterial@
+    Object::ExternalPtr<MaterialInstance> _skinEdgeMaterial;  // +0x40  ?GetSkinEdgeMaterial@
+    RtGraphics::VideoBufferHeader _vertexBuffer;           // +0x48   ?GetVertexBuffer@
+    RtGraphics::VideoBufferHeader _indexBuffer;            // +0x68   ?GetIndexBuffer@
+    RtGraphics::VideoBufferHeader _skinVertexBuffer;       // +0x88   ?GetSkinVertexBuffer@
+    RtGraphics::VideoBufferHeader _skinIndexBuffer;        // +0xa8   ?GetSkinIndexBuffer@
+    RtGraphics::VideoBufferHeader _edgeVertexBuffer;       // +0xc8   ?GetEdgeVertexBuffer@
+    RtGraphics::VideoBufferHeader _edgeIndexBuffer;        // +0xe8   ?GetEdgeIndexBuffer@
+    RtGraphics::VideoBufferHeader _edgeSkinVertexBuffer;   // +0x108  ?GetEdgeSkinVertexBuffer@
+    RtGraphics::VideoBufferHeader _edgeSkinIndexBuffer;    // +0x128  ?GetEdgeSkinIndexBuffer@
+    // Both are `Array<GraphicsMesh::TriangleList>` (stride 0x18), spelled as RAW
+    // 16-byte headers for `AnimationGroup.h`'s reason: `SetSize` is the
+    // registered row at 0x1800136f0 (`rtcoll::kSpec_Tri18A4`) and the typed form
+    // would make the compiler emit a second element lifecycle beside it.
+    Collection::Array<uint8_t> _triangleLists;            // +0x148  ?GetTriangleLists@
+    Collection::Array<uint8_t> _edgeLists;                // +0x158  ?GetEdgeLists@
+    ::Box _aabb;                                          // +0x168  ?GetAABB@; ctor +/-1e8
+};
+
+static_assert(sizeof(EdgeMesh) == 0x180,
+              "Graphics::EdgeMesh is 0x180 bytes (the MOV EDX,0x180 in its own "
+              "slot-0 vector deleting destructor 0x1800134b0)");
+static_assert(alignof(EdgeMesh) == 8, "Graphics::EdgeMesh aligns to 8 (the vptr)");
+static_assert(sizeof(EdgeMesh) == sizeof(RtGraphics::EdgeMesh),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(EdgeMesh, _reserved20) == sizeof(Object::External),
+              "EdgeMesh's own fields begin at the end of the Object::External base");
+
+// Cross-asserts against the POD, field for field, INCLUDING the three pairs the
+// POD names differently — which is the whole point of asserting them.
+static_assert(offsetof(EdgeMesh, _maskMaterial)          == offsetof(RtGraphics::EdgeMesh, _material0),    "alias _material0");
+static_assert(offsetof(EdgeMesh, _skinMaskMaterial)      == offsetof(RtGraphics::EdgeMesh, _material1),    "alias _material1");
+static_assert(offsetof(EdgeMesh, _edgeMaterial)          == offsetof(RtGraphics::EdgeMesh, _material2),    "alias _material2");
+static_assert(offsetof(EdgeMesh, _skinEdgeMaterial)      == offsetof(RtGraphics::EdgeMesh, _material3),    "alias _material3");
+static_assert(offsetof(EdgeMesh, _vertexBuffer)          == offsetof(RtGraphics::EdgeMesh, _triVerts),     "alias _triVerts");
+static_assert(offsetof(EdgeMesh, _indexBuffer)           == offsetof(RtGraphics::EdgeMesh, _triIndices),   "alias _triIndices");
+static_assert(offsetof(EdgeMesh, _skinVertexBuffer)      == offsetof(RtGraphics::EdgeMesh, _edgeVerts),    "the POD's _edgeVerts is the SKIN pair");
+static_assert(offsetof(EdgeMesh, _skinIndexBuffer)       == offsetof(RtGraphics::EdgeMesh, _edgeIndices),  "ditto");
+static_assert(offsetof(EdgeMesh, _edgeVertexBuffer)      == offsetof(RtGraphics::EdgeMesh, _capVerts),     "the POD's _capVerts is the EDGE pair");
+static_assert(offsetof(EdgeMesh, _edgeIndexBuffer)       == offsetof(RtGraphics::EdgeMesh, _capIndices),   "ditto");
+static_assert(offsetof(EdgeMesh, _edgeSkinVertexBuffer)  == offsetof(RtGraphics::EdgeMesh, _extraVerts),   "the POD's _extraVerts is the EDGE-SKIN pair");
+static_assert(offsetof(EdgeMesh, _edgeSkinIndexBuffer)   == offsetof(RtGraphics::EdgeMesh, _extraIndices), "ditto");
+static_assert(offsetof(EdgeMesh, _triangleLists)         == offsetof(RtGraphics::EdgeMesh, _triangleLists),"alias _triangleLists");
+static_assert(offsetof(EdgeMesh, _edgeLists)             == offsetof(RtGraphics::EdgeMesh, _edgeLists),    "alias _edgeLists");
+static_assert(offsetof(EdgeMesh, _aabb)                  == offsetof(RtGraphics::EdgeMesh, _bounds),       "alias _bounds");
+
+// And against the retail getters directly, so a POD edit cannot move both.
+static_assert(offsetof(EdgeMesh, _maskMaterial)         == 0x28,  "EdgeMesh::_maskMaterial @ +0x28 (0x180012ef0)");
+static_assert(offsetof(EdgeMesh, _skinMaskMaterial)     == 0x30,  "EdgeMesh::_skinMaskMaterial @ +0x30 (0x180012f10)");
+static_assert(offsetof(EdgeMesh, _edgeMaterial)         == 0x38,  "EdgeMesh::_edgeMaterial @ +0x38 (0x180012f00)");
+static_assert(offsetof(EdgeMesh, _skinEdgeMaterial)     == 0x40,  "EdgeMesh::_skinEdgeMaterial @ +0x40 (0x180012f20)");
+static_assert(offsetof(EdgeMesh, _vertexBuffer)         == 0x48,  "EdgeMesh::_vertexBuffer @ +0x48 (0x180012e60)");
+static_assert(offsetof(EdgeMesh, _indexBuffer)          == 0x68,  "EdgeMesh::_indexBuffer @ +0x68 (0x180012e50)");
+static_assert(offsetof(EdgeMesh, _skinVertexBuffer)     == 0x88,  "EdgeMesh::_skinVertexBuffer @ +0x88 (0x180012e80)");
+static_assert(offsetof(EdgeMesh, _skinIndexBuffer)      == 0xa8,  "EdgeMesh::_skinIndexBuffer @ +0xa8 (0x180012e70)");
+static_assert(offsetof(EdgeMesh, _edgeVertexBuffer)     == 0xc8,  "EdgeMesh::_edgeVertexBuffer @ +0xc8 (0x180012ea0)");
+static_assert(offsetof(EdgeMesh, _edgeIndexBuffer)      == 0xe8,  "EdgeMesh::_edgeIndexBuffer @ +0xe8 (0x180012e90)");
+static_assert(offsetof(EdgeMesh, _edgeSkinVertexBuffer) == 0x108, "EdgeMesh::_edgeSkinVertexBuffer @ +0x108 (0x180012ec0)");
+static_assert(offsetof(EdgeMesh, _edgeSkinIndexBuffer)  == 0x128, "EdgeMesh::_edgeSkinIndexBuffer @ +0x128 (0x180012eb0)");
+static_assert(offsetof(EdgeMesh, _triangleLists)        == 0x148, "EdgeMesh::_triangleLists @ +0x148 (0x180012ed0)");
+static_assert(offsetof(EdgeMesh, _edgeLists)            == 0x158, "EdgeMesh::_edgeLists @ +0x158 (0x180012ee0)");
+static_assert(offsetof(EdgeMesh, _aabb)                 == 0x168, "EdgeMesh::_aabb @ +0x168 (0x180012f30)");
+
+static_assert(sizeof(EdgeMesh::TriangleVertex) == 8,  "EdgeMesh::TriangleVertex is 8 bytes");
+static_assert(sizeof(EdgeMesh::EdgeVertex)     == 16, "EdgeMesh::EdgeVertex is 16 bytes");
 
 }  // namespace Graphics

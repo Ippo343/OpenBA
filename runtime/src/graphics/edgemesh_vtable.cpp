@@ -65,6 +65,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/graphics/Mesh.h"   // the real Graphics::EdgeMesh (block G)
 #include "../collection/array_internal.h"
 
 // Same local declaration mesh.cpp, array.cpp and deleting_dtor.cpp carry, and
@@ -271,11 +272,35 @@ TriListArrayFn RtSerializeTriangleListArray() {
 
 }  // namespace
 
-// ---- slot 2  ?Type@EdgeMesh@Graphics@@UEBAIXZ  0x180012c70 -----------------
+// ############################################################################
+// ENDGAME B.3.5 step 5, block G — `Graphics::EdgeMesh`'s member bodies. Their
+// own `namespace Graphics { }` block, after the anonymous namespace above has
+// closed, because a member definition has to appear in a namespace ENCLOSING the
+// class and `Graphics` / `RtGraphics` are siblings (B34_BRIEFS A.2). The
+// anonymous namespace's helpers are reachable unqualified from here.
+//
+// ALL EIGHT NON-SLOT-0 SLOT BODIES MOVED. Every registered door at the bottom of
+// the file keeps its mangled name AND its retail address and is now a one-line
+// QUALIFIED, non-virtual delegation. THE QUALIFICATION IS LOAD-BEARING
+// (B34_BRIEFS A.1): a live `EdgeMesh` wears the MINTED
+// `??_7EdgeMesh@Graphics@@6B@`, whose slots resolve back to these very doors, so
+// an unqualified virtual call inside a door would dispatch into itself instead of
+// delegating.
+//
+// `this` IS NOW GENUINELY UNUSED IN FOUR OF THEM AND NO LONGER NEEDS A
+// `(void)self`: slots 1, 2, 3 and 4 read neither `this` nor their arguments in
+// retail (the encodings have no RCX and no RDX operand), and as members that is
+// simply a body that mentions no field. The four `unused parameter 'self'`
+// warnings this file used to carry in the perf build are gone with the doors'
+// parameters becoming delegation arguments.
+// ############################################################################
 
-extern "C" uint32_t RtGraphics_EdgeMesh_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(EdgeMeshTypeInfo());
-    return ours;
+namespace Graphics {
+
+// ---- slot 2  ?Type@EdgeMesh@Graphics@@UEBAIXZ  0x180012c70 -----------------
+//   0x180012c70  8b 05 ..   MOV EAX,[0x1801f99b0]   RET   -> node + 0x00, DWORD
+uint32_t EdgeMesh::Type() const {
+    return ReadTypeId(EdgeMeshTypeInfo());
 }
 
 // ---- slot 1  ?TypeName@EdgeMesh@Graphics@@UEBAPEBDXZ  0x180012c90 ----------
@@ -287,9 +312,8 @@ extern "C" uint32_t RtGraphics_EdgeMesh_Type(const void* self) {
 //   strcmp, because it is the one screen that can still see identity move, and
 //   the identity question is retired in both shipped binaries (zero consumers
 //   of any node's +0x08 — reference_basetypeinfo_name_is_content_only.md).
-extern "C" const char* RtGraphics_EdgeMesh_TypeNameStr(const void* self) {
-    const char* const ours = ReadTypeName(EdgeMeshTypeInfo());
-    return ours;
+const char* EdgeMesh::TypeName() const {
+    return ReadTypeName(EdgeMeshTypeInfo());
 }
 
 // ---- slot 3  ?GetFileVersion@EdgeMesh@Graphics@@UEBAHXZ  0x1800a23d0 -------
@@ -302,9 +326,8 @@ extern "C" const char* RtGraphics_EdgeMesh_TypeNameStr(const void* self) {
 // EdgeMesh::Serialize below is ever revised, and retail's does not. It is also
 // NOT the same constant as MaterialInstance's 4 or Particle's 0x1000, which is
 // why each of the three is written as its own literal in its own file.
-extern "C" int32_t RtGraphics_EdgeMesh_GetFileVersion(const void* self) {
-    const int32_t ours = 2;
-    return ours;
+int32_t EdgeMesh::GetFileVersion() const {
+    return 2;
 }
 
 // ---- slot 4  ?Compile@EdgeMesh@Graphics@@UEAA...  0x1800a21c0 --------------
@@ -320,9 +343,17 @@ extern "C" int32_t RtGraphics_EdgeMesh_GetFileVersion(const void* self) {
 // The Filename& parameter is kept in the signature even though the body never
 // touches it, because the vtable slot is still CALLED with it in RDX and a
 // narrower signature would be a different ABI on any future by-pointer use.
-extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* self, const void* filename) {
-    const int32_t ours = 1;
-    return ours;
+// *** THIS IS EdgeMesh'S OWN SLOT 4, NOT `Object::External`'s. *** Material,
+// MaterialInstance and GraphicsMesh all INHERIT `?Compile@External@Object@@`
+// (0x1800066e0) at this index; EdgeMesh overrides it with its own six bytes.
+// Both bodies return 1, so getting that backwards is SILENT — which is why
+// `tests/unit/graphics_material_abi_test.cpp` compares the slot-4 POINTER
+// against a bare `Object::External` leaf's and requires this one to DIFFER.
+//
+// The `Filename&` parameter is kept because the vtable slot is still CALLED with
+// it in RDX, and it is genuinely unread: the encoding has no RDX operand.
+EdgeMesh::CompileResult EdgeMesh::Compile(const System::Filename& /*path*/) {
+    return 1u;
 }
 
 // ---- slot 5  ?Serialize@EdgeMesh@Graphics@@UEAA_NAEAVStream@IO@@@Z ---------
@@ -373,10 +404,8 @@ extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* self, const void* filename)
 // both use the value that came off the stream, not the value the array had.
 // Reading `_size` again after the resize would be the same number by accident
 // on the write arm and a silent truncation on the read arm.
-extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
-
-    uint8_t* const self = reinterpret_cast<uint8_t*>(selfv);
-    uint8_t* const st   = reinterpret_cast<uint8_t*>(stream);
+bool EdgeMesh::Serialize(void* stream) {
+    uint8_t* const st = reinterpret_cast<uint8_t*>(stream);
 
     SerializeCtx ctx;
     ctx.stream   = stream;
@@ -398,11 +427,14 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
     ExtPtrSerializeFn extMat      = RtSerializeExternalPtrMaterial();
     TriListArrayFn    triArray    = RtSerializeTriangleListArray();
 
-    extBase(self + 0x20, &ctx);
-    extMat (self + 0x28, &ctx);
-    extMat (self + 0x30, &ctx);
-    extMat (self + 0x38, &ctx);
-    extMat (self + 0x40, &ctx);
+    // The +0x20 qword no getter names, then the four materials IN FIELD ORDER
+    // (mask, skinMask, edge, skinEdge — see Mesh.h's note; the FIELD order and
+    // the SetMaterials ARGUMENT order are two groupings of the same four).
+    extBase(&_reserved20,      &ctx);
+    extMat (&_maskMaterial,     &ctx);
+    extMat (&_skinMaskMaterial, &ctx);
+    extMat (&_edgeMaterial,     &ctx);
+    extMat (&_skinEdgeMaterial, &ctx);
 
     void** const evt = *reinterpret_cast<void***>(ctx.encoding);
     using EncDwordFn = void (*)(void*, void*, int);
@@ -413,29 +445,41 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
         reinterpret_cast<uint8_t*>(evt) + kEncSerializeArray);
 
     {   // step 5 — the triangle lists, +0x148 data / +0x150 size
-        int32_t n = *reinterpret_cast<const int32_t*>(self + 0x150);
+        int32_t n = _triangleLists._size;
         encDword(ctx.encoding, &n, 0);
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
-            // retail 0x1800136f0 — Array<EdgeMesh::Triangle>::SetSize(n).
-            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(self + 0x148)->SetSize(n);
-        triArray(&ctx, n, *reinterpret_cast<void**>(self + 0x148));
+            // retail 0x1800136f0 — Array<GraphicsMesh::TriangleList>::SetSize(n).
+            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_triangleLists)->SetSize(n);
+        triArray(&ctx, n, _triangleLists._data);
     }
     {   // step 6 — the edge lists, +0x158 data / +0x160 size
-        int32_t n = *reinterpret_cast<const int32_t*>(self + 0x160);
+        int32_t n = _edgeLists._size;
         encDword(ctx.encoding, &n, 0);
         if (*reinterpret_cast<const int32_t*>(st + kStreamModeOffset) == 0)
             // Same door, same spec: the edge-list array shares 0x1800136f0.
-            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(self + 0x158)->SetSize(n);
-        triArray(&ctx, n, *reinterpret_cast<void**>(self + 0x158));
+            rtcoll::AsArray<&rtcoll::kSpec_Tri18A4>(&_edgeLists)->SetSize(n);
+        triArray(&ctx, n, _edgeLists._data);
     }
 
-    {   // step 7 — eight Video buffers, index before vertex, retail's order
-        static const size_t kBufferSlots[8] = {
-            0x70, 0x50, 0xb0, 0x90, 0xf0, 0xd0, 0x130, 0x110
+    {   // step 7 — eight Video buffers, INDEX BEFORE VERTEX in each pair,
+        // retail's order. The eight offsets 0x70, 0x50, 0xb0, 0x90, 0xf0, 0xd0,
+        // 0x130, 0x110 are each header+0x08 — the `_deviceData` qword
+        // `PlatformConstruct` wrote — which is why they read 8 past the four
+        // pairs' bases. All four pairs are now NAMED by retail's own getters
+        // (Mesh.h's EdgeMesh banner), so the eight are spelled out.
+        void* const kBuffers[8] = {
+            _indexBuffer._deviceData,          // +0x68 + 8 = +0x70
+            _vertexBuffer._deviceData,         // +0x48 + 8 = +0x50
+            _skinIndexBuffer._deviceData,      // +0xa8 + 8 = +0xb0
+            _skinVertexBuffer._deviceData,     // +0x88 + 8 = +0x90
+            _edgeIndexBuffer._deviceData,      // +0xe8 + 8 = +0xf0
+            _edgeVertexBuffer._deviceData,     // +0xc8 + 8 = +0xd0
+            _edgeSkinIndexBuffer._deviceData,  // +0x128 + 8 = +0x130
+            _edgeSkinVertexBuffer._deviceData, // +0x108 + 8 = +0x110
         };
         using BufSerializeFn = void (*)(void*, SerializeCtx*);
         for (size_t i = 0; i < 8; ++i) {
-            void* const buf = *reinterpret_cast<void**>(self + kBufferSlots[i]);
+            void* const buf = kBuffers[i];                 // faithful: unguarded
             void** const bvt = *reinterpret_cast<void***>(buf);
             BufSerializeFn f = *reinterpret_cast<BufSerializeFn*>(
                 reinterpret_cast<uint8_t*>(bvt) + kVideoBufferSerialize);
@@ -447,8 +491,8 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
     // literal 3 in EDX (`LEA EDX,[R9+0x3]` with R9 already zeroed), and the two
     // runs are +0x168 and +0x174, not one run of six: the Box is {min, max} and
     // the encoding is told so.
-    encArray(ctx.encoding, 3, self + 0x168, 0);
-    encArray(ctx.encoding, 3, self + 0x174, 0);
+    encArray(ctx.encoding, 3, &_aabb.min, 0);
+    encArray(ctx.encoding, 3, &_aabb.max, 0);
 
     // step 9 — `if (enc) enc->vt[0](enc, 1)`. Flag 1 is destroy AND free; the
     // Encoding the factory made in step 2 is owned by this frame.
@@ -472,9 +516,9 @@ extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
 //
 // No null test. Retail has none; destructing a null faults here exactly as it
 // faults in the DLL (CLAUDE.md, "Don't fix a faithful crash with a null check").
-extern "C" void RtGraphics_EdgeMesh_Destruct(void* selfv) {
-    void** const vp = reinterpret_cast<void**>(selfv);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
+void EdgeMesh::Destruct() {
+    void** const vp = reinterpret_cast<void**>(this);
+    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
 }
 
 // ---- slot 8  ?Construct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ -----
@@ -489,11 +533,12 @@ extern "C" void RtGraphics_EdgeMesh_Destruct(void* selfv) {
 // The ctor is reached by NAME (see EdgeMeshCtor above), so this body follows
 // mesh.cpp's ported ctor whenever RT_GFXMESH is on. A tail jump and a
 // call differ only in the stack frame, which no caller of this slot observes.
-extern "C" void* RtGraphics_EdgeMesh_Construct(void* selfv) {
-    if (!selfv) {  return nullptr; }
+Object::External* EdgeMesh::Construct() {
     CtorFn ctor = EdgeMeshCtor();
-    void* const ours = ctor ? ctor(selfv) : nullptr;
-    return ours;
+    // The null test is retail's and lives in the DOOR, which is where retail put
+    // it (`TEST RCX,RCX ; JNZ 0x1800a2830 ; XOR EAX,EAX`); by the time a member
+    // runs, `this` is non-null by construction.
+    return ctor ? reinterpret_cast<Object::External*>(ctor(this)) : nullptr;
 }
 
 // ---- slot 6  ?Reconstruct@EdgeMesh@Graphics@@UEAAPEAVExternal@Object@@XZ ---
@@ -511,12 +556,68 @@ extern "C" void* RtGraphics_EdgeMesh_Construct(void* selfv) {
 // is kept: reconstructing a null faults here exactly as it faults in the DLL.
 // The identical asymmetry exists in the MaterialInstance pair and was kept
 // there for the same reason (wave24_lane_gfxmat.cpp:440).
-extern "C" void* RtGraphics_EdgeMesh_Reconstruct(void* selfv) {
-    void** const vp = reinterpret_cast<void**>(selfv);
-    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(selfv, 0);
+Object::External* EdgeMesh::Reconstruct() {
+    void** const vp = reinterpret_cast<void**>(this);
+    reinterpret_cast<Slot0Fn>(static_cast<void**>(*vp)[0])(this, 0);
     CtorFn ctor = EdgeMeshCtor();
-    void* const ours = ctor ? ctor(selfv) : nullptr;
-    return ours;
+    return ctor ? reinterpret_cast<Object::External*>(ctor(this)) : nullptr;
+}
+
+// ??1EdgeMesh@Graphics@@UEAA@XZ  0x1800a2780 — EMPTY, and the existing door is
+// untouched. `RtGraphics_EdgeMesh_Dtor` in
+// `runtime/src/graphics/batchc_gfx_leaves.cpp` stamps the MINTED table, runs the
+// eight `Video::{Vertex,Index}Buffer::PlatformDestruct` calls in retail's order
+// and frees the two list arrays; a compiler-emitted chain would stamp GCC's
+// tables and would not run the eight platform destructs at all. The two
+// spellings coexist exactly as `Object::External`'s do.
+EdgeMesh::~EdgeMesh() {}
+
+}  // namespace Graphics
+
+// ============================================================================
+// THE DOORS. Each keeps its registered name and address and delegates with a
+// QUALIFIED non-virtual call. `Graphics::EdgeMesh` is what the `self` void*
+// really is, so every one of them carries the `// B.3.5 bridge` marker the B.4
+// metric counts.
+// ============================================================================
+extern "C" uint32_t RtGraphics_EdgeMesh_Type(const void* selfv) {
+    return reinterpret_cast<const Graphics::EdgeMesh*>(selfv)      // B.3.5 bridge
+               ->Graphics::EdgeMesh::Type();
+}
+extern "C" const char* RtGraphics_EdgeMesh_TypeNameStr(const void* selfv) {
+    return reinterpret_cast<const Graphics::EdgeMesh*>(selfv)      // B.3.5 bridge
+               ->Graphics::EdgeMesh::TypeName();
+}
+extern "C" int32_t RtGraphics_EdgeMesh_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const Graphics::EdgeMesh*>(selfv)      // B.3.5 bridge
+               ->Graphics::EdgeMesh::GetFileVersion();
+}
+extern "C" int32_t RtGraphics_EdgeMesh_Compile(void* selfv, const void* filename) {
+    return static_cast<int32_t>(
+        reinterpret_cast<Graphics::EdgeMesh*>(selfv)               // B.3.5 bridge
+            ->Graphics::EdgeMesh::Compile(
+                *reinterpret_cast<const System::Filename*>(filename)));
+}
+extern "C" bool RtGraphics_EdgeMesh_Serialize(void* selfv, void* stream) {
+    return reinterpret_cast<Graphics::EdgeMesh*>(selfv)            // B.3.5 bridge
+               ->Graphics::EdgeMesh::Serialize(stream);
+}
+extern "C" void RtGraphics_EdgeMesh_Destruct(void* selfv) {
+    reinterpret_cast<Graphics::EdgeMesh*>(selfv)                   // B.3.5 bridge
+        ->Graphics::EdgeMesh::Destruct();
+}
+// The null test is RETAIL'S OWN and stays in the door: `TEST RCX,RCX ; JNZ
+// 0x1800a2830 ; XOR EAX,EAX ; RET`, twelve bytes.
+extern "C" void* RtGraphics_EdgeMesh_Construct(void* selfv) {
+    if (!selfv) { return nullptr; }
+    return reinterpret_cast<Graphics::EdgeMesh*>(selfv)            // B.3.5 bridge
+               ->Graphics::EdgeMesh::Construct();
+}
+// NO null test here, unlike Construct one slot over. That asymmetry is retail's
+// and is kept: reconstructing a null faults here exactly as it faults in the DLL.
+extern "C" void* RtGraphics_EdgeMesh_Reconstruct(void* selfv) {
+    return reinterpret_cast<Graphics::EdgeMesh*>(selfv)            // B.3.5 bridge
+               ->Graphics::EdgeMesh::Reconstruct();
 }
 
 // ============================================================================
