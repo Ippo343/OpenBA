@@ -24,6 +24,10 @@
 //
 // Each function is a 1:1 port of the decompiled exe helper (Ghidra). Do NOT "improve".
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Geometry.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -550,7 +554,7 @@ void ActRm_PositionEntity_9760(int64_t param_1, int cellIndex, float rotation) {
             yaw, pitch, *reinterpret_cast<const Math::Vector3*>(worldPos));           // B.3.1 bridge
         *reinterpret_cast<Math::Transform*>(objB + 0x148) = xform;                    // B.3.1 bridge
         *reinterpret_cast<float*>(objB + 0x168) = rotation;
-        if (fn_Geometry_SetTransform)
-            fn_Geometry_SetTransform(objB + 0x28, objB + 0x148);
+        reinterpret_cast<Graphics::Geometry*>(objB + 0x28)
+            ->SetTransform(*reinterpret_cast<const Math::Transform*>(objB + 0x148));   // B.3.5 bridge
     }
 }

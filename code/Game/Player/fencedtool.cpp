@@ -16,6 +16,11 @@
 //
 // Decompiled from Application-x64.exe.
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "Player/fencedtool_funcs.h"
 #include "Tool.h"
 #include "engine_funcs.h"
@@ -54,16 +59,11 @@ static void EnsureInternalDtor() {
 }
 
 // Graphics::Scene::RemoveObject — resolved locally via exe IAT dispatch slot
-typedef void (*fn_SceneRemoveObject_t)(void* scene, uint32_t objectId);
-static fn_SceneRemoveObject_t s_fn_SceneRemoveObject = nullptr;
 
 static bool s_sceneResolved = false;
 
 static void EnsureSceneFuncs() {
     if (s_sceneResolved) return;
-    // Resolve via IAT at [0x140151360] — same pattern as storagedisplaycomponent.cpp
-    uintptr_t iatSlot = ResolveAddr(Module::Exe, 0x140151360);
-    if (iatSlot) s_fn_SceneRemoveObject = *reinterpret_cast<fn_SceneRemoveObject_t*>(iatSlot);
     s_sceneResolved = true;
 }
 
@@ -106,8 +106,9 @@ void FencedTool_Shutdown2(FencedTool* self) {
     // Remove scene object if added
     if ((int)self->sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
-        if (s_fn_SceneRemoveObject && scene) {
-            s_fn_SceneRemoveObject(scene, self->sceneObjectId);
+        if (scene) {
+            reinterpret_cast<Graphics::Scene*>(scene)
+                ->RemoveObject(self->sceneObjectId);   // B.3.5 bridge
         }
     }
 
@@ -210,8 +211,9 @@ int FencedTool_Shutdown(FencedTool* self) {
     // Remove scene object if added
     if ((int)self->sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
-        if (s_fn_SceneRemoveObject && scene) {
-            s_fn_SceneRemoveObject(scene, self->sceneObjectId);
+        if (scene) {
+            reinterpret_cast<Graphics::Scene*>(scene)
+                ->RemoveObject(self->sceneObjectId);   // B.3.5 bridge
         }
         self->sceneObjectId = (uint32_t)-1;
     }
@@ -260,8 +262,9 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
             // Add mesh to scene if not already added
             if ((int)self->sceneObjectId < 0) {
                 void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
-                if (fn_SceneAddObject && scene && self->meshInstance) {
-                    self->sceneObjectId = (int32_t)fn_SceneAddObject(scene, self->meshInstance);
+                if (scene && self->meshInstance) {
+                    self->sceneObjectId = (int32_t)reinterpret_cast<Graphics::Scene*>(scene)
+                        ->AddObject(reinterpret_cast<Graphics::Geometry*>(self->meshInstance));   // B.3.5 bridge
                 }
             }
 
@@ -294,13 +297,15 @@ void FencedTool_Serialize_Impl(FencedTool* self, void* /*param2*/, char param3) 
             }
 
             // Set transform on mesh
-            if (fn_Geometry_SetTransform && self->meshInstance) {
-                fn_Geometry_SetTransform(self->meshInstance, localTransform);
+            if (self->meshInstance) {
+                reinterpret_cast<Graphics::Geometry*>(self->meshInstance)
+                    ->SetTransform(*reinterpret_cast<const Math::Transform*>(localTransform));   // B.3.5 bridge
             }
 
             // Update mesh hierarchy
-            if (fn_MeshInstance_UpdateHierarchy && self->meshInstance) {
-                fn_MeshInstance_UpdateHierarchy(self->meshInstance);
+            if (self->meshInstance) {
+                reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+                    ->UpdateHierarchy();   // B.3.5 bridge
             }
 
             return;
@@ -311,8 +316,9 @@ remove:
     // Remove mesh from scene if present
     if ((int32_t)self->sceneObjectId >= 0) {
         void* scene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x60);
-        if (s_fn_SceneRemoveObject && scene) {
-            s_fn_SceneRemoveObject(scene, (uint32_t)self->sceneObjectId);
+        if (scene) {
+            reinterpret_cast<Graphics::Scene*>(scene)
+                ->RemoveObject((uint32_t)self->sceneObjectId);   // B.3.5 bridge
         }
         self->sceneObjectId = -1;
     }
@@ -773,10 +779,6 @@ after_check:
 typedef void* (*fn_MeshInstance_Ctor_t)(void* self);
 static fn_MeshInstance_Ctor_t s_fn_MeshInstance_Ctor = nullptr;
 
-// Graphics::MeshInstance::SetMesh(this, mesh) — dispatch slot 0x140151498
-typedef void (*fn_MeshInstance_SetMesh_t)(void* self, void* mesh);
-static fn_MeshInstance_SetMesh_t s_fn_MeshInstance_SetMesh = nullptr;
-
 // MeshInstance vtable override pointer — 0x14015e240
 static void** s_MeshInstance_Vtable = nullptr;
 
@@ -791,10 +793,6 @@ static void EnsureStartupHelpers() {
     // MeshInstance::MeshInstance — dispatch slot 0x140151490
     uintptr_t slot1 = ResolveAddr(Module::Exe, 0x140151490);
     if (slot1) s_fn_MeshInstance_Ctor = *(fn_MeshInstance_Ctor_t*)slot1;
-
-    // MeshInstance::SetMesh — dispatch slot 0x140151498
-    uintptr_t slot2 = ResolveAddr(Module::Exe, 0x140151498);
-    if (slot2) s_fn_MeshInstance_SetMesh = *(fn_MeshInstance_SetMesh_t*)slot2;
 
     // MeshInstance vtable override at 0x14015e240
     s_MeshInstance_Vtable = (void**)ResolveAddr(Module::Exe, 0x14015e240);
@@ -950,13 +948,15 @@ void FencedTool_Startup_Impl(FencedTool* self) {
     void** modelData = *(void***)(modelArray + 0x08);
     void* lastMesh = modelData[modelCount - 1];  // last entry
 
-    if (s_fn_MeshInstance_SetMesh && meshInst) {
-        s_fn_MeshInstance_SetMesh(meshInst, lastMesh);
+    if (meshInst) {
+        reinterpret_cast<Graphics::MeshInstance*>(meshInst)
+            ->SetMesh(Graphics::ExternalPtrHandle{lastMesh});   // B.3.5 bridge
     }
 
     // 8. UpdateHierarchy — tail call in original (JMP to dispatch slot)
-    if (fn_MeshInstance_UpdateHierarchy && self->meshInstance) {
-        fn_MeshInstance_UpdateHierarchy(self->meshInstance);
+    if (self->meshInstance) {
+        reinterpret_cast<Graphics::MeshInstance*>(self->meshInstance)
+            ->UpdateHierarchy();   // B.3.5 bridge
     }
 }
 
