@@ -96,21 +96,24 @@
 //       Wave 8, not Wave 6", which now reads as resolved -- Wave 8 is closed.
 //       It is not a wave-ownership question: `engine.cpp:367` calls the DLL's
 //       `CreateVideoContext` BY ADDRESS, which is a call-through to the DLL's
-//       own ctor, not a reimplementation, so `fn_VideoCtx_Ctor` still has zero
-//       callers. Corrected in the Wave 8.5 close-out.)
+//       own ctor, not a reimplementation. Corrected in the Wave 8.5 close-out;
+//       the `fn_VideoCtx_Ctor` this sentence used to name reached zero callers
+//       and was DELETED in ENDGAME B.3.5, batch b35-K2 (41baab1c).)
 //       The ctor also allocates FIVE sub-objects (a VertexBuffer, an
 //       IndexBuffer, an instance VertexBuffer, a RenderBuffer and two
 //       ImageBuffers) through each class's own `operator new`, and calls each
 //       one's `PlatformConstruct`. Porting it would mean our code allocates
 //       objects the DLL's dtor later frees, on a path we never take.
-//       Our tree's only reference is `fn_VideoCtx_Ctor`
-//       (engine/funcs/engine_funcs.cpp:1620), and that pointer is NEVER
-//       CALLED — see the stale-comment note at the bottom of this file.
+//       Our tree has NO reference to it at all any more. It used to have one,
+//       `fn_VideoCtx_Ctor` in engine/funcs/engine_funcs.cpp, which was resolved
+//       and never called; ENDGAME B.3.5 batch b35-K2 deleted that pointer with
+//       the rest of the Context lifecycle group.
 //
 //   ??1Context@Video@@QEAA@XZ                                     (dtor)
 //       The mirror image: it frees those five sub-objects and destroys seven
-//       embedded `ConstantBuffer`s. Same ownership split, same zero callers
-//       (`fn_VideoCtx_Dtor` is resolved and never called).
+//       embedded `ConstantBuffer`s. Same ownership split, same zero callers --
+//       the `fn_VideoCtx_Dtor` that was resolved and never called is itself gone
+//       now (ENDGAME B.3.5, b35-K2).
 //
 //   ??3Context@Video@@SAXPEAX@Z                            (operator delete)
 //       Three lines, and every one of them is out of scope. It takes the
@@ -125,8 +128,9 @@
 //
 //   ?ClearResources@Context@Video@@QEAAXXZ
 //       It is pure, self-contained and trivially portable — and it has no
-//       caller. `fn_VideoCtx_ClearResources` (engine_funcs.cpp:1567) is
-//       resolved and never invoked, and no DLL-internal caller exists either.
+//       caller. `fn_VideoCtx_ClearResources` used to be resolved-and-never-invoked
+//       in engine_funcs.cpp; it was deleted for that reason in ENDGAME B.3.5
+//       (b35-K2), and no DLL-internal caller exists either.
 //       A registered port on a path nothing executes reports `calls=0` and
 //       `divergences=0` forever, which reads as a pass and proves nothing;
 //       that is exactly the trap reference_uncalled_port_is_not_verified.md
@@ -1032,15 +1036,19 @@ int RtVideoContextRegister() {
 //     those three would have registered nothing anybody calls — which happens
 //     to be harmless here only because all three are held back.
 //
-//  2. `fn_VideoCtx_Ctor`, `fn_VideoCtx_Dtor`, `fn_VideoCtx_Delete` and
-//     `fn_VideoCtx_ClearResources` (engine/funcs/engine_funcs.h:95-104 and
-//     :50-51) are DEAD RESOLVES. All four are assigned in `EngineFuncsInit`
-//     and the only other mention of any of them is the diagnostic printf at
-//     engine/funcs/engine_funcs.cpp:4123-4141. Nothing in code/, engine/,
-//     standalone/, runtime/ or dx11/ ever calls one. `fn_VideoCtx_Reset` is
-//     the only member of that group with a live caller
-//     (standalone/main.cpp:1321). The header comment "Video::Context
-//     lifecycle" is accurate about what they ARE and silent about the fact
-//     that nothing drives them; a `// resolved, never called` line on each
-//     would have saved this lane the grep.
+//  2. RESOLVED AND CLOSED. This lane reported `fn_VideoCtx_Ctor`,
+//     `fn_VideoCtx_Dtor`, `fn_VideoCtx_Delete` and `fn_VideoCtx_ClearResources`
+//     as DEAD RESOLVES -- assigned in `EngineFuncsInit`, mentioned nowhere else
+//     but a diagnostic printf, called by nothing in code/, engine/, standalone/,
+//     runtime/ or dx11/ -- and noted that `fn_VideoCtx_Reset` was the only
+//     member of the group with a live caller, in standalone/main.cpp.
+//
+//     ALL FIVE ARE GONE. ENDGAME B.3.5 batch b35-I3 moved main.cpp's
+//     FSE-refocus recovery onto `Video::Context::Reset()`, which emptied the
+//     last of them, and batch b35-K2 (41baab1c) deleted the whole group --
+//     typedefs, externs, definitions, initialisers and dump lines. So the
+//     `// resolved, never called` line this note asked for is moot: there is no
+//     pointer left to put it on. THE REGISTERED DOORS AND THE HELD-BACK
+//     CLASSIFICATION BELOW ARE UNAFFECTED -- what died was engine_funcs's copy
+//     of the addresses, not the ports or the registrations.
 // ============================================================================

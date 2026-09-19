@@ -17,10 +17,18 @@
 // makes plain. The `Video::Context` lifecycle reaches the DLL through TWO
 // DIFFERENT DOORS:
 //
-//     engine_funcs.cpp:1621  fn_VideoCtx_Ctor    ResolveAddr(Runtime, 0x1800f1820)
-//     engine_funcs.cpp:1623  fn_VideoCtx_Dtor    ResolveExport("??1Context@Video@@QEAA@XZ")
-//                                                (falling back to 0x1800f16e0)
-//     engine_funcs.cpp:1625  fn_VideoCtx_Delete  ResolveAddr(Runtime, 0x180018500)
+//     0x1800f1820  the ctor                 (was engine_funcs's fn_VideoCtx_Ctor,
+//                                               resolved BY ADDRESS)
+//     ??1Context@Video@@QEAA@XZ  the dtor      (was fn_VideoCtx_Dtor, by name with
+//                                               a 0x1800f16e0 address fallback)
+//     0x180018500  ??3Context@Video@@           (was fn_VideoCtx_Delete, by address)
+//
+// The three `fn_VideoCtx_*` pointers this paragraph used to cite BY LINE NUMBER
+// no longer exist: all of them reached zero callers and ENDGAME B.3.5 batch
+// b35-K2 (41baab1c) deleted the whole Context lifecycle group from
+// engine/funcs/engine_funcs.{h,cpp}. THE ADDRESSES AND THE ARGUMENT ARE
+// UNCHANGED -- what is described below is the DLL's own lifecycle and the doors
+// this file registers, neither of which depended on those pointers.
 //
 // and `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ` — which is on the LIVE
 // BOOT PATH, called from `RtEngine_MainLoop_Ctor` — drives the dtor, the

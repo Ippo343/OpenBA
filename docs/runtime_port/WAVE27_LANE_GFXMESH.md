@@ -360,10 +360,21 @@ ONE place to repoint.
 
 **0x180016c20 is a different function from 0x180016a40.** Both are exported,
 both are `?GetNodeToWorld@MeshInstance@Graphics@@`, and the two mangled names
-differ only in a trailing `M` — the `(int)` overload is ported, the `(int,float)`
-overload is not. Exactly the pair
+differ only in a trailing `M`. Exactly the pair
 `reference_resolveexport_phantom_names.md` warns about, so the VA was confirmed
 against the export directory rather than the name being assumed to exist.
+
+> **CORRECTION (ENDGAME B.3.5 closing pass, b35-close, 2026-09-19).** This
+> paragraph used to end "— the `(int)` overload is ported, the `(int,float)`
+> overload is not", which CONTRADICTED the paragraph immediately below it in this
+> same section ("0x180016c20 IS CLOSED — this lane ported it") and the table row
+> above it (struck through, "CLOSED — ported by this lane"). The "is not" half was
+> stale the day it was written. **BOTH OVERLOADS ARE PORTED**, and both are in
+> `runtime/src/graphics/mesh.cpp`: the `(int)` overload at :531 (retail
+> 0x180016a40, ordinal 2813) and the `(int, float)` interpolated overload at :1663
+> (retail 0x180016c20, ordinal 2814), each with its own registered door. The rest
+> of the paragraph — the VA-versus-name warning, which is the part worth keeping —
+> stands unchanged.
 
 **0x180016c20 IS CLOSED — this lane ported it** rather than handing it on, and
 that is why the BODY gap reads 18 at the tip instead of 19. Instruction for

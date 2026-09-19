@@ -361,11 +361,31 @@ class Particle;           // block H2 (runtime/types/graphics/Particle.h, the PO
 //    through it the IO serializer — for no ABI gain, on the Geometry base every
 //    Video/Graphics block includes;
 //  * `T` is `GraphicsMesh`, `MaterialInstance`, `EdgeMesh`, `AnimationGroup`
-//    and `Particle`, which are blocks G and H2's classes. The typed spelling
-//    lands with them, as a one-line change to this alias and no change to any
-//    body.
+//    and `Particle`, which are blocks G and H2's classes.
 //
 // The alias is named for what it is so the retail type is not lost.
+//
+// WHAT THE TYPED SPELLING ACTUALLY COSTS — corrected, ENDGAME B.3.5 closing pass.
+// This banner used to end "The typed spelling lands with them, as a ONE-LINE
+// change to this alias and no change to any body." That is not true and was never
+// true, and the reason is in the bullet above it: ONE ALIAS SERVES FIVE DIFFERENT
+// `T`. `using ExternalPtrHandle = Object::ExternalPtr<?>` has nothing to put in
+// the `?`, so the alias cannot be retyped at all — it has to be DELETED and every
+// use replaced with the `Object::ExternalPtr<T>` that use means.
+//
+// Measured on this tree: 20 uses across SIX headers — Geometry.h 2, Light.h 2,
+// Material.h 1, Mesh.h 10, ParticleInstance.h 4, SunLight.h 1 — and 109
+// occurrences of the name tree-wide once the bodies and callers are counted. Each
+// header use must be resolved to its own `T` by reading the retail mangled name
+// beside it (THE DOOR DECIDES, as everywhere else), and several sit in VIRTUAL
+// slot signatures, where getting `T` wrong changes an overload rather than failing
+// to compile.
+//
+// So the retype is NOT a cleanup that rides along with block G or H2. It is owed
+// together with the RECEIVER-SIDE `Object::ExternalPtr` work — the same work the
+// nine hand-inlined `ReaderWriter` slot calls and the twelve ExternalPtr exe doors
+// are waiting on (B35_RULES section 11) — because that is the pass that has to
+// read every one of these sites for its own reasons anyway.
 // ---------------------------------------------------------------------------
 using ExternalPtrHandle = RtGraphics::ExternalPtr;
 

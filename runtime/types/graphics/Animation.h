@@ -399,8 +399,12 @@ public:
 
     // ?GetRate@       0x180015ff0  NOT PORTED
     float GetRate() const;
-    // ?GetRootPoseAtTime@ 0x1800faaa0  door: wave29_lane_gfxbody.cpp (not ours)
-    //   hidden retslot (Math::Transform)
+    // ?GetRootPoseAtTime@ 0x1800faaa0  PORTED — hidden retslot (Math::Transform).
+    //   This note read "door: wave29_lane_gfxbody.cpp (not ours)", which was true
+    //   of block H1 and stale by the time block GC moved the body: it is a member
+    //   now, defined in `runtime/src/graphics/wave29_lane_gfxbody.cpp`, and the
+    //   door in that file delegates. ENDGAME B.3.5's closing pass converted its
+    //   two remaining runtime-internal callers (wave28_lane_gfxbody.cpp) onto it.
     Math::Transform GetRootPoseAtTime(const System::Time& time,
                                       const System::Time& delta) const;
     // ?GetSourceName@ 0x180015f90  NOT PORTED — hidden retslot
