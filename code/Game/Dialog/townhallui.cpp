@@ -2198,7 +2198,7 @@ bool Ready() {
           fn_InventorySort_Asc && fn_InventorySort_Desc && fn_DynArray_Resize &&
           fn_TableElement_SetSize && fn_TableElement_SetChild2 && fn_TableElement_SetChild3 &&
           fn_GraphElement_RemoveGraphs && fn_GraphElement_AddGraph &&
-          fn_GraphElement_AddGraphPoint && fn_StringTable_GetCount && fn_Time_AsSeconds &&
+          fn_GraphElement_AddGraphPoint && fn_StringTable_GetCount &&
           fn_NumberEditElement_SetValue && fn_NumberEditElement_SetMinMax))
         return false;
     if (!(g_pExternalFactorySingleton && *g_pExternalFactorySingleton)) return false;
@@ -2265,7 +2265,6 @@ void DiagPrint(const char* where, void* self) {
         {"fn_GraphElement_AddGraph",     (void*)fn_GraphElement_AddGraph},
         {"fn_GraphElement_AddGraphPoint",(void*)fn_GraphElement_AddGraphPoint},
         {"fn_StringTable_GetCount", (void*)fn_StringTable_GetCount},
-        {"fn_Time_AsSeconds",       (void*)fn_Time_AsSeconds},
         {"fn_NumberEditElement_SetValue",  (void*)fn_NumberEditElement_SetValue},
         {"fn_NumberEditElement_SetMinMax", (void*)fn_NumberEditElement_SetMinMax},
     };

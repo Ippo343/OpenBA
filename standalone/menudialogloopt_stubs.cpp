@@ -467,7 +467,7 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     }
 
     // Run the per-frame camera derivation (orbit + FromLookAt + SetCameraToWorld).
-    if (time && fn_Time_AsSeconds) {
+    if (time) {
         float dt = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
         MenuDialogLoopT_UpdateCamera_PhaseA(self, dt);
     }

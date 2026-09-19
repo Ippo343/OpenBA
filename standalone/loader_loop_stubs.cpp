@@ -79,21 +79,11 @@ bool SyncEngineLoader() {
     return Opt().syncEngineLoader;
 }
 
-typedef void (*fn_WaitForFinish_t)(void* thread);
 void WaitForEngineLoader() {
     if (!SyncEngineLoader() || !g_pLoader) return;
-    static fn_WaitForFinish_t s_wait = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_wait = reinterpret_cast<fn_WaitForFinish_t>(
-            ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
-        s_resolved = true;
-    }
-    if (s_wait) {
-        printf("[EngineLoader] waiting for loader thread to finish (sync)...\n");
-        reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
-        printf("[EngineLoader] loader thread finished\n");
-    }
+    printf("[EngineLoader] waiting for loader thread to finish (sync)...\n");
+    reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
+    printf("[EngineLoader] loader thread finished\n");
 }
 
 // ============================================================

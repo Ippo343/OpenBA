@@ -36,10 +36,6 @@ extern "C" void BuilderPool_Tick();
 typedef void* (*fn_Time_Ctor_t)(void* out, float seconds);
 static fn_Time_Ctor_t s_fn_Time_Ctor = nullptr;
 
-// System::Random::Rand(Random*, uint max) -> uint [0, max)
-typedef uint32_t (*fn_Random_Rand_t)(void* random, uint32_t max);
-static fn_Random_Rand_t s_fn_Random_Rand = nullptr;
-
 static bool s_resolved = false;
 
 static void EnsureResolved() {
@@ -67,15 +63,6 @@ static void EnsureResolved() {
     //     grew as the history arrays grew.
     s_fn_Time_Ctor = reinterpret_cast<fn_Time_Ctor_t>(
         ResolveExport("??0Time@System@@QEAA@M@Z"));
-
-    // System::Random::Rand(unsigned int max) — Runtime export.
-    // [MANGLING FIX 2026-07-25] "?Rand@Random@System@@QEAAI@Z" (no argument) is not
-    // exported; the DLL has three overloads and the one this file wants is
-    // "?Rand@Random@System@@QEAAII@Z" (unsigned int -> unsigned int, ordinal 3441).
-    // While it resolved to null, ShuffleSchools/ShuffleEntities bailed out at their
-    // `if (!s_fn_Random_Rand) return;` guard, i.e. the Fisher-Yates passes never ran.
-    s_fn_Random_Rand = reinterpret_cast<fn_Random_Rand_t>(
-        ResolveExport("?Rand@Random@System@@QEAAII@Z"));
 
     s_resolved = true;
 }
@@ -310,7 +297,7 @@ void CitizenBehavior_ShuffleSchools(CitizenBehaviorRaw* self) {
     // Get global Random from GameUpdateLoop
     void* random = *reinterpret_cast<void**>(
         reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
-    if (!random || !s_fn_Random_Rand) return;
+    if (!random) return;
 
     uint64_t* schoolArray = *reinterpret_cast<uint64_t**>(self->data + 0x20);
     if (!schoolArray) return;
@@ -359,7 +346,7 @@ void CitizenBehavior_ShuffleEntities(CitizenBehaviorRaw* self, uint64_t profId) 
 
             void* random = *reinterpret_cast<void**>(
                 reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton) + 0xD8);
-            if (!random || !s_fn_Random_Rand) return;
+            if (!random) return;
 
             uint64_t* entities = reinterpret_cast<uint64_t*>(node[1]); // array at +0x08
             for (uint32_t i = 0; i < count; i++) {

@@ -182,10 +182,12 @@ struct Imports {
     // 0x180013218, 0x1800132c0, 0x180013260, 0x180013270, 0x180013268) and
     // Format (0x180013288) are gone — System::String is a real class in this
     // build and the plugin calls its members directly.
-    void* (*WideStringCtor)(void*, const wchar_t*);    // 0x1800132e0
-    void  (*WideStringDtor)(void*);                    // 0x1800132d8
+    // ENDGAME B.3.4b closing: the WideString ctor / dtor / StrLength imports
+    // (0x1800132e0, 0x1800132d8, 0x180013278) are gone with their call sites —
+    // System::WideString is a real class here too. AsUTF8 STAYS: it returns a
+    // System::String BY VALUE through a hidden retslot into a String the caller
+    // already constructed, which the member form cannot reproduce.
     void  (*WideStringAsUTF8)(const void*, void*);     // 0x180013258 (ret by hidden ptr)
-    int   (*WideStringStrLength)(const wchar_t*);      // 0x180013278
 
     // --- Video::ImageBuffer ----------------------------------------------
     bool  (*ImageBufferCopyFromTexture)(void*, void*, int, int);  // 0x1800132a0
@@ -194,9 +196,6 @@ struct Imports {
     void  (*AppRegisterMessageCallback)(void*, unsigned, void*);   // 0x180013290
     void  (*AppUnregisterMessageCallback)(void*, unsigned);        // 0x180013298
     HINSTANCE (*AppGetInstance)(void*);                            // 0x1800132a8
-
-    // --- System::Error ----------------------------------------------------
-    void  (*ErrorSetText)(const char*, bool);          // 0x180013460
 
     // --- the three singleton slots ---------------------------------------
     void** appSingleton;                               // 0x180013310
@@ -251,10 +250,7 @@ const Imports* GetImports() {
         { (void**)&g_im.DisplayModeCtor,        "??0DisplayMode@Device@Video@@QEAA@HH@Z",                        0x180013308 },
         { (void**)&g_im.DisplayModeDtor,        "??1DisplayMode@Device@Video@@QEAA@XZ",                          0x1800132f8 },
 
-        { (void**)&g_im.WideStringCtor,         "??0WideString@System@@QEAA@PEB_W@Z",                            0x1800132e0 },
-        { (void**)&g_im.WideStringDtor,         "??1WideString@System@@QEAA@XZ",                                 0x1800132d8 },
         { (void**)&g_im.WideStringAsUTF8,       "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",                 0x180013258 },
-        { (void**)&g_im.WideStringStrLength,    "?StrLength@WideString@System@@SAHPEB_W@Z",                      0x180013278 },
 
         { (void**)&g_im.ImageBufferCopyFromTexture, "?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z",        0x1800132a0 },
 
@@ -263,8 +259,6 @@ const Imports* GetImports() {
         { (void**)&g_im.AppUnregisterMessageCallback,
               "?UnregisterMessageCallback@Application@1@QEAAXI@Z",                                              0x180013298 },
         { (void**)&g_im.AppGetInstance,         "?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ",            0x1800132a8 },
-
-        { (void**)&g_im.ErrorSetText,           "?SetText@Error@System@@SAXPEBD_N@Z",                            0x180013460 },
 
         { (void**)&g_im.appSingleton,           "?_singleton@Application@1@0PEAV11@EA",                          0x180013310 },
         { (void**)&g_im.configSingleton,        "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
