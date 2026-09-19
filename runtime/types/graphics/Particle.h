@@ -15,6 +15,12 @@
 #include <cstdint>
 #include <cstddef>
 
+// ENDGAME B.3.5 block E: this header is DELIBERATELY left with no include of
+// `Geometry.h`. The real `Graphics::ParticleInstance` /
+// `ParticleSystemInstance` classes live in `ParticleInstance.h`, which includes
+// both this header and `Geometry.h`; see that file's banner for why the split
+// exists (`<windows.h>` and `Volume.h`'s `Rectangle`).
+
 namespace RtGraphics {
 
 // ============================================================================
@@ -270,3 +276,4 @@ static_assert(sizeof(ParticleSystemInstance) == 0xe0, "Graphics::ParticleSystemI
 static_assert(offsetof(ParticleSystemInstance, _f_d8) == 0xd8, "ParticleSystemInstance::_f_d8 @ +0xd8");
 
 }  // namespace RtGraphics
+

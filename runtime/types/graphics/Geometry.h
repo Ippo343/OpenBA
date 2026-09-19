@@ -51,6 +51,28 @@
 
 namespace RtGraphics {
 
+// ============================================================================
+// Object::ExternalPtr<T> — an 8-byte handle, passed and stored BY VALUE.
+//
+// MOVED HERE FROM Mesh.h BY ENDGAME B.3.5 BLOCK E, unchanged. It was declared
+// in `Mesh.h` (which includes this header), but the real `Graphics::Geometry`
+// class below needs it for slot 2's `Draw` parameter, so it has to be the other
+// way round. Every user reaches it through `Mesh.h` exactly as before.
+//
+// Never dereferenced arithmetically by this family; it is copied around as an
+// opaque qword and, where retail follows it, followed as a plain pointer to the
+// resource object (MeshInstance::SetMesh does exactly that: it stores the
+// argument at +0xc0 and then reads `*(mesh + 0x70)` off it).
+//
+// Typed as a distinct struct rather than `void*` so a signature cannot silently
+// lose it or swap it with an `int` — the recorded 5th-argument /
+// pointer-typed-as-int trap (reference_hidden_retval_and_int_pointer_args.md).
+// ============================================================================
+struct ExternalPtr {
+    void* p;
+};
+static_assert(sizeof(ExternalPtr) == 8, "Object::ExternalPtr must be 8 bytes");
+
 // ============================================================
 // Graphics::Geometry — 0xC0 bytes.
 //
@@ -173,3 +195,320 @@ enum GeometryVSlot : int {
 };
 
 }  // namespace RtGraphics
+
+// ############################################################################
+// ENDGAME B.3 step 5 (block E) — `Graphics::Geometry`, the REAL C++ class
+// ############################################################################
+//
+// `B35_RULES.md` §2.1/§2.2, measured from the retail DLL this pass by block 0:
+//
+//   ??_7Geometry@Graphics@@6B@ @ 0x180154e60, NINE slots, sizeof 0xC0,
+//   and it is a **ROOT** — NOT an `Object::Base` subclass. Its slot 0
+//   (0x180015e90) and slots 1/2/3 are its own and share nothing with
+//   ??_7Base@Object@@6B@ (0x180154788, whose slot 2 is `?Type@Base@Object@@`).
+//   There is no `_typeInfo`, no `TypeName`, no `Type`. ABSTRACT: slots 1, 2
+//   and 3 are `_purecall` (0x18007ec28).
+//
+// THE SLOT LIST, copied from `B35_SLOTS.md` (read as `.rdata` qwords, not
+// decompiled), with the names of slots 1/2/3 read off the OVERRIDES — a pure
+// slot's name can only ever come from a subclass that fills it, and all seven
+// subclasses agree:
+//
+//   [0] +0x00  0x180015e90  (unexported) vector deleting destructor
+//   [1] +0x08  _purecall    Update(const System::Time&)
+//   [2] +0x10  _purecall    Draw(Context&, const Camera&, ExternalPtr<MaterialInstance>,
+//                                float, int, int, int) const
+//   [3] +0x18  _purecall    AddDrawItems(const Scene&, Renderer&) const
+//   [4] +0x20  0x1800a4020  ?UpdateAttached@Geometry@Graphics@@UEAAXXZ
+//   [5] +0x28  0x1800a43c0  ?GetSubTransform@…  -> Math::Transform BY VALUE
+//   [6] +0x30  0x1800154a0  ?GetInstanceTransform@…  -> Math::Matrix BY VALUE
+//   [7] +0x38  0x180015590  ?SetSharedInstanceData@…
+//   [8] +0x40  0x1800a4420  ?Clean@Geometry@Graphics@@UEAA_NXZ
+//
+// *** A CORRECTION TO THE BANNER AT THE TOP OF THIS FILE. *** It reads
+// "slot 1 _purecall (Draw)" and "slot 3 _purecall (AddDrawItems)". Slot 1 is
+// **Update** and slot 2 is **Draw**: every one of the seven subclasses' tables
+// puts `?Update@X@Graphics@@UEAAXAEBVTime@System@@@Z` at [1] and
+// `?Draw@X@…MHHH@Z` at [2] (B35_SLOTS.md, nine independent readings). The old
+// comment mis-named slot 1 and left slot 2 unnamed; the enum below never
+// carried a name for either, so nothing was built on the mistake.
+//
+// -------------------------------------------------------------------------
+// RULE B5-12 — SLOTS 5 AND 6 ARE HIDDEN-RETSLOT SLOTS
+// -------------------------------------------------------------------------
+// `GetSubTransform` returns `Math::Transform` (0x1c) and
+// `GetInstanceTransform` returns `Math::Matrix` (0x40), both **by value
+// through a vtable slot**. Those two indices are the WHOLE of the hidden-
+// retslot vtable surface in Video and Graphics — nine (class, slot) pairs,
+// two indices (B35_RULES §2.5). The 2026-09-13 perf-only crash (`1a4200c3`)
+// was exactly one of them: a `void` port of `ParticleInstance::
+// GetInstanceTransform` left RAX holding garbage at -O2 while -O0 happened to
+// still hold the slot pointer. Every surviving `fn_*` typedef and hand-built
+// mint row for these two slots keeps `Transform*` / `Matrix*` and must never
+// be "simplified" to `void`. **Verify at -O2, not -O0.**
+//
+// *** AND B5-12 IS WRONG ABOUT THE FIX. MEASURED, 2026-09-19, BLOCK E. ***
+//
+// The rule says: "When the Geometry block declares those virtuals, they return
+// the value type BY VALUE in C++ — GCC's Microsoft-ABI lowering produces the
+// same hidden slot and the same RAX return, which is the point of using a real
+// class here." **It does not.** GCC (ucrt64 13.1, the tree's only compiler)
+// passes the hidden return pointer as the FIRST argument, BEFORE `this`, the way
+// the Itanium/SysV ABI does. MSVC — and therefore retail — passes `this` FIRST
+// and the return pointer SECOND.
+//
+// The probe (a `virtual Big Get(int) const` returning 28 bytes, its slot 0
+// called twice through two hand-spelled function-pointer types):
+//
+//   (this, ret, n)  -> wrote the 28 bytes THROUGH `this`, corrupting the object,
+//                      and left the caller's buffer untouched
+//   (ret, this, n)  -> wrote the caller's buffer, returned it in RAX, object intact
+//
+// The same swap is what made the first version of this block's unit test
+// segfault: the slot-5 call scribbled a `Math::Transform` over the probe
+// object's vptr and the next slot read faulted. Retail's order is settled
+// independently by the tree: every ported retslot door is spelled
+// `(self, ret, args…)` — `RtGraphics_Geometry_GetSubTransform(const Geometry*,
+// Transform*, int)` in `scene.cpp` is registered as slot 5's body and the game
+// renders — and `1a4200c3`'s own description says "the hidden return slot
+// arrives in RDX".
+//
+// A vtable slot is the ONE place this matters, because a slot is the shared
+// contract between a GCC-compiled member and the retail-order callers that
+// still reach it: the minted rows in `standalone/rt_data_mint_tables.inc`, the
+// surviving `fn_*` typedefs, and the 118 hand-inlined `(*(void***)p)[N]` call
+// sites. So slots 5 and 6 are declared below with an EXPLICIT out-parameter in
+// RETAIL ORDER — `T* M(T* ret, args…) const` — which makes GCC emit exactly the
+// convention MSVC emitted and keeps a minted row and a GCC vtable entry
+// interchangeable, which is what licenses the whole coexistence argument.
+//
+// NON-VIRTUAL by-value returns are NOT affected and are declared as ordinary
+// C++ by-value returns (`GetTransform`, `AABB`, `LocalAABB`,
+// `MeshInstance::GetNodeToWorld`, …): they are never reached through a slot, so
+// both ends of every call are this same GCC, and their registered doors keep the
+// retail `(self, ret)` shape as separate functions.
+//
+// `tests/unit/graphics_geometry_abi_test.cpp` PART C pins both halves of this.
+//
+// -------------------------------------------------------------------------
+// WHY THE `RtGraphics::Geometry` POD ABOVE STAYS
+// -------------------------------------------------------------------------
+// B4b-1 renames a POD out of the retail name only when the POD OCCUPIES that
+// name. `RtGraphics` is a SIBLING of `Graphics`, so there is no collision and
+// nothing has to move. The POD also has live users OUTSIDE this block's file
+// set — `runtime/src/graphics/scene.cpp`, `cull.cpp`,
+// `batchc_gfx_leaves.cpp`, `animation.cpp`, `vtbatch7_animgroup_particlesystem.cpp`
+// and `runtime/types/graphics/Scene.h` — which this block may not touch. So
+// the two descriptions coexist, exactly as `Object::External` coexists with
+// `RtObject::External` (`runtime/types/object/External.h`), and every offset
+// is CROSS-ASSERTED against the POD below so the two cannot drift.
+//
+// -------------------------------------------------------------------------
+// ABSTRACT, AND NOTHING HERE IS CONSTRUCTIBLE — B34_BRIEFS §A.4
+// -------------------------------------------------------------------------
+// Slot 0 stays `= 0`. Its body is the vector deleting destructor at
+// 0x180015e90, which is a row in the minted tables, not a C++ function this
+// block owns, and B35_RULES §11 forbids retiring that row in step 5. Nothing
+// in the tree holds a `Graphics::Geometry` (or any subclass) BY VALUE as a
+// C++ member — the four by-value mirrors of §3 are the `RtGraphics` PODs
+// holding `RtGraphics::Geometry`, not the class — so §A.4's amended rule
+// ("abstract where nothing holds the class by value") applies to the whole
+// tree below. `sizeof` and `offsetof` work on an abstract class, so every
+// layout pin still holds.
+//
+// NO REAL CONSTRUCTOR and NO REAL DESTRUCTOR BODY (ENDGAME §B.1 decision 2,
+// B4b-2, B35_RULES §11): `??0Geometry@Graphics@@QEAA@XZ` (0x1800a4270) and
+// `??1Geometry@Graphics@@UEAA@XZ` (0x1800a41c0) keep their doors in
+// `runtime/src/graphics/scene.cpp`. The ONE exception is the COPY
+// constructor, which RULE B5-10 requires be declared explicitly and never
+// `= default`; see its comment below.
+// ############################################################################
+
+// Forward declarations of the classes other blocks own. B.3.5 takes them by
+// reference / pointer under their REAL retail names; the bridge happens at the
+// use site, never in this header.
+namespace System { class Time; class String; }
+namespace Video  { class Context; }
+namespace IO     { class Serializer; }
+
+namespace Graphics {
+
+class Camera;             // block F  (runtime/types/graphics/Camera.h)
+class Renderer;           // block F
+class Scene;              // block F
+class MaterialInstance;   // block G  (runtime/types/graphics/Material.h)
+class GraphicsMesh;       // block G  (runtime/types/graphics/Mesh.h, the POD today)
+class EdgeMesh;           // block G
+class AnimationGroup;     // block H2
+class Particle;           // block H2 (runtime/types/graphics/Particle.h, the POD today)
+
+// ---------------------------------------------------------------------------
+// `Object::ExternalPtr<T>` IS SPELLED AS THE 8-BYTE POD HANDLE, ON PURPOSE.
+//
+// Retail's parameter and return type is `Object::ExternalPtr<T>` — a real class
+// template that `runtime/types/object/External.h` already carries. This family
+// keeps `RtGraphics::ExternalPtr` (one `void* p`, `static_assert(sizeof == 8)`)
+// instead, for the same reason `Object::External::_path` keeps the POD
+// `RtSystem::Filename` rather than the real `System::Filename`
+// (External.h's field banner):
+//
+//  * the two are ABI-identical — 8 bytes, trivially copyable, so the Microsoft
+//    x64 ABI passes both in a register and returns both in RAX — and every
+//    already-diffed body in this family (`MeshInstance::SetMesh`,
+//    `SetMaterialInstance`, `PlayAnimation`, `EdgeMeshInstance::SetMesh`,
+//    `ParticleInstance::SetParticle`) carries the POD handle today;
+//  * the typed spelling would make these headers include External.h — and
+//    through it the IO serializer — for no ABI gain, on the Geometry base every
+//    Video/Graphics block includes;
+//  * `T` is `GraphicsMesh`, `MaterialInstance`, `EdgeMesh`, `AnimationGroup`
+//    and `Particle`, which are blocks G and H2's classes. The typed spelling
+//    lands with them, as a one-line change to this alias and no change to any
+//    body.
+//
+// The alias is named for what it is so the retail type is not lost.
+// ---------------------------------------------------------------------------
+using ExternalPtrHandle = RtGraphics::ExternalPtr;
+
+// ============================================================
+// Graphics::Geometry — 0xC0 bytes, nine slots, ABSTRACT, a ROOT.
+//
+// The fields carry the POD's names so that a body moving out of a door reads
+// `_dirtyFlags` where it used to read `self->_dirtyFlags`, and the two
+// descriptions can be asserted field for field.
+// ============================================================
+class Geometry {
+public:
+    // ---- RULE B5-10 --------------------------------------------------------
+    // `??0Geometry@Graphics@@QEAA@AEBV01@@Z` @ 0x180015b60 is a REAL,
+    // REGISTERED, EXPORTED body (393 bytes; `runtime/src/graphics/
+    // closure_batch2b.cpp`), not a compiler default. It zeroes the nested
+    // `Array<Geometry*>` header and then runs retail's DEEP
+    // `Array<Geometry*>::operator=` over it. `= default` here would replace
+    // that with a bitwise copy of a heap pointer — two owners of one buffer.
+    // Four POD mirrors embed these bytes by value and `Collection::Array`
+    // copies of the derived classes go through this constructor, so it is
+    // declared explicitly and defined in closure_batch2b.cpp.
+    Geometry(const Geometry& src);
+
+    // `??4Geometry@Graphics@@QEAAAEAV01@AEBV01@@Z` @ 0x180015cf0.
+    // NOT PORTED and no caller anywhere in the tree: declared so no caller
+    // batch has to edit this header, deliberately left undefined.
+    Geometry& operator=(const Geometry& src);
+
+    // ---- the nine slots, in measured retail order -------------------------
+    // Slot 0 is `DeletingDtor(unsigned)`, NOT a virtual destructor
+    // (ENDGAME §B.1 decision 2). Deletion is the minted row at 0x180015e90.
+    virtual Geometry* DeletingDtor(unsigned flags) = 0;                  // [0] 0x180015e90
+    virtual void Update(const System::Time& time) = 0;                   // [1] _purecall
+    virtual void Draw(Video::Context& context, const Camera& camera,
+                      ExternalPtrHandle material,
+                      float opacity, int a, int b, int c) const = 0;     // [2] _purecall
+    virtual void AddDrawItems(const Scene& scene,
+                              Renderer& renderer) const = 0;             // [3] _purecall
+    virtual void UpdateAttached();                                       // [4] 0x1800a4020
+    // Slots 5 and 6: the hidden return slot is spelled OUT, in retail's order
+    // (`this`, then the caller's storage), and returned again as the result.
+    // See the B5-12 block above for why a C++ by-value return is wrong HERE and
+    // right for every non-virtual member.
+    virtual Math::Transform* GetSubTransform(Math::Transform* ret,
+                                             int node) const;            // [5] 0x1800a43c0 RETSLOT
+    virtual Math::Matrix* GetInstanceTransform(Math::Matrix* ret, int node,
+                                               float t) const;           // [6] 0x1800154a0 RETSLOT
+    virtual int  SetSharedInstanceData(Video::Context& context,
+                                       int a, float t) const;            // [7] 0x180015590
+    virtual bool Clean();                                                // [8] 0x1800a4420
+
+    // ---- the non-virtual exported surface ---------------------------------
+    // ALL of these are PORTED, and every body lives in
+    // `runtime/src/graphics/scene.cpp` — which is NOT this block's file (it
+    // holds `Graphics::Scene` too, and block F owns it). They are declared
+    // here so no later block or caller batch has to edit this header; the
+    // five whose retail bodies exist keep their registered doors and their
+    // bodies move onto these members when scene.cpp converts.
+    void Attach(Geometry* child, int node);              // 0x1800a3fa0  door in scene.cpp
+    void Detach(Geometry* child);                        // 0x1800a3f20  door in scene.cpp
+    void SetTransform(const Math::Transform& xf);        // 0x1800155a0  door in scene.cpp
+    void SetBounds(const ::Box& box);                    // 0x180015700  door in scene.cpp
+    Math::Transform GetTransform() const;                // 0x180015800  door in scene.cpp, RETSLOT
+
+    // Exported, NOT PORTED anywhere in the tree, and no caller: declared,
+    // deliberately undefined. Each is one or two instructions in retail and
+    // the offsets they read are pinned in the POD's banner above.
+    void     SetOpacity(float opacity);                  // 0x1800156c0  not ported
+    float    GetOpacity() const;                         // 0x1800156f0  not ported
+    ::Box    AABB() const;                               // 0x180015780  not ported, RETSLOT
+    ::Box    LocalAABB() const;                          // 0x1800157c0  not ported, RETSLOT
+    uint32_t GetMaterialTypeFlags() const;               // 0x1800157f0  not ported
+    bool     IsDirty() const;                            // 0x180015860  not ported
+    bool     NeedsCleaning() const;                      // 0x180015870  not ported
+    void     SetDetailId(int id);                        // 0x180015880  not ported
+    int      GetDetailId() const;                        // 0x180015890  not ported
+
+protected:
+    // `??1Geometry@Graphics@@UEAA@XZ` @ 0x1800a41c0. NON-VIRTUAL (decision 2),
+    // protected because this is a base. The body is scene.cpp's door and is
+    // NOT moved here: it re-stamps the vtable, detaches every child and frees
+    // `_attached`, and a compiler-run `~Array` on top of that explicit free
+    // would be retail's own decomposition run twice (the `Object::External::
+    // _refs` discussion in External.h). Declared, deliberately undefined:
+    // nothing in the tree destroys one of these as a C++ object.
+    ~Geometry();
+
+public:
+    // ---- the 0xB8 bytes after the vptr ------------------------------------
+    Geometry*                    _attachParent;      // +0x08
+    int32_t                      _attachNode;        // +0x10
+    int32_t                      _pad14;             // +0x14  uninitialised, unused
+    Collection::Array<Geometry*> _attached;          // +0x18
+    int32_t                      _detailId;          // +0x28
+    uint32_t                     _dirtyFlags;        // +0x2c
+    uint32_t                     _materialTypeFlags; // +0x30
+    ::Box                        _localBounds;       // +0x34
+    ::Box                        _worldBounds;       // +0x4c
+    ::Box                        _prevWorldBounds;   // +0x64
+    float                        _opacity;           // +0x7c
+    float                        _opacityPrev;       // +0x80
+    Math::Transform              _transform;         // +0x84
+    Math::Transform              _prevTransform;     // +0xa0
+    uint32_t                     _padBC;             // +0xbc  uninitialised, unused
+};
+
+static_assert(sizeof(Geometry) == 0xC0,
+              "Graphics::Geometry is 0xC0 bytes (MOV EDX,0xc0 in its own slot-0 "
+              "vector deleting destructor, 0x180015e90)");
+static_assert(alignof(Geometry) == 8, "Graphics::Geometry is qword aligned (the vptr)");
+static_assert(sizeof(Geometry) == sizeof(RtGraphics::Geometry),
+              "the real class and the POD describe the same bytes");
+
+// Cross-asserts against the POD: every field at the same offset in both.
+static_assert(offsetof(Geometry, _attachParent)      == offsetof(RtGraphics::Geometry, _attachParent),      "alias _attachParent");
+static_assert(offsetof(Geometry, _attachNode)        == offsetof(RtGraphics::Geometry, _attachNode),        "alias _attachNode");
+static_assert(offsetof(Geometry, _attached)          == offsetof(RtGraphics::Geometry, _attached),          "alias _attached");
+static_assert(offsetof(Geometry, _detailId)          == offsetof(RtGraphics::Geometry, _detailId),          "alias _detailId");
+static_assert(offsetof(Geometry, _dirtyFlags)        == offsetof(RtGraphics::Geometry, _dirtyFlags),        "alias _dirtyFlags");
+static_assert(offsetof(Geometry, _materialTypeFlags) == offsetof(RtGraphics::Geometry, _materialTypeFlags), "alias _materialTypeFlags");
+static_assert(offsetof(Geometry, _localBounds)       == offsetof(RtGraphics::Geometry, _localBounds),       "alias _localBounds");
+static_assert(offsetof(Geometry, _worldBounds)       == offsetof(RtGraphics::Geometry, _worldBounds),       "alias _worldBounds");
+static_assert(offsetof(Geometry, _prevWorldBounds)   == offsetof(RtGraphics::Geometry, _prevWorldBounds),   "alias _prevWorldBounds");
+static_assert(offsetof(Geometry, _opacity)           == offsetof(RtGraphics::Geometry, _opacity),           "alias _opacity");
+static_assert(offsetof(Geometry, _opacityPrev)       == offsetof(RtGraphics::Geometry, _opacityPrev),       "alias _opacityPrev");
+static_assert(offsetof(Geometry, _transform)         == offsetof(RtGraphics::Geometry, _transform),         "alias _transform");
+static_assert(offsetof(Geometry, _prevTransform)     == offsetof(RtGraphics::Geometry, _prevTransform),     "alias _prevTransform");
+
+// And against the retail bodies directly, so a POD edit cannot move both.
+static_assert(offsetof(Geometry, _attachParent)      == 0x08, "Geometry::_attachParent @ +0x08 (Attach 0x1800a3fa0)");
+static_assert(offsetof(Geometry, _attachNode)        == 0x10, "Geometry::_attachNode @ +0x10");
+static_assert(offsetof(Geometry, _attached)          == 0x18, "Geometry::_attached @ +0x18");
+static_assert(offsetof(Geometry, _detailId)          == 0x28, "Geometry::_detailId @ +0x28 (GetDetailId 0x180015890)");
+static_assert(offsetof(Geometry, _dirtyFlags)        == 0x2c, "Geometry::_dirtyFlags @ +0x2c (IsDirty 0x180015860)");
+static_assert(offsetof(Geometry, _materialTypeFlags) == 0x30, "Geometry::_materialTypeFlags @ +0x30 (0x1800157f0)");
+static_assert(offsetof(Geometry, _localBounds)       == 0x34, "Geometry::_localBounds @ +0x34 (SetBounds 0x180015700)");
+static_assert(offsetof(Geometry, _worldBounds)       == 0x4c, "Geometry::_worldBounds @ +0x4c (Clean 0x1800a4420)");
+static_assert(offsetof(Geometry, _prevWorldBounds)   == 0x64, "Geometry::_prevWorldBounds @ +0x64");
+static_assert(offsetof(Geometry, _opacity)           == 0x7c, "Geometry::_opacity @ +0x7c (GetOpacity 0x1800156f0)");
+static_assert(offsetof(Geometry, _opacityPrev)       == 0x80, "Geometry::_opacityPrev @ +0x80");
+static_assert(offsetof(Geometry, _transform)         == 0x84, "Geometry::_transform @ +0x84 (SetTransform 0x1800155a0)");
+static_assert(offsetof(Geometry, _prevTransform)     == 0xa0, "Geometry::_prevTransform @ +0xa0");
+static_assert(offsetof(Geometry, _padBC)             == 0xbc, "Geometry::+0xbc is the never-written tail dword");
+
+}  // namespace Graphics
