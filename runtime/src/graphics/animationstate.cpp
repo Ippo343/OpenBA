@@ -62,6 +62,14 @@
 #include "../../types/system/String.h"
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"
+// ENDGAME B.3.5 block H1: the real `Graphics::Animation` / `AnimationState` /
+// `AnimationManager` classes, and `System::Time` for the two tick parameters
+// `Animation::GetPoseAtTime` takes by reference. Value.h is what drags the ONE
+// global `struct Time` (engine/types/common.h) into this translation unit; no
+// other header here declares one, so there is nothing for it to collide with.
+#include "../../types/graphics/Animation.h"
+#include "../../types/graphics/AnimationState.h"
+#include "../../types/system/Value.h"
 #include "../../types/io/Serializer.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -326,9 +334,22 @@ extern "C" void RtGraphics_SerializeAnimLayers(Serializer* ser, int count, void*
         SerializeGroupPtr()(p + 0x00, ser);                  // ExternalPtr<AnimationGroup>
         RwScalar(rw, rw_vtbl::kScalarInt,   p + 0x08);       // clip index
         RwScalar(rw, rw_vtbl::kScalarFloat, p + 0x10);       // speed / weight
-        RwScalar(rw, rw_vtbl::kScalarInt64, p + 0x18);       // time
-        RwScalar(rw, rw_vtbl::kScalarInt64, p + 0x20);       // fade length
-        RwScalar(rw, rw_vtbl::kScalarInt64, p + 0x28);       // fade remaining
+        // ENDGAME B.3.5 block H1 — THE THREE HAND-INLINED int64 SLOT CALLS
+        // B35_RULES section 11 listed as "receiver-side work". Block H1 owns the
+        // receiver (`Graphics::AnimationState::Layer`), and
+        // `IO::Serializer::Serialize(int64_t&, const char*)`
+        // (`?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z` @ 0x180035000) is a real
+        // member, so they are spelled as member calls. The member's own body
+        // still calls the ReaderWriter's +0x90 slot (Serializer.h's section 3.1
+        // banner: the 22 members KEEP their raw slot calls until the minted
+        // tables retire), so this is a spelling change and nothing else — and it
+        // removes the last three places a Graphics body spells `0x90` by hand.
+        // The `rt::io::Serializer` POD and `IO::Serializer` are asserted
+        // layout-identical in runtime/types/io/Serializer.h.
+        IO::Serializer* const sc = reinterpret_cast<IO::Serializer*>(ser);  // B.3.5 bridge
+        sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x18), nullptr);      // time
+        sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x20), nullptr);      // fade length
+        sc->Serialize(*reinterpret_cast<int64_t*>(p + 0x28), nullptr);      // fade remaining
         RwScalar(rw, rw_vtbl::kScalarInt,   p + 0x0c);       // packed instance handle
         RwScalar(rw, rw_vtbl::kScalarBool,  p + 0x30);       // restarted
     }
@@ -400,15 +421,12 @@ extern "C" void RtGraphics_SerializeAnimInstances(Serializer* ser, int count, vo
 // The last call is a TAIL JUMP through the ReaderWriter vtable in retail
 // (Ghidra prints "Could not recover jumptable ... Treating indirect jump as
 // call" at 0x1800fe2c3); a call is the same thing without the tail merge.
+// ENDGAME B.3.5 block H1: THE BODY MOVED INTO `Graphics::AnimationState::
+// Serialize` (this file's `namespace Graphics` block). The door keeps its
+// mangled name and its retail address and is a one-line qualified call.
 extern "C" void RtGraphics_AnimationState_Serialize(void* selfv, Serializer* ser) {
-    AnimStateRec* self = static_cast<AnimStateRec*>(selfv);
-    ReaderWriter* rw = ser->readerWriter;
-
-    int32_t n = self->_layers._size;
-    RwScalar(rw, rw_vtbl::kScalarInt, &n);
-    if (IsReading(ser)) SetSizeLayers()(&self->_layers, n);
-    RtGraphics_SerializeAnimLayers(ser, n, self->_layers._data);
-    RwScalar(rw, rw_vtbl::kScalarBool, self);
+    reinterpret_cast<Graphics::AnimationState*>(selfv)                      // B.3.5 bridge
+        ->Graphics::AnimationState::Serialize(*reinterpret_cast<IO::Serializer*>(ser));
 }
 
 // ============================================================================
@@ -425,33 +443,11 @@ extern "C" void RtGraphics_AnimationState_Serialize(void* selfv, Serializer* ser
 // it in place (group = null, clip index = -1, both arrays resized to 0) and
 // leaves it in the table, which is what lets GetInstanceId reuse the slot: its
 // first pass looks for `group == 0` and remembers the first such index.
+// ENDGAME B.3.5 block H1: THE BODY MOVED INTO
+// `Graphics::AnimationState::ResetAnimationState`.
 extern "C" void RtGraphics_AnimationState_Reset(void* selfv) {
-    AnimStateRec* self = static_cast<AnimStateRec*>(selfv);
-
-    for (int32_t i = 0; i < self->_layers._size; ++i) {
-        const int32_t handle =
-            *reinterpret_cast<const int32_t*>(self->_layers._data + i * 0x38 + 0x0c);
-        if (handle < 0) continue;                        // TEST ECX,ECX / JS
-
-        AnimationManagerView* mgr = AnimationManagerSingleton();
-        uint8_t* inst = mgr->_instances._data +
-                        static_cast<int64_t>((handle >> 8) & 0xff) * 0x30;
-        if (--*reinterpret_cast<int32_t*>(inst + 0x0c) != 0) continue;
-
-        *reinterpret_cast<uint64_t*>(inst + 0x00) = 0;   // _group
-        *reinterpret_cast<int32_t*>(inst + 0x08)  = -1;  // _animIndex
-        SetSizeNodes()(inst + 0x10, 0);                  // CALL 0x18005aa30
-        SetSizeStates()(inst + 0x20, 0);                 // CALL 0x18005b1e0
-    }
-
-    // The inlined ~Array. `MemFree` is null-guarded inside 0x1800c7ad0, which is
-    // instruction for instruction what retail inlines here.
-    using MemFreeFn = void (*)(void*);
-    if (self->_layers._data != nullptr)
-        RtAddr<MemFreeFn>(0x1800c7ad0)(self->_layers._data);
-    self->_layers._data     = nullptr;
-    self->_layers._size     = 0;
-    self->_layers._capacity = 0;
+    reinterpret_cast<Graphics::AnimationState*>(selfv)                       // B.3.5 bridge
+        ->Graphics::AnimationState::ResetAnimationState();
 }
 
 // ============================================================================
@@ -461,20 +457,13 @@ extern "C" void RtGraphics_AnimationState_Reset(void* selfv) {
 // Copy `count` baked Math::Transforms out of the cached instance the packed
 // handle names. Unguarded on every step — a bad handle indexes off the end of
 // the instance table — and that is retail's, so it stays that way.
+// ENDGAME B.3.5 block H1: THE BODY MOVED INTO
+// `Graphics::AnimationManager::GetPose(int, Math::Transform*, int) const`.
 extern "C" void RtGraphics_AnimationManager_GetPose(const void* selfv, int handle,
                                                     void* outv, int count) {
-    const AnimationManagerView* self = static_cast<const AnimationManagerView*>(selfv);
-
-    const uint8_t* inst = self->_instances._data +
-                          static_cast<int64_t>((handle >> 8) & 0xff) * 0x30;
-    const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(inst + 0x20);
-    const uint8_t* pose = *reinterpret_cast<const uint8_t* const*>(
-        states + static_cast<int64_t>(handle & 0xff) * 0x48 + 0x28);
-
-    uint8_t* out = static_cast<uint8_t*>(outv);
-    for (int i = 0; i < count; ++i, out += 0x1c, pose += 0x1c)
-        for (int w = 0; w < 7; ++w)
-            reinterpret_cast<uint32_t*>(out)[w] = reinterpret_cast<const uint32_t*>(pose)[w];
+    reinterpret_cast<const Graphics::AnimationManager*>(selfv)                // B.3.5 bridge
+        ->Graphics::AnimationManager::GetPose(
+            handle, static_cast<Math::Transform*>(outv), count);
 }
 
 // ============================================================================
@@ -496,21 +485,184 @@ extern "C" void RtGraphics_AnimationManager_GetPose(const void* selfv, int handl
 // `UCOMISS XMM9,XMM10 / JP taken / JZ` — the parity jump sends an unordered
 // compare to the INTERPOLATING arm, so `frac != frac` takes the lerp. Written
 // as `f0 == f1 || frac == 0.0f` in C, which has exactly that behaviour.
+// ENDGAME B.3.5 block H1: THE BODY MOVED INTO `Graphics::Animation::
+// GetPoseAtTime` (below, in this file's `namespace Graphics` block). The
+// registered door keeps its mangled name AND its retail address and is now a
+// one-line QUALIFIED, non-virtual call. `Graphics::Animation` has no vtable at
+// all, so the qualification is not load-bearing the way it is on a polymorphic
+// receiver (B34_BRIEFS A.1) — it is spelled anyway so the shape is uniform.
+//
+// The two `System::Time` parameters arrive as `const int64_t*` here because
+// that is retail's ABI for a `const System::Time&` (one tick count, 8 bytes),
+// and `System::Time` is layout-identical to it (`Value.h`, `_ticks` @ +0x00).
 extern "C" void RtGraphics_Animation_GetPoseAtTime(const void* selfv,
                                                    const int64_t* time,
                                                    const int64_t* delta,
-                                                   void* outv, int /*unused*/) {
-    const uint8_t* clip = static_cast<const uint8_t*>(selfv);
-    uint8_t* out = static_cast<uint8_t*>(outv);
+                                                   void* outv, int unused) {
+    // B.3.5 bridge
+    reinterpret_cast<const Graphics::Animation*>(selfv)->Graphics::Animation::GetPoseAtTime(
+        *reinterpret_cast<const System::Time*>(time),
+        *reinterpret_cast<const System::Time*>(delta),
+        static_cast<Math::Transform*>(outv), unused);
+}
 
-    const int32_t loopFrame  = *reinterpret_cast<const int32_t*>(clip + anim_clip::kLoopFrame);
-    const int32_t frameFirst = *reinterpret_cast<const int32_t*>(clip + anim_clip::kFrameFirst);
-    const int32_t frameLast  = *reinterpret_cast<const int32_t*>(clip + anim_clip::kFrameLast);
-    const int32_t frameCount = *reinterpret_cast<const int32_t*>(clip + anim_clip::kFrameCount);
-    const int32_t boneCount  = *reinterpret_cast<const int32_t*>(clip + anim_clip::kBoneCount);
-    const uint8_t  looping   = clip[anim_clip::kLooping];
-    const float    rate      = *reinterpret_cast<const float*>(clip + anim_clip::kFrameRate);
-    const uint8_t* keys      = *reinterpret_cast<const uint8_t* const*>(clip + anim_clip::kKeys);
+// ############################################################################
+// ENDGAME B.3.5 step 5, block H1 — the member bodies.
+//
+// Their own `namespace Graphics { }` block, after this file's anonymous
+// namespace has closed, because a member definition has to appear in a namespace
+// ENCLOSING the class and `Graphics` / `RtGraphics` are siblings (B34_BRIEFS
+// section A.2). The anonymous namespace's helpers (`RwScalar`, `IsReading`,
+// `SetSize*`, `RtAddr`, `AnimationManagerSingleton`, `SecondsPerTick`,
+// `QuaternionLerp`) are reachable unqualified: they are members of the global
+// namespace's unnamed namespace, in this same translation unit.
+//
+// FOUR BODIES MOVED HERE, and the doors above keep their mangled names, their
+// retail addresses and their registrations. None of these three classes is
+// polymorphic, so the `Class::` on each delegation is uniformity rather than
+// recursion-avoidance (B34_BRIEFS A.1) — it is spelled anyway.
+//
+// GREP HAZARD: a bare `AnimationState` / `AnimationManager` / `Animation` in
+// here binds the CLASS. The PODs this file also uses — `AnimStateRec`,
+// `AnimInstanceRec`, `AnimationManagerView` — are spelled `RtGraphics::` inside
+// this block.
+// ############################################################################
+
+namespace Graphics {
+
+// ============================================================================
+// ?Serialize@AnimationState@Graphics@@QEAAXAEAVSerializer@IO@@@Z  (0x1800fe250)
+//
+// *** IT SERIALIZES ONLY THE LAYERS AND THE BOOL. *** `_pose`, `_nodes` and
+// `_rootOffset` are NOT written here. That is retail's and it is consistent:
+// those three are derived state that `Update` recomputes on the next tick, and
+// this entry point is the one a `MeshInstance`'s own Serialize reaches. The
+// ARRAY form (`RtGraphics_SerializeAnimStates`, 0x18005c2c0) is the
+// AnimationManager's instance CACHE, which has to come back whole because
+// nothing rebuilds it.
+//
+// The last call is a TAIL JUMP through the ReaderWriter vtable in retail
+// (Ghidra prints "Could not recover jumptable" at 0x1800fe2c3); a call is the
+// same thing without the tail merge.
+//
+// THE RAW `rw_vtbl::k*` SLOT CALLS STAY (Serializer.h section 3.1's rule): the
+// int count and the bool go through the ReaderWriter's +0xA0 and +0x78 exactly
+// as before. Only the nine int64 sites B35_RULES section 11 names were
+// converted to member calls, and the three in this cluster are in
+// `RtGraphics_SerializeAnimLayers` above.
+// ============================================================================
+void AnimationState::Serialize(IO::Serializer& s) {
+    // The POD view of the same 16 bytes — Serializer.h asserts the two
+    // interchangeable. Used because the helpers above take the POD.
+    Serializer* ser = reinterpret_cast<Serializer*>(&s);   // B.3.5 bridge
+    ReaderWriter* rw = ser->readerWriter;
+
+    int32_t n = _layers._size;
+    RwScalar(rw, rw_vtbl::kScalarInt, &n);
+    if (IsReading(ser)) SetSizeLayers()(&_layers, n);
+    RtGraphics_SerializeAnimLayers(ser, n, _layers._data);
+    RwScalar(rw, rw_vtbl::kScalarBool, &_needsUniqueCopy);
+}
+
+// ============================================================================
+// ?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ  (0x1800fd930)
+//
+// Drop every layer's reference on the shared instance it was using, then free
+// the layer array outright. The free is the J1 `~Array` body INLINED — retail
+// does the Enter/Free/Leave itself here rather than calling 0x18001c480 — so it
+// is written out rather than routed through the Collection port, which is what
+// makes it byte-faithful and not merely equivalent.
+//
+// A REFERENCE THAT REACHES ZERO DOES NOT FREE THE INSTANCE RECORD. It blanks it
+// in place (group = null, clip index = -1, both arrays resized to 0) and leaves
+// it in the table, which is what lets `GetInstanceId` reuse the slot: its first
+// pass looks for `group == 0` and remembers the first such index.
+//
+// THE SINGLETON STAYS AN `RT_DATA_SLOT` READ. `?_singleton@AnimationManager@
+// Graphics@@0PEAV12@EA` @ 0x1801fe7b0 is a `CUTOVER_REQUIRED` row with six
+// by-name doors; per B35_RULES section 9 / RULE B4b-4 its `MintStorageCell()`
+// redirect is OWED at the class-static conversion, the END of B.3, not here.
+//
+// Every deref is UNGUARDED, exactly as retail's is.
+// ============================================================================
+void AnimationState::ResetAnimationState() {
+    for (int32_t i = 0; i < _layers._size; ++i) {
+        const int32_t handle =
+            *reinterpret_cast<const int32_t*>(_layers._data + i * 0x38 + 0x0c);
+        if (handle < 0) continue;                        // TEST ECX,ECX / JS
+
+        RtGraphics::AnimationManagerView* mgr = AnimationManagerSingleton();
+        uint8_t* inst = mgr->_instances._data +
+                        static_cast<int64_t>((handle >> 8) & 0xff) * 0x30;
+        if (--*reinterpret_cast<int32_t*>(inst + 0x0c) != 0) continue;
+
+        *reinterpret_cast<uint64_t*>(inst + 0x00) = 0;   // _group
+        *reinterpret_cast<int32_t*>(inst + 0x08)  = -1;  // _animIndex
+        SetSizeNodes()(inst + 0x10, 0);                  // CALL 0x18005aa30
+        SetSizeStates()(inst + 0x20, 0);                 // CALL 0x18005b1e0
+    }
+
+    // The inlined ~Array. `MemFree` is null-guarded inside 0x1800c7ad0, which is
+    // instruction for instruction what retail inlines here.
+    using MemFreeFn = void (*)(void*);
+    if (_layers._data != nullptr)
+        RtAddr<MemFreeFn>(0x1800c7ad0)(_layers._data);
+    _layers._data     = nullptr;
+    _layers._size     = 0;
+    _layers._capacity = 0;
+}
+
+// ============================================================================
+// ?GetPose@AnimationManager@Graphics@@QEBAXHPEAVTransform@Math@@H@Z (0x1800fb8e0)
+//
+// Copy `count` baked `Math::Transform`s out of the cached instance the packed
+// handle names. `(handle >> 8) & 0xff` is the instance index and `handle & 0xff`
+// the frame — the 256/256 ceiling is retail's, not ours.
+//
+// UNGUARDED ON EVERY STEP: a bad handle indexes off the end of the instance
+// table. That is retail's, so it stays that way (CLAUDE.md: retail's unguarded
+// derefs are load-bearing).
+//
+// The copy is SEVEN 32-BIT MOVES per Transform rather than a float assignment,
+// for the reason wave21 records: an integer move of a float is bit-exact where a
+// float assignment is only value-exact, and the two differ on a signalling NaN
+// or a negative zero. The nested records are still reached at raw offsets
+// (`+0x20` = `Instance::_states._data`, `+0x28` = `AnimationState::_pose._data`)
+// because the class's own Array members are the RAW header type; the offsets are
+// the ones the headers assert.
+// ============================================================================
+void AnimationManager::GetPose(int handle, Math::Transform* outv, int count) const {
+    const uint8_t* inst = _instances._data +
+                          static_cast<int64_t>((handle >> 8) & 0xff) * 0x30;
+    const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(inst + 0x20);
+    const uint8_t* pose = *reinterpret_cast<const uint8_t* const*>(
+        states + static_cast<int64_t>(handle & 0xff) * 0x48 + 0x28);
+
+    uint8_t* out = reinterpret_cast<uint8_t*>(outv);
+    for (int i = 0; i < count; ++i, out += 0x1c, pose += 0x1c)
+        for (int w = 0; w < 7; ++w)
+            reinterpret_cast<uint32_t*>(out)[w] = reinterpret_cast<const uint32_t*>(pose)[w];
+}
+
+// ?GetPoseAtTime@Animation@Graphics@@QEBAXAEBVTime@System@@0PEAVTransform@Math@@H@Z
+// retail 0x1800faca0. The banner above the door carries the porting argument;
+// what changed in this commit is the SPELLING — every `clip + anim_clip::kX`
+// offset became a named member of `Graphics::Animation`, whose layout is pinned
+// in runtime/types/graphics/Animation.h against the same instructions.
+void Animation::GetPoseAtTime(const System::Time& timeRef, const System::Time& deltaRef,
+                              Math::Transform* outv, int /*unused*/) const {
+    const int64_t* const time  = &timeRef._ticks;
+    const int64_t* const delta = &deltaRef._ticks;
+    uint8_t* out = reinterpret_cast<uint8_t*>(outv);
+
+    const int32_t loopFrame  = _loopFrame;
+    const int32_t frameFirst = _startFrame;
+    const int32_t frameLast  = _endFrame;
+    const int32_t frameCount = _frameCount;
+    const int32_t boneCount  = _boneCount;
+    const uint8_t  looping   = _looping ? 1u : 0u;
+    const float    rate      = _frameRate;
+    const uint8_t* keys      = _keys._data;
 
     // Where a loop restarts, as a frame index. Zero when the clip has no loop
     // frame at all — and note that THIS is the short-circuit, not a test on the
@@ -574,6 +726,8 @@ extern "C" void RtGraphics_Animation_GetPoseAtTime(const void* selfv,
     *reinterpret_cast<float*>(out + 0x14) *= scale;
     *reinterpret_cast<float*>(out + 0x18) *= scale;
 }
+
+}  // namespace Graphics
 
 // ============================================================================
 // Registration. Unconditional (DIRECTION.md §2: a port registers, no flag).

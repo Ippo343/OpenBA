@@ -130,6 +130,18 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
+// ENDGAME B.3.5 step 5, block H1: the real `Graphics::AnimationGroup` and
+// `Graphics::Animation`. The two file-local `struct AnimationGroup` /
+// `struct AnimationClip` this file used to declare (batch 7's) are GONE —
+// they moved into `runtime/types/graphics/AnimationGroup.h` and `Animation.h`
+// under retail's own names, with the same offsets and the same asserts.
+//
+// GREP HAZARD (B4b-5 / B34_BRIEFS A.7): inside the `namespace Graphics { }`
+// block below, a bare `Particle` binds NOTHING (the POD is `RtGraphics::
+// Particle`) but a bare `Animation`, `AnimationGroup` or `AnimationEvent` binds
+// the REAL CLASS. The `ParticleSystem` half of this file is deliberately left
+// byte-identical for block H2 and does not open that namespace at all.
+#include "../../types/graphics/AnimationGroup.h"
 #include "../../types/graphics/Particle.h"
 #include "../object/deleting_dtor_internal.h"   // rtcoll::MemAlloc
 
@@ -200,70 +212,55 @@ void CallSlot0(void* self, int flag) {
 // ============================================================================
 namespace {
 
-struct AnimationClip {
-    void*    eventsData;  int32_t eventsSize; int32_t eventsCap;  // +0x00
-    void*    str1;                                                 // +0x10
-    void*    str2;                                                 // +0x18
-    void*    str3;                                                 // +0x20
-    int32_t  i28;                                                  // +0x28
-    uint8_t  b2c; uint8_t pad2d[3];                                 // +0x2c
-    int32_t  i30;                                                   // +0x30
-    int32_t  i34;                                                   // +0x34
-    float    f38;                                                   // +0x38
-    uint8_t  b3c; uint8_t pad3d[3];                                  // +0x3c
-    int32_t  i40;                                                    // +0x40
-    float    f44;                                                    // +0x44
-    float    f48;                                                    // +0x48
-    int32_t  i4c;                                                     // +0x4c
-    int32_t  i50;                                                     // +0x50
-    uint8_t  pad54[4];                                                 // +0x54
-    int64_t  i58;                                                       // +0x58
-    void*    poseData; int32_t poseSize; int32_t poseCap;                // +0x60
-};
-static_assert(sizeof(AnimationClip) == 0x70, "AnimationGroup::Clip must be 0x70 bytes");
-static_assert(offsetof(AnimationClip, str1) == 0x10, "+0x10");
-static_assert(offsetof(AnimationClip, i58)  == 0x58, "+0x58");
-static_assert(offsetof(AnimationClip, poseData) == 0x60, "+0x60");
-
-struct AnimationGroup {
-    RtObject::External base;                        // +0x00 (0x20)
-    void*   clipData;    int32_t clipSize; int32_t clipCap;   // +0x20
-    float   f30;                                                // +0x30
-    void*   tagData;     int32_t tagSize;  int32_t tagCap;      // +0x38
-    void*   floatData;   int32_t floatSize; int32_t floatCap;   // +0x48
-};
-static_assert(sizeof(AnimationGroup) == 0x58, "Graphics::AnimationGroup must be 0x58 bytes");
-static_assert(offsetof(AnimationGroup, clipData)  == 0x20, "+0x20");
-static_assert(offsetof(AnimationGroup, f30)       == 0x30, "+0x30");
-static_assert(offsetof(AnimationGroup, tagData)   == 0x38, "+0x38");
-static_assert(offsetof(AnimationGroup, floatData) == 0x48, "+0x48");
+// The element type and the record are `Graphics::Animation` (0x70) and
+// `Graphics::AnimationGroup` (0x58), declared in runtime/types/graphics/.
+// Batch 7's two file-local structs used to sit here; they carried exactly these
+// offsets and exactly these static_asserts, and the headers carry them now --
+// plus the eleven retail accessor addresses block H1 disassembled in order to
+// NAME each field instead of numbering it.
+using AnimationClip  = ::Graphics::Animation;
+using AnimationGroup = ::Graphics::AnimationGroup;
 
 void* AnimGroupVTable() { return RT_DATA_SLOT(void*, "??_7AnimationGroup@Graphics@@6B@"); }
 const uint8_t* AnimGroupTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@AnimationGroup@Graphics@@0VBaseTypeInfo@Object@@A");
 }
 
+// The three vtable stamps STAY HAND-WRITTEN and they stay pointed at the MINT.
+// This is not a missed conversion: `Construct` and `Reconstruct` run on an
+// object that ALREADY EXISTS and that the rest of the tree expects to be wearing
+// `??_7AnimationGroup@Graphics@@6B@` out of `rt_data_mint_tables.inc`. A member
+// constructor here would stamp GCC's tables instead, which is exactly the
+// question B34_RULES section 4.3 answers NO to. The fields are spelled through
+// `Graphics::AnimationGroup` now; the STORES are byte for byte batch 7's.
 void ConstructBody(AnimationGroup* self) {
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();
     *vp = ExternalVTable();
-    self->base._path.data      = nullptr;
-    self->base._refs._data     = nullptr;
-    self->base._refs._size     = 0;
-    self->base._refs._capacity = 0;
+    self->_path.data      = nullptr;
+    self->_refs._data     = nullptr;
+    self->_refs._size     = 0;
+    self->_refs._capacity = 0;
     *vp = AnimGroupVTable();
-    self->clipData = nullptr; self->clipSize = 0; self->clipCap = 0;
-    self->f30 = 0.1f;
-    self->tagData = nullptr; self->tagSize = 0; self->tagCap = 0;
-    self->floatData = nullptr; self->floatSize = 0; self->floatCap = 0;
+    self->_clips._data = nullptr; self->_clips._size = 0; self->_clips._capacity = 0;
+    self->_defaultBlend = 0.1f;
+    self->_tags._data = nullptr; self->_tags._size = 0; self->_tags._capacity = 0;
+    self->_blendTimes._data = nullptr; self->_blendTimes._size = 0; self->_blendTimes._capacity = 0;
 }
 
 // 0x1800594a0 — Object::ExternalPtr<AnimationEvent>::Serialize, ported as an
 // appended thunk in external_ptr_serialize.cpp (shared 748-byte template).
 extern "C" void RtObject_ExternalPtrSerialize_AnimationEvent(void** self, Serializer* ser);
 
-// 0x18005a040 — the AnimationClip element loop, called by AnimationGroup's own
-// Serialize with (Serializer*, int count, AnimationClip* data).
+// 0x18005a040 — `Array<Graphics::Animation>::Serialize`'s element loop, called
+// by `AnimationGroup::Serialize` with (Serializer*, int count, Animation* data).
+//
+// IT STAYS A FREE FUNCTION. Retail 0x18005a040 is an unexported
+// `Collection::Array<T>::Serialize` instantiation, not a member of either class,
+// and runtime/src/collection/array.cpp owns that family. What changed in ENDGAME
+// B.3.5 block H1 is the SPELLING: every `c->i30`-style position name is now the
+// retail field name off `Graphics::Animation`, whose layout is pinned in its
+// header against the eleven accessor bodies listed there.
 extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int count, void* datav) {
     if (count <= 0) return;
     AnimationClip* c = static_cast<AnimationClip*>(datav);
@@ -272,35 +269,35 @@ extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int co
     for (int i = 0; i < count; ++i, ++c) {
         ReaderWriter* rw = ser->readerWriter;
         StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
-        strSer(&c->str1, ser);
-        strSer(&c->str2, ser);
-        strSer(&c->str3, ser);
+        strSer(&c->_name, ser);
+        strSer(&c->_meshName, ser);
+        strSer(&c->_sourceName, ser);
 
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt, &c->i30);
+        RwScalar(rw, rw_vtbl::kScalarInt, &c->_startFrame);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt, &c->i34);
+        RwScalar(rw, rw_vtbl::kScalarInt, &c->_endFrame);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarFloat, &c->f38);
+        RwScalar(rw, rw_vtbl::kScalarFloat, &c->_rate);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarBool, &c->b3c);
+        RwScalar(rw, rw_vtbl::kScalarBool, &c->_looping);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt, &c->i40);
+        RwScalar(rw, rw_vtbl::kScalarInt, &c->_loopFrame);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt, &c->i28);
+        RwScalar(rw, rw_vtbl::kScalarInt, &c->_instanceCount);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarBool, &c->b2c);
+        RwScalar(rw, rw_vtbl::kScalarBool, &c->_instanced);
 
-        // The nested Array<{int32,ExternalPtr<AnimationEvent>}> at c->+0x00.
-        int32_t n = c->eventsSize;
+        // The nested Array<Animation::Event> at c->+0x00, stride 0x10.
+        int32_t n = c->_events._size;
         rw = ser->readerWriter;
         RwScalar(rw, rw_vtbl::kScalarInt, &n);
         if (IsReading(ser->stream)) {
             static SetSizeFn setSize = nullptr;
             if (!setSize) setSize = RtAddr<SetSizeFn>(0x180059930ull);
-            setSize(&c->eventsData, n);
+            setSize(&c->_events, n);
         }
-        uint8_t* e = static_cast<uint8_t*>(c->eventsData);
+        uint8_t* e = c->_events._data;
         for (int32_t k = 0; k < n; ++k, e += 0x10) {
             rw = ser->readerWriter;
             RwScalar(rw, rw_vtbl::kScalarInt, e);
@@ -309,72 +306,130 @@ extern "C" void RtGraphics_AnimationGroup_SerializeClips(Serializer* ser, int co
         }
 
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt, &c->i50);
+        RwScalar(rw, rw_vtbl::kScalarInt, &c->_frameCount);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarFloat, &c->f44);
+        RwScalar(rw, rw_vtbl::kScalarFloat, &c->_frameRate);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarFloat, &c->f48);
+        RwScalar(rw, rw_vtbl::kScalarFloat, &c->_loopScale);
         rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt, &c->i4c);
+        RwScalar(rw, rw_vtbl::kScalarInt, &c->_boneCount);
 
         // Already-ported Array<Math::Transform>::Serialize (animationstate.cpp).
-        RtGraphics_SerializeTransformArray(&c->poseData, ser);
+        RtGraphics_SerializeTransformArray(&c->_keys, ser);
 
-        rw = ser->readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt64, &c->i58);
+        // ENDGAME B.3.5 block H1 — ONE OF THE NINE HAND-INLINED int64 SLOT CALLS
+        // B35_RULES section 11 listed as "receiver-side work". Block H1 owns this
+        // receiver (`Graphics::Animation::_duration`), and
+        // `IO::Serializer::Serialize(int64_t&, const char*)` @ 0x180035000 is a
+        // real member, so it is spelled as a member call. That member's own body
+        // still calls the ReaderWriter's +0x90 slot (Serializer.h section 3.1:
+        // the 22 members keep their raw slot calls until the minted tables
+        // retire), so this is a spelling change and nothing else. The three int64
+        // calls in `RtGraphics_ParticleSystem_Serialize` below are NOT touched:
+        // that class is block H2's and its half of this file stays byte-identical.
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(c->_duration, nullptr);  // B.3.5 bridge
     }
 }
 
 }  // namespace
 
-extern "C" uint32_t RtGraphics_AnimationGroup_Type(const void*) {
-    uint32_t v = 0; std::memcpy(&v, AnimGroupTypeInfo(), sizeof v); return v;
-}
-extern "C" const char* RtGraphics_AnimationGroup_TypeName(const void*) {
+// ############################################################################
+// ENDGAME B.3.5 step 5, block H1 — `Graphics::AnimationGroup`'s member bodies.
+//
+// Their own `namespace Graphics { }` block, after the anonymous namespace above
+// has closed, because a member definition has to appear in a namespace
+// ENCLOSING the class and `Graphics` / `RtGraphics` are siblings (B34_BRIEFS
+// section A.2). The anonymous namespace's helpers — `ConstructBody`,
+// `CallSlot0`, `AnimGroupTypeInfo`, `MakeReaderWriter`, `RwScalar`, `RwFloats`,
+// `IsReading`, `RtAddr` — are reachable from here unqualified: they are members
+// of the global namespace's unnamed namespace, in this same translation unit.
+//
+// ALL EIGHT NON-DESTRUCTOR SLOT BODIES MOVED. Every registered door below keeps
+// its mangled name AND its retail address and is now a one-line QUALIFIED,
+// non-virtual delegation. THE QUALIFICATION IS LOAD-BEARING (B34_BRIEFS A.1): a
+// live `AnimationGroup` wears the MINTED `??_7AnimationGroup@Graphics@@6B@`,
+// whose slots resolve back to these very doors, so an unqualified virtual call
+// inside a door would dispatch into itself instead of delegating.
+// ############################################################################
+
+namespace Graphics {
+
+// [1] ?TypeName@AnimationGroup@Graphics@@UEBAPEBDXZ  0x180016310
+//     reads `?_typeInfo@AnimationGroup@Graphics@@` + 8 (BaseTypeInfo::name).
+const char* AnimationGroup::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, AnimGroupTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" int32_t RtGraphics_AnimationGroup_GetFileVersion(const void*) { return 8; }
-extern "C" int32_t RtGraphics_AnimationGroup_Compile(void*, const void*) { return 1; /* CompileResult::Success */ }
 
-extern "C" void* RtGraphics_AnimationGroup_Construct(void* selfv) {
-    if (!selfv) return nullptr;
-    ConstructBody(static_cast<AnimationGroup*>(selfv));
-    return selfv;
+// [2] ?Type@AnimationGroup@Graphics@@UEBAIXZ  0x1800162f0 — the record's +0x00.
+uint32_t AnimationGroup::Type() const {
+    uint32_t v = 0; std::memcpy(&v, AnimGroupTypeInfo(), sizeof v); return v;
 }
-extern "C" void* RtGraphics_AnimationGroup_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<AnimationGroup*>(selfv));
-    return selfv;
-}
-extern "C" void RtGraphics_AnimationGroup_Destruct(void* selfv) { CallSlot0(selfv, 0); }
 
-extern "C" bool RtGraphics_AnimationGroup_Serialize(void* selfv, void* streamv) {
-    AnimationGroup* self = static_cast<AnimationGroup*>(selfv);
+// [3] ?GetFileVersion@AnimationGroup@Graphics@@UEBAHXZ  0x1800fb680
+//     `MOV EAX,8; RET`. EIGHT — the version every AnimationGroup in every save
+//     was written with. B35_RULES section 6.1: `VertexLayout::GetFileVersion`
+//     returning 1 instead of retail's 3 silently dropped every draw item once.
+int32_t AnimationGroup::GetFileVersion() const { return 8; }
+
+// [4] ?Compile@AnimationGroup@Graphics@@UEAA?AW4CompileResult@External@Object@@
+//     AEBVFilename@System@@@Z  0x1800fb690. `MOV EAX,1; RET` — a no-op that
+//     answers CompileResult::Success: an AnimationGroup loads pre-baked and has
+//     no separate compile step. `path` is genuinely dead (RDX is never read).
+//     The four-byte `?AW4` enum comes back in EAX with NO hidden return slot.
+AnimationGroup::CompileResult AnimationGroup::Compile(const System::Filename& /*path*/) {
+    return 1u;
+}
+
+// [8] ?Construct@AnimationGroup@Graphics@@UEAAPEAVExternal@Object@@XZ 0x1800165d0
+Object::External* AnimationGroup::Construct() {
+    ConstructBody(this);
+    return this;
+}
+
+// [6] ?Reconstruct@AnimationGroup@Graphics@@UEAAPEAVExternal@Object@@XZ 0x180016550
+//     `vtable[0](this, 0)` then the same in-place construction. Slot 0 is called
+//     VIRTUALLY on purpose — retail dispatches it, and a subclass's deleting
+//     destructor is what has to run.
+Object::External* AnimationGroup::Reconstruct() {
+    CallSlot0(this, 0);
+    ConstructBody(this);
+    return this;
+}
+
+// [7] ?Destruct@AnimationGroup@Graphics@@UEAAXXZ  0x180016650
+void AnimationGroup::Destruct() { CallSlot0(this, 0); }
+
+// [5] ?Serialize@AnimationGroup@Graphics@@UEAA_NAEAVStream@IO@@@Z  0x1800fb6a0
+//
+// *** THE EMISSION ORDER IS RETAIL'S AND IT IS NOT THE DECLARATION ORDER. ***
+// The +0x30 float goes out AFTER the tag array (see the comment at that call).
+// Getting it wrong presents as a HANG, not a crash.
+bool AnimationGroup::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
     Serializer ser{};
     ReaderWriter* rw = MakeReaderWriter(&ser, stream);
 
-    // +0x20 Array<AnimationClip>
-    int32_t n = self->clipSize;
+    // +0x20 Array<Graphics::Animation>
+    int32_t n = _clips._size;
     RwScalar(rw, rw_vtbl::kScalarInt, &n);
     if (IsReading(stream)) {
         using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x180059e70ull)(&self->clipData, n);
+        RtAddr<SetSizeFn>(0x180059e70ull)(&_clips, n);
     }
-    RtGraphics_AnimationGroup_SerializeClips(&ser, n, self->clipData);
+    RtGraphics_AnimationGroup_SerializeClips(&ser, n, _clips._data);
 
     // +0x38 Array<{String,String,float}>, stride 0x18.
-    n = self->tagSize;
+    n = _tags._size;
     rw = ser.readerWriter;
     RwScalar(rw, rw_vtbl::kScalarInt, &n);
     if (IsReading(stream)) {
         using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x18005a220ull)(&self->tagData, n);
+        RtAddr<SetSizeFn>(0x18005a220ull)(&_tags, n);
     }
     {
         using StrSerFn = void (*)(void* str, Serializer* ser);
         StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
-        uint8_t* p = static_cast<uint8_t*>(self->tagData);
+        uint8_t* p = _tags._data;
         for (int32_t i = 0; i < n; ++i, p += 0x18) {
             strSer(p + 0x00, &ser);
             strSer(p + 0x08, &ser);
@@ -392,21 +447,77 @@ extern "C" bool RtGraphics_AnimationGroup_Serialize(void* selfv, void* streamv) 
     // float's bytes (count=1288519116), asked CompressedStream::Read for bytes
     // past the end of the file, and spun forever in Read's chunk loop.
     rw = ser.readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarFloat, &self->f30);
+    RwScalar(rw, rw_vtbl::kScalarFloat, &_defaultBlend);
 
     // +0x48 Array<float>, bulk kArrayFloat.
-    n = self->floatSize;
+    n = _blendTimes._size;
     rw = ser.readerWriter;
     RwScalar(rw, rw_vtbl::kScalarInt, &n);
     if (IsReading(stream)) {
         using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x18005a410ull)(&self->floatData, n);
+        RtAddr<SetSizeFn>(0x18005a410ull)(&_blendTimes, n);
     }
     rw = ser.readerWriter;
-    RwFloats(rw, n, self->floatData);
+    RwFloats(rw, n, _blendTimes._data);
 
     DestroyReaderWriter(ser.readerWriter);
     return true;
+}
+
+// ??1AnimationGroup@Graphics@@UEAA@XZ  0x1800fb620.
+//
+// EMPTY, AND THE EXISTING DOOR IS UNTOUCHED. `RtGraphics_AnimationGroup_Dtor`
+// in `runtime/src/object/deleting_dtor_leaves.cpp` (NOT block H1's file set)
+// stamps the MINTED table and releases the three Arrays, which is right for the
+// minted objects that are the only ones alive today. A real destructor chain
+// emits the stamps naming GCC's tables; hand-writing them here would name the
+// minted one, which is the one thing a converted object must not carry. The two
+// spellings coexist exactly as `Object::External`'s do
+// (`external_class.cpp:152` beside `external.cpp`'s `RtObject_External_Dtor`).
+AnimationGroup::~AnimationGroup() {}
+
+}  // namespace Graphics
+
+// ============================================================================
+// The registered doors. Same mangled names, same retail addresses, same
+// registrations — each is now a one-line QUALIFIED delegation.
+// ============================================================================
+
+extern "C" uint32_t RtGraphics_AnimationGroup_Type(const void* selfv) {
+    return reinterpret_cast<const Graphics::AnimationGroup*>(selfv)        // B.3.5 bridge
+               ->Graphics::AnimationGroup::Type();
+}
+extern "C" const char* RtGraphics_AnimationGroup_TypeName(const void* selfv) {
+    return reinterpret_cast<const Graphics::AnimationGroup*>(selfv)        // B.3.5 bridge
+               ->Graphics::AnimationGroup::TypeName();
+}
+extern "C" int32_t RtGraphics_AnimationGroup_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const Graphics::AnimationGroup*>(selfv)        // B.3.5 bridge
+               ->Graphics::AnimationGroup::GetFileVersion();
+}
+extern "C" int32_t RtGraphics_AnimationGroup_Compile(void* selfv, const void* path) {
+    return static_cast<int32_t>(
+        reinterpret_cast<Graphics::AnimationGroup*>(selfv)                 // B.3.5 bridge
+            ->Graphics::AnimationGroup::Compile(
+                *reinterpret_cast<const System::Filename*>(path)));
+}
+extern "C" void* RtGraphics_AnimationGroup_Construct(void* selfv) {
+    // The retail null test stays IN THE DOOR (B35 class-block brief).
+    if (!selfv) return nullptr;
+    return reinterpret_cast<Graphics::AnimationGroup*>(selfv)              // B.3.5 bridge
+               ->Graphics::AnimationGroup::Construct();
+}
+extern "C" void* RtGraphics_AnimationGroup_Reconstruct(void* selfv) {
+    return reinterpret_cast<Graphics::AnimationGroup*>(selfv)              // B.3.5 bridge
+               ->Graphics::AnimationGroup::Reconstruct();
+}
+extern "C" void RtGraphics_AnimationGroup_Destruct(void* selfv) {
+    reinterpret_cast<Graphics::AnimationGroup*>(selfv)                     // B.3.5 bridge
+        ->Graphics::AnimationGroup::Destruct();
+}
+extern "C" bool RtGraphics_AnimationGroup_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<Graphics::AnimationGroup*>(selfv)              // B.3.5 bridge
+               ->Graphics::AnimationGroup::Serialize(streamv);
 }
 
 // ============================================================================
