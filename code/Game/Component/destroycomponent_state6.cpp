@@ -105,11 +105,6 @@ static uint32_t*            s_tidDestroyDesc = nullptr;  // 0x1401c7628
 static uint32_t*            s_tidModelDesc   = nullptr;  // 0x1401c7a88
 static uint32_t*            s_tidDecalComp   = nullptr;  // 0x1401c7580
 
-static void* ReadSlot(uintptr_t ghidraSlot) {
-    uintptr_t s = ResolveAddr(Module::Exe, ghidraSlot);
-    return s ? *reinterpret_cast<void**>(s) : nullptr;
-}
-
 static bool s_resolved = false;
 static void EnsureResolved() {
     if (s_resolved) return;
