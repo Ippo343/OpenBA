@@ -91,7 +91,6 @@ void** g_pVideoDeviceSingleton = nullptr;
 
 // Video::Device Lock/Unlock
 fn_VideoDevice_Lock_t fn_VideoDevice_Lock = nullptr;
-fn_VideoDevice_Unlock_t fn_VideoDevice_Unlock = nullptr;
 
 // ExternalFactory
 void** g_pExternalFactorySingleton = nullptr;
@@ -106,7 +105,6 @@ uint32_t* g_pExternalTypeId = nullptr;
 fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources = nullptr;
 fn_ListCleanup_t fn_ListCleanup = nullptr;
 
-
 // Map::Find (AVL tree lookup)
 fn_Map_Find_t fn_Map_Find = nullptr;
 
@@ -119,7 +117,6 @@ fn_ParseValue_t fn_ParseValue = nullptr;
 
 // Persistence
 void** g_pPersistenceSingleton = nullptr;
-
 
 // UI infrastructure (existing)
 fn_DialogController_Dtor_t fn_DialogController_Dtor = nullptr;
@@ -503,9 +500,6 @@ uint32_t* g_TypeId_ClimateGenerator = nullptr;
 uint32_t* g_TypeId_TerrainGenerator = nullptr;
 
 // OptionsDialog support — Runtime DLL exports
-fn_VideoDevice_ValidateConfiguration_t fn_VideoDevice_ValidateConfiguration = nullptr;
-fn_VideoDevice_GetMultisampleModeCount_t fn_VideoDevice_GetMultisampleModeCount = nullptr;
-fn_VideoDevice_IsMultisampleModeSupported_t fn_VideoDevice_IsMultisampleModeSupported = nullptr;
 
 // OptionsDialog exe helpers — OnOk/OnCancel/OnApply reimplemented in code/Game/Dialog/optionsdialog.cpp
 // PopulateInputBindList and OnInputBindClick now reimplemented in code/Game/Dialog/optionsdialog.cpp
@@ -527,8 +521,6 @@ fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
 void** g_pAudioConfigSingleton = nullptr;
 void** g_pVideoConfigSingleton = nullptr;
-fn_VideoDevice_GetInterface_t fn_VideoDevice_GetInterface = nullptr;
-fn_VideoDevice_GetInterfaceCount_t fn_VideoDevice_GetInterfaceCount = nullptr;
 fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor = nullptr;
 fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab = nullptr;
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
@@ -558,7 +550,6 @@ fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot = nullptr;
 // Player/Tool module — shared engine APIs
 fn_SceneAddObject_t fn_SceneAddObject = nullptr;
 fn_SceneRemoveObject_t fn_SceneRemoveObject = nullptr;
-fn_Geometry_SetTransform_t fn_Geometry_SetTransform = nullptr;
 fn_MeshInstance_UpdateHierarchy_t fn_MeshInstance_UpdateHierarchy = nullptr;
 // Graphics::EdgeMesh family (selection-outline tessellation)
 fn_MemAllocStatic_t                fn_MemAllocStatic = nullptr;
@@ -569,7 +560,6 @@ fn_EdgeMesh_Ctor_t                 fn_EdgeMesh_Ctor = nullptr;
 fn_EdgeMesh_TriangleVertex_Ctor_t  fn_EdgeMesh_TriangleVertex_Ctor = nullptr;
 fn_EdgeMesh_EdgeVertex_Ctor_t      fn_EdgeMesh_EdgeVertex_Ctor = nullptr;
 fn_EdgeMesh_Set_t                  fn_EdgeMesh_Set = nullptr;
-fn_EdgeMesh_SetMaterials_t         fn_EdgeMesh_SetMaterials = nullptr;
 fn_EdgeMeshInstance_Ctor_t         fn_EdgeMeshInstance_Ctor = nullptr;
 fn_TileRender_t fn_TileRender = nullptr;
 fn_TileValidityCheck_t fn_TileValidityCheck = nullptr;
@@ -714,15 +704,10 @@ fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
 // Random default ctor: uses existing fn_Random_Default_Ctor
 // --- ModDialog::Slot4 support ---
 fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
-fn_MaterialInstance_SetMaterial_t fn_MaterialInstance_SetMaterial = nullptr;
-fn_MaterialInstance_AddTexture_t fn_MaterialInstance_AddTexture = nullptr;
-fn_MaterialInstance_BuildParameters_t fn_MaterialInstance_BuildParameters = nullptr;
 fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor = nullptr;
 fn_SpriteSheet_AddSpriteInfo_t fn_SpriteSheet_AddSpriteInfo = nullptr;
 fn_SpriteSheet_SetSpriteInfo_t fn_SpriteSheet_SetSpriteInfo = nullptr;
 fn_Sprite_Ctor_ByIndex_t fn_Sprite_Ctor_ByIndex = nullptr;
-fn_ImageBuffer_Width_t fn_ImageBuffer_Width = nullptr;
-fn_ImageBuffer_Height_t fn_ImageBuffer_Height = nullptr;
 uintptr_t g_ModDialog_MaterialInstanceVtable = 0;
 uintptr_t g_ModDialog_SpriteSheetVtable = 0;
 fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush = nullptr;
@@ -753,14 +738,12 @@ fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject = nullptr;
 fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent = nullptr;
 fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInstance_Ctor = nullptr;
 fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor = nullptr;
-fn_Graphics_Scene_Clean_t fn_Graphics_Scene_Clean = nullptr;
 
 // --- MenuScene 3D rendering (Phase A) ---
 fn_Graphics_Renderer_Ctor_t      fn_Graphics_Renderer_Ctor      = nullptr;
 fn_Graphics_Scene_Ctor_t         fn_Graphics_Scene_Ctor         = nullptr;
 fn_Graphics_SunLight_Ctor_t      fn_Graphics_SunLight_Ctor      = nullptr;
 fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
-fn_Graphics_Renderer_Draw_t      fn_Graphics_Renderer_Draw      = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
 
@@ -847,17 +830,11 @@ void** g_pAppSingleton = nullptr;
 // ============================================================
 fn_AudioConfig_Save_t fn_AudioConfig_Save = nullptr;
 fn_AudioConfig_Startup_t fn_AudioConfig_Startup = nullptr;
-fn_VideoConfig_Save_t fn_VideoConfig_Save = nullptr;
 fn_InputConfig_Save_t fn_InputConfig_Save = nullptr;
 fn_InputConfig_Load_t fn_InputConfig_Load = nullptr;
 void** g_pInputConfigSingleton = nullptr;
 fn_InputDevice_EnableMouseClipping_t fn_InputDevice_EnableMouseClipping = nullptr;
 fn_InputDevice_ResetState_t fn_InputDevice_ResetState = nullptr;
-fn_VideoDevice_ApplyChangedSettings_t fn_VideoDevice_ApplyChangedSettings = nullptr;
-fn_VideoDevice_Startup_t fn_VideoDevice_Startup = nullptr;
-fn_VideoDevice_RecreateDynamic_t fn_VideoDevice_RecreateDynamic = nullptr;
-fn_VideoDevice_ReleaseDynamic_t fn_VideoDevice_ReleaseDynamic = nullptr;
-fn_VideoDevice_Shutdown_t fn_VideoDevice_Shutdown = nullptr;
 fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError = nullptr;
 fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart = nullptr;
 fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop = nullptr;
@@ -1174,7 +1151,6 @@ uint32_t** g_ppTypeInfo_MaterialInstance = nullptr;
 fn_Array_Resize_t fn_Array_Resize_Stride02       = nullptr;  // 0x14001c890
 fn_Array_Resize_t fn_Array_Resize_Stride16B      = nullptr;  // 0x14001ef10
 
-
 // M3.5 Path B session 6 — heightmap mesh-build path helpers.
 fn_TradeWork_sub_c1e0_t    fn_TradeWork_sub_c1e0    = nullptr;  // 0x1400ac1e0
 fn_TradeWork_FUN_ac880_t   fn_TradeWork_FUN_ac880   = nullptr;  // 0x1400ac880
@@ -1184,32 +1160,14 @@ fn_Geometry_ChunkUpdate_t  fn_Geometry_ChunkUpdate  = nullptr;  // 0x1400aad50  
 // M3.5 Path B session 7 — image-buffer heightmap upload helper.
 fn_TradeWork_sub_c780_t fn_TradeWork_sub_c780 = nullptr;  // 0x1400ac780
 
-
 // M3.5 Path B session 8 — the promoted IO::Serializer dispatch-slot pointers
 // are all gone now; see the banner on the (former) typedef block in
 // engine_funcs.h. The slot rows in address_registry.cpp are untouched.
 
 // M3.5 — Geometry vtable draw primitives (slot 0x14015f110)
-fn_Renderer_GetCullCamera_t            fn_Renderer_GetCullCamera           = nullptr;
-fn_Renderer_AddDrawItem_t              fn_Renderer_AddDrawItem             = nullptr;
-fn_Renderer_GetShader_t                fn_Renderer_GetShader               = nullptr;
-fn_Camera_GetFrustum_t                 fn_Camera_GetFrustum                = nullptr;
 fn_Frustum_Contains_t                  fn_Frustum_Contains                 = nullptr;
 fn_Frustum_MulTransform3_t             fn_Frustum_MulTransform3            = nullptr;
-fn_Geometry_GetTransform_t             fn_Geometry_GetTransform            = nullptr;
 fn_InterpolatedState_Transform_Lerp_t  fn_InterpolatedState_Transform_Lerp = nullptr;
-fn_Context_SetTransform_t              fn_Context_SetTransform             = nullptr;
-fn_Context_SetColor_t                  fn_Context_SetColor                 = nullptr;
-fn_Context_SetVertexBuffer_t           fn_Context_SetVertexBuffer          = nullptr;
-fn_Context_SetImageBuffer_t            fn_Context_SetImageBuffer           = nullptr;
-fn_Context_BeginIndexedVertices_t      fn_Context_BeginIndexedVertices     = nullptr;
-fn_Context_EndIndexedVertices_t        fn_Context_EndIndexedVertices       = nullptr;
-fn_Context_DrawIndexed_t               fn_Context_DrawIndexed              = nullptr;
-fn_Geometry_UpdateAttached_t           fn_Geometry_UpdateAttached          = nullptr;
-fn_Geometry_GetSubTransform_t          fn_Geometry_GetSubTransform         = nullptr;
-fn_Geometry_GetInstanceTransform_t     fn_Geometry_GetInstanceTransform    = nullptr;
-fn_Geometry_SetSharedInstanceData_t    fn_Geometry_SetSharedInstanceData   = nullptr;
-fn_Geometry_Clean_t                    fn_Geometry_Clean                   = nullptr;
 
 // ============================================================
 // Initialization
@@ -1295,15 +1253,10 @@ bool EngineFuncsInit() {
     // Video::Device Lock/Unlock (retail ordinals 3214 / 4462)
     fn_VideoDevice_Lock = reinterpret_cast<fn_VideoDevice_Lock_t>(
         ResolveExport("?Lock@Device@Video@@QEAAXXZ"));
-    fn_VideoDevice_Unlock = reinterpret_cast<fn_VideoDevice_Unlock_t>(
-        ResolveExport("?Unlock@Device@Video@@QEAAXXZ"));
 
     // --- ExternalFactory ---
     g_pExternalFactorySingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fc6c8));
-
-
-
 
     fn_IsDerivedFrom = reinterpret_cast<fn_IsDerivedFrom_t>(
         ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
@@ -1328,7 +1281,6 @@ bool EngineFuncsInit() {
     fn_ListCleanup = reinterpret_cast<fn_ListCleanup_t>(
         ResolveAddr(Module::Runtime, 0x180010ab0));
 
-
     // --- Map::Find / Map::Insert (AVL tree for Configuration) ---
     fn_Map_Find = reinterpret_cast<fn_Map_Find_t>(
         ResolveAddr(Module::Runtime, 0x18002ace0));
@@ -1344,9 +1296,6 @@ bool EngineFuncsInit() {
     // --- Persistence ---
     g_pPersistenceSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Runtime, 0x1801fc6b8));
-
-
-
 
     // --- UI infrastructure ---
 
@@ -2240,20 +2189,10 @@ bool EngineFuncsInit() {
     // HelpUI_ArrayResize now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
     // --- OptionsDialog support — Runtime DLL exports ---
-    fn_VideoDevice_ValidateConfiguration = reinterpret_cast<fn_VideoDevice_ValidateConfiguration_t>(
-        ResolveExport("?ValidateConfiguration@Device@Video@@QEAAXAEAH0000000@Z"));
-    fn_VideoDevice_GetMultisampleModeCount = reinterpret_cast<fn_VideoDevice_GetMultisampleModeCount_t>(
-        ResolveExport("?GetMultisampleModeCount@Device@Video@@QEBAHXZ"));
-    fn_VideoDevice_IsMultisampleModeSupported = reinterpret_cast<fn_VideoDevice_IsMultisampleModeSupported_t>(
-        ResolveExport("?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z"));
 
     // --- OptionsDialog exe helpers — all REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp ---
     // fn_OptionsDialog_PopulateInputBindList — reimplemented
     // fn_OptionsDialog_OnInputBindClick — reimplemented
-    fn_VideoDevice_GetInterface = reinterpret_cast<fn_VideoDevice_GetInterface_t>(
-        ResolveExport("?GetInterface@Device@Video@@QEBAAEBUGraphicsInterface@12@H@Z"));
-    fn_VideoDevice_GetInterfaceCount = reinterpret_cast<fn_VideoDevice_GetInterfaceCount_t>(
-        ResolveExport("?GetInterfaceCount@Device@Video@@QEBAHXZ"));
     fn_Sprite_DefaultCtor = reinterpret_cast<fn_Sprite_DefaultCtor_t>(
         ResolveExport("??0Sprite@UI@@QEAA@XZ"));
     fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
@@ -2519,16 +2458,10 @@ bool EngineFuncsInit() {
         } else {
         }
     }
-    // Graphics::Geometry::SetTransform — IAT dispatch slot 0x1401512e0; same fallback.
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401512e0));
-        if (dispatch && *dispatch) {
-            fn_Geometry_SetTransform = reinterpret_cast<fn_Geometry_SetTransform_t>(*dispatch);
-        } else {
-            fn_Geometry_SetTransform = reinterpret_cast<fn_Geometry_SetTransform_t>(
-                ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
-        }
-    }
+    // Graphics::Geometry::SetTransform reached 0 CALLs in ENDGAME B.3.5 (b35-close):
+    // its readers are members of the real `Graphics::Geometry`, so the slot read
+    // (exe dispatch 0x1401512e0) and its ResolveExport fallback are gone. The
+    // registration of the ported body is unaffected.
     // Graphics::MeshInstance::UpdateHierarchy — IAT dispatch slot 0x140152888
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152888));
@@ -2555,8 +2488,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0EdgeVertex@EdgeMesh@Graphics@@QEAA@AEBUTriangleVertex@12@0H@Z"));
     fn_EdgeMesh_Set = reinterpret_cast<fn_EdgeMesh_Set_t>(
         ResolveExport("?Set@EdgeMesh@Graphics@@QEAA_NHPEBUTriangleList@GraphicsMesh@2@H0HPEAGHPEAXHH1H2HH1H2HH1H2HAEBVBox@Volume@@@Z"));
-    fn_EdgeMesh_SetMaterials = reinterpret_cast<fn_EdgeMesh_SetMaterials_t>(
-        ResolveExport("?SetMaterials@EdgeMesh@Graphics@@QEAAXV?$ExternalPtr@VMaterialInstance@Graphics@@@Object@@000@Z"));
     fn_EdgeMeshInstance_Ctor = reinterpret_cast<fn_EdgeMeshInstance_Ctor_t>(
         ResolveExport("??0EdgeMeshInstance@Graphics@@QEAA@XZ"));
     // NO FALLBACK. There used to be a `if (!fn_EdgeMeshInstance_Ctor)` branch here
@@ -2584,7 +2515,6 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Player/Tool APIs resolved:\n");
     printf("  SceneAddObject            = %p\n", (void*)fn_SceneAddObject);
     printf("  SceneRemoveObject         = %p\n", (void*)fn_SceneRemoveObject);
-    printf("  Geometry_SetTransform     = %p\n", (void*)fn_Geometry_SetTransform);
     printf("  MeshInstance_UpdateHier   = %p\n", (void*)fn_MeshInstance_UpdateHierarchy);
     printf("  TileRender                = %p\n", (void*)fn_TileRender);
     printf("  TileValidityCheck         = %p\n", (void*)fn_TileValidityCheck);
@@ -2870,21 +2800,11 @@ bool EngineFuncsInit() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151838));
         if (d && *d) fn_MaterialInstance_Ctor = reinterpret_cast<fn_MaterialInstance_Ctor_t>(*d);
     }
-    // MaterialInstance::SetMaterial: dispatch at 0x140151870
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151870));
-        if (d && *d) fn_MaterialInstance_SetMaterial = reinterpret_cast<fn_MaterialInstance_SetMaterial_t>(*d);
-    }
-    // MaterialInstance::AddTexture: dispatch at 0x140151878
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151878));
-        if (d && *d) fn_MaterialInstance_AddTexture = reinterpret_cast<fn_MaterialInstance_AddTexture_t>(*d);
-    }
-    // MaterialInstance::BuildParameters: dispatch at 0x140151880
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151880));
-        if (d && *d) fn_MaterialInstance_BuildParameters = reinterpret_cast<fn_MaterialInstance_BuildParameters_t>(*d);
-    }
+    // MaterialInstance::{SetMaterial, AddTexture, BuildParameters} (exe dispatch
+    // 0x140151870 / 0x140151878 / 0x140151880) reached 0 CALLs in ENDGAME B.3.5
+    // (b35-close): they are members of the real `Graphics::MaterialInstance`. Both
+    // resolve paths this file had for each — the slot read here and the by-name
+    // fallback further down — are gone with them.
     // SpriteSheet ctor: dispatch at 0x140151848
     {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151848));
@@ -2906,10 +2826,6 @@ bool EngineFuncsInit() {
         if (d && *d) fn_Sprite_Ctor_ByIndex = reinterpret_cast<fn_Sprite_Ctor_ByIndex_t>(*d);
     }
     // ImageBuffer::Width / Height — resolved by export name from Runtime
-    fn_ImageBuffer_Width = reinterpret_cast<fn_ImageBuffer_Width_t>(
-        ResolveExport("?Width@ImageBuffer@Video@@QEBAHXZ"));
-    fn_ImageBuffer_Height = reinterpret_cast<fn_ImageBuffer_Height_t>(
-        ResolveExport("?Height@ImageBuffer@Video@@QEBAHXZ"));
     // Custom vtables for mod thumbnail objects
     g_ModDialog_MaterialInstanceVtable = ResolveAddr(Module::Exe, 0x14015c400);
     g_ModDialog_SpriteSheetVtable      = ResolveAddr(Module::Exe, 0x14015c3b0);
@@ -2938,15 +2854,6 @@ bool EngineFuncsInit() {
     if (!fn_SpriteSheet_Ctor)
         fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(
             ResolveExport("??0SpriteSheet@UI@@QEAA@XZ"));
-    if (!fn_MaterialInstance_SetMaterial)
-        fn_MaterialInstance_SetMaterial = reinterpret_cast<fn_MaterialInstance_SetMaterial_t>(
-            ResolveExport("?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z"));
-    if (!fn_MaterialInstance_AddTexture)
-        fn_MaterialInstance_AddTexture = reinterpret_cast<fn_MaterialInstance_AddTexture_t>(
-            ResolveExport("?AddTexture@MaterialInstance@Graphics@@QEAAXAEBVString@System@@V?$ExternalPtr@VImageBuffer@Video@@@Object@@@Z"));
-    if (!fn_MaterialInstance_BuildParameters)
-        fn_MaterialInstance_BuildParameters = reinterpret_cast<fn_MaterialInstance_BuildParameters_t>(
-            ResolveExport("?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ"));
     if (!fn_Sprite_Ctor_ByIndex)
         fn_Sprite_Ctor_ByIndex = reinterpret_cast<fn_Sprite_Ctor_ByIndex_t>(
             ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z"));
@@ -3030,15 +2937,11 @@ bool EngineFuncsInit() {
         ResolveExport("??0ParticleSystemInstance@Graphics@@QEAA@XZ"));
     fn_Graphics_Particle_Ctor = reinterpret_cast<fn_Graphics_Particle_Ctor_t>(
         ResolveExport("??0Particle@Graphics@@QEAA@XZ"));
-    fn_Graphics_Scene_Clean = reinterpret_cast<fn_Graphics_Scene_Clean_t>(
-        ResolveExport("?Clean@Scene@Graphics@@QEAAXXZ"));
     printf("[EngineFuncs] MenuDLT static-mesh + particle helpers:\n"
            "  ParticleSystemInstance::Ctor  = %p\n"
-           "  Particle::Ctor                = %p\n"
-           "  Scene::Clean                  = %p\n",
+           "  Particle::Ctor                = %p\n",
            (void*)fn_Graphics_ParticleSystemInstance_Ctor,
-           (void*)fn_Graphics_Particle_Ctor,
-           (void*)fn_Graphics_Scene_Clean);
+           (void*)fn_Graphics_Particle_Ctor);
     fflush(stdout);
 
     // --- MenuScene 3D rendering (Phase A) ---
@@ -3050,8 +2953,6 @@ bool EngineFuncsInit() {
         ResolveExport("??0SunLight@Graphics@@QEAA@XZ"));
     fn_Graphics_MeshInstance_Ctor = reinterpret_cast<fn_Graphics_MeshInstance_Ctor_t>(
         ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ"));
-    fn_Graphics_Renderer_Draw = reinterpret_cast<fn_Graphics_Renderer_Draw_t>(
-        ResolveExport("?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z"));
     fn_Volume_Frustum_Ctor = reinterpret_cast<fn_Volume_Frustum_Ctor_t>(
         ResolveExport("??0Frustum@Volume@@QEAA@AEBVScalar@Math@@000@Z"));
     fn_Graphics_Camera_Ctor = reinterpret_cast<fn_Graphics_Camera_Ctor_t>(
@@ -3298,8 +3199,6 @@ bool EngineFuncsInit() {
             g_pFileSystemSingleton = *exref;
     }
 
-
-
     // --- Stage 3: OptionsDialog Runtime exports ---
 
     // Audio::Configuration
@@ -3309,8 +3208,6 @@ bool EngineFuncsInit() {
         ResolveExport("?Startup@Configuration@Audio@@QEAA_NXZ"));
 
     // Video::Configuration
-    fn_VideoConfig_Save = reinterpret_cast<fn_VideoConfig_Save_t>(
-        ResolveExport("?Save@Configuration@Video@@QEAAXXZ"));
 
     // Input::Configuration
     fn_InputConfig_Save = reinterpret_cast<fn_InputConfig_Save_t>(
@@ -3336,16 +3233,6 @@ bool EngineFuncsInit() {
         ResolveExport("?ResetState@Device@Input@@QEAAXXZ"));
 
     // Video::Device
-    fn_VideoDevice_ApplyChangedSettings = reinterpret_cast<fn_VideoDevice_ApplyChangedSettings_t>(
-        ResolveExport("?ApplyChangedSettings@Device@Video@@QEAA_NXZ"));
-    fn_VideoDevice_Startup = reinterpret_cast<fn_VideoDevice_Startup_t>(
-        ResolveExport("?Startup@Device@Video@@QEAA_NXZ"));
-    fn_VideoDevice_RecreateDynamic = reinterpret_cast<fn_VideoDevice_RecreateDynamic_t>(
-        ResolveExport("?RecreateDynamic@Device@Video@@QEAAXXZ"));
-    fn_VideoDevice_ReleaseDynamic = reinterpret_cast<fn_VideoDevice_ReleaseDynamic_t>(
-        ResolveExport("?ReleaseDynamic@Device@Video@@QEAAXXZ"));
-    fn_VideoDevice_Shutdown = reinterpret_cast<fn_VideoDevice_Shutdown_t>(
-        ResolveExport("?Shutdown@Device@Video@@QEAAXXZ"));
 
     // Engine::MainLoop. NO FALLBACK: the one here read 0x1800dcc00, which is
     // not a function entry at all but an address INSIDE OnVideoError's own body
@@ -4038,68 +3925,17 @@ bool EngineFuncsInit() {
     // 9-slot derived Geometry vtable. All resolved via ResolveExport from the
     // Runtime DLL exports. These provide the actual draw path, used by
     // code/Game/Game/geometry_draw.cpp.
-    fn_Renderer_GetCullCamera = reinterpret_cast<fn_Renderer_GetCullCamera_t>(
-        ResolveExport("?GetCullCamera@Renderer@Graphics@@QEAAAEBVCamera@2@XZ"));
-    fn_Renderer_AddDrawItem = reinterpret_cast<fn_Renderer_AddDrawItem_t>(
-        ResolveExport("?AddDrawItem@Renderer@Graphics@@QEAAXPEBVGeometry@2@PEBVMaterialInstance@2@GGMMHPEBXI@Z"));
-    fn_Renderer_GetShader = reinterpret_cast<fn_Renderer_GetShader_t>(
-        ResolveExport("?GetShader@Renderer@Graphics@@QEBAHXZ"));
-    fn_Camera_GetFrustum = reinterpret_cast<fn_Camera_GetFrustum_t>(
-        ResolveExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ"));
     fn_Frustum_Contains = reinterpret_cast<fn_Frustum_Contains_t>(
         ResolveExport("?Contains@Frustum@Volume@@QEBAIAEBVBox@2@I@Z"));
     fn_Frustum_MulTransform3 = reinterpret_cast<fn_Frustum_MulTransform3_t>(
         ResolveExport("??DFrustum@Volume@@QEBA?AV01@AEBVTransform3@Math@@@Z"));
-    fn_Geometry_GetTransform = reinterpret_cast<fn_Geometry_GetTransform_t>(
-        ResolveExport("?GetTransform@Geometry@Graphics@@QEBA?AVTransform@Math@@XZ"));
     fn_InterpolatedState_Transform_Lerp = reinterpret_cast<fn_InterpolatedState_Transform_Lerp_t>(
         ResolveExport("?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@QEBA?AVTransform@Math@@AEBVScalar@4@@Z"));
-    fn_Context_SetTransform = reinterpret_cast<fn_Context_SetTransform_t>(
-        ResolveExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
-    fn_Context_SetColor = reinterpret_cast<fn_Context_SetColor_t>(
-        ResolveExport("?SetColor@Context@Video@@QEAAXAEBVVector4@Math@@@Z"));
-    fn_Context_SetVertexBuffer = reinterpret_cast<fn_Context_SetVertexBuffer_t>(
-        ResolveExport("?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z"));
-    fn_Context_SetImageBuffer = reinterpret_cast<fn_Context_SetImageBuffer_t>(
-        ResolveExport("?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z"));
-    fn_Context_BeginIndexedVertices = reinterpret_cast<fn_Context_BeginIndexedVertices_t>(
-        ResolveExport("?BeginIndexedVertices@Context@Video@@QEAA_NHHH@Z"));
-    fn_Context_EndIndexedVertices = reinterpret_cast<fn_Context_EndIndexedVertices_t>(
-        ResolveExport("?EndIndexedVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z"));
-    fn_Context_DrawIndexed = reinterpret_cast<fn_Context_DrawIndexed_t>(
-        ResolveExport("?DrawIndexed@Context@Video@@QEAAXW4PrimitiveType@12@HHHHH@Z"));
-    fn_Geometry_UpdateAttached = reinterpret_cast<fn_Geometry_UpdateAttached_t>(
-        ResolveExport("?UpdateAttached@Geometry@Graphics@@UEAAXXZ"));
-    fn_Geometry_GetSubTransform = reinterpret_cast<fn_Geometry_GetSubTransform_t>(
-        ResolveExport("?GetSubTransform@Geometry@Graphics@@UEBA?AVTransform@Math@@H@Z"));
-    fn_Geometry_GetInstanceTransform = reinterpret_cast<fn_Geometry_GetInstanceTransform_t>(
-        ResolveExport("?GetInstanceTransform@Geometry@Graphics@@UEBA?AVMatrix@Math@@HM@Z"));
-    fn_Geometry_SetSharedInstanceData = reinterpret_cast<fn_Geometry_SetSharedInstanceData_t>(
-        ResolveExport("?SetSharedInstanceData@Geometry@Graphics@@UEBAHAEAVContext@Video@@HM@Z"));
-    fn_Geometry_Clean = reinterpret_cast<fn_Geometry_Clean_t>(
-        ResolveExport("?Clean@Geometry@Graphics@@UEAA_NXZ"));
 #ifdef _DEBUG
     printf("[EngineFuncs] M3.5 Geometry vtable draw primitives resolved\n");
-    printf("  Renderer_GetCullCamera   = %p\n", (void*)fn_Renderer_GetCullCamera);
-    printf("  Renderer_AddDrawItem     = %p\n", (void*)fn_Renderer_AddDrawItem);
-    printf("  Renderer_GetShader       = %p\n", (void*)fn_Renderer_GetShader);
-    printf("  Camera_GetFrustum        = %p\n", (void*)fn_Camera_GetFrustum);
     printf("  Frustum_Contains         = %p\n", (void*)fn_Frustum_Contains);
     printf("  Frustum_MulTransform3    = %p\n", (void*)fn_Frustum_MulTransform3);
-    printf("  Geometry_GetTransform    = %p\n", (void*)fn_Geometry_GetTransform);
     printf("  InterpState_Trans_Lerp   = %p\n", (void*)fn_InterpolatedState_Transform_Lerp);
-    printf("  Context_SetTransform     = %p\n", (void*)fn_Context_SetTransform);
-    printf("  Context_SetColor         = %p\n", (void*)fn_Context_SetColor);
-    printf("  Context_SetVertexBuffer  = %p\n", (void*)fn_Context_SetVertexBuffer);
-    printf("  Context_SetImageBuffer   = %p\n", (void*)fn_Context_SetImageBuffer);
-    printf("  Context_BeginIndexedVtx  = %p\n", (void*)fn_Context_BeginIndexedVertices);
-    printf("  Context_EndIndexedVtx    = %p\n", (void*)fn_Context_EndIndexedVertices);
-    printf("  Context_DrawIndexed      = %p\n", (void*)fn_Context_DrawIndexed);
-    printf("  Geometry_UpdateAttached  = %p\n", (void*)fn_Geometry_UpdateAttached);
-    printf("  Geometry_GetSubTransform = %p\n", (void*)fn_Geometry_GetSubTransform);
-    printf("  Geometry_GetInstanceTr   = %p\n", (void*)fn_Geometry_GetInstanceTransform);
-    printf("  Geometry_SetSharedInst   = %p\n", (void*)fn_Geometry_SetSharedInstanceData);
-    printf("  Geometry_Clean           = %p\n", (void*)fn_Geometry_Clean);
 #endif
 
     // Only Input::Device::Update and Timer globals are critical for first reimpl
