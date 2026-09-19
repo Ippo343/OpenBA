@@ -53,6 +53,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>   // B.3.4 PACKAGE+FS: the "IO::Registry has no vptr" pins
 #include "../system/String.h"
 
 namespace RtIo {
@@ -86,3 +87,97 @@ constexpr const char* kRegistryProductName = "Banished";
 constexpr const char* kRegistryPathSeparator = "\\";
 
 }  // namespace RtIo
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — the REAL `IO::Registry`.
+// ============================================================================
+//
+// Design: B34_RULES.md §1.5 rule 5 (the class keeps the `IO` namespace despite
+// the name-adjacency to `System` — that is retail's placement, not a mistake to
+// fix), §4.3 (the ctor-door question), §1.5 rule 3 (the POD stays).
+//
+// *** IT HAS NO VTABLE. ***
+// -------------------------
+// There is no `??_7Registry@IO@@6B@` anywhere: not in the retail export table,
+// not in `standalone/rt_data_mint_tables.inc`, and `deleting_dtor.cpp` carries
+// no row for it. Every exported member is `QEAA` — the constructor
+// (0x1800b9500), the copy constructor (0x18002b140), `?NextKey@` (0x1800b97c0)
+// and `?NextGroup@` (0x1800b9480). So, exactly as for `IO::Serializer`
+// (B34_RULES §4.3), converting its CONSTRUCTOR is safe: a ctor door is
+// dangerous only when the member form would change which vtable a live object
+// wears, and this object wears none.
+//
+// *** WHY IT HAS NO DESTRUCTOR, AND WHY `_path` STAYS A POD. ***
+// --------------------------------------------------------------
+// Retail exports no `??1Registry@IO@@`: every `~Registry` in the DLL is
+// INLINED at its use site as `if (_key) RegCloseKey(_key); _key = 0;` followed
+// by the String release idiom on `_path` (0x1800b8892 in `ReadSettings`,
+// 0x1800b8af2 and 0x1800b8fc3 in `WriteSettings`). Our port reproduces all
+// three of those inlined teardowns by hand, and one of them lives inside
+// `WriteSettingsBody`, which ENDGAME B.3.1 deliberately LEFT AS C.
+//
+// Retyping `_path` to a real `System::String` would give this class a
+// non-trivial destructor, which would then run *in addition to* those three
+// hand-written releases — the `RtSystem::String` double-free in a new costume
+// (B31_RULES). So `_path` keeps the `RtSystem::String` POD spelling and the
+// class keeps NO destructor: a `IO::Registry` local is destroyed by hand, at
+// retail's own position, exactly as it is today. It converts when the last
+// hand-written teardown does, which is not this step.
+// ============================================================================
+
+namespace IO {
+
+class Registry {
+public:
+    // ??0Registry@IO@@QEAA@PEBD@Z                            retail 0x1800b9500
+    // Body: runtime/src/io/persistence_registry_win.cpp (`_win`, because the
+    // whole tail is RegOpenKeyExW / RegCreateKeyExW).
+    //
+    // NOT `explicit`: retail's is a one-argument converting constructor and
+    // every call site passes `nullptr` positionally. It CREATES the key when it
+    // is absent — retail's behaviour, and the one registry mutation on the boot
+    // path. `_key` is left null when both the open and the create fail
+    // (0x1800b971c).
+    Registry(const char* subKey);
+
+    // Retail HAS a copy constructor (`??0Registry@IO@@QEAA@AEBV01@@Z`, ord 344,
+    // 0x18002b140) and it AddRefs `_path` — see this header's top banner, where
+    // its member-wise body is what pins the 0x18 size. It is NOT ported (no
+    // call site in this tree reaches it, and an uncalled port is an unverified
+    // port). Deleted rather than left implicit because the IMPLICIT one would
+    // copy `_path.data` WITHOUT the AddRef and hand two owners one refcount.
+    Registry(const Registry&) = delete;
+    Registry& operator=(const Registry&) = delete;
+
+    // ---- the 0x18 bytes, at retail's offsets -------------------------------
+    // PUBLIC for the same reason `IO::Serializer`'s two are: unconverted bodies
+    // reach them through a cast, and `offsetof` on them has to be well formed.
+    RtSystem::String _path;            // +0x00 — see the POD banner above
+    void*            _key;             // +0x08 — HKEY, or null
+    uint32_t         _enumIndex;       // +0x10
+    uint32_t         _enumGroupIndex;  // +0x14 — name inferred, offset is not
+};
+
+static_assert(sizeof(Registry) == 0x18,
+              "IO::Registry is exactly 0x18 bytes -- pinned by the member-wise "
+              "copy ctor ??0Registry@IO@@QEAA@AEBV01@@Z (retail 0x18002b140)");
+static_assert(sizeof(Registry) == sizeof(RtIo::Registry),
+              "IO::Registry and the RtIo::Registry POD stay interchangeable");
+static_assert(offsetof(Registry, _key)            == 0x08, "IO::Registry::_key @ +0x08");
+static_assert(offsetof(Registry, _enumIndex)      == 0x10, "IO::Registry::_enumIndex @ +0x10");
+static_assert(offsetof(Registry, _enumGroupIndex) == 0x14, "IO::Registry::_enumGroupIndex @ +0x14");
+static_assert(offsetof(Registry, _path) == offsetof(RtIo::Registry, path), "alias path");
+static_assert(offsetof(Registry, _key)  == offsetof(RtIo::Registry, key),  "alias key");
+static_assert(offsetof(Registry, _enumIndex) == offsetof(RtIo::Registry, enumIndex),
+              "alias enumIndex");
+static_assert(offsetof(Registry, _enumGroupIndex) == offsetof(RtIo::Registry, enumGroupIndex),
+              "alias enumGroupIndex");
+// The guard, stated as an assertion so a future `virtual` fails the build
+// rather than the boot: a vptr would make this 0x20 bytes and push every field
+// eight bytes down, under a door that is registered BY ADDRESS.
+static_assert(!std::is_polymorphic<Registry>::value,
+              "IO::Registry must never acquire a vtable: retail has none for it");
+static_assert(std::is_standard_layout<Registry>::value,
+              "the door reaches these four fields through a reinterpret_cast");
+
+}  // namespace IO

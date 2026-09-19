@@ -181,6 +181,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Modification.h"
+#include "../../types/io/PackageFile.h"   // B.3.4 PACKAGE+FS: the real class
 #include "../../types/system/Filename.h"
 #include "../../types/collection/Collection.h"   // ENDGAME B.3.2 closing pass
 #include "../system/pod_bridge.h"
@@ -560,26 +561,18 @@ extern "C" void RtColl_ArrayModSetSizeFill_180028610(void* av, int n, const void
 // The element types come from the export names, not from the call site:
 // `?$Array@I` (unsigned int) for the icon, `?$Array@E` (unsigned char) for the
 // preview — which is why the two call different assigns.
+// ENDGAME B.3.4 PACKAGE+FS commit 3: both bodies are now members of the real
+// `IO::PackageFile`, at the bottom of this file. Both doors keep their names
+// and both registrations and delegate. Neither is a virtual slot -- they are
+// `QEBA` -- so the qualification below is for the reader, not for dispatch.
 extern "C" void* RtIo_PackageFile_GetIconData(const void* selfv, void* retv) {
-    ModArray* const ret = static_cast<ModArray*>(retv);
-    const uint8_t* const self = static_cast<const uint8_t*>(selfv);
-    const void* const member = self + 0x80;             // LEA RDX,[RCX+0x80]
-    ret->data = nullptr;                                // MOV [RBX],RAX
-    ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
-    ret->capacity = 0;                                  //   so capacity is zeroed too
-    if (ret != member) RtColl_ArrayI32Assign_180011110(ret, member);   // 0x180011110
-    return ret;
+    return reinterpret_cast<const IO::PackageFile*>(selfv)
+               ->IO::PackageFile::GetIconData(retv);
 }
 
 extern "C" void* RtIo_PackageFile_GetPreviewData(const void* selfv, void* retv) {
-    ModArray* const ret = static_cast<ModArray*>(retv);
-    const uint8_t* const self = static_cast<const uint8_t*>(selfv);
-    const void* const member = self + 0x98;             // LEA RDX,[RCX+0x98]
-    ret->data = nullptr;
-    ret->size = 0;
-    ret->capacity = 0;
-    if (ret != member) RtColl_ArrayU8Assign_180011220(ret, member);    // 0x180011220
-    return ret;
+    return reinterpret_cast<const IO::PackageFile*>(selfv)
+               ->IO::PackageFile::GetPreviewData(retv);
 }
 
 // ===========================================================================
@@ -804,12 +797,97 @@ static const char* ShotCompare(const ModShot* a, int32_t na,
 }
 
 // ---- the body -------------------------------------------------------------
+// ENDGAME B.3.4 PACKAGE+FS commit 2: the body is now
+// `IO::Modification::RefreshList()`, at the bottom of this file. The door keeps
+// its name, its by-name AND by-address registration, and delegates. No
+// qualified `IO::` call: `IO::Modification` has no vtable at all
+// (runtime/types/io/Modification.h), so B34_BRIEFS section A.1's re-entry
+// hazard -- which is about a live object wearing a MINTED table whose slots
+// resolve back to these very doors -- cannot arise.
 extern "C" void RtIo_Modification_RefreshList(void* selfv) {
-    Modification* const self = static_cast<Modification*>(selfv);
+    reinterpret_cast<IO::Modification*>(selfv)->RefreshList();
+}
+
+// ===========================================================================
+// Registration
+// ===========================================================================
+// BOTH DOORS for the three rows that have a name in the export table, address
+// door alone for the five that do not. RefreshList needs both: it is reached by
+// NAME from runtime/src/engine/engine_lifecycle.cpp:605 (the Engine::Startup
+// call attempt 19 died on) and by ADDRESS through engine/funcs/
+// engine_funcs.cpp's `fn_Modification_RefreshList`, which
+// code/Game/Dialog/moddialog.cpp calls on both the mods dialog's Cancel and its
+// Ok. Registering one and not the other would leave the second resolving null
+// with the name never mentioned in the log.
+//
+// EVERY MANGLED NAME AND ORDINAL BELOW WAS PRINTED OUT OF Runtime-x64.dll's OWN
+// EXPORT DIRECTORY with pefile, not transcribed from a decompile. The first
+// draft of this file guessed `?$Array@H` for GetIconData; the real export is
+// `?$Array@I` (unsigned int) and `?BV` (const), which no compiler would have
+// caught — the same class of error lane PKG2 records for its ordinals.
+//
+//   ?RefreshList@Modification@IO@@QEAAXXZ                            ord 3528
+//   ?GetIconData@PackageFile@IO@@QEBA?BV?$Array@I@Collection@@XZ     ord 2697
+//   ?GetPreviewData@PackageFile@IO@@QEBA?BV?$Array@E@Collection@@XZ  ord 2855
+//
+// Every address was grepped for an existing `RegisterRuntimeAddr(0x…` across
+// runtime/, standalone/ and code/ before being claimed — the check
+// `reference_grep_for_the_port_before_writing_it.md` exists for. All eight were
+// unregistered.
+//
+// The mangled names are LITERALS: tools/runtime_census.py matches
+// `RegisterRuntimeExport("<literal>"` and cannot see through a constant.
+int RtIoModificationRefreshRegister() {
+    int n = 0;
+
+    RegisterRuntimeExport("?RefreshList@Modification@IO@@QEAAXXZ",
+                          (void*)&RtIo_Modification_RefreshList); ++n;
+    RegisterRuntimeExport("?GetIconData@PackageFile@IO@@QEBA?BV?$Array@I@Collection@@XZ",
+                          (void*)&RtIo_PackageFile_GetIconData); ++n;
+    RegisterRuntimeExport("?GetPreviewData@PackageFile@IO@@QEBA?BV?$Array@E@Collection@@XZ",
+                          (void*)&RtIo_PackageFile_GetPreviewData); ++n;
+
+    RegisterRuntimeAddr(0x1800af5f0, (void*)&RtIo_Modification_RefreshList);
+    RegisterRuntimeAddr(0x180025530, (void*)&RtIo_PackageFile_GetIconData);
+    RegisterRuntimeAddr(0x180025580, (void*)&RtIo_PackageFile_GetPreviewData);
+
+    // Unexported in both shipped builds — address door only.
+    RegisterRuntimeAddr(0x180028610, (void*)&RtColl_ArrayModSetSizeFill_180028610);
+    RegisterRuntimeAddr(0x1800274c0, (void*)&RtColl_SetInsertFixup_1800274c0);
+    RegisterRuntimeAddr(0x180027f50, (void*)&AvlRotateRight);
+    RegisterRuntimeAddr(0x180027e20, (void*)&AvlRotateLeft);
+    RegisterRuntimeAddr(0x18007f034, (void*)&RtCrt_ParseInt10_18007f034);
+
+    printf("[RtPort]   IO::Modification::RefreshList (lane MOD2): "
+           "%d exports + 8 addresses\n", n);
+    return n;
+}
+
+}  // namespace RtIO
+
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::Modification::RefreshList`'s member body
+// ============================================================================
+namespace IO {
+
+void Modification::RefreshList() {
+    // A member of `IO::X` must be DEFINED in a namespace ENCLOSING the class
+    // (B34_BRIEFS section A.2), so this body cannot live inside `namespace
+    // RtIO` where its two dozen file-local helpers, typedefs and
+    // using-declarations do. ONE function-scope using-directive brings them all
+    // in unchanged, which is what keeps this 380-line transcription a MOVE
+    // rather than a rewrite: every line below is the line that was in the door,
+    // byte for byte, except the five field reads that became members.
+    //
+    // It is safe against B34_RULES section 7.2's grep hazard rather than
+    // exposed to it: the only name `IO` and `RtIO` share is `Modification`, and
+    // inside a member the injected-class-name wins outright, so a collision
+    // would be a compile error and never a silent rebind.
+    using namespace RtIO;
 
     // `this + 8` is the Array<Mod> header {mods, count, capacity}. Retail holds
     // it in RDI for the whole body and spills it at [RBP+0x208].
-    ModArray* const arr = reinterpret_cast<ModArray*>(&self->mods);
+    ModArray* const arr = reinterpret_cast<ModArray*>(&_mods);
 
     // 0x1800af62c — UNCONDITIONAL. This is what makes the function idempotent
     // and therefore diffable; see the banner.
@@ -818,8 +896,8 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     // 0x1800af631: `CMP byte ptr [RBX+1],0 ; JNZ main`. With saving disabled the
     // list is restored from the backup EnableSavingSettings(false) made and the
     // function returns — no disk scan, no registry read.
-    if (self->savingSettings == 0) {
-        RtColl_ArrayModAssign_180010110(arr, &self->savedMods);   // 0x180010110
+    if (_savingSettings == 0) {
+        RtColl_ArrayModAssign_180010110(arr, &_savedMods);   // 0x180010110
         return;
     }
 
@@ -1121,8 +1199,8 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     // leftmost node, then take the successor repeatedly (leftmost of the right
     // subtree, else climb while we are a right child).
     // -----------------------------------------------------------------------
-    for (int32_t i = 0; i < self->count; ++i) {
-        for (int32_t j = 0; j < self->count; ++j) {
+    for (int32_t i = 0; i < _count; ++i) {
+        for (int32_t j = 0; j < _count; ++j) {
             if (i == j) continue;                                // CMP R13,R15 ; JZ
             Mod* const mods = static_cast<Mod*>(arr->data);      // re-read, as retail does
             AvlNode* node = reinterpret_cast<AvlNode*>(mods[i].set.root);
@@ -1192,59 +1270,47 @@ extern "C" void RtIo_Modification_RefreshList(void* selfv) {
     // -----------------------------------------------------------------------
 }
 
-// ===========================================================================
-// Registration
-// ===========================================================================
-// BOTH DOORS for the three rows that have a name in the export table, address
-// door alone for the five that do not. RefreshList needs both: it is reached by
-// NAME from runtime/src/engine/engine_lifecycle.cpp:605 (the Engine::Startup
-// call attempt 19 died on) and by ADDRESS through engine/funcs/
-// engine_funcs.cpp's `fn_Modification_RefreshList`, which
-// code/Game/Dialog/moddialog.cpp calls on both the mods dialog's Cancel and its
-// Ok. Registering one and not the other would leave the second resolving null
-// with the name never mentioned in the log.
-//
-// EVERY MANGLED NAME AND ORDINAL BELOW WAS PRINTED OUT OF Runtime-x64.dll's OWN
-// EXPORT DIRECTORY with pefile, not transcribed from a decompile. The first
-// draft of this file guessed `?$Array@H` for GetIconData; the real export is
-// `?$Array@I` (unsigned int) and `?BV` (const), which no compiler would have
-// caught — the same class of error lane PKG2 records for its ordinals.
-//
-//   ?RefreshList@Modification@IO@@QEAAXXZ                            ord 3528
-//   ?GetIconData@PackageFile@IO@@QEBA?BV?$Array@I@Collection@@XZ     ord 2697
-//   ?GetPreviewData@PackageFile@IO@@QEBA?BV?$Array@E@Collection@@XZ  ord 2855
-//
-// Every address was grepped for an existing `RegisterRuntimeAddr(0x…` across
-// runtime/, standalone/ and code/ before being claimed — the check
-// `reference_grep_for_the_port_before_writing_it.md` exists for. All eight were
-// unregistered.
-//
-// The mangled names are LITERALS: tools/runtime_census.py matches
-// `RegisterRuntimeExport("<literal>"` and cannot see through a constant.
-int RtIoModificationRefreshRegister() {
-    int n = 0;
+}  // namespace IO
 
-    RegisterRuntimeExport("?RefreshList@Modification@IO@@QEAAXXZ",
-                          (void*)&RtIo_Modification_RefreshList); ++n;
-    RegisterRuntimeExport("?GetIconData@PackageFile@IO@@QEBA?BV?$Array@I@Collection@@XZ",
-                          (void*)&RtIo_PackageFile_GetIconData); ++n;
-    RegisterRuntimeExport("?GetPreviewData@PackageFile@IO@@QEBA?BV?$Array@E@Collection@@XZ",
-                          (void*)&RtIo_PackageFile_GetPreviewData); ++n;
+// ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS — `IO::PackageFile`'s two counted-array getters
+// ============================================================================
+// Defined outside `namespace RtIO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2). They stay in THIS
+// file because this is where their doors and their registrations have always
+// been, and because the two `Collection::Array<T>::operator=` instantiations
+// they call are this file's, reached by address.
+namespace IO {
 
-    RegisterRuntimeAddr(0x1800af5f0, (void*)&RtIo_Modification_RefreshList);
-    RegisterRuntimeAddr(0x180025530, (void*)&RtIo_PackageFile_GetIconData);
-    RegisterRuntimeAddr(0x180025580, (void*)&RtIo_PackageFile_GetPreviewData);
-
-    // Unexported in both shipped builds — address door only.
-    RegisterRuntimeAddr(0x180028610, (void*)&RtColl_ArrayModSetSizeFill_180028610);
-    RegisterRuntimeAddr(0x1800274c0, (void*)&RtColl_SetInsertFixup_1800274c0);
-    RegisterRuntimeAddr(0x180027f50, (void*)&AvlRotateRight);
-    RegisterRuntimeAddr(0x180027e20, (void*)&AvlRotateLeft);
-    RegisterRuntimeAddr(0x18007f034, (void*)&RtCrt_ParseInt10_18007f034);
-
-    printf("[RtPort]   IO::Modification::RefreshList (lane MOD2): "
-           "%d exports + 8 addresses\n", n);
-    return n;
+// The self-compare (`LEA RDX,[RCX+0x80]` / `CMP RBX,RDX`) can only be true if a
+// caller passes the member's own address as the return slot. Transcribed, not
+// dropped: it IS the guard, and neither Array::operator= carries one of its own
+// (only the Filename instantiation does -- modification.cpp).
+//
+// The element types come from the export names, not from the call site:
+// `?$Array@I` (unsigned int) for the icon, `?$Array@E` (unsigned char) for the
+// preview -- which is why the two call different assigns. The two offsets that
+// used to be spelled here as `self + 0x80` / `self + 0x98` are now the named
+// members `_iconData` / `_previewData`, each pinned by a static_assert in
+// runtime/types/io/PackageFile.h.
+void* PackageFile::GetIconData(void* retv) const {
+    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+    const void* const member = &_iconData;              // LEA RDX,[RCX+0x80]
+    ret->data = nullptr;                                // MOV [RBX],RAX
+    ret->size = 0;                                      // MOV [RBX+8],RAX — one qword,
+    ret->capacity = 0;                                  //   so capacity is zeroed too
+    if (ret != member) RtIO::RtColl_ArrayI32Assign_180011110(ret, member);  // 0x180011110
+    return ret;
 }
 
-}  // namespace RtIO
+void* PackageFile::GetPreviewData(void* retv) const {
+    RtIO::ModArray* const ret = static_cast<RtIO::ModArray*>(retv);
+    const void* const member = &_previewData;           // LEA RDX,[RCX+0x98]
+    ret->data = nullptr;
+    ret->size = 0;
+    ret->capacity = 0;
+    if (ret != member) RtIO::RtColl_ArrayU8Assign_180011220(ret, member);   // 0x180011220
+    return ret;
+}
+
+}  // namespace IO
