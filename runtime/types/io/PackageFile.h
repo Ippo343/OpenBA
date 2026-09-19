@@ -1,0 +1,400 @@
+#pragma once
+// ============================================================================
+// runtime/types/io/PackageFile.h — the REAL `IO::PackageFile`
+// ENDGAME B.3.4 PACKAGE+FS commit 3.   Design: B34_RULES.md §1.4, §4.2, §4.3;
+// B34_BRIEFS.md §E.2, §E.3.
+// ============================================================================
+//
+// There was no header for this class before this commit. Its layout was
+// scattered across `FileSystem.h`'s `PackageFileView` (a PARTIAL view of the
+// eleven fields other files read) and the raw offsets
+// `runtime/src/io/package_file.cpp`'s constructor writes. This header is
+// written FROM THAT CONSTRUCTOR, which is the strongest source a layout can
+// have: `??0PackageFile@IO@@QEAA@XZ` (retail 0x1800b4440) writes the WHOLE
+// 0xf0-byte object, store by store, and `runtime/src/io/package_file.cpp`'s
+// `PackageFileCtorBody` already carries every one of those stores with the
+// address of the instruction it reproduces.
+//
+// Every field below is pinned by a `static_assert` against either that store or
+// the one-instruction accessor that reads it. Where the constructor's store
+// list SKIPS a span, that span is explicit padding with the skip recorded — it
+// is not extended from a decompile (the rule `Persistence.h`'s banner states
+// for its own file and `FileSystem.h`'s +0x58/+0x60 note states for naming).
+//
+// ----------------------------------------------------------------------------
+// IT IS AN `Object::External` SUBCLASS, AND SLOT 8 IS ITS OWN
+// ----------------------------------------------------------------------------
+// `??_7PackageFile@IO@@6B@` @ 0x180155700 has 9 slots, bounded by a null qword
+// at 0x180155748. Slots 1..7 are `Object::External`'s own eight minus its slot
+// 0, in External's exact order (B34_RULES §1.4) — which is what makes
+// `package_file_serialize.cpp`'s "slot 5" `External::Serialize`.
+//
+// *** THE SLOT-8 QUESTION B34_BRIEFS §E.2 LEFT OPEN IS ANSWERED HERE:
+//     `Construct` IS DECLARED BY `IO::PackageFile` ITSELF, not by an
+//     unmodelled class between `External` and it. *** Four independent pieces
+//     of evidence, all read out of retail `Runtime-x64.dll` (function_count
+//     15290) this pass:
+//
+//   1. **0x1800252f0 is reachable from exactly one vtable.** `get_xrefs_to`
+//      returns three references and no more: the export-table entry at
+//      0x1801b26ec, the EXTERNAL entry-point row, and **0x180155740**, which is
+//      `??_7PackageFile@IO@@6B@ + 0x40` — slot 8. No other class's table holds
+//      this body.
+//   2. **`Object::External`'s own table stops at eight.** Re-read byte-wise:
+//      0x1801547a0 = { 0x180006640, 0x1800066c0, 0x1800066d0, _purecall,
+//      0x1800066e0, _purecall, _purecall, _purecall }, then a NULL qword at
+//      0x1801547e0 immediately followed by the "External" type-name string.
+//      `Construct` is absent from it, so slot 8 is ADDED below External.
+//   3. **Fifty-eight classes across nine namespaces each export their own
+//      `?Construct@<Leaf>@<NS>@@UEAAPEAVExternal@Object@@XZ`** — `UI` (30),
+//      `Graphics` (8), `Video` (5), `Audio` (2), `Collision2D` (2),
+//      `Picking`, `Pathfinding`, `Achievement`, `Object::ExternalList` and this
+//      one — and **there is no `?Construct@` on any base class at all.** Each
+//      sits inside a per-class reflection-boilerplate block whose members
+//      (`_TypeName`, `_ParentTypeName`, `Type`, `TypeId`, `TypeName`,
+//      `CreateNewObject`, `CreateInPlaceObject`, `Reconstruct`, `Construct`,
+//      `Destruct`) are emitted at consecutive addresses — i.e. a macro expanded
+//      in each class BODY, which is what puts the virtual in each class.
+//   4. **A second, independent 9-slot instance has the identical shape.**
+//      `Achievement::Achievement`, a direct `External` subclass, has its table
+//      at 0x180154740: slots 1..7 in External's order (slot 4 is 0x1800066e0,
+//      External's own `Compile`, INHERITED), slot 8 = 0x1800012f0 `Construct`,
+//      bounded by `Object::Base`'s table at 0x180154788. So "External plus
+//      exactly one added virtual" is the family's general shape, not something
+//      peculiar to `PackageFile`.
+//
+// This also agrees with what B.3.3 already committed to for the same situation
+// one class over: `runtime/types/object/External.h` declares
+// `virtual External* Construct();  // [8] 0x1800075e0` on `Object::ExternalList`
+// with the note "so `Construct` is ExternalList's OWN new virtual: External's
+// table stops at eight". This header does the same thing for the same reason.
+//
+// ----------------------------------------------------------------------------
+// IT GETS NO REAL CONSTRUCTOR AND NO REAL DESTRUCTOR — B34_RULES §4.3
+// ----------------------------------------------------------------------------
+// `IO::PackageFile` is constructed TWO ways, and neither is ours to take over:
+//
+//   * a `standalone/rt_factories_io.*` object-creation replay row (an
+//     `RtFactOp::Call` into `??0PackageFile@IO@@QEAA@XZ`), and
+//   * `runtime/src/io/filesystem_packages.cpp`'s `MemAlloc(0xF0)` followed by
+//     the same ctor door.
+//
+// Both leave the object wearing the MINTED `??_7PackageFile@IO@@6B@`, whose
+// nine rows are LIVE (B34_RULES §4.2: not one of the nineteen IO minted rows
+// and not one of the fourteen IO deleting-dtor registrations may retire in this
+// step). A real C++ constructor would stamp GCC's table instead and swap the
+// table under the replay.
+//
+// THE SHAPE THAT ENFORCES IT is B34_BRIEFS §A.4's: slot 0 is re-declared
+// `override = 0`, so **the class is ABSTRACT and nothing can construct one**.
+// That is not a workaround, it is the honest statement: slot 0's body lives in
+// `runtime/src/object/deleting_dtor.cpp` as
+// `RT_DELDTOR(0x1800259d0, …, 0x0f0, "IO::PackageFile")`, which is also what
+// FILLS slot 0 of the live minted table, and §4.2 forbids retiring it. The
+// destructor (0x1800b4540, `runtime/src/io/package_file_dtor.cpp`) stays a
+// transcribed body for the same reason: it performs retail's base->derived->base
+// vptr restamp BY HAND, and a compiler-generated destructor chain would do
+// something different with a table other code still reads.
+//
+// The class is therefore NOT marked `final`: unlike `IO::BinaryReader` and
+// friends, its slot ORDER has to be pinned by a concrete probe subclass in
+// `tests/unit/`, and `final` would make that impossible.
+//
+// ----------------------------------------------------------------------------
+// THE `?_typeInfo@` ROW STAYS MINTED
+// ----------------------------------------------------------------------------
+// `IO::PackageFile` is the only IO class with a `?_typeInfo@` mint row
+// (0x1801f9ac8, `rt_data_mint_tables.inc`), and the row is LIVE, not orphaned —
+// it is the only reflected `Object::External` subclass in the namespace. It
+// takes `DECLARE_TYPE`/`DEFINE_TYPE` eventually; it does **not** take them in
+// this step, for the same reason B.3.3's closing pass left the five `Object`
+// `?_typeInfo@` rows minted (B34_RULES §1.4). `Type()`, `TypeId()` and
+// `TypeName()` keep reading that record through `RT_DATA_SLOT`.
+//
+// ----------------------------------------------------------------------------
+// THE FIVE `RtSystem::String` MEMBERS STAY PODs
+// ----------------------------------------------------------------------------
+// +0x40, +0x48, +0x50, +0x58 and +0x60 are the five slots `~PackageFile`
+// (0x1800b4540) releases with the inlined refcount idiom, in descending order.
+// Retyping them to real `System::String` members would give this class a
+// non-trivial destructor that runs IN ADDITION to that transcribed body — the
+// `RtSystem::String` double-free lesson (B31_RULES). The destructor is not in
+// this commit's scope (see above), so the precondition "no ported body still
+// destroys that member by hand" is not met and the PODs stay. They are reached
+// through `pod_bridge.h`'s `Sys()` at each use, exactly as they were.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include <type_traits>
+
+#include "FileSystem.h"                // RtIO::PackageFileView, RtIO::FileInfo
+#include "../object/External.h"          // Object::External — the base
+#include "../system/String.h"
+
+namespace IO {
+
+class PackageFile : public Object::External {
+public:
+    // ---- the nine slots of ??_7PackageFile@IO@@6B@ (0x180155700) ----------
+    // Slot 0 is left PURE and its body is NOT here: it is
+    // `RT_DELDTOR(0x1800259d0, …, 0x0f0, "IO::PackageFile")` in
+    // runtime/src/object/deleting_dtor.cpp, which is ALSO what fills slot 0 of
+    // the live minted table (B34_RULES §4.2). Declaring it pure is what keeps
+    // this class un-instantiable, which is what keeps our constructor from
+    // taking over from the factory replay (§4.3).
+    Object::Base* DeletingDtor(unsigned flags) override = 0;    // [0] 0x1800259d0
+
+    const char*   TypeName() const override;                    // [1] 0x180025150
+    uint32_t      Type() const override;                        // [2] 0x180025130
+    int32_t       GetFileVersion() const override;              // [3] 0x1800b6080
+    // [4] 0x1800b6090 — PackageFile's OWN override, NOT External's inherited
+    // 0x1800066e0. `MOV EAX,0x1 ; RET`: a package is never "compiled", so the
+    // slot reports the same result whatever Filename it is handed and the
+    // parameter is genuinely unread. Its body is ported but has NEVER been
+    // registered (there is no `?Compile@PackageFile@IO@@` row anywhere in the
+    // tree, by name or by address); that is unchanged here, because this commit
+    // adds no registration.
+    CompileResult Compile(const System::Filename& path) override;  // [4] 0x1800b6090
+    // [5] 0x1800b60a0. The parameter is `IO::Stream&` in retail
+    // (`?Serialize@PackageFile@IO@@UEAA_NAEAVStream@2@@Z`) and `void*` here
+    // because `Object::External` declares the slot that way until STREAMS
+    // lands `IO::Stream`. Changing it is block 4's job, on the base, and this
+    // override follows it for free.
+    bool          Serialize(void* stream) override;             // [5] 0x1800b60a0
+    Object::External* Reconstruct() override;                   // [6] 0x1800252d0
+    void          Destruct() override;                          // [7] 0x180025300
+    // [8] — PackageFile's OWN new virtual. See the banner for the four pieces
+    // of evidence that it is declared HERE and not on an unmodelled class
+    // between `Object::External` and this one. Its body is a bare
+    // `TEST RCX,RCX / JNZ ??0PackageFile` tail jump, so the null branch is
+    // real and not defensive: the factory calls it on whatever the allocator
+    // returned, including nullptr.
+    virtual Object::External* Construct();                      // [8] 0x1800252f0
+
+    // ---- the non-virtual exported members ---------------------------------
+    // All `QEBA`/`QEAA`. The three String getters return BY VALUE and AddRef
+    // rather than copy — retail's bodies are the null-then-AddRef idiom, which
+    // is `System::String`'s copy constructor exactly.
+    System::String GetName() const;         // ?GetName@        0x180025320
+    System::String GetAuthor() const;       // ?GetAuthor@      0x180025360
+    System::String GetDescription() const;  // ?GetDescription@ 0x1800253a0
+
+    int32_t  GetVersion() const;      // 0x1800253d0  MOV EAX,[RCX+0x68]
+    int32_t  GetUserVersion() const;  // 0x1800253e0  MOV EAX,[RCX+0x6c]
+    int32_t  GetPriority() const;     // 0x1800254e0  MOV EAX,[RCX+0x70]
+    int32_t  GetPlatform() const;     // 0x1800253f0  MOV EAX,[RCX+0x74]
+    int32_t  GetIconWidth() const;    // 0x180025510  MOV EAX,[RCX+0x78]
+    int32_t  GetIconHeight() const;   // 0x180025520  MOV EAX,[RCX+0x7c]
+    uint32_t GetCRC() const;          // 0x180025500  MOV EAX,[RCX+0xa8]
+    int32_t  GetFileCount() const;    // 0x1800254d0  MOV EAX,[RCX+0xb8]
+
+    // 0x1800254f0 is `MOVZX EAX,byte ptr [RCX+0xac]` — a ZERO extension of the
+    // byte. The field is the one LoadPackages' index pass tests, so a wrong
+    // width here would change package precedence, not just a returned bool.
+    bool CanOverride() const;         // ?CanOverride@ 0x1800254f0
+
+    // Both index-takers SIGN-extend the index (`MOVSXD R8,EDX`) and neither
+    // bounds-checks. No guard is added: the caller bounds it with
+    // GetFileCount, and a guard here would skip work rather than restore it.
+    uint32_t GetFileOffset(int index) const;  // 0x1800254c0
+    uint32_t GetFileSize(int index) const;    // 0x1800254a0
+
+    // The two counted-array getters, both returning `Collection::Array<T>` BY
+    // VALUE into a hidden return slot. The element types come from the export
+    // names, not from the call sites: `?$Array@I` (unsigned int) for the icon
+    // at +0x80, `?$Array@E` (unsigned char) for the preview at +0x98. Both
+    // carry retail's self-compare guard (`LEA RDX,[RCX+0x80] ; CMP RBX,RDX`),
+    // which can only be true if a caller passes the member's own address as the
+    // return slot — transcribed, not dropped.
+    //
+    // Declared with `void*` for the return slot because the two `Array<T>`
+    // instantiations they assign through are still reached by address; the
+    // bodies stay in modification_refresh.cpp where their registrations are.
+    void* GetIconData(void* ret) const;       // 0x180025530
+    void* GetPreviewData(void* ret) const;    // 0x180025580
+
+    // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z 0x1800b46b0
+    bool ReadPackfile(const RtSystem::Filename& path);
+
+    // The static companion retail's reflection block emits, reading the same
+    // minted `?_typeInfo@PackageFile@IO@@` record `Type()` reads.
+    static uint32_t TypeId();         // 0x180025140
+
+    // ---- the 0xd0 bytes PackageFile adds, from +0x20 ----------------------
+    // PUBLIC, like `Object::External`'s and `IO::Serializer`'s, because the
+    // unconverted bodies in filesystem_packages.cpp, filesystem_find_win.cpp
+    // and package_file_serialize.cpp reach these offsets through
+    // `RtIO::PackageFileView` or by raw byte offset, and `offsetof` on them has
+    // to be well formed for the pins below.
+
+    // +0x20 and +0x30 — TWO `Collection::Array<System::String>` headers. Their
+    // MEANING is unknown and is NOT invented here: `package_file_serialize.cpp`
+    // refuses to name them on the argument that "a Serialize pins a field's
+    // TYPE and its POSITION IN THE RECORD STREAM and says nothing about its
+    // meaning", which is the same argument FileSystem.h:101 makes for
+    // +0x58/+0x60. What IS known: the serializer writes each as
+    // count-then-elements through `StringArraySerialize`, and sizes the array
+    // from the count on the reading side only.
+    void*    _stringArray20;      // +0x20  data
+    int32_t  _stringArray20Count; // +0x28  size
+    int32_t  _stringArray20Cap;   // +0x2c  capacity
+    void*    _stringArray30;      // +0x30  data
+    int32_t  _stringArray30Count; // +0x38  size
+    int32_t  _stringArray30Cap;   // +0x3c  capacity
+
+    // The five refcounted String slots ~PackageFile releases, in the order the
+    // three getters and the serializer name them. They keep the POD spelling —
+    // see the banner.
+    RtSystem::String _name;         // +0x40
+    RtSystem::String _author;       // +0x48
+    RtSystem::String _description;  // +0x50
+    RtSystem::String _string58;     // +0x58 — purpose unknown; type from ~PackageFile
+    RtSystem::String _string60;     // +0x60 — purpose unknown; type from ~PackageFile
+
+    int32_t  _version;      // +0x68
+    int32_t  _userVersion;  // +0x6c
+    // The ctor seeds +0x70/+0x74 with ONE qword 0x2710, i.e. priority 10000 and
+    // platform 0. +0x70 is the only field the packfile sort compares
+    // (0x1800264a0's whole comparator is `CMP dword ptr [RCX+0x70],EAX`).
+    int32_t  _priority;     // +0x70
+    int32_t  _platform;     // +0x74
+    // The only two fields the CONSTRUCTOR does not initialise: its store list
+    // jumps +0x70 -> +0x80. That is retail leaving them to ReadPackfile, not a
+    // gap in the transcription.
+    int32_t  _iconWidth;    // +0x78
+    int32_t  _iconHeight;   // +0x7c
+
+    void*    _iconData;      // +0x80  Collection::Array<uint32> — ?GetIconData@
+    int32_t  _iconCount;     // +0x88
+    int32_t  _iconCapacity;  // +0x8c
+
+    // +0x90 — A REAL int32 FIELD THE CONSTRUCTOR SKIPS. Its store list runs
+    // …, PutQ(0x88, 0), PutQ(0x98, 0), … so +0x90..+0x97 is never written by
+    // `??0PackageFile@IO@@`, exactly like +0x78/+0x7c — retail leaves it to
+    // ReadPackfile. And ReadPackfile is also what pins it:
+    // `package_file_read_win.cpp` reads it as an `int32_t` and passes it to
+    // `CompressedStream::Read` as the BYTE COUNT for the +0x98 array
+    // (retail 0x1800b4e09), immediately after reading the array's own header.
+    // So it is the preview blob's on-disk byte length, held separately from the
+    // `Array`'s element count at +0xa0.
+    //
+    // It is NOT absorbed into a neighbour: giving it to the icon array would
+    // make that a four-word header, and giving it to the preview array would
+    // move +0x98, which `?GetPreviewData@`'s `LEA RDX,[RCX+0x98]` pins. +0x94
+    // is untouched by anything read this pass and stays explicit padding.
+    int32_t  _previewByteCount;  // +0x90
+    int32_t  _pad94;             // +0x94 — NOT PINNED
+
+    void*    _previewData;     // +0x98  Collection::Array<uint8> — ?GetPreviewData@
+    int32_t  _previewCount;    // +0xa0
+    int32_t  _previewCapacity; // +0xa4
+
+    // +0xa8 — the package CRC, which is ALSO the packfile id: `?GetCRC@`
+    // (0x180025500) and `FileSystem::GetPackfileId` (0x1800ab050) hit the same
+    // four bytes. They are one field, not two.
+    uint32_t _crc;           // +0xa8
+    // +0xac — born 1 in the constructor (`MOV byte ptr [RCX+0xac],0x1`).
+    // LoadPackages' index pass reads it on the package that ALREADY owns a
+    // colliding path: nonzero means the later package takes the entry over.
+    // That is the whole of the loose-file / .pkg / .pkm precedence rule.
+    uint8_t  _overridable;   // +0xac
+    uint8_t  _padAd[3];      // +0xad
+
+    void*    _entries;       // +0xb0  Collection::Array<PackageFileEntry>, stride 16
+    int32_t  _entryCount;    // +0xb8
+    int32_t  _entryCapacity; // +0xbc
+
+    // +0xc0 — the EMBEDDED `IO::FileSystem::FileInfo`, 0x30 bytes, which is
+    // what makes the object exactly 0xf0. The constructor does `ADD RCX,0xc0`
+    // at 0x1800b44f1 and then writes the FileInfo's own fields in retail's
+    // out-of-order sequence (+0x00, +0x08, +0x10, +0x20, +0x28, and only then
+    // +0x18 = -1, the Win32 HANDLE).
+    RtIO::FileInfo _file;    // +0xc0 .. +0xef
+
+    // THERE IS DELIBERATELY NO DESTRUCTOR DECLARATION. `??1PackageFile@IO@@UEAA@XZ`
+    // (0x1800b4540) is ported and registered, and its body stays exactly where
+    // it is (runtime/src/io/package_file_dtor.cpp): it performs retail's
+    // base->derived->base vptr RESTAMP by hand and releases the five String
+    // slots in retail's descending order. A C++ destructor here would (a) need
+    // that restamp expressed as a constructor/destructor chain that stamps
+    // GCC's tables instead of the live minted one, and (b) run in addition to
+    // that transcribed body wherever both were reachable. Both are exactly what
+    // B34_RULES §4.3 forbids for a class a factory replay constructs. The
+    // implicit destructor the compiler supplies is never reached — the class is
+    // abstract and nothing instantiates one.
+};
+
+// ---- the layout pins ------------------------------------------------------
+// The size is not a guess: `RT_DELDTOR(0x1800259d0, 0x1800b4540, 0x0f0,
+// "IO::PackageFile")` carries it, and the constructor's last store is the
+// FileInfo's +0x18 at object offset 0xd8, inside a 0x30-byte member starting at
+// 0xc0 — 0xc0 + 0x30 == 0xf0 exactly.
+static_assert(sizeof(PackageFile) == 0xf0,
+              "IO::PackageFile is 0xf0 bytes -- the elemSize of its RT_DELDTOR row");
+static_assert(sizeof(Object::External) == 0x20,
+              "PackageFile's own fields start where External's end");
+
+static_assert(offsetof(PackageFile, _stringArray20)      == 0x20, "ctor 1800b4489 PutQ(0x20,0)");
+static_assert(offsetof(PackageFile, _stringArray20Count) == 0x28,
+              "Serialize 1800b6153 reads the count at +0x28");
+static_assert(offsetof(PackageFile, _stringArray30)      == 0x30, "ctor 1800b4491 PutQ(0x30,0)");
+static_assert(offsetof(PackageFile, _stringArray30Count) == 0x38,
+              "Serialize 1800b6193 reads the count at +0x38");
+static_assert(offsetof(PackageFile, _name)        == 0x40, "GetName 0x18002532a MOV RAX,[RCX+0x40]");
+static_assert(offsetof(PackageFile, _author)      == 0x48, "GetAuthor 0x18002536a");
+static_assert(offsetof(PackageFile, _description) == 0x50, "GetDescription 0x1800253aa");
+static_assert(offsetof(PackageFile, _string58)    == 0x58, "~PackageFile 0x1800b45c0 releases [RBX+0x58]");
+static_assert(offsetof(PackageFile, _string60)    == 0x60, "~PackageFile 0x1800b4599 releases [RBX+0x60]");
+static_assert(offsetof(PackageFile, _version)     == 0x68, "GetVersion 0x1800253d0");
+static_assert(offsetof(PackageFile, _userVersion) == 0x6c, "GetUserVersion 0x1800253e0");
+static_assert(offsetof(PackageFile, _priority)    == 0x70, "sort 0x1800264a0 CMP dword [RCX+0x70],EAX");
+static_assert(offsetof(PackageFile, _platform)    == 0x74, "GetPlatform 0x1800253f0");
+static_assert(offsetof(PackageFile, _iconWidth)   == 0x78, "GetIconWidth 0x180025510");
+static_assert(offsetof(PackageFile, _iconHeight)  == 0x7c, "GetIconHeight 0x180025520");
+static_assert(offsetof(PackageFile, _iconData)    == 0x80, "GetIconData 0x180025530 LEA RDX,[RCX+0x80]");
+static_assert(offsetof(PackageFile, _iconCount)   == 0x88, "Serialize 1800b620f reads the count at +0x88");
+static_assert(offsetof(PackageFile, _previewByteCount) == 0x90,
+              "ReadPackfile 0x1800b4e09 reads [this+0x90] as the byte count of the "
+              "+0x98 array read; the ctor's store list jumps PutQ(0x88,0) to PutQ(0x98,0)");
+static_assert(offsetof(PackageFile, _previewData) == 0x98, "GetPreviewData 0x180025580 LEA RDX,[RCX+0x98]");
+static_assert(offsetof(PackageFile, _previewCount) == 0xa0, "ctor 1800b44ce PutQ(0xA0,0)");
+static_assert(offsetof(PackageFile, _crc)         == 0xa8, "GetCRC 0x180025500 / GetPackfileId 0x1800ab050");
+static_assert(offsetof(PackageFile, _overridable) == 0xac, "ctor 1800b44dc MOV byte [RCX+0xac],1");
+static_assert(offsetof(PackageFile, _entries)     == 0xb0, "GetFileName 0x180025475 ADD RDX,[RCX+0xb0]");
+static_assert(offsetof(PackageFile, _entryCount)  == 0xb8, "LoadPackages 0x1800ab889 MOV EAX,[RCX+0xb8]");
+static_assert(offsetof(PackageFile, _file)        == 0xc0, "ctor 1800b44f1 ADD RCX,0xc0");
+static_assert(sizeof(RtIO::FileInfo) == 0x30, "the embedded FileInfo is what makes 0xc0 + 0x30 == 0xf0");
+
+// ---- the cross-asserts against the partial POD view ------------------------
+// `RtIO::PackageFileView` is NOT replaced by this class and must not be: it is
+// read by `filesystem_packages.cpp`, `filesystem_find_win.cpp` and
+// `filesystem.cpp`, and B33 §7's rule is that the POD stays, trivially
+// destructible, until its last user converts. These asserts are what keep the
+// two spellings from drifting — exactly as `RtObject::BaseTypeInfo` was kept
+// against `Object::BaseTypeInfo`.
+static_assert(offsetof(PackageFile, _name)        == offsetof(RtIO::PackageFileView, name),        "alias name");
+static_assert(offsetof(PackageFile, _author)      == offsetof(RtIO::PackageFileView, author),      "alias author");
+static_assert(offsetof(PackageFile, _description) == offsetof(RtIO::PackageFileView, description), "alias description");
+static_assert(offsetof(PackageFile, _string58)    == offsetof(RtIO::PackageFileView, _string58),   "alias _string58");
+static_assert(offsetof(PackageFile, _string60)    == offsetof(RtIO::PackageFileView, _string60),   "alias _string60");
+static_assert(offsetof(PackageFile, _version)     == offsetof(RtIO::PackageFileView, version),     "alias version");
+static_assert(offsetof(PackageFile, _userVersion) == offsetof(RtIO::PackageFileView, userVersion), "alias userVersion");
+static_assert(offsetof(PackageFile, _priority)    == offsetof(RtIO::PackageFileView, priority),    "alias priority");
+static_assert(offsetof(PackageFile, _platform)    == offsetof(RtIO::PackageFileView, platform),    "alias platform");
+static_assert(offsetof(PackageFile, _iconWidth)   == offsetof(RtIO::PackageFileView, iconWidth),   "alias iconWidth");
+static_assert(offsetof(PackageFile, _iconHeight)  == offsetof(RtIO::PackageFileView, iconHeight),  "alias iconHeight");
+static_assert(offsetof(PackageFile, _crc)         == offsetof(RtIO::PackageFileView, packfileId),  "alias packfileId/CRC");
+static_assert(offsetof(PackageFile, _overridable) == offsetof(RtIO::PackageFileView, overridable), "alias overridable");
+static_assert(offsetof(PackageFile, _entries)     == offsetof(RtIO::PackageFileView, entries),     "alias entries");
+static_assert(offsetof(PackageFile, _entryCount)  == offsetof(RtIO::PackageFileView, entryCount),  "alias entryCount");
+
+// The class IS polymorphic and that is the point — unlike `IO::Serializer`,
+// `IO::Registry` and `IO::Modification`, this one has a live nine-row minted
+// vtable. What must not drift is the SLOT COUNT, and nothing a header can
+// assert covers that; `tests/unit/io_vtable_abi_test.cpp`'s
+// `package_file_adds_exactly_one_virtual_at_slot_8_over_External` is the guard.
+static_assert(std::is_polymorphic<PackageFile>::value,
+              "IO::PackageFile is an Object::External subclass with a nine-slot table");
+
+}  // namespace IO
