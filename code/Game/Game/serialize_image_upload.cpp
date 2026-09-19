@@ -49,6 +49,10 @@
 // session 8. Session 7's only goal is that the helper exists, links, and is
 // callable, executing our cleaned C body.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Video::ImageBuffer is a real class
+// and the hand-inlined vtable +0x48 dispatch below is its slot 9 (`Create`).
+// ImageBuffer.h pulls no Volume.h, so include order against <windows.h> is free.
+#include "video/ImageBuffer.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -80,22 +84,15 @@ namespace {
 //   R8d        = 2  (Usage)
 //   EDX        = 0  (ImageType)
 //   RCX        = self
-typedef bool (*fn_ImageBuffer_Create_t)(void* self,
-                                         int   imageType,
-                                         int   usage,
-                                         int   format,
-                                         unsigned int mipLevels,
-                                         int   width,
-                                         int   height,
-                                         int   filterMode,
-                                         int   addrU,
-                                         int   addrV,
-                                         int   addrW,
-                                         void* mipData);
+//
+// ENDGAME B.3.5: the hand-inlined slot read and its typedef are GONE — +0x48 is
+// slot 9 of `Video::ImageBuffer` (B35_RULES 2.3 item 5), so this is a virtual
+// call on a PROVED receiver (0x68 bytes from MemAlloc, run through
+// `??0ImageBuffer@Video@@`, then given the exe's NoiseUI table). The virtual call
+// reads that live vptr at the same +0x48 the slot read did.
 
 constexpr int kImageBufferSize        = 0x68;     // sizeof(Video::ImageBuffer)
 constexpr int kImageBufferAlign       = 8;
-constexpr int kCreateVtableSlotOffset = 0x48;     // bytes into vtable
 constexpr int kImageBufferOffset      = 0x148;    // self+0x148 = ImageBuffer*
 constexpr int kHeightmapBytesOffset   = 0x140;    // self+0x140 = raw bytes
 constexpr int kGridSizeOffset         = 0xC0;     // self+0xC0 = grid edge
@@ -215,41 +212,23 @@ extern "C" void TradeWork_impl_sub_c780_Body(void* self) {
         return;
     }
 
-    // (6) Dispatch through the custom vtable's +0x48 slot (Create). Index 9
-    //     in the 8-byte-stride vtable. Mirrors NoiseUI_Slot4 lines 290-299
-    //     and ModDialog lines 395-397 exactly.
-    uintptr_t vtable = *reinterpret_cast<uintptr_t*>(img);
-    if (vtable == 0) {
-        // Defensive: vtable write should always succeed since g_NoiseUI is non-zero.
-        printf("[sub_c780] vtable write disappeared (img=%p) — skipping\n", img);
-        fflush(stdout);
-        return;
-    }
-    fn_ImageBuffer_Create_t fnCreate = *reinterpret_cast<fn_ImageBuffer_Create_t*>(
-        vtable + kCreateVtableSlotOffset);
-    if (!fnCreate) {
-        static bool s_warned = false;
-        if (!s_warned) {
-            printf("[sub_c780] vtable +0x48 (Create) is null — "
-                   "skipping CopyToTexture\n");
-            fflush(stdout);
-            s_warned = true;
-        }
-        return;
-    }
-
-    bool createOk = fnCreate(img,
-             /*imageType */ 0,
+    // (6) Slot 9 of Video::ImageBuffer — `Create` — which is what the exe's
+    //     hand-inlined vtable +0x48 dispatch was. Mirrors NoiseUI_Slot4 lines
+    //     290-299 and ModDialog lines 395-397 exactly.
+    //     The old `vtable == 0` and `fnCreate == null` tests were reads of the
+    //     slot itself, not object tests, and go with the slot read.
+    bool createOk = reinterpret_cast<Video::ImageBuffer*>(img)->Create(
+             /*type      */ 0,
              /*usage     */ 2,
              /*format    */ 5,
-             /*mipLevels */ 0,
+             /*flags     */ 0u,
              /*width     */ width,
              /*height    */ width,
-             /*filterMode*/ 2,
-             /*addrU     */ 1,
-             /*addrV     */ 1,
-             /*addrW     */ 1,
-             /*mipData   */ nullptr);
+             /*filter    */ 2,
+             /*addressU  */ 1,
+             /*addressV  */ 1,
+             /*addressW  */ 1,
+             /*levels    */ nullptr);   // B.3.5 bridge
 
     // Diagnostic: verify Create populated the buffer params/data slots.
     {

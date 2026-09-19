@@ -62,7 +62,11 @@
 //    leaving the flags set re-enters this path every frame forever.
 // ---------------------------------------------------------------------------
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Video::ImageBuffer is a real class
+// and `SaveImageToFile` is its class static. ImageBuffer.h pulls no Volume.h, so
+// it is safe after resolve.h's <windows.h> here.
 #include "resolve.h"
+#include "video/ImageBuffer.h"
 #include "engine_funcs.h"
 #include "io/FileSystem.h"      // ENDGAME B.3.4a closing 4/4
 #include "system/Filename.h"
@@ -273,7 +277,13 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     unsigned int* pixels = reinterpret_cast<unsigned int*>(
         s_MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(height * width)) << 2, 4));
     fn_ImageBuffer_CopyFromTexture(frameCopy, pixels, width, height);
-    s_SaveImageToFile(&path, width, height, pixels);
+    // B.3.5 bridge — ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z
+    // is STATIC (`SA_N`), so there is no receiver: the door's first argument was
+    // the Filename, not a `this`. `s_SaveImageToFile` and its resolve STAY — the
+    // `s_ok` aggregate and the [TakeScreenshot] printf still read the pointer.
+    Video::ImageBuffer::SaveImageToFile(
+        *reinterpret_cast<const System::Filename*>(&path),
+        width, height, pixels);   // B.3.5 bridge
     s_MemFree(pixels);
 
 
