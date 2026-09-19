@@ -14,7 +14,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Typed ExternalPtr serialize for Toolbar (exe function at 0x140024c70)
@@ -68,9 +70,9 @@ void Toolbar_Serialize(Toolbar* self, void* stream) {
     EnsureResolved();
 
     // Create serializer on stack (24 bytes), version 0
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // ExternalPtr fields
@@ -86,7 +88,8 @@ void Toolbar_Serialize(Toolbar* self, void* stream) {
     reinterpret_cast<System::String*>(&self->_field38)->Serialize(serializer);
 
     // Encoding vcall 0x98 for int at +0x48
-    SerializerEncodingVCall(serializer, 0x98, (void*)((uintptr_t)self + 0x48));
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
+        *reinterpret_cast<unsigned int*>((void*)((uintptr_t)self + 0x48)), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Typed ExternalPtr serialize for Toolbar at +0x60
     if (s_fn_ExtPtr_Toolbar_Serialize) {
@@ -99,23 +102,24 @@ void Toolbar_Serialize(Toolbar* self, void* stream) {
     }
 
     // Encoding vcall 0x98 for int at +0x40
-    SerializerEncodingVCall(serializer, 0x98, (void*)((uintptr_t)self + 0x40));
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
+        *reinterpret_cast<unsigned int*>((void*)((uintptr_t)self + 0x40)), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Bool fields
     if (g_fn_Serialize_Bool) {
-        g_fn_Serialize_Bool(serializer, &self->_field45, nullptr);
-        g_fn_Serialize_Bool(serializer, &self->_field44, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field45, nullptr);   // B.3.4 bridge (cast dropped: _field45 is bool)
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field44, nullptr);   // B.3.4 bridge (cast dropped: _field44 is bool)
     }
 
     // Int fields
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, &self->selectedIndex, nullptr);
-        g_fn_Serialize_Int(serializer, &self->_field50, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->selectedIndex, nullptr);   // B.3.4 bridge (cast dropped: selectedIndex is int32_t)
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field50, nullptr);   // B.3.4 bridge (cast dropped: _field50 is int32_t)
     }
 
     // Destroy serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 

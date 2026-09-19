@@ -38,8 +38,10 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Local function pointers (resolved once)
@@ -115,7 +117,7 @@ static void Reimpl_TerrainDataSerialize(void* serializer, uint32_t count, void* 
     int32_t* row = reinterpret_cast<int32_t*>(arrayPtr);
     for (uint32_t r = 0; r < count; ++r) {
         for (int k = 0; k < 17; ++k)
-            g_fn_Serialize_Int(serializer, &row[kOrder[k]], nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(row[kOrder[k]], nullptr);   // B.3.4 bridge (cast dropped: row[] is int32_t)
         row += 17;
     }
 }
@@ -235,8 +237,8 @@ void TerrainGenerator_Cleanup(TerrainGenerator* self) {
 void TerrainGenerator_Serialize(TerrainGenerator* self, void* stream) {
     EnsureInit();
     // Create Serializer on stack (24 bytes)
-    uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    if (g_fn_Serializer_Ctor) ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize ExternalPtr at +0x20
     if (fn_ExternalPtr_Serialize2)
@@ -247,7 +249,7 @@ void TerrainGenerator_Serialize(TerrainGenerator* self, void* stream) {
 
     // Serialize bool at +0x30
     if (g_fn_Serialize_Bool)
-        g_fn_Serialize_Bool(serializer, reinterpret_cast<uint8_t*>(self) + 0x30, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x30), nullptr);   // B.3.4 bridge (cast kept: _field30 is uint8_t, not bool)
 
     // Serialize 3 filename strings with version-0 resolution pattern:
     // +0x38, +0x50, +0x68
@@ -260,7 +262,7 @@ void TerrainGenerator_Serialize(TerrainGenerator* self, void* stream) {
     // then if version==0 resize the array, then serialize array contents.
     uint32_t count = *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(self) + 0x88);
     if (g_fn_Serialize_Int)
-        g_fn_Serialize_Int(serializer, &count, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge (cast kept: count is uint32_t, not int)
 
     if (GetSerializerVersion(serializer) == 0) {
         // Resize terrain data array to deserialized count
@@ -275,7 +277,7 @@ void TerrainGenerator_Serialize(TerrainGenerator* self, void* stream) {
     }
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) g_fn_Serializer_Dtor(serializer);
+    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

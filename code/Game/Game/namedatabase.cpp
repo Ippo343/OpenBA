@@ -28,8 +28,10 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 static constexpr uintptr_t kVtableAddr = 0x14015eea0;
 static constexpr int       kSize       = 0x60;
@@ -129,8 +131,8 @@ extern "C" void NameDatabase_Serialize(void* self, void* stream) {
     if (!s_ctor || !s_dtor || !s_int) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
 
-    uint8_t ser[24];
-    s_ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Loading when the serializer's stream mode field (stream+8) == 0.
     auto isLoading = [&]() -> bool {
@@ -140,37 +142,40 @@ extern "C" void NameDatabase_Serialize(void* self, void* stream) {
 
     // --- array1: stride 0xc (3 fields/elem) ---
     int c1 = *(int*)(s + 0x28);
-    s_int(ser, &c1, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c1, nullptr);   // B.3.4 bridge
     if (isLoading() && s_resize1) s_resize1(s + 0x20, c1);
     if (c1 > 0) {
         uint8_t* p = *(uint8_t**)(s + 0x20);   // element0
         for (int i = 0; i < c1; ++i) {
-            if (s_bytes) s_bytes(ser, 4, p + 0x0, nullptr);  // field0: 4 raw bytes
-            if (s_byte)  s_byte(ser, p + 0x4, nullptr);      // field1: uchar
-            if (s_uint)  s_uint(ser, p + 0x8, nullptr);      // field2: uint
+            // field0: 4 raw bytes
+            if (s_bytes) reinterpret_cast<IO::Serializer*>(ser)->SerializeBytes(4, p + 0x0, nullptr);   // B.3.4 bridge
+            // field1: uchar
+            if (s_byte)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned char*>(p + 0x4), nullptr);   // B.3.4 bridge
+            // field2: uint
+            if (s_uint)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(p + 0x8), nullptr);   // B.3.4 bridge
             p += 0xc;
         }
     }
 
     // --- array2: stride 0x2 (uint16) — bulk ---
     int c2 = *(int*)(s + 0x38);
-    s_int(ser, &c2, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, nullptr);   // B.3.4 bridge
     if (isLoading() && s_resize2) s_resize2(s + 0x30, c2);
-    if (s_bulkUShort) s_bulkUShort(ser, c2, *(void**)(s + 0x30), nullptr);
+    if (s_bulkUShort) reinterpret_cast<IO::Serializer*>(ser)->Serialize(c2, reinterpret_cast<unsigned short*>(*(void**)(s + 0x30)), nullptr);   // B.3.4 bridge
 
     // --- array3: stride 0x1 (byte buffer) — bulk ---
     int c3 = *(int*)(s + 0x48);
-    s_int(ser, &c3, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, nullptr);   // B.3.4 bridge
     if (isLoading() && s_resize3) s_resize3(s + 0x40, c3);
-    if (s_bulkByte) s_bulkByte(ser, c3, *(void**)(s + 0x40), nullptr);
+    if (s_bulkByte) reinterpret_cast<IO::Serializer*>(ser)->Serialize(c3, reinterpret_cast<unsigned char*>(*(void**)(s + 0x40)), nullptr);   // B.3.4 bridge
 
     // --- array4: stride 0x4 (int) — bulk ---
     int c4 = *(int*)(s + 0x58);
-    s_int(ser, &c4, nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, nullptr);   // B.3.4 bridge
     if (isLoading() && s_resize4) s_resize4(s + 0x50, c4);
-    if (s_bulkInt) s_bulkInt(ser, c4, *(void**)(s + 0x50), nullptr);
+    if (s_bulkInt) reinterpret_cast<IO::Serializer*>(ser)->Serialize(c4, reinterpret_cast<int*>(*(void**)(s + 0x50)), nullptr);   // B.3.4 bridge
 
-    s_dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

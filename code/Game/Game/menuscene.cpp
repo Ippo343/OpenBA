@@ -18,10 +18,12 @@
 #include "math/Math.h"
 #include "system/String.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 // Heap-overflow checkpoint (standalone diagnostic; no-op when
 // BANISHED_REDZONE is unset).
@@ -340,7 +342,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     uint64_t outer_ser[3] = {0, 0, 0};
     bool outer_ctored = false;
     if (stream && g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(outer_ser, stream, 2);
+        ::new (static_cast<void*>(outer_ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
         outer_ctored = true;
         reinterpret_cast<System::String*>(&self->_field20)->Serialize(outer_ser);
     } else {
@@ -422,22 +424,22 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             // stream; serialize Math::Transform (28B) + Math::Vector3 (12B at
             // +0x1c) + 3 floats (+0x28, +0x2C, +0x30); dtor.
             uint64_t inner_ser[3] = {0, 0, 0};
-            g_fn_Serializer_Ctor(inner_ser, stream, 0);
+            ::new (static_cast<void*>(inner_ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
             // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  0x180059b90
             reinterpret_cast<Math::Transform*>(xform)->Serialize(inner_ser);
             // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    0x1800150e0
             reinterpret_cast<Math::Vector3*>(
                 reinterpret_cast<uint8_t*>(xform) + 0x1C)->Serialize(inner_ser);
-            fn_Serializer_Serialize_Float(inner_ser,
-                reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x28),
-                nullptr);
-            fn_Serializer_Serialize_Float(inner_ser,
-                reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x2C),
-                nullptr);
-            fn_Serializer_Serialize_Float(inner_ser,
-                reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x30),
-                nullptr);
-            g_fn_Serializer_Dtor(inner_ser);
+            reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
+                *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x28),
+                nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
+                *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x2C),
+                nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(inner_ser)->Serialize(
+                *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(xform) + 0x30),
+                nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(inner_ser)->~Serializer();   // B.3.4 bridge
             static bool s_logged = false;
             if (!s_logged) {
                 const float* xf = reinterpret_cast<const float*>(xform);
@@ -486,7 +488,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
     if (outer_ctored && g_fn_Serialize_Int) {
         // ----- Array #1 (+0x30, stride 0x20) -----
         int count38 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field38) & 0xFFFFFFFF);
-        g_fn_Serialize_Int(outer_ser, &count38, nullptr);
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count38, nullptr);   // B.3.4 bridge (cast dropped: count38 is int)
         if (count38 > 0 && fn_Array_Resize_Stride20) {
             fn_Array_Resize_Stride20(&self->_field30, count38);
         }
@@ -499,7 +501,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
 
         // ----- Array #2 (+0x40, stride 0x08, GraphicsMesh exrefs) -----
         int count48 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field48) & 0xFFFFFFFF);
-        g_fn_Serialize_Int(outer_ser, &count48, nullptr);
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count48, nullptr);   // B.3.4 bridge (cast dropped: count48 is int)
         if (count48 > 0 && fn_Array_Resize_Stride08) {
             fn_Array_Resize_Stride08(&self->_field40, count48);
         }
@@ -533,11 +535,11 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             self->skyColor     |= 0xFF000000;
         }
         if (fn_Serializer_Serialize_Float) {
-            fn_Serializer_Serialize_Float(outer_ser, &self->fogStart,         nullptr);
-            fn_Serializer_Serialize_Float(outer_ser, &self->fogEnd,           nullptr);
-            fn_Serializer_Serialize_Float(outer_ser, &self->fogDensity,       nullptr);
-            fn_Serializer_Serialize_Float(outer_ser, &self->sunIntensity,     nullptr);
-            fn_Serializer_Serialize_Float(outer_ser, &self->ambientIntensity, nullptr);
+            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogStart,         nullptr);   // B.3.4 bridge (cast dropped: fogStart is float)
+            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogEnd,           nullptr);   // B.3.4 bridge (cast dropped: fogEnd is float)
+            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->fogDensity,       nullptr);   // B.3.4 bridge (cast dropped: fogDensity is float)
+            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->sunIntensity,     nullptr);   // B.3.4 bridge (cast dropped: sunIntensity is float)
+            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->ambientIntensity, nullptr);   // B.3.4 bridge (cast dropped: ambientIntensity is float)
         }
 
         // ----- v2-gated tail: Weather extPtr + +0x78 float + particle array
@@ -551,12 +553,12 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
         }
         if (fn_Serializer_Serialize_Float) {
             // Single float at +0x78 (the v2-only "scene-time" or similar).
-            fn_Serializer_Serialize_Float(outer_ser, &self->_field78, nullptr);
+            reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(self->_field78, nullptr);   // B.3.4 bridge (cast dropped: _field78 is float)
         }
 
         // ----- Particle element array (+0x50, stride 0x14: 4 floats + 1 int) -----
         int count58 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field58) & 0xFFFFFFFF);
-        g_fn_Serialize_Int(outer_ser, &count58, nullptr);
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count58, nullptr);   // B.3.4 bridge (cast dropped: count58 is int)
         if (count58 > 0 && fn_Array_Resize_Stride14) {
             fn_Array_Resize_Stride14(&self->_field50, count58);
         }
@@ -565,11 +567,11 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
             uint8_t* base = reinterpret_cast<uint8_t*>(self->_field50);
             for (int i = 0; i < count58; ++i) {
                 uint8_t* elem = base + static_cast<size_t>(i) * 0x14;
-                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x00), nullptr);  // offset.x
-                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x04), nullptr);  // offset.y
-                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x08), nullptr);  // offset.z
-                fn_Serializer_Serialize_Float(outer_ser, reinterpret_cast<float*>(elem + 0x0C), nullptr);  // yaw
-                g_fn_Serialize_Int(outer_ser, reinterpret_cast<int*>(elem + 0x10), nullptr);              // resIdx
+                reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(*reinterpret_cast<float*>(elem + 0x00), nullptr);   // B.3.4 bridge  offset.x
+                reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(*reinterpret_cast<float*>(elem + 0x04), nullptr);   // B.3.4 bridge  offset.y
+                reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(*reinterpret_cast<float*>(elem + 0x08), nullptr);   // B.3.4 bridge  offset.z
+                reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(*reinterpret_cast<float*>(elem + 0x0C), nullptr);   // B.3.4 bridge  yaw
+                reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(*reinterpret_cast<int*>(elem + 0x10), nullptr);   // B.3.4 bridge  resIdx
             }
         }
 
@@ -577,7 +579,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
 
         // ----- Particle resource exrefs (+0x60, stride 0x08, FUN_14001bff0) -----
         int count68 = static_cast<int>(reinterpret_cast<uintptr_t>(self->_field68) & 0xFFFFFFFF);
-        g_fn_Serialize_Int(outer_ser, &count68, nullptr);
+        reinterpret_cast<IO::Serializer*>(outer_ser)->Serialize(count68, nullptr);   // B.3.4 bridge (cast dropped: count68 is int)
         if (count68 > 0 && fn_Array_Resize_Stride08) {
             fn_Array_Resize_Stride08(&self->_field60, count68);
         }
@@ -631,7 +633,7 @@ void MenuScene_Serialize(MenuScene* self, void* stream) {
 
     // (5) Dtor the outer Serializer.
     if (outer_ctored && g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(outer_ser);
+        reinterpret_cast<IO::Serializer*>(outer_ser)->~Serializer();   // B.3.4 bridge
     }
     RZ_CHECK("Slot5 exit");
     return;

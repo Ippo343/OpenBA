@@ -36,6 +36,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "io/Serializer.h"     // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -140,7 +141,7 @@ void Struct60B_Sub_F9C0_Body(void* arrayHeaderPtr, void* serializer) {
     int32_t local_count = count;
     FnSerInt_t serInt = ResolveSlot(0x140152ac8, s_serInt, s_triedInt);
     if (serInt) {
-        serInt(serializer, &local_count, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, nullptr);   // B.3.4 bridge
     }
 
     // Loading branch: resize the buffer to local_count.
@@ -178,11 +179,11 @@ void Struct60B_Sub_F9C0_Body(void* arrayHeaderPtr, void* serializer) {
     for (int i = 0; i < local_count; ++i) {
         uint8_t* elem = elemBase + static_cast<size_t>(i) * 0x14;
         if (serRawA) {
-            serRawA(serializer, 4, elem + 0x00, nullptr);
-            serRawA(serializer, 4, elem + 0x08, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(elem + 0x00), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<short*>(elem + 0x08), nullptr);   // B.3.4 bridge
         }
         if (serRawB) {
-            serRawB(serializer, 4, elem + 0x10, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(4, reinterpret_cast<unsigned char*>(elem + 0x10), nullptr);   // B.3.4 bridge
         }
     }
 }
@@ -254,50 +255,50 @@ void Struct60B_Serialize_Body(void* serializer, int count, void* arrayBase) {
 
         // 2. 5 ints at +0x28..+0x38.
         if (serInt) {
-            serInt(serializer, reinterpret_cast<int32_t*>(elem + 0x28), nullptr);
-            serInt(serializer, reinterpret_cast<int32_t*>(elem + 0x2c), nullptr);
-            serInt(serializer, reinterpret_cast<int32_t*>(elem + 0x30), nullptr);
-            serInt(serializer, reinterpret_cast<int32_t*>(elem + 0x34), nullptr);
-            serInt(serializer, reinterpret_cast<int32_t*>(elem + 0x38), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x28), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x2c), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x30), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x34), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x38), nullptr);   // B.3.4 bridge
         }
 
         // 3. 1 byte at +0x3c.
         if (serByte) {
-            serByte(serializer, elem + 0x3c, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned char*>(elem + 0x3c), nullptr);   // B.3.4 bridge
         }
 
         // 4. 1 int at +0x40.
         if (serInt) {
-            serInt(serializer, reinterpret_cast<int32_t*>(elem + 0x40), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x40), nullptr);   // B.3.4 bridge
         }
 
         // 5. 1 bool at +0x44.
         if (serBool) {
-            serBool(serializer, reinterpret_cast<bool*>(elem + 0x44), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x44), nullptr);   // B.3.4 bridge
         }
 
         // 6. 5 floats at +0x48..+0x58.
         if (serFloat) {
-            serFloat(serializer, reinterpret_cast<float*>(elem + 0x48), nullptr);
-            serFloat(serializer, reinterpret_cast<float*>(elem + 0x4c), nullptr);
-            serFloat(serializer, reinterpret_cast<float*>(elem + 0x50), nullptr);
-            serFloat(serializer, reinterpret_cast<float*>(elem + 0x54), nullptr);
-            serFloat(serializer, reinterpret_cast<float*>(elem + 0x58), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x48), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x4c), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x50), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x54), nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(elem + 0x58), nullptr);   // B.3.4 bridge
         }
 
         // 7. 1 bool at +0x5c.
         if (serBool) {
-            serBool(serializer, reinterpret_cast<bool*>(elem + 0x5c), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x5c), nullptr);   // B.3.4 bridge
         }
 
         // 8. Version-gated bool at +0x5d (versions >= 2).
-        int version = getVer ? getVer(serializer) : 0;
+        int version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 0;   // B.3.4 bridge
         if (version >= 2 && serBool) {
-            serBool(serializer, reinterpret_cast<bool*>(elem + 0x5d), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(elem + 0x5d), nullptr);   // B.3.4 bridge
         }
 
         // 9. Version-gated sub-array work (versions >= 1).
-        version = getVer ? getVer(serializer) : 0;
+        version = getVer ? reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() : 0;   // B.3.4 bridge
         if (version >= 1) {
             // Sub-array at elem+0x08 (stride-0x14): per-element raw serialize.
             Struct60B_Sub_F9C0_Body(elem + 0x08, serializer);
@@ -307,7 +308,7 @@ void Struct60B_Serialize_Body(void* serializer, int count, void* arrayBase) {
             // (= the count slot of the +0x18 ArrayHeader16).
             int32_t local_count = *reinterpret_cast<int32_t*>(elem + 0x20);
             if (serInt) {
-                serInt(serializer, &local_count, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, nullptr);   // B.3.4 bridge
             }
             // If loading, resize the +0x18 sub-array to local_count.
             int innerCheck = *reinterpret_cast<int*>(
@@ -328,7 +329,7 @@ void Struct60B_Serialize_Body(void* serializer, int count, void* arrayBase) {
             // Bulk uint16 serialize of the data buffer.
             uint16_t* data16 = *reinterpret_cast<uint16_t**>(elem + 0x18);
             if (serUSArr && data16) {
-                serUSArr(serializer, local_count, data16, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(local_count, reinterpret_cast<unsigned short*>(data16), nullptr);   // B.3.4 bridge
             }
         }
     }
@@ -396,7 +397,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
     }
 
     // Encoding state. Slot vtable+0x10 returns 3 for path-export mode.
-    void* encoding = fn_Serializer_GetEncoding(serializer);
+    void* encoding = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!encoding) return;
     using EncodingStateFn = int (*)(void*);
     EncodingStateFn getStateFn = nullptr;
@@ -443,7 +444,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
 
             bool needsPathSerialize = false;
             if (!*slot || serializerInner != 0 || refId != 0xFFFFFFFFu) {
-                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
                 if (refId != 0xFFFFFFFFu) {
                     if (serializerInner == 0) {
                         System::Filename tmpFn = efactory->GetPathForReferenceId(refId);
@@ -452,7 +453,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
                     needsPathSerialize = true;
                 }
             } else {
-                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
             }
 
             if (needsPathSerialize) {
@@ -470,7 +471,7 @@ void Struct60B_ArraySerializeMaterialInstance_Body(
             }
         } else {
             bool hasRef = (*slot != nullptr);
-            g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasRef, nullptr);   // B.3.4 bridge
             if (hasRef) {
                 if (*slot) {
                     System::Filename pathBuf =

@@ -34,9 +34,11 @@
 #include "Object/factory_registration.h"
 #include "collection/Collection.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 // ============================================================
 // Helper #1 — Geometry init (FUN_1400b00e0)
@@ -223,16 +225,16 @@ extern "C" void Reimpl_Transform_SerializeWrapper(void* transform, void* stream)
     }
 
     const uintptr_t t = (uintptr_t)transform;
-    uint8_t ser[24];
-    g_fn_Serializer_Ctor(ser, stream, 0);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // ?Serialize@Transform@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x180059b90
     reinterpret_cast<Math::Transform*>(transform)->Serialize(ser);   // +0x00 Math::Transform
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z    retail 0x1800150e0
     reinterpret_cast<Math::Vector3*>(t + 0x1c)->Serialize(ser);      // +0x1c Math::Vector3
-    fn_Serializer_Serialize_Float(ser, (float*)(t + 0x28), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(t + 0x2c), nullptr);
-    fn_Serializer_Serialize_Float(ser, (float*)(t + 0x30), nullptr);
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(t + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(t + 0x2c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*(float*)(t + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -442,9 +444,8 @@ extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
         // them as floats, but the wire format is identical for (uint32, float).
         for (int off = 0; off < 7; ++off) {
             if (fn_Serializer_Serialize_Uint) {
-                fn_Serializer_Serialize_Uint(serializer,
-                    reinterpret_cast<uint32_t*>(elem + off * 4),
-                    nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
+                    *reinterpret_cast<uint32_t*>(elem + off * 4), nullptr);   // B.3.4 bridge
             }
         }
         // Two shorts at +0x1c and +0x1e — Serializer has a short overload
@@ -452,9 +453,8 @@ extern "C" void Reimpl_Array_Serialize_Stride20(void* serializer,
         // primitive, treat them as a single uint32 for now. This is a TODO
         // if tests reveal endianness issues.
         if (fn_Serializer_Serialize_Uint) {
-            fn_Serializer_Serialize_Uint(serializer,
-                reinterpret_cast<uint32_t*>(elem + 0x1c),
-                nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(
+                *reinterpret_cast<uint32_t*>(elem + 0x1c), nullptr);   // B.3.4 bridge
         }
     }
 }
@@ -531,7 +531,8 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
     // Encoding state. Slot vtable+0x10 returns 3 for "saving in
     // export-by-path" mode where we walk existing pointers through GetPath +
     // FindOrLoad without serializing anything.
-    void* encoding = fn_Serializer_GetEncoding(serializer);
+    void* encoding = const_cast<IO::Encoding*>(
+        &reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!encoding) return;
     using EncodingStateFn = int (*)(void*);
     EncodingStateFn getStateFn = nullptr;
@@ -589,7 +590,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
 
             bool needsPathSerialize = false;
             if (!*slot || serializerInner != 0 || refId != 0xFFFFFFFFu) {
-                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
                 if (refId != 0xFFFFFFFFu) {
                     if (serializerInner == 0) {
                         // Loading path: ask the factory for the actual path
@@ -600,7 +601,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
                     needsPathSerialize = true;
                 }
             } else {
-                fn_Serializer_Serialize_Uint(serializer, &refId, nullptr);
+                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(refId, nullptr);   // B.3.4 bridge
             }
 
             if (needsPathSerialize) {
@@ -619,7 +620,7 @@ void ArraySerializeExternalGeneric(void* serializer, int count, void* arrayBase,
         } else {
             // Plain mode: serialize a bool flag, then a string path if true.
             bool hasRef = (*slot != nullptr);
-            g_fn_Serialize_Bool(serializer, &hasRef, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(hasRef, nullptr);   // B.3.4 bridge
             if (hasRef) {
                 if (*slot) {
                     System::Filename pathBuf =

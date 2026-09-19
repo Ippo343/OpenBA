@@ -107,7 +107,9 @@
 #include "Component/coll_bridge.h"
 #include <cstdint>
 #include <cstring>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 
 // ============================================================
 // Externs for already-ported/registered sibling functions
@@ -188,7 +190,7 @@ void RegistryCensus(uint8_t* base, const char* leg, const char* when) {
 // ------------------------------------------------------------
 void SerializeIBPArray(uint8_t* hdr, void* serializer, const uint32_t* typeIdPtr) {
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
     bool loading = SerializerLoading(serializer);
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Element is the 8-byte InternalBasePtr slot walked below.
@@ -379,19 +381,19 @@ void SerializeIntArray(void* serializer, int32_t count, void* data) {
             std::fflush(stderr);
         }
     }
-    if (s_fn) s_fn(serializer, count, data, nullptr);
+    if (s_fn) reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, reinterpret_cast<int*>(data), nullptr);   // B.3.4 bridge
 }
 
 void SerializeIntAssocArray(uint8_t* hdr, void* serializer) {
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
     bool loading = SerializerLoading(serializer);
     if (loading) ResizeStride0x10(hdr, count);
 
     uint8_t* slot = *reinterpret_cast<uint8_t**>(hdr);
     for (int32_t i = 0; i < count; ++i) {
         int32_t innerCount = *reinterpret_cast<int32_t*>(slot + 8);
-        g_fn_Serialize_Int(serializer, &innerCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(innerCount, nullptr);   // B.3.4 bridge
         // B.3.2: Collection::Array<T>::SetSize — retail 0x1400021d0, stride 4 align 4,
         // grown tail left as the allocation found it (no init arm). The bulk int
         // serializer below overwrites all `innerCount` elements either way.
@@ -445,7 +447,7 @@ uint64_t* CompRefTreeSucc(uint64_t* n) {
 
 void SerializeCompRefTree(uint8_t* hdr, void* serializer, fn_KeyResolve_t keyFn) {
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
     bool loading = SerializerLoading(serializer);
 
     if (loading) {
@@ -537,14 +539,14 @@ uint64_t* LegacyTreeSucc(uint64_t* n) {
 }
 void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
     int32_t count = *reinterpret_cast<int32_t*>(hdr + 8);
-    g_fn_Serialize_Int(serializer, &count, nullptr);
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
     bool loading = SerializerLoading(serializer);
     if (loading) {
         for (int32_t i = 0; i < count; ++i) {
             uint64_t key = 0;
             if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(&key, serializer);
             int32_t value = 0;
-            g_fn_Serialize_Int(serializer, &value, nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(value, nullptr);   // B.3.4 bridge
 
             uint64_t** rootPtr = reinterpret_cast<uint64_t**>(hdr);
             if (*rootPtr == nullptr) {
@@ -578,7 +580,7 @@ void SerializeLegacyKeyIntTree(uint8_t* hdr, void* serializer) {
         uint64_t* node = LegacyTreeMin(*reinterpret_cast<uint64_t**>(hdr));
         while (node) {
             if (fn_ExternalPtr_BuildSerialize) fn_ExternalPtr_BuildSerialize(node, serializer);
-            g_fn_Serialize_Int(serializer, reinterpret_cast<int32_t*>(&node[1]), nullptr);
+            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int32_t*>(&node[1]), nullptr);   // B.3.4 bridge
             node = LegacyTreeSucc(node);
         }
     }
@@ -594,9 +596,9 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     EnsureResolved();
     uint8_t* base = static_cast<uint8_t*>(self);
 
-    uint8_t serBuf[0x18];
+    alignas(8) uint8_t serBuf[0x18];
     void* ser = serBuf;
-    g_fn_Serializer_Ctor(ser, stream, 6);
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 6);   // B.3.4 bridge
 
     const char* leg = SerializerLoading(ser) ? "LOAD" : "SAVE";
     RegistryCensus(base, leg, "enter");
@@ -618,7 +620,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     SerializeIBPArray(base + 0x80, ser, s_tid_LivestockComponent);
     SerializeIBPArray(base + 0xb0, ser, s_tid_HerdComponent);
 
-    if (g_fn_Serializer_GetVersion(ser) > 0) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 0) {   // B.3.4 bridge
         SerializeIBPArray(base + 0xf0, ser, s_tid_DiseaseComponent);
     }
 
@@ -630,7 +632,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     // (0x1400049c0), matching FUN_140001bb0(hdr,count) + FUN_1400049c0(ser,count,ptr,p4).
     {
         int32_t count = *reinterpret_cast<int32_t*>(base + 0x118);
-        g_fn_Serialize_Int(ser, &count, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
@@ -644,7 +646,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     }
     {
         int32_t count = *reinterpret_cast<int32_t*>(base + 0x128);
-        g_fn_Serialize_Int(ser, &count, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8,
         // new tail zeroed. Element is the 8-byte ExternalPtr<ComponentDescription>.
         if (SerializerLoading(ser))
@@ -662,13 +664,13 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
 
     // TREE #2 (BuildComponentRef key) on the live path (version>=2, always true
     // at version 6); legacy key/int BST otherwise (DEAD — see file header).
-    if (g_fn_Serializer_GetVersion(ser) < 2) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() < 2) {   // B.3.4 bridge
         SerializeLegacyKeyIntTree(base + 0x160, ser);
     } else {
         SerializeCompRefTree(base + 0x160, ser,
             reinterpret_cast<fn_KeyResolve_t>(fn_ExternalPtr_BuildSerialize));
     }
-    if (g_fn_Serializer_GetVersion(ser) == 5) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 5) {   // B.3.4 bridge
         ResizeStride0x10(base + 0x160 /*unused for v==5 clamp — mirrors 0x28 below*/, 0);
     }
 
@@ -677,24 +679,24 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
     // Stride-8 int-pair array at +0x130.
     {
         int32_t count = *reinterpret_cast<int32_t*>(base + 0x138);
-        g_fn_Serialize_Int(ser, &count, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
         bool loading = SerializerLoading(ser);
         if (loading) ResizeStride08Pair(base + 0x130, count);
         int32_t* pairs = *reinterpret_cast<int32_t**>(base + 0x130);
         for (int32_t i = 0; i < count; ++i) {
-            g_fn_Serialize_Int(ser, &pairs[i * 2 + 0], nullptr);
-            g_fn_Serialize_Int(ser, &pairs[i * 2 + 1], nullptr);
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(pairs[i * 2 + 0], nullptr);   // B.3.4 bridge
+            reinterpret_cast<IO::Serializer*>(ser)->Serialize(pairs[i * 2 + 1], nullptr);   // B.3.4 bridge
         }
     }
 
-    if (g_fn_Serializer_GetVersion(ser) > 4) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 4) {   // B.3.4 bridge
         SerializeIntAssocArray(base + 0x140, ser);
     }
-    if (g_fn_Serializer_GetVersion(ser) == 5) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 5) {   // B.3.4 bridge
         ResizeStride0x10(base + 0x140, 0);
     }
 
-    if (g_fn_Serializer_GetVersion(ser) < 4) {
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() < 4) {   // B.3.4 bridge
         // DEAD-PATH (version<4): legacy Time-array -> ProfessionResourceEntry /
         // SummaryEntry conversion. Never reached at our fixed version 6 — see file
         // header. Left unimplemented (no-op) rather than risk a wrong-stride write
@@ -703,17 +705,17 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         // it can be trusted, so we intentionally stop short of guessing here.
     } else {
         int32_t profCount = *reinterpret_cast<int32_t*>(base + 0x178);
-        g_fn_Serialize_Int(ser, &profCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(profCount, nullptr);   // B.3.4 bridge
         bool loading = SerializerLoading(ser);
         if (loading) ResizeStride0x20(base + 0x170, profCount);
         if (profCount > 0) {
             uint8_t* entry = *reinterpret_cast<uint8_t**>(base + 0x170) + 8;
             for (int32_t i = 0; i < profCount; ++i) {
-                g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(entry - 0x08), nullptr);
-                g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(entry - 0x04), nullptr);
-                g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(entry + 0x00), nullptr);
-                g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(entry + 0x04), nullptr);
-                g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(entry + 0x08), nullptr);
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x08), nullptr);   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x04), nullptr);   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x00), nullptr);   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x04), nullptr);   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry + 0x08), nullptr);   // B.3.4 bridge
                 g_fn_Time_Serialize(entry + 0x0C, ser);
                 entry += 0x20;
             }
@@ -723,7 +725,7 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         }
 
         int32_t sumCount = *reinterpret_cast<int32_t*>(base + 0x188);
-        g_fn_Serialize_Int(ser, &sumCount, nullptr);
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(sumCount, nullptr);   // B.3.4 bridge
         if (loading) {
             // FUN_14000f090 — already registered (StorageComponent_DynArrayResize et al).
             typedef void (*fn_Resize10_t)(void*, int);
@@ -733,26 +735,26 @@ extern "C" void CitizenList_Serialize_8f760(void* self, void* stream, void* /*p3
         if (sumCount > 0) {
             uint8_t* entry = *reinterpret_cast<uint8_t**>(base + 0x180) + 8;
             for (int32_t i = 0; i < sumCount; ++i) {
-                g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(entry - 0x08), nullptr);
-                g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(entry - 0x04), nullptr);
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x08), nullptr);   // B.3.4 bridge
+                reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(entry - 0x04), nullptr);   // B.3.4 bridge
                 g_fn_Time_Serialize(entry + 0x00, ser);
                 entry += 0x10;
             }
         }
     }
 
-    fn_Serializer_Serialize_Float(ser, reinterpret_cast<float*>(base + 0x1a8), nullptr);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(base + 0x1a8), nullptr);   // B.3.4 bridge
     g_fn_Time_Serialize(base + 0x1a0, ser);
 
-    if (g_fn_Serializer_GetVersion(ser) > 1) {
-        g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(base + 0x1ac), nullptr);
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 1) {   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(base + 0x1ac), nullptr);   // B.3.4 bridge
     }
-    if (g_fn_Serializer_GetVersion(ser) > 2) {
-        g_fn_Serialize_Int(ser, reinterpret_cast<int32_t*>(base + 0x1b0), nullptr);
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2) {   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int32_t*>(base + 0x1b0), nullptr);   // B.3.4 bridge
     }
 
     RegistryCensus(base, leg, "exit ");
-    g_fn_Serializer_Dtor(ser);
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

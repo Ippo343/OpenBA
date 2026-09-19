@@ -15,7 +15,9 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Weather::Dtor (vtable +0x00) — Scalar deleting destructor
@@ -129,48 +131,48 @@ void Weather_Serialize(Weather* self, void* stream) {
     Weather_Serialize_InitFuncs();
 
     // Create IO::Serializer on the stack (24 bytes), version 0
-    uint8_t serializer[24];
-    g_fn_Serializer_Ctor(serializer, stream, 0);
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ExternalPtr material (+0x20)
     fn_ExternalPtr_Serialize3(&self->material, serializer);
 
-    // int particleCount (+0x28)
-    g_fn_Serialize_Int(serializer, &self->particleCount, nullptr);
+    // int particleCount (+0x28) — declared int32_t == int door type: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->particleCount, nullptr);   // B.3.4 bridge
 
     // Vector3 velocityDir (+0x2C..+0x34)  — member function: this=vec3, arg=serializer
     // B.3.1 bridge: WeatherParticle keeps the three floats as separate members.
     reinterpret_cast<Math::Vector3*>(&self->velocityDirX)->Serialize(serializer);
 
-    // float velocity (+0x38)
-    s_fn_Serialize_Float(serializer, &self->velocity, nullptr);
+    // float velocity (+0x38) — declared float == float door type: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->velocity, nullptr);   // B.3.4 bridge
 
-    // float velocityTolerence (+0x3C)
-    s_fn_Serialize_Float(serializer, &self->velocityTolerence, nullptr);
+    // float velocityTolerence (+0x3C) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->velocityTolerence, nullptr);   // B.3.4 bridge
 
-    // bool velocityStretch (+0x40)
-    g_fn_Serialize_Bool(serializer, &self->velocityStretch, nullptr);
+    // bool velocityStretch (+0x40) — declared bool == bool door type: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->velocityStretch, nullptr);   // B.3.4 bridge
 
-    // float particleSize (+0x44)
-    s_fn_Serialize_Float(serializer, &self->particleSize, nullptr);
+    // float particleSize (+0x44) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->particleSize, nullptr);   // B.3.4 bridge
 
-    // float size (+0x48)
-    s_fn_Serialize_Float(serializer, &self->size, nullptr);
+    // float size (+0x48) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->size, nullptr);   // B.3.4 bridge
 
-    // float nearFade (+0x4C)
-    s_fn_Serialize_Float(serializer, &self->nearFade, nullptr);
+    // float nearFade (+0x4C) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->nearFade, nullptr);   // B.3.4 bridge
 
-    // float nearFadeStart (+0x50)
-    s_fn_Serialize_Float(serializer, &self->nearFadeStart, nullptr);
+    // float nearFadeStart (+0x50) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->nearFadeStart, nullptr);   // B.3.4 bridge
 
-    // float farFadeStart (+0x54)
-    s_fn_Serialize_Float(serializer, &self->farFadeStart, nullptr);
+    // float farFadeStart (+0x54) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->farFadeStart, nullptr);   // B.3.4 bridge
 
-    // float farFade (+0x58)
-    s_fn_Serialize_Float(serializer, &self->farFade, nullptr);
+    // float farFade (+0x58) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->farFade, nullptr);   // B.3.4 bridge
 
-    // float transitionTime (+0x5C)
-    s_fn_Serialize_Float(serializer, &self->transitionTime, nullptr);
+    // float transitionTime (+0x5C) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->transitionTime, nullptr);   // B.3.4 bridge
 
     // Color ambientColor (+0x60)  — member function: this=color, arg=serializer
     s_fn_Color_Serialize(&self->ambientColor, serializer);
@@ -181,23 +183,23 @@ void Weather_Serialize(Weather* self, void* stream) {
     // Color fogColor (+0x68)
     s_fn_Color_Serialize(&self->fogColor, serializer);
 
-    // float fogNear (+0x6C)
-    s_fn_Serialize_Float(serializer, &self->fogNear, nullptr);
+    // float fogNear (+0x6C) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->fogNear, nullptr);   // B.3.4 bridge
 
-    // float fogFar (+0x70)
-    s_fn_Serialize_Float(serializer, &self->fogFar, nullptr);
+    // float fogFar (+0x70) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->fogFar, nullptr);   // B.3.4 bridge
 
-    // float fogMax (+0x74)
-    s_fn_Serialize_Float(serializer, &self->fogMax, nullptr);
+    // float fogMax (+0x74) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->fogMax, nullptr);   // B.3.4 bridge
 
-    // float sunHeading (+0x78)
-    s_fn_Serialize_Float(serializer, &self->sunHeading, nullptr);
+    // float sunHeading (+0x78) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->sunHeading, nullptr);   // B.3.4 bridge
 
-    // float sunPitch (+0x7C)
-    s_fn_Serialize_Float(serializer, &self->sunPitch, nullptr);
+    // float sunPitch (+0x7C) — declared float: cast dropped
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->sunPitch, nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    g_fn_Serializer_Dtor(serializer);
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

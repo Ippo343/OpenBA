@@ -15,7 +15,9 @@
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
+#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Achievement base class functions (Runtime DLL exports)
@@ -152,15 +154,15 @@ void Scenario_Serialize(Scenario* self, void* stream) {
     }
 
     // Create serializer on stack (24 bytes), version 0
-    uint8_t serializer[24];
+    alignas(8) uint8_t serializer[24];
     if (g_fn_Serializer_Ctor) {
-        g_fn_Serializer_Ctor(serializer, stream, 0);
+        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     }
 
     // Serialize Scenario-specific fields
     if (g_fn_Serialize_Int) {
-        g_fn_Serialize_Int(serializer, &self->_field60, nullptr);
-        g_fn_Serialize_Int(serializer, &self->_field64, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field60, nullptr);   // B.3.4 bridge (cast dropped: _field60 is int32_t)
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field64, nullptr);   // B.3.4 bridge (cast dropped: _field64 is int32_t)
     }
 
     reinterpret_cast<System::String*>(&self->scenarioName)->Serialize(serializer);
@@ -180,13 +182,13 @@ void Scenario_Serialize(Scenario* self, void* stream) {
     reinterpret_cast<System::String*>(&self->_field88)->Serialize(serializer);
 
     if (g_fn_Serialize_Bool) {
-        g_fn_Serialize_Bool(serializer, &self->_field68, nullptr);
-        g_fn_Serialize_Bool(serializer, &self->_field69, nullptr);
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field68, nullptr);   // B.3.4 bridge (cast dropped: _field68 is bool)
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->_field69, nullptr);   // B.3.4 bridge (cast dropped: _field69 is bool)
     }
 
     // Destroy serializer
     if (g_fn_Serializer_Dtor) {
-        g_fn_Serializer_Dtor(serializer);
+        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
     }
 }
 
