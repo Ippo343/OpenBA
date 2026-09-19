@@ -64,9 +64,8 @@ New from B.3.4 (details and anchors in `STATUS.md`'s B.3.4 block and `B34B_RULES
     `RT_EXPORT_ONCE` by name although `Timer::TicksToSeconds` / `SecondsToTicks` are now static
     members (a routing change, so it is its own gated commit).
 12. DONE (`59ca40dd`): the `?_singleton@Configuration@System@@` row now names only `?Get@`
-    as the blocker; disposition unchanged. Still owed from the 2026-09-19 defect pass: run the
-    mods-enabled (conflicting mods) and tutorial routes against `e353fb15` (`AllowsModChanges`
-    now FALSE off the menu, so game->menu remounts), and the perf build.
+    as the blocker; disposition unchanged. The 2026-09-19 defect pass's owed routes (mods,
+    tutorial, perf build, (d) with a conflict) were run the same day — results in `../STATUS.md`.
 
 ## 2. B.3 step 5 — `Video` and `Graphics` (dx11/ stays the plugin, implemented in-tree)
 

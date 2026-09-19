@@ -121,10 +121,15 @@ built them wrong, and callbacks stored in data.
   is snapshotted, game->menu re-runs `RefreshList`. (d) FIXED (`94258ffc`; retail `LEA RDX,
   [RAX+RCX*8]` at 0x14006ddee / 0x14006dfdb). (e) note corrected (`59ca40dd`); disposition
   unchanged (`?Get@Configuration@System@@` still unported), manifest check 59 rows identical.
-  Merged-tree gate: new game `calls=5686`, resave PASS == golden (`calls=5691` is the load route's
-  number), pause-menu Quit-to-Main-Menu returns to a live menu, crash log 0 bytes, unit 260/0,
-  dispatch 0 mismatches. NOT run: mods-enabled and tutorial routes, perf build, (d) with
-  conflicting mods installed.
+  Merged-tree gate: new game reaches the world (`calls=5686` seen on the (c) branch, not re-read
+  on the merge), resave PASS == golden (`calls=5691` is the load route's number), pause-menu
+  Quit-to-Main-Menu returns to a live menu, crash log 0 bytes, unit 260/0, dispatch 0 mismatches.
+  Tutorial route + pause-menu Quit: exit 0, `calls=5776 openFileFail=15` = the archived tutorial
+  number. Mods (both `.pkm` moved in, back in `_mods_off/` after): front-end Mods route to Quit
+  exit 0; new game -> Quit-to-Main-Menu live; in-game Mods toggle + Ok -> save-state world reload
+  completes. (d) driven with a fabricated conflict (a duplicated `.pkm`) and a temporary trace:
+  `conflictCount=1`, `Find` -> `cIdx=0`, valid `Mod*`. `sa-stress` (perf build): exit 0, clean
+  quit, 140 fps, sim ms/iter +7.1% vs baseline under a BUSY machine — recorded, not chased.
   **Gate at the close** (coordinator; the final tree `1b5eb639` gated 0 problems with resave 5/5, and
   the numbers below are from the `make clean` run on `282cd55b` — 1,993 debug / 2,433 perf compile
   lines — before the System closing sweep, which was then gated per merge): debug + perf + unit exit 0; distinct warnings 284 debug / 482 perf
