@@ -39,6 +39,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
 #include <cstdint>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 namespace {
 
@@ -196,7 +197,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
             rec[0] = 0; rec[1] = 0; rec[2] = 0;
 
             if (fn_InternalBasePtr_Serialize)
-                fn_InternalBasePtr_Serialize(&rec[0], param_2);
+                reinterpret_cast<Object::InternalBasePtr*>(&rec[0])->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
             // Validate the deserialized object against CitizenAIComponent; null on fail.
             // Skip when the type-id is unresolved (0) — cascade-safe (keep the object).
             if (rec[0] != 0 && g_tid_TradeWork_CitizenComponent != 0 && fn_IsDerivedFrom &&
@@ -229,7 +230,7 @@ extern "C" void TradeWork_Serialize_c8a0(int64_t* param_1, void* param_2) {
         while (node != 0) {
             // Serialize this node's IBP (+0x00), int (+0x10), ExternalPtr (+0x08).
             if (fn_InternalBasePtr_Serialize)
-                fn_InternalBasePtr_Serialize(reinterpret_cast<void*>(node), param_2);
+                reinterpret_cast<Object::InternalBasePtr*>(reinterpret_cast<void*>(node))->Serialize(*reinterpret_cast<IO::Serializer*>(param_2));   // B.3.4 bridge
             if (*reinterpret_cast<int64_t*>(node) != 0 && g_tid_TradeWork_CitizenComponent != 0 &&
                 fn_IsDerivedFrom &&
                 !fn_IsDerivedFrom(*reinterpret_cast<void**>(node),

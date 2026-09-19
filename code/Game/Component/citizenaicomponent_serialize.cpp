@@ -43,6 +43,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 
@@ -71,7 +72,7 @@ extern "C" void CitizenAIComponent_Serialize(void* self, void* stream) {
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 5);   // B.3.4 bridge
 
     if (fn_InternalBasePtr_Serialize) {
-        fn_InternalBasePtr_Serialize(At(self, 0x38), ser);
+        reinterpret_cast<Object::InternalBasePtr*>(At(self, 0x38))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
         void* sibling = *reinterpret_cast<void**>(At(self, 0x38));
         if (sibling && fn_IsDerivedFrom) {
             uint32_t tid = CitizenAISer_TidCitizenComponent();

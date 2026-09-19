@@ -95,7 +95,7 @@ inline bool Loading(void* stream) {
 }
 
 void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
-    if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(ibp, ser);
+    if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
     if (obj && fn_IsDerivedFrom && tid && *tid && !fn_IsDerivedFrom(obj, *tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;

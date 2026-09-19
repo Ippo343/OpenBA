@@ -344,7 +344,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
             }
             // Serialize the InternalBasePtr
             if (fn_InternalBasePtr_Serialize) {
-                fn_InternalBasePtr_Serialize((void*)ibpAddr, serializer);
+                reinterpret_cast<Object::InternalBasePtr*>((void*)ibpAddr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             }
             void* rawAfterSer = *(void**)ibpAddr;   // before our IsDerivedFrom filter
             if (s_trace == 1 && !rawAfterSer) {

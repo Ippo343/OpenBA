@@ -244,12 +244,12 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
         do {
             void* ibpA = nullptr;
             void* ibpB = nullptr;
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&ibpA, ser);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&ibpA)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             if (ibpA != nullptr && tidEntity && fn_IsDerivedFrom &&
                 !fn_IsDerivedFrom(ibpA, *tidEntity)) {
                 ibpA = nullptr;
             }
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(&ibpB, ser);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(&ibpB)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             if (ibpB != nullptr && tidCitizenAI && fn_IsDerivedFrom &&
                 !fn_IsDerivedFrom(ibpB, *tidCitizenAI)) {
                 ibpB = nullptr;
@@ -271,14 +271,14 @@ void WorkLeaf_BstSerializeIBPpair_29c10(void* treeRootSlot, void* ser) {
         }
         while (node != nullptr) {
             // IBP A at node+0x00
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(node, ser);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(node)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             void* a = *reinterpret_cast<void**>(node);
             if (a != nullptr && tidEntity && fn_IsDerivedFrom &&
                 !fn_IsDerivedFrom(a, *tidEntity)) {
                 *reinterpret_cast<void**>(node) = nullptr;
             }
             // IBP B at node+0x08
-            if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(node + 8, ser);
+            if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(node + 8)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
             void* b = *reinterpret_cast<void**>(node + 8);
             if (b != nullptr && tidCitizenAI && fn_IsDerivedFrom &&
                 !fn_IsDerivedFrom(b, *tidCitizenAI)) {

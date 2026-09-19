@@ -17,6 +17,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Resolved helpers
@@ -89,7 +90,7 @@ void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
     if (localCount > 0 && s_fn_IBP_Serialize) {
         for (int i = 0; i < localCount; i++) {
             void* ibp = (void*)((uintptr_t)arrayBase + (uintptr_t)i * 8);
-            s_fn_IBP_Serialize(ibp, serializer2);
+            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
 
             // Validate: if not ComponentEntity, null it out
             void* ptr = *(void**)ibp;

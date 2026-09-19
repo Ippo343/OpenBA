@@ -196,7 +196,7 @@ void RemoveAnimal_Serialize_Impl(RemoveAnimal* self, void* stream) {
 
     // Serialize entity ref at +0x20
     ::new (static_cast<void*>(localSerializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    s_fn_IBP_Serialize(s + 0x20, localSerializer2);
+    reinterpret_cast<Object::InternalBasePtr*>(s + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(localSerializer2));   // B.3.4 bridge
 
     // Type-check: if the deserialized ptr is not a ComponentEntity, null it
     void* entityRef = *(void**)(s + 0x20);

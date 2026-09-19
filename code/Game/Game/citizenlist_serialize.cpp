@@ -199,7 +199,7 @@ void SerializeIBPArray(uint8_t* hdr, void* serializer, const uint32_t* typeIdPtr
     uint8_t* arr = *reinterpret_cast<uint8_t**>(hdr);
     for (int32_t i = 0; i < count; ++i) {
         uint8_t* elem = arr + static_cast<size_t>(i) * 8;
-        fn_InternalBasePtr_Serialize(elem, serializer);
+        reinterpret_cast<Object::InternalBasePtr*>(elem)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
         void* val = *reinterpret_cast<void**>(elem);
         if (val != nullptr && typeIdPtr && *typeIdPtr) {
             if (!fn_IsDerivedFrom(val, *typeIdPtr)) {

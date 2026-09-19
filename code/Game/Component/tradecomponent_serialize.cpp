@@ -81,6 +81,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // TradeComponent's own array-resize helpers (tradecomponent.cpp, file-scope,
 // external linkage — not declared in tradecomponent_funcs.h).
@@ -441,7 +442,7 @@ extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream) {
     if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x71)), nullptr);   // B.3.4 bridge
 
     // +0x80: InternalBasePtr, validated against ComponentEntity.
-    if (fn_InternalBasePtr_Serialize) fn_InternalBasePtr_Serialize(At(self, 0x80), ser);
+    if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(At(self, 0x80))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     {
         void* obj = *reinterpret_cast<void**>(At(self, 0x80));
         if (obj && fn_IsDerivedFrom && g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity &&

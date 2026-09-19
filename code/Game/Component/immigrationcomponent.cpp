@@ -31,6 +31,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 
 // ============================================================
 // Resolved helpers
@@ -162,7 +163,7 @@ void ImmigrationComponent_Shutdown(ImmigrationComponent* self, void* stream) {
         do {
             // InternalBasePtr::Serialize(element, serializer)
             if (fn_InternalBasePtr_Serialize) {
-                fn_InternalBasePtr_Serialize(elementPtr, serializer2);
+                reinterpret_cast<Object::InternalBasePtr*>(elementPtr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
             }
 
             // Validate: if ptr is non-null but not a ComponentEntity, clear it

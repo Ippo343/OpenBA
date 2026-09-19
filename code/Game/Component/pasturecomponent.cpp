@@ -379,7 +379,7 @@ void PastureComponent_Shutdown(PastureComponent* self, void* stream) {
         uintptr_t ptr = (uintptr_t)entityArray;
         for (int64_t i = 0; i < count; i++) {
             if (s_fn_IBP_Serialize) {
-                s_fn_IBP_Serialize((void*)ptr, serializer);
+                reinterpret_cast<Object::InternalBasePtr*>((void*)ptr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             }
             void* obj = *(void**)ptr;
             if (obj != nullptr && s_fn_IsDerivedFrom_dispatch && s_TypeId_PastureAnimal) {
