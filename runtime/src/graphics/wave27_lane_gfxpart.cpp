@@ -82,6 +82,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Particle.h"
+#include "../../types/graphics/ParticleInstance.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/math/Math.h"
 

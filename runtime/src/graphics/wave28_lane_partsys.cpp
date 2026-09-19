@@ -143,6 +143,7 @@
 #include "../../funcs/rt_libm.h"
 #include "../../types/graphics/Geometry.h"
 #include "../../types/graphics/Particle.h"
+#include "../../types/graphics/ParticleInstance.h"
 #include "../../types/math/Math.h"
 
 using RtGraphics::Geometry;
