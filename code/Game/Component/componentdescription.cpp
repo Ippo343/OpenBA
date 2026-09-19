@@ -54,9 +54,7 @@ static inline int SerStreamErr(void* serializer) {
 // etc.) reuse this exact proven loop.
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase) {
     if (!serializer || count <= 0 || !arrayBase) return;
-    if (!fn_Serializer_GetEncoding ||
-        !fn_Serializer_Serialize_Uint || !g_fn_Serialize_Bool ||
-        !g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
+    if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
         static bool warned = false;
         if (!warned) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); warned = true; }
         return;
@@ -142,7 +140,6 @@ extern "C" void ComponentDescription_Serialize(void* self, void* stream) {
     if (!self) return;
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     alignas(8) uint8_t serBuf[24];
-    if (!g_fn_Serializer_Ctor || !g_fn_Serialize_Int) return;
     ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // category enum (+0x20) through the UINT door. `serBuf + 8` was the
@@ -162,7 +159,7 @@ extern "C" void ComponentDescription_Serialize(void* self, void* stream) {
     // load each sub-description (FUN_140032090)
     Desc_LoadExternalArray(serBuf, count, *(void**)(s + OFF_ARRAY));
 
-    if (g_fn_Serializer_Dtor) reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
 }
 
 extern "C" void* ComponentDescription_Dtor(void* self, uint32_t flags) {

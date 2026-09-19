@@ -98,10 +98,6 @@ static void* CitizenDescription_Ctor_Impl(void* mem) {
 }
 
 void CitizenDescription_Serialize(void* self, void* stream) {
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor ||
-        !fn_Serializer_Serialize_Float || !g_fn_Serialize_Int) {
-        return;
-    }
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
