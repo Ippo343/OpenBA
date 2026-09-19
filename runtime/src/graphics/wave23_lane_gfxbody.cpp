@@ -340,6 +340,10 @@ extern "C" void RtGraphics_FrameCopyImageBuffer_Dtor(void* self) {
 // instruction from 0x1800a3b87-0x1800a3bc9, cross-checked against the field
 // names runtime/types/video/ImageBuffer.h recovered from the DX11 side.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::FrameCopyImageBuffer::Create` -- vtable SLOT 9, which this class
+// OVERRIDES (the header's correction to B35_RULES 2.3 item 5). The door keeps its
+// name, its registration and its entry counter.
 extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
         void* self,
         int32_t imageType, int32_t usage, int32_t format,
@@ -348,52 +352,17 @@ extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
         int32_t addressU, int32_t addressV, int32_t addressW,
         void* levels) {
     Attend("FrameCopyImageBuffer::Create", g_createCalls);
-
-    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
-
-    p->base.dimension = imageType;      // +0x28  <- EDX      (0x1800a3b87)
-    p->base.kind      = usage;          // +0x2c  <- R8D      (0x1800a3b8a)
-    p->base.format    = static_cast<uint32_t>(format);   // +0x30 <- R9D (0x1800a3b8e)
-    p->base.width     = width;          // +0x20  <- arg5     (0x1800a3b92)
-    p->base.height    = height;         // +0x24  <- arg6     (0x1800a3b99)
-    p->base.flags     = flags;          // +0x34  <- arg4     (0x1800a3ba0)
-    p->base.filter    = filterMode;     // +0x44  <- arg7     (0x1800a3ba7)
-    p->base.addressU  = addressU;       // +0x38  <- arg8     (0x1800a3bae)
-    p->base.addressV  = addressV;       // +0x3c  <- arg9     (0x1800a3bb8)
-    p->base.addressW  = addressW;       // +0x40  <- arg10    (0x1800a3bc2)
-
-    // `MOV RCX,[RCX+0x60]; MOV RAX,[RCX]; MOV RDX,<arg11>; CALL [RAX+0x18]` —
-    // slot 3 of the platform companion, "create the texture and all its views"
-    // (dx11/src/imagebufferdata.cpp:13), taking the level-descriptor array.
-    // TWO arguments: retail sets RCX and RDX and nothing else.
-    void* const data = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(self) + 0x60);       // faithful: unguarded
-    void** const vt = *reinterpret_cast<void***>(data);
-    const bool ok = reinterpret_cast<bool (*)(void*, void*)>(vt[3])(data, levels);
-    if (!ok) return false;                              // TEST AL,AL / JZ -> return AL
-
-    // The second RenderBuffer, this time with `this` as the colour attachment.
-    // Here retail calls `??2RenderBuffer@Video@@SAPEAX_K@Z` (0x18001f2e0) as a
-    // REAL CALL rather than inlining it — `MOV ECX,0x30; CALL 0x18001f2e0` at
-    // 0x1800a3be2. Same five instructions as the inlined form in the ctor, and
-    // MemAlloc(0x30, 8) is that body (see the MemAlloc note above), so this is
-    // spelled the same way for one arena and one reader.
-    void* const rb = MemAlloc(0x30, 8);
-    if (rb != nullptr) {
-        reinterpret_cast<uint64_t*>(rb)[0] = 0;
-        reinterpret_cast<uint64_t*>(rb)[1] = 0;
-        reinterpret_cast<uint64_t*>(rb)[2] = 0;
-        RenderBufferPlatformConstruct(rb);
-    }
-    p->_destTarget = rb;                                // +0x80
-
-    // `XOR R8D,R8D; MOV RDX,RDI; MOV RCX,RBX` — colour is THIS, depth is null.
-    // Note RDX is `this`, NOT `this->_backBufferImage`: that is the difference
-    // between the ctor's RenderBuffer and this one, and it is the whole point
-    // of the class (copy FROM the back-buffer alias INTO our own texture).
-    RenderBufferCreate(rb, self, nullptr);
-
-    return true;                                        // MOV AL,0x1
+    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)       // B.3.5 bridge
+        ->Graphics::FrameCopyImageBuffer::Create(
+            static_cast<Video::ImageBuffer::ImageType>(imageType),
+            static_cast<Video::ImageBuffer::Usage>(usage),
+            static_cast<Video::ImageBuffer::Format>(format),
+            flags, width, height,
+            static_cast<Video::ImageBuffer::FilterMode>(filterMode),
+            static_cast<Video::ImageBuffer::AddressMode>(addressU),
+            static_cast<Video::ImageBuffer::AddressMode>(addressV),
+            static_cast<Video::ImageBuffer::AddressMode>(addressW),
+            static_cast<Video::ImageBuffer::LevelArray*>(levels));
 }
 
 // ============================================================================
@@ -410,23 +379,15 @@ extern "C" bool RtGraphics_FrameCopyImageBuffer_Create(
 // takes (this, Context*, RenderBuffer*, bool). saveload_draw.cpp:75 records the
 // same class of defect on the call INTO this function, found the same way.
 // ============================================================================
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::FrameCopyImageBuffer::Generate` -- vtable slot 10. The door keeps its
+// name, its registration and the ENTRY counter; the BLIT counter is a branch
+// counter and stays inside the member, where the branch is.
 extern "C" void RtGraphics_FrameCopyImageBuffer_Generate(
         void* self, void* context, int32_t generation) {
     Attend("FrameCopyImageBuffer::Generate", g_generateCalls);
-
-    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
-    if (p->_generation == generation) return;           // CMP [RCX+0x68],R8D / JZ
-
-    Attend("FrameCopyImageBuffer::Generate BLIT", g_generateCopies);
-
-    // rax = _destTarget (+0x80); rcx = rax->platformData (+0x28); r8 = _sourceTarget.
-    void* const data = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(p->_destTarget) + 0x28);   // faithful: unguarded
-    void** const vt = *reinterpret_cast<void***>(data);
-    reinterpret_cast<void (*)(void*, void*, void*, bool)>(vt[3])(
-        data, context, p->_sourceTarget, true);
-
-    p->_generation = generation;                        // MOV [RBX+0x68],EDI
+    reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)        // B.3.5 bridge
+        ->Graphics::FrameCopyImageBuffer::Generate(context, generation);
 }
 
 // ============================================================================
@@ -734,6 +695,85 @@ void AnimationManager::Update(const System::Time& time, bool rootOnly) {
         ++groupIndex;
         if (groupIndex >= _instances._size) break;     // the bound is RE-READ
     }
+}
+
+// ---------------------------------------------------------------------------
+// ?Create@FrameCopyImageBuffer@Graphics@@  0x1800a3b70 -- SLOT 9, ENDGAME B.3.5
+// block GC. The argument-to-offset map, the two-argument platform slot 3 call and
+// the "RDX is `this`, NOT `_backBufferImage`" note are in the door's banner.
+//
+// Ten raw `base.*` POD writes became the real `Video::ImageBuffer` fields, which
+// is what the inheritance chain is for; `self + 0x60` is `_data`.
+// ---------------------------------------------------------------------------
+bool FrameCopyImageBuffer::Create(ImageType imageType, Usage usage, Format format,
+                                  uint32_t flags, int32_t width, int32_t height,
+                                  FilterMode filterMode,
+                                  AddressMode addressU, AddressMode addressV,
+                                  AddressMode addressW, LevelArray* levels) {
+    _dimension = imageType;            // +0x28  <- EDX      (0x1800a3b87)
+    _kind      = usage;                    // +0x2c  <- R8D      (0x1800a3b8a)
+    _format    = format;            // +0x30 <- R9D (0x1800a3b8e)
+    _width     = width;                    // +0x20  <- arg5     (0x1800a3b92)
+    _height    = height;                  // +0x24  <- arg6     (0x1800a3b99)
+    _flags     = flags;                    // +0x34  <- arg4     (0x1800a3ba0)
+    _filter    = filterMode;          // +0x44  <- arg7     (0x1800a3ba7)
+    _addressU  = addressU;              // +0x38  <- arg8     (0x1800a3bae)
+    _addressV  = addressV;              // +0x3c  <- arg9     (0x1800a3bb8)
+    _addressW  = addressW;              // +0x40  <- arg10    (0x1800a3bc2)
+
+    // `MOV RCX,[RCX+0x60]; MOV RAX,[RCX]; MOV RDX,<arg11>; CALL [RAX+0x18]` —
+    // slot 3 of the platform companion, "create the texture and all its views"
+    // (dx11/src/imagebufferdata.cpp:13), taking the level-descriptor array.
+    // TWO arguments: retail sets RCX and RDX and nothing else.
+    void* const data = _data;                          // +0x60
+    void** const vt = *reinterpret_cast<void***>(data);
+    const bool ok = reinterpret_cast<bool (*)(void*, void*)>(vt[3])(data, levels);
+    if (!ok) return false;                              // TEST AL,AL / JZ -> return AL
+
+    // The second RenderBuffer, this time with `this` as the colour attachment.
+    // Here retail calls `??2RenderBuffer@Video@@SAPEAX_K@Z` (0x18001f2e0) as a
+    // REAL CALL rather than inlining it — `MOV ECX,0x30; CALL 0x18001f2e0` at
+    // 0x1800a3be2. Same five instructions as the inlined form in the ctor, and
+    // MemAlloc(0x30, 8) is that body (see the MemAlloc note above), so this is
+    // spelled the same way for one arena and one reader.
+    void* const rb = MemAlloc(0x30, 8);
+    if (rb != nullptr) {
+        reinterpret_cast<uint64_t*>(rb)[0] = 0;
+        reinterpret_cast<uint64_t*>(rb)[1] = 0;
+        reinterpret_cast<uint64_t*>(rb)[2] = 0;
+        RenderBufferPlatformConstruct(rb);
+    }
+    _destTarget = rb;                                   // +0x80
+
+    // `XOR R8D,R8D; MOV RDX,RDI; MOV RCX,RBX` — colour is THIS, depth is null.
+    // Note RDX is `this`, NOT `this->_backBufferImage`: that is the difference
+    // between the ctor's RenderBuffer and this one, and it is the whole point
+    // of the class (copy FROM the back-buffer alias INTO our own texture).
+    RenderBufferCreate(rb, this, nullptr);
+
+    return true;                                        // MOV AL,0x1
+}
+
+// ---------------------------------------------------------------------------
+// ?Generate@FrameCopyImageBuffer@Graphics@@  0x1800a3b20 -- slot 10, block GC.
+// `UEBA` is CONST and the body still writes `_generation` through it; the
+// `const_cast` is at the site rather than hidden in a `mutable`, which is
+// GeneratedImageBuffer.h's own rule for exactly these two slots. The
+// four-argument platform slot-3 call (`MOV R9B,0x1`) is unchanged.
+// ---------------------------------------------------------------------------
+void FrameCopyImageBuffer::Generate(void* context, int32_t generation) const {
+    if (_generation == generation) return;              // CMP [RCX+0x68],R8D / JZ
+
+    Attend("FrameCopyImageBuffer::Generate BLIT", g_generateCopies);
+
+    // rax = _destTarget (+0x80); rcx = rax->platformData (+0x28); r8 = _sourceTarget.
+    void* const data = *reinterpret_cast<void**>(
+        reinterpret_cast<uint8_t*>(_destTarget) + 0x28);   // faithful: unguarded
+    void** const vt = *reinterpret_cast<void***>(data);
+    reinterpret_cast<void (*)(void*, void*, void*, bool)>(vt[3])(
+        data, context, _sourceTarget, true);
+
+    const_cast<FrameCopyImageBuffer*>(this)->_generation = generation;  // [RBX+0x68]
 }
 
 }  // namespace Graphics

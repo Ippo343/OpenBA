@@ -143,14 +143,17 @@ public:
     Object::External* Reconstruct() override;                      // [ 6] 0x18001f130
     void              Destruct() override;                         // [ 7] 0x18001f160
     Object::External* Construct() override;                        // [ 8] 0x18001f150
-    // [ 9] 0x1800a3b70 — ITS OWN, see the banner. PURE here because the body is
-    // in `wave23_lane_gfxbody.cpp` (block H1's) and is not a member yet.
+    // [ 9] 0x1800a3b70 — ITS OWN, see the banner. DEFINED AS A MEMBER in
+    // `wave23_lane_gfxbody.cpp` since ENDGAME B.3.5 block GC, so the `= 0` that
+    // stood in for "the body is not a member yet" is GONE. That does NOT make the
+    // class constructible: slot 0 (`DeletingDtor`) is still pure, for the reason
+    // its own banner gives, so `FrameCopyImageBuffer` stays abstract.
     bool Create(ImageType type, Usage usage, Format format, uint32_t flags,
                 int32_t width, int32_t height, FilterMode filter,
                 AddressMode addressU, AddressMode addressV,
-                AddressMode addressW, LevelArray* levels) override = 0;
-    // [10] 0x1800a3b20 — likewise `wave23_lane_gfxbody.cpp`'s.
-    void Generate(void* context, int32_t generation) const override = 0;
+                AddressMode addressW, LevelArray* levels) override;
+    // [10] 0x1800a3b20 — likewise a member in `wave23_lane_gfxbody.cpp` now.
+    void Generate(void* context, int32_t generation) const override;
     // [11] 0x1800a3b10 — `RET`. One byte in the shipped build, ported as an
     // empty body (reference_retail_ships_empty_bodies.md).
     void Render(void* renderer, const void* scene, const void* camera,

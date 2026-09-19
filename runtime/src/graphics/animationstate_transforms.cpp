@@ -86,6 +86,7 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/graphics/AnimationManager.h"
 #include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
+#include "../../types/graphics/Mesh.h"             // Graphics::MeshInstance, ditto
 #include "../../types/system/Value.h"                // System::Time, ditto
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -675,230 +676,15 @@ extern "C" void RtGraphics_AnimationState_UpdateNodes(
 // The root quaternion's four `q * 0.0f` products are hoisted out of the loop by
 // MSVC and are kept hoisted here, because they are what the second rotate's
 // accumulators are SEEDED with.
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::MeshInstance::GetBones` (block E's class; this file is not block
+// E's). The door keeps its name and its registration.
 extern "C" int RtGraphics_MeshInstance_GetBones(
     const void* selfv, float t, const void* rootv, void* outv) {
-
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
-    const uint8_t* mesh = *reinterpret_cast<const uint8_t* const*>(self + 0xc0);
-    const int32_t boneCount = *reinterpret_cast<const int32_t*>(mesh + 0x68);
-    uint8_t* out = static_cast<uint8_t*>(outv);
-
-    // The body writes only the caller's matrix buffer and returns the bone count;
-    // nothing it reads is modified. (The two dead oracle captures that used to
-    // sit here went with the rest of this file's replay scaffolding — block GC.)
-
-    float identity[7];
-    float inverse[7];
-    const float* rootT;
-    if (self[0xd8] != 0) {
-        identity[0] = 0.0f; identity[1] = 0.0f; identity[2] = 0.0f;
-        identity[3] = 1.0f;
-        identity[4] = 0.0f; identity[5] = 0.0f; identity[6] = 0.0f;
-        rootT = identity;
-    } else {
-        rootT = TransformInverse(rootv, inverse);
-    }
-
-    const float rqx = rootT[0];
-    const float rqy = rootT[1];
-    const float rqz = rootT[2];
-    const float rqw = rootT[3];
-    const float rtx = rootT[4];
-    const float rty = rootT[5];
-    const float rtz = rootT[6];
-
-    // The root transform, rebuilt as the `this` retail hands to operator*.
-    const float rootXform[7] = { rqx, rqy, rqz, rqw, rtx, rty, rtz };
-
-    const uint8_t* interp;
-    if (self[0xd8] != 0) {
-        const uint8_t* layers = *reinterpret_cast<const uint8_t* const*>(self + 0xe0);
-        const int64_t lcount = *reinterpret_cast<const int32_t*>(self + 0xe8);
-        const int32_t handle =
-            *reinterpret_cast<const int32_t*>(layers + lcount * kLayerStride - 0x2c);
-        const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
-        const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
-            instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
-        interp = *reinterpret_cast<const uint8_t* const*>(
-            states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x38);
-    } else {
-        interp = *reinterpret_cast<const uint8_t* const*>(self + 0xf0);
-    }
-
-    if (boneCount <= 0) return boneCount;
-
-    const float rqx0 = rqx * 0.0f;
-    const float rqy0 = rqy * 0.0f;
-    const float rqz0 = rqz * 0.0f;
-    const float rqw0 = rqw * 0.0f;
-    const float mrqx = -rqx;
-    const float mrqy = -rqy;
-    const float mrqz = -rqz;
-
-    for (int64_t k = 0; k < boneCount; ++k) {
-        const uint8_t* ip = interp + k * kInterpStride;
-
-        // Lerp the node's two stored transforms by `t`.
-        float sx = *reinterpret_cast<const float*>(ip + 0x2c);
-        float fx = *reinterpret_cast<const float*>(ip + 0x10);
-        float sy = *reinterpret_cast<const float*>(ip + 0x30);
-        float fy = *reinterpret_cast<const float*>(ip + 0x14);
-        float sz = *reinterpret_cast<const float*>(ip + 0x34);
-        float fz = *reinterpret_cast<const float*>(ip + 0x18);
-        fx = fx - sx;
-        fy = fy - sy;
-        fz = fz - sz;
-        fx = fx * t;
-        fy = fy * t;
-        fz = fz * t;
-        sx = sx + fx;
-        sy = sy + fy;
-        sz = sz + fz;
-
-        float lqret[4];
-        const float* lq = QuaternionLerp(ip + kTransformStride, lqret, ip, &t);
-
-        const uint8_t* bind =
-            *reinterpret_cast<const uint8_t* const*>(mesh + 0x60) + k * kNodeStride + 0x28;
-
-        // ---- stage 1: rotate the bind translation by the lerped rotation ----
-        const float lqx = lq[0];
-        const float lqw = lq[3];
-        const float lqz = lq[2];
-        const float lqy = lq[1];
-        const float bvx = *reinterpret_cast<const float*>(bind + 0x10);
-        const float bvy = *reinterpret_cast<const float*>(bind + 0x14);
-        const float bvz = *reinterpret_cast<const float*>(bind + 0x18);
-        const float mlqx = -lqx;
-        const float mlqy = -lqy;
-        const float mlqz = -lqz;
-
-        const float ka = lqx * 0.0f;
-        float B = lqy * 0.0f;
-        float A = bvx * lqw;
-        const float kb = bvz * lqy;
-        float C = bvx * lqy;
-        A = A + ka;
-        const float kc = bvy * lqz;
-        A = A + kc;
-        const float kd = bvx * lqz;
-        A = A - kb;
-        const float ke = bvy * lqw;
-        B = B - kd;
-        const float kf = bvz * lqx;
-        B = B + ke;
-        const float kg = bvz * lqw;
-        B = B + kf;
-        const float kh = lqz * 0.0f;
-        float D = lqw * 0.0f;
-        C = C + kh;
-        const float ki = bvy * lqx;
-        C = C - ki;
-        C = C + kg;
-        const float kj = bvy * lqy;
-        const float kk = bvz * lqz;
-        float rx = A * lqw;
-        const float u1 = C * mlqy;
-        float ry = B * lqw;
-        const float kl = bvx * lqx;
-        D = D - kl;
-        D = D - kj;
-        D = D - kk;
-        const float u0 = D * mlqx;
-        rx = u0 + rx;
-        const float u6 = B * mlqx;
-        const float u2 = B * mlqz;
-        rx = rx + u1;
-        rx = rx - u2;
-        const float u3 = D * mlqy;
-        const float u4 = D * mlqz;
-        const float u5 = C * mlqx;
-        rx = rx + sx;
-        float rz = C * lqw;
-        ry = ry - u5;
-        rz = u6 + rz;
-        const float u7 = A * mlqz;
-        const float u8 = A * mlqy;
-        ry = ry + u3;
-        rz = rz - u8;
-        rz = rz + u4;
-        ry = ry + u7;
-        rz = rz + sz;
-        ry = ry + sy;
-
-        const float lerped[7] = { lqx, lqy, lqz, lqw, sx, sy, sz };
-        float q1ret[4];
-        const float* q1 = QuaternionMul(lerped, q1ret, bind);
-        const float composedQ[4] = { q1[0], q1[1], q1[2], q1[3] };
-
-        // ---- stage 2: the same shape again against the root rotation. The
-        // four accumulators are SEEDED with the hoisted `rq * 0.0f` products,
-        // which is why those are computed once outside the loop. ----
-        float A2 = rx * rqw;
-        A2 = A2 + rqx0;
-        float C2 = rx * rqy;
-        float B2 = rqy0;
-        C2 = C2 + rqz0;
-        const float m0 = ry * rqz;
-        A2 = A2 + m0;
-        const float m1 = rz * rqy;
-        const float m2 = rx * rqz;
-        A2 = A2 - m1;
-        const float m3 = ry * rqw;
-        B2 = B2 - m2;
-        const float m4 = rz * rqx;
-        B2 = B2 + m3;
-        B2 = B2 + m4;
-        const float m5 = ry * rqx;
-        float D2 = rqw0;
-        C2 = C2 - m5;
-        const float m6 = rx * rqx;
-        const float m7 = ry * rqy;
-        D2 = D2 - m6;
-        float Rx = A2 * rqw;
-        const float m8 = rz * rqw;
-        float Ry = B2 * rqw;
-        C2 = C2 + m8;
-        D2 = D2 - m7;
-        const float m9 = rz * rqz;
-        const float v1 = C2 * mrqy;
-        D2 = D2 - m9;
-        const float v0 = D2 * mrqx;
-        Rx = v0 + Rx;
-        const float v2 = B2 * mrqz;
-        const float v6 = B2 * mrqx;
-        Rx = Rx + v1;
-        const float v3 = D2 * mrqy;
-        Rx = Rx - v2;
-        const float v4 = D2 * mrqz;
-        const float v5 = C2 * mrqx;
-        Rx = Rx + rtx;
-        float Rz = C2 * rqw;
-        Ry = Ry - v5;
-        Rz = v6 + Rz;
-        const float v7 = A2 * mrqz;
-        const float v8 = A2 * mrqy;
-        Ry = Ry + v3;
-        Rz = Rz - v8;
-        Rz = Rz + v4;
-        Ry = Ry + v7;
-        Ry = Ry + rty;
-        Rz = Rz + rtz;
-
-        float q2ret[4];
-        const float* q2 = QuaternionMul(rootXform, q2ret, composedQ);
-
-        const float finalXform[7] = { q2[0], q2[1], q2[2], q2[3], Rx, Ry, Rz };
-        float matrix[16];
-        const float* m = TransformAsMatrix(finalXform, matrix);
-
-        uint8_t* dst = out + k * 0x40;
-        for (int w = 0; w < 16; ++w)
-            reinterpret_cast<uint32_t*>(dst)[w] = reinterpret_cast<const uint32_t*>(m)[w];
-    }
-
-
-    return boneCount;
+    return reinterpret_cast<const Graphics::MeshInstance*>(selfv)        // B.3.5 bridge
+        ->Graphics::MeshInstance::GetBones(
+            t, *reinterpret_cast<const Math::Transform*>(rootv),
+            static_cast<Math::Matrix*>(outv));                           // B.3.5 bridge
 }
 
 // ============================================================================
@@ -1596,6 +1382,242 @@ void AnimationState::UpdateNodes(float speed,
         dst[5] = ry;
         dst[6] = rz;
     }
+}
+
+// ---------------------------------------------------------------------------
+// ?GetBones@MeshInstance@Graphics@@  0x180100070 -- ENDGAME B.3.5 block GC.
+// The +0xd8 byte tested three separate times, the identity-versus-inverse root
+// choice and MSVC's hoisted `q * 0.0f` seeds are all in the door's banner.
+//
+// The MeshInstance fields are still reached at their raw offsets through one
+// bridge local rather than through Mesh.h's names: this body reads +0xc0, +0xd8,
+// +0xe0, +0xe8 and +0xf0, and every one of them is an offset the surrounding
+// helpers in this file also use. Renaming them is a separate mechanical pass.
+// ---------------------------------------------------------------------------
+int MeshInstance::GetBones(float t, const Math::Transform& rootRef,
+                           Math::Matrix* out_) const {
+    const uint8_t* self = reinterpret_cast<const uint8_t*>(this);  // B.3.5 bridge
+    const void* const rootv = &rootRef;
+    void* const outv = out_;
+    const uint8_t* mesh = *reinterpret_cast<const uint8_t* const*>(self + 0xc0);
+    const int32_t boneCount = *reinterpret_cast<const int32_t*>(mesh + 0x68);
+    uint8_t* out = static_cast<uint8_t*>(outv);
+
+    // The body writes only the caller's matrix buffer and returns the bone count;
+    // nothing it reads is modified. (The two dead oracle captures that used to
+    // sit here went with the rest of this file's replay scaffolding — block GC.)
+
+    float identity[7];
+    float inverse[7];
+    const float* rootT;
+    if (self[0xd8] != 0) {
+        identity[0] = 0.0f; identity[1] = 0.0f; identity[2] = 0.0f;
+        identity[3] = 1.0f;
+        identity[4] = 0.0f; identity[5] = 0.0f; identity[6] = 0.0f;
+        rootT = identity;
+    } else {
+        rootT = TransformInverse(rootv, inverse);
+    }
+
+    const float rqx = rootT[0];
+    const float rqy = rootT[1];
+    const float rqz = rootT[2];
+    const float rqw = rootT[3];
+    const float rtx = rootT[4];
+    const float rty = rootT[5];
+    const float rtz = rootT[6];
+
+    // The root transform, rebuilt as the `this` retail hands to operator*.
+    const float rootXform[7] = { rqx, rqy, rqz, rqw, rtx, rty, rtz };
+
+    const uint8_t* interp;
+    if (self[0xd8] != 0) {
+        const uint8_t* layers = *reinterpret_cast<const uint8_t* const*>(self + 0xe0);
+        const int64_t lcount = *reinterpret_cast<const int32_t*>(self + 0xe8);
+        const int32_t handle =
+            *reinterpret_cast<const int32_t*>(layers + lcount * kLayerStride - 0x2c);
+        const uint8_t* instData = AnimationManagerSingleton()->_instances._data;
+        const uint8_t* states = *reinterpret_cast<const uint8_t* const*>(
+            instData + static_cast<int64_t>((handle >> 8) & 0xff) * kInstanceStride + 0x20);
+        interp = *reinterpret_cast<const uint8_t* const*>(
+            states + static_cast<int64_t>(handle & 0xff) * kStateStride + 0x38);
+    } else {
+        interp = *reinterpret_cast<const uint8_t* const*>(self + 0xf0);
+    }
+
+    if (boneCount <= 0) return boneCount;
+
+    const float rqx0 = rqx * 0.0f;
+    const float rqy0 = rqy * 0.0f;
+    const float rqz0 = rqz * 0.0f;
+    const float rqw0 = rqw * 0.0f;
+    const float mrqx = -rqx;
+    const float mrqy = -rqy;
+    const float mrqz = -rqz;
+
+    for (int64_t k = 0; k < boneCount; ++k) {
+        const uint8_t* ip = interp + k * kInterpStride;
+
+        // Lerp the node's two stored transforms by `t`.
+        float sx = *reinterpret_cast<const float*>(ip + 0x2c);
+        float fx = *reinterpret_cast<const float*>(ip + 0x10);
+        float sy = *reinterpret_cast<const float*>(ip + 0x30);
+        float fy = *reinterpret_cast<const float*>(ip + 0x14);
+        float sz = *reinterpret_cast<const float*>(ip + 0x34);
+        float fz = *reinterpret_cast<const float*>(ip + 0x18);
+        fx = fx - sx;
+        fy = fy - sy;
+        fz = fz - sz;
+        fx = fx * t;
+        fy = fy * t;
+        fz = fz * t;
+        sx = sx + fx;
+        sy = sy + fy;
+        sz = sz + fz;
+
+        float lqret[4];
+        const float* lq = QuaternionLerp(ip + kTransformStride, lqret, ip, &t);
+
+        const uint8_t* bind =
+            *reinterpret_cast<const uint8_t* const*>(mesh + 0x60) + k * kNodeStride + 0x28;
+
+        // ---- stage 1: rotate the bind translation by the lerped rotation ----
+        const float lqx = lq[0];
+        const float lqw = lq[3];
+        const float lqz = lq[2];
+        const float lqy = lq[1];
+        const float bvx = *reinterpret_cast<const float*>(bind + 0x10);
+        const float bvy = *reinterpret_cast<const float*>(bind + 0x14);
+        const float bvz = *reinterpret_cast<const float*>(bind + 0x18);
+        const float mlqx = -lqx;
+        const float mlqy = -lqy;
+        const float mlqz = -lqz;
+
+        const float ka = lqx * 0.0f;
+        float B = lqy * 0.0f;
+        float A = bvx * lqw;
+        const float kb = bvz * lqy;
+        float C = bvx * lqy;
+        A = A + ka;
+        const float kc = bvy * lqz;
+        A = A + kc;
+        const float kd = bvx * lqz;
+        A = A - kb;
+        const float ke = bvy * lqw;
+        B = B - kd;
+        const float kf = bvz * lqx;
+        B = B + ke;
+        const float kg = bvz * lqw;
+        B = B + kf;
+        const float kh = lqz * 0.0f;
+        float D = lqw * 0.0f;
+        C = C + kh;
+        const float ki = bvy * lqx;
+        C = C - ki;
+        C = C + kg;
+        const float kj = bvy * lqy;
+        const float kk = bvz * lqz;
+        float rx = A * lqw;
+        const float u1 = C * mlqy;
+        float ry = B * lqw;
+        const float kl = bvx * lqx;
+        D = D - kl;
+        D = D - kj;
+        D = D - kk;
+        const float u0 = D * mlqx;
+        rx = u0 + rx;
+        const float u6 = B * mlqx;
+        const float u2 = B * mlqz;
+        rx = rx + u1;
+        rx = rx - u2;
+        const float u3 = D * mlqy;
+        const float u4 = D * mlqz;
+        const float u5 = C * mlqx;
+        rx = rx + sx;
+        float rz = C * lqw;
+        ry = ry - u5;
+        rz = u6 + rz;
+        const float u7 = A * mlqz;
+        const float u8 = A * mlqy;
+        ry = ry + u3;
+        rz = rz - u8;
+        rz = rz + u4;
+        ry = ry + u7;
+        rz = rz + sz;
+        ry = ry + sy;
+
+        const float lerped[7] = { lqx, lqy, lqz, lqw, sx, sy, sz };
+        float q1ret[4];
+        const float* q1 = QuaternionMul(lerped, q1ret, bind);
+        const float composedQ[4] = { q1[0], q1[1], q1[2], q1[3] };
+
+        // ---- stage 2: the same shape again against the root rotation. The
+        // four accumulators are SEEDED with the hoisted `rq * 0.0f` products,
+        // which is why those are computed once outside the loop. ----
+        float A2 = rx * rqw;
+        A2 = A2 + rqx0;
+        float C2 = rx * rqy;
+        float B2 = rqy0;
+        C2 = C2 + rqz0;
+        const float m0 = ry * rqz;
+        A2 = A2 + m0;
+        const float m1 = rz * rqy;
+        const float m2 = rx * rqz;
+        A2 = A2 - m1;
+        const float m3 = ry * rqw;
+        B2 = B2 - m2;
+        const float m4 = rz * rqx;
+        B2 = B2 + m3;
+        B2 = B2 + m4;
+        const float m5 = ry * rqx;
+        float D2 = rqw0;
+        C2 = C2 - m5;
+        const float m6 = rx * rqx;
+        const float m7 = ry * rqy;
+        D2 = D2 - m6;
+        float Rx = A2 * rqw;
+        const float m8 = rz * rqw;
+        float Ry = B2 * rqw;
+        C2 = C2 + m8;
+        D2 = D2 - m7;
+        const float m9 = rz * rqz;
+        const float v1 = C2 * mrqy;
+        D2 = D2 - m9;
+        const float v0 = D2 * mrqx;
+        Rx = v0 + Rx;
+        const float v2 = B2 * mrqz;
+        const float v6 = B2 * mrqx;
+        Rx = Rx + v1;
+        const float v3 = D2 * mrqy;
+        Rx = Rx - v2;
+        const float v4 = D2 * mrqz;
+        const float v5 = C2 * mrqx;
+        Rx = Rx + rtx;
+        float Rz = C2 * rqw;
+        Ry = Ry - v5;
+        Rz = v6 + Rz;
+        const float v7 = A2 * mrqz;
+        const float v8 = A2 * mrqy;
+        Ry = Ry + v3;
+        Rz = Rz - v8;
+        Rz = Rz + v4;
+        Ry = Ry + v7;
+        Ry = Ry + rty;
+        Rz = Rz + rtz;
+
+        float q2ret[4];
+        const float* q2 = QuaternionMul(rootXform, q2ret, composedQ);
+
+        const float finalXform[7] = { q2[0], q2[1], q2[2], q2[3], Rx, Ry, Rz };
+        float matrix[16];
+        const float* m = TransformAsMatrix(finalXform, matrix);
+
+        uint8_t* dst = out + k * 0x40;
+        for (int w = 0; w < 16; ++w)
+            reinterpret_cast<uint32_t*>(dst)[w] = reinterpret_cast<const uint32_t*>(m)[w];
+    }
+
+    return boneCount;
 }
 
 }  // namespace Graphics

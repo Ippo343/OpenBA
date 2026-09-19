@@ -569,64 +569,29 @@ inline void DrawItemArraysDestroy(uint8_t* base) {
 
 }  // namespace
 
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto
+// `Graphics::Renderer::BeginDrawGroup`, in this file's trailing `namespace
+// Graphics` block (the A.2 sibling reason again). The door keeps its name, its
+// registration and its entry counter; the APPEND counter is a branch counter and
+// stays in the member.
+//
+// THE `??4Camera@Graphics@@` RESOLVER EDGES STAY, and that is block F's ruling
+// carried forward rather than an omission: retail's `operator=` is a PARTIAL copy
+// that leaves +0x61..+0x63 and +0xd5..+0xd7 alone, `Graphics::Camera::operator=`
+// is `= default` precisely so the class stays trivially copyable, and a defaulted
+// assignment cannot express a partial copy. The faithful body lives in that door,
+// which is where every copy the live engine makes goes.
 extern "C" int32_t RtGraphics_Renderer_BeginDrawGroup(void* self, const void* renderBuffer,
                                                       const void* drawCamera,
                                                       const void* cullCamera,
                                                       int32_t shader, uint32_t passMask) {
     Attend("Renderer::BeginDrawGroup", g_beginGroupCalls);
-
-    Renderer* const r = static_cast<Renderer*>(self);
-
-    const int32_t prev = r->currentDrawGroup;          // MOV EBP,[RCX+0x34]
-    const int32_t idx  = r->field_38;                  // MOVSXD RCX,[RCX+0x38]
-    r->currentDrawGroup = idx;                         // MOV [RDI+0x34],ECX
-
-    if (r->drawGroups.GetSize() != idx) {
-        // ---- REUSE -------------------------------------------------------
-        r->field_38 = idx + 1;                         // LEA EAX,[RCX+1]
-        uint8_t* const g = reinterpret_cast<uint8_t*>(r->drawGroups.GetData()) +
-                           static_cast<int64_t>(idx) * 0x1f0;
-        *reinterpret_cast<const void**>(g) = renderBuffer;
-        RT_EXPORT_ONCE(CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
-            reinterpret_cast<Camera*>(g + 8), static_cast<const Camera*>(drawCamera));
-        RT_EXPORT_ONCE(CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
-            reinterpret_cast<Camera*>(g + 0xe0), static_cast<const Camera*>(cullCamera));
-        *reinterpret_cast<int32_t*>(g + 0x1b8)  = shader;
-        *reinterpret_cast<uint32_t*>(g + 0x1bc) = passMask;
-        return prev;
-    }
-
-    // ---- APPEND ----------------------------------------------------------
-    ++g_beginGroupAppends;
-    alignas(8) uint8_t temp[0x1f0];
-    *reinterpret_cast<const void**>(temp) = renderBuffer;
-    RT_EXPORT_ONCE(CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
-        reinterpret_cast<Camera*>(temp + 8), static_cast<const Camera*>(drawCamera));
-    RT_EXPORT_ONCE(CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
-        reinterpret_cast<Camera*>(temp + 0xe0), static_cast<const Camera*>(cullCamera));
-    *reinterpret_cast<int32_t*>(temp + 0x1b8)  = shader;
-    *reinterpret_cast<uint32_t*>(temp + 0x1bc) = passMask;
-    DrawItemArraysInit(temp + 0x1c0);
-
-    //   SYMBOL:      0x1800638e0 — Collection::Array<RendererDrawGroup>::SetSize.
-    //                CONFIRMED ABSENT from the export directory with pefile, not
-    //                inferred from a comment (AEAA means private, not unexported).
-    //
-    // ENDGAME B.3.2 step 2 (callers) — the ResolveAddr-by-address call above is
-    // GONE. `r->drawGroups` is a real `Collection::Array<RendererDrawGroup>`
-    // member (runtime/types/graphics/Camera.h), but its DECLARED spec is the
-    // trait-derived default, which is NOT what retail's 0x1800638e0 does (see
-    // array_internal.h's `kSpec_DrawGroup1f0` banner: the element assign is a
-    // deep nested-array copy the trait derivation cannot reproduce). Bridged
-    // through the hand-derived row at the call site instead of trusting the
-    // field's own (wrong) spec — array.cpp's `RtColl_ArraySetSizeFill_...` row
-    // for this address stays registered, unchanged, for `code/`.
-    rtcoll::AsArray<&rtcoll::kSpec_DrawGroup1f0>(&r->drawGroups)
-        ->SetSizeFill(r->drawGroups.GetSize() + 1, temp);
-
-    DrawItemArraysDestroy(temp + 0x1c0);
-    ++r->field_38;                                     // INC [RDI+0x38] — NOT the size
-    return prev;
+    return reinterpret_cast<Graphics::Renderer*>(self)                   // B.3.5 bridge
+        ->Graphics::Renderer::BeginDrawGroup(
+            reinterpret_cast<const Video::RenderBuffer*>(renderBuffer),  // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Camera*>(drawCamera),      // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Camera*>(cullCamera),      // B.3.5 bridge
+            shader, passMask);
 }
 
 // ============================================================================
@@ -1061,5 +1026,78 @@ void AnimationState::UpdateRootOnly(float dt, Math::Vector3& rootOffsetOut) {
 }
 
 #undef RTGC_LAYERS
+
+// ---------------------------------------------------------------------------
+// ?BeginDrawGroup@Renderer@Graphics@@  0x180104fd0 -- ENDGAME B.3.5 block GC.
+// The reuse-versus-append split, the `_drawGroupsUsed` cursor (B35_RULES 13
+// item 10, SETTLED by this body) and the hand-derived `kSpec_DrawGroup1f0` bridge
+// are in the banner beside the door.//
+// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
+// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
+// indexes are still spelled `RtGraphics::*` through one bridge local, because
+// those PODs have live users in files outside this block and B4b-1 keeps a POD
+// until its LAST user converts. Camera.h cross-asserts every one of their offsets
+// against the real classes', so the two descriptions cannot drift, and renaming
+// ~200 field accesses in a body this size is a second change, not this one.
+// ---------------------------------------------------------------------------
+int Renderer::BeginDrawGroup(const Video::RenderBuffer* renderBufferIn,
+                             const Camera& drawCameraRef, const Camera& cullCameraRef,
+                             int shader, uint32_t passMask) {
+    RtGraphics::Renderer* const r =
+        reinterpret_cast<RtGraphics::Renderer*>(this);          // B.3.5 bridge
+    const void* const renderBuffer = renderBufferIn;
+    const void* const drawCamera   = &drawCameraRef;
+    const void* const cullCamera   = &cullCameraRef;
+    const int32_t prev = r->currentDrawGroup;          // MOV EBP,[RCX+0x34]
+    const int32_t idx  = r->field_38;                  // MOVSXD RCX,[RCX+0x38]
+    r->currentDrawGroup = idx;                         // MOV [RDI+0x34],ECX
+
+    if (r->drawGroups.GetSize() != idx) {
+        // ---- REUSE -------------------------------------------------------
+        r->field_38 = idx + 1;                         // LEA EAX,[RCX+1]
+        uint8_t* const g = reinterpret_cast<uint8_t*>(r->drawGroups.GetData()) +
+                           static_cast<int64_t>(idx) * 0x1f0;
+        *reinterpret_cast<const void**>(g) = renderBuffer;
+        RT_EXPORT_ONCE(rtgfxbody28::CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
+            reinterpret_cast<RtGraphics::Camera*>(g + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
+        RT_EXPORT_ONCE(rtgfxbody28::CameraAssignFn, "??4Camera@Graphics@@QEAAAEAV01@AEBV01@@Z")(
+            reinterpret_cast<RtGraphics::Camera*>(g + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
+        *reinterpret_cast<int32_t*>(g + 0x1b8)  = shader;
+        *reinterpret_cast<uint32_t*>(g + 0x1bc) = passMask;
+        return prev;
+    }
+
+    // ---- APPEND ----------------------------------------------------------
+    ++rtgfxbody28::g_beginGroupAppends;
+    alignas(8) uint8_t temp[0x1f0];
+    *reinterpret_cast<const void**>(temp) = renderBuffer;
+    RT_EXPORT_ONCE(rtgfxbody28::CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
+        reinterpret_cast<RtGraphics::Camera*>(temp + 8), static_cast<const RtGraphics::Camera*>(drawCamera));
+    RT_EXPORT_ONCE(rtgfxbody28::CameraCopyCtorFn, "??0Camera@Graphics@@QEAA@AEBV01@@Z")(
+        reinterpret_cast<RtGraphics::Camera*>(temp + 0xe0), static_cast<const RtGraphics::Camera*>(cullCamera));
+    *reinterpret_cast<int32_t*>(temp + 0x1b8)  = shader;
+    *reinterpret_cast<uint32_t*>(temp + 0x1bc) = passMask;
+    rtgfxbody28::DrawItemArraysInit(temp + 0x1c0);
+
+    //   SYMBOL:      0x1800638e0 — Collection::Array<RtGraphics::RendererDrawGroup>::SetSize.
+    //                CONFIRMED ABSENT from the export directory with pefile, not
+    //                inferred from a comment (AEAA means private, not unexported).
+    //
+    // ENDGAME B.3.2 step 2 (callers) — the ResolveAddr-by-address call above is
+    // GONE. `r->drawGroups` is a real `Collection::Array<RtGraphics::RendererDrawGroup>`
+    // member (runtime/types/graphics/RtGraphics::Camera.h), but its DECLARED spec is the
+    // trait-derived default, which is NOT what retail's 0x1800638e0 does (see
+    // array_internal.h's `kSpec_DrawGroup1f0` banner: the element assign is a
+    // deep nested-array copy the trait derivation cannot reproduce). Bridged
+    // through the hand-derived row at the call site instead of trusting the
+    // field's own (wrong) spec — array.cpp's `RtColl_ArraySetSizeFill_...` row
+    // for this address stays registered, unchanged, for `code/`.
+    rtcoll::AsArray<&rtcoll::kSpec_DrawGroup1f0>(&r->drawGroups)
+        ->SetSizeFill(r->drawGroups.GetSize() + 1, temp);
+
+    rtgfxbody28::DrawItemArraysDestroy(temp + 0x1c0);
+    ++r->field_38;                                     // INC [RDI+0x38] — NOT the size
+    return prev;
+}
 
 }  // namespace Graphics

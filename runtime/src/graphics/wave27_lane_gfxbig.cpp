@@ -555,184 +555,20 @@ extern "C" void RtGraphics_Renderer_DrawItemSort(void* data, int32_t count, void
                       });
 }
 
+// ENDGAME B.3.5 block GC: THE BODY MOVED onto `Graphics::Renderer::Draw`, in
+// this file's trailing `namespace Graphics` block (everything here is inside
+// `namespace rtgfxbig`, which is `Graphics`'s SIBLING -- B34_BRIEFS A.2). The
+// door keeps its name, its registration and all three counters; the two BRANCH
+// counters stay in the loops, inside the member.
 extern "C" void RtGraphics_Renderer_Draw(void* self, void* context, float alpha,
                                          const void* scene, const void* camera) {
     Attend("Renderer::Draw", g_drawCalls);
-
-    Renderer* const r   = static_cast<Renderer*>(self);
-    RtVideo::Context* ctx = static_cast<RtVideo::Context*>(context);
-
-    // Reset FIRST, then the two scalars, then AddScene. 0x180105110 is PORTED
-    // (wave9_lane_gfxd.cpp registers it) so the name door reaches our body.
-    RT_EXPORT_ONCE(ResetFn, "?Reset@Renderer@Graphics@@QEAAXXZ")(r);
-
-    r->frameAlpha    = alpha;                 // MOVSS [RDI+0x40],XMM6
-    r->contextSerial = ctx->_frameIndex;      // MOV EAX,[RSI+8] / MOV [RDI+0x44],EAX
-
-    // field_3c is read here UNINITIALISED on the first frame. See the banner.
-    RT_EXPORT_ONCE(AddSceneFn,
-        "?AddScene@Renderer@Graphics@@QEAAXPEBVScene@2@PEBVRenderBuffer@Video@@"
-        "AEBVCamera@2@HHHI@Z")(
-            r, scene, ctx->_defaultRenderBuffer, camera,
-            r->field_3c, 0x40, 0, 0x8007u);
-
-    // ---------------- PASS 1: cull and collect ----------------------------
-    r->currentScene = 0;
-    if (r->scenes._size > 0) {
-        do {
-            RendererSceneEntry* const e = r->scenes._data + r->currentScene;
-
-            r->field_3c  = e->field_e8;
-            r->field_48  = e->field_f8;
-
-            const int32_t nextGroup = RT_EXPORT_ONCE(BeginDrawGroupFn,
-                "?BeginDrawGroup@Renderer@Graphics@@QEAAHPEBVRenderBuffer@Video@@"
-                "AEBVCamera@2@1HI@Z")(
-                    r, e->renderBuffer, &e->camera, &e->camera,
-                    e->field_ec, e->field_f0);
-
-            // The CURRENT group index is written into the entry, and it is the
-            // value from BEFORE this BeginDrawGroup (0x180104c78 reads
-            // [RDI+0x34], which is only updated at the bottom of the loop).
-            e->drawGroupIndex = r->currentDrawGroup;
-
-            const uint32_t passMask =
-                r->drawGroups._data[r->currentDrawGroup].passMask;
-
-            // The scene's drawable list: head at Scene+0x60, `next` at +0x10,
-            // payload at +0x00. Both the head and every `next` are read as raw
-            // offsets because Graphics::Scene's layout is lane D's, not this
-            // lane's, and this body reads exactly three of its fields.
-            void* node = *reinterpret_cast<void* const*>(
-                static_cast<const uint8_t*>(scene) + 0x60);
-            while (node != nullptr) {
-                void* const obj = *reinterpret_cast<void**>(node);
-                const uint8_t* const o = static_cast<const uint8_t*>(obj);
-                if ((*reinterpret_cast<const uint32_t*>(o + 0x30) & passMask) != 0 &&
-                    *reinterpret_cast<const int32_t*>(o + 0x28) <= r->field_48) {
-                    // Slot 3 = ?AddDrawItems@…@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z.
-                    // A VIRTUAL DISPATCH through the object's own vtable, NOT a
-                    // door: lane GFXMESH owns ??_7MeshInstance@ and this call
-                    // reaches whatever is in the live table. Nothing here
-                    // registers, stamps or reads that slot as an identity token.
-                    reinterpret_cast<AddDrawItemsFn>(VTable(obj)[3])(obj, scene, r);
-                }
-                node = *reinterpret_cast<void**>(static_cast<uint8_t*>(node) + 0x10);
-            }
-
-            if (r->field_48 != 0) {
-                RT_EXPORT_ONCE(AddCulledFn,
-                    "?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")(scene, r);
-            }
-
-            for (int32_t k = 0; k < 3; ++k) {
-                Collection::Array<RendererDrawItem>& list =
-                    r->drawGroups._data[r->currentDrawGroup].items[k];
-                // TWO tests, `> 0` then `> 1` (0x180104cfa, 0x180104cfe). Only
-                // the second can decide anything; the first is retail's and is
-                // kept because a zero-size list with a non-null _data would take
-                // a different path if it were removed.
-                if (list._size > 0 && list._size > 1) {
-                    // ---------------------------------------------------------
-                    // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8b, faithfully):
-                    // RtGraphics_Renderer_DrawItemSort, above, registered at
-                    // the bottom of this file together with its 0x180063b90
-                    // selection-sort callee. ResolveAddr consults the port
-                    // registry first, so this call site needs no change.
-                    // ---------------------------------------------------------
-                    using SortFn = void (*)(void* data, int32_t count, void* scratch);
-                    static SortFn sort = nullptr;
-                    if (!sort)   // cache a hit, retry a miss — rt_port.h's contract
-                        sort = reinterpret_cast<SortFn>(
-                            ResolveAddr(Module::Runtime, 0x180062d60));
-                    // Retail hands it its OWN unused R8 home slot (X+0x18) as
-                    // scratch — a float argument in XMM2 leaves that slot free.
-                    // Four qwords is strictly more than the 16 bytes retail's
-                    // window can hold.
-                    uint64_t scratch[4];
-                    if (sort) { sort(list._data, list._size, scratch); ++g_drawSorts; }
-                }
-            }
-
-            ++r->currentScene;
-            r->currentDrawGroup = nextGroup;
-            ++g_drawGroups;
-        } while (r->currentScene < r->scenes._size);
-    }
-
-    // ---------------- PASS 2: emit, BACKWARD ------------------------------
-    for (int64_t si = static_cast<int32_t>(r->scenes._size) - 1; si >= 0; --si) {
-        // `_data` is RE-READ at the top of every iteration (MOV RBP,[RDI] at
-        // 0x180104d60) while the byte offset is carried in RBX and decremented.
-        RendererSceneEntry* const e = r->scenes._data + si;
-
-        r->field_3c = e->field_e8;
-        ctx->_dirty |= 0xc0;                        // OR [RSI+0x10],0xc0
-        ctx->_shaderDetail = e->field_e8;           // MOV [RSI+0xc],EAX
-
-        // Slot 9 on every drawable the entry names. 5th argument is a literal 1.
-        for (int32_t j = 0; j < e->drawableIds._size; ++j) {
-            const int32_t id = e->drawableIds._data[j];
-            RendererDrawable& d = r->drawables._data[id];
-            reinterpret_cast<PrepareFn>(VTable(d.object)[9])(
-                d.object, ctx, r, d.value, 1);
-        }
-
-        // Rebind the render target only on a change.
-        if (ctx->_renderBuffer != e->renderBuffer) {
-            ctx->_dirty |= 1;
-            ctx->_renderBuffer = e->renderBuffer;
-        }
-
-        // Viewport then scissor, each reconciled against the buffer's full
-        // extent. The RenderBuffer pointer is RE-READ for each of the two blocks
-        // (0x180104dec and 0x180104e37) rather than reused.
-        {
-            const RtVideo::RenderBufferPrefix* rb =
-                reinterpret_cast<const RtVideo::RenderBufferPrefix*>(e->renderBuffer);
-            const int32_t w = rb->width, h = rb->height;
-            if (!(ctx->_viewport.x == 0 && ctx->_viewport.y == 0 &&
-                  ctx->_viewport.width == w && ctx->_viewport.height == h)) {
-                ctx->_dirty |= 0x200;
-                // MOV QWORD PTR [RSI+0x1d0],0x0 — x and y as ONE 8-byte store.
-                *reinterpret_cast<uint64_t*>(&ctx->_viewport) = 0;
-                ctx->_viewport.width = w;
-                ctx->_viewport.height = h;
-            }
-        }
-        {
-            const RtVideo::RenderBufferPrefix* rb =
-                reinterpret_cast<const RtVideo::RenderBufferPrefix*>(e->renderBuffer);
-            const int32_t w = rb->width, h = rb->height;
-            if (!(ctx->_scissor.x == 0 && ctx->_scissor.y == 0 &&
-                  ctx->_scissor.width == w && ctx->_scissor.height == h)) {
-                ctx->_dirty |= 0x400;
-                *reinterpret_cast<uint64_t*>(&ctx->_scissor) = 0;
-                ctx->_scissor.width = w;
-                ctx->_scissor.height = h;
-            }
-        }
-
-        // Clear — slot 4 of Context::_contextData. The colour 0x1184d6 and the
-        // flag word 6 are IMMEDIATES in the instruction stream (0x180104e8d,
-        // 0x180104e85); the 1.0f depth is XMM6, loaded once at 0x180104d3d from
-        // [0x18016169c], whose four bytes were READ (00 00 80 3f) rather than
-        // assumed (reference_crt_coefficients_must_be_lifted_not_retyped.md).
-        {
-            void* const cd = ctx->_contextData;
-            reinterpret_cast<ClearFn>(VTable(cd)[4])(cd, 6, 0x1184d6u, 1.0f, 0);
-        }
-
-        // Three passes x every drawable. Slot 10.
-        for (int32_t k = 0; k < 3; ++k) {
-            for (int32_t j = 0; j < e->drawableIds._size; ++j) {
-                const int32_t id = e->drawableIds._data[j];
-                RendererDrawable& d = r->drawables._data[id];
-                reinterpret_cast<EmitFn>(VTable(d.object)[10])(
-                    d.object, ctx, r, e->drawGroupIndex, d.value, k, e->field_ec);
-            }
-        }
-    }
+    reinterpret_cast<Graphics::Renderer*>(self)                          // B.3.5 bridge
+        ->Graphics::Renderer::Draw(
+            *reinterpret_cast<Video::Context*>(context),                 // B.3.5 bridge
+            alpha,
+            *reinterpret_cast<const Graphics::Scene*>(scene),            // B.3.5 bridge
+            *reinterpret_cast<const Graphics::Camera*>(camera));         // B.3.5 bridge
 }
 
 // ============================================================================
@@ -1324,6 +1160,205 @@ bool AnimationState::Update(const System::Time& timeRef,
     }
 
     return true;                                   // MOV AL,0x1
+}
+
+// ---------------------------------------------------------------------------
+// ?Draw@Renderer@Graphics@@QEAAXAEAVContext@Video@@MAEBVScene@2@AEBVCamera@2@@Z
+// retail 0x180104bb0 -- ENDGAME B.3.5 block GC. THE WHOLE FRAME. The two passes,
+// the four kinds of virtual call, the field_3c-read-uninitialised-on-frame-one
+// note and the clear colour/flag immediates are in the banner beside the door.//
+// THE POD SPELLING OF THE *ELEMENT* RECORDS IS KEPT, DELIBERATELY. `this` is the
+// real `Graphics::Renderer`; the draw-group / scene-entry / draw-item records it
+// indexes are still spelled `RtGraphics::*` through one bridge local, because
+// those PODs have live users in files outside this block and B4b-1 keeps a POD
+// until its LAST user converts. Camera.h cross-asserts every one of their offsets
+// against the real classes', so the two descriptions cannot drift, and renaming
+// ~200 field accesses in a body this size is a second change, not this one.
+// ---------------------------------------------------------------------------
+void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
+                    const Camera& cameraRef) {
+    RtGraphics::Renderer* const r =
+        reinterpret_cast<RtGraphics::Renderer*>(this);          // B.3.5 bridge
+    RtVideo::Context* const ctx =
+        reinterpret_cast<RtVideo::Context*>(&context);          // B.3.5 bridge
+    const void* const scene  = &sceneRef;
+    // Reset FIRST, then the two scalars, then AddScene.
+    //
+    // BLOCK GC ITEM 6: this was `RT_EXPORT_ONCE("?Reset@Renderer@Graphics@@…")`
+    // reaching our own body through the resolver. `Reset` is a member of the real
+    // `Graphics::Renderer` (block F), so it is a QUALIFIED non-virtual member call
+    // -- retail's own direct CALL to 0x180105110. Same for `AddScene` and
+    // `BeginDrawGroup` below; all three doors stay registered for outside callers.
+    this->Graphics::Renderer::Reset();
+
+    r->frameAlpha    = alpha;                 // MOVSS [RDI+0x40],XMM6
+    r->contextSerial = ctx->_frameIndex;      // MOV EAX,[RSI+8] / MOV [RDI+0x44],EAX
+
+    // field_3c is read here UNINITIALISED on the first frame. See the banner.
+    this->Graphics::Renderer::AddScene(
+        &sceneRef,
+        reinterpret_cast<const Video::RenderBuffer*>(ctx->_defaultRenderBuffer),  // B.3.5 bridge
+        cameraRef, _shaderDetail, 0x40, 0, 0x8007u);
+
+    // ---------------- PASS 1: cull and collect ----------------------------
+    r->currentScene = 0;
+    if (r->scenes._size > 0) {
+        do {
+            RtGraphics::RendererSceneEntry* const e = r->scenes._data + r->currentScene;
+
+            r->field_3c  = e->field_e8;
+            r->field_48  = e->field_f8;
+
+            // Retail passes the entry's ONE camera as BOTH the draw camera and
+            // the cull camera (`MOV R9,R8` at 0x180104c5f); transcribed.
+            const int32_t nextGroup = this->Graphics::Renderer::BeginDrawGroup(
+                reinterpret_cast<const Video::RenderBuffer*>(e->renderBuffer),  // B.3.5 bridge
+                *reinterpret_cast<const Camera*>(&e->camera),                   // B.3.5 bridge
+                *reinterpret_cast<const Camera*>(&e->camera),                   // B.3.5 bridge
+                e->field_ec, e->field_f0);
+
+            // The CURRENT group index is written into the entry, and it is the
+            // value from BEFORE this BeginDrawGroup (0x180104c78 reads
+            // [RDI+0x34], which is only updated at the bottom of the loop).
+            e->drawGroupIndex = r->currentDrawGroup;
+
+            const uint32_t passMask =
+                r->drawGroups._data[r->currentDrawGroup].passMask;
+
+            // The scene's drawable list: head at Scene+0x60, `next` at +0x10,
+            // payload at +0x00. Both the head and every `next` are read as raw
+            // offsets because Graphics::Scene's layout is lane D's, not this
+            // lane's, and this body reads exactly three of its fields.
+            void* node = *reinterpret_cast<void* const*>(
+                static_cast<const uint8_t*>(scene) + 0x60);
+            while (node != nullptr) {
+                void* const obj = *reinterpret_cast<void**>(node);
+                const uint8_t* const o = static_cast<const uint8_t*>(obj);
+                if ((*reinterpret_cast<const uint32_t*>(o + 0x30) & passMask) != 0 &&
+                    *reinterpret_cast<const int32_t*>(o + 0x28) <= r->field_48) {
+                    // Slot 3 = ?AddDrawItems@…@Graphics@@UEBAXAEBVScene@2@AEAVRenderer@2@@Z.
+                    // A VIRTUAL DISPATCH through the object's own vtable, NOT a
+                    // door: lane GFXMESH owns ??_7MeshInstance@ and this call
+                    // reaches whatever is in the live table. Nothing here
+                    // registers, stamps or reads that slot as an identity token.
+                    reinterpret_cast<rtgfxbig::AddDrawItemsFn>(rtgfxbig::VTable(obj)[3])(obj, scene, r);
+                }
+                node = *reinterpret_cast<void**>(static_cast<uint8_t*>(node) + 0x10);
+            }
+
+            if (r->field_48 != 0) {
+                RT_EXPORT_ONCE(rtgfxbig::AddCulledFn,
+                    "?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")(scene, r);
+            }
+
+            for (int32_t k = 0; k < 3; ++k) {
+                Collection::Array<RtGraphics::RendererDrawItem>& list =
+                    r->drawGroups._data[r->currentDrawGroup].items[k];
+                // TWO tests, `> 0` then `> 1` (0x180104cfa, 0x180104cfe). Only
+                // the second can decide anything; the first is retail's and is
+                // kept because a zero-size list with a non-null _data would take
+                // a different path if it were removed.
+                if (list._size > 0 && list._size > 1) {
+                    // ---------------------------------------------------------
+                    // ADDRESS DOOR 1 of 3 — PORTED (BATCH 8b, faithfully):
+                    // RtGraphics_Renderer_DrawItemSort, above, registered at
+                    // the bottom of this file together with its 0x180063b90
+                    // selection-sort callee. ResolveAddr consults the port
+                    // registry first, so this call site needs no change.
+                    // ---------------------------------------------------------
+                    using SortFn = void (*)(void* data, int32_t count, void* scratch);
+                    static SortFn sort = nullptr;
+                    if (!sort)   // cache a hit, retry a miss — rt_port.h's contract
+                        sort = reinterpret_cast<SortFn>(
+                            ResolveAddr(Module::Runtime, 0x180062d60));
+                    // Retail hands it its OWN unused R8 home slot (X+0x18) as
+                    // scratch — a float argument in XMM2 leaves that slot free.
+                    // Four qwords is strictly more than the 16 bytes retail's
+                    // window can hold.
+                    uint64_t scratch[4];
+                    if (sort) { sort(list._data, list._size, scratch); ++rtgfxbig::g_drawSorts; }
+                }
+            }
+
+            ++r->currentScene;
+            r->currentDrawGroup = nextGroup;
+            ++rtgfxbig::g_drawGroups;
+        } while (r->currentScene < r->scenes._size);
+    }
+
+    // ---------------- PASS 2: emit, BACKWARD ------------------------------
+    for (int64_t si = static_cast<int32_t>(r->scenes._size) - 1; si >= 0; --si) {
+        // `_data` is RE-READ at the top of every iteration (MOV RBP,[RDI] at
+        // 0x180104d60) while the byte offset is carried in RBX and decremented.
+        RtGraphics::RendererSceneEntry* const e = r->scenes._data + si;
+
+        r->field_3c = e->field_e8;
+        ctx->_dirty |= 0xc0;                        // OR [RSI+0x10],0xc0
+        ctx->_shaderDetail = e->field_e8;           // MOV [RSI+0xc],EAX
+
+        // Slot 9 on every drawable the entry names. 5th argument is a literal 1.
+        for (int32_t j = 0; j < e->drawableIds._size; ++j) {
+            const int32_t id = e->drawableIds._data[j];
+            RtGraphics::RendererDrawable& d = r->drawables._data[id];
+            reinterpret_cast<rtgfxbig::PrepareFn>(rtgfxbig::VTable(d.object)[9])(
+                d.object, ctx, r, d.value, 1);
+        }
+
+        // Rebind the render target only on a change.
+        if (ctx->_renderBuffer != e->renderBuffer) {
+            ctx->_dirty |= 1;
+            ctx->_renderBuffer = e->renderBuffer;
+        }
+
+        // Viewport then scissor, each reconciled against the buffer's full
+        // extent. The RenderBuffer pointer is RE-READ for each of the two blocks
+        // (0x180104dec and 0x180104e37) rather than reused.
+        {
+            const RtVideo::RenderBufferPrefix* rb =
+                reinterpret_cast<const RtVideo::RenderBufferPrefix*>(e->renderBuffer);
+            const int32_t w = rb->width, h = rb->height;
+            if (!(ctx->_viewport.x == 0 && ctx->_viewport.y == 0 &&
+                  ctx->_viewport.width == w && ctx->_viewport.height == h)) {
+                ctx->_dirty |= 0x200;
+                // MOV QWORD PTR [RSI+0x1d0],0x0 — x and y as ONE 8-byte store.
+                *reinterpret_cast<uint64_t*>(&ctx->_viewport) = 0;
+                ctx->_viewport.width = w;
+                ctx->_viewport.height = h;
+            }
+        }
+        {
+            const RtVideo::RenderBufferPrefix* rb =
+                reinterpret_cast<const RtVideo::RenderBufferPrefix*>(e->renderBuffer);
+            const int32_t w = rb->width, h = rb->height;
+            if (!(ctx->_scissor.x == 0 && ctx->_scissor.y == 0 &&
+                  ctx->_scissor.width == w && ctx->_scissor.height == h)) {
+                ctx->_dirty |= 0x400;
+                *reinterpret_cast<uint64_t*>(&ctx->_scissor) = 0;
+                ctx->_scissor.width = w;
+                ctx->_scissor.height = h;
+            }
+        }
+
+        // Clear — slot 4 of Context::_contextData. The colour 0x1184d6 and the
+        // flag word 6 are IMMEDIATES in the instruction stream (0x180104e8d,
+        // 0x180104e85); the 1.0f depth is XMM6, loaded once at 0x180104d3d from
+        // [0x18016169c], whose four bytes were READ (00 00 80 3f) rather than
+        // assumed (reference_crt_coefficients_must_be_lifted_not_retyped.md).
+        {
+            void* const cd = ctx->_contextData;
+            reinterpret_cast<rtgfxbig::ClearFn>(rtgfxbig::VTable(cd)[4])(cd, 6, 0x1184d6u, 1.0f, 0);
+        }
+
+        // Three passes x every drawable. Slot 10.
+        for (int32_t k = 0; k < 3; ++k) {
+            for (int32_t j = 0; j < e->drawableIds._size; ++j) {
+                const int32_t id = e->drawableIds._data[j];
+                RtGraphics::RendererDrawable& d = r->drawables._data[id];
+                reinterpret_cast<rtgfxbig::EmitFn>(rtgfxbig::VTable(d.object)[10])(
+                    d.object, ctx, r, e->drawGroupIndex, d.value, k, e->field_ec);
+            }
+        }
+    }
 }
 
 }  // namespace Graphics

@@ -267,9 +267,31 @@ static_assert(offsetof(AnimationState, nodes)         == 0x38, "AnimationState::
 // be an inference about which one the interpolator samples, and no body this
 // lane read establishes that (reference_a_writer_beats_readers_agreeing_on_a_
 // sign.md: a single writer does not name a field's meaning either).
+// *** THIS IS NOW THE TREE'S ONE AND ONLY DEFINITION. *** ENDGAME B.3.5 block GC
+// collapsed a LATENT ODR DEFECT: `Mesh.h` carried a SECOND
+// `RtGraphics::InterpolatedTransform`, same 0x38 size and same offsets but spelled
+// `Transform _state[2]`, with neither guarding against the other. The two
+// coexisted only because no translation unit had ever included both headers;
+// `GraphicsMesh.h`'s banner records block G hitting the redefinition and routing
+// around it rather than editing two other blocks' files. Block GC hit it for real
+// — `animationstate_transforms.cpp` needs `Mesh.h` for `Graphics::MeshInstance`
+// AND this header for `Graphics::AnimationState` — so `Mesh.h` now INCLUDES this
+// header instead of redeclaring the type.
+//
+// THE FIELD NAMES ARE THESE ONES AND THE SEMANTICS ARE Mesh.h's, which is the
+// stronger read of the two. `?Lerp@?$InterpolatedState@VTransform@Math@@@Graphics@@`
+// (0x18001aff0, eleven instructions) calls `Math::Transform::Lerp` with `this+0x1c`
+// as the RECEIVER and `this+0x00` as the argument, and `Transform::Lerp`'s
+// SUBSS/MULSS/ADDSS order (0x18001d6d8..0x18001d6fa) makes the receiver the FROM
+// end. So the interpolation runs FROM +0x1c TO +0x00: **+0x00 is CURRENT and +0x1c
+// is PREVIOUS**, the ordinary render-interpolation arrangement, and it agrees with
+// `GetNodeToWorld` reading the first one. The POSITIONAL names are kept because
+// they are the live spelling in `wave27_lane_gfxbig.cpp` and `mesh.cpp` (nothing
+// ever used `_state[...]` as a member access — only comments named it), and the
+// meaning lives in the comments, where the evidence travels with it.
 struct InterpolatedTransform {
-    float first[7];    // +0x00  Math::Transform — the SOURCE of the dt==0 copy
-    float second[7];   // +0x1c  Math::Transform — the DESTINATION
+    float first[7];    // +0x00  Math::Transform — CURRENT (the dt==0 copy's SOURCE)
+    float second[7];   // +0x1c  Math::Transform — PREVIOUS (its DESTINATION)
 };
 static_assert(sizeof(InterpolatedTransform) == 0x38,
               "InterpolatedState<Math::Transform> is two 0x1c Transforms");
