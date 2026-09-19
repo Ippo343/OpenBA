@@ -39,6 +39,10 @@
 //  PickingComponent is re-owned to the master entity and its mesh is registered, so a
 //  click anywhere on the span selects the bridge — see SeatSegmentPickOwner below.)
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Geometry.h"
 #include "BridgeTool.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -180,9 +184,8 @@ void ApplyYaw(void* model, float yawDeg, const float offset[3]) {
     uintptr_t m = reinterpret_cast<uintptr_t>(model);
     std::memcpy(reinterpret_cast<void*>(m + 0x148), &xform, 0x1c);
     *reinterpret_cast<float*>(m + 0x168) = yawDeg;
-    if (fn_Geometry_SetTransform)
-        fn_Geometry_SetTransform(reinterpret_cast<void*>(m + 0x28),
-                                 reinterpret_cast<void*>(m + 0x148));
+    reinterpret_cast<Graphics::Geometry*>(m + 0x28)
+        ->SetTransform(*reinterpret_cast<const Math::Transform*>(m + 0x148));   // B.3.5 bridge
 }
 
 // ---- picking ------------------------------------------------------------------

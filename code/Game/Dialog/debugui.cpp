@@ -11,6 +11,10 @@
 //
 // Slot4 (setup), Slot7, Slot8, and Slot9 are cleanly reimplemented here.
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Scene.h"
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -239,7 +243,9 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
 
                 // Add to graphics scene
                 void* graphicsScene = *(void**)(world + 0x60);
-                fn_Graphics_Scene_AddGlobalObject(graphicsScene, geometryArray[i]);
+                reinterpret_cast<Graphics::Scene*>(graphicsScene)
+                    ->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(
+                        geometryArray[i]));   // B.3.5 bridge
 
                 // Reset state to 0 (showing)
                 *(int*)((uintptr_t)drawMgr + 0x10) = 0;

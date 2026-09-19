@@ -57,6 +57,10 @@
 // Faithful offset-by-offset port of 0x14004cd00 .. 0x14004e4b0 and 0x140050030 /
 // 0x1400501a0 (nomad -> citizen conversion).
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
@@ -302,9 +306,10 @@ extern "C" void Nomad_Init(void* nomadV, void* ownerIBP, const float* spawnPos, 
     if (s_SetYaw) s_SetYaw(model, reinterpret_cast<void*>(nomad + 0x30), yaw);
     if (s_SetVariant) s_SetVariant(reinterpret_cast<int64_t*>(model),
                                    static_cast<uint16_t>(*reinterpret_cast<uint32_t*>(nomad + 0x50)), 0);
-    if (ndesc && fn_Graphics_MeshInstance_SetMaterialInstance) {
+    if (ndesc) {
         void* mat = *reinterpret_cast<void**>(ndesc + ((*reinterpret_cast<uint32_t*>(nomad + 0x50) == 0) ? 0x28 : 0x30));
-        fn_Graphics_MeshInstance_SetMaterialInstance(reinterpret_cast<void*>(model + 0x28), 0, mat);
+        reinterpret_cast<Graphics::MeshInstance*>(model + 0x28)
+            ->SetMaterialInstance(0, Graphics::ExternalPtrHandle{mat});   // B.3.5 bridge
     }
 }
 

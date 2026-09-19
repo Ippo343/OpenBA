@@ -64,6 +64,11 @@
 //     mesh table loaded in SA is reported by BANISHED_OUTLINE_TRACE's
 //     "PREBUILT-branch ... cellMesh=" line.)
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -492,7 +497,8 @@ void Impl_c4a0(int64_t self) {
 
     // If we already have a scene object, remove it and clear the "in-scene" flag.
     if ((int)*reinterpret_cast<uint32_t*>(self + 0x120) >= 0) {
-        if (fn_SceneRemoveObject) fn_SceneRemoveObject(scene, *reinterpret_cast<uint32_t*>(self + 0x120));
+        reinterpret_cast<Graphics::Scene*>(scene)
+            ->RemoveObject(*reinterpret_cast<uint32_t*>(self + 0x120));   // B.3.5 bridge
         uint32_t f0 = *reinterpret_cast<uint32_t*>(self + 0x20);
         uint32_t f1 = f0 & 0xfffffffb;
         *reinterpret_cast<uint32_t*>(self + 0x20) = f1;
@@ -556,18 +562,18 @@ void Impl_c4a0(int64_t self) {
         if (r && *reinterpret_cast<int64_t*>(r) != 0 &&
             desc && *reinterpret_cast<int64_t*>(reinterpret_cast<int64_t>(desc) + 0x30) != 0) {
             Impl_b930(self);
-            if (fn_EdgeMeshInstance_SetMesh)
-                fn_EdgeMeshInstance_SetMesh(reinterpret_cast<void*>(self + 0x28),
-                                            *reinterpret_cast<void**>(self + 0xf8), nullptr);
-            if (fn_Geometry_SetTransform)
-                fn_Geometry_SetTransform(reinterpret_cast<void*>(self + 0x28),
-                                         reinterpret_cast<void*>(self + 0x100));
+            reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)
+                ->SetMesh(Graphics::ExternalPtrHandle{*reinterpret_cast<void**>(self + 0xf8)},
+                          nullptr);   // B.3.5 bridge
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)
+                ->SetTransform(*reinterpret_cast<const Math::Transform*>(self + 0x100));   // B.3.5 bridge
             uint8_t time[8];
             if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
             void* inst = reinterpret_cast<void*>(self + 0x28);
             reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
-            if (fn_SceneAddObject)
-                *reinterpret_cast<uint32_t*>(self + 0x120) = fn_SceneAddObject(scene, inst);
+            *reinterpret_cast<uint32_t*>(self + 0x120) =
+                reinterpret_cast<Graphics::Scene*>(scene)
+                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
             return;
         }
     }
@@ -623,9 +629,9 @@ add_prebuilt:
         if (srcNodes == nullptr) {
             srcInst = nullptr;
         }
-        if (fn_EdgeMeshInstance_SetMesh)
-            fn_EdgeMeshInstance_SetMesh(reinterpret_cast<void*>(self + 0x28), cellMesh,
-                                        srcInst);
+        reinterpret_cast<Graphics::EdgeMeshInstance*>(self + 0x28)
+            ->SetMesh(Graphics::ExternalPtrHandle{cellMesh},
+                      reinterpret_cast<Graphics::MeshInstance*>(srcInst));   // B.3.5 bridge
 
         // The source instance is not only what the outline FOLLOWS, it is what POSITIONS
         // it: retail's PREBUILT branch sets no transform of its own because
@@ -638,15 +644,16 @@ add_prebuilt:
         // Place it from the model's own world Transform (ModelComponent+0x148, the
         // 0x20-byte Math::Transform that BridgeTool::CalcPath writes per segment). Same
         // call the BUILD branch above makes with the HighlightComponent's +0x100.
-        if (srcInst == nullptr && fn_Geometry_SetTransform) {
-            fn_Geometry_SetTransform(reinterpret_cast<void*>(self + 0x28),
-                                     reinterpret_cast<void*>(charIBP + 0x148));
+        if (srcInst == nullptr) {
+            reinterpret_cast<Graphics::Geometry*>(self + 0x28)
+                ->SetTransform(*reinterpret_cast<const Math::Transform*>(charIBP + 0x148));   // B.3.5 bridge
         }
         uint8_t time[8];
         if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(time, 0.0f);
         void* inst = reinterpret_cast<void*>(self + 0x28);
         reinterpret_cast<void(*)(void*, void*)>((*reinterpret_cast<void***>(inst))[1])(inst, time);
-        uint32_t id = fn_SceneAddObject ? fn_SceneAddObject(scene, inst) : 0xffffffff;
+        uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
+            ->AddObject(reinterpret_cast<Graphics::Geometry*>(inst));   // B.3.5 bridge
         uint32_t f0 = *reinterpret_cast<uint32_t*>(self + 0x20);
         *reinterpret_cast<uint32_t*>(self + 0x120) = id;
         uint32_t f1 = f0 | 4;
