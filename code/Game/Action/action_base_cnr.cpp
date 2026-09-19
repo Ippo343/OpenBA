@@ -14,6 +14,10 @@
 // turns the call into a no-op).
 //
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "graphics/Geometry.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
@@ -440,9 +444,8 @@ uint64_t ActCNR_SetupModelAtCell_126540(int64_t self, int cellIndex) {
     // 7 dwords -> modelIBP +0x148..+0x160
     *reinterpret_cast<Math::Transform*>(modelIBP + 0x148) = xform;   // B.3.1 bridge
     *reinterpret_cast<float*>(modelIBP + 0x168) = yaw;
-    if (fn_Geometry_SetTransform)
-        fn_Geometry_SetTransform(reinterpret_cast<void*>(modelIBP + 0x28),
-                                 reinterpret_cast<void*>(modelIBP + 0x148));
+    reinterpret_cast<Graphics::Geometry*>(modelIBP + 0x28)
+        ->SetTransform(*reinterpret_cast<const Math::Transform*>(modelIBP + 0x148));   // B.3.5 bridge
     return 1;
 }
 

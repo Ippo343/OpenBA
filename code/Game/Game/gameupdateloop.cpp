@@ -17,6 +17,13 @@
 // HEAVILY INSTRUMENTED with printf() for tracing a hang during first Update tick
 // after loading a tutorial scenario.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::Scene and Video::Context
+// are real classes. FIRST in the block on purpose — "resolve.h" (and several of
+// the standalone headers below) pull <windows.h>, whose <wingdi.h> declares a
+// global `Rectangle` FUNCTION that hides `Volume::Rectangle`'s class name inside
+// Volume.h's own static_asserts (Scene.h -> Geometry.h -> Volume.h).
+#include "graphics/Scene.h"
+#include "video/Context.h"
 #include "sampler.h"
 #include "options.h"
 #include "GameUpdateLoop.h"
@@ -200,9 +207,9 @@ static fn_UI_PausesGame_t fn_UI_PausesGame = nullptr;
 // Graphics::Scene::Clean(this) — moved to engine_funcs.{h,cpp}; reuse the
 // project-wide extern so MenuDLT can also call it.
 
-// Graphics::Scene::RemoveGlobalObject(this, Geometry*) (Runtime)
-typedef void (*fn_Graphics_Scene_RemoveGlobalObject_t)(void* scene, void* geometry);
-static fn_Graphics_Scene_RemoveGlobalObject_t fn_Graphics_Scene_RemoveGlobalObject = nullptr;
+// ENDGAME B.3.5: the `?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z`
+// cache (typedef + static + its resolver) is GONE — all five callers in this file
+// now call `Graphics::Scene::RemoveGlobalObject` directly.
 
 // Graphics::Renderer::Draw(this, Context*, float alpha, Scene*, Camera*)
 // (NB: a global with the same name is declared extern in engine_funcs.h. The two
@@ -220,13 +227,10 @@ static fn_Graphics_Renderer_Dtor_t fn_Graphics_Renderer_Dtor = nullptr;
 typedef void (*fn_SaveLoad_Draw_t)(void* self, void* ctx, void* material);
 static fn_SaveLoad_Draw_t fn_SaveLoad_Draw = nullptr;
 
-// Video::Context::SetTime(this, float)
-typedef void (*fn_Video_Context_SetTime_t)(void* self, float time);
-static fn_Video_Context_SetTime_t fn_Video_Context_SetTime = nullptr;
-
-// Video::Context::SetCamera(this, Matrix*, Matrix*)
-typedef void (*fn_Video_Context_SetCamera_t)(void* self, void* viewMatrix, void* projMatrix);
-static fn_Video_Context_SetCamera_t fn_Video_Context_SetCamera = nullptr;
+// ENDGAME B.3.5: the `?SetTime@Context@Video@@QEAAXM@Z` and
+// `?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z` caches (typedefs,
+// statics, resolvers and CHECK_FN lines) are GONE — both are members of block
+// D1's real `Video::Context` now.
 
 // Math::Transform3::AsMatrix(this) -> Matrix (non-trivial return: 64 bytes)
 // MSVC x64 member function ABI: RCX=this, RDX=hidden retval ptr, returns RAX=retval ptr
@@ -613,8 +617,7 @@ static void EnsureInit() {
     fn_UI_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
         ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
     // fn_Graphics_Scene_Clean is now resolved in engine_funcs.cpp (extern).
-    fn_Graphics_Scene_RemoveGlobalObject = reinterpret_cast<fn_Graphics_Scene_RemoveGlobalObject_t>(
-        ResolveExport("?RemoveGlobalObject@Scene@Graphics@@QEAAXPEAVGeometry@2@@Z"));
+    // B.3.5: the Scene::RemoveGlobalObject resolve went with its cache.
     // [FIX-M5] The mangled name here was wrong (AEAVScene/Camera@Math); the correct
     // signature is const-ref Scene + Camera@Graphics (AEBVScene@2@ AEBVCamera@2@) —
     // the same export engine_funcs resolves as fn_Graphics_Renderer_Draw. The wrong
@@ -632,10 +635,7 @@ static void EnsureInit() {
         ResolveExport("?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"));
     fn_Audio_Scene_StopAll = reinterpret_cast<fn_Audio_Scene_StopAll_t>(
         ResolveExport("?StopAll@Scene@Audio@@QEAAXXZ"));
-    fn_Video_Context_SetTime = reinterpret_cast<fn_Video_Context_SetTime_t>(
-        ResolveExport("?SetTime@Context@Video@@QEAAXM@Z"));
-    fn_Video_Context_SetCamera = reinterpret_cast<fn_Video_Context_SetCamera_t>(
-        ResolveExport("?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z"));
+    // B.3.5: the Context::SetTime / Context::SetCamera resolves went with their caches.
     // fn_Vector3_Normalize — removed 2026-07-31, see the note at its former declaration.
     // fn_MainLoop_SetNextLoop — resolved by EngineFuncsInit()
     // fn_ImageBuffer_CopyToTexture — resolved by EngineFuncsInit()
@@ -699,8 +699,6 @@ static void EnsureInit() {
     CHECK_FN(fn_Graphics_Scene_Clean);
     CHECK_FN(fn_GUL_AudioSceneUpdate);
     CHECK_FN(fn_Audio_Scene_StopAll);
-    CHECK_FN(fn_Video_Context_SetTime);
-    CHECK_FN(fn_Video_Context_SetCamera);
     CHECK_FN(fn_MainLoop_SetNextLoop);
     CHECK_FN(fn_Time_Ctor_Seconds);
     CHECK_FN(fn_App_IsPaused);
@@ -1597,11 +1595,9 @@ post_simulation:
 
     // Step 15: Graphics::Scene::Clean
     TRACE("[GameUpdateLoop::Update] calling Graphics::Scene::Clean...\n");
-    if (fn_Graphics_Scene_Clean) {
-        fn_Graphics_Scene_Clean(self->m_graphicsScene);
-    } else {
-        TRACE("[GameUpdateLoop::Update] SKIP Graphics::Scene::Clean (NULL)\n");
-    }
+    // B.3.5 bridge — the `if (fn_Graphics_Scene_Clean)` readiness guard (and its
+    // SKIP trace) went with the door call.
+    reinterpret_cast<Graphics::Scene*>(self->m_graphicsScene)->Clean();   // B.3.5 bridge
     TRACE("[GameUpdateLoop::Update] Graphics::Scene::Clean done\n");
 
     // Step 16: Image capture check
@@ -1720,7 +1716,8 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 
         float gameSeconds = reinterpret_cast<const System::Time*>((void*)&self->m_gameTime)->AsSeconds();   // B.3.4b bridge
         float frameSeconds = reinterpret_cast<const System::Time*>((void*)&engineFrameTime)->AsSeconds();   // B.3.4b bridge
-        fn_Video_Context_SetTime(videoCtx, gameSeconds + frameSeconds * alpha);
+        reinterpret_cast<Video::Context*>(videoCtx)->SetTime(
+            gameSeconds + frameSeconds * alpha);   // B.3.5 bridge
     }
     TRACE("[GameUpdateLoop::Draw] video context time set\n");
 
@@ -1739,13 +1736,14 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             void* gameWorld = *g_pGameWorldSingleton;
             void* graphicsScene = *(void**)((uintptr_t)gameWorld + 0x60);
 
-            fn_Graphics_Scene_RemoveGlobalObject(graphicsScene, self->m_sunLight);
-            fn_Graphics_Scene_RemoveGlobalObject(graphicsScene, self->m_worldGeometry);
+            Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
+            gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(self->m_sunLight));       // B.3.5 bridge
+            gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(self->m_worldGeometry));  // B.3.5 bridge
 
             fn_ImageCapture_DrawCheck(imageCapture, videoCtx, self->m_worldGeometry, self->m_sunLight);
 
-            fn_Graphics_Scene_AddGlobalObject(graphicsScene, self->m_sunLight);
-            fn_Graphics_Scene_AddGlobalObject(graphicsScene, self->m_worldGeometry);
+            gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(self->m_sunLight));       // B.3.5 bridge
+            gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(self->m_worldGeometry));  // B.3.5 bridge
         }
     }
     TRACE("[GameUpdateLoop::Draw] image capture terrain done\n");
@@ -1951,7 +1949,8 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
             ((uint32_t*)projMatrix)[i] = *(uint32_t*)(pc + 0xC8 + i * 4);
         }
 
-        fn_Video_Context_SetCamera(videoCtx, &viewMatrix, projMatrix);
+        reinterpret_cast<Video::Context*>(videoCtx)->SetCamera(
+            viewMatrix, *reinterpret_cast<const Math::Matrix*>(projMatrix));   // B.3.5 bridge
     }
     TRACE("[GameUpdateLoop::Draw] camera matrices set\n");
 
@@ -2487,9 +2486,10 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     {
         void* gameWorld = *g_pGameWorldSingleton;
         void* graphicsScene = *(void**)((uintptr_t)gameWorld + 0x60);
-        fn_Graphics_Scene_RemoveGlobalObject(graphicsScene, self->m_worldGeometry);
-        fn_Graphics_Scene_RemoveGlobalObject(graphicsScene, self->m_sunLight);
-        fn_Graphics_Scene_RemoveGlobalObject(graphicsScene, self->m_skyMesh);
+        Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(graphicsScene);   // B.3.5 bridge
+        gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(self->m_worldGeometry));  // B.3.5 bridge
+        gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(self->m_sunLight));       // B.3.5 bridge
+        gs->RemoveGlobalObject(reinterpret_cast<Graphics::Geometry*>(self->m_skyMesh));        // B.3.5 bridge
     }
 
     // Delete scenario instance

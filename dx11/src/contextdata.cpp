@@ -144,6 +144,10 @@
 #include "options.h"
 #include "dx11_backend_access.h"
 #include "system/Error.h"   // ENDGAME B.3.4b System callers: System::Error (-Iruntime/types)
+// ENDGAME B.3.5 block VC: `Video::Viewport` (replaces this file's duplicate view)
+// and `Video::ContextData` (RULE B5-3's qualified base-destructor call).
+#include "video/Context.h"
+#include "video/CompanionData.h"
 
 #include <windows.h>
 #include <d3d11.h>
@@ -178,6 +182,12 @@ namespace {
 // resolve to nullptr.
 // ============================================================
 struct Imports {
+    // ENDGAME B.3.5 block VC: NO LONGER CALLED — slot 0 makes the qualified
+    // `~ContextData()` call directly (RULE B5-3). The ROW AND THIS FIELD STAY, on
+    // b35-D2's ruling for the same five dtors: the row is what makes `g_imOk` /
+    // `GetImports()` null when the Runtime side is absent, and that
+    // all-or-nothing test is the seam's only fallback guarantee. Dropping it
+    // would make nineteen slots claim a Runtime side they had not checked for.
     void  (*ContextDataBaseDtor)(void*);              // ??1ContextData@Video@@UEAA@XZ           0x180013470
 
     void  (*DeviceLock)(void*);                       // ?Lock@Device@Video@@QEAAXXZ             0x180013408
@@ -422,10 +432,18 @@ inline ID3D11DeviceContext* Ctx3D(ContextData* self) {
 // Video::Viewport — 16 bytes, four int32. Shape proven by Runtime's
 // ?GetViewport@ (0x18001a0c0) copying Context+0x1d0..0x1dc into it, and used
 // here to call ?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z.
-struct Viewport {
-    int32_t x, y, w, h;
-};
-static_assert(sizeof(Viewport) == 16, "Video::Viewport is four int32");
+//
+// ENDGAME B.3.5 block VC, RULE B5-2's duplicate-view collapse: the local
+// definition is GONE and this is an ALIAS of the REAL `Video::Viewport`
+// (runtime/types/video/Context.h), which b35-D1 made a real class and whose own
+// banner names this line as one of the two duplicates owed to the closing pass.
+// Field-identical, so the collapse renames two fields (`w`/`h` ->
+// `width`/`height`) and nothing else, and the real header's four `offsetof`
+// asserts plus its `sizeof == 0x10` replace the one assert that was here.
+//
+// The 84-slot seam and the concrete `*Data` classes remain the DECLARED LEAVE of
+// RULE B5-8; this commit changes no slot.
+using Viewport = ::Video::Viewport;
 
 // IID_ID3D11Texture2D, transcribed from the 16 bytes at VideoDX11 0x1800186d8
 // that slot 2 passes to IDXGISwapChain::GetBuffer:
@@ -463,9 +481,22 @@ inline Fn Orig(int slot) {
 void* ContextData_Dtor(ContextData* self, unsigned flags) {
     self->vptr = Dx11VtableAddress(Vt::ContextData);
 
-    static Dx11BaseDtor_t base = reinterpret_cast<Dx11BaseDtor_t>(
-        Dx11ResolveRuntimeImport("??1ContextData@Video@@UEAA@XZ", 0x180013470));
-    if (base) base(self);
+    // ENDGAME B.3.5 block VC, RULE B5-3 — the derived-destructor idiom written as
+    // C++. This was a `Dx11ResolveRuntimeImport("??1ContextData@Video@@UEAA@XZ",
+    // 0x180013470)` plus an indirect call, i.e. spelling 9 of the nine caller
+    // bindings (RULE B5-14) and one of dx11's 76 mangled-name literals.
+    // `Video::ContextData` is a real abstract class (block A) with a real member
+    // destructor, so this is a QUALIFIED NON-VIRTUAL call on the base subobject,
+    // reached through a bridge cast because `VideoDX11::ContextData` is still the
+    // declared leave of RULE B5-8 and does not inherit in C++.
+    //
+    // It must NOT be `DeletingDtor(0)`: that re-enters slot 0, i.e. this very
+    // function. The base destructor is in no slot, which is exactly why the
+    // qualification is safe and the virtual call is not.
+    //
+    // The pattern is `dx11/src/vertexlayoutdata.cpp`'s, which block A landed.
+    reinterpret_cast< ::Video::ContextData*>(self)
+        -> ::Video::ContextData::~ContextData();                 // B.3.5 bridge
 
     if (flags & 1) Dx11MemFree(self);
     return self;
@@ -511,8 +542,8 @@ bool ContextData_BeginCommands(ContextData* self) {
     Viewport vp;
     vp.x = 0;
     vp.y = 0;
-    vp.w = Field<int32_t>(device, Dev::kWidth);
-    vp.h = Field<int32_t>(device, Dev::kHeight);
+    vp.width  = Field<int32_t>(device, Dev::kWidth);
+    vp.height = Field<int32_t>(device, Dev::kHeight);
     im->CtxSetViewport(ctx, &vp);
 
     self->d3dContext = OwnerDeviceData(self)->d3dContext;

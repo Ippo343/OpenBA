@@ -82,6 +82,11 @@
 // Gated behind BANISHED_WATER_CONTOUR (default OFF). When OFF the flat-water /
 // no-detail default is unchanged.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Video::{Vertex,Index}Buffer are
+// real classes. Ahead of "resolve.h" — resolve.h pulls <windows.h>, whose
+// <wingdi.h> declares a global `Rectangle` FUNCTION that hides
+// `Volume::Rectangle`'s class name inside Volume.h's own static_asserts.
+#include "video/Buffers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -111,32 +116,13 @@ constexpr float kVDenom     = 32.0f;     // DAT_1401721d0 (streamwise-V denomina
 constexpr float kMinArcGate = 0.001f;    // DAT_1401720b8 (avg-edge degenerate gate)
 
 // ============================================================
-// VertexBuffer / IndexBuffer::Create (Runtime DX wiring) — same lazy resolve
-// pattern as serialize_heightmap_mesh.cpp.
+// ENDGAME B.3.5 Video/Graphics caller batch — the two buffer doors are gone.
+// `?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z` (exe dispatch slot 0x140152668)
+// and `?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z` (slot 0x140152660) are real
+// members of block D's classes, so the two caches, their typedefs, the
+// `loadSlot` lambda, the latch and `ResolveRuntimePtrs` went with their last
+// callers.
 // ============================================================
-typedef bool (*VertexBufferCreate_t)(void* self, int sizeBytes, bool dynamic, void* initialData);
-typedef bool (*IndexBufferCreate_t )(void* self, int sizeBytes, bool dynamic, void* initialData);
-
-VertexBufferCreate_t s_VertexBufferCreate = nullptr;
-IndexBufferCreate_t  s_IndexBufferCreate  = nullptr;
-bool s_rtResolved = false;
-
-void ResolveRuntimePtrs() {
-    if (s_rtResolved) return;
-    auto loadSlot = [](uintptr_t slotAddr) -> void* {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, slotAddr));
-        return slot ? *slot : nullptr;
-    };
-    s_VertexBufferCreate = reinterpret_cast<VertexBufferCreate_t>(loadSlot(0x140152668));
-    s_IndexBufferCreate  = reinterpret_cast<IndexBufferCreate_t >(loadSlot(0x140152660));
-    if (!s_VertexBufferCreate)
-        s_VertexBufferCreate = reinterpret_cast<VertexBufferCreate_t>(
-            ResolveExport("?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z"));
-    if (!s_IndexBufferCreate)
-        s_IndexBufferCreate = reinterpret_cast<IndexBufferCreate_t>(
-            ResolveExport("?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z"));
-    s_rtResolved = true;
-}
 
 // ============================================================
 // Growable-vector idiom (the engine's {data,count,cap} 16-byte header, with the
@@ -802,8 +788,6 @@ extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf) {
         fflush(stderr);
         return;
     }
-    ResolveRuntimePtrs();
-
     uint8_t* geom = (uint8_t*)self;
     uint8_t* h    = (uint8_t*)hf;
 
@@ -813,10 +797,11 @@ extern "C" void WorldGen_BuildContourWaterMesh(void* self, void* hf) {
     // Finalize the GPU buffers (b260 tail). IndexBuffer first, then VertexBuffer.
     Vec* vtxAcc = (Vec*)(geom + 0x1a0);
     Vec* idxAcc = (Vec*)(geom + 0x1b0);
-    if (s_IndexBufferCreate)
-        s_IndexBufferCreate(geom + 0x180, idxAcc->count * 2, false, idxAcc->data);
-    if (s_VertexBufferCreate)
-        s_VertexBufferCreate(geom + 0x160, vtxAcc->count << 4, false, vtxAcc->data);
+    // B.3.5 bridges — the two `if (door)` readiness guards are gone with the doors.
+    reinterpret_cast<Video::IndexBuffer*>(geom + 0x180)
+        ->Create(idxAcc->count * 2, false, idxAcc->data);   // B.3.5 bridge
+    reinterpret_cast<Video::VertexBuffer*>(geom + 0x160)
+        ->Create(vtxAcc->count << 4, false, vtxAcc->data);  // B.3.5 bridge
 
     fprintf(stderr, "[water_contour] built: bodies(+0x1c8)=%d featRanges(+0x1d8)=%d "
             "verts(+0x1a8)=%d idx(+0x1b8)=%d VB=%p IB=%p\n",

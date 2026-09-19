@@ -15,6 +15,11 @@
 // instantiates FrustumOutlineElement; it is registered for completeness, not
 // driven. To fully activate, reconstruct the 0x14015c2a0 subclass vtable.
 
+// graphics/Camera.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Camera.h"
+#include <new>
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -95,10 +100,8 @@ static void Frustum_ComputeLayout(void* self, int x, int y, int w, int h) {
 // each). Registered at 0x14006c5b0 (see frustumoutlinedescription.cpp) so
 // fn_MapUI_ProjectCornersToGround (minimap click-to-move-camera) resolves too.
 // ===========================================================================
-typedef void* (*Frustum_fnGetFrustum_t)(void* camera, void* retFrustum);
 typedef void  (*Frustum_fnGetCorners_t)(void* frustum, void* out8Vec3);
 
-static Frustum_fnGetFrustum_t s_getFrustum = nullptr;
 static Frustum_fnGetCorners_t s_getCorners = nullptr;
 static bool s_frustumMathReady = false;
 
@@ -109,8 +112,6 @@ static bool s_frustumMathReady = false;
 static void EnsureFrustumMathFns() {
     if (s_frustumMathReady) return;
     s_frustumMathReady = true;
-    s_getFrustum = reinterpret_cast<Frustum_fnGetFrustum_t>(
-        ResolveExport("?GetFrustum@Camera@Graphics@@QEBA?AVFrustum@Volume@@XZ"));
     s_getCorners = reinterpret_cast<Frustum_fnGetCorners_t>(
         ResolveExport("?GetCorners@Frustum@Volume@@QEBAXQEAVVector3@Math@@@Z"));
 }
@@ -118,7 +119,7 @@ static void EnsureFrustumMathFns() {
 extern "C" void FrustumOutline_ProjectCorners(float* out) {
     if (!out) return;
     EnsureFrustumMathFns();
-    if (!s_getFrustum || !s_getCorners) return;
+    if (!s_getCorners) return;
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gw) return;
     uint8_t* cam = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(gw) + 0xe0);
@@ -133,8 +134,11 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
                               *reinterpret_cast<float*>(cam + 0xc4));
 
     // 8 view-frustum corners (camera object at cam+0x34), in camera space.
-    uint8_t frustum[0x80];
-    void* fr = s_getFrustum(cam + 0x34, frustum);
+    // Camera::GetFrustum is a hidden-retslot door in retail; the door body moves
+    // to the call site as exactly ONE construction into the same caller storage.
+    alignas(::Frustum) uint8_t frustum[0x80];
+    void* fr = ::new (static_cast<void*>(frustum)) ::Frustum(
+        reinterpret_cast<const Graphics::Camera*>(cam + 0x34)->GetFrustum());   // B.3.5 bridge
     Math::Vector3 corners[8];
     s_getCorners(fr, corners);
 

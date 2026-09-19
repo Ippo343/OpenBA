@@ -92,6 +92,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
+// ENDGAME B.3.5 block VC — the three headers the converted call sites need:
+// `Video::{Index,Vertex}Buffer` and their `*Data` companions, `Video::ImageBuffer`
+// and `Video::{Device,ImageBuffer,ConstantBuffer}Data`'s slot names.
+#include "../../types/video/Buffers.h"
+#include "../../types/video/CompanionData.h"
+#include "../../types/video/ImageBuffer.h"
 
 // ============================================================================
 // ENDGAME B.3.5 block D1 — WHAT DID AND DID NOT CHANGE HERE
@@ -127,8 +133,18 @@
 // The two `operator new`s this file ports — `??2ImageBuffer@Video@@` and
 // `??2RenderBuffer@Video@@` — are `Video::ImageBuffer`'s and
 // `Video::RenderBuffer`'s members (proved by their mangled names, not by a
-// prefix), i.e. block C's and block D2's classes. They stay UNTOUCHED doors
-// here; moving them onto those classes is owed to those blocks.
+// prefix), i.e. block C's and block D2's classes. ENDGAME B.3.5 block VC (the
+// fragment pass) MOVED BOTH BODIES onto those members; the two doors keep their
+// names and both rows each.
+//
+// BLOCK VC ALSO CONVERTED EVERY BINDING IN THIS FILE. Nine `RT_EXPORT_ONCE` name
+// doors (spelling 3) and five hand-inlined `(*(void***)p)[N]` dispatches
+// (spelling 5) are gone: the `*Data` receivers are block A's real abstract
+// classes with named slots, and `Video::{Vertex,Index,Render}Buffer::
+// PlatformConstruct`, `RenderBuffer::Create` and the two `operator new`s are
+// members. `??0Context@Video@@`, the four sub-object zero-fills and
+// `??0ImageBuffer@Video@@` remain DOORS for B4b-2's reason, and the last is now
+// CALLED as a door by direct near call instead of through a resolver.
 // ============================================================================
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -142,6 +158,14 @@ extern "C" void RtVideo_Context_Dtor(Video::Context* self);    // context_lifecy
 // direct call; the registration in context_lifecycle.cpp is untouched, so an
 // outside caller that still asks by name or by address gets the same body.
 extern "C" void Video_Context_OperatorDelete(void* p);         // context_lifecycle.cpp
+// `??0ImageBuffer@Video@@QEAA@XZ`'s ported body — a ctor DOOR, not a constructor
+// (B4b-2: it runs on raw `operator new` bytes and stamps the MINTED vtable).
+// ENDGAME B.3.5 block VC: this used to be an
+// `RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")` indirect call
+// (spelling 3) on a symbol whose only implementation in the process is
+// buffers.cpp's. Now a direct call; the registration there is untouched, so an
+// outside caller that still asks by name or address gets the same body.
+void Video_ImageBuffer_Ctor(ImageBuffer* self);                // buffers.cpp
 
 namespace {
 
@@ -152,12 +176,12 @@ void* MemAlloc(uint64_t bytes, int align) {
     return fn ? fn(bytes, align) : nullptr;
 }
 
-using VoidThisFn   = void  (*)(void*);
-using NewFn        = void* (*)(uint64_t);
-using RbCreateFn   = bool  (*)(void*, const void*, const void*);
-using CompanionMk  = void* (*)(void*, void*);          // factory, subject
-using BufSetSizeFn = void  (*)(void*, int32_t, bool, int32_t);
-using ImgSlotFn    = void  (*)(void*);
+// ENDGAME B.3.5 block VC: `VoidThisFn`, `NewFn`, `RbCreateFn`, `CompanionMk`,
+// `BufSetSizeFn` and `ImgSlotFn` are all GONE. Every one of them typed either an
+// `RT_EXPORT_ONCE` name door onto a class this tree has made real, or a
+// hand-inlined `(*(void***)p)[N]` onto one of block A's `*Data` bases. They are
+// direct member and virtual calls now; the doors and registrations they went
+// through are untouched.
 
 template <typename T> inline T& Field(void* p, size_t off) {
     return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
@@ -197,12 +221,13 @@ void InitConstantBuffer(Video::ConstantBuffer* buf, void* device) {
     Field<int64_t>(buf, 0x30) = 0;                      // _constantCount AND _capacity
     buf->_device        = device;                       // +0x38
 
-    void* factory = device ? Field<void*>(device, 0x100) : nullptr;
-    void* companion = nullptr;
-    if (factory) {
-        void** vt = *reinterpret_cast<void***>(factory);
-        companion = reinterpret_cast<CompanionMk>(vt[11])(factory, buf);  // +0x58
-    }
+    // B.3.5 bridge — `Device::deviceData` is a pinned `void*` at +0x100 and the
+    // `device` parameter is itself untyped. `vt[11]` (+0x58) is
+    // `Video::DeviceData::CreateConstantBufferData`, block A's slot name.
+    Video::DeviceData* factory = device
+        ? reinterpret_cast<Video::DeviceData*>(Field<void*>(device, 0x100))
+        : nullptr;
+    void* companion = factory ? factory->CreateConstantBufferData(buf) : nullptr;
     buf->_platformData = companion;                     // +0x40
 }
 
@@ -213,19 +238,25 @@ void InitConstantBuffer(Video::ConstantBuffer* buf, void* device) {
 // stores null and dereferences it anyway. Do not add a guard here — the project
 // rule is that an unguarded deref in a faithful body means the value is always
 // there, and the fix for a null is upstream.
-void MakeDynamicBuffer(void* self, size_t slot, int32_t bytes,
-                       VoidThisFn platformConstruct) {
+// ENDGAME B.3.5 block VC: templated on the buffer class and its companion, so the
+// two `RT_EXPORT_ONCE("?PlatformConstruct@{Vertex,Index}Buffer@Video@@…")` name
+// doors and the `companion->vt[1]` dispatch are a qualified member call and a
+// virtual call. `vt[1]` is `Video::{Vertex,Index}BufferData::Create(sizeBytes,
+// dynamic, data)` — the same +0x08, with `dynamic` hardcoded true and no initial
+// data, which is what retail's `(companion, bytes, 1, 0)` says.
+template <class Buf, class BufData>
+void MakeDynamicBuffer(void* self, size_t slot, int32_t bytes) {
     void* p = MemAlloc(0x20, 4);                        // 0x180011640
     if (p) {
         Field<int32_t>(p, 0x00) = 0;
         Field<uint8_t>(p, 0x04) = 0;
-        platformConstruct(p);
+        reinterpret_cast<Buf*>(p)->Buf::PlatformConstruct();          // B.3.5 bridge
     }
     Field<void*>(self, slot) = p;
 
-    void* companion = Field<void*>(p, 0x08);
-    void** vt = *reinterpret_cast<void***>(companion);
-    reinterpret_cast<BufSetSizeFn>(vt[1])(companion, bytes, true, 0);
+    // B.3.5 bridge — `platformData` is a pinned `void*` at +0x08.
+    BufData* companion = reinterpret_cast<BufData*>(Field<void*>(p, 0x08));
+    (void)companion->Create(static_cast<uint32_t>(bytes), 1, nullptr);
 }
 
 }  // namespace
@@ -245,11 +276,25 @@ void MakeDynamicBuffer(void* self, size_t slot, int32_t bytes,
 // 0x180011640. Reading one and assuming the others match by resemblance is
 // exactly how this family has been got wrong before. Each was disassembled.
 // ============================================================================
+// ENDGAME B.3.5 block VC — THE BODIES ARE THE MEMBERS. Both mangled names say
+// which class they belong to (`??2ImageBuffer@Video@@`, `??2RenderBuffer@Video@@`
+// — proved by the mangling, not by a prefix), and both classes are real now, so
+// each is `Ns::C::operator new` and each door below is a one-line QUALIFIED call.
+// `operator new` and `operator delete` are STATIC members and change no
+// triviality trait, so `Device.h`'s `is_trivially_copyable<Video::RenderBuffer>`
+// assert still holds and still proves it.
+void* Video::ImageBuffer::operator new(size_t size) {
+    return MemAlloc(size, 8);                           // MOV R8D,0x8
+}
+void* Video::RenderBuffer::operator new(size_t size) {
+    return MemAlloc(size, 8);                           // MOV R8D,0x8
+}
+
 extern "C" void* RtVideo_ImageBuffer_OperatorNew(uint64_t bytes) {
-    return MemAlloc(bytes, 8);                          // MOV R8D,0x8
+    return Video::ImageBuffer::operator new(static_cast<size_t>(bytes));
 }
 extern "C" void* RtVideo_RenderBuffer_OperatorNew(uint64_t bytes) {
-    return MemAlloc(bytes, 8);                          // MOV R8D,0x8
+    return Video::RenderBuffer::operator new(static_cast<size_t>(bytes));
 }
 
 // ============================================================================
@@ -333,27 +378,23 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
     // normalisation.
     {
         void* singleton = *DeviceSingletonSlot();
-        void* factory = singleton ? Field<void*>(singleton, 0x100) : nullptr;
-        void* companion = nullptr;
-        if (factory) {
-            void** vt = *reinterpret_cast<void***>(factory);
-            companion = reinterpret_cast<CompanionMk>(vt[9])(factory, self); // +0x48
-        }
-        Field<void*>(self, 0x2160) = companion;
+        // B.3.5 bridge — the singleton slot and `Device::deviceData` are both
+        // untyped here. `vt[9]` (+0x48) is `Video::DeviceData::CreateContextData`.
+        Video::DeviceData* factory = singleton
+            ? reinterpret_cast<Video::DeviceData*>(Field<void*>(singleton, 0x100))
+            : nullptr;
+        Field<void*>(self, 0x2160) = factory ? factory->CreateContextData(self) : nullptr;
     }
 
     if (vertexBytes > 0)
-        MakeDynamicBuffer(self, 0x20f8, vertexBytes,
-            RT_EXPORT_ONCE(VoidThisFn,
-                           "?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ"));
+        MakeDynamicBuffer<Video::VertexBuffer, Video::VertexBufferData>(
+            self, 0x20f8, vertexBytes);
     if (indexBytes > 0)
-        MakeDynamicBuffer(self, 0x2118, indexBytes,
-            RT_EXPORT_ONCE(VoidThisFn,
-                           "?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ"));
+        MakeDynamicBuffer<Video::IndexBuffer, Video::IndexBufferData>(
+            self, 0x2118, indexBytes);
     if (instanceBytes > 0)
-        MakeDynamicBuffer(self, 0x2130, instanceBytes,
-            RT_EXPORT_ONCE(VoidThisFn,
-                           "?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ"));
+        MakeDynamicBuffer<Video::VertexBuffer, Video::VertexBufferData>(
+            self, 0x2130, instanceBytes);
 
     if (renderBuffer) {
         // Retail JUMPS STRAIGHT TO THE RETURN here: with a render buffer handed
@@ -363,40 +404,44 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
         return self;
     }
 
-    void* rb = RT_EXPORT_ONCE(NewFn, "??2RenderBuffer@Video@@SAPEAX_K@Z")(0x30);
+    // ENDGAME B.3.5 block VC: the whole default-render-buffer tail is direct
+    // calls. Six `RT_EXPORT_ONCE` name doors (spelling 3) retire here —
+    // `??2RenderBuffer@`, `?PlatformConstruct@RenderBuffer@`, `??2ImageBuffer@`
+    // twice, `??0ImageBuffer@` twice and `?Create@RenderBuffer@` — plus two
+    // hand-inlined `img->_data->vt[N]` dispatches. `??0ImageBuffer@` stays a
+    // ctor DOOR and is CALLED as one (B4b-2): it stamps the minted vtable, which
+    // a C++ constructor cannot.
+    Video::RenderBuffer* rb = static_cast<Video::RenderBuffer*>(
+        Video::RenderBuffer::operator new(0x30));
     if (rb) {
-        Field<void*>(rb, 0x00) = nullptr;
-        Field<void*>(rb, 0x08) = nullptr;
-        Field<void*>(rb, 0x10) = nullptr;
-        RT_EXPORT_ONCE(VoidThisFn,
-            "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ")(rb);
+        rb->colorBuffer = nullptr;   // +0x00
+        rb->depthBuffer = nullptr;   // +0x08
+        Field<int64_t>(rb, 0x10) = 0;  // width AND height, one qword store
+        rb->Video::RenderBuffer::PlatformConstruct();
     }
     Field<void*>(self, 0x2138) = rb;
 
-    void* color = RT_EXPORT_ONCE(NewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(0x68);
-    if (color) RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(color);
+    Video::ImageBuffer* color =
+        static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
+    // B.3.5 bridge — the ctor DOOR's parameter is the POD view.
+    if (color) Video_ImageBuffer_Ctor(reinterpret_cast<ImageBuffer*>(color));
     Field<void*>(self, 0x2140) = color;
 
-    void* depth = RT_EXPORT_ONCE(NewFn, "??2ImageBuffer@Video@@SAPEAX_K@Z")(0x68);
-    if (depth) RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(depth);
+    Video::ImageBuffer* depth =
+        static_cast<Video::ImageBuffer*>(Video::ImageBuffer::operator new(0x68));
+    if (depth) Video_ImageBuffer_Ctor(reinterpret_cast<ImageBuffer*>(depth));
     Field<void*>(self, 0x2148) = depth;
 
     // Two UNGUARDED companion calls on the images just built — slot 1 on the
-    // colour image, slot 2 on the depth image. Different slots, and swapping
-    // them would be silent.
-    {
-        void* c = Field<void*>(Field<void*>(self, 0x2140), 0x60);
-        reinterpret_cast<ImgSlotFn>((*reinterpret_cast<void***>(c))[1])(c);
-    }
-    {
-        void* d = Field<void*>(Field<void*>(self, 0x2148), 0x60);
-        reinterpret_cast<ImgSlotFn>((*reinterpret_cast<void***>(d))[2])(d);
-    }
+    // colour image, slot 2 on the depth image. Different slots, and swapping them
+    // would be silent, which is exactly why they are spelled as block A's names
+    // now: `Video::ImageBufferData::AttachColorBuffer` / `AttachDepthBuffer`.
+    // Unguarded is retail's: when `operator new` failed, `color`/`depth` is null
+    // and retail dereferences it anyway.
+    color->_data->AttachColorBuffer();
+    depth->_data->AttachDepthBuffer();
 
-    RT_EXPORT_ONCE(RbCreateFn,
-        "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z")(
-            Field<void*>(self, 0x2138), Field<void*>(self, 0x2140),
-            Field<void*>(self, 0x2148));
+    rb->Video::RenderBuffer::Create(color, depth);
     return self;
 }
 

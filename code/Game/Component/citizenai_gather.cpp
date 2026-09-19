@@ -72,6 +72,12 @@
 // world-start).
 
 
+// graphics/Scene.h FIRST: it pulls runtime/types/volume/Volume.h, whose
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen through resolve.h, which breaks Volume.h's own
+// `sizeof(Rectangle)` assert.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -230,9 +236,8 @@ static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (
     if (*reinterpret_cast<int*>(mi + 0xf0) == 0) {
         // mask empty -> remove from scene
         if (-1 < *reinterpret_cast<int32_t*>(mi + 0x100)) {
-            if (fn_SceneRemoveObject)
-                fn_SceneRemoveObject(*reinterpret_cast<void**>(gw + 0x60),
-                                     *reinterpret_cast<uint32_t*>(mi + 0x100));
+            reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
+                ->RemoveObject(*reinterpret_cast<uint32_t*>(mi + 0x100));   // B.3.5 bridge
             *reinterpret_cast<int32_t*>(mi + 0x100) = static_cast<int32_t>(0xffffffff);
         }
         uint32_t before = *reinterpret_cast<uint32_t*>(mi + 0x20);
@@ -244,10 +249,8 @@ static void HideRenderWorkplaceMesh(int64_t* self, fn_findComp_t findStor, int (
         int32_t* settings = g_pGameSettingsPtr ? *g_pGameSettingsPtr : nullptr;
         if (settings && reinterpret_cast<char*>(settings)[0xc] != '\0' &&
             *reinterpret_cast<int32_t*>(mi + 0x100) < 0) {
-            uint32_t id = fn_Graphics_Scene_AddObject
-                ? fn_Graphics_Scene_AddObject(*reinterpret_cast<void**>(gw + 0x60),
-                                              reinterpret_cast<void*>(mi + 0x28))
-                : 0xffffffffu;
+            uint32_t id = reinterpret_cast<Graphics::Scene*>(*reinterpret_cast<void**>(gw + 0x60))
+                ->AddObject(reinterpret_cast<Graphics::Geometry*>(mi + 0x28));   // B.3.5 bridge
             *reinterpret_cast<uint32_t*>(mi + 0x100) = id;
             SceneWatch_Note(id, reinterpret_cast<void*>(mi + 0x28), "CitizenAI::Gather carry-mesh");
         }

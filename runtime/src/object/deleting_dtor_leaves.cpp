@@ -66,6 +66,12 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+// ENDGAME B.3.5: the two genuine MEMBER calls in this file's bodies
+// (`RenderBuffer::PlatformDestruct`, `ParticleInstance::RemoveState`). The
+// `??1…`/`??3…`/`??_7…` rows are NOT retired here — B35_RULES section 11 keeps
+// every deleting-dtor row, vtable stamp and dtor door byte-identical.
+#include "../../types/video/Device.h"
+#include "../../types/graphics/ParticleInstance.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
@@ -118,7 +124,7 @@ extern "C" void RtGraphics_SunLight_Dtor(void* self) {
     if (void* a = Field(self, 0xf0)) DeleteVia0(a);
     if (void* b = Field(self, 0xf8)) DeleteVia0(b);
     if (void* rb = Field(self, 0x100)) {
-        RT_EXPORT_ONCE(DtorFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(rb);
+        reinterpret_cast<Video::RenderBuffer*>(rb)->PlatformDestruct();  // B.3.5 bridge
         RT_EXPORT_ONCE(DtorFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(rb);
     }
     RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
@@ -173,7 +179,7 @@ extern "C" void RtIo_Stream_Dtor(void* self) {
 // ??1ParticleInstance@Graphics@@UEAA@XZ   0x1801041f0
 extern "C" void RtGraphics_ParticleInstance_Dtor(void* self) {
     STAMP(self, "??_7ParticleInstance@Graphics@@6B@");
-    RT_EXPORT_ONCE(DtorFn, "?RemoveState@ParticleInstance@Graphics@@IEAAXXZ")(self);
+    reinterpret_cast<Graphics::ParticleInstance*>(self)->RemoveState();  // B.3.5 bridge
     RT_EXPORT_ONCE(DtorFn, "??1Geometry@Graphics@@UEAA@XZ")(self);
 }
 

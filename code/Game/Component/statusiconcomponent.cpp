@@ -13,6 +13,11 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+// graphics/*.h FIRST: they pull runtime/types/volume/Volume.h, whose global-scope
+// `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once <windows.h> has
+// been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
+#include "graphics/Scene.h"
+#include "graphics/Geometry.h"
 #include "Component/statusiconcomponent_funcs.h"
 #include "scene_watch.h"
 #include "engine_funcs.h"
@@ -35,18 +40,6 @@ static fn_SpriteSheet_GetSpriteCount_t s_fn_SpriteSheet_GetSpriteCount = nullptr
 typedef void (*fn_StatusIconHelper_a440_t)(void* geometry, float param2, int spriteCount,
                                            void* param4, void* spriteSheet);
 static fn_StatusIconHelper_a440_t s_fn_StatusIconHelper_a440 = nullptr;
-
-// Graphics::Geometry::SetBounds(this, Box const&) — Runtime export, IAT slot 0x1401525e8.
-typedef void (*fn_Geometry_SetBounds_t)(void* geometry, const void* box);
-static fn_Geometry_SetBounds_t s_fn_Geometry_SetBounds = nullptr;
-
-// Graphics::Scene::AddObject — dispatch slot at 0x140151370
-typedef uint32_t (*fn_Scene_AddObject_t)(void* scene, void* geometry);
-static fn_Scene_AddObject_t s_fn_Scene_AddObject = nullptr;
-
-// Graphics::Scene::RemoveObject — dispatch slot at 0x140151360
-typedef void (*fn_Scene_RemoveObject_t)(void* scene, uint32_t objectId);
-static fn_Scene_RemoveObject_t s_fn_Scene_RemoveObject = nullptr;
 
 // System::Time::Time(Time*, float) — dispatch slot at 0x140152b00
 typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
@@ -81,22 +74,12 @@ static void EnsureHelpers() {
         s_fn_SpriteSheet_GetSpriteCount = reinterpret_cast<fn_SpriteSheet_GetSpriteCount_t>(
             ResolveExport("?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ"));
 
-    slot = ResolveAddr(Module::Exe, 0x140151370);
-    if (slot) s_fn_Scene_AddObject = *reinterpret_cast<fn_Scene_AddObject_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140151360);
-    if (slot) s_fn_Scene_RemoveObject = *reinterpret_cast<fn_Scene_RemoveObject_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
 
     // Direct exe addresses
     s_fn_StatusIconHelper_a440 = reinterpret_cast<fn_StatusIconHelper_a440_t>(
         ResolveAddr(Module::Exe, 0x1400aa440));
-
-    // Graphics::Geometry::SetBounds — Runtime export (the only callee of helper_a440).
-    s_fn_Geometry_SetBounds = reinterpret_cast<fn_Geometry_SetBounds_t>(
-        ResolveExport("?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z"));
 
     s_fn_EntityNotify = reinterpret_cast<fn_EntityNotify_t>(
         ResolveAddr(Module::Exe, 0x1400c3470));
@@ -145,8 +128,8 @@ void StatusIconComponent_GeometrySetup(void* geometry, float param2, int spriteC
     box[4] = half;                            // max.y
     box[5] = (float)spriteCount * param2;     // max.z
 
-    if (s_fn_Geometry_SetBounds)
-        s_fn_Geometry_SetBounds(geometry, box);
+    reinterpret_cast<Graphics::Geometry*>(geometry)
+        ->SetBounds(*reinterpret_cast<const ::Box*>(box));   // B.3.5 bridge
 }
 
 // ============================================================
@@ -326,10 +309,11 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
     int32_t iconId = *(int32_t*)(s + 0x100);
     if (iconId < 0 && savedFieldF0 != 0) {
         // Add geometry to scene
-        if (s_fn_Scene_AddObject && g_pGameWorldSingleton) {
+        if (g_pGameWorldSingleton) {
             void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
             if (scene) {
-                uint32_t newId = s_fn_Scene_AddObject(scene, (void*)(s + 0x28));
+                uint32_t newId = reinterpret_cast<Graphics::Scene*>(scene)
+                    ->AddObject(reinterpret_cast<Graphics::Geometry*>(s + 0x28));   // B.3.5 bridge
                 SceneWatch_Note(newId, (void*)(s + 0x28), "StatusIconComponent::OnAdded");
 
                 // Set flags: OR bit 2 (0x04) into flags at +0x20
@@ -369,11 +353,11 @@ void StatusIconComponent_OnUpdate2(StatusIconComponent* self) {
 void StatusIconComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
+    // Scene::AddObject/RemoveObject are members now (B.3.5 caller batch I2).
     printf("[StatusIconComponent] Funcs resolved: SpriteCount=%p "
-           "Helper_a440=%p AddObj=%p RemoveObj=%p OnRemoveOrig=%p\n",
+           "Helper_a440=%p OnRemoveOrig=%p\n",
            (void*)s_fn_SpriteSheet_GetSpriteCount,
            (void*)s_fn_StatusIconHelper_a440,
-           (void*)s_fn_Scene_AddObject, (void*)s_fn_Scene_RemoveObject,
            (void*)s_fn_OnRemove_Original);
 #endif
 }
@@ -418,8 +402,6 @@ typedef void* (*fn_Geometry_BaseCtor_t)(void* geometry);
 static fn_Geometry_BaseCtor_t s_fn_Geometry_BaseCtor = nullptr;
 
 // Graphics::Geometry::SetTransform (Runtime export) — used by OnRemove positioning.
-typedef void (*fn_SI_GeomSetTransform_t)(void* geometry, const void* transform);
-static fn_SI_GeomSetTransform_t s_fn_Geometry_SetTransform = nullptr;
 
 // Entity component finders (registered exe ports; member ABI RCX=entity, RDX=retIBP).
 typedef void* (*fn_Finder_t)(uintptr_t entity, void* outIBP);
@@ -436,8 +418,6 @@ static void EnsureDrawHelpers() {
     if (s_drawHelpersResolved) return;
     s_fn_Geometry_BaseCtor = reinterpret_cast<fn_Geometry_BaseCtor_t>(
         ResolveExport("??0Geometry@Graphics@@QEAA@XZ"));
-    s_fn_Geometry_SetTransform = reinterpret_cast<fn_SI_GeomSetTransform_t>(
-        ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
     s_fn_FindModel = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_FindMulti = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004740));
     s_fn_FindMap   = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004680));
@@ -553,8 +533,8 @@ static void StatusIcon_OnRemovedFromWorld_VSlot(void* self) {
         if (sceneId == 0) *(int32_t*)(c + 0x100) = -1;
         return;
     }
-    if (sceneId >= 0 && scene && s_fn_Scene_RemoveObject) {
-        s_fn_Scene_RemoveObject(scene, (uint32_t)sceneId);
+    if (sceneId >= 0 && scene) {
+        reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sceneId);   // B.3.5 bridge
         *(int32_t*)(c + 0x100) = -1;
     }
 }
@@ -727,13 +707,14 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
 
     int32_t sceneId = *(int32_t*)(c + 0x100);
     if (iconVisible == 0) {
-        if (sceneId >= 0 && s_fn_Scene_RemoveObject && scene) {
-            s_fn_Scene_RemoveObject(scene, (uint32_t)sceneId);
+        if (sceneId >= 0 && scene) {
+            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sceneId);   // B.3.5 bridge
             *(int32_t*)(c + 0x100) = -1;
         }
     } else if (sceneId < 0) {
-        if (s_fn_Scene_AddObject && scene) {
-            uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
+        if (scene) {
+            uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
+                ->AddObject(reinterpret_cast<Graphics::Geometry*>(c + 0x28));   // B.3.5 bridge
             *(int32_t*)(c + 0x100) = (int32_t)id;
             SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Update");
         }
@@ -815,7 +796,8 @@ void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self) {
 
     // Transform (0x1C bytes): {0,0,0, 1.0(cos), pos.x, pos.y, pos.z} — pure translation.
     float xf[7] = { 0.0f, 0.0f, 0.0f, 1.0f, pos[0], pos[1], pos[2] };
-    if (s_fn_Geometry_SetTransform) s_fn_Geometry_SetTransform((void*)(c + 0x28), xf);
+    reinterpret_cast<Graphics::Geometry*>(c + 0x28)
+        ->SetTransform(*reinterpret_cast<const Math::Transform*>(xf));   // B.3.5 bridge
 }
 
 // ============================================================
@@ -857,8 +839,8 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
         int32_t sid = *(int32_t*)(c + 0x100);
         if (!inited) {
             if (sid == 0) *(int32_t*)(c + 0x100) = -1;   // repair the zero-fill sentinel
-        } else if (sid >= 0 && s_fn_Scene_RemoveObject && scene) {
-            s_fn_Scene_RemoveObject(scene, (uint32_t)sid);
+        } else if (sid >= 0 && scene) {
+            reinterpret_cast<Graphics::Scene*>(scene)->RemoveObject((uint32_t)sid);   // B.3.5 bridge
             *(int32_t*)(c + 0x100) = -1;
         }
         new20 = old20 & 0xfffffffbu;
@@ -874,8 +856,9 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
         // at the same point: a stream-restored component has never run slot 4, and adding
         // its sprite-less geometry is a silent no-draw. See StatusIcon_EnsureSprite.
         if (inited) StatusIcon_EnsureSprite(c);
-        if (inited && vis != 0 && *(int32_t*)(c + 0x100) < 0 && s_fn_Scene_AddObject && scene) {
-            uint32_t id = s_fn_Scene_AddObject(scene, (void*)(c + 0x28));
+        if (inited && vis != 0 && *(int32_t*)(c + 0x100) < 0 && scene) {
+            uint32_t id = reinterpret_cast<Graphics::Scene*>(scene)
+                ->AddObject(reinterpret_cast<Graphics::Geometry*>(c + 0x28));   // B.3.5 bridge
             *(int32_t*)(c + 0x100) = (int32_t)id;
             SceneWatch_Note(id, (void*)(c + 0x28), "StatusIconComponent::Show");
         }

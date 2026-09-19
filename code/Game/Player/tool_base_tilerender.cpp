@@ -33,6 +33,10 @@
 // standalone/reg_player_tilerender.cpp (RegisterPlayerTileRenderBatch), wired into
 // RegisterCodeFunctions().
 
+// The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
+// whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
+// once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "video/Context.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/Filename.h"
@@ -58,16 +62,8 @@ static inline float C_hScale()  { return 0.00390625f;  }  // DAT_1401720bc (0x3b
 // ---- Runtime-x64.dll exports used by the overlay render (resolved lazily). --------
 // Names recovered from the exe dispatch-slot name-table (0x1401c027e..).
 typedef void  (*fn_MatSetup_t)(void* mat, void* ctx, int flag);         // ?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z (slot 0x140152920)
-typedef void  (*fn_CtxSetTransform_t)(void* ctx, int slot, void* matrix);// ?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z (slot 0x1401525e0)
-typedef bool  (*fn_CtxBeginVerts_t)(void* ctx, int count, int stride);  // ?BeginVertices@Context@Video@@QEAA_NHH@Z (slot 0x140152930)
-typedef void  (*fn_CtxAddVertex_t)(void* ctx, const void* vtx);         // ?AddVertex@Context@Video@@QEAAXPEBX@Z (slot 0x140152948)
-typedef void  (*fn_CtxEndVerts_t)(void* ctx, int primType);             // ?EndVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z (slot 0x140152938)
 
 static fn_MatSetup_t       s_matSetup    = nullptr;
-static fn_CtxSetTransform_t s_ctxSetXform = nullptr;
-static fn_CtxBeginVerts_t  s_ctxBegin    = nullptr;
-static fn_CtxAddVertex_t   s_ctxAddVtx   = nullptr;
-static fn_CtxEndVerts_t    s_ctxEnd      = nullptr;
 
 // The record array is owned/freed by sub_1380. Uses the proven engine_funcs
 // allocator pair (fn_MemAlloc(singleton,size,align) + fn_MemFreeStatic(ptr)) — same
@@ -90,14 +86,6 @@ static void EnsureFns() {
     };
     s_matSetup = reinterpret_cast<fn_MatSetup_t>(slot(0x140152920));
     if (!s_matSetup) s_matSetup = reinterpret_cast<fn_MatSetup_t>(ResolveExport("?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z"));
-    s_ctxSetXform = reinterpret_cast<fn_CtxSetTransform_t>(slot(0x1401525e0));
-    if (!s_ctxSetXform) s_ctxSetXform = reinterpret_cast<fn_CtxSetTransform_t>(ResolveExport("?SetTransform@Context@Video@@QEAAXHAEBVMatrix@Math@@@Z"));
-    s_ctxBegin = reinterpret_cast<fn_CtxBeginVerts_t>(slot(0x140152930));
-    if (!s_ctxBegin) s_ctxBegin = reinterpret_cast<fn_CtxBeginVerts_t>(ResolveExport("?BeginVertices@Context@Video@@QEAA_NHH@Z"));
-    s_ctxAddVtx = reinterpret_cast<fn_CtxAddVertex_t>(slot(0x140152948));
-    if (!s_ctxAddVtx) s_ctxAddVtx = reinterpret_cast<fn_CtxAddVertex_t>(ResolveExport("?AddVertex@Context@Video@@QEAAXPEBX@Z"));
-    s_ctxEnd = reinterpret_cast<fn_CtxEndVerts_t>(slot(0x140152938));
-    if (!s_ctxEnd) s_ctxEnd = reinterpret_cast<fn_CtxEndVerts_t>(ResolveExport("?EndVertices@Context@Video@@QEAAXW4PrimitiveType@12@@Z"));
     s_init = true;
 }
 
@@ -225,16 +213,17 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
     }
 
     if (material && s_matSetup) s_matSetup(material, ctx, 0);
-    if (s_ctxSetXform) {
+    {
         Math::Matrix matrix = Math::Matrix::Identity();
-        s_ctxSetXform(ctx, 0, &matrix);
+        reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, matrix);   // B.3.5 bridge
     }
 
     // Guard: never iterate a record set whose base pointer is null (a failed alloc in
     // the builder would otherwise leave count>0 with a null base -> null-record deref).
     int count3 = (param_3 && param_3[0]) ? (int)param_3[1] : 0;
     int count4 = (param_4 && param_4[0]) ? (int)param_4[1] : 0;
-    bool began = s_ctxBegin ? s_ctxBegin(ctx, (count3 + count4) * 6, 0x18) : false;
+    bool began = reinterpret_cast<Video::Context*>(ctx)
+                     ->BeginVertices((count3 + count4) * 6, 0x18);   // B.3.5 bridge
     if (!began) return;
 
     // Even/odd tile UV templates (6 (u,v) pairs each), verbatim from the decompile.
@@ -290,7 +279,7 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
             vtx[3] = ((vt - half) * sinA + (ut - half) * cosA + half) * uvScale + variantCol;
             vtx[4] = ((vt - half) * cosA - (ut - half) * sinA) + half;
             std::memcpy(&vtx[5], &rec[3], 4);                        // color = rec+0xc
-            if (s_ctxAddVtx) s_ctxAddVtx(ctx, vtx);
+            reinterpret_cast<Video::Context*>(ctx)->AddVertex(vtx);   // B.3.5 bridge
         }
     }
 
@@ -314,11 +303,11 @@ extern "C" void PlayerTileRender_DrawOverlay_08c0(uint64_t /*param_1*/, void* ct
             vtx[3] = ((vt - half) * sinA + (ut - half) * cosA + half) * uvScale + variantCol;
             vtx[4] = ((vt - half) * cosA - (ut - half) * sinA) + half;
             std::memcpy(&vtx[5], &rec[3], 4);                        // color = rec+0xc
-            if (s_ctxAddVtx) s_ctxAddVtx(ctx, vtx);
+            reinterpret_cast<Video::Context*>(ctx)->AddVertex(vtx);   // B.3.5 bridge
         }
     }
 
-    if (s_ctxEnd) s_ctxEnd(ctx, 0);
+    reinterpret_cast<Video::Context*>(ctx)->EndVertices(0);   // B.3.5 bridge
 }
 
 // ============================================================

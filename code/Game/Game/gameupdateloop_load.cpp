@@ -21,6 +21,15 @@
 // All subsystem ctor bodies below were verified against Ghidra disassembly
 // (m5-load-ctor-drafts workflow, 2026-05-30) — exact field offsets in comments.
 
+// ENDGAME B.3.5 Video/Graphics caller batch: Graphics::{Camera,Scene,Geometry,
+// MeshInstance,SunLight} are real classes. These go AHEAD of "resolve.h" and the
+// explicit <windows.h> below — <wingdi.h> declares a global `Rectangle` FUNCTION
+// that hides `Volume::Rectangle`'s class name inside Volume.h's own
+// static_asserts (Camera.h and Geometry.h include Volume.h).
+#include "graphics/Camera.h"
+#include "graphics/Scene.h"
+#include "graphics/Mesh.h"        // MeshInstance
+#include "graphics/SunLight.h"
 #include "GameUpdateLoop.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -751,8 +760,8 @@ extern "C" void* Reimpl_FUN_140098660(void* camera, float fovY, float nearZ, flo
     }
     uint8_t frustum[0xC0];
     void* fr = fn_Volume_Frustum_Ctor ? fn_Volume_Frustum_Ctor(frustum, &nearZ, &farZ, &fovX, &fovY) : nullptr;
-    if (fn_Graphics_Camera_SetFrustum)
-        fn_Graphics_Camera_SetFrustum((void*)((uint8_t*)camera + 0x34), fr ? fr : frustum);
+    reinterpret_cast<Graphics::Camera*>((uint8_t*)camera + 0x34)->SetFrustum(
+        *reinterpret_cast<const ::Frustum*>(fr ? fr : frustum));   // B.3.5 bridge
     return camera;
 }
 
@@ -852,16 +861,24 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
         meshRes = const_cast<::Object::External*>(efactory->FindOrLoad(fname));  // B.3.3 bridge
     }
 
-    if (meshRes && s_SetMesh) s_SetMesh(mem, meshRes);
+    // B.3.5 bridge — ?SetMesh@MeshInstance@Graphics@@…. `s_SetMesh` and its
+    // resolve STAY: the [GUL::SkyMesh] fprintf below still reads the pointer as a
+    // diagnostic, so this was not the cache's last user. Only the readiness term
+    // came out of the guard; `meshRes` is an object test and stays.
+    if (meshRes)
+        reinterpret_cast<Graphics::MeshInstance*>(mem)->SetMesh(
+            Graphics::ExternalPtrHandle{meshRes});   // B.3.5 bridge
 
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
     if (s_TimeCtor) {
         uint64_t timeObj = 0;
         s_TimeCtor(&timeObj, 0.0f);
-        void* vt = *(void**)mem;
-        if (vt && *(void**)((uint8_t*)vt + 8))
-            (*(void(**)(void*, void*))((uint8_t*)vt + 8))(mem, &timeObj);
+        // B.3.5 bridge — vtable+0x08 is slot 1 of `Graphics::Geometry`, i.e.
+        // `Update(const System::Time&)`. The receiver is a PROVED MeshInstance:
+        // 0x120 bytes from AllocSub, run through `??0MeshInstance@Graphics@@` above.
+        reinterpret_cast<Graphics::Geometry*>(mem)->Update(
+            *reinterpret_cast<const System::Time*>(&timeObj));   // B.3.5 bridge
     }
     *(uint32_t*)((uint8_t*)mem + 0x28) = 0;
 
@@ -1145,7 +1162,11 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             if (len > 0.0f) { dir[0] = -dir[0]/len; dir[1] = -dir[1]/len; dir[2] = -dir[2]/len; }
             float col1[4] = { 0.8f, 0.8f, 0.8f, 0.85f };
             float col2[4] = { 0.37f, 0.37f, 0.4f, 1.0f };
-            if (fn_Graphics_SunLight_Set) fn_Graphics_SunLight_Set(mem, dir, col1, col2);
+            // B.3.5 bridge — ?Set@SunLight@Graphics@@QEAAXAEBVVector3@Math@@AEBVVector4@4@1@Z.
+            reinterpret_cast<Graphics::SunLight*>(mem)->Set(
+                *reinterpret_cast<const Math::Vector3*>(dir),
+                *reinterpret_cast<const Math::Vector4*>(col1),
+                *reinterpret_cast<const Math::Vector4*>(col2));   // B.3.5 bridge
             *(uint32_t*)((uint8_t*)mem + 0x28) = 0;
         }
         *(void**)(p + 0x100) = mem;
@@ -1652,8 +1673,12 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
         Reimpl_FUN_140098660(*(void**)(p + 0xE0), 40.0f, 2.0f, 512.0f);
     {
         void* gScene = *(void**)(p + 0x60);   // g_pGameWorld+0x60
-        if (gScene && fn_Graphics_Scene_AddGlobalObject) {
-            if (*(void**)(p + 0x110)) fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x110)); // WorldGeom
+        // B.3.5: the `fn_Graphics_Scene_AddGlobalObject` readiness term went with
+        // the door; `gScene` is an object test and stays.
+        if (gScene) {
+            Graphics::Scene* gs = reinterpret_cast<Graphics::Scene*>(gScene);   // B.3.5 bridge
+            if (*(void**)(p + 0x110))
+                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(*(void**)(p + 0x110))); // WorldGeom  B.3.5 bridge
             // M5 5b lighting: add the SunLight so the directional light + ambient
             // light the terrain in the main render pass (Renderer::Draw dispatches the
             // light's vtable+0x50 SunLight::Draw → Context::SetLight + DrawItemList).
@@ -1666,12 +1691,12 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             // DrawShadowMap 0x180106bc0, AddScene 0x180105700).
             static const bool kAddSunLight = true;
             if (kAddSunLight && *(void**)(p + 0x100))
-                fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x100)); // SunLight
+                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(*(void**)(p + 0x100))); // SunLight  B.3.5 bridge
             // SkyMesh: add as a Scene global object so the reflection + main passes
             // both draw the `_clear_` sky dome (the dark-water fix; see BuildSkyMesh_Step28).
             static const bool kAddSkyMesh = true;
             if (kAddSkyMesh && *(void**)(p + 0x108))
-                fn_Graphics_Scene_AddGlobalObject(gScene, *(void**)(p + 0x108)); // SkyMesh
+                gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(*(void**)(p + 0x108))); // SkyMesh  B.3.5 bridge
         }
         void* aScene = *(void**)(p + 0x78);   // g_pGameWorld+0x78
         if (aScene && fn_Audio_Scene_Pause) {

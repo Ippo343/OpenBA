@@ -1,5 +1,10 @@
 // standalone/perf_experimental.cpp — see perf_experimental.h.
 #include "perf_experimental.h"
+// ENDGAME B.3.5: Graphics::Camera / Renderer / Geometry, ahead of the
+// <windows.h> that "resolve.h" pulls in — <wingdi.h> declares a FUNCTION named
+// Rectangle, which breaks Volume.h's Volume::Rectangle (the <windows.h> trap).
+#include "graphics/Camera.h"
+#include "graphics/Geometry.h"
 #include "perf_terrain.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -7,6 +12,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>       // placement new — the retslot door body at the call site
 #include <vector>
 #include "math/Math.h"       // -Iruntime/types
 
@@ -89,12 +95,9 @@ struct DeferredPick { void* model; void* scene; uint32_t id; PickXfCtor_t ctor; 
 std::vector<DeferredPick> s_deferredPicks;   // citizens whose pick transform was not pushed
 struct DeferredReplay { void* obj; void (*fn)(void*); };
 std::vector<DeferredReplay> s_deferredReplays;  // icons etc. whose presentation tick was skipped
-typedef void (*GeomSetXf_t)(void* geometry, const void* transform);
-GeomSetXf_t s_geomSetXf = nullptr;
 bool s_flushing = false;   // replays re-enter the tick bodies; no re-deferral while flushing
 int  s_iterIndex = 0, s_iterCount = 1;   // SetIteration
 long s_cntBatchSkipped = 0;
-bool s_geomSetXfResolved = false;
 
 void ResolveRootOnly() {
     if (s_rootOnlyResolved) return;
@@ -109,22 +112,26 @@ void ResolveRootOnly() {
 
 void RefreshFrustum(void* renderer) {
     s_haveFrustum = false;
-    if (!renderer || !fn_Renderer_GetCullCamera || !fn_Camera_GetFrustum ||
-        !fn_Frustum_MulTransform3) return;
-    void* camera = fn_Renderer_GetCullCamera(renderer);
+    if (!renderer || !fn_Frustum_MulTransform3) return;
     // Renderer::GetCullCamera returns a reference into the camera object; before the first
     // Draw the pointer it adjusts is null, so the "reference" is a small negative address
-    // (-0x110 seen live). Anything outside user space is "no camera yet".
+    // (-0x110 seen live). Anything outside user space is "no camera yet". Taking the
+    // address of the returned reference does not dereference it, so the range test below
+    // still runs before any load.
+    const ::Graphics::Camera* camera =
+        &reinterpret_cast<::Graphics::Renderer*>(renderer)->GetCullCamera();  // B.3.5 bridge
     if (reinterpret_cast<intptr_t>(camera) <= 0x10000 ||
         reinterpret_cast<uintptr_t>(camera) >= 0x00007fffffff0000ull) return;
     alignas(16) uint8_t camFrustum[256] = {0};
     alignas(16) uint8_t worldFrustum[256] = {0};
-    fn_Camera_GetFrustum(camera, camFrustum);
-    // B.3.1 bridge: Graphics::Camera keeps its world transform at +0x64 and is
-    // not a converted class yet; the copy is Math::Transform3's copy ctor.
-    Math::Transform3 camXf3 =
-        *reinterpret_cast<const Math::Transform3*>(
-            reinterpret_cast<const uint8_t*>(camera) + 0x64);
+    // B.3.5: the retslot door's body moved to the call site — exactly one
+    // construction, into the SAME caller storage the door used to be handed.
+    ::new (static_cast<void*>(camFrustum)) ::Frustum(camera->GetFrustum());
+    // Graphics::Camera keeps its world transform at +0x64; the copy is
+    // Math::Transform3's copy ctor, now through the real class's named field.
+    static_assert(offsetof(::Graphics::Camera, _cameraToWorld) == 0x64,
+                  "Camera::_cameraToWorld @ +0x64 — the offset this read used to spell out");
+    Math::Transform3 camXf3 = camera->_cameraToWorld;
     fn_Frustum_MulTransform3(camFrustum, worldFrustum, &camXf3);
     std::memcpy(s_planes, worldFrustum, sizeof(s_planes));
     // Sanity: a zero frustum (renderer not yet drawn) must not cull everything.
@@ -144,16 +151,15 @@ void FlushCulled() {
     uint8_t saved = s_rootOnly ? *s_rootOnly : 0;
     if (s_rootOnly) *s_rootOnly = 0;
     int64_t zeroTime = 0;
-    if (!s_geomSetXfResolved) {
-        s_geomSetXfResolved = true;
-        s_geomSetXf = reinterpret_cast<GeomSetXf_t>(
-            ResolveExport("?SetTransform@Geometry@Graphics@@QEAAXAEBVTransform@Math@@@Z"));
-    }
     for (void* model : s_culledModels) {
         uintptr_t s = reinterpret_cast<uintptr_t>(model);
         // GEOM_CULL left the render-scene transform stale: push model+0x148 first.
-        if (Cfg().geomCull && s_geomSetXf)
-            s_geomSetXf(reinterpret_cast<void*>(s + 0x28), reinterpret_cast<const void*>(s + 0x148));
+        // The receiver is the Geometry the vtable dispatch below also drives: every
+        // drawable component in this port embeds its Geometry at owner+0x28
+        // (scene_watch.cpp:176-178 and engine/types/ModelComponent.h).
+        if (Cfg().geomCull)
+            reinterpret_cast<::Graphics::Geometry*>(s + 0x28)->SetTransform(
+                *reinterpret_cast<const Math::Transform*>(s + 0x148));  // B.3.5 bridge
         typedef void (*fn_MeshUpdate_t)(void*, void*);
         fn_MeshUpdate_t upd = *reinterpret_cast<fn_MeshUpdate_t*>(*reinterpret_cast<uintptr_t*>(s + 0x28) + 0x8);
         if (upd) upd(reinterpret_cast<void*>(s + 0x28), &zeroTime);
