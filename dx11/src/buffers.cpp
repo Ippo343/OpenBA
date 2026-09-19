@@ -113,26 +113,34 @@ struct RuntimeDeps {
     // Video::Device::_singleton — the ADDRESS of the variable, not its value.
     void**  videoDeviceSingleton;
 
-    // ?Lock@Device@Video@@QEAAXXZ   (ordinal 3214)
-    void  (*DeviceLock)(void* device);
-    // ?Unlock@Device@Video@@QEAAXXZ (ordinal 4462)
-    void  (*DeviceUnlock)(void* device);
-
-    // The three Runtime-side base destructors chained by our slot-0 dtors.
-    void  (*VertexBufferDataDtor)(void* self);    // ??1VertexBufferData@Video@@UEAA@XZ
-    void  (*IndexBufferDataDtor)(void* self);     // ??1IndexBufferData@Video@@UEAA@XZ
-    void  (*ConstantBufferDataDtor)(void* self);  // ??1ConstantBufferData@Video@@UEAA@XZ
+    // ENDGAME B.3.5 block J, RULE B5-14 — NINE OF THE FIFTEEN FIELDS ARE GONE.
+    // Every one was a mangled Runtime symbol resolved into a function pointer and
+    // called indirectly (caller binding 3 into this file's own table), and every
+    // class they named is a real C++ class now, so each is a direct member call:
+    //
+    //   ?Lock@Device@Video@@              -> Video::Device::Lock
+    //   ?Unlock@Device@Video@@            -> Video::Device::Unlock
+    //   ?GetEncoding@Serializer@IO@@      -> IO::Serializer::GetEncoding
+    //   ?Serialize@…AEA_NPEBD@Z           -> IO::Serializer::Serialize(bool&,  const char*)
+    //   ?Serialize@…AEAHPEBD@Z            -> IO::Serializer::Serialize(int&,   const char*)
+    //   ?SerializeBytes@Serializer@IO@@   -> IO::Serializer::SerializeBytes
+    //   ??1{Vertex,Index,Constant}BufferData@Video@@ -> ~XData(), block D2 already
+    //
+    // THE DOOR DECIDED THE OVERLOAD for the two `?Serialize@` rows: `AEA_N` is the
+    // `bool&` member and `AEAH` the `int&` one, not whatever the argument's
+    // apparent type suggests. The three base-destructor rows were kept by block D2
+    // so `g_deps.ok` would still fail when the Runtime side was absent; a member
+    // call is resolved by the LINKER, which is strictly stronger, so the rows were
+    // testing symbols nobody reads any more. What remains in the all-or-nothing
+    // test below is exactly what is still resolved at run time — the allocator
+    // door, the `Device::_singleton` storage read (RULE B4b-4) and the three live
+    // vtables — so `EnsureDeps()` is narrowed, not weakened, and every
+    // `if (!EnsureDeps())` guard in this file stays.
 
     // ?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z  (static: size, alignment)
     void* (*MemAlloc)(unsigned long long size, int alignment);
     // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z     (static)
     void  (*MemFree)(void* ptr);
-
-    // IO::Serializer, used only by the two Serialize slots.
-    const void* (*SerializerGetEncoding)(void* serializer);              // ?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ
-    void  (*SerializeBool)(void* ser, bool* field, const char* name);    // ?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z
-    void  (*SerializeInt)(void* ser, int* field, const char* name);      // ?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z
-    void  (*SerializeBytes)(void* ser, int count, void* data, const char* name); // ?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z
 
     // The three vtable bases in the shipped DLL's .rdata. A destructor stores
     // its own class's vptr before chaining to the base dtor; because the seam
@@ -162,25 +170,9 @@ bool EnsureDeps() {
     g_deps.videoDeviceSingleton =
         reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
 
-    g_deps.DeviceLock   = Exp<void (*)(void*)>("?Lock@Device@Video@@QEAAXXZ");
-    g_deps.DeviceUnlock = Exp<void (*)(void*)>("?Unlock@Device@Video@@QEAAXXZ");
-
-    g_deps.VertexBufferDataDtor   = Exp<void (*)(void*)>("??1VertexBufferData@Video@@UEAA@XZ");
-    g_deps.IndexBufferDataDtor    = Exp<void (*)(void*)>("??1IndexBufferData@Video@@UEAA@XZ");
-    g_deps.ConstantBufferDataDtor = Exp<void (*)(void*)>("??1ConstantBufferData@Video@@UEAA@XZ");
-
     g_deps.MemAlloc = Exp<void* (*)(unsigned long long, int)>(
         "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
     g_deps.MemFree  = Exp<void (*)(void*)>("?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
-
-    g_deps.SerializerGetEncoding = Exp<const void* (*)(void*)>(
-        "?GetEncoding@Serializer@IO@@QEAAAEBVEncoding@2@XZ");
-    g_deps.SerializeBool  = Exp<void (*)(void*, bool*, const char*)>(
-        "?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z");
-    g_deps.SerializeInt   = Exp<void (*)(void*, int*, const char*)>(
-        "?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z");
-    g_deps.SerializeBytes = Exp<void (*)(void*, int, void*, const char*)>(
-        "?SerializeBytes@Serializer@IO@@QEAAXHPEAXPEBD@Z");
 
     // The LIVE vtables, not the shipped .rdata arrays at 0x1800188xx. These
     // are our exe-owned arrays and VideoDX11-x64.dll is never mapped, so
@@ -189,11 +181,7 @@ bool EnsureDeps() {
     g_deps.vtIndexBufferData    = Dx11LiveVtable(Vt::IndexBufferData);
     g_deps.vtConstantBufferData = Dx11LiveVtable(Vt::ConstantBufferData);
 
-    g_deps.ok = g_deps.videoDeviceSingleton && g_deps.DeviceLock && g_deps.DeviceUnlock &&
-                g_deps.VertexBufferDataDtor && g_deps.IndexBufferDataDtor &&
-                g_deps.ConstantBufferDataDtor && g_deps.MemAlloc && g_deps.MemFree &&
-                g_deps.SerializerGetEncoding && g_deps.SerializeBool &&
-                g_deps.SerializeInt && g_deps.SerializeBytes &&
+    g_deps.ok = g_deps.videoDeviceSingleton && g_deps.MemAlloc && g_deps.MemFree &&
                 g_deps.vtVertexBufferData && g_deps.vtIndexBufferData &&
                 g_deps.vtConstantBufferData;
 
@@ -219,6 +207,20 @@ inline ID3D11Device* ActiveDevice() {
     return reinterpret_cast<ID3D11Device*>(ActiveDeviceData()->d3dDevice);
 }
 inline void* VideoDeviceSingleton() { return *g_deps.videoDeviceSingleton; }
+
+// ENDGAME B.3.5 block J — the bridge cast the converted `Video::Device::Lock` /
+// `Unlock` calls go through. `Device::_singleton` is read as a `void**` here
+// (RULE B4b-4 keeps the static a by-address read until the end of B.3), so the
+// step to the real class is a reinterpret_cast, named once.
+inline ::Video::Device* VideoDeviceObject() {
+    return reinterpret_cast< ::Video::Device*>(VideoDeviceSingleton());  // B.3.5 bridge
+}
+
+// The serializer crosses the seam as a `void*` in every registered slot
+// signature; the same one-place cast.
+inline ::IO::Serializer* SerOf(void* serializer) {
+    return reinterpret_cast< ::IO::Serializer*>(serializer);             // B.3.5 bridge
+}
 
 // ============================================================
 // Owner-side views (Runtime-x64.dll classes — prefix only)
@@ -504,7 +506,7 @@ using RecreateFn = bool (*)(void* self, uint32_t sizeBytes, uint8_t dynamicByte,
 
 void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
                          void* serializer, RecreateFn recreate) {
-    const void* encoding = g_deps.SerializerGetEncoding(serializer);
+    const void* encoding = &SerOf(serializer)->GetEncoding();
 
     // encoding->vtable[0](encoding) -> bool. Which virtual this is has NOT been
     // identified; the DLL only ever uses it as an "is this encoding one I can
@@ -517,8 +519,8 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
     GpuBufferOwner* owner = reinterpret_cast<GpuBufferOwner*>(ownerPtr);
 
     // Order matters: the dynamic flag first, then the size.
-    g_deps.SerializeBool(serializer, reinterpret_cast<bool*>(&owner->dynamic), nullptr);
-    g_deps.SerializeInt(serializer, &owner->size, nullptr);
+    SerOf(serializer)->Serialize(reinterpret_cast<bool&>(owner->dynamic), nullptr);
+    SerOf(serializer)->Serialize(owner->size, nullptr);
 
     const int32_t sizeBytes = owner->size;
     if (sizeBytes == 0) return;
@@ -526,7 +528,7 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
     if (SerializerStreamMode(serializer) == 0) {
         // Load: read the payload into scratch memory and rebuild the buffer.
         void* scratch = g_deps.MemAlloc(static_cast<unsigned long long>(sizeBytes), 4);
-        g_deps.SerializeBytes(serializer, owner->size, scratch, nullptr);
+        SerOf(serializer)->SerializeBytes(owner->size, scratch, nullptr);
         recreate(self, static_cast<uint32_t>(owner->size), owner->dynamic, scratch);
         g_deps.MemFree(scratch);
         return;
@@ -544,7 +546,7 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
 
     ID3D11Buffer* staging = nullptr;
 
-    g_deps.DeviceLock(VideoDeviceSingleton());
+    VideoDeviceObject()->Lock();
 
     ID3D11Device*        dev = ActiveDevice();
     ID3D11DeviceContext* ctx = ActiveContext();
@@ -561,11 +563,11 @@ void GpuBuffer_Serialize(void* self, void* ownerPtr, void** bufferSlot,
 
     D3D11_MAPPED_SUBRESOURCE mapped;
     ctx->Map(staging, 0, D3D11_MAP_READ_WRITE, 0, &mapped);                      // 3
-    g_deps.SerializeBytes(serializer, owner->size, mapped.pData, nullptr);
+    SerOf(serializer)->SerializeBytes(owner->size, mapped.pData, nullptr);
     ctx->Unmap(staging, 0);
     staging->Release();
 
-    g_deps.DeviceUnlock(VideoDeviceSingleton());
+    VideoDeviceObject()->Unlock();
 }
 
 // ============================================================
@@ -589,7 +591,7 @@ bool GpuBuffer_SetData(void* ownerPtr, void* buffer,
     const GpuBufferOwner* owner = reinterpret_cast<const GpuBufferOwner*>(ownerPtr);
     if (owner->size == 0) return true;
 
-    g_deps.DeviceLock(VideoDeviceSingleton());
+    VideoDeviceObject()->Lock();
 
     ID3D11DeviceContext* ctx = ActiveContext();
 
@@ -604,7 +606,7 @@ bool GpuBuffer_SetData(void* ownerPtr, void* buffer,
     ctx->UpdateSubresource(reinterpret_cast<ID3D11Buffer*>(buffer), dstSubresource, &box,
                            src, static_cast<UINT>(sizeBytes), 0);
 
-    g_deps.DeviceUnlock(VideoDeviceSingleton());
+    VideoDeviceObject()->Unlock();
     return true;
 }
 
