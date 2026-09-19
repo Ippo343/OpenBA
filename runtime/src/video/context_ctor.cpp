@@ -93,11 +93,55 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
 
+// ============================================================================
+// ENDGAME B.3.5 block D1 — WHAT DID AND DID NOT CHANGE HERE
+// ============================================================================
+// NOTHING IN THIS FILE BECOMES A MEMBER. `??0Context@Video@@` stays a registered
+// ctor DOOR (B4b-2 / B35_RULES 11): it runs on 0x2168 raw bytes from
+// `System::MemoryAllocator` whose first field it then writes, it is inlined
+// seven times over `Video::ConstantBuffer`'s own constructor, and a real
+// constructor would additionally destroy `std::is_trivially_copyable<Context>`,
+// which nine files depend on. The four sub-object zero-fills stay free functions
+// for the same reason. What the conversion bought here is TYPES: `Context*` and
+// `Video::ConstantBuffer*` instead of `void*` plus raw offsets, and one
+// RT_EXPORT_ONCE retired.
+//
+// THE FOUR BY-ADDRESS-ONLY ROWS ARE CONFIRMED AS `Video::Context`'s, not
+// inferred from their names (B35_FILEMAP flags them as INFERRED). Ghidra
+// `getReferencesTo` on each of 0x180053730 / 0x180053840 / 0x1800538b0 /
+// 0x180053920 in the retail DLL (15290 functions) returns exactly TWO callers
+// each, and both are `Video::Context` constructors:
+//
+//   0x1800f19cc / 0x1800f19f4 / 0x1800f1a00 / 0x1800f1a0c
+//        inside ??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z
+//        (0x1800f1820) — the five-argument ctor this file ports
+//   0x1800f1422 / 0x1800f144a / 0x1800f1456 / 0x1800f1462
+//        inside ??0Context@Video@@QEAA@PEAVDevice@1@@Z (0x1800f1280, body
+//        0x1800f1280..0x1800f16d5) — the ONE-ARGUMENT ctor, which is NOT ported
+//
+// No other referencer exists, so the attribution is proved rather than guessed,
+// and the second caller is new information: the four zero-fills are SHARED by
+// both Context constructors, which is why they are registered separately
+// instead of being folded into the ported ctor.
+//
+// The two `operator new`s this file ports — `??2ImageBuffer@Video@@` and
+// `??2RenderBuffer@Video@@` — are `Video::ImageBuffer`'s and
+// `Video::RenderBuffer`'s members (proved by their mangled names, not by a
+// prefix), i.e. block C's and block D2's classes. They stay UNTOUCHED doors
+// here; moving them onto those classes is owed to those blocks.
+// ============================================================================
+
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-extern "C" void RtVideo_Context_AssignConstants(void* self);   // constant_buffer.cpp
-extern "C" void RtVideo_Context_Dtor(RtVideo::Context* self);  // context_lifecycle.cpp
+extern "C" void RtVideo_Context_Dtor(Video::Context* self);    // context_lifecycle.cpp
+// `??3Context@Video@@SAXPEAX@Z`'s ported body, also context_lifecycle.cpp. This
+// used to be an `RT_EXPORT_ONCE(…, "??3Context@Video@@SAXPEAX@Z")` indirect call
+// — binding spelling (c) — on a symbol whose only implementation in the process
+// is the one three lines away in this block's own file set. B.3.5 makes it a
+// direct call; the registration in context_lifecycle.cpp is untouched, so an
+// outside caller that still asks by name or by address gets the same body.
+extern "C" void Video_Context_OperatorDelete(void* p);         // context_lifecycle.cpp
 
 namespace {
 
@@ -137,16 +181,21 @@ void** DeviceSingletonSlot() {
 //
 // +0x19..+0x1b are deliberately left alone; see the banner.
 // ---------------------------------------------------------------------------
-void InitConstantBuffer(void* buf, void* device) {
-    Field<void*>(buf, 0x00)   = nullptr;
-    Field<void*>(buf, 0x08)   = nullptr;
-    Field<int64_t>(buf, 0x10) = -1;                     // +0x10 AND +0x14
-    Field<uint8_t>(buf, 0x18) = 0;
-    // Unaligned by construction — retail's `MOV qword ptr [RSI+0x1c],RBX`.
-    std::memset(At(buf, 0x1c), 0, 8);                   // +0x1c..+0x23
-    Field<void*>(buf, 0x28)   = nullptr;
-    Field<void*>(buf, 0x30)   = nullptr;
-    Field<void*>(buf, 0x38)   = device;
+// B.3.5: the destination is the real `Video::ConstantBuffer` now, so every write
+// but one is a named field. The exception is retail's `MOV qword ptr
+// [RSI+0x1c],RBX` — a single UNALIGNED eight-byte store covering +0x1c..+0x23,
+// i.e. `_registerCount` AND `_bankStride` AND the unproven `_unknown24`. It
+// stays a `memset` because splitting it into two field stores would silently
+// stop writing +0x24..+0x27, which retail does write here and nowhere else.
+void InitConstantBuffer(Video::ConstantBuffer* buf, void* device) {
+    buf->_prefix        = nullptr;                      // +0x00
+    buf->_typeName      = nullptr;                      // +0x08
+    Field<int64_t>(buf, 0x10) = -1;                     // _ordinalIndex AND _uploadIndex
+    buf->_bindToVertex  = 0;                            // +0x18, a BYTE
+    std::memset(At(buf, 0x1c), 0, 8);                   // +0x1c..+0x23, unaligned
+    buf->_constantData  = nullptr;                      // +0x28
+    Field<int64_t>(buf, 0x30) = 0;                      // _constantCount AND _capacity
+    buf->_device        = device;                       // +0x38
 
     void* factory = device ? Field<void*>(device, 0x100) : nullptr;
     void* companion = nullptr;
@@ -154,7 +203,7 @@ void InitConstantBuffer(void* buf, void* device) {
         void** vt = *reinterpret_cast<void***>(factory);
         companion = reinterpret_cast<CompanionMk>(vt[11])(factory, buf);  // +0x58
     }
-    Field<void*>(buf, 0x40) = companion;
+    buf->_platformData = companion;                     // +0x40
 }
 
 // One dynamic buffer: `operator new(0x20)`, two field writes, PlatformConstruct,
@@ -237,7 +286,7 @@ extern "C" void* RtVideo_Ctx_ZeroLightBlock(void* p) {         // 0x180053920
 // ??0Context@Video@@QEAA@PEAVDevice@1@HHHPEAVRenderBuffer@1@@Z
 //                                                   retail 0x1800f1820, ord 125
 // ============================================================================
-extern "C" void* RtVideo_Context_Ctor(void* self, void* device,
+extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
                                       int32_t vertexBytes, int32_t indexBytes,
                                       int32_t instanceBytes,
                                       void* renderBuffer) {
@@ -248,8 +297,8 @@ extern "C" void* RtVideo_Context_Ctor(void* self, void* device,
     Field<int32_t>(self, 0x1c0) = 0;
     for (size_t off = 0x1c8; off <= 0x290; off += 8) Field<void*>(self, off) = nullptr;
 
-    InitConstantBuffer(At(self, 0x298), device);   // mc_ MaterialConstants
-    InitConstantBuffer(At(self, 0x2e0), device);   // pc_ PixelConstants
+    InitConstantBuffer(&self->_materialConstants, device);   // mc_
+    InitConstantBuffer(&self->_pixelConstants, device);      // pc_
 
     RtVideo_Ctx_ZeroTransformPair(At(self, 0x328));
     for (size_t off = 0x3f8; off <= 0x410; off += 8) Field<void*>(self, off) = nullptr;
@@ -257,11 +306,11 @@ extern "C" void* RtVideo_Context_Ctor(void* self, void* device,
     RtVideo_Ctx_ZeroTransformMatrices(At(self, 0x10d8));  // 52 x 0x40 -> +0x1dd8
     RtVideo_Ctx_ZeroLightBlock(At(self, 0x1dd8));         // 0x1a0     -> +0x1f78
 
-    InitConstantBuffer(At(self, 0x1f78), device);  // gc_ GlobalConstants
-    InitConstantBuffer(At(self, 0x1fc0), device);  // ic_ InstanceConstants
-    InitConstantBuffer(At(self, 0x2008), device);  // bc_ BoneConstants
-    InitConstantBuffer(At(self, 0x2050), device);  // tc_ TransformConstants
-    InitConstantBuffer(At(self, 0x2098), device);  // lc_ LightConstants
+    InitConstantBuffer(&self->_globalConstants, device);     // gc_
+    InitConstantBuffer(&self->_instanceConstants, device);   // ic_
+    InitConstantBuffer(&self->_boneConstants, device);       // bc_
+    InitConstantBuffer(&self->_transformConstants, device);  // tc_
+    InitConstantBuffer(&self->_lightConstants, device);      // lc_
 
     Field<void*>(self, 0x20e0)   = nullptr;
     Field<int32_t>(self, 0x20e8) = 0;
@@ -275,7 +324,7 @@ extern "C" void* RtVideo_Context_Ctor(void* self, void* device,
     std::memset(At(self, 0x138), 0, 0x40);
     std::memset(At(self, 0x178), 0, 0x40);
 
-    RtVideo_Context_AssignConstants(self);
+    self->Video::Context::AssignConstants();
 
     // The Context's OWN backend companion, from the Device SINGLETON rather
     // than from the `device` argument — retail reads 0x1801fe7a8 here even
@@ -364,21 +413,21 @@ extern "C" void* RtVideo_Context_Ctor(void* self, void* device,
 // ============================================================================
 extern "C" void RtEngine_MainLoop_CreateVideoContext(void* self) {
     if (void* old = Field<void*>(self, 0x10)) {
-        RtVideo_Context_Dtor(static_cast<RtVideo::Context*>(old));
-        RT_EXPORT_ONCE(VoidThisFn, "??3Context@Video@@SAXPEAX@Z")(old);
+        RtVideo_Context_Dtor(static_cast<Video::Context*>(old));
+        Video_Context_OperatorDelete(old);   // was RT_EXPORT_ONCE("??3Context@Video@@SAXPEAX@Z")
         Field<void*>(self, 0x10) = nullptr;
     }
 
     // Retail inlines `Enter ; Allocate(alloc, 0x2168, 8) ; Leave`, which is
     // MemAlloc(0x2168, 8) — see the banner.
-    void* block = MemAlloc(sizeof(RtVideo::Context), 8);
+    void* block = MemAlloc(sizeof(Video::Context), 8);
     if (!block) {
         Field<void*>(self, 0x10) = nullptr;
         return;
     }
     void* device = *DeviceSingletonSlot();
-    Field<void*>(self, 0x10) = RtVideo_Context_Ctor(block, device,
-                                                    0x800000, 0x400000,
+    Field<void*>(self, 0x10) = RtVideo_Context_Ctor(static_cast<Video::Context*>(block),
+                                                    device, 0x800000, 0x400000,
                                                     0x100000, nullptr);
 }
 

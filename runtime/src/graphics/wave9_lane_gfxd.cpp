@@ -444,23 +444,10 @@ extern "C" void RtGfxd_DrawGroupClearPasses(void* group) {
 // its buffer, so the next frame's BeginDrawGroup reuses them. Only `_scenes` and
 // `_drawables` are emptied, and even they keep their capacity.
 // ============================================================================
+// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::Reset()` at the
+// bottom of this file. The door keeps its name and both registrations.
 extern "C" void RtGraphics_Renderer_Reset(Renderer* self) {
-    uint8_t* const p = reinterpret_cast<uint8_t*>(self);
-
-    const int32_t neg1 = -1;
-    std::memcpy(p + 0x34, &neg1, 4);
-
-    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(p + 0x18); ++i) {
-        uint8_t* groups = *reinterpret_cast<uint8_t* const*>(p + 0x10);
-        RtGfxd_DrawGroupClearPasses(groups + static_cast<int64_t>(i) * 0x1f0);
-    }
-
-    RtGfxd_SceneArraySetSize0(p + 0x00);        // _scenes
-    RtGfxd_DrawableArraySetSize0(p + 0x20);     // _drawables
-
-    const uint32_t zero = 0u;
-    std::memcpy(p + 0x40, &zero, 4);            // frameAlpha, as a dword store
-    std::memcpy(p + 0x38, &zero, 4);
+    reinterpret_cast<::Graphics::Renderer*>(self)->::Graphics::Renderer::Reset();  // B.3.5 bridge
 }
 
 // ============================================================================
@@ -492,35 +479,146 @@ extern "C" void RtGraphics_Renderer_Reset(Renderer* self) {
 // element, so the record's own buffer — allocated by the Array's operator= at
 // 0x18001cdf0 — has to be released before the record leaves scope.
 // ============================================================================
+// ENDGAME B.3.5 block F: the BODY MOVED to `Graphics::Renderer::AddScene` at the
+// bottom of this file, where the four out-of-order stack arguments land on NAMED
+// members of `Graphics::RendererSceneEntry` instead of on byte offsets. The door
+// keeps its name, both registrations and retail's argument order.
 extern "C" void RtGraphics_Renderer_AddScene(Renderer* self,
                                              const void* scene,
                                              const void* renderBuffer,
                                              const Camera* camera,
                                              int32_t arg5, int32_t arg6,
                                              int32_t arg7, uint32_t arg8) {
-    uint8_t rec[0x110];                          // uninitialised ON PURPOSE
-
-    std::memcpy(rec + 0x00, &scene, 8);
-    std::memcpy(rec + 0x08, &renderBuffer, 8);
-    RtGraphics_Camera_CopyCtor(reinterpret_cast<Camera*>(rec + 0x10), camera);
-
-    const int32_t neg1 = -1;
-    std::memcpy(rec + 0xe8, &arg5, 4);
-    std::memcpy(rec + 0xec, &arg7, 4);
-    std::memcpy(rec + 0xf0, &arg8, 4);
-    std::memcpy(rec + 0xf4, &neg1, 4);
-    std::memcpy(rec + 0xf8, &arg6, 4);
-    std::memset(rec + 0x100, 0, 8);
-    std::memset(rec + 0x108, 0, 8);
-
-    uint8_t* const p = reinterpret_cast<uint8_t*>(self);
-    RtGfxd_SceneArraySetSizeFill(p + 0x00,
-                                 *reinterpret_cast<const int32_t*>(p + 0x08) + 1, rec);
-    // retail 0x18001c750 — the stack record's own Array<int32> header, freed.
-    reinterpret_cast<rtcoll::ArrayHdr*>(rec + 0x100)->~Array();
+    reinterpret_cast<::Graphics::Renderer*>(self)->::Graphics::Renderer::AddScene(  // B.3.5 bridge
+        reinterpret_cast<const ::Graphics::Scene*>(scene),
+        reinterpret_cast<const ::Video::RenderBuffer*>(renderBuffer),
+        *reinterpret_cast<const ::Graphics::Camera*>(camera),
+        arg5, arg6, arg7, arg8);
 }
 
 }  // namespace rtgfxd
+
+// ############################################################################
+// ENDGAME B.3 step 5 (block F) — THE TWO `Renderer` BODIES, MOVED ONTO MEMBERS
+// ############################################################################
+//
+// `Graphics::Renderer` is a real C++ class as of block F
+// (`runtime/types/graphics/Camera.h`), so `Reset` and `AddScene` — the two of
+// `Renderer::Draw`'s four portable-export callees this lane ported — move onto
+// it. The two `Graphics::Camera` CONSTRUCTORS above DO NOT MOVE: RULE B5-4 keeps
+// ctor doors as doors, and both bodies are byte-faithful PARTIAL writes (the copy
+// ctor leaves +0xd5..+0xd7 alone; the default ctor leaves +0x61..+0x63 and
+// +0xd5..+0xd7 alone) that a C++ constructor with an initialiser list cannot
+// express. They stay where they are, on the `RtGraphics::Camera` POD, and the
+// three `ArraySpec` rows and their four registered entry points stay with them.
+//
+// NAME-LOOKUP HYGIENE (B34B_RULES §7.2): the `using RtGraphics::Camera;` /
+// `Renderer;` declarations above live inside `namespace rtgfxd`, so they are not
+// visible here at all; inside `namespace Graphics` a bare `Camera`, `Renderer` or
+// `RendererSceneEntry` binds the REAL CLASS. Everything this lane owns is reached
+// with an explicit `rtgfxd::` qualifier.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?Reset@Renderer@Graphics@@QEAAXXZ — retail 0x180105110.
+//
+// Store order is retail's, and it is not the order a reader would guess:
+// `_currentDrawGroup` is set to -1 FIRST, before the group loop, and `_alphaT`
+// and `_drawGroupsUsed` are cleared LAST, after both arrays. `_alphaT` is a float
+// and retail writes it with `MOV dword ptr [RBX+0x40],0x0` — an INTEGER store of
+// the zero bit pattern, which is +0.0f; `= 0.0f` is the same four bytes.
+//
+// The loop re-reads `_drawGroups._size` from memory on every iteration
+// (`CMP EDI,dword ptr [RBX+0x18]` at 0x180105145), which is faithful and also
+// harmless: the callee cannot change it. `GetSize()` is that read.
+//
+// NOTE WHAT RESET DOES NOT DO. It does not touch `_drawGroups`' own header at
+// all — the group objects are cleared in place and the array keeps its size and
+// its buffer, so the next frame's `BeginDrawGroup` reuses them. Only
+// `_sceneGroups` and `_drawables` are emptied, and even they keep their capacity.
+// ---------------------------------------------------------------------------
+void Renderer::Reset() {
+    _currentDrawGroup = -1;
+
+    for (int32_t i = 0; i < _drawGroups.GetSize(); ++i)
+        rtgfxd::RtGfxd_DrawGroupClearPasses(&_drawGroups[i]);
+
+    rtgfxd::RtGfxd_SceneArraySetSize0(&_sceneGroups);
+    rtgfxd::RtGfxd_DrawableArraySetSize0(&_drawables);
+
+    _alphaT         = 0.0f;   // retail: MOV dword ptr [RBX+0x40],0x0
+    _drawGroupsUsed = 0;
+}
+
+// ---------------------------------------------------------------------------
+// ?AddScene@Renderer@Graphics@@QEAAXPEBVScene@2@PEBVRenderBuffer@Video@@
+//                                  AEBVCamera@2@HHHI@Z — retail 0x180105700.
+//
+// *** THE FOUR STACK ARGUMENTS ARE NOT STORED IN SOURCE ORDER, AND THAT IS THE
+// ONE THING IN THIS FUNCTION A READER WILL GET WRONG. *** Read off the four
+// `[RSP+0x1xx]` loads at 0x18010572c..0x18010576f:
+//
+//     arg5 (H, [RSP+0x170])  ->  entry +0xe8    `_shaderDetail`
+//     arg6 (H, [RSP+0x178])  ->  entry +0xf8    `_detailId`          <-- swapped
+//     arg7 (H, [RSP+0x180])  ->  entry +0xec    `_shader`            <-- swapped
+//     arg8 (I, [RSP+0x188])  ->  entry +0xf0    `_materialTypeFlags`
+//
+// and +0xf4 (`_drawGroupIndex`) is the immediate -1, which `Draw` writes back
+// later from `Renderer::_currentDrawGroup`. The C++ parameter list below is
+// spelled in RETAIL'S DECLARATION ORDER (…, shaderDetail, detailId, shader,
+// materialTypeFlags) so the door is a straight pass-through and the swap stays
+// visible exactly once, here, where the assignments are.
+//
+// `raw` IS DELIBERATELY UNINITIALISED. Retail builds this record on the stack and
+// never writes +0xfc, nor the Camera's +0xd5..+0xd7 tail (which lands at
+// +0xe5..+0xe7); the assign then copies those uninitialised bytes into the array
+// element. A port that zeroed them would be "helpful" and WRONG in the one way
+// that shows up as a byte divergence against a DLL-built Renderer
+// (reference_oracle_must_not_compare_unwritten_bytes.md, and the same reasoning
+// renderer.cpp's Renderer ctor gives for leaving +0x3c and +0x4c alone). That is
+// why the record is raw storage with a typed cursor over it rather than a
+// `RendererSceneEntry` object: a constructed one would zero-initialise the
+// embedded Camera's Vector4 members.
+//
+// The trailing `~Array<int32>` on the record's `_drawableIds` is retail's
+// (0x18010579c). It is not redundant: `SetSizeFill`'s assign copy-constructs a
+// fresh buffer into the array ELEMENT, so the record's own buffer — allocated by
+// the inner Array's `operator=` at 0x18001cdf0 — has to be released before the
+// record leaves scope.
+// ---------------------------------------------------------------------------
+void Renderer::AddScene(const Scene* scene, const Video::RenderBuffer* renderBuffer,
+                        const Camera& camera, int shaderDetail, int detailId,
+                        int shader, uint32_t materialTypeFlags) {
+    alignas(RendererSceneEntry) uint8_t raw[sizeof(RendererSceneEntry)];  // ON PURPOSE
+    RendererSceneEntry* const rec = reinterpret_cast<RendererSceneEntry*>(raw);
+
+    rec->_scene        = scene;
+    rec->_renderBuffer = renderBuffer;
+    rtgfxd::RtGraphics_Camera_CopyCtor(                                  // B.3.5 bridge
+        reinterpret_cast<RtGraphics::Camera*>(&rec->_camera),
+        reinterpret_cast<const RtGraphics::Camera*>(&camera));
+
+    rec->_shaderDetail      = shaderDetail;   // +0xe8
+    rec->_shader            = shader;         // +0xec
+    rec->_materialTypeFlags = materialTypeFlags;  // +0xf0
+    rec->_drawGroupIndex    = -1;             // +0xf4
+    rec->_detailId          = detailId;       // +0xf8
+    // +0xfc: NOT WRITTEN. See the banner.
+
+    // The two zero qwords retail stores over the inner Array header, spelled as
+    // the three fields they are.
+    rec->_drawableIds._data     = nullptr;
+    rec->_drawableIds._size     = 0;
+    rec->_drawableIds._capacity = 0;
+
+    rtgfxd::RtGfxd_SceneArraySetSizeFill(&_sceneGroups, _sceneGroups.GetSize() + 1, raw);
+    // retail 0x18001c750 — the stack record's own Array<int32> header, freed.
+    rec->_drawableIds.~Array();
+}
+
+}  // namespace Graphics
 
 // ============================================================================
 // REGISTRATION

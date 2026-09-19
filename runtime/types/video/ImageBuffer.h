@@ -1,12 +1,25 @@
 #pragma once
-// Video::ImageBuffer — binary-compatible struct definition.
-// Runtime-x64.dll class, 0x68 bytes.
+// ============================================================================
+// runtime/types/video/ImageBuffer.h — `Video::ImageBuffer` as a real C++ class,
+// plus the `RtVideo::ImageBuffer` POD its unconverted callers still use.
 //
-// Inheritance: Object::Base -> Object::External -> Object::CompiledExternal -> Video::ImageBuffer
+// ENDGAME B.3.5 block C. RULES B5-2.1 (this header is what `dx11/`'s deleted
+// `ImageBufferOwner` view now points at), B5-15 (the two type-name literals are
+// COPIED from B35_SLOTS, not derived from the C++ base name), B5-16 (`Construct`
+// is introduced by this branch at slot 8).
+// ============================================================================
+//
+// Runtime-x64.dll class, 0x68 bytes, `??_7ImageBuffer@Video@@6B@` @ 0x180154fc0,
+// TEN slots (B35_SLOTS.md), `sizeof` confirmed by the `MOV EDX,0x68` in the
+// slot-0 vector deleting destructor at 0x18001ed20.
+//
+// Inheritance: Object::Base -> Object::External -> Object::CompiledExternal ->
+// Video::ImageBuffer. `?_ParentTypeName@ImageBuffer@Video@@` (0x18001e8d0)
+// returns "Object::CompiledExternal", read byte-wise.
 //
 // Decompiled from (Wave 6 lane C):
 //   Ctor:            0x1800f2580 (??0ImageBuffer@Video@@QEAA@XZ)
-//   Copy ctor:       0x18001eb80 (??0ImageBuffer@Video@@QEAA@AEBV01@@Z) — NOT this lane's scope
+//   Copy ctor:       0x18001eb80 (??0ImageBuffer@Video@@QEAA@AEBV01@@Z)
 //   Dtor:            0x1800f2610 (??1ImageBuffer@Video@@UEAA@XZ)
 //   Width:           0x1800f2530 (?Width@ImageBuffer@Video@@QEBAHXZ)
 //   Height:          0x1800f24e0 (?Height@ImageBuffer@Video@@QEBAHXZ)
@@ -32,15 +45,13 @@
 // ctor's default value 0) identify them as the address-mode triple
 // (U/V/W), and +0x44 (init value 1) as the filter index.
 //
-// Width()/Height() were PREVIOUSLY WRONG: the old inline `return width;` /
+// Width()/Height() were PREVIOUSLY WRONG as inlines: the old `return width;` /
 // `return height;` only reproduced the common case. The real accessors
 // (0x1800f2530 / 0x1800f24e0) special-case two flag bits that make the
 // buffer track the live device resolution (bit 8 = full device size, bit 9 =
 // half device size) and a third (bit 6) that right-shifts the stored value
-// by a device-configured downsample amount. Nothing in this tree called the
-// old inline (only the fn_ImageBuffer_Width/Height pointers, resolved by
-// mangled name, are ever used), so this was latent rather than an observed
-// bug. Fixed below.
+// by a device-configured downsample amount.
+// ============================================================================
 
 #include <cstdint>
 #include <cstddef>
@@ -48,21 +59,58 @@
 // ENDGAME B.3.5 block A — `Video::ImageBufferData` and its POD view live here
 // now, with the other eleven companion bases (RULE B5-1 / B4b-1).
 #include "CompanionData.h"
+// `Object::CompiledExternal`, the proved parent of the real class below.
+#include "../object/External.h"
+
+// `runtime/src/video/`'s door helper over `Video::ImageBuffer`'s protected
+// surface. Four of its members are PRIVATE in retail (`AEAA` — the three
+// platform halves and `PlatformSerialize`) and `~ImageBuffer` is non-virtual and
+// protected, yet all five are exported by name and keep registered `extern "C"`
+// doors, which cannot name a protected member; `Serialize` also has to call
+// `PlatformSerialize`. B34_BRIEFS A.4's answer is to FRIEND the holder rather
+// than widen the access, so the header keeps saying what retail says. A DERIVED
+// helper class would not work: deriving forces GCC to reference
+// `vtable for Video::ImageBuffer`, whose slot 0 (`DeletingDtor`) is a table row
+// in `runtime/src/object/deleting_dtor.cpp` and is defined in no translation
+// unit, so the link fails (seen on `Video::RenderState`, not predicted).
+struct ImageBufferDoorAccess;
+
+// `Collection::Array<T>` (three template parameters, two defaulted) and
+// `System::Filename` both arrive with `../object/External.h` above, which
+// includes them; they are NOT forward-declared here, because a hand-written
+// `template <class T> class Array;` would be a different template.
+namespace IO { class Serializer; }
+
+// ############################################################################
+// THE POD, MOVED INTO `RtVideo` BY B4b-1.
+// ############################################################################
+//
+// The retail name now belongs to the real class `Video::ImageBuffer` below, so
+// the POD moves into the `Rt*` namespace — and it STAYS, because it still has
+// five unconverted users, none of them this block's:
+//
+//   runtime/src/video/buffers.cpp          (13 members; block D2)
+//   runtime/src/video/dynamic_resources.cpp (2;          block D2)
+//   runtime/src/video/video_resources.cpp   (1;          block D2)
+//   runtime/src/save/saveload_draw.cpp / saveload_saveinfo.cpp (the owner's)
+//   runtime/src/graphics/wave23_lane_gfxbody.cpp, through the two
+//     `RtGraphics::*ImageBuffer` PODs that embed it (block H1)
+//
+// A global-scope `using` is left behind so not one of those files has to move
+// in this block; they all spell it `ImageBuffer` with no namespace, which is
+// the fourth namespace spelling B35_FILEMAP (d) records for this header.
+// ############################################################################
+
+namespace RtVideo {
 
 // ============================================================
-// Object::CompiledExternal base (0x20 bytes)
-// Ctor @ 0x1800bb920 (??0CompiledExternal@Object@@QEAA@XZ)
-// Chain: Base(vtable) -> External(+0x08..+0x18 zeroed) -> CompiledExternal(vtable set)
-// ============================================================
-
-// ============================================================
-// Video::ImageBuffer (0x68 bytes)
+// RtVideo::ImageBuffer (0x68 bytes) — the POD view
 // ============================================================
 struct ImageBuffer {
     // --- CompiledExternal base (0x20 bytes) ---
     void*       vtable;             // +0x00  vtable pointer (set through Base->External->CompiledExternal->ImageBuffer chain)
-    uint64_t    externalData08;     // +0x08  External base field (zeroed in ctor)
-    uint64_t    externalData10;     // +0x10  External base field (zeroed in ctor)
+    uint64_t    externalData08;     // +0x08  External base field (zeroed in ctor) — External::_path
+    uint64_t    externalData10;     // +0x10  External base field (zeroed in ctor) — External::_refs
     uint64_t    externalData18;     // +0x18  External base field (zeroed in ctor)
 
     // --- ImageBuffer subclass fields ---
@@ -86,8 +134,8 @@ struct ImageBuffer {
     // System::String IS one pointer to a refcounted payload whose count sits at
     // -4, which is why the destructor in buffers.cpp is correct as written and
     // needs no change — but the NAME sends a reader looking for pixels in what
-    // is really the source path/name. Left spelled `pixelData` so no other
-    // lane's file has to move in this wave; rename it when Video is quiet.
+    // is really the source path/name. Left spelled `pixelData` HERE so no other
+    // block's file has to move; the real class below calls it `_sourceName`.
     void*       pixelData;          // +0x48  System::String (refcount at ptr-4, frees at 0)
     uint64_t    field50;            // +0x50  unknown (copied in copy ctor; not touched by any Lane C export)
     uint64_t    field58;            // +0x58  unknown (copied in copy ctor; not touched by any Lane C export)
@@ -138,13 +186,275 @@ static_assert(offsetof(ImageBuffer, field50) == 0x50, "field50 at +0x50");
 static_assert(offsetof(ImageBuffer, field58) == 0x58, "field58 at +0x58");
 static_assert(offsetof(ImageBuffer, platformData) == 0x60, "platformData at +0x60");
 
-// ============================================================
-// Video::ImageBufferData — MOVED OUT OF THIS FILE by ENDGAME B.3.5 block A.
-//
-// The retail name is now the real abstract class `Video::ImageBufferData` in
-// CompanionData.h, along with the other eleven `*Data` bases (RULE B5-1), and this
-// file's former POD lives there as `RtVideo::ImageBufferData` (RULE B4b-1).
-// There is ONE definition of the two fields; the alias below keeps the global
-// spelling `ImageBufferData` that `runtime/src/video/buffers.cpp` uses.
-// ============================================================
+}  // namespace RtVideo
+
+// The global spelling the five unconverted consumers use. See the banner above.
+using RtVideo::ImageBuffer;
+// And `Video::ImageBufferData`'s POD, whose global alias ENDGAME B.3.5 block A
+// left here when it moved the declaration into `CompanionData.h`:
+// `runtime/src/video/buffers.cpp` writes `pd->vtable` by hand in three
+// trampolines and in the ported `??1ImageBufferData` door. Block D2's when
+// `buffers.cpp` converts.
 using RtVideo::ImageBufferData;
+
+// ############################################################################
+// THE REAL CLASS.
+// ############################################################################
+
+namespace Video {
+
+// ============================================================
+// Video::ImageBuffer — one image/texture resource. 0x68 bytes,
+// `Object::CompiledExternal` base (which adds no bytes over `External`'s 0x20).
+//
+// *** NOT CONSTRUCTIBLE IN B.3.5. *** Every live `ImageBuffer` is built by
+// `??0ImageBuffer@Video@@QEAA@XZ` (0x1800f2580, ported in
+// `runtime/src/video/buffers.cpp`) or by the factory rows in
+// `runtime/src/video/rt_factories_video.inc`, and wears the MINTED
+// `??_7ImageBuffer@Video@@6B@` table rather than GCC's. A `Video::ImageBuffer
+// ib;` would stamp GCC's table on an object the rest of the tree reads through
+// the minted one, with no build error — so the default constructor is
+// `protected` and `= default` (B34_BRIEFS A.4).
+//
+// NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
+// `DeletingDtor(unsigned)`. `~ImageBuffer()` is non-virtual and has no slot.
+// ============================================================
+class ImageBuffer : public Object::CompiledExternal {
+public:
+    // The five 4-byte enums `?Create@` names, all NESTED in this class
+    // (`W4ImageType@12@`, `W4Usage@12@`, `W4Format@12@`, `W4FilterMode@12@`,
+    // `W4AddressMode@12@`). THE ENUMERATOR NAMES ARE NOT RECOVERABLE from the
+    // binary — only the values the ported bodies and the DX11 backend read — so,
+    // exactly as `Object::External::CompileResult` and
+    // `Video::VertexLayout::Usage` do for the same reason, they are spelled as
+    // the 32-bit integers they are rather than as enums with invented names.
+    //
+    // What IS known, from the bodies:
+    //   ImageType    +0x28 `_dimension`: 0 = 2D, 1 = cube
+    //   Usage        +0x2c `_kind`: 1 = depth, 2 = default, 3 = dynamic,
+    //                4 = generated, 5 = rendered, and {0,1,4,5} = render buffer
+    //   Format       +0x30, an index into an 8-entry DXGI table; < 3 is
+    //                block-compressed
+    //   FilterMode   +0x44: 0 = POINT, 1 = LINEAR, 2 = ANISOTROPIC
+    //   AddressMode  +0x38/+0x3c/+0x40: 0 = WRAP, 1 = CLAMP
+    using ImageType   = int32_t;
+    using Usage       = int32_t;
+    using Format      = int32_t;
+    using FilterMode  = int32_t;
+    using AddressMode = int32_t;
+
+    // The `Collection::Array<Collection::Array<uint8_t>>` of per-mip-level pixel
+    // blobs that `Create` and `PlatformCreate` take
+    // (`PEAV?$Array@V?$Array@E@Collection@@@Collection@@` in the mangling).
+    using LevelArray = Collection::Array<Collection::Array<uint8_t> >;
+
+    // ---- the ten slots, in measured order -------------------------------
+    // Slot 4 is `Object::External::Compile`, INHERITED (retail's slot 4 is
+    // 0x1800066e0, External's own body), so it is not redeclared here.
+    //
+    // SLOT 0 IS CONCRETE IN RETAIL (0x18001ed20) AND IS DECLARED `= 0` HERE,
+    // which is B.3.4's settled shape (B34_BRIEFS A.4) and the same call
+    // `CompanionData.h` makes for the twelve `*Data` bases: our slot 0 is a table
+    // ROW in `runtime/src/object/deleting_dtor.cpp`, registered by address, and
+    // is defined in no translation unit. Leaving it non-pure makes GCC demand
+    // `vtable for Video::ImageBuffer` from whichever translation unit defines a
+    // constructor or destructor of the class, which then fails to link. Pure
+    // makes every entry known (`__cxa_pure_virtual`) and the vtable emittable —
+    // and no live object ever wears it, because the ctor door stamps the minted
+    // address. The class is therefore ABSTRACT in C++ while being "concrete" in
+    // B35_RULES 2.2's sense (retail instantiates it); the two statements are
+    // about different things.
+    virtual Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x18001ed20
+    const char*       TypeName() const override;              // [1] 0x18001e900
+    uint32_t          Type() const override;                  // [2] 0x18001e8e0
+    int32_t           GetFileVersion() const override;        // [3] 0x1800f26e0 — `MOV EAX,7`
+    bool              Serialize(void* stream) override;       // [5] 0x1800f26f0
+    Object::External* Reconstruct() override;                 // [6] 0x18001ea80
+    void              Destruct() override;                    // [7] 0x18001eab0
+    // [8] 0x18001eaa0. `virtual`, NOT `override`: `Object::External`'s and
+    // `CompiledExternal`'s retail tables are eight entries, so this branch
+    // introduces `Construct` itself (RULE B5-16).
+    virtual Object::External* Construct();
+    // [9] 0x1800f2680. Introduced by this branch too. `Graphics::
+    // GeneratedImageBuffer` INHERITS it, `Graphics::FrameCopyImageBuffer`
+    // OVERRIDES it, and `Graphics::ReflectionImageBuffer` inherits it again
+    // (B35_RULES 2.3 item 5, read from the three slot lists).
+    //
+    // PURE ON PURPOSE, for slot 0's reason and `IO::Stream::DeletingDtor`'s: the
+    // body is the registered door `Video_ImageBuffer_Create` in
+    // `runtime/src/video/buffers.cpp`, which is ENDGAME B.3.5 block D2's file and
+    // is defined in no translation unit as a member. A non-pure declaration puts
+    // an undefined symbol in this class's emitted vtable and the exe does not
+    // link (seen, not predicted). Being pure changes nothing at a CALL SITE: a
+    // virtual call reads the live object's vptr, which is the MINTED table, and
+    // that slot has a body. It becomes a member when block D2 converts
+    // `buffers.cpp`, and no header edit is needed for that — only `= 0` coming
+    // off this line.
+    virtual bool Create(ImageType type, Usage usage, Format format, uint32_t flags,
+                        int32_t width, int32_t height, FilterMode filter,
+                        AddressMode addressU, AddressMode addressV,
+                        AddressMode addressW, LevelArray* levels) = 0;
+
+    // ---- the exported non-virtual members --------------------------------
+    // Every `?…@ImageBuffer@Video@@` in the shipped export table is declared
+    // here, ported or not, so no later block has to edit this header
+    // (BLOCK_BRIEF "the shape"). None of them is DEFINED in this block: the
+    // bodies are the registered doors in `runtime/src/video/buffers.cpp`,
+    // `dynamic_resources.cpp` and `video_resources.cpp`, which belong to block
+    // D2, and they become member definitions when that block converts them.
+    // Declaring them undefined is safe because nothing calls them THROUGH the
+    // class yet — `dx11/src/imagebufferdata.cpp` still reaches the nine it uses
+    // by mangled name, which is the door deciding, as it must while the body
+    // lives behind one.
+    int32_t Width() const;                 // 0x1800f2530 — reads the live device size for bits 8/9
+    int32_t Height() const;                // 0x1800f24e0 — ditto
+    int32_t GetLevelCount() const;         // 0x1800f2420
+    Format  GetFormat() const;             // 0x1800f2500 — `?AW4`, an ENUM by value: EAX, NOT a retslot
+    bool    HasMipMaps() const;            // 0x1800f2440
+    bool    Is2D() const;                  // 0x1800f2410
+    bool    IsCube() const;                // 0x1800f2470
+    bool    IsCompressed() const;          // 0x1800f2480
+    bool    IsColorBuffer() const;         // 0x1800f2450
+    bool    IsDepthBuffer() const;         // 0x1800f24c0
+    bool    IsDynamic() const;             // 0x1800f24d0
+    bool    IsGenerated() const;           // 0x1800f24a0
+    bool    IsRenderBuffer() const;        // 0x1800f2460
+    bool    IsRendered() const;            // 0x1800f2490
+    bool    IsShadowMap() const;           // 0x1800f24b0
+    bool    IsAliasedColor() const;        // 0x1800f2430
+    bool    IsAliasedDepth() const;        // 0x1800f24f0
+    bool    CanDownsample() const;         // 0x1800f2400
+    bool    ClearEdgeAlpha() const;        // 0x1800f23f0
+    bool    ClearEdgeColor() const;        // 0x1800f23e0
+    void    AliasDefaultColorBuffer();     // 0x1800f2ef0
+    void    AliasDefaultDepthBuffer();     // 0x1800f2f60
+    void    Bind(void* context, int32_t slot) const;   // 0x1800f3300
+    bool    CopyToTexture(void* dst, int32_t width, int32_t height);   // 0x1800f3380
+    bool    CopyFromTexture(void* src, int32_t width, int32_t height); // 0x1800f33a0
+    void    Recreate();                    // 0x1800f2fd0
+    void    Release();                     // 0x1800f2ea0
+    ImageBufferData*       GetData();      // 0x1800f2560 — the non-const overload
+    const ImageBufferData* GetData() const;// 0x1800f2570 — `QEBA`, the const one
+
+    // ?SaveImageToFile@ImageBuffer@Video@@SA_NAEBVFilename@System@@HHPEAI@Z
+    //   0x1800f2840. STATIC — it takes no `this`; the body is
+    //   `runtime/src/video/save_image_to_file.cpp`.
+    static bool SaveImageToFile(const System::Filename& path, int32_t width,
+                                int32_t height, uint32_t* pixels);
+    // ?ReleaseDynamic@ / ?RecreateDynamic@ — STATIC, they walk the
+    // `?_firstSurface@ImageBuffer@Video@@` intrusive list. Bodies in
+    // `dynamic_resources.cpp` (block D2).
+    static void ReleaseDynamic();          // 0x1800f3100
+    static void RecreateDynamic();         // 0x1800f30c0
+
+    // `??0ImageBuffer@Video@@QEAA@AEBV01@@Z` (0x18001eb80) and
+    // `??4ImageBuffer@Video@@QEAAAEAV01@AEBV01@@Z` (0x18001ec50) are REAL,
+    // EXPORTED bodies, not compiler defaults — the situation RULE B5-10 records
+    // for `Graphics::Geometry`. Declared, and deliberately left UNDEFINED: a
+    // `= default` here would silently substitute a bitwise copy (which would
+    // alias `_data`, a singly-owned `ImageBufferData*`, and share `_sourceName`
+    // without bumping its refcount) for whatever those two do.
+    ImageBuffer(const ImageBuffer& other);              // 0x18001eb80 — not ported
+    ImageBuffer& operator=(const ImageBuffer& other);   // 0x18001ec50 — not ported
+
+    // The static reflection companions retail emits.
+    static uint32_t      TypeId();                              // 0x18001e8f0
+    static Object::Base* CreateNewObject();                     // rt_factories_video.inc
+    static Object::Base* CreateInPlaceObject(void* storage);    // rt_factories_video.inc
+    static void*         operator new(size_t size);             // ??2 — reached by name
+    static void*         operator new(size_t size, void* storage);
+    static void          operator delete(void* p);              // ??3 — closure_batch2b.cpp
+
+protected:
+    // The registered doors over the protected surface. See the banner on the
+    // forward declaration above `namespace RtVideo`.
+    friend struct ::ImageBufferDoorAccess;
+
+    // See the "NOT CONSTRUCTIBLE" banner.
+    ImageBuffer() = default;
+
+    // ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610), body in `buffers.cpp`.
+    // NON-virtual; reached by `DeletingDtor` and by `Destruct`.
+    ~ImageBuffer();
+
+    // The four private platform halves (`AEAA` = private, not unexported).
+    void PlatformConstruct();                  // 0x1800f2ba0
+    void PlatformDestruct();                   // 0x1800f2c40
+    bool PlatformCreate(LevelArray* levels);   // 0x1800f2c90
+    void PlatformSerialize(IO::Serializer& serializer);   // 0x1800f3130
+
+    // RULE B5-15: both literals are COPIED from B35_SLOTS section 3, read
+    // byte-wise out of the retail image, NOT stringised from the C++ base name.
+    //   0x18001e8c0  ?_TypeName@ImageBuffer@Video@@       -> "ImageBuffer"
+    //   0x18001e8d0  ?_ParentTypeName@ImageBuffer@Video@@ -> "Object::CompiledExternal"
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    // ---- the 0x48 bytes ImageBuffer adds ---------------------------------
+    // PUBLIC for the reason `Object::External`'s `_path`/`_refs` are: the ported
+    // bodies, the three `Graphics::*ImageBuffer` subclasses and `dx11/` read
+    // these at exactly these offsets. Field for field the same bytes as
+    // `RtVideo::ImageBuffer` above, cross-asserted below.
+    int32_t     _width;        // +0x20  raw; `Width()` is NOT this field
+    int32_t     _height;       // +0x24  raw; `Height()` is NOT this field
+    ImageType   _dimension;    // +0x28  0 = 2D, 1 = cube
+    Usage       _kind;         // +0x2C  bind-flag selector; init 2
+    Format      _format;       // +0x30
+    uint32_t    _flags;        // +0x34  see the POD's comment for the bit map
+    AddressMode _addressU;     // +0x38
+    AddressMode _addressV;     // +0x3C
+    AddressMode _addressW;     // +0x40
+    FilterMode  _filter;       // +0x44  init 1
+    // +0x48 is a `System::String`, NOT a pixel buffer — proved by
+    // `?Serialize@ImageBuffer@Video@@` handing `this+0x48` to
+    // `?Serialize@String@System@@`. It is spelled `void*` rather than
+    // `System::String` for the reason `Object::External::_path` is spelled as
+    // the POD `RtSystem::Filename`: a real `System::String` member would give
+    // this class a compiler-emitted release that runs IN ADDITION to the by-hand
+    // release retail's `~ImageBuffer` performs (buffers.cpp), which is the
+    // double-free shape B31_RULES records. The POD calls the same eight bytes
+    // `pixelData`, which is the name Wave 18 proved wrong; the real class uses
+    // the proved one.
+    void*       _sourceName;   // +0x48  System::String (refcount at ptr-4)
+    uint64_t    _field50;      // +0x50  copied by the copy ctor; no export reads it
+    uint64_t    _field58;      // +0x58  copied by the copy ctor; no export reads it
+    // The `Video::ImageBufferData*` the Device factory hands back (`DeviceData`
+    // slot 10, +0x50 — `Dx11_CreateImageBufferData`). THIS is the field
+    // `dx11/src/dx11_backend_access.h`'s deleted `ImageBufferOwner` view pinned
+    // at +0x60 (RULE B5-2.1).
+    ImageBufferData* _data;    // +0x60
+};
+
+static_assert(sizeof(ImageBuffer) == 0x68,
+              "Video::ImageBuffer is 0x68 bytes (MOV EDX,0x68 in the slot-0 "
+              "vector deleting dtor at 0x18001ed20)");
+static_assert(alignof(ImageBuffer) == 8, "Video::ImageBuffer is qword-aligned");
+static_assert(sizeof(ImageBuffer) == sizeof(RtVideo::ImageBuffer),
+              "the real class and the POD describe the same bytes");
+
+#define RT_VIDEO_IMAGEBUFFER_PIN(MEMBER, POD_MEMBER, OFFSET)                   \
+    static_assert(offsetof(ImageBuffer, MEMBER) == (OFFSET),                   \
+                  "Video::ImageBuffer::" #MEMBER " @ +" #OFFSET);              \
+    static_assert(offsetof(ImageBuffer, MEMBER)                                \
+                      == offsetof(RtVideo::ImageBuffer, POD_MEMBER),           \
+                  "alias " #MEMBER)
+
+RT_VIDEO_IMAGEBUFFER_PIN(_width,      width,        0x20);
+RT_VIDEO_IMAGEBUFFER_PIN(_height,     height,       0x24);
+RT_VIDEO_IMAGEBUFFER_PIN(_dimension,  dimension,    0x28);
+RT_VIDEO_IMAGEBUFFER_PIN(_kind,       kind,         0x2C);
+RT_VIDEO_IMAGEBUFFER_PIN(_format,     format,       0x30);
+RT_VIDEO_IMAGEBUFFER_PIN(_flags,      flags,        0x34);
+RT_VIDEO_IMAGEBUFFER_PIN(_addressU,   addressU,     0x38);
+RT_VIDEO_IMAGEBUFFER_PIN(_addressV,   addressV,     0x3C);
+RT_VIDEO_IMAGEBUFFER_PIN(_addressW,   addressW,     0x40);
+RT_VIDEO_IMAGEBUFFER_PIN(_filter,     filter,       0x44);
+RT_VIDEO_IMAGEBUFFER_PIN(_sourceName, pixelData,    0x48);
+RT_VIDEO_IMAGEBUFFER_PIN(_field50,    field50,      0x50);
+RT_VIDEO_IMAGEBUFFER_PIN(_field58,    field58,      0x58);
+RT_VIDEO_IMAGEBUFFER_PIN(_data,       platformData, 0x60);
+
+#undef RT_VIDEO_IMAGEBUFFER_PIN
+
+}  // namespace Video

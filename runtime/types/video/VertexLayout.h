@@ -157,7 +157,21 @@ public:
     // ---- the nine slots, in measured order -----------------------------
     // Slot 4 is `Object::External::Compile`, INHERITED (retail's slot 4 is
     // 0x1800066e0, External's own body), so it is not redeclared here.
-    Object::Base*     DeletingDtor(unsigned flags) override;  // [0] 0x18004e000
+    //
+    // ENDGAME B.3.5 block B: slot 0 is `override = 0`, where block A wrote it
+    // non-pure. Retail's slot 0 IS a concrete per-class body, but OURS is not a
+    // per-class function at all — it is deleting_dtor.cpp's ONE table-driven body,
+    // reached through `RT_DELDTOR(0x18004e000, 0x1800f5df0, 0x048,
+    // "Video::VertexLayout")` at deleting_dtor.cpp:826, and B35_RULES 11 keeps that
+    // row for the whole of step 5. Leaving it non-pure was harmless while no member
+    // had a body; the moment `~VertexLayout()` is DEFINED, GCC emits a vptr store
+    // that needs `vtable for Video::VertexLayout`, which needs every non-pure slot
+    // to have one — twelve `undefined reference to vtable` at link is exactly what
+    // block A hit on the `*Data` bases and answered the same way (B34_BRIEFS A.4,
+    // the IO::BinaryReader shape). The class is therefore abstract in C++ where
+    // retail's is concrete, which costs nothing: nothing constructs one as a C++
+    // object, and a probe subclass in tests/unit can still override slot 0.
+    Object::Base*     DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004e000
     const char*       TypeName() const override;              // [1] 0x18004dcd0
     uint32_t          Type() const override;                  // [2] 0x18004dcb0
     int32_t           GetFileVersion() const override;        // [3] 0x1800f5e60 — `MOV EAX,3`
@@ -204,26 +218,39 @@ public:
     static void*        operator new(size_t size, void* storage); // 0x18004dd50 — not ported
     static void         operator delete(void* p);                 // 0x18004dd60 — class_operator_delete.cpp
 
+    // ??1VertexLayout@Video@@UEAA@XZ (0x1800f5df0). NON-virtual; reached by
+    // `DeletingDtor` and by `Destruct`.
+    //
+    // PUBLIC as of B.3.5 block B, where block A had it protected: the REGISTERED
+    // DOOR that fills `??1VertexLayout@Video@@UEAA@XZ` is a free function, not a
+    // member or a friend, and has to spell
+    // `->Video::VertexLayout::~VertexLayout()`. Block A's `protected` was correct
+    // while no door reached it. The same applies to the three `Platform*` halves,
+    // which the ctor door and the destructor call. The one thing that stays
+    // inaccessible is the CONSTRUCTOR, which is the property that matters.
+    ~VertexLayout();
+
+    // The three platform halves (`AEAA`, i.e. PRIVATE in retail, not unexported —
+    // reference_aeaa_is_private_not_unexported.md). `PlatformCreate` returns void,
+    // unlike VertexProgram's and PixelProgram's, which return bool — 0x180003ff0
+    // falls off its end with no return value set, so that is deliberate.
+    void PlatformConstruct();                    // 0x1800f5f90
+    void PlatformDestruct();                     // 0x1800f5fd0
+    void PlatformCreate();                       // 0x1800f6060
+    // 0x1800f5ff0 — declared, NOT ported: retail's `Serialize` INLINES it, and
+    // this port inlines it at the same place, so a separate body would be a second
+    // copy of four statements with nothing calling it. Nothing in the tree reaches
+    // this address (it has no registration of its own, here or anywhere).
+    void PlatformSerialize(void* serializer);
+
+    static const char* _TypeName();              // 0x18004dc90 -> "VertexLayout" — not ported
+    static const char* _ParentTypeName();        // 0x18004dca0 -> "Object::CompiledExternal" — not ported
+
 protected:
     // See the "NOT CONSTRUCTIBLE" banner. `??0VertexLayout@Video@@QEAA@XZ`
     // (0x1800f5d50) stays a registered ctor DOOR (B4b-2 / B35_RULES 11): no
     // real constructor on a polymorphic class.
     VertexLayout() = default;
-
-    // ??1VertexLayout@Video@@UEAA@XZ (0x1800f5df0). NON-virtual; reached by
-    // `DeletingDtor` and by `Destruct`.
-    ~VertexLayout();
-
-    // The three private platform halves. `PlatformCreate` returns void, unlike
-    // VertexProgram's and PixelProgram's, which return bool — 0x180003ff0
-    // falls off its end with no return value set, so that is deliberate.
-    void PlatformConstruct();                    // 0x1800f5f90
-    void PlatformDestruct();                     // 0x1800f5fd0
-    void PlatformCreate();                       // 0x1800f6060
-    void PlatformSerialize(void* serializer);    // 0x1800f5ff0
-
-    static const char* _TypeName();              // 0x18004dc90 -> "VertexLayout"
-    static const char* _ParentTypeName();        // 0x18004dca0 -> "Object::CompiledExternal"
 
 public:
     // ---- the 0x28 bytes VertexLayout adds ------------------------------

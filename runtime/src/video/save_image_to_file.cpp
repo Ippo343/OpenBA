@@ -112,6 +112,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/system/Filename.h"
+// ENDGAME B.3.5 block C — the real `Video::ImageBuffer`, whose STATIC member
+// this body now is.
+#include "../../types/video/ImageBuffer.h"
 #include "../collection/array_internal.h"
 #include "../collection/array_destroy_internal.h"
 
@@ -184,11 +187,18 @@ void ArraySetSizeByte(rtcoll::ArrayHdr* a, int32_t newSize, uint8_t fill) {
 }  // namespace
 
 // ============================================================================
-// The body
+// The body — now the STATIC member `Video::ImageBuffer::SaveImageToFile`
+// (ENDGAME B.3.5 block C). Retail's `SA_N` says static, and the first parameter
+// is `AEBVFilename@System@@`, a REFERENCE; the old free function took a pointer
+// because the registered door's ABI hands one over, and that pointer-to-reference
+// step now happens in the door at the bottom of this file, where it belongs.
 // ============================================================================
-bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
-                                       int width, int height,
-                                       uint32_t* pixels) {
+namespace Video {
+
+bool ImageBuffer::SaveImageToFile(const System::Filename& pathRef,
+                                  int32_t width, int32_t height,
+                                  uint32_t* pixels) {
+    const System::Filename* const path = &pathRef;
     // ---- 1. build "<dir><name>.bmp" and adjust its delimiters --------------
     //
     // Four temporaries, constructed in this order and released in exactly the
@@ -386,6 +396,18 @@ bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
     // which is retail's order.
 
     return ok;
+}
+
+}  // namespace Video
+
+// ============================================================================
+// The registered door — a QUALIFIED call on the static member. Name and address
+// are UNCHANGED.
+// ============================================================================
+extern "C" bool Video_ImageBuffer_SaveImageToFile(const System::Filename* path,
+                                                  int width, int height,
+                                                  uint32_t* pixels) {
+    return Video::ImageBuffer::SaveImageToFile(*path, width, height, pixels);
 }
 
 // ============================================================================

@@ -176,3 +176,117 @@ UNIT_TREE_SRCS +=
 # come through runtime/types/object/External.h, whose linkable half
 # (external_class.cpp) is already on this list.
 UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block F — `Graphics::Camera`, `Graphics::Renderer`,
+# `Graphics::Scene` and the four Renderer array element types
+# (tests/unit/graphics_renderer_abi_test.cpp). NO TREE SOURCE IS LINKED, and
+# unlike block E's Geometry test there are no marker bodies either: none of the
+# seven classes is polymorphic, so there is no vtable for a translation unit to
+# emit and nothing forces a key function to exist here. Every body lives in
+# `runtime/src/graphics/{renderer,scene,cull,sun_camera,wave9_lane_gfxd,
+# wave29_lane_gfxbody,closure_batch2b}.cpp`, which stand on
+# `RegisterRuntimeExport` / `ResolveAddr` / `RT_EXPORT_ONCE` / `RT_DATA_SLOT` and
+# cannot link here (the same reason `external_class_doors.cpp` is kept out), and
+# writing marker bodies for members that already have real ones would be a second
+# definition. So the test is LAYOUT plus two ABI properties — RULE B5-4's trivial
+# copyability in both directions, and the `(this, ret)` retslot door shape on a
+# NON-virtual by-value return, which is the other half of block E's ms_abi
+# finding. `Math::Transform3` / `Math::Matrix` / `::Frustum` are the real classes
+# (runtime/src/math/ is already on this list), so the copies it checks are real.
+# The arithmetic in `Camera::IsMirrored`, `SunLight::GetSunCamera` and
+# `Scene::Clean` is verified by the real run.
+UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 step 5 block H2 — the REAL `Graphics::Particle` and
+# `Graphics::ParticleSystem` (tests/unit/graphics_particle_abi_test.cpp). NO TREE
+# SOURCE IS LINKED, for the reason block E's and block H1's graphics tests give:
+# every body of these two classes lives in
+# `runtime/src/graphics/wave27_lane_gfxpart.cpp` and
+# `vtbatch7_animgroup_particlesystem.cpp`, which stand on `RegisterRuntimeExport`,
+# `RT_DATA_SLOT`, `ResolveAddr` and `rtcoll::MemAlloc` and cannot link here.
+#
+# NOR ARE MARKER BODIES NEEDED, which is the one difference from block H1's file.
+# Both classes are ABSTRACT (slot 0 is `= 0` at every level, because its body is a
+# minted RT_DELDTOR row §11 forbids retiring), so nothing in the test instantiates
+# either one and GCC is never asked for their vtables: the real classes are used
+# for `sizeof`/`offsetof`/`is_same` claims only, and the slot ABI is measured on a
+# probe hierarchy declared in the test — exactly as tests/unit/io_vtable_abi_test.cpp
+# does with `TestReaderWriter`. `Object::External`'s size is read through
+# runtime/types/object/External.h, whose linkable half (external_class.cpp) is
+# already on this list.
+#
+# The test's reason to exist is RULE B5-16: `ParticleSystem` is the ONE class in
+# Video and Graphics where `Construct` is not slot 8 — `Particle` introduces
+# `CreateSystem` pure there, so `Construct` lands at 9 behind it. A swap of those
+# two indices compiles, links and runs, and hands `CreateSystem`'s callers an
+# `Object::External*`. PART B reads the GCC table back at byte offsets 0x40 and
+# 0x48 and pins which member each one is.
+UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block C — the ImageBuffer chain / RenderState ABI proof
+# (tests/unit/video_imagebuffer_abi_test.cpp). NO tree sources link, for the same
+# reason block A's list gives: `Video::ImageBuffer`, the three
+# `Graphics::*ImageBuffer` classes and `Video::RenderState` are declarations plus
+# layout pins, and their bodies are registered doors in `runtime/src/video/` and
+# `runtime/src/graphics/` that stand on the port registry, the address registry
+# and `Collection::Array`'s allocator seam. The test checks the real classes'
+# `sizeof`/`offsetof`/`is_base_of` directly (no instantiation needed) and the
+# twelve-slot ABI of the three-level chain on mirror classes declared in the test,
+# exactly as tests/unit/io_vtable_abi_test.cpp does with `TestReaderWriter`.
+# `Object::External` / `CompiledExternal`'s linkable half (external_class.cpp) is
+# already on this list, which is all the layout asserts in these headers need.
+# ENDGAME B.3.5 block D2 — the Video::Device / Configuration / RenderBuffer /
+# {Index,Vertex}Buffer ABI proof (tests/unit/video_device_abi_test.cpp).
+# NO tree sources link, and the reason is per-file rather than general:
+# `runtime/src/video/device.cpp` stands on `RT_DATA_SLOT` and two
+# `IO::Persistence` accessors, `device_startup.cpp` on the exe's `ResolveAddr`,
+# the Application singleton and the AVL set, `video_interfaces_win.cpp` plus the
+# three `_win` twins on <windows.h>, and `buffers.cpp` / `dynamic_resources.cpp` /
+# `video_resources.cpp` on the port registry and dx11's live vtables. So the test
+# checks the nine real classes' `sizeof`/`offsetof`/`alignof` directly (no
+# definition and no instantiation needed), asserts the old POD spellings are the
+# SAME TYPE rather than a second layout, and proves the two CODEGEN shapes the
+# block's doors rely on — the qualified non-virtual call on a receiver that was
+# never constructed as a C++ object, and the hidden-return-slot door of RULE B5-12
+# as amended — on mirror classes declared in the test, exactly as
+# tests/unit/io_vtable_abi_test.cpp does with `TestReaderWriter`.
+UNIT_TREE_SRCS +=
+
+# ENDGAME B.3.5 block D1 — the Video::Context / Viewport / ConstantBuffer ABI
+# proof (tests/unit/video_context_abi_test.cpp). NO tree sources link, and the
+# reason is specific rather than the usual one: all three classes are
+# NON-polymorphic, so there is no slot table to drive, and every ported member
+# is a registered door in `runtime/src/video/context*.cpp`,
+# `constant_buffer.cpp` or `batchc_context_setlight.cpp`. Those translation
+# units stand on the port registry, the address registry and — for the nine
+# backend forwarders — a live `Video::ContextData` vtable owned by dx11, so
+# none of them can link into a host test. What the test checks instead is what
+# breaking would be SILENT: the 0x2168 layout at the raw offsets four other
+# files hard-code, the 0x48 ConstantBuffer stride against the seven embedded
+# instances that are its only evidence, RULE B5-4's trivial copyability, and
+# the `reinterpret_cast`-onto-MemAlloc'd-bytes round trip every door performs.
+# `Video::Viewport`'s two comparison operators are checked on a mirror declared
+# in the test, the same posture io_vtable_abi_test.cpp takes with
+# `TestReaderWriter`.
+# ENDGAME B.3.5 block B — the Video program/shader family's ABI proof
+# (tests/unit/video_program_abi_test.cpp). NO tree source links, for the same
+# reason block A's test links none: every body of `Video::ShaderProgram`,
+# `VertexProgram`, `PixelProgram`, `VertexLayout` and `VideoProgram` is a
+# registered door in `runtime/src/video/`, standing on `RegisterRuntimeExport`,
+# `RT_DATA_SLOT`, `ResolveAddr` and `Video::Device::_singleton`. All five classes
+# also declare slot 0 `override = 0` (their slot-0 bodies are the `RT_DELDTOR`
+# rows in `runtime/src/object/deleting_dtor.cpp`, registered BY ADDRESS and kept
+# by B35_RULES 11), so none can be instantiated to have a vtable read back.
+#
+# The test therefore checks the real classes' `sizeof`/`offsetof` and their
+# INHERITANCE directly — none of which needs a definition or an instantiation —
+# and checks the slot ABI on mirror classes declared in the test, exactly as
+# io_vtable_abi_test.cpp does with `TestReaderWriter`. The inheritance part is the
+# point: `Object::CompiledExternal` adds no bytes over `Object::External`, so
+# re-parenting `Video::VideoProgram` onto it would pass every size and offset
+# assertion and change only which vtable the ctor stamps.
+#
+# `Object::External` / `CompiledExternal` and `Collection::Array<T>`'s spec come
+# in through runtime/types, whose linkable halves (external_class.cpp, array
+# headers) are already on this list.
+UNIT_TREE_SRCS +=

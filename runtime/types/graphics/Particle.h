@@ -20,6 +20,16 @@
 // `ParticleSystemInstance` classes live in `ParticleInstance.h`, which includes
 // both this header and `Geometry.h`; see that file's banner for why the split
 // exists (`<windows.h>` and `Volume.h`'s `Rectangle`).
+//
+// ENDGAME B.3.5 block H2: the REAL `Graphics::Particle` and
+// `Graphics::ParticleSystem` are at the BOTTOM of this file, and the two
+// includes below are what they need. Neither reaches `Volume.h`, so the
+// `Rectangle` collision block E measured is not reintroduced: this header stays
+// usable from `vtbatch7_animgroup_particlesystem.cpp`, which includes
+// `<windows.h>` through `standalone/resolve.h`. (`AnimationGroup.h` already
+// proves the pairing — `vtbatch7` includes it after `resolve.h` and builds.)
+#include "../object/External.h"       // Object::External, the proved parent
+#include "../collection/Collection.h" // Collection::Array<T>, the +0x38 header
 
 namespace RtGraphics {
 
@@ -277,3 +287,412 @@ static_assert(offsetof(ParticleSystemInstance, _f_d8) == 0xd8, "ParticleSystemIn
 
 }  // namespace RtGraphics
 
+// ############################################################################
+// ENDGAME B.3.5 step 5 (block H2) — `Graphics::Particle` and
+// `Graphics::ParticleSystem`, the REAL C++ classes
+// ############################################################################
+//
+// The two *Instance* classes are NOT here: they derive from `Graphics::Geometry`
+// and live in `ParticleInstance.h` (block E), for the `Volume.h` /
+// `<windows.h>` reason that file's banner records. These two derive from
+// `Object::External` and need no geometry at all, which is why they can sit in
+// this header beside the PODs they are cross-asserted against.
+//
+// GREP HAZARD (B4b-5 / B34_BRIEFS A.7), AND IT CHANGED IN THIS BLOCK: before
+// H2, a bare `Particle` inside a `namespace Graphics { }` block bound NOTHING
+// (the POD is `RtGraphics::Particle`, and a stray spelling was a compile error).
+// It now binds the REAL CLASS. Every POD spelling inside such a block in
+// `animation.cpp`, `wave27_lane_gfxpart.cpp`, `wave28_lane_partsys.cpp` and
+// `vtbatch7_animgroup_particlesystem.cpp` must be written `RtGraphics::`.
+//
+// PARENTS, PROVED BYTE-WISE (B35_SLOTS.md:506-507, read as `.rdata` bytes):
+//     ?_ParentTypeName@Particle@Graphics@@       -> "Object::External"
+//     ?_ParentTypeName@ParticleSystem@Graphics@@ -> "Particle"       <- NO NAMESPACE
+//
+// RULE B5-15 — THE FOUR NAME LITERALS, RECORDED AND NOT USED. Nothing here
+// re-mints or retires a reflection row (B35_RULES section 11): the two
+// `?_typeInfo@` rows and the two `??_7` mint rows stay, and slots 1/2 keep
+// reading the `_typeInfo` nodes. The literals are written down so that a later
+// `DEFINE_TYPE` is COPIED, not derived from a C++ base name — deriving
+// `Graphics::Particle` for `ParticleSystem`'s parent would change the CRC and
+// stop every save that names a ParticleSystem from loading:
+//     ?_TypeName@Particle@Graphics@@             -> "Particle"
+//     ?_ParentTypeName@Particle@Graphics@@       -> "Object::External"
+//     ?_TypeName@ParticleSystem@Graphics@@       -> "ParticleSystem"
+//     ?_ParentTypeName@ParticleSystem@Graphics@@ -> "Particle"
+//
+// SECTION 9 / RULE B4b-4 — `?_rng@Particle@Graphics@@1VRandom@System@@A`
+// (0x1801fe7f0) IS NOT A STATIC MEMBER HERE. It is a `System::Random` held BY
+// VALUE and seeded through a constructor DOOR at load (0x180149650), which is
+// B4b-2's double-seed case verbatim: a real static member would be constructed
+// a second time by our own runtime init and every particle placement would
+// desync from the DLL's other readers. It stays an `RT_DATA_SLOT` /
+// `ResolveExport` read in `wave27_lane_gfxpart.cpp` and `wave28_lane_partsys.cpp`
+// (`ParticleRng()`), and RULE B4b-4 owes it a `MintStorageCell()` redirect at
+// the class-static conversion, the END of B.3 — not in step 5. The same holds
+// for `?_frameIndex@ParticleInstance@Graphics@@1HA` (0x1801fe77c), read through
+// `RtFrameIndexSlot()` in `animation.cpp`.
+//
+// NO REAL CONSTRUCTOR ON EITHER CLASS (B4b-2 / ENDGAME section B.1 decision 3).
+// `??0Particle@Graphics@@QEAA@XZ` (0x180103e80) and
+// `??0ParticleSystem@Graphics@@QEAA@XZ` (0x1800a5320) keep their registered ctor
+// doors in `animation.cpp` and `vtbatch7_animgroup_particlesystem.cpp`: both are
+// called on memory that already exists and that the rest of the tree expects to
+// be wearing the MINTED `??_7` table out of `rt_data_mint_tables.inc`. A member
+// constructor would stamp GCC's tables instead.
+// ############################################################################
+
+namespace Graphics {
+
+// `?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ` returns
+// one of these. The class is declared in `ParticleInstance.h`, which includes
+// THIS header — so the reference here is a forward declaration and the two
+// headers do not form an include cycle.
+class ParticleInstance;
+
+// ============================================================================
+// Graphics::Particle : Object::External — 0x48 bytes, NINE slots, ABSTRACT.
+//
+// `??_7Particle@Graphics@@6B@` @ 0x180155130, read out of `.rdata` one qword at
+// a time (B35_SLOTS.md:170-179):
+//
+//   [0] +0x00  0x180020160  (unexported) the vector deleting destructor
+//   [1] +0x08  0x18001ff30  ?TypeName@         graphics_typeinfo_accessors.cpp
+//   [2] +0x10  0x18001ff10  ?Type@             graphics_typeinfo_accessors.cpp
+//   [3] +0x18  0x180104080  ?GetFileVersion@   (`MOV EAX,0x1000; RET`)
+//   [4] +0x20  0x1800066e0  Object::External::Compile        INHERITED
+//   [5] +0x28  0x180103f00  ?Serialize@        wave27_lane_gfxpart.cpp
+//   [6] +0x30  _purecall    inherited-from Object::External  -> Reconstruct
+//   [7] +0x38  _purecall    inherited-from Object::External  -> Destruct
+//   [8] +0x40  _purecall    INTRODUCED HERE                 -> CreateSystem
+//
+// *** B35_RULES section 13 ITEM 6 IS NOW CLOSED, AND THE INFERENCE WAS RIGHT. ***
+// The question pass recorded slots 6/7/8's identities as INFERRED from
+// `ParticleSystem`'s concrete overrides at the same indices. They are confirmed
+// here without new bytes, from two reads that were already byte-level:
+//   * slots 6 and 7 are marked `inherited-from Object::External` in the vtable
+//     dump, i.e. those two `_purecall` entries are the SAME qwords External's own
+//     table carries — and the real `Object::External` (External.h:601, itself
+//     read from retail) declares exactly `virtual External* Reconstruct() = 0`
+//     at [6] and `virtual void Destruct() = 0` at [7]. Particle therefore
+//     OVERRIDES two inherited pure slots and introduces nothing at 6/7.
+//   * slot 8 is `_purecall` and is NOT marked inherited (External's table is
+//     eight entries), and `ParticleSystem`'s slot 8 is
+//     `?CreateSystem@ParticleSystem@Graphics@@UEBAPEAVParticleInstance@2@XZ`
+//     @ 0x1800a5140. A subclass cannot override a slot its base did not declare,
+//     so `CreateSystem` is introduced PURE here, at 8 — which is the whole
+//     mechanism behind RULE B5-16's trap (see ParticleSystem below).
+// So slots 6/7 are `override = 0` (they re-declare inherited pure slots at the
+// right index) and slot 8 is `virtual ... = 0` (B5-16: `virtual`, not
+// `override`, where the branch introduces the slot).
+//
+// ABSTRACT for the ordinary reason (B34_BRIEFS A.4 as amended): nothing holds a
+// `Particle` by value anywhere in the tree, and three of its nine slots are
+// `_purecall` in retail itself. Slot 0 is left `= 0` as well — its body is the
+// minted `RT_DELDTOR` row at 0x180020160, which B35_RULES section 11 forbids
+// retiring, and declaring it pure re-declares the slot at the right index
+// without creating a second, divergent one.
+//
+// THE LAYOUT IS THE POD'S, FIELD FOR FIELD, with the two MEASURED GAPS kept as
+// named pads rather than left to C++'s natural alignment (see the POD's banner
+// above for the disassembled store list that found them one at a time).
+// ============================================================================
+class Particle : public Object::External {
+public:
+    // [0] 0x180020160 — pure on purpose; the RT_DELDTOR row is not retired.
+    Object::Base* DeletingDtor(unsigned flags) override = 0;
+
+    // [1] 0x18001ff30 / [2] 0x18001ff10 / [3] 0x180104080.
+    //   MEMBERS THAT FORWARD, not doors that delegate: all three bodies live in
+    //   `runtime/src/graphics/graphics_typeinfo_accessors.cpp`, which is NOT block
+    //   H2's file set, so the direction is reversed and the member calls the
+    //   registered door. The same split `external_class_doors.cpp` documents and
+    //   `Graphics::AnimationEvent` (block H1) already uses.
+    const char* TypeName() const override;                 // [1]
+    uint32_t    Type() const override;                     // [2]
+    int32_t     GetFileVersion() const override;           // [3] 0x1000 == 4096
+    // [4] Compile is Object::External's own body (0x1800066e0), inherited.
+    bool        Serialize(void* stream) override;           // [5] 0x180103f00
+
+    // [6] / [7] — retail leaves both `_purecall` here; they re-declare the two
+    //   slots `Object::External` introduced as pure, at the same indices.
+    Object::External* Reconstruct() override = 0;
+    void              Destruct() override = 0;
+
+    // [8] — INTRODUCED PURE BY THIS CLASS (RULE B5-16). `virtual`, not
+    //   `override`: `Object::External`'s table is eight entries and has no such
+    //   slot. `ParticleSystem` is where it gets a body, at slot 8, which is why
+    //   `Construct` is pushed to slot 9 on THAT class and nowhere else.
+    virtual ParticleInstance* CreateSystem() const = 0;
+
+    // ---- the non-slot exported members -------------------------------------
+    // Declared up front, ported or not, so no caller batch has to edit this
+    // header (B35 class-block brief). Each is left UNDEFINED with a `not ported`
+    // note because nothing in the tree calls it.
+    //
+    // ?IsInstanced@Particle@Graphics@@QEBA_NXZ            0x18001ff60 — NOT PORTED
+    bool IsInstanced() const;
+    // ?TypeId@Particle@Graphics@@SAIXZ                    0x18001ff20 — NOT PORTED
+    static uint32_t TypeId();
+    // ?CreateNewObject@…SAPEAVBase@Object@@XZ             0x18001ff40 — NOT PORTED
+    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z     0x18001ff50 — NOT PORTED
+    //   The reflection block's two factories. Both go through
+    //   `System::MemoryAllocator`, which B35_RULES section 11 keeps as doors for
+    //   the whole of step 5. Note what is ABSENT: `Particle` has no `??2`/`??3`
+    //   of its own in the export table — it is abstract, so only `ParticleSystem`
+    //   carries the per-class operator new / delete.
+    static Object::Base* CreateNewObject();
+    static Object::Base* CreateInPlaceObject(void* place);
+    // ??0Particle@Graphics@@QEAA@AEBV01@@Z                0x180020030 — NOT PORTED
+    // ??4Particle@Graphics@@QEAAAEAV01@AEBV01@@Z          0x1800200e0 — NOT PORTED
+    Particle(const Particle& src);
+    Particle& operator=(const Particle& src);
+
+protected:
+    // NOT retail's 0x180103e80 — see the banner. `= default` keeps the class
+    // trivially default-constructible so no layout pin moves.
+    Particle() = default;
+
+    // ??1Particle@Graphics@@UEAA@XZ  0x180103c70. NON-virtual (ENDGAME section
+    // B.1 decision 2), and DUPLICATED rather than delegated: the retail body
+    // stamps the MINTED table and walks `_records` freeing each element's own
+    // buffer, which is right for the minted objects that are the only ones alive
+    // today. It is not ported anywhere in the tree, so the member is defined
+    // EMPTY (in `wave27_lane_gfxpart.cpp`, beside `Serialize`) and nothing is
+    // claimed for it. The `Object::External` precedent verbatim.
+    ~Particle();
+
+public:
+    // ---- the 0x28 bytes Particle adds --------------------------------------
+    // PUBLIC for the same reason `Object::External`'s are: unconverted bodies
+    // reach them at these offsets through a cast.
+    uint8_t  _active;        // +0x20  ctor stores 1
+    uint8_t  _pad21[3];      // +0x21  MEASURED GAP — the ctor never writes it
+    int32_t  _recordCount;   // +0x24  ctor 1. The POOL RECORD COUNT: Serialize
+                             //        hands it to Array<void*>::SetSize over
+                             //        `_records` and then builds that many.
+    int32_t  _subCount;      // +0x28  ctor 0xf. The PER-RECORD SUB-ARRAY SIZE:
+                             //        the record ctor (0x180103bf0) reads it and
+                             //        sizes the record's own +0x18 array with it.
+    uint32_t _pad2c;         // +0x2c  MEASURED GAP — the ctor never writes it
+    void*    _material;      // +0x30  ExternalPtr<Graphics::MaterialInstance>.
+                             //        Spelled as a raw pointer, not the template:
+                             //        an `ExternalPtr` is one pointer wide and
+                             //        holds the pointee at +0x00, and `Serialize`
+                             //        hands `&_material` to the retail
+                             //        `ExternalBasePtr<T>::Serialize`
+                             //        instantiation at 0x180014520 rather than to
+                             //        anything the compiler would emit.
+    // +0x38  Array<void*> — the pool-record pointer array. Spelled
+    // `Collection::Array<uint8_t>` (a RAW 16-byte header) for the reason
+    // `AnimationGroup`'s three arrays are: element lifecycle for it runs through
+    // the REGISTERED `kSpec_Fill8` row in `runtime/src/collection/array.cpp`, at
+    // retail's own address, and a typed member would make the compiler emit a
+    // SECOND element lifecycle beside the ported one.
+    Collection::Array<uint8_t> _records;   // +0x38 {_data, _size@0x40, _capacity@0x44}
+};
+
+static_assert(sizeof(Particle) == 0x48,
+              "Graphics::Particle is 0x48 bytes (the MOV EDX,0x48 in its own "
+              "slot-0 vector deleting destructor 0x180020160)");
+static_assert(alignof(Particle) == 8, "qword aligned (the vptr)");
+static_assert(sizeof(Particle) == sizeof(RtGraphics::Particle),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(Particle, _active)      == offsetof(RtGraphics::Particle, _active), "alias _active");
+static_assert(offsetof(Particle, _recordCount) == offsetof(RtGraphics::Particle, _f24),    "alias _f24");
+static_assert(offsetof(Particle, _subCount)    == offsetof(RtGraphics::Particle, _f28),    "alias _f28");
+static_assert(offsetof(Particle, _active)      == 0x20, "Particle::_active @ +0x20 (ctor 0x180103e80)");
+static_assert(offsetof(Particle, _recordCount) == 0x24, "Particle::_recordCount @ +0x24");
+static_assert(offsetof(Particle, _subCount)    == 0x28, "Particle::_subCount @ +0x28");
+static_assert(offsetof(Particle, _material)    == 0x30, "Particle::_material @ +0x30 (Serialize 0x180103f00)");
+static_assert(offsetof(Particle, _records)     == 0x38, "Particle::_records @ +0x38");
+static_assert(offsetof(Particle, _active) == sizeof(Object::External),
+              "Particle's own fields begin at the end of the External base: the "
+              "ctor inlines External's three zeroed qwords and then writes +0x20");
+
+// ============================================================================
+// Graphics::ParticleSystem : Graphics::Particle — 0x108 bytes, TEN slots.
+//
+// `??_7ParticleSystem@Graphics@@6B@` @ 0x180155090 (B35_SLOTS.md:193-203):
+//
+//   [0] +0x00  0x180020a70  (unexported) the vector deleting destructor
+//   [1] +0x08  0x1800203e0  ?TypeName@
+//   [2] +0x10  0x1800203c0  ?Type@
+//   [3] +0x18  0x1800a4d10  ?GetFileVersion@   (returns 0x1001)
+//   [4] +0x20  0x1800066e0  Object::External::Compile   INHERITED through Particle
+//   [5] +0x28  0x1800a4d20  ?Serialize@
+//   [6] +0x30  0x180020560  ?Reconstruct@
+//   [7] +0x38  0x180020590  ?Destruct@
+//   [8] +0x40  0x1800a5140  ?CreateSystem@     <- RULE B5-16's TRAP LIVES HERE
+//   [9] +0x48  0x180020580  ?Construct@        <- INTRODUCED HERE, AT NINE
+//
+// *** THIS IS THE ONE CLASS IN VIDEO AND GRAPHICS WHERE `Construct` IS NOT
+// SLOT 8 (RULE B5-16). *** Every other Video/Graphics external introduces
+// `Construct` itself at slot 8; here `Particle` already spent slot 8 on
+// `CreateSystem` (pure), so `Construct` enters the branch one slot later. Copying
+// "Construct is slot 8" onto this class swaps the two and produces a
+// `CreateSystem` that returns an `Object::External*` where callers expect a
+// `ParticleInstance*` — a wrong-type call through the right index, which is
+// silent. `tests/unit/graphics_particle_abi_test.cpp` PART B reads the
+// GCC-generated table back slot by slot and pins both indices.
+//
+// CONCRETE IN RETAIL, DECLARED ABSTRACT HERE — slot 0 only. Nothing holds a
+// `ParticleSystem` by value (B34_BRIEFS A.4 as amended), and its deleting-dtor
+// body is a minted `RT_DELDTOR` row at 0x180020a70 that section 11 forbids
+// retiring, so slot 0 stays `= 0` exactly as `AnimationGroup`'s does. Every
+// other slot has a real body.
+//
+// *** THE LAYOUT IS AUTHORED HERE FOR THE FIRST TIME (B35_RULES section 13
+// item 3: the SIZE was verified, the FIELDS were not). *** It is not invented:
+// it MOVES the file-local `struct ParticleSystem` from
+// `vtbatch7_animgroup_particlesystem.cpp:534-558` — which batch 7b pinned as a
+// WRITER, off the disassembled 60-store constructor at 0x1800a5320 and off
+// `Serialize`'s emission order — and it NAMES each field from the independent
+// READER `wave28_lane_partsys.cpp:424-459` measured for
+// `ParticleSystemInstance::Update`, where every `kPS_*` constant carries the
+// instruction that reads it. Two independent witnesses, one per direction; the
+// offsets were identical and nothing had to be reconciled. Fields the reader
+// never touched keep a position name.
+//
+// TWO MEASURED GAPS, from the constructor's store list: +0x54..+0x57 (it writes
+// +0x50 and then the int64 at +0x58) and +0xe4..+0xe7 (it writes +0xdc and +0xe0
+// as ONE qword of -1 and then the int64 at +0xe8). `Serialize` skips both as
+// well. They are named pads, which says exactly as much as is known.
+// ============================================================================
+class ParticleSystem : public Particle {
+public:
+    // [0] 0x180020a70 — pure on purpose; the RT_DELDTOR row is not retired.
+    Object::Base* DeletingDtor(unsigned flags) override = 0;
+
+    const char* TypeName() const override;                  // [1] 0x1800203e0
+    uint32_t    Type() const override;                      // [2] 0x1800203c0
+    int32_t     GetFileVersion() const override;            // [3] 0x1800a4d10 -> 0x1001
+    // [4] Compile stays Object::External's body, inherited through Particle.
+    bool        Serialize(void* stream) override;           // [5] 0x1800a4d20
+    Object::External* Reconstruct() override;               // [6] 0x180020560
+    void        Destruct() override;                        // [7] 0x180020590
+    // [8] THE TRAP. `override`, because `Particle` introduced it pure at 8.
+    ParticleInstance* CreateSystem() const override;        // [8] 0x1800a5140
+    // [9] INTRODUCED HERE. `virtual`, not `override` (B5-16): no base of this
+    //     class declares `Construct` — `Object::External`'s table is eight
+    //     entries and `Particle`'s is nine.
+    virtual Object::External* Construct();                  // [9] 0x180020580
+
+    // ---- the non-slot exported members -------------------------------------
+    // ?TypeId@ParticleSystem@Graphics@@SAIXZ                 0x1800203d0 — NOT PORTED
+    static uint32_t TypeId();
+    // ??2ParticleSystem@Graphics@@SAPEAX_K@Z                 0x1800203f0 — NOT PORTED
+    // ??2ParticleSystem@Graphics@@SAPEAX_KPEAX@Z             0x180020460 — NOT PORTED
+    // ??3ParticleSystem@Graphics@@SAXPEAX@Z                  0x180020470 — NOT PORTED
+    // ?CreateNewObject@…SAPEAVBase@Object@@XZ                0x1800204d0 — NOT PORTED
+    // ?CreateInPlaceObject@…SAPEAVBase@Object@@PEAX@Z        0x180020550 — NOT PORTED
+    //   The reflection block's five statics; each goes through
+    //   `System::MemoryAllocator`, doors for all of step 5 (section 11).
+    static void* operator new(std::size_t bytes);
+    static void* operator new(std::size_t bytes, void* place);
+    static void  operator delete(void* p);
+    static Object::Base* CreateNewObject();
+    static Object::Base* CreateInPlaceObject(void* place);
+
+protected:
+    // NOT retail's 0x1800a5320 — the ctor door stays (see the banner).
+    ParticleSystem() = default;
+    // ??1ParticleSystem@Graphics@@UEAA@XZ  0x1800a51c0. NON-virtual, and not
+    // ported anywhere in the tree; defined EMPTY beside the other members in
+    // `vtbatch7_animgroup_particlesystem.cpp`, for `~AnimationGroup`'s reason.
+    ~ParticleSystem();
+
+public:
+    // ---- the 0xc0 bytes ParticleSystem adds --------------------------------
+    // Each comment is the instruction that reads or writes the field: `ctor` is
+    // 0x1800a5320's store list, `Update` is wave28's measured read.
+    float    _f48;            // +0x48  ctor 5.0f. Serialize emits it FIRST, and
+                              //        Serialize's read-side tail RAW-BIT-COPIES
+                              //        it into each pool record's +0x10. No
+                              //        reader identified it, so it keeps a
+                              //        position name.
+    float    _rateAccelA;     // +0x4c  MULSS 0x4c(%rdi) @ 0x1800a5758; ctor 0.0f
+    float    _rateAccelB;     // +0x50  MULSS 0x50(%rdi) @ 0x1800a5764; ctor 1.0f
+    uint32_t _pad54;          // +0x54  MEASURED GAP — ctor and Serialize skip it
+    int64_t  _durationTicks;  // +0x58  MOV 0x58(%rdi),%rcx @ 0x1800a5781.
+                              //        ctor `(int64)(-1.0 / _secondsPerTick)` —
+                              //        a NEGATIVE count, the "no duration" sentinel
+    float    _emitDirX;       // +0x60  three floats @ 0x1800a5f65/73/89
+    float    _emitDirY;       // +0x64
+    float    _emitDirZ;       // +0x68  ctor (0,0,1)
+    float    _spreadX;        // +0x6c  MULSS group @ 0x1800a5a68
+    float    _spreadY;        // +0x70
+    float    _spreadZ;        // +0x74  ctor (1,1,1)
+    float    _spreadScale;    // +0x78  MULSS @ 0x1800a5976/59f3/5a9c.
+                              //        *** SERIALIZED BEFORE _spreadX/Y/Z ***
+    float    _angleBRange;    // +0x7c  MULSS @ 0x1800a5ec2
+    float    _angleARange;    // +0x80  MULSS @ 0x1800a5e48
+    float    _speedBase;      // +0x84  ADDSS @ 0x1800a5dc6
+    float    _speedRange;     // +0x88  MULSS @ 0x1800a5dbd
+    float    _accelScale;     // +0x8c  MOVSS @ 0x1800a62f1
+    float    _damping;        // +0x90  MOVSS @ 0x1800a64ba
+    float    _rotBase;        // +0x94  ADDSS @ 0x1800a5b98
+    float    _rotRange;       // +0x98  MULSS @ 0x1800a5b90
+    float    _spinBase;       // +0x9c  ADDSS @ 0x1800a5cbc
+    float    _spinRange;      // +0xa0  MULSS @ 0x1800a5cb4
+    float    _spinAccel;      // +0xa4  MULSS @ 0x1800a65eb
+    float    _spinDamp;       // +0xa8  MULSS @ 0x1800a65fa
+    float    _lifeBase;       // +0xac  ADDSS @ 0x1800a58e3
+    float    _lifeRange;      // +0xb0  MULSS @ 0x1800a58db
+    float    _gravScale;      // +0xb4  MOVSS @ 0x1800a6300
+    float    _gravX;          // +0xb8
+    float    _gravY;          // +0xbc
+    float    _gravZ;          // +0xc0  ctor -9.8f (0xc11ccccd)
+    float    _sizeBase;       // +0xc4  ADDSS @ 0x1800a5c2a
+    float    _sizeRange;      // +0xc8  MULSS @ 0x1800a5c22
+    float    _sizeAccel;      // +0xcc  MULSS @ 0x1800a6627
+    float    _sizeDamp;       // +0xd0  MULSS @ 0x1800a6636
+    float    _colorT0;        // +0xd4  SUBSS @ 0x1800a63db / 0x1800a6692
+    float    _colorT1;        // +0xd8  MOVSS @ 0x1800a63d3
+    uint32_t _color0;         // +0xdc  four PACKED BYTES, read one at a time by
+                              //        Update; Serialize visits it as kScalarUInt
+    uint32_t _color1;         // +0xe0  ditto. ctor writes both as one qword of -1
+    uint32_t _pad_e4;         // +0xe4  MEASURED GAP — ctor and Serialize skip it
+    int64_t  _fadeInTicks;    // +0xe8  CVTSI2SDQ 0xe8(%rdi) @ 0x1800a675c.
+                              //        ctor `(int64)(0.25 / _secondsPerTick)`
+    int64_t  _fadeOutTicks;   // +0xf0  MOV 0xf0(%rdi),%rcx @ 0x1800a672a. Same
+                              //        ctor value, a SECOND DIVSD off one XMM1
+    // +0xf8  Array<void*> — the per-system pool-pointer array `Serialize`
+    // rebuilds on the read side, `SetSize(&_pool, _recordCount)` through the
+    // registered `kSpec_Fill8` row. Raw 16-byte header, for `_records`' reason.
+    Collection::Array<uint8_t> _pool;   // +0xf8 {_data, _size@0x100, _capacity@0x104}
+};
+
+static_assert(sizeof(ParticleSystem) == 0x108,
+              "Graphics::ParticleSystem is 0x108 bytes (the MOV EDX,0x108 in its "
+              "own slot-0 vector deleting destructor 0x180020a70)");
+static_assert(alignof(ParticleSystem) == 8, "qword aligned (the vptr)");
+static_assert(offsetof(ParticleSystem, _f48) == sizeof(Particle),
+              "ParticleSystem's own fields begin at the end of the Particle base: "
+              "the ctor inlines Particle's stores and then writes +0x48 with no gap");
+static_assert(offsetof(ParticleSystem, _f48)           == 0x48,  "+0x48");
+static_assert(offsetof(ParticleSystem, _rateAccelA)    == 0x4c,  "+0x4c");
+static_assert(offsetof(ParticleSystem, _rateAccelB)    == 0x50,  "+0x50");
+static_assert(offsetof(ParticleSystem, _durationTicks) == 0x58,  "+0x58");
+static_assert(offsetof(ParticleSystem, _emitDirX)      == 0x60,  "+0x60");
+static_assert(offsetof(ParticleSystem, _spreadX)       == 0x6c,  "+0x6c");
+static_assert(offsetof(ParticleSystem, _spreadScale)   == 0x78,  "+0x78");
+static_assert(offsetof(ParticleSystem, _angleBRange)   == 0x7c,  "+0x7c");
+static_assert(offsetof(ParticleSystem, _gravScale)     == 0xb4,  "+0xb4");
+static_assert(offsetof(ParticleSystem, _gravX)         == 0xb8,  "+0xb8");
+static_assert(offsetof(ParticleSystem, _sizeBase)      == 0xc4,  "+0xc4");
+static_assert(offsetof(ParticleSystem, _colorT0)       == 0xd4,  "+0xd4");
+static_assert(offsetof(ParticleSystem, _color0)        == 0xdc,  "+0xdc");
+static_assert(offsetof(ParticleSystem, _color1)        == 0xe0,  "+0xe0");
+static_assert(offsetof(ParticleSystem, _fadeInTicks)   == 0xe8,  "+0xe8");
+static_assert(offsetof(ParticleSystem, _fadeOutTicks)  == 0xf0,  "+0xf0");
+static_assert(offsetof(ParticleSystem, _pool)          == 0xf8,  "+0xf8");
+// THE FIFTEEN-FLOAT RUN Serialize emits one scalar at a time, +0x7c..+0xb4
+// inclusive. If a field is ever inserted in the middle, this is what fails
+// rather than the stream silently shifting by four bytes.
+static_assert(offsetof(ParticleSystem, _gravScale) - offsetof(ParticleSystem, _angleBRange)
+                  == 14 * sizeof(float),
+              "Serialize's 15 consecutive float scalars run +0x7c..+0xb4");
+
+
+}  // namespace Graphics

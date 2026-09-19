@@ -1,11 +1,45 @@
 #pragma once
-// Video::IndexBuffer / Video::VertexBuffer — binary-compatible struct
-// definitions. Runtime-x64.dll classes, 0x20 bytes each, identical layout.
+// ============================================================================
+// runtime/types/video/Buffers.h — Video::IndexBuffer / Video::VertexBuffer,
+// promoted to real C++ classes by ENDGAME B.3.5 block D2.
+// ============================================================================
 //
-// Neither class carries a vtable of its own — Create/Set/Bind are thin
+// Runtime-x64.dll classes, 0x20 bytes each, identical layout. NON-POLYMORPHIC:
+// neither has a `??_7` export or a `?_typeInfo@` row (B35_RULES §2.1), and
+// neither carries a vtable of its own — Create/Set/Bind/Lock/Unlock are thin
 // dispatches through the platform buffer object at +0x08 (dx11's
-// IndexBufferData / VertexBufferData, see dx11/types/VideoDX11Data.h), which
-// this lane does not own and does not duplicate here.
+// IndexBufferData / VertexBufferData, see dx11/types/VideoDX11Data.h and the
+// abstract bases in runtime/types/video/CompanionData.h).
+//
+// ---------------------------------------------------------------------------
+// B.3.5 BLOCK D2 — B4b-1 AND THE NAMESPACE
+// ---------------------------------------------------------------------------
+// This header used to declare `struct IndexBuffer` / `struct VertexBuffer` at
+// GLOBAL SCOPE with no namespace at all (B35_FILEMAP §3d's fourth spelling,
+// "none"). The retail names are `Video::IndexBuffer` / `Video::VertexBuffer`, so
+// B4b-1 applies: the real classes take the retail names in `namespace Video`,
+// and the old GLOBAL spelling becomes a type ALIAS of each. The two were
+// field-identical, so there is ONE definition and no duplicate layout — the
+// move the B.3.5 brief prefers over a second copy. `buffers.cpp`,
+// `companion_data.cpp`, `context_lifecycle.cpp` and `dynamic_resources.cpp`
+// spell these types unqualified today and keep compiling unchanged.
+//
+// NO REAL CONSTRUCTOR OR DESTRUCTOR, and the reason is the intrusive list:
+// `PlatformConstruct`/`PlatformDestruct` (0x1800f3680/0x1800f3760 for
+// IndexBuffer, 0x1800f57e0/0x1800f58c0 for VertexBuffer) link and unlink `this`
+// in a process-global circular doubly linked list of every live buffer of that
+// type, rooted at `?_firstBuffer@IndexBuffer@Video@@` (0x1801fe788) /
+// `?_firstBuffer@VertexBuffer@Video@@` (0x1801fe798) and guarded by
+// `Video::Device::_singleton`'s critical section at +0x60 (RULE B5-6). Those two
+// heads are `RT_DATA_SLOT` reads, not C++ statics — the `MintStorageCell()`
+// redirect is OWED at the class-static conversion, the end of B.3 (RULE B4b-4 /
+// B35_RULES §9, three by-name doors each) — so no constructor here could publish
+// them. The ctor DOORS stay registered free functions in
+// `runtime/src/video/buffers.cpp`.
+//
+// Every exported member of both classes is declared below whether or not it is
+// ported; `NOT PORTED` means declared here and defined nowhere, so a caller gets
+// a link error rather than a silent null call.
 //
 // Decompiled from (Wave 6 lane C):
 //   IndexBuffer ctor:   0x1800f3490 (??0IndexBuffer@Video@@QEAA@XZ)
@@ -14,42 +48,114 @@
 //   VertexBuffer::Create: 0x1800f59e0 (?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z)
 //   IndexBuffer::Set:     0x1800f38a0 (?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z)
 //   VertexBuffer::Set:    0x1800f5a00 (?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z)
-//   IndexBuffer::GetSize (not this lane's scope, used only to confirm +0x00): 0x180011e00
-//   VertexBuffer::GetSize (not this lane's scope, same confirmation):        0x180011db0
-//
+//   IndexBuffer::GetSize (used only to confirm +0x00):  0x180011e00
+//   VertexBuffer::GetSize (same confirmation):          0x180011db0
+// ============================================================================
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
-// PlatformConstruct/PlatformDestruct (0x1800f3680/0x1800f3760 for IndexBuffer,
-// the VertexBuffer twins are not in this lane's 22-function scope) additionally
-// maintain an intrusive doubly-linked list of every live buffer of that type,
-// rooted at the exported `_firstBuffer` static and guarded by
-// Device::_singleton's critical section at +0x60. That list is NOT
-// reproduced here: PlatformConstruct/PlatformDestruct are not in this lane's
-// scope (our tree never calls them directly — only Create/Set, which reach
-// the platform object without touching the list), so the fields exist only
-// to keep the struct's layout — and therefore Create/Set's `this+8` and the
-// ctor's byte offsets — correct.
-struct IndexBuffer {
+namespace IO { class Serializer; }
+
+namespace Video {
+
+class Context;             // runtime/types/video/Context.h       (b35-D1)
+class IndexBufferData;     // runtime/types/video/CompanionData.h (b35-A)
+class VertexBufferData;    // runtime/types/video/CompanionData.h (b35-A)
+
+// ----------------------------------------------------------------------------
+// Video::IndexBuffer — 0x20 bytes.
+//
+// LIFECYCLE EXPORTS — DOORS, NOT MEMBERS (see the header banner):
+//   ??0IndexBuffer@Video@@QEAA@XZ                0x1800f3490  Video_IndexBuffer_Ctor
+//   ??1IndexBuffer@Video@@QEAA@XZ                0x1800f3480  UNPORTED
+//   ??4IndexBuffer@Video@@QEAAAEAV01@AEBV01@@Z   0x180011e10  UNPORTED (operator=)
+// ----------------------------------------------------------------------------
+class IndexBuffer {
+public:
+    // ?Create@IndexBuffer@Video@@QEAA_NH_NPEAX@Z  0x1800f3880  buffers.cpp
+    //   A trampoline into IndexBufferData slot 1 (+0x08).
+    bool Create(int count, bool dynamic, void* data);
+    // ?Set@IndexBuffer@Video@@QEAA_NHHPEAX@Z      0x1800f38a0  buffers.cpp
+    //   A trampoline into IndexBufferData slot 2 (+0x10).
+    bool Set(int offset, int count, void* data);
+    // ?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f34e0  NOT PORTED  (slot 3, +0x18)
+    void* Lock(int sizeBytes, int& outByteOffset);
+    // ?Unlock@IndexBuffer@Video@@QEAAXXZ          0x1800f34c0  NOT PORTED  (slot 4, +0x20)
+    void  Unlock();
+    // ?Bind@IndexBuffer@Video@@QEBAXAEAVContext@2@@Z 0x1800f3860  NOT PORTED (slot 5)
+    void  Bind(Context& context) const;
+    // ?Serialize@IndexBuffer@Video@@QEAAXAEAVSerializer@IO@@@Z 0x1800f38c0 NOT PORTED (slot 6)
+    void  Serialize(IO::Serializer& serializer);
+    // ?GetSize@IndexBuffer@Video@@QEBAHXZ         0x180011e00  NOT PORTED
+    int   GetSize() const;
+
+    // ---- the two class-static list sweeps (under the Device lock) -----------
+    // ?RecreateDynamic@IndexBuffer@Video@@SAXXZ   0x1800f3500  dynamic_resources.cpp
+    static void RecreateDynamic();
+    // ?ReleaseDynamic@IndexBuffer@Video@@SAXXZ    0x1800f35d0  dynamic_resources.cpp
+    static void ReleaseDynamic();
+
+    // ---- the platform half; DOORS in buffers.cpp ---------------------------
+    // NOTE both are PUBLIC in retail (`QEAA`), unlike ImageBuffer's and
+    // RenderBuffer's private (`AEAA`) twins.
+    // ?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ 0x1800f3680  buffers.cpp
+    void PlatformConstruct();
+    // ?PlatformDestruct@IndexBuffer@Video@@QEAAXXZ  0x1800f3760  buffers.cpp
+    void PlatformDestruct();
+
+    // ---- data ---------------------------------------------------------------
     int32_t  size;          // +0x00  index count (Create's first param); zeroed in ctor
-    bool     dynamic;        // +0x04  zeroed in ctor
+    bool     dynamic;       // +0x04  zeroed in ctor
     uint8_t  pad05[3];
-    void*    platformData;  // +0x08  dx11::IndexBufferData* (or equivalent), set by PlatformConstruct
-    void*    listPrev;       // +0x10  intrusive list (Device's live-buffer registry); not touched by Create/Set
-    void*    listNext;        // +0x18
+    void*    platformData;  // +0x08  Video::IndexBufferData*, set by PlatformConstruct
+    void*    listPrev;      // +0x10  intrusive list (Device's live-buffer registry); not touched by Create/Set
+    void*    listNext;      // +0x18  the field the four retail walkers step through
 };
-static_assert(sizeof(IndexBuffer) == 0x20, "IndexBuffer must be 0x20 bytes");
-static_assert(offsetof(IndexBuffer, size) == 0x00, "size at +0x00");
-static_assert(offsetof(IndexBuffer, dynamic) == 0x04, "dynamic at +0x04");
-static_assert(offsetof(IndexBuffer, platformData) == 0x08, "platformData at +0x08");
-static_assert(offsetof(IndexBuffer, listPrev) == 0x10, "listPrev at +0x10");
-static_assert(offsetof(IndexBuffer, listNext) == 0x18, "listNext at +0x18");
 
-// Layout-identical to IndexBuffer (confirmed: both ctors write the same byte
-// pattern, both Create/Set dispatch through the same +0x08/vtable+0x08 and
-// +0x08/vtable+0x10 shape).
-struct VertexBuffer {
+// ----------------------------------------------------------------------------
+// Video::VertexBuffer — layout-identical to IndexBuffer (confirmed: both ctors
+// write the same byte pattern, both Create/Set dispatch through the same
+// +0x08/vtable+0x08 and +0x08/vtable+0x10 shape). The ONE slot where the two
+// companion shapes differ is `Bind`, which takes four arguments here.
+//
+// LIFECYCLE EXPORTS — DOORS, NOT MEMBERS:
+//   ??0VertexBuffer@Video@@QEAA@XZ               0x1800f55f0  Video_VertexBuffer_Ctor
+//   ??1VertexBuffer@Video@@QEAA@XZ               0x1800f55e0  UNPORTED
+//   ??4VertexBuffer@Video@@QEAAAEAV01@AEBV01@@Z  0x180011dd0  UNPORTED (operator=)
+// ----------------------------------------------------------------------------
+class VertexBuffer {
+public:
+    // ?Create@VertexBuffer@Video@@QEAA_NH_NPEAX@Z  0x1800f59e0  buffers.cpp
+    bool Create(int count, bool dynamic, void* data);
+    // ?Set@VertexBuffer@Video@@QEAA_NHHPEAX@Z      0x1800f5a00  buffers.cpp
+    bool Set(int offset, int count, void* data);
+    // ?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z    0x1800f5640  NOT PORTED  (slot 3, +0x18)
+    void* Lock(int sizeBytes, int& outByteOffset);
+    // ?Unlock@VertexBuffer@Video@@QEAAXXZ          0x1800f5620  NOT PORTED  (slot 4, +0x20)
+    void  Unlock();
+    // ?Bind@VertexBuffer@Video@@QEBAXAEAVContext@2@HII@Z 0x1800f59c0 NOT PORTED (slot 5)
+    void  Bind(Context& context, int slot, unsigned offsetBytes, unsigned strideBytes) const;
+    // ?Serialize@VertexBuffer@Video@@QEAAXAEAVSerializer@IO@@@Z 0x1800f5a20 NOT PORTED (slot 6)
+    void  Serialize(IO::Serializer& serializer);
+    // ?GetSize@VertexBuffer@Video@@QEBAHXZ         0x180011db0  NOT PORTED
+    int   GetSize() const;
+    // ?GetData@VertexBuffer@Video@@QEBAPEBVVertexBufferData@2@XZ 0x180011dc0  NOT PORTED
+    //   (IndexBuffer has no exported twin of this one.)
+    const VertexBufferData* GetData() const;
+
+    // ?RecreateDynamic@VertexBuffer@Video@@SAXXZ   0x1800f5660  dynamic_resources.cpp
+    static void RecreateDynamic();
+    // ?ReleaseDynamic@VertexBuffer@Video@@SAXXZ    0x1800f5730  dynamic_resources.cpp
+    static void ReleaseDynamic();
+
+    // ?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ 0x1800f57e0  buffers.cpp
+    void PlatformConstruct();
+    // ?PlatformDestruct@VertexBuffer@Video@@QEAAXXZ  0x1800f58c0  buffers.cpp
+    void PlatformDestruct();
+
+    // ---- data ---------------------------------------------------------------
     int32_t  size;
     bool     dynamic;
     uint8_t  pad05[3];
@@ -57,9 +163,41 @@ struct VertexBuffer {
     void*    listPrev;
     void*    listNext;
 };
-static_assert(sizeof(VertexBuffer) == 0x20, "VertexBuffer must be 0x20 bytes");
-static_assert(offsetof(VertexBuffer, size) == 0x00, "size at +0x00");
-static_assert(offsetof(VertexBuffer, dynamic) == 0x04, "dynamic at +0x04");
-static_assert(offsetof(VertexBuffer, platformData) == 0x08, "platformData at +0x08");
-static_assert(offsetof(VertexBuffer, listPrev) == 0x10, "listPrev at +0x10");
-static_assert(offsetof(VertexBuffer, listNext) == 0x18, "listNext at +0x18");
+
+}  // namespace Video
+
+// ---- layout assertions, after the classes ----------------------------------
+static_assert(sizeof(Video::IndexBuffer) == 0x20, "IndexBuffer must be 0x20 bytes");
+static_assert(alignof(Video::IndexBuffer) == 8, "IndexBuffer aligns to 8");
+static_assert(std::is_standard_layout<Video::IndexBuffer>::value, "IndexBuffer stays standard-layout");
+static_assert(std::is_trivially_copyable<Video::IndexBuffer>::value,
+              "IndexBuffer stays trivially copyable — its ctor keeps the intrusive list and stays a door");
+static_assert(offsetof(Video::IndexBuffer, size) == 0x00, "size at +0x00");
+static_assert(offsetof(Video::IndexBuffer, dynamic) == 0x04, "dynamic at +0x04");
+static_assert(offsetof(Video::IndexBuffer, platformData) == 0x08, "platformData at +0x08");
+static_assert(offsetof(Video::IndexBuffer, listPrev) == 0x10, "listPrev at +0x10");
+static_assert(offsetof(Video::IndexBuffer, listNext) == 0x18, "listNext at +0x18");
+
+static_assert(sizeof(Video::VertexBuffer) == 0x20, "VertexBuffer must be 0x20 bytes");
+static_assert(alignof(Video::VertexBuffer) == 8, "VertexBuffer aligns to 8");
+static_assert(std::is_standard_layout<Video::VertexBuffer>::value, "VertexBuffer stays standard-layout");
+static_assert(std::is_trivially_copyable<Video::VertexBuffer>::value,
+              "VertexBuffer stays trivially copyable — its ctor keeps the intrusive list and stays a door");
+static_assert(offsetof(Video::VertexBuffer, size) == 0x00, "size at +0x00");
+static_assert(offsetof(Video::VertexBuffer, dynamic) == 0x04, "dynamic at +0x04");
+static_assert(offsetof(Video::VertexBuffer, platformData) == 0x08, "platformData at +0x08");
+static_assert(offsetof(Video::VertexBuffer, listPrev) == 0x10, "listPrev at +0x10");
+static_assert(offsetof(Video::VertexBuffer, listNext) == 0x18, "listNext at +0x18");
+
+// ============================================================================
+// The old GLOBAL-SCOPE spelling, now ALIASES of the real classes (B4b-1 —
+// see the header banner). ONE definition, two names.
+// ============================================================================
+using IndexBuffer  = ::Video::IndexBuffer;
+using VertexBuffer = ::Video::VertexBuffer;
+
+namespace RtVideo {
+// `RtVideo::` for symmetry with Device.h, so a caller batch can spell either.
+using IndexBuffer  = ::Video::IndexBuffer;
+using VertexBuffer = ::Video::VertexBuffer;
+}  // namespace RtVideo

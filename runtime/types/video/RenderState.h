@@ -1,10 +1,17 @@
 #pragma once
 // ============================================================================
-// runtime/types/video/RenderState.h — Video::RenderState and its three
-// plain-old-data sub-structs, AlphaBlend / Depth / Stencil.
+// runtime/types/video/RenderState.h — `Video::RenderState` as a real C++ class,
+// with its three nested value types `AlphaBlend` / `Depth` / `Stencil`.
+//
+// ENDGAME B.3.5 block C. RULES B5-15 (the two type-name literals are COPIED
+// from B35_SLOTS, not derived from the C++ base name), B5-16 (`Construct` is
+// introduced by this branch at slot 8, so `virtual` and not `override`).
 // ============================================================================
 //
-// Offsets read out of RETAIL Runtime-x64.dll `objdump -d`, 2026-09-12.
+// Offsets read out of RETAIL Runtime-x64.dll `objdump -d`, 2026-09-12; the
+// vtable, the slot list, `sizeof` and the two `_TypeName` literals re-read from
+// bytes by block 0 and tabulated in `B35_SLOTS.md` (`Video::RenderState`,
+// vtable 0x180157720, 9 slots, sizeof 0x80).
 //
 // *** RenderState DERIVES FROM Object::External DIRECTLY, NOT FROM
 //     Object::CompiledExternal. *** Every other Video external in this tree
@@ -17,7 +24,10 @@
 //     (0x1800bc950). ?_ParentTypeName@RenderState@Video@@ (0x18004b540)
 //     returns the literal "Object::External", where ShaderProgram's
 //     (0x18004e090) returns "Object::CompiledExternal" — the export table says
-//     the same thing the ctor does.
+//     the same thing the ctor does. B35_RULES 2.1 lists this as the one
+//     direct-`External` Video class with a documented header, and the class
+//     declaration below is what finally makes the distinction structural
+//     instead of a comment.
 //
 // THE FIELD OFFSETS ARE PINNED BY ?Initialize@RenderState@Video@@ (0x1800f4840),
 // which is nothing but a field-by-field copy of the three sub-structs into
@@ -42,81 +52,262 @@
 // sizeof is 0x80: the vector deleting destructor at 0x18004b9d0 carries
 // `MOV EDX,0x80`, and rt_factories_video.inc's CreateNewObject step asks the
 // allocator for 0x80 with alignment 8.
+//
+// ----------------------------------------------------------------------------
+// THE `rt::video::RenderState` POD IS GONE, NOT MOVED (B4b-1)
+// ----------------------------------------------------------------------------
+// B4b-1 says a POD occupying the retail name moves into an `Rt*` namespace and
+// lives there until its LAST user converts. `rt::video::{RenderState,
+// AlphaBlend, Depth, Stencil}` had exactly one user in the whole tree —
+// `runtime/src/video/renderstate.cpp`, verified by grep over `code/ engine/
+// runtime/ standalone/ dx11/` — and that file converts in this same commit. So
+// there is no second spelling to keep alive and nothing outside this header to
+// update: the classes below are the ONE definition of these bytes. (Contrast
+// `RtVideo::ImageBuffer` in ImageBuffer.h, whose POD has five unconverted users
+// and therefore stays.)
 // ============================================================================
 
 #include <cstddef>
 #include <cstdint>
+#include <type_traits>
 
 #include "../object/External.h"
+// `_data` is a real `Video::RenderStateData*` (ENDGAME B.3.5 block A, RULE
+// B5-1), which is what lets `renderstate.cpp` call `Create()` / `Bind()` /
+// `DeletingDtor()` on it as virtuals instead of hand-indexing +0x08/+0x10/+0x00,
+// and `Video::DeviceData::CreateRenderStateData` as slot 17 by name.
+#include "CompanionData.h"
 
-namespace rt {
-namespace video {
+namespace IO { class Serializer; }
 
-// ?Serialize@AlphaBlend@RenderState@Video@@ (0x1800f4aa0):
-//   Bool(+0x00), UInt(+0x04), UInt(+0x08), UInt(+0x0c), UInt(+0x10)
-// ??0AlphaBlend@RenderState@Video@@ (0x1800f4b30): +0x00=0, +0x04=1, +0x08=0,
-//   +0x0c=0, +0x10=0xf.
-struct AlphaBlend {
-    uint8_t  enabled;    // +0x00
-    uint8_t  _pad01[3];  // +0x01  never written (the ctor stores a BYTE at +0)
-    uint32_t srcBlend;   // +0x04  default 1
-    uint32_t dstBlend;   // +0x08  default 0
-    uint32_t blendOp;    // +0x0c  default 0
-    uint32_t writeMask;  // +0x10  default 0xf (all four channels)
+// `runtime/src/video/renderstate.cpp`'s door helper. `?PlatformConstruct@` /
+// `?PlatformCreate@` / `?PlatformDestruct@` are PRIVATE in retail (`AEAA`) and
+// `~RenderState` is non-virtual and protected, yet all four are exported by name
+// and keep registered `extern "C"` doors — which cannot name a protected member.
+// B34_BRIEFS A.4's answer is to FRIEND the holder rather than widen the access,
+// so the header keeps saying what retail says. A derived helper class would have
+// worked too and does NOT work here: deriving forces GCC to reference
+// `vtable for Video::RenderState`, whose slot 0 (`DeletingDtor`) is a table row
+// in `runtime/src/object/deleting_dtor.cpp` and is defined in no translation
+// unit, so the link fails (seen, not predicted).
+struct RenderStateDoorAccess;
+
+namespace Video {
+
+// ============================================================
+// Video::RenderState — one compiled render-state resource. 0x80 bytes,
+// `Object::External` base (see the banner).
+//
+// *** NOT CONSTRUCTIBLE IN B.3.5. *** Every live `RenderState` is built by
+// `??0RenderState@Video@@QEAA@XZ` (0x1800f4b60) or by the factory rows in
+// `runtime/src/video/rt_factories_video.inc`, and wears the MINTED
+// `??_7RenderState@Video@@6B@` table rather than GCC's. A `Video::RenderState
+// rs;` would stamp GCC's table on an object the rest of the tree reads through
+// the minted one, with no build error — so the default constructor is
+// `protected` and `= default` (B34_BRIEFS A.4), which leaves a probe SUBCLASS
+// in `tests/unit/` able to reach it and nothing else. It is NOT trivial: it
+// runs `Object::External`'s constructor and the three nested value types'
+// (below), which between them are exactly the field writes retail's ctor
+// inlines — the ctor DOOR still writes them all explicitly anyway, because it
+// also has to stamp the minted vtable.
+//
+// NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
+// `DeletingDtor(unsigned)`. `~RenderState()` is non-virtual and has no slot.
+// ============================================================
+class RenderState : public Object::External {
+public:
+    // The two 4-byte enums `?Initialize@` names (`W4CullMode@12@`,
+    // `W4FillMode@12@`, i.e. enums NESTED in `Video::RenderState`). THE
+    // ENUMERATOR NAMES ARE NOT RECOVERABLE from the binary — only the ctor
+    // defaults (cull 1, fill 0) and `IsWireframe`'s `fill == 1` — so, exactly
+    // as `Object::External::CompileResult` and `Video::VertexLayout::Usage` do
+    // for the same reason, they are spelled as the 32-bit integers they are
+    // rather than as enums with invented names.
+    using CullMode = uint32_t;
+    using FillMode = uint32_t;
+
+    // ========================================================
+    // Video::RenderState::AlphaBlend — 0x14 bytes. A `struct`: the mangled
+    // `?Initialize@` spells `AEBUAlphaBlend@12@`, `U` and not `V`.
+    //
+    // ?Serialize@AlphaBlend@RenderState@Video@@ (0x1800f4aa0):
+    //   Bool(+0x00), UInt(+0x04), UInt(+0x08), UInt(+0x0c), UInt(+0x10)
+    // ??0AlphaBlend@RenderState@Video@@ (0x1800f4b30): +0x00=0, +0x04=1,
+    //   +0x08=0, +0x0c=0, +0x10=0xf.
+    // ========================================================
+    struct AlphaBlend {
+        // ??0AlphaBlend@RenderState@Video@@QEAA@XZ  0x1800f4b30. A REAL
+        // exported constructor, and unlike the polymorphic classes in this file
+        // it may be one: the struct has no vtable, so converting its ctor
+        // cannot change which table a live object wears (the same licence
+        // `IO::Serializer` is granted in runtime/types/io/Serializer.h).
+        AlphaBlend();
+        // ?Serialize@AlphaBlend@RenderState@Video@@QEAAXAEAVSerializer@IO@@@Z
+        //   0x1800f4aa0
+        void Serialize(IO::Serializer& ser);
+
+        uint8_t  enabled;    // +0x00
+        uint8_t  _pad01[3];  // +0x01  never written (the ctor stores a BYTE at +0)
+        uint32_t srcBlend;   // +0x04  default 1
+        uint32_t dstBlend;   // +0x08  default 0
+        uint32_t blendOp;    // +0x0c  default 0
+        uint32_t writeMask;  // +0x10  default 0xf (all four channels)
+    };
+
+    // ========================================================
+    // Video::RenderState::Depth — 0x10 bytes.
+    //
+    // ?Serialize@Depth@RenderState@Video@@ (0x1800f4a00):
+    //   Bool(+0x00), Bool(+0x01), UInt(+0x04), Float(+0x08), Float(+0x0c)
+    // ??0Depth@RenderState@Video@@ (0x1800f4a80): word at +0x00 = 0x0101 (so
+    //   both bools are 1), qword at +0x04 = 4 (func = 4, +0x08 = 0), +0x0c = 0.
+    // ========================================================
+    struct Depth {
+        Depth();                             // 0x1800f4a80
+        void Serialize(IO::Serializer& ser); // 0x1800f4a00
+
+        uint8_t  test;       // +0x00  default 1
+        uint8_t  write;      // +0x01  default 1
+        uint8_t  _pad02[2];  // +0x02
+        uint32_t func;       // +0x04  default 4
+        float    bias;       // +0x08  default 0
+        float    slopeBias;  // +0x0c  default 0
+    };
+
+    // ========================================================
+    // Video::RenderState::Stencil — 0x24 bytes.
+    //
+    // ?Serialize@Stencil@RenderState@Video@@ (0x1800f48e0):
+    //   Bool(+0x00), Bool(+0x01), UInt(+0x04), UChar(+0x08),
+    //   UInt(+0x0c), UInt(+0x10), UInt(+0x14), UInt(+0x18), UInt(+0x1c),
+    //   UInt(+0x20)
+    // ??0Stencil@RenderState@Video@@ (0x1800f49d0) zeroes the whole 0x24.
+    //
+    // `writeMask` IS SERIALIZED AS A UChar among eight UInts. A UInt there
+    // would move the next eight fields by three bytes in every saved file, so
+    // the asymmetry is pinned by its own assert below and must not be tidied.
+    // ========================================================
+    struct Stencil {
+        Stencil();                           // 0x1800f49d0
+        void Serialize(IO::Serializer& ser); // 0x1800f48e0
+
+        uint8_t  enabled;      // +0x00
+        uint8_t  twoSided;     // +0x01
+        uint8_t  _pad02[2];    // +0x02
+        uint32_t readMask;     // +0x04
+        uint8_t  writeMask;    // +0x08  serialized as UChar, not UInt
+        uint8_t  _pad09[3];    // +0x09
+        uint32_t func;         // +0x0c
+        uint32_t failOp;       // +0x10
+        uint32_t depthFailOp;  // +0x14
+        uint32_t passOp;       // +0x18
+        uint32_t backFunc;     // +0x1c
+        uint32_t reference;    // +0x20
+    };
+
+    // ---- the nine slots, in measured order ------------------------------
+    // Slot 4 is `Object::External::Compile`, INHERITED (retail's slot 4 is
+    // 0x1800066e0, External's own body), so it is not redeclared here.
+    //
+    // SLOT 0 IS CONCRETE IN RETAIL (0x18004b9d0) AND IS DECLARED `= 0` HERE,
+    // which is B.3.4's settled shape (B34_BRIEFS A.4) and the same call
+    // `CompanionData.h` makes for the twelve `*Data` bases. Our slot 0 is a table
+    // ROW in `runtime/src/object/deleting_dtor.cpp`, registered by address, and is
+    // defined in no translation unit. Leaving it non-pure is what does NOT work,
+    // and the reason is worth recording: defining `~RenderState()` makes GCC emit
+    // a vptr store at the top of the destructor, which needs
+    // `vtable for Video::RenderState`, which needs slot 0's body — one
+    // `undefined reference to 'vtable for Video::RenderState'` at link (seen, not
+    // predicted). Pure makes every entry known (`__cxa_pure_virtual`) and the
+    // vtable emittable in the translation unit that defines the key function
+    // (`TypeName`, i.e. renderstate.cpp) — and that vtable is never installed on
+    // a live object anyway, because the ctor door stamps the MINTED address.
+    virtual Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x18004b9d0
+    const char*       TypeName() const override;              // [1] 0x18004b570
+    uint32_t          Type() const override;                  // [2] 0x18004b550
+    int32_t           GetFileVersion() const override;        // [3] 0x1800f4c80 — `MOV EAX,3`
+    bool              Serialize(void* stream) override;       // [5] 0x1800f4c90
+    Object::External* Reconstruct() override;                 // [6] 0x18004b6f0
+    void              Destruct() override;                    // [7] 0x18004b720
+    // [8] 0x18004b710. `virtual`, NOT `override`: `Object::External`'s retail
+    // table is eight entries, so this branch introduces `Construct` itself
+    // (RULE B5-16).
+    virtual Object::External* Construct();
+
+    // ---- the exported non-virtual members --------------------------------
+    // ?Initialize@RenderState@Video@@QEAAXAEBUAlphaBlend@12@AEBUDepth@12@
+    //             AEBUStencil@12@W4CullMode@12@W4FillMode@12@_N@Z  0x1800f4840
+    void Initialize(const AlphaBlend& alphaBlend, const Depth& depth,
+                    const Stencil& stencil, CullMode cullMode,
+                    FillMode fillMode, bool flag);
+    bool IsWireframe() const;              // ?IsWireframe@ 0x18004b730
+    void Bind(void* context) const;        // ?Bind@        0x1800f4ec0
+
+    // `??0RenderState@Video@@QEAA@AEBV01@@Z` (0x18004b640) and
+    // `??4RenderState@Video@@QEAAAEAV01@AEBV01@@Z` (0x18004b750) are REAL,
+    // EXPORTED bodies, not compiler defaults — the situation RULE B5-10
+    // records for `Graphics::Geometry`. Declared, and deliberately left
+    // UNDEFINED in this block: nothing in the tree calls either, and a
+    // `= default` here would silently substitute a bitwise copy (which would
+    // alias `_data`, a singly-owned `RenderStateData*`) for whatever they do.
+    RenderState(const RenderState& other);              // 0x18004b640 — not ported
+    RenderState& operator=(const RenderState& other);   // 0x18004b750 — not ported
+
+    // The static reflection companions retail emits.
+    static uint32_t      TypeId();                              // 0x18004b560
+    static Object::Base* CreateNewObject();                     // rt_factories_video.inc
+    static Object::Base* CreateInPlaceObject(void* storage);    // rt_factories_video.inc
+    static void*         operator new(size_t size);             // ??2 — not ported
+    static void*         operator new(size_t size, void* storage);
+    static void          operator delete(void* p);              // ??3 — not ported
+
+protected:
+    // The four registered doors over the protected surface. See the banner on
+    // the forward declaration above this namespace.
+    friend struct ::RenderStateDoorAccess;
+
+    // See the "NOT CONSTRUCTIBLE" banner. `??0RenderState@Video@@QEAA@XZ`
+    // (0x1800f4b60) stays a registered ctor DOOR (B4b-2 / B35_RULES 11).
+    RenderState() = default;
+
+    // ??1RenderState@Video@@UEAA@XZ (0x1800f4c30). NON-virtual; reached by
+    // `DeletingDtor` and by `Destruct`.
+    ~RenderState();
+
+    // The three private platform halves. `PlatformCreate` returns void here,
+    // unlike the shader programs' `_N` (bool) form — the mangling says so and
+    // so does the tail-jump's discarded result.
+    void PlatformConstruct();   // ?PlatformConstruct@ 0x1800f4e30
+    void PlatformCreate();      // ?PlatformCreate@    0x1800f4ea0
+    void PlatformDestruct();    // ?PlatformDestruct@  0x1800f4e80
+
+    // RULE B5-15: both literals are COPIED from B35_SLOTS section 3, read
+    // byte-wise out of the retail image, NOT stringised from the C++ base name.
+    //   0x18004b530  ?_TypeName@RenderState@Video@@        -> "RenderState"
+    //   0x18004b540  ?_ParentTypeName@RenderState@Video@@  -> "Object::External"
+    // Here the two happen to agree with a `#Parent` stringisation; on
+    // `Graphics::ParticleSystem` they do not, which is why the rule exists.
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    // ---- the 0x60 bytes RenderState adds ---------------------------------
+    // PUBLIC for the reason `Object::External`'s `_path`/`_refs` are: the
+    // ported bodies in `runtime/src/video/` and the unconverted callers reach
+    // these at exactly these offsets.
+    AlphaBlend       _alphaBlend; // +0x20
+    Depth            _depth;      // +0x34
+    Stencil          _stencil;    // +0x44
+    CullMode         _cullMode;   // +0x68  default 1
+    FillMode         _fillMode;   // +0x6c  default 0; ==1 means wireframe
+    uint8_t          _flag70;     // +0x70
+    uint8_t          _pad71[7];   // +0x71  never written
+    RenderStateData* _data;       // +0x78  from DeviceData slot 17
 };
-static_assert(sizeof(AlphaBlend) == 0x14, "RenderState::AlphaBlend is 0x14 (5 dwords copied by Initialize)");
-static_assert(offsetof(AlphaBlend, writeMask) == 0x10, "AlphaBlend::writeMask @ +0x10");
 
-// ?Serialize@Depth@RenderState@Video@@ (0x1800f4a00):
-//   Bool(+0x00), Bool(+0x01), UInt(+0x04), Float(+0x08), Float(+0x0c)
-// ??0Depth@RenderState@Video@@ (0x1800f4a80): word at +0x00 = 0x0101 (so both
-//   bools are 1), qword at +0x04 = 4 (func = 4, +0x08 = 0), +0x0c = 0.
-struct Depth {
-    uint8_t  test;       // +0x00  default 1
-    uint8_t  write;      // +0x01  default 1
-    uint8_t  _pad02[2];  // +0x02
-    uint32_t func;       // +0x04  default 4
-    float    bias;       // +0x08  default 0
-    float    slopeBias;  // +0x0c  default 0
-};
-static_assert(sizeof(Depth) == 0x10, "RenderState::Depth is 0x10 (4 dwords copied by Initialize)");
-static_assert(offsetof(Depth, func) == 0x04, "Depth::func @ +0x04");
-
-// ?Serialize@Stencil@RenderState@Video@@ (0x1800f48e0):
-//   Bool(+0x00), Bool(+0x01), UInt(+0x04), UChar(+0x08),
-//   UInt(+0x0c), UInt(+0x10), UInt(+0x14), UInt(+0x18), UInt(+0x1c), UInt(+0x20)
-// ??0Stencil@RenderState@Video@@ (0x1800f49d0) zeroes the whole 0x24.
-struct Stencil {
-    uint8_t  enabled;      // +0x00
-    uint8_t  twoSided;     // +0x01
-    uint8_t  _pad02[2];    // +0x02
-    uint32_t readMask;     // +0x04
-    uint8_t  writeMask;    // +0x08  serialized as UChar, not UInt
-    uint8_t  _pad09[3];    // +0x09
-    uint32_t func;         // +0x0c
-    uint32_t failOp;       // +0x10
-    uint32_t depthFailOp;  // +0x14
-    uint32_t passOp;       // +0x18
-    uint32_t backFunc;     // +0x1c
-    uint32_t reference;    // +0x20
-};
-static_assert(sizeof(Stencil) == 0x24, "RenderState::Stencil is 0x24 (9 dwords copied by Initialize)");
-static_assert(offsetof(Stencil, writeMask) == 0x08, "Stencil::writeMask @ +0x08");
-static_assert(offsetof(Stencil, reference) == 0x20, "Stencil::reference @ +0x20");
-
-struct RenderState {
-    RtObject::External base;        // +0x00 (0x20) — External, NOT CompiledExternal
-    AlphaBlend         _alphaBlend; // +0x20
-    Depth              _depth;      // +0x34
-    Stencil            _stencil;    // +0x44
-    uint32_t           _cullMode;   // +0x68  default 1
-    uint32_t           _fillMode;   // +0x6c  default 0; ==1 means wireframe
-    uint8_t            _flag70;     // +0x70
-    uint8_t            _pad71[7];   // +0x71
-    void*              _data;       // +0x78  Video::RenderStateData*
-};
 static_assert(sizeof(RenderState) == 0x80,
               "Video::RenderState is 0x80 (MOV EDX,0x80 at 0x18004ba02)");
+static_assert(alignof(RenderState) == 8, "Video::RenderState is qword-aligned");
 static_assert(offsetof(RenderState, _alphaBlend) == 0x20, "RenderState::_alphaBlend @ +0x20");
 static_assert(offsetof(RenderState, _depth)      == 0x34, "RenderState::_depth @ +0x34");
 static_assert(offsetof(RenderState, _stencil)    == 0x44, "RenderState::_stencil @ +0x44");
@@ -125,5 +316,31 @@ static_assert(offsetof(RenderState, _fillMode)   == 0x6c, "RenderState::_fillMod
 static_assert(offsetof(RenderState, _flag70)     == 0x70, "RenderState::_flag70 @ +0x70");
 static_assert(offsetof(RenderState, _data)       == 0x78, "RenderState::_data @ +0x78");
 
-} // namespace video
-} // namespace rt
+static_assert(sizeof(RenderState::AlphaBlend) == 0x14,
+              "RenderState::AlphaBlend is 0x14 (5 dwords copied by Initialize)");
+static_assert(sizeof(RenderState::Depth) == 0x10,
+              "RenderState::Depth is 0x10 (4 dwords copied by Initialize)");
+static_assert(sizeof(RenderState::Stencil) == 0x24,
+              "RenderState::Stencil is 0x24 (9 dwords copied by Initialize)");
+static_assert(alignof(RenderState::AlphaBlend) == 4, "AlphaBlend is dword-aligned");
+static_assert(alignof(RenderState::Depth) == 4, "Depth is dword-aligned");
+static_assert(alignof(RenderState::Stencil) == 4, "Stencil is dword-aligned");
+static_assert(offsetof(RenderState::AlphaBlend, writeMask) == 0x10, "AlphaBlend::writeMask @ +0x10");
+static_assert(offsetof(RenderState::Depth, func) == 0x04, "Depth::func @ +0x04");
+static_assert(offsetof(RenderState::Stencil, writeMask) == 0x08,
+              "Stencil::writeMask @ +0x08 — serialized as UChar (0x1800f48e0)");
+static_assert(offsetof(RenderState::Stencil, reference) == 0x20, "Stencil::reference @ +0x20");
+
+// `?Initialize@` copies each sub-struct dword by dword, INCLUDING the padding
+// bytes after `AlphaBlend::enabled` and `Depth::test`/`write`. The member
+// bodies express that as a struct assignment, which is only the same bytes
+// while all three stay trivially copyable — asserted rather than assumed. A
+// user-declared default constructor (above) does not affect this.
+static_assert(std::is_trivially_copyable<RenderState::AlphaBlend>::value,
+              "Initialize copies AlphaBlend as bytes");
+static_assert(std::is_trivially_copyable<RenderState::Depth>::value,
+              "Initialize copies Depth as bytes");
+static_assert(std::is_trivially_copyable<RenderState::Stencil>::value,
+              "Initialize copies Stencil as bytes");
+
+}  // namespace Video
