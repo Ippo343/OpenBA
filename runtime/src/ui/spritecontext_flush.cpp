@@ -156,6 +156,7 @@
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::{Context,Device}Data
+#include "../../types/graphics/Material.h"    // ENDGAME B.3.5: Graphics::MaterialInstance
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp — the linker
@@ -254,13 +255,12 @@ inline float TransformY(const Transform2& m, float x, float y) {
 // ---------------------------------------------------------------------------
 // Dependencies
 // ---------------------------------------------------------------------------
-// `?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z` 0x180102c90.
-// An EXPORT door the tree already opens (tool_base_tilerender.cpp:100), so
-// naming it here adds nothing to the unsatisfied-export set. RT_EXPORT_ONCE:
-// this call is part of the WORK, so it must pick up a future port of `Setup`.
-typedef void (*MaterialSetupFn)(void* material, void* context, int shader);
-const char* const kMaterialSetup =
-    "?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z";
+// ENDGAME B.3.5 — `?Setup@MaterialInstance@Graphics@@QEBAXAEAVContext@Video@@H@Z`
+// 0x180102c90 was an RT_EXPORT_ONCE door here, with a `MaterialSetupFn` typedef
+// and a `kMaterialSetup` literal, because the member was only DECLARED. The body
+// is `Graphics::MaterialInstance::Setup` (runtime/src/graphics/wave21_lane_gfxbody.cpp)
+// now, so step 6 below calls the member and the typedef/literal are gone with it.
+// The door stays registered for callers outside this file.
 
 // ENDGAME B.3.2 step 2 — the 0x1800783d0 forwarder that used to sit here is
 // GONE. `self->_draws` is a real `Collection::Array<SpriteDraw>` member, and
@@ -373,8 +373,9 @@ void FlushBody(SpriteContext* self, float halfPixel,
     const uint8_t isLine = (count > 0) ? self->_draws._data[0].isLine : 0;
 
     // --- 0x18011bb37 -------------------------------------------------------
-    RT_EXPORT_ONCE(MaterialSetupFn, kMaterialSetup)(
-        Field<void*>(self->_currentSheet, kSheetMaterial), ctx, 0);
+    reinterpret_cast<const Graphics::MaterialInstance*>(
+        Field<void*>(self->_currentSheet, kSheetMaterial))
+        ->Setup(*reinterpret_cast<Video::Context*>(ctx), 0);   // B.3.5 bridge
 
     // --- the chunked walk, 0x18011bb3c..0x18011c5ef ------------------------
     const int32_t vertsPer = isLine ? 2 : 6;

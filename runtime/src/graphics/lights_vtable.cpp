@@ -58,6 +58,12 @@
 // and the header cites this file as its first source.
 #include "../../types/graphics/Light.h"
 #include "../../types/graphics/SunLight.h"
+// ENDGAME B.3.5 caller batch: the cross-class edges this file opens. Every one
+// of them is a real class today, so the by-name doors below become member calls.
+#include "../../types/graphics/Camera.h"    // Graphics::Renderer, Graphics::Camera
+#include "../../types/graphics/Scene.h"     // Graphics::Scene
+#include "../../types/video/Context.h"      // Video::Context
+#include "../../types/video/Device.h"       // Video::RenderBuffer
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -150,12 +156,16 @@ void GeometryDtor(void* p) {
 // Video side of that is ported"; the Video side it named (ImageBuffer /
 // RenderBuffer operator new, ctor, PlatformConstruct and Create) was already
 // ported, which is what made the port possible.
+// ENDGAME B.3.5 caller batch: a DEFINED member (batchc_gfx_leaves.cpp:885), so
+// this is a member call; the door stays registered for callers outside the file.
 void SpotLightCreateTargets(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?CreateTargets@SpotLight@Graphics@@AEAAXXZ")(p);
+    reinterpret_cast<Graphics::SpotLight*>(p)->CreateTargets();   // B.3.5 bridge
 }
 
+// ENDGAME B.3.5 caller batch: `Video::RenderBuffer::PlatformDestruct` is a
+// DEFINED member (runtime/src/video/buffers_win.cpp).
 void RenderBufferPlatformDestruct(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ")(p);
+    reinterpret_cast<Video::RenderBuffer*>(p)->PlatformDestruct();   // B.3.5 bridge
 }
 void RenderBufferOperatorDelete(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??3RenderBuffer@Video@@SAXPEAX@Z")(p);
@@ -166,14 +176,12 @@ void RenderBufferOperatorDelete(void* p) {
 // BATCH C 2026-09-12; it used to read "NOT PORTED"), exported, reached by name.
 // All five Draw arms end in it, and its EIGHT values (this + seven params) are
 // what the whole of each body exists to compute.
-using SetLightFn = void (*)(void* ctx, const float* v3a, const float* v3b,
-                            const float* v4c, const float* v4d,
-                            float e, float f, int32_t g);
+// ENDGAME B.3.5 caller batch: a DEFINED member of the real `Video::Context`
+// (runtime/src/video/batchc_context_setlight.cpp), whose declaration takes the
+// same raw pointers this door did. The `SetLightFn` typedef went with the door.
 void ContextSetLight(void* ctx, const float* a, const float* b,
                      const float* c, const float* d, float e, float f, int32_t g) {
-    RT_EXPORT_ONCE(SetLightFn,
-        "?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z")
-        (ctx, a, b, c, d, e, f, g);
+    reinterpret_cast<Video::Context*>(ctx)->SetLight(a, b, c, d, e, f, g);  // B.3.5 bridge
 }
 
 // `?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z` 0x180105240
@@ -181,11 +189,10 @@ void ContextSetLight(void* ctx, const float* a, const float* b,
 // 2026-09-12; it used to read "NOT PORTED"), exported, reached by name.
 // FIVE VALUES; see the banner. The fifth is the SHADER INDEX — that body is
 // where the three arms' `MOV [RSP+0xa0],EAX` finally lands.
-using DrawItemListFn = void (*)(void* renderer, void* ctx, int32_t, int32_t, int32_t);
+// ENDGAME B.3.5 caller batch: a DEFINED member (batchc_gfx_leaves.cpp:943).
 void RendererDrawItemList(void* renderer, void* ctx, int32_t a, int32_t b, int32_t c) {
-    RT_EXPORT_ONCE(DrawItemListFn,
-        "?DrawItemList@Renderer@Graphics@@QEBAXAEAVContext@Video@@HHH@Z")
-        (renderer, ctx, a, b, c);
+    reinterpret_cast<const Graphics::Renderer*>(renderer)
+        ->DrawItemList(*reinterpret_cast<Video::Context*>(ctx), a, b, c);  // B.3.5 bridge
 }
 
 // The five Math / Graphics helpers SpotLight and SunLight's Draw use. Every one
@@ -239,33 +246,33 @@ void CameraFromFrustum(void* cam, const void* frustum, const void* xform, bool f
 // The four Renderer / Scene entry points SpotLight::AddDrawItems drives. All
 // PORTED, all exported (`AEBA` on the two Scene ones is private, which this DLL
 // still exports).
-using AddLightFn   = void (*)(void*, const void*);
-using BeginGroupFn = int32_t (*)(void*, const void*, const void*, const void*,
-                                 int32_t, uint32_t);
-using EndGroupFn   = void (*)(void*, int32_t);
-using SceneAddFn   = void (*)(const void*, void*);
-
+// ENDGAME B.3.5 caller batch: all five are DEFINED members today —
+// `Renderer::AddLight` / `::EndDrawGroup` and `Scene::AddGlobalDrawItems` in
+// wave29_lane_gfxbody.cpp, `Renderer::BeginDrawGroup` in wave28_lane_gfxbody.cpp,
+// `Scene::AddCulledDrawItems` in cull.cpp. The four function-pointer typedefs
+// went with their doors; the doors themselves stay registered.
 void RendererAddLight(void* renderer, const void* light) {
-    RT_EXPORT_ONCE(AddLightFn, "?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z")
-        (renderer, light);
+    reinterpret_cast<Graphics::Renderer*>(renderer)
+        ->AddLight(reinterpret_cast<const Graphics::Light*>(light));   // B.3.5 bridge
 }
 int32_t RendererBeginDrawGroup(void* renderer, const void* target,
                                const void* camA, const void* camB,
                                int32_t a, uint32_t b) {
-    return RT_EXPORT_ONCE(BeginGroupFn,
-        "?BeginDrawGroup@Renderer@Graphics@@QEAAHPEBVRenderBuffer@Video@@AEBVCamera@2@1HI@Z")
-        (renderer, target, camA, camB, a, b);
+    return reinterpret_cast<Graphics::Renderer*>(renderer)->BeginDrawGroup(
+        reinterpret_cast<const Video::RenderBuffer*>(target),
+        *reinterpret_cast<const Graphics::Camera*>(camA),
+        *reinterpret_cast<const Graphics::Camera*>(camB), a, b);       // B.3.5 bridge
 }
 void RendererEndDrawGroup(void* renderer, int32_t id) {
-    RT_EXPORT_ONCE(EndGroupFn, "?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z")(renderer, id);
+    reinterpret_cast<Graphics::Renderer*>(renderer)->EndDrawGroup(id);  // B.3.5 bridge
 }
 void SceneAddGlobalDrawItems(const void* scene, void* renderer) {
-    RT_EXPORT_ONCE(SceneAddFn, "?AddGlobalDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")
-        (scene, renderer);
+    reinterpret_cast<const Graphics::Scene*>(scene)
+        ->AddGlobalDrawItems(*reinterpret_cast<Graphics::Renderer*>(renderer));  // B.3.5 bridge
 }
 void SceneAddCulledDrawItems(const void* scene, void* renderer) {
-    RT_EXPORT_ONCE(SceneAddFn, "?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")
-        (scene, renderer);
+    reinterpret_cast<const Graphics::Scene*>(scene)
+        ->AddCulledDrawItems(*reinterpret_cast<Graphics::Renderer*>(renderer));  // B.3.5 bridge
 }
 
 // The two unexported Collection::Array<T>::SetSize instantiations

@@ -199,6 +199,7 @@
 #include "../../types/video/ImageBuffer.h"
 #include "../../types/graphics/FrameCopyImageBuffer.h"  // ENDGAME B.3.5
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/Material.h"   // ENDGAME B.3.5: Graphics::MaterialInstance
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
 
@@ -592,7 +593,10 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
 
         ReleaseStringSlot(&binding.name);
     }
-    RT_EXPORT_ONCE(VoidThisFn, "?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ")(mat);
+    // ENDGAME B.3.5: `?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ`
+    // 0x1801033e0 is a DEFINED member now (wave27_lane_gfxbig.cpp), so the
+    // by-name door call becomes a member call. The door stays registered.
+    reinterpret_cast<Graphics::MaterialInstance*>(mat)->BuildParameters();  // B.3.5 bridge
 
     // ---- the one-sprite sheet ---------------------------------------------
     SpriteSheet* sheet = nullptr;

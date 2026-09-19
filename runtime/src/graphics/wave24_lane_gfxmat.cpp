@@ -638,8 +638,10 @@ bool MaterialInstance::Serialize(void* streamv) {
     // `[SpriteSheetLoad] Dialog/SpriteSheet.rsc`. RT_EXPORT_ONCE resolves
     // registry-first, so this call site needed no change to follow the port.
     if (!RT_GFXMAT_CORRUPT(4)) {
-        using BuildParamsFn = void (*)(void*);
-        RT_EXPORT_ONCE(BuildParamsFn, "?BuildParameters@MaterialInstance@Graphics@@QEAAXXZ")(this);
+        // ENDGAME B.3.5 caller batch: `MaterialInstance::BuildParameters` is a
+        // DEFINED member (wave27_lane_gfxbig.cpp:773), so this is the qualified
+        // non-virtual member call retail makes, and `BuildParamsFn` is gone.
+        this->MaterialInstance::BuildParameters();
     }
 
     if (enc) reinterpret_cast<EncDtorFn>(VSlot(enc, kEncScalarDtor))(enc, 1);

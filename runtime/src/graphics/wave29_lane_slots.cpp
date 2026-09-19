@@ -61,6 +61,7 @@
 #include "../../types/graphics/AnimationState.h"   // ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
 #include "../../types/system/Value.h"              // System::Time, ditto
+#include "../../types/video/Context.h"             // ENDGAME B.3.5 caller batch
 
 using RtGraphics::MeshInstance;
 
@@ -174,13 +175,15 @@ using UpdateHierarchyFn = void (*)(void* self);
 //   CONSEQUENCE: null ⇒ no skinning matrices are produced and nothing is handed
 //                to the Context, so a skinned mesh would render in its bind
 //                pose. Announced once rather than silently skipped.
-using GetBonesFn = int32_t (*)(const void* self, float t, const void* base, void* outMatrices);
+// ENDGAME B.3.5 caller batch: the "NOT PORTED" verdict above is STALE —
+// `Graphics::MeshInstance::GetBones` is a DEFINED member, so the typedef that
+// used to sit here is gone and `SetSharedInstanceData` calls the member.
 
 // ?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z
 //   SYMBOL:      retail 0x18001a780, an ordinary public export.
 //   CONDITION:   PORTED (BATCH 8, runtime/src/video/context.cpp
 //                RtVideo_Context_SetBones). ResolveExport now reaches our body.
-using SetBonesFn = void (*)(void* ctx, int32_t count, const void* matrices);
+// ENDGAME B.3.5 caller batch: a DEFINED member, so this typedef went too.
 
 }  // namespace
 
@@ -437,7 +440,8 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
                                             float t) const {
     ++g_miSSID;
 
-    void* const ctx = reinterpret_cast<void*>(&context);              // B.3.5 bridge
+    // ENDGAME B.3.5 caller batch: the `void* ctx` bridge local is gone with the
+    // `SetBones` name door below — `context` is already the real class.
     const uint8_t* const me = B(static_cast<const void*>(this));
 
     const int64_t wide = static_cast<int64_t>(packed);      // movsxd r9,r8d
@@ -463,22 +467,18 @@ int32_t MeshInstance::SetSharedInstanceData(Video::Context& context, int32_t pac
     // ---- the identity Transform (0x18010171f .. 0x180101750) ---------------
     float ident[7] = {0.0f, 0.0f, 0.0f, 1.0f, 0.0f, 0.0f, 0.0f};
 
-    GetBonesFn getBones = reinterpret_cast<GetBonesFn>(ResolveExport(
-        "?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z"));
-    SetBonesFn setBones = reinterpret_cast<SetBonesFn>(ResolveExport(
-        "?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z"));
-    if (!getBones || !setBones) {
-        static bool said = false;
-        if (!said) { said = true;
-            std::fprintf(stderr, "[SLOTS29] MeshInstance::SetSharedInstanceData: "
-                                 "GetBones=%p SetBones=%p -- a skinned mesh will "
-                                 "render in its bind pose\n",
-                                 (void*)getBones, (void*)setBones); }
-        return 0;
-    }
-
-    const int32_t n = getBones(me, t, ident, bones);         // 0x180101759
-    setBones(ctx, n, bones);                                 // 0x180101768
+    // ENDGAME B.3.5 caller batch: both were `ResolveExport` name doors into
+    // locals, with a one-shot "resolved NULL" announcement behind them. Both are
+    // DEFINED members today — `Graphics::MeshInstance::GetBones` in
+    // animationstate_transforms.cpp:1127 and `Video::Context::SetBones` in
+    // video/context.cpp:396 — so both are direct member calls, `GetBones`
+    // qualified and non-virtual on `this` (retail's own direct CALL to
+    // 0x180100070). The two typedefs, the two locals and the announcement are
+    // gone: a member call cannot be null, so there was nothing left to announce.
+    const int32_t n = this->MeshInstance::GetBones(
+        t, *reinterpret_cast<const Math::Transform*>(ident),
+        reinterpret_cast<Math::Matrix*>(bones));              // 0x180101759
+    context.SetBones(n, reinterpret_cast<const Math::Matrix*>(bones));  // 0x180101768
 
     return 0;                                                // ALWAYS 0 — see banner
 }

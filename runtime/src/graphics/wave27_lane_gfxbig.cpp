@@ -109,6 +109,7 @@
 #include "../../types/graphics/AnimationState.h"
 #include "../../types/system/Value.h"   // System::Time -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Camera.h"
+#include "../../types/graphics/Scene.h"   // ENDGAME B.3.5 caller batch: Graphics::Scene
 #include "../../types/graphics/Material.h"
 #include "../../types/video/Context.h"
 #include "../collection/array_internal.h"
@@ -429,7 +430,8 @@ using AddSceneFn       = void (*)(Renderer*, const void* scene, const void* rend
 using BeginDrawGroupFn = int32_t (*)(Renderer*, const void* renderBuffer,
                                      const void* camera, const void* camera2,
                                      int32_t, uint32_t);
-using AddCulledFn      = void (*)(const void* scene, Renderer*);
+// ENDGAME B.3.5 caller batch: `AddCulledFn` is gone with its door — the member
+// call in `Renderer::Draw` needs no typedef.
 
 // slot 3 of a scene drawable: AddDrawItems(const Scene&, Renderer&)
 using AddDrawItemsFn = void (*)(void* self, const void* scene, Renderer*);
@@ -1247,8 +1249,11 @@ void Renderer::Draw(Video::Context& context, float alpha, const Scene& sceneRef,
             }
 
             if (r->field_48 != 0) {
-                RT_EXPORT_ONCE(rtgfxbig::AddCulledFn,
-                    "?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")(scene, r);
+                // ENDGAME B.3.5 caller batch: `Graphics::Scene::AddCulledDrawItems`
+                // is a DEFINED member (cull.cpp:363) and the receiver is this
+                // body's own `const Scene&` parameter, so this is the qualified
+                // non-virtual member call retail makes. `AddCulledFn` went with it.
+                sceneRef.Graphics::Scene::AddCulledDrawItems(*this);
             }
 
             for (int32_t k = 0; k < 3; ++k) {

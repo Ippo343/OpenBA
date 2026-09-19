@@ -168,7 +168,8 @@ const char* const kPIupdate        = "?Update@ParticleInstance@Graphics@@QEAA_NX
 const char* const kPIincrement     = "?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ";
 const char* const kPSIctor         = "??0ParticleSystemInstance@Graphics@@QEAA@XZ";
 const char* const kGeometryCtor    = "??0Geometry@Graphics@@QEAA@XZ";
-const char* const kSetBounds       = "?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z";
+// ENDGAME B.3.5 caller batch: `kSetBounds` is gone with its door — the member call
+// spells the name it no longer needs.
 const char* const kFrameIndexData  = "?_frameIndex@ParticleInstance@Graphics@@1HA";
 
 // ============================================================================
@@ -237,10 +238,10 @@ void RtGeometryCtor(void* self) {
 // Graphics::Geometry::SetBounds(const Volume::Box&) -- retail 0x180015700,
 // ordinal 3836, EXPORTED. Also not this lane's class; called at its own
 // export from ParticleInstance::Update below, exactly as retail does.
-using SetBoundsFn = void (*)(void*, const void*);
-void RtGeometrySetBounds(void* self, const void* box) {
-    RT_EXPORT_ONCE(SetBoundsFn, kSetBounds)(self, box);   // ported; see RtGeometryCtor
-}
+// ENDGAME B.3.5 caller batch: `Graphics::Geometry::SetBounds` is a DEFINED member
+// (scene.cpp:1373), so the `SetBoundsFn` typedef and this wrapper are GONE and
+// `ParticleInstance::Update` calls the member on its own Geometry base. The door
+// stays registered in scene.cpp for callers outside that file.
 
 }  // namespace
 
@@ -668,10 +669,12 @@ bool ParticleInstance::Update() {
     int* frameIndex = RtFrameIndexSlot();
     bool needsUpdate;
     if (resource->_active != 0 && _boundsPtr->frameTag == *frameIndex) {
-        // `Geometry::SetBounds(const Volume::Box&)` at its own export, exactly as
-        // retail does. `this` IS the Geometry base (offset zero), so the cast the
-        // POD form needed is gone.
-        RtGeometrySetBounds(this, _boundsPtr);
+        // `Geometry::SetBounds(const Volume::Box&)`, exactly as retail does —
+        // a QUALIFIED non-virtual member call since the ENDGAME B.3.5 caller
+        // batch. `this` IS the Geometry base (offset zero), so the cast the POD
+        // form needed is gone.
+        this->::Graphics::Geometry::SetBounds(
+            *reinterpret_cast<const ::Box*>(_boundsPtr));
         needsUpdate = false;
     } else {
         _boundsPtr->frameTag = *frameIndex;                  // unguarded, faithful

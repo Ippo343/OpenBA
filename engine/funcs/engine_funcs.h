@@ -61,14 +61,17 @@ extern fn_AudioDevice_FreeChannel_t fn_AudioDevice_FreeChannel;
 typedef bool (*fn_App_PlatformUpdate_t)(void* self);
 extern fn_App_PlatformUpdate_t fn_App_PlatformUpdate;
 
-// Video::Context::ClearResources(this) — RESOLVED, NEVER CALLED; see the
-// Video::Context LIFECYCLE note further down this header.
-typedef void (*fn_VideoCtx_ClearResources_t)(void* self);
-extern fn_VideoCtx_ClearResources_t fn_VideoCtx_ClearResources;
-
-// Video::Context::Reset(this)
-typedef void (*fn_VideoCtx_Reset_t)(void* self);
-extern fn_VideoCtx_Reset_t fn_VideoCtx_Reset;
+// ENDGAME B.3.5 caller batch (b35-K2), THE GLOBAL DOOR SWEEP: the whole
+// Video::Context LIFECYCLE GROUP is GONE from this header — `fn_VideoCtx_Ctor`,
+// `fn_VideoCtx_Dtor`, `fn_VideoCtx_Delete`, `fn_VideoCtx_ClearResources` and
+// `fn_VideoCtx_Reset`, with their typedefs, externs, definitions, initialisers
+// and their four EngineFuncsDump lines. The note further down this header (which
+// also goes) had already recorded that all five were resolved-and-never-called
+// once batch b35-I3 moved main.cpp's FSE-refocus recovery onto
+// `Video::Context::Reset()`. A tree-wide caller count by binding confirms zero:
+// the only remaining mentions are COMMENTS in runtime/src/video/context.cpp and
+// context_lifecycle.cpp, and B.3.2's rules say a comment is not a caller. The
+// registered doors in runtime/src/video/ are untouched.
 
 // Engine::Loader::Load(this, UpdateLoop*)
 typedef void (*fn_Loader_Load_t)(void* loader, void* updateLoop);
@@ -111,37 +114,19 @@ extern fn_DynArrayPush_t fn_PostDrawPush;
 extern fn_DynArrayPush_t fn_PostUpdatePush;
 
 // ============================================================
-// Video::Context lifecycle
+// Video::Context lifecycle — RETIRED (ENDGAME B.3.5, batch b35-K2)
 // ============================================================
-
-// Video::Context LIFECYCLE — RESOLVED, NEVER CALLED. Corrected 2026-09-07
-// (Wave 6 lane A, docs/runtime_port/WAVE6_LANE_A.md §6). The comments below say
-// what these three ARE and were silent about the fact that nothing drives them,
-// which is the failure mode PLAN.md §6 step 8 is about. The Context is created
-// and destroyed entirely inside Runtime's Engine::MainLoop
-// (CreateVideoContext 0x1800dd500 / ReleaseVideoContext / ~MainLoop), so these
-// three pointers plus fn_VideoCtx_ClearResources exist only for the
-// EngineFuncsDump() diagnostic at engine_funcs.cpp:4123-4141.
-// fn_VideoCtx_Reset used to be the one member of this group with a live caller
-// (standalone/main.cpp's FSE-refocus recovery); ENDGAME B.3.5 (batch b35-I3)
-// converted that call site to `Video::Context::Reset()` on the real class, so
-// ALL FIVE of the group (Ctor, Dtor, Delete, ClearResources, Reset) are now
-// resolved-and-never-called, and the whole group retires with the closing pass.
-// runtime/src/video/context.cpp:1018-1020 still says Reset has a live caller:
-// that note is now stale. Note the resolve MECHANISM differs per row: the
-// ctor and operator delete come from ResolveAddr(Module::Runtime, ...)
-// (engine_funcs.cpp:1620, :1628), not from a mangled name.
-// Video::Context::Context(this, Device*, int, int, int, RenderBuffer*)
-typedef void* (*fn_VideoCtx_Ctor_t)(void* self, void* device, int param1, int param2, int param3, void* renderBuf);
-extern fn_VideoCtx_Ctor_t fn_VideoCtx_Ctor;
-
-// Video::Context::~Context(this)
-typedef void (*fn_VideoCtx_Dtor_t)(void* self);
-extern fn_VideoCtx_Dtor_t fn_VideoCtx_Dtor;
-
-// Video::Context::operator_delete(ptr)
-typedef void (*fn_VideoCtx_Delete_t)(void* ptr);
-extern fn_VideoCtx_Delete_t fn_VideoCtx_Delete;
+//
+// All five rows are gone; see the note at the top of this header. The facts the
+// old banner recorded, kept because they are still true of the TREE: the Context
+// is created and destroyed entirely inside Runtime's Engine::MainLoop
+// (CreateVideoContext 0x1800dd500 / ReleaseVideoContext / ~MainLoop), so nothing
+// on the engine side ever drove these pointers except `EngineFuncsDump()`. The
+// resolve MECHANISM differed per row and that is why a name-anchored sweep
+// undercounts this group: the ctor and `operator delete` came from
+// `ResolveAddr(Module::Runtime, 0x1800f1820 / 0x180018500)`, not from a mangled
+// name, and both of those addresses resolve to `??0Context@Video@@` and
+// `??3Context@Video@@` in `standalone/rt_export_addrs.inc`.
 
 // ============================================================
 // System::MemoryAllocator
@@ -1276,10 +1261,9 @@ extern fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo;
 typedef void* (*fn_ImageBuffer_Ctor_t)(void* self);
 extern fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor;
 
-// ImageBuffer::~ImageBuffer() — virtual dtor
-// ??1ImageBuffer@Video@@UEAA@XZ (0x1800f2610, ordinal 609)
-typedef void (*fn_ImageBuffer_Dtor_t)(void* self);
-extern fn_ImageBuffer_Dtor_t fn_ImageBuffer_Dtor;
+// ENDGAME B.3.5 (b35-K2): `fn_ImageBuffer_Dtor`
+// (??1ImageBuffer@Video@@UEAA@XZ, 0x1800f2610) is GONE — zero callers tree-wide.
+// The registered door in runtime/src/video/ is untouched.
 
 // ImageBuffer::CopyToTexture(this, data, width, height) -> bool
 // ?CopyToTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z (0x1800f3380, ordinal 1869)
@@ -2916,29 +2900,15 @@ extern fn_AudioScene_RegisterObject_t fn_AudioScene_RegisterObject;
 typedef void* (*fn_Entity_FindAudioComponent_t)(void* entity, void* retval);
 extern fn_Entity_FindAudioComponent_t fn_Entity_FindAudioComponent;
 
-// Graphics::Scene::AddGlobalObject — adds a Geometry to the global scene render list
-// RCX=Graphics::Scene*, RDX=Geometry*
-typedef void (*fn_Graphics_Scene_AddGlobalObject_t)(void* scene, void* geometry);
-extern fn_Graphics_Scene_AddGlobalObject_t fn_Graphics_Scene_AddGlobalObject;
-
-// Graphics::Scene::AddObject — adds a per-instance Geometry; returns id (uint).
-// RCX=Graphics::Scene*, RDX=Geometry*  ->  EAX = handle id.
-typedef unsigned int (*fn_Graphics_Scene_AddObject_t)(void* scene, void* geometry);
-extern fn_Graphics_Scene_AddObject_t fn_Graphics_Scene_AddObject;
-
-// Graphics::GraphicsMesh::GetMaterialList(int) — returns a pointer to a
-// Collection::Array<ExternalPtr<MaterialInstance>> stored at offset matIdx*0x10
-// inside GraphicsMesh+0x70. Member function returning >8B uses MS x64 ABI:
-// RCX=this(GraphicsMesh*), RDX=int matIdx → returns Array* in RAX.
-// Array layout: +0x00 = data ptr (8-byte ExternalPtrs), +0x08 = count.
-typedef void* (*fn_Graphics_GraphicsMesh_GetMaterialList_t)(void* self, int matIdx);
-extern fn_Graphics_GraphicsMesh_GetMaterialList_t fn_Graphics_GraphicsMesh_GetMaterialList;
-
-// Graphics::MeshInstance::SetMaterialInstance(int idx, ExternalPtr<MaterialInstance>)
-// Writes the 8-byte ExternalPtr value into MeshInstance+0xC8 + idx*8.
-// RCX=MeshInstance*, RDX=int, R8=ExternalPtr value (8 bytes).
-typedef void (*fn_Graphics_MeshInstance_SetMaterialInstance_t)(void* self, int idx, void* matExtPtr);
-extern fn_Graphics_MeshInstance_SetMaterialInstance_t fn_Graphics_MeshInstance_SetMaterialInstance;
+// ENDGAME B.3.5 (b35-K2), THE GLOBAL DOOR SWEEP. Four of the five rows that used
+// to sit here are GONE — zero callers tree-wide after batches b35-I1/I2/K1
+// converted `code/**`:
+//   fn_Graphics_Scene_AddGlobalObject            (?AddGlobalObject@Scene@Graphics@@)
+//   fn_Graphics_Scene_AddObject                  (?AddObject@Scene@Graphics@@)
+//   fn_Graphics_GraphicsMesh_GetMaterialList     (?GetMaterialList@GraphicsMesh@Graphics@@)
+//   fn_Graphics_MeshInstance_SetMaterialInstance (?SetMaterialInstance@MeshInstance@Graphics@@)
+// The first two were the two HEAVIEST doors in B35_RULES section 7's table (12
+// and 7 call sites); both are at zero now. Their registered doors are untouched.
 
 // Graphics::ParticleSystemInstance::ParticleSystemInstance() — default ctor.
 // Object size 0xe0, alignment 8.
@@ -2953,13 +2923,12 @@ extern fn_Graphics_ParticleSystemInstance_Ctor_t fn_Graphics_ParticleSystemInsta
 typedef void* (*fn_Graphics_Particle_Ctor_t)(void* self);
 extern fn_Graphics_Particle_Ctor_t fn_Graphics_Particle_Ctor;
 
-// Graphics::ParticleInstance::IncrementInstanceIndex() — advances the
-// Runtime's static _frameIndex counter. ParticleSystemInstance::Update
-// early-returns if `emit+0x2c == _frameIndex`, so this MUST be called
-// once per render frame for baked particle systems to actually simulate
-// after their first update. Mirrors what Renderer::Render does in retail.
-typedef void (*fn_Graphics_ParticleInstance_IncrementInstanceIndex_t)(void);
-extern fn_Graphics_ParticleInstance_IncrementInstanceIndex_t fn_Graphics_ParticleInstance_IncrementInstanceIndex;
+// ENDGAME B.3.5 (b35-K2): `fn_Graphics_ParticleInstance_IncrementInstanceIndex`
+// (?IncrementInstanceIndex@ParticleInstance@Graphics@@SAXXZ) is GONE — zero
+// callers. The FACT it documented is load-bearing and stays on record here:
+// `ParticleSystemInstance::Update` early-returns when `emit+0x2c == _frameIndex`,
+// so this static MUST be advanced once per render frame or baked particle systems
+// stop simulating after their first update. Whoever calls it now calls the member.
 
 // Graphics::Scene::Clean(this) — walks scene objects and calls Geometry::Clean
 // (vtable +0x40) on each that has a dirty bit set. Must be called once per
@@ -2985,29 +2954,25 @@ extern fn_Graphics_Scene_Ctor_t fn_Graphics_Scene_Ctor;
 typedef void* (*fn_Graphics_SunLight_Ctor_t)(void* self);
 extern fn_Graphics_SunLight_Ctor_t fn_Graphics_SunLight_Ctor;
 
-// Graphics::SunLight::Set(direction, color, ambient) — set lighting parameters.
-// RCX=SunLight*, RDX=Vector3* (direction), R8=Vector4* (sun color), R9=Vector4* (ambient color).
-typedef void (*fn_Graphics_SunLight_Set_t)(void* self, void* direction, void* sunColor, void* ambient);
-extern fn_Graphics_SunLight_Set_t fn_Graphics_SunLight_Set;
+// ENDGAME B.3.5 (b35-K2): `fn_Graphics_SunLight_Set` (?Set@SunLight@Graphics@@)
+// is GONE — zero callers. `fn_Graphics_SunLight_Ctor` above it STAYS: it is a
+// ctor door with live callers (B4b-2 / B35_RULES section 11).
 
 // Graphics::MeshInstance::MeshInstance() — default ctor. Object size 0x120, alignment 8.
 typedef void* (*fn_Graphics_MeshInstance_Ctor_t)(void* self);
 extern fn_Graphics_MeshInstance_Ctor_t fn_Graphics_MeshInstance_Ctor;
 
-// Graphics::MeshInstance::SetMesh(meshExternalPtr) — assign mesh resource.
-// RCX=MeshInstance*, RDX=ExternalPtr<GraphicsMesh> (8-byte external ptr value).
-typedef void (*fn_Graphics_MeshInstance_SetMesh_t)(void* self, void* meshPtr);
-extern fn_Graphics_MeshInstance_SetMesh_t fn_Graphics_MeshInstance_SetMesh;
+// ENDGAME B.3.5 (b35-K2): `fn_Graphics_MeshInstance_SetMesh`
+// (?SetMesh@MeshInstance@Graphics@@) is GONE — zero callers. It had FOUR in
+// B35_RULES section 7's table.
 
 // Graphics::Renderer::Draw(context, alpha, scene, camera) — main render call.
 // RCX=Renderer*, RDX=Video::Context*, XMM2=alpha, R9=Scene*, [stack+0x20]=Camera*.
 typedef void (*fn_Graphics_Renderer_Draw_t)(void* self, void* context, float alpha, void* scene, void* camera);
 extern fn_Graphics_Renderer_Draw_t fn_Graphics_Renderer_Draw;
 
-// Video::Context::SetFog(fogStart, fogEnd, fogColorVec4) — push fog params.
-// RCX=Context*, XMM1=fogStart, XMM2=fogEnd, R9=Vector4*.
-typedef void (*fn_Video_Context_SetFog_t)(void* context, float fogStart, float fogEnd, void* fogColor);
-extern fn_Video_Context_SetFog_t fn_Video_Context_SetFog;
+// ENDGAME B.3.5 (b35-K2): `fn_Video_Context_SetFog` (?SetFog@Context@Video@@) is
+// GONE — zero callers.
 
 // Volume::Frustum::Frustum(self, near, far, fovX, fovY) — perspective frustum.
 // Arg ORDER (verified via FUN_140098800 + Frustum::Frustum @ Runtime 0x1800fa1e0):
@@ -3022,9 +2987,9 @@ extern fn_Volume_Frustum_Ctor_t fn_Volume_Frustum_Ctor;
 typedef void* (*fn_Graphics_Camera_Ctor_t)(void* self, void* frustum, void* transform3, bool isPerspective);
 extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
 
-// Graphics::Camera::SetFrustum(frustum) — replace the camera's frustum.
-typedef void (*fn_Graphics_Camera_SetFrustum_t)(void* self, void* frustum);
-extern fn_Graphics_Camera_SetFrustum_t fn_Graphics_Camera_SetFrustum;
+// ENDGAME B.3.5 (b35-K2): `fn_Graphics_Camera_SetFrustum`
+// (?SetFrustum@Camera@Graphics@@) is GONE — zero callers. `fn_Graphics_Camera_Ctor`
+// above it STAYS: a ctor door with ten live uses (B4b-2 / section 11).
 
 // Audio::Scene::MoveEmitter — moves an audio emitter from old to new position
 // RCX=Audio::Scene*, EDX=emitterId, R8=oldPos(Vector3*), R9=newPos(Vector3*)
@@ -5317,10 +5282,9 @@ extern fn_EdgeMesh_Set_t fn_EdgeMesh_Set;
 typedef void (*fn_EdgeMesh_SetMaterials_t)(void* self, void* m0, void* m1, void* m2, void* m3);
 extern fn_EdgeMesh_SetMaterials_t fn_EdgeMesh_SetMaterials;
 
-// Graphics::EdgeMeshInstance::SetMesh(ExternalPtr<EdgeMesh>, arg). exe slot 0x140151368
-// ?SetMesh@EdgeMeshInstance@Graphics@@QEAAXV?$ExternalPtr@VEdgeMesh@Graphics@@@Object@@...@Z
-typedef void (*fn_EdgeMeshInstance_SetMesh_t)(void* self, void* mesh, void* arg);
-extern fn_EdgeMeshInstance_SetMesh_t fn_EdgeMeshInstance_SetMesh;
+// ENDGAME B.3.5 (b35-K2): `fn_EdgeMeshInstance_SetMesh`
+// (?SetMesh@EdgeMeshInstance@Graphics@@, exe slot 0x140151368) is GONE — zero
+// callers. `fn_EdgeMeshInstance_Ctor` above it STAYS (ctor door, live callers).
 
 // Graphics::EdgeMeshInstance::EdgeMeshInstance() — default ctor (constructs the
 // HighlightComponent+0x28 sub-object, which is zeroed under COMPONENT_INERT_FACTORY).

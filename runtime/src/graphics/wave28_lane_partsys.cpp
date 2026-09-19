@@ -147,6 +147,9 @@
 // ENDGAME B.3.5 block E: the real `Graphics::SunLight` (and `Light`).
 #include "../../types/graphics/SunLight.h"
 #include "../../types/math/Math.h"
+#include "../../types/graphics/Camera.h"    // ENDGAME B.3.5 caller batch: Renderer, Camera
+#include "../../types/graphics/Scene.h"     // ENDGAME B.3.5 caller batch: Graphics::Scene
+#include "../../types/video/Device.h"       // ENDGAME B.3.5 caller batch: Video::RenderBuffer
 
 using RtGraphics::Geometry;
 using RtGraphics::Particle;
@@ -1175,44 +1178,47 @@ namespace Graphics {
 void SunLight::AddDrawItems(const Scene& sceneRef, Renderer& rendererRef) const {
     ++g_sunAddDrawItems;
 
-    // Bridges, at the one place the foreign objects' offsets are read.
-    const void* const scenev = reinterpret_cast<const void*>(&sceneRef);   // B.3.5 bridge
-    const void* const self   = this;
+    // One bridge left, at the one place a foreign object's offsets are read:
+    // `renderer+0x10/+0x3c/+0x48`. The `scenev` and `self` bridges went with the
+    // by-name doors below (ENDGAME B.3.5 caller batch) — the member calls take the
+    // real references this body is already handed.
     uint8_t* renderer = B(reinterpret_cast<void*>(&rendererRef));          // B.3.5 bridge
 
     if (_depthTarget == nullptr) return;
     ++g_sunAddDrawEmit;
 
-    using AddLightFn        = void (*)(void* renderer, const void* light);
-    using GetSunCameraFn    = void* (*)(const void* self, void* retCamera, void* renderer);
-    using BeginDrawGroupFn  = int  (*)(void* renderer, const void* renderBuffer,
-                                       const void* camA, const void* camB,
-                                       int a, unsigned int b);
-    using SceneDrawItemsFn  = void (*)(const void* scene, void* renderer);
-    using EndDrawGroupFn    = void (*)(void* renderer, int group);
+    // ENDGAME B.3.5 caller batch: all six by-name doors here are DEFINED members
+    // today and every receiver is a real class in this body's own signature, so
+    // all six are member calls and the six `using` typedefs above them are gone.
+    //   AddLight / BeginDrawGroup / EndDrawGroup  -> Graphics::Renderer
+    //   AddGlobalDrawItems / AddCulledDrawItems   -> Graphics::Scene
+    //   GetSunCamera                              -> Graphics::SunLight, RETSLOT
+    rendererRef.Graphics::Renderer::AddLight(this);
 
-    RT_EXPORT_ONCE(AddLightFn,
-        "?AddLight@Renderer@Graphics@@QEAAXPEBVLight@2@@Z")(renderer, self);
-
+    // `GetSunCamera` is a HIDDEN-RETSLOT door (B5-12) and converts in the only
+    // shape the brief allows — the DOOR BODY MOVED TO THE CALL SITE: exactly one
+    // `Graphics::Camera` placement-new'd into the SAME 0xd8 caller storage retail
+    // reserves at RSP+0x30, from the member's prvalue. `Camera` is non-virtual, so
+    // an ordinary C++ by-value return is the right shape (Camera.h's own note),
+    // and C++17 guaranteed elision makes this one construction, not two.
     alignas(16) uint8_t cam[0xd8];
-    RT_EXPORT_ONCE(GetSunCameraFn,
-        "?GetSunCamera@SunLight@Graphics@@QEBA?AVCamera@2@AEAVRenderer@2@@Z")(self, cam, renderer);
+    static_assert(sizeof(::Graphics::Camera) == 0xd8, "retail reserves 0xd8 for the sun camera");
+    new (cam) ::Graphics::Camera(                                      // B.3.5 bridge
+        this->::Graphics::SunLight::GetSunCamera(rendererRef));
 
     const void* sceneCam = *reinterpret_cast<uint8_t**>(renderer + 0x10) + 8;
-    const int group = RT_EXPORT_ONCE(BeginDrawGroupFn,
-        "?BeginDrawGroup@Renderer@Graphics@@QEAAHPEBVRenderBuffer@Video@@AEBVCamera@2@1HI@Z")(
-            renderer, _renderBuffer, sceneCam, cam, 1, 1u);
+    const int group = rendererRef.Graphics::Renderer::BeginDrawGroup(
+        reinterpret_cast<const ::Video::RenderBuffer*>(_renderBuffer),
+        *reinterpret_cast<const ::Graphics::Camera*>(sceneCam),
+        *reinterpret_cast<const ::Graphics::Camera*>(cam), 1, 1u);     // B.3.5 bridge
 
     if (I32(renderer, 0x3c) != 0) {
-        RT_EXPORT_ONCE(SceneDrawItemsFn,
-            "?AddGlobalDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")(scenev, renderer);
+        sceneRef.Graphics::Scene::AddGlobalDrawItems(rendererRef);
         if (I32(renderer, 0x48) != 0)
-            RT_EXPORT_ONCE(SceneDrawItemsFn,
-                "?AddCulledDrawItems@Scene@Graphics@@AEBAXAEAVRenderer@2@@Z")(scenev, renderer);
+            sceneRef.Graphics::Scene::AddCulledDrawItems(rendererRef);
     }
 
-    RT_EXPORT_ONCE(EndDrawGroupFn,
-        "?EndDrawGroup@Renderer@Graphics@@QEAAXH@Z")(renderer, group);
+    rendererRef.Graphics::Renderer::EndDrawGroup(group);
 }
 
 }  // namespace Graphics

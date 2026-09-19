@@ -136,7 +136,6 @@ using GeometryDtorFn      = void  (*)(void*);   // ~Geometry is UEAA@XZ: VOID. O
 using ImageBufferCtorFn   = void* (*)(void*);
 using MemAllocFn          = void* (*)(size_t, int);
 using MemFreeFn           = void  (*)(void*);
-using RenderBufferCreateFn= bool  (*)(void*, const void*, const void*);
 using PlatformFn          = void  (*)(void*);
 using DeletingDtorFn      = void  (*)(void*, int);
 
@@ -155,15 +154,22 @@ MemAllocFn MemAlloc() {
 MemFreeFn MemFree() {
     return RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
 }
-RenderBufferCreateFn RenderBufferCreate() {
-    return RT_EXPORT_ONCE(RenderBufferCreateFn,
-                          "?Create@RenderBuffer@Video@@QEAA_NPEBVImageBuffer@2@0@Z");
+// ENDGAME B.3.5 caller batch: `Create`, `PlatformConstruct` and `PlatformDestruct`
+// are DEFINED members of the real `Video::RenderBuffer` (device.cpp / buffers.cpp),
+// so the three by-name doors become member calls. They were spelled as
+// FUNCTION-POINTER GETTERS (`RenderBufferCreate(rb, …)`); a member call has no
+// pointer to hand back, so each is now an ordinary wrapper taking the receiver and
+// the five call sites lost their extra `()`. `RenderBufferCreateFn` went with them.
+bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
+    return reinterpret_cast<Video::RenderBuffer*>(rb)->Create(
+        reinterpret_cast<const Video::ImageBuffer*>(colour),
+        reinterpret_cast<const Video::ImageBuffer*>(depth));           // B.3.5 bridge
 }
-PlatformFn RenderBufferPlatformConstructPort() {
-    return RT_EXPORT_ONCE(PlatformFn, "?PlatformConstruct@RenderBuffer@Video@@AEAAXXZ");
+void RenderBufferPlatformConstructPort(void* rb) {
+    reinterpret_cast<Video::RenderBuffer*>(rb)->PlatformConstruct();   // B.3.5 bridge
 }
-PlatformFn RenderBufferPlatformDestructPort() {
-    return RT_EXPORT_ONCE(PlatformFn, "?PlatformDestruct@RenderBuffer@Video@@AEAAXXZ");
+void RenderBufferPlatformDestructPort(void* rb) {
+    reinterpret_cast<Video::RenderBuffer*>(rb)->PlatformDestruct();    // B.3.5 bridge
 }
 
 // The two vtables the ctor stamps, and the one the dtor restores. Exported
@@ -265,7 +271,7 @@ void* NewRenderBuffer() {
     w[0] = 0;   // +0x00 colorBuffer
     w[1] = 0;   // +0x08 depthBuffer
     w[2] = 0;   // +0x10 width | height
-    RenderBufferPlatformConstructPort()(rb);
+    RenderBufferPlatformConstructPort(rb);
     return rb;
 }
 
@@ -273,7 +279,7 @@ void* NewRenderBuffer() {
 void DeleteRenderBuffer(void* rb) {
     if (rb == nullptr)
         return;
-    RenderBufferPlatformDestructPort()(rb);
+    RenderBufferPlatformDestructPort(rb);
     OperatorDelete(rb);
 }
 
@@ -369,14 +375,14 @@ void SunLight::Set(const Math::Vector3& direction, const Math::Vector4& sun,
         _colourTarget = NewImageBuffer();
         ImageBufferCreate(_colourTarget, 0, 0, 5, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
         _renderBuffer = NewRenderBuffer();
-        RenderBufferCreate()(_renderBuffer, _colourTarget, _depthTarget);
+        RenderBufferCreate(_renderBuffer, _colourTarget, _depthTarget);
     } else if (!DeviceSupportsColourShadowTarget() && _colourTarget != nullptr) {
         // The device lost it: drop the colour target and rebuild depth-only.
         DeleteRenderBuffer(_renderBuffer);
         DeleteImageBuffer(_colourTarget);
         _colourTarget = nullptr;
         _renderBuffer = NewRenderBuffer();
-        RenderBufferCreate()(_renderBuffer, _colourTarget, _depthTarget);
+        RenderBufferCreate(_renderBuffer, _colourTarget, _depthTarget);
     }
     // A rebuild call verifies NOTHING against an oracle here, and the old
     // `float pre[11]` / `bool rebuilt` locals that said so were dead: both were
@@ -433,7 +439,7 @@ void* Graphics_SunLight_Ctor(SunLight* self) {
     ImageBufferCreate(self->_depthTarget, 0, 1, 7, 0x40, 0x800, 0x800, 1, 1, 1, 1, nullptr);
 
     self->_renderBuffer = NewRenderBuffer();
-    RenderBufferCreate()(self->_renderBuffer, self->_colourTarget, self->_depthTarget);
+    RenderBufferCreate(self->_renderBuffer, self->_colourTarget, self->_depthTarget);
 
     // Inlined Geometry::SetBounds.
     auto& b = self->_base._localBounds;

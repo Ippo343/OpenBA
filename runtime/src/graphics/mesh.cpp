@@ -132,6 +132,9 @@
 #include "../../types/graphics/Camera.h"   // Graphics::Renderer -- ENDGAME B.3.5 block GC
 #include "../../types/graphics/Mesh.h"
 #include "../../types/graphics/GraphicsMesh.h"   // ENDGAME B.3.5 block G
+// ENDGAME B.3.5 caller batch: the cross-class edges this file opens.
+#include "../../types/graphics/AnimationState.h"  // Graphics::AnimationState
+#include "../../types/video/Buffers.h"            // Video::{Index,Vertex}Buffer
 
 using RtGraphics::ExternalPtr;
 using RtGraphics::Geometry;
@@ -208,15 +211,10 @@ ArrayResizeFn RtTriListArrayResize() { static ArrayResizeFn f = RtAddr<ArrayResi
 typedef void  (*GeometryCtorFn)(void* self);
 typedef void  (*GeometryCopyCtorFn)(void* self, const void* other);
 typedef void  (*GeometryDtorFn)(void* self);
-typedef void  (*GeometrySetBoundsFn)(void* self, const void* box);
 // NOTE: the "going to the DLL is the byte-faithful choice" sentence above is
 // about the CALL being a direct internal one in retail, not about which door
-// resolves it. Both animation names below are now PORTED and are resolved
-// through the port registry; see the note at RtAnimReset.
-typedef void  (*AnimResetFn)(void* animState);
-typedef void  (*AnimPlayFn)(void* animState, ExternalPtr group, int index,
-                            const void* nodeArray, const void* startTime,
-                            const void* blendTime, float weight, bool flag);
+// resolves it. ENDGAME B.3.5 caller batch: the two AnimationState typedefs that
+// used to sit here (`AnimResetFn`, `AnimPlayFn`) are gone with their doors.
 // ENDGAME B.3.1 step 2: Math::Quaternion's operator* and Rotate, called as
 // members. The `(self, ret, arg)` SHAPE is kept because the call sites below
 // work on raw offsets into GraphicsMesh's untyped node/pool storage; those
@@ -254,28 +252,20 @@ GeometryCopyCtorFn RtGeometryCopyCtor() {
 GeometryDtorFn RtGeometryDtor() {
     return RT_EXPORT_ONCE(GeometryDtorFn, "??1Geometry@Graphics@@UEAA@XZ");
 }
-// RT_EXPORT_ONCE (Wave 9 lane W, 2026-09-08). `Geometry::SetBounds` HAS BEEN
-// PORTED since Wave 6 lane D — scene.cpp:1750 registers
-// RtGraphics_Geometry_SetBounds under this exact mangled name — and this is the
-// WORK of EdgeMeshInstance::SetMesh (mesh.cpp:1678), not an oracle readback. On
-// the raw door it was a live-path port BYPASS: our own registered, diffed body
-// sat unreached while every EdgeMeshInstance built its bounds through the DLL,
-// and at cutover the raw DLL door is GetProcAddress on a module that is gone.
+// ENDGAME B.3.5 caller batch: `?SetBounds@Geometry@Graphics@@` is a DEFINED
+// member of the real `Graphics::Geometry` (scene.cpp:1373), and its one caller in
+// this file is `EdgeMeshInstance::SetMesh`, whose `this` IS a Geometry — so the
+// resolve-and-return accessor and the `GeometrySetBoundsFn` typedef are GONE and
+// the call site is a qualified non-virtual member call. The door stays registered.
 //
-// tools/port_bypass_audit.py --by-name could NOT see this one and still cannot.
-// It reported OK-RESOLVE-ONLY: the accessor stores the pointer and RETURNS it,
-// so the brace-matched enclosing function that the classifier follows is this
-// four-line accessor, in which the pointer is indeed never called. The call is
-// in the CALLER, one frame out. That is the same accessor shape lane V had to
-// read by hand for all eleven of its raw-door rows, and it is a THIRD face of
-// the blind spot WAVE9.md's bypass row records as closed — the fix there was to
-// follow the assignment target through the enclosing function, which is exactly
-// what a resolve-and-return escapes. Do not read that gate's 0 as covering this
-// family until the audit follows a returned pointer to its callers.
-GeometrySetBoundsFn RtGeometrySetBounds() {
-    return RT_EXPORT_ONCE(GeometrySetBoundsFn,
-                          "?SetBounds@Geometry@Graphics@@QEAAXAEBVBox@Volume@@@Z");
-}
+// THE NOTE THAT DIED WITH IT, kept because it names a live tool gap:
+// `tools/port_bypass_audit.py --by-name` could not see this site and still
+// cannot. The accessor stored the pointer and RETURNED it, so the brace-matched
+// enclosing function the classifier follows was the four-line accessor, in which
+// the pointer is indeed never called — the call was in the CALLER, one frame out.
+// Do not read that gate's 0 as covering the resolve-and-return family until the
+// audit follows a returned pointer to its callers. Three accessors of exactly
+// that shape in this file converted in this batch.
 // RT_EXPORT_ONCE on both, not the raw DLL door (closure batch 3b, 2026-09-12),
 // for exactly the reason the four-door note above gives — and this pair is the
 // same defect one more time, found the same way.
@@ -292,13 +282,13 @@ GeometrySetBoundsFn RtGeometrySetBounds() {
 // cannot see it either: a bypassed port never runs, so it never disagrees, and
 // both bodies read `entered=0` in the summary while this file called the DLL's
 // copies hundreds of times a session.
-AnimResetFn RtAnimReset() {
-    return RT_EXPORT_ONCE(AnimResetFn, "?ResetAnimationState@AnimationState@Graphics@@QEAAXXZ");
-}
-AnimPlayFn RtAnimPlay() {
-    return RT_EXPORT_ONCE(AnimPlayFn,
-        "?PlayAnimation@AnimationState@Graphics@@QEAAXV?$ExternalPtr@VAnimationGroup@Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@AEBVTime@System@@2M_N@Z");
-}
+// ENDGAME B.3.5 caller batch: both are DEFINED members of the real
+// `Graphics::AnimationState` today (`ResetAnimationState` in animationstate.cpp,
+// `PlayAnimation` in animationstate_transforms.cpp), so both resolve-and-return
+// accessors are GONE and the two call sites below are member calls through the
+// 0x18-byte `_animation` PREFIX that `Mesh.h` embeds — `AnimationState.h` pins
+// that boundary with `offsetof(_rootOffset) == 0x18`. `AnimResetFn` and
+// `AnimPlayFn` went with them. Both doors stay registered for outside callers.
 // Video buffer platform constructors, called eight times by EdgeMesh's ctor.
 //
 // RT_EXPORT_ONCE (Wave 9 lane W, 2026-09-08). BOTH NAMES ARE NOW PORTED —
@@ -310,13 +300,9 @@ AnimPlayFn RtAnimPlay() {
 // by the audit's own denominator moving: `ported names 573 -> 579` and
 // `OK-RESOLVE-ONLY 4 -> 11`, the +7 being these two plus five siblings that
 // only acquired a verdict because their name became a ported one.
-typedef void (*BufferPlatformCtorFn)(void* self);
-BufferPlatformCtorFn RtVertexBufferPlatformCtor() {
-    return RT_EXPORT_ONCE(BufferPlatformCtorFn, "?PlatformConstruct@VertexBuffer@Video@@QEAAXXZ");
-}
-BufferPlatformCtorFn RtIndexBufferPlatformCtor() {
-    return RT_EXPORT_ONCE(BufferPlatformCtorFn, "?PlatformConstruct@IndexBuffer@Video@@QEAAXXZ");
-}
+// ENDGAME B.3.5 caller batch: both are DEFINED members of the real
+// `Video::{Vertex,Index}Buffer`, so the two accessors are gone with their typedef
+// and `EdgeMesh`'s constructor calls the members on its eight buffer sub-objects.
 
 // The vtables the ctors stamp. All four are REAL EXPORTED SYMBOLS in the
 // shipped DLL — PLAN §2.2 hazard D was corrected once already ("the DLL exports
@@ -1084,8 +1070,12 @@ static void* RtGraphics_EdgeMesh_Ctor(void* self) {
     for (int i = 0; i < 4; ++i) {
         // Retail's order is strictly vertex, index, vertex, index, ... and each
         // pair is (zero the dword, zero the flag byte, PlatformConstruct).
-        vbufs[i]->_size = 0;  vbufs[i]->_flags = 0;  RtVertexBufferPlatformCtor()(vbufs[i]);
-        ibufs[i]->_size = 0;  ibufs[i]->_flags = 0;  RtIndexBufferPlatformCtor()(ibufs[i]);
+        // ENDGAME B.3.5 caller batch: both `PlatformConstruct` bodies are DEFINED
+        // members of the real Video buffer classes (video/buffers.cpp).
+        vbufs[i]->_size = 0;  vbufs[i]->_flags = 0;
+        reinterpret_cast<Video::VertexBuffer*>(vbufs[i])->PlatformConstruct();  // B.3.5 bridge
+        ibufs[i]->_size = 0;  ibufs[i]->_flags = 0;
+        reinterpret_cast<Video::IndexBuffer*>(ibufs[i])->PlatformConstruct();   // B.3.5 bridge
     }
 
     em->_triangleLists._data = nullptr;
@@ -2568,7 +2558,8 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
         }
     }
 
-    RtAnimReset()(&_animation);
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // B.3.5 bridge
+        ->::Graphics::AnimationState::ResetAnimationState();
     RtNodeArrayResize()(&_nodes, Rd<int32_t>(mesh.p, 0x68));
     this->MeshInstance::UpdateHierarchy();
 
@@ -2595,8 +2586,18 @@ void MeshInstance::SetMesh(ExternalPtrHandle mesh) {
 void MeshInstance::PlayAnimation(ExternalPtrHandle group, int index,
                                  const void* startTime, const void* blendTime,
                                  float weight) {
-    RtAnimPlay()(&_animation, group, index, B(_mesh.p) + 0x60,
-                 startTime, blendTime, weight, true);
+    // ENDGAME B.3.5 caller batch. `B(_mesh.p) + 0x60` is the ADDRESS of the
+    // embedded `Array<Node>`, not a loaded pointer (Mesh.h's banner). The
+    // eight-argument door had `this` first; the member takes seven.
+    reinterpret_cast<::Graphics::AnimationState*>(&_animation)   // B.3.5 bridge
+        ->::Graphics::AnimationState::PlayAnimation(
+            Object::ExternalPtr<::Graphics::AnimationGroup>(
+                reinterpret_cast<::Graphics::AnimationGroup*>(group.p)),
+            index,
+            *reinterpret_cast<const Collection::Array<uint8_t>*>(B(_mesh.p) + 0x60),
+            *reinterpret_cast<const System::Time*>(startTime),
+            *reinterpret_cast<const System::Time*>(blendTime),
+            weight, true);
 }
 
 // ---------------------------------------------------------------------------
@@ -2847,7 +2848,11 @@ void EdgeMeshInstance::SetMesh(ExternalPtrHandle mesh, MeshInstance* followed) {
         _materialTypeFlags |= 1u << (static_cast<uint8_t>(Rd<int32_t>(mat, 0x20)) & 0x1f);
     }
 
-    RtGeometrySetBounds()(this, B(mesh.p) + 0x168);
+    // ENDGAME B.3.5 caller batch: `Graphics::Geometry::SetBounds` is a DEFINED
+    // member (scene.cpp:1373) and `this` IS a Geometry, so the resolve-and-return
+    // accessor is gone and the call is qualified and non-virtual, as retail's is.
+    this->::Graphics::Geometry::SetBounds(
+        *reinterpret_cast<const ::Box*>(B(mesh.p) + 0x168));
 }
 
 // ---------------------------------------------------------------------------

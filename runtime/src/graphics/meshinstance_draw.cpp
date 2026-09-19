@@ -67,6 +67,7 @@
 #include "../../types/math/Math.h"
 // ENDGAME B.3.5 block E: the real `Graphics::MeshInstance` / `EdgeMeshInstance`.
 #include "../../types/graphics/Mesh.h"
+#include "../../types/video/Context.h"   // ENDGAME B.3.5 caller batch: Video::Context
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -119,10 +120,8 @@ constexpr int kBoneMatrices = 48;
 // The six named dependencies. Every one is EXPORTED and every one is already
 // PORTED, so RT_EXPORT_ONCE (registry-first) lands on our bodies.
 // ---------------------------------------------------------------------------
-using GetBonesFn  = int32_t (*)(const void* self, float t, const void* xform, void* out);
-using SetBonesFn  = void (*)(void* ctx, int32_t count, const void* matrices);
-using SetTfsFn    = void (*)(void* ctx, int32_t slot, const void* matrix,
-                             const void* scale);
+// ENDGAME B.3.5 caller batch: `GetBonesFn`, `SetBonesFn` and `SetTfsFn` went with
+// the three by-name doors below, which are member calls now.
 
 // ENDGAME B.3.1 step 2: both are Math:: members. The `(self, ret, ...)` shape
 // stays because the call sites work on raw offsets into MeshInstance's untyped
@@ -139,20 +138,26 @@ void* TransformAsMatrix(const void* self, void* ret) {
         static_cast<const Math::Transform*>(self)->AsMatrix();
     return ret;
 }
+// ENDGAME B.3.5 caller batch: all three are DEFINED members today —
+// `Graphics::MeshInstance::GetBones` in animationstate_transforms.cpp, and
+// `Video::Context::SetBones` / `::SetTransformScale` in video/context.cpp — so
+// the three by-name doors become member calls. THE DOOR DECIDED THE OVERLOAD:
+// `?SetTransformScale@…AEBVMatrix@Math@@AEBVVector4@4@@Z` 0x18001a400 is the
+// four-argument setter, not `SetTransform` (0x18001a6b0).
 int32_t MeshInstanceGetBones(const void* self, float t, const void* xform, void* out) {
-    return RT_EXPORT_ONCE(GetBonesFn,
-        "?GetBones@MeshInstance@Graphics@@QEBAHMAEBVTransform@Math@@PEAVMatrix@4@@Z")
-        (self, t, xform, out);
+    return reinterpret_cast<const ::Graphics::MeshInstance*>(self)->GetBones(
+        t, *reinterpret_cast<const Math::Transform*>(xform),
+        static_cast<Math::Matrix*>(out));                            // B.3.5 bridge
 }
 void ContextSetBones(void* ctx, int32_t count, const void* matrices) {
-    RT_EXPORT_ONCE(SetBonesFn, "?SetBones@Context@Video@@QEAAXHPEBVMatrix@Math@@@Z")
-        (ctx, count, matrices);
+    reinterpret_cast<Video::Context*>(ctx)->SetBones(
+        count, reinterpret_cast<const Math::Matrix*>(matrices));      // B.3.5 bridge
 }
 void ContextSetTransformScale(void* ctx, int32_t slot, const void* matrix,
                               const void* scale) {
-    RT_EXPORT_ONCE(SetTfsFn,
-        "?SetTransformScale@Context@Video@@QEAAXHAEBVMatrix@Math@@AEBVVector4@4@@Z")
-        (ctx, slot, matrix, scale);
+    reinterpret_cast<Video::Context*>(ctx)->SetTransformScale(
+        slot, *reinterpret_cast<const Math::Matrix*>(matrix),
+        *reinterpret_cast<const Math::Vector4*>(scale));               // B.3.5 bridge
 }
 // ENDGAME B.3.5 block E: `MeshInstanceGetNodeToWorld` DELETED. It was a
 // `RT_EXPORT_ONCE` door onto `?GetNodeToWorld@MeshInstance@Graphics@@QEBA?AV

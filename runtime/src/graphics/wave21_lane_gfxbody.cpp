@@ -34,6 +34,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/graphics/Material.h"
+#include "../../types/video/VideoProgram.h"   // ENDGAME B.3.5 caller batch
 #include "../../types/video/Context.h"
 
 using RtGraphics::MaterialBinding;
@@ -148,18 +149,16 @@ void* MemAlloc(uint64_t bytes, int align) {
 
 // ?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z, retail 0x1800f4520.
 //
-// THIS CALL GROWS THE CUTOVER SURFACE BY ONE. `VideoProgram::SetupShaders` is
-// exported and unported, and before this file it was not in the census `called`
-// column at all — nothing in our tree asked for it. Porting a body that calls
-// it adds it to the set that must work at cutover
-// (reference_porting_can_grow_the_cutover_surface.md). Said out loud here
-// because the census prints the new row without saying who added it.
+// THE "exported and unported" VERDICT ABOVE IS STALE (ENDGAME B.3.5 caller
+// batch). `Video::VideoProgram::SetupShaders` is a DEFINED member today —
+// runtime/src/video/video_program.cpp:178, which takes the context as the same
+// `void*` this door passed — so the by-name door, its `Fn` typedef, its
+// function-local cache and its readiness test are GONE and this is a member
+// call. The sentence about growing the cutover surface was true when written and
+// is answered: the surface it named is ours now.
 void SetupShaders(void* program, Context* ctx) {
-    using Fn = void (*)(void*, Context*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(
-        ResolveExport("?SetupShaders@VideoProgram@Video@@QEBAXAEAVContext@2@@Z"));
-    fn(program, ctx);
+    reinterpret_cast<::Video::VideoProgram*>(program)
+        ->SetupShaders(static_cast<void*>(ctx));   // B.3.5 bridge
 }
 
 }  // namespace
