@@ -133,7 +133,10 @@
 // That function belongs to lane L6 and is NOT ported here — it is called
 // through L6's port, Dx11_DeviceData_Resize. It is a near CALL in the original
 // (0x1800016a3), not a vtable dispatch, so the seam cannot redirect it and the
-// binding has to be explicit; see GetImports().
+// binding has to be explicit. ENDGAME B.3.5 block J: it used to be a function
+// POINTER FIELD in this file's import struct, set to `&Dx11_DeviceData_Resize`
+// unconditionally — never a resolved import, so never anything `g_imOk` could
+// fail on. Slot 1 names the function directly now.
 //
 // Slot 3 calls DeviceData vtable slots 3 (shutdown) and 2 (create device). It
 // calls them THROUGH the live vtable, so it picks up whatever the seam has
@@ -148,6 +151,12 @@
 // and `Video::ContextData` (RULE B5-3's qualified base-destructor call).
 #include "video/Context.h"
 #include "video/CompanionData.h"
+// ENDGAME B.3.5 block J, RULE B5-14: the seventeen table-driven Runtime imports
+// this file used to resolve by mangled name are direct member calls now, so the
+// classes that own those members are named here. `video/Device.h` arrives via
+// dx11_backend_access.h; `video/Buffers.h` is this file's own addition, for
+// `Video::{Vertex,Index}Buffer::Lock/Unlock` (block VC's members).
+#include "video/Buffers.h"
 
 #include <windows.h>
 #include <d3d11.h>
@@ -163,67 +172,67 @@ namespace VideoDX11 {
 namespace {
 
 // ============================================================
-// Runtime-x64.dll imports
+// Runtime-x64.dll imports — ENDGAME B.3.5 block J, RULE B5-14 ("spelling 9")
 //
-// Resolved lazily in this translation unit only — deliberately not added to
-// engine/funcs/engine_funcs.h. Every mangled string below was read out of
-// VideoDX11-x64.dll's own import-name table (`objdump -p`), so it is exactly
-// the string the shipped DLL resolves, and the IAT slot given as the fallback
-// is the pointer the shipped code CALLs through.
+// SEVENTEEN OF THE EIGHTEEN ROWS ARE GONE. They were mangled Runtime symbol
+// names held as `const char*` in an initialised table and resolved positionally
+// by the loop below — the ninth caller binding, and seventeen of dx11's 76
+// literals. Every class they named is a real C++ class in `runtime/types/video/`
+// now, so each one is a DIRECT MEMBER CALL at its call site, through one marked
+// `// B.3.5 bridge` cast where the receiver is still an untyped pointer this
+// file walks to by offset:
+//
+//   ??1ContextData@Video@@UEAA@XZ                     -> ~ContextData()          (block VC already)
+//   ?Lock@Device@Video@@                              -> Video::Device::Lock
+//   ?Unlock@Device@Video@@                            -> Video::Device::Unlock
+//   ?ReleaseDynamic@Device@Video@@                    -> Video::Device::ReleaseDynamic
+//   ?RecreateDynamic@Device@Video@@                   -> Video::Device::RecreateDynamic
+//   ?SetViewport@Context@Video@@                      -> Video::Context::SetViewport
+//   ?SetRenderBuffer@Context@Video@@                  -> Video::Context::SetRenderBuffer
+//   ?SetImageBuffer@Context@Video@@                   -> Video::Context::SetImageBuffer
+//   ?SetVertexBuffer@Context@Video@@                  -> Video::Context::SetVertexBuffer
+//   ?BindTextures@Context@Video@@   (AEAA)            -> Video::Context::BindTextures
+//   ?BindResources@Context@Video@@  (AEAA)            -> Video::Context::BindResources
+//   ?Bind@RenderBuffer@Video@@                        -> Video::RenderBuffer::Bind
+//   ?Bind@ConstantBuffer@Video@@                      -> Video::ConstantBuffer::Bind
+//   ?Lock@VertexBuffer@Video@@   / ?Unlock@…          -> Video::VertexBuffer::Lock / Unlock
+//   ?Lock@IndexBuffer@Video@@    / ?Unlock@…          -> Video::IndexBuffer::Lock / Unlock
+//
+// The two `AEAA` names really are private in retail and really are exported;
+// `Video::Context` declares both as public members (Context.h), which is what
+// makes the direct call legal on this side of the seam.
+//
+// WHAT STAYS, AND WHY IT IS STILL AN ALL-OR-NOTHING TEST. `g_imOk` is what makes
+// `GetImports()` return null, and a null there is what sends a slot to
+// `Orig<>()` instead of dereferencing a null pointer (RULE B5-8: the seam's
+// completeness check is the only guarantee those slots are non-null). A row whose
+// import became a direct member call no longer NEEDS that test — the linker
+// proves the symbol exists at build time, which is strictly stronger than a
+// run-time null check. So the test is not weakened by the rows leaving; it is
+// narrowed to the one binding that is still resolved at run time:
+//
+//   ?_singleton@Configuration@Video@@0PEAV12@EA  — a STATIC STORAGE read, which
+//   B35_RULES section 9 / RULE B4b-4 keep as a by-name read until the
+//   class-static conversion at the end of B.3. Slot 3 is its only reader, and
+//   slot 3 is the only slot that still consults `GetImports()`.
+//
+// `Dx11SeamInstall()`'s own completeness check is untouched: all 20 slots are
+// still registered, and the twelve concrete `*Data` classes and the 84-slot seam
+// remain the DECLARED LEAVE of RULE B5-8.
 //
 // The IAT slot addresses were derived by walking the import table in order from
 // two anchors (?_singleton@Device@Video@@ at 0x1800134b8 and ?MemFree@ at
-// 0x1800134d0) and then cross-checked: all fourteen below land on a call site
-// Ghidra had already labelled with that exact name. Two independent proofs per
-// entry.
-//
-// Note the two `AEAA` (private) members: BindResources and BindTextures really
-// are private and really are exported by name; a `QEAA` guess would silently
-// resolve to nullptr.
+// 0x1800134d0) and then cross-checked against Ghidra's own call-site labels.
 // ============================================================
 struct Imports {
-    // ENDGAME B.3.5 block VC: NO LONGER CALLED — slot 0 makes the qualified
-    // `~ContextData()` call directly (RULE B5-3). The ROW AND THIS FIELD STAY, on
-    // b35-D2's ruling for the same five dtors: the row is what makes `g_imOk` /
-    // `GetImports()` null when the Runtime side is absent, and that
-    // all-or-nothing test is the seam's only fallback guarantee. Dropping it
-    // would make nineteen slots claim a Runtime side they had not checked for.
-    void  (*ContextDataBaseDtor)(void*);              // ??1ContextData@Video@@UEAA@XZ           0x180013470
-
-    void  (*DeviceLock)(void*);                       // ?Lock@Device@Video@@QEAAXXZ             0x180013408
-    void  (*DeviceUnlock)(void*);                     // ?Unlock@Device@Video@@QEAAXXZ           0x180013410
-    void  (*DeviceReleaseDynamic)(void*);             // ?ReleaseDynamic@Device@Video@@QEAAXXZ   0x180013230
-    void  (*DeviceRecreateDynamic)(void*);            // ?RecreateDynamic@Device@Video@@QEAAXXZ  0x180013240
-
-    void  (*CtxSetViewport)(void*, const void*);      // ?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z          0x180013400
-    void  (*CtxSetRenderBuffer)(void*, const void*);  // ?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z  0x180013468
-    void  (*CtxSetImageBuffer)(void*, const void*, int);           // ?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z   0x1800133f0
-    void  (*CtxSetVertexBuffer)(void*, const void*, int, int, int);// ?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z 0x1800133f8
-    void  (*CtxBindTextures)(void*);                  // ?BindTextures@Context@Video@@AEAAXXZ    0x180013450
-    void  (*CtxBindResources)(void*);                 // ?BindResources@Context@Video@@AEAAXXZ   0x180013438
-
-    void  (*RenderBufferBind)(const void*, void*);    // ?Bind@RenderBuffer@Video@@QEBAXAEAVContext@2@@Z             0x180013448
-    void  (*ConstantBufferBind)(void*, void*, void*, int, int);    // ?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z     0x180013440
-
-    void* (*VertexBufferLock)(void*, int, int*);      // ?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z   0x180013430
-    void  (*VertexBufferUnlock)(void*);               // ?Unlock@VertexBuffer@Video@@QEAAXXZ         0x180013428
-    void* (*IndexBufferLock)(void*, int, int*);       // ?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z    0x180013420
-    void  (*IndexBufferUnlock)(void*);                // ?Unlock@IndexBuffer@Video@@QEAAXXZ          0x180013418
-
     void** configSingleton;                           // ?_singleton@Configuration@Video@@0PEAV12@EA 0x180013480
-
-    // NOT a Runtime import: VideoDX11's own DeviceData swap-chain resize helper
-    // at 0x180004340, owned by lane L6. Slot 1 calls it directly (0x1800016a3
-    // is a near CALL, not a vtable dispatch), so the seam cannot redirect it —
-    // it is bound to L6's port explicitly in GetImports().
-    int   (*DeviceDataResize)(void*);
 };
 
 Imports g_im;
 bool    g_imResolved = false;
 bool    g_imOk       = false;
 
-// Returns nullptr when any import is missing; the affected slots then forward
+// Returns nullptr when the one remaining import is missing; slot 3 then forwards
 // to the shipped implementation instead of dereferencing a null. This is the
 // same policy lane L3 used.
 const Imports* GetImports() {
@@ -233,37 +242,10 @@ const Imports* GetImports() {
 
         struct Entry { void** dst; const char* mangled; uintptr_t iat; };
         const Entry table[] = {
-            { (void**)&g_im.ContextDataBaseDtor,   "??1ContextData@Video@@UEAA@XZ",                                 0x180013470 },
-            { (void**)&g_im.DeviceLock,            "?Lock@Device@Video@@QEAAXXZ",                                   0x180013408 },
-            { (void**)&g_im.DeviceUnlock,          "?Unlock@Device@Video@@QEAAXXZ",                                 0x180013410 },
-            { (void**)&g_im.DeviceReleaseDynamic,  "?ReleaseDynamic@Device@Video@@QEAAXXZ",                         0x180013230 },
-            { (void**)&g_im.DeviceRecreateDynamic, "?RecreateDynamic@Device@Video@@QEAAXXZ",                        0x180013240 },
-            { (void**)&g_im.CtxSetViewport,        "?SetViewport@Context@Video@@QEAAXAEBVViewport@2@@Z",            0x180013400 },
-            { (void**)&g_im.CtxSetRenderBuffer,    "?SetRenderBuffer@Context@Video@@QEAAXPEBVRenderBuffer@2@@Z",    0x180013468 },
-            { (void**)&g_im.CtxSetImageBuffer,     "?SetImageBuffer@Context@Video@@QEAAXPEBVImageBuffer@2@H@Z",     0x1800133f0 },
-            { (void**)&g_im.CtxSetVertexBuffer,    "?SetVertexBuffer@Context@Video@@QEAAXPEBVVertexBuffer@2@HHH@Z", 0x1800133f8 },
-            { (void**)&g_im.CtxBindTextures,       "?BindTextures@Context@Video@@AEAAXXZ",                          0x180013450 },
-            { (void**)&g_im.CtxBindResources,      "?BindResources@Context@Video@@AEAAXXZ",                         0x180013438 },
-            { (void**)&g_im.RenderBufferBind,      "?Bind@RenderBuffer@Video@@QEBAXAEAVContext@2@@Z",               0x180013448 },
-            { (void**)&g_im.ConstantBufferBind,    "?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z",       0x180013440 },
-            { (void**)&g_im.VertexBufferLock,      "?Lock@VertexBuffer@Video@@QEAAPEAXHAEAH@Z",                     0x180013430 },
-            { (void**)&g_im.VertexBufferUnlock,    "?Unlock@VertexBuffer@Video@@QEAAXXZ",                           0x180013428 },
-            { (void**)&g_im.IndexBufferLock,       "?Lock@IndexBuffer@Video@@QEAAPEAXHAEAH@Z",                      0x180013420 },
-            { (void**)&g_im.IndexBufferUnlock,     "?Unlock@IndexBuffer@Video@@QEAAXXZ",                            0x180013418 },
             { (void**)&g_im.configSingleton,       "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
         };
         for (const Entry& e : table)
             *e.dst = Dx11ResolveRuntimeImport(e.mangled, e.iat);
-
-        // OUR port of 0x180004340, not the shipped body at that address.
-        // This used to be the shipped address, on the reasoning that L6 owned
-        // the function and both callers would converge once L6 landed. They
-        // did not: L6's WM_ACTIVATE handler calls its own port, while this one
-        // kept calling the shipped body — and the shipped body then called the
-        // shipped CreateColorBuffer (0x1800052b0) beneath it. A DEP tripwire
-        // over the shipped .text caught both; "84/84 vtable slots are ours"
-        // could not, because neither call is a vtable dispatch.
-        g_im.DeviceDataResize = &Dx11_DeviceData_Resize;
 
         const void* const* p = reinterpret_cast<const void* const*>(&g_im);
         g_imOk = true;
@@ -422,6 +404,27 @@ typedef void (*DeviceNotifyFn)();
 inline void* OwnerDevice(ContextData* self) {
     return Field<void*>(self->context, Ctx::kDevice);
 }
+
+// ENDGAME B.3.5 block J — the two bridge casts every converted call goes through.
+// `Video::Context+0x00` is a `Video::Device*` and `VideoDX11::ContextData::context`
+// a `Video::Context*`, but this file reaches both as `void*` (by offset, and
+// through the seam's registered slot signatures), and neither owner object is
+// constructed on this side of the boundary. One helper each, so the cast is named
+// once instead of seventeen times; RULE B5-8's declared leave is why the cast
+// exists at all.
+inline ::Video::Device* DevOf(void* device) {
+    return reinterpret_cast< ::Video::Device*>(device);          // B.3.5 bridge
+}
+inline ::Video::Context* CtxOf(void* context) {
+    return reinterpret_cast< ::Video::Context*>(context);        // B.3.5 bridge
+}
+// The Context's two dynamic-geometry buffers, at +0x20f8 and +0x2118.
+inline ::Video::VertexBuffer* VbOf(void* vb) {
+    return reinterpret_cast< ::Video::VertexBuffer*>(vb);        // B.3.5 bridge
+}
+inline ::Video::IndexBuffer* IbOf(void* ib) {
+    return reinterpret_cast< ::Video::IndexBuffer*>(ib);         // B.3.5 bridge
+}
 inline DeviceData* OwnerDeviceData(ContextData* self) {
     return Field<DeviceData*>(OwnerDevice(self), Dev::kActiveDeviceData);
 }
@@ -517,10 +520,11 @@ void* ContextData_Dtor(ContextData* self, unsigned flags) {
 // (0x180001668, 0x18000166e, ...). Using one local is equivalent: nothing on
 // the path writes ContextData+0x08.
 // ============================================================
+// ENDGAME B.3.5 block J: the `if (!GetImports()) Orig<>(1)` readiness guard is
+// GONE with the four imports this slot used. It tested nothing but the import
+// table's readiness, and the four calls below are member calls the linker
+// resolved at build time — there is nothing left for it to test.
 bool ContextData_BeginCommands(ContextData* self) {
-    const Imports* im = GetImports();
-    if (!im) return Orig<bool (*)(ContextData*)>(1)(self);
-
     void* ctx = self->context;
     Field<int32_t>(ctx, Ctx::kTrianglesSubmitted) = 0;
     Field<int32_t>(ctx, Ctx::kVerticesSubmitted)  = 0;
@@ -532,19 +536,19 @@ bool ContextData_BeginCommands(ContextData* self) {
         // 0x180004340 — DeviceData swap-chain resize/recreate. Lane L6's
         // function; called through the shipped code, and its result is
         // discarded exactly as the original discards it (`XOR AL,AL`).
-        im->DeviceDataResize(Field<void*>(device, Dev::kActiveDeviceData));
+        Dx11_DeviceData_Resize(Field<void*>(device, Dev::kActiveDeviceData));
         return false;
     }
 
-    im->DeviceLock(device);
-    im->CtxSetRenderBuffer(ctx, Field<void*>(ctx, Ctx::kDefaultRenderBuffer));
+    DevOf(device)->Lock();
+    CtxOf(ctx)->SetRenderBuffer(Field<void*>(ctx, Ctx::kDefaultRenderBuffer));
 
     Viewport vp;
     vp.x = 0;
     vp.y = 0;
     vp.width  = Field<int32_t>(device, Dev::kWidth);
     vp.height = Field<int32_t>(device, Dev::kHeight);
-    im->CtxSetViewport(ctx, &vp);
+    CtxOf(ctx)->SetViewport(vp);
 
     self->d3dContext = OwnerDeviceData(self)->d3dContext;
     return true;
@@ -680,7 +684,7 @@ void ContextData_Finish(ContextData* self) {
     const UINT  sync   = Field<uint8_t>(config, kConfigVSync) != 0 ? 1u : 0u;
 
     HRESULT hr = static_cast<IDXGISwapChain*>(dd->swapChain)->Present(sync, 0);
-    im->DeviceUnlock(device);
+    DevOf(device)->Unlock();
 
     // The PLAN 5.5 drive. Substitutes the Present result and nothing else; see
     // the block comment above ContextData_Finish.
@@ -707,7 +711,7 @@ void ContextData_Finish(ContextData* self) {
     std::fflush(stderr);
     if (onLost) onLost();
 
-    im->DeviceReleaseDynamic(owner);
+    DevOf(owner)->ReleaseDynamic();
 
     dd->d3dDevice = nullptr;
 
@@ -733,7 +737,7 @@ void ContextData_Finish(ContextData* self) {
         return;
     }
 
-    im->DeviceRecreateDynamic(owner);
+    DevOf(owner)->RecreateDynamic();
 
     DeviceNotifyFn onRestored = Field<DeviceNotifyFn>(owner, Dev::kOnDeviceRestored);
     std::fprintf(stderr, "[DeviceLost] recreate OK; onRestored=%p -> %s\n",
@@ -862,27 +866,28 @@ static_assert(D3D11_CLEAR_DEPTH == 1 && D3D11_CLEAR_STENCIL == 2,
 // This is a near CALL from slot 4 as well as a vtable slot; both paths run the
 // identical body.
 // ============================================================
+// ENDGAME B.3.5 block J: three imports became members and the readiness guard
+// went with them. `RenderBufferOwner` is already the real `Video::RenderBuffer`
+// (block D2), so the last line needs no cast on the receiver at all — only the
+// `Video::Context&` argument does.
 void ContextData_BindRenderBuffer(ContextData* self) {
-    const Imports* im = GetImports();
-    if (!im) { Orig<void (*)(ContextData*)>(5)(self); return; }
-
     for (int i = 0; i < Ctx::kTextureSlotCount; ++i) {
         void* ctx = self->context;
         void* bound = Field<void*>(ctx, Ctx::kTextures + static_cast<size_t>(i) * 8);
         const RenderBufferOwner* rb =
             Field<const RenderBufferOwner*>(ctx, Ctx::kRenderBuffer);
         if (bound == rb->colorBuffer || bound == rb->depthBuffer)
-            im->CtxSetImageBuffer(ctx, nullptr, i);
+            CtxOf(ctx)->SetImageBuffer(nullptr, i);
     }
 
     void* ctx = self->context;
     if (Field<uint8_t>(ctx, Ctx::kDirtyFlags) & 0x02) {
-        im->CtxBindTextures(ctx);
+        CtxOf(ctx)->BindTextures();
         Field<uint32_t>(self->context, Ctx::kDirtyFlags) &= 0xfffffffdu;
     }
 
     ctx = self->context;
-    im->RenderBufferBind(Field<void*>(ctx, Ctx::kRenderBuffer), ctx);
+    Field<const RenderBufferOwner*>(ctx, Ctx::kRenderBuffer)->Bind(*CtxOf(ctx));
 }
 
 // ============================================================
@@ -934,27 +939,35 @@ void ContextData_BindScissor(ContextData* self) {
 //     ?Bind@ConstantBuffer@Video@@QEAAXAEAVContext@2@PEAXHH@Z
 //       void ConstantBuffer::Bind(Context&, void* data, int offset, int size)
 // The `offset` argument is the literal 0 in both calls.
+//
+// ENDGAME B.3.5 block J: that import is `Video::ConstantBuffer::Bind` now
+// (runtime/types/video/ConstantBuffer.h; body in constant_buffer.cpp). The two
+// receivers are the two ConstantBuffers EMBEDDED in the Context at +0x2050 and
+// +0x2008, which retail takes the address of with LEA and this file reaches with
+// `FieldPtr` — so they keep the raw-offset spelling and take the bridge cast. The
+// readiness guard went with the import.
 // ============================================================
 void ContextData_BindTransforms(ContextData* self) {
-    const Imports* im = GetImports();
-    if (!im) { Orig<void (*)(ContextData*)>(8)(self); return; }
-
     void* ctx = self->context;
     if (Field<uint32_t>(ctx, Ctx::kDirtyFlags) & 0x4000) {
-        im->ConstantBufferBind(FieldPtr(ctx, Ctx::kTransformConstantBuffer),
-                               ctx,
-                               FieldPtr(ctx, Ctx::kTransformData),
-                               0,
-                               Field<int32_t>(ctx, Ctx::kTransformCount) << 6);
+        // B.3.5 bridge — an embedded ConstantBuffer reached by offset.
+        reinterpret_cast< ::Video::ConstantBuffer*>(
+            FieldPtr(ctx, Ctx::kTransformConstantBuffer))
+            ->Bind(*CtxOf(ctx),
+                   FieldPtr(ctx, Ctx::kTransformData),
+                   0,
+                   Field<int32_t>(ctx, Ctx::kTransformCount) << 6);
     }
 
     ctx = self->context;
     if (Field<int32_t>(ctx, Ctx::kBoneCount) > 0) {
-        im->ConstantBufferBind(FieldPtr(ctx, Ctx::kBoneConstantBuffer),
-                               ctx,
-                               FieldPtr(ctx, Ctx::kBoneData),
-                               0,
-                               Ctx::kBoneDataBytes);
+        // B.3.5 bridge — the other embedded ConstantBuffer.
+        reinterpret_cast< ::Video::ConstantBuffer*>(
+            FieldPtr(ctx, Ctx::kBoneConstantBuffer))
+            ->Bind(*CtxOf(ctx),
+                   FieldPtr(ctx, Ctx::kBoneData),
+                   0,
+                   Ctx::kBoneDataBytes);
     }
 }
 static_assert(Ctx::kBoneData + Ctx::kBoneDataBytes == Ctx::kTransformData,
@@ -1039,13 +1052,6 @@ void ContextData_BindVertexNone(ContextData* self, int slot) {
 void ContextData_DrawIndexed(ContextData* self, int primitiveType,
                              int baseVertex, int vertexCount,
                              int startIndex, int indexCount, int instanceCount) {
-    const Imports* im = GetImports();
-    if (!im) {
-        Orig<void (*)(ContextData*, int, int, int, int, int, int)>(12)(
-            self, primitiveType, baseVertex, vertexCount,
-            startIndex, indexCount, instanceCount);
-        return;
-    }
     (void)primitiveType;   // deliberately unused past this point — see above
 
     void* ctx = self->context;
@@ -1054,7 +1060,7 @@ void ContextData_DrawIndexed(ContextData* self, int primitiveType,
     Field<int32_t>(self->context, Ctx::kDrawsSubmitted)    += 1;
     Field<int32_t>(self->context, Ctx::kObjectsSubmitted)  += instanceCount;
 
-    im->CtxBindResources(self->context);
+    CtxOf(self->context)->BindResources();
 
     if (self->topology != D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST) {
         self->topology = D3D11_PRIMITIVE_TOPOLOGY_TRIANGLELIST;
@@ -1112,9 +1118,6 @@ int ContextData_GetMaxDynamicInstances(ContextData* /*self*/,
 // the Lock returned. Same value; kept literal.
 // ============================================================
 bool ContextData_BeginVertices(ContextData* self, int vertexCount, int vertexStride) {
-    const Imports* im = GetImports();
-    if (!im) return Orig<bool (*)(ContextData*, int, int)>(14)(self, vertexCount, vertexStride);
-
     void* ctx = self->context;
     void* vb  = Field<void*>(ctx, Ctx::kDynVertexBuffer);
     if (*static_cast<const int32_t*>(vb) <= vertexCount * vertexStride)
@@ -1124,10 +1127,9 @@ bool ContextData_BeginVertices(ContextData* self, int vertexCount, int vertexStr
     Field<int32_t>(self->context, Ctx::kDynVertexCount)  = vertexCount;
 
     ctx = self->context;
-    void* mapped = im->VertexBufferLock(
-        Field<void*>(ctx, Ctx::kDynVertexBuffer),
-        vertexCount * vertexStride,
-        &Field<int32_t>(ctx, Ctx::kDynVertexOffset));
+    void* mapped = VbOf(Field<void*>(ctx, Ctx::kDynVertexBuffer))
+        ->Lock(vertexCount * vertexStride,
+               Field<int32_t>(ctx, Ctx::kDynVertexOffset));
 
     Field<void*>(self->context, Ctx::kDynVertexCursor) = mapped;
     Field<void*>(self->context, Ctx::kDynVertexBase) =
@@ -1172,18 +1174,14 @@ inline void ApplyPrimitiveType(ContextData* self, int primitiveType) {
 // The final Draw is a tail jump: Draw(Context+0x2104, 0).
 // ============================================================
 void ContextData_EndVertices(ContextData* self, int primitiveType) {
-    const Imports* im = GetImports();
-    if (!im) { Orig<void (*)(ContextData*, int)>(15)(self, primitiveType); return; }
-
     Field<void*>(self->context, Ctx::kDynVertexCursor) = nullptr;
-    im->VertexBufferUnlock(Field<void*>(self->context, Ctx::kDynVertexBuffer));
+    VbOf(Field<void*>(self->context, Ctx::kDynVertexBuffer))->Unlock();
 
     void* ctx = self->context;
-    im->CtxSetVertexBuffer(ctx,
-                           Field<void*>(ctx, Ctx::kDynVertexBuffer),
-                           0,
-                           Field<int32_t>(ctx, Ctx::kDynVertexOffset),
-                           Field<int32_t>(ctx, Ctx::kDynVertexStride));
+    CtxOf(ctx)->SetVertexBuffer(Field<void*>(ctx, Ctx::kDynVertexBuffer),
+                                0,
+                                Field<int32_t>(ctx, Ctx::kDynVertexOffset),
+                                Field<int32_t>(ctx, Ctx::kDynVertexStride));
 
     ctx = self->context;
     const int vertexCount = Field<int32_t>(ctx, Ctx::kDynVertexCount);
@@ -1193,7 +1191,7 @@ void ContextData_EndVertices(ContextData* self, int primitiveType) {
     Field<int32_t>(self->context, Ctx::kDrawsSubmitted)   += 1;
     Field<int32_t>(self->context, Ctx::kObjectsSubmitted) += 1;
 
-    im->CtxBindResources(self->context);
+    CtxOf(self->context)->BindResources();
 
     ApplyPrimitiveType(self, primitiveType);
 
@@ -1248,12 +1246,6 @@ bool ContextData_BeginIndexedVertices(ContextData* self, int vertexCount,
 bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCount,
                                                int vertexStride, int indexCount,
                                                int instanceCount) {
-    const Imports* im = GetImports();
-    if (!im) {
-        return Orig<bool (*)(ContextData*, int, int, int, int)>(18)(
-            self, vertexCount, vertexStride, indexCount, instanceCount);
-    }
-
     void* ctx = self->context;
     void* vb  = Field<void*>(ctx, Ctx::kDynVertexBuffer);
     const int32_t vertexCapacity = *static_cast<const int32_t*>(vb);
@@ -1266,10 +1258,9 @@ bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCoun
     Field<int32_t>(self->context, Ctx::kDynInstanceCount)  = instanceCount;
 
     ctx = self->context;
-    void* mappedVertices = im->VertexBufferLock(
-        Field<void*>(ctx, Ctx::kDynVertexBuffer),
-        vertexCount * vertexStride,
-        &Field<int32_t>(ctx, Ctx::kDynVertexOffset));
+    void* mappedVertices = VbOf(Field<void*>(ctx, Ctx::kDynVertexBuffer))
+        ->Lock(vertexCount * vertexStride,
+               Field<int32_t>(ctx, Ctx::kDynVertexOffset));
 
     Field<void*>(self->context, Ctx::kDynVertexCursor) = mappedVertices;
     Field<void*>(self->context, Ctx::kDynVertexBase) =
@@ -1280,10 +1271,9 @@ bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCoun
     Field<int32_t>(self->context, Ctx::kDynIndexCount) = indexCount;
 
     ctx = self->context;
-    void* mappedIndices = im->IndexBufferLock(
-        Field<void*>(ctx, Ctx::kDynIndexBuffer),
-        indexCount * 2,
-        &Field<int32_t>(ctx, Ctx::kDynIndexOffset));
+    void* mappedIndices = IbOf(Field<void*>(ctx, Ctx::kDynIndexBuffer))
+        ->Lock(indexCount * 2,
+               Field<int32_t>(ctx, Ctx::kDynIndexOffset));
 
     Field<void*>(self->context, Ctx::kDynIndexCursor) = mappedIndices;
     Field<void*>(self->context, Ctx::kDynIndexBase) =
@@ -1315,21 +1305,17 @@ bool ContextData_BeginInstancedIndexedVertices(ContextData* self, int vertexCoun
 // vertices, and add the instance count (not 1) to objectsSubmitted.
 // ============================================================
 void ContextData_EndInstancedIndexedVertices(ContextData* self, int primitiveType) {
-    const Imports* im = GetImports();
-    if (!im) { Orig<void (*)(ContextData*, int)>(19)(self, primitiveType); return; }
-
     Field<void*>(self->context, Ctx::kDynVertexCursor) = nullptr;
-    im->VertexBufferUnlock(Field<void*>(self->context, Ctx::kDynVertexBuffer));
+    VbOf(Field<void*>(self->context, Ctx::kDynVertexBuffer))->Unlock();
 
     Field<void*>(self->context, Ctx::kDynIndexCursor) = nullptr;
-    im->IndexBufferUnlock(Field<void*>(self->context, Ctx::kDynIndexBuffer));
+    IbOf(Field<void*>(self->context, Ctx::kDynIndexBuffer))->Unlock();
 
     void* ctx = self->context;
-    im->CtxSetVertexBuffer(ctx,
-                           Field<void*>(ctx, Ctx::kDynVertexBuffer),
-                           0,
-                           Field<int32_t>(ctx, Ctx::kDynVertexOffset),
-                           Field<int32_t>(ctx, Ctx::kDynVertexStride));
+    CtxOf(ctx)->SetVertexBuffer(Field<void*>(ctx, Ctx::kDynVertexBuffer),
+                                0,
+                                Field<int32_t>(ctx, Ctx::kDynVertexOffset),
+                                Field<int32_t>(ctx, Ctx::kDynVertexStride));
 
     ctx = self->context;
     void* const   dynIb     = Field<void*>(ctx, Ctx::kDynIndexBuffer);
@@ -1354,7 +1340,7 @@ void ContextData_EndInstancedIndexedVertices(ContextData* self, int primitiveTyp
     Field<int32_t>(self->context, Ctx::kObjectsSubmitted) +=
         Field<int32_t>(self->context, Ctx::kDynInstanceCount);
 
-    im->CtxBindResources(self->context);
+    CtxOf(self->context)->BindResources();
 
     ApplyPrimitiveType(self, primitiveType);
 

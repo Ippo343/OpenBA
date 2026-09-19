@@ -147,7 +147,14 @@ struct Imports {
     // --- object lifetime -------------------------------------------------
     void* (*MemAlloc)(size_t, int);                    // 0x1800134c0
     void  (*MemFree)(void*);                           // 0x1800134d0
-    void  (*DeviceDataBaseDtor)(void*);                // 0x180013228 ??1DeviceData
+    // ENDGAME B.3.5 block J: `??1DeviceData@Video@@UEAA@XZ` and its table row are
+    // GONE. Block D2 made slot 0 call `~DeviceData()` by qualified non-virtual
+    // name and kept the row so `g_imOk` would still fail when the Runtime side was
+    // absent. It no longer can be absent for THIS binding: a member call is
+    // resolved by the LINKER, which is a stronger guarantee than a run-time null
+    // test, so the row was testing a symbol nobody reads. Every row that is still
+    // resolved at run time is still in the all-or-nothing test below, and
+    // `Dx11SeamInstall()`'s completeness check is untouched (RULE B5-8).
 
     // --- the eleven base ctors, in DeviceData slot 9..19 order -----------
     void* (*CtorContextData)(void*, void*);            // 0x180013478
@@ -163,20 +170,29 @@ struct Imports {
     void* (*CtorRenderBufferData)(void*, void*);       // 0x1800134b0
 
     // --- Video::Device ---------------------------------------------------
-    void  (*DeviceLock)(void*);                        // 0x180013408
-    void  (*DeviceUnlock)(void*);                      // 0x180013410
-    void  (*DeviceReleaseDynamic)(void*);              // 0x180013230
-    void  (*DeviceRecreateDynamic)(void*);             // 0x180013240
-    void  (*DeviceAdjustDisplay)(void*);               // 0x180013238
-    void  (*DeviceGetDisplayMode)(void*, void*, int);  // 0x180013300 (ret by hidden ptr)
-    int   (*DeviceGetMultisampleModeCount)(void*);     // 0x1800132f0
-    bool  (*DeviceIsMultisampleModeSupported)(void*, int);  // 0x1800132e8
+    // ENDGAME B.3.5 block J, RULE B5-14: ALL EIGHT ROWS ARE GONE. `Video::Device`
+    // is a real class (runtime/types/video/Device.h) and every one of them is a
+    // direct member call now. `GetDisplayMode` is the by-value one and is
+    // converted in the ONLY shape B5-12 allows for a caller — "the door body
+    // moved to the call site": one placement-new of the member's prvalue into the
+    // same caller storage the retail retslot pointed at, and nothing else.
+    //   ?Lock@                       -> Video::Device::Lock
+    //   ?Unlock@                     -> Video::Device::Unlock
+    //   ?ReleaseDynamic@             -> Video::Device::ReleaseDynamic
+    //   ?RecreateDynamic@            -> Video::Device::RecreateDynamic
+    //   ?AdjustDisplay@              -> Video::Device::AdjustDisplay
+    //   ?GetDisplayMode@             -> Video::Device::GetDisplayMode  (by value)
+    //   ?GetMultisampleModeCount@    -> Video::Device::GetMultisampleModeCount
+    //   ?IsMultisampleModeSupported@ -> Video::Device::IsMultisampleModeSupported
 
     // --- Video::Device::Adapter / GraphicsInterface / DisplayMode --------
+    // THE SEVEN CTOR/DTOR ROWS STAY (B4b-2, B35_RULES section 2.4 and 11): none
+    // of these four nested value types has a real C++ constructor or destructor —
+    // Device.h records why per type — so there is no member to call. Only
+    // `Adapter::FindOrAddMode`, which IS a real member, converted.
     void* (*AdapterCtor)(void*);                       // 0x180013250
     void* (*AdapterCopyCtor)(void*, const void*);      // 0x1800132b8
     void  (*AdapterDtor)(void*);                       // 0x1800134c8
-    void  (*AdapterFindOrAddMode)(void*, const void*, const void*);  // 0x180013280
     void* (*GfxIfaceCtor)(void*);                      // 0x1800132d0
     void* (*GfxIfaceCopyCtor)(void*, const void*);     // 0x1800132b0
     void  (*GfxIfaceDtor)(void*);                      // 0x1800132c8
@@ -190,15 +206,31 @@ struct Imports {
     // build and the plugin calls its members directly.
     // ENDGAME B.3.4b closing: the WideString ctor / dtor / StrLength imports
     // (0x1800132e0, 0x1800132d8, 0x180013278) are gone with their call sites —
-    // System::WideString is a real class here too. AsUTF8 STAYS: it returns a
-    // System::String BY VALUE through a hidden retslot into a String the caller
-    // already constructed, which the member form cannot reproduce.
-    void  (*WideStringAsUTF8)(const void*, void*);     // 0x180013258 (ret by hidden ptr)
+    // System::WideString is a real class here too.
+    //
+    // ENDGAME B.3.5 block J: `?AsUTF8@WideString@System@@` IS GONE TOO, and the
+    // reason this row gave for staying was stale. It said the member form "cannot
+    // reproduce" a hidden retslot written into a String the caller had already
+    // constructed — but the caller only default-constructed that String because
+    // the DOOR's ABI needed somewhere to write. `System::WideString::AsUTF8()` is
+    // a real const member returning `System::String` by value
+    // (runtime/src/system/widestring.cpp), and both sides of the call are
+    // GCC-compiled C++, so direct-initialising the local FROM the prvalue is one
+    // construction into the same storage — strictly fewer than the two the door
+    // shape performed. The retslot hazard RULE B5-12 warns about is a
+    // door/virtual-slot hazard; it does not arise for a non-virtual member called
+    // from C++.
 
     // --- Video::ImageBuffer ----------------------------------------------
-    bool  (*ImageBufferCopyFromTexture)(void*, void*, int, int);  // 0x1800132a0
+    // ENDGAME B.3.5 block J: `?CopyFromTexture@ImageBuffer@Video@@` is
+    // `Video::ImageBuffer::CopyFromTexture` (runtime/src/video/buffers.cpp).
 
     // --- Application ------------------------------------------------------
+    // THESE THREE STAY, AND THE REASON IS NOT "scope". `Application::Application`
+    // is not a real C++ class yet: the layout lives in
+    // `runtime/types/application/Application.h` as the POD
+    // `RtApplication::Application`, which is a step-6 conversion, not a
+    // Video/Graphics one. There is no member to call.
     void  (*AppRegisterMessageCallback)(void*, unsigned, void*);   // 0x180013290
     void  (*AppUnregisterMessageCallback)(void*, unsigned);        // 0x180013298
     HINSTANCE (*AppGetInstance)(void*);                            // 0x1800132a8
@@ -222,7 +254,6 @@ const Imports* GetImports() {
     const Entry table[] = {
         { (void**)&g_im.MemAlloc,               "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z",                 0x1800134c0 },
         { (void**)&g_im.MemFree,                "?MemFree@MemoryAllocator@System@@SAXPEAX@Z",                    0x1800134d0 },
-        { (void**)&g_im.DeviceDataBaseDtor,     "??1DeviceData@Video@@UEAA@XZ",                                  0x180013228 },
 
         { (void**)&g_im.CtorContextData,        "??0ContextData@Video@@QEAA@PEAVContext@1@@Z",                    0x180013478 },
         { (void**)&g_im.CtorImageBufferData,    "??0ImageBufferData@Video@@QEAA@PEAVImageBuffer@1@@Z",            0x1800133e8 },
@@ -236,29 +267,15 @@ const Imports* GetImports() {
         { (void**)&g_im.CtorVideoProgramData,   "??0VideoProgramData@Video@@QEAA@PEAVVideoProgram@1@@Z",          0x1800134a0 },
         { (void**)&g_im.CtorRenderBufferData,   "??0RenderBufferData@Video@@QEAA@PEAVRenderBuffer@1@@Z",          0x1800134b0 },
 
-        { (void**)&g_im.DeviceLock,             "?Lock@Device@Video@@QEAAXXZ",                                   0x180013408 },
-        { (void**)&g_im.DeviceUnlock,           "?Unlock@Device@Video@@QEAAXXZ",                                 0x180013410 },
-        { (void**)&g_im.DeviceReleaseDynamic,   "?ReleaseDynamic@Device@Video@@QEAAXXZ",                          0x180013230 },
-        { (void**)&g_im.DeviceRecreateDynamic,  "?RecreateDynamic@Device@Video@@QEAAXXZ",                         0x180013240 },
-        { (void**)&g_im.DeviceAdjustDisplay,    "?AdjustDisplay@Device@Video@@QEAAXXZ",                           0x180013238 },
-        { (void**)&g_im.DeviceGetDisplayMode,   "?GetDisplayMode@Device@Video@@QEBA?AVDisplayMode@12@H@Z",        0x180013300 },
-        { (void**)&g_im.DeviceGetMultisampleModeCount,    "?GetMultisampleModeCount@Device@Video@@QEBAHXZ",       0x1800132f0 },
-        { (void**)&g_im.DeviceIsMultisampleModeSupported, "?IsMultisampleModeSupported@Device@Video@@QEBA_NH@Z",  0x1800132e8 },
 
         { (void**)&g_im.AdapterCtor,            "??0Adapter@Device@Video@@QEAA@XZ",                              0x180013250 },
         { (void**)&g_im.AdapterCopyCtor,        "??0Adapter@Device@Video@@QEAA@AEBU012@@Z",                      0x1800132b8 },
         { (void**)&g_im.AdapterDtor,            "??1Adapter@Device@Video@@QEAA@XZ",                              0x1800134c8 },
-        { (void**)&g_im.AdapterFindOrAddMode,
-              "?FindOrAddMode@Adapter@Device@Video@@QEAAXAEBVDisplayMode@23@AEBVRefreshRate@23@@Z",              0x180013280 },
         { (void**)&g_im.GfxIfaceCtor,           "??0GraphicsInterface@Device@Video@@QEAA@XZ",                    0x1800132d0 },
         { (void**)&g_im.GfxIfaceCopyCtor,       "??0GraphicsInterface@Device@Video@@QEAA@AEBU012@@Z",            0x1800132b0 },
         { (void**)&g_im.GfxIfaceDtor,           "??1GraphicsInterface@Device@Video@@QEAA@XZ",                    0x1800132c8 },
         { (void**)&g_im.DisplayModeCtor,        "??0DisplayMode@Device@Video@@QEAA@HH@Z",                        0x180013308 },
         { (void**)&g_im.DisplayModeDtor,        "??1DisplayMode@Device@Video@@QEAA@XZ",                          0x1800132f8 },
-
-        { (void**)&g_im.WideStringAsUTF8,       "?AsUTF8@WideString@System@@QEBA?AVString@2@XZ",                 0x180013258 },
-
-        { (void**)&g_im.ImageBufferCopyFromTexture, "?CopyFromTexture@ImageBuffer@Video@@QEAA_NPEAXHH@Z",        0x1800132a0 },
 
         { (void**)&g_im.AppRegisterMessageCallback,
               "?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z",                          0x180013290 },
@@ -428,6 +445,18 @@ template <typename T> inline T Field(const void* base, size_t off) {
 }
 
 inline void* DeviceOf(DeviceData* self) { return self->device; }
+
+// ENDGAME B.3.5 block J — the two bridge casts every converted call goes through.
+// `DeviceData::device` (+0x08) is a `Video::Device*` and the cursor slot is handed
+// a `Video::ImageBuffer*`, but both arrive on this side of the seam as `void*`
+// (RULE B5-8's declared leave: the concrete `*Data` classes mirror the base's
+// fields rather than deriving in C++). Named once each instead of at ten sites.
+inline ::Video::Device* VDev(void* device) {
+    return reinterpret_cast< ::Video::Device*>(device);            // B.3.5 bridge
+}
+inline ::Video::ImageBuffer* VImg(void* imageBuffer) {
+    return reinterpret_cast< ::Video::ImageBuffer*>(imageBuffer);  // B.3.5 bridge
+}
 inline void* ConfigOf(const Imports* im) { return *im->configSingleton; }
 inline void* AppOf(const Imports* im)    { return *im->appSingleton; }
 
@@ -540,10 +569,10 @@ int ResolveMultisampleMode(DeviceData* self, const Imports* im) {
     void* cfg = ConfigOf(im);
 
     int index = Field<int32_t>(cfg, Cfg::kMultisample);
-    if (index >= im->DeviceGetMultisampleModeCount(dev))
-        index = im->DeviceGetMultisampleModeCount(dev) - 1;
+    if (index >= VDev(dev)->GetMultisampleModeCount())
+        index = VDev(dev)->GetMultisampleModeCount() - 1;
 
-    while (!im->DeviceIsMultisampleModeSupported(dev, index))
+    while (!VDev(dev)->IsMultisampleModeSupported(index))
         --index;
 
     if (Field<int32_t>(cfg, Cfg::kMultisample) != index)
@@ -582,8 +611,15 @@ void FillSwapChainDesc(DeviceData* self, DXGI_SWAP_CHAIN_DESC* desc, const Impor
     void* dev = DeviceOf(self);
     void* cfg = ConfigOf(im);
 
+    // ENDGAME B.3.5 block J, RULE B5-12 / CALLER_BATCH_BRIEF "by-value returns":
+    // the door body moved to the call site. `Video::Device::GetDisplayMode` returns
+    // the mode BY VALUE; retail's caller hands it a pointer to this very stack slot
+    // and the door placement-constructs into it. Written as ONE placement-new of
+    // the prvalue into that same uninitialised storage, which is what the door did,
+    // and no copy (C++17 guarantees the prvalue is built in place).
     DisplayMode mode;
-    im->DeviceGetDisplayMode(dev, &mode, Field<int32_t>(dev, Dev::kModeIndex));
+    ::new (static_cast<void*>(&mode))
+        DisplayMode(VDev(dev)->GetDisplayMode(Field<int32_t>(dev, Dev::kModeIndex)));
 
     std::memset(desc, 0, sizeof(*desc));
 
@@ -867,7 +903,7 @@ int DeviceData_Resize(DeviceData* self) {
     // Dx11InvalidateConstantBufferBindings in buffers.cpp.
     Dx11InvalidateConstantBufferBindings();
 
-    im->DeviceReleaseDynamic(dev);
+    VDev(dev)->ReleaseDynamic();
 
     Dx11Release(self->depthBuffer);
     Dx11Release(self->colorBuffer);
@@ -876,8 +912,10 @@ int DeviceData_Resize(DeviceData* self) {
 
     void* cfg = ConfigOf(im);
 
+    // The same by-value shape as FillSwapChainDesc's — see the note there.
     DisplayMode mode;
-    im->DeviceGetDisplayMode(dev, &mode, Field<int32_t>(dev, Dev::kModeIndex));
+    ::new (static_cast<void*>(&mode))
+        DisplayMode(VDev(dev)->GetDisplayMode(Field<int32_t>(dev, Dev::kModeIndex)));
 
     if (Field<uint8_t>(cfg, Cfg::kFullscreen) != 0 && self->wasFullscreen == 0) {
         Field<int32_t>(dev, Dev::kWidth)  = mode.width;
@@ -913,7 +951,7 @@ int DeviceData_Resize(DeviceData* self) {
     }
 
     TraceGeom("pre-AdjustDisplay", dev, im);
-    im->DeviceAdjustDisplay(dev);
+    VDev(dev)->AdjustDisplay();
     TraceGeom("post-AdjustDisplay", dev, im);
 
     // Guard, second half. If the external actor re-collapsed the window inside
@@ -984,7 +1022,7 @@ int DeviceData_Resize(DeviceData* self) {
                                nullptr) == 0 &&
         CreateColorBuffer(self, im) &&
         CreateDepthBuffer(self, im)) {
-        im->DeviceRecreateDynamic(dev);
+        VDev(dev)->RecreateDynamic();
         Field<uint8_t>(dev, Dev::kResetPending) = 0;
         ok = true;
     }
@@ -1107,9 +1145,9 @@ DeviceData* DeviceData_Dtor(DeviceData* self, unsigned flags) {
     // call, not a resolved import and never `DeletingDtor(0)` — that would
     // re-enter this slot. The cast is the bridge the declared leave (RULE B5-8)
     // requires: this class mirrors the base's two fields rather than deriving.
-    // `Imports::DeviceDataBaseDtor` and its table row STAY: the row is what makes
-    // `g_imOk` false when the Runtime side is absent, and that all-or-nothing
-    // test is the seam's only fallback guarantee (RULE B5-8).
+    // ENDGAME B.3.5 block J: `Imports::DeviceDataBaseDtor` and its table row are
+    // GONE — see the note at the struct. The readiness test above still guards
+    // `MemFree`, which this body really does resolve at run time.
     reinterpret_cast<Video::DeviceData*>(self)
         ->Video::DeviceData::~DeviceData();   // B.3.5 bridge
 
@@ -1314,7 +1352,7 @@ bool DeviceData_CreateDevice(DeviceData* self) {
     Field<HMONITOR>(dev, Dev::kMonitor) = od.Monitor;
 
     // 8 — settle the window, which may rewrite Device+0x04/+0x08.
-    im->DeviceAdjustDisplay(dev);
+    VDev(dev)->AdjustDisplay();
     StallDebug::Mark("  DX11 AdjustDisplay (window sized)");
 
     // 9
@@ -1452,9 +1490,9 @@ void DeviceData_SetImageBuffer(DeviceData* self, void* imageBuffer, int hotX, in
     void* dev = DeviceOf(self);
 
     uint32_t pixels[32 * 32];
-    im->DeviceLock(dev);
-    im->ImageBufferCopyFromTexture(imageBuffer, pixels, 32, 32);
-    im->DeviceUnlock(dev);
+    VDev(dev)->Lock();
+    VImg(imageBuffer)->CopyFromTexture(pixels, 32, 32);
+    VDev(dev)->Unlock();
 
     uint32_t andPlane[32];
     uint32_t xorPlane[32];
@@ -1697,12 +1735,15 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                 WideStringStorage w;
                 ::new (static_cast<void*>(&w)) System::WideString(adapterDesc.Description);   // B.3.4 bridge
                 {
-                    // System::WideString is not a B.3.1 class, so AsUTF8 stays
-                    // an import; its RESULT is a real System::String, and the
-                    // inner scope releases it before the WideString, which is
-                    // the shipped order.
-                    System::String utf8;
-                    im->WideStringAsUTF8(&w, &utf8);
+                    // ENDGAME B.3.5 block J: `?AsUTF8@WideString@System@@` is a
+                    // real const member returning `System::String` by value, so
+                    // the local is DIRECT-INITIALISED from the prvalue — one
+                    // construction into the storage the door used to be handed as
+                    // a retslot, instead of a default construction plus that
+                    // write. The inner scope still releases it before the
+                    // WideString, which is the shipped order.
+                    const System::String utf8 =
+                        reinterpret_cast<const System::WideString*>(&w)->AsUTF8();  // B.3.4 bridge
                     reinterpret_cast<System::String&>(rec) = utf8;  // B.3.1 bridge
                 }
                 reinterpret_cast<System::WideString*>(&w)->~WideString();   // B.3.4 bridge
@@ -1745,8 +1786,9 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                     WideStringStorage tailW;
                     ::new (static_cast<void*>(&tailW)) System::WideString(mi.szDevice + (len - 1));   // B.3.4 bridge
                     {
-                        System::String tailU;
-                        im->WideStringAsUTF8(&tailW, &tailU);
+                        // Same shape as the adapter description above.
+                        const System::String tailU =
+                            reinterpret_cast<const System::WideString*>(&tailW)->AsUTF8();  // B.3.4 bridge
                         {
                             const System::String t1 = prefix + tailU;
                             const System::String t2 = t1 + ")";
@@ -1782,7 +1824,7 @@ static bool EnumerateDxgiInterfaceInto(void* dev, const char* interfaceName,
                         RefreshRate rr;
                         rr.numerator   = static_cast<int32_t>(m.RefreshRate.Numerator);
                         rr.denominator = static_cast<int32_t>(m.RefreshRate.Denominator);
-                        im->AdapterFindOrAddMode(&rec, &dm, &rr);
+                        rec.FindOrAddMode(dm, rr);
                         im->DisplayModeDtor(&dm);
                     }
                 }

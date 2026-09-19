@@ -169,6 +169,9 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
+// ENDGAME B.3.5 block J: the eight real Video::*Data abstract bases (block A),
+// whose slots the seventeen backend dispatches below now go through.
+#include "../../types/video/CompanionData.h"
 
 // ENDGAME B.3.5 block D1. Both bodies MOVED onto `Video::Context`; the two
 // registered doors at the bottom kept their names, their mangled-name rows and
@@ -275,17 +278,80 @@ enum : size_t {
     kCBufBindSlot     = 0x10,                            // (that,ctx,src,0,len)
 };
 
-using VoidVoidFn   = void (*)(void*);
-using VoidIntFn    = void (*)(void*, int32_t);
-using BindCtxFn    = void (*)(void*, void*);
-using BindCtxIntFn = void (*)(void*, void*, int32_t);
-using BindVBufFn   = void (*)(void*, void*, int32_t, int32_t, int32_t);
-using BindCBufFn   = void (*)(void*, void*, const void*, int32_t, int32_t);
-
-inline void* VSlot(void* obj, size_t byteOff) {
-    void* vt = Field<void*>(obj, 0);
-    return Field<void*>(vt, byteOff);
+// ENDGAME B.3.5 block J, COORDINATOR RULING — `VSlot()` AND THE SIX FUNCTION
+// TYPEDEFS ARE GONE, and the seventeen dispatches they served are VIRTUAL CALLS.
+//
+// `VSlot(obj, byteOff)` read the vptr at `obj+0x00` and indexed it at `byteOff`;
+// every one of the eight companion classes is a real abstract class with its slots
+// in retail order (block A, runtime/types/video/CompanionData.h), so a virtual call
+// through the matching base reads THE SAME live vptr at THE SAME byte offset. It is
+// the same dispatch, with the slot index and the argument list checked by the
+// compiler instead of by a `using ...Fn = ...` typedef and a comment. The seam is
+// still what fills the slots; nothing here changes what is installed in one.
+//
+// The object behind each pointer is the CONCRETE VideoDX11 class, which does not
+// derive from the abstract base in C++ (RULE B5-8's declared leave), so each
+// receiver takes one `// B.3.5 bridge` cast. The eight one-line helpers below are
+// those casts, named once per companion kind instead of seventeen times inline.
+//
+// THE SLOT DECIDES. Every index below was checked against the class's declaration
+// order in CompanionData.h AND against the `DX11_REGISTER_SLOT` row that fills it;
+// the `static_assert`s pin the seven ContextData byte offsets this file had spelled
+// as an enum. THREE SLOT SIGNATURES WERE UNDER-DECLARED in that header and are
+// corrected there this pass, each with the retail disassembly — `ImageBufferData`
+// slot 4's first argument is the Context (not "unknownArg"), `IndexBufferData` slot
+// 5 takes the Context at all, `ConstantBufferData` slot 2's fourth argument is an
+// int and not a pointer, and `VideoProgramData` slot 2 is `Bind(Context*, int)`
+// rather than a nameless no-argument `Slot2`. In all four cases the CALL SITES here
+// were already passing the right thing; it was the declaration that was short.
+//
+// The OWNER-side companion offsets (`kImageCompanion` &c) stay raw field reads:
+// they are not doors, and two of them (+0x40 vs +0x50 for a VideoProgram) are the
+// trap this file's banner exists to record.
+inline Video::ContextData* AsContextData(void* p) {
+    return reinterpret_cast<Video::ContextData*>(p);              // B.3.5 bridge
 }
+inline Video::ImageBufferData* AsImageData(void* p) {
+    return reinterpret_cast<Video::ImageBufferData*>(p);          // B.3.5 bridge
+}
+// VertexProgramData and PixelProgramData declare an identical slot 2, which is why
+// retail shares one dispatch shape between them; VideoProgramData's slot 2 is the
+// same shape at the same index behind a different companion offset. Typed on
+// VertexProgramData, exactly as `buffers.cpp` types one view on IndexBuffer for
+// both GPU buffers.
+inline Video::VertexProgramData* AsProgramData(void* p) {
+    return reinterpret_cast<Video::VertexProgramData*>(p);        // B.3.5 bridge
+}
+inline Video::VertexBufferData* AsVertexBufferData(void* p) {
+    return reinterpret_cast<Video::VertexBufferData*>(p);         // B.3.5 bridge
+}
+inline Video::VertexLayoutData* AsLayoutData(void* p) {
+    return reinterpret_cast<Video::VertexLayoutData*>(p);         // B.3.5 bridge
+}
+inline Video::IndexBufferData* AsIndexBufferData(void* p) {
+    return reinterpret_cast<Video::IndexBufferData*>(p);          // B.3.5 bridge
+}
+inline Video::RenderStateData* AsRenderStateData(void* p) {
+    return reinterpret_cast<Video::RenderStateData*>(p);          // B.3.5 bridge
+}
+inline Video::ConstantBufferData* AsConstantBufferData(void* p) {
+    return reinterpret_cast<Video::ConstantBufferData*>(p);       // B.3.5 bridge
+}
+
+static_assert(kSlotBindRenderBuffer / 8 ==  5, "ContextData::BindRenderBuffer is slot 5");
+static_assert(kSlotBindViewport     / 8 ==  6, "ContextData::BindViewport is slot 6");
+static_assert(kSlotBindScissor      / 8 ==  7, "ContextData::BindScissor is slot 7");
+static_assert(kSlotBindTransforms   / 8 ==  8, "ContextData::BindTransforms is slot 8");
+static_assert(kSlotBindTextureNone  / 8 ==  9, "ContextData::BindTextureNone is slot 9");
+static_assert(kSlotBindIndexNone    / 8 == 10, "ContextData::BindIndexNone is slot 10");
+static_assert(kSlotBindVertexNone   / 8 == 11, "ContextData::BindVertexNone is slot 11");
+static_assert(kImageBindSlot  / 8 == 4, "ImageBufferData::Bind is slot 4");
+static_assert(kProgBindSlot   / 8 == 2, "Vertex/Pixel/VideoProgramData::Bind is slot 2");
+static_assert(kVBufBindSlot   / 8 == 5, "VertexBufferData::Bind is slot 5");
+static_assert(kLayoutBindSlot / 8 == 1, "VertexLayoutData::Bind is slot 1");
+static_assert(kIBufBindSlot   / 8 == 5, "IndexBufferData::Bind is slot 5");
+static_assert(kStateBindSlot  / 8 == 2, "RenderStateData::Bind is slot 2");
+static_assert(kCBufBindSlot   / 8 == 2, "ConstantBufferData::Bind is slot 2");
 
 // ---- Negative-control injection --------------------------------------------
 // Set only by the probe, and only for one case at a time. A control that lives
@@ -316,12 +382,10 @@ void Video::Context::BindTextures() {
         if (img) {
             // 0x1800ef358: RCX = img->+0x60, RDX = ctx, R8D = i, vt[+0x20].
             void* companion = Field<void*>(img, kImageCompanion);
-            reinterpret_cast<BindCtxIntFn>(VSlot(companion, kImageBindSlot))(
-                companion, this, i);
+            AsImageData(companion)->Bind(this, static_cast<unsigned>(i));
         } else {
             // 0x1800ef372: companion->BindTextureNone(i).
-            void* cd = _contextData;
-            reinterpret_cast<VoidIntFn>(VSlot(cd, kSlotBindTextureNone))(cd, i);
+            AsContextData(_contextData)->BindTextureNone(i);
         }
     }
     // 0x1800ef398 — AFTER the loop, unconditionally, even when no bit was set.
@@ -360,7 +424,7 @@ void Video::Context::BindResources() {
     // either were wrong the call log would differ, because a stale `cd` would
     // dispatch through the wrong table.
     if (_dirty & 0x1u)
-        reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindRenderBuffer))(cd);
+        AsContextData(cd)->BindRenderBuffer();
 
     // --- 0x00002 textures ---------------------------------------------------
     // A direct member call now, not the resolved door: retail's `CALL
@@ -375,14 +439,14 @@ void Video::Context::BindResources() {
     if (_dirty & 0x40u) {
         void* p = _vertexProgram;
         void* c = Field<void*>(p, kProgCompanion50);
-        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, this, detail);
+        AsProgramData(c)->Bind(this, detail);
     }
 
     // --- 0x00080 pixel program ---------------------------------------------
     if (_dirty & 0x80u) {
         void* p = _pixelProgram;
         void* c = Field<void*>(p, kProgCompanion50);
-        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, this, detail);
+        AsProgramData(c)->Bind(this, detail);
     }
 
     // --- 0x00100 video program ---------------------------------------------
@@ -394,12 +458,15 @@ void Video::Context::BindResources() {
         // `_pixelConstantStaging`, which Context.h keeps undivided on purpose.
         void* p = Field<void*>(this, kVideoProgram);
         void* c = Field<void*>(p, kVideoCompanion40);
-        reinterpret_cast<BindCtxIntFn>(VSlot(c, kProgBindSlot))(c, this, detail);
+        // Slot 2 of `Video::VideoProgramData` is the SAME shape at the SAME index
+        // as the two above, which is why one helper serves all three; the header
+        // names it `Bind` as of this pass (it was a nameless `Slot2()`).
+        AsProgramData(c)->Bind(this, detail);
     }
 
     // --- 0x04000 transforms, OR a live transform count ----------------------
     if ((_dirty & 0x4000u) || _transformCount > 0 || _unknown0024 > 0)
-        reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindTransforms))(cd);
+        AsContextData(cd)->BindTransforms();
 
     // Negative control 1 hoists the vertex-layout arm to HERE, ahead of the
     // streams. Nothing in the Context bytes can tell the two orders apart, so
@@ -407,7 +474,7 @@ void Video::Context::BindResources() {
     // SEQUENCE and not just the end state.
     if (g_ctxBindDefect == 1 && (_dirty & 0x4u)) {
         void* c = Field<void*>(_vertexLayout, kLayoutCompanion);
-        reinterpret_cast<BindCtxFn>(VSlot(c, kLayoutBindSlot))(c, this);
+        AsLayoutData(c)->Bind(this);
     }
 
     // --- 0x00008 the sixteen vertex streams ---------------------------------
@@ -422,10 +489,12 @@ void Video::Context::BindResources() {
                 // R9D = offsets[i] (+0x138), [RSP+0x20] = strides[i] (+0x178,
                 // reached as R15+0x40 off the offsets cursor).
                 void* c = Field<void*>(vb, kVBufCompanion);
-                reinterpret_cast<BindVBufFn>(VSlot(c, kVBufBindSlot))(
-                    c, this, i, _vertexOffsets[i], _vertexStrides[i]);
+                AsVertexBufferData(c)->Bind(this,
+                                            static_cast<uint32_t>(i),
+                                            static_cast<uint32_t>(_vertexOffsets[i]),
+                                            static_cast<uint32_t>(_vertexStrides[i]));
             } else {
-                reinterpret_cast<VoidIntFn>(VSlot(cd, kSlotBindVertexNone))(cd, i);
+                AsContextData(cd)->BindVertexNone(i);
             }
         }
         // 0x1800ef1af — inside the 0x8 arm only. A stream marked dirty while
@@ -439,7 +508,7 @@ void Video::Context::BindResources() {
     if (g_ctxBindDefect != 1) {
         if (_dirty & 0x4u) {
             void* c = Field<void*>(_vertexLayout, kLayoutCompanion);
-            reinterpret_cast<BindCtxFn>(VSlot(c, kLayoutBindSlot))(c, this);
+            AsLayoutData(c)->Bind(this);
         }
     }
 
@@ -448,23 +517,26 @@ void Video::Context::BindResources() {
         void* ib = _indexBuffer;
         if (ib) {
             void* c = Field<void*>(ib, kIBufCompanion);
-            reinterpret_cast<BindCtxFn>(VSlot(c, kIBufBindSlot))(c, this);
+            // The Context argument retail loads into RDX at 0x1800ef1e2 and
+            // VideoDX11's body never reads. The SLOT takes it; CompanionData.h is
+            // corrected this pass from a no-argument `Bind()`.
+            AsIndexBufferData(c)->Bind(this);
         } else {
-            reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindIndexNone))(cd);
+            AsContextData(cd)->BindIndexNone();
         }
     }
 
     // --- 0x00020 render state -----------------------------------------------
     if (_dirty & 0x20u) {
         void* c = Field<void*>(_renderState, kStateCompanion);
-        reinterpret_cast<BindCtxFn>(VSlot(c, kStateBindSlot))(c, this);
+        AsRenderStateData(c)->Bind(this);
     }
 
     // --- 0x00200 viewport / 0x00400 scissor ---------------------------------
     if (_dirty & 0x200u)
-        reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindViewport))(cd);
+        AsContextData(cd)->BindViewport();
     if (_dirty & 0x400u)
-        reinterpret_cast<VoidVoidFn>(VSlot(cd, kSlotBindScissor))(cd);
+        AsContextData(cd)->BindScissor();
 
     // --- the five constant-buffer uploads -----------------------------------
     // Each is `buf->_platformData->vt[+0x10](platformData, ctx, staging, 0,
@@ -488,8 +560,10 @@ void Video::Context::BindResources() {
         void* c = u.buf->_platformData;
         int32_t len = u.len;
         if (g_ctxBindDefect == 3 && u.bit == 0x800u) len = kInstanceBytes;
-        reinterpret_cast<BindCBufFn>(VSlot(c, kCBufBindSlot))(
-            c, this, At(this, u.src), 0, len);
+        // The fourth argument is retail's `XOR R9D,R9D` — a DWORD zero, which is
+        // why CompanionData.h's `void* unused2` is corrected to `int32_t first`
+        // this pass. It was never a pointer.
+        AsConstantBufferData(c)->Bind(this, At(this, u.src), 0, len);
     }
 
     // 0x1800ef317 / 0x1800ef31b — a QWORD zero over +0x20..+0x27, then the
