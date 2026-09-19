@@ -120,6 +120,12 @@
 
 using RtGraphics::AnimationEvent;
 using RtGraphics::AnimationManager;
+// ENDGAME B.3.5 block H1 — the GREP HAZARD this file now lives with. The two
+// `using` lines above bind the PODs at FILE scope, but inside the
+// `namespace Graphics { ... }` block at the bottom of this file a bare
+// `AnimationEvent` / `AnimationManager` binds the REAL CLASS instead. Every POD
+// spelling inside that block is qualified `RtGraphics::` for exactly that
+// reason (B34_BRIEFS section A.7, RULE B4b-5).
 using RtGraphics::Particle;
 using RtGraphics::ParticleInstance;
 using RtGraphics::ParticleSystemInstance;
@@ -564,6 +570,67 @@ extern "C" ParticleSystemInstance* RtGraphics_ParticleSystemInstance_Ctor(
 
     return self;
 }
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block H1 — `Graphics::AnimationEvent`'s member bodies.
+//
+// They sit in their own `namespace Graphics { }` block AFTER every other
+// namespace in this file has closed, because C++ requires a member definition
+// to appear in a namespace ENCLOSING the class and `Graphics` and `RtGraphics`
+// are siblings (B34_BRIEFS section A.2).
+//
+// WHAT MOVED AND WHAT DID NOT, stated plainly rather than implied:
+//
+//  * `TypeName()` / `Type()` are MEMBERS THAT FORWARD, not doors that delegate.
+//    Their bodies are `RtGraphics_AnimationEvent_TypeName` /
+//    `_Type` in `runtime/src/graphics/graphics_typeinfo_accessors.cpp`, which is
+//    NOT block H1's file set, so the direction is reversed for these two: the
+//    registered door is untouched and the member calls it. Exactly the split
+//    `runtime/src/object/external_class_doors.cpp` documents.
+//
+//  * `~AnimationEvent()` IS DUPLICATED, NOT DELEGATED, and the door below is
+//    left exactly as it was. Retail 0x1800a2120 stamps AnimationEvent's own
+//    vtable and then tail-jumps `~External`; a real destructor chain emits both
+//    for free, naming GCC's tables. The DOOR must keep naming the MINTED table,
+//    because every live `AnimationEvent` in the process was built by the ctor
+//    door and wears it — B34_RULES section 4.3's test ("would the member form
+//    change which vtable a live object wears?") answers YES, so the two
+//    spellings coexist. This is the `Object::External` precedent verbatim
+//    (`external_class.cpp:152` beside `external.cpp`'s `RtObject_External_Dtor`).
+//
+//  * THE CONSTRUCTOR DOOR IS NOT A DELEGATION EITHER (B4b-2). It is called on
+//    raw memory by `code/Game/Component/animaudioevent.cpp:45`, which then
+//    stamps its own subclass table; the class has no real constructor at all.
+// ############################################################################
+
+extern "C" uint32_t    RtGraphics_AnimationEvent_Type(const void*);
+extern "C" const char* RtGraphics_AnimationEvent_TypeName(const void*);
+
+namespace Graphics {
+
+// [1] ?TypeName@AnimationEvent@Graphics@@UEBAPEBDXZ  retail 0x1800116f0
+//     `MOV RAX,qword ptr [?_typeInfo@AnimationEvent@Graphics@@ + 8]; RET`
+//     — `BaseTypeInfo::name`, CONTENT-only (never compared by pointer).
+const char* AnimationEvent::TypeName() const {
+    return RtGraphics_AnimationEvent_TypeName(this);
+}
+
+// [2] ?Type@AnimationEvent@Graphics@@UEBAIXZ  retail 0x1800116d0
+//     `MOV EAX,dword ptr [?_typeInfo@AnimationEvent@Graphics@@ + 0]; RET` —
+//     0xFFFFFFFF until `Object::Factory::Startup` runs.
+uint32_t AnimationEvent::Type() const {
+    return RtGraphics_AnimationEvent_Type(this);
+}
+
+// ??1AnimationEvent@Graphics@@UEAA@XZ  retail 0x1800a2120.
+//
+// EMPTY ON PURPOSE. The two instructions retail spends here are the vtable
+// stamp (the chain emits it on entry to this destructor) and the tail jump into
+// `~External` (the chain emits that on exit). Writing either by hand would name
+// the minted table, which is the one thing a converted object must not carry.
+AnimationEvent::~AnimationEvent() {}
+
+}  // namespace Graphics
 
 // ============================================================================
 // Registration.
