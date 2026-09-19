@@ -91,8 +91,16 @@ void Pf_RoadMeshRebuild_f370(int64_t param_1, uint32_t* param_2);
 typedef void (*fn_Ser_SerUShort_t)(void* serializer, uint16_t* field, const char* name);
 typedef void (*fn_Ser_SerSChar_t)(void* serializer, int8_t* field, const char* name);
 
-static fn_Ser_SerUShort_t s_fn_SerUShort = nullptr;  // 0x140152408
-static fn_Ser_SerSChar_t  s_fn_SerSChar  = nullptr;  // 0x140152418
+// ENDGAME B.3.4a closing: `s_fn_SerSChar`'s trailing comment said 0x140152418,
+// which is the UCHAR slot. It binds `?Serialize@Serializer@IO@@QEAAXAEACPEBD@Z`
+// — `AEAC` is `signed char&`, `AEAE` would be `unsigned char&` — i.e. the SCHAR
+// export, two lines below. The mangled name in EnsureLocalSlots is the
+// authority, and this is the canonical instance of B34_RULES' warning that a
+// static's NAME and its COMMENT prove nothing: here the name was right and the
+// comment was wrong. Both slot numbers are dropped rather than corrected —
+// these two pointers are resolved BY NAME and never touch a dispatch slot.
+static fn_Ser_SerUShort_t s_fn_SerUShort = nullptr;  // ?Serialize@…@@QEAAXAEAGPEBD@Z (ushort&)
+static fn_Ser_SerSChar_t  s_fn_SerSChar  = nullptr;  // ?Serialize@…@@QEAAXAEACPEBD@Z (schar&)
 static bool s_localSlotsResolved = false;
 
 static void EnsureLocalSlots() {

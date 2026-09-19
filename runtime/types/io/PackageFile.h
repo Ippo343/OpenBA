@@ -217,6 +217,24 @@ public:
     // ?ReadPackfile@PackageFile@IO@@QEAA_NAEBVFilename@System@@@Z 0x1800b46b0
     bool ReadPackfile(const RtSystem::Filename& path);
 
+    // ---- ENDGAME B.3.4a closing: the last two PackageFile bodies ----------
+    // Both lived in FileSystem's files (filesystem_openfile_win.cpp,
+    // filesystem_packages.cpp) because that is where their CALLERS are, not
+    // because they are FileSystem's. Their doors stay in those files with their
+    // names and registrations; only the bodies moved here.
+    //
+    // ?GetFileInfo@PackageFile@IO@@QEBA?AUFileInfo@FileSystem@2@XZ 0x180025400
+    // Returns the EMBEDDED `_file` at +0xc0 BY VALUE — a copy ctor into the
+    // hidden return slot, no bounds check and nothing else.
+    RtIO::FileInfo GetFileInfo() const;
+
+    // ?GetFileName@PackageFile@IO@@QEBA?AVFilename@System@@H@Z     0x180025450
+    // `MOVSXD RDX,R8D ; SHL RDX,0x4 ; ADD RDX,qword ptr [RCX+0xb0]` — a
+    // SIGN-extended index into `_entries` at stride 16, then the Filename copy
+    // ctor. NO BOUNDS CHECK, deliberately: the caller bounds the index with
+    // GetFileCount and a guard here would skip work rather than restore it.
+    System::Filename GetFileName(int index) const;
+
     // The static companion retail's reflection block emits, reading the same
     // minted `?_typeInfo@PackageFile@IO@@` record `Type()` reads.
     static uint32_t TypeId();         // 0x180025140
