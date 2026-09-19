@@ -55,18 +55,52 @@
 #include "../../funcs/rt_port.h"
 #include "widestring.h"
 
+// ============================================================================
+// ENDGAME B.3.4b SYSTEM (3) — THE CLASSES ARE REAL; THE DOORS DELEGATE.
+// ============================================================================
+// `System::Random`, `System::Time`, `System::Color` and `System::DateTime` are
+// real C++ classes since B.3.4b (runtime/types/system/Value.h). Unlike
+// `Thread.h`, NO POD MOVED: `::Random` and `::Color` were already at global
+// scope and `::Time` is `engine/types/common.h`'s, shared with the exe tree.
+// Rule B4b-1 therefore does not fire here, and this commit touches nothing
+// outside `runtime/`.
+//
+// NONE OF THE FOUR GETS A REAL CONSTRUCTOR — Value.h's banner gives the
+// per-class reason, and for `Random` it is concrete: `Object::InternalFactory`
+// holds one BY VALUE at +0x20 (runtime/types/object/Internal.h:662) while
+// `Ctor_InternalFactory` (runtime/src/engine/singleton_ctors.cpp:352-361, not
+// this step's file) seeds it through the `??0Random@System@@QEAA@XZ` door. A
+// real constructor would seed the object factory's RNG twice, from two
+// different `time(nullptr)` values, with no build error.
+//
+// MEMBER BODIES ARE DEFINED AT GLOBAL SCOPE with qualified names
+// (`uint32_t System::Random::Rand() {...}`) rather than inside a
+// `namespace System { ... }` block. Both are legal — the global namespace
+// encloses `System` — and the qualified form is chosen DELIBERATELY: inside a
+// `namespace System` block a bare `Random`, `Time` or `Color` binds the CLASS,
+// not the POD, and in this file the two are layout-identical, so the wrong
+// spelling would compile and behave correctly right up until one of them gains
+// a member (B34_RULES §7.2). Keeping the block out removes the hazard instead
+// of documenting it.
+// ============================================================================
+
 namespace {
 
 // ---- Random: seeding, twist and core draw (retail algorithm, see Value.h) --
+//
+// B.3.4b: these three retyped from the POD `::Random*` to the class
+// `System::Random*` (and `index`/`mt` to `_index`/`_mt`). Same bytes, same
+// arithmetic, same loop bounds — the alternative was a `reinterpret_cast` at
+// every one of the nine call sites below.
 
 // Standard MT19937 init_genrand recurrence. Shared by both ctors.
 // Pinned by ??0Random@System@@QEAA@I@Z (0x1800c7ed0).
-void SeedMT(Random* self, uint32_t seed) {
-    self->index = 0;
-    self->mt[0] = seed;
+void SeedMT(System::Random* self, uint32_t seed) {
+    self->_index = 0;
+    self->_mt[0] = seed;
     for (int i = 1; i < 624; ++i) {
-        uint32_t prev = self->mt[i - 1];
-        self->mt[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
+        uint32_t prev = self->_mt[i - 1];
+        self->_mt[i] = (prev ^ (prev >> 30)) * 0x6c078965u + static_cast<uint32_t>(i);
     }
 }
 
@@ -74,27 +108,27 @@ void SeedMT(Random* self, uint32_t seed) {
 // no dispatch slot exists for it — it is only ever reached through Rand()).
 // Standard MT19937 twist (UPPER_MASK/LOWER_MASK/MATRIX_A), confirmed against
 // the disassembly instruction-by-instruction.
-void NextGroupImpl(Random* self) {
+void NextGroupImpl(System::Random* self) {
     constexpr uint32_t kUpper = 0x80000000u, kLower = 0x7fffffffu, kMatrixA = 0x9908b0dfu;
     for (int i = 0; i < 624; ++i) {
-        uint32_t y = (self->mt[i] & kUpper) | (self->mt[(i + 1) % 624] & kLower);
-        uint32_t next = self->mt[(i + 397) % 624] ^ (y >> 1);
+        uint32_t y = (self->_mt[i] & kUpper) | (self->_mt[(i + 1) % 624] & kLower);
+        uint32_t next = self->_mt[(i + 397) % 624] ^ (y >> 1);
         if (y & 1u) next ^= kMatrixA;
-        self->mt[i] = next;
+        self->_mt[i] = next;
     }
 }
 
 // Core of ?Rand@Random@System@@QEAAIXZ (0x1800c7f90), factored out so every
 // overload below (which all draw one uint32 and post-process it) shares one
 // transcription of the tempering constants instead of five copies.
-uint32_t RandImpl(Random* self) {
-    if (self->index == 0) NextGroupImpl(self);
-    uint32_t y = self->mt[self->index];
+uint32_t RandImpl(System::Random* self) {
+    if (self->_index == 0) NextGroupImpl(self);
+    uint32_t y = self->_mt[self->_index];
     y ^= y >> 11;
     y ^= (y & 0xff3a58adu) << 7;
     y ^= (y & 0xffffdf8cu) << 15;
-    int next = self->index + 1;
-    self->index = (next == 0x270) ? 0 : next;
+    int next = self->_index + 1;
+    self->_index = (next == 0x270) ? 0 : next;
     return y ^ (y >> 18);
 }
 
@@ -110,13 +144,17 @@ uint32_t RandImpl(Random* self) {
 // against (same rationale as Math::Vector2's default ctor in vector.cpp).
 // Retail seeds from `(uint)_time64(&t)`; std::time's 64-bit time_t on this
 // target truncates to unsigned the same way.
-Random* RtSystem_Random_Ctor(Random* self) {
+// B.3.4b: NOT a real constructor, deliberately — see the banner at the top of
+// this file and Value.h's. It keeps the free-function shape and the door's
+// registered address.
+System::Random* RtSystem_Random_Ctor(System::Random* self) {
     SeedMT(self, static_cast<uint32_t>(std::time(nullptr)));
     return self;
 }
 
 // ??0Random@System@@QEAA@I@Z  retail 0x1800c7ed0
-Random* RtSystem_Random_CtorSeed(Random* self, uint32_t seed) {
+// B.3.4b: NOT a real constructor either, same reason.
+System::Random* RtSystem_Random_CtorSeed(System::Random* self, uint32_t seed) {
     SeedMT(self, seed);
     return self;
 }
@@ -134,56 +172,39 @@ Random* RtSystem_Random_CtorSeed(Random* self, uint32_t seed) {
 // (?NextGroup@Random@System@@AEAAXXZ, 0x1800c7dd0, ord 3245).  Registering the
 // name is therefore the plain door, not a workaround.
 //
-extern "C" void RtSystem_Random_NextGroup(Random* self) { NextGroupImpl(self); }
+extern "C" void RtSystem_Random_NextGroup(System::Random* self) { self->NextGroup(); }
 
 // ?Rand@Random@System@@QEAAIXZ  retail 0x1800c7f90
-uint32_t RtSystem_Random_Rand(Random* self) {
-    Random before;
-    uint32_t ours = RandImpl(self);
-    return ours;
-}
+uint32_t RtSystem_Random_Rand(System::Random* self) { return self->Rand(); }
 
 // ?Rand@Random@System@@QEAAII@Z  retail 0x1800c8040  (bound==0 short-circuits
 // to 0 WITHOUT drawing — state must stay untouched, hence the ternary rather
 // than an early `if`+call).
-uint32_t RtSystem_Random_RandBound(Random* self, uint32_t bound) {
-    Random before;
-    uint32_t ours = (bound == 0) ? 0u : (RandImpl(self) % bound);
-    return ours;
+uint32_t RtSystem_Random_RandBound(System::Random* self, uint32_t bound) {
+    return self->Rand(bound);
 }
 
 // ?Rand@Random@System@@QEAAHHH@Z  retail 0x1800c7d70
-int32_t RtSystem_Random_RandRange(Random* self, int32_t lo, int32_t hi) {
-    Random before;
-    uint32_t r = RandImpl(self);
-    int32_t ours = lo + static_cast<int32_t>(r % (static_cast<uint32_t>(hi - lo) + 1u));
-    return ours;
+int32_t RtSystem_Random_RandRange(System::Random* self, int32_t lo, int32_t hi) {
+    return self->Rand(lo, hi);
 }
 
 // ?RandFloat@Random@System@@QEAAMXZ  retail 0x1800c7d40
 // DAT_18016165c = 1/2^32 exactly (read as bytes: 0x2f800000): maps a full
 // 32-bit draw to [0,1).
 namespace { constexpr float kRandUnit = 2.3283064365386963e-10f; }  // 0x2f800000
-float RtSystem_Random_RandFloat(Random* self) {
-    Random before;
-    float ours = static_cast<float>(RandImpl(self)) * kRandUnit;
-    return ours;
+float RtSystem_Random_RandFloat(System::Random* self) {
+    return self->RandFloat();
 }
 
 // ?RandFloatTol@Random@System@@QEAAMXZ  retail 0x1800c8000
-// return 1.0f - (u * (1/2^32)) * 2.0f, left-associated exactly as retail.
-float RtSystem_Random_RandFloatTol(Random* self) {
-    Random before;
-    float ours = 1.0f - (static_cast<float>(RandImpl(self)) * kRandUnit) * 2.0f;
-    return ours;
+float RtSystem_Random_RandFloatTol(System::Random* self) {
+    return self->RandFloatTol();
 }
 
 // ?RandTol@Random@System@@QEAAHH@Z  retail 0x1800c7da0
-int32_t RtSystem_Random_RandTol(Random* self, int32_t tol) {
-    Random before;
-    uint32_t r = RandImpl(self);
-    int32_t ours = static_cast<int32_t>(r % (static_cast<uint32_t>(tol) * 2u + 1u)) - tol;
-    return ours;
+int32_t RtSystem_Random_RandTol(System::Random* self, int32_t tol) {
+    return self->RandTol(tol);
 }
 
 // ?Serialize@Random@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800c7cf0
@@ -198,9 +219,63 @@ int32_t RtSystem_Random_RandTol(Random* self, int32_t tol) {
 // rw_vtbl::kScalarUInt and +0x40 is rw_vtbl::kArrayUInt, so the doors name the
 // types: `unsigned int&` and `(int, unsigned int*)`. The old trailing `0` was
 // the ignored `const char* name`.
-void RtSystem_Random_Serialize(Random* self, void* serializer) {
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&self->index), nullptr);   // B.3.4 bridge  (0x98 = uint door)
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(0x270, reinterpret_cast<unsigned int*>(self->mt), nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
+void RtSystem_Random_Serialize(System::Random* self, void* serializer) {
+    self->Serialize(*reinterpret_cast<::IO::Serializer*>(serializer));
+}
+
+// ============================================================================
+// ENDGAME B.3.4b — the `System::Random` member BODIES.
+// ============================================================================
+// Defined at GLOBAL scope with qualified names rather than inside a
+// `namespace System { ... }` block; the file banner says why. Every body is the
+// one that used to sit in the door directly above it.
+//
+// ONE THING DELETED, AND IT IS REPORTED RATHER THAN SMUGGLED. Six of these
+// bodies opened with `Random before;` — a 2500-byte uninitialised stack local
+// that was never written and never read, left over from the Wave-2 diff harness
+// that compared our draw against the DLL's. It is dead in every build and its
+// removal changes no instruction that touches `this`. It is called out here
+// because a keyword tally of this commit shows `Random before;` going 6 -> 0
+// and that delta must have a stated reason rather than being explained away as
+// a rename.
+// ============================================================================
+
+uint32_t System::Random::Rand() {
+    return RandImpl(this);
+}
+
+uint32_t System::Random::Rand(uint32_t bound) {
+    // bound==0 short-circuits to 0 WITHOUT drawing — the state must stay
+    // untouched, hence the ternary rather than an early `if` + call.
+    return (bound == 0) ? 0u : (RandImpl(this) % bound);
+}
+
+int32_t System::Random::Rand(int32_t lo, int32_t hi) {
+    uint32_t r = RandImpl(this);
+    return lo + static_cast<int32_t>(r % (static_cast<uint32_t>(hi - lo) + 1u));
+}
+
+float System::Random::RandFloat() {
+    return static_cast<float>(RandImpl(this)) * kRandUnit;
+}
+
+float System::Random::RandFloatTol() {
+    // 1.0f - (u * (1/2^32)) * 2.0f, left-associated exactly as retail.
+    return 1.0f - (static_cast<float>(RandImpl(this)) * kRandUnit) * 2.0f;
+}
+
+int32_t System::Random::RandTol(int32_t tol) {
+    uint32_t r = RandImpl(this);
+    return static_cast<int32_t>(r % (static_cast<uint32_t>(tol) * 2u + 1u)) - tol;
+}
+
+void System::Random::NextGroup() {
+    NextGroupImpl(this);
+}
+
+void System::Random::Serialize(::IO::Serializer& s) {
+    s.Serialize(*reinterpret_cast<unsigned int*>(&_index), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    s.Serialize(0x270, reinterpret_cast<unsigned int*>(_mt), nullptr);   // B.3.4 bridge  (0x40 = uint-array door)
 }
 
 // ============================================================
@@ -213,7 +288,11 @@ void RtSystem_Random_Serialize(Random* self, void* serializer) {
 // (runtime/src/system/timer.cpp), so diffing it again would count the same
 // comparison twice under a second name.
 //
-Time* RtSystem_Time_Ctor(Time* self, float seconds) {
+// B.3.4b: NOT a real constructor. Its ~132 call sites construct into RAW BYTE
+// BUFFERS and convert as placement-new (B34_RULES section 7.3), which is
+// caller-batch work gated behind the 4a closing pass; the constructor converts
+// WITH them, not before. Value.h's banner restates this.
+System::Time* RtSystem_Time_Ctor(System::Time* self, float seconds) {
     using SecondsToTicksFn = int64_t(*)(float);
     // Resolved ONCE per call site either way: this body runs on every
     // Update(const Time&), and resolving per call put a GetProcAddress under
@@ -221,17 +300,15 @@ Time* RtSystem_Time_Ctor(Time* self, float seconds) {
     // time, most of the Wave 2 perf-gate breach, and invisible to both
     // profilers because it lands in ntdll self time
     // (reference_rtoriginal_is_getprocaddress.md, WAVE3_LANE_P.md).
-    self->ticks = RT_EXPORT_ONCE(SecondsToTicksFn,
+    self->_ticks = RT_EXPORT_ONCE(SecondsToTicksFn,
                                  "?SecondsToTicks@Timer@System@@SA_JM@Z")(seconds);
     return self;
 }
 
 // ?AsSeconds@Time@System@@QEBAMXZ  retail 0x180007900 — same delegation, same
 // RT_EXPORT_ONCE reasoning as the ctor above.
-float RtSystem_Time_AsSeconds(const Time* self) {
-    using TicksToSecondsFn = float(*)(int64_t);
-    return RT_EXPORT_ONCE(TicksToSecondsFn,
-                          "?TicksToSeconds@Timer@System@@SAM_J@Z")(self->ticks);
+float RtSystem_Time_AsSeconds(const System::Time* self) {
+    return self->AsSeconds();
 }
 
 // ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800ca740
@@ -248,12 +325,33 @@ float RtSystem_Time_AsSeconds(const Time* self) {
 // now justified — but minting it is a receiver change, not a caller batch's,
 // and it belongs with whoever next opens `IO::Serializer`. Reported, not
 // converted, and not "fixed" by routing the 8 bytes through a 4-byte door.
-void RtSystem_Time_Serialize(Time* self, void* serializer) {
-    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(serializer) + 8);
+void RtSystem_Time_Serialize(System::Time* self, void* serializer) {
+    self->Serialize(*reinterpret_cast<::IO::Serializer*>(serializer));
+}
+
+// ============================================================================
+// ENDGAME B.3.4b — the `System::Time` member BODIES.
+// ============================================================================
+
+float System::Time::AsSeconds() const {
+    using TicksToSecondsFn = float(*)(int64_t);
+    return RT_EXPORT_ONCE(TicksToSecondsFn,
+                          "?TicksToSeconds@Timer@System@@SAM_J@Z")(_ticks);
+}
+
+// ⚠ BYTE-IDENTICAL, DELIBERATELY. See the declaration's comment in Value.h and
+// B34B_RULES section 3: `IO::Serializer` has no int64 scalar overload yet,
+// retail DOES export one (0x180035000), and adding it is sequenced after the 4a
+// closing pass because the member body belongs in a file another agent owns.
+// The `+ 8` is the READERWRITER (the Stream is at Serializer+0x00) and +0x90 is
+// `rw_vtbl::kScalarInt64`. Do NOT route these eight bytes through the four-byte
+// int door.
+void System::Time::Serialize(::IO::Serializer& s) {
+    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(&s) + 8);
     void* vtbl = *reinterpret_cast<void**>(stream);
     using SerializeInt64Fn = void(*)(void*, void*, int);
     SerializeInt64Fn fn = *reinterpret_cast<SerializeInt64Fn*>(reinterpret_cast<char*>(vtbl) + 0x90);
-    fn(stream, &self->ticks, 0);
+    fn(stream, &_ticks, 0);
 }
 
 // ============================================================
@@ -265,8 +363,13 @@ void RtSystem_Time_Serialize(Time* self, void* serializer) {
 // its plain int). Not diffed (I/O side effect, see Random::Serialize above).
 // ENDGAME B.3.4 callers batch H: `serializer + 8` is the READERWRITER, +0x98
 // is rw_vtbl::kScalarUInt, and the trailing `0` was the ignored `name`.
-void RtSystem_Color_Serialize(Color* self, void* serializer) {
-    reinterpret_cast<::IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&self->value), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+void RtSystem_Color_Serialize(System::Color* self, void* serializer) {
+    self->Serialize(*reinterpret_cast<::IO::Serializer*>(serializer));
+}
+
+// ENDGAME B.3.4b — the `System::Color` member BODY.
+void System::Color::Serialize(::IO::Serializer& s) {
+    s.Serialize(*reinterpret_cast<unsigned int*>(&_value), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 }
 
 // ============================================================
@@ -287,9 +390,26 @@ void RtSystem_Color_Serialize(Color* self, void* serializer) {
 // RT_EXPORT_ONCE. `?Release@String@System@@AEAAXXZ`, DateAsString and
 // TimeAsString are all ported and registered below, so these lines reach our
 // own bodies through the registry.
+// ENDGAME B.3.4b: the DOOR keeps retail's two-argument hidden-retslot shape
+// `String* f(const DateTime* this, String* ret)` and placement-news the member's
+// prvalue into the caller's slot. The MEMBER returns by value, which is what
+// retail's source said. Registering the member directly, or reaching one from a
+// raw slot caller, is `reference_hidden_retslot_wild_write.md`.
 System::String* RtSystem_DateTime_AsString(const void* self, System::String* ret) {
+    new (ret) System::String(
+        reinterpret_cast<const System::DateTime*>(self)->AsString());
+    return ret;
+}
+
+System::String System::DateTime::AsString() const {
     using StringRetFn = System::String*(*)(const void*, System::String*);
 
+    // ENDGAME B.3.4b: the two inner calls STAY on the registry doors. They are
+    // what retail's own AsString does (it CALLs the two exported siblings) and
+    // re-pointing them at the members would be caller work, not this commit's.
+    // The doors below now delegate to those same members anyway, so the route
+    // is one indirection longer and one body deep, exactly as before.
+    //
     // ENDGAME B.3.1 step 2. THE DECLARATION ORDER IS DELIBERATELY THE REVERSE
     // OF THE FILL ORDER: retail releases dateStr FIRST and timeStr second
     // (0x1800c5546 / 0x1800c5555), and reverse-order destruction of these two
@@ -299,17 +419,22 @@ System::String* RtSystem_DateTime_AsString(const void* self, System::String* ret
     // not to matter.
     System::String timeStr;
     System::String dateStr;
-    RT_EXPORT_ONCE(StringRetFn, "?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &dateStr);
-    RT_EXPORT_ONCE(StringRetFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(self, &timeStr);
+    RT_EXPORT_ONCE(StringRetFn, "?DateAsString@DateTime@System@@QEBA?AVString@2@XZ")(this, &dateStr);
+    RT_EXPORT_ONCE(StringRetFn, "?TimeAsString@DateTime@System@@QEBA?AVString@2@XZ")(this, &timeStr);
 
     // ?Format@String@System@@SA?AV12@PEBDZZ (0x1800c9730), spelled as itself.
-    // `ret` is the hidden return slot — raw bytes — so the result is
-    // placement-constructed into it; C++17 elides straight into the slot, so
-    // there is no extra AddRef/Release pair retail did not spend.
-    new (ret) System::String(System::String::Format("%s %s", dateStr._data, timeStr._data));
+    //
+    // B.3.4b: this was `new (ret) String(Format(...))` writing the caller's
+    // hidden slot directly; it is now a `return` of the same prvalue, and the
+    // DOOR does the placement-new. THE STRING TRAFFIC IS UNCHANGED: under
+    // C++17 a prvalue initialises the object being created, so `Format`'s
+    // result constructs straight into this function's return object and that
+    // return object constructs straight into the door's `ret`. No temporary, no
+    // extra AddRef/Release pair retail did not spend — the same guarantee the
+    // old comment relied on, one frame further out.
+    return System::String::Format("%s %s", dateStr._data, timeStr._data);
 
     // The two `?Release@String@System@@AEAAXXZ` calls are the destructors now.
-    return ret;
 }
 
 // ============================================================================
@@ -361,7 +486,11 @@ System::String* RtSystem_DateTime_AsString(const void* self, System::String* ret
 // bit-for-bit the sequence `RtSystem_WideString_Dtor` (widestring.cpp, Wave 9
 // lane FS) already implements, including its asymmetry, so this calls that
 // rather than open-coding a third copy of the idiom.
-static System::String* RtSystem_DateTime_FormatPart(const void* self, System::String* ret,
+// B.3.4b: still a file-static helper over the retslot, and still shared by the
+// two members below, for the reason its own banner gives — two copies of a
+// 20-line body is how the second one drifts. `self` is now typed.
+static System::String* RtSystem_DateTime_FormatPart(const System::DateTime* self,
+                                                    System::String* ret,
                                                     bool timePart) {
     // DELIBERATELY UNINITIALISED, and this is the one thing the sweep below
     // CAUGHT rather than confirmed. Retail's prologue reserves 0x250 bytes and
@@ -388,7 +517,14 @@ static System::String* RtSystem_DateTime_FormatPart(const void* self, System::St
     // Unguarded, and faithful: retail passes `this` straight through with no
     // null test and ignores both BOOL results. A guard here would change what
     // the function returns rather than protect anything.
-    FileTimeToLocalFileTime(static_cast<const FILETIME*>(self), &local);
+    // B.3.4b: `self` is a `System::DateTime*` now instead of a `void*`, and the
+    // cast is the one place in the tree that spells the class as the FILETIME
+    // it is. The header keeps <windows.h> out and splits the two DWORDs; this
+    // file is the platform-side half that may put them back together.
+    static_assert(sizeof(System::DateTime) == sizeof(FILETIME),
+                  "System::DateTime IS a FILETIME -- Value.h's layout pin, "
+                  "restated where the real type is actually visible");
+    FileTimeToLocalFileTime(reinterpret_cast<const FILETIME*>(self), &local);
     FileTimeToSystemTime(&local, &st);
 
     wchar_t buf[256];   // 0x100 WCHARs, retail's [RSP+0x50] scratch -- also uninitialised
@@ -409,12 +545,47 @@ static System::String* RtSystem_DateTime_FormatPart(const void* self, System::St
     return ret;   // MOV RAX,RBX
 }
 
+// The two doors keep retail's hidden-retslot shape and delegate to the members.
 System::String* RtSystem_DateTime_DateAsString(const void* self, System::String* ret) {
-    return RtSystem_DateTime_FormatPart(self, ret, /*timePart=*/false);
+    new (ret) System::String(
+        reinterpret_cast<const System::DateTime*>(self)->DateAsString());
+    return ret;
 }
 
 System::String* RtSystem_DateTime_TimeAsString(const void* self, System::String* ret) {
-    return RtSystem_DateTime_FormatPart(self, ret, /*timePart=*/true);
+    new (ret) System::String(
+        reinterpret_cast<const System::DateTime*>(self)->TimeAsString());
+    return ret;
+}
+
+// ============================================================================
+// ENDGAME B.3.4b — the two `System::DateTime` member BODIES.
+// ============================================================================
+// They return `System::String` BY VALUE, which is what retail's source said;
+// the helper above still fills a slot, so each member hands it a local and
+// returns that.
+//
+// THE STRING TRAFFIC, STATED PRECISELY RATHER THAN OPTIMISTICALLY. The door's
+// `new (ret) String(member())` is guaranteed by C++17 to build the member's
+// return object AT `ret` — that part is the standard, not a hope. The member's
+// local into its own return object is NRVO, which is permitted but NOT
+// guaranteed; if the compiler declines it, the cost is exactly one MOVE
+// construction of a `System::String`, which steals the pointer and leaves a
+// null behind, so the moved-from local's destructor is a no-op and no refcount
+// moves. Either way the allocator sees the same one allocation retail's body
+// made. The local is default-constructed (data == nullptr) before
+// `FormatPart` placement-constructs over it, which releases nothing because an
+// empty String owns nothing.
+System::String System::DateTime::DateAsString() const {
+    System::String ret;
+    RtSystem_DateTime_FormatPart(this, &ret, /*timePart=*/false);
+    return ret;
+}
+
+System::String System::DateTime::TimeAsString() const {
+    System::String ret;
+    RtSystem_DateTime_FormatPart(this, &ret, /*timePart=*/true);
+    return ret;
 }
 
 // ?CurrentBuildId@Configuration@System@@SA?AVString@2@XZ  retail 0x1800c4c60

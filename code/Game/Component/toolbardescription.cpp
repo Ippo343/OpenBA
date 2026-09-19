@@ -153,8 +153,23 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
     //    is NULL in the standalone exe, so
     //    fall back to the reimpl above (otherwise +0x50 stays NULL and the two
     //    cost/status strings are never deserialized — the "cost ???" bug).
-    void* serObj = *(void**)(serializer + 8);
-    bool loading = serObj && (*(int*)((uintptr_t)serObj + 8) == 0);
+    //
+    // ENDGAME B.3.4a closing — the same one-field-off read as
+    // ambientemitterdescription.cpp: `*(int*)(*(void**)(serializer + 8) + 8)`
+    // is ReaderWriter::_allowCustomSerialize, always 0, so `loading` was stuck
+    // TRUE and the String array was resized on the SAVE leg as well.
+    // Retail reads the direction off serializer +0x00 (the Stream).
+    // ToolbarDescription::Serialize, Application-x64.exe 0x14012da30, local
+    // Serializer at [RSP+0x28]:
+    //     14012dacd  MOV RAX,qword ptr [RSP + 0x28]   ; serializer+0x00 = Stream*
+    //     14012dad2  CMP dword ptr [RAX + 0x8],0x0    ; stream+0x08 = direction
+    //     14012dad6  JNZ 0x14012dae5                  ; nonzero -> SKIP the resize
+    //     14012dad8  MOV EDX,dword ptr [RSP + 0x50]   ; the count
+    //     14012dadc  LEA RCX,[RSI + 0x50]
+    //     14012dae0  CALL 0x140028860                 ; Array<String>::SetSize
+    // Byte-for-byte the same five instructions as 0x1400431f0.
+    bool loading = (static_cast<int>(
+        reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge
     if (loading) {
         if (fn_StringArray_Resize) fn_StringArray_Resize((void*)(s + 0x50), count);
         else ToolbarDescription_StringArrayResize((void*)(s + 0x50), (unsigned)count);

@@ -854,9 +854,28 @@ void PlantArea_Serialize_Impl(PlantArea* self, void* stream) {
         GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
-    // Serialize validity array (byte array)
-    s_fn_Serializer_SerializeBoolArray(serializerBuf, cellCountBuf[0],
-                                       *(void**)(selfAddr + 0x58), nullptr);
+    // Serialize validity array through the BOOL-ARRAY door.
+    //
+    // ENDGAME B.3.4a closing — SETTLED FROM RETAIL, not from the alias, exactly
+    // as batch H settled the identical bug in harvestarea.cpp. Retail
+    // PlantArea::Serialize (Application-x64.exe 0x1400f4540) ends with
+    //     1400f45b1  XOR R9D,R9D                    ; name = nullptr
+    //     1400f45b4  MOV R8,qword ptr [RDI + 0x58]  ; the buffer
+    //     1400f45b8  MOV EDX,dword ptr [RSP + 0x50] ; the count
+    //     1400f45bc  LEA RCX,[RSP + 0x28]           ; the Serializer
+    //     1400f45c1  CALL qword ptr [0x140151458]
+    // 0x140151458 is `?Serialize@Serializer@IO@@QEAAXHPEA_NPEBD@Z`
+    // (address_registry.cpp:1163), the FOUR-parameter (int n, bool*, const char*)
+    // array door at rw_vtbl::kArrayBool.
+    //
+    // `s_fn_Serializer_SerializeBoolArray` was ALIASED onto 0x140152ac8 at :199
+    // ("Bool array serialize uses same fn as int serialize"), which is the
+    // THREE-parameter `Serialize(int&)` SCALAR door. Called with four arguments,
+    // the element COUNT landed in RDX — the register the scalar body
+    // dereferences as `int*` — so this was a wild read off a small integer, not
+    // a differently-shaped write. It could never have been retail behaviour.
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(
+        cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
 
     // Serialize ExternalRef at +0x68
     s_fn_ExternalRef_Serialize((void*)(selfAddr + 0x68), serializerBuf);

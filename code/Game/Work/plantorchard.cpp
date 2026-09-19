@@ -701,8 +701,21 @@ void PlantOrchard_Serialize_Impl(PlantOrchard* self, void* stream) {
         GameColl::AsArray<GameColl::U8>((void*)(selfAddr + 0x58)).SetSize(cellCountBuf[0]);
     }
 
-    s_fn_Serializer_SerializeBoolArray(serializerBuf, cellCountBuf[0],
-                                       *(void**)(selfAddr + 0x58), nullptr);
+    // Serialize validity array through the BOOL-ARRAY door.
+    //
+    // ENDGAME B.3.4a closing — same alias bug, same retail proof as
+    // plantarea.cpp and harvestarea.cpp. PlantOrchard::Serialize
+    // (Application-x64.exe 0x1400f4f50) is instruction-for-instruction the same
+    // function as PlantArea's with one different field offset earlier:
+    //     1400f4fc1  XOR R9D,R9D                    ; name = nullptr
+    //     1400f4fc4  MOV R8,qword ptr [RDI + 0x58]  ; the buffer
+    //     1400f4fc8  MOV EDX,dword ptr [RSP + 0x50] ; the count
+    //     1400f4fcc  LEA RCX,[RSP + 0x28]           ; the Serializer
+    //     1400f4fd1  CALL qword ptr [0x140151458]   ; the bool-array door
+    // The local pointer was aliased onto 0x140152ac8, the three-parameter
+    // `Serialize(int&)` scalar door, and called with four arguments.
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(
+        cellCountBuf[0], reinterpret_cast<bool*>(*(void**)(selfAddr + 0x58)), nullptr);   // B.3.4 bridge  (slot 0x140151458 = bool-array door)
 
     s_fn_ExternalRef_Serialize((void*)(selfAddr + 0x68), serializerBuf);
 

@@ -190,6 +190,42 @@ NOWHERE** — re-verified; a conversion must not invent one. 22 further retail e
 ResourceParameter members, `?Get@Configuration@System@@SAPEAV12@XZ` 0x18000da70 …) are
 unported.
 
+### 1.2 "Is it a class?" — the verdict per class, and the test that decides it
+
+B.3.4a's `IO::TextCodec` is the precedent for the other answer: four receiverless unexported
+free functions, **nothing landed for it, and that is a valid recorded outcome**. So each 4b
+class had to be tested rather than assumed.
+
+> **THE TEST (coordinator, 2026-09-19).** Read the MANGLED names. MSVC emits
+> `?Name@Class@Namespace@@SA…` (public static), `…@CA…` (private static) or `…@0…A` (private
+> static data) **only for a member of a class of that name**. A free function cannot carry a
+> class-scoped mangling. `IO::TextCodec`'s functions had no class-scoped exported names at
+> all — that is what made it the other shape.
+
+| class | verdict | the evidence | landed |
+|---|---|---|---|
+| `System::Thread` | **class, polymorphic** | `??_7Thread@System@@6B@`, `UEAA` on `OnCompleted` | SYSTEM (2) |
+| `System::CriticalSection` | **class, no vtable** | `QEAA` on all four | SYSTEM (2) |
+| `System::Random` | **class with instance state** | `QEAA` on nine, `AEAA` on `NextGroup` | SYSTEM (3) |
+| `System::Time` | **class with instance state** | `QEAA` ctor, `QEBA` `AsSeconds` | SYSTEM (3) |
+| `System::Color` | **class with instance state** | `QEAA`/`QEBA` on all twelve | SYSTEM (3) |
+| `System::DateTime` | **class with instance state** | `QEBA` on all three + `AsFileTime` | SYSTEM (3) |
+| `System::Timer` | **class, ALL-STATIC** | 6 × `SA`, 3 × `CA`, 5 × `0…A`, 1 × `QEAA` (`operator=`) | SYSTEM (4) |
+| `System::CRC` | **class, ALL-STATIC** | 2 × `SA` (`Compute`), 1 × `0PAIA` (`_crcTable`) | SYSTEM (4) |
+| `System::Error` | **class, ALL-STATIC** | 3 × `SA`, 3 × `0…A` | SYSTEM (4) |
+| `System::Configuration` | **class with instance state** | 5 × `QEAA` over `this+0x10` (a map) and `this+0x20` | not yet |
+| `System::Compression` | **class with instance state** | `??0` + `QEAA Compress`; an 8-byte heap instance | not yet |
+| `System::WideString` | **class with instance state** | one `wchar_t* data`; 6 × `QEAA`, 1 × `AEAA`, 1 × `SA` | not yet |
+| `System::MemoryAllocator` | **class with instance state** | 0x670 bytes | deferred, §6 |
+| `System::Debug` | class, but **nothing ported** | one `0_NA` static, no function anywhere | nothing to do |
+| `System::StackCriticalSection` | class, but **nothing ported** | `??0`/`??1` only, zero readers | nothing to do |
+
+**None of the thirteen came out `TextCodec`-shaped.** The three all-static ones came closest
+and are still classes — `Timer`, `CRC` and `Error` each declare `class X { public: static … };`
+with the bodies moved and the doors delegating, which is the established shape for that case.
+Their *data* statics are a separate question and are governed by rule B4b-4 (§4.1), not by
+this table.
+
 ---
 
 ## 2. `System::Thread` — every stamper and reader, re-derived
@@ -559,8 +595,33 @@ Receiver-side only until `b34-closing` reports the 4a closing pass merged. Until
 |---|---|---|
 | 1 | this sheet | `docs/runtime_port/endgame_b/B34B_RULES.md` |
 | 2 | `System::CriticalSection` + `System::Thread` | `runtime/types/system/Thread.h`, `runtime/src/system/thread_win.cpp`, `runtime/types/engine/UpdateLoop.h`, `runtime/src/engine/loops.cpp` (one word, §7.1), `tests/unit/system_abi_test.cpp` + `system_abi_stubs.{cpp,h}` |
-| 3 | `System::Random`, `Color`, `Time`, `DateTime` | `runtime/types/system/Value.h`, `runtime/src/system/value_types.cpp`, the test |
-| 4 | `Configuration` / `Compression` / `Timer` / `CRC` / `Error` / `WideString` — **establish first whether each IS a class** (the `IO::TextCodec` precedent: four receiverless free functions, and nothing landed, which is a valid recorded outcome) | `runtime/src/system/{configuration,compression,timer,crc,error,widestring}.{cpp,h}`, `runtime/types/system/` as needed |
+| 3 | `System::Random`, `Color`, `Time`, `DateTime` | `runtime/types/system/Value.h`, `runtime/src/system/value_types.cpp`, `tests/unit/system_abi_test.cpp` (PART E) |
+
+### 7.0 `System::Time` — resolved, and it cost nothing outside `runtime/`
+
+The coordinator's condition at commit 2 was: declare the class in
+`runtime/types/system/` with a cross-assert against the shared POD **and zero edits outside
+`runtime/`**, or leave `Time` for after the closing pass. **The condition is met**, so `Time`
+landed with commit 3. The facts that decide it:
+
+- **Who owns the POD.** `struct Time { int64_t ticks; }` is `engine/types/common.h:12-15`,
+  with its own `sizeof == 8` assert. `runtime/types/math/Math.h` includes that header, so it
+  reaches most of the tree. B.3.3 step 6B deliberately de-duplicated it there (it used to be
+  declared in `Value.h` as well, and any TU including both failed with `redefinition of
+  'struct Time'`). **It is not moved and not touched.**
+- **The layout.** One `int64_t` at +0x00, pinned by `??0Time@System@@QEAA@M@Z` (0x1800078c0),
+  which writes one qword. `System::Time` is a NEW name in a NEW namespace over the same eight
+  bytes, cross-asserted `sizeof` and `offsetof` against `::Time`.
+- **Which spelling the callers use.** All three doors are `void*` in `engine_funcs.h`:
+  `fn_Time_Ctor_Float` (:1827), `fn_Time_AsSeconds` (:1083), `g_fn_Time_Serialize` (:5475). A
+  whole-tree sweep for the C++ spelling `System::Time` returns **comments only** under
+  `code/Game`. So no caller has a type dependency on either spelling.
+
+Net: the class is declared in `Value.h`, the three bodies moved onto members in
+`value_types.cpp`, and **no file outside `runtime/` changed**. The 132 `fn_Time_Ctor_Float`
+caller sites and the int64 `Serialize` overload are still gated behind the 4a closing pass.
+| 4 | `Timer` / `CRC` / `Error` — the ALL-STATIC trio, verdicts in §1.2 | `runtime/types/system/{Timer,Crc,Error}.h` (new), `runtime/src/system/{timer,crc,error}.cpp`, `tests/unit/{system_abi_test.cpp,sources.mk}` |
+| 5 | `Configuration` / `Compression` / `WideString` — the three with instance state, verdicts in §1.2 | `runtime/src/system/{configuration,compression,widestring}.{cpp,h}`, `runtime/types/system/` as needed |
 | — | `System::MemoryAllocator` | **not converted**; §6 is the deliverable |
 | — | `IO::Serializer::Serialize(int64_t&)` + the `Time::Serialize` site | **after `b34-closing`**; §3 |
 

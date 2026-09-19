@@ -53,9 +53,27 @@ void AmbientEmitterDescription_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
     int count = *(int32_t*)(s + 0x30);
 
-    // 2. on load (serializer version == 0), resize ptr-array (+0x28) to count
-    void* serObj = *(void**)(serializer + 8);
-    bool loading = serObj && (*(int*)((uintptr_t)serObj + 8) == 0);
+    // 2. on LOAD, resize ptr-array (+0x28) to count.
+    //
+    // ENDGAME B.3.4a closing — THIS READ WAS ONE FIELD OFF AND `loading` WAS
+    // STUCK TRUE. It read `*(int*)(*(void**)(serializer + 8) + 8)`: serializer
+    // +0x08 is the READERWRITER, and ReaderWriter+0x08 is `_allowCustomSerialize`
+    // (B34_RULES §1.2.4), which is always 0 — so the test was `0 == 0`, i.e.
+    // TRUE on the save leg too, and the array was resized while saving.
+    //
+    // Retail reads the DIRECTION, off serializer +0x00 (the Stream), not +0x08.
+    // AmbientEmitterDescription::Serialize, Application-x64.exe 0x1400431b0,
+    // with the local Serializer at [RSP+0x28]:
+    //     1400431f0  MOV RAX,qword ptr [RSP + 0x28]   ; serializer+0x00 = Stream*
+    //     1400431f5  CMP dword ptr [RAX + 0x8],0x0    ; stream+0x08 = direction
+    //     1400431f9  JNZ 0x140043208                  ; nonzero -> SKIP the resize
+    //     1400431fb  MOV EDX,dword ptr [RSP + 0x50]   ; the count
+    //     1400431ff  LEA RCX,[RDI + 0x28]
+    //     140043203  CALL 0x140001bb0                 ; Array<T*>::SetSize
+    // So the resize runs only when direction == 0, and that is `loading`.
+    // `IO::Serializer::GetDirection()` is those same two loads (Serializer.h:833).
+    bool loading = (static_cast<int>(
+        reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge
     if (loading && fn_Array_Resize_Stride08) {
         fn_Array_Resize_Stride08((void*)(s + 0x28), count);
     }

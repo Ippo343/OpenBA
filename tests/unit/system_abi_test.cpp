@@ -58,6 +58,10 @@
 #include "system_abi_stubs.h"
 
 #include "../../runtime/types/system/Thread.h"
+#include "../../runtime/types/system/Value.h"   // B.3.4b SYSTEM (3), PART E
+#include "../../runtime/types/system/Timer.h"   // B.3.4b SYSTEM (4), PART F
+#include "../../runtime/types/system/Crc.h"
+#include "../../runtime/types/system/Error.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -276,6 +280,175 @@ UNIT_TEST(the_qualified_call_suppresses_dispatch_and_reaches_the_class_body) {
 
     CHECK_EQ(g_freeOnCompletedCalls, 0);                    // did NOT dispatch
     CHECK_EQ(g_systemStub_OnCompletedCalls, before + 1);    // reached the body
+}
+
+// ===========================================================================
+// PART E — B.3.4b SYSTEM (3): the value types.
+// ===========================================================================
+// `System::Random`, `Time`, `Color` and `DateTime` have NO vtable, so there is
+// no slot order to pin and nothing here resembles PARTS C and D. What there IS
+// to pin is the thing a build can get wrong silently: that each class is the
+// same bytes as the POD the unconverted tree still reads through a cast, and
+// that none of them acquires a vptr, a virtual, or a destructor.
+//
+// NO MEMBER IS CALLED HERE, deliberately. Their bodies live in
+// `runtime/src/system/value_types.cpp`, which includes <windows.h> and stands
+// on the port registry (`RT_EXPORT_ONCE` for `Timer::TicksToSeconds`,
+// `String::Format`, the two DateTime siblings) and cannot link into a host test
+// — the same reason `object_ptr_test.cpp` and `set_test.cpp` are header-only.
+// The MT19937 draw, the tick conversion and the three date formats are verified
+// by the real run. This part is layout, and layout is what a static_assert can
+// carry but a deleted static_assert cannot report.
+
+UNIT_TEST(system_random_is_0x9c4_bytes_and_aliases_the_global_pod) {
+    CHECK_EQ(sizeof(System::Random), static_cast<size_t>(2500));
+    CHECK_EQ(sizeof(System::Random), sizeof(::Random));
+    CHECK_EQ(offsetof(System::Random, _index), static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::Random, _mt),    static_cast<size_t>(0x04));
+    CHECK_EQ(offsetof(System::Random, _index), offsetof(::Random, index));
+    CHECK_EQ(offsetof(System::Random, _mt),    offsetof(::Random, mt));
+    CHECK(!std::is_polymorphic<System::Random>::value);
+    CHECK(std::is_standard_layout<System::Random>::value);
+    CHECK(std::is_trivially_destructible<System::Random>::value);
+
+    // B4b-2, and for Random the reason is specific: `Object::InternalFactory`
+    // holds a `::Random` BY VALUE at +0x20 (runtime/types/object/Internal.h)
+    // while `Ctor_InternalFactory` seeds it through the
+    // `??0Random@System@@QEAA@XZ` door. A real constructor here would seed the
+    // object factory's RNG twice from two different `time(nullptr)` values the
+    // moment anyone re-spells that member — a determinism change with no build
+    // error. This assertion is what makes adding one fail the test suite.
+    CHECK(std::is_trivially_default_constructible<System::Random>::value);
+}
+
+UNIT_TEST(system_time_is_8_bytes_over_the_shared_global_struct_Time) {
+    // `::Time` is `engine/types/common.h`'s, shared with the exe tree, and is
+    // NOT moved by B.3.4b (rule B4b-1 does not fire: the POD never occupied the
+    // class's name). `System::Time` is a new name over the same eight bytes.
+    CHECK_EQ(sizeof(System::Time), static_cast<size_t>(8));
+    CHECK_EQ(sizeof(System::Time), sizeof(::Time));
+    CHECK_EQ(offsetof(System::Time, _ticks), static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::Time, _ticks), offsetof(::Time, ticks));
+    CHECK(!std::is_polymorphic<System::Time>::value);
+    CHECK(std::is_standard_layout<System::Time>::value);
+    // The ~132 `fn_Time_Ctor_Float` sites build these in RAW BYTE BUFFERS and
+    // convert as placement-new; a non-trivial default constructor or a
+    // destructor would change what those buffers cost.
+    CHECK(std::is_trivially_default_constructible<System::Time>::value);
+    CHECK(std::is_trivially_destructible<System::Time>::value);
+}
+
+UNIT_TEST(system_color_is_4_bytes_and_aliases_the_global_pod) {
+    CHECK_EQ(sizeof(System::Color), static_cast<size_t>(4));
+    CHECK_EQ(sizeof(System::Color), sizeof(::Color));
+    CHECK_EQ(offsetof(System::Color, _value), static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::Color, _value), offsetof(::Color, value));
+    CHECK(!std::is_polymorphic<System::Color>::value);
+    CHECK(std::is_standard_layout<System::Color>::value);
+    CHECK(std::is_trivially_destructible<System::Color>::value);
+}
+
+UNIT_TEST(system_datetime_is_a_filetime_two_dwords_not_an_int64) {
+    // The one class in Value.h that had NO POD at all — the header used to say
+    // "`this` IS A FILETIME, 8 opaque bytes" and every body took `const void*`.
+    // A FILETIME is {DWORD dwLowDateTime; DWORD dwHighDateTime;}, so it is
+    // 4-ALIGNED. Spelling it `uint64_t` would compile, would keep sizeof at 8,
+    // and would silently raise alignof to 8 — which is why alignment is
+    // asserted here and not only size.
+    CHECK_EQ(sizeof(System::DateTime), static_cast<size_t>(8));
+    CHECK_EQ(alignof(System::DateTime), static_cast<size_t>(4));
+    CHECK_EQ(offsetof(System::DateTime, _lowDateTime),  static_cast<size_t>(0x00));
+    CHECK_EQ(offsetof(System::DateTime, _highDateTime), static_cast<size_t>(0x04));
+    CHECK(!std::is_polymorphic<System::DateTime>::value);
+    CHECK(std::is_standard_layout<System::DateTime>::value);
+    CHECK(std::is_trivially_destructible<System::DateTime>::value);
+}
+
+UNIT_TEST(the_value_classes_write_the_same_bytes_the_pods_read) {
+    // The live mixed state, as PART D does for Thread: written through the POD
+    // spelling (what the unconverted tree does) and read back through the
+    // class, and the reverse. This is the whole coexistence claim for a class
+    // with no vtable.
+    ::Random pod{};
+    pod.index = 42;
+    pod.mt[0] = 0xdeadbeefu;
+    pod.mt[623] = 0x0badc0deu;
+    System::Random* asClass = reinterpret_cast<System::Random*>(&pod);
+    CHECK_EQ(asClass->_index, 42);
+    CHECK_EQ(asClass->_mt[0], 0xdeadbeefu);
+    CHECK_EQ(asClass->_mt[623], 0x0badc0deu);
+    asClass->_index = 7;
+    CHECK_EQ(pod.index, 7);
+
+    ::Color cpod{};
+    cpod.value = 0xff3366ccu;   // AARRGGBB as a uint32, per Value.h's banner
+    System::Color* cAsClass = reinterpret_cast<System::Color*>(&cpod);
+    CHECK_EQ(cAsClass->_value, cpod.value);
+
+    ::Time tpod{};
+    tpod.ticks = 0x0123456789abcdefLL;
+    System::Time* tAsClass = reinterpret_cast<System::Time*>(&tpod);
+    CHECK_EQ(tAsClass->_ticks, 0x0123456789abcdefLL);
+}
+
+// ===========================================================================
+// PART F — B.3.4b SYSTEM (4): the all-static classes.
+// ===========================================================================
+// `System::Timer`, `System::CRC` and `System::Error` are classes whose every
+// member is `static`. The mangling is the evidence and it is what separates
+// them from B.3.4a's `IO::TextCodec`, which came out the other way — four
+// receiverless free functions with NO exported class-scoped name, for which
+// nothing landed. `?Startup@Timer@System@@SA_NXZ`, `?Compute@CRC@System@@SAIPEBXHI@Z`
+// and `?SetText@Error@System@@SAXPEBD_N@Z` all carry `@<Class>@System@@` plus a
+// static-member mangling (`SA` public static, `CA` private static, `0` private
+// static data), which MSVC emits only for a member of a class of that name.
+//
+// They have NO instance state, so there is nothing to `offsetof` and no POD to
+// cross-assert against — the whole of PART A has no analogue here. What IS
+// worth pinning is that they stay empty and non-polymorphic, because a stray
+// data member or virtual would silently give them a layout they must not have.
+
+UNIT_TEST(the_all_static_system_classes_stay_empty_and_non_polymorphic) {
+    CHECK(std::is_empty<System::Timer>::value);
+    CHECK(std::is_empty<System::CRC>::value);
+    CHECK(std::is_empty<System::Error>::value);
+    CHECK(!std::is_polymorphic<System::Timer>::value);
+    CHECK(!std::is_polymorphic<System::CRC>::value);
+    CHECK(!std::is_polymorphic<System::Error>::value);
+    // `System::Timer::operator=` is retail's only non-static member
+    // (??4Timer@System@@QEAAAEAV01@AEBV01@@Z, 0x180007890, `MOV RAX,RCX; RET`).
+    // It copies nothing, so the class stays trivially copyable and empty.
+    CHECK(std::is_trivially_destructible<System::Timer>::value);
+    CHECK(std::is_copy_assignable<System::Timer>::value);
+}
+
+UNIT_TEST(system_crc_compute_matches_the_standard_crc32_check_vector) {
+    // THE ONE BEHAVIOURAL TEST IN THIS FILE, and it is possible because
+    // `crc.cpp` is the only one of B.3.4b's six converted files that links on
+    // the host: no <windows.h>, no RT_DATA_SLOT, no platform call, and its two
+    // registration calls are stubbed. So this runs the REAL
+    // `System::CRC::Compute` member, not a copy of it.
+    //
+    // "123456789" is the standard CRC-32 check vector and 0xCBF43926 is its
+    // documented result. Retail's Compute does NOT complement the seed on
+    // entry but DOES complement on exit (`NOT EAX` before the `RET`), so a
+    // caller wanting the standard answer passes 0xFFFFFFFF itself — which is
+    // exactly what this asserts, and what pins the entry/exit asymmetry that
+    // Crc.h's banner describes.
+    const char kCheck[] = "123456789";
+    CHECK_EQ(System::CRC::Compute(kCheck, 9, 0xFFFFFFFFu), 0xCBF43926u);
+
+    // The chaining convention `runtime/src/io/persistence_worker_win.cpp`'s
+    // `Crc32Chunked` uses: feed the complement of the previous result back in.
+    // Splitting the vector must reproduce the whole-buffer answer.
+    uint32_t part = System::CRC::Compute(kCheck, 4, 0xFFFFFFFFu);
+    CHECK_EQ(System::CRC::Compute(kCheck + 4, 5, ~part), 0xCBF43926u);
+
+    // `count <= 0` skips the loop and still complements — retail's
+    // `TEST EDX,EDX / JLE done`. Not an edge case nobody hits: it is the shape
+    // of an empty chunk on the persistence path.
+    CHECK_EQ(System::CRC::Compute(kCheck, 0, 0xFFFFFFFFu), 0x00000000u);
+    CHECK_EQ(System::CRC::Compute(kCheck, -1, 0x12345678u), ~0x12345678u);
 }
 
 UNIT_TEST(the_pod_and_the_class_agree_about_which_bytes_the_fields_are) {
