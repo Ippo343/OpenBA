@@ -252,15 +252,15 @@ public:
 
     // ?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z  0x1800ca740
     //
-    // ⚠ ITS BODY IS STILL THE HAND-INLINED ReaderWriter +0x90 SLOT CALL, and
-    // that is deliberate. `IO::Serializer` does not declare the int64 scalar
-    // overload; retail DOES export one
-    // (`?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z` @ 0x180035000, confirmed in
-    // `standalone/rt_export_addrs.inc:1204`), and B34B_RULES §3 carries the
-    // coordinator's decision to add it — sequenced AFTER the 4a closing pass,
-    // because the member body belongs in `runtime/src/io/serializer.cpp`, which
-    // another agent owns. Until then this site stays byte-identical. Do NOT
-    // "fix" it by routing eight bytes through the four-byte int door.
+    // B.3.4b SYSTEM (5): its body is `s.Serialize(_ticks, nullptr)` — ONE
+    // member call. It used to hand-inline the ReaderWriter's +0x90 slot because
+    // `IO::Serializer` declared no int64 scalar overload; that overload now
+    // exists (`?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z` @ 0x180035000,
+    // `standalone/rt_export_addrs.inc:1204`), and THIS SITE IS WHAT JUSTIFIED
+    // ADDING IT — B34B_RULES §3 sequenced it after the 4a closing pass because
+    // the member body belongs in `runtime/src/io/serializer_class.cpp`. Still
+    // do NOT route these eight bytes through the four-byte int door: +0x90 and
+    // +0xA0 are different slots and different widths.
     void Serialize(::IO::Serializer& s);
 
     // ---- the 8 bytes -------------------------------------------------------

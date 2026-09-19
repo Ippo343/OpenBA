@@ -785,10 +785,24 @@ public:
     // resolution picks the width from the reference's type. The 22 VIRTUALS
     // they forward to are the ones that need distinct names.
     //
-    // Retail also exports `Serialize(char&)` (0x18007c3e0, +0x70) and the
-    // int64/uint64 scalar and array forms. They are ABSENT ON PURPOSE: no call
-    // site in this tree reaches them, and an uncalled port is an unverified
-    // port. Adding one is a porting decision, not a tidy-up.
+    // Retail also exports `Serialize(char&)` (0x18007c3e0, +0x70), the uint64
+    // scalar (0x18007c3d0, +0x88) and both 64-bit ARRAY forms (0x18007c410
+    // +0x38, 0x18007c420 +0x30). Those four are still ABSENT ON PURPOSE: no
+    // call site in this tree reaches them, and an uncalled port is an
+    // unverified port. Adding one is a porting decision, not a tidy-up.
+    //
+    // ⚠ THE int64 SCALAR BELOW IS THE ONE THAT STOPPED BEING ABSENT, AND THE
+    // JUSTIFYING CALL SITE IS NAMED SO THE RULE IS NOT WEAKENED BY IT.
+    // `?Serialize@Time@System@@QEAAXAEAVSerializer@IO@@@Z` (retail 0x1800ca740,
+    // `runtime/src/system/value_types.cpp`) serializes an 8-byte tick count
+    // through this exact member. Until B.3.4b SYSTEM (5) it hand-inlined the
+    // ReaderWriter's +0x90 slot, because this declaration did not exist and
+    // routing eight bytes through the four-byte `int&` door would have been a
+    // save-format change. It is a real, live, exercised call site — 32 CALL
+    // sites reach `g_fn_Time_Serialize` through `engine_funcs.h` plus five that
+    // bypass the cache — so the port is verified rather than merely compiled.
+    // The other four stay out until they can say the same.
+    void Serialize(int64_t&       v, const char* name);   // 0x180035000  +0x90
     void Serialize(bool&          v, const char* name);   // 0x1800061e0  +0x78
     void Serialize(signed char&   v, const char* name);   // 0x18007c3b0  +0xC0
     void Serialize(unsigned char& v, const char* name);   // 0x180055c80  +0xB8
