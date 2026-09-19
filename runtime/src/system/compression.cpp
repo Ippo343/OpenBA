@@ -161,8 +161,34 @@
 #include <cstdio>
 #include <cstring>
 
+#include <new>        // placement new: the ??0 door builds into the caller's 8 bytes
+
 #include "../../funcs/rt_port.h"
+#include "../../types/system/Compression.h"   // ENDGAME B.3.4b SYSTEM (4b)
 #include "string.h"   // RtMemAlloc -- the lock-wrapped MemoryAllocator door
+
+// ============================================================================
+// ENDGAME B.3.4b SYSTEM (4b) — THE CLASS IS REAL; THE DOORS DELEGATE.
+// ============================================================================
+// `System::Compression` is declared in `runtime/types/system/Compression.h`,
+// which carries the "is it a class?" evidence (a `QEAA` ctor, a `QEAA` member
+// and an `SA` static, all class-scoped manglings) and the layout pins. The two
+// codec bodies and the constructor moved onto members VERBATIM; the three
+// registered doors keep their names, their retail addresses and their
+// registration rows and each delegates in one line.
+//
+// The member bodies are defined at GLOBAL scope with qualified names
+// (`int System::Compression::Compress(...)`) rather than inside a
+// `namespace System { ... }` block — rule B4b-5. There is no POD of this name,
+// but the branch counters, `CompressHash` and the two counter structs are
+// `RtSystem`'s and are reached from the bodies as `RtSystem::X`, which is the
+// arrangement B34_BRIEFS §A.2 established (anonymous-namespace members ARE
+// reachable as `RtSystem::X` from elsewhere in the same translation unit).
+//
+// NEITHER BODY LOST ITS BRANCH COUNTERS. `g_branch` / `g_cbranch` are the
+// effectiveness controls the Wave-9 and Wave-22 oracles drove; they are null on
+// every shipped call and the bodies keep the one predictable null test each.
+// ============================================================================
 
 namespace RtSystem {
 
@@ -197,8 +223,25 @@ namespace {
 
 typedef int (*DecompressFn)(const void*, uint32_t, void*, uint32_t);
 
-// The body, factored out so the oracle can run the identical code onto scratch.
-int DecompressBody(const void* src, uint32_t srcLen, void* dst, uint32_t dstCap) {
+// ENDGAME B.3.4b SYSTEM (4b): `DecompressBody` and `CompressBody` are GONE as
+// free functions. They were "factored out so the oracle can run the identical
+// code onto scratch", and the oracles they served died with the cutover; the
+// two bodies are now `System::Compression::Decompress` and
+// `System::Compression::Compress`, defined at global scope below this
+// namespace. Nothing else about either body changed — see the tally in the
+// commit message.
+}  // namespace
+}  // namespace RtSystem
+
+// ============================================================================
+// ?Decompress@Compression@System@@SAHPEBXIPEAXI@Z            retail 0x1800c4660
+// ============================================================================
+// The bespoke LZ77/LZSS byte codec §2 of this file's banner derives instruction
+// by instruction. `SA`, so no `this` and no instance state is touched — which
+// is exactly why `runtime/src/io/compressed_stream_read.cpp` can reach it from
+// two `RT_EXPORT_ONCE` sites with no receiver at all.
+int System::Compression::Decompress(const void* src, uint32_t srcLen,
+                                    void* dst, uint32_t dstCap) {
     const uint8_t* sp          = static_cast<const uint8_t*>(src);
     const uint8_t* const srcEnd = sp + srcLen;          // 1800c4672, zero-extended
     uint8_t* const dstBase      = static_cast<uint8_t*>(dst);
@@ -210,10 +253,10 @@ int DecompressBody(const void* src, uint32_t srcLen, void* dst, uint32_t dstCap)
         const uint32_t c = *sp++;                       // 1800c4680
         if (c < 0x20u) {                                // 1800c468a  JNC -> match
             // ---- literal run -------------------------------------------
-            if (g_branch) ++g_branch->literalRun;
+            if (RtSystem::g_branch) ++RtSystem::g_branch->literalRun;
             uint32_t n = c + 1u;                        // 1800c468c
             if (op + n > dstEnd) {                      // 1800c4696  JA
-                if (g_branch) ++g_branch->failLiteral;
+                if (RtSystem::g_branch) ++RtSystem::g_branch->failLiteral;
                 return 0;
             }
             do {                                        // 1800c46a0
@@ -227,18 +270,18 @@ int DecompressBody(const void* src, uint32_t srcLen, void* dst, uint32_t dstCap)
             const uint8_t* mp = op - ((c & 0x1fu) << 8) - 1;
             if (len == 7u) {                            // 1800c46cf
                 len = 7u + *sp++;                       // 1800c46d1..d9
-                if (g_branch) ++g_branch->matchExtended;
-            } else if (g_branch) {
-                ++g_branch->matchShort;
+                if (RtSystem::g_branch) ++RtSystem::g_branch->matchExtended;
+            } else if (RtSystem::g_branch) {
+                ++RtSystem::g_branch->matchShort;
             }
             mp -= *sp++;                                // 1800c46dc/e7, the low offset byte
             if (op + 2 + len > dstEnd) {                // 1800c46f3  JA
-                if (g_branch) ++g_branch->failMatchDst;
+                if (RtSystem::g_branch) ++RtSystem::g_branch->failMatchDst;
                 return 0;
             }
             // UNSIGNED compare (JC at 1800c46f8): mp can wrap below the buffer.
             if (reinterpret_cast<uintptr_t>(mp) < reinterpret_cast<uintptr_t>(dstBase)) {
-                if (g_branch) ++g_branch->failMatchSrc;
+                if (RtSystem::g_branch) ++RtSystem::g_branch->failMatchSrc;
                 return 0;
             }
             // The two unrolled bytes, then `len` more — 2 + len total, and
@@ -279,12 +322,19 @@ int DecompressBody(const void* src, uint32_t srcLen, void* dst, uint32_t dstCap)
     // (+0x1c), `activeWindow` (+0x20) and per-window use counts; there, comparing
     // returned bytes alone IS the lossy transform, and the oracle must compare
     // the object's state too. Recorded in WAVE9_READPACKFILE_PLAN.md.
-    if (g_branch) {
-        if (sp == srcEnd) ++g_branch->exitExact;
-        else              ++g_branch->exitOvershoot;
+    if (RtSystem::g_branch) {
+        if (sp == srcEnd) ++RtSystem::g_branch->exitExact;
+        else              ++RtSystem::g_branch->exitOvershoot;
     }
     return static_cast<int>(op - dstBase);              // 1800c472d
 }
+
+// The encoder's own file-local state reopens the two namespaces: `g_cbranch`
+// and `CompressHash` belong to `RtSystem`'s anonymous namespace exactly as they
+// always did, and `System::Compression::Compress` below reaches them as
+// `RtSystem::X` (B34_BRIEFS §A.2).
+namespace RtSystem {
+namespace {
 
 // ============================================================================
 // WAVE 22 LANE SYSBODY — the ENCODER: Compression::Compress and its ctor
@@ -397,13 +447,40 @@ static inline uint32_t CompressHash(uint32_t dv) {
     return static_cast<uint16_t>((dv >> 8) - dv * 5u);   // 1800c42bc..1800c42c9
 }
 
-int CompressBody(void* self, const void* src, uint32_t srcLen,
-                 void* dst, uint32_t dstCap) {
+}  // namespace
+}  // namespace RtSystem
+
+// ============================================================================
+// ??0Compression@System@@QEAA@XZ                             retail 0x1800c41a0
+// ============================================================================
+// EnterCS(_singleton+0x640); Allocate(_singleton, 0x40000, 4); LeaveCS;
+// *this = p; memset(p, 0, 0x40000).
+//
+// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) IS that exact
+// lock/Allocate/unlock sequence — verified by decompiling it, not assumed — so
+// `RtMemAlloc(0x40000, 4)` from string.cpp is the same three instructions plus
+// a call, and it keeps standalone/allocator_lock.cpp's detour on Allocate in
+// the path. Open-coding EnterCriticalSection on `_singleton + 0x640` here
+// would be a second, private opinion about where that lock lives.
+//
+// NOT NULL-CHECKED: retail stores the result and memsets it unconditionally.
+// An allocation failure here is an upstream fault to find.
+System::Compression::Compression() {
+    void* p = RtSystem::RtMemAlloc(0x40000u, 4);
+    _table = static_cast<uint32_t*>(p);
+    std::memset(p, 0, 0x40000u);
+}
+
+// ============================================================================
+// ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z             retail 0x1800c4230
+// ============================================================================
+int System::Compression::Compress(const void* src, uint32_t srcLen,
+                                  void* dst, uint32_t dstCap) {
     // 1800c4247 / 1800c4255 — both length tests, before anything else.
     if (srcLen == 0 || dstCap == 0)
         return 0;                                        // 1800c4645
 
-    uint32_t* const table = *static_cast<uint32_t**>(self);   // 1800c42c6: MOV RCX,[R11]
+    uint32_t* const table = _table;                           // 1800c42c6: MOV RCX,[R11]
     const uint8_t* const in     = static_cast<const uint8_t*>(src);
     const uint8_t* const inEnd  = in + srcLen;                // 1800c4289
     const uint8_t* const inMax  = inEnd - 2;                  // 1800c4292: R15
@@ -420,7 +497,7 @@ int CompressBody(void* self, const void* src, uint32_t srcLen,
     if (ip < inMax) {                                         // 1800c429f: CMP RDX,R15 / JNC
         for (;;) {
             dv = (dv << 8) | ip[2];                           // 1800c42b0..1800c42ba
-            uint32_t* const slot = &table[CompressHash(dv)];
+            uint32_t* const slot = &table[RtSystem::CompressHash(dv)];
             const uint8_t* const mpos = in + *slot;           // 1800c42d2: zero-extended uint32
             *slot = static_cast<uint32_t>(ip - in);           // 1800c42db
             const uint64_t off = static_cast<uint64_t>(ip - mpos) - 1u;   // 1800c42de..42e1
@@ -433,12 +510,12 @@ int CompressBody(void* self, const void* src, uint32_t srcLen,
 
             if (!isMatch) {
                 // ---- LITERAL ---- 1800c458f
-                if (op >= outEnd) { fail = true; if (g_cbranch) ++g_cbranch->failDst; break; }  // 1800c458f  JNC
+                if (op >= outEnd) { fail = true; if (RtSystem::g_cbranch) ++RtSystem::g_cbranch->failDst; break; }  // 1800c458f  JNC
                 *op++ = *ip++;
                 ++ii;
-                if (g_cbranch) ++g_cbranch->literal;
+                if (RtSystem::g_cbranch) ++RtSystem::g_cbranch->literal;
                 if (ii == 0x20) {                             // 1800c45a7
-                    if (g_cbranch) ++g_cbranch->literalFlush;
+                    if (RtSystem::g_cbranch) ++RtSystem::g_cbranch->literalFlush;
                     op[-0x21] = 0x1f;                         // 1800c45ac: the reserved slot, 32 literals back
                     ++op;                                     // and reserve the next one
                     ii = 0;
@@ -457,7 +534,7 @@ int CompressBody(void* self, const void* src, uint32_t srcLen,
             // is about to be reclaimed.
             if (!(op + 4 < outEnd)) {
                 if (op - (ii == 0 ? 1 : 0) + 4 >= outEnd) {
-                    fail = true; if (g_cbranch) ++g_cbranch->failDst; break;
+                    fail = true; if (RtSystem::g_cbranch) ++RtSystem::g_cbranch->failDst; break;
                 }
             }
 
@@ -478,7 +555,7 @@ int CompressBody(void* self, const void* src, uint32_t srcLen,
             // SAME k in the same order, and the fallthrough sets len = 0x12
             // and enters the generic loop (1800c44a2..44b0).
             len = 0x12;
-            if (g_cbranch) ++g_cbranch->matchUnroll;
+            if (RtSystem::g_cbranch) ++RtSystem::g_cbranch->matchUnroll;
             for (uint32_t k = 3; k <= 0x12u; ++k) {
                 if (mpos[k] != ip[k]) { len = k; goto emit; }
             }
@@ -496,11 +573,11 @@ int CompressBody(void* self, const void* src, uint32_t srcLen,
                 ++ip;                                          // 1800c44c9: INC RAX
                 if (code < 7u) {                               // 1800c44cc  JNC
                     // 1800c44d2..44e5
-                    if (g_cbranch) ++g_cbranch->matchShort;
+                    if (RtSystem::g_cbranch) ++RtSystem::g_cbranch->matchShort;
                     *op++ = static_cast<uint8_t>((off >> 8) + (code << 5));
                 } else {
                     // 1800c44eb..4501
-                    if (g_cbranch) ++g_cbranch->matchLong;
+                    if (RtSystem::g_cbranch) ++RtSystem::g_cbranch->matchLong;
                     *op++ = static_cast<uint8_t>((off >> 8) - 0x20u);
                     *op++ = static_cast<uint8_t>(code - 7u);
                 }
@@ -518,9 +595,9 @@ int CompressBody(void* self, const void* src, uint32_t srcLen,
                 uint32_t v = (static_cast<uint32_t>(q[0]) << 16) |
                              (static_cast<uint32_t>(q[1]) << 8)  |
                               static_cast<uint32_t>(q[2]);
-                table[CompressHash(v)] = static_cast<uint32_t>(q - in);
+                table[RtSystem::CompressHash(v)] = static_cast<uint32_t>(q - in);
                 v = (v << 8) | q[3];                           // 1800c4557/4566: 3 bytes at ip-1
-                table[CompressHash(v)] = static_cast<uint32_t>((q + 1) - in);
+                table[RtSystem::CompressHash(v)] = static_cast<uint32_t>((q + 1) - in);
                 dv = v;                                        // EDI, 24-bit-clean again (note 2)
             }
         }
@@ -547,44 +624,38 @@ int CompressBody(void* self, const void* src, uint32_t srcLen,
     return static_cast<int>(op - outBase);
 }
 
-}  // namespace
+// ============================================================================
+// The three registered doors — names, signatures and registration rows all
+// unchanged. Each delegates in one line.
+// ============================================================================
+// `System::Compression` has NO vtable, so none of these needs the qualified
+// non-virtual call B34_BRIEFS §A.1 forces on a polymorphic receiver: a
+// non-virtual member call cannot dispatch back into its own door.
+namespace RtSystem {
 
-// ============================================================================
 // ??0Compression@System@@QEAA@XZ                             retail 0x1800c41a0
-// ============================================================================
-// EnterCS(_singleton+0x640); Allocate(_singleton, 0x40000, 4); LeaveCS;
-// *this = p; memset(p, 0, 0x40000).
 //
-// `?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z` (0x1800c7a50) IS that exact
-// lock/Allocate/unlock sequence — verified by decompiling it, not assumed — so
-// `RtMemAlloc(0x40000, 4)` from string.cpp is the same three instructions plus
-// a call, and it keeps standalone/allocator_lock.cpp's detour on Allocate in
-// the path. Open-coding EnterCriticalSection on `_singleton + 0x640` here
-// would be a second, private opinion about where that lock lives.
-//
-// NOT NULL-CHECKED: retail stores the result and memsets it unconditionally.
-// An allocation failure here is an upstream fault to find.
+// A CONSTRUCTOR DOOR. `self` is the caller's RAW BYTES — `MemAlloc(8, 4)` in
+// `runtime/src/io/compressed_stream_write.cpp:629-633` and in
+// `runtime/src/save/saveload_meta.cpp:395-398`, neither of which is in this
+// step's file set and neither of which changes. So the class is
+// placement-constructed into those eight bytes, never assigned, and the door
+// returns `self` — retail's `MOV RAX,RCX`, which both call sites store.
 extern "C" void* RtSystem_Compression_Ctor(void* self) {
-    void* p = RtMemAlloc(0x40000u, 4);
-    *static_cast<void**>(self) = p;
-    std::memset(p, 0, 0x40000u);
+    new (self) System::Compression();
     return self;   // 1800c41a0 is QEAA: a ctor returns `this` in RAX
 }
 
-// ============================================================================
 // ?Compress@Compression@System@@QEAAHPEBXIPEAXI@Z             retail 0x1800c4230
-// ============================================================================
 extern "C" int RtSystem_Compression_Compress(void* self, const void* src, uint32_t srcLen,
                                              void* dst, uint32_t dstCap) {
-    return CompressBody(self, src, srcLen, dst, dstCap);
+    return static_cast<System::Compression*>(self)->Compress(src, srcLen, dst, dstCap);
 }
 
-// ============================================================================
 // ?Decompress@Compression@System@@SAHPEBXIPEAXI@Z            retail 0x1800c4660
-// ============================================================================
 extern "C" int RtSystem_Compression_Decompress(const void* src, uint32_t srcLen,
                                                void* dst, uint32_t dstCap) {
-    return DecompressBody(src, srcLen, dst, dstCap);
+    return System::Compression::Decompress(src, srcLen, dst, dstCap);
 }
 
 }  // namespace RtSystem

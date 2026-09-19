@@ -50,10 +50,6 @@ static uint32_t* s_TypeId_ModelDesc2 = nullptr;
 // Helper function pointers (resolved once)
 // ============================================================
 
-// Object::InternalBasePtr::Serialize(this, Serializer*)
-typedef void (*fn_IBP_Serialize_t)(void* self, void* serializer);
-static fn_IBP_Serialize_t s_fn_IBP_Serialize = nullptr;
-
 // Original Draw function — delegated because Draw is 300+ instructions with
 // multi-object hierarchy iteration, worker assignment, and storage management
 typedef void (*fn_BuildComponent_Draw_Original_t)(void*);
@@ -63,9 +59,6 @@ static bool s_helpersResolved = false;
 
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
-
-    s_fn_IBP_Serialize = (fn_IBP_Serialize_t)ResolveExport(
-        "?Serialize@InternalBasePtr@Object@@QEAAXAEAVSerializer@IO@@@Z");
 
     // Type IDs from exe .rdata
     s_TypeId_ModelComp2 = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7a50);
@@ -124,7 +117,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
 
     // Serialize each IBP in array1, validate with IsDerivedFrom
     void** arr1 = *(void***)(s + 0x58);
-    if (s_fn_IBP_Serialize && count1 > 0) {
+    if (count1 > 0) {
         for (int i = 0; i < count1; i++) {
             void* ibp = (void*)((uintptr_t)arr1 + i * 8);
             reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
@@ -152,7 +145,7 @@ void BuildComponent_Shutdown(BuildComponent* self, void* stream) {
 
     // Serialize each IBP in array2, validate with IsDerivedFrom
     void** arr2 = *(void***)(s + 0x68);
-    if (s_fn_IBP_Serialize && count2 > 0) {
+    if (count2 > 0) {
         for (int i = 0; i < count2; i++) {
             void* ibp = (void*)((uintptr_t)arr2 + i * 8);
             reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser1));   // B.3.4 bridge
@@ -534,9 +527,9 @@ void* BuildComponent_FindStorage26a30(int64_t compHost, void* retbuf) {
 void BuildComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[BuildComponent] Funcs resolved: IBP_Serialize=%p DrawOriginal=%p "
+    printf("[BuildComponent] Funcs resolved: DrawOriginal=%p "
            "TypeId_Build=%p TypeId_Storage=%p\n",
-           (void*)s_fn_IBP_Serialize, (void*)s_fn_Draw_Original,
+           (void*)s_fn_Draw_Original,
            (void*)s_TypeId_ModelComp2, (void*)s_TypeId_PickingComp);
 #endif
 }

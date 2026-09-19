@@ -45,30 +45,14 @@ namespace {
 
 // ---- resolved engine helpers (shared by all four bodies) -------------------
 typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
-typedef void (*fn_SerCtor_t)(void* ser, void* stream, int version);
-typedef void (*fn_SerDtor_t)(void* ser);
-typedef void (*fn_SerInt_t)(void* ser, void* field, const char* name);
-typedef void (*fn_SerBool_t)(void* ser, void* field, const char* name);
-typedef void (*fn_SerFloat_t)(void* ser, float* field, const char* name);
-typedef void (*fn_SerShort_t)(void* ser, void* field, const char* name);
-typedef int  (*fn_SerGetVersion_t)(void* ser);
 typedef void (*fn_TimeSerialize_t)(void* time, void* ser);
-typedef void (*fn_IBPSerialize_t)(void* ibp, void* ser);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 // 0x1400032e0 was Collection::Array<void*>::SetSize(n) monomorphised into the
 // exe (ENDGAME B.3.2 step 2, ImmigrationComp_DynArrayResize body: stride 8,
 // align 8, zero tail) — the resolved pointer is gone, see the call sites below.
 
 fn_ComponentSerialize_t s_Base       = nullptr;  // 0x1401189b0
-fn_SerCtor_t            s_Ctor       = nullptr;  // slot 0x140152ad8
-fn_SerDtor_t            s_Dtor       = nullptr;  // slot 0x140152ad0
-fn_SerInt_t             s_Int        = nullptr;  // slot 0x140152ac8
-fn_SerBool_t            s_Bool       = nullptr;  // slot 0x140152a58
-fn_SerFloat_t           s_Float      = nullptr;  // slot 0x140152a60
-fn_SerShort_t           s_Short      = nullptr;  // slot 0x140152468
-fn_SerGetVersion_t      s_GetVersion = nullptr;  // slot 0x140152a48
 fn_TimeSerialize_t      s_TimeSer    = nullptr;  // slot 0x140152aa8
-fn_IBPSerialize_t       s_IBPSer     = nullptr;  // slot 0x140152aa0
 fn_IsDerived_t          s_IsDerived  = nullptr;  // slot 0x140152a98
 
 // type-id storage (null when the owning reg wave is off; see header note)
@@ -86,24 +70,8 @@ void Resolve() {
         ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_Ctor = *reinterpret_cast<fn_SerCtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_Dtor = *reinterpret_cast<fn_SerDtor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (slot) s_Int = *reinterpret_cast<fn_SerInt_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a58);
-    if (slot) s_Bool = *reinterpret_cast<fn_SerBool_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a60);
-    if (slot) s_Float = *reinterpret_cast<fn_SerFloat_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152468);
-    if (slot) s_Short = *reinterpret_cast<fn_SerShort_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a48);
-    if (slot) s_GetVersion = *reinterpret_cast<fn_SerGetVersion_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152aa8);
     if (slot) s_TimeSer = *reinterpret_cast<fn_TimeSerialize_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (slot) s_IBPSer = *reinterpret_cast<fn_IBPSerialize_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_IsDerived = *reinterpret_cast<fn_IsDerived_t*>(slot);
 
@@ -124,7 +92,7 @@ inline bool Loading(void* ser) {
 // Serialize one InternalBasePtr and apply retail's post-load type validation
 // (null the ref when the pointee is not derived from *tid).
 inline void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
-    if (s_IBPSer) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
     if (obj && s_IsDerived && tid && *tid && !s_IsDerived(obj, *tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;
@@ -145,7 +113,7 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 // ============================================================
 extern "C" void HerdComponent_Serialize(void* self, void* stream) {
     Resolve();
-    if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
+    if (!self || !stream) return;
     if (s_Base) s_Base(self, stream);
 
     alignas(8) uint8_t ser[24];
@@ -160,7 +128,7 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) {
     for (int i = 0; i < count && member; ++i, member += 8)
         SerializeValidatedIBP(member, ser, s_tidWildAnimal);
 
-    if (s_Bool)    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
     if (s_TimeSer) s_TimeSer(At(self, 0x50), ser);
     if (s_TimeSer) s_TimeSer(At(self, 0x58), ser);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x4c)), nullptr);   // B.3.4 bridge
@@ -179,7 +147,7 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream) {
 // ============================================================
 extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
     Resolve();
-    if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
+    if (!self || !stream) return;
     if (s_Base) s_Base(self, stream);
 
     alignas(8) uint8_t ser[24];
@@ -187,21 +155,19 @@ extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
 
     if (s_TimeSer) s_TimeSer(At(self, 0x30), ser);
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
-    if (s_Float) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x44)), nullptr);   // B.3.4 bridge
-    if (s_Float) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
-    if (s_Bool)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x40)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x44)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x48)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x40)), nullptr);   // B.3.4 bridge
     if (s_TimeSer) s_TimeSer(At(self, 0x50), ser);
-    if (s_Short) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3a)), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3e)), nullptr);   // B.3.4 bridge
-    }
-    if (s_GetVersion && reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0) {   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3a)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<short*>(At(self, 0x3e)), nullptr);   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() == 0) {   // B.3.4 bridge
         // v0 compatibility: read-and-discard one IBP (retail probes the type
         // and drops the value; the local never leaves the frame).
         uint64_t legacy = 0;
-        if (s_IBPSer) reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+        reinterpret_cast<Object::InternalBasePtr*>(&legacy)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
         if (legacy && s_IsDerived && s_tidPopulation && *s_tidPopulation)
             s_IsDerived(reinterpret_cast<void*>(legacy), *s_tidPopulation);
     }
@@ -216,7 +182,7 @@ extern "C" void AnimalComponent_Serialize(void* self, void* stream) {
 // ============================================================
 extern "C" void LivestockComponent_Serialize(void* self, void* stream) {
     Resolve();
-    if (!self || !stream || !s_Ctor || !s_Dtor) return;
+    if (!self || !stream) return;
     if (s_Base) s_Base(self, stream);
 
     alignas(8) uint8_t ser[24];
@@ -238,7 +204,7 @@ extern "C" void LivestockComponent_Serialize(void* self, void* stream) {
 // ============================================================
 extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream) {
     Resolve();
-    if (!self || !stream || !s_Ctor || !s_Dtor || !s_Int) return;
+    if (!self || !stream) return;
     if (s_Base) s_Base(self, stream);
 
     alignas(8) uint8_t ser[24];

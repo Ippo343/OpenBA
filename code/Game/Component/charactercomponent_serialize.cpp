@@ -95,7 +95,7 @@ inline bool Loading(void* stream) {
 }
 
 void SerializeValidatedIBP(void* ibp, void* ser, const uint32_t* tid) {
-    if (fn_InternalBasePtr_Serialize) reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* obj = *reinterpret_cast<void**>(ibp);
     if (obj && fn_IsDerivedFrom && tid && *tid && !fn_IsDerivedFrom(obj, *tid))
         *reinterpret_cast<uint64_t*>(ibp) = 0;
@@ -108,22 +108,18 @@ extern "C" void CharacterComponent_Serialize(void* self, void* stream) {
     Resolve();
     Component_SerializeReimpl(self, stream);
 
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor) return;
-
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // ?Serialize@Vector3@Math@@QEAAXAEAVSerializer@IO@@@Z  retail 0x1800150e0
     reinterpret_cast<Math::Vector3*>(At(self, 0x2c))->Serialize(ser);
-    if (fn_Serializer_Serialize_Float) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
-    }
-    if (g_fn_Serialize_Bool) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
-    if (g_fn_Serialize_Int)  reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x60)), nullptr);    // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x3c)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(At(self, 0x38)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(At(self, 0x28)), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(At(self, 0x60)), nullptr);    // B.3.4 bridge
 
     int count = *reinterpret_cast<int*>(At(self, 0x50));
-    if (g_fn_Serialize_Int) reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
     // B.3.2 bridge: exe 0x1400032e0 IS Collection::Array<void*>::SetSize(n).
     if (Loading(stream)) GameColl::AsArray<GameColl::Ptr8>(At(self, 0x48)).SetSize(count);
 

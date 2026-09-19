@@ -1395,24 +1395,8 @@ void EntityList_Serialize(EntityList* self, void* stream) {
     // each and left the stream 30 bytes short for every load — silently
     // desyncing Geometry and everything after it. The offsets prove the width:
     // processCount is at +0xA8 and cursor at +0xBC, exactly 5 ints apart.
-    typedef void (*FnSerIntArr_t)(void* ser, int count, void* data, const char* name);
-    static FnSerIntArr_t s_serIntArr = nullptr;
-    static bool s_triedIntArr = false;
-    if (!s_serIntArr && !s_triedIntArr) {
-        s_triedIntArr = true;
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151278));
-        if (slot && *slot) s_serIntArr = reinterpret_cast<FnSerIntArr_t>(*slot);
-        else {
-            fprintf(stderr, "[EntityList::Serialize] dispatch slot 0x140151278 "
-                    "(Serialize int-array) unresolved — the 5-int arrays will "
-                    "desync the rest of the stream\n");
-            fflush(stderr);
-        }
-    }
-    if (s_serIntArr) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->processCount), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->cursor), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->processCount), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(5, reinterpret_cast<int*>(self->cursor), nullptr);   // B.3.4 bridge
 
     // Step 8: Per-entity metadata serialization
     int32_t entityIdx = 0;

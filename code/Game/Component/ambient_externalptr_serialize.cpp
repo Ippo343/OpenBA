@@ -37,7 +37,6 @@ inline int SerializerMode(void* serializer) {
 }
 
 inline int EncodingType(void* serializer) {
-    if (!fn_Serializer_GetEncoding) return 0;
     void* enc = const_cast<IO::Encoding*>(&reinterpret_cast<IO::Serializer*>(serializer)->GetEncoding());   // B.3.4 bridge
     if (!enc) return 0;
     void** vt = *reinterpret_cast<void***>(enc);           // Encoding vtable
@@ -83,8 +82,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
             refId = efactory->GetReferenceId(
                 reinterpret_cast<const ::Object::External*>(*field));  // B.3.3 bridge
         // Serialize the reference id (matches the exe's guarded Serialize(uint)).
-        if (fn_Serializer_Serialize_Uint)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(&refId), nullptr);   // B.3.4 bridge
         if ((int)refId != -1) {
             if (loading) {
                 pathBuf = efactory->GetPathForReferenceId(refId);
@@ -94,8 +92,7 @@ extern "C" void AmbientExternalPtrSerialize_Reimpl(void* fieldPtr, void* seriali
     } else {
         // Non-reference mode: bool "present" flag, then the path string.
         uint8_t present = (*field != nullptr) ? 1 : 0;
-        if (g_fn_Serialize_Bool)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&present), nullptr);   // B.3.4 bridge
         if (present) {
             if (*field != nullptr)
                 pathBuf = reinterpret_cast<const ::Object::External*>(*field)->GetPath();  // B.3.3 bridge — save: fill path from object

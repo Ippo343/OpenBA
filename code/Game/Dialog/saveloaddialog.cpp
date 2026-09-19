@@ -1018,11 +1018,11 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     fflush(stdout);
     // The list CheckMod matches the save against is IO::Modification::_singleton.
     // Printed alongside so a non-zero CheckMod can be READ rather than guessed at.
-    if (g_ppModificationSingleton && *g_ppModificationSingleton && fn_Modification_GetCount) {
+    if (g_ppModificationSingleton && *g_ppModificationSingleton) {
         void* modSgl = *g_ppModificationSingleton;
         int installed = reinterpret_cast<const IO::Modification*>(modSgl)->GetCount();   // B.3.4 bridge
         printf("[SaveLoadDialog::DoLoad] installed mod count=%d\n", installed);
-        for (int mi = 0; mi < installed && fn_Modification_GetMod; mi++) {
+        for (int mi = 0; mi < installed; mi++) {
             void* m = const_cast<RtIO::Mod*>(
                 &reinterpret_cast<const IO::Modification*>(modSgl)->GetModification(mi));   // B.3.4 bridge
             const char* path = m ? *(const char* const*)((uintptr_t)m + 0x58) : nullptr;

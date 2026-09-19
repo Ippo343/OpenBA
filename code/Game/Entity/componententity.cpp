@@ -282,9 +282,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize description ExternalPtr at +0x28
     if (fn_ExternalPtr_BuildSerialize) {
@@ -293,9 +291,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
 
     // Serialize component count
     uint32_t compCount = (uint32_t)self->componentCount;
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((void*)&compCount), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>((void*)&compCount), nullptr);   // B.3.4 bridge
 
     // Check if loading (encoding mode == 0)
     int encodingMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
@@ -342,9 +338,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
                 fflush(stderr);
             }
             // Serialize the InternalBasePtr
-            if (fn_InternalBasePtr_Serialize) {
-                reinterpret_cast<Object::InternalBasePtr*>((void*)ibpAddr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
-            }
+            reinterpret_cast<Object::InternalBasePtr*>((void*)ibpAddr)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4 bridge
             void* rawAfterSer = *(void**)ibpAddr;   // before our IsDerivedFrom filter
             if (s_trace == 1 && !rawAfterSer) {
                 fprintf(stderr, "[CompEnt::Ser] ent=%p comp %lld RAW NULL from "
@@ -462,9 +456,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     }
 
     // Serialize entityFlags at +0x40
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
 
     // On load: create missing components from description
     if (encodingMode == 0) {
@@ -579,9 +571,7 @@ void ComponentEntity_Serialize(ComponentEntity* self, void* stream) {
     }
 
     // Destroy Serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -626,18 +616,12 @@ void ComponentEntity_Slot8(ComponentEntity* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
     alignas(8) uint8_t serializer[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize entityId at +0x18
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x18), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x18), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

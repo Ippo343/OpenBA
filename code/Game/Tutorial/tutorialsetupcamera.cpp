@@ -26,30 +26,6 @@
 #include <new>
 
 // ============================================================
-// Local function pointers resolved once
-// ============================================================
-
-// IO::Serializer::Serialize(this, int*, name) — dispatch slot 0x140152ac8
-typedef void (*fn_Serializer_SerializeInt_t)(void* serializer, void* intPtr, const char* name);
-static fn_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-static bool s_funcsResolved = false;
-
-static void EnsureFuncsResolved() {
-    if (s_funcsResolved) return;
-    s_funcsResolved = true;
-
-    // Resolve Serializer::Serialize(int*) from dispatch slot
-    uintptr_t* slot = reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152ac8));
-    if (slot && *slot)
-        s_fn_Serializer_SerializeInt = reinterpret_cast<fn_Serializer_SerializeInt_t>(*slot);
-
-#ifdef _DEBUG
-    printf("[TutorialSetupCamera] SerializeInt=%p\n", (void*)s_fn_Serializer_SerializeInt);
-#endif
-}
-
-// ============================================================
 // TutorialSetupCamera::Dtor (vtable +0x00, 0x140028530)
 // ============================================================
 // Scalar deleting destructor.
@@ -90,27 +66,20 @@ void* TutorialSetupCamera_Dtor(void* self, uint32_t flags) {
 // Serializes 4 int32 fields: cameraX, cameraChunkRow, cameraY, cameraChunkCol.
 // Creates Serializer(stream, version=0), serializes fields, destroys serializer.
 void TutorialSetupCamera_Serialize(void* self, void* stream) {
-    EnsureFuncsResolved();
     uintptr_t s = (uintptr_t)self;
 
     // Create serializer
     alignas(8) uint8_t serializer[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize 4 int32 fields
-    if (s_fn_Serializer_SerializeInt) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge  cameraX
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge  cameraChunkRow
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge  cameraY
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge  cameraChunkCol
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge  cameraX
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge  cameraChunkRow
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge  cameraY
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge  cameraChunkCol
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

@@ -28,12 +28,11 @@ static void CropFieldDescription_Init(void* self) {
 
 void CropFieldDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!g_fn_Serializer_Ctor || !g_fn_Serializer_Dtor || !fn_Serializer_Serialize_Float) return;
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x24), nullptr);   // B.3.4 bridge
     // Original version-gates the enum: if (0 < GetVersion()) { enum +0x20 }
-    if (g_fn_Serializer_GetVersion && reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0) {   // B.3.4 bridge
+    if (reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0) {   // B.3.4 bridge
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge (enum +0x20, version-gated)
     }
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge

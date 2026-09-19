@@ -80,30 +80,20 @@ void TutorialGoalButton_Serialize(void* self, void* stream) {
 
     // Base class serialize (empty — just creates/destroys serializer)
     alignas(8) uint8_t ser0[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
 
     // Create serializer for our fields
     alignas(8) uint8_t ser[32];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize elementPath (+0x20)
     reinterpret_cast<System::String*>(s + 0x20)->Serialize(ser);
 
     // Serialize invertCheck (+0x28) — bool
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
 
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================

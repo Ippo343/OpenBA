@@ -25,14 +25,6 @@
 typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
 static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
-// IO::Serializer::Serializer(this, stream, version) -- dispatch slot at 0x140152ad8
-typedef void (*fn_Serializer_Ctor_t)(void* self, void* stream, int version);
-static fn_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-
-// IO::Serializer::~Serializer(this) -- dispatch slot at 0x140152ad0
-typedef void (*fn_Serializer_Dtor_t)(void* self);
-static fn_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
 static bool s_initialized = false;
 
 // ============================================================
@@ -52,17 +44,13 @@ void AbsorbResourceComponent_Shutdown(AbsorbResourceComponent* self, void* strea
 
     // First empty serializer block (version 0)
     alignas(8) uint8_t serializerBuf1[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf1)->~Serializer();                                       // B.3.4 bridge
 
     // Second empty serializer block (version 0)
     alignas(8) uint8_t serializerBuf2[24];
-    if (s_fn_Serializer_Ctor && s_fn_Serializer_Dtor) {
-        ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
 }
 
 // ============================================================
@@ -76,19 +64,11 @@ void AbsorbResourceComponent_Shutdown(AbsorbResourceComponent* self, void* strea
 // IBP::Serialize 0x140152aa0, IsDerivedFrom 0x140152a98, Serialize-uint 0x140152a50,
 // Serializer dtor 0x140152ad0. Direct: helper_1d10 0x140031d10.
 typedef void (*fn_CS_Persist_t)(void* self, void* stream);
-typedef void (*fn_CS_Ctor_t)(void* ser, void* stream, int ver);
-typedef void (*fn_CS_IBPSer_t)(void* ibp, void* ser);
 typedef bool (*fn_CS_IsDerived_t)(void* obj, uint32_t tid);
-typedef void (*fn_CS_SerUint_t)(void* ser, uint32_t* field, const char* name);
 typedef void (*fn_CS_Helper1d10_t)(void* extRef, void* ser);
-typedef void (*fn_CS_Dtor_t)(void* ser);
 static fn_CS_Persist_t    s_cs_Persist = nullptr;
-static fn_CS_Ctor_t      s_cs_Ctor = nullptr;
-static fn_CS_IBPSer_t    s_cs_IBPSer = nullptr;
 static fn_CS_IsDerived_t  s_cs_IsDerived = nullptr;
-static fn_CS_SerUint_t   s_cs_SerUint = nullptr;
 static fn_CS_Helper1d10_t s_cs_Helper1d10 = nullptr;
-static fn_CS_Dtor_t      s_cs_Dtor = nullptr;
 static uint32_t*         s_cs_pTId_CompEntity = nullptr;  // DWORD_1401c5d70
 static bool s_csResolved = false;
 static void EnsureComponentSerializeHelpers() {
@@ -96,16 +76,8 @@ static void EnsureComponentSerializeHelpers() {
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x1401515e0);
     if (slot) s_cs_Persist = *reinterpret_cast<fn_CS_Persist_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_cs_Ctor = *reinterpret_cast<fn_CS_Ctor_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152aa0);
-    if (slot) s_cs_IBPSer = *reinterpret_cast<fn_CS_IBPSer_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_cs_IsDerived = *reinterpret_cast<fn_CS_IsDerived_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a50);
-    if (slot) s_cs_SerUint = *reinterpret_cast<fn_CS_SerUint_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_cs_Dtor = *reinterpret_cast<fn_CS_Dtor_t*>(slot);
     s_cs_Helper1d10 = reinterpret_cast<fn_CS_Helper1d10_t>(ResolveAddr(Module::Exe, 0x140031d10));
     s_cs_pTId_CompEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
     s_csResolved = true;
@@ -139,19 +111,19 @@ void Component_SerializeReimpl(void* selfP, void* stream) {
     if (s_cs_Persist) s_cs_Persist(selfP, stream);
 
     alignas(8) uint8_t ser[24];
-    if (s_cs_Ctor) ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    if (s_cs_IBPSer) reinterpret_cast<Object::InternalBasePtr*>((void*)(self + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(self + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
     void* owner = *(void**)(self + 0x10);
     if (owner && s_cs_IsDerived && s_cs_pTId_CompEntity &&
         !s_cs_IsDerived(owner, *s_cs_pTId_CompEntity)) {
         *(uint64_t*)(self + 0x10) = 0;
     }
 
-    if (s_cs_SerUint) reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(self + 0x20), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(self + 0x20), nullptr);   // B.3.4 bridge
     if (s_cs_Helper1d10) s_cs_Helper1d10((void*)(self + 0x18), ser);
 
-    if (s_cs_Dtor) reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -163,19 +135,11 @@ void AbsorbResourceComponent_InitFuncs() {
     s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1401189b0));
 
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (slot) s_fn_Serializer_Ctor = *reinterpret_cast<fn_Serializer_Ctor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (slot) s_fn_Serializer_Dtor = *reinterpret_cast<fn_Serializer_Dtor_t*>(slot);
-
     s_initialized = true;
 
 #ifdef _DEBUG
-    printf("[AbsorbResourceComponent] Funcs resolved: Serialize=%p Ctor=%p Dtor=%p\n",
-           (void*)s_fn_Component_Serialize, (void*)s_fn_Serializer_Ctor,
-           (void*)s_fn_Serializer_Dtor);
+    printf("[AbsorbResourceComponent] Funcs resolved: Serialize=%p\n",
+           (void*)s_fn_Component_Serialize);
 #endif
 }
 

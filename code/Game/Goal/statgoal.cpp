@@ -90,9 +90,7 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
 
     // Create serializer (stack-local, 24 bytes: [0]=?, [8]=serializerPtr)
     alignas(8) uint8_t serializerBuf[24];
-    if (g_fn_Serializer_Ctor) {
-        ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    }
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // statTypeA / statTypeB / comparisonType, each through the UINT door.
     // `serializerBuf + 8` was the READERWRITER (IO::Serializer::_readerWriter),
@@ -104,14 +102,10 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x38), nullptr);   // B.3.4 bridge  (0x98 = uint door)  comparisonType
 
     // Serialize fixedValue (+0x3c) via Serialize_Int
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge
 
     // Serialize requireOtherGoalsMet (+0x40) via Serialize_Bool
-    if (g_fn_Serialize_Bool) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // B.3.4 bridge
 
     // Serialize statA string (+0x48) via String::Serialize
     // Each leg is wrapped in the Filename stack temporary retail's compiler
@@ -153,14 +147,10 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x78), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize statSubType (+0x7c) via Serialize_Int
-    if (g_fn_Serialize_Int) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x7c), nullptr);   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x7c), nullptr);   // B.3.4 bridge
 
     // Destroy serializer
-    if (g_fn_Serializer_Dtor) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-    }
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
