@@ -173,22 +173,31 @@ inline void* PassShaderProgram(const void* material, int32_t pass) {
 
 }  // namespace
 
+// ENDGAME B.3.5 block G: BOTH BODIES MOVED to `Graphics::Material`'s members,
+// at the bottom of this file. The doors keep their names, their addresses and
+// their attendance counters, and delegate with a QUALIFIED non-virtual call.
+//
+// The members keep the OUT-PARAMETER spelled rather than returning a
+// `System::String` by value, and that is a deliberate departure from the
+// COORDINATOR AMENDMENT's "non-virtual by-value members are unaffected": retail's
+// body passes the CALLER'S slot straight through to `Video::ShaderProgram`'s own
+// retslot export without ever writing it, and a C++ by-value return would
+// materialise a temporary, let the callee fill THAT, and then copy a refcounted
+// pointer out of it. The copy would be harmless (the refcount is already taken)
+// but the pass-through would stop being one, and the whole content of these two
+// functions IS the pass-through.
 extern "C" String* RtGraphics_Material_GetConstantName(const void* self, String* ret,
                                                        int32_t pass, int32_t index) {
     Attend("Material::GetConstantName", g_getConstNameCalls);
-    RT_EXPORT_ONCE(ShaderGetNameFn,
-        "?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z")(
-            PassShaderProgram(self, pass), ret, index);
-    return ret;                                   // MOV RAX,RBX
+    return reinterpret_cast<const Graphics::Material*>(self)        // B.3.5 bridge
+               ->Graphics::Material::GetConstantName(ret, pass, index);
 }
 
 extern "C" String* RtGraphics_Material_GetTextureName(const void* self, String* ret,
                                                       int32_t pass, int32_t index) {
     Attend("Material::GetTextureName", g_getTexNameCalls);
-    RT_EXPORT_ONCE(ShaderGetNameFn,
-        "?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z")(
-            PassShaderProgram(self, pass), ret, index);
-    return ret;
+    return reinterpret_cast<const Graphics::Material*>(self)        // B.3.5 bridge
+               ->Graphics::Material::GetTextureName(ret, pass, index);
 }
 
 // ============================================================================
@@ -297,12 +306,15 @@ int32_t FindByName(const uint8_t* data, int32_t size, const String* query, int32
 
 }  // namespace
 
+// ENDGAME B.3.5 block G: BOTH BODIES MOVED to `Graphics::MaterialInstance`'s
+// members. The doors keep their names, addresses and BOTH counters — the entry
+// count and the separate "a name actually matched" branch count, which the file's
+// attendance banner says are different findings.
 extern "C" int32_t RtGraphics_MaterialInstance_FindConstant(const void* self,
                                                             const String* name) {
     Attend("MaterialInstance::FindConstant", g_findConstCalls);
-    const MaterialInstance* const m = static_cast<const MaterialInstance*>(self);
-    const int32_t r = FindByName(reinterpret_cast<const uint8_t*>(m->constants._data),
-                                 m->constants._size, name, 0x18);
+    const int32_t r = reinterpret_cast<const Graphics::MaterialInstance*>(self)  // B.3.5 bridge
+                          ->Graphics::MaterialInstance::FindConstant(*name);
     if (r >= 0) ++g_findConstHits;
     return r;
 }
@@ -310,9 +322,8 @@ extern "C" int32_t RtGraphics_MaterialInstance_FindConstant(const void* self,
 extern "C" int32_t RtGraphics_MaterialInstance_FindTexture(const void* self,
                                                            const String* name) {
     Attend("MaterialInstance::FindTexture", g_findTexCalls);
-    const MaterialInstance* const m = static_cast<const MaterialInstance*>(self);
-    const int32_t r = FindByName(reinterpret_cast<const uint8_t*>(m->textures._data),
-                                 m->textures._size, name, 0x10);
+    const int32_t r = reinterpret_cast<const Graphics::MaterialInstance*>(self)  // B.3.5 bridge
+                          ->Graphics::MaterialInstance::FindTexture(*name);
     if (r >= 0) ++g_findTexHits;
     return r;
 }
@@ -937,3 +948,81 @@ void RtGraphicsWave28GfxbodySummary() {
 
 int  RtGraphicsWave28GfxbodyRegister() { return rtgfxbody28::RtGraphicsWave28GfxbodyRegister(); }
 void RtGraphicsWave28GfxbodySummary()  { rtgfxbody28::RtGraphicsWave28GfxbodySummary(); }
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block G — `Graphics::Material`'s and
+// `Graphics::MaterialInstance`'s member bodies, whose live doors are the four
+// functions above. Their own `namespace Graphics { }` block, because a member
+// definition has to appear in a namespace ENCLOSING the class and `Graphics` /
+// `RtGraphics` are siblings (B34_BRIEFS A.2). The file-local helpers here sit in
+// `rtgfxbody28`'s OWN unnamed namespace, not the global one, so unqualified
+// lookup does NOT reach them from `namespace Graphics` and they are spelled
+// `rtgfxbody28::` — the other half of the A.2 trap, and the reason this block
+// does not just work the way mesh.cpp's does.
+// ############################################################################
+
+namespace Graphics {
+
+// ---------------------------------------------------------------------------
+// ?GetConstantName@Material@Graphics@@QEBA?AVString@System@@HH@Z  0x180102830
+// ?GetTextureName@Material@Graphics@@QEBA?AVString@System@@HH@Z   0x180102900
+//
+// Four-line forwarders onto `Video::ShaderProgram`. `_passes` at +0x28 is the
+// `Array<ExternalPtr<Video::VideoProgram>>` the real class declares, and the pass
+// object's +0x30 is its pixel `ShaderProgram` (one of the four `ExternalPtr`
+// members `Video::VideoProgram`'s own getters expose, at +0x20/+0x28/+0x30/+0x38).
+//
+// THE CALLER'S RETURN SLOT IS PASSED STRAIGHT THROUGH — `ret` is never written
+// here, only handed on — which is why the member keeps the out-parameter. See
+// the doors' banner above.
+//
+// NO NULL CHECK ANYWHERE, and that is not an oversight in retail: the
+// NEIGHBOURING export `?GetConstantCount@Material@Graphics@@` (0x180102880) walks
+// the SAME chain and DOES test the shader program for null first. The asymmetry is
+// deliberate in the shipped code and is transcribed rather than "fixed".
+// ---------------------------------------------------------------------------
+RtSystem::String* Material::GetConstantName(RtSystem::String* ret,
+                                            int32_t pass, int32_t index) const {
+    RT_EXPORT_ONCE(rtgfxbody28::ShaderGetNameFn,
+        "?GetConstantName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z")(
+            rtgfxbody28::PassShaderProgram(this, pass), ret, index);
+    return ret;                                   // MOV RAX,RBX
+}
+
+RtSystem::String* Material::GetTextureName(RtSystem::String* ret,
+                                           int32_t pass, int32_t index) const {
+    RT_EXPORT_ONCE(rtgfxbody28::ShaderGetNameFn,
+        "?GetTextureName@ShaderProgram@Video@@QEBA?AVString@System@@H@Z")(
+            rtgfxbody28::PassShaderProgram(this, pass), ret, index);
+    return ret;
+}
+
+// ---------------------------------------------------------------------------
+// ?FindConstant@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z 0x180102f40
+// ?FindTexture@MaterialInstance@Graphics@@AEBAHAEBVString@System@@@Z  0x180103020
+//
+// A linear search of the instance's own constant / texture array for an element
+// whose leading `System::String` equals the argument, returning the index or -1.
+// The two differ in THREE fields and nothing else — the array, its count and the
+// element stride — and `Material.h`'s real class names all of them, so the
+// stride literals below are the array's element size rather than a number.
+//
+// `AEBA` is PRIVATE, and this DLL exports its private members
+// (reference_aeaa_is_private_not_unexported.md) — which is also why the two are
+// PUBLIC here for now rather than private: the doors above are `extern "C"` free
+// functions and cannot be friends of the class without a declaration this header
+// does not need.
+// ---------------------------------------------------------------------------
+int32_t MaterialInstance::FindConstant(const RtSystem::String& name) const {
+    return rtgfxbody28::FindByName(reinterpret_cast<const uint8_t*>(_constants._data),
+                      _constants._size, &name,
+                      static_cast<int32_t>(sizeof(RtGraphics::MaterialConstant)));
+}
+
+int32_t MaterialInstance::FindTexture(const RtSystem::String& name) const {
+    return rtgfxbody28::FindByName(reinterpret_cast<const uint8_t*>(_textures._data),
+                      _textures._size, &name,
+                      static_cast<int32_t>(sizeof(RtGraphics::MaterialTexture)));
+}
+
+}  // namespace Graphics
