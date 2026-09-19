@@ -47,7 +47,68 @@
 // getters could safely replay, but they are covered by the same probe and are
 // left uniform with their siblings rather than opening a raw door for two
 // two-instruction functions.
+// ============================================================================
+// ENDGAME B.3.4 block 4 (STREAMS): THE BODIES ARE NOW `IO::MemoryStream`'s.
+// ============================================================================
+//
+// The six virtuals below moved, unchanged instruction for instruction, onto the
+// real class declared in runtime/types/io/Stream.h. What stays here is the six
+// registered DOORS: same names, same by-name AND by-address registrations, same
+// addresses. Each is now one line.
+//
+// THE `IO::MemoryStream::` QUALIFICATION IN EACH DOOR IS LOAD-BEARING, not
+// decoration (B34_BRIEFS section A.1). A live MemoryStream in this build wears
+// the MINTED table 0x1801555b0, whose slots resolve back to these very doors.
+// A plain virtual call in a door would therefore dispatch through the minted
+// table into itself — infinite recursion, not delegation. The qualification
+// suppresses virtual dispatch and lands on the member body directly.
+//
+// NO CONSTRUCTOR CONVERTED, and none may (B34_RULES section 4.3): every
+// construction site keeps stamping `RT_DATA_SLOT("??_7MemoryStream@IO@@6B@")`,
+// and the ported ctor/dtor pair in compressedstream.cpp (0x1800ae710 /
+// 0x1800ae890) is untouched.
+// The slot-0 thunk `iobase_vtables.cpp` already defines and registers by
+// address (0x1800242a0). `IO::MemoryStream::DeletingDtor` names it rather than
+// restating it: section 4.2 keeps that registration alive for the whole step,
+// and the class must not be abstract because CompressedMemoryStream embeds one
+// by value. Declared at GLOBAL scope so the `namespace IO` bodies below can
+// reach it without qualifying a C-linkage name.
+extern "C" void* RtIo_MemoryStream_DeletingDtor(RtIo::MemoryStream* self,
+                                                unsigned int flags);
+
 namespace RtIo {
+
+extern "C" bool RtIo_MemoryStream_Read(MemoryStream* self, int32_t count, void* dst) {
+    return reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::Read(count, dst);
+}
+
+extern "C" bool RtIo_MemoryStream_Write(MemoryStream* self, int32_t count, const void* src) {
+    return reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::Write(count, src);
+}
+
+extern "C" bool RtIo_MemoryStream_SetCurrentPos(MemoryStream* self, int32_t pos) {
+    return reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::SetCurrentPos(pos);
+}
+
+extern "C" uint32_t RtIo_MemoryStream_GetCurrentPos(const MemoryStream* self) {
+    return reinterpret_cast<const IO::MemoryStream*>(self)->IO::MemoryStream::GetCurrentPos();
+}
+
+extern "C" uint32_t RtIo_MemoryStream_GetSize(const MemoryStream* self) {
+    return reinterpret_cast<const IO::MemoryStream*>(self)->IO::MemoryStream::GetSize();
+}
+
+extern "C" void RtIo_MemoryStream_Close(MemoryStream* self) {
+    reinterpret_cast<IO::MemoryStream*>(self)->IO::MemoryStream::Close();
+}
+
+}  // namespace RtIo
+
+// A member of `IO::X` cannot be defined inside `namespace RtIo` — `IO` and
+// `RtIo` are siblings, and C++ requires a member definition to appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2). So the bodies open
+// their own `namespace IO` block after the doors close.
+namespace IO {
 
 // ============================================================================
 // ?Read@MemoryStream@IO@@UEAA_NHPEAX@Z                       retail 0x1800ae950
@@ -61,19 +122,19 @@ namespace RtIo {
 // that overflows int32, because retail's sum WRAPS and then compares small.
 // The offset arithmetic that follows really is 64-bit, so the two widths are
 // transcribed separately rather than unified.
-extern "C" bool RtIo_MemoryStream_Read(MemoryStream* self, int32_t count, void* dst) {
+bool MemoryStream::Read(int count, void* dst) {
 
-    const int64_t cursor = static_cast<int32_t>(self->cursor);   // 1800ae95d MOVSXD
+    const int64_t cursor = static_cast<int32_t>(_cursor);        // 1800ae95d MOVSXD
     const int64_t n      = count;                                // 1800ae961 MOVSXD
     const int32_t end    = static_cast<int32_t>(cursor) +
                            static_cast<int32_t>(n);              // 1800ae964 LEA (32-bit)
 
-    if (end > static_cast<int32_t>(self->size)) {                // 1800ae96a CMP/JG
+    if (end > static_cast<int32_t>(_size)) {                     // 1800ae96a CMP/JG
         return false;                                            // 1800ae991
     }
-    std::memcpy(dst, static_cast<const uint8_t*>(self->data) + cursor,
+    std::memcpy(dst, static_cast<const uint8_t*>(_data) + cursor,
                 static_cast<size_t>(n));                         // 1800ae97c
-    self->cursor += static_cast<uint32_t>(n);                    // 1800ae981
+    _cursor += static_cast<uint32_t>(n);                         // 1800ae981
     return true;
 }
 
@@ -83,19 +144,19 @@ extern "C" bool RtIo_MemoryStream_Read(MemoryStream* self, int32_t count, void* 
 // Byte-for-byte the same body as Read with the memcpy operands swapped —
 // including the same 32-bit signed bound check, and including the fact that it
 // will NOT grow the buffer: a write past _size fails rather than reallocating.
-extern "C" bool RtIo_MemoryStream_Write(MemoryStream* self, int32_t count, const void* src) {
+bool MemoryStream::Write(int count, const void* src) {
 
-    const int64_t cursor = static_cast<int32_t>(self->cursor);   // 1800ae8fd
+    const int64_t cursor = static_cast<int32_t>(_cursor);        // 1800ae8fd
     const int64_t n      = count;                                // 1800ae901
     const int32_t end    = static_cast<int32_t>(cursor) +
                            static_cast<int32_t>(n);              // 1800ae904
 
-    if (end > static_cast<int32_t>(self->size)) {                // 1800ae90a
+    if (end > static_cast<int32_t>(_size)) {                     // 1800ae90a
         return false;                                            // 1800ae92e
     }
-    std::memcpy(static_cast<uint8_t*>(self->data) + cursor, src,
+    std::memcpy(static_cast<uint8_t*>(_data) + cursor, src,
                 static_cast<size_t>(n));                         // 1800ae919
-    self->cursor += static_cast<uint32_t>(n);                    // 1800ae91e
+    _cursor += static_cast<uint32_t>(n);                         // 1800ae91e
     return true;
 }
 
@@ -106,8 +167,8 @@ extern "C" bool RtIo_MemoryStream_Write(MemoryStream* self, int32_t count, const
 // bounds check. Retail stores whatever it is given and returns true, so a seek
 // past the end succeeds here and the following Read is what fails. A port that
 // "helpfully" validated would change which of the two calls reports the error.
-extern "C" bool RtIo_MemoryStream_SetCurrentPos(MemoryStream* self, int32_t pos) {
-    self->cursor = static_cast<uint32_t>(pos);   // 1800ae9b0
+bool MemoryStream::SetCurrentPos(int pos) {
+    _cursor = static_cast<uint32_t>(pos);        // 1800ae9b0
     return true;                                 // 1800ae9b3
 }
 
@@ -116,13 +177,13 @@ extern "C" bool RtIo_MemoryStream_SetCurrentPos(MemoryStream* self, int32_t pos)
 // ?GetSize@MemoryStream@IO@@UEBAIXZ                          retail 0x1800ae9d0
 // ============================================================================
 // Two instructions each. `UEBAI` — const, returning unsigned.
-extern "C" uint32_t RtIo_MemoryStream_GetCurrentPos(const MemoryStream* self) {
-    const uint32_t v = self->cursor;             // 1800ae9c0
+uint32_t MemoryStream::GetCurrentPos() const {
+    const uint32_t v = _cursor;                  // 1800ae9c0
     return v;
 }
 
-extern "C" uint32_t RtIo_MemoryStream_GetSize(const MemoryStream* self) {
-    const uint32_t v = self->size;               // 1800ae9d0
+uint32_t MemoryStream::GetSize() const {
+    const uint32_t v = _size;                    // 1800ae9d0
     return v;
 }
 
@@ -147,15 +208,34 @@ extern "C" uint32_t RtIo_MemoryStream_GetSize(const MemoryStream* self) {
 // table's slots 2..6 all being one address reads like a plausible stub table,
 // which CORROBORATES the wrong reading. A self-consistent wrong answer.
 //
+// (And it is the SAME +0x38 that means `Open` on the FileStream branch — the
+// one place the two halves of the family genuinely disagree about a slot.)
+//
 // Retail's is a no-op, so ours must be too: a Close that actually released
 // anything would double-free against the dtor, which is where the release
 // really lives (0x1800ae890).
-extern "C" void RtIo_MemoryStream_Close(MemoryStream* self) {
-    (void)self;
+void MemoryStream::Close() {
     // 1800ae9e0: RET — deliberately empty.
 }
 
-}  // namespace RtIo
+// ============================================================================
+// MemoryStream vector deleting destructor    retail 0x1800242a0 — vtable slot 0
+// ============================================================================
+// The BODY is `RtIo_MemoryStream_DeletingDtor` in iobase_vtables.cpp, which is
+// registered by address at 0x1800242a0 and fills slot 0 of the live minted
+// table (rt_data_mint_tables.inc:2884). B34_RULES section 4.2 forbids retiring
+// that row in this step, and iobase_vtables.cpp is not block 4's file, so this
+// override NAMES the existing door instead of restating the thunk.
+//
+// It exists at all only because `IO::CompressedMemoryStream` holds a
+// `MemoryStream` BY VALUE at +0x68: a member of abstract type is ill-formed, so
+// this one slot cannot stay `= 0` the way every other stream class's does.
+Stream* MemoryStream::DeletingDtor(unsigned flags) {
+    return static_cast<MemoryStream*>(::RtIo_MemoryStream_DeletingDtor(
+        reinterpret_cast<RtIo::MemoryStream*>(this), flags));
+}
+
+}  // namespace IO
 
 // ============================================================================
 // Registration

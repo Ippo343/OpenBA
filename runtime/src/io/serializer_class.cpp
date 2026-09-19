@@ -46,17 +46,19 @@
 // the end of B.3. These 22 bodies are nonetheless the LAST place a CALLER
 // spells those offsets, which is the win the block was for.
 //
-// THE `rt::io::Stream` CASTS ARE B.3.4 BRIDGES. `IO::Stream` is only
-// forward-declared until block 4 (STREAMS); the constructor has to read
-// `direction` and `encoding`, which only the POD declares today. Block 4
-// deletes the casts and changes NO signature — block 2 did the same for
-// `IO::ReaderWriter`.
+// THE `rt::io::Stream` BRIDGE CASTS ARE GONE (B.3.4 block 4). Block 3 read
+// `direction` and `encoding` through the POD because `IO::Stream` was only
+// forward-declared; it is a real class now, so the constructor and
+// `GetEncoding` read `_direction` / `_encoding` off the class directly. NO
+// SIGNATURE MOVED — block 3 already carried retail's final `(Stream&, int)`,
+// exactly as block 2 did for `IO::ReaderWriter`.
 //
 // PORTABILITY: no <windows.h>, no port registry, no allocator. The only
-// include is the layout header (PLAN §4.1 decision 1).
+// includes are the two layout headers (PLAN §4.1 decision 1).
 // ============================================================================
 
 #include "../../types/io/Serializer.h"
+#include "../../types/io/Stream.h"
 
 #include <cstdint>
 
@@ -132,19 +134,24 @@ namespace rw_vtbl = rt::io::rw_vtbl;
 // int)`. `BinaryWriter` stores that int and WRITES IT TO THE STREAM, so losing
 // the third argument would silently change the save format's version word.
 Serializer::Serializer(Stream& stream, int version) {
-    // B.3.4 bridge — `IO::Stream` lands in block 4; only the POD declares
-    // `direction` and `encoding` today. Block 4 deletes these two casts.
-    rt::io::Stream* s = reinterpret_cast<rt::io::Stream*>(&stream);
-
     _stream       = &stream;
     _readerWriter = nullptr;
 
-    rt::io::Encoding* factory = s->encoding;
-    void** fvt = factory->vtable;
-    const int slot = (s->direction == rt::io::kDirectionReading)
+    // The FACTORY SLOT IS STILL A RAW SLOT CALL, and stays one for the same
+    // reason the 22 Serialize members keep theirs (B34_RULES section 3.1): the
+    // Encoding a live stream carries wears one of the three MINTED tables
+    // (0x1801554a8 / 0x1801559d0 / 0x1801559f8), whose slots resolve back to
+    // registered doors. `CreateReader`/`CreateWriter` are slots 3 and 4 of a
+    // five-slot table whose slot 0 is NOT a destructor, which is why the
+    // constant is spelled from `encoding_vtbl` rather than counted.
+    Encoding* factory = stream._encoding;
+    // `MOV RAX,[RCX]` — the vptr AT the object, which on a live Encoding is
+    // the minted table, not GCC's.
+    void** const fvt = *reinterpret_cast<void** const*>(factory);
+    const int slot = (stream._direction == rt::io::kDirectionReading)
                          ? rt::io::encoding_vtbl::kCreateReader
                          : rt::io::encoding_vtbl::kCreateWriter;
-    using MakeRw = ReaderWriter* (*)(rt::io::Encoding*, Serializer*, int);
+    using MakeRw = ReaderWriter* (*)(Encoding*, Serializer*, int);
     _readerWriter = reinterpret_cast<MakeRw>(
         *reinterpret_cast<void* const*>(
             reinterpret_cast<const uint8_t*>(fvt) + slot))(factory, this, version);
@@ -183,9 +190,7 @@ int Serializer::GetVersion() const {
 // dispatch, no side effect. It answers with the STREAM's encoding policy
 // object, which is a different class from this Serializer's ReaderWriter.
 const Encoding& Serializer::GetEncoding() {
-    // B.3.4 bridge, as in the constructor: only the POD declares `encoding`.
-    rt::io::Stream* s = reinterpret_cast<rt::io::Stream*>(_stream);
-    return *reinterpret_cast<const Encoding*>(s->encoding);
+    return *_stream->_encoding;
 }
 
 // ============================================================================
