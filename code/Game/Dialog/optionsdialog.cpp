@@ -15,6 +15,7 @@
 #include "system/Filename.h"
 #include "ui/UserInterface.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -1111,7 +1112,7 @@ static void OptionsDialog_RestoreVideoSettings(OptionsDialog* self) {
     // Re-read all settings from persistence
     void* persistence = g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr;
     if (fn_Persistence_ReadSettings && persistence)
-        fn_Persistence_ReadSettings(persistence);
+        reinterpret_cast<IO::Persistence*>(persistence)->ReadSettings();   // B.3.4 bridge
 
     // Re-read game settings from persistence
     if (fn_ReadGameSettings && g_pGameSettingsPtr && *g_pGameSettingsPtr)
@@ -1146,7 +1147,7 @@ void OptionsDialog_OnApply(OptionsDialog* self) {
 
     // Write all settings to disk
     if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_WriteSettings)
-        fn_Persistence_WriteSettings(*g_pPersistenceSingleton);
+        reinterpret_cast<const IO::Persistence*>(*g_pPersistenceSingleton)->WriteSettings();   // B.3.4 bridge
 }
 
 // ============================================================
@@ -1173,7 +1174,7 @@ void OptionsDialog_OnOk(OptionsDialog* self) {
 void OptionsDialog_OnCancel(OptionsDialog* self) {
     // Reload persistence settings from disk
     if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_ReadSettings)
-        fn_Persistence_ReadSettings(*g_pPersistenceSingleton);
+        reinterpret_cast<IO::Persistence*>(*g_pPersistenceSingleton)->ReadSettings();   // B.3.4 bridge
 
     // Re-register default input bindings and load saved config
     if (fn_RegisterDefaultInputBindings)
@@ -1193,7 +1194,7 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
 
     // Reload persistence settings again (for audio config)
     if (g_pPersistenceSingleton && *g_pPersistenceSingleton && fn_Persistence_ReadSettings)
-        fn_Persistence_ReadSettings(*g_pPersistenceSingleton);
+        reinterpret_cast<IO::Persistence*>(*g_pPersistenceSingleton)->ReadSettings();   // B.3.4 bridge
 
     // Reinitialize audio from saved config
     if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton && fn_AudioConfig_Startup)

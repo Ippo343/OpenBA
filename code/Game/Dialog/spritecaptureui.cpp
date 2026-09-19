@@ -18,6 +18,8 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External
+#include "io/FileSystem.h"     // ENDGAME B.3.4 caller batch P
+#include <new>
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
@@ -169,8 +171,15 @@ check_pressed:
             // b. Get source directory as System::String (non-trivial return: RCX=this, RDX=retval)
             void* fsInstance = g_pFileSystemSingleton ? *g_pFileSystemSingleton : nullptr;
             System::String sourceDirStr;
+            // B.3.4 bridge. The guard stays. The member returns
+            // `System::Filename` BY VALUE through MSVC's hidden return slot, and
+            // `&sourceDirStr` is the slot the door was handed — Filename and
+            // String are the same 8 bytes with the same release sequence
+            // (Filename.h), which is why the door wrote a Filename into a String
+            // local. One AddRef, and ~String at scope exit is the one release.
             if (fsInstance)
-                fn_FileSystem_GetSourceDirectory(fsInstance, &sourceDirStr);
+                ::new (reinterpret_cast<System::Filename*>(&sourceDirStr)) System::Filename(
+                    reinterpret_cast<const IO::FileSystem*>(fsInstance)->GetSourceDirectory());
 
             // c. Get edit element text (String at editCapture + 0xC8)
             void* editElem = *(void**)&self->editCapture;

@@ -22,6 +22,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
 #include <cstdint>
 #include <utility>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -155,7 +156,8 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     // --- Get mod data ---
     void* modification = *g_ppModificationSingleton;
     int modIndex = *(int*)(s + 0xC0);
-    void* mod = fn_Modification_GetMod(modification, modIndex);
+    void* mod = const_cast<RtIO::Mod*>(
+        &reinterpret_cast<const IO::Modification*>(modification)->GetModification(modIndex));   // B.3.4 bridge
     uintptr_t m = (uintptr_t)mod;
 
     // --- Hide create/update buttons ---
@@ -202,8 +204,10 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     for (int i = 0; i < conflictCount; i++) {
         void** conflictArray = *(void***)(m + 0x70);
-        int cIdx = fn_Modification_Find(modification, conflictArray[i]);
-        void* cMod = fn_Modification_GetMod(modification, cIdx);
+        int cIdx = reinterpret_cast<const IO::Modification*>(modification)
+                       ->Find(*reinterpret_cast<const RtSystem::Filename*>(conflictArray[i]));   // B.3.4 bridge
+        void* cMod = const_cast<RtIO::Mod*>(
+            &reinterpret_cast<const IO::Modification*>(modification)->GetModification(cIdx));   // B.3.4 bridge
         uintptr_t cm = (uintptr_t)cMod;
 
         // Color: ^li^c1 if enabled, ^li^c0 if disabled
@@ -258,8 +262,10 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
             for (int i = 0; i < conflictCount; i++) {
                 void** cArray = *(void***)(m + 0x70);
-                int cIdx = fn_Modification_Find(modification, cArray[i]);
-                void* cMod = fn_Modification_GetMod(modification, cIdx);
+                int cIdx = reinterpret_cast<const IO::Modification*>(modification)
+                               ->Find(*reinterpret_cast<const RtSystem::Filename*>(cArray[i]));   // B.3.4 bridge
+                void* cMod = const_cast<RtIO::Mod*>(
+                    &reinterpret_cast<const IO::Modification*>(modification)->GetModification(cIdx));   // B.3.4 bridge
 
                 if (*(uint8_t*)((uintptr_t)cMod + 0x50) != 0) {
                     void* cBstRoot = *(void**)((uintptr_t)cMod + 0x60);

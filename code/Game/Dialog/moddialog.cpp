@@ -37,6 +37,7 @@
 #include "system/String.h"
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
@@ -107,7 +108,7 @@ static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
     void* modSingleton = *(void**)g_ppModificationSingleton;
     if (!modSingleton) return;
 
-    int modCount = fn_Modification_GetCount(modSingleton);
+    int modCount = reinterpret_cast<const IO::Modification*>(modSingleton)->GetCount();   // B.3.4 bridge
     if (modCount <= 0) return;
 
     uintptr_t entriesBase = *(uintptr_t*)(s + 0xB8);  // mod entry array
@@ -116,7 +117,8 @@ static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
         uintptr_t entry = entriesBase + (uintptr_t)i * 0x58;
 
         // Get mod data
-        void* mod = fn_Modification_GetMod(modSingleton, i);
+        void* mod = const_cast<RtIO::Mod*>(
+            &reinterpret_cast<const IO::Modification*>(modSingleton)->GetModification(i));   // B.3.4 bridge
         if (!mod) continue;
 
         uintptr_t m = (uintptr_t)mod;
@@ -129,7 +131,8 @@ static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
             for (int j = 0; j < modCount; j++) {
                 if (j == i) continue;
 
-                void* otherMod = fn_Modification_GetMod(modSingleton, j);
+                void* otherMod = const_cast<RtIO::Mod*>(
+                    &reinterpret_cast<const IO::Modification*>(modSingleton)->GetModification(j));   // B.3.4 bridge
                 uintptr_t om = (uintptr_t)otherMod;
                 uint8_t otherEnabled = *(uint8_t*)(om + 0x50);
                 if (otherEnabled == 0) continue;
@@ -261,7 +264,7 @@ void ModDialog_Slot4(ModDialog* self) {
     }
 
     void* modSingleton = *(void**)g_ppModificationSingleton;
-    int modCount = fn_Modification_GetCount(modSingleton);
+    int modCount = reinterpret_cast<const IO::Modification*>(modSingleton)->GetCount();   // B.3.4 bridge
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
 
     for (int i = 0; i < modCount; i++) {
@@ -528,7 +531,8 @@ static void ModDialog_ToggleMod_Impl(ModDialog* self, int index) {
 
     uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)(int64_t)index * 0x58;
     uintptr_t checkElem = *(uintptr_t*)(entry + 0x28);
-    fn_Modification_Enable(modSingleton, index, *(uint8_t*)(checkElem + 0xD8) != 0);
+    reinterpret_cast<IO::Modification*>(modSingleton)
+        ->Enable(index, *(uint8_t*)(checkElem + 0xD8) != 0);   // B.3.4 bridge
 
     ModDialog_RefreshDisplay_Impl(self);
 }
@@ -544,7 +548,7 @@ static void ModDialog_MoveToTop_Impl(ModDialog* self, int index) {
 
     // Swap up to top
     while (index > 0) {
-        fn_Modification_Swap(modSingleton, index, index - 1);
+        reinterpret_cast<IO::Modification*>(modSingleton)->Swap(index, index - 1);   // B.3.4 bridge
         index--;
     }
 
@@ -673,7 +677,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
         if ((unsigned)(result - 1) < 2) {
             // User confirmed: save and reload
-            fn_Modification_SaveList(modSingleton);
+            reinterpret_cast<IO::Modification*>(modSingleton)->SaveList();   // B.3.4 bridge
             fn_ModDialog_CloseAndReload((void*)self);
 
             if (gameWorld == nullptr) {
@@ -708,7 +712,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
             }
         } else {
             // User cancelled: refresh list to undo changes
-            fn_Modification_RefreshList(modSingleton);
+            reinterpret_cast<IO::Modification*>(modSingleton)->RefreshList();   // B.3.4 bridge
         }
     }
 
@@ -742,7 +746,7 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
 
         if (id == 100) {
             // Cancel — refresh list and close
-            fn_Modification_RefreshList(modSingleton);
+            reinterpret_cast<IO::Modification*>(modSingleton)->RefreshList();   // B.3.4 bridge
 
             // Build InternalBasePtr for CloseDialog
             void* dialogPtr = nullptr;
@@ -768,14 +772,14 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
 
         if (id >= 2000 && id < 3000) {
             // Move up: swap(id-2000, id-2001)
-            fn_Modification_Swap(modSingleton, id - 2000, id - 2001);
+            reinterpret_cast<IO::Modification*>(modSingleton)->Swap(id - 2000, id - 2001);   // B.3.4 bridge
             ModDialog_RefreshDisplay_Impl(self);
             goto done;
         }
 
         if (id >= 3000 && id < 4000) {
             // Move down: swap(id-3000, id-2999)
-            fn_Modification_Swap(modSingleton, id - 3000, id - 2999);
+            reinterpret_cast<IO::Modification*>(modSingleton)->Swap(id - 3000, id - 2999);   // B.3.4 bridge
             ModDialog_RefreshDisplay_Impl(self);
             goto done;
         }

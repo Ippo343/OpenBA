@@ -44,6 +44,9 @@
 #include "system/Filename.h"
 #include "system/String.h"
 #include "Tutorial/tutorial_funcs.h"
+#include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
+#include "io/FileSystem.h"    // ENDGAME B.3.4 caller batch P
+#include <new>
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -285,10 +288,17 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         // the GetDataDirectory temp is a Filename.
         void* persistence = *g_pPersistenceSingleton;
         System::String savePathBuf;
-        fn_Persistence_GetSavePath(persistence, &savePathBuf);
+        // B.3.4 bridge, twice. Each member returns BY VALUE through MSVC's
+        // hidden return slot, and the buffer below is the slot the door was
+        // handed, so the prvalue is constructed straight into it (guaranteed
+        // elision): one AddRef each, exactly as the door did, and each local's
+        // own destructor is the one release it always was.
+        ::new (&savePathBuf) System::String(
+            reinterpret_cast<const IO::Persistence*>(persistence)->GetSavePath());
         void* fileSystem = *g_pFileSystemSingleton2;
         System::Filename dataDirBuf;
-        fn_FileSystem_GetDataDirectory(fileSystem, &dataDirBuf);
+        ::new (&dataDirBuf) System::Filename(
+            reinterpret_cast<const IO::FileSystem*>(fileSystem)->GetDataDirectory());
         *reinterpret_cast<System::String*>(
             *reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90) =
             dataDirBuf.AsString();
