@@ -1,0 +1,274 @@
+#pragma once
+// ============================================================================
+// runtime/types/video/VertexLayout.h — `Video::VertexLayout` as a real C++
+// class, plus its nested `Element`.
+//
+// ENDGAME B.3.5 block A, RULE B5-2.2: this is the ONE header step 5 has to
+// AUTHOR rather than port. Before this file, `Video::VertexLayout`'s layout
+// existed in exactly two places, both partial and both private to one
+// translation unit:
+//
+//   * `dx11/src/dx11_backend_access.h`'s `VertexLayoutOwner` /
+//     `VertexLayoutElement` — four offsets, read out of VideoDX11's
+//     `VertexLayoutData::PlatformCreate` (0x180003ff0);
+//   * an anonymous-namespace `struct VertexLayout` / `VertexElement` inside
+//     `runtime/src/video/vertexlayout.cpp`.
+//
+// Both are now views of THIS declaration. Nothing else in the tree named the
+// layout, so there is no `Rt*` POD to move (B4b-1 does not fire).
+//
+// THE BODIES DO NOT LIVE HERE AND DO NOT MOVE IN THIS BLOCK.
+// `runtime/src/video/vertexlayout.cpp` keeps its ten registered doors exactly
+// as they are; ENDGAME B.3.5 block B (the program/shader family) owns that file
+// and moves the bodies into the members declared below. This block's job is a
+// COMPLETE and CORRECT declaration so block B, block D and the dx11 caller
+// batch never have to edit it.
+//
+// EVIDENCE — all read this pass from the RETAIL `Runtime-x64.dll` (15290
+// functions, image base 0x180000000), as DISASSEMBLY, not decompiled C:
+//
+//   sizeof 0x48        the `MOV EDX,0x48` in the slot-0 vector deleting dtor
+//                      (B35_SLOTS.md, `Video::VertexLayout`)
+//   parent             `?_ParentTypeName@VertexLayout@Video@@CAPEBDXZ`
+//                      (0x18004dca0) returns "Object::CompiledExternal"
+//   9 slots            `??_7VertexLayout@Video@@6B@` @ 0x180157ba0
+//   fields             `??0VertexLayout@Video@@QEAA@XZ` @ 0x1800f5d50:
+//                        1800f5d66  LEA [0x180154788]  ??_7Base
+//                        1800f5d70  LEA [0x1801547a0]  ??_7External
+//                        1800f5d7a  zero +0x08, +0x10, +0x18   (External's)
+//                        1800f5d90  LEA [0x180154a30]  ??_7CompiledExternal
+//                        1800f5d9a  LEA [0x180157ba0]  ??_7VertexLayout
+//                        1800f5da4  zero +0x20, +0x28          (_elements)
+//                        1800f5dac  zero +0x38, +0x40          (_signature)
+//                        1800f5db4  _singleton -> Device+0x100 -> vt[0x70]
+//                        1800f5dd6  store the result at +0x30   (_data)
+//                      and `??1VertexLayout` @ 0x1800f5df0, which destroys
+//                      +0x30 (slot 0, flags=1), then +0x38 as
+//                      `Array<uint8>::~Array` (0x1800112a0), then +0x20 as
+//                      `Array<Element>::~Array` (0x18004fa30), re-stamps
+//                      ??_7CompiledExternal and tail-JMPs ~External
+//                      (0x1800bc950). Nothing touches +0x2c or +0x44, which is
+//                      what makes both of them an `Array<T>::_capacity`.
+// ============================================================================
+//
+// *** THE ELEMENT FIELD MAP IN `runtime/src/video/vertexlayout.cpp` IS WRONG,
+// *** AND `dx11_backend_access.h`'s IS RIGHT.  (B.3.5 block A finding.)
+//
+// `vertexlayout.cpp`'s local `VertexElement` reads
+//   +0x08 stream  +0x0c usage  +0x10 usageIndex  +0x14 format  +0x18 offset
+// Retail says otherwise, on two independent reads:
+//
+//   `?Add@VertexLayout@Video@@QEAAXHHW4Usage@12@HW4Format@12@@Z` @ 0x1800f5a90
+//   builds one Element in its own frame and appends it. The five parameters
+//   land in declaration order:
+//       1800f5aa6  MOV [RSP+0x30],EDX    arg1 (int)     -> Element +0x08
+//       1800f5aaa  MOV [RSP+0x34],R8D    arg2 (int)     -> Element +0x0c
+//       1800f5aaf  MOV [RSP+0x38],R9D    arg3 (Usage)   -> Element +0x10
+//       1800f5ab4  MOV [RSP+0x3c],...    arg4 (int)     -> Element +0x14
+//       1800f5abf  MOV [RSP+0x40],...    arg5 (Format)  -> Element +0x18
+//   (RSP+0x28 is the Element's leading `String name`, left null: `Add` does not
+//   name an element, which is consistent with the DX11 backend never reading a
+//   semantic — see `dx11/src/vertexlayoutdata.cpp`.)
+//
+//   VideoDX11's `VertexLayoutData::PlatformCreate` @ 0x180003ff0 reads
+//   +0x08 as the D3D11 InputSlot, +0x0c as the AlignedByteOffset and +0x18 as
+//   the format index. Those three agree with `Add` exactly.
+//
+//   `?GetStreamCount@VertexLayout@Video@@QEBAHXZ` @ 0x1800f5a30 walks the
+//   element array in 0x20 steps and takes `max(elem+0x08) + 1` — so +0x08 is
+//   the STREAM, which both readings already agreed on.
+//
+// So `format` is at +0x18, not +0x14, and +0x0c is the byte OFFSET, not the
+// usage. The mistake is inert today: `Serialize` (0x1800563c0) writes the six
+// fields positionally through the ReaderWriter's Int/UInt slots, and
+// vertexlayout.cpp's permutation happens to keep the same int/uint/int/uint/int
+// sequence on the wire, so no save or `MeshLayout\*.rsc` is misread. It is a
+// naming defect, not a data defect — but it is exactly the shape that turns
+// into one the moment a member reads a field by name. The names below are the
+// retail-proved ones; `vertexlayout.cpp` belongs to block B and is left alone.
+// ============================================================================
+
+#include <cstddef>
+#include <cstdint>
+
+#include "../collection/Collection.h"
+#include "../object/External.h"
+
+namespace IO { class Stream; }
+
+namespace Video {
+
+// ============================================================
+// Video::VertexLayout — a compiled vertex-buffer layout. 0x48 bytes,
+// `Object::CompiledExternal` base (which adds no bytes over `External`'s 0x20).
+//
+// *** NOT CONSTRUCTIBLE IN B.3.5. *** Every live `VertexLayout` is built by
+// `??0VertexLayout@Video@@QEAA@XZ` (or by the factory rows in
+// `runtime/src/video/rt_factories_video.inc`) and wears the MINTED
+// `??_7VertexLayout@Video@@6B@` table, not GCC's. A `Video::VertexLayout vl;`
+// would stamp GCC's table on an object the rest of the tree reads through the
+// minted one, with no build error — so the default constructor is `protected`
+// and `= default` (B34_BRIEFS A.4). `= default` keeps the class trivially
+// default-constructible, so no layout pin moves, and a probe SUBCLASS in
+// `tests/unit/` can still reach it.
+//
+// NO VIRTUAL DESTRUCTOR (ENDGAME B.1 decision 2): slot 0 is
+// `DeletingDtor(unsigned)`. `~VertexLayout()` is non-virtual and has no slot.
+// ============================================================
+class VertexLayout : public Object::CompiledExternal {
+public:
+    // ---- the two 4-byte enums `?Add@` names ----------------------------
+    // `W4Usage@12@` / `W4Format@12@` in the mangling, i.e. enums NESTED in
+    // `Video::VertexLayout`. THE ENUMERATOR NAMES ARE NOT RECOVERABLE from the
+    // binary, so — exactly as `Object::External::CompileResult` does for the
+    // same reason (External.h) — they are spelled as the 32-bit integers they
+    // are rather than as enums with invented names.
+    //
+    // `Format` is known to have nine valid values, 0..8, from the table
+    // VideoDX11's `PlatformCreate` builds on its stack; the DXGI mapping is
+    // transcribed in `dx11/src/vertexlayoutdata.cpp`. Retail range-checks
+    // neither, and neither do we.
+    using Usage  = int32_t;
+    using Format = int32_t;
+
+    // ============================================================
+    // Video::VertexLayout::Element — 0x20 bytes, a `struct` (the mangled
+    // `?GetElement@VertexLayout@Video@@QEBAAEBUElement@12@H@Z` spells `U`,
+    // not `V`). Field map and its proof: the banner at the top of this file.
+    //
+    // `name` is a `System::String` (one pointer to a refcounted payload whose
+    // count sits at -4). It is spelled `void*` here for the reason
+    // `runtime/types/video/ImageBuffer.h` gives for its own +0x48: a real
+    // `System::String` member would give `Element` a non-trivial destructor
+    // that runs IN ADDITION to the by-hand release the ported
+    // `Array<Element>::~Array` spec already performs (0x18004fa30) — the
+    // double-free shape B31_RULES records. The eight bytes are the same.
+    // ============================================================
+    struct Element {
+        void*    name;        // +0x00  System::String — the semantic name
+        int32_t  stream;      // +0x08  vertex stream / D3D11 InputSlot
+        int32_t  offset;      // +0x0c  byte offset within the stream
+        Usage    usage;       // +0x10  never read by the DX11 backend
+        int32_t  usageIndex;  // +0x14  never read by the DX11 backend
+        Format   format;      // +0x18  0..8, indexes VideoDX11's DXGI table
+        uint32_t _pad1c;      // +0x1c  NOT WRITTEN by `Add` (0x1800f5a90)
+    };
+
+    // ---- the nine slots, in measured order -----------------------------
+    // Slot 4 is `Object::External::Compile`, INHERITED (retail's slot 4 is
+    // 0x1800066e0, External's own body), so it is not redeclared here.
+    Object::Base*     DeletingDtor(unsigned flags) override;  // [0] 0x18004e000
+    const char*       TypeName() const override;              // [1] 0x18004dcd0
+    uint32_t          Type() const override;                  // [2] 0x18004dcb0
+    int32_t           GetFileVersion() const override;        // [3] 0x1800f5e60 — `MOV EAX,3`
+    bool              Serialize(void* stream) override;       // [5] 0x1800f5e70
+    Object::External* Reconstruct() override;                 // [6] 0x18004de50
+    void              Destruct() override;                    // [7] 0x18004de80
+    // [8] 0x18004de70. `virtual`, NOT `override`: `Object::External`'s and
+    // `CompiledExternal`'s retail tables are eight entries, so this branch
+    // introduces `Construct` itself (RULE B5-16).
+    virtual Object::External* Construct();
+
+    // ---- the exported non-virtual members ------------------------------
+    // Every `?…@VertexLayout@Video@@` in the shipped export table is declared
+    // here, ported or not, so no later block has to edit this header
+    // (BLOCK_BRIEF "the shape"). The ten that `runtime/src/video/
+    // vertexlayout.cpp` already implements as doors are marked `door`; the rest
+    // are `// not ported` — nothing in the tree calls them, they exist only as
+    // rows in `standalone/rt_export_addrs.inc`.
+    int32_t        GetElementCount() const;                       // 0x18004de90 — not ported
+    const Element& GetElement(int32_t index) const;               // 0x18004dea0 — not ported
+    int32_t        GetStreamCount() const;                        // 0x1800f5a30 — not ported
+    void           BeginAdd();                                    // 0x1800f5b20 — not ported
+    void           Add(int32_t stream, int32_t offset, Usage usage,
+                       int32_t usageIndex, Format format);        // 0x1800f5a90 — not ported
+    void           EndAdd();                                      // 0x1800f5a70 — not ported
+    void           Bind(void* context) const;                     // 0x1800f6080 — not ported
+    bool           operator==(const VertexLayout& other) const;   // 0x1800f5b30 — not ported
+
+    // `??0VertexLayout@Video@@QEAA@AEBV01@@Z` (0x18004deb0) and
+    // `??4VertexLayout@Video@@QEAAAEAV01@AEBV01@@Z` (0x18004df30) are REAL,
+    // EXPORTED bodies, not compiler defaults — the same situation RULE B5-10
+    // records for `Graphics::Geometry`. Declared, and deliberately left
+    // undefined in this block: nothing in the tree calls either, and a
+    // `= default` here would silently substitute a bitwise copy for whatever
+    // those two do with the element array and the String names.
+    VertexLayout(const VertexLayout& other);                      // 0x18004deb0 — not ported
+    VertexLayout& operator=(const VertexLayout& other);           // 0x18004df30 — not ported
+
+    // The static reflection companions retail emits.
+    static uint32_t     TypeId();                                 // 0x18004dcc0 — not ported
+    static Object::Base* CreateNewObject();                       // 0x18004ddc0 — rt_factories_video.inc
+    static Object::Base* CreateInPlaceObject(void* storage);      // 0x18004de40 — rt_factories_video.inc
+    static void*        operator new(size_t size);                // 0x18004dce0 — not ported
+    static void*        operator new(size_t size, void* storage); // 0x18004dd50 — not ported
+    static void         operator delete(void* p);                 // 0x18004dd60 — class_operator_delete.cpp
+
+protected:
+    // See the "NOT CONSTRUCTIBLE" banner. `??0VertexLayout@Video@@QEAA@XZ`
+    // (0x1800f5d50) stays a registered ctor DOOR (B4b-2 / B35_RULES 11): no
+    // real constructor on a polymorphic class.
+    VertexLayout() = default;
+
+    // ??1VertexLayout@Video@@UEAA@XZ (0x1800f5df0). NON-virtual; reached by
+    // `DeletingDtor` and by `Destruct`.
+    ~VertexLayout();
+
+    // The three private platform halves. `PlatformCreate` returns void, unlike
+    // VertexProgram's and PixelProgram's, which return bool — 0x180003ff0
+    // falls off its end with no return value set, so that is deliberate.
+    void PlatformConstruct();                    // 0x1800f5f90
+    void PlatformDestruct();                     // 0x1800f5fd0
+    void PlatformCreate();                       // 0x1800f6060
+    void PlatformSerialize(void* serializer);    // 0x1800f5ff0
+
+    static const char* _TypeName();              // 0x18004dc90 -> "VertexLayout"
+    static const char* _ParentTypeName();        // 0x18004dca0 -> "Object::CompiledExternal"
+
+public:
+    // ---- the 0x28 bytes VertexLayout adds ------------------------------
+    // Spelled with leading underscores to match `runtime/src/video/
+    // vertexlayout.cpp`'s local view, so block B's move is a rename of the
+    // struct and nothing else. Public because `dx11/` reads `_elements` and
+    // `_signature` directly — the same posture `Object::External` takes with
+    // `_path` / `_refs`.
+    Collection::Array<Element> _elements;   // +0x20  {data, _size +0x28, _capacity +0x2c}
+    // The `Video::VertexLayoutData*` the Device factory hands back
+    // (`DeviceData` vtable +0x70, slot 14 — `Dx11_CreateVertexLayoutData`).
+    void*                      _data;       // +0x30
+    // The compiled vertex-shader INPUT SIGNATURE blob. Retail reaches it only
+    // through `PlatformSerialize`, which is why the field is named for the
+    // platform half; VideoDX11 hands it to `CreateInputLayout` as the signature
+    // and aborts the whole of `PlatformCreate` when `_size` is 0.
+    Collection::Array<uint8_t> _signature;  // +0x38  {data, _size +0x40, _capacity +0x44}
+};
+
+static_assert(sizeof(VertexLayout) == 0x48,
+              "Video::VertexLayout is 0x48 bytes (MOV EDX,0x48 in the slot-0 "
+              "vector deleting dtor)");
+static_assert(alignof(VertexLayout) == 8, "Video::VertexLayout is qword-aligned");
+static_assert(offsetof(VertexLayout, _elements) == 0x20,
+              "VertexLayout::_elements @ +0x20 (ctor 0x1800f5da4, "
+              "VideoDX11 0x180003ff0)");
+static_assert(offsetof(VertexLayout, _elements) + offsetof(Collection::Array<VertexLayout::Element>, _size) == 0x28,
+              "VertexLayout::_elements._size @ +0x28 (Serialize 0x1800f5ebf)");
+static_assert(offsetof(VertexLayout, _data) == 0x30,
+              "VertexLayout::_data @ +0x30 (ctor 0x1800f5dd6, dtor 0x1800f5e10)");
+static_assert(offsetof(VertexLayout, _signature) == 0x38,
+              "VertexLayout::_signature @ +0x38 (ctor 0x1800f5dac, "
+              "VideoDX11 0x180003ff0)");
+static_assert(offsetof(VertexLayout, _signature) + offsetof(Collection::Array<uint8_t>, _size) == 0x40,
+              "VertexLayout::_signature._size @ +0x40 (Serialize 0x1800f5f06)");
+
+static_assert(sizeof(VertexLayout::Element) == 0x20,
+              "Video::VertexLayout::Element is 0x20 bytes (the 0x20 stride "
+              "0x1800563c0 and 0x180003ff0 both walk in)");
+static_assert(alignof(VertexLayout::Element) == 8, "Element is qword-aligned");
+static_assert(offsetof(VertexLayout::Element, name)       == 0x00, "Element::name @ +0x00");
+static_assert(offsetof(VertexLayout::Element, stream)     == 0x08, "Element::stream @ +0x08 (Add arg1, GetStreamCount 0x1800f5a30)");
+static_assert(offsetof(VertexLayout::Element, offset)     == 0x0c, "Element::offset @ +0x0c (Add arg2, VideoDX11 AlignedByteOffset)");
+static_assert(offsetof(VertexLayout::Element, usage)      == 0x10, "Element::usage @ +0x10 (Add arg3)");
+static_assert(offsetof(VertexLayout::Element, usageIndex) == 0x14, "Element::usageIndex @ +0x14 (Add arg4)");
+static_assert(offsetof(VertexLayout::Element, format)     == 0x18, "Element::format @ +0x18 (Add arg5, VideoDX11 format index)");
+
+}  // namespace Video
