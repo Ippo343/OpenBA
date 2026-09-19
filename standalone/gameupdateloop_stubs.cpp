@@ -18,13 +18,13 @@
 //   +0x40  OnVideoError(self)              — exe 0x140095970  (device-lost — stub)
 //   +0x48  OnVideoRestart(self)            — exe 0x140095930  (device-restored — stub)
 //   +0x50  GetResourceFilename(self)       — exe 0x140019d40  (returns "Game/Game")
-//   +0x58  AllowsModChanges(self)          — exe 0x14003a8f4  (Runtime thunk -> true)
+//   +0x58  AllowsModChanges(self)          — exe 0x14003a8f4  (Runtime thunk -> FALSE)
 //
 // Slots 0-4 route to the existing clean reimpls in
 // code/Game/Game/gameupdateloop.cpp. The six remaining slots are filled here:
 //   - GetResourceFilename is LOAD-BEARING (the loader reads its return value to
 //     know which resource group to load) and must return exactly "Game/Game".
-//   - AllowsModChanges returns true (matches the Runtime thunk).
+//   - AllowsModChanges returns false (the Runtime base, 0x180031790).
 //   - DrawFailed/SaveRestore/OnVideoError/OnVideoRestart are verified-safe
 //     no-ops on the new-game path (Ghidra recon 2026-05-30): DrawFailed is a
 //     bare RET; SaveRestore only runs when restoring a .sav; the two video
@@ -130,11 +130,17 @@ const char* GUL_GetResourceFilename(void* self) {
     return "Game/Game";
 }
 
-// +0x58 AllowsModChanges — original thunks to the Runtime impl which returns
-// true (the loop permits mod configuration). Side-effect-free getter.
+// +0x58 AllowsModChanges — exe slot 11 is the import thunk 0x14003a8f4 -> the ONE
+// Runtime export ?AllowsModChanges@UpdateLoop@Engine@@ (0x180031790 =
+// `XOR AL,AL ; RET`), i.e. FALSE. Only MenuDialogLoopT overrides it (exe
+// 0x14001a2c0, `MOV AL,1 ; RET`). Engine::Loader::Load (0x1800dc050) compares
+// this against Modification::_savingEnabled: true->false snapshots _mods into
+// _savedMods, false->true re-runs RefreshList and marks the list dirty (= a
+// package remount on returning to the menu). This stub used to return true on a
+// misread of the thunk, which pinned the byte at 1 for the whole process.
 bool GUL_AllowsModChanges(void* self) {
     (void)self;
-    return true;
+    return false;
 }
 
 } // namespace

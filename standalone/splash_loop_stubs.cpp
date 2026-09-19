@@ -15,7 +15,7 @@
 //   +0x40  OnVideoError(self)              — thunk 0x14003A8C4 -> Runtime DialogLoaderLoopT::OnVideoError
 //   +0x48  OnVideoRestart(self)            — thunk 0x14003A900 -> Runtime DialogLoaderLoopT::OnVideoRestart
 //   +0x50  GetResourceFilename(self)       — thunk 0x14003A8FA -> Runtime DialogLoaderLoopT::GetResourceFilename
-//   +0x58  AllowsModChanges(self)          — thunk 0x14003A8F4 -> Runtime DialogLoaderLoopT::AllowsModChanges
+//   +0x58  AllowsModChanges(self)          — thunk 0x14003A8F4 -> Runtime UpdateLoop::AllowsModChanges (FALSE)
 //   +0x60  CreateDialog(self, retptr)      — exe 0x140099070 (LoaderDialog ctor)
 //
 // First-pass: Startup/Shutdown/Update/Draw/CreateDialog are print-only stubs.
@@ -569,9 +569,12 @@ const char* Stub_GetResourceFilename(UpdateLoop* self) {
 
 bool Stub_AllowsModChanges(UpdateLoop* self) {
     (void)self;
-    // Original thunks to Runtime DialogLoaderLoopT::AllowsModChanges which
-    // returns true (loader screens always permit mod swaps).
-    return true;
+    // Exe slot 11 (vtable 0x140158800 +0x58) is the import thunk 0x14003a8f4 ->
+    // the ONE Runtime export ?AllowsModChanges@UpdateLoop@Engine@@ (0x180031790,
+    // `XOR AL,AL ; RET`): FALSE. There is no DialogLoaderLoopT override; only
+    // MenuDialogLoopT (exe 0x14001a2c0) returns true. See GUL_AllowsModChanges
+    // (gameupdateloop_stubs.cpp) for what Engine::Loader::Load does with it.
+    return false;
 }
 
 extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr);
