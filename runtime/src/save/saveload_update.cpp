@@ -52,6 +52,7 @@
 #include "../../types/io/Modification.h"   // UpdateLoad reorders the mod list
 #include "../../types/collection/Collection.h"
 #include "../../types/video/CompanionData.h"  // ENDGAME B.3.5: Video::ImageBufferData
+#include "../../types/video/ImageBuffer.h"     // ENDGAME B.3.5: Video::ImageBuffer
 #include "../collection/array_internal.h"   // rtcoll::AsArray, ArraySpec -- B.3.2 step 2
 #include "../system/string.h"              // RtString_ReleaseInline
 #include "resolve.h"   // ResolveAddr / Module -- the port-aware address door
@@ -98,7 +99,6 @@ namespace {
 // each name was written down, never copied out of Ghidra's demangler
 // (reference_resolveexport_phantom_names.md).
 using BeginDeleteFn = bool (*)(void* persistence, const char** name);
-using RecreateFn    = void (*)(void* imageBuffer);
 
 // The vtable slot OnVideoRestart calls: `MOV R10,[RCX]` then
 // `CALL qword ptr [R10+0x28]`, i.e. index 5 of the object hanging off
@@ -270,12 +270,13 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out) {
         if (buffer == nullptr) continue;
         if (*reinterpret_cast<const int32_t*>(row + 0x40) < 0) continue;
 
-        RecreateFn recreate =
-            RT_EXPORT_ONCE(RecreateFn, "?Recreate@ImageBuffer@Video@@QEAAXXZ");
-        if (out.Call("Video::ImageBuffer::Recreate", (const void*)recreate,
-                     reinterpret_cast<int64_t>(buffer))) {
-            recreate(buffer);
-        }
+        // ENDGAME B.3.5: `?Recreate@ImageBuffer@Video@@QEAAXXZ` (0x1800f2fd0) is a
+        // member of the real `Video::ImageBuffer`, defined in
+        // runtime/src/video/video_resources.cpp. `buffer` is the save row's
+        // +0x18 `Video::ImageBuffer*`. The `out.Call(label, target, …)` wrapper
+        // went with the door pointer it labelled: `RtSink::Call` ignores every
+        // argument and returns true unconditionally (rt_sink.h).
+        reinterpret_cast<Video::ImageBuffer*>(buffer)->Recreate();  // B.3.5 bridge
 
         void** device = DeviceSingletonSlot();
         RtVideoDeviceLock(device);
