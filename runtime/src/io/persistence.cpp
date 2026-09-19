@@ -140,14 +140,64 @@ bool RetailValueIsTrue(const char* value) {
 // retail 0x1800b81e0 — full RT_DIFF oracle (read-only: Map_Find + a transient
 // String::Format/MemFree pair, no persistent mutation).
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 6: the five bodies in this file move onto
+// the real `IO::Persistence`, below. Each door keeps its name, its signature
+// and both registration lines, and delegates. No qualified `IO::` call is
+// needed: `IO::Persistence` has no vtable of its own -- the vptr at +0x10 is
+// the EMBEDDED worker's (runtime/types/io/Persistence.h) -- so B34_BRIEFS
+// section A.1's re-entry hazard cannot arise.
 bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, int* out) {
+    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+}
 
-    System::String k = MakeSettingsKey(section, key);
-    void* node = CallMapFind(self, &k);
+bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out) {
+    return reinterpret_cast<const IO::Persistence*>(self)->Get(section, key, *out);
+}
+
+void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, int value) {
+    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
+}
+
+void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value) {
+    reinterpret_cast<IO::Persistence*>(self)->Set(section, key, value);
+}
+
+// The return is BY VALUE, so `retval` IS retail's hidden return slot; the
+// member's by-value result is CONSTRUCTED into it -- one AddRef, exactly as the
+// String copy ctor at 0x180006cb0 does.
+void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
+    new (static_cast<System::String*>(retval)) System::String(
+        reinterpret_cast<const IO::Persistence*>(self)->GetSavePath());
+    return retval;
+}
+
+// ============================================================================
+// `IO::Persistence`'s member bodies for this file
+// ============================================================================
+// Defined in `namespace IO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2). The file-local
+// helpers live in this translation unit's GLOBAL anonymous namespace, so they
+// are reached as `::MakeSettingsKey` / `::CallMapFind` / `::CallMapInsert` /
+// `::StringFormat` / `::RetailValueIsTrue` -- spelled with the `::` on purpose,
+// so a future reader cannot mistake them for members.
+//
+// NOTHING ELSE CHANGED: same callees in the same order, the same asymmetric
+// release-then-adopt on an existing node, the same documented RetailValueIsTrue
+// deviation, the same "only write through the out reference when found"
+// contract. Every POD is spelled `RtIo::` or `RtSystem::` and every real class
+// `System::` (B34_RULES section 7.2) -- note this file's POD namespace is
+// `RtIo`, LOWERCASE o.
+namespace IO {
+
+bool Persistence::Get(const char* section, const char* key, int& outRef) const {
+    int* const out = &outRef;
+
+    System::String k = ::MakeSettingsKey(section, key);
+    void* node = ::CallMapFind(const_cast<Persistence*>(this), &k);
     bool ours = (node != nullptr);
     int oursVal = *out;   // retail only ever writes *param_3 when found; preserve the caller's value otherwise
     if (ours) {
-        auto* n = static_cast<SettingsMapNode*>(node);
+        auto* n = static_cast<RtIo::SettingsMapNode*>(node);
         // FUN_18007f034 in retail is a bare tail-jump to CRT strtol(s, 0, 10)
         // — no need to call the DLL for it, this is not engine-specific.
         oursVal = static_cast<int>(std::strtol(n->value.data ? n->value.data : "", nullptr, 10));
@@ -162,15 +212,16 @@ bool RtIo_Persistence_GetInt(void* self, const char* section, const char* key, i
 // bool IO::Persistence::Get(const char* section, const char* key, bool& out)
 // retail 0x1800b8290 — full RT_DIFF oracle, same shape as Get(int&).
 // ============================================================================
-bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out) {
+bool Persistence::Get(const char* section, const char* key, bool& outRef) const {
+    bool* const out = &outRef;
 
-    System::String k = MakeSettingsKey(section, key);
-    void* node = CallMapFind(self, &k);
+    System::String k = ::MakeSettingsKey(section, key);
+    void* node = ::CallMapFind(const_cast<Persistence*>(this), &k);
     bool ours = (node != nullptr);
     bool oursVal = *out;
     if (ours) {
-        auto* n = static_cast<SettingsMapNode*>(node);
-        oursVal = RetailValueIsTrue(n->value.data);
+        auto* n = static_cast<RtIo::SettingsMapNode*>(node);
+        oursVal = ::RetailValueIsTrue(n->value.data);
     }
     // ~k is retail's release.
 
@@ -186,19 +237,19 @@ bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, 
 // Get(int&) that the value it now sees round-trips. the diff oracle: EQUAL is
 // our own verdict, computed from a real (read-only) call into the DLL.
 // ============================================================================
-void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, int value) {
+void Persistence::Set(const char* section, const char* key, int value) {
 
     // StringFormat() is the DLL's own export (see the comment on it above),
     // so it still fills a raw hidden-return-slot; the value is stolen into
     // the class the same way MakeSettingsKey's does.
-    String valStrPod{};
-    StringFormat()(&valStrPod, "%i", value);
-    System::String valStr(std::move(Sys(valStrPod)));
-    System::String keyStr = MakeSettingsKey(section, key);
+    RtSystem::String valStrPod{};
+    ::StringFormat()(&valStrPod, "%i", value);
+    System::String valStr(std::move(::Sys(valStrPod)));
+    System::String keyStr = ::MakeSettingsKey(section, key);
 
     void* outNode = nullptr;
-    CallMapInsert(self, &outNode, &keyStr, &valStr);
-    auto* node = static_cast<SettingsMapNode*>(outNode);
+    ::CallMapInsert(this, &outNode, &keyStr, &valStr);
+    auto* node = static_cast<RtIo::SettingsMapNode*>(outNode);
 
     // Retail's asymmetric release-then-adopt, transcribed exactly
     // (0x1800b80c0 + 0x50..0x90): Map_Insert only installs the value on a
@@ -210,7 +261,7 @@ void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, i
     // `RtSystem::String` member of `SettingsMapNode`, not yet converted, so
     // it is reached through the one transitional bridge.
     if (node->value.data != valStr._data) {
-        Sys(node->value) = valStr;
+        ::Sys(node->value) = valStr;
     }
     // ~keyStr, ~valStr are retail's two releases.
 }
@@ -219,21 +270,21 @@ void RtIo_Persistence_SetInt(void* self, const char* section, const char* key, i
 // void IO::Persistence::Set(const char* section, const char* key, bool value)
 // retail 0x1800b8380 — same shape as Set(int), value formatted as "true"/"false".
 // ============================================================================
-void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value) {
+void Persistence::Set(const char* section, const char* key, bool value) {
 
-    String valStrPod{};
-    StringFormat()(&valStrPod, "%s", value ? "true" : "false");
-    System::String valStr(std::move(Sys(valStrPod)));
-    System::String keyStr = MakeSettingsKey(section, key);
+    RtSystem::String valStrPod{};
+    ::StringFormat()(&valStrPod, "%s", value ? "true" : "false");
+    System::String valStr(std::move(::Sys(valStrPod)));
+    System::String keyStr = ::MakeSettingsKey(section, key);
 
     void* outNode = nullptr;
-    CallMapInsert(self, &outNode, &keyStr, &valStr);
-    auto* node = static_cast<SettingsMapNode*>(outNode);
+    ::CallMapInsert(this, &outNode, &keyStr, &valStr);
+    auto* node = static_cast<RtIo::SettingsMapNode*>(outNode);
 
     // Same shape as Set(int) above -- `String::operator=` on the not-yet-
     // converted `SettingsMapNode::value`, through the transitional bridge.
     if (node->value.data != valStr._data) {
-        Sys(node->value) = valStr;
+        ::Sys(node->value) = valStr;
     }
     // ~keyStr, ~valStr are retail's two releases.
 }
@@ -244,19 +295,18 @@ void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, 
 // a field) with no mutation, so both sides can run for real; only the
 // oracle's own temporary copy needs releasing afterward.
 // ============================================================================
-void* RtIo_Persistence_GetSavePath(void* self, void* retval) {
+System::String Persistence::GetSavePath() const {
 
-    auto* p = static_cast<Persistence*>(self);
-    // `retval` is the hidden return slot -- raw, uninitialised bytes -- so the
-    // value is placement-constructed into it. `String(const String&)` (retail
-    // 0x180006cb0) is exactly the "adopt savePath's buffer, AddRef if non-null"
-    // sequence the C body wrote out by hand. `savePath` is a `RtSystem::String`
-    // member of the not-yet-converted `Persistence`, reached through the one
-    // transitional bridge.
-    new (static_cast<System::String*>(retval)) System::String(Sys(p->savePath));
-
-    return retval;
+    // `String(const String&)` (retail 0x180006cb0) is exactly the "adopt
+    // savePath's buffer, AddRef if non-null" sequence the C body wrote out by
+    // hand; the DOOR's placement-new is retail's hidden-return-slot
+    // construction, so this is still exactly one AddRef. `_savePath` is a
+    // `RtSystem::String` member (the header says why it stays a POD), reached
+    // through the one transitional bridge.
+    return System::String(::Sys(_savePath));
 }
+
+}  // namespace IO
 
 // ============================================================================
 // Registration. ReadSettings/WriteSettings are DELIBERATELY absent — see

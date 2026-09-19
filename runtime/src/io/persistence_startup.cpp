@@ -104,37 +104,66 @@ void** FileSystemSingletonSlot() {
 // ============================================================================
 // ?Startup@Persistence@IO@@QEAA_NXZ                        retail 0x1800b7ee0
 // ============================================================================
+// ENDGAME B.3.4 PACKAGE+FS commit 6: the body is now
+// `IO::Persistence::Startup()`, below. The door keeps its name, its
+// `extern "C"` linkage and both registration lines, and delegates. No qualified
+// `IO::` call is needed: `IO::Persistence` has no vtable of its own -- the vptr
+// at +0x10 is the EMBEDDED worker's -- so B34_BRIEFS section A.1's re-entry
+// hazard cannot arise.
 extern "C" bool RtIo_Persistence_Startup(Persistence* self) {
+    return reinterpret_cast<IO::Persistence*>(self)->Startup();
+}
 
-    RT_EXPORT_ONCE(VoidThisFn, "?ReadSettings@Persistence@IO@@QEAAXXZ")(self);
+// ============================================================================
+// `IO::Persistence::Startup` -- the member body
+// ============================================================================
+// Defined in `namespace IO` because a member of `IO::X` must appear in a
+// namespace ENCLOSING the class (B34_BRIEFS section A.2); the file-local helper
+// lives in this translation unit's GLOBAL anonymous namespace and is reached as
+// `::FileSystemSingletonSlot` / `::VoidThisFn` / `::GetSaveDirFn`.
+//
+// NOTHING ELSE CHANGED. `?ReadSettings@Persistence@IO@@` is STILL called by
+// NAME through RT_EXPORT_ONCE even though it is now a member of the same class:
+// retail's own CALL goes through the export, and a direct member call would
+// silently stop following a future promotion of that row. The unguarded
+// FileSystem-singleton DEREFERENCE stays unguarded and the guard on whether the
+// SLOT EXISTS stays exactly where it was.
+namespace IO {
+
+bool Persistence::Startup() {
+
+    RT_EXPORT_ONCE(::VoidThisFn, "?ReadSettings@Persistence@IO@@QEAAXXZ")(
+        reinterpret_cast<RtIo::Persistence*>(this));
 
     // GetSaveDirectory is reached by NAME through RT_EXPORT_ONCE (lane FS's
     // class, unported at the time this row closed) and still fills a raw
     // hidden-return-slot, so the value lands in a POD and is then stolen into
     // the class -- a pure pointer steal, no AddRef, `tmpPod` left null.
-    String tmpPod{nullptr};
+    RtSystem::String tmpPod{nullptr};
 
     // Retail dereferences FileSystem::_singleton without a check (0x1800b7f01
     // is a bare `MOV RCX,[0x1801fc6a8]`). The DEREFERENCE stays unguarded. What
     // is guarded is whether the SLOT EXISTS at all: with no DLL that variable
     // exists only if the mint provides it. Our difference from retail, not a
     // guard over retail's logic.
-    if (void** fsSlot = FileSystemSingletonSlot()) {
-        RT_EXPORT_ONCE(GetSaveDirFn,
+    if (void** fsSlot = ::FileSystemSingletonSlot()) {
+        RT_EXPORT_ONCE(::GetSaveDirFn,
             "?GetSaveDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(*fsSlot, &tmpPod);
     }
-    System::String tmp(std::move(Sys(tmpPod)));
+    System::String tmp(std::move(::Sys(tmpPod)));
 
     // String::operator=, retail 0x1800c9810, inlined at 0x1800b7f10 -- the
     // exact self-assignment guard on the BUFFER (the banner above). `savePath`
     // is a `RtSystem::String` member of the not-yet-converted `Persistence`,
     // reached through the one transitional bridge.
-    Sys(self->savePath) = tmp;
+    ::Sys(_savePath) = tmp;
 
     // ~tmp is retail's release at 0x1800b7f5d.
 
     return true;
 }
+
+}  // namespace IO
 
 // ============================================================================
 // Registration
