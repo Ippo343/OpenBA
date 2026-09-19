@@ -52,8 +52,16 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
 #include "../collection/Collection.h"
+#include "../object/External.h"   // Object::ExternalPtr<T>, for GetInstanceId
+
+// Forward declarations only. Tags match the real declarations (RULE B4b-5).
+namespace System { class Time; }
+namespace Math { class Transform; class Vector3; }
+namespace IO { class Serializer; }
+namespace Graphics { class AnimationGroup; }
 
 namespace RtGraphics {
 
@@ -181,3 +189,192 @@ namespace anim_group {
 }
 
 }  // namespace RtGraphics
+
+// ############################################################################
+// ENDGAME B.3.5 step 5, block H1 — the REAL `Graphics::AnimationManager`.
+//
+// `RtGraphics::AnimationManagerView` above (the head overlay) and
+// `RtGraphics::AnimationManager` in Animation.h (the whole 0x9d8) both KEEP
+// LIVING (B4b-1), and `tests/unit/graphics_animation_abi_test.cpp` cross-asserts
+// the class against both.
+//
+// *** THE `anim_clip` / `anim_group` OFFSET-CONSTANT NAMESPACES ABOVE ARE NOW
+// REDUNDANT WITH TWO REAL CLASSES, AND THEY STAY. *** `anim_clip::k*` describe
+// `Graphics::Animation`'s fields and `anim_group::k*` describe
+// `Graphics::AnimationGroup`'s; every one is CROSS-ASSERTED against the class in
+// the unit test, so the two spellings cannot drift. They are kept because
+// unconverted bodies outside block H1's file set still use them
+// (`wave28_lane_gfxbody.cpp`, `wave29_lane_gfxbody.cpp`), and retiring a
+// constant those files read would be editing another block's files.
+// ############################################################################
+
+namespace Graphics {
+
+// ============================================================================
+// Graphics::AnimationManager — 0x9d8 bytes, NO vtable, ONE INSTANCE.
+//
+// Both `??0AnimationManager@Graphics@@QEAA@XZ` (0x1800fc430) and
+// `??1…@QEAA@XZ` (0x1800fc400) are `QEAA` — non-virtual — and the constructor
+// never stores a vtable pointer.
+//
+// NO REAL CONSTRUCTOR OR DESTRUCTOR, and the reason is NOT B4b-2's vtable test
+// (there is no vtable). It is retail's own store list. The constructor at
+// 0x1800fc430 writes +0x00..+0x13 and then the 624 words at +0x14..+0x9d3, and
+// STOPS: the four bytes at +0x9d4 are never written. A C++ constructor with a
+// member-initialiser list covering every member would write them — the exact
+// class of divergence RULE B5-13 names for `Renderer` +0x3c/+0x4c. The
+// constructor also publishes `this` into the exported static `_singleton`, which
+// is a global side effect, and `code/Game/Game/gameupdateloop_load.cpp:333`
+// calls it over raw `MemAlloc`'d memory. The doors in
+// `runtime/src/graphics/animation.cpp` stay free functions; both members are
+// declared here for the record and deliberately left undefined.
+//
+// `?_singleton@AnimationManager@Graphics@@0PEAV12@EA` @ 0x1801fe7b0 STAYS AN
+// `RT_DATA_SLOT` READ — six by-name doors reach it today. Per B35_RULES section
+// 9 and RULE B4b-4 the `MintStorageCell()` redirect that would make the name
+// door, the address door and a C++ `static AnimationManager* _singleton` one
+// cell is OWED at the class-static conversion, the END of B.3, not in step 5.
+// That is why there is no `static AnimationManager* _singleton;` member below.
+// ============================================================================
+class AnimationManager {
+public:
+    // ------------------------------------------------------------------------
+    // Graphics::AnimationManager::Instance — 0x30 bytes.
+    //
+    // One cached, shared skeleton animation: the group/clip it plays, a
+    // reference count, the bind-pose node list it was built for, and one
+    // `AnimationState` per frame of the clip. Retail's own nested name:
+    // `Array<AnimationManager::Instance>::Serialize` is 0x18005c660.
+    // Field for field the same record as `RtGraphics::AnimInstanceRec` above.
+    // ------------------------------------------------------------------------
+    struct Instance {
+        void*   _group;                            // +0x00  ExternalPtr<AnimationGroup>,
+                                                   //        copied as a RAW qword
+        int32_t _animIndex;                        // +0x08  -1 on a blanked slot
+        int32_t _refCount;                         // +0x0c
+        Collection::Array<uint8_t> _nodes;         // +0x10  Array<GraphicsMesh::Node>, 0x48
+        Collection::Array<uint8_t> _states;        // +0x20  Array<AnimationState>, 0x48
+    };
+
+    // ---- the members retail exports -----------------------------------------
+    // ??0AnimationManager@Graphics@@QEAA@XZ        0x1800fc430 — door, see banner
+    // ??1AnimationManager@Graphics@@QEAA@XZ        0x1800fc400 — door, see banner
+    AnimationManager();
+    ~AnimationManager();
+    // ??0AnimationManager@Graphics@@QEAA@AEBV01@@Z 0x18005a780  NOT PORTED
+    // ??4AnimationManager@Graphics@@QEAAAEAV01@AEBV01@@Z 0x18005a870 NOT PORTED
+    AnimationManager(const AnimationManager&);
+    AnimationManager& operator=(const AnimationManager&);
+    // ??2AnimationManager@Graphics@@SAPEAX_K@Z      0x18005a5b0  NOT PORTED
+    // ??2AnimationManager@Graphics@@SAPEAX_KPEAX@Z  0x18005a620  NOT PORTED
+    // ??3AnimationManager@Graphics@@SAXPEAX@Z       0x18005a630  NOT PORTED
+    static void* operator new(std::size_t bytes);
+    static void* operator new(std::size_t bytes, void* place);
+    static void  operator delete(void* p);
+
+    // ?Get@AnimationManager@Graphics@@SAPEAV12@XZ   0x18005a690  NOT PORTED
+    //   One load of `_singleton`. Left unported on purpose: the six live
+    //   by-name readers of that cell go through `RT_DATA_SLOT`, and a member
+    //   that returned the cell would be a second door onto it before the
+    //   B4b-4 redirect exists.
+    static AnimationManager* Get();
+
+    // ?Update@AnimationManager@Graphics@@QEAAXAEBVTime@System@@_N@Z 0x1800fc240
+    //   DECLARED, DELIBERATELY UNDEFINED. The live body is the unchanged door in
+    //   `wave23_lane_gfxbody.cpp`. That body
+    //   is wrapped in its lane's `RT_GFX23_CORRUPT(n)` effectiveness-probe
+    //   scaffolding and its `Attend()`/`g_animUpdStates` counters, which
+    //   `standalone/scene_watch.cpp` reads; moving the body out from under its
+    //   own probes is a second change riding on this one — the call
+    //   `runtime/src/object/external_class_doors.cpp` makes for the same reason.
+    void Update(const System::Time& time, bool rootOnly);
+
+    // ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z 0x1800fc190
+    //   DECLARED, DELIBERATELY UNDEFINED — the live body is
+    //   `wave24_lane_gfxmat.cpp`'s registered door, which is block G's file, not
+    //   block H1's. This class is non-polymorphic, so no vtable slot needs a
+    //   member definition and one would only be a second resolution path.
+    void Serialize(IO::Serializer& s);
+
+    // ?GetPose@AnimationManager@Graphics@@QEBAXHPEAVTransform@Math@@H@Z 0x1800fb8e0
+    //   PORTED HERE — the body moved out of animationstate.cpp's
+    //   `RtGraphics_AnimationManager_GetPose`. Unguarded on every step, exactly
+    //   as retail is: a bad handle indexes off the end of the instance table.
+    void GetPose(int handle, Math::Transform* out, int count) const;
+
+    // ?GetPose@AnimationManager@Graphics@@QEBAPEBVTransform@Math@@H@Z 0x18005a6d0
+    //   NOT PORTED — the one-argument overload that returns the buffer instead
+    //   of copying out of it. A real C++ overload, not a renamed one: B5-17's
+    //   distinct-name rule is about overloaded VIRTUALS (MSVC groups and
+    //   reverses those within a vtable) and neither of these is virtual.
+    const Math::Transform* GetPose(int handle) const;
+
+    // ?GetInstanceId@AnimationManager@Graphics@@QEAAHV?$ExternalPtr@VAnimationGroup
+    // @Graphics@@@Object@@HAEBV?$Array@UNode@GraphicsMesh@Graphics@@@Collection@@@Z
+    //   0x1800fb9d0. DECLARED, DELIBERATELY UNDEFINED: the live body is the
+    //   unchanged door in animationstate_transforms.cpp, kept there for the
+    //   scaffolding reason above (its banner's "NOT DIFFABLE: the body allocates
+    //   instances, bakes poses into them and moves reference counts").
+    //
+    //   `nodes` is retail's `const Array<GraphicsMesh::Node>&`, stride 0x48.
+    //   `GraphicsMesh` is block G's class and is deliberately not named here.
+    int32_t GetInstanceId(Object::ExternalPtr<AnimationGroup> group, int animIndex,
+                          const Collection::Array<uint8_t>& nodes);
+
+    // ?FreeInstanceId@AnimationManager@Graphics@@QEAAXH@Z 0x1800fb970 NOT PORTED
+    void FreeInstanceId(int handle);
+    // ?GetRootAnimationOffset@…QEBA?AVVector3@Math@@H@Z 0x18005a730 NOT PORTED
+    //   hidden retslot (Math::Vector3)
+    Math::Vector3 GetRootAnimationOffset(int handle) const;
+    // ?GetRootPose@…QEBA?AVTransform@Math@@H@Z 0x1800fb870 NOT PORTED
+    //   hidden retslot (Math::Transform)
+    Math::Transform GetRootPose(int handle) const;
+    // ?GetTransforms@…QEAAPEAV?$InterpolatedState@VTransform@Math@@@2@H@Z
+    //   0x18005a700 NOT PORTED  /  the const form 0x18005a6a0 NOT PORTED
+    void* GetTransforms(int handle);
+    const void* GetTransforms(int handle) const;
+
+    // ---- the 0x9d8 bytes ---------------------------------------------------
+    // +0x00  Collection::Array<Instance>, stride 0x30. NOT a CRITICAL_SECTION —
+    //        see the CORRECTION banner in Animation.h: 0x1800fc268 reads +0x08
+    //        as a LOOP BOUND and 0x1800fc2a0 reads +0x00 as an ARRAY BASE, and a
+    //        LockCount is not a loop bound.
+    Collection::Array<uint8_t> _instances;
+
+    // +0x10  UNVERIFIED — no reader in the ctor, the dtor, `Update` or
+    //        `Serialize`. The DO-NOT-DELETE note in Animation.h owns this field's
+    //        history; do not re-open it on the same guess.
+    uint32_t _f10;
+
+    // +0x14  Mersenne-Twister state, `_time64(NULL)`-seeded by the constructor
+    //        with the textbook `init_genrand` recurrence.
+    uint32_t _rngState[624];
+
+    // +0x9d4 NEVER WRITTEN by the constructor — alignment to the 0x9d8
+    //        allocation size, and a real hole (the B5-13 class).
+    uint32_t _pad9d4;
+};
+static_assert(sizeof(AnimationManager) == 0x9d8,
+              "Graphics::AnimationManager must match AllocSub(0x9d8, 8)");
+static_assert(alignof(AnimationManager) == 8, "Graphics::AnimationManager aligns to 8");
+static_assert(sizeof(AnimationManager::Instance) == 0x30,
+              "AnimationManager::Instance is 0x30 bytes");
+static_assert(offsetof(AnimationManager, _instances) == 0x00, "_instances @ +0x00");
+static_assert(offsetof(AnimationManager, _f10)       == 0x10, "_f10 @ +0x10");
+static_assert(offsetof(AnimationManager, _rngState)  == 0x14, "_rngState @ +0x14");
+static_assert(offsetof(AnimationManager::Instance, _animIndex) == 0x08, "Instance::_animIndex");
+static_assert(offsetof(AnimationManager::Instance, _refCount)  == 0x0c, "Instance::_refCount");
+static_assert(offsetof(AnimationManager::Instance, _nodes)     == 0x10, "Instance::_nodes");
+static_assert(offsetof(AnimationManager::Instance, _states)    == 0x20, "Instance::_states");
+static_assert(sizeof(AnimationManager::Instance) == sizeof(RtGraphics::AnimInstanceRec),
+              "the class's nested Instance and the POD describe the same bytes");
+static_assert(offsetof(AnimationManager, _instances) ==
+              offsetof(RtGraphics::AnimationManagerView, _instances), "alias _instances");
+static_assert(!std::is_polymorphic<AnimationManager>::value,
+              "Graphics::AnimationManager must never acquire a vtable: both its "
+              "ctor and its dtor are QEAA and the ctor stores no vptr");
+static_assert(std::is_standard_layout<AnimationManager>::value,
+              "the ported doors reach these fields through a reinterpret_cast");
+
+}  // namespace Graphics
+

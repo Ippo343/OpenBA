@@ -36,22 +36,11 @@
 
 namespace RtGraphics {
 
-// ============================================================================
-// Object::ExternalPtr<T> — an 8-byte handle, passed and stored BY VALUE.
-//
-// Never dereferenced arithmetically by this lane; it is copied around as an
-// opaque qword and, where retail follows it, followed as a plain pointer to the
-// resource object (MeshInstance::SetMesh does exactly that: it stores the
-// argument at +0xc0 and then reads `*(mesh + 0x70)` off it).
-//
-// Typed as a distinct struct rather than `void*` so a signature cannot silently
-// lose it or swap it with an `int` — the recorded 5th-argument /
-// pointer-typed-as-int trap (reference_hidden_retval_and_int_pointer_args.md).
-// ============================================================================
-struct ExternalPtr {
-    void* p;
-};
-static_assert(sizeof(ExternalPtr) == 8, "Object::ExternalPtr must be 8 bytes");
+// `RtGraphics::ExternalPtr` — the 8-byte handle — MOVED TO Geometry.h by
+// ENDGAME B.3.5 block E, unchanged and with its whole banner. The real
+// `Graphics::Geometry` class needs it for slot 2's `Draw` parameter, and
+// Geometry.h is included ABOVE this point, so it cannot live here any more.
+// Every user of `Mesh.h` still sees it, transitively, exactly as before.
 
 // ============================================================================
 // Graphics::InterpolatedState<Transform> — 0x38 bytes, two Transforms.
@@ -390,3 +379,257 @@ static_assert(offsetof(EdgeMeshInstance, _mesh)     == 0xc0, "EdgeMeshInstance::
 static_assert(offsetof(EdgeMeshInstance, _followed) == 0xc8, "EdgeMeshInstance::_followed @ +0xc8");
 
 }  // namespace RtGraphics
+
+// ############################################################################
+// ENDGAME B.3 step 5 (block E) — `Graphics::MeshInstance` and
+// `Graphics::EdgeMeshInstance`, the REAL C++ classes
+// ############################################################################
+//
+// Both derive from the real `Graphics::Geometry` (Geometry.h). RULE B5-5: the
+// `Geometry _base` embedded member of the two PODs above becomes a real base
+// class in the same commit as `Geometry`, and it is the INHERITANCE that is
+// real here — the PODs' `_base` was always "single inheritance written as
+// embedding" (B35_RULES §3 says so in as many words).
+//
+// The PODs keep their names and their out-of-block users (`batchc_gfx_leaves.cpp`
+// is not this block's file), so both descriptions coexist and every offset is
+// cross-asserted. `GraphicsMeshView`, `EdgeMesh`, `MeshNode`, `TriangleVertex`,
+// `EdgeVertex`, `VideoBufferHeader`, `MeshAnimationState`, `MeshAnimationLayer`
+// and `InterpolatedTransform` above are NOT this block's classes —
+// `Graphics::GraphicsMesh` and `Graphics::EdgeMesh` are block G's and
+// `Graphics::AnimationState` is block H1's — and are left exactly as they are.
+//
+// ABSTRACT, per B34_BRIEFS §A.4's amended rule: nothing in the tree holds
+// either class BY VALUE as a C++ member, and slot 0's body is a row in
+// `runtime/src/object/deleting_dtor.cpp` (which B35_RULES §11 forbids retiring
+// in step 5 and which is not this block's file), so slot 0 stays `= 0`.
+// ############################################################################
+
+namespace Graphics {
+
+// ============================================================================
+// Graphics::MeshInstance : Graphics::Geometry — 0x120, NINE slots.
+//
+// `??_7MeshInstance@Graphics@@6B@` @ 0x180154dc0 (B35_SLOTS.md):
+//   [0] 0x180017330  (unexported) vector deleting dtor   deleting_dtor.cpp row
+//   [1] 0x180100800  ?Update@…                  wave29_lane_slots.cpp
+//   [2] 0x180100960  ?Draw@…MHHH@Z              meshinstance_draw.cpp
+//   [3] 0x180100f20  ?AddDrawItems@…            mesh.cpp
+//   [4] 0x1800a4020  Geometry::UpdateAttached            INHERITED
+//   [5] 0x180101200  ?GetSubTransform@…         mesh.cpp        RETSLOT
+//   [6] 0x180101280  ?GetInstanceTransform@…    mesh.cpp        RETSLOT
+//   [7] 0x180101660  ?SetSharedInstanceData@…   wave29_lane_slots.cpp
+//   [8] 0x1800a4420  Geometry::Clean                     INHERITED
+//
+// `MeshInstance` overrides BOTH retslot slots (5 and 6), where
+// `EdgeMeshInstance` overrides only slot 6 (B35_RULES §2.3 item 6).
+//
+// THE TWO UNEXPORTED `.data` STATICS `MeshInstance::Update` READS STAY
+// (B35_RULES §9, §6.1): the guard byte at 0x1801ff30c and the 48-entry identity
+// `Transform` table at 0x1801ff310, minted as `EXTRA_STORAGE_BY_ADDR`. They are
+// NOT in the cutover manifest and so are NOT protected by the manifest gate;
+// `wave29_lane_slots.cpp` carries both `ResolveAddr` rows forward explicitly and
+// `MeshInstance::Update` still declines the whole update when either resolves
+// NULL. `?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA` (0x1801fc70b) likewise
+// stays an `RT_DATA_SLOT` read — RULE B4b-4 owes it a `MintStorageCell()`
+// redirect at the class-static conversion, the END of B.3, not here.
+// ============================================================================
+class MeshInstance : public Geometry {
+public:
+    // `??0MeshInstance@Graphics@@QEAA@AEBV01@@Z` @ 0x1800170c0 — PORTED, body in
+    // `runtime/src/graphics/mesh.cpp`. Declared, NOT `= default`: it zeroes each
+    // of the three nested Array headers and then runs retail's deep
+    // `Array<T>::operator=` over it, which a bitwise copy would not.
+    MeshInstance(const MeshInstance& src);
+    MeshInstance& operator=(const MeshInstance& src);   // 0x1800171e0  not ported
+
+    // ---- the nine slots ---------------------------------------------------
+    Geometry* DeletingDtor(unsigned flags) override = 0;                 // [0] 0x180017330
+    void Update(const System::Time& time) override;                      // [1] 0x180100800
+    void Draw(Video::Context& context, const Camera& camera,
+              ExternalPtrHandle material,
+              float opacity, int a, int b, int c) const override;         // [2] 0x180100960
+    void AddDrawItems(const Scene& scene, Renderer& renderer) const override; // [3] 0x180100f20
+    // Both retslot slots, in retail order — see Geometry.h's B5-12 block.
+    Math::Transform* GetSubTransform(Math::Transform* ret,
+                                     int node) const override;            // [5] 0x180101200 RETSLOT
+    Math::Matrix* GetInstanceTransform(Math::Matrix* ret, int node,
+                                       float t) const override;            // [6] 0x180101280 RETSLOT
+    int SetSharedInstanceData(Video::Context& context,
+                              int a, float t) const override;             // [7] 0x180101660
+    // slots 4 and 8 are Geometry's own bodies, inherited unchanged.
+
+    // ---- PORTED non-virtual members (bodies in this block's files) --------
+    Math::Transform GetNodeToWorld(int node) const;                       // 0x180016a40 RETSLOT
+    Math::Transform GetNodeToWorld(int node, float t) const;              // 0x180016c20 RETSLOT
+    Math::Vector3   RootAnimationOffset() const;                          // 0x180016ef0 RETSLOT
+    bool            IsAnimating() const;                                  // 0x1800ff7d0
+    void            UpdateHierarchy();                                    // 0x1800ff910
+    void            SetMaterialInstance(int index, ExternalPtrHandle value); // 0x1800ffe80
+    void            SetMesh(ExternalPtrHandle mesh);                      // 0x1800ffea0
+    void            PlayAnimation(ExternalPtrHandle group, int index,
+                                  const void* startTime, const void* blendTime,
+                                  float weight);                          // 0x1800ff840
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined -
+    // Each is one to a dozen instructions in retail over offsets this header
+    // already pins. Declared so no later block or caller batch edits this file.
+    ExternalPtrHandle GetMesh() const;                       // 0x180016a20
+    int      GetNodeCount() const;                           // 0x180016a30
+    void     SetVisualScale(const Math::Vector4& scale);     // 0x180016fa0
+    Math::Vector4 GetVisualScale() const;                    // 0x180016fd0 RETSLOT
+    int      GetMaterialInstanceCount() const;               // 0x180017000
+    ExternalPtrHandle GetMaterialInstance(int index) const;  // 0x180017010
+    void     SetSortKey(int key);                            // 0x180017030
+    void     Serialize(IO::Serializer& serializer);          // 0x1800ff680
+    float    GetAnimationElapsed() const;                    // 0x1800ff700
+    bool     IsCurrentAnimationLooping() const;              // 0x1800ff730
+    void     SetCurrentAnimationTimeScale(float scale);      // 0x1800ff760
+    float    GetCurrentAnimationTimeScale() const;           // 0x1800ff780
+    int      GetCurrentAnimationIndex() const;               // 0x1800ff7b0
+    void     ResetAnimationState();                          // 0x1800ff810
+    void     CopyHierarchy(const MeshInstance& src);         // 0x1800ffd80
+    int      GetMaterialIndex(ExternalPtrHandle material);   // 0x1800ffe30
+    int      GetBones(float t, const Math::Transform& xf,
+                      Math::Matrix* out) const;              // 0x180100070
+
+    // The two CLASS STATICS over `?_rootOnlyUpdates@MeshInstance@Graphics@@0_NA`
+    // (0x1801fc70b). Exported, not ported, no caller as members — the flag
+    // itself is read through `RT_DATA_SLOT` in `wave29_lane_slots.cpp` and owes
+    // a `MintStorageCell()` redirect at the END of B.3 (RULE B4b-4).
+    static void EnableRootOnlyUpdates(bool enable);          // 0x180017040
+    static bool AreRootOnlyUpdateEnabled();                  // 0x180017050
+
+    // `??2MeshInstance@Graphics@@SAPEAX_K@Z` (0x180016940),
+    // `??2…@SAPEAX_KPEAX@Z` (0x1800169b0) and `??3…@SAXPEAX@Z` (0x1800169c0) are
+    // the class's own `operator new` / `operator delete`. They are exported and
+    // unported, and they are deliberately NOT declared: a declared-but-undefined
+    // `operator new` would make any future `new MeshInstance` a link error at
+    // best and a silently different allocator at worst, and nothing in the tree
+    // news one as a C++ object (see the ABSTRACT banner above). Recorded here so
+    // the omission is a decision, not a gap.
+
+protected:
+    // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
+    // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
+    // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
+    // here (ENDGAME decision 2). The body stays in its door in `mesh.cpp`: it
+    // frees the three Array buffers through retail's own out-of-line
+    // `Array<T>::~Array` and then runs `~Geometry`, and a compiler-emitted
+    // member/base destructor chain on top of that would be retail's own
+    // decomposition run twice. Declared, deliberately undefined.
+    ~MeshInstance();
+
+public:
+    RtGraphics::ExternalPtr                        _mesh;         // +0xc0  ExternalPtr<GraphicsMesh>
+    Collection::Array<RtGraphics::ExternalPtr>     _materials;    // +0xc8
+    RtGraphics::MeshAnimationState                 _animation;    // +0xd8 .. +0xef
+    Collection::Array<RtGraphics::InterpolatedTransform> _nodes;  // +0xf0
+    Vector3                                        _rootAnimationOffset; // +0x100
+    float                                          _color[4];     // +0x10c ctor 1,1,1,1
+    int16_t                                        _sortBias;     // +0x11c ctor 0
+    int16_t                                        _pad11e;       // +0x11e
+};
+
+static_assert(sizeof(MeshInstance) == 0x120,
+              "Graphics::MeshInstance is 0x120 bytes (MOV EDX,0x120 in its own "
+              "slot-0 vector deleting destructor 0x180017330)");
+static_assert(alignof(MeshInstance) == 8, "qword aligned (the vptr)");
+static_assert(sizeof(MeshInstance) == sizeof(RtGraphics::MeshInstance),
+              "the real class and the POD describe the same bytes");
+
+static_assert(offsetof(MeshInstance, _mesh)      == offsetof(RtGraphics::MeshInstance, _mesh),      "alias _mesh");
+static_assert(offsetof(MeshInstance, _materials) == offsetof(RtGraphics::MeshInstance, _materials), "alias _materials");
+static_assert(offsetof(MeshInstance, _animation) == offsetof(RtGraphics::MeshInstance, _animation), "alias _animation");
+static_assert(offsetof(MeshInstance, _nodes)     == offsetof(RtGraphics::MeshInstance, _nodes),     "alias _nodes");
+static_assert(offsetof(MeshInstance, _rootAnimationOffset) == offsetof(RtGraphics::MeshInstance, _rootAnimationOffset), "alias _rootAnimationOffset");
+static_assert(offsetof(MeshInstance, _color)     == offsetof(RtGraphics::MeshInstance, _color),     "alias _color");
+static_assert(offsetof(MeshInstance, _sortBias)  == offsetof(RtGraphics::MeshInstance, _sortBias),  "alias _sortBias");
+
+static_assert(offsetof(MeshInstance, _mesh)                == 0xc0,  "MeshInstance::_mesh @ +0xc0 (??0 0x1800fffc0)");
+static_assert(offsetof(MeshInstance, _materials)           == 0xc8,  "MeshInstance::_materials @ +0xc8");
+static_assert(offsetof(MeshInstance, _animation)           == 0xd8,  "MeshInstance::_animation @ +0xd8 (the BYTE store at 0x180100009)");
+static_assert(offsetof(MeshInstance, _nodes)               == 0xf0,  "MeshInstance::_nodes @ +0xf0");
+static_assert(offsetof(MeshInstance, _rootAnimationOffset) == 0x100, "MeshInstance::_rootAnimationOffset @ +0x100");
+static_assert(offsetof(MeshInstance, _color)               == 0x10c, "MeshInstance::_color @ +0x10c (four 0x3f800000 dwords)");
+static_assert(offsetof(MeshInstance, _sortBias)            == 0x11c, "MeshInstance::_sortBias @ +0x11c (a WORD store, which is why sizeof is 0x120)");
+
+// The base subobject must start at zero and the derived fields must start at
+// exactly sizeof(Geometry) — no tail-padding reuse, no vptr duplication.
+static_assert(offsetof(MeshInstance, _mesh) == sizeof(Geometry),
+              "MeshInstance's own fields begin at the end of the Geometry base, "
+              "with no gap: retail's ctor writes +0xc0 immediately after the base ctor");
+
+// ============================================================================
+// Graphics::EdgeMeshInstance : Graphics::Geometry — 0xd0, NINE slots.
+//
+// `??_7EdgeMeshInstance@Graphics@@6B@` @ 0x180154d70 (B35_SLOTS.md):
+//   [0] 0x1800175d0  (unexported) vector deleting dtor   deleting_dtor.cpp row
+//   [1] 0x1800a39b0  ?Update@…                  mesh.cpp
+//   [2] 0x1800a3150  ?Draw@…MHHH@Z              meshinstance_draw.cpp
+//   [3] 0x1800a2fd0  ?AddDrawItems@…            mesh.cpp
+//   [4] 0x1800a4020  Geometry::UpdateAttached            INHERITED
+//   [5] 0x1800a43c0  Geometry::GetSubTransform           INHERITED  (see B5-12)
+//   [6] 0x1800a3840  ?GetInstanceTransform@…    mesh.cpp        RETSLOT
+//   [7] 0x180015590  Geometry::SetSharedInstanceData     INHERITED
+//   [8] 0x1800a4420  Geometry::Clean                     INHERITED
+//
+// *** IT OVERRIDES ONLY ONE OF THE TWO RETSLOT SLOTS. *** Slot 5 stays
+// `Geometry::GetSubTransform` (0x1800a43c0, byte-identical target) and only slot
+// 6 is its own. B35_RULES §2.3 item 6 records the same asymmetry; the class
+// below therefore declares slot 6 and NOT slot 5.
+//
+// `_followed` (+0xc8) IS LEFT UNINITIALISED BY THE DEFAULT CONSTRUCTOR and the
+// port must not zero it — see the POD's banner above. That is why there is no
+// real default constructor here either (there would be none anyway: ENDGAME
+// decision 2 and B35_RULES §11 keep the ctor door).
+// ============================================================================
+class EdgeMeshInstance : public Geometry {
+public:
+    // `??0EdgeMeshInstance@Graphics@@QEAA@AEBV01@@Z` @ 0x1800174f0 — PORTED,
+    // body in `mesh.cpp`. It writes +0xc0 AND +0xc8, where the default ctor
+    // writes only +0xc0.
+    EdgeMeshInstance(const EdgeMeshInstance& src);
+    EdgeMeshInstance& operator=(const EdgeMeshInstance& src);  // 0x180017550  not ported
+
+    Geometry* DeletingDtor(unsigned flags) override = 0;                 // [0] 0x1800175d0
+    void Update(const System::Time& time) override;                      // [1] 0x1800a39b0
+    void Draw(Video::Context& context, const Camera& camera,
+              ExternalPtrHandle material,
+              float opacity, int a, int b, int c) const override;         // [2] 0x1800a3150
+    void AddDrawItems(const Scene& scene, Renderer& renderer) const override; // [3] 0x1800a2fd0
+    Math::Matrix* GetInstanceTransform(Math::Matrix* ret, int node,
+                                       float t) const override;            // [6] 0x1800a3840 RETSLOT
+    // slots 4, 5, 7 and 8 are Geometry's own bodies, inherited unchanged.
+
+    // PORTED, body in `mesh.cpp`. `MeshInstance*` is the outline's back-pointer.
+    void SetMesh(ExternalPtrHandle mesh, MeshInstance* followed);         // 0x1800a3a20
+
+    // Exported, NOT PORTED, no caller: declared, deliberately undefined.
+    ExternalPtrHandle GetMesh() const;                                    // 0x1800174c0
+
+    // `??2`/`??3` operator new/delete (0x1800173e0 / 0x180017450 / 0x180017460)
+    // are deliberately not declared; see MeshInstance's note above.
+
+protected:
+    ~EdgeMeshInstance();    // 0x1800174d0  exported, NOT PORTED, no caller
+
+public:
+    RtGraphics::ExternalPtr _mesh;      // +0xc0  ExternalPtr<EdgeMesh>; ctor 0
+    MeshInstance*           _followed;  // +0xc8  default ctor LEAVES IT UNSET
+};
+
+static_assert(sizeof(EdgeMeshInstance) == 0xd0,
+              "Graphics::EdgeMeshInstance is 0xd0 bytes (MOV EDX,0xd0 in its own "
+              "slot-0 vector deleting destructor 0x1800175d0)");
+static_assert(alignof(EdgeMeshInstance) == 8, "qword aligned (the vptr)");
+static_assert(sizeof(EdgeMeshInstance) == sizeof(RtGraphics::EdgeMeshInstance),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(EdgeMeshInstance, _mesh)     == offsetof(RtGraphics::EdgeMeshInstance, _mesh),     "alias _mesh");
+static_assert(offsetof(EdgeMeshInstance, _followed) == offsetof(RtGraphics::EdgeMeshInstance, _followed), "alias _followed");
+static_assert(offsetof(EdgeMeshInstance, _mesh)     == 0xc0, "EdgeMeshInstance::_mesh @ +0xc0");
+static_assert(offsetof(EdgeMeshInstance, _followed) == 0xc8, "EdgeMeshInstance::_followed @ +0xc8");
+static_assert(offsetof(EdgeMeshInstance, _mesh) == sizeof(Geometry),
+              "EdgeMeshInstance's own fields begin at the end of the Geometry base");
+
+}  // namespace Graphics

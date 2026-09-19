@@ -66,9 +66,17 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
 
+// ENDGAME B.3.5 block D1: the body MOVED onto `Video::Context::SetLight`; the
+// registered door at the bottom kept its name, its mangled-name row and its
+// address row and is a one-line QUALIFIED non-virtual delegation. The offsets
+// stay RAW: every one of them is inside `_lightStaging` (+0x1dd8, 0x1a0 bytes)
+// or `_pixelConstantStaging` (+0x200, 0x98 bytes), two members Context.h keeps
+// undivided because retail's own `Reset` and `BindResources` treat them as
+// single blocks. The four static_asserts below are what pin the raw offsets to
+// those two members.
 namespace {
 
-using RtVideo::Context;
+using Video::Context;
 
 // The three windows this body writes, and nothing else.
 constexpr uint32_t kLightStage    = 0x1dd8;   // .. 0x1e38, 0x60 bytes
@@ -113,10 +121,32 @@ inline void CopyD(void* self, uint32_t dst, uint32_t src) {
     std::memcpy(At(self, dst), At(self, src), 4);
 }
 
-void SetLightBody(void* self,
-                  const float* direction, const float* attenuation,
-                  const uint32_t* colour, const uint32_t* position,
-                  float nearPlane, float farPlane, int32_t shadowResolution) {
+using SetLightFn = void (*)(void*, const float*, const float*,
+                            const uint32_t*, const uint32_t*, float, float, int32_t);
+
+}  // namespace
+
+// ============================================================================
+// ?SetLight@Context@Video@@QEAAXAEBVVector3@Math@@0AEBVVector4@4@1MMH@Z
+//                                                   retail 0x18001a950, ord 3903
+// ============================================================================
+// The parameters are raw pointers, not `const Math::Vector3&` /
+// `const Math::Vector4&`, and that is deliberate rather than laziness: the two
+// Vector3s are read as three consecutive floats and the two Vector4s are COPIED
+// as four consecutive DWORDS (retail never does arithmetic on the colour or the
+// position, which is why the copy is a dword copy and not four float loads).
+// Typing them would invite a later reader to do float arithmetic on bytes retail
+// only ever moves. Context.h's declaration carries the same note.
+void Video::Context::SetLight(const void* directionRaw, const void* attenuationRaw,
+                              const void* colourRaw, const void* positionRaw,
+                              float nearPlane, float farPlane,
+                              int32_t shadowResolution) {
+    Context* const self = this;
+    const float*    direction   = static_cast<const float*>(directionRaw);
+    const float*    attenuation = static_cast<const float*>(attenuationRaw);
+    const uint32_t* colour      = static_cast<const uint32_t*>(colourRaw);
+    const uint32_t* position    = static_cast<const uint32_t*>(positionRaw);
+
     // +0x1dd8 .. +0x1de4 — the colour, four dwords copied as dwords.
     std::memcpy(At(self, 0x1dd8), colour, 16);
 
@@ -159,29 +189,15 @@ void SetLightBody(void* self,
     *reinterpret_cast<uint32_t*>(At(self, 0x10)) |= kDirtyBits;
 }
 
-using SetLightFn = void (*)(void*, const float*, const float*,
-                            const uint32_t*, const uint32_t*, float, float, int32_t);
-
-}  // namespace
-
+// ---- the door, unchanged name and unchanged registration --------------------
 extern "C" void RtVideo_Context_SetLight(void* self,
                                          const void* direction, const void* attenuation,
                                          const void* colour, const void* position,
                                          float nearPlane, float farPlane,
                                          int32_t shadowResolution) {
-
-    SetLightBody(self,
-                 static_cast<const float*>(direction),
-                 static_cast<const float*>(attenuation),
-                 static_cast<const uint32_t*>(colour),
-                 static_cast<const uint32_t*>(position),
-                 nearPlane, farPlane, shadowResolution);
-
-    // ---- the idempotent replay oracle (see the banner) ----------------------
-    // Snapshot what we wrote, let the DLL's body write the same three windows
-    // again on the same object, and compare. Safe precisely because this body
-    // touches nothing but those windows and the dirty mask — which is an OR of
-    // a constant, so re-running it cannot change it either.
+    static_cast<Video::Context*>(self)->Video::Context::SetLight(
+        direction, attenuation, colour, position,
+        nearPlane, farPlane, shadowResolution);
 }
 
 // ============================================================================
