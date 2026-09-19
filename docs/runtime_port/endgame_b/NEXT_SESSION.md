@@ -50,8 +50,7 @@ New from B.3.4 (details and anchors in `STATUS.md`'s B.3.4 block and `B34B_RULES
 9. The 125 call sites through the TWELVE `ExternalPtr` exe-side doors (template instantiations
    ported as game-code bodies with their own guard set — NOT Runtime members): exe-phase,
    receiver-side work. `fn_ExternalPtr_Serialize3` is the last reader of exe 0x140007140.
-10. Small, retail-read-shaped: `moddetailsdialog.cpp:206/:262` passes a `Filename` element's
-    VALUE where `Modification::Find` takes its address; eight direction reads with an unproved
+10. Small, retail-read-shaped (`moddetailsdialog.cpp` Find-by-address is DONE, `94258ffc`): eight direction reads with an unproved
     receiver (listed in `d6ee7bfc`); `dx11/src/buffers.cpp:271` reads a stream direction but
     dx11 has no IO dependency; `standalone/res_load_lock.{h,cpp}`'s header rule is followed by
     exactly one body — decide live or dead.
@@ -64,10 +63,10 @@ New from B.3.4 (details and anchors in `STATUS.md`'s B.3.4 block and `B34B_RULES
     Still owed: `Time::AsSeconds` / the `Time` ctor reach `System::Timer` through
     `RT_EXPORT_ONCE` by name although `Timer::TicksToSeconds` / `SecondsToTicks` are now static
     members (a routing change, so it is its own gated commit).
-12. `standalone/reg_mint_promoted.cpp:3026`'s `RT_UNPROMOTABLE` note calls `??0Configuration@System@@`
-    unported; it is registered (`engine_lifecycle.cpp:995-996`). It is a tool-parsed tagged row
-    scoped to the DLL-present world: re-derive the row's disposition with `tools/cutover_manifest.py`
-    in the loop rather than rewording it by hand.
+12. DONE (`59ca40dd`): the `?_singleton@Configuration@System@@` row now names only `?Get@`
+    as the blocker; disposition unchanged. Still owed from the 2026-09-19 defect pass: run the
+    mods-enabled (conflicting mods) and tutorial routes against `e353fb15` (`AllowsModChanges`
+    now FALSE off the menu, so game->menu remounts), and the perf build.
 
 ## 2. B.3 step 5 — `Video` and `Graphics` (dx11/ stays the plugin, implemented in-tree)
 

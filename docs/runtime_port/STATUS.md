@@ -103,18 +103,28 @@ built them wrong, and callbacks stored in data.
   with a per-site argument (retail's `StatGoal::Serialize` 0x1400da8e2 has no test).
   (5) `completeroad.cpp`'s uchar door cache was permanently NULL (misspelled mangled fragment),
   hidden by its guard.
-  **OPEN, unguarded, with stacks (carry into step 5; `NEXT_SESSION.md` §1):** (a) allocator
-  `LockEnter` on a near-null lock = `MemoryAllocator::Get()` returned null (W2: `rtalloc::
-  Destruct` from `~Engine` while an unparked loader thread allocates; W2′: unlocked free-list
-  mutation -> wild write on the minted `.bss` cell). The crash dump now prints the cell
-  (`5b332342`). (b) `SaveLoadDialog_PopulateFileList` null deref, load-a-save route, 2 in 7
-  under load, never since. (c) the AUDIO STREAM thread faulting in `FileSystem::ReadFile`
-  (`_packfiles[packIndex]`) while `Engine::Loader::Load` runs `Modification::SetupFileSystem`
-  (package remount) on the caller thread — once in ~60 resaves. (d) `moddetailsdialog.cpp:206/
-  :262` passes a `Filename` element by VALUE where `Modification::Find` takes its address (only
-  with conflicting mods). (e) `standalone/reg_mint_promoted.cpp:3026`'s `RT_UNPROMOTABLE` note
-  says `??0Configuration@System@@` is unported; it is registered (`engine_lifecycle.cpp:995`).
-  Left unedited: it is a tool-parsed tagged row scoped to the DLL-present world.
+  **The five defects left open at the close — worked 2026-09-19 (branch `defects-open-5`):**
+  (a) allocator `LockEnter` on a near-null lock: NOT reproduced, cause inferred. W2′ (unlocked
+  free list) is not live — every door into the allocator is locked, as retail's inlined
+  Enter/Allocate/Leave. W2 fits the stack; retail's only loader join ahead of `~Engine` is
+  `LoaderLoop::Shutdown` (0x1800dc280, `WaitForSingleObject(hFinished, INFINITE)`), which our two
+  LoaderLoop Shutdown stubs skipped — they now join (`a9873f47`). The recorded window was most
+  likely already closed by `96c17f47`. Same exposure as retail remains for a quit during a splash
+  loop; our `WinMain` tail after `~Engine` is longer than retail's. (b) `SaveLoadDialog_
+  PopulateFileList` null = `tableSaveList` (+0x108) missing because one `.crs` loaded null under
+  the two-loader race `96c17f47` removed; port matches retail, no change, 10 menu-Load runs (6
+  under load) clean. Inferred, not reproduced on a pre-fix build. (c) FIXED by ordering, as
+  retail: `MenuDLT::Shutdown` calls `Audio::Scene::StopAll(self+0xb30)` (exe 0x14009b41a) before
+  the next loop remounts (`c4603875`); retail takes no lock on this path and keeps the same
+  one-read residual window. Found with it: non-menu loops' `AllowsModChanges` returned true where
+  retail's base (0x180031790) returns FALSE (`e353fb15`) — `_savingEnabled` now flips, `_savedMods`
+  is snapshotted, game->menu re-runs `RefreshList`. (d) FIXED (`94258ffc`; retail `LEA RDX,
+  [RAX+RCX*8]` at 0x14006ddee / 0x14006dfdb). (e) note corrected (`59ca40dd`); disposition
+  unchanged (`?Get@Configuration@System@@` still unported), manifest check 59 rows identical.
+  Merged-tree gate: new game `calls=5686`, resave PASS == golden (`calls=5691` is the load route's
+  number), pause-menu Quit-to-Main-Menu returns to a live menu, crash log 0 bytes, unit 260/0,
+  dispatch 0 mismatches. NOT run: mods-enabled and tutorial routes, perf build, (d) with
+  conflicting mods installed.
   **Gate at the close** (coordinator; the final tree `1b5eb639` gated 0 problems with resave 5/5, and
   the numbers below are from the `make clean` run on `282cd55b` — 1,993 debug / 2,433 perf compile
   lines — before the System closing sweep, which was then gated per merge): debug + perf + unit exit 0; distinct warnings 284 debug / 482 perf
