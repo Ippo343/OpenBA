@@ -1757,4 +1757,150 @@ UNIT_TEST(the_real_PackageFile_is_0xf0_bytes_with_retails_field_offsets) {
              sizeof(IO::PackageFile));
 }
 
+// ===========================================================================
+// PART H — ENDGAME B.3.4b SYSTEM (5): `IO::Serializer::Serialize(int64_t&)`.
+// ===========================================================================
+// The 18th overload, `?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z` @
+// 0x180035000, ReaderWriter slot **+0x90** (`rw_vtbl::kScalarInt64`). It is the
+// first scalar added since block 3, and the only one whose absence was ever
+// load-bearing: `System::Time::Serialize` (retail 0x1800ca740) hand-inlined
+// this very slot for the whole of B.3.4 because there was no member to call and
+// the four-byte `int&` door (+0xA0) is a different slot AND a different width.
+//
+// WHAT THIS PINS THAT A BUILD CANNOT. The member body is
+// `ScalarCall(_readerWriter, rw_vtbl::kScalarInt64, v, name)` — a RAW slot read
+// at a byte offset. Nothing about `kScalarInt64 == 0x90` is checked by the type
+// system, so a one-slot drift would compile, link, and quietly serialize eight
+// bytes through +0x88 (`kScalarUInt64`) or +0x98 (`kScalarUInt`, FOUR bytes) —
+// a save-format change with no build error. The probe drives the REAL member
+// (`runtime/src/io/serializer_class.cpp`, in `tests/unit/sources.mk`) against a
+// hand-built `void*[26]` of the shape `rt_data_mint_tables.inc` publishes, with
+// a DISTINCT body in every one of the four neighbouring slots, so landing on
+// the wrong one is a failure and not a coincidence.
+//
+// It also pins the REFERENCE semantics: retail's `AEA_J` is an `int64&`, so the
+// slot receives the caller's ADDRESS and the read side writes THROUGH it. The
+// body below stores a value back, and the test reads it out of the caller's own
+// variable.
+namespace ser_int64 {
+
+long long g_seen        = 0;     // what slot 0x90 was handed
+int       g_calls90     = 0;
+int       g_callsWrong  = 0;     // any of the three neighbours
+const char* g_name      = nullptr;
+
+void ScalarInt64(void* /*self*/, int64_t* v, const char* name) {
+    ++g_calls90;
+    g_seen = static_cast<long long>(*v);
+    g_name = name;
+    *v = 0x0102030405060708LL;   // the read side writes THROUGH the reference
+}
+void ScalarUInt64(void*, uint64_t*, const char*)  { ++g_callsWrong; }  // +0x88
+void ScalarUInt  (void*, uint32_t*, const char*)  { ++g_callsWrong; }  // +0x98
+void ScalarInt   (void*, int32_t*,  const char*)  { ++g_callsWrong; }  // +0xA0
+void Nothing     (void*)                          { ++g_callsWrong; }
+
+void* g_table[26] = {
+    (void*)&Nothing,      // +0x00  kDtor
+    (void*)&Nothing,      // +0x08  kGetVersion
+    (void*)&Nothing,      // +0x10  kSkip
+    (void*)&Nothing,      // +0x18  kArrayChar
+    (void*)&Nothing,      // +0x20  kArrayBool
+    (void*)&Nothing,      // +0x28  kArrayFloat
+    (void*)&Nothing,      // +0x30  kArrayUInt64
+    (void*)&Nothing,      // +0x38  kArrayInt64
+    (void*)&Nothing,      // +0x40  kArrayUInt
+    (void*)&Nothing,      // +0x48  kArrayInt
+    (void*)&Nothing,      // +0x50  kArrayUShort
+    (void*)&Nothing,      // +0x58  kArrayShort
+    (void*)&Nothing,      // +0x60  kArrayUChar
+    (void*)&Nothing,      // +0x68  kArraySChar
+    (void*)&Nothing,      // +0x70  kScalarChar
+    (void*)&Nothing,      // +0x78  kScalarBool
+    (void*)&Nothing,      // +0x80  kScalarFloat
+    (void*)&ScalarUInt64, // +0x88  kScalarUInt64   <- the neighbour below
+    (void*)&ScalarInt64,  // +0x90  kScalarInt64    <- THE ONE
+    (void*)&ScalarUInt,   // +0x98  kScalarUInt     <- the neighbour above
+    (void*)&ScalarInt,    // +0xA0  kScalarInt      <- the four-byte door
+    (void*)&Nothing,      // +0xA8  kScalarUShort
+    (void*)&Nothing,      // +0xB0  kScalarShort
+    (void*)&Nothing,      // +0xB8  kScalarUChar
+    (void*)&Nothing,      // +0xC0  kScalarSChar
+    (void*)&Nothing,      // +0xC8  kSerializeBytes
+};
+
+// One vptr plus ReaderWriter's three fields — the storage a minted-table
+// object occupies. Nothing constructs an `IO::ReaderWriter` here.
+struct RwStorage {
+    void*   vptr;
+    uint8_t allowCustomSerialize;
+    uint8_t _pad09[7];
+    void*   serializer;
+    void*   stream;
+};
+static_assert(sizeof(RwStorage) == 0x20, "ReaderWriter storage is 0x20 bytes");
+
+}  // namespace ser_int64
+
+UNIT_TEST(serializer_serialize_int64_lands_on_slot_0x90_and_round_trips) {
+    using namespace ser_int64;
+
+    static_assert(rt::io::rw_vtbl::kScalarInt64 == 0x90,
+                  "the member body spells this constant; if it moves, the "
+                  "eight bytes go through a different retail slot");
+
+    RwStorage rw{};
+    rw.vptr = static_cast<void*>(g_table);
+
+    // The Serializer is NOT constructed: its constructor drives an Encoding
+    // factory and consumes a 12-byte stream header (PART E), which has nothing
+    // to do with this overload. A raw 16-byte buffer wearing the two public
+    // fields is exactly the object the 861 caller sites hand these doors, and
+    // a raw buffer has no implicit destructor, so nothing can run twice.
+    alignas(8) uint8_t buf[16] = {};
+    IO::Serializer* ser = reinterpret_cast<IO::Serializer*>(buf);
+    ser->_stream       = nullptr;
+    ser->_readerWriter = reinterpret_cast<IO::ReaderWriter*>(&rw);
+
+    g_calls90 = 0;
+    g_callsWrong = 0;
+    g_seen = 0;
+    g_name = nullptr;
+
+    // This is `System::Time::Serialize`'s whole body since B.3.4b SYSTEM (5).
+    int64_t ticks = 0x7fedcba987654321LL;
+    ser->Serialize(ticks, "ticks");
+
+    CHECK_EQ(g_calls90, 1);
+    CHECK_EQ(g_callsWrong, 0);                       // not +0x88, +0x98 or +0xA0
+    CHECK_EQ(g_seen, 0x7fedcba987654321LL);          // all EIGHT bytes arrived
+    CHECK(g_name != nullptr);                        // `name` is forwarded
+    CHECK_EQ(ticks, 0x0102030405060708LL);           // the read side wrote back
+}
+
+UNIT_TEST(the_int64_overload_is_a_distinct_slot_from_the_int_one) {
+    // The reason this overload had to exist at all, stated as a measurement:
+    // the four-byte door is a DIFFERENT slot, so "just use Serialize(int&)"
+    // would have moved `System::Time`'s eight bytes to another retail virtual
+    // AND halved them.
+    static_assert(rt::io::rw_vtbl::kScalarInt64 != rt::io::rw_vtbl::kScalarInt,
+                  "+0x90 and +0xA0 are different slots");
+    static_assert(rt::io::rw_vtbl::kScalarInt - rt::io::rw_vtbl::kScalarInt64 == 0x10,
+                  "two slots apart: kScalarInt64, kScalarUInt, kScalarInt");
+    static_assert(rt::io::rw_vtbl::kScalarInt64 - rt::io::rw_vtbl::kScalarUInt64 == 8,
+                  "kScalarUInt64 (+0x88) is the slot immediately below");
+
+    // And the uint64 sibling is still ABSENT ON PURPOSE. Swept this pass:
+    // retail exports `?Serialize@Serializer@IO@@QEAAXAEA_KPEBD@Z` @ 0x18007c3d0
+    // (rt_export_addrs.inc:2602) and both 64-bit array forms (0x18007c410,
+    // 0x18007c420), and NOTHING in this tree reaches +0x88 through an
+    // `IO::Serializer` -- the only `kScalarUInt64` mentions are inside
+    // `serialize_family.cpp`, which IMPLEMENTS the ReaderWriter side, and this
+    // file's own tables. An uncalled port is an unverified port.
+    using S = IO::Serializer;
+    using Int64Overload = void (S::*)(int64_t&, const char*);
+    Int64Overload p = &S::Serialize;     // resolves only because it EXISTS
+    CHECK(p != nullptr);
+}
+
 }  // namespace

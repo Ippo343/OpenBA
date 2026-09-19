@@ -316,16 +316,14 @@ float RtSystem_Time_AsSeconds(const System::Time* self) {
 // Slot +0x90 serializes the 8-byte `ticks`. Not diffed (I/O side effect, see
 // Random::Serialize above).
 //
-// ENDGAME B.3.4 callers batch H LEFT THIS ONE BYTE-IDENTICAL, deliberately.
-// `serializer + 8` is the READERWRITER here too, and +0x90 is
-// rw_vtbl::kScalarInt64 — but `IO::Serializer` does NOT declare the int64
-// scalar overload. runtime/types/io/Serializer.h says why: retail's int64 and
-// uint64 forms "are ABSENT ON PURPOSE: no call site in this tree reaches them,
-// and an uncalled port is an unverified port. Adding one is a porting
-// decision, not a tidy-up." This site is that call site, so the overload is
-// now justified — but minting it is a receiver change, not a caller batch's,
-// and it belongs with whoever next opens `IO::Serializer`. Reported, not
-// converted, and not "fixed" by routing the 8 bytes through a 4-byte door.
+// ENDGAME B.3.4 callers batch H left this byte-identical and REPORTED the gap:
+// +0x90 is `rw_vtbl::kScalarInt64` and `IO::Serializer` declared no int64
+// scalar overload, so there was no member to call and the four-byte `int&` door
+// was not a substitute. B.3.4b SYSTEM (5) closes it: the overload is declared
+// (runtime/types/io/Serializer.h), its body is a scalar slot call like the
+// other seventeen (runtime/src/io/serializer_class.cpp) and its door is
+// registered by name and by address (runtime/src/io/serializer.cpp). This site
+// is the call site that justified it, and the member below is now one line.
 void RtSystem_Time_Serialize(System::Time* self, void* serializer) {
     self->Serialize(*reinterpret_cast<::IO::Serializer*>(serializer));
 }
@@ -340,19 +338,21 @@ float System::Time::AsSeconds() const {
                           "?TicksToSeconds@Timer@System@@SAM_J@Z")(_ticks);
 }
 
-// ⚠ BYTE-IDENTICAL, DELIBERATELY. See the declaration's comment in Value.h and
-// B34B_RULES section 3: `IO::Serializer` has no int64 scalar overload yet,
-// retail DOES export one (0x180035000), and adding it is sequenced after the 4a
-// closing pass because the member body belongs in a file another agent owns.
-// The `+ 8` is the READERWRITER (the Stream is at Serializer+0x00) and +0x90 is
-// `rw_vtbl::kScalarInt64`. Do NOT route these eight bytes through the four-byte
-// int door.
+// ENDGAME B.3.4b SYSTEM (5) — THE HAND-INLINED SLOT CALL IS GONE, and this is
+// the site that justified adding the overload rather than the other way round.
+//
+// What used to be here was six lines that reached `s + 8` (the ReaderWriter;
+// the Stream is at Serializer+0x00), loaded its vtable and tail-called
+// `[vtbl + 0x90]` — `rw_vtbl::kScalarInt64` — because `IO::Serializer` did not
+// declare an int64 scalar overload and routing eight bytes through the
+// four-byte `int&` door would have been a save-format change. B34B_RULES §3
+// sequenced the overload AFTER the 4a closing pass, because its body belongs in
+// `runtime/src/io/serializer_class.cpp`, which another agent owned. That agent
+// has landed; the overload exists (`0x180035000`, registered by name and by
+// address in `runtime/src/io/serializer.cpp`); this is now one member call to
+// the same slot. The trailing `0` was the ignored `const char* name`.
 void System::Time::Serialize(::IO::Serializer& s) {
-    void* stream = *reinterpret_cast<void**>(reinterpret_cast<char*>(&s) + 8);
-    void* vtbl = *reinterpret_cast<void**>(stream);
-    using SerializeInt64Fn = void(*)(void*, void*, int);
-    SerializeInt64Fn fn = *reinterpret_cast<SerializeInt64Fn*>(reinterpret_cast<char*>(vtbl) + 0x90);
-    fn(stream, &_ticks, 0);
+    s.Serialize(_ticks, nullptr);   // 0x180035000  +0x90 = rw_vtbl::kScalarInt64
 }
 
 // ============================================================

@@ -66,6 +66,8 @@
 //   0x18007c3c0 ord 3735  Serialize(short&)          rw vtable +0xB0
 //   0x1800675a0 ord 3736  Serialize(ushort&)         rw vtable +0xA8
 //   0x1800061d0 ord 3737  Serialize(int&)            rw vtable +0xA0
+//   0x180035000       -   Serialize(int64&)          rw vtable +0x90
+//                         ENDGAME B.3.4b SYSTEM (5), the 24th door.
 //   0x1800061f0 ord 3738  Serialize(uint&)           rw vtable +0x98
 //   0x180021660 ord 3739  Serialize(float&)          rw vtable +0x80
 //   0x180052920 ord 3753  Serialize(n, bool*)        rw vtable +0x20
@@ -198,6 +200,12 @@ RT_SER_SCALAR(RtSerializer_Serialize_UShort, uint16_t, rw_vtbl::kScalarUShort,
 RT_SER_SCALAR(RtSerializer_Serialize_Int,    int32_t,  rw_vtbl::kScalarInt,
               "IO::Serializer::Serialize(int&)",
               "?Serialize@Serializer@IO@@QEAAXAEAHPEBD@Z")
+// ENDGAME B.3.4b SYSTEM (5) — the 24th door. `_J` is MSVC's `__int64`, which is
+// `int64_t` on this toolchain; `long` is FOUR bytes on Win64 and would bind
+// neither overload, so there is no ambiguity to create here.
+RT_SER_SCALAR(RtSerializer_Serialize_Int64,  int64_t,  rw_vtbl::kScalarInt64,
+              "IO::Serializer::Serialize(int64&)",
+              "?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z")
 RT_SER_SCALAR(RtSerializer_Serialize_UInt,   uint32_t, rw_vtbl::kScalarUInt,
               "IO::Serializer::Serialize(uint&)",
               "?Serialize@Serializer@IO@@QEAAXAEAIPEBD@Z")
@@ -426,7 +434,22 @@ int RtIoSerializerRegister() {
                           (void*)&RtSerializer_GetDirection);
     RegisterRuntimeAddr(0x180006210, (void*)&RtSerializer_GetDirection);
 
-    const int total = 23;
+    // ENDGAME B.3.4b SYSTEM (5) — the 24th door, `Serialize(int64_t&)`.
+    // By NAME and by ADDRESS, same reasoning as GetDirection above:
+    // `tools/runtime_census.py` reads only a LITERAL mangled string at a
+    // `RegisterRuntimeExport(` call, and the address is what a by-address
+    // resolver finds. **NO EXE DISPATCH SLOT IMPORTS THIS MEMBER** — swept
+    // `standalone/address_registry.cpp` and every `standalone/reg_*.cpp` for
+    // `?Serialize@Serializer@IO@@QEAAXAEA_J`, and for the uint64 sibling
+    // `AEA_K` as well: zero hits for either, and the fourteen
+    // `RegisterDispatchSlot` rows at 0x1401524xx bind the bool / uchar / short
+    // / int / uint / float scalars and the array forms only. So no row moves
+    // and `tools/dispatch_slot_map.py --check` is unaffected.
+    RegisterRuntimeExport("?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z",
+                          (void*)&RtSerializer_Serialize_Int64);
+    RegisterRuntimeAddr(0x180035000, (void*)&RtSerializer_Serialize_Int64);
+
+    const int total = 24;
     printf("[RtIO/Serializer] %d exports registered\n", total);
     return total;
 }

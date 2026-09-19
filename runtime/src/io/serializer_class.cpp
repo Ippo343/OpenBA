@@ -216,6 +216,16 @@ const Encoding& Serializer::GetEncoding() {
 // (0x180155210): the entry at that offset is the exported
 // `?Serialize@Binary{Reader,Writer}@IO@@` whose mangled parameter type matches.
 
+// ?Serialize@Serializer@IO@@QEAAXAEA_JPEBD@Z  0x180035000  +0x90
+// ENDGAME B.3.4b SYSTEM (5). The 18th overload, and the only one added since
+// block 3. Its justifying call site is `System::Time::Serialize` (retail
+// 0x1800ca740), which hand-inlined this very slot until this member existed —
+// see the declaration's comment in runtime/types/io/Serializer.h. Identical in
+// shape to every scalar below it; the width is the whole difference, and it is
+// the reason the site could not use the `int&` door.
+void Serializer::Serialize(int64_t& v, const char* name) {
+    ::ScalarCall(_readerWriter, rw_vtbl::kScalarInt64, v, name);
+}
 void Serializer::Serialize(bool& v, const char* name) {
     ::ScalarCall(_readerWriter, rw_vtbl::kScalarBool, v, name);
 }
