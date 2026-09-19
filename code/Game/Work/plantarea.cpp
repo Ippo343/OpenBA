@@ -94,20 +94,6 @@ static PAW_FindSubEntity_t s_fn_FindSubEntity = nullptr;  // 0x140002e10
 typedef void (*PAW_Work_Serialize_t)(void* self, void* stream);
 static PAW_Work_Serialize_t s_fn_Work_Serialize = nullptr;  // 0x1400f7400
 
-// Serializer ctor/dtor
-typedef void* (*PAW_Serializer_Ctor_t)(void* self, void* stream, int version);
-typedef void  (*PAW_Serializer_Dtor_t)(void* self);
-static PAW_Serializer_Ctor_t s_fn_Serializer_Ctor = nullptr;
-static PAW_Serializer_Dtor_t s_fn_Serializer_Dtor = nullptr;
-
-// Serializer::Serialize for int fields
-typedef void (*PAW_Serializer_SerializeInt_t)(void* ser, int* buf, const char* name);
-static PAW_Serializer_SerializeInt_t s_fn_Serializer_SerializeInt = nullptr;
-
-// Serializer::Serialize for bool array
-typedef void (*PAW_Serializer_SerializeBoolArray_t)(void* ser, int count, void* buf, const char* name);
-static PAW_Serializer_SerializeBoolArray_t s_fn_Serializer_SerializeBoolArray = nullptr;
-
 // ExternalRef serialize (FUN_140002340)
 typedef void (*PAW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
 static PAW_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;  // 0x140002340
@@ -186,21 +172,6 @@ bool PlantArea_ResolveFuncs() {
     s_fn_CropDescComplete = reinterpret_cast<PAW_CropDescComplete_t>(
         ResolveAddr(Module::Exe, 0x14011b390));
 
-    // Dispatch slots (indirect through .rdata)
-    uintptr_t iatSerCtor = ResolveAddr(Module::Exe, 0x140152ad8);
-    if (iatSerCtor)
-        s_fn_Serializer_Ctor = *reinterpret_cast<PAW_Serializer_Ctor_t*>(iatSerCtor);
-    uintptr_t iatSerDtor = ResolveAddr(Module::Exe, 0x140152ad0);
-    if (iatSerDtor)
-        s_fn_Serializer_Dtor = *reinterpret_cast<PAW_Serializer_Dtor_t*>(iatSerDtor);
-
-    uintptr_t iatSerInt = ResolveAddr(Module::Exe, 0x140152ac8);
-    if (iatSerInt)
-        s_fn_Serializer_SerializeInt = *reinterpret_cast<PAW_Serializer_SerializeInt_t*>(iatSerInt);
-    // Bool array serialize uses same fn as int serialize (different usage)
-    s_fn_Serializer_SerializeBoolArray = reinterpret_cast<PAW_Serializer_SerializeBoolArray_t>(
-        s_fn_Serializer_SerializeInt);
-
     // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
     // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
     // `*ResolveAddr(...)` read here yielded NULL and the collect-array grow in the
@@ -228,9 +199,7 @@ bool PlantArea_ResolveFuncs() {
               s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_BST_RecursiveFree && s_fn_ValidateTask &&
               s_fn_TaskCancel && s_fn_FindSubEntity &&
-              s_fn_Work_Serialize && s_fn_Serializer_Ctor &&
-              s_fn_Serializer_Dtor && s_fn_Serializer_SerializeInt &&
-              s_fn_ExternalRef_Serialize &&
+              s_fn_Work_Serialize && s_fn_ExternalRef_Serialize &&
               s_fn_CropDescComplete &&
               fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
@@ -257,9 +226,6 @@ bool PlantArea_ResolveFuncs() {
         if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
         if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
-        if (!s_fn_Serializer_Ctor) printf("  MISSING: Serializer_Ctor\n");
-        if (!s_fn_Serializer_Dtor) printf("  MISSING: Serializer_Dtor\n");
-        if (!s_fn_Serializer_SerializeInt) printf("  MISSING: Serializer_SerializeInt\n");
         if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
         if (!s_fn_CropDescComplete) printf("  MISSING: CropDescComplete\n");
     }
@@ -868,8 +834,8 @@ void PlantArea_Serialize_Impl(PlantArea* self, void* stream) {
     // (address_registry.cpp:1163), the FOUR-parameter (int n, bool*, const char*)
     // array door at rw_vtbl::kArrayBool.
     //
-    // `s_fn_Serializer_SerializeBoolArray` was ALIASED onto 0x140152ac8 at :199
-    // ("Bool array serialize uses same fn as int serialize"), which is the
+    // `s_fn_Serializer_SerializeBoolArray` was ALIASED onto 0x140152ac8 (that alias
+    // and its door are gone with the B.3.4a closing sweep), which is the
     // THREE-parameter `Serialize(int&)` SCALAR door. Called with four arguments,
     // the element COUNT landed in RDX — the register the scalar body
     // dereferences as `int*` — so this was a wild read off a small integer, not
