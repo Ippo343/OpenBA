@@ -298,6 +298,155 @@ packed read) at 0x1800ace7e; `0x1800c7ad0` (static `MemFree`, twice - the two `F
 releases) at 0x1800acec1 / 0x1800acefb; the import at `[0x18014b110]` (ReadFile) at 0x1800acf2a.
 There is no critical-section thunk and no other callee. **Verified: retail's packed read takes no
 lock; its correctness depends on a single loader.** Q2-Q9 above were NOT re-checked by the
-coordinator. Q5 (does the EXE ever dispatch a load off the loader thread) is still open: it needs
-`Application-x64.exe` as the Ghidra program and waits until the agents pinned to the retail DLL
-have finished.
+coordinator. Q5 (does the EXE ever dispatch a load off the loader thread) is answered below.
+
+---
+
+## Q5. Does the retail EXE ever dispatch a resource load off the loader thread?
+
+Answered 2026-09-19 by `loader-fix`, against **`Application-x64.exe`** (image base
+`0x140000000`, function_count 11473). Program asserted with `get_current_program_info`
+before the reads; the session was switched back to `Runtime-x64.dll` (function_count 15290)
+afterwards and re-asserted. All addresses in this section are EXE addresses.
+
+Import thunks were resolved the only way that works in this project (the §1 caveat — name
+xrefs return empty for imports): find the mangled name string with
+`search_memory_strings`, take the hint/name-table entry two bytes before it, and
+`search_byte_patterns` for that RVA as a little-endian qword. The hit inside `.rdata`
+(`0x140151000`–`0x1401c0dff`) is the IAT slot that the `CALL qword ptr [...]` uses.
+
+### Q5a. Does the exe import `Engine::Loader` at all? — **NO.**
+
+`search_memory_strings("@Loader@Engine@@")` over the whole exe returns **0 matches**. There
+is no `?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z`, no `?Run@Loader@Engine@@`, and no
+`?_loader@LoaderLoop@Engine@@1VLoader@2@A` in the import name table.
+`search_memory_strings("LoadResources")` likewise returns **0 matches** — the exe does not
+import `?LoadResources@UpdateLoop@Engine@@QEAAXXZ` either.
+
+**Consequence.** The only code in the shipped game that starts a resource load or dispatches
+`UpdateLoop::Load` (slot 6, `+0x30`) is `Engine::Loader::Run` (Runtime `0x1800dbfc0`),
+reached from `Engine::Loader::Load` (`0x1800dc050`), reached only from
+`LoaderLoop::Startup` (`0x1800dc260`) and `DialogLoaderLoopT::Startup` (`0x1800db000`) —
+all three inside the DLL. The exe cannot dispatch a load off the loader thread, because it
+has no door to the loader at all.
+
+### Q5b. What does retail's splash `Startup` do, where our `Stub_Startup` step 3 spawns the AsyncLoader worker? — **Nothing. It chains the base `Startup` and sets up the fade.**
+
+`GameLoadDialogLoopT::Startup` @ **`0x140098fa0`** — slot +0x08 of the splash vtable
+`0x140158800` (Ghidra's auto-name `OptionsDialog_impl_8fa0` is wrong). Full disassembly,
+29 instructions; every call named:
+
+```
+140098fad: CALL qword ptr [0x140152308]   ; ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ
+                                          ;   -> tail-calls Engine::Loader::Load == THE ONE KICK
+140098fbe: CALL 0x140099260               ; exe-internal UI setup helper
+140098fd5: CALL qword ptr [0x140151f80]   ; UI::SetFullscreenFade(ui, 1, this+0x188, 1)
+140098feb: CALL qword ptr [0x140151f80]   ; UI::SetFullscreenFade(ui, 0, this+0x188, 0)
+140099000: CALL qword ptr [0x140152358]   ; UI::SetFullscreenFadeSprite
+14009900c: CALL qword ptr [0x140151bf8]   ; UI::EnableCursor(ui, true)
+                                          ; then a float computed into this+0x13c; RET
+```
+
+`[0x140152308]` verified by reading the slot (`4C DD 1B 00 …` -> name-table RVA `0x1bdd4c`,
+string at `0x1401bdd4e` = `?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ`).
+
+**There is exactly one load kick in retail's splash Startup, and it is the base
+`DialogLoaderLoopT::Startup`'s tail call into `Loader::Load`.** No second dispatch, no
+thread creation, no exe-side loader. Our `Stub_Startup` reproduces this (its step 2) *and*
+`Stub_Update` adds `AsyncLoader::StartAsyncLoad(m_nextLoop, …)` on top of it — that is the
+second dispatcher.
+
+### Q5c. How does retail's splash learn the load has finished? — `LoaderLoop::IsFinished`, polled from `Update`.
+
+`GameLoadDialogLoopT::Update` @ **`0x140098da0`** (splash vtable slot +0x18):
+
+```
+140098dc0: CALL qword ptr [0x140152310]   ; ?IsFinished@LoaderLoop@Engine@@QEBA_NXZ
+140098dc6: TEST AL,AL / JZ 0x140098e0d    ; not finished -> skip the whole fade block
+140098dca: CMP byte ptr [RSI+0x190],0     ; fade-out-kicked latch
+140098de3:   CALL [0x140151f80]           ;   UI::SetFullscreenFade(ui, 1, this+0x18c, 0)
+140098de9:   MOV byte ptr [RSI+0x190],1
+140098df2: (else) MOVSS XMM1,[RSI+0x150]  ; the fade RATE
+140098e07:   CALL qword ptr [0x140152318] ;   ?Exit@LoaderLoop@Engine@@QEAAXXZ   (rate == 0)
+140098e0d: MOV RAX,[RSI+0x28] ; MOV ECX,[RAX+0x24] ; JZ ...  ; nextLoop->_loadProgress gate
+           ... the 2.0s loading-tip block (DAT_140172174 == 2.0f) ...
+140098f82: JMP qword ptr [0x140152320]    ; ?Update@DialogLoaderLoopT@Engine@@  (tail)
+```
+
+IAT slots verified the same way: `[0x140152310]` -> `0x1bdd7a` =
+`?IsFinished@LoaderLoop@Engine@@QEBA_NXZ`; `[0x140152318]` -> `0x1bdda6` =
+`?Exit@LoaderLoop@Engine@@QEAAXXZ`; `[0x140152320]` -> `0x1bddc8` =
+`?Update@DialogLoaderLoopT@Engine@@`.
+
+`IsFinished` (Runtime `0x1800dc150`) is
+`!(LoaderLoop::_loader._thread.runFlags & 1) && _elapsedTicks >= _delayTicks`
+(runtime/types/engine/UpdateLoop.h, §LoaderLoop). **That `runFlags` bit is retail's ONLY
+loader-completion signal, and the splash's own `Update` is exactly where retail polls it.**
+Our `Stub_Update` polls `AsyncLoader::IsAsyncLoadBusy()` in that same position instead.
+
+### Q5d. Does the exe create threads? — **Yes, exactly one class, and it is not a loader.**
+
+The exe imports `??0Thread@System@@QEAA@I@Z`, `??1Thread@System@@QEAA@XZ`,
+`?Start@Thread@System@@QEAAXXZ`, `?WaitForFinish@Thread@System@@QEAAXXZ`,
+`?OnCompleted@Thread@System@@UEAAXXZ` and `?YieldToThreads@Application@1@`. It imports no
+`CreateThread` / `_beginthreadex` from KERNEL32 — its full KERNEL32 import list is the plain
+CRT set.
+
+- `??0Thread@System@@` IAT slot **`0x140152518`** — **exactly one** call site in the whole
+  exe: `0x1400a6818`, inside `FUN_1400a67f0`. That ctor builds one object with a `0x10000`
+  (64 KB) stack, stamps vtable **`0x14015ef18`**, constructs a `System::CriticalSection` at
+  `this+0x30` (`CALL [0x140152528]`), sets `+0x58 = 1`, and fills a 32-dword table at
+  `+0x170`. One `Thread`-derived class, period.
+- Vtable `0x14015ef18`: slot 0 (`Thread::Run`) = **`0x1400a6360`**; slot 1 = `0x14003ab46`,
+  a thunk to `?OnCompleted@Thread@System@@` (i.e. not overridden).
+- `get_function_callees(FUN_1400a6360)` — the worker body — is exactly
+  `{ FUN_1400a6430, StackCriticalSection::Lock, StackCriticalSection::Unlock, MemFree }`.
+  It is a **lock-protected job queue** with its own critical section, and it touches nothing
+  in `IO::` or `Object::`.
+- `?Start@Thread@System@@` IAT slot **`0x140152558`** — 10 call sites, all inside the
+  `0x14009e8c0`–`0x1400a70a0` job-system cluster (`FUN_1400a6620`, `FUN_1400a6690`,
+  `FUN_1400a6a30`, `FUN_1400a6b20`, `FUN_1400a6f00`, `FUN_1400a6fe0`, plus the
+  Ghidra-misnamed `RoadTool_helper_6e30`, `RoadTool_sub_ce00_sub_68b0`,
+  `TradeComponent_impl_6c10`, `CreateNaturalResource_impl_sub_e8c0`). Every one of them
+  brackets its `Start` with `StackCriticalSection::Lock`/`Unlock`.
+
+**These are compute workers with their own lock, spawned from inside the world build — which
+itself runs on the loader thread. They are not a second resource loader.**
+
+### Q5e. Does retail's MAIN thread ever call `FindOrLoad`? — Yes, but never while the loader thread is alive.
+
+`?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z` IAT slot
+**`0x140151230`** has ~128 exe call sites. They fall into two groups, and neither overlaps
+the loader:
+
+1. **Component / description / serialize helpers** (`FUN_1400019a0`, `FUN_140001c70`,
+   `Object_ExternalPtr_BuildComponentRef_Serialize`, the `Tutorial*` and `Citizen*`
+   helpers, …). These run inside `External::Load`'s own recursive serialize — i.e. on
+   whichever thread is already doing the load, which in retail is only ever the loader.
+2. **Dialog constructors and UI** (`MainMenuDialog_Serialize`, `NewGameDialog_impl_3620`,
+   `SaveLoadDialog_impl_3770`, `OptionsDialog_impl_3a10`, `MessageDialog_Ctor*`,
+   `ModDialog_*`, `EntityUI_OpenPauseMenu`, `MenuScene_impl_a930` — the exe's
+   `MenuDialogLoopT::Load` scene block — and `FUN_140099ac0`). These run on the **main**
+   thread, but only from a loop that is already active, and a loop only becomes active after
+   the splash that kicked the loader has observed `IsFinished` (Q5c) and after
+   `DialogLoaderLoopT::Shutdown` / `LoaderLoop::Shutdown` / `LoaderLoop::OnVideoError`
+   (Runtime `0x1800dafc0`, `0x1800dc280`, `0x1800dc360`) have each done a
+   `Thread::WaitForFinish` on that same loader. **Retail's structure makes "main thread
+   loads" and "loader thread loads" mutually exclusive in time.**
+
+### Q5 verdict
+
+**Retail has exactly one resource loader, and the exe has no way to make a second.** It
+imports neither `Engine::Loader` nor `UpdateLoop::LoadResources`; its only `Thread`-derived
+class is a locked compute-job pool; and its splash loop's `Startup`/`Update` pair is
+precisely "kick the one loader, then poll `LoaderLoop::IsFinished`".
+
+**Therefore `standalone/async_loader.{h,cpp}` is OUR INVENTION, not ported retail code**, and
+the `AsyncLoader::StartAsyncLoad(ll->m_nextLoop, …)` call in
+`standalone/splash_loop_stubs.cpp` `Stub_Update` is the second dispatcher named in
+LOADER_READ_SPIN.md §2.3 / §6. It was added (per `async_loader.h`'s own header comment)
+because the Runtime `Loader::Run` was believed to hang on `Engine+0x6c0` in standalone; that
+belief is stale — the instrumented boots in LOADER_READ_SPIN.md §1b show the Runtime loader
+thread alive and entering `External::Load` 6–7 times concurrently per boot. Removing our
+dispatcher and restoring retail's `IsFinished` poll is the single-loader fix, and it is a
+`standalone/` change, exactly as §6 predicted.

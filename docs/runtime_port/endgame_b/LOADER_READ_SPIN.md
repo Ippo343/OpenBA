@@ -390,3 +390,171 @@ Concretely, it must not:
 8. **`??0PackageFile@IO@@`** — does a `PackageFile` hold exactly one `FileInfo` / one
    `HANDLE`, or is there a second handle (e.g. per-thread) anywhere in its 0xC0+ layout that
    our `PackageFileView` does not model?
+
+*(Q1–Q4 and Q6–Q9 were answered in LOADER_READ_SPIN_GHIDRA.md. Q5 — the EXE-side half —
+was answered there too, by `loader-fix` on 2026-09-19; see §9.1 below.)*
+
+---
+
+## 9. THE FIX — a single loader (2026-09-19, agent `loader-fix`)
+
+§6's **primary** recommendation was taken. The fallback (a positioned read in
+`filesystem_openfile_win.cpp`) was **not** needed and was **not** written: nothing under
+`runtime/src/io/` changed, and every one of §7's nine prohibitions still holds.
+
+### 9.1 What Q5 settled
+
+`docs/runtime_port/endgame_b/LOADER_READ_SPIN_GHIDRA.md` §Q5 read `Application-x64.exe`
+and found:
+
+* The exe imports **neither** `Engine::Loader` **nor** `UpdateLoop::LoadResources` (zero
+  string matches for `@Loader@Engine@@` and `LoadResources` in its import name table), so
+  the only dispatcher of `UpdateLoop::Load` in the shipped game is `Engine::Loader::Run`
+  inside the DLL.
+* Retail's splash `Startup` (exe `0x140098fa0`) is 29 instructions whose first call is
+  `?Startup@DialogLoaderLoopT@Engine@@`, whose tail call **is** `Loader::Load`. One kick.
+* Retail's splash `Update` (exe `0x140098da0`) opens with `?IsFinished@LoaderLoop@Engine@@`
+  — i.e. retail polls the loader thread from exactly the position where our `Stub_Update`
+  was polling `AsyncLoader::IsAsyncLoadBusy()`.
+* The exe's only `Thread`-derived class (one ctor site, vtable `0x14015ef18`) is a
+  **lock-protected compute job queue**, not a loader.
+
+So `standalone/async_loader.{h,cpp}` was **our invention**, and the second loader was ours
+to delete. Its header's justification — "the Runtime `Loader::Run` hangs on `Engine+0x6c0`
+in standalone" — was stale; §1b already showed that thread alive and entering
+`External::Load` 6–7 times concurrently per boot.
+
+### 9.2 What changed
+
+All in `standalone/`:
+
+1. **`standalone/async_loader.{h,cpp}` deleted.** The `AsyncLoader::StartAsyncLoad` call in
+   `splash_loop_stubs.cpp` `Stub_Update` (the "Fix 1 deferred load kick") is gone with it.
+   `next->vtable->Load` is now dispatched exactly once, by the Runtime `Engine::Loader`
+   thread that `Stub_Startup`'s step 2 starts — retail's one kick.
+2. **`standalone/engine_loader_gate.{h,cpp}` added.** `EngineLoader::IsBusy()` is retail's
+   `LoaderLoop::IsFinished` first term, asked without the wake-up race: it polls
+   `_loader._thread.hFinished` (`g_pLoaderCompletionEvent`, Runtime `0x1801fe7e0`) with a
+   zero timeout rather than `runFlags & 1`, because `Thread::Start`'s `ResetEvent` runs
+   synchronously on the caller thread inside `Loader::Load` while `runFlags |= 1` only
+   happens once the loader wakes. Manual-reset, so the poll observes without consuming.
+   **No lock, no new primitive, no timeout.**
+3. **`splash_loop_stubs.cpp`**: the transition gate is now
+   `!EngineLoader::IsBusy() && elapsed >= delay && worldReady`, which is `IsFinished` plus
+   our own world-build signal; and the loading-tip gate lost its `g_loadKickedFor` term, so
+   it is now exactly retail's `nextLoop->m_loadProgress != 0` (exe `0x140098e0d`).
+4. **`ChunkedSceneLoader` is gated on the loader.** This was a SECOND main-thread loader
+   that §2.3 did not name: `RunArmedInit()` runs `LoadSceneA1` →
+   `FindOrLoad("Game/MenuScene/SceneN.rsc")`, a deep recursive `External::Load`, on the
+   **main** thread while the loader thread loads MenuDLT — on every boot. Retail has no such
+   split: it loads the menu scene inside `MenuDialogLoopT::Load` (exe `MenuScene_impl_a930`
+   from `FUN_140099ac0`), i.e. on the loader thread. Waiting for the loader here **restores
+   retail's exclusivity**; it is not a new guard.
+5. **`BANISHED_ASYNC_LOAD` / `Opt().asyncLoad` removed** — its only reader was the deleted
+   file. No script, Makefile target or `.claude/` file set it (swept). No new flags: the fix
+   is unconditional.
+
+**Nothing under `code/Game/` was touched at all** — the B.3.4 caller batches were live
+there. Two comments in that tree are now stale and want a closing pass:
+
+* `code/Game/Game/gameupdateloop_load.cpp` (the `s_loadingLoop` guard region, ~896-924)
+  still describes dispatcher (1) as "our standalone AsyncLoader worker". That guard is now
+  an **assertion rather than a fix**: with one dispatcher it can never fire, so a
+  `[GUL::Load] redundant dispatch` line reappearing in a log means a second dispatcher has
+  come back. **That line count is the cheapest regression signal for this fix.**
+* `code/Game/Game/menudialogloopt_funcs.h:157` says `MenuDialogLoopT_LoadMusic` is "safe to
+  call on the AsyncLoader worker thread"; it now runs on the `Engine::Loader` thread.
+
+The equivalent stale comments inside `standalone/` (`menudialogloopt_stubs.cpp`,
+`gameupdateloop_stubs.cpp`, `loader_loop_stubs.cpp`, `chunked_scene_loader.h`) **were**
+corrected here, because they state thread affinity and no batch was live in them.
+
+### 9.3 The route audit — where else could the main thread load?
+
+A main-thread `FindOrLoad` is only concurrent with the loader if it executes while the
+loader thread is asynchronously alive, and that is only ever **inside a splash loop**:
+`DialogLoaderLoopT::Startup` is the only asynchronous kick, while `loader_loop_stubs.cpp`'s
+Inner/Outer `LoaderLoop::Startup` call `fn_Loader_Load` and then **block** in
+`WaitForEngineLoader` (`Opt().syncEngineLoader` defaults ON), so those are serial by
+construction. Every route therefore reduces to "what does the main thread do during a
+splash", and all routes share one splash vtable (`0x140158800`).
+
+| route | main-thread work while the loader runs | verdict |
+|---|---|---|
+| **boot** (ShiningRock → Loading → MenuDLT) | `UI::Update` on the splash's own dialog; the 2.0 s tip cycle (reads a string table, no load); `UIFade` (a 16-byte field copy from `KeyMap+0xA8`, no load); **`ChunkedSceneLoader` → `LoadSceneA1` → `FindOrLoad`** | **WAS CONCURRENT — now gated (9.2 item 4).** Everything else is retail's own shape. |
+| **new game from menu** (autostart *and* manual) | same splash body; `ChunkedSceneLoader` is armed only once at boot and already consumed, so nothing loads. `NewGameDialog::StartGame` and the generator combo run in `MenuDLT::Update`, i.e. before the transition, with the loader idle. | exclusive |
+| **tutorial** (`BANISHED_AUTOTUTORIAL`) | identical to new game — same splash, same `GameUpdateLoop` next loop | exclusive |
+| **menu Load Game** (`BANISHED_AUTOMENU_BUTTON=2`, and the resave gate's `BANISHED_AUTOLOAD`) | `SaveLoad::Update` is ticked from `MenuDLT::Update` (`+0xb70`) — `MenuDLT` is only current *after* its splash observed the loader finished. The save load itself is `GameUpdateLoop::Load` on the loader thread. | exclusive |
+| **return to menu from the pause menu** | builds a fresh splash chain; `MenuDLT::Stub_Startup`'s `EnsureCursorsLoaded` / `StandaloneEnsureSpriteSheetLoaded` / `EnsureUISoundsLoaded` / `LoadMusic` are main-thread `FindOrLoad`s, but `Startup` only runs once `MainLoop` has switched to `MenuDLT`, which the splash now gates on `!IsBusy()`. **Before this change the splash transitioned on the AsyncLoader flag, so these COULD overlap the loader thread.** | exclusive *as a result of* 9.2 item 3 |
+
+Nothing else was gated. `UI::Update` draining the splash's pending-dialog list happens in
+retail in the same place with the loader running, so it is not our divergence.
+
+**Not changed, but worth recording:** `standalone/res_load_lock.{h,cpp}` exists and is taken
+by exactly one body — `ExternalFactory::ExpandRelativePath`
+(`runtime/src/object/external_path_win.cpp:356`). `FindOrLoad` and `External::Load`
+themselves do **not** take it today, despite the header saying a ported body must. So S6 was
+already serialized and S1/S4 never were, which is consistent with §2.1's inventory. Removing
+a lock is out of scope here and §7.9 warns against it; left alone.
+
+### 9.4 Measurements
+
+Both binaries built from this worktree and md5-pinned, so every row below is the same
+machine, same harness, same game data, one exe at a time under
+`tools/game_dir_lock.sh … loader-fix`:
+
+| | base `1c8a64dd` (CONTROL) | this branch (AFTER) |
+|---|---|---|
+| exe md5 | `74d6aaad7a59c61bdcac3d5e1a5331fb` | `b2419671be913541211c24373c916b06` |
+
+**New-game route** (`BANISHED_AUTOSTART=1 BANISHED_PAUSEMENU=600 BANISHED_PAUSEMENU_QUIT=120`):
+
+| metric | CONTROL, 12 boots | AFTER, 24 boots |
+|---|---|---|
+| **defective** (`openCompFail>0` or `badMagic>0` or `retNull>3`, hang, crash) | **4 / 12 (33%)** | **0 / 24** |
+| `[GUL::Load] redundant dispatch` present | **12 / 12** | **0 / 24** |
+| `calls > 5686` (§1d: the second thread got loads in) | **7 / 12** | **0 / 24** |
+| `calls` values | 5686 ×4, 5738, 5740 ×2, 5742, 5743, 5744, 5746 | **5686 ×24** |
+| `topics` | 66 ×12 | 66 ×24 |
+| exit code | 0 ×12 | 0 ×24 |
+
+The four defective control boots: `oC=1 rN=4`; `oC=2 bM=2 rN=7`; `oC=1 bM=1 rN=5`;
+`oC=2 rN=5`. Fisher exact on defect rate, 4/12 vs 0/24: **p ≈ 0.008**. On the
+second-loader marker `calls > 5686`, 7/12 vs 0/24: **p ≈ 0.0001**. The control's 33% is
+consistent with §1a's independently measured 11/24 (46%) on an older build.
+
+`calls` is the discriminator to watch, and it is now *pinned*: all 24 after-boots read
+exactly 5686 **while the random menu-scene pick varied** (variants 2, 8, 3, 7 observed), so
+the constant is genuine determinism and not a fixed scene.
+
+**Other AFTER routes** — tutorial (`BANISHED_AUTOTUTORIAL=1`) 4/4 clean, `calls=5776`,
+`openCompFail=0`, `badMagic=0`, `retNull=15` constant (that route's own benign
+missing-file floor, the §1e shape); menu-Load (`BANISHED_AUTOMENU_BUTTON=2
+BANISHED_AUTOMENU_CLICKS=m6`) 4/4 clean, `openCompFail=0`, `badMagic=0`, `retNull=2`.
+
+**Resave gate** against the existing golden (21075114 bytes): **AFTER 10/10 PASS**,
+**CONTROL 10/10 PASS**, zero crash-log bytes in all 20. Never `GOLDEN CREATED`.
+
+### 9.5 What these numbers do NOT establish
+
+Stated plainly, because the sample is honest about its own limits:
+
+1. **The crash and hang casualties (§1a `ctrl/10`–`ctrl2/8`, exits 3 and 4) were not
+   reproduced in this control sample at all.** 12 new-game control boots produced four
+   *counter* defects and zero crashes or hangs. So the claim supported here is "the
+   NULL-resource / bad-magic family is gone"; the crash and hang shapes are inferred to
+   follow only because §3 L6c/L6d show them to be downstream of the same desync.
+2. **The two crash shapes the coordinator supplied from batch B did not reproduce on base.**
+   10 control resave-gate runs and 8 control menu-Load runs were clean, against batch B's 2
+   in 7. So this work says **nothing** about (a) `SaveLoadDialog_PopulateFileList` or
+   (b) `External::Load → GraphicsMesh_Serialize → String::Serialize → SetLength →
+   MemAlloc → LockEnter` on a null lock. **Both remain open**, and (b) in particular is
+   allocator-lifetime-shaped rather than package-read-shaped. Neither was guarded.
+3. **The menu-Load route's `calls` variation is route noise, not a loader signal.** It
+   varies identically before and after (control 4760/4765/4768/4789, after
+   4760/4768/4789/4760) — recorded so nobody later reads it as a surviving second loader.
+   That route stops in the SaveLoadDialog and never reaches `GameUpdateLoop::Load`.
+4. **§5's second defect (S4, the unlocked `ExternalFactory::Add` AVL rotate) is not
+   addressed by argument, only by construction** — with one loader there is no concurrent
+   mutator, but no run here exercised it directly.
+

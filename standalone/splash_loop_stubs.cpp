@@ -30,7 +30,7 @@
 #include "DialogLoaderLoopT.h"
 #include "MainLoop.h"
 #include "common.h"
-#include "async_loader.h"
+#include "engine_loader_gate.h"
 #include "chunked_scene_loader.h"
 #include "stall_debug.h"
 #include "boot_window.h"
@@ -131,20 +131,17 @@ void Stub_Destroy(UpdateLoop* self, unsigned flags) {
     }
 }
 
-// Per-loop latches for the deferred load kick and the fade-out kick. They used to
-// be function-local statics compared as `latch != self`, on the stated assumption
-// that "splash loops run one at a time, each with a unique self". Quit-to-main-menu
-// broke that: a SECOND new game builds a second splash loop, the allocator can hand
-// back the freed first one's address, and `latch == self` is then true on frame 0 --
-// so the load kick never fires and the second New Game hangs on the loading screen
-// with an unbuilt world. Clearing them in Stub_Startup (which runs exactly once per
-// loop) makes the latch depend on the loop's LIFETIME rather than its address.
-UpdateLoop* g_loadKickedFor       = nullptr;
+// Per-loop latch for the fade-out kick. It used to be a function-local static
+// compared as `latch != self`, on the stated assumption that "splash loops run one
+// at a time, each with a unique self". Quit-to-main-menu broke that: a SECOND new
+// game builds a second splash loop, the allocator can hand back the freed first
+// one's address, and `latch == self` is then true on frame 0. Clearing it in
+// Stub_Startup (which runs exactly once per loop) makes the latch depend on the
+// loop's LIFETIME rather than its address.
 UpdateLoop* g_fadeOutInitiatedFor = nullptr;
 
 void Stub_Startup(UpdateLoop* self) {
     StallDebug::Phase startupPhase("SplashDLT::Stub_Startup");
-    g_loadKickedFor       = nullptr;   // fresh loop -- see the note above
     g_fadeOutInitiatedFor = nullptr;
     DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
     UpdateLoop* next = ll->m_nextLoop;
@@ -179,50 +176,65 @@ void Stub_Startup(UpdateLoop* self) {
     // produce a LoaderDialog wrapping m_dialogExternal, stores it at
     // self+0x58 (m_dialogInstance), invokes the dialog's Slot4 (Setup),
     // pushes the IBP into the UI's pending-open list at self+0x88, then calls
-    // Loader::Load(&_loader, m_nextLoop). The Runtime Loader thread hangs in
-    // standalone (Engine+0x6c0 audio sub-object deadlock), so we ignore its
-    // completion event and run our own async loader for next->vtable->Load
-    // below — see Step 3.
+    // Loader::Load(&_loader, m_nextLoop).
+    //
+    // THAT TAIL CALL IS THE ONE AND ONLY LOAD KICK, here and in retail. Read
+    // out of the shipped exe: 0x140098fa0 is 29 instructions and its first call
+    // is this chain; there is no second dispatch and no exe-side loader at all
+    // (the exe does not even import Engine::Loader — see
+    // docs/runtime_port/endgame_b/LOADER_READ_SPIN_GHIDRA.md §Q5). The loader
+    // thread it starts loads m_nextLoop's resources while the main thread below
+    // animates this splash, which is exactly retail's shape.
     if (ll->m_dialogExternal && fn_DialogLoaderLoopT_Startup) {
         StallDebug::Phase chainPhase("SplashDLT fn_DialogLoaderLoopT_Startup");
         printf("[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup "
-               "(creates dialog + pushes to UI; Runtime Loader::Load is "
-               "kicked but ignored)\n");
+               "(creates dialog + pushes to UI, then kicks the ONE "
+               "Engine::Loader thread for next)\n");
         fn_DialogLoaderLoopT_Startup(self);
+        // Arm the gate the moment the kick has happened; Stub_Update polls it
+        // in the same place retail polls LoaderLoop::IsFinished.
+        EngineLoader::NoteKicked();
         printf("[SplashDLT::Startup] DialogLoaderLoopT::Startup returned, "
-               "m_dialogInstance=%p\n", ll->m_dialogInstance);
+               "m_dialogInstance=%p loaderBusy=%d\n",
+               ll->m_dialogInstance, (int)EngineLoader::IsBusy());
     } else {
         printf("[SplashDLT::Startup] WARN: skipping DialogLoaderLoopT::Startup "
                "(rsc=%p fn=%p)\n", ll->m_dialogExternal,
                (void*)fn_DialogLoaderLoopT_Startup);
     }
 
-    // Step 3: the next loop's load (next->vtable->Load) used to be kicked HERE,
-    // synchronously, before the reveal was ever triggered. For the boot splashes
-    // that was a ~60-125ms hitch, but for the new-game path next->Load is
-    // GameUpdateLoop::Load — the entire world build (worldgen + start-town +
-    // resources), ~5.8s — so the screen sat BLACK for ~5.8s and only faded the
-    // loading dialog in AFTER the load had finished. The loading screen provided
-    // no feedback during the actual work (see notes: fade->load->fade stall).
+    // Step 3 USED TO BE HERE and is gone. It kicked next->vtable->Load a SECOND
+    // time, through standalone/async_loader.{h,cpp} — first synchronously on the
+    // main thread, later (for the new-game path) on a worker thread. Step 2 had
+    // already kicked the Runtime Engine::Loader thread for the same loop, so the
+    // standalone ran TWO resource loaders where retail runs one. Both threads
+    // then went through IO::FileSystem::ReadFile's packed arm, which is a
+    // SetFilePointer + ReadFile pair on ONE shared Win32 handle with no lock
+    // (retail takes no lock anywhere on this path, verified in Ghidra), and an
+    // interleave served one thread bytes from the other's offset: NULL
+    // resources, bad magic, a spin in CompressedStream::Read, dialog crashes.
+    // 11 of 24 boots were defective. Full diagnosis in
+    // docs/runtime_port/endgame_b/LOADER_READ_SPIN.md; the Ghidra proof that
+    // AsyncLoader was our invention and not ported retail code is §Q5 of
+    // LOADER_READ_SPIN_GHIDRA.md.
     //
-    // Fix 1: DEFER the load kick into Stub_Update. Startup now only builds the
-    // dialog + triggers the reveal (below); Stub_Update lets the reveal animate
-    // for a few frames so the loading dialog is actually on-screen, then kicks
-    // the (still-synchronous, main-thread) load. The load is not moved to a
-    // worker thread because the engine allocator + Graphics::Scene::AddGlobalObject
-    // are not thread-safe (see async_loader.cpp) — but the one frozen frame now
-    // shows a proper loading screen + tip instead of a black hang.
+    // The reason the kick was deferred into Stub_Update in the first place — the
+    // load was synchronous on the main thread, so the screen sat black for the
+    // whole ~5.8s world build — no longer exists: step 2's loader thread does the
+    // load while the main thread keeps animating this splash, which is what
+    // retail does and what the deferral was hand-rolling.
     //
     // Note: ChunkedSceneLoader is only ARMED at boot (RunGameMain in
-    // code/Game/Game/game_main.cpp). Stub_Update runs its Init on the first
-    // revealed frame and then Tick()s PhaseB, so MenuDLT's struct fields
-    // (+0xb90 menuScene, +0xb98 renderer, etc.) are populated behind a drawn
-    // splash rather than during the un-presented boot window.
+    // code/Game/Game/game_main.cpp). Stub_Update runs its Init and Tick()s PhaseB
+    // once the loader thread is done (see the gate there), so MenuDLT's struct
+    // fields (+0xb90 menuScene, +0xb98 renderer, etc.) are populated behind a
+    // drawn splash rather than during the un-presented boot window.
 
-    // Trigger reveal. With async loading, only Step 1's own-rsc load is
-    // synchronous (~10ms for ShiningRock/Loading splashes; usually skipped
-    // because m_dialogExternal was populated by an upstream load). The reveal
-    // gets a normal first-tick dt and animates frame-by-frame.
+    // Trigger reveal. Only Step 1's own-rsc load is synchronous (~10ms for the
+    // ShiningRock/Loading splashes; usually skipped because m_dialogExternal was
+    // populated by an upstream load), and it runs BEFORE step 2 starts the loader
+    // thread, so it is not concurrent with it. The reveal gets a normal
+    // first-tick dt and animates frame-by-frame.
     void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
     UIFade::EnsureFadeSprite(ui);
     UIFade::TriggerReveal(ui);
@@ -291,31 +303,50 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // was already on screen and had never been presented to, which is the
     // boot-time blank-window flash. Here it lands behind a drawn splash.
     //
-    // Same reveal test the deferred load-kick below uses: alpha < 0.5 (1=black,
-    // 0=fully revealed) or a 0.25s safety cap so a stuck fade can't strand it.
-    if (ChunkedSceneLoader::IsArmed()) {
-        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
-        int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
-            ? *g_Timer_ticksPerSecond / 4 : 0;
-        float revealAlpha = UIFade::GetCurrentAlpha(ui);
-        if (revealAlpha < 0.5f || (revealCap && ll->m_elapsedTicks >= revealCap)) {
-            printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f -> running "
-                   "deferred ChunkedSceneLoader init\n", (void*)self, revealAlpha);
-            ChunkedSceneLoader::RunArmedInit();
+    // Reveal test: alpha < 0.5 (1=black, 0=fully revealed) or a 0.25s safety cap
+    // so a stuck fade can't strand it.
+    // ...but NOT while the one Engine::Loader thread is still loading.
+    //
+    // ChunkedSceneLoader IS OURS, NOT RETAIL'S. Retail loads the menu scene
+    // inside MenuDialogLoopT::Load — exe MenuScene_impl_a930, reached from
+    // FUN_140099ac0 — i.e. on the loader thread, as part of the very load this
+    // splash is waiting for. We split it out because PhaseB's 12K-15K
+    // Graphics::Scene::AddObject calls mutate global scene state that is not
+    // safe off the main thread, and then drove it from here per tick. That put
+    // LoadSceneA1's FindOrLoad("Game/MenuScene/SceneN.rsc") — a deep recursive
+    // External::Load — on the MAIN thread at the same time as the loader
+    // thread's own loads: a second concurrent reader of the packages, on every
+    // boot (LOADER_READ_SPIN.md).
+    //
+    // Waiting for the loader here does not add a guard; it RESTORES retail's
+    // exclusivity, which retail gets for free by never having the work on two
+    // threads in the first place. The chunking still lands behind a drawn
+    // splash — just after the loader has finished rather than beside it.
+    if (!EngineLoader::IsBusy()) {
+        if (ChunkedSceneLoader::IsArmed()) {
+            void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
+            int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
+                ? *g_Timer_ticksPerSecond / 4 : 0;
+            float revealAlpha = UIFade::GetCurrentAlpha(ui);
+            if (revealAlpha < 0.5f || (revealCap && ll->m_elapsedTicks >= revealCap)) {
+                printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f "
+                       "loader idle -> running deferred ChunkedSceneLoader init\n",
+                       (void*)self, revealAlpha);
+                ChunkedSceneLoader::RunArmedInit();
+            }
         }
-    }
 
-    // Drive the chunked scene loader. Each tick processes ~500 PhaseB
-    // elements (~17ms of work, well within a 60Hz frame budget) so the
-    // splash's loading animation keeps moving while the heavy 12K-15K
-    // static-mesh iteration runs in the background. When the chunk
-    // function reports done, ChunkedSceneLoader::Tick auto-runs LoadSceneA3
-    // (particles) and clears IsBusy() — the transition gate below waits
-    // on this in addition to AsyncLoader::IsAsyncLoadBusy().
-    if (ChunkedSceneLoader::IsBusy()) {
-        StallDebug::Phase phase("SplashDLT ChunkedSceneLoader::Tick");
-        int processed = ChunkedSceneLoader::Tick(500);
-        (void)processed;
+        // Drive the chunked scene loader. Each tick processes ~500 PhaseB
+        // elements (~17ms of work, well within a 60Hz frame budget) so the
+        // splash's loading animation keeps moving while the heavy 12K-15K
+        // static-mesh iteration runs. When the chunk function reports done,
+        // ChunkedSceneLoader::Tick auto-runs LoadSceneA3 (particles) and clears
+        // IsBusy() — the transition gate below waits on this too.
+        if (ChunkedSceneLoader::IsBusy()) {
+            StallDebug::Phase phase("SplashDLT ChunkedSceneLoader::Tick");
+            int processed = ChunkedSceneLoader::Tick(500);
+            (void)processed;
+        }
     }
 
     // Loading-screen frame cap (matches real LoaderLoop ~14ms sleep).
@@ -323,54 +354,10 @@ bool Stub_Update(UpdateLoop* self, void* time) {
 
     ll->m_elapsedTicks += dt->ticks;
 
-    // ---- Fix 1: deferred load kick ----
-    // The next loop's Load (for the new-game path, GameUpdateLoop::Load — the
-    // ~5.8s world build) used to run synchronously inside Stub_Startup BEFORE
-    // the reveal, so the screen sat black for the whole build. Now Startup only
-    // triggers the reveal; here we let it animate for a few frames so the
-    // loading dialog is actually on-screen, then kick the (still main-thread,
-    // still blocking) load. The one frozen frame now shows a real loading screen
-    // + tip instead of a black hang. Single-slot static like fadeOutInitiatedFor
-    // below — splash loops run one at a time, each with a unique `self`.
-    if (g_loadKickedFor != self && ll->m_nextLoop) {
-        void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
-        float revealAlpha = UIFade::GetCurrentAlpha(ui);   // 1=black -> 0=revealed
-        int64_t revealCap = (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0)
-            ? *g_Timer_ticksPerSecond / 4 : 0;             // 0.25s safety cap
-        bool revealed = (revealAlpha < 0.5f);
-        bool timedOut = (revealCap && ll->m_elapsedTicks >= revealCap);
-        if (revealed || timedOut) {
-            g_loadKickedFor = self;
-            // The new-game world build (GameUpdateLoop::Load) is multi-second.
-            // Run it on a WORKER thread so the main thread keeps animating the
-            // loading screen + cycling tips (the worldReady gate below holds the
-            // transition until it finishes). Without forceThreaded the default is
-            // a synchronous main-thread load — fine for the small boot splashes,
-            // but with BANISHED_GAME_PRELOAD on the main thread wins the build
-            // race and freezes for ~6s. For the boot splashes (not the game loop)
-            // stay synchronous.
-            bool isGameLoop =
-                (g_GameUpdateLoop_Vtable &&
-                 *reinterpret_cast<void**>(ll->m_nextLoop) ==
-                     reinterpret_cast<void*>(g_GameUpdateLoop_Vtable));
-            // Retail does NOT seed a tip here: FUN_140098DA0 only ever sets
-            // descText from inside the 2.0s timer branch, so the loading screen
-            // opens showing the .rsc default and the first tip lands 2.0s later.
-            // Seeding one here was a deviation -- it made the text appear at once
-            // and added an extra change, which reads as "cycling faster".
-            // Only the timer is reset, which retail does implicitly (ctor zeroes it).
-            *reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58) = 0;
-            printf("[SplashDLT::Update] self=%p reveal-alpha=%.2f -> kicking "
-                   "deferred load of next=%p (gameLoop=%d, threaded=%d)\n",
-                   (void*)self, revealAlpha, (void*)ll->m_nextLoop,
-                   (int)isGameLoop, (int)isGameLoop);
-            AsyncLoader::StartAsyncLoad(ll->m_nextLoop, /*forceThreaded=*/isGameLoop);
-        } else {
-            // Still revealing the loading screen — keep animating, do not advance
-            // to the load or the fade-out yet.
-            return true;
-        }
-    }
+    // (The "Fix 1 deferred load kick" that used to sit here is gone — it was the
+    // second dispatcher of next->vtable->Load. See the Step 3 note in
+    // Stub_Startup. The load now runs once, on the Engine::Loader thread that
+    // Stub_Startup's step 2 started, which is retail's single loader.)
 
     // ---- Fix 2: cycle the loading tip every 2.0s, as retail does ----
     // Retail FUN_140098DA0 drives this off the self+0xB58 timer against
@@ -389,7 +376,12 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     // Net faithful behaviour: tips cycle only while a NEW-GAME worldgen is
     // running; the boot splash chain (nextLoop=MenuDLT) and save-loads never
     // write +0x24, so those screens keep the .rsc default (a single space).
-    if (g_loadKickedFor == self && g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0 &&
+    //
+    // The gate is now EXACTLY retail's: `nextLoop->m_loadProgress != 0` and
+    // nothing else (exe 0x140098e0d: MOV RAX,[RSI+0x28]; MOV ECX,[RAX+0x24];
+    // TEST ECX,ECX; JZ). The extra `g_loadKickedFor == self` term that used to
+    // be here was an artefact of our deferred load kick, which is gone.
+    if (g_Timer_ticksPerSecond && *g_Timer_ticksPerSecond > 0 &&
         ll->m_nextLoop && *(int*)((uintptr_t)ll->m_nextLoop + 0x24) != 0) {
         int64_t* tipTimer =
             reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(self) + 0xB58);
@@ -425,10 +417,17 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         worldReady = GameUpdateLoop_IsWorldBuilt(ll->m_nextLoop);
     }
 
-    // Once the splash hold elapses, kick off the fade-OUT (to opaque black)
-    // and wait one extra tick before transitioning. Mirrors the original
-    // FUN_140098DA0 (LoaderLoop::Update) sequence.
-    if (ll->m_elapsedTicks >= ll->m_delayTicks && worldReady) {
+    // Once the loader thread is done AND the splash hold has elapsed, kick off
+    // the fade-OUT (to opaque black) and wait one extra tick before
+    // transitioning. Mirrors the original FUN_140098DA0 sequence, whose own
+    // first act is `if (LoaderLoop::IsFinished(this))` — and IsFinished
+    // (Runtime 0x1800dc150) is exactly
+    // `!(_loader._thread.runFlags & 1) && _elapsedTicks >= _delayTicks`.
+    // EngineLoader::IsBusy() is that first term, asked without the wake-up race
+    // (see engine_loader_gate.h); `worldReady` is ours, because our world build
+    // signals completion separately.
+    if (!EngineLoader::IsBusy() && ll->m_elapsedTicks >= ll->m_delayTicks &&
+        worldReady) {
         void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
 
         if (g_fadeOutInitiatedFor != self) {
@@ -445,22 +444,10 @@ bool Stub_Update(UpdateLoop* self, void* time) {
             return true;
         }
 
-        // Wait for our async loader worker to finish loading m_nextLoop's
-        // resources before transitioning. AsyncLoader::StartAsyncLoad was
-        // called from Stub_Startup with `next` as its argument; the worker
-        // thread runs `next->vtable->Load(next)` and flips a done flag.
-        // (We bypass the Runtime g_pLoaderFlags because the Runtime Loader
-        // thread hangs internally on Engine+0x6c0 audio access in standalone.)
-        if (AsyncLoader::IsAsyncLoadBusy()) {
-            static int waitCount = 0;
-            if ((waitCount++ % 30) == 0) {
-                printf("[SplashDLT::Update] self=%p fade=%.3f waiting for "
-                       "AsyncLoader\n", (void*)self, alpha);
-            }
-            return true;
-        }
+        // (The loader thread was already waited for by the `!IsBusy()` term on
+        // the branch above — retail asks the same question in the same place.)
 
-        // Also wait for the chunked scene loader to finish PhaseB+A3. Without
+        // Wait for the chunked scene loader to finish PhaseB+A3. Without
         // this gate, the splash transitions before chunking completes and
         // MenuDLT would have to finish synchronously — re-introducing the
         // freeze.
