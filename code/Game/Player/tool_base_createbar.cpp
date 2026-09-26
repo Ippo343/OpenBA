@@ -54,6 +54,7 @@
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 
 namespace {
@@ -161,7 +162,8 @@ extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
     void* elem = reinterpret_cast<void*>(elemBuf);     // *retbuf = element ptr
 
     if (elem) {
-        if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, str);
+        reinterpret_cast<UI::TextElement*>(elem)->SetParameter(  // B.3.6 bridge
+            0, *static_cast<const System::String*>(str));
 
         // hide/show by empty string
         System::String tmp(*reinterpret_cast<const System::String*>(str));
@@ -232,7 +234,8 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
         *static_cast<const System::String*>(costStr));
     uint8_t uiA_copy[16];
     std::memcpy(uiA_copy, uiA, 16);
-    if (fn_TextElement_SetText) fn_TextElement_SetText(elem, uiA_copy);
+    reinterpret_cast<UI::TextElement*>(elem)->SetText(  // B.3.6 bridge
+        reinterpret_cast<const UI::String*>(uiA_copy));
 
     // UIString_B = UIString(stringTable, comp+0x40); SetParameter(elem, 0, (SysStr)UIString_B).
     uint8_t uiB[16] = {};
@@ -242,7 +245,7 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     System::String sysB;
     ::new (&sysB) System::String(
         reinterpret_cast<const UI::String*>(uiB)->operator System::String());  // B.3.6 bridge
-    if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, &sysB);
+    reinterpret_cast<UI::TextElement*>(elem)->SetParameter(0, sysB);  // B.3.6 bridge
 
     // hide/show by whether costString (UIString_A) is empty.
     System::String sysA;
@@ -296,7 +299,7 @@ extern "C" void UpdateToolUI_e700(void* ctrl, uint32_t param_8) {
             elem = *reinterpret_cast<void**>(elemIBP);
         }
         if (elem) {
-            if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, &s);
+            reinterpret_cast<UI::TextElement*>(elem)->SetParameter(0, s);  // B.3.6 bridge
         } else {
             // Loud: retail would have faulted here, so this means our controller state is
             // wrong upstream (label array shorter than the requirement count), not that the

@@ -28,6 +28,7 @@
 #include <cstdint>
 #include <new>
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/ComboElement.h"                  // ENDGAME B.3.6 UI callers (K4)
 
 // Standalone factory from code/Game/Player/removaltool.cpp (extern "C").
 // Returns a freshly MemAlloc'd RemovalTool (0x40 bytes) with its standalone
@@ -1698,13 +1699,13 @@ void FirePasturePanel(void* entityUI) {
                    "controllers (tid=%u)\n", cnt, tidPUI);
         } else {
             void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(pui) + 0x30);
-            int items = (combo && fn_ComboElement_GetItemCount)
-                            ? fn_ComboElement_GetItemCount(combo) : -1;
+            int items = combo
+                            ? reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount() : -1;  // B.3.6 bridge
             fprintf(stderr, "[PasturePanel] SELECT: PastureUI=%p combo=%p items=%d want=%d\n",
                    pui, combo, items, wantItem);
             if (combo && items > 0) {
                 if (wantItem >= items) wantItem = items - 1;
-                fn_ComboElement_SetCurrentItem(combo, wantItem);
+                reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
                 void** vt = *reinterpret_cast<void***>(pui);
                 typedef void (*Slot9_t)(void*, void*, int, int);
                 reinterpret_cast<Slot9_t>(vt[9])(pui, combo, 0x14, 500);
@@ -1828,8 +1829,8 @@ void FireOrchardPanel(void* entityUI) {
     }
     void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x30);
     void* yield = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x38);
-    int items = (combo && fn_ComboElement_GetItemCount)
-                    ? fn_ComboElement_GetItemCount(combo) : -1;
+    int items = combo
+                    ? reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount() : -1;  // B.3.6 bridge
     // OrchardComponent+0x60 is the selected tree type (Slot11 writes it, Slot12 reads
     // it). Printing it before AND after the select is what turns "the event fired"
     // into "the type actually landed" — see the diagnostics-report-outcomes rule.
@@ -1849,7 +1850,7 @@ void FireOrchardPanel(void* entityUI) {
         int wantItem = std::atoi(selEnv);
         if (combo && items > 0) {
             if (wantItem >= items) wantItem = items - 1;
-            fn_ComboElement_SetCurrentItem(combo, wantItem);
+            reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
             void** vt = *reinterpret_cast<void***>(oui);
             typedef void (*Slot9_t)(void*, void*, int, int);
             reinterpret_cast<Slot9_t>(vt[9])(oui, combo, 0x14, 500);

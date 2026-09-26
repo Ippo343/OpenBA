@@ -45,6 +45,7 @@
 #include "ui/Element.h"                      // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"                  // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TextElement.h"                  // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"                // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include <windows.h>
@@ -75,7 +76,6 @@ static void TipBail(const char* why, const void* p) {
 void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     if (!self) { TipBail("self==null", nullptr); return; }
     if (!self->m_dialogInstance) { TipBail("m_dialogInstance==null", self); return; }
-    if (!fn_TextElement_SetText)         { TipBail("fn_TextElement_SetText", nullptr); return; }
 
     // Find "descText" in the dialog instance (member value-return ABI:
     // RCX=this, RDX=retbuf, R8=name — the typedef carries all three).
@@ -118,7 +118,7 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     uint8_t textVal[16];
     *reinterpret_cast<uint64_t*>(textVal)     = *reinterpret_cast<uint64_t*>(uiStr);
     *reinterpret_cast<uint64_t*>(textVal + 8) = *reinterpret_cast<uint64_t*>(uiStr + 8);
-    fn_TextElement_SetText(elem, textVal);
+    reinterpret_cast<UI::TextElement*>(elem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
 
     static int s_tipLog = 0;
     if (s_tipLog++ < 8) {

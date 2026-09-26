@@ -26,6 +26,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // EntityUI::SetEditMode (code/Game/Dialog/entityui.cpp) — C++ linkage, matches the
 // declaration tool_harness.cpp already uses for the same function.
@@ -110,9 +111,9 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
     }
 
     void* combo = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(oui) + 0x30);
-    int items = (combo && fn_ComboElement_GetItemCount) ? fn_ComboElement_GetItemCount(combo) : -1;
+    int items = combo ? reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount() : -1;  // B.3.6 bridge
     fprintf(stderr, "[OrchardForceStart]     OrchardUI=%p combo(+0x30)=%p items=%d\n", oui, combo, items);
-    if (!combo || items <= 0 || !fn_ComboElement_SetCurrentItem) {
+    if (!combo || items <= 0) {
         fprintf(stderr, "[OrchardForceStart]     cannot assign tree type: combo unusable "
                         "(combo=%p items=%d) — refusing to synthesize a pointer\n", combo, items);
         return false;
@@ -125,7 +126,7 @@ bool TryAssignRealTreeType(void* entityUI, void* orchEnt, void* orchComp) {
     static int s_treeTurn = 0;
     const int wantItem = s_treeTurn % items;
     ++s_treeTurn;
-    fn_ComboElement_SetCurrentItem(combo, wantItem);
+    reinterpret_cast<UI::ComboElement*>(combo)->SetCurrentItem(wantItem);  // B.3.6 bridge
     void** vt = *reinterpret_cast<void***>(oui);
     typedef void (*Slot9_t)(void*, void*, int, int);
     reinterpret_cast<Slot9_t>(vt[9])(oui, combo, 0x14, 500);   // real combo-change event, msg 0x14 elem 500

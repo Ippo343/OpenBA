@@ -76,8 +76,9 @@ static uint32_t CaptureBoxDescription_GetTypeId(void* /*self*/) {
 // GetVersion (vtable +0x18): ElementDescription::GetFileVersion() | 0x100 — the 0x100
 // bit flags a custom serialize format on top of the base ElementDescription version.
 static uint32_t CaptureBoxDescription_GetVersion(void* self) {
-    uint32_t base = fn_ElementDescription_GetFileVersion
-                        ? fn_ElementDescription_GetFileVersion(self) : 0;
+    // base — QUALIFIED: this body IS slot 3 of a hand-built ElementDescription table.
+    uint32_t base = static_cast<uint32_t>(
+        reinterpret_cast<const UI::ElementDescription*>(self)->UI::ElementDescription::GetFileVersion());  // B.3.6 bridge
     return base | 0x100u;
 }
 
