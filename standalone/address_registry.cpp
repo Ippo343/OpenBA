@@ -85,12 +85,6 @@ extern "C" {
     void RegisterMapDescriptionVtable();
     void RegisterCreatePlacedDescriptionVtable();
     void RegisterCreateDragDescriptionVtable();
-    void RegisterCharacterDescriptionVtable();
-    void RegisterCitizenDescriptionVtable();
-    void RegisterCitizenAIDescriptionVtable();
-    void RegisterStateMachineDescriptionVtable();
-    void RegisterNaturalResourceDescriptionVtable();
-    void RegisterAbsorbResourceDescriptionVtable();
     void RegisterUIDescriptionVtable();
     void RegisterToolbarDescriptionVtable();
     void RegisterStatusIconDescriptionVtable();
@@ -1814,12 +1808,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterMapDescriptionVtable();
     RegisterCreatePlacedDescriptionVtable();
     RegisterCreateDragDescriptionVtable();
-    RegisterCharacterDescriptionVtable();
-    RegisterCitizenDescriptionVtable();
-    RegisterCitizenAIDescriptionVtable();
-    RegisterStateMachineDescriptionVtable();
-    RegisterNaturalResourceDescriptionVtable();
-    RegisterAbsorbResourceDescriptionVtable();
     RegisterUIDescriptionVtable();
     RegisterToolbarDescriptionVtable();
     RegisterStatusIconDescriptionVtable();

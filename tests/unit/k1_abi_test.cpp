@@ -33,6 +33,12 @@
 #include "Component/TrackerDescription.h"
 #include "Component/WildAnimalDescription.h"
 #include "Component/ZoneDescription.h"
+#include "Component/AbsorbResourceDescription.h"
+#include "Component/CitizenAIDescription.h"
+#include "Component/StateMachineDescription.h"
+#include "Component/CharacterDescription.h"
+#include "Component/NaturalResourceDescription.h"
+#include "Component/CitizenDescription.h"
 
 namespace {
 
@@ -81,6 +87,15 @@ UNIT_TEST(k1_fieldless_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<TrackerDescription>(0x20), 0);
     CHECK_EQ(CheckDescriptionLeaf<WildAnimalDescription>(0x20), 0);
     CHECK_EQ(CheckDescriptionLeaf<ZoneDescription>(0x20), 0);
+}
+
+UNIT_TEST(k1_description_leaves_that_now_run_external_dtor) {
+    CHECK_EQ(CheckDescriptionLeaf<AbsorbResourceDescription>(0x20), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CitizenAIDescription>(0x20), 0);
+    CHECK_EQ(CheckDescriptionLeaf<StateMachineDescription>(0x20), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CharacterDescription>(0x48), 0);
+    CHECK_EQ(CheckDescriptionLeaf<NaturalResourceDescription>(0x88), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CitizenDescription>(0x148), 0);
 }
 
 }  // namespace

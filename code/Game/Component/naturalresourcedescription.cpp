@@ -25,201 +25,132 @@
 //   float +0x60.
 //
 // Decompiled from Application-x64.exe (read-only Ghidra recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (NaturalResourceDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140163e90) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/NaturalResourceDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <cstring>
 #include <cstdint>
 #include <new>
-#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
 namespace {
-constexpr uintptr_t kVtableAddr    = 0x140163e90;
-constexpr uintptr_t kSerializeAddr = 0x140125e10;
-constexpr uint32_t  kFileVersion   = 4;
+// The retail ctor stores raw IEEE bit patterns; this keeps them exact.
+inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+}  // namespace
 
-// FUN_140018020 — ExternalRef<Profession> serialize (exe-internal; reads bool +
-// String name then ExternalFactory::FindOrLoad → resolves to a Profession*).
-// REPORTED for engine_funcs.h; resolved here via ResolveAddr (standalone needs it
-// registered in address_registry.cpp).
-typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer);
-
-inline void SetF(void* base, uintptr_t off, uint32_t bits) {
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(base) + off) = bits;
-}
-} // namespace
-
-static void* NaturalResourceDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(mem) = reinterpret_cast<void*>(vt);
-
-    uint8_t* p = reinterpret_cast<uint8_t*>(mem);
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;          // ExternalPtr (null)
-    SetF(mem, 0x28, 0x3f800000);  // 1.0
-    SetF(mem, 0x2c, 0x40800000);  // 4.0
-    SetF(mem, 0x30, 0x3f800000);  // 1.0   (8-byte write → +0x34 = 0)
-    SetF(mem, 0x34, 0x00000000);
-    SetF(mem, 0x38, 0x3f000000);  // 0.5   (8-byte write → +0x3c = 0)
-    SetF(mem, 0x3c, 0x00000000);
-    SetF(mem, 0x40, 0x41800000);  // 16.0
-    SetF(mem, 0x44, 0x3f733333);  // 0.95
-    *(p + 0x48) = 0;              // bool
-    SetF(mem, 0x4c, 0x3f800000);  // 1.0
-    SetF(mem, 0x50, 0x3f800000);  // 1.0
-    SetF(mem, 0x54, 0x3f800000);  // 1.0   (8-byte write → +0x58 = 0)
-    SetF(mem, 0x58, 0x00000000);
-    *reinterpret_cast<uint64_t*>(p + 0x5c) = 1;          // int +0x5c = 1 (8-byte write → +0x60 = 0)
-    *(p + 0x64) = 0;              // bool
+// ctor (inlined into create 0x1400365d0 / createInPlace 0x140036610):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+NaturalResourceDescription::NaturalResourceDescription()
+    : Description(),
+      _building(nullptr),
+      _f28(1.0f),
+      _f2c(4.0f),
+      _f30(1.0f),
+      _f34(0.0f),
+      _f38(0.5f),
+      _f3c(0.0f),
+      _f40(16.0f),
+      _f44(FloatBits(0x3f733333)),
+      _b48(false),
+      _f4c(1.0f),
+      _f50(1.0f),
+      _f54(1.0f),
+      _f58(0.0f),
+      _i5c(1),
+      _f60(0.0f),
+      _b64(false),
+      _profession(nullptr),
+      _u80(0xb) {
     if (fn_Time_Ctor_Float) {
-        fn_Time_Ctor_Float(p + 0x68, 1.0f);
-        fn_Time_Ctor_Float(p + 0x70, 1.0f);
+        fn_Time_Ctor_Float(&_time68, 1.0f);
+        fn_Time_Ctor_Float(&_time70, 1.0f);
     } else {
-        *reinterpret_cast<uint64_t*>(p + 0x68) = 0;
-        *reinterpret_cast<uint64_t*>(p + 0x70) = 0;
+        _time68._ticks = 0;
+        _time70._ticks = 0;
     }
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;          // ExternalRef<Profession> (null)
-    *reinterpret_cast<int32_t*>(p + 0x80) = 0xb;         // enum default 11
-    return mem;
 }
 
-void NaturalResourceDescription_Serialize(void* self, void* stream) {
-    if (!fn_ExternalPtr_BuildSerialize) {
-        return;
-    }
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x140036650: ~NaturalResourceDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* NaturalResourceDescription::DeletingDtor(unsigned flags) {
+    this->~NaturalResourceDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    // +0x20 ExternalPtr<BuildingDescription>
-    fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x38), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x48), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x4c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x50), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x54), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x58), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x5c), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x44), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x64), nullptr);   // B.3.4 bridge
-
-    // +0x68, +0x70 System::Time::Serialize
-    reinterpret_cast<System::Time*>(s + 0x68)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-    reinterpret_cast<System::Time*>(s + 0x70)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
-
-    // +0x80 enum through the UINT door (the same dispatch StatGoal uses).
-    // `serializer + 8` was the READERWRITER, not an Encoding, and vtable +0x98
-    // is rw_vtbl::kScalarUInt.
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x80), nullptr);   // B.3.4 bridge  (0x98 = uint door)
-
-    // +0x78 ExternalRef<Profession> (exe FUN_140018020). Resolved via ResolveAddr;
-    // works once 0x140018020 is registered.
+// [5] 0x140125e10: stream order as retail.
+bool NaturalResourceDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    fn_ExternalPtr_BuildSerialize(&_building, &ser);   // +0x20 ExternalPtr<BuildingDescription>
+    ser.Serialize(_f28, nullptr);
+    ser.Serialize(_f2c, nullptr);
+    ser.Serialize(_f30, nullptr);
+    ser.Serialize(_f34, nullptr);
+    ser.Serialize(_f38, nullptr);
+    ser.Serialize(_b48, nullptr);
+    ser.Serialize(_f4c, nullptr);
+    ser.Serialize(_f50, nullptr);
+    ser.Serialize(_f54, nullptr);
+    ser.Serialize(_f58, nullptr);
+    ser.Serialize(_i5c, nullptr);
+    ser.Serialize(_f3c, nullptr);
+    ser.Serialize(_f40, nullptr);
+    ser.Serialize(_f44, nullptr);
+    ser.Serialize(_b64, nullptr);
+    _time68.Serialize(ser);
+    _time70.Serialize(ser);
+    ser.Serialize(_u80, nullptr);   // enum through the UINT door
     {
+        // +0x78 ExternalRef<Profession> (exe 0x140018020, resolved by address).
+        typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer);
         fn_ExternalRefSerialize_t f =
             reinterpret_cast<fn_ExternalRefSerialize_t>(ResolveAddr(Module::Exe, 0x140018020));
-        if (f) f(s + 0x78, serializer);
+        if (f) f(&_profession, &ser);
     }
-
-    // +0x60 float
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x60), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+    ser.Serialize(_f60, nullptr);
+    return true;
 }
 
-void* NaturalResourceDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(self) = reinterpret_cast<void*>(vt);
-    // Fields are scalar + ExternalPtr/ExternalRef raw pointers + Time (POD).
-    // The ExternalPtr/Ref hold non-owning pointers; nothing to free here.
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140036620: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* NaturalResourceDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) NaturalResourceDescription();
 }
 
-// ============================================================
-// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
-// ============================================================
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void NaturalResourceDescription::Destruct() {}
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t NaturalResourceDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("NaturalResourceDescription");
-    return cached;
+// [8] 0x140036640: NaturalResourceComponent's type id through the hidden return slot.
+Object::Type* NaturalResourceDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("NaturalResourceComponent");
+    return ret;
 }
 
-static void* NaturalResourceDescription_Dtor_Tramp(void* self, uint32_t flags) {
-    return NaturalResourceDescription_Dtor(self, flags);
-}
-static void  NaturalResourceDescription_Serialize_Tramp(void* self, void* stream) {
-    NaturalResourceDescription_Serialize(self, stream);
-}
-static int   NaturalResourceDescription_VtblReturn4(void* /*self*/) { return (int)kFileVersion; }
-static int   NaturalResourceDescription_VtblReturn0(void* /*self*/) { return 0; }
-static void* NaturalResourceDescription_VtblReturnNull(void* /*self*/, ...) { return nullptr; }
+// [9] 0x140036610 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* NaturalResourceDescription::Construct() { return nullptr; }
 
-extern "C" void* NaturalResourceDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return NaturalResourceDescription_Ctor_Impl(memory);
-}
-
-static void  NaturalResourceDescription_Cleanup_Tramp(void* self) {
-    typedef void* (*dtor_t)(void*, uint32_t);
-    dtor_t d = *reinterpret_cast<dtor_t*>(*reinterpret_cast<uintptr_t*>(self));
-    if (d) d(self, 0);
-    NaturalResourceDescription_Ctor_Impl(self);
-}
-static void* NaturalResourceDescription_Slot8_Tramp(void* self) {
-    if (!self) return nullptr;
-    NaturalResourceDescription_Ctor_Impl(self);
-    return self;
-}
-
-// Vtable @ 0x140163e90 (Object::External, verified via read_memory):
-//   +0x00 Dtor 0x140036650 | +0x08 0x1400365c0 | +0x10 GetTypeId 0x1400365b0
-//   +0x18 GetVersion 0x140125fc0 (mov eax,4) | +0x20 Compile 0x14003a912
-//   +0x28 Serialize 0x140125e10 | +0x30 Cleanup 0x140036620
-//   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x140036640 | +0x48 0x140036610
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* NaturalResourceDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "NaturalResourceComponent"); }
-
-static void* g_NaturalResourceDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&NaturalResourceDescription_Dtor_Tramp),      // +0x00
-    reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturnNull),  // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&NaturalResourceDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturn4),     // +0x18 GetVersion
-    reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturn0),     // +0x20 Compile
-    reinterpret_cast<void*>(&NaturalResourceDescription_Serialize_Tramp), // +0x28
-    reinterpret_cast<void*>(&NaturalResourceDescription_Cleanup_Tramp),   // +0x30
-    reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&NaturalResourceDescription_GetComponentTypeId),     // +0x40
-    reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturnNull),  // +0x48 guard
-    reinterpret_cast<void*>(&NaturalResourceDescription_VtblReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterNaturalResourceDescriptionVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_NaturalResourceDescription_Vtable));
-}
-
-extern "C" void* NaturalResourceDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x88, 8);
+// create 0x1400365d0: MemAlloc(0x88, 8), then the (inlined) ctor.
+void* NaturalResourceDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NaturalResourceDescription), 8);
     if (!p) return nullptr;
-    return NaturalResourceDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) NaturalResourceDescription());
+}
+// createInPlace 0x140036610.
+void* NaturalResourceDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) NaturalResourceDescription());
 }
 
-REGISTER_TYPE(NaturalResourceDescription, "Description",
-              &NaturalResourceDescription_Factory, &NaturalResourceDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(NaturalResourceDescription, "_ZTV26NaturalResourceDescription")
+DEFINE_EXE_TYPE(NaturalResourceDescription, "Description")

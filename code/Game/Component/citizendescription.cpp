@@ -28,236 +28,233 @@
 //   float +0x64,+0x68; int +0xf8,+0xfc,+0x100,+0x104,+0x108; float +0x10c.
 //
 // Decompiled from Application-x64.exe (read-only Ghidra recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (CitizenDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162600) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/CitizenDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <cstring>
 #include <cstdint>
 #include <new>
 
 namespace {
-constexpr uintptr_t kVtableAddr    = 0x140162600;
-constexpr uintptr_t kSerializeAddr = 0x140114900;
-constexpr uint32_t  kFileVersion   = 17;
+// The retail ctor stores raw IEEE bit patterns; this keeps them exact.
+inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+}  // namespace
 
-// exe-internal helpers (REPORTED for engine_funcs.h; resolved via ResolveAddr).
-typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer);            // FUN_140018020
-// FUN_140001bb0 was Collection::Array<void*>::SetSize(n) monomorphised into
-// the exe (ENDGAME B.3.2 step 2: stride 8, align 8, zero tail) — converted at
-// its call site below.
-typedef void (*fn_RefArraySerialize_t)(void* serializer, int count, void* base, void* p4); // FUN_14001bcc0
-// IO::Serializer::Serialize(float[]) dispatch slot 0x140151ea8.
-typedef void (*fn_SerFloatArray_t)(void* serializer, int count, float* base, const char* name);
-
-inline void SetF(void* base, uintptr_t off, uint32_t bits) {
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(base) + off) = bits;
+// ctor (inlined into create 0x140030170 / createInPlace 0x1400301b0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+CitizenDescription::CitizenDescription()
+    : Description(),
+      _f38(FloatBits(0x41700000)),
+      _f3c(FloatBits(0x40000000)),
+      _f40(FloatBits(0x3991a2b4)),
+      _f44(FloatBits(0x40000000)),
+      _f48(FloatBits(0x40000000)),
+      _f4c(FloatBits(0x40400000)),
+      _f50(FloatBits(0x40000000)),
+      _f54(FloatBits(0x41000000)),
+      _f58(FloatBits(0x44610000)),
+      _f5c(FloatBits(0x44e10000)),
+      _f60(FloatBits(0x45a8c000)),
+      _f64(FloatBits(0x3c23d70a)),
+      _f68(FloatBits(0x3dcccccd)),
+      _f6c(FloatBits(0x40c00000)),
+      _f70(FloatBits(0x41200000)),
+      _f74(FloatBits(0x41000000)),
+      _f78(FloatBits(0x40400000)),
+      _f7c(FloatBits(0x3f800000)),
+      _f80(FloatBits(0x3f800000)),
+      _f84(FloatBits(0x3f800000)),
+      _f88(FloatBits(0x3f800000)),
+      _f8c(FloatBits(0x3f800000)),
+      _f90(FloatBits(0x3f800000)),
+      _f94(FloatBits(0x3f800000)),
+      _f98(FloatBits(0x3f000000)),
+      _f9c(FloatBits(0x41400000)),
+      _fa0(FloatBits(0x3e800000)),
+      _fa4(FloatBits(0x41200000)),
+      _ia8(4),
+      _iac(12),
+      _ib0(3),
+      _fb4(FloatBits(0x3f19999a)),
+      _fb8(FloatBits(0x3e800000)),
+      _ibc(20),
+      _fc0(FloatBits(0x42c80000)),
+      _fc4(FloatBits(0x42c80000)),
+      _fc8(FloatBits(0x425c0000)),
+      _fcc(FloatBits(0x42960000)),
+      _fd0(FloatBits(0x42c80000)),
+      _fd4(FloatBits(0x41c80000)),
+      _fd8(FloatBits(0x3dcccccd)),
+      _fe8(FloatBits(0x42480000)),
+      _fec(FloatBits(0x42960000)),
+      _ff0(FloatBits(0x42c80000)),
+      _ff4(FloatBits(0x42400000)),
+      _if8(60),
+      _ifc(60),
+      _i100(2000),
+      _i104(6),
+      _i108(200),
+      _f10c(FloatBits(0x42340000)),
+      _i110(100),
+      _f114(FloatBits(0x40a00000)),
+      _i118(200),
+      _f11c(FloatBits(0x40800000)),
+      _f120(FloatBits(0x40a00000)),
+      _f124(FloatBits(0x40a00000)),
+      _f128(FloatBits(0x40000000)),
+      _f12c(FloatBits(0x3c23d70a)),
+      _f130(FloatBits(0x42700000)),
+      _refs(nullptr),
+      _refCount(0),
+      _refCap(0) {
+    _professions[0] = _professions[1] = _professions[2] = nullptr;
+    _f3dc[0] = _f3dc[1] = _f3dc[2] = FloatBits(0x41200000);
 }
-inline void SetI(void* base, uintptr_t off, int32_t v) {
-    *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(base) + off) = v;
-}
-} // namespace
 
-static void* CitizenDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(mem) = reinterpret_cast<void*>(vt);
-
-    uint8_t* p = reinterpret_cast<uint8_t*>(mem);
-    // ExternalRef<Profession> ptrs (null)
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;
-    // float / int defaults (exact bit patterns from FUN_140114e70)
-    SetF(mem, 0x38, 0x41700000); SetF(mem, 0x3c, 0x40000000); SetF(mem, 0x40, 0x3991a2b4);
-    SetF(mem, 0x44, 0x40000000); SetF(mem, 0x48, 0x40000000); SetF(mem, 0x4c, 0x40400000);
-    SetF(mem, 0x50, 0x40000000); SetF(mem, 0x54, 0x41000000); SetF(mem, 0x58, 0x44610000);
-    SetF(mem, 0x5c, 0x44e10000); SetF(mem, 0x60, 0x45a8c000); SetF(mem, 0x64, 0x3c23d70a);
-    SetF(mem, 0x68, 0x3dcccccd); SetF(mem, 0x6c, 0x40c00000); SetF(mem, 0x70, 0x41200000);
-    SetF(mem, 0x74, 0x41000000); SetF(mem, 0x78, 0x40400000); SetF(mem, 0x7c, 0x3f800000);
-    SetF(mem, 0x80, 0x3f800000); SetF(mem, 0x84, 0x3f800000); SetF(mem, 0x88, 0x3f800000);
-    SetF(mem, 0x8c, 0x3f800000); SetF(mem, 0x90, 0x3f800000); SetF(mem, 0x94, 0x3f800000);
-    SetF(mem, 0x98, 0x3f000000); SetF(mem, 0x9c, 0x41400000); SetF(mem, 0xa0, 0x3e800000);
-    SetF(mem, 0xa4, 0x41200000); SetI(mem, 0xa8, 4); SetI(mem, 0xac, 0xc);
-    SetI(mem, 0xb0, 3);          SetF(mem, 0xb4, 0x3f19999a); SetF(mem, 0xb8, 0x3e800000);
-    SetI(mem, 0xbc, 0x14);       SetF(mem, 0xc0, 0x42c80000); SetF(mem, 0xc4, 0x42c80000);
-    SetF(mem, 0xc8, 0x425c0000); SetF(mem, 0xcc, 0x42960000); SetF(mem, 0xd0, 0x42c80000);
-    SetF(mem, 0xd4, 0x41c80000); SetF(mem, 0xd8, 0x3dcccccd);
-    SetF(mem, 0xdc, 0x41200000); SetF(mem, 0xe0, 0x41200000); SetF(mem, 0xe4, 0x41200000);
-    SetF(mem, 0xe8, 0x42480000); SetF(mem, 0xec, 0x42960000); SetF(mem, 0xf0, 0x42c80000);
-    SetF(mem, 0xf4, 0x42400000); SetI(mem, 0xf8, 0x3c);       SetI(mem, 0xfc, 0x3c);
-    SetI(mem, 0x100, 2000);      SetI(mem, 0x104, 6);         SetI(mem, 0x108, 200);
-    SetF(mem, 0x10c, 0x42340000); SetI(mem, 0x110, 100);      SetF(mem, 0x114, 0x40a00000);
-    SetI(mem, 0x118, 200);       SetF(mem, 0x11c, 0x40800000); SetF(mem, 0x120, 0x40a00000);
-    SetF(mem, 0x124, 0x40a00000); SetF(mem, 0x128, 0x40000000); SetF(mem, 0x12c, 0x3c23d70a);
-    SetF(mem, 0x130, 0x42700000);
-    // dynamic External* array header at +0x138 (ptr) / +0x140 (count) / +0x144 (cap)
-    *reinterpret_cast<uint64_t*>(p + 0x138) = 0;
-    *reinterpret_cast<uint64_t*>(p + 0x140) = 0;  // count + cap zeroed
-    return mem;
+// dtor (slot 0 0x1400301f0 minus the stamps): the tree's slot 0 skipped ~External; the compiler chain now runs it (B38 D2 — this commit's behaviour change)
+// The compiler then chains ~Description -> ~External.
+CitizenDescription::~CitizenDescription() {
+    // Free the dynamic External* array buffer (entries are non-owning ptrs).
+    if (_refs && fn_MemFreeStatic) {
+        fn_MemFreeStatic(_refs);
+        _refs = nullptr;
+        _refCount = 0;
+        _refCap = 0;
+    }
 }
 
-void CitizenDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x1400301f0: ~CitizenDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* CitizenDescription::DeletingDtor(unsigned flags) {
+    this->~CitizenDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    auto F = [&](uintptr_t off) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + off), nullptr);   // B.3.4 bridge
-    };
-    auto I = [&](uintptr_t off) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + off), nullptr);   // B.3.4 bridge
-    };
-
-    F(0x44);
-    F(0x6c); F(0x70); F(0x74); F(0x78); F(0x7c); F(0x80); F(0x84); F(0x88); F(0x8c); F(0x90);
-    F(0x38); F(0x3c); F(0x40);
-    F(0xc0);
-    F(0xd8);
-
-    // float[3] bulk at +0xdc (was dispatch slot 0x140151ea8).
-    // ENDGAME B.3.4a closing: the else arm was a *stream-equivalent* fallback —
-    // three scalar floats write the same bytes as one float[3] — taken only
-    // when the door failed to resolve. `IO::Serializer::Serialize(int, float*,
-    // const char*)` is a member now and cannot fail to resolve, so the bulk
-    // form is the only path and the three-scalar spelling of the same bytes
-    // goes with the door that made it necessary.
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(3, reinterpret_cast<float*>(s + 0xdc), nullptr);   // B.3.4 bridge
-
-    F(0x48); F(0x4c); F(0x50); F(0x54); F(0x58); F(0x5c); F(0x60);
-    F(0xc4); F(0xd4); F(0xc8); F(0xcc); F(0xd0);
-    F(0xe8); F(0xec); F(0xf0); F(0xf4);
-
-    I(0x110);
-
-    // dynamic External* array (count at +0x140, ptr at +0x138)
+// [5] 0x140114900: stream order as retail.
+bool CitizenDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_f44, nullptr);
+    ser.Serialize(_f6c, nullptr);
+    ser.Serialize(_f70, nullptr);
+    ser.Serialize(_f74, nullptr);
+    ser.Serialize(_f78, nullptr);
+    ser.Serialize(_f7c, nullptr);
+    ser.Serialize(_f80, nullptr);
+    ser.Serialize(_f84, nullptr);
+    ser.Serialize(_f88, nullptr);
+    ser.Serialize(_f8c, nullptr);
+    ser.Serialize(_f90, nullptr);
+    ser.Serialize(_f38, nullptr);
+    ser.Serialize(_f3c, nullptr);
+    ser.Serialize(_f40, nullptr);
+    ser.Serialize(_fc0, nullptr);
+    ser.Serialize(_fd8, nullptr);
+    ser.Serialize(3, _f3dc, nullptr);   // float[3] bulk at +0xdc
+    ser.Serialize(_f48, nullptr);
+    ser.Serialize(_f4c, nullptr);
+    ser.Serialize(_f50, nullptr);
+    ser.Serialize(_f54, nullptr);
+    ser.Serialize(_f58, nullptr);
+    ser.Serialize(_f5c, nullptr);
+    ser.Serialize(_f60, nullptr);
+    ser.Serialize(_fc4, nullptr);
+    ser.Serialize(_fd4, nullptr);
+    ser.Serialize(_fc8, nullptr);
+    ser.Serialize(_fcc, nullptr);
+    ser.Serialize(_fd0, nullptr);
+    ser.Serialize(_fe8, nullptr);
+    ser.Serialize(_fec, nullptr);
+    ser.Serialize(_ff0, nullptr);
+    ser.Serialize(_ff4, nullptr);
+    ser.Serialize(_i110, nullptr);
     {
-        int32_t count = *reinterpret_cast<int32_t*>(s + 0x140);
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge (local temp, mirrors local_res8)
-        // If loading (serializer version field == 0) resize the array to `count`.
-        void* serObj = *reinterpret_cast<void**>(serializer);  // local_20[0]
-        bool loading = serObj && (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        if (loading) {
+        // dynamic External* array (count at +0x140, data at +0x138)
+        int32_t count = _refCount;
+        ser.Serialize(count, nullptr);   // local temp, as retail
+        if (static_cast<int>(ser.GetDirection()) == 0) {   // loading
             // B.3.2 bridge: exe 0x140001bb0 IS Collection::Array<void*>::SetSize(n).
-            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(s + 0x138)).SetSize(count);
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(&_refs)).SetSize(count);
         }
+        typedef void (*fn_RefArraySerialize_t)(void* serializer, int count, void* base, void* p4);  // 0x14001bcc0
         fn_RefArraySerialize_t sa =
             reinterpret_cast<fn_RefArraySerialize_t>(ResolveAddr(Module::Exe, 0x14001bcc0));
-        if (sa) sa(serializer, count, *reinterpret_cast<void**>(s + 0x138), nullptr);
+        if (sa) sa(&ser, count, _refs, nullptr);
     }
-
-    F(0x114);
-    I(0x118);
-    F(0x120); F(0x11c); F(0x128); F(0x124); F(0x130);
-    F(0xa4);
-    I(0xa8); I(0xac);
-    F(0xa0);
-    I(0xb0);
-    F(0xb4); F(0xb8);
-    I(0xbc);
-
-    // ExternalRef<Profession> singletons at +0x20, +0x28, +0x30 (FUN_140018020)
+    ser.Serialize(_f114, nullptr);
+    ser.Serialize(_i118, nullptr);
+    ser.Serialize(_f120, nullptr);
+    ser.Serialize(_f11c, nullptr);
+    ser.Serialize(_f128, nullptr);
+    ser.Serialize(_f124, nullptr);
+    ser.Serialize(_f130, nullptr);
+    ser.Serialize(_fa4, nullptr);
+    ser.Serialize(_ia8, nullptr);
+    ser.Serialize(_iac, nullptr);
+    ser.Serialize(_fa0, nullptr);
+    ser.Serialize(_ib0, nullptr);
+    ser.Serialize(_fb4, nullptr);
+    ser.Serialize(_fb8, nullptr);
+    ser.Serialize(_ibc, nullptr);
     {
+        // ExternalRef<Profession> x3 at +0x20/+0x28/+0x30 (0x140018020)
+        typedef void (*fn_ExternalRefSerialize_t)(void* refField, void* serializer);
         fn_ExternalRefSerialize_t f =
             reinterpret_cast<fn_ExternalRefSerialize_t>(ResolveAddr(Module::Exe, 0x140018020));
-        if (f) { f(s + 0x20, serializer); f(s + 0x28, serializer); f(s + 0x30, serializer); }
+        if (f) { f(&_professions[0], &ser); f(&_professions[1], &ser); f(&_professions[2], &ser); }
     }
-
-    F(0x64); F(0x68);
-    I(0xf8); I(0xfc); I(0x100); I(0x104); I(0x108);
-    F(0x10c);
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_f64, nullptr);
+    ser.Serialize(_f68, nullptr);
+    ser.Serialize(_if8, nullptr);
+    ser.Serialize(_ifc, nullptr);
+    ser.Serialize(_i100, nullptr);
+    ser.Serialize(_i104, nullptr);
+    ser.Serialize(_i108, nullptr);
+    ser.Serialize(_f10c, nullptr);
+    return true;
 }
 
-void* CitizenDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(self) = reinterpret_cast<void*>(vt);
-    // Free the dynamic External* array buffer at +0x138 (entries are non-owning ptrs).
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
-    void* buf = *reinterpret_cast<void**>(p + 0x138);
-    if (buf && fn_MemFreeStatic) {
-        fn_MemFreeStatic(buf);
-        *reinterpret_cast<uint64_t*>(p + 0x138) = 0;
-        *reinterpret_cast<uint64_t*>(p + 0x140) = 0;
-    }
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400301c0: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* CitizenDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) CitizenDescription();
 }
 
-// ============================================================
-// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
-// ============================================================
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void CitizenDescription::Destruct() {}
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CitizenDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CitizenDescription");
-    return cached;
+// [8] 0x1400301e0: CitizenComponent's type id through the hidden return slot.
+Object::Type* CitizenDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("CitizenComponent");
+    return ret;
 }
 
-static void* CitizenDescription_Dtor_Tramp(void* self, uint32_t flags) {
-    return CitizenDescription_Dtor(self, flags);
-}
-static void  CitizenDescription_Serialize_Tramp(void* self, void* stream) {
-    CitizenDescription_Serialize(self, stream);
-}
-static int   CitizenDescription_VtblReturn17(void* /*self*/) { return (int)kFileVersion; }
-static int   CitizenDescription_VtblReturn0(void* /*self*/) { return 0; }
-static void* CitizenDescription_VtblReturnNull(void* /*self*/, ...) { return nullptr; }
+// [9] 0x1400301b0 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* CitizenDescription::Construct() { return nullptr; }
 
-extern "C" void* CitizenDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return CitizenDescription_Ctor_Impl(memory);
-}
-
-static void  CitizenDescription_Cleanup_Tramp(void* self) {
-    typedef void* (*dtor_t)(void*, uint32_t);
-    dtor_t d = *reinterpret_cast<dtor_t*>(*reinterpret_cast<uintptr_t*>(self));
-    if (d) d(self, 0);
-    CitizenDescription_Ctor_Impl(self);
-}
-static void* CitizenDescription_Slot8_Tramp(void* self) {
-    if (!self) return nullptr;
-    CitizenDescription_Ctor_Impl(self);
-    return self;
-}
-
-// Vtable @ 0x140162600 (Object::External, verified via read_memory):
-//   +0x00 Dtor 0x1400301f0 | +0x08 0x140030160 | +0x10 GetTypeId 0x140030150
-//   +0x18 GetVersion 0x140114e00 (mov eax,17) | +0x20 Compile 0x14003a912
-//   +0x28 Serialize 0x140114900 | +0x30 Cleanup 0x1400301c0
-//   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x1400301e0 | +0x48 0x1400301b0
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* CitizenDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "CitizenComponent"); }
-
-static void* g_CitizenDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CitizenDescription_Dtor_Tramp),      // +0x00
-    reinterpret_cast<void*>(&CitizenDescription_VtblReturnNull),  // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&CitizenDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&CitizenDescription_VtblReturn17),    // +0x18 GetVersion
-    reinterpret_cast<void*>(&CitizenDescription_VtblReturn0),     // +0x20 Compile
-    reinterpret_cast<void*>(&CitizenDescription_Serialize_Tramp), // +0x28
-    reinterpret_cast<void*>(&CitizenDescription_Cleanup_Tramp),   // +0x30
-    reinterpret_cast<void*>(&CitizenDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&CitizenDescription_GetComponentTypeId),     // +0x40
-    reinterpret_cast<void*>(&CitizenDescription_VtblReturnNull),  // +0x48 guard
-    reinterpret_cast<void*>(&CitizenDescription_VtblReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterCitizenDescriptionVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_CitizenDescription_Vtable));
-}
-
-extern "C" void* CitizenDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x148, 8);
+// create 0x140030170: MemAlloc(0x148, 8), then the (inlined) ctor.
+void* CitizenDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CitizenDescription), 8);
     if (!p) return nullptr;
-    return CitizenDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) CitizenDescription());
+}
+// createInPlace 0x1400301b0.
+void* CitizenDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CitizenDescription());
 }
 
-REGISTER_TYPE(CitizenDescription, "Description",
-              &CitizenDescription_Factory, &CitizenDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(CitizenDescription, "_ZTV18CitizenDescription")
+DEFINE_EXE_TYPE(CitizenDescription, "Description")

@@ -10,113 +10,69 @@
 // (0x14012bb40) = 1.
 //
 // Decompiled from Application-x64.exe (read-only Ghidra recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (StateMachineDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401645a0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/StateMachineDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-namespace {
-constexpr uintptr_t kVtableAddr    = 0x1401645a0;
-constexpr uintptr_t kSerializeAddr = 0x14012bb00;
-constexpr uint32_t  kFileVersion   = 1;
-} // namespace
+// ctor (inlined into create 0x140038330 / createInPlace 0x140038390):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+StateMachineDescription::StateMachineDescription()
+    : Description() {}
 
-static void* StateMachineDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(mem) = reinterpret_cast<void*>(vt);
-    return mem;
+// [0] 0x140038440: ~StateMachineDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* StateMachineDescription::DeletingDtor(unsigned flags) {
+    this->~StateMachineDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void StateMachineDescription_Serialize(void* self, void* stream) {
-    (void)self;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x14012bb00: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool StateMachineDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* StateMachineDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(self) = reinterpret_cast<void*>(vt);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400383e0: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* StateMachineDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) StateMachineDescription();
 }
 
-// ============================================================
-// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
-// ============================================================
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void StateMachineDescription::Destruct() {}
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t StateMachineDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StateMachineDescription");
-    return cached;
+// [8] 0x140038430: StateMachineComponent's type id through the hidden return slot.
+Object::Type* StateMachineDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("StateMachineComponent");
+    return ret;
 }
 
-static void* StateMachineDescription_Dtor_Tramp(void* self, uint32_t flags) {
-    return StateMachineDescription_Dtor(self, flags);
-}
-static void  StateMachineDescription_Serialize_Tramp(void* self, void* stream) {
-    StateMachineDescription_Serialize(self, stream);
-}
-static int   StateMachineDescription_VtblReturn1(void* /*self*/) { return (int)kFileVersion; }
-static int   StateMachineDescription_VtblReturn0(void* /*self*/) { return 0; }
-static void* StateMachineDescription_VtblReturnNull(void* /*self*/, ...) { return nullptr; }
+// [9] 0x140038390 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* StateMachineDescription::Construct() { return nullptr; }
 
-extern "C" void* StateMachineDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return StateMachineDescription_Ctor_Impl(memory);
-}
-
-static void  StateMachineDescription_Cleanup_Tramp(void* self) {
-    typedef void* (*dtor_t)(void*, uint32_t);
-    dtor_t d = *reinterpret_cast<dtor_t*>(*reinterpret_cast<uintptr_t*>(self));
-    if (d) d(self, 0);
-    StateMachineDescription_Ctor_Impl(self);
-}
-static void* StateMachineDescription_Slot8_Tramp(void* self) {
-    if (!self) return nullptr;
-    StateMachineDescription_Ctor_Impl(self);
-    return self;
-}
-
-// Vtable @ 0x1401645a0 (Object::External, verified via read_memory):
-//   +0x00 Dtor 0x140038440 | +0x08 0x140038320 | +0x10 GetTypeId 0x140038310
-//   +0x18 GetVersion 0x14012bb40 (mov eax,1) | +0x20 Compile 0x14003a912
-//   +0x28 Serialize 0x14012bb00 (empty) | +0x30 Cleanup 0x1400383e0
-//   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x140038430 | +0x48 0x140038390
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* StateMachineDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "StateMachineComponent"); }
-
-static void* g_StateMachineDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&StateMachineDescription_Dtor_Tramp),      // +0x00
-    reinterpret_cast<void*>(&StateMachineDescription_VtblReturnNull),  // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&StateMachineDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&StateMachineDescription_VtblReturn1),     // +0x18 GetVersion
-    reinterpret_cast<void*>(&StateMachineDescription_VtblReturn0),     // +0x20 Compile
-    reinterpret_cast<void*>(&StateMachineDescription_Serialize_Tramp), // +0x28
-    reinterpret_cast<void*>(&StateMachineDescription_Cleanup_Tramp),   // +0x30
-    reinterpret_cast<void*>(&StateMachineDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&StateMachineDescription_GetComponentTypeId),     // +0x40
-    reinterpret_cast<void*>(&StateMachineDescription_VtblReturnNull),  // +0x48 guard
-    reinterpret_cast<void*>(&StateMachineDescription_VtblReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterStateMachineDescriptionVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_StateMachineDescription_Vtable));
-}
-
-extern "C" void* StateMachineDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+// create 0x140038330: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* StateMachineDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StateMachineDescription), 8);
     if (!p) return nullptr;
-    return StateMachineDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) StateMachineDescription());
+}
+// createInPlace 0x140038390.
+void* StateMachineDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StateMachineDescription());
 }
 
-REGISTER_TYPE(StateMachineDescription, "Description",
-              &StateMachineDescription_Factory, &StateMachineDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(StateMachineDescription, "_ZTV23StateMachineDescription")
+DEFINE_EXE_TYPE(StateMachineDescription, "Description")
