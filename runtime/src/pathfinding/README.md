@@ -25,3 +25,7 @@ status paragraph at the end of this file says what the files hold.)
 - `pointlist.cpp`
 - `rt_factories_pathfinding.cpp`
 - `rt_factories_pathfinding.inc`
+
+## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
+
+`Pathfinding::PointList` (External, 9 slots, 0x50) is a REAL C++ class (`runtime/types/pathfinding/PointList.h`, bodies in `pointlist.cpp`) and is LIVE: every `InteractDescription` / `ParticleDescription` the game loads loads one through the factory. `Pathfinding::Scene` (0x90) and `IPathInfo` (8 bytes, two pure slots) are declarations only — dead in retail (B37_RULES 6.2, B7-9). Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.

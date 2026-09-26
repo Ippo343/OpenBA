@@ -42,3 +42,7 @@ per matching node header, so they are not Input's to own.
 `input_device_update.cpp` (MainLoop::Run calls the member every frame). Members
 still declared and not ported carry a `// not ported` marker in
 `runtime/types/input/Input.h` / `Device.h`.
+
+## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
+
+`Input::KeyMap` (0x18; `Binding` 0x18 / `BindingNode` 0x38), `Input::Device` (exactly 0x1200) and `Input::Configuration` (0x10) are REAL non-polymorphic C++ classes in `runtime/types/input/{Input,Device}.h`; every tree caller calls the members (the `fn_KeyMap_*` / `fn_Input_Device_*` globals are deleted, and the drag tool's `KeyMap::Released` path, bound to an unregistered slot before, is live). `~Configuration` and `~KeyMap` are declared, not defined: they stay doors. `KeyMap`'s two split fields stand in for a `Collection::Set` until that template has a byte-key compare policy (B37_RULES 12). Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.

@@ -33,3 +33,7 @@ confirm against the retail DLL before porting one.
 `??0Application@0@QEAA@PEAX@Z` (the constructor) is ported in
 `runtime/src/engine/singleton_ctors.cpp`, with the fourteen other constructors that publish a
 `?_singleton@...` data export.
+
+## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
+
+`Application::Application` (0x30, non-polymorphic) is a REAL C++ class with its 27 exported members (`runtime/types/application/Application.h`, every name spelled with MSVC's `@Application@1@` back-reference). The ctor stays `Ctor_Application` in `runtime/src/engine/singleton_ctors.cpp` (inlined in retail `Engine::Startup`) and `~Application` is declared, not defined, so `Engine::Shutdown` keeps calling its door; dx11 calls the members. Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.

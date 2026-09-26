@@ -36,3 +36,7 @@ status paragraph at the end of this file says what the files hold.)
 - `rt_achievement_port.cpp`
 - `rt_factories_achievement.cpp`
 - `rt_factories_achievement.inc`
+
+## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
+
+`Achievement::Achievement` (External, 9 slots, 0x58), `AchievementInstance` (Internal, 0x28), `Goal` (External, abstract, 10 slots, 0x30; slot 9 `GetInstanceType` is the one retslot virtual), `GoalInstance` (Internal, 0x20), the value type `GoalList` (0x10) and the non-polymorphic `AchievementManager` (0x48) are REAL C++ classes in `runtime/types/achievement/{AchievementManager,Goal}.h`. Their ctor/dtor doors stay: the exe subclasses (`Scenario`, five Goals, two GoalInstances, the unregistered AchievementInstance table) construct through them until step 8; the 4 `??_7`, 4 `?_typeInfo` and 4 `RT_DELDTOR` rows retire at the end of B.3. Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.

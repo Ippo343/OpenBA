@@ -37,3 +37,7 @@ side -- see the block comment above those bodies for why that works without a De
 `Scene::Update`, `Device::Update` and `Device::FreeChannelPlatform`, once listed here as still on
 the DLL, are ported (`audio_scene_update.cpp`, `audio_device.cpp`). The file names have NOT been
 split to match the original tree above yet -- that is a mechanical follow-up, not a port.
+
+## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
+
+`Audio::SoundBuffer` (CompiledExternal, 0x80), `SoundEffect` (External, 0x40), `Stream` (a `System::Thread` subclass, 2 slots, 0x88), and the non-polymorphic `Scene` (0x38), `Configuration` (0x10) and `Device` (0x1298, with its nested `AudioChannel` and `PlatformChannel` — the IXAudio2VoiceCallback record whose table is the unnamed 0x180157c60 mint row) are REAL C++ classes in `runtime/types/audio/`. The XAudio2 callback bodies stay in `audio_voice_callback_win.cpp`; the `Stream` / `Device` ctors stay doors (`singleton_ctors.cpp`), and no lock was added anywhere (B37_RULES 5). Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.
