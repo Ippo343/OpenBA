@@ -28,20 +28,13 @@
 //     9  Construct          0x180044470  here
 //   ??1RibbonDescription@UI@@UEAA@XZ     0x1800d5c90
 //
-// LAYOUT, sizeof 0x80 (`MOV EDX,0x80` at 0x18004463f, the eh_vector stride in
-// the deleting destructor). `ElementDescription` (0x68) plus:
-//     +0x68  bool    _b68        ctor: `MOV word [RCX+0x68],DX` — ONE 16-bit
-//     +0x69  bool    _b69        store covering BOTH bools
-//     +0x6a  (2 bytes never written by the ctor and never read here)
-//     +0x6c  int32   _i6c        ctor: `MOV dword [RCX+0x6c],EDX`
-//     +0x70  Array<ExternalPtr<ElementDescription>>   _children
-//     +0x78  _size, +0x7c _capacity
-// The three names are deliberately `_b68`/`_b69`/`_i6c`: Serialize proves their
-// WIDTHS (two kScalarBool calls at +0x68/+0x69 and one kScalarInt at +0x6c) and
-// CreateInstance proves where they are copied to on the element (+0xc0, +0xc1,
-// +0xc4), but nothing in either body says what they MEAN. One body is not
-// enough to name a field, and a guessed name in a header whose contract is that
-// it is measured would be worse than none.
+// LAYOUT: runtime/types/ui/RibbonDescription.h (sizeof 0x80; RULE B6-8 moved
+// this file's offsets there under the retail name, named after the
+// RibbonElement fields each one seeds).
+//
+// ENDGAME B.3.6 block C5: every slot body MOVED into the members of the real
+// `UI::RibbonDescription`; each registered door is a one-line QUALIFIED
+// delegation. The dtor stays a door (B4b-2).
 //
 // NOT HERE: `?CreateNewObject@RibbonDescription@UI@@` / `?CreateInPlaceObject@`
 // are already ported and registered, table-driven, by
@@ -54,21 +47,39 @@
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/Element.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/ui/RibbonDescription.h"
+#include "../../types/ui/RibbonElement.h"
+
+#include <atomic>
+#include <new>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtRibbonDescription()  { return RT_DATA_SLOT(void*, "??_7RibbonDescription@UI@@6B@"); }
-void* VtRibbonElement()      { return RT_DATA_SLOT(void*, "??_7RibbonElement@UI@@6B@"); }
-const uint8_t* RibbonDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A");
+// RULE B6-5: the members below (Construct/Reconstruct run ConstructBody) may
+// run on the loader thread, so every export they resolve lives in a
+// namespace-scope atomic, never a function-local first-call cache.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
+std::atomic<void*> g_vtBase{nullptr};
+std::atomic<void*> g_vtExternal{nullptr};
+std::atomic<void*> g_vtElementDescription{nullptr};
+std::atomic<void*> g_vtRibbonDescription{nullptr};
+std::atomic<void*> g_vtRibbonElement{nullptr};
+void* VtBase()               { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
+void* VtExternal()           { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
+void* VtElementDescription() { return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
+void* VtRibbonDescription()  { return AtomicExport(g_vtRibbonDescription, "??_7RibbonDescription@UI@@6B@"); }
+void* VtRibbonElement()      { return AtomicExport(g_vtRibbonElement, "??_7RibbonElement@UI@@6B@"); }
 
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
@@ -93,10 +104,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
 
 // The inlined constructor, transcribed from 0x18004448a..0x180044501. Identical
 // to GroupDescription's through +0x60 (the ElementDescription part), then:
@@ -134,34 +141,6 @@ void ConstructBody(uint8_t* p) {
 
 }  // namespace
 
-extern "C" uint32_t RtUi_RibbonDescription_Type(const void*) {
-    const uint8_t* ti = RibbonDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-extern "C" const char* RtUi_RibbonDescription_TypeName(const void*) {
-    const uint8_t* ti = RibbonDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
-// 0x1800d5ef0: `MOV EAX,0x204 ; RET`. 0x204, not GroupDescription's 0x104 —
-// the file version is per class and the two must not be shared.
-extern "C" int32_t RtUi_RibbonDescription_GetFileVersion(const void*) { return 0x204; }
-
-extern "C" void* RtUi_RibbonDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180044481
-    ConstructBody(static_cast<uint8_t*>(selfv));
-    return selfv;
-}
-extern "C" void* RtUi_RibbonDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                       // 1800443d7
-    ConstructBody(static_cast<uint8_t*>(selfv));
-    return selfv;
-}
-// 0x180044520 is three instructions: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`
-// — a tail jump into slot 0 with flag 0, i.e. destroy without freeing.
-extern "C" void RtUi_RibbonDescription_Destruct(void* selfv) {
-    CallSlot0(selfv, 0);
-}
-
 // ============================================================================
 // ??1RibbonDescription@UI@@UEAA@XZ   0x1800d5c90
 // ============================================================================
@@ -197,16 +176,56 @@ extern "C" void RtUi_RibbonDescription_Dtor(void* selfv) {
 }
 
 // ============================================================================
-// ?Serialize@RibbonDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d5f00
+// The MEMBERS
+// ============================================================================
+namespace {
+std::atomic<void*> g_typeInfo{nullptr};
+const uint8_t* RibbonTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@RibbonDescription@UI@@0VBaseTypeInfo@Object@@A"));
+}
+}  // namespace
+
+namespace UI {
+
+// [1] 0x180044130 / [2] 0x180044110
+const char* RibbonDescription::TypeName() const {
+    const char* v = nullptr; __builtin_memcpy(&v, RibbonTypeInfo() + 8, sizeof v); return v;
+}
+uint32_t RibbonDescription::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, RibbonTypeInfo(), sizeof v); return v;
+}
+// [3] 0x1800d5ef0: `MOV EAX,0x204 ; RET`. 0x204, not GroupDescription's 0x104 —
+// the file version is per class and the two must not be shared.
+int32_t RibbonDescription::GetFileVersion() const { return 0x204; }
+
+// [9] 0x180044470 — the ctor INLINED (ConstructBody); the null-`this` test
+// stays in the door.
+Object::External* RibbonDescription::Construct() {
+    ConstructBody(reinterpret_cast<uint8_t*>(this));
+    return this;
+}
+// [6] 0x1800443c0 — destroy in place through slot 0 (flag 0), re-run the ctor.
+Object::External* RibbonDescription::Reconstruct() {
+    DeletingDtor(0);                                                    // 1800443d7
+    ConstructBody(reinterpret_cast<uint8_t*>(this));
+    return this;
+}
+// [7] 0x180044520 is three instructions: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`
+// — a tail jump into slot 0 with flag 0, i.e. destroy without freeing.
+void RibbonDescription::Destruct() { DeletingDtor(0); }
+
+// ============================================================================
+// [5] ?Serialize@RibbonDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d5f00
 // ============================================================================
 //   ElementDescription::Serialize(this, stream)     0x180116b00, ported
 //   rw = encoding factory, read side or write side by stream->mode
-//   rw->vt[0x78](rw, &_b68, 0)      kScalarBool   1800d5f5e
-//   rw->vt[0x78](rw, &_b69, 0)      kScalarBool   1800d5f70
-//   rw->vt[0xa0](rw, &_i6c, 0)      kScalarInt    1800d5f82
-//   n = _children._size ; rw->vt[0xa0](rw, &n, 0)              1800d5f9f
-//   if (pair.stream->mode == 0) SetSize(&_children, n)         0x1800492d0
-//   ElementDescriptionPtrArray_Serialize(&pair, n, _children._data)  0x1800493d0
+//   rw->vt[0x78](rw, &_vertical, 0)  kScalarBool   1800d5f5e
+//   rw->vt[0x78](rw, &_uniform, 0)   kScalarBool   1800d5f70
+//   rw->vt[0xa0](rw, &_spacing, 0)   kScalarInt    1800d5f82
+//   n = _items._size ; rw->vt[0xa0](rw, &n, 0)                 1800d5f9f
+//   if (pair.stream->mode == 0) SetSize(&_items, n)            0x1800492d0
+//   ElementDescriptionPtrArray_Serialize(&pair, n, _items._data)  0x1800493d0
 //   if (rw) rw->vt[0](rw, 1)
 //
 // THE FIELD ORDER IS 0x68, 0x69, 0x6c — NOT 0x68, 0x6c, 0x69. CreateInstance
@@ -214,40 +233,39 @@ extern "C" void RtUi_RibbonDescription_Dtor(void* selfv) {
 // 1800d60bf..1800d60d6) and a port that took its order from there would emit
 // the two bools and the int in the wrong sequence into every saved layout,
 // which the reader would then mis-parse. Each body's order is its own.
-extern "C" bool RtUi_RibbonDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+bool RibbonDescription::Serialize(void* streamArg) {
+    Stream* stream = static_cast<Stream*>(streamArg);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(p, stream);              // 1800d5f1a
+    // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
+    ElementDescription::Serialize(stream);                              // 1800d5f1a
 
-    Serializer ser = { stream, nullptr };                      // [RSP+0x28], [RSP+0x30]
+    Serializer ser = { stream, nullptr };                               // [RSP+0x28], [RSP+0x30]
 
     void*  factory = stream->encodingFactory;
     void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;       // Create{Reader,Writer}
+    const int which = (stream->mode == 0) ? 0x18 : 0x20;                // Create{Reader,Writer}
     using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
     void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800d5f4a
+    ser.readerWriter = rw;                                              // 1800d5f4a
 
     using ScalarFn = void (*)(void* rw, void* value, const char* name);
     void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(rw, p + 0x68, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(rw, p + 0x69, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt  / 8])(rw, p + 0x6c, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(rw, &_vertical, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(rw, &_uniform, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt  / 8])(rw, &_spacing, nullptr);
 
-    int32_t n = *reinterpret_cast<int32_t*>(p + 0x78);         // 1800d5f88
+    int32_t n = _itemsCount;                                            // 1800d5f88
     reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
 
-    if (ser.stream->mode == 0) {                               // 1800d5fa5 (re-read)
+    if (ser.stream->mode == 0) {                                        // 1800d5fa5 (re-read)
         using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x1800492d0ull)(p + 0x70, n);        // 1800d5fb8
+        RtAddr<SetSizeFn>(0x1800492d0ull)(&_itemsData, n);              // 1800d5fb8
     }
 
     using ElemSerFn = void (*)(Serializer* ser, int count, void* data);
-    RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, *reinterpret_cast<void**>(p + 0x70));
+    RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _itemsData);
 
-    if (rw != nullptr) {                                       // 1800d5fd5
+    if (rw != nullptr) {                                                // 1800d5fd5
         using DeleteFn = void (*)(void* rw, int flag);
         reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
     }
@@ -255,82 +273,112 @@ extern "C" bool RtUi_RibbonDescription_Serialize(void* selfv, void* streamv) {
 }
 
 // ============================================================================
-// ?CreateInstance@RibbonDescription@UI@@...   retail 0x1800d6000
+// [8] ?CreateInstance@RibbonDescription@UI@@...   retail 0x1800d6000
 // ============================================================================
 // RCX = this, RDX = the hidden InternalPtr<Element> return slot, R8 = the
 // Dialog*. (See groupdescription.cpp for why Ghidra prints only two of the
 // three.)
 //
-// RibbonElement is 0xd8 bytes (`MOV EDX,0xd8` at 0x1800d6048), i.e. Element's
-// 0xc0 plus four of its own fields, which the tail of this body initialises and
-// then fills from the description:
-//     +0xc0 bool, +0xc1 bool, +0xc4 int32, +0xc8 Array (data/size/cap)
-// The ctor half zeroes +0xc0..+0xc1 with ONE 16-bit store, then +0xc4, +0xc8,
-// +0xd0 (1800d6088..1800d60a0).
+// RibbonElement is 0xd8 bytes (`MOV EDX,0xd8` at 0x1800d6048); retail INLINES
+// its ctor: ??0Element, the vtable stamp, ONE 16-bit store over +0xc0..+0xc1,
+// then +0xc4, +0xc8, +0xd0 (1800d6088..1800d60a0).
 //
 // The LAST call is the one that makes this class different from Group's:
-// `Array<int32>::SetSize(&elem->+0xc8, desc->_children._size)` (0x18002fea0,
+// `Array<int32>::SetSize(&elem->_extents, desc->_items._size)` (0x18002fea0,
 // array.cpp kSpec_I32 — the instantiation whose new tail is UNINITIALISED).
 // It runs AFTER the child loop and OUTSIDE it.
-extern "C" void** RtUi_RibbonDescription_CreateInstance(const void* selfv,
-                                                        void** ret,
-                                                        const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
+Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd8, 8);   // 1800d6048
+    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd8, 8);           // 1800d6048
 
-    uint8_t* elem = nullptr;
-    if (raw != nullptr) {                                      // 1800d6070
+    RibbonElement* elem = nullptr;
+    if (raw != nullptr) {                                               // 1800d6070
         using ElementCtorFn = void* (*)(void*);
-        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);            // 1800d6078 ??0Element
+        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);                     // 1800d6078 ??0Element
         uint8_t* e = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e) = VtRibbonElement();      // 1800d6085
-        *reinterpret_cast<uint16_t*>(e + 0xc0) = 0;            // 1800d6088  WORD
-        *reinterpret_cast<int32_t*>(e + 0xc4)  = 0;            // 1800d6093
-        *reinterpret_cast<uint64_t*>(e + 0xc8) = 0;            // 1800d6099
-        *reinterpret_cast<uint64_t*>(e + 0xd0) = 0;            // 1800d60a0
-        elem = e;
+        *reinterpret_cast<void**>(e) = VtRibbonElement();              // 1800d6085
+        *reinterpret_cast<uint16_t*>(e + 0xc0) = 0;                     // 1800d6088  WORD
+        elem = static_cast<RibbonElement*>(raw);
+        elem->_spacing         = 0;                                     // 1800d6093
+        elem->_extentsData     = nullptr;                               // 1800d6099 (qword)
+        *reinterpret_cast<uint64_t*>(&elem->_extentsCount) = 0;         // 1800d60a0 (qword)
     }
 
-    void* slot = elem;                                         // 1800d60ad [RSP+0x50]
+    void* slot = elem;                                                  // 1800d60ad [RSP+0x50]
 
+    // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
+    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
     using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 1800d60ba
+    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);            // 1800d60ba
 
-    elem[0xc0] = self[0x68];                                   // 1800d60bf
-    *reinterpret_cast<int32_t*>(elem + 0xc4) =
-        *reinterpret_cast<const int32_t*>(self + 0x6c);        // 1800d60c9
-    elem[0xc1] = self[0x69];                                   // 1800d60d2
+    elem->_vertical = _vertical;                                        // 1800d60bf
+    elem->_spacing  = _spacing;                                         // 1800d60c9
+    elem->_uniform  = _uniform;                                         // 1800d60d2
 
-    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0x78);
-    for (int32_t i = 0; i < count; ++i) {                      // 1800d60dc / 1800d6149
-        void* const* descArray = *reinterpret_cast<void* const* const*>(self + 0x70);
-        void*        desc      = descArray[i];                 // 1800d60f7
+    const int32_t count = _itemsCount;
+    for (int32_t i = 0; i < count; ++i) {                               // 1800d60dc / 1800d6149
+        void* desc = _itemsData[i];                                     // 1800d60f7
 
+        // UI::Dialog::CreateElement (block B's class) — a door, by address.
         using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
         void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, &slot, desc);
 
-        uint8_t* child = *reinterpret_cast<uint8_t**>(made);   // 1800d6108
+        Element* child = *reinterpret_cast<Element**>(made);            // 1800d6108
         if (child != nullptr)
-            *reinterpret_cast<void**>(child + 0x98) = elem;    // 1800d6110
+            child->_parent = elem;                                      // 1800d6110
 
         using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                       *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                       made);                  // 1800d6129
+        RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+                                       elem->_children.GetSize() + 1,
+                                       made);                           // 1800d6129
 
-        for (uint8_t* n = elem; n != nullptr;                   // 1800d6131..1800d6145
-             n = *reinterpret_cast<uint8_t**>(n + 0x98)) {
-            *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
-        }
+        for (Element* n = elem; n != nullptr; n = n->_parent)           // 1800d6131..1800d6145
+            n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
     using SetSizeFn = void (*)(void* array, int n);
-    RtAddr<SetSizeFn>(0x18002fea0ull)(elem + 0xc8, count);     // 1800d6158
+    RtAddr<SetSizeFn>(0x18002fea0ull)(&elem->_extentsData, count);      // 1800d6158
 
-    *ret = elem;                                               // 1800d615d
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d615d
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_RibbonDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::RibbonDescription*>(self)->UI::RibbonDescription::Type();
+}
+extern "C" const char* RtUi_RibbonDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::RibbonDescription*>(self)->UI::RibbonDescription::TypeName();
+}
+extern "C" int32_t RtUi_RibbonDescription_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::RibbonDescription*>(self)
+        ->UI::RibbonDescription::GetFileVersion();
+}
+extern "C" void* RtUi_RibbonDescription_Construct(void* self) {
+    if (self == nullptr) return nullptr;                                // 180044481 (retail null test)
+    return reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Construct();
+}
+extern "C" void* RtUi_RibbonDescription_Reconstruct(void* self) {
+    return reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Reconstruct();
+}
+extern "C" void RtUi_RibbonDescription_Destruct(void* self) {
+    reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Destruct();
+}
+extern "C" bool RtUi_RibbonDescription_Serialize(void* self, void* stream) {
+    return reinterpret_cast<UI::RibbonDescription*>(self)->UI::RibbonDescription::Serialize(stream);
+}
+extern "C" void** RtUi_RibbonDescription_CreateInstance(const void* self, void** ret,
+                                                        const void* dialog) {
+    return reinterpret_cast<void**>(
+        reinterpret_cast<const UI::RibbonDescription*>(self)
+            ->UI::RibbonDescription::CreateInstance(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
+                static_cast<const UI::Dialog*>(dialog)));
 }
 
 int RtUiRibbonDescriptionRegister() {

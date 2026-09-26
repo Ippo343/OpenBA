@@ -126,13 +126,13 @@
 #include "../system/string.h"
 
 using UI::Element;
-using UI::SpinnerElement;
+using RtUI::SpinnerElement;   // B.3.6 C5: the Wave 7 POD moved to RtUI (B4b-1); UI::SpinnerElement is the class
 using UI::ComboElement;
 using RtUI::NumberEditElement;   // B.3.6 block C3: the POD moved (B4b-1)
 using RtUI::NumberElement;       // B.3.6 block C3: the POD moved (B4b-1)
 using RtUI::EditElement;         // B.3.6 block C3: the POD moved (B4b-1)
 using UI::RadioElement;
-using UI::ProgressElement;
+using RtUI::ProgressElement;   // B.3.6 C5: the Wave 7 POD moved to RtUI (B4b-1); UI::ProgressElement is the class
 using UI::kElementFlagNeedsSizeCalc;
 
 // ----------------------------------------------------------------------------

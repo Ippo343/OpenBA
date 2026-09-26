@@ -61,36 +61,18 @@
 //     a comparable copy, it produces a TabElement with four children and a tab
 //     count of two. That is not a weak oracle, it is corruption.
 //
-// THE ORACLE, AND EXACTLY WHAT IT DOES AND DOES NOT COVER
-// -------------------------------------------------------
-// The body is written against the live sink (runtime/funcs/rt_sink.h).
-//
-//   COMPARED, and non-vacuously (`changed=` is >= 1 every round because the
-//   tab count always moves):
-//     * `this+0xC0`, the tab count, +1 (0x1800DA286).
-//     * The DIRTY WALK: `p->_flags |= 0x8000000` for `this` and every ancestor
-//       up the `_parent` (+0x98) chain — run TWICE, once after each append
-//       (0x1800DA211 and 0x1800DA270), UNCONDITIONALLY. Note the contrast with
-//       UpdateContainers, whose walk is guarded on "did bit 0 change"; a tidied
-//       port that shared one helper between them would be wrong in one of the
-//       two. The second walk's predictions land on addresses the first already
-//       predicted and are reported in the `superseded=` column, which is what
-//       that column is for: an intermediate value, never a post-state claim.
-//
-//   EXCLUDED, i.e. holes that PRINT rather than hide:
-//     * The children Array header at `this+0xA0` (data pointer, size, capacity).
-//       Retail appends two elements our suppressed body did not create, so the
-//       size moves by two and the buffer may be reallocated. Not predictable
-//       while CreateInstance is unported.
-//     * The two created Elements themselves, including the `_parent` store at
-//       `elem+0x98`. They do not exist in predict mode.
-//
-//   THE SURVIVING BLOCKER, NAMED: `?CreateInstance@ElementDescription@UI@@…`
-//   (and the ExternalPtr vtable +0x40 thunk that reaches it) is unported, so
-//   the append half of this function is verified only in the sense that its
-//   inputs and its call targets are recorded (`RtSink::Call`). The day that
-//   callee lands, the Exclude on `this+0xA0` can be replaced by a prediction
-//   and this file's `excluded=` column should go to zero.
+// ENDGAME B.3.6 block C5 — THE BODY IS NOW THE MEMBER `UI::TabElement::AddTab`
+// ---------------------------------------------------------------------------
+// The body moved into the member, written directly (the RtSink oracle
+// scaffold it used to be written against had only its live arm in use). The
+// two ExternalPtr vtable +0x40 calls are now the virtual slot-8
+// `ElementDescription::CreateInstance` (RULE B6-2), the UpdateContainers
+// RT_EXPORT_ONCE is the member call, and the two Dialog doors moved to
+// namespace-scope atomics (RULE B6-5). The registered door keeps retail's
+// (this, ret, button, content) shape and places the member's result.
+// The dirty walk is still run TWICE, UNCONDITIONALLY (0x1800DA211 and
+// 0x1800DA270) — contrast UpdateContainers', which is guarded on "did bit
+// 0 change".
 //
 // ROUTING — CHECKED, NOT ASSUMED
 // -------------------------------
@@ -104,166 +86,127 @@
 // brain to close, because there is no second caller.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
-#include <cstdio>
+#include <new>
 
 #include "../../funcs/rt_port.h"
-#include "../../funcs/rt_sink.h"
 #include "../../types/ui/Element.h"
+#include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/TabElement.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// (same reasoning as runtime/src/ui/widgets_layout.cpp and rt_port.h itself:
-// that header drags in <windows.h>, which collides with engine type/member
-// names). This declaration must stay byte-identical to resolve.h's.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 namespace {
 
-namespace TAE = UI::TabElementOffsets;
-
-inline uint8_t* B(void* p, int off) { return reinterpret_cast<uint8_t*>(p) + off; }
-
-constexpr int      kFlags     = offsetof(UI::Element, _flags);    // 0x34
-constexpr int      kParent    = offsetof(UI::Element, _parent);   // 0x98
-constexpr int      kTabCount  = 0xC0;                             // 0x1800DA286
 constexpr uint32_t kDirtyBit  = 0x8000000u;                       // NeedsSizeCalc
 
 // UI::Dialog, 0x88 bytes — see the store-for-store table in the banner.
 constexpr size_t kDialogSize = 0x88;
 
-// ??0Dialog@UI@@QEAA@XZ (0x180112DB0) and ??1Dialog@UI@@UEAA@XZ (0x180112E40).
-// `UEAA` is the VIRTUAL spelling and it is the right one here: retail's inline
-// teardown is the non-deleting destructor's body, and the QEAA spelling of a
-// virtual destructor IS NOT IN THE EXPORT TABLE — it would resolve to null in
-// silence (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md, the same trap that
-// cost Wave 6 a session). Both names were checked against the DLL's export
-// directory before being written here, not inferred from the class shape
-// (reference_resolveexport_phantom_names.md).
+// RULE B6-5: AddTab is a member now and UI is built on the loader thread, so
+// the two Dialog doors live in namespace-scope atomics, not RT_EXPORT_ONCE's
+// function-local statics.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+std::atomic<void*> g_dialogCtor{nullptr};
+std::atomic<void*> g_dialogDtor{nullptr};
+
+// ??0Dialog@UI@@QEAA@XZ (0x180112DB0) and ??1Dialog@UI@@UEAA@XZ (0x180112E40) —
+// block B's class, doors. `UEAA` is the VIRTUAL spelling and it is the right one
+// here: retail's inline teardown is the non-deleting destructor's body, and the
+// QEAA spelling of a virtual destructor IS NOT IN THE EXPORT TABLE — it would
+// resolve to null in silence (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+// Both names were checked against the DLL's export directory.
 using DialogCtorFn = void* (*)(void*);
 using DialogDtorFn = void  (*)(void*);
-inline DialogCtorFn DialogCtor() {
-    return RT_EXPORT_ONCE(DialogCtorFn, "??0Dialog@UI@@QEAA@XZ");
+DialogCtorFn DialogCtor() {
+    return reinterpret_cast<DialogCtorFn>(AtomicExport(g_dialogCtor, "??0Dialog@UI@@QEAA@XZ"));
 }
-inline DialogDtorFn DialogDtor() {
-    return RT_EXPORT_ONCE(DialogDtorFn, "??1Dialog@UI@@UEAA@XZ");
+DialogDtorFn DialogDtor() {
+    return reinterpret_cast<DialogDtorFn>(AtomicExport(g_dialogDtor, "??1Dialog@UI@@UEAA@XZ"));
 }
 
-// ENDGAME B.3.2 step 2 — the 0x180076900 forwarder that used to sit here is
-// GONE. `TabElement`'s `_children` (Element.h, +0xa0) is the real
-// `Collection::Array<Element*>` member dialog_create.cpp's banner already
-// covers, and this file does not have a typed `self` to reach it through, so
-// the two call sites below bridge with the same `kSpec_Fill8Z` row at the raw
-// `TAE::kChildrenData` offset.
+// Array<InternalPtr<Element>>::SetSize(n, fill) — the kSpec_Fill8Z row
+// (0x180076900) over `Element::_children`.
 inline void ArrayCellsSetSizeFill(void* arrayHdr, int32_t n, const void* fill) {
     rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(arrayHdr)->SetSizeFill(n, fill);
 }
 
-// ?UpdateContainers@TabElement@UI@@AEAAXXZ — PORTED in this same wave
-// (runtime/src/ui/widgets_layout.cpp) and registered under name AND address.
-void UpdateContainers(void* self) {
-    using Fn = void (*)(void*);
-    RT_EXPORT_ONCE(Fn, "?UpdateContainers@TabElement@UI@@AEAAXXZ")(self);
-}
-
-// The ExternalPtr<ElementDescription> virtual at slot +0x40 (index 8).
-// (this, InternalPtr<Element>* ret, UI::Dialog* ctx) -> ret
-using CreateInstanceFn = void** (*)(void*, void**, void*);
-inline CreateInstanceFn CreateInstanceSlot(void* extPtr) {
-    return reinterpret_cast<CreateInstanceFn*>(*reinterpret_cast<void**>(extPtr))[8];
-}
-
-// The UNCONDITIONAL dirty walk. Deliberately NOT shared with
-// widgets_layout.cpp's `WalkDirty`, and not with UpdateContainers' guarded one:
-// retail spells this walk out twice here with no guard at all
-// (0x1800DA211, 0x1800DA270), and a helper shared between a guarded and an
-// unguarded walk is one edit away from being wrong in whichever caller the
-// editor was not looking at.
-void DirtyWalk(void* self, RtSink& out) {
-    for (uint8_t* p = reinterpret_cast<uint8_t*>(self); p != nullptr;
-         p = *reinterpret_cast<uint8_t**>(p + kParent)) {
-        out.U32(p + kFlags, out.ReadU32(p + kFlags) | kDirtyBit,
-                "element._flags |= NeedsSizeCalc");
-    }
-}
-
-// ---------------------------------------------------------------------------
-// The body, written ONCE against an RtSink.
-//
-// `ret` is BOTH this function's hidden return slot AND the destination of the
-// second CreateInstance (0x1800DA232 loads RSI, which is the incoming RDX).
-// That aliasing is retail's, not a modelling shortcut, and it is called out
-// because an oracle that snapshotted `self` and `ret` independently would be
-// comparing one buffer against itself
-// (reference_oracle_must_snapshot_aliased_inputs.md).
-// ---------------------------------------------------------------------------
-void AddTabBody(void* self, void** ret, void* descA, void* descB, RtSink& out) {
-    alignas(16) uint8_t dlg[kDialogSize];
-    DialogCtor()(dlg);                                        // 0x1800DA163..1D2
-
-    void* cell = nullptr;   // retail's [RBP+0x67], the scratch InternalPtr
-
-    // ---- tab BUTTON: created from descA into the scratch cell --------------
-    CreateInstanceFn createA = CreateInstanceSlot(descA);
-    if (out.Call("ExternalPtr<ElementDescription>::vtbl+0x40 (tab)",
-                 reinterpret_cast<const void*>(createA),
-                 reinterpret_cast<int64_t>(descA),
-                 reinterpret_cast<int64_t>(&cell),
-                 reinterpret_cast<int64_t>(dlg))) {
-        createA(descA, &cell, dlg);                           // 0x1800DA1E5
-        if (cell) *reinterpret_cast<void**>(B(cell, kParent)) = self;   // 0x1800DA1F0
-        ArrayCellsSetSizeFill(B(self, TAE::kChildrenData),
-                              *reinterpret_cast<int32_t*>(B(self, TAE::kChildrenCount)) + 1,
-                              &cell);                          // 0x1800DA209
-    }
-    DirtyWalk(self, out);                                      // 0x1800DA211
-
-    // ---- tab CONTENT: created from descB straight into the return slot -----
-    CreateInstanceFn createB = CreateInstanceSlot(descB);
-    if (out.Call("ExternalPtr<ElementDescription>::vtbl+0x40 (content)",
-                 reinterpret_cast<const void*>(createB),
-                 reinterpret_cast<int64_t>(descB),
-                 reinterpret_cast<int64_t>(ret),
-                 reinterpret_cast<int64_t>(dlg))) {
-        createB(descB, ret, dlg);                              // 0x1800DA235
-        cell = *ret;                                           // 0x1800DA238/23B
-        if (cell) *reinterpret_cast<void**>(B(cell, kParent)) = self;   // 0x1800DA244
-        ArrayCellsSetSizeFill(B(self, TAE::kChildrenData),
-                              *reinterpret_cast<int32_t*>(B(self, TAE::kChildrenCount)) + 1,
-                              &cell);                          // 0x1800DA25E
-    }
-    DirtyWalk(self, out);                                      // 0x1800DA270
-
-    out.U32(B(self, kTabCount),
-            out.ReadU32(B(self, kTabCount)) + 1, "TabElement._tabCount");  // 0x1800DA286
-
-    // UpdateContainers is suppressed in predict mode for the reason its own
-    // port documents: it recomputes CHILD visibility, and in predict mode the
-    // children retail is about to append do not exist yet. Retail runs its own
-    // a moment later, on the real children.
-    if (out.Call("UI::TabElement::UpdateContainers",
-                 reinterpret_cast<const void*>(&UpdateContainers),
-                 reinterpret_cast<int64_t>(self))) {
-        UpdateContainers(self);                                // 0x1800DA28F
-    }
-
-    DialogDtor()(dlg);                                         // 0x1800DA295..329
+// The UNCONDITIONAL dirty walk. Deliberately NOT shared with UpdateContainers'
+// guarded one: retail spells this walk out twice here with no guard at all
+// (0x1800DA211, 0x1800DA270).
+void DirtyWalk(UI::Element* self) {
+    for (UI::Element* p = self; p != nullptr; p = p->_parent)
+        p->_flags |= kDirtyBit;
 }
 
 } // namespace
 
+namespace UI {
+
+// ---------------------------------------------------------------------------
+// The body. `button` and `content` are the two ExternalPtr<ElementDescription>
+// values (trivially copyable, in registers — retail reads each one's vtable
+// straight out of the register, 0x1800DA1E5 / 0x1800DA235).
+//
+// Retail creates the CONTENT straight into the caller's hidden return slot
+// (0x1800DA232 loads RSI, the incoming RDX) and reads the cell back from it;
+// here the member returns the handle by value and the door places it in that
+// slot, which nothing can observe between the two (the slot is the caller's
+// and is read only after the return).
+// ---------------------------------------------------------------------------
+Object::InternalPtr<Element> TabElement::AddTab(Object::ExternalPtr<ElementDescription> button,
+                                                Object::ExternalPtr<ElementDescription> content) {
+    alignas(16) uint8_t dlg[kDialogSize];
+    DialogCtor()(dlg);                                        // 0x1800DA163..1D2
+    const Dialog* dialog = reinterpret_cast<const Dialog*>(dlg);   // B.3.6 bridge
+
+    Object::InternalPtr<Element> cell;   // retail's [RBP+0x67], the scratch InternalPtr
+
+    // ---- tab BUTTON: created from `button` into the scratch cell -----------
+    button->CreateInstance(&cell, dialog);                    // 0x1800DA1E5 — slot 8, virtual
+    if (cell.Get() != nullptr) cell->_parent = this;          // 0x1800DA1F0
+    ArrayCellsSetSizeFill(&_children, _children.GetSize() + 1, &cell);   // 0x1800DA209
+    DirtyWalk(this);                                          // 0x1800DA211
+
+    // ---- tab CONTENT: created from `content` (the return value) ------------
+    Object::InternalPtr<Element> result;
+    content->CreateInstance(&result, dialog);                 // 0x1800DA235 — slot 8, virtual
+    cell = result;                                            // 0x1800DA238/23B
+    if (cell.Get() != nullptr) cell->_parent = this;          // 0x1800DA244
+    ArrayCellsSetSizeFill(&_children, _children.GetSize() + 1, &cell);   // 0x1800DA25E
+    DirtyWalk(this);                                          // 0x1800DA270
+
+    ++_tabCount;                                              // 0x1800DA286
+
+    UpdateContainers();                                       // 0x1800DA28F
+
+    DialogDtor()(dlg);                                        // 0x1800DA295..329
+    return result;
+}
+
+}  // namespace UI
+
 // ============================================================================
-// The registered entry point.
+// The registered entry point — a DOOR: retail's (this, ret, button, content)
+// shape, the member's prvalue placed into the caller's slot (B5-12).
 // ============================================================================
 extern "C" void** RtUi_TabElement_AddTab(void* self, void** ret,
                                          void* descA, void* descB) {
-    RtSink live;
-    AddTabBody(self, ret, descA, descB, live);
+    new (static_cast<void*>(ret)) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::AddTab(
+            Object::ExternalPtr<UI::ElementDescription>(
+                reinterpret_cast<UI::ElementDescription*>(descA)),   // B.3.6 bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                reinterpret_cast<UI::ElementDescription*>(descB)))); // B.3.6 bridge
     return ret;                                            // 0x1800DA32D
 }
 

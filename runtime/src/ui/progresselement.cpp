@@ -13,29 +13,19 @@
 //
 // plus ??0ProgressElement (0x180119c40) and ??1ProgressElement (0x180077ef0).
 //
-// ---------------------------------------------------------------------------
-// LAYOUT. sizeof == 0x130 (the deleting destructor's `MOV EDX,0x130`). SIX
-// UI::Sprites and three scalars, every one written by the ctor:
+// LAYOUT: runtime/types/ui/ProgressElement.h (sizeof 0x130; six UI::Sprites,
+// the background colour and the two floats, every one written by the ctor).
 //
-//   +0xC0  _fillLeft    Sprite    }  the FILL (the coloured bar), drawn with
-//   +0xD0  _fillMiddle  Sprite    }  Element::_color
-//   +0xE0  _fillRight   Sprite    }
-//   +0xF0  _trackLeft   Sprite    }  the TRACK (the groove), drawn with
-//   +0x100 _trackMiddle Sprite    }  _backgroundColor
-//   +0x110 _trackRight  Sprite    }
-//   +0x120 _backgroundColor uint32, ctor 0xFFFFFFFF
-//                                ?SetBackgroundColor@ 0x180077ee0
-//   +0x124 _maxValue        float,  ctor 1.0f    ?SetMaximumValue@ 0x180077ec0
-//   +0x128 _currentValue    float,  ctor 0.25f   ?SetCurrentValue@ 0x180077ed0
-//
-// runtime/types/ui/ProgressElement.h already pinned the last two from their
-// one-instruction setters and left +0xC0..+0x123 as "not reversed by this
-// lane"; it is reversed now, and the header says so.
+// ENDGAME B.3.6 block C5: the five slot bodies MOVED into the members of the
+// real `UI::ProgressElement`; each registered door is a one-line QUALIFIED
+// delegation. The ctor / dtor stay doors (B4b-2).
 //
 // ~ProgressElement does NOT restamp the vtable — it is a bare tail jump to
 // ~Element (five instructions at 0x180077ef0, disassembled). That asymmetry
 // with its own ctor is retail's and is reproduced.
 // ============================================================================
+
+#include <atomic>
 
 #include "widget_common.h"
 #include "../../types/ui/ProgressElement.h"
@@ -54,30 +44,244 @@ constexpr int kBackColor   = 0x120;
 constexpr int kMaxValue    = 0x124;
 constexpr int kCurValue    = 0x128;
 
-static_assert(kMaxValue == offsetof(UI::ProgressElement, _maxValue), "");
-static_assert(kCurValue == offsetof(UI::ProgressElement, _currentValue), "");
+static_assert(kFillLeft    == offsetof(UI::ProgressElement, _fillLeft), "");
+static_assert(kTrackRight  == offsetof(UI::ProgressElement, _trackRight), "");
+static_assert(kBackColor   == offsetof(UI::ProgressElement, _backgroundColor), "");
+static_assert(kMaxValue    == offsetof(UI::ProgressElement, _maxValue), "");
+static_assert(kCurValue    == offsetof(UI::ProgressElement, _currentValue), "");
 
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A");
+// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7ProgressElement@UI@@6B@"); }
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
+const uint8_t* ProgressTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@ProgressElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtProgressElement() { return AtomicExport(g_vtable, "??_7ProgressElement@UI@@6B@"); }
+
+// A sprite's frame width / height (widget_common.h's reader, handed the sprite
+// itself at offset 0).
+int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
+int32_t SpriteH(const ::Sprite& s) { return SpriteHeight(&s, 0); }
 
 }  // namespace
 
-extern "C" uint32_t RtUi_ProgressElement_Type(const void*) {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+namespace UI {
+
+// [1] 0x180077d40 / [2] 0x180077d20
+const char* ProgressElement::TypeName() const {
+    const char* v = nullptr; __builtin_memcpy(&v, ProgressTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" const char* RtUi_ProgressElement_TypeName(const void*) {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
+uint32_t ProgressElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, ProgressTypeInfo(), sizeof v); return v;
 }
 
-// ??0ProgressElement@UI@@QEAA@XZ   0x180119c40
+// ---------------------------------------------------------------------------
+// [4] ?ComputeSize@ProgressElement@UI@@UEAAXXZ   0x1801198f0
+// ---------------------------------------------------------------------------
+void ProgressElement::ComputeSize() {
+    if ((_flags & kFlagNeedsSizeCalc) == 0) return;
+
+    const int32_t fillW  = SpriteW(_fillLeft) + SpriteW(_fillMiddle) + SpriteW(_fillRight);
+    int32_t trackW = SpriteW(_trackLeft) + SpriteW(_trackMiddle) + SpriteW(_trackRight);
+
+    int32_t height = 0;
+    if (_children.GetSize() > 0) {
+        Element* child = _children.GetData()[0];
+        if (child != nullptr) {
+            int32_t cw = 0;
+            InlineGetPaddedSize(child, &cw, &height);
+        }
+    }
+
+    if (trackW < fillW) trackW = fillW;
+    _layoutWidth = trackW;
+
+    int32_t spriteH = SpriteH(_trackLeft);
+    const int32_t fillH = SpriteH(_fillLeft);
+    if (spriteH < fillH) spriteH = fillH;
+    if (height  < spriteH) height = spriteH;
+
+    _flags &= ~kFlagNeedsSizeCalc;
+    _layoutHeight = height;
+}
+
+// ---------------------------------------------------------------------------
+// [5] ?ComputeLayout@ProgressElement@UI@@UEAAXHHHH@Z   0x180119610
+// ---------------------------------------------------------------------------
+void ProgressElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (_border != nullptr)
+        reinterpret_cast<Element*>(_border)->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
+
+    ComputeSize();   // slot 4, VIRTUAL — `CALL [RAX+0x20]` in retail
+
+    int32_t h = _layoutHeight;
+    const int32_t align = _alignment;
+    if (right  < _layoutWidth + x) x = right - _layoutWidth;
+    if (bottom < h + y) y = bottom - h;
+
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t ah = (bottom - _bottomPad) - py;
+    const int32_t aw = (right  - _rightPad)  - px;
+
+    // Only the vertical stretch bit is tested; the width always stretches.
+    if ((_flags & kFlagStretchY) != 0) h = ah;
+
+    switch (align) {
+        case 2: case 5: case 8:
+            px = (right - _rightPad) - aw;
+            break;
+        default:
+            break;
+    }
+    if (align > 2) {
+        if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
+        else if (align < 9) py = (bottom - _bottomPad) - h;
+    }
+
+    _layoutLeft   = px;
+    _layoutRight  = aw + px;
+    _layoutTop    = py;
+    _layoutBottom = py + h;
+
+    if (_children.GetSize() <= 0) return;
+    Element* child = _children.GetData()[0];
+    if (child == nullptr) return;
+
+    int32_t cw = 0, ch = 0;
+    InlineGetPaddedSize(child, &cw, &ch);
+
+    int32_t left  = _layoutLeft;
+    int32_t barW  = static_cast<int32_t>(
+        (_currentValue / _maxValue) * static_cast<float>(_layoutRight - left));
+    if (barW < _layoutWidth) barW = _layoutWidth;
+
+    uint32_t color;
+    if (_currentValue == 0.0f) {
+        if (I32(this, kFillLeft + kSpriteIndex) < 0) {
+            color = 0xffffffffu;
+        } else {
+            left += SpriteW(_fillLeft);
+            color = 0xffffffffu;
+        }
+    } else {
+        const int32_t capW = SpriteW(_fillRight);
+        if (barW + cw < (_layoutRight - left) - capW) {
+            color = 0xffffffffu;
+        } else {
+            color = 0xff000000u;
+            left  = (left - SpriteW(_fillRight)) - cw;
+        }
+        left += barW;
+    }
+
+    // The child is RE-READ from the array before each of the two calls.
+    _children.GetData()[0]->SetColor(color);                                  // slot 10
+    _children.GetData()[0]->ComputeLayout(left, _layoutTop, left + cw, _layoutBottom);  // slot 5
+}
+
+// ---------------------------------------------------------------------------
+// [6] ?Draw@ProgressElement@UI@@UEBAXAEAVSpriteContext@2@E@Z  0x1801192c0
+//
+// THE ALPHA IS HALVED TWICE when the dim flag is set. Retail tests
+// `flags & 0x40000` once before each of the two colour modulations and shifts
+// the SAME register both times, so a dimmed progress bar's fill is at a
+// quarter alpha, not a half. Transcribed, not corrected.
+// ---------------------------------------------------------------------------
+void ProgressElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    void* const ctx = &context;
+    if (_border != nullptr)
+        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
+
+    uint32_t raw = _backgroundColor;
+    if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
+    const uint32_t trackColor = ModulateColor(raw, alpha);
+
+    raw = _color;
+    if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
+    const uint32_t fillColor = ModulateColor(raw, alpha);
+
+    const int32_t left   = _layoutLeft;
+    const int32_t top    = _layoutTop;
+    const int32_t rightX = _layoutRight;
+
+    // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
+    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackLeft, left, top, trackColor);
+
+    const int32_t midH   = SpriteH(_trackMiddle);
+    const int32_t rightW = SpriteW(_trackRight);
+    const int32_t leftW  = SpriteW(_trackLeft);
+    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
+                                         left + leftW, top,
+                                         rightX - rightW, top + midH, trackColor);
+
+    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackRight,
+                                         rightX - SpriteW(_trackRight), top, trackColor);
+
+    if (_currentValue > 0.0f) {
+        int32_t barW = static_cast<int32_t>(
+            (_currentValue / _maxValue) * static_cast<float>(rightX - left));
+        if (barW < _layoutWidth) barW = _layoutWidth;
+
+        RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_fillLeft, left, top, fillColor);
+
+        const int32_t fMidH = SpriteH(_fillMiddle);
+        const int32_t fCapW = SpriteW(_fillRight);
+        const int32_t fLefW = SpriteW(_fillLeft);
+        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_fillMiddle,
+                                             left + fLefW, top,
+                                             (left - fCapW) + barW, top + fMidH, fillColor);
+
+        RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_fillRight,
+                                             (left - SpriteW(_fillRight)) + barW,
+                                             top, fillColor);
+    }
+
+    if (_children.GetSize() > 0) {
+        const Element* child = _children.GetData()[0];
+        if (child != nullptr)
+            child->Draw(context, alpha);   // slot 6
+    }
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_ProgressElement_Type(const void* self) {
+    return reinterpret_cast<const UI::ProgressElement*>(self)->UI::ProgressElement::Type();
+}
+extern "C" const char* RtUi_ProgressElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::ProgressElement*>(self)->UI::ProgressElement::TypeName();
+}
+extern "C" void RtUi_ProgressElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::ProgressElement*>(self)->UI::ProgressElement::ComputeSize();
+}
+extern "C" void RtUi_ProgressElement_ComputeLayout(void* self, int32_t x, int32_t y,
+                                                   int32_t right, int32_t bottom) {
+    reinterpret_cast<UI::ProgressElement*>(self)->UI::ProgressElement::ComputeLayout(
+        x, y, right, bottom);
+}
+extern "C" void RtUi_ProgressElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::ProgressElement*>(self)->UI::ProgressElement::Draw(
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+
+// ??0ProgressElement@UI@@QEAA@XZ   0x180119c40 — a DOOR (B4b-2), unchanged.
 extern "C" void* RtUi_ProgressElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
     ElementCtor(self);
-    PTR(self, 0x00) = Vtable();
+    PTR(self, 0x00) = VtProgressElement();
     const int sprites[6] = { kFillLeft, kFillMiddle, kFillRight,
                              kTrackLeft, kTrackMiddle, kTrackRight };
     for (int off : sprites) {
@@ -90,188 +294,9 @@ extern "C" void* RtUi_ProgressElement_Ctor(void* self) {   // returns this in RA
     return self;
 }
 
-// ??1ProgressElement@UI@@UEAA@XZ   0x180077ef0 — tail jump, no restamp.
+// ??1ProgressElement@UI@@UEAA@XZ   0x180077ef0 — tail jump, no restamp. A DOOR.
 extern "C" void RtUi_ProgressElement_Dtor(void* self) {
     ElementDtor(self);
-}
-
-// ---------------------------------------------------------------------------
-// slot 4 — ?ComputeSize@ProgressElement@UI@@UEAAXXZ   0x1801198f0
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_ProgressElement_ComputeSize(void* self) {
-    if ((U32(self, kElFlags) & kFlagNeedsSizeCalc) == 0) return;
-
-    const int32_t fillW  = SpriteWidth(self, kFillLeft)
-                         + SpriteWidth(self, kFillMiddle)
-                         + SpriteWidth(self, kFillRight);
-    int32_t trackW = SpriteWidth(self, kTrackLeft)
-                   + SpriteWidth(self, kTrackMiddle)
-                   + SpriteWidth(self, kTrackRight);
-
-    int32_t height = 0;
-    if (I32(self, kElChildCount) > 0) {
-        void* child = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
-        if (child != nullptr) {
-            int32_t cw = 0;
-            InlineGetPaddedSize(child, &cw, &height);
-        }
-    }
-
-    if (trackW < fillW) trackW = fillW;
-    I32(self, kElLayoutWidth) = trackW;
-
-    int32_t spriteH = SpriteHeight(self, kTrackLeft);
-    const int32_t fillH = SpriteHeight(self, kFillLeft);
-    if (spriteH < fillH) spriteH = fillH;
-    if (height  < spriteH) height = spriteH;
-
-    U32(self, kElFlags) &= ~kFlagNeedsSizeCalc;
-    I32(self, kElLayoutHeight) = height;
-}
-
-// ---------------------------------------------------------------------------
-// slot 5 — ?ComputeLayout@ProgressElement@UI@@UEAAXHHHH@Z   0x180119610
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_ProgressElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                   int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
-
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
-
-    int32_t h = I32(self, kElLayoutHeight);
-    const int32_t align = I32(self, kElAlignment);
-    if (right  < I32(self, kElLayoutWidth) + x) x = right - I32(self, kElLayoutWidth);
-    if (bottom < h + y) y = bottom - h;
-
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-
-    // Only the vertical stretch bit is tested; the width always stretches.
-    if ((U32(self, kElFlags) & kFlagStretchY) != 0) h = ah;
-
-    switch (align) {
-        case 2: case 5: case 8:
-            px = (right - I32(self, kElRightPad)) - aw;
-            break;
-        default:
-            break;
-    }
-    if (align > 2) {
-        if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
-        else if (align < 9) py = (bottom - I32(self, kElBottomPad)) - h;
-    }
-
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutRight)  = aw + px;
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutBottom) = py + h;
-
-    if (I32(self, kElChildCount) <= 0) return;
-    void* child = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
-    if (child == nullptr) return;
-
-    int32_t cw = 0, ch = 0;
-    InlineGetPaddedSize(child, &cw, &ch);
-
-    int32_t left  = I32(self, kElLayoutLeft);
-    int32_t barW  = static_cast<int32_t>(
-        (F32(self, kCurValue) / F32(self, kMaxValue))
-        * static_cast<float>(I32(self, kElLayoutRight) - left));
-    if (barW < I32(self, kElLayoutWidth)) barW = I32(self, kElLayoutWidth);
-
-    uint32_t color;
-    if (F32(self, kCurValue) == 0.0f) {
-        if (I32(self, kFillLeft + kSpriteIndex) < 0) {
-            color = 0xffffffffu;
-        } else {
-            left += SpriteWidth(self, kFillLeft);
-            color = 0xffffffffu;
-        }
-    } else {
-        const int32_t capW = SpriteWidth(self, kFillRight);
-        if (barW + cw < (I32(self, kElLayoutRight) - left) - capW) {
-            color = 0xffffffffu;
-        } else {
-            color = 0xff000000u;
-            left  = (left - SpriteWidth(self, kFillRight)) - cw;
-        }
-        left += barW;
-    }
-
-    void* c0 = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
-    reinterpret_cast<SetColorSlotFn>(VTable(c0)[kVtSetColor / 8])(c0, color);
-    c0 = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
-    reinterpret_cast<ComputeLayoutSlotFn>(VTable(c0)[kVtComputeLayout / 8])(
-        c0, left, I32(self, kElLayoutTop), left + cw, I32(self, kElLayoutBottom));
-}
-
-// ---------------------------------------------------------------------------
-// slot 6 — ?Draw@ProgressElement@UI@@UEBAXAEAVSpriteContext@2@E@Z  0x1801192c0
-//
-// THE ALPHA IS HALVED TWICE when the dim flag is set. Retail tests
-// `flags & 0x40000` once before each of the two colour modulations and shifts
-// the SAME register both times, so a dimmed progress bar's fill is at a
-// quarter alpha, not a half. Transcribed, not corrected.
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_ProgressElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
-
-    uint32_t raw = U32(me, kBackColor);
-    if ((U32(me, kElFlags) & kFlagDimColor) != 0) alpha >>= 1;
-    const uint32_t trackColor = ModulateColor(raw, alpha);
-
-    raw = U32(me, kElColor);
-    if ((U32(me, kElFlags) & kFlagDimColor) != 0) alpha >>= 1;
-    const uint32_t fillColor = ModulateColor(raw, alpha);
-
-    const int32_t left   = I32(me, kElLayoutLeft);
-    const int32_t top    = I32(me, kElLayoutTop);
-    const int32_t rightX = I32(me, kElLayoutRight);
-
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, B(me, kTrackLeft), left, top, trackColor);
-
-    const int32_t midH  = SpriteHeight(me, kTrackMiddle);
-    const int32_t rightW = SpriteWidth(me, kTrackRight);
-    const int32_t leftW  = SpriteWidth(me, kTrackLeft);
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kTrackMiddle),
-                                         left + leftW, top,
-                                         rightX - rightW, top + midH, trackColor);
-
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, B(me, kTrackRight),
-                                         rightX - SpriteWidth(me, kTrackRight), top,
-                                         trackColor);
-
-    if (F32(me, kCurValue) > 0.0f) {
-        int32_t barW = static_cast<int32_t>(
-            (F32(me, kCurValue) / F32(me, kMaxValue))
-            * static_cast<float>(rightX - left));
-        if (barW < I32(me, kElLayoutWidth)) barW = I32(me, kElLayoutWidth);
-
-        RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, B(me, kFillLeft), left, top, fillColor);
-
-        const int32_t fMidH = SpriteHeight(me, kFillMiddle);
-        const int32_t fCapW = SpriteWidth(me, kFillRight);
-        const int32_t fLefW = SpriteWidth(me, kFillLeft);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kFillMiddle),
-                                             left + fLefW, top,
-                                             (left - fCapW) + barW, top + fMidH, fillColor);
-
-        RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, B(me, kFillRight),
-                                             (left - SpriteWidth(me, kFillRight)) + barW,
-                                             top, fillColor);
-    }
-
-    if (I32(me, kElChildCount) > 0) {
-        void* child = reinterpret_cast<void**>(PTR(me, kElChildren))[0];
-        if (child != nullptr)
-            reinterpret_cast<DrawSlotFn>(VTable(child)[kVtDraw / 8])(child, ctx, alpha);
-    }
 }
 
 // ============================================================================

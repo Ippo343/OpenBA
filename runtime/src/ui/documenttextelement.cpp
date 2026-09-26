@@ -23,8 +23,11 @@
 //
 // `?SetText@` (both overloads) and `?GetLink@` are ALREADY PORTED in
 // runtime/src/ui/widgets_layout.cpp; `?GenerateItems@` (0x1800cf060), the
-// layout pass ComputeSize calls, belongs to the UI-text agent and is reached by
-// address.
+// layout pass ComputeSize calls, is a member in runtime/src/ui/documenttext.cpp.
+//
+// B.3.6 block C5: slots 1, 2, 4-7 are members of UI::DocumentTextElement
+// (runtime/types/ui/DocumentTextElement.h); the registered names are one-line
+// qualified doors.
 //
 // ---------------------------------------------------------------------------
 // LAYOUT — 0x1c8 bytes (`MOV EDX,0x1c8` at 0x18003c66f). Enumerated from the
@@ -41,7 +44,7 @@
 //   +0x108 int32        the WRAP WIDTH, ctor 300 — ComputeSize floors
 //                       `_layoutWidth` by it
 //   +0x110 Array<UI::Font*>        the font table items index into
-//   +0x120 Array<UI::Sprite>       the sprite table inline images index into
+//   +0x120 Array<UI::SpriteSheet*> the sheet table inline images index into
 //   +0x130 Array<...>              a third table, destroyed by 0x18003db40
 //   +0x140 ExternalPtr             an object whose +0x20 is the array inline
 //                                  CAPTURES index into
@@ -68,6 +71,8 @@
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
+#include <atomic>
+
 #include "element_common.h"
 #include "../../types/ui/DocumentTextElement.h"
 
@@ -76,61 +81,56 @@ using namespace rtuielem;
 namespace {
 
 constexpr int kUnderlineSprite = 0x0d8;
-constexpr int kColorNormal     = 0x0f8;
-constexpr int kColorHover      = 0x0fc;
-constexpr int kColorPressed    = 0x100;
-constexpr int kWrapWidth       = 0x108;
-constexpr int kFonts           = 0x110;
-constexpr int kSprites         = 0x120;
-constexpr int kCaptureOwner    = 0x140;
-constexpr int kItems           = 0x148;
-constexpr int kItemCount       = 0x150;
 constexpr int kLinks           = UI::DocumentTextElementOffsets::kLinkArrayData;  // 0x158
-constexpr int kLinkCount       = 0x160;
 constexpr int kSourceText      = UI::DocumentTextElementOffsets::kContentString;  // 0x168
 
 static_assert(kLinks == 0x158 && kSourceText == 0x168,
               "DocumentTextElement.h must still pin the link array and the source string");
+static_assert(kUnderlineSprite == offsetof(UI::DocumentTextElement, _underlineSprite), "");
 
-constexpr int kItemStride = 0x24;
-constexpr int kLinkStride = UI::DocumentTextElementOffsets::kLinkEntryStride;   // 0x18
+using Item = UI::DocumentTextElement::DocumentItem;
+using Link = UI::DocumentTextElement::Link;
 
-// UI::Element::UpdateState
-constexpr int kStateMouseDown = 0x01;
-constexpr int kStateMouseUp   = 0x04;
-constexpr int kStateMouseHeld = 0x07;
-constexpr int kStateMouseX    = 0x18;
-constexpr int kStateMouseY    = 0x1c;
-
-// UI::UserInterface
+// UI::UserInterface (block E's class) — raw offsets, as before.
 constexpr int kUiEvents      = 0x48;
 constexpr int kUiEventCount  = 0x50;
 constexpr int kUiAudioScene  = 0x90;
 constexpr int kUiHoverSound  = 0xb8;
 constexpr int kUiClickSound  = 0xc0;
 
-// UI::Font
+// UI::Font (block D's class)
 constexpr int kFontLineHeight = 0x50;
 constexpr int kFontBaseline   = 0x54;
 constexpr int kFontUnderlineTrim = 0x5c;
 
 constexpr int32_t kEventActivated = 0x12;
 
-RTELEM_TYPE_SLOTS(DocumentTextElement)
+// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
+std::atomic<void*> g_captureTypeInfo{nullptr};
+std::atomic<void*> g_secondsPerTick{nullptr};
+std::atomic<void*> g_memFree{nullptr};
+
+const uint8_t* DocumentTextElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtDocumentTextElement() { return AtomicExport(g_vtable, "??_7DocumentTextElement@UI@@6B@"); }
 
 uint32_t SpriteCaptureTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A");
+    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
+        g_captureTypeInfo, "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A"));
     return p ? *p : 0u;
 }
 double SecondsPerTick() {
-    double* p = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
+    const double* p = static_cast<const double*>(AtomicExport(
+        g_secondsPerTick, "?_secondsPerTick@Timer@System@@0NA"));
     return p ? *p : 0.0;
 }
 
 using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
 using ClearArrayFn    = void* (*)(void* array);
-using GenerateItemsFn = void  (*)(void* self);
 using SubStringFn     = void* (*)(const void* str, void* out, int start, int length);
 using MemFreeFn       = void  (*)(void* p);
 using AddFontFn       = void (*)(void* ctx, void* font, const void* str, int wrap,
@@ -139,7 +139,6 @@ using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, ui
 using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
                                  int l, int t, int r, int b, uint32_t color);
 using CaptureDrawFn   = void (*)(void* capture, void* ctx, int x, int y);
-using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
 using ElementDtorFn     = void  (*)(void* self);
 using ArrayDtorFn       = void* (*)(void* array);
@@ -170,7 +169,8 @@ void ReleaseString(void** slot) {
     --*rc;
     if (*rc == 0) {
         *slot = s - 8;
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*slot);
+        reinterpret_cast<MemFreeFn>(
+            AtomicExport(g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(*slot);
     } else {
         *slot = nullptr;
     }
@@ -206,10 +206,14 @@ void PlayInline(void* ui, int soundField) {
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(DocumentTextElement)
+namespace UI {
+
+// [1] 0x18003be50 / [2] 0x18003be30
+const char* DocumentTextElement::TypeName() const { return TypeNameOf(DocumentTextElementTypeInfo()); }
+uint32_t    DocumentTextElement::Type() const     { return TypeIdOf(DocumentTextElementTypeInfo()); }
 
 // ============================================================================
-// ?ComputeSize@DocumentTextElement@UI@@UEAAXXZ   0x1800cdb60
+// [4] ?ComputeSize@DocumentTextElement@UI@@UEAAXXZ   0x1800cdb60
 // ============================================================================
 // Throw away the previous item and link lists, floor the width at the wrap
 // width, zero the height, and let `GenerateItems` (0x1800cf060) re-lay the text
@@ -218,31 +222,30 @@ RTELEM_TYPE_BODIES(DocumentTextElement)
 // NOTE THE ASYMMETRY: the WIDTH is a floor (`if (_layoutWidth < _wrapWidth)`),
 // so a document inside a wider box keeps the box's width, while the HEIGHT is
 // unconditionally reset to 0 before the layout pass.
-extern "C" void RtUi_DocumentTextElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
+void DocumentTextElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
 
-    RtAddr<ClearArrayFn>(0x18003d1c0ull)(self + kItems);
-    RtAddr<ClearArrayFn>(0x18003d430ull)(self + kLinks);
+    RtAddr<ClearArrayFn>(0x18003d1c0ull)(&_itemsData);
+    RtAddr<ClearArrayFn>(0x18003d430ull)(&_linksData);
 
-    if (I32(self, kElemLayoutWidth) < I32(self, kWrapWidth))
-        I32(self, kElemLayoutWidth) = I32(self, kWrapWidth);
-    I32(self, kElemLayoutHeight) = 0;
+    if (_layoutWidth < _wrapWidth)
+        _layoutWidth = _wrapWidth;
+    _layoutHeight = 0;
 
-    RtAddr<GenerateItemsFn>(0x1800cf060ull)(self);
+    GenerateItems();   // 0x1800cf060 — was by address; the member (documenttext.cpp)
 
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
+    _flags &= ~kFlagNeedsSizeCalc;
 }
 
 // ============================================================================
-// ?ComputeLayout@DocumentTextElement@UI@@UEAAXHHHH@Z   0x1800cda00
+// [5] ?ComputeLayout@DocumentTextElement@UI@@UEAAXHHHH@Z   0x1800cda00
 // ============================================================================
-extern "C" void RtUi_DocumentTextElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    ElementComputeAlignedRect(self, x, y, w, h);
+void DocumentTextElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    ElementComputeAlignedRect(this, x, y, w, h);
 }
 
 // ============================================================================
-// ?Draw@DocumentTextElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800cd7a0
+// [6] ?Draw@DocumentTextElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800cd7a0
 // ============================================================================
 // One pass over the item list. There is NO alpha modulation anywhere in this
 // body: each item carries its own colour (Update computes it), and the `alpha`
@@ -255,82 +258,69 @@ extern "C" void RtUi_DocumentTextElement_ComputeLayout(void* self, int x, int y,
 //                 drawn with `_fonts[+0x1c]`, then optionally an underline bar
 //                 one pixel below the baseline. The temporary String is
 //                 released before the next item.
-//   1  SPRITE   — a UI::Sprite built ON THE STACK from `_sprites[+0x1c]` and
+//   1  SPRITE   — a UI::Sprite built ON THE STACK from `_sheets[+0x1c]` and
 //                 the item's +0x10, drawn at natural size in OPAQUE WHITE.
-//   2  CAPTURE  — a `UI::SpriteCapture` fetched from `_captureOwner->[+0x20]`,
+//   2  CAPTURE  — a `UI::SpriteCapture` fetched from `_resourceList->[+0x20]`,
 //                 type-tested, and given its own Draw. A failed type test
 //                 yields null and retail calls through it.
-extern "C" void RtUi_DocumentTextElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+void DocumentTextElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    void* const ctx = &context;
 
-    void* border = Pc(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<DrawFn>(border, kSlotDraw)(border, ctx, alpha);
+    if (_border != nullptr)
+        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
+    // UI::SpriteContext (block D's class) and System::String — doors by address.
     const auto addFont   = RtAddr<AddFontFn>(0x18011ccb0ull);
     const auto addPt     = RtAddr<AddSpritePtFn>(0x18011cf00ull);
     const auto addRect   = RtAddr<AddSpriteRectFn>(0x18011d3c0ull);
     const auto subString = RtAddr<SubStringFn>(0x1800c9230ull);
 
-    const int32_t count = I32c(self, kItemCount);
+    void* const* const fonts  = static_cast<void* const*>(_fontsData);
+    const int32_t count = _itemsCount;
     for (int32_t i = 0; i < count; ++i) {
-        const uint8_t* item = static_cast<const uint8_t*>(Pc(self, kItems)) +
-                              static_cast<int64_t>(i) * kItemStride;
-        const uint8_t kind = item[0x20];
-        const int L = I32c(self, kElemLayoutLeft);
-        const int T = I32c(self, kElemLayoutTop);
+        const Item* item = static_cast<const Item*>(_itemsData) + i;
+        const uint8_t kind = item->kind;
+        const int L = _layoutLeft;
+        const int T = _layoutTop;
 
         if (kind == 0) {
             void* tmp = nullptr;
-            subString(self + kSourceText, &tmp,
-                      *reinterpret_cast<const int32_t*>(item + 0x10),
-                      *reinterpret_cast<const int32_t*>(item + 0x14));
+            subString(&_sourceText, &tmp, item->first, item->last);
 
-            void* font = static_cast<void* const*>(Pc(self, kFonts))[
-                             *reinterpret_cast<const int32_t*>(item + 0x1c)];
+            void* font = static_cast<void* const*>(_fontsData)[item->index];
             addFont(ctx, font, &tmp, 0, 0, 0, -1,
-                    *reinterpret_cast<const int32_t*>(item + 0x00) + L,
-                    *reinterpret_cast<const int32_t*>(item + 0x04) + T,
-                    *reinterpret_cast<const uint32_t*>(item + 0x18));
+                    item->x + L, item->y + T, static_cast<uint32_t>(item->color));
 
-            const uint8_t underline = item[0x21];
+            const uint8_t underline = item->byte21;
             if (underline == 1 || underline == 2) {
-                int width = *reinterpret_cast<const int32_t*>(item + 0x08);
+                int width = item->width;
                 if (underline == 2) {
-                    const void* f = static_cast<void* const*>(Pc(self, kFonts))[
-                                        *reinterpret_cast<const int32_t*>(item + 0x1c)];
+                    const void* f = fonts[item->index];
                     width -= I32c(f, kFontUnderlineTrim);
                 }
-                const int x = *reinterpret_cast<const int32_t*>(item + 0x00) + L;
-                const int y = *reinterpret_cast<const int32_t*>(item + 0x04) + T;
-                addRect(ctx, self + kUnderlineSprite, x, y + 1, width + x, y + 2,
-                        *reinterpret_cast<const uint32_t*>(item + 0x18));
+                const int x = item->x + L;
+                const int y = item->y + T;
+                addRect(ctx, &_underlineSprite, x, y + 1, width + x, y + 2,
+                        static_cast<uint32_t>(item->color));
             }
             ReleaseString(&tmp);
         } else if (kind == 1) {
             struct { void* sheet; int32_t index; int32_t pad; } sprite;
-            sprite.sheet = static_cast<void* const*>(Pc(self, kSprites))[
-                               *reinterpret_cast<const int32_t*>(item + 0x1c)];
-            sprite.index = *reinterpret_cast<const int32_t*>(item + 0x10);
-            addPt(ctx, &sprite,
-                  L + *reinterpret_cast<const int32_t*>(item + 0x00),
-                  T + *reinterpret_cast<const int32_t*>(item + 0x04),
-                  0xffffffffu);
+            sprite.sheet = static_cast<void* const*>(_sheetsData)[item->index];
+            sprite.index = item->first;
+            addPt(ctx, &sprite, L + item->x, T + item->y, 0xffffffffu);
         } else if (kind == 2) {
-            void* obj = static_cast<void* const*>(Pc(Pc(self, kCaptureOwner), 0x20))[
-                            *reinterpret_cast<const int32_t*>(item + 0x1c)];
+            void* obj = static_cast<void* const*>(Pc(_resourceList, 0x20))[item->index];
             void* capture = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(obj, SpriteCaptureTypeId())
                                 ? obj : nullptr;
-            RtAddr<CaptureDrawFn>(0x1800d9230ull)(
-                capture, ctx,
-                L + *reinterpret_cast<const int32_t*>(item + 0x00),
-                T + *reinterpret_cast<const int32_t*>(item + 0x04));
+            // UI::SpriteCapture::Draw (block D's class) — a door by address.
+            RtAddr<CaptureDrawFn>(0x1800d9230ull)(capture, ctx, L + item->x, T + item->y);
         }
     }
 }
 
 // ============================================================================
-// ?Update@DocumentTextElement@UI@@   0x1800cd360
+// [7] ?Update@DocumentTextElement@UI@@   0x1800cd360
 // ============================================================================
 // Link hit testing and colouring, one link span at a time.
 //
@@ -347,98 +337,126 @@ extern "C" void RtUi_DocumentTextElement_Draw(const void* selfv, void* ctx, uint
 // draws one glyph too much of rule on every link.
 //
 // `UI::UserInterface::Play` is INLINED here, twice — see PlayInline above.
-extern "C" void RtUi_DocumentTextElement_Update(void* selfv, const void* time, void* ui,
-                                                void** dlg, const void* statev) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* st = static_cast<const uint8_t*>(statev);
-
+void DocumentTextElement::Update(const System::Time& time, UserInterface* ui,
+                                 Object::InternalPtr<DialogInstance>* dialog,
+                                 const UpdateState& state) {
     {
-        void* dlgCopy = *dlg;
-        using ElemUpdateFn = void (*)(void*, const void*, void*, void**, const void*);
-        RtAddr<ElemUpdateFn>(0x180116270ull)(self, time, ui, &dlgCopy, st);
+        // The base Update, QUALIFIED (this object's slot 7 is this very body),
+        // with the handle copied into a temporary whose ADDRESS is passed.
+        Object::InternalPtr<DialogInstance> dlgCopy = *dialog;
+        Element::Update(time, ui, &dlgCopy, state);
     }
 
-    if ((U32(self, kElemFlags) & kFlagHidden) != 0) return;
+    if ((_flags & kFlagHidden) != 0) return;
 
-    const int32_t linkCount = I32(self, kLinkCount);
+    const int32_t linkCount = _linksCount;
     for (int32_t li = 0; li < linkCount; ++li) {
-        uint8_t* link = static_cast<uint8_t*>(P(self, kLinks)) +
-                        static_cast<int64_t>(li) * kLinkStride;
+        Link* link = static_cast<Link*>(_linksData) + li;
 
-        uint32_t colour = U32(self, kColorNormal);
+        uint32_t colour = _linkColor;
         bool hit = false;
         bool pressed = false;
 
-        if ((U32(self, kElemFlags) & 0x20000u) != 0) {
-            int32_t j = I32(link, 0x08);
-            const int32_t end = I32(link, 0x0c);
+        if ((_flags & 0x20000u) != 0) {
+            int32_t j = link->firstItem;
+            const int32_t end = link->lastItem;
             for (; j < end; ++j) {
-                uint8_t* item = static_cast<uint8_t*>(P(self, kItems)) +
-                                static_cast<int64_t>(j) * kItemStride;
-                int y0 = I32(item, 0x04) + I32(self, kElemLayoutTop);
-                int y1 = I32(item, 0x0c) + y0;
-                if (item[0x20] == 0) {
-                    const void* f = static_cast<void* const*>(P(self, kFonts))[I32(item, 0x1c)];
+                const Item* item = static_cast<const Item*>(_itemsData) + j;
+                int y0 = item->y + _layoutTop;
+                int y1 = item->height + y0;
+                if (item->kind == 0) {
+                    const void* f = static_cast<void* const*>(_fontsData)[item->index];
                     const int adj = I32c(f, kFontBaseline) - I32c(f, kFontLineHeight);
                     y0 += adj;
                     y1 += adj;
                 }
-                const int x0 = I32(item, 0x00) + I32(self, kElemLayoutLeft);
-                const int x1 = I32(item, 0x08) + x0;
-                if (x0 <= I32c(st, kStateMouseX) && I32c(st, kStateMouseX) < x1 &&
-                    y0 <= I32c(st, kStateMouseY) && I32c(st, kStateMouseY) < y1) {
+                const int x0 = item->x + _layoutLeft;
+                const int x1 = item->width + x0;
+                if (x0 <= state.mouseX && state.mouseX < x1 &&
+                    y0 <= state.mouseY && state.mouseY < y1) {
                     hit = true;
                     break;
                 }
             }
         }
 
-        if (st[kStateMouseDown] != 0 && hit) link[0x10] = 1;
+        if (state.buttonPressed != 0 && hit) link->armed = 1;
 
-        if ((U32(self, kElemFlags) & kFlagDisabledMask) == 0) {
+        if ((_flags & kFlagDisabledMask) == 0) {
             if (hit) {
-                colour = (link[0x10] != 0 && st[kStateMouseHeld] != 0)
-                             ? U32(self, kColorPressed) : U32(self, kColorHover);
+                colour = (link->armed != 0 && state.leftDown != 0)
+                             ? _linkPressedColor : _linkHoverColor;
                 pressed = true;
             } else {
-                link[0x10] = 0;
+                link->armed = 0;
             }
         } else {
-            colour = U32(self, kColorNormal);
-            if (!hit) link[0x10] = 0;
+            colour = _linkColor;
+            if (!hit) link->armed = 0;
         }
 
-        for (int32_t j = I32(link, 0x08); j < I32(link, 0x0c); ++j) {
-            uint8_t* item = static_cast<uint8_t*>(P(self, kItems)) +
-                            static_cast<int64_t>(j) * kItemStride;
-            if (item[0x20] != 0) continue;
-            U32(item, 0x18) = colour;
-            if (j == I32(link, 0x0c) - 1 && pressed) item[0x21] = 2;
-            else                                     item[0x21] = pressed ? 1 : 0;
+        for (int32_t j = link->firstItem; j < link->lastItem; ++j) {
+            Item* item = static_cast<Item*>(_itemsData) + j;
+            if (item->kind != 0) continue;
+            item->color = static_cast<int32_t>(colour);
+            if (j == link->lastItem - 1 && pressed) item->byte21 = 2;
+            else                                    item->byte21 = pressed ? 1 : 0;
         }
 
-        if (st[kStateMouseDown] != 0 && hit && link[0x10] != 0)
+        if (state.buttonPressed != 0 && hit && link->armed != 0)
             PlayInline(ui, kUiHoverSound);
 
-        if (st[kStateMouseUp] != 0 && hit && link[0x10] != 0) {
+        if (state.b04 != 0 && hit && link->armed != 0) {
             Event ev;
-            ev.dialog    = *dlg;
-            ev.element   = self;
+            ev.dialog    = dialog->Get();
+            ev.element   = this;
             ev.kind      = kEventActivated;
-            ev.elementId = I32(self, kElemElementId);
-            ev.x         = I32c(st, kStateMouseX);
-            ev.y         = I32c(st, kStateMouseY);
+            ev.elementId = _elementId;
+            ev.x         = state.mouseX;
+            ev.y         = state.mouseY;
             ev.index     = li;
             ev.tail      = 0;
-            RtAddr<EventPushFn>(0x180033690ull)(static_cast<uint8_t*>(ui) + kUiEvents,
+            // UserInterface's event array (block E's class): raw offsets, by address.
+            RtAddr<EventPushFn>(0x180033690ull)(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
                                                 I32(ui, kUiEventCount) + 1, &ev);
             PlayInline(ui, kUiClickSound);
         }
     }
 }
 
+}  // namespace UI
+
 // ============================================================================
-// Constructors / destructor
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_DocumentTextElement_Type(const void* self) {
+    return reinterpret_cast<const UI::DocumentTextElement*>(self)->UI::DocumentTextElement::Type();
+}
+extern "C" const char* RtUi_DocumentTextElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::DocumentTextElement*>(self)
+        ->UI::DocumentTextElement::TypeName();
+}
+extern "C" void RtUi_DocumentTextElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::ComputeSize();
+}
+extern "C" void RtUi_DocumentTextElement_ComputeLayout(void* self, int x, int y, int w, int h) {
+    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::ComputeLayout(
+        x, y, w, h);
+}
+extern "C" void RtUi_DocumentTextElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::DocumentTextElement*>(self)->UI::DocumentTextElement::Draw(
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_DocumentTextElement_Update(void* self, const void* time, void* ui,
+                                                void** dlg, const void* state) {
+    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::Update(
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(state));
+}
+
+// ============================================================================
+// Constructors / destructor — DOORS (B4b-2), bodies unchanged.
 // ============================================================================
 
 extern "C" void* RtUi_DocumentTextElement_CopyCtor(void* selfv, const void* otherv) {

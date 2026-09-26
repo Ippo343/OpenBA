@@ -27,6 +27,10 @@
 // The ctor writes all six sprites as {null sheet, index -1} and the colour as
 // 0xFFFFFFFF, then 1.0f and 0.25f into the two floats below. sizeof is 0x130,
 // from the vector deleting destructor's `MOV EDX,0x130` at 0x180078182.
+//
+// ENDGAME B.3.6 block C5: the Wave 7 POD MOVED to `RtUI::ProgressElement`
+// (B4b-1) — widgets_input.cpp's two setter doors still take it — and the retail
+// name is the REAL class below, cross-asserted field for field.
 // ============================================================================
 
 #include <cstdint>
@@ -34,7 +38,7 @@
 #include "Element.h"
 #include "Sprite.h"
 
-namespace UI {
+namespace RtUI {
 
 struct ProgressElement {
     RtUI::Element  base;              // +0x00 .. +0xBF
@@ -57,5 +61,91 @@ static_assert(offsetof(ProgressElement, _backgroundColor) == 0x120, "");
 static_assert(offsetof(ProgressElement, base)         == 0x00,  "ProgressElement::base @ +0x00");
 static_assert(offsetof(ProgressElement, _maxValue)    == 0x124, "ProgressElement::_maxValue @ +0x124");
 static_assert(offsetof(ProgressElement, _currentValue)== 0x128, "ProgressElement::_currentValue @ +0x128");
+
+} // namespace RtUI
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block C5) — `UI::ProgressElement`, the REAL C++ class
+// ############################################################################
+//
+// PARENT, read (B36_SLOTS.md section 3), recorded not used (RULE B6-7):
+//     ?_TypeName@ProgressElement@UI@@CAPEBDXZ       @0x180077d00 -> "ProgressElement"
+//     ?_ParentTypeName@ProgressElement@UI@@CAPEBDXZ @0x180077d10 -> "Element"
+//
+// `??_7ProgressElement@UI@@6B@` @ 0x180159180, TWELVE slots; sizeof 0x130:
+//   [0] 0x180078150 deleting dtor (RT_DELDTOR row)  [1] 0x180077d40 TypeName
+//   [2] 0x180077d20 Type        [3] Element::Persist (inherited)
+//   [4] 0x1801198f0 ComputeSize [5] 0x180119610 ComputeLayout
+//   [6] 0x1801192c0 Draw        [7..11] Element's (inherited — Update too)
+//
+// ABSTRACT (slot 0 `= 0`), NO real ctor: every live one is built by the
+// `??0ProgressElement@UI@@QEAA@XZ` door (0x180119c40, progresselement.cpp)
+// and wears the MINTED table.
+// ############################################################################
+namespace UI {
+
+class ProgressElement : public Element {
+public:
+    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180078150
+    const char* TypeName() const override;                        // [1] 0x180077d40
+    uint32_t    Type() const override;                            // [2] 0x180077d20
+    void ComputeSize() override;                                  // [4] 0x1801198f0
+    void ComputeLayout(int32_t x, int32_t y,
+                       int32_t w, int32_t h) override;            // [5] 0x180119610
+    void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x1801192c0
+
+    // ---- non-virtual members ----------------------------------------------
+    // One instruction each, read as disassembly this block. The registered
+    // doors for the two float setters are widgets_input.cpp's (fragment pass).
+    void SetMaximumValue(float v)       { _maxValue = v; }        // 0x180077ec0 MOVSS [RCX+0x124],XMM1
+    void SetCurrentValue(float v)       { _currentValue = v; }    // 0x180077ed0 MOVSS [RCX+0x128],XMM1
+    void SetBackgroundColor(uint32_t c) { _backgroundColor = c; } // 0x180077ee0 MOV [RCX+0x120],EDX
+    // Body in widgets_input.cpp (door RtUi_ProgressElement_SetProgressTextParameter).
+    void SetProgressTextParameter(int32_t index, const System::String& text); // 0x180119b30
+    void SetProgressText(::UIString text);                        // 0x180119bd0  not ported
+
+    ProgressElement(const ProgressElement& src);                  // 0x180077f10  not ported
+    ProgressElement& operator=(const ProgressElement& src);       // 0x180078020  not ported
+    static uint32_t TypeId();                                     // not ported
+    static Object::Base* CreateNewObject();                       // factory door
+    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+
+protected:
+    ProgressElement() = default;   // NOT ??0ProgressElement (0x180119c40, a door)
+    ~ProgressElement();            // ??1ProgressElement 0x180077ef0 — the door; declared only
+
+private:
+    static const char* _TypeName();                               // 0x180077d00 -> "ProgressElement"
+    static const char* _ParentTypeName();                         // 0x180077d10 -> "Element"
+    static Object::BaseTypeInfo _typeInfo;                        // minted
+
+public:
+    ::Sprite _fillLeft;         // +0xC0   } the FILL, drawn with Element::_color
+    ::Sprite _fillMiddle;       // +0xD0   }
+    ::Sprite _fillRight;        // +0xE0   }
+    ::Sprite _trackLeft;        // +0xF0   } the TRACK, drawn with _backgroundColor
+    ::Sprite _trackMiddle;      // +0x100  }
+    ::Sprite _trackRight;       // +0x110  }
+    uint32_t _backgroundColor;  // +0x120  ctor 0xFFFFFFFF
+    float    _maxValue;         // +0x124  ctor 1.0f
+    float    _currentValue;     // +0x128  ctor 0.25f
+    uint32_t _pad12c;           // +0x12C  written by nothing
+};
+
+static_assert(sizeof(ProgressElement) == 0x130,
+              "UI::ProgressElement is 0x130 (MOV EDX,0x130 in 0x180078150)");
+static_assert(alignof(ProgressElement) == 8, "UI::ProgressElement aligns to 8");
+static_assert(offsetof(ProgressElement, _fillLeft) == sizeof(Element), "");
+// The class and the POD describe the same bytes.
+static_assert(sizeof(ProgressElement) == sizeof(RtUI::ProgressElement), "");
+static_assert(offsetof(ProgressElement, _fillLeft)        == offsetof(RtUI::ProgressElement, _fillLeft), "");
+static_assert(offsetof(ProgressElement, _fillMiddle)      == offsetof(RtUI::ProgressElement, _fillMiddle), "");
+static_assert(offsetof(ProgressElement, _fillRight)       == offsetof(RtUI::ProgressElement, _fillRight), "");
+static_assert(offsetof(ProgressElement, _trackLeft)       == offsetof(RtUI::ProgressElement, _trackLeft), "");
+static_assert(offsetof(ProgressElement, _trackMiddle)     == offsetof(RtUI::ProgressElement, _trackMiddle), "");
+static_assert(offsetof(ProgressElement, _trackRight)      == offsetof(RtUI::ProgressElement, _trackRight), "");
+static_assert(offsetof(ProgressElement, _backgroundColor) == offsetof(RtUI::ProgressElement, _backgroundColor), "");
+static_assert(offsetof(ProgressElement, _maxValue)        == offsetof(RtUI::ProgressElement, _maxValue), "");
+static_assert(offsetof(ProgressElement, _currentValue)    == offsetof(RtUI::ProgressElement, _currentValue), "");
 
 } // namespace UI
