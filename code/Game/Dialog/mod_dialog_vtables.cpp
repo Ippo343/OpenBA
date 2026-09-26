@@ -55,6 +55,7 @@
 
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "engine/UpdateLoop.h"   // ENDGAME B.3.7 callers (K1)
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
@@ -435,10 +436,8 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
         uintptr_t inner = *reinterpret_cast<uintptr_t*>(
             reinterpret_cast<uintptr_t>(engine) + 0x20);
         if (inner) {
-            typedef void (*fn_PrepareReload_t)(void*, bool, void*);
-            auto fn = reinterpret_cast<fn_PrepareReload_t>(
-                *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(inner) + 0x38));
-            fn(reinterpret_cast<void*>(inner), true, statePtr);
+            reinterpret_cast<Engine::UpdateLoop*>(inner)->SaveRestore(  // B.3.7 bridge
+                true, reinterpret_cast<Save::SavedState*>(statePtr));
         }
     }
 

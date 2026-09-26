@@ -14,15 +14,23 @@
 // Nothing here is registered as a vtable slot: neither class exports a
 // `??_7`, and this lane verified (not assumed) that none of the 15 ported
 // bodies dereferences a vtable pointer anywhere — see the type header.
+//
+// ENDGAME B.3.7 block B5: the bodies are MEMBERS of the real classes
+// `Input::KeyMap` / `Input::Device` / `Input::Configuration`
+// (runtime/types/input/Input.h, Device.h); the registered free functions are
+// one-line doors. `KeyMap::Released` (0x1800a79b0) is new here.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 
-using namespace RtInput;
+using Input::Binding;
+using Input::BindingNode;
+using State = Input::Device::State;
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / Module, forward-declared rather than pulled in from
@@ -38,24 +46,6 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 extern bool RtIo_Persistence_GetBool(void* self, const char* section, const char* key, bool* out);
 extern void RtIo_Persistence_SetBool(void* self, const char* section, const char* key, bool value);
 
-// Wave 9 lane INPUT: the lockstep oracle for the five `Collection::Set` AVL
-// bodies this file reaches by address (runtime/src/collection/set_avl_e24.cpp).
-// SELF-SCHEDULED on the first real RegisterInput rather than run from
-// RtInputPortInit: the probe allocates, and at port-init time the allocator has
-// been constructed but not started — a probe that allocates from a *PortInit
-// faults on a null `_singleton` at +0x640 (lane PKG2). The first RegisterInput
-// call is provably safe because the caller is itself about to allocate a node.
-// Wave 9 lane ENGIO. Runs at most once, and only when
-// RT_INPUTUPD_PROBE=1. Hooked from KeyMap::GetValue rather than
-// from the function it verifies, because Input::Device::Update has NO
-// CALLER in this tree -- the live per-frame call is a near call inside the
-// DLL's held-back MainLoop::Run, which no registration can intercept, so a
-// hook inside the port can never fire (the first version of this lane put
-// it there and measured nothing). KeyMap::GetValue is a gameplay-path
-// function measured at calls=9000 on the autostart route, which is late
-// enough that Application::_singleton and Input::Configuration::_singleton
-// are both published.
-
 namespace {
 
 // ============================================================================
@@ -66,14 +56,13 @@ namespace {
 // (+0x28); id == node.id -> found. Pinned identically (down to the branch
 // order) in the disassembly of GetDeviceForId (0x1800a7970),
 // GetInputForId (0x1800a7930), GetValue (0x1800a7b60), Pressed (0x1800a7a80),
-// SetInput (0x1800a7e20), ClearInput/2 (0x1800a7d70), ClearInput/3
-// (0x1800a7db0) and the search half of RegisterInput (0x1800a7e70, held back
-// — see the wave doc). Returns nullptr on no match, exactly like retail's
-// RAX ending at 0 — every caller below reproduces retail's un-null-guarded
-// use of that result (CLAUDE.md: a faithful crash on a bad id is not ours to
-// fix).
-BindingNode* FindBinding(KeyMap* km, uint8_t id) {
-    auto* n = static_cast<BindingNode*>(km->_root);
+// Released (0x1800a79b0), SetInput (0x1800a7e20), ClearInput/2 (0x1800a7d70),
+// ClearInput/3 (0x1800a7db0) and the search half of RegisterInput
+// (0x1800a7e70). Returns nullptr on no match, exactly like retail's RAX ending
+// at 0 — every caller below reproduces retail's un-null-guarded use of that
+// result (CLAUDE.md: a faithful crash on a bad id is not ours to fix).
+BindingNode* FindBinding(const Input::KeyMap* km, uint8_t id) {
+    BindingNode* n = km->_root;
     while (n) {
         if (id < n->element.id) {
             n = n->left;
@@ -104,113 +93,153 @@ BindingNode* Successor(BindingNode* n) {
     return p;
 }
 
-// Device::_singleton, an exported DATA symbol (retail 0x1801fe770). NOT
-// registered by this lane (data exports carry nothing to redirect — every
-// prior wave's note applies unchanged); read directly, exactly like
-// engine_funcs.cpp's own g_pInputDeviceSingleton.
-uint8_t* DeviceSingleton() {
-    uint8_t** slot = RT_DATA_SLOT(uint8_t**,
+// Device::_singleton, an exported DATA symbol (retail 0x1801fe770), read
+// through the port-aware data door (carry-over 5: it stays a slot until the
+// end of B.3), exactly like engine_funcs.cpp's own g_pInputDeviceSingleton.
+Input::Device* DeviceSingleton() {
+    Input::Device** slot = RT_DATA_SLOT(Input::Device**,
         "?_singleton@Device@Input@@0PEAV12@EA");
     return slot ? *slot : nullptr;
 }
 
-// Resolve a (device, slot-local input id) pair to the base address of that
-// input's State record's containing array, exactly as GetValue/Pressed/
-// Released's shared dispatch does: device 0 = joystick `deviceCtx`
-// (the function's OWN first int parameter, threaded through unchanged),
-// device 1 = keyboard, device 2 = mouse, anything else = nullptr (retail's
-// R8 stays 0 in that branch too — a faithful potential null deref on an
-// invalid device index, not a case this lane invents).
-uint8_t* DeviceArrayBase(uint8_t* deviceSingleton, int32_t device, int32_t deviceCtx) {
+// Resolve a (device, joystick) pair to the base of that device's State block,
+// exactly as GetValue/Pressed/Released's shared dispatch does: device 0 =
+// joystick block `joystick` (the function's OWN first int parameter, threaded
+// through unchanged), device 1 = keyboard, device 2 = mouse, anything else =
+// nullptr (retail's R8 stays 0 in that branch too — a faithful potential null
+// deref on an invalid device index, not a case this port invents). BYTE
+// arithmetic, not `&d->_joystick[joystick]`: retail neither bounds the index
+// nor requires `d` to be non-null, and neither does this.
+State* DeviceArrayBase(const Input::Device* d, int32_t device, int32_t joystick) {
+    auto* base = reinterpret_cast<uint8_t*>(const_cast<Input::Device*>(d));
     switch (device) {
-        case 0: return deviceSingleton + static_cast<int64_t>(deviceCtx) * kJoystickStride;
-        case 1: return deviceSingleton + kKeyboardOffset;
-        case 2: return deviceSingleton + kMouseOffset;
+        case 0: return reinterpret_cast<State*>(
+                    base + static_cast<int64_t>(joystick) * RtInput::kJoystickStride);
+        case 1: return reinterpret_cast<State*>(base + RtInput::kKeyboardOffset);
+        case 2: return reinterpret_cast<State*>(base + RtInput::kMouseOffset);
         default: return nullptr;
     }
 }
 
+// ---------------------------------------------------------------------------
+// RULE B6-5 door caches (ENDGAME B.3.7). ClearAll and RegisterInput reach four
+// unexported Collection::Set<E24> bodies by address. As free functions they
+// kept function-local `static` first-call caches; as members they may not, so
+// each is a namespace-scope `std::atomic<void*>` slot resolved with the
+// never-cache-a-null shape of runtime/src/ui/element_common.h's `AtomicAddr`.
+// The addresses and the bodies they reach are unchanged (set_avl_e24.cpp
+// registers 0x180023060/130/170, allocator.cpp 0x180009c30).
+// ---------------------------------------------------------------------------
+std::atomic<void*> g_setDestroySubtree{nullptr};   // 0x180023130
+std::atomic<void*> g_setFreeNode{nullptr};         // 0x180009c30
+std::atomic<void*> g_setAllocNode{nullptr};        // 0x180023060
+std::atomic<void*> g_setRebalance{nullptr};        // 0x180023170
+
+inline void* AtomicAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+// The three device-state readers of KeyMap (GetValue / Pressed / Released)
+// share ONE shape and differ only in which State byte they read and what they
+// return. Retail spells it out three times; the per-slot loop is written once
+// here and each member passes its field reader.
+//
+//   for slot in 0..1:
+//     d = (int8)binding.device[slot]
+//     if (_suspendCount > 0 && d == 1) return 0   <- WHOLE call, not `continue`
+//     if (d < 0) continue                          (0xFF unbound)
+//     v = state(base(d, joystick))[inputId[slot]]
+//     if (v) return v
+//   return 0
+//
+// ORDER: retail tests the suspend condition BEFORE the unbound test
+// (Released 0x1800a79f1..0x1800a7a05: `TEST EBX,EBX ; JLE` / `CMP [..+0x10],1 ;
+// JZ return0` / THEN `TEST CL,CL ; JS next`). A device byte of 1 is never
+// negative, so the two orders agree on every input; retail's is kept.
+template <typename T, typename Read>
+T ReadBoundState(const Input::KeyMap* km, int32_t joystick, int32_t id, Read read) {
+    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
+    const Input::Device* dev = DeviceSingleton();
+    for (int slot = 0; slot < 2; ++slot) {
+        // Faithful to retail: a missing id leaves n == nullptr and this reads
+        // through a near-null address — the same crash retail would take.
+        const int8_t device = static_cast<int8_t>(n->element.device[slot]);
+        if (km->_suspendCount > 0 && device == 1) return T();
+        if (device < 0) continue;
+        State* base = DeviceArrayBase(dev, device, joystick);
+        const T v = read(base[n->element.inputId[slot]]);
+        if (v) return v;
+    }
+    return T();
+}
+
 }  // namespace
 
-// ============================================================================
-// Input::KeyMap — 9 of 11 ported
-// ============================================================================
+// ############################################################################
+// Input::KeyMap — the member bodies (ENDGAME B.3.7 block B5: moved off the
+// registered free functions, which are one-line doors at the bottom).
+// ############################################################################
+namespace Input {
 
 // ?ClearAll@KeyMap@Input@@QEAAXXZ  retail 0x1800a7d20  ord 1706
 //
 // A full teardown of the binding tree. The recursive subtree-destroy and the
-// single-node free are NOT reimplemented: they are Collection::Set<Binding>
-// internals shared with every other Set instantiation in the DLL (same
-// reasoning as runtime/src/io/persistence.cpp's Map_Find/Map_Insert), called
-// here by address exactly as retail's own disassembly does — both take
-// `&this->_root` as their first argument (0x1800a7d20: `LEA RBX,[RCX+8]`
-// feeds RCX at both call sites), not `this`, so there is no ABI ambiguity to
-// resolve (contrast RegisterInput, held back for exactly that reason below).
-// NOT CONVERTED (ENDGAME B.3.2 step 2), every Set-shaped call in this file
-// (DestroySubtree here, AllocNode/Retrace in RegisterInput below): `KeyMap`
-// (runtime/types/input/KeyMap.h) types its tree as separate `void* _root` /
-// `int32_t _count` fields rather than a real `Collection::Set<Binding,...>`
-// member — the same split-field pattern `Collection::Array<T>` sites hit
-// elsewhere in this batch. Converting these needs more than a member
-// retype, though: `Binding`'s key is an unsigned BYTE id compared with a
-// plain unsigned less-than, not `Collection::AVLCompare`'s string compare, so
-// it would also need a new `Compare` policy (a `KeyTraits`/`CompareTraits`
-// specialization, Collection.h's `detail` namespace) before
-// `Collection::Set<Binding, ByteIdCompare>::Insert`/`Remove`/`Clear` could
-// stand in for these three address doors. That is Collection-side policy
-// work this batch does not own.
-using SetDestroySubtreeFn = void (*)(void* setPtr, BindingNode* node);
-using SetFreeNodeFn       = void (*)(void* setPtr, BindingNode* node);
+// single-node free are Collection::Set<Binding> internals shared with every
+// other Set instantiation in the DLL, called by address exactly as retail's
+// own disassembly does — both take `&this->_root` as their first argument
+// (0x1800a7d20: `LEA RBX,[RCX+8]` feeds RCX at both call sites), not `this`.
+// NOT CONVERTED to a `Collection::Set` member (ENDGAME B.3.2 step 2):
+// `Binding`'s key is an unsigned BYTE id compared with a plain unsigned
+// less-than, not `Collection::AVLCompare`'s string compare, so it would need a
+// new `Compare` policy (Collection.h's `detail` namespace) before
+// `Collection::Set<Binding, ByteIdCompare>::Clear` could stand in for these
+// address doors. That is Collection-side policy work, not Input's.
+void KeyMap::ClearAll() {
+    using SetDestroySubtreeFn = void (*)(void* setPtr, BindingNode* node);
+    using SetFreeNodeFn       = void (*)(void* setPtr, BindingNode* node);
+    auto destroySubtree = reinterpret_cast<SetDestroySubtreeFn>(
+        AtomicAddr(g_setDestroySubtree, 0x180023130));
+    auto freeNode = reinterpret_cast<SetFreeNodeFn>(
+        AtomicAddr(g_setFreeNode, 0x180009c30));
 
-void RtInput_KeyMap_ClearAll(void* self) {
-    static auto destroySubtree = reinterpret_cast<SetDestroySubtreeFn>(
-        ResolveAddr(Module::Runtime, 0x180023130));
-    static auto freeNode = reinterpret_cast<SetFreeNodeFn>(
-        ResolveAddr(Module::Runtime, 0x180009c30));
-
-    auto* km = static_cast<KeyMap*>(self);
-    void* setPtr = &km->_root;
-    auto* root = static_cast<BindingNode*>(km->_root);
+    void* setPtr = &_root;
+    BindingNode* root = _root;
     if (root) {
         destroySubtree(setPtr, root->left);
         destroySubtree(setPtr, root->right);
         freeNode(setPtr, root);
     }
-    km->_count = 0;
-    km->_root = nullptr;
-
+    _count = 0;
+    _root = nullptr;
 }
 
 // ?ClearInput@KeyMap@Input@@QEAAXHH@Z  retail 0x1800a7d70  ord 1709
 // ClearInput(id, slot): unbind ONE slot of the binding with this id.
-// Un-guarded on a missing id, faithfully (retail's RAX==0 write-through).
-void RtInput_KeyMap_ClearInput_HH(void* self, int32_t id, int32_t slot) {
-    auto* km = static_cast<KeyMap*>(self);
-    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
-    // Faithful to retail: a missing id leaves n==nullptr and the write below
-    // targets address (0+slot+0x10/0x12) — the same crash retail would take.
+// Un-guarded on a missing id, faithfully (retail's RAX==0 write-through): the
+// write targets address (0+slot+0x10/0x12) — the same crash retail would take.
+void KeyMap::ClearInput(int32_t id, int32_t slot) {
+    BindingNode* n = FindBinding(this, static_cast<uint8_t>(id));
     n->element.device[slot]  = 0xFF;
     n->element.inputId[slot] = 0;
-
-    bool ok = n && n->element.device[slot] == 0xFF && n->element.inputId[slot] == 0;
 }
 
 // ?ClearInput@KeyMap@Input@@QEAAXHHH@Z  retail 0x1800a7db0  ord 1710
 // ClearInput(id, device, inputId): unbind whichever slot (of the id's two)
 // currently matches (device, inputId). Checks BOTH slots (retail's loop does
 // not early-out on a match — see 0x1800a7db0: JNZ 0x1800a7e02 from the match
-// branch too, straight into the increment).
-void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32_t inputId) {
-    auto* km = static_cast<KeyMap*>(self);
-    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
-    // n may be nullptr here (retail: RAX=0 -> the array base is address 0);
-    // faithfully NOT guarded (see the 2-arg overload's comment) — the same
-    // element-pointer arithmetic on a null `n` reproduces retail's exact
-    // near-null read/write address.
+// branch too, straight into the increment). `n` may be nullptr here and is
+// faithfully NOT guarded.
+void KeyMap::ClearInput(int32_t id, int32_t device, int32_t input) {
+    BindingNode* n = FindBinding(this, static_cast<uint8_t>(id));
     for (int slot = 0; slot < 2; ++slot) {
         int8_t  d = static_cast<int8_t>(n->element.device[slot]);
         uint8_t k = n->element.inputId[slot];
-        if (d == device && k == inputId) {
+        if (d == device && k == input) {
             n->element.device[slot] = 0xFF;
             n->element.inputId[slot] = 0;
         }
@@ -218,20 +247,11 @@ void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32
 }
 
 // ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z  retail 0x1800a7e70  ord 3529
-// (this line said "ord 3712" until Wave 9 lane INPUT re-read the export
-// directory with pefile: 3529 is the ordinal, 3712 is not this symbol.)
 //
-// UNBLOCKED 2026-09-07. Wave 8 lane D held this back because it could not pin
-// the first argument of the node allocator FUN_180023060. Reading the CALLEE
-// settles it: RCX is never read -- 0x180023097 `MOV RCX,RBX` destroys it before
-// any use, loading the allocator critical section at *(0x1801fc718)+0x640. The
-// real signature is
-//     BindingNode* AllocNode(<unused>, const Binding* src, BindingNode* parent)
-// and the call sites agree in the stronger form: RCX is `this` at 0x1800a7ee6
-// (reached only when the tree is empty, so the descent loop never ran) and a
-// zero-extended id byte at 0x1800a7f3a/0x1800a7f4d. A value that differs like
-// that across call sites cannot be a parameter the callee reads.
-// See docs/runtime_port/WAVE8_LANE_D.md for the full write-up.
+// The node allocator FUN_180023060's first argument is never read
+// (0x180023097 `MOV RCX,RBX` destroys it before any use), so the real
+// signature is `BindingNode* AllocNode(<unused>, const Binding* src,
+// BindingNode* parent)`. See docs/runtime_port/WAVE8_LANE_D.md.
 //
 // SHAPE (0x1800a7e70). Retail descends the tree TWICE and that is kept:
 //   1. a read-only descent that returns early if `id` is already registered;
@@ -241,51 +261,21 @@ void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32
 // The empty-tree path skips the rebalance and increments BEFORE storing _root
 // (0x1800a7eeb then 0x1800a7eee) -- order kept.
 //
-// The id compare is UNSIGNED (retail `CMP DL,CL; JC` -- JC is below, not less),
-// matching FindBinding above and every other member of this family.
-//
+// The id compare is UNSIGNED (retail `CMP DL,CL; JC` -- JC is below, not less).
 // Slot 1 is initialised UNBOUND: device[1] = 0xFF, inputId[1] = 0
 // (0x1800a7eca, 0x1800a7ecf). _pad02 and _pad14 are NOT written by retail, so
-// the node inherits whatever the allocator handed back there -- faithful, and
-// the reason the oracle below compares fields rather than bytes
-// (reference_oracle_must_not_compare_unwritten_bytes.md).
-//
-// ORACLE: OUR WRITER, THEIR READERS -- and it has to be, because there is no
-// replay available. RegisterInput mutates the one shared AVL tree, so calling
-// ours and then theirs would insert the same id twice (the second call would in
-// fact return early, silently making the oracle vacuous). Instead the insert is
-// verified by asking the DLL'S OWN accessors, resolved through
-// the raw DLL door so they are the shipped bodies, to read back what we wrote:
-// GetDeviceForId / GetInputForId must report the pair we inserted for slot 0
-// and `unbound` for slot 1, GetIdForDeviceInput -- which walks the WHOLE tree
-// through Leftmost/Successor rather than doing a lookup -- must find the id,
-// and _count must have moved by exactly one. That exercises the node linkage
-// and the rebalance through code we did not write, which a self-check on our
-// own bookkeeping would not.
-using SetAllocNodeFn  = BindingNode* (*)(void* unused, const Binding* src, BindingNode* parent);
-using SetRebalanceFn  = void (*)(void* setPtr, BindingNode** parentSlot);
+// the node inherits whatever the stack held there -- faithful.
+void KeyMap::RegisterInput(int32_t id, int32_t device, int32_t input,
+                           const char* name, bool exclusive) {
+    using SetAllocNodeFn = BindingNode* (*)(void* unused, const Binding* src, BindingNode* parent);
+    using SetRebalanceFn = void (*)(void* setPtr, BindingNode** parentSlot);
+    auto allocNode = reinterpret_cast<SetAllocNodeFn>(
+        AtomicAddr(g_setAllocNode, 0x180023060));
+    auto rebalance = reinterpret_cast<SetRebalanceFn>(
+        AtomicAddr(g_setRebalance, 0x180023170));
 
-void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
-                                  int32_t inputId, const char* name, bool exclusive) {
-    static auto allocNode = reinterpret_cast<SetAllocNodeFn>(
-        ResolveAddr(Module::Runtime, 0x180023060));
-    static auto rebalance = reinterpret_cast<SetRebalanceFn>(
-        ResolveAddr(Module::Runtime, 0x180023170));
-
-    auto* km = static_cast<KeyMap*>(self);
-    auto* root = static_cast<BindingNode*>(km->_root);
+    BindingNode* root = _root;
     const uint8_t key = static_cast<uint8_t>(id);
-
-    // ---- the oracle's PRE-state, and why this line exists --------------------
-    // `GetIdForDeviceInput` returns the FIRST in-order match for a
-    // (device, inputId) pair, so "the walk finds OUR id" is only the right
-    // expectation when that pair was not ALREADY bound to a lower id. Two
-    // actions bound to the same physical key is a legitimate state, and this
-    // oracle asserted `found == key` unconditionally from Wave 8.5 until Wave 9
-    // lane INPUT's lockstep probe fired it twice on a population containing two
-    // such pairs. The port was correct both times; the ORACLE was wrong.
-    // Recorded here rather than only in the wave doc, per PLAN §6 step 8.
-    int32_t preFound = -1;
 
     // 1. Already registered? Retail's first descent (0x1800a7e90) tracks no
     //    parent and leaves the root in RBX untouched, which is what the
@@ -305,17 +295,16 @@ void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
     elem.description = name;
     elem.device[0]   = static_cast<uint8_t>(device);
     elem.device[1]   = 0xFF;
-    elem.inputId[0]  = static_cast<uint8_t>(inputId);
+    elem.inputId[0]  = static_cast<uint8_t>(input);
     elem.inputId[1]  = 0;
 
-    void* setPtr = &km->_root;
-    const int32_t countBefore = km->_count;
+    void* setPtr = &_root;
 
     if (!root) {
         // 3a. Empty tree: the node IS the root, with a null parent.
         BindingNode* node = allocNode(nullptr, &elem, nullptr);
-        km->_count += 1;          // retail increments first (0x1800a7eeb)
-        km->_root = node;
+        _count += 1;          // retail increments first (0x1800a7eeb)
+        _root = node;
     } else {
         // 3b. Second descent, tracking the parent in a stack slot the
         //     rebalance step is then handed BY ADDRESS (0x1800a7f56:
@@ -340,233 +329,211 @@ void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
             }
         }
         rebalance(setPtr, &parent);
-        km->_count += 1;
+        _count += 1;
     }
-
 }
 
 // ?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z  retail 0x1800a7970  ord 2571
 // Returns -1 both for "id not registered" AND "slot unbound" (0xFF sign-
 // extends to -1 through the SAME `MOVSX` retail uses — 0x1800a7995..799d).
-int32_t RtInput_KeyMap_GetDeviceForId(const void* self, int32_t id, int32_t slot) {
-    auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
-    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
-    int32_t ours = n ? static_cast<int8_t>(n->element.device[slot]) : -1;
-
-    return ours;
+int32_t KeyMap::GetDeviceForId(int32_t id, int32_t slot) const {
+    BindingNode* n = FindBinding(this, static_cast<uint8_t>(id));
+    return n ? static_cast<int8_t>(n->element.device[slot]) : -1;
 }
 
 // ?GetInputForId@KeyMap@Input@@QEBAHHH@Z  retail 0x1800a7930  ord 2713
 // Zero-extended (retail: MOVZX at 0x1800a7958) — unlike GetDeviceForId, an
-// unbound slot's inputId byte is 0, which is already a valid "no input" value
-// with nothing to sign-extend.
-int32_t RtInput_KeyMap_GetInputForId(const void* self, int32_t id, int32_t slot) {
-    auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
-    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
-    int32_t ours = n ? static_cast<int32_t>(n->element.inputId[slot]) : -1;
-
-    return ours;
+// unbound slot's inputId byte is 0, already a valid "no input" value.
+int32_t KeyMap::GetInputForId(int32_t id, int32_t slot) const {
+    BindingNode* n = FindBinding(this, static_cast<uint8_t>(id));
+    return n ? static_cast<int32_t>(n->element.inputId[slot]) : -1;
 }
 
 // ?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z  retail 0x1800a7890  ord 2700
 // The one KeyMap accessor that is NOT a key lookup: an in-order walk of the
 // WHOLE tree searching every binding's two slots for (device, inputId),
 // returning the first match's id. Pinned from the disassembly's leftmost/
-// successor shape (0x1800a78a0..0x1800a791d) — see FindBinding's neighbours
-// above, Leftmost/Successor.
-int32_t RtInput_KeyMap_GetIdForDeviceInput(const void* self, int32_t device, int32_t inputId) {
-    auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
-    int32_t ours = -1;
-    for (BindingNode* n = Leftmost(static_cast<BindingNode*>(km->_root)); n; n = Successor(n)) {
-        bool matched = false;
+// successor shape (0x1800a78a0..0x1800a791d).
+int32_t KeyMap::GetIdForDeviceInput(int32_t device, int32_t input) const {
+    for (BindingNode* n = Leftmost(_root); n; n = Successor(n)) {
         for (int slot = 0; slot < 2; ++slot) {
             if (static_cast<int8_t>(n->element.device[slot]) == device &&
-                static_cast<int32_t>(n->element.inputId[slot]) == inputId) {
-                matched = true;
-                break;
+                static_cast<int32_t>(n->element.inputId[slot]) == input) {
+                return n->element.id;
             }
         }
-        if (matched) { ours = n->element.id; break; }
     }
-
-    return ours;
+    return -1;
 }
 
 // ?GetValue@KeyMap@Input@@QEBAFHH@Z  retail 0x1800a7b60  ord 3005
-// GetValue(deviceCtx, id): find the binding, then for each of its 2 slots
-// (skipping unbound ones), consult Device's LATCHED state and return the
-// first non-zero axis value. `_disableKeyboardCount > 0 && slot's device==1`
-// SHORT-CIRCUITS THE WHOLE FUNCTION to 0 (retail 0x1800a7adb/e0 both jump to
-// the function's single 0-return, not just `continue` — checked in the
-// disassembly, not the (misleading) decompile). Faithful either way if the
-// id is unregistered: FindBinding returns nullptr and the slot loop reads
-// through a null-based pointer, exactly like retail's RAX==0 path.
-int16_t RtInput_KeyMap_GetValue(const void* self, int32_t deviceCtx, int32_t id) {
-    auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
-    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
-    uint8_t* deviceSingleton = DeviceSingleton();
-    int16_t ours = 0;
-    for (int slot = 0; slot < 2; ++slot) {
-        int8_t device = static_cast<int8_t>(n->element.device[slot]);
-        if (device < 0) continue;  // 0xFF unbound
-        if (km->_disableKeyboardCount > 0 && device == 1) { ours = 0; goto done; }
-        {
-            uint8_t* base = DeviceArrayBase(deviceSingleton, device, deviceCtx);
-            uint8_t  inputIdx = n->element.inputId[slot];
-            int16_t  v = (reinterpret_cast<State*>(base) + inputIdx)->value;
-            if (v != 0) { ours = v; goto done; }
-        }
-    }
-done:
-    return ours;
+// The first non-zero State::value (+0x04) among the binding's bound slots.
+// `_suspendCount > 0 && slot's device == 1` SHORT-CIRCUITS THE WHOLE FUNCTION
+// to 0 (retail 0x1800a7adb/e0 both jump to the function's single 0-return,
+// not just `continue` — checked in the disassembly, not the misleading
+// decompile).
+int16_t KeyMap::GetValue(int32_t joystick, int32_t id) const {
+    return ReadBoundState<int16_t>(this, joystick, id,
+        [](const State& s) -> int16_t { return s.value; });
 }
 
 // ?Pressed@KeyMap@Input@@QEBA_NHH@Z  retail 0x1800a7a80  ord 3432
-// Same shape as GetValue, reading State::pressed (+0x06) instead of
-// State::value (+0x04), and returning the raw byte (retail: MOVZX EAX,CL —
-// preserved as `!= 0` here since the field is declared `bool`).
-bool RtInput_KeyMap_Pressed(const void* self, int32_t deviceCtx, int32_t id) {
-    auto* km = const_cast<KeyMap*>(static_cast<const KeyMap*>(self));
-    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
-    uint8_t* deviceSingleton = DeviceSingleton();
-    bool ours = false;
-    for (int slot = 0; slot < 2; ++slot) {
-        int8_t device = static_cast<int8_t>(n->element.device[slot]);
-        if (device < 0) continue;
-        if (km->_disableKeyboardCount > 0 && device == 1) { ours = false; goto done; }
-        {
-            uint8_t* base = DeviceArrayBase(deviceSingleton, device, deviceCtx);
-            uint8_t  inputIdx = n->element.inputId[slot];
-            bool p = (reinterpret_cast<State*>(base) + inputIdx)->pressed;
-            if (p) { ours = true; goto done; }
-        }
-    }
-done:
-    return ours;
+// Same shape as GetValue, reading State::pressed (+0x06).
+bool KeyMap::Pressed(int32_t joystick, int32_t id) const {
+    return ReadBoundState<bool>(this, joystick, id,
+        [](const State& s) -> bool { return s.pressed; });
+}
+
+// ?Released@KeyMap@Input@@QEBA_NHH@Z  retail 0x1800a79b0
+// PORTED by block B5 (it was the one KeyMap reader nothing registered):
+// read as disassembly, it is Pressed's body with the State byte at +0x07
+// (`MOVZX ECX,byte [R8+RDX*8+0x7]` at 0x1800a7a45) instead of +0x06. Same
+// descent (`CMP R8B,R9B ; JC left ; CMP R9B,R8B ; JNC found`), same miss path
+// (`XOR EAX,EAX` and then the unguarded slot reads through 0), same suspend
+// short-circuit (`MOV EBX,[RCX] ; TEST EBX,EBX ; JLE` then `CMP [..+0x10],1`),
+// same joystick stride (`IMUL R8,R8,0x1b0`). Its tree caller
+// (`fn_KeyMap_Released`, dragtool.cpp) is bound to the UNREGISTERED exe slot
+// 0x1401528f0 (B37_RULES 6.3 defect 1, not this block's to fix), so this body
+// is registered for the day that binding is repaired.
+bool KeyMap::Released(int32_t joystick, int32_t id) const {
+    return ReadBoundState<bool>(this, joystick, id,
+        [](const State& s) -> bool { return s.released; });
 }
 
 // ?SetInput@KeyMap@Input@@QEAAXHHHH@Z  retail 0x1800a7e20  ord 3896
 // SetInput(id, slot, device, inputId): overwrite one slot directly (no
 // search over the two slots — the caller names which one). Faithfully
 // unguarded on a missing id.
-void RtInput_KeyMap_SetInput(void* self, int32_t id, int32_t slot, int32_t device, int32_t inputId) {
-    auto* km = static_cast<KeyMap*>(self);
-    BindingNode* n = FindBinding(km, static_cast<uint8_t>(id));
-    n->element.inputId[slot] = static_cast<uint8_t>(inputId);
+void KeyMap::SetInput(int32_t id, int32_t slot, int32_t device, int32_t input) {
+    BindingNode* n = FindBinding(this, static_cast<uint8_t>(id));
+    n->element.inputId[slot] = static_cast<uint8_t>(input);
     n->element.device[slot]  = static_cast<uint8_t>(device);
-
-    bool ok = n && n->element.device[slot] == static_cast<uint8_t>(device) &&
-              n->element.inputId[slot] == static_cast<uint8_t>(inputId);
 }
 
-// ============================================================================
-// Input::Device — 4 of 7 ported (+ _singleton held back, a data export)
-// ============================================================================
+// ############################################################################
+// Input::Device — the four const readers / reset of latched state
+// ############################################################################
 
 // ?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z  retail 0x1800e1660
-// ord 3004. Const read of already-latched state (WAVE8.md §5's carve-out) —
-// full replay oracle.
-int16_t RtInput_Device_GetValue(const void* self, InputDevice device, int32_t deviceCtx, int32_t inputIdx) {
-    // DeviceArrayBase returns nullptr for a device value outside {0,1,2} —
-    // faithful to retail (its R8 stays 0 in that branch too), NOT guarded
-    // here: the State* below reproduces retail's exact near-null address.
-    auto* base = DeviceArrayBase(const_cast<uint8_t*>(static_cast<const uint8_t*>(self)),
-                                  static_cast<int32_t>(device), deviceCtx);
-    auto* state = reinterpret_cast<State*>(base) + inputIdx;
-    int16_t ours = state->value;
-
-    return ours;
+// ord 3004. DeviceArrayBase returns nullptr for a device value outside
+// {0,1,2} — faithful to retail (its R8 stays 0 in that branch too), NOT
+// guarded: the State* below reproduces retail's exact near-null address.
+int16_t Device::GetValue(InputDevice device, int32_t joystick, int32_t input) const {
+    return DeviceArrayBase(this, static_cast<int32_t>(device), joystick)[input].value;
 }
 
-// ?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z  retail 0x1800e16c0
-// ord 3431.
-bool RtInput_Device_Pressed(const void* self, InputDevice device, int32_t deviceCtx, int32_t inputIdx) {
-    auto* base = DeviceArrayBase(const_cast<uint8_t*>(static_cast<const uint8_t*>(self)),
-                                  static_cast<int32_t>(device), deviceCtx);
-    auto* state = reinterpret_cast<State*>(base) + inputIdx;
-    bool ours = state->pressed;
-
-    return ours;
+// ?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z  retail 0x1800e16c0  ord 3431.
+bool Device::Pressed(InputDevice device, int32_t joystick, int32_t input) const {
+    return DeviceArrayBase(this, static_cast<int32_t>(device), joystick)[input].pressed;
 }
 
-// ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z  retail 0x1800e1720
-// ord 3545.
-bool RtInput_Device_Released(const void* self, InputDevice device, int32_t deviceCtx, int32_t inputIdx) {
-    auto* base = DeviceArrayBase(const_cast<uint8_t*>(static_cast<const uint8_t*>(self)),
-                                  static_cast<int32_t>(device), deviceCtx);
-    auto* state = reinterpret_cast<State*>(base) + inputIdx;
-    bool ours = state->released;
-
-    return ours;
+// ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z  retail 0x1800e1720  ord 3545.
+bool Device::Released(InputDevice device, int32_t joystick, int32_t input) const {
+    return DeviceArrayBase(this, static_cast<int32_t>(device), joystick)[input].released;
 }
 
 // ?ResetState@Device@Input@@QEAAXXZ  retail 0x1800e0ef0  ord 3579
-// Zeroes exactly the 3 arrays this lane mapped (joystick/keyboard/mouse);
-// deliberately does NOT touch +0x11D0 (_mouseClipping), matching retail
-// (0x1800e0ef0's three loops stop before that byte). Mutator on shared
-// state, so no replay (WAVE8.md §5 / the brief's explicit carve-out) — shadow
-// verifies our own write, no call into the original.
-void RtInput_Device_ResetState(void* self) {
-    auto* base = static_cast<uint8_t*>(self);
-    std::memset(base, 0, kJoystickCount * kJoystickStride);
-    std::memset(base + kKeyboardOffset, 0, kKeyboardInputCount * sizeof(State));
-    std::memset(base + kMouseOffset, 0, kMouseInputCount * sizeof(State));
-
-    bool zeroed = true;
-    for (int i = 0; i < kJoystickCount * kJoystickStride && zeroed; ++i) zeroed = (base[i] == 0);
+// Zeroes exactly the three State blocks (joystick/keyboard/mouse), whole
+// records this time (unlike the ctor); deliberately does NOT touch +0x11D0
+// (_mouseClipping), matching retail (0x1800e0ef0's three loops stop before it).
+void Device::ResetState() {
+    std::memset(_joystick, 0, sizeof(_joystick));
+    std::memset(_keyboard, 0, sizeof(_keyboard));
+    std::memset(_mouse, 0, sizeof(_mouse));
 }
 
-// ============================================================================
-// Input::Configuration — 2 of 3 ported (+ _singleton held back, a data export)
-// ============================================================================
-//
-// Both wrap a call into `Input::KeyMap::Load`/`Save` that this lane holds
-// back (see the wave doc) — but Configuration::Load/Save don't need to
-// REIMPLEMENT that call, only to MAKE it, exactly as retail's own bodies do
-// (0x1800e0c80 / 0x1800e0c00: `CALL 0x1800a7190` / `CALL 0x1800a7520`, a near
-// call to KeyMap's own body, untouched by this port). This is the same shape
-// Wave 6's Video::Context lane used for methods it called but did not own.
-
-// ?Load@Configuration@Input@@QEAAXXZ  retail 0x1800e0c80  ord 3199
-//
-// THE BODY THAT WAS HERE IS GONE. Wave 9 lane ENG independently ported the same
-// function into input_config_startup.cpp, believing 0x1800e0c80 to be
-// unexported. It is not (see below), so from that moment this export had TWO
-// bodies and its TWO DOORS REACHED DIFFERENT ONES: the name door bound here,
-// the address door bound there and won, because RtInputConfigStartupRegister
-// runs after RtInputRegister. Callers resolving by name and callers resolving
-// by address were running different code for one function.
-//
-// Lane ENG's body is the one kept, on three counts: it already won the address
-// door, so keeping it is the smaller behavioural change; it reaches KeyMap::Load
-// through the NAME "?Load@KeyMap@Input@@QEAAXXZ" where this one used a bare
-// ResolveAddr(0x1800a7190) address door that dies at cutover (verified with
-// pefile: that address IS that export); and its RT_DIFF shadow actually
-// predicates on something (the three bools landing in {0,1}) where this one
-// passed a literal `true`.
-//
-// ONE BEHAVIOURAL CONSEQUENCE, stated rather than buried: with
-// RT_INPUTCFGSTART=0 the name door used to reach this body. Both doors
-// now reach lane ENG's regardless of that switch -- the switch gates
-// ?Startup@'s registration, never the linkage of a body this file registers.
-extern "C" void RtInput_Configuration_Load(Configuration* self);
+// ############################################################################
+// Input::Configuration::Save
+// ############################################################################
 
 // ?Save@Configuration@Input@@QEAAXXZ  retail 0x1800e0c00  ord 3604
-void RtInput_Configuration_Save(void* self) {
-    auto* cfg = static_cast<Configuration*>(self);
-
-    using KeyMapSaveFn = void (*)(void*);
-    static auto keyMapSave = reinterpret_cast<KeyMapSaveFn>(ResolveAddr(Module::Runtime, 0x1800a7520));
-    keyMapSave(cfg->keyMap);
+// `CALL 0x1800a7520` (KeyMap::Save, a near call) then three Persistence::Set
+// bools. The KeyMap call used to be a by-address `ResolveAddr(0x1800a7520)`
+// door; it is now the direct member call (the door resolved to the same body,
+// keymap_save.cpp's). The Persistence singleton read stays a data slot.
+void Configuration::Save() {
+    _keyMap->Save();
 
     uint8_t** persistenceSlot = RT_DATA_SLOT(uint8_t**,
         "?_singleton@Persistence@IO@@0PEAV12@EA");
     void* persistence = persistenceSlot ? *persistenceSlot : nullptr;
 
-    RtIo_Persistence_SetBool(persistence, "Input", "MouseClipping", cfg->mouseClipping);
-    RtIo_Persistence_SetBool(persistence, "Input", "Legacy", cfg->legacy);
-    RtIo_Persistence_SetBool(persistence, "Input", "MouseDisplay", cfg->mouseDisplay);
+    RtIo_Persistence_SetBool(persistence, "Input", "MouseClipping", _mouseClipping);
+    RtIo_Persistence_SetBool(persistence, "Input", "Legacy", _legacy);
+    RtIo_Persistence_SetBool(persistence, "Input", "MouseDisplay", _mouseDisplay);
+}
 
+}  // namespace Input
+
+// ############################################################################
+// The registered DOORS. Each keeps its name and address registration and
+// delegates with a QUALIFIED non-virtual call.
+// ############################################################################
+
+void RtInput_KeyMap_ClearAll(void* self) {
+    reinterpret_cast<Input::KeyMap*>(self)->Input::KeyMap::ClearAll();
+}
+void RtInput_KeyMap_ClearInput_HH(void* self, int32_t id, int32_t slot) {
+    reinterpret_cast<Input::KeyMap*>(self)->Input::KeyMap::ClearInput(id, slot);
+}
+void RtInput_KeyMap_ClearInput_HHH(void* self, int32_t id, int32_t device, int32_t inputId) {
+    reinterpret_cast<Input::KeyMap*>(self)->Input::KeyMap::ClearInput(id, device, inputId);
+}
+void RtInput_KeyMap_RegisterInput(void* self, int32_t id, int32_t device,
+                                  int32_t inputId, const char* name, bool exclusive) {
+    reinterpret_cast<Input::KeyMap*>(self)->Input::KeyMap::RegisterInput(
+        id, device, inputId, name, exclusive);
+}
+int32_t RtInput_KeyMap_GetDeviceForId(const void* self, int32_t id, int32_t slot) {
+    return reinterpret_cast<const Input::KeyMap*>(self)->Input::KeyMap::GetDeviceForId(id, slot);
+}
+int32_t RtInput_KeyMap_GetInputForId(const void* self, int32_t id, int32_t slot) {
+    return reinterpret_cast<const Input::KeyMap*>(self)->Input::KeyMap::GetInputForId(id, slot);
+}
+int32_t RtInput_KeyMap_GetIdForDeviceInput(const void* self, int32_t device, int32_t inputId) {
+    return reinterpret_cast<const Input::KeyMap*>(self)->Input::KeyMap::GetIdForDeviceInput(
+        device, inputId);
+}
+int16_t RtInput_KeyMap_GetValue(const void* self, int32_t joystick, int32_t id) {
+    return reinterpret_cast<const Input::KeyMap*>(self)->Input::KeyMap::GetValue(joystick, id);
+}
+bool RtInput_KeyMap_Pressed(const void* self, int32_t joystick, int32_t id) {
+    return reinterpret_cast<const Input::KeyMap*>(self)->Input::KeyMap::Pressed(joystick, id);
+}
+bool RtInput_KeyMap_Released(const void* self, int32_t joystick, int32_t id) {
+    return reinterpret_cast<const Input::KeyMap*>(self)->Input::KeyMap::Released(joystick, id);
+}
+void RtInput_KeyMap_SetInput(void* self, int32_t id, int32_t slot, int32_t device, int32_t inputId) {
+    reinterpret_cast<Input::KeyMap*>(self)->Input::KeyMap::SetInput(id, slot, device, inputId);
+}
+
+int16_t RtInput_Device_GetValue(const void* self, Input::Device::InputDevice device,
+                                int32_t joystick, int32_t inputIdx) {
+    return reinterpret_cast<const Input::Device*>(self)->Input::Device::GetValue(
+        device, joystick, inputIdx);
+}
+bool RtInput_Device_Pressed(const void* self, Input::Device::InputDevice device,
+                            int32_t joystick, int32_t inputIdx) {
+    return reinterpret_cast<const Input::Device*>(self)->Input::Device::Pressed(
+        device, joystick, inputIdx);
+}
+bool RtInput_Device_Released(const void* self, Input::Device::InputDevice device,
+                             int32_t joystick, int32_t inputIdx) {
+    return reinterpret_cast<const Input::Device*>(self)->Input::Device::Released(
+        device, joystick, inputIdx);
+}
+void RtInput_Device_ResetState(void* self) {
+    reinterpret_cast<Input::Device*>(self)->Input::Device::ResetState();
+}
+
+// ?Load@Configuration@Input@@QEAAXXZ  retail 0x1800e0c80  ord 3199
+// ONE body, in input_config_startup.cpp (Wave 9 lane ENG's, kept when the two
+// doors of this export were found reaching two different bodies). This file
+// keeps the registration because RtInputRegister is ungated.
+extern "C" void RtInput_Configuration_Load(Input::Configuration* self);
+
+void RtInput_Configuration_Save(void* self) {
+    reinterpret_cast<Input::Configuration*>(self)->Input::Configuration::Save();
 }
 
 // ============================================================================
@@ -644,6 +611,10 @@ int RtInputRegister() {
 
     RegisterRuntimeExport("?Pressed@KeyMap@Input@@QEBA_NHH@Z", (void*)&RtInput_KeyMap_Pressed);
     RegisterRuntimeAddr(0x1800a7a80, (void*)&RtInput_KeyMap_Pressed); ++n;
+
+    // ENDGAME B.3.7 block B5: ported (Pressed's body reading State +0x07).
+    RegisterRuntimeExport("?Released@KeyMap@Input@@QEBA_NHH@Z", (void*)&RtInput_KeyMap_Released);
+    RegisterRuntimeAddr(0x1800a79b0, (void*)&RtInput_KeyMap_Released); ++n;
 
     RegisterRuntimeExport("?SetInput@KeyMap@Input@@QEAAXHHHH@Z", (void*)&RtInput_KeyMap_SetInput);
     RegisterRuntimeAddr(0x1800a7e20, (void*)&RtInput_KeyMap_SetInput); ++n;

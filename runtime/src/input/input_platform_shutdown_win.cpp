@@ -200,11 +200,18 @@ struct ShutdownSummary {
 ShutdownSummary g_summary;
 
 // The inlined descent. Instruction-for-instruction our own ported
-// `?UnregisterMessageCallback@Application@1@QEAAXI@Z`, reached BY NAME so this
-// call site follows that port. Returns whether a node was actually erased,
-// which the descent itself cannot report (retail's returns void and a miss is
+// `Application::Application::UnregisterMessageCallback` (0x18009fa20). It used
+// to be reached BY NAME through RT_EXPORT_ONCE; since block B1 made it a
+// member it is the direct member call (ENDGAME B.3.7 B5), which reaches the
+// same body — the door's `if (fn)` miss arm, possible only with the port
+// unregistered, goes with it. Returns whether a node was actually erased, which
+// the descent itself cannot report (retail's returns void and a miss is
 // silent) — the extra return value is THIS PORT'S instrumentation, not a
 // behavioural change: the observable effect on the tree is identical.
+//
+// The post-condition helper `CallbackPresent` that used to sit below this was
+// DEAD CODE — defined, never called (the only warning this file carried,
+// -Wunused-function) — and is removed rather than kept alive.
 bool EraseCallback(Application::Application* app, unsigned message) {
     Set* set = CallbackSet(app);
     // Read the node out BEFORE the call so a hit can be recognised without
@@ -213,25 +220,10 @@ bool EraseCallback(Application::Application* app, unsigned message) {
         const unsigned key = *reinterpret_cast<const unsigned*>(n);
         if (message < key)      n = n->left;
         else if (key >= message) {
-            using UnregFn = void (*)(Application::Application*, unsigned);
-            UnregFn fn = RT_EXPORT_ONCE(UnregFn,
-                "?UnregisterMessageCallback@Application@1@QEAAXI@Z");
-            if (fn) { fn(app, message); return true; }
-            return false;
+            app->UnregisterMessageCallback(message);
+            return true;
         }
         else                    n = n->right;
-    }
-    return false;
-}
-
-// Post-condition probe: is `message` still in the tree? Pure read, no mutation.
-bool CallbackPresent(Application::Application* app, unsigned message) {
-    Set* set = CallbackSet(app);
-    for (Node* n = set->root; n; ) {
-        const unsigned key = *reinterpret_cast<const unsigned*>(n);
-        if (message < key)       n = n->left;
-        else if (key >= message) return true;
-        else                     n = n->right;
     }
     return false;
 }
@@ -244,16 +236,14 @@ inline void ComCall(void* obj, int slotByteOffset) {
     reinterpret_cast<Fn>(vtbl[slotByteOffset / 8])(obj);
 }
 
-template <typename T> inline T& Field(void* p, int off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
-
 }  // namespace
 
 // ============================================================================
 // ?PlatformShutdown@Device@Input@@AEAAXXZ                  retail 0x1800e1b50
 // ============================================================================
-extern "C" void RtInput_Device_PlatformShutdown(void* self) {
+namespace Input {
+
+void Device::PlatformShutdown() {
     ++g_entries;
 
     // ---- the three message-callback erases ---------------------------------
@@ -276,27 +266,27 @@ extern "C" void RtInput_Device_PlatformShutdown(void* self) {
 
     // ---- the three COM teardowns, in retail's order and with its asymmetry --
     // MOUSE first (+0x11E8): Unacquire, then Release.
-    void* mouse = Field<void*>(self, RtInput::kMouseComOffset);
+    void* mouse = _mouseDevice;
     if (mouse != nullptr) {                                   // 0x1800e1bfe
         ComCall(mouse, kComUnacquire);                        // 0x1800e1c06
         // Retail RE-LOADS the field between the two calls rather than reusing
         // the register. Reproduced: Unacquire is an outbound call and nothing
         // here may assume it left the field untouched.
-        ComCall(Field<void*>(self, RtInput::kMouseComOffset), kComRelease);  // 0x1800e1c13
+        ComCall(_mouseDevice, kComRelease);                   // 0x1800e1c13
         ++g_released;
     }
 
     // KEYBOARD (+0x11E0): Unacquire, then Release.
-    void* keyboard = Field<void*>(self, RtInput::kKeyboardComOffset);
+    void* keyboard = _keyboardDevice;
     if (keyboard != nullptr) {                                // 0x1800e1c1d
         ComCall(keyboard, kComUnacquire);                     // 0x1800e1c25
-        ComCall(Field<void*>(self, RtInput::kKeyboardComOffset), kComRelease);  // 0x1800e1c32
+        ComCall(_keyboardDevice, kComRelease);                // 0x1800e1c32
         ++g_released;
     }
 
     // FACTORY (+0x11D8): Release ONLY — retail tail-jumps it. No Unacquire,
     // because an IDirectInput8 was never acquired. See the banner.
-    void* dinput = Field<void*>(self, RtInput::kDirectInputOffset);
+    void* dinput = _directInput;
     if (dinput != nullptr) {                                  // 0x1800e1c3f
         ComCall(dinput, kComRelease);                         // 0x1800e1c49, TAIL JMP
         ++g_released;
@@ -305,6 +295,13 @@ extern "C" void RtInput_Device_PlatformShutdown(void* self) {
     // ---- SELF-CHECK --------------------------------------------------------
     // The COM pointers are deliberately NOT examined: after Release they may be
     // dangling, and reading through one is a use, not a check.
+}
+
+}  // namespace Input
+
+// The registered DOOR (ENDGAME B.3.7 B5): name and address, one QUALIFIED call.
+extern "C" void RtInput_Device_PlatformShutdown(void* self) {
+    reinterpret_cast<Input::Device*>(self)->Input::Device::PlatformShutdown();
 }
 
 // ============================================================================

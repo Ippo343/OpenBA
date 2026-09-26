@@ -3,6 +3,7 @@
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "object/Internal.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "Object/factory_registration.h"
@@ -136,7 +137,7 @@ void AutoSaveDialog_Slot6(AutoSaveDialog* self) {
         return;
 
     void* saveLoad = *g_pSaveLoadSingleton;
-    int operation = fn_SaveLoad_GetOperation(saveLoad);
+    int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
 
     // operation==4 means "load"; otherwise it's a save
     uint32_t hideFlags = (uint32_t)(operation != 4);

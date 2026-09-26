@@ -69,16 +69,12 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 
-// Wave 9 lane ENGIO: `Device::Update` (input_device_update.cpp) ends in this
-// body exactly as retail's `JMP 0x1800E2130` does, so it is no longer
-// file-local. It is still NOT exported and still gets no
-// `RegisterRuntimeExport`; making it a direct C++ call rather than a
-// ResolveAddr-on-Module::Runtime hop for 0x1800E2130 is what keeps this lane's
-// by-address door count unmoved (WAVE9.md, "porting a function can GROW the
-// cutover surface").
-extern "C" void RtInput_Device_PlatformUpdate(void* selfPtr);
+// ENDGAME B.3.7 B5: `Device::Update` (input_device_update.cpp) ends in this
+// body exactly as retail's `JMP 0x1800E2130` does, through the MEMBER call
+// `PlatformUpdate()`. The extern "C" forwarder `RtInput_Device_PlatformUpdate`
+// that used to carry that call is gone (its only caller was Update).
 
-namespace {
+namespace Input {
 
 // ---------------------------------------------------------------------------
 // Input::Device::PlatformUpdate — retail 0x1800E2130. NOT exported, so it gets
@@ -114,21 +110,10 @@ namespace {
 // the time any focus message or mouse-clipping toggle can arrive. A null check
 // would not restore the behaviour, it would skip it. If this ever faults, the
 // upstream fact to fix is that our Application was never given its HWND.
-void Device_PlatformUpdate(void* selfPtr);
+void Device::PlatformUpdate() {
 
-}  // namespace
-
-extern "C" void RtInput_Device_PlatformUpdate(void* selfPtr) {
-    Device_PlatformUpdate(selfPtr);
-}
-
-namespace {
-
-void Device_PlatformUpdate(void* selfPtr) {
-
-    auto* self = static_cast<uint8_t*>(selfPtr);
-    const bool clipping = self[RtInput::kMouseClippingOffset] != 0;
-    const bool focused  = self[RtInput::kHasFocusOffset] != 0;
+    const bool clipping = _mouseClipping != 0;
+    const bool focused  = _hasFocus != 0;
 
     // "Did work" = took the clipping branch. The other branch is the common
     // one (every lost-focus message runs it), so without this the site's
@@ -149,10 +134,7 @@ void Device_PlatformUpdate(void* selfPtr) {
     ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.left));    // (left, top)
     ClientToScreen(hwnd, reinterpret_cast<POINT*>(&rc.right));   // (right, bottom)
     ClipCursor(&rc);
-
 }
-
-}  // namespace
 
 // ---------------------------------------------------------------------------
 // Input::Device::EnableMouseClipping — retail 0x1800E1780, ord 2296. Nine
@@ -168,19 +150,23 @@ void Device_PlatformUpdate(void* selfPtr) {
 // holding a `void(*)(void*, bool)` typedef reaches this unchanged, and the
 // raw-byte store stays faithful.
 // ---------------------------------------------------------------------------
-void RtInput_Device_EnableMouseClipping(void* selfPtr, uint8_t enable) {
-
-    auto* self = static_cast<uint8_t*>(selfPtr);
-    const bool changed = self[RtInput::kMouseClippingOffset] != enable;
-    self[RtInput::kMouseClippingOffset] = enable;
-
-    // "Did work" = the flag actually changed value. A run whose work column is
-    // zero has only ever re-asserted the setting it already had, which is the
-    // negative case worth being able to see.
-
-    Device_PlatformUpdate(selfPtr);
-
+void Device::EnableMouseClipping(uint8_t enable) {
+    _mouseClipping = enable;
+    PlatformUpdate();                            // retail: JMP 0x1800e2130
 }
+
+}  // namespace Input
+
+// ---- the registered DOORS (ENDGAME B.3.7 B5): one QUALIFIED call each ------
+void RtInput_Device_EnableMouseClipping(void* selfPtr, uint8_t enable) {
+    reinterpret_cast<Input::Device*>(selfPtr)->Input::Device::EnableMouseClipping(enable);
+}
+
+namespace {
+void Device_PlatformUpdate(void* selfPtr) {
+    reinterpret_cast<Input::Device*>(selfPtr)->Input::Device::PlatformUpdate();
+}
+}  // namespace
 
 int RtInputWinRegister() {
     int n = 0;

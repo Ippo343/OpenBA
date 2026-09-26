@@ -155,14 +155,11 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
-
-// Wave 9 lane IOA's body, in input_win.cpp. Retail's Update ends in
-// JMP 0x1800E2130; ours ends in this call.
-extern "C" void RtInput_Device_PlatformUpdate(void* selfPtr);
+#include "../../types/system/Value.h"   // System::Time
 
 namespace {
 
-using RtInput::State;
+using State = Input::Device::State;
 
 // ---- the three minted DATA slots -------------------------------------------
 // RT_DATA_SLOT is the never-cache-a-null form (rt_port.h). Lane E3 measured 22
@@ -171,8 +168,8 @@ using RtInput::State;
 inline void** ApplicationSingleton() {
     return RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA");
 }
-inline void** InputConfigSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+inline Input::Configuration** InputConfigSingleton() {
+    return RT_DATA_SLOT(Input::Configuration**, "?_singleton@Configuration@Input@@0PEAV12@EA");
 }
 inline const double* TimerSecondsPerTick() {
     return RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
@@ -204,7 +201,7 @@ inline double RepeatResetSeconds() {                // 0x1801616B8
 
 // 0x1801F9480, 0x69 bytes. index (0..104) -> Win32 virtual-key code. Read ONLY
 // by the legacy (GetAsyncKeyState) keyboard path.
-const uint8_t kIndexToVirtualKey[RtInput::kKeyboardInputCount] = {
+const uint8_t kIndexToVirtualKey[Input::Device::kKeyboardInputCount] = {
     0x1b, 0x70, 0x71, 0x72, 0x73, 0x74, 0x75, 0x76, 0x77, 0x78, 0x79, 0x7a,
     0x7b, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x41,
     0x42, 0x43, 0x44, 0x45, 0x46, 0x47, 0x48, 0x49, 0x4a, 0x4b, 0x4c, 0x4d,
@@ -331,9 +328,11 @@ using AcquireFn  = uint32_t (*)(void*);
 // hoisting them could change is where _secondsPerTick is read, and leaving the
 // read where retail has it costs nothing and argues nothing.
 // ---------------------------------------------------------------------------
-void Device_UpdateState(void* /*self — loaded by retail, never read*/,
-                        State* dst, const State* src, int32_t count,
-                        const int64_t* time) {
+}  // namespace
+
+namespace Input {
+
+void Device::UpdateState(State* dst, State* src, int32_t count, const System::Time& time) {
 
     const float  divisor = ValueDivisor();
     const double spt     = *TimerSecondsPerTick();
@@ -356,7 +355,7 @@ void Device_UpdateState(void* /*self — loaded by retail, never read*/,
             dst[i].holdTicks = 0;
             dst[i].repeat    = false;
         } else {
-            dst[i].holdTicks += *time;
+            dst[i].holdTicks += time._ticks;
             if (dst[i].holdTicks < static_cast<int64_t>(RepeatDelaySeconds() / spt)) {
                 dst[i].repeat = false;
             } else {
@@ -379,6 +378,7 @@ void Device_UpdateState(void* /*self — loaded by retail, never read*/,
     // afterwards compares the second application of an update that is only
     // accidentally idempotent. The byte comparison lives in the probe, on a
     // synthetic Device. See the banner.
+    (void)edges;
 }
 
 // ---------------------------------------------------------------------------
@@ -415,27 +415,26 @@ void Device_UpdateState(void* /*self — loaded by retail, never read*/,
 // not zeroed here. It is read only on the success path, where DirectInput has
 // filled all 256 bytes.
 // ---------------------------------------------------------------------------
-bool Device_PlatformGetKeyboardState(void* selfPtr, State* out) {
+bool Device::PlatformGetKeyboardState(State* out) {
 
-    auto* self   = static_cast<uint8_t*>(selfPtr);
-    auto* config = static_cast<const uint8_t*>(*InputConfigSingleton());
+    const Configuration* config = *InputConfigSingleton();
 
-    if (config[offsetof(RtInput::Configuration, legacy)] != 0) {
+    if (config->_legacy) {
         auto* app  = *ApplicationSingleton();
         HWND  hwnd = *reinterpret_cast<HWND*>(app);       // Application +0x00
 
         if (GetForegroundWindow() == hwnd) {
-            for (int i = 0; i < RtInput::kKeyboardInputCount; ++i) {
+            for (int i = 0; i < kKeyboardInputCount; ++i) {
                 const SHORT s = GetAsyncKeyState(kIndexToVirtualKey[i]);
                 out[i].value = (s & 0x8000) ? kFullScale : 0;
             }
         } else {
-            for (int i = 0; i < RtInput::kKeyboardInputCount; ++i) out[i].value = 0;
+            for (int i = 0; i < kKeyboardInputCount; ++i) out[i].value = 0;
         }
         return true;
     }
 
-    void*   keyboard = *reinterpret_cast<void**>(self + RtInput::kKeyboardComOffset);
+    void*   keyboard = _keyboardDevice;
     uint8_t keys[256];   // deliberately uninitialised — see the banner
 
     const uint32_t hr = reinterpret_cast<GetStateFn>(
@@ -447,7 +446,7 @@ bool Device_PlatformGetKeyboardState(void* selfPtr, State* out) {
         // re-acquire is exactly the moment a device pointer could be replaced,
         // and hoisting it out is a change with no upside.
         for (;;) {
-            void* dev = *reinterpret_cast<void**>(self + RtInput::kKeyboardComOffset);
+            void* dev = _keyboardDevice;
             const uint32_t a =
                 reinterpret_cast<AcquireFn>(ComSlot(dev, kComAcquire))(dev);
             if (a != kDiErrInputLost) break;
@@ -498,10 +497,9 @@ bool Device_PlatformGetKeyboardState(void* selfPtr, State* out) {
 // CLEARED here), lastCursorX (+0x11F8) and lastCursorY (+0x11FC). The asymmetry
 // is retail's, not a simplification.
 // ---------------------------------------------------------------------------
-bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
+bool Device::PlatformGetMouseState(State* out) {
 
-    auto* self   = static_cast<uint8_t*>(selfPtr);
-    auto* config = static_cast<const uint8_t*>(*InputConfigSingleton());
+    const Configuration* config = *InputConfigSingleton();
 
     auto swapIfLeftHanded = [&]() {
         if (GetSystemMetrics(SM_SWAPBUTTON)) {
@@ -511,12 +509,12 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
         }
     };
 
-    if (config[offsetof(RtInput::Configuration, legacy)] != 0) {
+    if (config->_legacy) {
         auto* app  = *ApplicationSingleton();
         HWND  hwnd = *reinterpret_cast<HWND*>(app);
 
         if (GetForegroundWindow() != hwnd) {
-            for (int i = 0; i < RtInput::kMouseInputCount; ++i) out[i].value = 0;
+            for (int i = 0; i < kMouseInputCount; ++i) out[i].value = 0;
             return true;
         }
 
@@ -525,8 +523,8 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
         ScreenToClient(hwnd, &pt);
         const int32_t x = pt.x, y = pt.y;
 
-        auto* lastX = reinterpret_cast<int32_t*>(self + RtInput::kLastCursorXOffset);
-        auto* lastY = reinterpret_cast<int32_t*>(self + RtInput::kLastCursorYOffset);
+        int32_t* lastX = &_lastCursorX;
+        int32_t* lastY = &_lastCursorY;
 
         // 16-bit wrapping subtracts, in retail's operand order (see the banner).
         out[2].value = static_cast<int16_t>(static_cast<uint16_t>(x) -
@@ -543,7 +541,7 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
         out[6].value = (GetAsyncKeyState(VK_MBUTTON) & 0x8000) ? kFullScale : 0;
         swapIfLeftHanded();
 
-        auto* wheel = reinterpret_cast<int32_t*>(self + RtInput::kWheelAccumOffset);
+        int32_t* wheel = &_wheelAccum;
         const int32_t w = *wheel;
         out[12].value = (w == 0) ? static_cast<int16_t>(0)
                                  : (w > 0 ? kFullScale
@@ -553,7 +551,7 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
         return true;
     }
 
-    void* mouse = *reinterpret_cast<void**>(self + RtInput::kMouseComOffset);
+    void* mouse = _mouseDevice;
 
     // DIMOUSESTATE: int32 lX, lY, lZ; BYTE rgbButtons[8]. Retail zeroes all 20
     // bytes before the call (three stores at 0x1800E1F8E/F92/F96) even though a
@@ -567,7 +565,7 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
 
     if (hr != 0) {
         for (;;) {
-            void* dev = *reinterpret_cast<void**>(self + RtInput::kMouseComOffset);
+            void* dev = _mouseDevice;
             const uint32_t a =
                 reinterpret_cast<AcquireFn>(ComSlot(dev, kComAcquire))(dev);
             if (a != kDiErrInputLost) break;
@@ -598,6 +596,10 @@ bool Device_PlatformGetMouseState(void* selfPtr, State* out) {
 
     return true;
 }
+
+}  // namespace Input
+
+namespace {
 
 // The zeroing loop Update runs over each scratch buffer. It is NOT a memset,
 // and writing one here would be wrong in a way nothing could observe — which is
@@ -654,31 +656,27 @@ void ZeroScratch(State* buf, int32_t count) {
 // Retail TAIL-JUMPS to PlatformUpdate; ours calls it and returns. Identical
 // observable behaviour, and PlatformUpdate is already ours (lane IOA).
 // ---------------------------------------------------------------------------
-extern "C" void RtInput_Device_Update(void* selfPtr, const int64_t* time) {
+namespace Input {
+
+void Device::Update(const System::Time& time) {
 
     // NOTE FOR ANYONE LOOKING FOR THE PROBE HOOK: it is NOT here, and the first
     // version of this lane put it here and measured nothing. See the
     // ZERO CALLERS section of the banner. The probe is scheduled from
     // Input::KeyMap::GetValue instead (input.cpp), which really does run.
 
-    auto* self = static_cast<uint8_t*>(selfPtr);
-
-    State keyboardScratch[RtInput::kKeyboardInputCount];
-    ZeroScratch(keyboardScratch, RtInput::kKeyboardInputCount);
-    const bool gotKeyboard = Device_PlatformGetKeyboardState(self, keyboardScratch);
+    State keyboardScratch[kKeyboardInputCount];
+    ZeroScratch(keyboardScratch, kKeyboardInputCount);
+    const bool gotKeyboard = PlatformGetKeyboardState(keyboardScratch);
     if (gotKeyboard) {
-        Device_UpdateState(self,
-                           reinterpret_cast<State*>(self + RtInput::kKeyboardOffset),
-                           keyboardScratch, RtInput::kKeyboardInputCount, time);
+        UpdateState(_keyboard, keyboardScratch, kKeyboardInputCount, time);
     }
 
-    State mouseScratch[RtInput::kMouseInputCount];
-    ZeroScratch(mouseScratch, RtInput::kMouseInputCount);
-    const bool gotMouse = Device_PlatformGetMouseState(self, mouseScratch);
+    State mouseScratch[kMouseInputCount];
+    ZeroScratch(mouseScratch, kMouseInputCount);
+    const bool gotMouse = PlatformGetMouseState(mouseScratch);
     if (gotMouse) {
-        Device_UpdateState(self,
-                           reinterpret_cast<State*>(self + RtInput::kMouseOffset),
-                           mouseScratch, RtInput::kMouseInputCount, time);
+        UpdateState(_mouse, mouseScratch, kMouseInputCount, time);
     }
 
     // Both pollers return true unconditionally today, so both ifs are always
@@ -687,9 +685,35 @@ extern "C" void RtInput_Device_Update(void* selfPtr, const int64_t* time) {
     // corresponding dispatch stopped running — which would be invisible
     // otherwise, because the resulting state is "last frame's, unchanged".
 
-    RtInput_Device_PlatformUpdate(self);   // retail: JMP 0x1800E2130
-
+    PlatformUpdate();   // retail: JMP 0x1800E2130
 }
+
+}  // namespace Input
+
+// ---------------------------------------------------------------------------
+// The registered DOORS (ENDGAME B.3.7 B5). Each keeps its name and address
+// registration and delegates with one QUALIFIED non-virtual call. The
+// `System::Time const&` argument arrives as a pointer (a reference IS a
+// pointer in the ABI).
+// ---------------------------------------------------------------------------
+extern "C" void RtInput_Device_Update(void* selfPtr, const System::Time* time) {
+    reinterpret_cast<Input::Device*>(selfPtr)->Input::Device::Update(*time);
+}
+
+namespace {
+
+void Device_UpdateState(void* self, State* dst, State* src, int32_t count,
+                        const System::Time* time) {
+    reinterpret_cast<Input::Device*>(self)->Input::Device::UpdateState(dst, src, count, *time);
+}
+bool Device_PlatformGetKeyboardState(void* self, State* out) {
+    return reinterpret_cast<Input::Device*>(self)->Input::Device::PlatformGetKeyboardState(out);
+}
+bool Device_PlatformGetMouseState(void* self, State* out) {
+    return reinterpret_cast<Input::Device*>(self)->Input::Device::PlatformGetMouseState(out);
+}
+
+}  // namespace
 
 // Entry points the probe needs, to drive the internal bodies under their own
 // names on a SYNTHETIC device. They exist for the probe and are on no live
@@ -699,7 +723,8 @@ extern "C" void RtInput_Device_Update(void* selfPtr, const int64_t* time) {
 extern "C" void RtInput_Probe_UpdateState(void* self, void* dst, const void* src,
                                           int32_t count, const int64_t* time) {
     Device_UpdateState(self, static_cast<State*>(dst),
-                       static_cast<const State*>(src), count, time);
+                       static_cast<State*>(const_cast<void*>(src)), count,
+                       reinterpret_cast<const System::Time*>(time));
 }
 extern "C" bool RtInput_Probe_GetKeyboardState(void* self, void* out) {
     return Device_PlatformGetKeyboardState(self, static_cast<State*>(out));

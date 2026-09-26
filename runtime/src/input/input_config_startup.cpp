@@ -113,15 +113,15 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/input/Input.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-using RtInput::Configuration;
+// The unexported KeyMap scalar deleting destructor 0x180053440, ported in
+// keymap_save.cpp and registered there BY ADDRESS. Startup's re-entry arm used
+// to reach it through `ResolveAddr(Module::Runtime, 0x180053440)`; that door
+// resolved to this same body, so it is now a direct call (ENDGAME B.3.7 B5).
+void* RtInput_KeyMap_DeletingDtor(void* selfPtr);
 
 namespace {
 
 typedef void* (*MemAllocFn)(uint64_t, int);
-typedef void  (*VoidThisFn)(void*);
 typedef bool  (*GetBoolFn)(void* self, const char* section, const char* key, bool* out);
 
 // ?_singleton@Persistence@IO@@0PEAV12@EA, ord 4816, retail 0x1801fc6b8.
@@ -137,14 +137,17 @@ const char kMouseDisplay[]  = "MouseDisplay";   // 0x180157d48
 
 }  // namespace
 
+namespace Input {
+
 // ============================================================================
 // ?Load@Configuration@Input@@QEAAXXZ — retail 0x1800e0c80, ordinal 3199.
 // (Was labelled UNEXPORTED here. It is not -- see the banner.)
 // ============================================================================
-extern "C" void RtInput_Configuration_Load(Configuration* self) {
-
-    // Unguarded, exactly as retail: `MOV RCX,[RCX]` then straight into the call.
-    RT_EXPORT_ONCE(VoidThisFn, "?Load@KeyMap@Input@@QEAAXXZ")(self->keyMap);
+void Configuration::Load() {
+    // Unguarded, exactly as retail: `MOV RCX,[RCX]` then straight into the
+    // call. Was `RT_EXPORT_ONCE("?Load@KeyMap@Input@@QEAAXXZ")`, which resolved
+    // to keymap_load.cpp's body; now the member call (ENDGAME B.3.7 B5).
+    _keyMap->Load();
 
     // Retail reads Persistence::_singleton ONCE into RBX and uses it for all
     // three calls; the slot guard is ours (the variable does not exist without
@@ -154,42 +157,47 @@ extern "C" void RtInput_Configuration_Load(Configuration* self) {
         void* persistence = *pSlot;
         GetBoolFn get = RT_EXPORT_ONCE(GetBoolFn,
             "?Get@Persistence@IO@@QEBA_NPEBD0AEA_N@Z");
-        get(persistence, kSection, kMouseClipping, &self->mouseClipping);
-        get(persistence, kSection, kLegacy,        &self->legacy);
-        get(persistence, kSection, kMouseDisplay,  &self->mouseDisplay);
+        get(persistence, kSection, kMouseClipping, &_mouseClipping);
+        get(persistence, kSection, kLegacy,        &_legacy);
+        get(persistence, kSection, kMouseDisplay,  &_mouseDisplay);
     }
-
 }
 
 // ============================================================================
 // ?Startup@Configuration@Input@@QEAA_NXZ                   retail 0x1800e0d30
 // ============================================================================
-extern "C" bool RtInput_Configuration_Startup(Configuration* self) {
-
-    if (self->keyMap != nullptr) {
-        // 0x1800e0d54. An unnamed scalar deleting destructor; no export in
-        // either build, so it can only be reached by address, and that address
-        // is unmapped at cutover. Dead on the boot path (the ctor just zeroed
-        // this field) -- see the banner.
-        if (uintptr_t fn = ResolveAddr(Module::Runtime, 0x180053440))
-            reinterpret_cast<VoidThisFn>(fn)(self->keyMap);
+bool Configuration::Startup() {
+    if (_keyMap != nullptr) {
+        // 0x1800e0d54. The unnamed KeyMap scalar deleting destructor; no export
+        // in either build. Dead on the boot path (the ctor just zeroed this
+        // field) -- see the banner.
+        RtInput_KeyMap_DeletingDtor(_keyMap);
     }
 
-    void* keyMap = RT_EXPORT_ONCE(MemAllocFn,
-        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(0x18, 4);
+    // `MemAlloc(0x18, 4)` with KeyMap's ctor INLINED: three zero stores.
+    auto* keyMap = static_cast<KeyMap*>(RT_EXPORT_ONCE(MemAllocFn,
+        "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(sizeof(KeyMap), 4));
     if (keyMap) {
-        uint8_t* p = static_cast<uint8_t*>(keyMap);
-        *reinterpret_cast<int32_t*>(p + 0x00) = 0;
-        *reinterpret_cast<void**>(p + 0x08)   = nullptr;
-        *reinterpret_cast<int32_t*>(p + 0x10) = 0;
+        keyMap->_suspendCount = 0;
+        keyMap->_root         = nullptr;
+        keyMap->_count        = 0;
     }
     // The null is STORED, not rejected -- 0x1800e0db6/0x1800e0db9.
-    self->keyMap = keyMap;
+    _keyMap = keyMap;
 
-    RtInput_Configuration_Load(self);
-
-
+    Load();
     return true;
+}
+
+}  // namespace Input
+
+// ---- the registered doors ---------------------------------------------------
+extern "C" void RtInput_Configuration_Load(Input::Configuration* self) {
+    self->Input::Configuration::Load();
+}
+
+extern "C" bool RtInput_Configuration_Startup(Input::Configuration* self) {
+    return self->Input::Configuration::Startup();
 }
 
 // ============================================================================

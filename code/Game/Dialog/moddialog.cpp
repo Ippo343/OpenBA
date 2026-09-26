@@ -43,6 +43,7 @@
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "engine/UpdateLoop.h"   // ENDGAME B.3.7 callers (K1)
 #include "video/ImageBuffer.h"
 #include "video/Device.h"
 #include "graphics/Material.h"
@@ -729,9 +730,8 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
                 if (engine) {
                     uintptr_t inner = *(uintptr_t*)((uintptr_t)engine + 0x20);
                     if (inner) {
-                        typedef void (*fn_PrepareReload_t)(void* self, bool param, void* savedState);
-                        fn_PrepareReload_t fn = (fn_PrepareReload_t)(*(uintptr_t*)(*(uintptr_t*)inner + 0x38));
-                        fn((void*)inner, true, statePtr);
+                        reinterpret_cast<Engine::UpdateLoop*>(inner)->SaveRestore(  // B.3.7 bridge
+                            true, reinterpret_cast<Save::SavedState*>(statePtr));
                     }
                 }
 
