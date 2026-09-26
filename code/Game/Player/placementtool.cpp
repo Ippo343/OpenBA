@@ -30,6 +30,8 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include "object/Internal.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // Locally resolved function pointers (exe addresses)
@@ -40,11 +42,6 @@
 // HighlightRemove — direct call at 0x1400b0d00
 typedef void (*fn_HighlightRemove_t)(void* highlightMgr, int overlayId);
 static fn_HighlightRemove_t s_fn_HighlightRemove = nullptr;
-
-// UI::UserInterface::CloseDialog — IAT dispatch slot [0x140151550]
-// Takes (uiMgr, &localIBP): RCX=uiMgr, RDX=pointer to IBP value
-typedef void (*fn_CloseDialog_t)(void* uiMgr, void* dialogIBPPtr);
-static fn_CloseDialog_t s_fn_CloseDialog = nullptr;
 
 // InternalBasePtr::Ctor — IAT dispatch slot [0x140152a90]
 typedef void* (*fn_IBP_Ctor_t)(void* self, void* internal);
@@ -140,19 +137,12 @@ static void EnsureFuncs() {
     };
 
     // IAT slots verified against Serialize/OnKey disassembly
-    s_fn_CloseDialog       = (fn_CloseDialog_t)resolveIAT(0x140151550);
     s_fn_IBP_Ctor          = (fn_IBP_Ctor_t)resolveIAT(0x140152a90);
     // These IAT dispatch slots are unregistered in standalone (→ null). The resolved
     // engine_funcs globals are the canonical fallback (SetEditMode uses them). A null
     // IBP_Ctor silently makes an IBP wrapping a NON-null object come out 0 — e.g. the
     // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
     if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
-    // CloseDialog slot 0x140151550 is likewise unfilled in standalone → null, so the
-    // tool's Shutdown2/OnKey close paths no-op and the CreateBar never disappears when
-    // the tool is dismissed (right-click). Fall back to the export-resolved global
-    // (same fn DragTool_CloseToolDialog uses).
-    if (!s_fn_CloseDialog && fn_UI_CloseDialog)
-        s_fn_CloseDialog = reinterpret_cast<fn_CloseDialog_t>(fn_UI_CloseDialog);
     s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     // Standalone: the raw IAT slot 0x140151758 is unfilled → null, which would make
     // EVERY key check (rotate/flip AND the key-5 place-confirm) no-op — the "can't place
@@ -295,9 +285,10 @@ void PlacementTool_Shutdown2_Impl(PlacementTool* self) {
     if (ibpVal != 0) {
         // Close the dialog via UI::UserInterface
         void* uiMgr = *(void**)(GetGameWorld() + 0x98);
-        if (s_fn_CloseDialog && uiMgr) {
+        if (uiMgr) {
             uintptr_t localIBP = ibpVal;
-            s_fn_CloseDialog(uiMgr, &localIBP);
+            reinterpret_cast<UI::UserInterface*>(uiMgr)->CloseDialog(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&localIBP));
         }
 
         // Clear the InternalBasePtr and write back
@@ -352,8 +343,9 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
         if (*dialogIBP != 0 && *dialogIBP != 0) {
             uintptr_t localIBP = *dialogIBP;
             void* uiMgr = *(void**)(GetGameWorld() + 0x98);
-            if (s_fn_CloseDialog && uiMgr) {
-                s_fn_CloseDialog(uiMgr, &localIBP);
+            if (uiMgr) {
+                reinterpret_cast<UI::UserInterface*>(uiMgr)->CloseDialog(  // B.3.6 bridge
+                    reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&localIBP));
             }
             // Clear IBP: construct with null
             if (s_fn_IBP_Ctor) {

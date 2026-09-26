@@ -189,7 +189,8 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
         uint64_t local = *slot;
         void* ui = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
-        if (fn_UI_CloseDialog) fn_UI_CloseDialog(ui, &local);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&local));
         if (fn_InternalBasePtr_Ctor) new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *slot = local;
     }
@@ -239,7 +240,8 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
             reinterpret_cast<RtObject::Internal*>(dialogToWrap));   // B.3.3 bridge
         *slot = newIBP;
         uint64_t addIBP = newIBP;
-        if (fn_UI_AddDialog) fn_UI_AddDialog(ui, &addIBP);
+        reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addIBP));
     }
 
     // (5) Reset the two cached float coords to -1.0f.

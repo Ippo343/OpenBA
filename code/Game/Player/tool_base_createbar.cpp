@@ -50,6 +50,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 
 namespace {
 
@@ -65,8 +70,6 @@ namespace {
 typedef void (*BoxGetCorners_t)(const void* self, void* outCorners);
 // Rectangle::Rectangle(this) — default ctor
 typedef void* (*RectCtor_t)(void* self);
-// UI::String::operator System::String(this, retbuf) -> retbuf (member, hidden retbuf)
-typedef void* (*UIStrToSys_t)(const void* self, void* retbuf);
 // FUN_1400fec70 (REG) — build 4 footprint corners from a tile rect
 typedef uint32_t (*Ec70_t)(uint64_t, int, int, int, int, float*);
 // FUN_1400fe960 (REG) — project N corners into a screen rectangle
@@ -74,7 +77,6 @@ typedef uint8_t (*Fe960_t)(uint64_t, uint32_t, float*, void*);
 
 BoxGetCorners_t  s_fn_BoxGetCorners = nullptr;
 RectCtor_t       s_fn_RectCtor     = nullptr;
-UIStrToSys_t     s_fn_UIStrToSys   = nullptr;
 Ec70_t           s_fn_ec70         = nullptr;
 Fe960_t          s_fn_fe960        = nullptr;
 
@@ -83,14 +85,13 @@ void EnsureCreateBarExports() {
     if (s_ready) return;
     s_fn_BoxGetCorners = reinterpret_cast<BoxGetCorners_t>(ResolveExport("?GetCorners@Box@Volume@@QEBAXPEAVVector3@Math@@@Z"));
     s_fn_RectCtor      = reinterpret_cast<RectCtor_t>(ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
-    s_fn_UIStrToSys    = reinterpret_cast<UIStrToSys_t>(ResolveExport("??BString@UI@@QEBA?AV0System@@XZ"));
     // ec70 / fe960 are exe code (registered in standalone).
     s_fn_ec70  = reinterpret_cast<Ec70_t>(ResolveAddr(Module::Exe, 0x1400fec70));
     s_fn_fe960 = reinterpret_cast<Fe960_t>(ResolveAddr(Module::Exe, 0x1400fe960));
     // Latch once everything critical resolved (retry next call otherwise). The
     // by-value math/rect helpers + fe960 are the ones that would crash if null.
     if (s_fn_BoxGetCorners && s_fn_RectCtor &&
-        s_fn_UIStrToSys && s_fn_ec70 && s_fn_fe960)
+        s_fn_ec70 && s_fn_fe960)
         s_ready = true;
 }
 
@@ -155,7 +156,8 @@ extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
 
     uint64_t elemBuf = 0;                              // InternalPtr retbuf
-    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
+    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elem = reinterpret_cast<void*>(elemBuf);     // *retbuf = element ptr
 
     if (elem) {
@@ -165,8 +167,7 @@ extern "C" void UpdateToolUI_e600(void* ctrl, void* str) {
         System::String tmp(*reinterpret_cast<const System::String*>(str));
         bool isEmpty = StringIsEmpty(&tmp);
 
-        if (fn_Element_SetFlagsOnOff)
-            fn_Element_SetFlagsOnOff(elem, isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);
+        reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);  // B.3.6 bridge
     }
 }
 
@@ -205,7 +206,8 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
     uint64_t elemBuf = 0;
-    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
+    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elem = reinterpret_cast<void*>(elemBuf);
     if (!elem) {
         return;
@@ -225,28 +227,31 @@ extern "C" void UpdateToolUI_e420(void* ctrl, void* costStr) {
 
     // UIString_A = UIString(stringTable, costString); SetText(elem, UIString_A).
     uint8_t uiA[16] = {};
-    if (fn_UIString_Ctor) fn_UIString_Ctor(uiA, reinterpret_cast<uint64_t>(stringTable), costStr);
+    ::new (uiA) UI::String(
+        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)),  // B.3.6 bridge
+        *static_cast<const System::String*>(costStr));
     uint8_t uiA_copy[16];
     std::memcpy(uiA_copy, uiA, 16);
     if (fn_TextElement_SetText) fn_TextElement_SetText(elem, uiA_copy);
 
     // UIString_B = UIString(stringTable, comp+0x40); SetParameter(elem, 0, (SysStr)UIString_B).
     uint8_t uiB[16] = {};
-    if (fn_UIString_Ctor)
-        fn_UIString_Ctor(uiB, reinterpret_cast<uint64_t>(stringTable),
-                         reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(comp) + 0x40));
+    ::new (uiB) UI::String(
+        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)),  // B.3.6 bridge
+        *reinterpret_cast<const System::String*>(reinterpret_cast<uintptr_t>(comp) + 0x40));
     System::String sysB;
-    if (s_fn_UIStrToSys) s_fn_UIStrToSys(uiB, &sysB);
+    ::new (&sysB) System::String(
+        reinterpret_cast<const UI::String*>(uiB)->operator System::String());  // B.3.6 bridge
     if (fn_TextElement_SetParameter) fn_TextElement_SetParameter(elem, 0, &sysB);
 
     // hide/show by whether costString (UIString_A) is empty.
     System::String sysA;
-    if (s_fn_UIStrToSys) s_fn_UIStrToSys(uiA, &sysA);
+    ::new (&sysA) System::String(
+        reinterpret_cast<const UI::String*>(uiA)->operator System::String());  // B.3.6 bridge
     System::String sysA_copy(sysA);
     bool isEmpty = StringIsEmpty(&sysA_copy);
 
-    if (fn_Element_SetFlagsOnOff)
-        fn_Element_SetFlagsOnOff(elem, isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);
+    reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(isEmpty ? 1u : 0u, isEmpty ? 0u : 1u);  // B.3.6 bridge
 }
 
 // ============================================================================
@@ -320,7 +325,8 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
     void* dlgIBP = reinterpret_cast<uint8_t*>(ctrl) + 0x18;
     void* dialog = *reinterpret_cast<void**>(dlgIBP);
     uint64_t elemBuf = 0;
-    if (fn_DialogInstance_FindElement) fn_DialogInstance_FindElement(dialog, &elemBuf, &nameStr);
+    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elemIBP = &elemBuf;
     void* obj = *reinterpret_cast<void**>(elemIBP);
 
@@ -333,10 +339,9 @@ extern "C" void UpdateToolUI_e360(void* ctrl, uint32_t color) {
 
     if (ibp != 0) {
         void* elem = reinterpret_cast<void*>(ibp);
-        // virtual slot +0x50 = ImageElement::SetColor(this, color).
-        void* vtbl = *reinterpret_cast<void**>(elem);
-        auto setColor = *reinterpret_cast<void(**)(void*, uint32_t)>(reinterpret_cast<uintptr_t>(vtbl) + 0x50);
-        setColor(elem, color);
+        // virtual slot +0x50 = ImageElement::SetColor(this, color). Receiver proved:
+        // DialogInstance::FindElement's result, narrowed by IsDerivedFrom(ImageElement).
+        reinterpret_cast<UI::Element*>(elem)->SetColor(color);  // B.3.6 bridge
     }
 }
 
@@ -386,7 +391,8 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     // Resolve the CreateBar controller (BuildRequirementUI) from the dialog.
     uint32_t ctrlTid = BuildReqUICtrlTypeId();
     uint64_t ctrlBuf = 0;
-    if (fn_DialogInstance_GetController) fn_DialogInstance_GetController(dialog, &ctrlBuf, ctrlTid);
+    ::new (&ctrlBuf) Object::InternalPtr<UI::DialogController>(
+        reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(ctrlTid));  // B.3.6 bridge
     void* ctrl = nullptr;
     if (ctrlBuf != 0) {
         void* c = reinterpret_cast<void*>(ctrlBuf);
@@ -473,7 +479,8 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     // --- Read the dialog root bounds (+0x68 left, +0x6c top, +0x70 right, +0x74 bottom) ---
     // GetRoot returns InternalPtr<Element> by value (hidden retbuf); rootIBP == &rootRetbuf.
     uint64_t rootRetbuf = 0;
-    void* rootIBP = fn_DialogInstance_GetRoot ? fn_DialogInstance_GetRoot(dialog, &rootRetbuf) : nullptr;
+    void* rootIBP = ::new (&rootRetbuf) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(dialog)->GetRoot());  // B.3.6 bridge
     void* rootElem = rootIBP ? *reinterpret_cast<void**>(rootIBP) : nullptr;
     {
         static bool s_rootLogged = false;
@@ -512,8 +519,7 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
         *cachedY = static_cast<float>(screenY);
     }
 
-    if (fn_DialogInstance_SetUpperLeft)
-        fn_DialogInstance_SetUpperLeft(dialog, static_cast<int>(*cachedX),
+    reinterpret_cast<UI::DialogInstance*>(dialog)->SetUpperLeft(static_cast<int>(*cachedX),  // B.3.6 bridge
                                        static_cast<int>(*cachedY), true);
     {
         static bool s_posLogged = false;

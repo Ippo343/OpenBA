@@ -33,6 +33,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 
 namespace {
 
@@ -474,9 +476,10 @@ extern "C" void PlayerTrade_EntityUI_66b0(int64_t param_1) {
 
 
     void* controllerRaw = nullptr;   // local_res8
-    if (fn_DialogInstance_GetController) {
+    {
         void* dialog = *reinterpret_cast<void**>(param_1 + 0x18);
-        fn_DialogInstance_GetController(dialog, &controllerRaw, ctrlTypeId);
+        ::new (&controllerRaw) Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(ctrlTypeId));  // B.3.6 bridge
     }
 
     void* ctrlPtr = nullptr;
