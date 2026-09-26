@@ -551,7 +551,79 @@ Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry
 > gate stays OK; refresh `standalone/cutover_manifest.inc` with `python tools/cutover_manifest.py
 > --inc` at the close.
 
-## 11–12. (reserved for the fragment passes and caller rounds)
+## 11. The fragment passes and caller rounds, as run
+
+Every block ran on its own worktree branch under `b36_session/BLOCK_BRIEF.md` (caller batches under
+`CALLER_BATCH_BRIEF.md`); every merge was gated by the coordinator on the merged tree with the
+`b36_session`-style gate (standalone-debug, standalone-perf, unit, `dispatch_slot_map --check`,
+`cutover_manifest --gate`, `rt_mint_gen --check`, plus the new-game runtime route) and landed with
+**0 problems**. The coordinator's per-merge gate table is pasted below this section.
+
+| wave | block(s) | branch(es) | what it converted |
+|---|---|---|---|
+| 0 | question pass | `b36-0` (`0a265714`) | this sheet, `B36_SLOTS.md`, `B36_FILEMAP.md`, the three read-only reports |
+| 1 | A, B, D | `b36-A`, `b36-B`, `b36-D` | the bases `Element`/`ElementDescription`; the dialog family; the value types `Sprite`/`String` and the resources (`SpriteContext` 0x88, `CharacterSet`, `Cursor`, `StringTable`, `SpriteSheet`, `SpriteCapture`, `Font`) — D in eight commits |
+| 2 | C1–C5, E | `b36-C1`…`b36-C5`, `b36-E` | the 27 leaf Element/Description pairs in B6-9 order; `UserInterface` (0x128, non-polymorphic, not trivially copyable) |
+| 3 | fragment F2 | `b36-F2` (4 commits) | `ElementDescription` members defined in `dialog.cpp` and its by-address `CreateInstance` callers made qualified member calls; `ContainerElement::SetOffsets` and `Element::GetToolTipString` defined in place; eight (then the last two) `DescriptionsBatch1.h` PODs made aliases of their classes (B6-4.4); C5's seven `CreateInstance` callers |
+| 3 | fragment F1 | `b36-F1` (2 commits) | the `widgets_input.cpp` / `widgets_layout.cpp` / `element_bodies_b5.cpp` door bodies became members of their classes; the TextDescription applier calls `ElementDescription::CreateInstance` as a member |
+| 4 | callers round 1 | `b36-K1` (townhallui, tradeui + helpers), `b36-K2` (the ~20 exe dialogs), `b36-K3` (the ~45 panel UIs in `code/Game/Dialog`), `b36-K4` (Tutorial, Player, Component, Entity, Game, standalone, `runtime/src/{engine,save}`) | `engine_funcs` door calls, `ResolveExport`/exe-slot/hand-inlined vtable calls onto UI members converted to member calls, each receiver a `// B.3.6 bridge` |
+| 4 | callers round 2 | `b36-K1r2` (townhallui, tradeui), `b36-K3r2` (the K3 files again), K4's two follow-ups | the sites round 1 left for members that were defined on main only after that round's launch |
+| 5 | close | `b36-close` (this pass, commits 1–7) | below |
+
+The closing pass: (1) the `engine_funcs` zero-caller sweep BY BINDING — 126 UI-bound globals deleted
+whole, 7 door globals kept (ctor/dtor doors and one Save door), and the last references
+(four `engine_funcs.h` inline bodies, two value-type ctor sites, the `Debug_*` sprite wrappers,
+`fn_Element_SetUserData`, readiness conjuncts and `%p` rows) converted or removed; (2) dead door
+caches (`statusiconcomponent.cpp`, `gameupdateloop_serialize.cpp`) deleted, three function-local
+lazy `ResolveExport` caches and the `VideoDevice` `RT_DATA_SLOT` moved to members / namespace-scope
+atomics (B6-5); (3) stale banners, `Element::AddChild` to the B6-11 hidden-pointer shape (retail
+0x180115df0 read as disassembly), `runtime/src/ui/README.md`; (4) `cutover_manifest.inc` refreshed —
+the COSMETIC warning is gone; (5) the six misnamed type-info globals renamed; (6)
+`b36_session/CLOSE_NUMBERS.md`; (7) this section.
+
+(coordinator: paste the per-merge gate table here)
+
+## 12. Deliberately left
+
+**Doors that remain, by design (B36_RULES 7, B4b-2):** 809 `@UI@@` names are still registered by
+`RegisterRuntimeExport` — 590 are one-line qualified delegations to members, the rest ctor (67), dtor
+(69), factory statics (74), `operator new/delete` (7) and literals (2); the 68 `??_7` and 68
+`?_typeInfo` mint rows; 67 `RT_DELDTOR` rows + `RtUiStringTable_ScalarDelete`. In `engine_funcs`:
+`fn_DialogInstance_Ctor` (29 calls), `fn_DialogInstance_Dtor` (20), `fn_SpriteSheet_Ctor` (4),
+`fn_ElementDescription_Ctor`/`_Dtor` (2 each), `fn_Element_Ctor` (2), and 22 `g_TypeId_*` type-info
+globals; the `UserInterface` ctor/dtor resolves in `gameupdateloop_load.cpp`, `gameupdateloop.cpp` and
+`runtime/src/engine/loops.cpp`; `DialogCtor`/`DialogDtor` in `dialog_create.cpp`; the minted-table
+slot copies of §3.3 (`tool_base_toolui.cpp`, `frustumoutlineelement.cpp`, `thumb_vtables.cpp`,
+`dialog_controller_vtable.cpp`, `standalone/dlgctrl_route.cpp`).
+
+**Carry-overs (not done in step 6, each with its size):**
+1. **76 live by-address calls to NON-ctor UI members inside `runtime/src/ui`** through the file-local
+   `RtAddr<Fn>(0x18…)` helper (`SpriteContext::AddSprite` ×27, `Dialog::CreateElement` ×8,
+   `UserInterface::Play` ×7, `CloseDialog` ×2, `String` conversion ×2, ~30 others once or twice),
+   plus 69 ctor/dtor ones. The step-6 inventory (§6 row d: "5 of 51") grepped only
+   `ResolveAddr(Module::Runtime, …)`; the helper spelling was never counted. Each needs its receiver
+   typed — the next UI caller batch, or B.4.
+2. **103 exported UI members declared and not ported** (CLOSE_NUMBERS §7): `DialogInstance` 22,
+   `Dialog` 13, `UserInterface` 13, `Element` 10, `SpriteContext` 8, …
+3. **Four `RtUI::` PODs still embed `RtUI::Element base;`** (`EditElement.h`, `NumberElement.h`,
+   `ProgressElement.h`, `SpinnerElement.h`), and `RtUI::Element` lives until the last goes.
+4. **`g_TypeId_Element`'s fallback** (ex-`g_TypeId_ObjectInternal`): bound to `UI::Element`'s exe slot,
+   but with the slot unfilled (`BANISHED_LIVE_ELEMENT_TIDS` off, the default) the lazy fallbacks in
+   `ui_dialog_stub_factories.cpp` `EnsureTypeIds` and `debugui.cpp`'s heal table fill it with
+   `GetTypeIdByName("Internal")` — `Object::Internal`'s id. Equivalent for every Element the checks
+   see; not changed. `g_TypeId_CheckElement` and `g_TypeId_CheckboxElement` bind the same slot twice.
+5. **Exe-phase subclasses (step 8):** the 20 `DialogInstance` and 38 `DialogController` exe subclasses,
+   4 `DialogControllerConfig`, 2 `Element` and 2 `ElementDescription` subclasses still construct
+   through the ctor doors and hand-built tables (§3.1, `EXE_SUBCLASSES.md`); the thirty
+   QUALIFIED-call sites of §3.2; the `0x14015b070` double claim (`Dialogs.h:23` vs `Panels.h:22`);
+   the `::TutorialSetupDialog` ODR violation; the four §3.3 slot-copy sites that must convert
+   before the mint rows retire.
+6. **`g_TypeId` renames: DONE** (commit 5) — `SpinnerElement`→`NumberElement`,
+   `SliderElement`→`SpinnerElement`, `ObjectInternal`→`Element`, `UIElementBase`→`ButtonElement`,
+   `ToolbarElement`→`CheckElement`, `g_pExternalTypeId`→`g_TypeId_Dialog`; `g_TypeId_DialogInstance`
+   deleted (zero references).
+7. `TextDescription::CreateInstance` stays a door (`element_bodies_b5.cpp`), reached by address from
+   slot 8 and `LabelDescription`.
 
 ## 13. NOT VERIFIED — read this before citing anything above
 
@@ -571,3 +643,28 @@ store in every UI ctor/dtor. Read from the TREE this pass: every `static_assert(
 6. **I did not build, run or gate anything.**
 7. **No Ghidra renames or annotations were made.** One read-only Java script
    (`b36_session/ghidra/UiAppendix.java`); `switch_program` was left on `Runtime-x64.dll`.
+
+## 14. Corrections from the closing pass (2026-09-26, `b36-close`)
+
+1. **§6's caller table undercounted spelling (d).** "`ResolveAddr(Module::Runtime, 0x18…)` onto a UI
+   address: 5 of 51" counted only that literal spelling. `runtime/src/ui` also resolves by address
+   through a file-local `RtAddr<Fn>(ghidra)` helper (`element_common.h`, `widget_common.h`, several
+   leaf files): 235 UI-address sites at `dc647869`, 146 now, of which 76 are live calls to NON-ctor
+   members. A caller sweep must include every helper that takes a hex literal (`RtAddr<>`,
+   `resolveIAT()`, `RSlot()`), not just `ResolveAddr(` — scan hex literals against
+   `rt_export_addrs.inc` and the PE import table (`slotlits.py` in the closing scratchpad).
+2. **The `engine_funcs` sweep must include `engine_funcs.h`'s own inline bodies.** Four live calls
+   to UI doors sat there (`SetEngineNextLoop`, `SetDialogLoaderNextLoop`, `FindDialogByName_Impl`,
+   `Toolbar_CenterOnEntity_Impl`); a sweep that excludes both `engine_funcs` files as "the binding"
+   reports those globals at zero references and the build then fails. Exclude `engine_funcs.cpp`'s
+   initialiser statements, not the header.
+3. **The UI-bound `engine_funcs` population is 132 door pointers + 23 type-info globals**, not "118"
+   / "112": duplicate bindings of one export (three default-`Sprite` ctors plus `fn_Sprite_Sprite`,
+   both `EditElement::SetText` pointers) and exe-slot bindings are part of it. Counting by initialiser
+   finds them; counting by name does not.
+4. **`element_common.h` `AtomicExport` froze pre-init hits**, contrary to `rt_resolve_cache.cpp`
+   section 6; it now stores only what `RtResolveCached` itself would cache. Any new B6-5 atomic slot
+   should use that shape.
+5. **`Element::AddChild` was declared by value** despite B6-11; retail 0x180115df0 dereferences RDX and
+   passes that same pointer to `SetSizeFill` as the fill. Declared `InternalPtr<Element>*` now.
+6. **Element.h's POD banner** listed seven embedders; at the close four `RtUI::` PODs remain (§12.3).
