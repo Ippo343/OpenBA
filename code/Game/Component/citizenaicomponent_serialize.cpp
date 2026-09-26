@@ -45,6 +45,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 
 extern void Component_SerializeReimpl(void* self, void* stream);
 
@@ -55,9 +56,8 @@ inline uint8_t* At(void* self, ptrdiff_t off) {
 }
 
 uint32_t CitizenAISer_TidCitizenComponent() {
-    static uint32_t s_tid = 0;
-    if (s_tid == 0) s_tid = ::Object::GetTypeIdByName("CitizenComponent");
-    return s_tid;
+    // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
+    return CitizenComponent::TypeId();
 }
 
 } // namespace

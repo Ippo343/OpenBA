@@ -307,24 +307,56 @@ void AmbientEmitterComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 CIT — AmbientEmitterComponent as a REAL class
+// (AmbientEmitterComponent.h).
+//
+// Before: COMPONENT_LIVE_FACTORY_ONADDED + COMPONENT_INSTALL_SERIALIZE — a
+// 48-slot hand-filled table (slot 3 the serializer, slot 6 OnAdded) with
+// Inert_ScalarDtor in slot 0. After: the compiler's 16-slot vtable and a real
+// ctor/dtor chain (B38_RULES D1, D2).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-// Route the OnAdded slot (vtable +0x30 / index 6, dispatched by
-// ComponentEntity_OnAddedPass at register time — flags 0xC3 has +0x20 bit 0 set)
-// to the real AmbientEmitterComponent::Draw (0x140042ba0). This is what seeds a
-// building's ambient audio: resize the emitter array from the description, and if
-// the description carries the audio flag (desc+0x20) play + AddEmitter the 3D
-// looping sounds. Graduated 2026-09-13 (previously opt-in): always live.
-COMPONENT_LIVE_FACTORY_ONADDED(AmbientEmitterComponent, 0x48, 0xC3,
-                               AmbientEmitterComponent_Draw)
-// Slot 3 (+0x18): COMPONENT_LIVE_FACTORY_ONADDED does not fill it, so the ported
-// body above was dead code and every AmbientEmitterComponent record was read as
-// the bare Component base. Retail 0x140042f30 reads a Vector3, an emitter count
-// and then that many 16-byte entries, so the shortfall is VARIABLE -- which is
-// why it surfaced as an all-zero PersistObject record thousands of entities into
-// the tutorial load rather than as a fixed offset.
-COMPONENT_INSTALL_SERIALIZE(AmbientEmitterComponent, AmbientEmitterComponent_Shutdown)
-REGISTER_TYPE(AmbientEmitterComponent, "Component",
-              &AmbientEmitterComponent_Factory_Ser,
-              &AmbientEmitterComponent_CreateInPlace_Ser);
+#include "Component/AmbientEmitterComponent.h"
+
+// 0x1400430c0. Component() is the CALL 0x1401188b0; the 0x140158a60 stamp is
+// the compiler's; +0x28, +0x30 (dword), +0x38, +0x40 = 0; flags |= 0x43 (0xc3).
+AmbientEmitterComponent::AmbientEmitterComponent()
+    : field28(nullptr), field30(0), _pad34{}, field38(nullptr), field40(nullptr) {
+    OrFlagsInCtor(0x43);
+}
+
+// [0] 0x1400016d0. PORT GAP (retail frees the +0x38 emitter array first) — the
+// tree's Inert_ScalarDtor never did; kept (AmbientEmitterComponent.h).
+Object::Base* AmbientEmitterComponent::DeletingDtor(unsigned flags) {
+    this->~AmbientEmitterComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [3] 0x140042f30 — the body resolves its own helpers first.
+void AmbientEmitterComponent::Persist(void* stream) { AmbientEmitterComponent_Shutdown(this, stream); }
+
+// [6] 0x140042ba0 — dispatched by ComponentEntity_OnAddedPass at register time
+// (flags bit 0): size the emitter array and start the building's ambient sounds.
+void AmbientEmitterComponent::OnAdded() { AmbientEmitterComponent_Draw(this); }
+
+// [7] 0x140042b90 (`JMP 0x140042d70`). PORT GAP (retail 0x140042b90) — B38 D9:
+// not ported; the tree's table held the inert stub here, kept.
+void AmbientEmitterComponent::OnRemove() {}
+
+// create 0x1400014b0: MemAlloc(0x48, 8), then the ctor.
+void* AmbientEmitterComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AmbientEmitterComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AmbientEmitterComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* AmbientEmitterComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AmbientEmitterComponent());
+}
+
+DEFINE_EXE_VTABLE(AmbientEmitterComponent, "_ZTV23AmbientEmitterComponent")
+DEFINE_EXE_TYPE(AmbientEmitterComponent, "Component")

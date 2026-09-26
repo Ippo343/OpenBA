@@ -19,33 +19,8 @@ namespace PopulationComponentAddr {
     constexpr uintptr_t Vtable = 0x14015a360;
 }
 
-struct PopulationComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `PopulationComponent` is a real class now
+// (code/Game/Component/PopulationComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/PopulationComponent.h"
 
-    // PopulationComponent own fields
-    void*    field28;      // +0x28: zeroed
-    uint32_t field30;      // +0x30: zeroed (dword)
-    uint8_t  _pad34[4];    // +0x34: padding
-    void*    field38;      // +0x38: zeroed
-    void*    field40;      // +0x40: zeroed
-    uint32_t field48;      // +0x48: zeroed (dword)
-    uint8_t  _pad4C[4];    // +0x4C: padding
-    void*    field50;      // +0x50: zeroed
-    void*    field58;      // +0x58: zeroed
-    void*    field60;      // +0x60: zeroed
-    void*    field68;      // +0x68: zeroed
-};
-
-static_assert(sizeof(PopulationComponent) == 0x70, "PopulationComponent size mismatch");
-static_assert(offsetof(PopulationComponent, vtable) == 0x00, "");
-static_assert(offsetof(PopulationComponent, flags) == 0x20, "");
-static_assert(offsetof(PopulationComponent, field28) == 0x28, "");
-static_assert(offsetof(PopulationComponent, field30) == 0x30, "");
-static_assert(offsetof(PopulationComponent, field48) == 0x48, "");
-static_assert(offsetof(PopulationComponent, field68) == 0x68, "");

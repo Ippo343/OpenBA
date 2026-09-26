@@ -397,52 +397,59 @@ void AmbientEnvironmentComponent_InitFuncs() {
     EnsureResolved();
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-#include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-
-// Route the per-tick Update slot (vtable +0x48 / index 9) to the biome-ambient
-// reimpl.
+// ============================================================================
+// ENDGAME B.3.8 CIT — AmbientEnvironmentComponent as a REAL class
+// (AmbientEnvironmentComponent.h).
 //
-// Hand-expanded from COMPONENT_LIVE_FACTORY (rather than using the macro as-is)
-// to ALSO wire slot 3 (stream Serialize, retail 0x1400437e0 — see
-// ambientenvironmentcomponent_serialize.cpp). The write happens inside the factory function
-// body, never at namespace scope, so FillTypedVtable's per-instance vtable
-// copy (which runs before this) can't erase it.
+// Before: a 48-slot hand-built AmbientEnvironmentComponent_LiveVtable filled at
+// every create (slot 3 the serializer, slot 9 the biome-ambient Update),
+// Inert_ScalarDtor in slot 0. After: the compiler's 16-slot vtable and a real
+// ctor/dtor chain (B38_RULES D1, D2).
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/AmbientEnvironmentComponent.h"
+
+// Retail 0x1400437e0 (ambientenvironmentcomponent_serialize.cpp).
 extern "C" void AmbientEnvironmentComponent_Serialize(void* self, void* stream);
 
-static uint32_t AmbientEnvironmentComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("AmbientEnvironmentComponent");
-    return cached;
+// 0x1400438d0. Component() is the CALL 0x1401188b0; the 0x140158b70 stamp is
+// the compiler's; +0x38 = 0, +0x40 (dword) = 0; flags |= 0x88. Retail leaves
+// +0x28/+0x30 unwritten; they are zeroed as the tree's factory did.
+AmbientEnvironmentComponent::AmbientEnvironmentComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr), field40(0), _pad44{} {
+    OrFlagsInCtor(0x88);
 }
-static void* AmbientEnvironmentComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void AmbientEnvironmentComponent_UpdateVSlot(void* s, void* t) {
-    AmbientEnvironmentComponent_Update(reinterpret_cast<AmbientEnvironmentComponent*>(s),
-                                       reinterpret_cast<int64_t*>(t));
+
+// [0] 0x140002170: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* AmbientEnvironmentComponent::DeletingDtor(unsigned flags) {
+    this->~AmbientEnvironmentComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void AmbientEnvironmentComponent_SerializeVSlot(void* s, void* stream) {
-    AmbientEnvironmentComponent_Serialize(s, stream);
+
+// [3] 0x1400437e0.
+void AmbientEnvironmentComponent::Persist(void* stream) {
+    AmbientEnvironmentComponent_Serialize(this, stream);
 }
-static void AmbientEnvironmentComponent_FinishLiveVtable() {
-    AmbientEnvironmentComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&AmbientEnvironmentComponent_SerializeVSlot);
-        AmbientEnvironmentComponent_LiveVtable[9] =
-            reinterpret_cast<void*>(&AmbientEnvironmentComponent_UpdateVSlot);
+
+// [9] 0x140043690 (`JMP 0x140043310`). RDX is a pointer to the elapsed
+// System::Time (EntityList bucket tick 0x1400c42af).
+void AmbientEnvironmentComponent::Update(void* time) {
+    AmbientEnvironmentComponent_Update(this, static_cast<int64_t*>(time));
 }
-extern "C" void* AmbientEnvironmentComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x88,
-        AmbientEnvironmentComponent_LiveVtable,
-        reinterpret_cast<void*>(&AmbientEnvironmentComponent_LiveGetTypeId));
-    AmbientEnvironmentComponent_FinishLiveVtable();
-    return p;
+
+// create 0x140001ee0: MemAlloc(0x48, 8), then the ctor.
+void* AmbientEnvironmentComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AmbientEnvironmentComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AmbientEnvironmentComponent());
 }
-static void* AmbientEnvironmentComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x88,
-        AmbientEnvironmentComponent_LiveVtable,
-        reinterpret_cast<void*>(&AmbientEnvironmentComponent_LiveGetTypeId));
-    AmbientEnvironmentComponent_FinishLiveVtable();
-    return mem;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* AmbientEnvironmentComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AmbientEnvironmentComponent());
 }
-REGISTER_TYPE(AmbientEnvironmentComponent, "Component",
-              &AmbientEnvironmentComponent_Factory, &AmbientEnvironmentComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(AmbientEnvironmentComponent, "_ZTV27AmbientEnvironmentComponent")
+DEFINE_EXE_TYPE(AmbientEnvironmentComponent, "Component")

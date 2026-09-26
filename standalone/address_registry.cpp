@@ -131,7 +131,6 @@ extern "C" {
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFireDescriptionVtable();
-    void RegisterFireComponentVtable();
     void RegisterFishingDescriptionVtable();
     void RegisterFloorDescriptionVtable();
     void RegisterForesterDescriptionVtable();
@@ -1861,7 +1860,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireDescriptionVtable();
-    RegisterFireComponentVtable();
     RegisterFishingDescriptionVtable();
     RegisterFloorDescriptionVtable();
     RegisterForesterDescriptionVtable();

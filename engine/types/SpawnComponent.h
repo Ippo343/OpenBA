@@ -18,20 +18,8 @@ namespace SpawnComponentAddr {
     constexpr uintptr_t Vtable = 0x14015a670;
 }
 
-struct SpawnComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `SpawnComponent` is a real class now
+// (code/Game/Component/SpawnComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/SpawnComponent.h"
 
-    void*    field28;      // +0x28: zeroed
-    void*    field30;      // +0x30: zeroed
-};
-
-static_assert(sizeof(SpawnComponent) == 0x38, "SpawnComponent size mismatch");
-static_assert(offsetof(SpawnComponent, vtable) == 0x00, "");
-static_assert(offsetof(SpawnComponent, flags) == 0x20, "");
-static_assert(offsetof(SpawnComponent, field28) == 0x28, "");
-static_assert(offsetof(SpawnComponent, field30) == 0x30, "");

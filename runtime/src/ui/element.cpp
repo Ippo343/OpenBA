@@ -353,35 +353,10 @@ void* RtUi_Element_Ctor(Element* self) {
     // pointer has no field name; the door stamps the MINTED table exactly as
     // before (B4b-2: this stays a door, it is not a C++ constructor).
     *reinterpret_cast<void**>(self) = ElementVTable();
-    self->_name             = nullptr;
-    self->_leftPad          = 0;
-    self->_rightPad         = 0;
-    self->_topPad           = 0;
-    self->_bottomPad        = 0;
-    self->_minWidth         = 0;
-    self->_minHeight        = 0;
-    self->_alignment        = 3;                                  // literal 3 at 0x180115e88
-    self->_flags            = UI::kElementFlagNeedsSizeCalc;      // 0x08000000
-    self->_color            = 0xFFFFFFFFu;
-    self->_mouseCursorIndex = 0;
-    self->_toolTipDialog    = nullptr;
-    self->_toolTip.table    = nullptr;
-    self->_toolTip.index    = -1;                                 // +0x54 deliberately untouched
-    self->_toolTipString    = nullptr;
-    self->_layoutLeft       = 0;
-    self->_layoutTop        = 0;
-    self->_layoutRight      = 0;
-    self->_layoutBottom     = 0;
-    self->_unknown78        = -1;                                 // +0x7c deliberately untouched
-    self->_userData         = nullptr;
-    self->_elementId        = -1;                                 // +0x8c deliberately untouched
-    self->_dialogParent     = nullptr;
-    self->_parent           = nullptr;
-    self->_children._data   = nullptr;
-    self->_children._size   = 0;
-    self->_children._capacity = 0;
-    self->_border           = nullptr;
-    self->_description      = nullptr;
+    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores are ONE body with
+    // the real constructor `UI::Element::Element()` — `InitFields`, in the
+    // member section below.
+    UI::Element::DoorBody::Init(self);
 
     // ---- BUILD ORACLE ------------------------------------------------------
     // A ctor cannot be replayed onto a copy of the object it just built: the
@@ -799,11 +774,102 @@ void Element::SetUserData(Object::Base* userData) {
     _userData = userData;
 }
 
-// ---- ??1Element@UI@@UEAA@XZ — the C++ destructor, EMPTY on purpose ---------
-// The retail body (0x1801161a0) is the registered door `RtUi_Element_Dtor`
-// below, reached through the minted slot 0. No live Element is destroyed as a
-// C++ object; this exists so a probe subclass can derive (Material precedent).
-Element::~Element() {}
+// ---- ??0Element@UI@@QEAA@XZ 0x180115e50 MINUS ??0Internal and the vptr store
+// ENDGAME B.3.8 block RB (RULE B8-1): shared by `Element::Element()` (Element.h)
+// and the door `RtUi_Element_Ctor` above. Moved verbatim (`self->x` -> `x`);
+// +0x54, +0x60, +0x64, +0x7c, +0x8c stay unwritten, as the door's banner says.
+void Element::InitFields() {
+    _name             = nullptr;
+    _leftPad          = 0;
+    _rightPad         = 0;
+    _topPad           = 0;
+    _bottomPad        = 0;
+    _minWidth         = 0;
+    _minHeight        = 0;
+    _alignment        = 3;                                  // literal 3 at 0x180115e88
+    _flags            = UI::kElementFlagNeedsSizeCalc;      // 0x08000000
+    _color            = 0xFFFFFFFFu;
+    _mouseCursorIndex = 0;
+    _toolTipDialog    = nullptr;
+    _toolTip.table    = nullptr;
+    _toolTip.index    = -1;                                 // +0x54 deliberately untouched
+    _toolTipString    = nullptr;
+    _layoutLeft       = 0;
+    _layoutTop        = 0;
+    _layoutRight      = 0;
+    _layoutBottom     = 0;
+    _unknown78        = -1;                                 // +0x7c deliberately untouched
+    _userData         = nullptr;
+    _elementId        = -1;                                 // +0x8c deliberately untouched
+    _dialogParent     = nullptr;
+    _parent           = nullptr;
+    _children._data   = nullptr;
+    _children._size   = 0;
+    _children._capacity = 0;
+    _border           = nullptr;
+    _description      = nullptr;
+}
+
+// ---- ??1Element@UI@@UEAA@XZ 0x1801161a0 MINUS the restamp and the ~Internal tail
+// ENDGAME B.3.8 block RB (RULE B8-1): shared by `Element::~Element()`
+// (Element.h) and the door `RtUi_Element_Dtor`. Moved verbatim (`self->x` ->
+// `x`); the evidence is the door's banner.
+void Element::ReleaseFields() {
+
+    // 0x180115570 RemoveChildren — a member since fragment pass F1 (body in
+    // widgets_layout.cpp); called as one instead of by ADDRESS.
+    UI::Element::RemoveChildren();
+
+    // The border element, destroyed through ITS OWN slot 0 with flag 1 —
+    // scalar delete. Not `??1Element`: slot 0 is `??_E`, and picking the wrong
+    // one of the three spellings resolves null behind a guard
+    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+    if (_border != nullptr) {
+        void* border = _border;
+        if (border != nullptr) {           // retail's second, redundant test
+            using DeletingDtorFn = void* (*)(void*, unsigned);
+            void** vtbl = *reinterpret_cast<void***>(border);
+            reinterpret_cast<DeletingDtorFn>(vtbl[0])(border, 1u);
+        }
+        _border = nullptr;
+    }
+
+    // ENDGAME B.3.2 step 2 — the 0x180037240 forwarder is GONE. `_children` is
+    // the real `Collection::Array<Element*>` member, and 0x180037240 is a J1
+    // `~Array` (destroy == null): trait-equivalent, since `Element*` is
+    // trivially destructible. `.~Array()` IS that instantiation.
+    // In the member it is ~Array's own body (`ClearCallback`) rather than an
+    // explicit `~Array()` call: the real destructor chain runs ~Array again
+    // after this body, a no-op on the header this zeroes, and ending the
+    // member's lifetime twice would be undefined.
+    decltype(_children)::ClearCallback(
+        reinterpret_cast<rtcoll::ArrayHdr*>(&_children));
+
+    // The two System::String releases, in retail's order (+0x58 then +0x10) and
+    // with retail's asymmetry: on the FREEING branch the field is left holding
+    // `data - 8`, a dangling pointer; only the SHARING branch nulls it. Both
+    // reproduced — see runtime/types/system/String.h, "RETAIL'S RELEASE IDIOM,
+    // AND WHY IT MUST BE COPIED EXACTLY".
+    if (char* p = reinterpret_cast<char*>(_toolTipString)) {
+        if (--RtSystem::StringRefCount(p) == 0) {
+            _toolTipString = p - 8;
+            MemFreeFn freeFn = MemFree();
+            if (freeFn) freeFn(_toolTipString);
+        } else {
+            _toolTipString = nullptr;
+        }
+    }
+    if (char* p = reinterpret_cast<char*>(_name)) {
+        if (--RtSystem::StringRefCount(p) == 0) {
+            _name = p - 8;
+            MemFreeFn freeFn = MemFree();
+            if (freeFn) freeFn(_name);
+        } else {
+            _name = nullptr;
+        }
+    }
+}
+
 
 // ---- ?SetOffsets@ContainerElement@UI@@QEAAXHH@Z  0x1800cc1e0 ---------------
 // ENDGAME B.3.6 fragment pass F2: block C4's class, its body in block A's file
@@ -1102,54 +1168,10 @@ void RtUi_Element_Dtor(Element* self) {
     // carry the identical pointer (the argument at the top of this file).
     if (void* vt = ElementVTable()) *reinterpret_cast<void**>(self) = vt;
 
-    // 0x180115570 RemoveChildren — a member since fragment pass F1 (body in
-    // widgets_layout.cpp); called as one instead of by ADDRESS.
-    self->UI::Element::RemoveChildren();
-
-    // The border element, destroyed through ITS OWN slot 0 with flag 1 —
-    // scalar delete. Not `??1Element`: slot 0 is `??_E`, and picking the wrong
-    // one of the three spellings resolves null behind a guard
-    // (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
-    if (self->_border != nullptr) {
-        void* border = self->_border;
-        if (border != nullptr) {           // retail's second, redundant test
-            using DeletingDtorFn = void* (*)(void*, unsigned);
-            void** vtbl = *reinterpret_cast<void***>(border);
-            reinterpret_cast<DeletingDtorFn>(vtbl[0])(border, 1u);
-        }
-        self->_border = nullptr;
-    }
-
-    // ENDGAME B.3.2 step 2 — the 0x180037240 forwarder is GONE. `_children` is
-    // the real `Collection::Array<Element*>` member, and 0x180037240 is a J1
-    // `~Array` (destroy == null): trait-equivalent, since `Element*` is
-    // trivially destructible. `.~Array()` IS that instantiation.
-    self->_children.~Array();
-
-    // The two System::String releases, in retail's order (+0x58 then +0x10) and
-    // with retail's asymmetry: on the FREEING branch the field is left holding
-    // `data - 8`, a dangling pointer; only the SHARING branch nulls it. Both
-    // reproduced — see runtime/types/system/String.h, "RETAIL'S RELEASE IDIOM,
-    // AND WHY IT MUST BE COPIED EXACTLY".
-    if (char* p = reinterpret_cast<char*>(self->_toolTipString)) {
-        if (--RtSystem::StringRefCount(p) == 0) {
-            self->_toolTipString = p - 8;
-            MemFreeFn freeFn = MemFree();
-            if (freeFn) freeFn(self->_toolTipString);
-        } else {
-            self->_toolTipString = nullptr;
-        }
-    }
-    if (char* p = reinterpret_cast<char*>(self->_name)) {
-        if (--RtSystem::StringRefCount(p) == 0) {
-            self->_name = p - 8;
-            MemFreeFn freeFn = MemFree();
-            if (freeFn) freeFn(self->_name);
-        } else {
-            self->_name = nullptr;
-        }
-    }
-
+    // ENDGAME B.3.8 block RB (RULE B8-1): everything between the restamp and
+    // the ~Internal tail is ONE body with the real destructor
+    // `UI::Element::~Element()` — `ReleaseFields`, in the member section.
+    UI::Element::DoorBody::Release(self);
 
     // 0x1800bfdb0 ~Internal — a TAIL CALL in retail, a normal call here. That
     // is the one deliberate departure: it costs a stack frame and changes
