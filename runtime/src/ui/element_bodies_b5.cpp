@@ -233,15 +233,10 @@ void* CallElementCtor(void* self) {        // 0x180115e50, runtime/src/ui/elemen
 
 // `?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@
 // Object@@@Z` (0x180115ad0) — the shared "apply the description's Element-level
-// fields to the new element" pass. Its body is still dialog.cpp's registered
-// DOOR (fragment pass F2's), so it is reached through the port-aware
-// `ResolveAddr` with no cache (RULE B6-5), exactly as description_common.h's
-// `ElementDescriptionApply` does. TWO arguments, the InternalPtr arriving by
-// address. Not a hidden slot: it returns void.
-using DescApplyFn = void (*)(const void* desc, void** elemPtr);
-void ElementDescriptionApply(const void* desc, void** elemPtr) {
-    RtAddr<DescApplyFn>(0x180115ad0ull)(desc, elemPtr);
-}
+// fields to the new element" pass — is `UI::ElementDescription::
+// CreateInstance(InternalPtr<Element>*)` (dialog.cpp, fragment pass F2), the
+// InternalPtr arriving by address. TextDescription's applier below calls it
+// QUALIFIED: the leaf's own two CreateInstance overloads hide the base name.
 
 // The three `Collection::Array<T>::SetSize(n)`-then-fill-the-new-tail helpers
 // retail inlines a call to. All three are ported in
@@ -750,8 +745,8 @@ namespace UI {
 
 void TextDescription::CreateInstance(Object::InternalPtr<TextElement>* element,
                                      const Dialog* /*dialog — never read*/) const {
-    void* local = element->Get();                                  // 18011ef7f
-    ElementDescriptionApply(this, &local);                         // 18011ef92
+    Object::InternalPtr<Element> local(element->Get());            // 18011ef7f
+    ElementDescription::CreateInstance(&local);                    // 18011ef92
 
     TextElement* elem = element->Get();                            // 18011ef97, re-read
     elem->_font = _font;                                           // 18011ef9e  +0xc0 <- +0x68
