@@ -17,6 +17,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "achievement/Goal.h"   // ENDGAME B.3.7 callers (K2): QUALIFIED base calls
 #include <new>
 
 // Vtable pointer for FinishTutorialGoal (resolved at runtime)
@@ -43,10 +44,8 @@ void* FinishTutorialGoal_Dtor(FinishTutorialGoal* self, uint32_t flags) {
     // Set vtable to FinishTutorialGoal (for correct virtual dispatch during destruction)
     *(void**)self = s_vtable_FinishTutorialGoal;
 
-    // Call Goal base destructor
-    if (fn_Goal_BaseDtor) {
-        fn_Goal_BaseDtor(self);
-    }
+    // Achievement::Goal::~Goal (0x18009edb0) — a QUALIFIED member call (B7-13).
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
 
     // If bit 0 set, free memory
     if ((flags & 1) != 0) {
@@ -67,10 +66,9 @@ void* FinishTutorialGoal_Dtor(FinishTutorialGoal* self, uint32_t flags) {
 int FinishTutorialGoal_Slot5(FinishTutorialGoal* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
-    // Call Goal base serialize
-    if (fn_Goal_BaseSerialize) {
-        fn_Goal_BaseSerialize(self, stream);
-    }
+    // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13): an
+    // unqualified call would dispatch through this exe table back into this slot.
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
@@ -135,12 +133,18 @@ static uint32_t FinishTutorialGoal_GetTypeId_Std(void* /*self*/) {
     return cached;
 }
 
-// Slot +0x48: returns FinishTutorialInstance typeId via *retval.
+// Slot +0x48: the exe OVERRIDE of Achievement::Goal::GetInstanceType (retail
+// 0x1400261f0): returns FinishTutorialInstance's type id BY VALUE.
 // Original: MOV EDX,[TypeInfo_FinishTutorialInstance]; MOV [RDX_retval],EDX; MOV RAX,RDX; RET.
-static void* FinishTutorialGoal_Slot9_Standalone(void* /*self*/, uint32_t* retval) {
+// RULE B7-4: the override takes the base's retslot shape
+// `Object::Type* (const Goal* this, Object::Type* ret)` — `this` first, the
+// hidden return slot second, the slot handed back in RAX — exactly what
+// `virtual Object::Type* Goal::GetInstanceType(Object::Type* ret) const`
+// compiles to (the TimeGoal override has the same shape).
+static Object::Type* FinishTutorialGoal_Slot9_Standalone(const Achievement::Goal* /*self*/, Object::Type* retval) {
     static uint32_t cached = 0;
     if (cached == 0) cached = ::Object::GetTypeIdByName("FinishTutorialInstance");
-    if (retval) *retval = cached;
+    if (retval) retval->_type = cached;
     return retval;
 }
 
@@ -207,10 +211,10 @@ void* FinishTutorialGoal_Slot11(void* self, uint32_t flags) {
         reinterpret_cast< ::Object::InternalBasePtr*>((void*)(s + 0x20))->DeletePtr();   // B.3.3 bridge
     }
 
-    // Call GoalInstance base destructor
-    if (fn_GoalInstance_BaseDtor) {
-        fn_GoalInstance_BaseDtor(self);
-    }
+    // Achievement::GoalInstance::~GoalInstance (retail 0x18009ef40) — a
+    // QUALIFIED member call (B7-13): re-stamp + ~Internal (the InternalFactory
+    // swap-remove).
+    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::~GoalInstance();   // B.3.7 bridge
 
     // If bit 0 set, free memory
     if ((flags & 1) != 0) {

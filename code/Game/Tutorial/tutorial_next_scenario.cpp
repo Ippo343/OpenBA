@@ -46,6 +46,7 @@
 #include "Tutorial/tutorial_funcs.h"
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
 #include "io/FileSystem.h"    // ENDGAME B.3.4 caller batch P
+#include "save/SaveLoad.h"    // ENDGAME B.3.7 callers (K2)
 #include <new>
 #include <cstdint>
 #include <cstdio>
@@ -156,11 +157,6 @@ const char* MissingDependency(bool needSaveLoad) {
     if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) return "SaveLoad singleton";
     if (!g_pPersistenceSingleton || !*g_pPersistenceSingleton) return "Persistence singleton";
     if (!g_pFileSystemSingleton2 || !*g_pFileSystemSingleton2) return "FileSystem singleton";
-    if (!fn_SaveLoad_SetOperation) return "SaveLoad::SetOperation";
-    if (!fn_SaveLoad_SetSaveName) return "SaveLoad::SetSaveName";
-    if (!fn_SaveLoad_GetOperation) return "SaveLoad::GetOperation";
-    if (!fn_SaveLoad_Update) return "SaveLoad::Update";
-    if (!fn_SaveLoad_GetSaveState) return "SaveLoad::GetSaveState";
     return nullptr;
 }
 
@@ -276,8 +272,8 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         }
 
         void* saveLoad = *g_pSaveLoadSingleton;
-        fn_SaveLoad_SetOperation(saveLoad, 3, 0);
-        fn_SaveLoad_SetSaveName(saveLoad, &saveNameStr, 2);
+        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(3), 0);   // B.3.7 bridge
+        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(saveNameStr, 2);   // B.3.7 bridge
 
         // Tutorial saves live inside WinData/*.pkg, so Persistence+0x90 must
         // point at the DATA directory for the load, then be restored. Identical
@@ -301,13 +297,13 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
             *reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90) =
             dataDirBuf.AsString();
 
-        int operation = fn_SaveLoad_GetOperation(saveLoad);
+        int operation = static_cast<int>(reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetOperation());   // B.3.7 bridge
         int loopCount = 0;
         while (operation != 0) {
             uint8_t zeroTime[8];
             fn_Time_Ctor_Float(zeroTime, 0.0f);
-            fn_SaveLoad_Update(saveLoad, zeroTime);
-            operation = fn_SaveLoad_GetOperation(saveLoad);
+            reinterpret_cast<Save::SaveLoad*>(saveLoad)->Update(*reinterpret_cast<const System::Time*>(zeroTime));   // B.3.7 bridge
+            operation = static_cast<int>(reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetOperation());   // B.3.7 bridge
             ++loopCount;
         }
         fprintf(stderr, "[TutNext] SaveLoad pump finished after %d iterations\n", loopCount);
@@ -316,7 +312,7 @@ extern "C" void TutWave_LoadNextScenario(void* self) {
         *reinterpret_cast<System::String*>(
             *reinterpret_cast<uintptr_t*>(g_pPersistenceSingleton) + 0x90) = savePathBuf;
 
-        void* savedState = fn_SaveLoad_GetSaveState(saveLoad);
+        void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();   // B.3.7 bridge
 
         void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
         if (gameLoop) {
