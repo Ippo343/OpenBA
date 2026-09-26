@@ -203,20 +203,8 @@ namespace WorkPlaceUIAddr {
 // --- ControlUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/ControlUI.h"
 
-// --- CropUI (0x60) --- extends SelectResourceUI
-// Has separate Ctor (0x1400b2c90). Base vtable 0x14015d330 (SelectResourceUI).
-// Ctor: InternalBasePtr@+0x30, then +0x38..+0x58=0
-struct CropUI {
-    DialogController base;     // +0x00
-    uint64_t internalBasePtr;  // +0x30: Object::InternalBasePtr (init to null)
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-    uint64_t data48;           // +0x48: zeroed
-    uint64_t data50;           // +0x50: zeroed
-    uint64_t data58;           // +0x58: zeroed
-};
-static_assert(sizeof(CropUI) == 0x60, "CropUI size mismatch");
-static_assert(offsetof(CropUI, internalBasePtr) == 0x30, "");
+// --- CropUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/CropUI.h"
 
 // --- DebugUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/DebugUI.h"
@@ -264,27 +252,14 @@ struct NoiseUI {
 };
 static_assert(sizeof(NoiseUI) == 0x70, "NoiseUI size mismatch");
 
-// --- OrchardUI (0x48) --- extends SelectResourceUI
-// Factory: SelectResourceUI vtable -> InternalBasePtr@+0x30 -> override vtable, +0x38=0, +0x40=0
-struct OrchardUI {
-    DialogController base;     // +0x00
-    uint64_t entityRef;        // +0x30: InternalBasePtr (initialized null)
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-};
-static_assert(sizeof(OrchardUI) == 0x48, "OrchardUI size mismatch");
+// --- OrchardUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/OrchardUI.h"
 
 // --- PageToggleUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/PageToggleUI.h"
 
-// --- PastureUI (0x40) --- extends SelectResourceUI
-// Factory: SelectResourceUI vtable -> InternalBasePtr@+0x30 -> override vtable, +0x38=0
-struct PastureUI {
-    DialogController base;     // +0x00
-    uint64_t entityRef;        // +0x30: InternalBasePtr (initialized null)
-    uint64_t data38;           // +0x38: zeroed
-};
-static_assert(sizeof(PastureUI) == 0x40, "PastureUI size mismatch");
+// --- PastureUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/PastureUI.h"
 
 // --- ProductionUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/ProductionUI.h"
@@ -301,9 +276,8 @@ static_assert(sizeof(PastureUI) == 0x40, "PastureUI size mismatch");
 // --- ResourceLimitUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/ResourceLimitUI.h"
 
-// --- SelectResourceUI (abstract) ---
-// No instantiation. Placeholder factory. Base for CropUI, OrchardUI, PastureUI.
-// vtable = 0x14015d330
+// --- SelectResourceUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/SelectResourceUI.h"
 
 // --- SpriteCaptureUI (0x70) ---
 // Serialize inits:

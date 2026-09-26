@@ -28,6 +28,7 @@
 #include "Dialog/CitizenUI.h"
 #include "Dialog/ConsumeProduceUI.h"
 #include "Dialog/ControlUI.h"
+#include "Dialog/CropUI.h"
 #include "Dialog/DebugUI.h"
 #include "Dialog/DestroyUI.h"
 #include "Dialog/EntityUI.h"
@@ -36,7 +37,9 @@
 #include "Dialog/HotKeyToolTipUI.h"
 #include "Dialog/ImmigrationUI.h"
 #include "Dialog/MapUI.h"
+#include "Dialog/OrchardUI.h"
 #include "Dialog/PageToggleUI.h"
+#include "Dialog/PastureUI.h"
 #include "Dialog/ProductionUI.h"
 #include "Dialog/ProfessionUI.h"
 #include "Dialog/RadiusUI.h"
@@ -138,6 +141,26 @@ void CheckPanelShape(size_t size) {
     CHECK_EQ(SlotOffset(&C::Type),         (uintptr_t)0x10);
 }
 
+// SelectResourceUI: abstract (slots 11-13 _purecall in 0x14015d330), 14 slots.
+UNIT_TEST(pnl_selectresourceui_abstract_base) {
+    using S = SelectResourceUI;
+    CHECK(std::is_abstract<S>::value);
+    CHECK(!std::has_virtual_destructor<S>::value);
+    CHECK((std::is_base_of<UI::DialogController, S>::value));
+    CHECK_EQ(sizeof(S), (size_t)0x38);
+    CHECK_EQ(offsetof(S, internalBasePtr), (size_t)0x30);
+    CHECK_EQ(SlotOffset(&S::DeletingDtor),   (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&S::OnCreated),      (uintptr_t)0x20);   // 0x140078be0
+    CHECK_EQ(SlotOffset(&S::OnUpdateLayout), (uintptr_t)0x38);   // 0x140078cb0
+    CHECK_EQ(SlotOffset(&S::OnUpdate),       (uintptr_t)0x40);   // 0x140078d30
+    CHECK_EQ(SlotOffset(&S::OnElementEvent), (uintptr_t)0x48);   // 0x140078d80
+    CHECK_EQ(SlotOffset(&S::SetResource),    (uintptr_t)0x58);   // [11]
+    CHECK_EQ(SlotOffset(&S::GetResource),    (uintptr_t)0x60);   // [12]
+    CHECK_EQ(SlotOffset(&S::GetCategory),    (uintptr_t)0x68);   // [13] last
+    // CropUI inherits slot 9 (retail's CropUI table holds 0x140078d80).
+    CHECK_EQ(SlotOffset(&CropUI::OnElementEvent), (uintptr_t)0x48);
+}
+
 // @@PANEL-TESTS-BEGIN (generated from the per-class slot lists)
 UNIT_TEST(pnl_AttendanceUI_layout_and_slots) {
     CheckPanelShape<AttendanceUI>((size_t)0x38);
@@ -185,6 +208,16 @@ UNIT_TEST(pnl_ControlUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&ControlUI::OnCreated), (uintptr_t)0x20);   // 0x14005f9b0
     CHECK_EQ(SlotOffset(&ControlUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14005f870
     CHECK_EQ(SlotOffset(&ControlUI::OnElementEvent), (uintptr_t)0x48);   // 0x14005f7f0
+}
+
+UNIT_TEST(pnl_CropUI_layout_and_slots) {
+    CheckPanelShape<CropUI>((size_t)0x60);
+    CHECK_EQ(SlotOffset(&CropUI::OnCreated), (uintptr_t)0x20);   // 0x1400b2b50
+    CHECK_EQ(SlotOffset(&CropUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400b2a50
+    CHECK_EQ(SlotOffset(&CropUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&CropUI::SetResource), (uintptr_t)0x58);   // 0x1400b2920
+    CHECK_EQ(SlotOffset(&CropUI::GetResource), (uintptr_t)0x60);   // 0x1400b29d0
+    CHECK_EQ(SlotOffset(&CropUI::GetCategory), (uintptr_t)0x68);   // 0x1400b29c0
 }
 
 UNIT_TEST(pnl_DebugUI_layout_and_slots) {
@@ -250,12 +283,34 @@ UNIT_TEST(pnl_MapUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&MapUI::OnElementEvent), (uintptr_t)0x48);   // 0x14006c9e0
 }
 
+UNIT_TEST(pnl_OrchardUI_layout_and_slots) {
+    CheckPanelShape<OrchardUI>((size_t)0x48);
+    CHECK_EQ(SlotOffset(&OrchardUI::OnCreated), (uintptr_t)0x20);   // 0x1400755b0
+    CHECK_EQ(SlotOffset(&OrchardUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400754b0
+    CHECK_EQ(SlotOffset(&OrchardUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&OrchardUI::OnElementEvent), (uintptr_t)0x48);   // standalone deviation
+    CHECK_EQ(SlotOffset(&OrchardUI::SetResource), (uintptr_t)0x58);   // 0x140075380
+    CHECK_EQ(SlotOffset(&OrchardUI::GetResource), (uintptr_t)0x60);   // 0x140075430
+    CHECK_EQ(SlotOffset(&OrchardUI::GetCategory), (uintptr_t)0x68);   // 0x140075420
+}
+
 UNIT_TEST(pnl_PageToggleUI_layout_and_slots) {
     CheckPanelShape<PageToggleUI>((size_t)0x48);
     CHECK_EQ(SlotOffset(&PageToggleUI::Persist), (uintptr_t)0x18);   // 0x1400759a0
     CHECK_EQ(SlotOffset(&PageToggleUI::OnCreated), (uintptr_t)0x20);   // 0x140075850
     CHECK_EQ(SlotOffset(&PageToggleUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140075780
     CHECK_EQ(SlotOffset(&PageToggleUI::OnElementEvent), (uintptr_t)0x48);   // 0x140075710
+}
+
+UNIT_TEST(pnl_PastureUI_layout_and_slots) {
+    CheckPanelShape<PastureUI>((size_t)0x40);
+    CHECK_EQ(SlotOffset(&PastureUI::OnCreated), (uintptr_t)0x20);   // 0x1400b5090
+    CHECK_EQ(SlotOffset(&PastureUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400b4e50
+    CHECK_EQ(SlotOffset(&PastureUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&PastureUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400b4e20
+    CHECK_EQ(SlotOffset(&PastureUI::SetResource), (uintptr_t)0x58);   // 0x1400b4c40
+    CHECK_EQ(SlotOffset(&PastureUI::GetResource), (uintptr_t)0x60);   // 0x1400b4d00
+    CHECK_EQ(SlotOffset(&PastureUI::GetCategory), (uintptr_t)0x68);   // 0x1400b4cf0
 }
 
 UNIT_TEST(pnl_ProductionUI_layout_and_slots) {
