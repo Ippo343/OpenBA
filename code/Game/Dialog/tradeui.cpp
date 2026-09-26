@@ -44,6 +44,11 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "runtime/types/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/Sprite.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 
 
 // Dispatch slot addresses for element type IDs used in Serialize inner loops
@@ -105,9 +110,9 @@ void TradeUI_Draw(TradeUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Mark sell and buy tables for layout recalculation
-    fn_Element_SetNeedsSizeCalc(*(void**)(s + 0xC8));
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xC8))->SetNeedsSizeCalc();  // B.3.6 bridge
 
-    fn_Element_SetNeedsSizeCalc(*(void**)(s + 0xD0));
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xD0))->SetNeedsSizeCalc();  // B.3.6 bridge
 
     // Get owning entity and find BuildingComponent
     void* entity = *(void**)(s + 0x28);
@@ -165,7 +170,7 @@ void TradeUI_Slot6(TradeUI* self) {
 static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32_t* typeId) {
     System::String strBuf(name);
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)dialogElem, foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)dialogElem)->FindElement(strBuf));  // B.3.6 bridge
     void* elem = *(void**)foundBuf;
     void* result = nullptr;
     if (elem && typeId) {
@@ -189,17 +194,19 @@ static void* TradeUI_FindTypedElement(void* dialogElem, const char* name, uint32
 // templateObj must be read from first child's +0xB8 BEFORE calling SetSize,
 // because SetSize destroys/replaces children.
 static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem, void* templateObj) {
-    int totalCells = fn_Element_ChildCount(tableElem);
+    int totalCells = reinterpret_cast<const UI::Element*>(tableElem)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalCells; i++) {
         // Get dialog resource reference
         void* dialogInst = *(void**)(s + 0x18);
         void* dialogResource = *(void**)((uintptr_t)dialogInst + 0x18);
 
-        // Clone via template vtable[8]: Clone(this, retBuf, dialogResource)
-        void** templateVt = *(void***)templateObj;
-        typedef void* (*fn_Clone_t)(void*, void*, void*);
+        // Clone via the template's slot 8, UI::ElementDescription::CreateInstance
+        // (retslot, B6-2). templateObj is Element::_description (+0xB8) of the
+        // table's Child(0) — every caller passes TradeUI_GetTableTemplate's result.
         uint64_t cloneBuf[2] = {0, 0};
-        ((fn_Clone_t)templateVt[8])(templateObj, cloneBuf, dialogResource);
+        reinterpret_cast<const UI::ElementDescription*>(templateObj)->CreateInstance(
+            reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(dialogResource));  // B.3.6 bridge
 
         fn_TableElement_SetChild2(tableElem, cloneBuf, i);
     }
@@ -208,7 +215,7 @@ static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem, void* template
 // Helper: read template from table's first child +0xB8 (must be called BEFORE SetSize)
 static void* TradeUI_GetTableTemplate(void* ibpPtr) {
     uint64_t childBuf[2] = {0, 0};
-    fn_Element_Child(*(void**)ibpPtr, childBuf, 0);
+    ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)ibpPtr)->Child(0));  // B.3.6 bridge
     void* firstChild = *(void**)childBuf;
     if (!firstChild) return nullptr;
     return *(void**)((uintptr_t)firstChild + 0xB8);
@@ -262,18 +269,19 @@ static void SetElementNameFromExternal(void* element, void* externalPtr)
     System::Filename pathBuf =
         reinterpret_cast<const ::Object::External*>(externalPtr)->GetPath();  // B.3.3 bridge
     System::Filename nameStr = pathBuf.GetPathFilename(false);
-    fn_Element_SetName(element, &nameStr);
+    reinterpret_cast<UI::Element*>(element)->SetName(*reinterpret_cast<const System::String*>(&nameStr));  // B.3.6 bridge
 }
 
 // ============================================================
 // Helper: virtual call for Element::SetEnabled(this, bool)
 // vtable[8] (offset 0x40)
 // ============================================================
+// UI::Element slot 8 is Enable(bool). Every caller passes an element this file
+// stored from a Child()/FindElement() result (the +0x60/+0x70/+0x80/+0x90/+0xA0
+// row arrays and the +0xC0 combo, all filled in TradeUI_Serialize).
 static inline void VCall_Element_SetEnabled(void* elem, bool enabled)
 {
-    void** vtbl = *(void***)elem;
-    typedef void (*fn_t)(void*, uint8_t);
-    ((fn_t)vtbl[8])(elem, enabled ? 1 : 0);
+    reinterpret_cast<UI::Element*>(elem)->Enable(enabled);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -281,11 +289,10 @@ static inline void VCall_Element_SetEnabled(void* elem, bool enabled)
 // Used as a visibility/show function in some contexts:
 //   arg=0 hides, arg=-1 (0xFFFFFFFF) shows.
 // ============================================================
+// UI::Element slot 10 is SetColor(uint32); callers pass the +0x60 sell rows.
 static inline void VCall_Element_Slot10(void* elem, int arg)
 {
-    void** vtbl = *(void***)elem;
-    typedef void (*fn_t)(void*, int);
-    ((fn_t)vtbl[10])(elem, arg);
+    reinterpret_cast<UI::Element*>(elem)->SetColor(static_cast<uint32_t>(arg));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -451,14 +458,12 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             // Set sprite from ValueDescription (+0x20=spriteSheet, +0x28=spriteName)
             void* valueDesc = (void*)sellData[1];
             uint8_t spriteBuf[16] = {0};
-            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valueDesc + 0x20),
-                          (void*)((uintptr_t)valueDesc + 0x28));
+            ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valueDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valueDesc + 0x28));  // B.3.6 bridge
             fn_LabelElement_SetSprite(*(void**)sellUI, spriteBuf);
 
             // Set text from ValueDescription (+0x30=stringTable, +0x38=stringName)
             uint8_t uiStrBuf[16] = {0};
-            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valueDesc + 0x30),
-                            (void*)((uintptr_t)valueDesc + 0x38));
+            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valueDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valueDesc + 0x38));  // B.3.6 bridge
             fn_TextElement_SetText(*(void**)sellUI, uiStrBuf);
 
             // Set sellable count on number element (sellUI+0x10)
@@ -530,12 +535,12 @@ void TradeUI_RefreshSellTable(TradeUI* self)
 
             // Set empty sprite
             uint8_t emptySprite[16] = {0};
-            fn_Sprite_Default_Ctor(emptySprite);
+            ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
             fn_LabelElement_SetSprite(*(void**)cellUI, emptySprite);
 
             // Set empty text
             uint8_t emptyStr[16] = {0};
-            fn_UIString_DefaultCtor(emptyStr);
+            ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
             fn_TextElement_SetText(*(void**)cellUI, emptyStr);
 
             // Disable spinner, number, and label elements (null-guard each)
@@ -597,7 +602,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
         const char* elemName = (ti == 0) ? "textName" : "textOrder";
         System::String nameStr(elemName);
         uint8_t foundBuf[16] = {0};
-        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
+        ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(nameStr));  // B.3.6 bridge
 
         // IsDerivedFrom TextElement
         void* textElem = nullptr;
@@ -624,22 +629,22 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
             // Set parameter 1: UI string from order entry
             uint8_t uiStrBuf[16] = {0};
-            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)orderEntry,
-                            (void*)(orderEntry + 8));
+            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)orderEntry)), *reinterpret_cast<const System::String*>(orderEntry + 8));  // B.3.6 bridge
             // Convert to System::String
             System::String sysStrBuf;
-            fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
+            ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
             fn_TextElement_SetParameter((void*)*textIbp, 1, &sysStrBuf);
         }
 
         // Show/hide text element based on order validity
         // vtable+0x50 is a visibility function: EDX=0 hides, EDX=-1 shows
         // Original asm: orderIdx<0 → XOR EDX,EDX; orderIdx>=0 → OR EDX,0xffffffff
+        // Slot 10 of UI::Element is SetColor(uint32); the receiver is the
+        // FindElement("textName"/"textOrder") result above.
         {
-            typedef void (*fn_SetVisible_t)(void* self, int visible);
             void* elem = (void*)*textIbp;
-            void** vtbl = *(void***)elem;
-            ((fn_SetVisible_t)vtbl[10])(elem, (orderIdx < 0) ? 0 : -1);
+            reinterpret_cast<UI::Element*>(elem)->SetColor(
+                static_cast<uint32_t>((orderIdx < 0) ? 0 : -1));  // B.3.6 bridge
         }
     }
 
@@ -681,14 +686,12 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
             // Set sprite from ValueDescription
             uint8_t spriteBuf[16] = {0};
-            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valDesc + 0x20),
-                          (void*)((uintptr_t)valDesc + 0x28));
+            ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x28));  // B.3.6 bridge
             fn_LabelElement_SetSprite(*(void**)buyUI, spriteBuf);
 
             // Set text from ValueDescription
             uint8_t uiStrBuf[16] = {0};
-            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valDesc + 0x30),
-                            (void*)((uintptr_t)valDesc + 0x38));
+            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x38));  // B.3.6 bridge
             fn_TextElement_SetText(*(void**)buyUI, uiStrBuf);
 
             // Set price number (buyUI+0x18 = price element)
@@ -730,12 +733,12 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
             // Set empty sprite
             uint8_t emptySprite[16] = {0};
-            fn_Sprite_Default_Ctor(emptySprite);
+            ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
             fn_LabelElement_SetSprite(*(void**)cellUI, emptySprite);
 
             // Set empty text
             uint8_t emptyStr[16] = {0};
-            fn_UIString_DefaultCtor(emptyStr);
+            ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
             fn_TextElement_SetText(*(void**)cellUI, emptyStr);
 
             // cellUI+0x10 is a SliderElement — use NumberEditElement::SetMinMax
@@ -789,12 +792,12 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
             // Set sprite and text on purchase button element
             void* purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-            int childCount = fn_Element_ChildCount(*(void**)purchaseUI);
+            int childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUI)->ChildCount();  // B.3.6 bridge
 
             for (int ci = 0; ci < childCount; ci++) {
                 void* purchaseUIPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
                 uint64_t childBuf[2] = {0, 0};
-                fn_Element_Child(*(void**)purchaseUIPtr, childBuf, ci);
+                ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)purchaseUIPtr)->Child(ci));  // B.3.6 bridge
 
                 // IsDerivedFrom TextElement check
                 void* childElem = nullptr;
@@ -809,19 +812,17 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                 if ((void*)*childIbp != nullptr) {
                     // Set sprite
                     uint8_t spriteBuf[16] = {0};
-                    fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valDesc + 0x20),
-                                  (void*)((uintptr_t)valDesc + 0x28));
+                    ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x28));  // B.3.6 bridge
                     fn_LabelElement_SetSprite((void*)*childIbp, spriteBuf);
 
                     // Set text
                     uint8_t uiStrBuf[16] = {0};
-                    fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valDesc + 0x30),
-                                    (void*)((uintptr_t)valDesc + 0x38));
+                    ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x38));  // B.3.6 bridge
                     fn_TextElement_SetText((void*)*childIbp, uiStrBuf);
                 }
 
                 purchaseUIPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-                childCount = fn_Element_ChildCount(*(void**)purchaseUIPtr);
+                childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUIPtr)->ChildCount();  // B.3.6 bridge
             }
 
             // Enable purchase button
@@ -855,11 +856,11 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             // Clear children
             int ci = 0;
             void* purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-            int childCount = fn_Element_ChildCount(*(void**)purchaseUI);
+            int childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUI)->ChildCount();  // B.3.6 bridge
             while (ci < childCount) {
                 purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
                 uint64_t childBuf[2] = {0, 0};
-                fn_Element_Child(*(void**)purchaseUI, childBuf, ci);
+                ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)purchaseUI)->Child(ci));  // B.3.6 bridge
 
                 void* childElem = nullptr;
                 if (*(void**)childBuf) {
@@ -872,17 +873,17 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
 
                 if ((void*)*childIbp != nullptr) {
                     uint8_t emptySprite[16] = {0};
-                    fn_Sprite_Default_Ctor(emptySprite);
+                    ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
                     fn_LabelElement_SetSprite((void*)*childIbp, emptySprite);
 
                     uint8_t emptyStr[16] = {0};
-                    fn_UIString_DefaultCtor(emptyStr);
+                    ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
                     fn_TextElement_SetText((void*)*childIbp, emptyStr);
                 }
 
                 ci++;
                 purchaseUI = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
-                childCount = fn_Element_ChildCount(*(void**)purchaseUI);
+                childCount = reinterpret_cast<const UI::Element*>(*(void**)purchaseUI)->ChildCount();  // B.3.6 bridge
             }
 
             // Disable button and clear checked state
@@ -963,11 +964,11 @@ void TradeUI_Serialize(TradeUI* self) {
     // Buttons (IsDerivedFrom ButtonElement)
     *(uintptr_t*)(s + 0xF0) = (uintptr_t)TradeUI_FindTypedElement(
         dialogElemPtr, "buttonTrade", g_TypeId_HelpButtonElem);
-    fn_Element_SetElementId(*(void**)(s + 0xF0), 0x4e20);
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xF0))->SetElementId(0x4e20);  // B.3.6 bridge
 
     *(uintptr_t*)(s + 0xF8) = (uintptr_t)TradeUI_FindTypedElement(
         dialogElemPtr, "buttonDismiss", g_TypeId_HelpButtonElem);
-    fn_Element_SetElementId(*(void**)(s + 0xF8), 0x4e21);
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xF8))->SetElementId(0x4e21);  // B.3.6 bridge
 
     // Text elements (IsDerivedFrom TextElement)
     *(uintptr_t*)(s + 0x110) = (uintptr_t)TradeUI_FindTypedElement(
@@ -983,15 +984,15 @@ void TradeUI_Serialize(TradeUI* self) {
     // Set comboPurchase current item from building component field
     int purchaseIdx = *(int*)(buildingPtr[0] + 0x28);
     fn_ComboElement_SetCurrentItem(*(void**)(s + 0x138), purchaseIdx);
-    fn_Element_SetElementId(*(void**)(s + 0x138), 0x4e22);
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x138))->SetElementId(0x4e22);  // B.3.6 bridge
 
     *(uintptr_t*)(s + 0xC0) = (uintptr_t)TradeUI_FindTypedElement(
         dialogElemPtr, "comboOrder", g_TypeId_HelpComboElem);
-    fn_Element_SetElementId(*(void**)(s + 0xC0), 0x4e23);
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xC0))->SetElementId(0x4e23);  // B.3.6 bridge
 
     *(uintptr_t*)(s + 0x140) = (uintptr_t)TradeUI_FindTypedElement(
         dialogElemPtr, "sortCombo", g_TypeId_HelpComboElem);
-    fn_Element_SetElementId(*(void**)(s + 0x140), 199);  // 0xC7
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x140))->SetElementId(199);  // B.3.6 bridge — 0xC7
     fn_ComboElement_SetCurrentItem(*(void**)(s + 0x140), 0);
 
     // --- Phase 2: Build tablePurchase row array (stride 0x20, 4 elements per row) ---
@@ -1010,22 +1011,22 @@ void TradeUI_Serialize(TradeUI* self) {
         uint64_t sub[2] = {0, 0};
 
         // child[flatIdx] = compound cell -> sub-child(0) = label
-        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx);
-        fn_Element_Child(*(void**)buf, sub, 0);
+        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx));  // B.3.6 bridge
+        ::new (static_cast<void*>(sub)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)buf)->Child(0));  // B.3.6 bridge
         void* label = *(void**)sub;
 
         // same compound cell -> sub-child(1) = number
-        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx);
+        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx));  // B.3.6 bridge
         flatIdx++;
-        fn_Element_Child(*(void**)buf, sub, 1);
+        ::new (static_cast<void*>(sub)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)buf)->Child(1));  // B.3.6 bridge
         void* number = *(void**)sub;
 
         // child[flatIdx] = button (standalone)
-        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx);
+        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx));  // B.3.6 bridge
         void* button = *(void**)buf;
 
         // child[flatIdx+1] = spinner (standalone)
-        fn_Element_Child(*(void**)(s + 0xE0), buf, flatIdx + 1);
+        ::new (static_cast<void*>(buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE0))->Child(flatIdx + 1));  // B.3.6 bridge
         void* spinner = *(void**)buf;
 
         flatIdx += 2;  // advance past button + spinner (total +3 per row)
@@ -1033,10 +1034,10 @@ void TradeUI_Serialize(TradeUI* self) {
         // Set element IDs
         uint64_t r0[2] = {0, 0};
         new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(label));   // B.3.3 bridge
-        if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId - 1000);
+        if (*(void**)r0) reinterpret_cast<UI::Element*>(*(void**)r0)->SetElementId(baseId - 1000);  // B.3.6 bridge
 
         new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(number));   // B.3.3 bridge
-        if (*(void**)r0) fn_Element_SetElementId(*(void**)r0, baseId);
+        if (*(void**)r0) reinterpret_cast<UI::Element*>(*(void**)r0)->SetElementId(baseId);  // B.3.6 bridge
 
         // The spinner carries the id the msg-0x15 (spinner changed) notification sends
         // as param4. Retail tags it through SpinnerElement::SetElementId (exe dispatch slot
@@ -1120,27 +1121,27 @@ void TradeUI_Serialize(TradeUI* self) {
 
     // Iterate tableStorage cells, find "ribbonStorageRow" sub-elements
     tableStorage = *(void**)(s + 0xD8);
-    int storageCellCount = fn_Element_ChildCount(tableStorage);
+    int storageCellCount = reinterpret_cast<const UI::Element*>(tableStorage)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < storageCellCount; i++) {
         // Find "ribbonStorageRow" in cell
         System::String strBuf("ribbonStorageRow");
         uint64_t cellBuf[2] = {0, 0};
-        fn_Element_Child(*(void**)(s + 0xD8), cellBuf, i);
+        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xD8))->Child(i));  // B.3.6 bridge
         uint64_t rowBuf[2] = {0, 0};
-        fn_FindElement(*(void**)cellBuf, rowBuf, &strBuf);
+        ::new (static_cast<void*>(rowBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->FindElement(strBuf));  // B.3.6 bridge
 
         // Get 3 child elements from row: child(0), child(1), child(2)
         void* rowElem = *(void**)rowBuf;
 
         uint64_t c0[2] = {0, 0}, c1[2] = {0, 0}, c2[2] = {0, 0};
         // child(0) = label, child(1) = slider, child(2) = spinner
-        fn_Element_Child(rowElem, c0, 0);
+        ::new (static_cast<void*>(c0)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
         void* e0 = *(void**)c0;
 
-        fn_Element_Child(rowElem, c1, 1);
+        ::new (static_cast<void*>(c1)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(1));  // B.3.6 bridge
         void* e1 = *(void**)c1;
 
-        fn_Element_Child(rowElem, c2, 2);
+        ::new (static_cast<void*>(c2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
         void* e2 = *(void**)c2;
 
         // child(1) is a SpinnerElement, not a slider: retail tags it through
@@ -1180,25 +1181,25 @@ void TradeUI_Serialize(TradeUI* self) {
     for (int i = 0; i < sellCellCount; i++) {
         System::String strBuf("ribbonSellRow");
         uint64_t cellBuf[2] = {0, 0};
-        fn_Element_Child(*(void**)(s + 0xC8), cellBuf, i);
+        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xC8))->Child(i));  // B.3.6 bridge
         uint64_t rowBuf[2] = {0, 0};
-        fn_FindElement(*(void**)cellBuf, rowBuf, &strBuf);
+        ::new (static_cast<void*>(rowBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->FindElement(strBuf));  // B.3.6 bridge
 
         void* rowElem = *(void**)rowBuf;
 
         // Get 4 child elements from ribbonSellRow:
         // child(0)=SpinnerElement, child(1)=LabelElement, child(2)=SpinnerElement, child(3)=SliderElement
         uint64_t c[2];
-        fn_Element_Child(rowElem, c, 0);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
         void* spinElem = *(void**)c;      // child(0) = SpinnerElement
 
-        fn_Element_Child(rowElem, c, 1);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(1));  // B.3.6 bridge
         void* labelElem = *(void**)c;     // child(1) = LabelElement
 
-        fn_Element_Child(rowElem, c, 2);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
         void* numElem = *(void**)c;       // child(2) = SpinnerElement (amount)
 
-        fn_Element_Child(rowElem, c, 3);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(3));  // B.3.6 bridge
         void* sliderElem = *(void**)c;    // child(3) = SliderElement
 
         // child(3) is a SpinnerElement (the "SliderElement" naming is the same mislabel
@@ -1239,24 +1240,24 @@ void TradeUI_Serialize(TradeUI* self) {
     for (int i = 0; i < buyCellCount; i++) {
         System::String strBuf("ribbonBuyRow");
         uint64_t cellBuf[2] = {0, 0};
-        fn_Element_Child(*(void**)(s + 0xD0), cellBuf, i);
+        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xD0))->Child(i));  // B.3.6 bridge
         uint64_t rowBuf[2] = {0, 0};
-        fn_FindElement(*(void**)cellBuf, rowBuf, &strBuf);
+        ::new (static_cast<void*>(rowBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->FindElement(strBuf));  // B.3.6 bridge
 
         void* rowElem = *(void**)rowBuf;
 
         // child(0)=SpinnerElement, child(1)=LabelElement, child(2)=SpinnerElement, child(3)=SliderElement
         uint64_t c[2];
-        fn_Element_Child(rowElem, c, 0);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
         void* spinElem = *(void**)c;      // child(0) = SpinnerElement
 
-        fn_Element_Child(rowElem, c, 1);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(1));  // B.3.6 bridge
         void* labelElem = *(void**)c;     // child(1) = LabelElement
 
-        fn_Element_Child(rowElem, c, 2);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
         void* numElem = *(void**)c;       // child(2) = SpinnerElement
 
-        fn_Element_Child(rowElem, c, 3);
+        ::new (static_cast<void*>(c)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(3));  // B.3.6 bridge
         void* sliderElem = *(void**)c;    // child(3) = SliderElement
 
         // child(3) is a SpinnerElement (same mislabel as the sell loop).
@@ -1293,15 +1294,15 @@ void TradeUI_Serialize(TradeUI* self) {
 
     // Iterate tableOrder cells, set element IDs (0x1F40+i) on purchase button children
     tableOrder = *(void**)(s + 0xE8);
-    int orderCellCount = fn_Element_ChildCount(tableOrder);
+    int orderCellCount = reinterpret_cast<const UI::Element*>(tableOrder)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < orderCellCount; i++) {
         uint64_t cellBuf[2] = {0, 0};
-        fn_Element_Child(*(void**)(s + 0xE8), cellBuf, i);
+        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0xE8))->Child(i));  // B.3.6 bridge
 
         void* typed = *(void**)cellBuf;
         uint64_t ibp[2] = {0, 0};
         new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(typed));   // B.3.3 bridge
-        fn_Element_SetElementId(*(void**)ibp, i + 0x1F40);
+        reinterpret_cast<UI::Element*>(*(void**)ibp)->SetElementId(i + 0x1F40);  // B.3.6 bridge
 
         // Push 8-byte entry (just the element pointer) into the purchase array
         // at +0xA0.
@@ -1340,11 +1341,10 @@ void TradeUI_Serialize(TradeUI* self) {
 //   bStorageFull = capacity < storageCount + (buyTotal - sellTotal)
 
 // Inline helper to call UI::Element::SetEnabled via vtable slot 8 (+0x40)
+// Callers pass the +0xF0/+0xF8 buttons (FindElement results) and the +0x80
+// storage rows (Child results) — all UI::Element. Slot 8 is Enable(bool).
 static inline void Element_SetEnabled(void* element, bool enabled) {
-    typedef void (*SetEnabled_t)(void* self, int enabled);
-    uintptr_t vtbl = *(uintptr_t*)element;
-    SetEnabled_t fn = *(SetEnabled_t*)(vtbl + 0x40);
-    fn(element, enabled ? 1 : 0);
+    reinterpret_cast<UI::Element*>(element)->Enable(enabled);  // B.3.6 bridge
 }
 
 // Find resource value for a given resource entity ptr by searching its component array
@@ -1439,26 +1439,26 @@ void TradeUI_Startup(TradeUI* self) {
         // Buy value exceeds sell value — show "not enough" text with difference
         System::String strBuf = System::String::Format("%d", (unsigned)(displayBuyTotal - displaySellTotal));
         fn_TextElement_SetParameter(*(void**)(s + 0x120), 0, &strBuf);
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x110), 1, 0);  // hide textNoStorage
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x118), 1, 0);  // hide textTooMuch
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x120), 0, 1);  // show textNotEnough
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textTooMuch
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textNotEnough
     } else if (bStorageFull) {
         // Storage overflow — show "no storage" text
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x110), 0, 1);  // show textNoStorage
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x118), 1, 0);  // hide textTooMuch
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x120), 1, 0);  // hide textNotEnough
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textNoStorage
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textTooMuch
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNotEnough
     } else if (!bBuySell) {
         // Totals are equal (no net trade) — hide all warning texts
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x110), 1, 0);  // hide textNoStorage
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x118), 1, 0);  // hide textTooMuch
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x120), 1, 0);  // hide textNotEnough
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textTooMuch
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNotEnough
     } else {
         // Sell value exceeds buy value — show "too much" text with difference
         System::String strBuf = System::String::Format("%d", (unsigned)(displaySellTotal - displayBuyTotal));
         fn_TextElement_SetParameter(*(void**)(s + 0x118), 0, &strBuf);
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x110), 1, 0);  // hide textNoStorage
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x118), 0, 1);  // show textTooMuch
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x120), 1, 0);  // hide textNotEnough
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textTooMuch
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNotEnough
     }
 
     // --- Find BuildState (merchant) component and check merchant arrival state ---
@@ -1481,8 +1481,8 @@ void TradeUI_Startup(TradeUI* self) {
     Element_SetEnabled(*(void**)(s + 0xf0), tradeEnabled);
 
     // --- Layout recalc for sell and buy tables ---
-    fn_Element_SetNeedsSizeCalc(*(void**)(s + 0xC8));
-    fn_Element_SetNeedsSizeCalc(*(void**)(s + 0xD0));
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xC8))->SetNeedsSizeCalc();  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xD0))->SetNeedsSizeCalc();  // B.3.6 bridge
 
     // --- Refresh table displays ---
     TradeUI_RefreshOrderQuantityDisplay(self);
@@ -1688,7 +1688,7 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
     System::String strBuf("tradeTabs");
 
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
 
     void* element = *(void**)foundBuf;
 
@@ -2352,7 +2352,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         uint64_t spriteSheet = *(uint64_t*)((uintptr_t)tradeDesc + 0x20);
         uintptr_t entriesBase = *(uintptr_t*)((uintptr_t)tradeDesc + 0x38);
         void* spriteName = (void*)(entriesBase + ((int64_t)typeIdx * 3 + 1) * 8);
-        fn_Sprite_Ctor(spriteTemp, spriteSheet, spriteName);
+        ::new (static_cast<void*>(spriteTemp)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), *reinterpret_cast<const System::String*>(spriteName));  // B.3.6 bridge
 
         // Copy constructed sprite to local for SetSprite (matches MOVAPS/MOVDQA in original)
         uint64_t spriteLocal[2];
@@ -2376,7 +2376,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         uint64_t stringTable = *(uint64_t*)((uintptr_t)tradeDesc + 0x28);
         entriesBase = *(uintptr_t*)((uintptr_t)tradeDesc + 0x38);
         void* stringName = (void*)(entriesBase + (int64_t)typeIdx * 0x18 + 0x10);
-        fn_UIString_Ctor(stringTemp, stringTable, stringName);
+        ::new (static_cast<void*>(stringTemp)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), *reinterpret_cast<const System::String*>(stringName));  // B.3.6 bridge
 
         // Copy constructed string to local for SetText (matches MOVAPS/MOVDQA in original)
         uint64_t stringLocal[2];
@@ -2513,14 +2513,14 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 
         // Set sprite icon from ValueDescription (+0x20=spriteSheet, +0x28=spriteName)
         uint8_t spriteTmp[32] = {};
-        fn_Sprite_Sprite(spriteTmp, *(uint64_t*)(valueDesc + 0x20), (void*)(valueDesc + 0x28));
+        ::new (static_cast<void*>(spriteTmp)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(valueDesc + 0x20))), *reinterpret_cast<const System::String*>(valueDesc + 0x28));  // B.3.6 bridge
         uint64_t spriteVal[2] = {((uint64_t*)spriteTmp)[0], ((uint64_t*)spriteTmp)[1]};
         fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
 
         // Set text name from ValueDescription (+0x30=stringTable, +0x38=stringName)
         // Original uses fn_UIString_Ctor — TextElement::SetText expects UI::String, not System::String
         uint64_t strBuf[2] = {0, 0};
-        fn_UIString_Ctor(strBuf, *(uint64_t*)(valueDesc + 0x30), (void*)(valueDesc + 0x38));
+        ::new (static_cast<void*>(strBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(valueDesc + 0x30))), *reinterpret_cast<const System::String*>(valueDesc + 0x38));  // B.3.6 bridge
         uint64_t strVal[2] = {strBuf[0], strBuf[1]};
         fn_TextElement_SetText(*(void**)uiRow, strVal);
 
@@ -2577,7 +2577,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         System::Filename pathBuf =
             reinterpret_cast<const ::Object::External*>(entry[0])->GetPath();  // B.3.3 bridge
         System::Filename filenameBuf = pathBuf.GetPathFilename(false);
-        fn_Element_SetName(*(void**)spinSlot, &filenameBuf);
+        reinterpret_cast<UI::Element*>(*(void**)spinSlot)->SetName(*reinterpret_cast<const System::String*>(&filenameBuf));  // B.3.6 bridge
     }
 
     // --- Clear remaining UI rows beyond data ---
@@ -2588,13 +2588,13 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 
         // Set blank sprite
         uint8_t blankSprite[16] = {};
-        fn_Sprite_DefaultCtor(blankSprite);
+        ::new (static_cast<void*>(blankSprite)) UI::Sprite();  // B.3.6 bridge
         uint64_t spriteVal[2] = {((uint64_t*)blankSprite)[0], ((uint64_t*)blankSprite)[1]};
         fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
 
         // Set blank text — must use UI::String default ctor, not System::String
         uint64_t blankStr[2] = {0, 0};
-        fn_UIString_DefaultCtor(blankStr);
+        ::new (static_cast<void*>(blankStr)) UI::String();  // B.3.6 bridge
         uint64_t strVal[2] = {blankStr[0], blankStr[1]};
         fn_TextElement_SetText(*(void**)uiRow, strVal);
 
