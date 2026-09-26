@@ -22,6 +22,11 @@
 //     [13] 0x1400f9cd0 CalcPath: build the segment entities (bridgetool_calcpath.cpp)
 //     [14] 0x1400facf0 CalcCost: snap, validate, report the body length
 //   sizeof 0x40.
+//
+// CreateBridgeDescription fields used by CalcPath/CalcCost (from the old POD):
+//   +0x20 / +0x24 / +0x2c / +0x30 terrain masks (body / approach / crossing /
+//   neighbour), +0x34 neighbour radius, +0x38 segmentTemplates[5] (entity
+//   templates for the 0/1/2/4/8-cell segments).
 // ============================================================================
 
 #include <cstdint>

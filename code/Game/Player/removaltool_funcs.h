@@ -5,12 +5,6 @@
 #include "RemovalTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00): Scalar deleting destructor.
-// Resets vtable chain (RemovalTool -> DragTool -> Tool), calls Internal::~Internal,
-// conditionally frees memory if flags & 1.
-// Original: 0x14002e7f0
-void* RemovalTool_Dtor(RemovalTool* self, uint32_t flags);
-
 // Startup (vtable +0x20, Slot4): Finds RemovalDescription component on the entity
 // at self->descriptionPtr (+0x20) and stores it at self->removalDesc (+0x38).
 // Iterates entity's component array, matching by RemovalDescription type ID (DAT_1401c74a0).

@@ -22,62 +22,16 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// RemovalTool vtable addresses (for vtable chain in Dtor)
+// RemovalTool::DeletingDtor (vtable +0x00) — 0x14002e7f0
 // ============================================================
-static void* s_vtable_RemovalTool = nullptr;
-static void* s_vtable_DragTool    = nullptr;
-static void* s_vtable_Tool        = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_RemovalTool) {
-        s_vtable_RemovalTool = (void*)ResolveAddr(Module::Exe, RemovalToolAddr::Vtable);
-        s_vtable_DragTool    = (void*)ResolveAddr(Module::Exe, DragToolAddr::Vtable);
-        s_vtable_Tool        = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
-}
-
-// ============================================================
-// Object::Internal::~Internal — called from base dtor
-// Resolved via the function pointer slot at 0x140152770
-// ============================================================
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
-
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
-
-// ============================================================
-// RemovalTool::Dtor (vtable +0x00) — Scalar deleting destructor
-// ============================================================
-// Resets vtable chain: RemovalTool -> DragTool -> Tool, then calls
-// Object::Internal::~Internal for base cleanup. If flags & 1,
-// frees the memory allocation.
-//
-// Original: 0x14002e7f0
-void* RemovalTool_Dtor(RemovalTool* self, uint32_t flags) {
-    EnsureVtables();
-    EnsureInternalDtor();
-
-    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
-    self->vtable = s_vtable_RemovalTool;
-    self->vtable = s_vtable_DragTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+// ENDGAME B.3.8 TOOL: the hand-rolled RemovalTool_Dtor restamped the Removal,
+// DragTool and Tool tables read by address — the last two UNREGISTERED, so it
+// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
+// restamps the real tables, then runs Object::Internal::~Internal.
+Object::Base* RemovalTool::DeletingDtor(unsigned flags) {
+    this->~RemovalTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -549,64 +503,47 @@ bool RemovalTool_CalcPath(RemovalTool* self, int startCell, int endCell) {
 }
 
 // ============================================================
-// Standalone factory + vtable (factory cascade).
-// RemovalTool: size 0x40, parent DragTool, 15-slot vtable @ 0x140161de0.
+// RemovalTool members (RemovalTool.h) — ENDGAME B.3.8 TOOL.
+// The hand-built g_RemovalTool_Vtable[15], its slot stubs, the in-place _SA
+// factory and RegisterRemovalToolVtable are gone: the compiler builds the
+// table, and nothing reads 0x140161de0 back by address (the old dtor was the
+// only reader). Inherited from the bases, as in retail: [6] DragTool::OnKey,
+// [9] DragTool::OnCancel (0x1400fc640 — the right-click cancel that closes the
+// CreateBar cost dialog), [10] false, [11] no setting (0x140004950 `*ret = 0`;
+// SetEditMode dereferences the slot), [12] cursor 5 (0x1400fc9d0).
 // ============================================================
-#include "tool_base_standalone.h"
-#include "Player/dragtool.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
+#include <new>
 
-static uint32_t RemovalTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("RemovalTool");
-    return c;
+void RemovalTool::Startup() { RemovalTool_Startup(this); }                     // [4]
+void RemovalTool::Draw(void* context, char active) {                           // [8]
+    RemovalTool_Draw(this, context, active);
 }
-// +0x58 (Slot11) GetToolSettingTypeId — retail RemovalTool slot 11 (0x140004950) is
-// `*ret = 0; return ret;` (RemovalTool has NO tool-setting). SetEditMode
-// (Toolbar_ShowGroup_Impl / FUN_140102b60) DEREFERENCES the returned pointer, so a
-// Tool_Ret0 stub (returns 0 -> *0) crashes — same trap PlacementTool_GetSettingType
-// documents. Return a valid pointer to a 0 so SetEditMode skips ToolSetting creation.
-static uint32_t* RemovalTool_GetSettingType(void*, uint32_t* ret) {
-    if (ret) *ret = 0;
-    return ret;
+bool RemovalTool::CalcPath(int startCell, int endCell) {                       // [13]
+    return RemovalTool_CalcPath(this, startCell, endCell);
 }
-extern "C" int DragTool_CancelDrag_Impl(void* self);   // 0x1400fc640 (dragtool.cpp)
-static int RemovalTool_GetCursor(void*) { return 5; }  // retail 0x1400fc9d0
-static void* g_RemovalTool_Vtable[15] = {
-    (void*)&RemovalTool_Dtor,      // +0x00 Dtor
-    (void*)&Tool_Slot1,            // +0x08
-    (void*)&RemovalTool_GetTypeId, // +0x10 GetTypeId
-    (void*)&Tool_Persist,          // +0x18 Serialize
-    (void*)&RemovalTool_Startup,   // +0x20 Startup
-    (void*)&Tool_Ret0,             // +0x28
-    (void*)&DragTool_OnKey,        // +0x30 OnKey (base)
-    (void*)&Tool_Ret0,             // +0x38
-    (void*)&RemovalTool_Draw,      // +0x40 Draw
-    // +0x48 Slot9 — retail 0x1400fc640, the SHARED DragTool cancel-drag/"can-deactivate?".
-    // This was Tool_Ret0, i.e. "always OK to tear me down". EntityUI's right-click path
-    // (EntityUI_ToolTick_SA) asks this slot first: non-zero means the tool cancelled its
-    // own drag and STAYS; zero means teardown proceeds. Slot 5 (+0x28) is genuinely empty
-    // on every DragTool subclass (retail 0x140104bc0 = `ret 0`), so slot 9 is the ONLY
-    // thing that closes the CreateBar cost dialog. With Tool_Ret0 here, a right-click
-    // mid-drag deleted the tool while its dialog was still open — the dialog outlived its
-    // owner and nothing could dismiss it. Same slot Road/Bridge/DragPlacement already use.
-    (void*)&DragTool_CancelDrag_Impl, // +0x48 Slot9 cancel drag (retail 0x1400fc640)
-    (void*)&Tool_Ret0,             // +0x50
-    (void*)&RemovalTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
-    // +0x60 (Slot12) cursor id. Retail is 0x1400fc9d0 — the shared DragTool body
-    // that returns 5, the same one Road/Bridge/Fenced/DragPlacement all use.
-    // This was Tool_Ret0, i.e. cursor 0, so the removal tool was the only drag
-    // tool in the game showing the wrong cursor.
-    (void*)&RemovalTool_GetCursor, // +0x60 cursor id (retail 0x1400fc9d0 = 5)
-    (void*)&RemovalTool_CalcPath,  // +0x68 CalcPath
-    (void*)&RemovalTool_CalcCost,  // +0x70 CalcCost
-};
-extern "C" void RegisterRemovalToolVtable() {
-    RegisterExeAddr(0x140161de0, (uintptr_t)g_RemovalTool_Vtable);
+int RemovalTool::CalcCost(int startCell, int endCell, uint32_t* outValid,     // [14]
+                          int* outCostB, int* outCostA, int* outLength) {
+    return static_cast<int>(RemovalTool_CalcCost(this, startCell, endCell, outValid,
+                                                 outCostB, outCostA,
+                                                 reinterpret_cast<uint32_t*>(outLength)));
 }
-extern "C" void* RemovalTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x40, g_RemovalTool_Vtable, 1);}
-extern "C" void* RemovalTool_Factory_SA(void) {
-    return Tool_Alloc(0x40, g_RemovalTool_Vtable, 1);
+
+// create 0x14002e7a0: MemAlloc(0x40, 8), then the ctor 0x140104cc0.
+void* RemovalTool::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RemovalTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) RemovalTool());
 }
-REGISTER_TYPE(RemovalTool, "DragTool", &RemovalTool_Factory_SA, &RemovalTool_CreateInPlace_SA);
+// createInPlace 0x14002e7e0: `if (storage) ctor(storage)`.
+void* RemovalTool::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) RemovalTool());
+}
+
+// Kept for standalone/tool_harness.cpp (outside this block's files): the
+// reflected create, by its old name.
+extern "C" void* RemovalTool_Factory_SA(void) { return RemovalTool::CreateNewObject(); }
+
+DEFINE_EXE_VTABLE(RemovalTool, "_ZTV11RemovalTool")
+DEFINE_EXE_TYPE(RemovalTool, "DragTool")

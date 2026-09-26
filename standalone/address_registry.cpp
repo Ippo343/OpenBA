@@ -236,7 +236,6 @@ extern "C" {
     void RegisterPathToolVtable();
     void RegisterPathToolSetSelected();   // dd710 route-builder (pathtool_setselected.cpp)
     void RegisterPlacementToolVtable();
-    void RegisterRemovalToolVtable();
     void RegisterRoadToolVtable();
 }
 
@@ -1994,7 +1993,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterPathToolVtable();
     RegisterPathToolSetSelected();
     RegisterPlacementToolVtable();
-    RegisterRemovalToolVtable();
     RegisterRoadToolVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
