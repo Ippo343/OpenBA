@@ -313,9 +313,11 @@ Object::Base* MultiObjectComponent::DeletingDtor(unsigned flags) {
 }
 // 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0, then the restamps and ~Internal
 // (the compiler chain).
-// PORT GAP (retail 0x140125a24 MemFree of the child list) — B38 D9: the tree's slot 0
-// (Inert_ScalarDtor) never freed it; kept that way here.
-MultiObjectComponent::~MultiObjectComponent() {}
+MultiObjectComponent::~MultiObjectComponent() {
+    Object::detail::InternalMemFree(field48);
+    field48 = nullptr;
+    field50 = nullptr;
+}
 
 // create 0x140035ef0: MemAlloc(0x60, 8), then the ctor.
 void* MultiObjectComponent::CreateNewObject() {

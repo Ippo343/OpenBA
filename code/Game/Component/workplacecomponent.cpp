@@ -1141,9 +1141,11 @@ Object::Base* WorkPlaceComponent::DeletingDtor(unsigned flags) {
 }
 // 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
 // (the compiler chain).
-// PORT GAP (retail 0x14012f294 MemFree of the worker roster) — B38 D9: the tree's
-// slot 0 (Inert_ScalarDtor) never freed it; kept that way here.
-WorkPlaceComponent::~WorkPlaceComponent() {}
+WorkPlaceComponent::~WorkPlaceComponent() {
+    Object::detail::InternalMemFree(field58);
+    field58 = nullptr;
+    field60 = nullptr;
+}
 
 // create 0x14003a030: MemAlloc(0x68, 8), then the ctor.
 void* WorkPlaceComponent::CreateNewObject() {

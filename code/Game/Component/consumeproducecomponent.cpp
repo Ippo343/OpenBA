@@ -290,9 +290,12 @@ Object::Base* ConsumeProduceComponent::DeletingDtor(unsigned flags) {
 }
 // 0x140118fd0: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
 // (the compiler chain).
-// PORT GAP (retail 0x140118ff4 MemFree of the rate array) — B38 D9: the tree's
-// slot 0 (Inert_ScalarDtor) never freed it; kept that way here.
-ConsumeProduceComponent::~ConsumeProduceComponent() {}
+ConsumeProduceComponent::~ConsumeProduceComponent() {
+    Object::detail::InternalMemFree(consumeRates);
+    consumeRates = nullptr;
+    consumeCount = 0;
+    consumeCapacity = 0;
+}
 
 // create 0x140032300: MemAlloc(0x70, 8), then the ctor.
 void* ConsumeProduceComponent::CreateNewObject() {

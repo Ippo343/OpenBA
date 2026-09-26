@@ -548,9 +548,11 @@ Object::Base* CropFieldComponent::DeletingDtor(unsigned flags) {
 }
 // 0x14011af60: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
 // (the compiler chain).
-// PORT GAP (retail 0x14011af84 MemFree of the slot grid) — B38 D9: the tree's slot 0
-// (Inert_ScalarDtor) never freed it; kept that way here.
-CropFieldComponent::~CropFieldComponent() {}
+CropFieldComponent::~CropFieldComponent() {
+    Object::detail::InternalMemFree(field58);
+    field58 = nullptr;
+    field60 = nullptr;
+}
 
 // create 0x140032ed0: MemAlloc(0x68, 8), then the ctor.
 void* CropFieldComponent::CreateNewObject() {

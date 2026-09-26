@@ -532,6 +532,7 @@ void TradeComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 
 extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream);   // tradecomponent_serialize.cpp
+void WorkBase_TreeNodeFree_e320(void* root, void* node);                       // work_base_reimpl.cpp, 0x14000e320
 
 // 0x14005c430. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // +0x28 = 0; +0x2c = -1 (the "no merchant selected" sentinel: tradeui's `>= 0` test
@@ -554,9 +555,34 @@ Object::Base* TradeComponent::DeletingDtor(unsigned flags) {
 }
 // 0x14005c340: frees the +0x60 buy-order BST, +0x50, +0x40 and the +0x30 name array,
 // then the restamps and ~Internal (the compiler chain).
-// PORT GAP (retail 0x14005c380..0x14005c3f9) — B38 D9: the tree's slot 0
-// (Inert_ScalarDtor) freed none of the four; kept that way here.
-TradeComponent::~TradeComponent() {}
+//   +0x60: the root's two subtrees through 0x14000e320 (children at +0x18/+0x20;
+//          ported as WorkBase_TreeNodeFree_e320), then the root; +0x60 = 0, +0x68 = 0
+//   +0x50: MemFree, +0x50 = +0x58 = 0
+//   +0x40: MemFree, +0x40 = +0x48 = 0
+//   +0x30: the name array's elements through 0x14000ef10 (count +0x38), MemFree,
+//          +0x30 = +0x38 = 0
+TradeComponent::~TradeComponent() {
+    if (void* root = field60) {
+        WorkBase_TreeNodeFree_e320(&field60, *reinterpret_cast<void**>(
+            reinterpret_cast<uint8_t*>(root) + 0x18));
+        WorkBase_TreeNodeFree_e320(&field60, *reinterpret_cast<void**>(
+            reinterpret_cast<uint8_t*>(root) + 0x20));
+        Object::detail::InternalMemFree(root);
+    }
+    field60 = nullptr;
+    field68 = 0;
+    Object::detail::InternalMemFree(field50);
+    field50 = nullptr;
+    field58 = nullptr;
+    Object::detail::InternalMemFree(field40);
+    field40 = nullptr;
+    field48 = nullptr;
+    TradeComponent_DtorNameArray(nullptr, reinterpret_cast<int64_t>(field30),
+                                 *reinterpret_cast<int32_t*>(&field38));
+    Object::detail::InternalMemFree(field30);
+    field30 = nullptr;
+    field38 = nullptr;
+}
 
 // create 0x14000db60: MemAlloc(0xa8, 8), then the ctor.
 void* TradeComponent::CreateNewObject() {

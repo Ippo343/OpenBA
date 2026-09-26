@@ -791,9 +791,11 @@ Object::Base* OrchardComponent::DeletingDtor(unsigned flags) {
 }
 // 0x140051ed0: MemFree(+0x50), +0x50 = +0x58 = 0, then the restamps and ~Internal
 // (the compiler chain).
-// PORT GAP (retail 0x140051ef4 MemFree of the tree-slot array) — B38 D9: the tree's
-// slot 0 (Inert_ScalarDtor) never freed it; kept that way here.
-OrchardComponent::~OrchardComponent() {}
+OrchardComponent::~OrchardComponent() {
+    Object::detail::InternalMemFree(field50);
+    field50 = nullptr;
+    field58 = nullptr;
+}
 
 // create 0x140009870: MemAlloc(0x68, 8), then the ctor.
 void* OrchardComponent::CreateNewObject() {

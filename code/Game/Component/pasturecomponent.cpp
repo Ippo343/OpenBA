@@ -534,9 +534,11 @@ Object::Base* PastureComponent::DeletingDtor(unsigned flags) {
 }
 // 0x140128070: MemFree(+0x30), +0x30 = +0x38 = 0, then the restamps and ~Internal
 // (the compiler chain).
-// PORT GAP (retail 0x1401280a7 MemFree of the animal list) — B38 D9: the tree's slot
-// 0 (Inert_ScalarDtor) never freed it; kept that way here.
-PastureComponent::~PastureComponent() {}
+PastureComponent::~PastureComponent() {
+    Object::detail::InternalMemFree(field30);
+    field30 = nullptr;
+    field38 = nullptr;
+}
 
 // create 0x140036730: MemAlloc(0x68, 8), then the ctor.
 void* PastureComponent::CreateNewObject() {
