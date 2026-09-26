@@ -29,7 +29,7 @@
 namespace UI {
 
 struct RadioElement {
-    Element base;                                 // +0x00 .. +0xBF
+    RtUI::Element base;                                 // +0x00 .. +0xBF
     Collection::Array<Element*> _checkBoxes;       // +0xC0
     int32_t _activeIndex;                          // +0xD0
 };

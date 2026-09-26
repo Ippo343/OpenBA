@@ -42,7 +42,7 @@
 namespace UI {
 
 struct SpinnerElement {
-    Element base;          // +0x00 .. +0xBF
+    RtUI::Element base;          // +0x00 .. +0xBF
     int32_t _increment;    // +0xC0
 };
 

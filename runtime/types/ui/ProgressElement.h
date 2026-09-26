@@ -37,7 +37,7 @@
 namespace UI {
 
 struct ProgressElement {
-    Element  base;              // +0x00 .. +0xBF
+    RtUI::Element  base;              // +0x00 .. +0xBF
     ::Sprite _fillLeft;         // +0xC0
     ::Sprite _fillMiddle;       // +0xD0
     ::Sprite _fillRight;        // +0xE0
