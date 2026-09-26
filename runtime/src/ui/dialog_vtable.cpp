@@ -333,11 +333,7 @@ constexpr size_t kWrittenHiEnd = 0x88;
 // class's own `_typeInfo` at +0x00.
 extern "C" uint32_t RtUiDialog_Type(const void* self) {
     ++RtUiDlgV::g_counts.type;
-    (void)self;
-    uint32_t ours = 0;
-    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
-                sizeof ours);
-    return ours;
+    return reinterpret_cast<const UI::Dialog*>(self)->UI::Dialog::Type();   // B.3.6 bridge
 }
 
 // The STATIC spelling of the same two instructions, at its own address
@@ -347,11 +343,7 @@ extern "C" uint32_t RtUiDialog_Type(const void* self) {
 // about. Lane SS did the same for `?TypeId@SpriteSheet@UI@@SAIXZ`.
 extern "C" uint32_t RtUiDialog_TypeId() {
     ++RtUiDlgV::g_counts.typeId;
-    uint32_t ours = 0;
-    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
-                sizeof ours);
-    using Fn = uint32_t (*)();
-    return ours;
+    return UI::Dialog::TypeId();
 }
 
 // ---- slot 1  ?TypeName@Dialog@UI@@UEBAPEBDXZ  0x180038440 ------------------
@@ -359,11 +351,7 @@ extern "C" uint32_t RtUiDialog_TypeId() {
 // SAME SHAPE as SpriteSheet's slot 1 (0x180002e50).
 extern "C" const char* RtUiDialog_TypeName(const void* self) {
     ++RtUiDlgV::g_counts.typeName;
-    (void)self;
-    const char* ours = nullptr;
-    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoName,
-                sizeof ours);
-    return ours;
+    return reinterpret_cast<const UI::Dialog*>(self)->UI::Dialog::TypeName();   // B.3.6 bridge
 }
 
 // ---- slot 3  ?GetFileVersion@Dialog@UI@@UEBAHXZ  0x1801130b0 ---------------
@@ -373,9 +361,7 @@ extern "C" const char* RtUiDialog_TypeName(const void* self) {
 // they are two independent resource formats that both reached version 6.
 extern "C" int RtUiDialog_GetFileVersion(const void* self) {
     ++RtUiDlgV::g_counts.fileVersion;
-    (void)self;
-    const int ours = 6;
-    return ours;
+    return reinterpret_cast<const UI::Dialog*>(self)->UI::Dialog::GetFileVersion();   // B.3.6 bridge
 }
 
 // ---- slot 7  ?Destruct@Dialog@UI@@UEAAXXZ  0x1800387f0 ---------------------
@@ -391,23 +377,19 @@ extern "C" int RtUiDialog_GetFileVersion(const void* self) {
 // the four arrays a Dialog owns.
 extern "C" void RtUiDialog_Destruct(void* self) {
     ++RtUiDlgV::g_counts.destruct;
-    void** const vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
+    reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Destruct();   // B.3.6 bridge
 }
 
 // ---- slot 8  ?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ  0x180038750 -
 //   if (this) { <the constructor, inlined>; return this; } else return nullptr;
 // The null test at 0x180038761 is retail's own, not a guard added here.
 extern "C" void* RtUiDialog_Construct(void* self) {
-    if (!self) {
+    if (!self) {                           // retail's own null test, kept in the door
         ++RtUiDlgV::g_counts.constructNull;
-          // the null arm does no work, and says so
         return nullptr;
     }
     ++RtUiDlgV::g_counts.construct;
-    RtUiDlgV::ConstructInPlace(static_cast<uint8_t*>(self));
-
-    return self;
+    return reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Construct();   // B.3.6 bridge
 }
 
 // ---- slot 6  ?Reconstruct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ  0x1800386b0
@@ -421,10 +403,7 @@ extern "C" void* RtUiDialog_Construct(void* self) {
 // object and cannot be run twice.
 extern "C" void* RtUiDialog_Reconstruct(void* self) {
     ++RtUiDlgV::g_counts.reconstruct;
-    void** const vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
-    RtUiDlgV::ConstructInPlace(static_cast<uint8_t*>(self));
-    return self;
+    return reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Reconstruct();   // B.3.6 bridge
 }
 
 // ============================================================================
@@ -628,32 +607,85 @@ const char* const kSerializeMangled =
 }  // namespace RtUiDlgV
 
 extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream) {
-    using namespace RtUiDlgV;
     ++RtUiDlgV::g_counts.serialize;
+    // B.3.6: the body is UI::Dialog::Serialize (below). QUALIFIED: the live
+    // object's minted slot 5 resolves back to this door.
+    return reinterpret_cast<UI::Dialog*>(self)->UI::Dialog::Serialize(stream);   // B.3.6 bridge
+}
+
+// ############################################################################
+// ENDGAME B.3.6 block B — the eight slot bodies are UI::Dialog members now
+// (runtime/types/ui/Dialog.h). Unchanged except `self->x` became `x` (the
+// Serialize offsets are the named fields they always were) and the
+// hand-inlined slot-0 call `(*(void***)self)[0](self, 0)` became the virtual
+// `DeletingDtor(0)`: it dispatches through the OBJECT's own table exactly as
+// the tail jump did, so a derived Dialog still reaches its own slot 0.
+// ############################################################################
+namespace UI {
+
+uint32_t Dialog::Type() const {                                // [2] 0x180038420
+    uint32_t ours = 0;
+    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
+                sizeof ours);
+    return ours;
+}
+
+uint32_t Dialog::TypeId() {                                    // static 0x180038430
+    uint32_t ours = 0;
+    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoTypeId,
+                sizeof ours);
+    return ours;
+}
+
+const char* Dialog::TypeName() const {                         // [1] 0x180038440
+    const char* ours = nullptr;
+    std::memcpy(&ours, RtUiDlgV::DialogTypeInfo() + RtUiDlgV::kBaseTypeInfoName,
+                sizeof ours);
+    return ours;
+}
+
+int32_t Dialog::GetFileVersion() const { return 6; }           // [3] 0x1801130b0
+
+void Dialog::Destruct() {                                      // [7] 0x1800387f0
+    DeletingDtor(0);          // `JMP qword ptr [RAX]` with EDX = 0 — VIRTUAL
+}
+
+Object::External* Dialog::Construct() {                        // [8] 0x180038750
+    // The null-`this` test (0x180038761) stays in the door.
+    RtUiDlgV::ConstructInPlace(reinterpret_cast<uint8_t*>(this));
+    return this;
+}
+
+Object::External* Dialog::Reconstruct() {                      // [6] 0x1800386b0
+    DeletingDtor(0);          // NO null test on this path — retail's
+    RtUiDlgV::ConstructInPlace(reinterpret_cast<uint8_t*>(this));
+    return this;
+}
+
+bool Dialog::Serialize(void* streamv) {                        // [5] 0x1801130c0
+    using namespace RtUiDlgV;
+    Stream* const stream = static_cast<Stream*>(streamv);
 
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
-    uint8_t* const base = reinterpret_cast<uint8_t*>(self);
-    auto u32 = [base](size_t off) { return reinterpret_cast<uint32_t*>(base + off); };
-    auto i32 = [base](size_t off) { return reinterpret_cast<int32_t*>(base + off); };
 
-    RecUInt(rw, u32(0x40));                                 // _defaultFlags
-    ElementDescPtrSerialize()(base + 0x38, &ser);           // _rootDescription
-    SpriteSheetPtrSerialize()(base + 0x20, &ser);           // _spriteSheet
-    StringSerialize()(base + 0x28, &ser);                   // _spriteName
-    RecUInt(rw, u32(0x30));                                 // _backgroundColor
+    RecUInt(rw, &_defaultFlags);                               // +0x40
+    ElementDescPtrSerialize()(&_rootDescription, &ser);        // +0x38
+    SpriteSheetPtrSerialize()(&_spriteSheet, &ser);            // +0x20
+    StringSerialize()(&_spriteName, &ser);                     // +0x28
+    RecUInt(rw, &_backgroundColor);                            // +0x30
 
     const bool reading = (ser.stream->direction == rt::io::kDirectionReading);
 
     // -- array 1: _namedTemplates (+0x58), count +0x60, stride 0x10 ---------
     {
-        int32_t count = *i32(0x60);        // a STACK COPY, per 0x18011315e
+        int32_t count = _namedTemplateCount;   // a STACK COPY, per 0x18011315e
         RecInt(rw, &count);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_ExtStr10at08>(base + 0x58)
+            rtcoll::AsArray<&rtcoll::kSpec_ExtStr10at08>(&_namedTemplates)
                 ->SetSize(count);          // retail 0x180075d20
         // RE-READ after SetSize: it reallocates.
-        uint8_t* e = *reinterpret_cast<uint8_t**>(base + 0x58);
+        uint8_t* e = reinterpret_cast<uint8_t*>(_namedTemplates);
         for (int32_t i = 0; i < count; ++i, e += 0x10) {
             ElementDescPtrSerialize()(e, &ser);             // entry+0x00
             StringSerialize()(e + 8, &ser);                 // entry+0x08
@@ -662,23 +694,22 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
 
     // -- array 2: _templates (+0x68), count +0x70, stride 0x08 --------------
     {
-        int32_t count = *i32(0x70);
+        int32_t count = _templateCount;
         RecInt(rw, &count);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(base + 0x68)
+            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_templates)
                 ->SetSize(count);          // retail 0x1800492d0
-        TemplatesWalker()(&ser, static_cast<uint32_t>(count),
-                          *reinterpret_cast<void**>(base + 0x68));
+        TemplatesWalker()(&ser, static_cast<uint32_t>(count), _templates);
     }
 
     // -- array 3: _controllerConfigs (+0x48), count +0x50, stride 0x20 ------
     {
-        int32_t count = *i32(0x50);
+        int32_t count = _controllerCount;
         RecInt(rw, &count);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_CfgEntry20>(base + 0x48)
+            rtcoll::AsArray<&rtcoll::kSpec_CfgEntry20>(&_controllerConfigs)
                 ->SetSize(count);          // retail 0x180075b20
-        uint8_t* e = *reinterpret_cast<uint8_t**>(base + 0x48);
+        uint8_t* e = reinterpret_cast<uint8_t*>(_controllerConfigs);
         for (int32_t i = 0; i < count; ++i, e += 0x20) {
             RecUInt(rw, reinterpret_cast<uint32_t*>(e));    // entry+0x00 _typeId
             ElementDescPtrSerialize()(e + 0x08, &ser);      // entry+0x08 _elementDesc
@@ -689,20 +720,25 @@ extern "C" bool RtUiDialog_Serialize(RtUI::Dialog* self, rt::io::Stream* stream)
 
     // -- array 4: _references (+0x78), count +0x80, stride 0x08 -------------
     {
-        int32_t count = *i32(0x80);
+        int32_t count = _referenceCount;
         RecInt(rw, &count);
         if (reading)
-            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(base + 0x78)
+            rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&_references)
                 ->SetSize(count);          // retail 0x18002f070
-        ReferencesWalker()(&ser, static_cast<uint32_t>(count),
-                           *reinterpret_cast<void**>(base + 0x78));
+        ReferencesWalker()(&ser, static_cast<uint32_t>(count), _references);
     }
 
-    RecInt(rw, i32(0x34));      // _drawLevel — the FIELD, not a copy. LAST.
+    RecInt(rw, &_drawLevel);    // +0x34 — the FIELD, not a copy. LAST.
 
     DestroyCodec(rw);
     return true;
 }
+
+// ??1Dialog@UI@@UEAA@XZ 0x180112e40 — EMPTY on purpose; the door
+// `RtUiDialog_Dtor` (dialog_ctor_dtor.cpp) does the teardown.
+Dialog::~Dialog() {}
+
+}  // namespace UI
 
 // ============================================================================
 // Registration — BOTH doors on every row, for the reason the mint itself gives:

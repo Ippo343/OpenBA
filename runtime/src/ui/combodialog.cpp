@@ -117,6 +117,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/ComboDialog.h"
 
 namespace RtUI {
 
@@ -127,56 +128,93 @@ const uint8_t* ComboDialogTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@ComboDialog@UI@@0VBaseTypeInfo@Object@@A");
 }
 
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using SetUpperLeftFn   = void (*)(void* dlg, int32_t x, int32_t y, bool centered);
 using SetCurrentItemFn = void (*)(void* combo, int32_t index);
 using PlayFn           = void (*)(void* ui, int32_t soundId);
 using CloseDialogFn    = void (*)(void* ui, void** dlgPtr);
 
 }  // namespace
 
-// ---- ?TypeName@ComboDialog@UI@@UEBAPEBDXZ   0x180074760 -------------------
-extern "C" const char* RtUi_ComboDialog_TypeName(const void*) {
-    const char* v = nullptr;
-    __builtin_memcpy(&v, ComboDialogTypeInfo() + 8, sizeof v);
-    return v;
-}
-// ---- ?Type@ComboDialog@UI@@UEBAIXZ          0x180074740 -------------------
-extern "C" uint32_t RtUi_ComboDialog_Type(const void*) {
-    uint32_t v = 0;
-    __builtin_memcpy(&v, ComboDialogTypeInfo(), sizeof v);
-    return v;
-}
-
 // ---- ??1ComboDialog@UI@@UEAA@XZ   0x180111cd0 -----------------------------
+// A DTOR DOOR (RULE B6-3): stamps the minted table and chains to
+// ~DialogInstance by name. The C++ `~ComboDialog` below is empty.
 extern "C" void RtUi_ComboDialog_Dtor(void* selfv) {
     void** v = reinterpret_cast<void**>(selfv);
     *v = VtComboDialog();                                            // 180111cd7
     RT_EXPORT_ONCE(void (*)(void*), "??1DialogInstance@UI@@UEAA@XZ")(selfv);  // 0x180114d40
 }
 
-// ---- ?OnUpdateLayout@ComboDialog@UI@@UEAAXXZ   0x180111cb0 ----------------
-extern "C" void RtUi_ComboDialog_OnUpdateLayout(void* selfv) {
-    uint8_t* p     = reinterpret_cast<uint8_t*>(selfv);
-    uint8_t* combo = *reinterpret_cast<uint8_t**>(p + 0xc8);           // _comboElement
-    const int32_t x = *reinterpret_cast<int32_t*>(combo + 0x68);
-    const int32_t y = *reinterpret_cast<int32_t*>(combo + 0x74);
-    RT_EXPORT_ONCE(SetUpperLeftFn, "?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z")
-        (selfv, x, y, false);                                          // 180111cc1 JMP
+// Other blocks' doors the member bodies reach (ComboElement, UserInterface),
+// file-scope so that no member keeps a static of its own (RULE B6-5).
+namespace {
+inline void ComboSetCurrentItem(void* combo, int32_t index) {
+    RT_EXPORT_ONCE(SetCurrentItemFn, "?SetCurrentItem@ComboElement@UI@@QEAAXH@Z")(combo, index);
+}
+inline void UiPlay(void* ui, int32_t sound) {
+    RT_EXPORT_ONCE(PlayFn, "?Play@UserInterface@UI@@QEAAXH@Z")(ui, sound);
+}
+inline void UiCloseDialog(void* ui, void** dlgPtr) {
+    RT_EXPORT_ONCE(CloseDialogFn,
+        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z")
+        (ui, dlgPtr);
+}
+}  // namespace
+
+}  // namespace RtUI
+
+// ############################################################################
+// ENDGAME B.3.6 block B — the five own slots are UI::ComboDialog members now
+// (runtime/types/ui/ComboDialog.h). The raw offsets became the named fields:
+// +0x10 `_ui` (the old code called it "combo"; it is DialogInstance::_ui, the
+// UserInterface whose +0xdc is the UI scale), +0x20 `_flags`, +0x50 `_root`,
+// +0xb8 `_list`, +0xc0 `_parentDialog`, +0xc8 `_combo`. Calls onto THIS
+// block's classes became member calls:
+//   SetUpperLeft by name              -> SetUpperLeft(x, y, false)    (non-virtual)
+//   `_parentDialog` vtable +0x40      -> _parentDialog->OnElementEvent(...)  (VIRTUAL,
+//                                        DialogInstance slot 8)
+// ############################################################################
+namespace UI {
+
+// ?TypeName@ComboDialog@UI@@UEBAPEBDXZ   0x180074760
+const char* ComboDialog::TypeName() const {
+    const char* v = nullptr;
+    __builtin_memcpy(&v, RtUI::ComboDialogTypeInfo() + 8, sizeof v);
+    return v;
+}
+// ?Type@ComboDialog@UI@@UEBAIXZ          0x180074740
+uint32_t ComboDialog::Type() const {
+    uint32_t v = 0;
+    __builtin_memcpy(&v, RtUI::ComboDialogTypeInfo(), sizeof v);
+    return v;
 }
 
-// ---- ?OnUpdate@ComboDialog@UI@@UEAAXAEBVTime@System@@@Z   0x180111bd0 -----
-extern "C" void RtUi_ComboDialog_OnUpdate(void* selfv, const void* /*time*/) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
+ComboDialog::~ComboDialog() {}   // see the dtor door above
 
-    // Input::Device::_singleton, exported data symbol.
+// ?OnUpdateLayout@ComboDialog@UI@@UEAAXXZ   0x180111cb0 — a tail JMP into
+// SetUpperLeft at the combo element's (left, bottom).
+void ComboDialog::OnUpdateLayout() {
+    const uint8_t* combo = static_cast<const uint8_t*>(_combo);
+    const int32_t x = *reinterpret_cast<const int32_t*>(combo + 0x68);
+    const int32_t y = *reinterpret_cast<const int32_t*>(combo + 0x74);
+    SetUpperLeft(x, y, false);                                       // 180111cc1 JMP
+}
+
+// ?OnUpdate@ComboDialog@UI@@UEAAXAEBVTime@System@@@Z   0x180111bd0
+// A click anywhere OUTSIDE the drop-down closes it.
+//
+// *** CORRECTED, B.3.6 block B: the root's Contains (Element slot 9, +0x48)
+// takes (x, y, UserInterface*). 0x180111c50 `CALL [RAX+0x48]` is reached with
+// EDX = mx (0x180111c0d), R8D = my (0x180111c1c) and R9 = `_ui`
+// (0x180111bee) still live; the port passed `this` only and let three
+// registers of garbage through — the register-passthrough arg drop
+// (feedback_ghidra_dropped_args.md). Now passed, as UI::DialogInstance::
+// Contains passes them. ***
+void ComboDialog::OnUpdate(const System::Time& /*time*/) {
     void** devSlot = RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
     uint8_t* dev = devSlot ? *reinterpret_cast<uint8_t**>(devSlot) : nullptr;
-    if (dev == nullptr) return;   // faithful: retail derefs it unconditionally too
+    if (dev == nullptr) return;   // pre-existing; retail derefs it unconditionally
 
-    uint8_t* combo = *reinterpret_cast<uint8_t**>(p + 0x10);            // 180111bee
-    const float scale = *reinterpret_cast<float*>(combo + 0xdc);
+    const float scale = *reinterpret_cast<const float*>(static_cast<const uint8_t*>(_ui) + 0xdc);
     const int16_t rawMx = *reinterpret_cast<int16_t*>(dev + 0x109c);
     const int16_t rawMy = *reinterpret_cast<int16_t*>(dev + 0x10b4);
     const int32_t mx = static_cast<int32_t>(static_cast<float>(rawMx) * scale);
@@ -185,74 +223,89 @@ extern "C" void RtUi_ComboDialog_OnUpdate(void* selfv, const void* /*time*/) {
     const bool anyButtonDown = dev[0x10fe] != 0 || dev[0x1116] != 0 || dev[0x112e] != 0;
     if (!anyButtonDown) return;                                          // 180111c33
 
-    const uint32_t flags = *reinterpret_cast<uint32_t*>(p + 0x20);
-    if ((flags & 0x4) == 0) {                                            // 180111c3f
-        if (flags & 0x8) {                                               // 180111c47
-            uint8_t* rectObj = *reinterpret_cast<uint8_t**>(p + 0x50);
-            using ContainsFn = bool (*)(void*);
-            const bool inside = reinterpret_cast<ContainsFn>(VTableOf(rectObj)[0x48 / 8])(rectObj);
-            if (inside) return;                                          // 180111c55
+    if ((_flags & 0x4) == 0) {                                           // 180111c3f
+        uint8_t* root = static_cast<uint8_t*>(_root);
+        if (_flags & 0x8) {                                              // 180111c47
+            using ContainsFn = bool (*)(void*, int32_t, int32_t, void*);
+            void** vt = *reinterpret_cast<void***>(root);
+            if (reinterpret_cast<ContainsFn>(vt[0x48 / 8])(root, mx, my, _ui))
+                return;                                                  // 180111c55
         } else {
-            uint8_t* rect = *reinterpret_cast<uint8_t**>(p + 0x50);
-            const int32_t l = *reinterpret_cast<int32_t*>(rect + 0x68);
-            const int32_t r = *reinterpret_cast<int32_t*>(rect + 0x70);
-            const int32_t t = *reinterpret_cast<int32_t*>(rect + 0x6c);
-            const int32_t b = *reinterpret_cast<int32_t*>(rect + 0x74);
+            const int32_t l = *reinterpret_cast<int32_t*>(root + 0x68);
+            const int32_t r = *reinterpret_cast<int32_t*>(root + 0x70);
+            const int32_t t = *reinterpret_cast<int32_t*>(root + 0x6c);
+            const int32_t b = *reinterpret_cast<int32_t*>(root + 0x74);
             if (mx >= l && mx <= r && my >= t && my <= b) return;         // 180111c71
         }
     }
 
-    uint8_t* controller = *reinterpret_cast<uint8_t**>(p + 0xc8);
-    int64_t* resultSlot = reinterpret_cast<int64_t*>(controller + 0x120);
+    int64_t* resultSlot = reinterpret_cast<int64_t*>(static_cast<uint8_t*>(_combo) + 0x120);
     if (*resultSlot != 0) *resultSlot = 0;                                // 180111c84
 
-    void* selfCopy = selfv;
-    RT_EXPORT_ONCE(CloseDialogFn,
-        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z")
-        (*reinterpret_cast<void**>(p + 0x10), &selfCopy);                  // 180111c9d
+    void* selfCopy = this;
+    RtUI::UiCloseDialog(_ui, &selfCopy);                                  // 180111c9d
 }
 
-// ---- ?OnElementEvent@ComboDialog@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
-//      0x180111af0 -------------------------------------------------------
-extern "C" void RtUi_ComboDialog_OnElementEvent(void* selfv, void* /*elem*/,
-                                                int32_t evt, int32_t stage,
-                                                int32_t value) {
+// ?OnElementEvent@ComboDialog@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
+//      0x180111af0 — a list pick: set the combo's item, click, forward the
+// event to the dialog that owns the combo, close.
+void ComboDialog::OnElementEvent(Object::InternalPtr<Element>* /*element*/,
+                                 int32_t evt, int32_t stage, int32_t value,
+                                 int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (evt != 0x14 || stage != 0) return;                                  // 180111af4/180111b05
 
-    uint8_t* p     = reinterpret_cast<uint8_t*>(selfv);
-    uint8_t* combo = *reinterpret_cast<uint8_t**>(p + 0xc8);
+    uint8_t* combo = static_cast<uint8_t*>(_combo);
+    RtUI::ComboSetCurrentItem(combo, value);                                // 180111b25
+    RtUI::UiPlay(_ui, 5);                                                   // 180111b33
 
-    RT_EXPORT_ONCE(SetCurrentItemFn, "?SetCurrentItem@ComboElement@UI@@QEAAXH@Z")
-        (combo, value);                                                     // 180111b25
+    const int32_t listIndex =
+        *reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(_list) + 0xd8);
+    RtUI::ComboSetCurrentItem(combo, listIndex);                            // 180111b4c
 
-    void* ui = *reinterpret_cast<void**>(p + 0x10);
-    RT_EXPORT_ONCE(PlayFn, "?Play@UserInterface@UI@@QEAAXH@Z")(ui, 5);       // 180111b33
-
-    uint8_t* description = *reinterpret_cast<uint8_t**>(p + 0xb8);
-    const int32_t descIndex = *reinterpret_cast<int32_t*>(description + 0xd8);
-    RT_EXPORT_ONCE(SetCurrentItemFn, "?SetCurrentItem@ComboElement@UI@@QEAAXH@Z")
-        (combo, descIndex);                                                 // 180111b4c
-
-    // *** SLOT 0x40, transcribed exactly as shipped -- see the file banner. ***
-    uint8_t* controller = *reinterpret_cast<uint8_t**>(p + 0xc0);
-    void*    local       = combo;   // re-read of _comboElement, same value
-    using ControllerSlot40Fn = void (*)(void* self, void* elemPtr, int32_t evt,
-                                        int32_t id, int32_t value, int32_t a,
-                                        int32_t b, void* c);
-    reinterpret_cast<ControllerSlot40Fn>(VTableOf(controller)[0x40 / 8])(
-        controller, &local, 0x14, *reinterpret_cast<int32_t*>(combo + 0x88),
-        value, 0, 0, nullptr);                                              // 180111b8a
+    // *** SLOT 0x40 on `_parentDialog`, i.e. DialogInstance slot 8 — see the
+    // file banner. The handle is re-read into a local whose ADDRESS is passed.
+    Object::InternalPtr<Element> local(static_cast<Element*>(_combo));
+    _parentDialog->OnElementEvent(&local, 0x14,
+                                  *reinterpret_cast<const int32_t*>(combo + 0x88),
+                                  value, 0, 0, nullptr);                    // 180111b8a
 
     int64_t* resultSlot = reinterpret_cast<int64_t*>(combo + 0x120);
     if (*resultSlot != 0) *resultSlot = 0;                                  // 180111ba2
 
-    void* selfCopy = selfv;
-    RT_EXPORT_ONCE(CloseDialogFn,
-        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z")
-        (ui, &selfCopy);                                                    // 180111bb7
+    void* selfCopy = this;
+    RtUI::UiCloseDialog(_ui, &selfCopy);                                    // 180111bb7
 }
 
-}  // namespace RtUI
+}  // namespace UI
+
+// The registered doors: QUALIFIED delegation (the minted table's slots
+// resolve back to these doors).
+namespace {
+inline UI::ComboDialog* AsCombo(void* p) {
+    return reinterpret_cast<UI::ComboDialog*>(p);           // B.3.6 bridge
+}
+}  // namespace
+
+extern "C" const char* RtUi_ComboDialog_TypeName(const void* self) {
+    return reinterpret_cast<const UI::ComboDialog*>(self)->UI::ComboDialog::TypeName();   // B.3.6 bridge
+}
+extern "C" uint32_t RtUi_ComboDialog_Type(const void* self) {
+    return reinterpret_cast<const UI::ComboDialog*>(self)->UI::ComboDialog::Type();   // B.3.6 bridge
+}
+extern "C" void RtUi_ComboDialog_OnUpdateLayout(void* self) {
+    AsCombo(self)->UI::ComboDialog::OnUpdateLayout();
+}
+extern "C" void RtUi_ComboDialog_OnUpdate(void* self, const void* time) {
+    AsCombo(self)->UI::ComboDialog::OnUpdate(*static_cast<const System::Time*>(time));
+}
+// The full eight-argument retail signature (the door used to spell only the
+// first five; the remaining three were never read and still are not).
+extern "C" void RtUi_ComboDialog_OnElementEvent(void* self, void* element,
+                                                int32_t a, int32_t b, int32_t c,
+                                                int32_t d, int32_t e, void* userData) {
+    AsCombo(self)->UI::ComboDialog::OnElementEvent(
+        static_cast<Object::InternalPtr<UI::Element>*>(element), a, b, c, d, e, userData);
+}
 
 // ============================================================================
 // Registration
