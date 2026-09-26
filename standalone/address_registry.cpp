@@ -62,7 +62,6 @@ extern "C" {
     void RegisterFinishTutorialGoalVtable();
     void RegisterFinishTutorialInstanceVtable();
     void RegisterMainMenuDialogVtable();
-    void RegisterLoaderDialogVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
     void RegisterOptionInputBindDialogVtable();
@@ -1789,7 +1788,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterFinishTutorialGoalVtable();
     RegisterFinishTutorialInstanceVtable();
     RegisterMainMenuDialogVtable();
-    RegisterLoaderDialogVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();
     RegisterOptionInputBindDialogVtable();

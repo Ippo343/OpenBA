@@ -154,16 +154,8 @@ struct AchievementDialog {
 static_assert(sizeof(AchievementDialog) == 0xD0, "AchievementDialog size mismatch");
 static_assert(offsetof(AchievementDialog, dataB8) == 0xB8, "");
 
-// --- AutoSaveDialog (0xD0) ---
-// Factory inits: +0xB8=0, +0xC0=0
-struct AutoSaveDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint8_t  _padC8[8];        // +0xC8: not initialized by factory
-};
-static_assert(sizeof(AutoSaveDialog) == 0xD0, "AutoSaveDialog size mismatch");
-static_assert(offsetof(AutoSaveDialog, dataB8) == 0xB8, "");
+// --- AutoSaveDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/AutoSaveDialog.h"
 
 // --- EventNotifyDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/EventNotifyDialog.h"
@@ -193,16 +185,8 @@ struct GoalDialog {
 static_assert(sizeof(GoalDialog) == 0xC8, "GoalDialog size mismatch");
 static_assert(offsetof(GoalDialog, dataB8) == 0xB8, "");
 
-// --- LoaderDialog (0xC8) ---
-// Factory inits: +0xB8=0, +0xC0(u32)=0
-struct LoaderDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint32_t dataC0;           // +0xC0: zeroed (u32 write)
-    uint8_t  _padC4[4];        // +0xC4: gap
-};
-static_assert(sizeof(LoaderDialog) == 0xC8, "LoaderDialog size mismatch");
-static_assert(offsetof(LoaderDialog, dataB8) == 0xB8, "");
+// --- LoaderDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/LoaderDialog.h"
 
 // --- MainMenuDialog (0xC8) ---
 // Factory: no subclass fields initialized

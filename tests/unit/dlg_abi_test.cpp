@@ -26,6 +26,8 @@
 #include "Dialog/OptionInputBindDialog.h"
 #include "Dialog/EventNotifyDialog.h"
 #include "Dialog/EventPopupDialog.h"
+#include "Dialog/LoaderDialog.h"
+#include "Dialog/AutoSaveDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -111,4 +113,21 @@ UNIT_TEST(dlg_event_dialogs) {
     CheckShape<EventPopupDialog>();
     CheckDialogInstanceSlots<EventNotifyDialog>();
     CheckDialogInstanceSlots<EventPopupDialog>();
+}
+
+// ===========================================================================
+// LoaderDialog (0x14015f300, 10 slots, 0xc8), AutoSaveDialog (0x14015b120,
+// 10 slots, 0xd0)
+// ===========================================================================
+UNIT_TEST(dlg_loader_autosave_dialogs) {
+    CHECK_EQ(sizeof(LoaderDialog),   (size_t)0xc8);
+    CHECK_EQ(sizeof(AutoSaveDialog), (size_t)0xd0);
+    CHECK_EQ(offsetof(LoaderDialog, loadingImage), (size_t)0xb8);
+    CHECK_EQ(offsetof(LoaderDialog, rotation),     (size_t)0xc0);
+    CHECK_EQ(offsetof(AutoSaveDialog, dataC0),     (size_t)0xc0);
+    CHECK_EQ(offsetof(AutoSaveDialog, angle),      (size_t)0xc8);
+    CheckShape<LoaderDialog>();
+    CheckShape<AutoSaveDialog>();
+    CheckDialogInstanceSlots<LoaderDialog>();
+    CheckDialogInstanceSlots<AutoSaveDialog>();
 }

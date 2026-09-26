@@ -6,37 +6,6 @@
 #include <cstdint>
 
 // ============================================================
-// LoaderDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds "loadingImage" element, stores at +0xB8.
-void LoaderDialog_Slot4(LoaderDialog* self);
-
-// Slot6 (vtable +0x30): Applies current rotation angle to loading spinner image.
-void LoaderDialog_Slot6(LoaderDialog* self);
-
-// Slot7 (vtable +0x38): Accumulates rotation angle from elapsed time (180 deg/sec).
-void LoaderDialog_Slot7(LoaderDialog* self, void* time);
-
-// ============================================================
-// AutoSaveDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — stops timer, picks autosave interval by
-// game speed, starts new timer. JMP thunk to 0x14005E120.
-void AutoSaveDialog_Slot4(AutoSaveDialog* self);
-
-// Slot6 (vtable +0x30): Toggles save/load indicator visibility based on
-// SaveLoad::GetOperation, applies rotation to active indicator.
-void AutoSaveDialog_Slot6(AutoSaveDialog* self);
-
-// Slot7 (vtable +0x38): Accumulates rotation angle (90 deg/sec), wraps at 360.
-void AutoSaveDialog_Slot7(AutoSaveDialog* self, void* time);
-
-// Slot8 (vtable +0x40): OnCommand — if msg==0x13 (timer), triggers autosave.
-void AutoSaveDialog_Slot8(AutoSaveDialog* self, void* param2, int param3, int param4);
-
-// ============================================================
 // TutorialGoalDialog
 // ============================================================
 
