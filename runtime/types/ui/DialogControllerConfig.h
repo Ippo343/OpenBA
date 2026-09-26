@@ -28,7 +28,7 @@
 // fields at +0x20 and build their bases through `fn_External_External`.
 //
 // ABSTRACT twice over: slots 3/5/6/7 are pure in retail, and slot 0 is the
-// mint's row (B6-3). No real constructor.
+// mint's row (B6-3). Real (empty) constructor since ENDGAME B.3.8 block RB.
 // ============================================================================
 
 #include <cstdint>
@@ -56,11 +56,17 @@ public:
     static Object::Base* CreateInPlaceObject(void* storage);      // 0x18003b490
 
 protected:
-    // NOT retail's `??0DialogControllerConfig@UI@@QEAA@XZ` (0x18003b4a0) — B6-3.
-    DialogControllerConfig() = default;
-    // `??1DialogControllerConfig@UI@@UEAA@XZ` 0x18003b4f0. Defined EMPTY: the
-    // registered door `RtUi_DialogControllerConfig_Dtor` stamps the minted
-    // table and chains to ~External by name.
+    // ??0DialogControllerConfig@UI@@QEAA@XZ  0x18003b4a0 — the REAL
+    // constructor (ENDGAME B.3.8 block RB, RULE B8-1). Retail's body is
+    // `??0External` + its own vptr store and NOTHING else (the class adds no
+    // field), so the compiler-emitted chain IS the whole port and the body is
+    // empty. No ctor door exists to share it with (the four exe configs build
+    // their base through `fn_External_External`, EXE_SUBCLASSES.md 1C).
+    DialogControllerConfig() {}
+    // `??1DialogControllerConfig@UI@@UEAA@XZ` 0x18003b4f0. EMPTY, which is
+    // retail's body (restamp + ~External, both the compiler's). The registered
+    // door `RtUi_DialogControllerConfig_Dtor` does those two by hand for the
+    // minted objects.
     ~DialogControllerConfig();
 
     // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:

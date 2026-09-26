@@ -473,9 +473,6 @@ void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSo
 void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
                               void** parentPtr, void* dataSource,
                               void* userData, int32_t userFlags) {
-    DialogInstance* const d = static_cast<DialogInstance*>(self);
-    const Dialog* const dlg = static_cast<const Dialog*>(dialog);
-
     InternalCtor(self);                                       // 0x1801148a2
 
     // 0x1801148a8: the DLL's OWN exported vtable, never a minted one. This is
@@ -483,8 +480,44 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     // table keeps a half-ported class from putting two vtables in play.
     static void* vtbl = nullptr;
     if (!vtbl) vtbl = ResolveExport("??_7DialogInstance@UI@@6B@");
-    F<void*>(d, 0x00) = vtbl;
+    F<void*>(self, 0x00) = vtbl;
 
+    // ENDGAME B.3.8 block RB (RULE B8-1): everything after the vptr store is
+    // ONE body with the real constructor `UI::DialogInstance(ui, dialog, …)` —
+    // `UI::DialogInstance::InitFields`, below this namespace. The door keeps
+    // the Internal ctor and the minted stamp for still-unconverted subclasses.
+    UI::DialogInstance::DoorBody::Init(
+        reinterpret_cast<UI::DialogInstance*>(self),                       // B.3.8 bridge
+        static_cast<UI::UserInterface*>(ui),
+        static_cast<const UI::Dialog*>(dialog),
+        reinterpret_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentPtr),  // B.3.8 bridge
+        static_cast<Object::Base*>(dataSource), userData, userFlags);
+    return self;   // 0x180114a37 `MOV RAX,RSI`
+}
+
+}  // namespace
+
+// ============================================================================
+// UI::DialogInstance::InitFields — the body of ??0DialogInstance 0x180114870
+// after `CALL ??0Internal` and the vptr store (ENDGAME B.3.8 block RB, B8-1).
+// Shared by the real constructor (DialogInstance.h) and the door
+// `RtUiDialogInstance_Ctor` above. MOVED VERBATIM from the door: it still
+// works through the field-identical `RtUI::` POD views (cross-asserted in
+// DialogInstance.h), so not one store changed.
+// ============================================================================
+namespace UI {
+
+void DialogInstance::InitFields(UserInterface* uiArg, const Dialog* dialogArg,
+                                const Object::InternalPtr<DialogInstance>* parentArg,
+                                Object::Base* dataSourceArg, void* userData,
+                                int32_t userFlags) {
+    void* const self = this;
+    void* const ui = uiArg;
+    const void* const dialog = dialogArg;
+    void* const dataSource = dataSourceArg;
+    void* const* const parentPtr = reinterpret_cast<void* const*>(parentArg);   // B.3.8 bridge
+    RtUI::DialogInstance* const d = reinterpret_cast<RtUI::DialogInstance*>(this);  // B.3.8 bridge
+    const RtUI::Dialog* const dlg = static_cast<const RtUI::Dialog*>(dialog);
     d->_ui         = ui;                          // +0x10
     d->_dialog     = const_cast<void*>(dialog);   // +0x18
     d->_flags      = dlg->_defaultFlags;          // +0x20  from _dialog->+0x40
@@ -538,7 +571,7 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     // tie-break (`?GetFirstDialog@UserInterface@UI@@`, 0x180031150, reads the
     // FIRST element from the list's +0x00) and warns that reading the ctor
     // alone gets this backwards.
-    if (DialogInstance* const parent = static_cast<DialogInstance*>(d->_parent)) {
+    if (RtUI::DialogInstance* const parent = static_cast<RtUI::DialogInstance*>(d->_parent)) {
         // 0x180114999: `MOV EDX,0x18 / LEA R8D,[RDX-0x10]` -> Allocate(0x18, 8),
         // wrapped in Enter/Leave — i.e. exactly ?MemAlloc@…(0x18, 8).
         uint8_t* node = static_cast<uint8_t*>(MemAlloc(0x18, 8));
@@ -594,11 +627,9 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
                 static_cast<UI::ElementDescription*>(e._elementDesc)),      // entry+0x08 -> a5
             *reinterpret_cast<const System::String*>(&e._name));  // B.3.6 bridge  entry+0x18 -> a6
     }
-
-    return self;   // 0x180114a37 `MOV RAX,RSI`
 }
 
-}  // namespace
+}  // namespace UI
 
 // ############################################################################
 // ENDGAME B.3.6 block B — StartTimer and the two AddController overloads are
