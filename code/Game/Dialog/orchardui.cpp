@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *g_TypeId_ProgressElement) before storing it at +0x38.
@@ -55,7 +57,7 @@ void OrchardUI_Slot4(OrchardUI* self) {
 
     void* parentElem = *(void**)(s + 0x20);
     uint64_t findResult = 0;
-    fn_FindElement(parentElem, &findResult, &nameStr);
+    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
 
     // Store yield element at +0x38, faithful to retail: the find result is kept only
     // if it really is a ProgressElement (see the type-id note at the top of the file —
@@ -134,9 +136,7 @@ void OrchardUI_Slot7(OrchardUI* self) {
     // Enable/disable combo based on item count (SelectResourceUI base logic)
     void* combo = (void*)*(uint64_t*)(s + 0x30);
     int itemCount = fn_ComboElement_GetItemCount(combo);
-    void** vtable = *(void***)combo;
-    typedef void (*fn_SetEnabled_t)(void*, bool);
-    ((fn_SetEnabled_t)vtable[8])(combo, itemCount > 0);
+    reinterpret_cast<UI::Element*>(combo)->Enable(itemCount > 0);  // B.3.6 bridge: Element slot 8 Enable
 }
 
 // ============================================================
