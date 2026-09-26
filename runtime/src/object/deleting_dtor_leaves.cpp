@@ -72,6 +72,7 @@
 // every deleting-dtor row, vtable stamp and dtor door byte-identical.
 #include "../../types/video/Device.h"
 #include "../../types/graphics/ParticleInstance.h"
+#include "../../types/achievement/Goal.h"   // ENDGAME B.3.7 callers (K5): Achievement::GoalList
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module module, uintptr_t ghidraAddr);
@@ -150,7 +151,9 @@ extern "C" void RtAudio_SoundEffect_Dtor(void* self) {
 // ??1AchievementInstance@Achievement@@UEAA@XZ   0x18009e400
 extern "C" void RtAchievement_AchievementInstance_Dtor(void* self) {
     STAMP(self, "??_7AchievementInstance@Achievement@@6B@");
-    RT_EXPORT_ONCE(DtorFn, "??1GoalList@Achievement@@QEAA@XZ")(static_cast<uint8_t*>(self) + 0x10);
+    // GoalList is a VALUE type with a real dtor (B37_RULES B7-8), held at +0x10.
+    reinterpret_cast< ::Achievement::GoalList*>(static_cast<uint8_t*>(self) + 0x10)
+        ->Achievement::GoalList::~GoalList();  // B.3.7 bridge
     RT_EXPORT_ONCE(DtorFn, "??1Internal@Object@@UEAA@XZ")(self);
 }
 
