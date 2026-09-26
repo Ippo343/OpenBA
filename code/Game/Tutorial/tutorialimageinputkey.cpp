@@ -22,6 +22,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -198,16 +201,19 @@ void* TutorialImageInputKey_Slot9(void* self, void* retIBP, void* dialog) {
     auto p = reinterpret_cast<uint8_t*>(self);
 
     // 1. Create UI element from imageRef at +0x20
-    if (fn_Dialog_CreateElement)
-        fn_Dialog_CreateElement(dialog, retIBP, *(void**)(p + 0x20));
+    ::new (retIBP) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<const UI::Dialog*>(dialog)->CreateElement(  // B.3.6 bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                reinterpret_cast<UI::ElementDescription*>(*(void**)(p + 0x20)))));
 
     // 2. CheckPtr on the returned IBP
 
     // 3. FindElementType — find TextElement child
     void* element = *(void**)retIBP;
     uint8_t foundIBP[16] = {};
-    if (fn_Element_FindElementType && g_TypeId_TextElement)
-        fn_Element_FindElementType(element, foundIBP, *g_TypeId_TextElement);
+    if (g_TypeId_TextElement)
+        ::new (foundIBP) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::Element*>(element)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
 
     // 4. CheckPtr on found element
 

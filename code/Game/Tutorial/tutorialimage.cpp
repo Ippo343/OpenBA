@@ -20,6 +20,9 @@
 #include <cstdio>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 
 // Vtable pointer (resolved at runtime)
 static void* s_vtable_TutorialImage = nullptr;
@@ -27,10 +30,6 @@ static void* s_vtable_TutorialImage = nullptr;
 // ExternalPtr serializer for imageRef field at +0x20 (0x140027ad0)
 typedef void (*fn_ExternalPtr_SerializeImage_t)(void* fieldPtr, void* serializer);
 static fn_ExternalPtr_SerializeImage_t s_fn_ExternalPtr_SerializeImage = nullptr;
-
-// Dialog::CreateElement dispatch (0x1401528c0)
-typedef void (*fn_Dialog_CreateElement_t)(void* dialog, void* retval, void* imageRef);
-static fn_Dialog_CreateElement_t s_fn_Dialog_CreateElement = nullptr;
 
 static bool s_resolved = false;
 
@@ -41,14 +40,6 @@ static void EnsureResolved() {
     // ExternalPtr serialize for image resources (direct call target at 0x140027ad0)
     s_fn_ExternalPtr_SerializeImage = reinterpret_cast<fn_ExternalPtr_SerializeImage_t>(
         ResolveAddr(Module::Exe, 0x140027ad0));
-
-    // Dialog::CreateElement — runtime dispatch slot at 0x1401528c0
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401528c0));
-        if (dispatch && *dispatch) {
-            s_fn_Dialog_CreateElement = reinterpret_cast<fn_Dialog_CreateElement_t>(*dispatch);
-        }
-    }
 
     s_resolved = true;
 }
@@ -186,9 +177,10 @@ void* TutorialImage_Slot9(void* self, void* param1, void* param2) {
     void* imageRef = *(void**)(s + 0x20);
 
     // Call Dialog::CreateElement(dialog=param2, retval=param1, imageRef)
-    if (s_fn_Dialog_CreateElement) {
-        s_fn_Dialog_CreateElement(param2, param1, imageRef);
-    }
+    ::new (param1) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<const UI::Dialog*>(param2)->CreateElement(  // B.3.6 bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                reinterpret_cast<UI::ElementDescription*>(imageRef))));
     return param1;   // retail returns the RETBUF (its param_2), which is our param1
 }
 

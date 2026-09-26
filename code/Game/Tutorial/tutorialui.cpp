@@ -11,13 +11,19 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
+#include "ui/UserInterface.h"                 // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 
 // Helper: FindElemByName with IsDerivedFrom check, stores InternalBasePtr
 static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
     System::String nameBuf(name);
 
     uint64_t foundResult = 0;
-    fn_FindElement((void*)*(uint64_t*)(self + 0x20), &foundResult, &nameBuf);
+    ::new (&foundResult) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::Element*>(*(uint64_t*)(self + 0x20))->FindElement(nameBuf));  // B.3.6 bridge
 
     void* found = (void*)foundResult;
     void* checked = nullptr;
@@ -43,15 +49,16 @@ void TutorialUI_Serialize(TutorialUI* self) {
     FindAndStore(s, "quitButton", 0x58);
 
     // Set button IDs
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x50), 0x578);  // nextButton = 1400
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x58), 0x579);  // quitButton = 1401
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x50))->SetElementId(0x578);  // nextButton = 1400  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x58))->SetElementId(0x579);  // quitButton = 1401  // B.3.6 bridge
 
     // Hide the "buttonClose" element in the dialog instance
     System::String closeName("buttonClose");
     uint64_t closeElem = 0;
-    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &closeElem, &closeName);
+    ::new (&closeElem) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(*(uint64_t*)(s + 0x18))->FindElement(closeName));  // B.3.6 bridge
     // SetFlagsOnOff(elem, hideFlags=1, showFlags=0) — hide element
-    fn_Element_SetFlagsOnOff((void*)closeElem, 1, 0);
+    reinterpret_cast<UI::Element*>(closeElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 }
 
 // OnRemove (vtable +0x48): Quit tutorial button handler.
@@ -135,8 +142,9 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
     {
         void* ui = *(void**)(eng + 0x98);
         uint64_t nullCursor = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
-        if (fn_UI_SetCursor) fn_UI_SetCursor(ui, nullCursor);
-        if (fn_UI_SetFullscreenFade) fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
+        reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(
+            Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(nullCursor)));  // B.3.6 bridge
+        reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
         *(void**)(eng + 0xC8) = pOuterLoop;
     }
 }
@@ -149,10 +157,10 @@ void TutorialUI_Startup(TutorialUI* self) {
     // nextButton (+0x50): check flags at element +0x34
     void* nextBtn = (void*)*(uint64_t*)(s + 0x50);
     bool nextHidden = (*(uint32_t*)((uintptr_t)nextBtn + 0x34) & 0x1800000) != 0;
-    fn_Element_SetFlagsOnOff(nextBtn, nextHidden ? 1 : 0, nextHidden ? 0 : 1);
+    reinterpret_cast<UI::Element*>(nextBtn)->SetFlagsOnOff(nextHidden ? 1 : 0, nextHidden ? 0 : 1);  // B.3.6 bridge
 
     // quitButton (+0x58): same check
     void* quitBtn = (void*)*(uint64_t*)(s + 0x58);
     bool quitHidden = (*(uint32_t*)((uintptr_t)quitBtn + 0x34) & 0x1800000) != 0;
-    fn_Element_SetFlagsOnOff(quitBtn, quitHidden ? 1 : 0, quitHidden ? 0 : 1);
+    reinterpret_cast<UI::Element*>(quitBtn)->SetFlagsOnOff(quitHidden ? 1 : 0, quitHidden ? 0 : 1);  // B.3.6 bridge
 }
