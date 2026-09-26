@@ -23,6 +23,9 @@
 #include "ui/UserInterface.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 namespace {
 
@@ -90,8 +93,8 @@ void ToolbarUtility_FindDialogByControllerType_0270(void* /*toolController*/,
         // GetController(dialog, &ctrlBuf, ToolUI tid) — R8=type-id filters internally.
         void* controller = nullptr;
         uintptr_t ctrlBuf[2] = {};
-        if (dialog && fn_DialogInstance_GetController)
-            fn_DialogInstance_GetController(dialog, ctrlBuf, toolUITid);
+        if (dialog)
+            ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialog)->GetController(toolUITid));  // B.3.6 bridge
         if (ctrlBuf[0] != 0) {
             void* c = reinterpret_cast<void*>(ctrlBuf[0]);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, toolUITid)) controller = c;

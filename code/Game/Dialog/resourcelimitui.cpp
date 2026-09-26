@@ -16,13 +16,15 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
     System::String nameStr(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, &nameStr);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
 
     return result;
 }
@@ -127,7 +129,7 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
 
     if (sender != spinner) {
         uint64_t childResult = 0;
-        fn_Element_Child(spinner, &childResult, 0);
+        ::new (&childResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinner)->Child(0));  // B.3.6 bridge
         void* child = (void*)childResult;
         if (sender != child) return;
     }
@@ -219,7 +221,7 @@ void ResourceLimitUI_Write_SA(ResourceLimitUI* self, void* param2, int msg, int 
     void* sender = *(void**)param2;
     if (sender != spinner) {
         uint64_t childResult = 0;
-        fn_Element_Child(spinner, &childResult, 0);
+        ::new (&childResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinner)->Child(0));  // B.3.6 bridge
         if (sender != (void*)childResult) return;
     }
     SetResourceLimitByIdx(resourceIndex, fn_SpinnerElement_GetValue(spinner));

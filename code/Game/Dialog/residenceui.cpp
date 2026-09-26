@@ -23,6 +23,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -45,7 +50,7 @@ static inline bool RUI_OkPtr(uintptr_t p) {
 static void* FindChildElem(void* parentElem, const char* name) {
     System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_FindElement(parentElem, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
     void* result = *(void**)retBuf;
     return result;
 }
@@ -110,28 +115,28 @@ void ResidenceUI_Slot4(ResidenceUI* self) {
         int base = i * colCount;
 
         // Col 0: buttonGoto
-        fn_Element_Child(tableElem, childBuf, base + 0);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 0));  // B.3.6 bridge
         entry[5] = FindElemAsBasePtr(*(void**)childBuf, "buttonGoto");
-        if (entry[5]) fn_Element_SetElementId((void*)entry[5], 300 + i);
+        if (entry[5]) reinterpret_cast<UI::Element*>(entry[5])->SetElementId(300 + i);  // B.3.6 bridge
 
         // Col 1: textName
-        fn_Element_Child(tableElem, childBuf, base + 1);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 1));  // B.3.6 bridge
         entry[2] = FindElemAsBasePtr(*(void**)childBuf, "textName");
 
         // Col 2: imageMale + imageFemale (container cell)
-        fn_Element_Child(tableElem, childBuf, base + 2);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 2));  // B.3.6 bridge
         void* iconCell = *(void**)childBuf;
         entry[0] = FindElemAsBasePtr(iconCell, "imageMale");
 
-        fn_Element_Child(tableElem, childBuf, base + 2);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 2));  // B.3.6 bridge
         entry[1] = FindElemAsBasePtr(*(void**)childBuf, "imageFemale");
 
         // Col 3: textAge
-        fn_Element_Child(tableElem, childBuf, base + 3);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 3));  // B.3.6 bridge
         entry[3] = FindElemAsBasePtr(*(void**)childBuf, "textAge");
 
         // Col 4: textProfession
-        fn_Element_Child(tableElem, childBuf, base + 4);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(base + 4));  // B.3.6 bridge
         entry[4] = FindElemAsBasePtr(*(void**)childBuf, "textProfession");
 
 #ifdef _DEBUG
@@ -278,13 +283,13 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     void* imageFemale = *(void**)(rowBase + 0x08);
                     if (imageFemale) {
                         if (isMale) {
-                            fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
+                            reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
                         } else {
-                            fn_Element_SetFlagsOnOff(imageFemale, 0, 1);
+                            reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
                         }
                     }
                     void* imageMale = *(void**)rowBase;
-                    if (imageMale) fn_Element_SetFlagsOnOff(imageMale, (uint32_t)!isMale, (uint32_t)isMale);
+                    if (imageMale) reinterpret_cast<UI::Element*>(imageMale)->SetFlagsOnOff((uint32_t)!isMale, (uint32_t)isMale);  // B.3.6 bridge
 
                     // Set name text: citizen+0x28 is the name String
                     void* textName = *(void**)(rowBase + 0x10);
@@ -334,7 +339,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                         if (RUI_OkPtr(profList)) {
                             uintptr_t entry = *(uintptr_t*)(profList + (jobEntity == 0 ? 0x40 : 0x48));
                             if (RUI_OkPtr(entry)) {
-                                fn_UIString_Ctor(uiStr, *(uint64_t*)(entry + 0x20), (void*)(entry + 0x30));
+                                ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(entry + 0x20))), *reinterpret_cast<const System::String*>(entry + 0x30));  // B.3.6 bridge
                                 builtProf = true;
                             }
                         }
@@ -342,7 +347,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                         // Adult laborer: the citizen's own profession object (+0x1f0).
                         uintptr_t profDesc = *(uintptr_t*)(citizen + 0x1f0);
                         if (RUI_OkPtr(profDesc)) {
-                            fn_UIString_Ctor(uiStr, *(uint64_t*)(profDesc + 0x20), (void*)(profDesc + 0x30));
+                            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profDesc + 0x20))), *reinterpret_cast<const System::String*>(profDesc + 0x30));  // B.3.6 bridge
                             builtProf = true;
                         }
                     }
@@ -371,9 +376,9 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
 
             // Hide both gender icons
             void* imageMale = *(void**)(rowBase + 0x00);
-            if (imageMale) fn_Element_SetFlagsOnOff(imageMale, 1, 0);
+            if (imageMale) reinterpret_cast<UI::Element*>(imageMale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
             void* imageFemale = *(void**)(rowBase + 0x08);
-            if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 1, 0);
+            if (imageFemale) reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
             // Clear name text
             {
@@ -394,8 +399,8 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
             if (textProfession) {
                 System::String emptyStr3("");
                 uint64_t origUIStr[2];
-                fn_UIString_Ctor(origUIStr,
-                    *(uint64_t*)((uintptr_t)textProfession + 0xD8), &emptyStr3);
+                ::new (origUIStr) UI::String(
+                    Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)textProfession + 0xD8))), emptyStr3);  // B.3.6 bridge
                 fn_TextElement_SetText(textProfession, origUIStr);
             }
 

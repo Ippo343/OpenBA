@@ -25,6 +25,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -53,8 +57,7 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     // buffer was never created (Minimap_CreateAndUpload not yet run) skip rather
     // than fault. Also require the core primitives.
     if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton ||
-        !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor ||
-        !fn_FindElement) {
+        !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor) {
         if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p "
                "MatCtor=%p SSCtor=%p FindElem=%p\n", elementName, imageBuffer,
                (void*)fn_MemAlloc, g_pMemAllocSingleton, (void*)fn_MaterialInstance_Ctor,
@@ -138,21 +141,21 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
     System::String nameEmpty, groupEmpty;
     MAPTRC("AddSpriteInfo");
-    fn_SpriteSheet_AddSpriteInfo(*spriteSheetOut, &nameEmpty, &groupEmpty, 0, 0, imgW, imgH);
+    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->AddSpriteInfo(*reinterpret_cast<const System::String*>(&nameEmpty), *reinterpret_cast<const System::String*>(&groupEmpty), 0, 0, imgW, imgH);  // B.3.6 bridge
     MAPTRC("AddSpriteInfo done");
 
     // Set sprite info with UV scale
     imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
     imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
-    fn_SpriteSheet_SetSpriteInfo(*spriteSheetOut, 0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);
+    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);  // B.3.6 bridge
 
     // --- Find named image element and set sprite ---
     System::String elemNameStr(elementName);
 
     void* dialogElem = *(void**)(s + 0x20);
     uint64_t foundElem = 0;
-    fn_FindElement(dialogElem, &foundElem, &elemNameStr);
+    ::new (&foundElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(elemNameStr));  // B.3.6 bridge
 
     void* rawElem = (void*)foundElem;
 
@@ -171,13 +174,13 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
 
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];
-    fn_Sprite_Ctor_ByIndex(spriteBuf, *spriteSheetOut, 0);
+    ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)), 0);  // B.3.6 bridge
     fn_ImageElement_SetSprite((void*)imageElemPtr, spriteBuf);
 
     // If blend mode, set flags and element ID
     if (useBlend != '\0') {
-        fn_Element_SetFlagsOnOff((void*)imageElemPtr, 0x10000, 0);
-        fn_Element_SetElementId((void*)imageElemPtr, 1000);
+        reinterpret_cast<UI::Element*>(imageElemPtr)->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(imageElemPtr)->SetElementId(1000);  // B.3.6 bridge
     }
 }
 

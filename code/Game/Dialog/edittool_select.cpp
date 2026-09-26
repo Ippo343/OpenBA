@@ -45,6 +45,9 @@
 #include "ui/UserInterface.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 namespace {
 
@@ -164,8 +167,8 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         // GetController(dialog, &ctrlBuf, EntityUI); filter by IsDerivedFrom.
         uint64_t ctrlBuf = 0;
         void* matched = nullptr;
-        if (dialog && fn_DialogInstance_GetController)
-            fn_DialogInstance_GetController(dialog, &ctrlBuf, tidEntityUI);
+        if (dialog)
+            ::new (&ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialog)->GetController(tidEntityUI));  // B.3.6 bridge
         if (ctrlBuf != 0) {
             void* c = reinterpret_cast<void*>(ctrlBuf);
             if (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tidEntityUI)) matched = c;
@@ -238,7 +241,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         if (dialogRef == 0) return;
 
         uint64_t addRef = dialogRef;
-        if (fn_UI_AddDialog) fn_UI_AddDialog(ui, &addRef);
+        reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addRef));  // B.3.6 bridge
     }
 
     // 6. Finalize. We're now committed to selecting `entity` (a dialog is opening),
@@ -260,11 +263,10 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
     //     (the documented citizen-dialog flicker). The +0x40 pin flag is honored, so
     //     a user-pinned panel is left open — matching retail.
     void* oldDialog = *reinterpret_cast<void**>(self + 0x28);
-    if (oldDialog && oldDialog != reinterpret_cast<void*>(resultDialog) && fn_UI_CloseDialog) {
+    if (oldDialog && oldDialog != reinterpret_cast<void*>(resultDialog)) {
         const uint32_t tidToolUI = ResolveTypeId(0x1401c5788, "ToolUI", &s_tid_ToolUI);
         uint64_t ctrlBuf = 0;
-        if (fn_DialogInstance_GetController)
-            fn_DialogInstance_GetController(oldDialog, &ctrlBuf, tidToolUI);
+        ::new (&ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(oldDialog)->GetController(tidToolUI));  // B.3.6 bridge
         void* ctrl = nullptr;
         if (ctrlBuf != 0) {
             void* c = reinterpret_cast<void*>(ctrlBuf);
@@ -277,7 +279,7 @@ extern "C" void EditTool_SelectEntity_Impl(void* selfV, void* entityIBPv) {
         // reading +0x40 off 0 would fault, so require a resolved controller first.)
         if (ctrlRef != 0 && *reinterpret_cast<char*>(ctrlRef + 0x40) == 0) {
             uint64_t closeRef = reinterpret_cast<uint64_t>(oldDialog);
-            fn_UI_CloseDialog(ui, &closeRef);
+            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
         }
     }
 
