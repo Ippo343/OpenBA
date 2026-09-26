@@ -155,6 +155,9 @@
 #include "../../types/system/Filename.h"
 #include "../../types/io/FileStream.h"
 #include "../../types/io/FileSystem.h"
+#include "../../types/audio/Device.h"
+#include "../../types/audio/SoundBuffer.h"
+#include "../../types/audio/Stream.h"
 
 using RtIo::FileStream;
 using RtIO::FileInfo;
@@ -165,28 +168,11 @@ uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
 
 namespace {
 
-// ---- Audio::Stream, a System::Thread subclass (audio_stream_win.cpp) -------
-constexpr int kStreamBufferTable = 0x30;  // Array<0x8ba0-byte slot>::_data
-constexpr int kStreamWakeEvent   = 0x40;  // Play's "drop the current pass" wake
-constexpr int kStreamBufferEvent = 0x48;  // OnBufferEnd's "a slot freed" wake
-constexpr int kStreamLock        = 0x50;  // the ctor's second CRITICAL_SECTION
-constexpr int kStreamBytePos     = 0x78;  // Play's 2nd arg
-constexpr int kStreamChannel     = 0x7c;  // Play's 1st arg
-constexpr int kStreamStopping    = 0x80;  // Play's "stop" flag
-
-// ---- Audio::Device ---------------------------------------------------------
-constexpr int kChannelStride        = 0x28;   // audio_device.cpp
-constexpr int kChannelSource        = 0x08;   // AudioChannel::source, SoundBuffer*
-constexpr int kVoiceCallbackBase    = 0xa98;  // audio_voice_callback_win.cpp
-constexpr int kVoiceCallbackStride  = 0x20;
-constexpr int kVoiceCallbackVoice   = 0x08;
-constexpr int kVoiceCallbackEvent   = 0x18;   // written by THIS body
-
-// ---- Audio::SoundBuffer (vtbatch7_soundbuffer_soundeffect.cpp) -------------
-constexpr int kSbLoopForever   = 0x20;
-constexpr int kSbPath          = 0x30;   // System::String, relative asset path
-constexpr int kSbSegmentTable  = 0x48;   // const uint32_t*, cumulative bytes
-constexpr int kSbSegmentBytes  = 0x50;   // BYTE length of that table
+// ENDGAME B.3.7 block B4: the `kStream*`, `kChannel*`, `kVoiceCallback*` and
+// `kSb*` byte offsets that lived here MOVED into runtime/types/audio/Stream.h,
+// Device.h and SoundBuffer.h (B6-8). `Run` is `Audio::Stream::Run`, the slot-0
+// override; the registered door delegates with a QUALIFIED call (a live Stream
+// wears the minted table, whose slot 0 resolves back to that door).
 
 // ---- the streaming geometry, all from this body ---------------------------
 constexpr int32_t kPacketBytes   = 0x8b6;   // 0x1800a1172 IMUL EDX,EDX,0x8b6
@@ -295,35 +281,41 @@ void* FileSystemSingleton() {
 // ============================================================================
 // Audio::Stream::Run() — retail 0x1800a0f60, ord 3602
 // ============================================================================
-extern "C" void RtAudio_Stream_Run(void* selfPtr) {
+namespace Audio {
+
+void Stream::Run() {
     ++g_calls;
 
-    uint8_t* const self = static_cast<uint8_t*>(selfPtr);
-    uint8_t* const dev  = static_cast<uint8_t*>(AudioDeviceSingleton());
+    // `?_singleton@Device@Audio@@` read raw (carry-over 5: it stays a slot).
+    Device* const dev = reinterpret_cast<Device*>(AudioDeviceSingleton());   // B.3.7 bridge
 
-    const int64_t slot = Load<int32_t>(self, kStreamChannel);           // MOVSXD
-    uint8_t* const voiceRec = reinterpret_cast<uint8_t*>(
-        reinterpret_cast<uintptr_t>(dev) + kVoiceCallbackBase +
-        static_cast<uintptr_t>(slot * kVoiceCallbackStride));           // 1800a0f9d
+    // Retail computes both record addresses from the raw singleton with no
+    // null test of the singleton itself, then tests the SUMS (1800a0fa0 /
+    // 1800a0fb1) — reproduced as address arithmetic, not as `&dev->...`, so a
+    // null Device takes the same early-outs it does in retail.
+    const int64_t slot = _channel;                                      // MOVSXD
+    Device::PlatformChannel* const voiceRec = reinterpret_cast<Device::PlatformChannel*>(
+        reinterpret_cast<uintptr_t>(dev) + offsetof(Device, _platformChannels) +
+        static_cast<uintptr_t>(slot * static_cast<int64_t>(sizeof(Device::PlatformChannel)))); // 1800a0f9d
     if (!voiceRec) return;                                              // 1800a0fa0
-    uint8_t* const chan = reinterpret_cast<uint8_t*>(
+    Device::AudioChannel* const chan = reinterpret_cast<Device::AudioChannel*>(
         reinterpret_cast<uintptr_t>(dev) +
-        static_cast<uintptr_t>(slot * kChannelStride));                 // 1800a0faa
+        static_cast<uintptr_t>(slot * static_cast<int64_t>(sizeof(Device::AudioChannel)))); // 1800a0faa
     if (!chan) return;                                                  // 1800a0fb1
-    const uint8_t* const buf = Load<const uint8_t*>(chan, kChannelSource);
+    const SoundBuffer* const buf = chan->source;
     if (!buf) return;                                                   // 1800a0fc2
 
-    // segmentBytes is the table's BYTE length; >> 2 is its ENTRY count.
+    // _wmaLength is the table's BYTE length; >> 2 is its ENTRY count.
     const int32_t segCount =
         static_cast<int32_t>(static_cast<uint64_t>(
-            static_cast<int64_t>(Load<int32_t>(buf, kSbSegmentBytes))) >> 2);
-    const uint32_t* const segTable = Load<const uint32_t*>(buf, kSbSegmentTable);
+            static_cast<int64_t>(buf->_wmaLength)) >> 2);
+    const uint32_t* const segTable = buf->_wmaData;
 
     // curSeg = first cumulative entry STRICTLY above the requested byte
     // position; 0 when none is (retail stores the counter only on the JA exit).
     int32_t curSeg = 0;                                                 // [RBP+0x60]
     if (segCount > 0) {                                                 // 1800a0ff2
-        const uint32_t bytePos = Load<uint32_t>(self, kStreamBytePos);
+        const uint32_t bytePos = static_cast<uint32_t>(_bytePosition);
         for (int32_t i = 0; i < segCount; ++i) {                        // 1800a0ff7
             if (segTable[i] > bytePos) { curSeg = i; break; }           // JA 1800a1009
         }
@@ -349,11 +341,8 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
             "?GetDataDirectory@FileSystem@IO@@QEBA?AVFilename@System@@XZ")(
                 fsys, &dataDir);                                        // 1800a107f
 
-        // B.3.1 bridge: `buf + kSbPath` is a POD String slot on the sound
-        // buffer record, which is not a converted class yet.
         const System::String joined =
-            dataDir.AsString() +
-            *reinterpret_cast<const System::String*>(buf + kSbPath);    // 1800a1090
+            dataDir.AsString() + buf->GetStreamPath();                  // 1800a1090
 
         System::Filename path;
         if (char* const d = joined._data) {                             // 1800a1096
@@ -371,10 +360,9 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
 
         // The VoiceCallback's OnBufferEnd signals THIS handle. Published here
         // and nowhere else — audio_voice_callback_win.cpp §2 cites this store.
-        Store<void*>(voiceRec, kVoiceCallbackEvent,
-                     Load<void*>(self, kStreamBufferEvent));            // 1800a114d
+        voiceRec->bufferEvent = _bufferEvent;                           // 1800a114d
 
-        auto* const lock = reinterpret_cast<CRITICAL_SECTION*>(self + kStreamLock);
+        auto* const lock = reinterpret_cast<CRITICAL_SECTION*>(_lock);
         HANDLE handles[2];                                              // [RBP-0x50]
         Xa2VoiceState state{};                                          // [RBP-0x78]
 
@@ -403,7 +391,7 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
                                static_cast<LONG>(byteOffset), nullptr, FILE_BEGIN);
 
             const int64_t slotByte = slotIndex * kSlotBytes;            // 1800a11c0
-            uint8_t* const table = Load<uint8_t*>(self, kStreamBufferTable);
+            uint8_t* const table = reinterpret_cast<uint8_t*>(_buffers);
             RT_EXPORT_ONCE(ReadFileFn,
                 "?ReadFile@FileSystem@IO@@QEAA_NAEAUFileInfo@12@HPEAX@Z")(
                     fsys, &st->file, byteCount,
@@ -416,7 +404,7 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
             if (nPackets64 > 0) {                                       // 1800a1201
                 for (int64_t k = 0; k < nPackets64; ++k) {              // 1800a1230
                     uint32_t* const dst = reinterpret_cast<uint32_t*>(
-                        Load<uint8_t*>(self, kStreamBufferTable) +
+                        reinterpret_cast<uint8_t*>(_buffers) +
                         slotIndex64 * kSlotBytes) + k;
                     *dst = segTable[curSeg64 + k] - base;
                 }
@@ -424,7 +412,7 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
 
             // ---- wait until the voice has fewer than 3 buffers queued ------
             EnterCriticalSection(lock);                                 // 1800a124b
-            void* voice = Load<void*>(voiceRec, kVoiceCallbackVoice);
+            void* voice = voiceRec->voice;
             if (!voice) { how = kExitBail; break; }                     // 1800a1258
             reinterpret_cast<GetStateFn>(
                 (*reinterpret_cast<void***>(voice))[kVoiceGetState / 8])(voice, &state);
@@ -432,12 +420,12 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
 
             bool bailed = false;
             while (state.buffersQueued >= kQueueHighWater) {            // 1800a1279
-                handles[0] = Load<HANDLE>(self, kStreamBufferEvent);    // 1800a1280
-                handles[1] = Load<HANDLE>(self, kStreamWakeEvent);      // 1800a1288
+                handles[0] = static_cast<HANDLE>(_bufferEvent);    // 1800a1280
+                handles[1] = static_cast<HANDLE>(_wakeEvent);      // 1800a1288
                 const DWORD woke = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
                 EnterCriticalSection(lock);                             // 1800a12ab
                 if (woke != 0) { bailed = true; break; }                // 1800a12b3
-                voice = Load<void*>(voiceRec, kVoiceCallbackVoice);
+                voice = voiceRec->voice;
                 if (!voice) { bailed = true; break; }                   // 1800a12c0
                 reinterpret_cast<GetStateFn>(
                     (*reinterpret_cast<void***>(voice))[kVoiceGetState / 8])(voice, &state);
@@ -452,13 +440,13 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
             std::memset(reinterpret_cast<uint8_t*>(&xb) + 4, 0, 0x28);  // 1800a12f7
             xb.audioBytes = static_cast<uint32_t>(byteCount);           // 1800a12fc
             uint8_t* const slotPtr =
-                Load<uint8_t*>(self, kStreamBufferTable) + slotByte;    // 1800a1302
+                reinterpret_cast<uint8_t*>(_buffers) + slotByte;        // 1800a1302
             xb.audioData = slotPtr + kSlotAudio;                        // 1800a130f
 
             curSeg32 += nPackets;                                       // 1800a1313
             curSeg = curSeg32;                                          // 1800a1316
             if (curSeg32 >= segCount &&                                 // 1800a131f
-                Load<uint8_t>(buf, kSbLoopForever) == 0)                // 1800a1328
+                buf->_loopForever == 0)                // 1800a1328
                 xb.flags = kXAudio2EndOfStream;                         // CMOVZ
 
             Xa2BufferWma wma;
@@ -467,7 +455,7 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
                 reinterpret_cast<const uint32_t*>(slotPtr);             // 1800a133b
 
             EnterCriticalSection(lock);                                 // 1800a1343
-            voice = Load<void*>(voiceRec, kVoiceCallbackVoice);
+            voice = voiceRec->voice;
             if (!voice) { how = kExitBail; break; }                     // 1800a1350
             reinterpret_cast<SubmitFn>(
                 (*reinterpret_cast<void***>(voice))[kVoiceSubmitSourceBuffer / 8])(
@@ -484,12 +472,12 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
 
             curSeg64 += nPackets64;                                     // 1800a138d
             if (curSeg64 >= static_cast<int64_t>(segCount)) {           // 1800a1397
-                if (Load<uint8_t>(buf, kSbLoopForever) == 0) {          // 1800a13a0
+                if (buf->_loopForever == 0) {          // 1800a13a0
                     how = kExitDrain; break;                            // -> 1800a13bd
                 }
                 curSeg32 = 0; curSeg = 0; curSeg64 = 0;                 // 1800a13a6..ac
             }
-            if (Load<uint8_t>(self, kStreamStopping) != 0) {            // 1800a13af
+            if (_stopping != 0) {            // 1800a13af
                 how = kExitStop; break;                                 // -> 1800a13da
             }
         }
@@ -504,15 +492,15 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
             // changes underneath us.
             for (;;) {
                 EnterCriticalSection(lock);                             // 1800a13c1
-                void* voice = Load<void*>(voiceRec, kVoiceCallbackVoice);
+                void* voice = voiceRec->voice;
                 if (!voice) { LeaveCriticalSection(lock); break; }      // 1800a13ce
                 reinterpret_cast<GetStateFn>(
                     (*reinterpret_cast<void***>(voice))[kVoiceGetState / 8])(voice, &state);
                 LeaveCriticalSection(lock);                             // 1800a140c
                 if (state.buffersQueued == 0) break;                    // 1800a1412 JBE
 
-                handles[0] = Load<HANDLE>(self, kStreamBufferEvent);    // 1800a1420
-                handles[1] = Load<HANDLE>(self, kStreamWakeEvent);      // 1800a1428
+                handles[0] = static_cast<HANDLE>(_bufferEvent);    // 1800a1420
+                handles[1] = static_cast<HANDLE>(_wakeEvent);      // 1800a1428
                 const DWORD woke = WaitForMultipleObjects(2, handles, FALSE, INFINITE);
                 EnterCriticalSection(lock);                             // 1800a144b
                 if (woke != 0) {                                        // 1800a1453
@@ -520,7 +508,7 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
                     LeaveCriticalSection(lock);
                     break;
                 }
-                voice = Load<void*>(voiceRec, kVoiceCallbackVoice);
+                voice = voiceRec->voice;
                 if (!voice) { LeaveCriticalSection(lock); break; }      // 1800a1460
                 reinterpret_cast<GetStateFn>(
                     (*reinterpret_cast<void***>(voice))[kVoiceGetState / 8])(voice, &state);
@@ -537,6 +525,12 @@ extern "C" void RtAudio_Stream_Run(void* selfPtr) {
 
     RT_EXPORT_ONCE(VoidThisFn, "??1FileStream@IO@@UEAA@XZ")(st);        // 1800a14b3..1654
 
+}
+
+}  // namespace Audio
+
+extern "C" void RtAudio_Stream_Run(void* selfPtr) {
+    reinterpret_cast<Audio::Stream*>(selfPtr)->Audio::Stream::Run();   // B.3.7 bridge
 }
 
 // ============================================================================

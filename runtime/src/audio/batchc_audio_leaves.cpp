@@ -42,54 +42,23 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Device.h"
+#include "../../types/audio/SoundBuffer.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-// runtime/src/audio/audio_device.cpp (Wave 9 lane IOA). Declared rather than
-// re-derived: there is ONE FreeChannelPlatform body in this tree and this file
-// must reach it, not a copy of it.
-// (C++ linkage, matching its definition — audio_device.cpp does not declare it
-// extern "C"; the linker checks the two spellings agree.)
-void RtAudio_Device_FreeChannelPlatform(void* self, int index);
+// ENDGAME B.3.7 block B4: this file's private copy of `AudioChannel` and its
+// `ChannelAt` / `FreeChannelPlatform` forward declaration are gone — the
+// record is `Audio::Device::AudioChannel` (runtime/types/audio/Device.h) and
+// the call is the member. The SoundBuffer offsets are the class's fields.
 
 namespace {
-
-// Mirrors runtime/src/audio/audio_device.cpp's AudioChannel exactly; the two
-// are checked against each other by these static_asserts and by the shared
-// FreeChannelPlatform they both index.
-struct AudioChannel {
-    uint32_t flags;       // +0x00  bit 0 = "live"; bit 1 = "finished, reap me"
-    uint32_t _pad04;      // +0x04
-    void*    source;      // +0x08  the Audio::SoundBuffer this channel plays
-    void*    userData;    // +0x10  2nd argument to the completion callback
-    uint32_t userValue;   // +0x18  3rd argument (a DWORD, read as R8D)
-    uint32_t _pad1c;      // +0x1c
-    void*    onComplete;  // +0x20  the stored completion callback
-};
-static_assert(sizeof(AudioChannel) == 0x28, "Audio::Device::AudioChannel must be 0x28");
-static_assert(offsetof(AudioChannel, source)     == 0x08, "AudioChannel::source @ +0x08");
-static_assert(offsetof(AudioChannel, userData)   == 0x10, "AudioChannel::userData @ +0x10");
-static_assert(offsetof(AudioChannel, userValue)  == 0x18, "AudioChannel::userValue @ +0x18");
-static_assert(offsetof(AudioChannel, onComplete) == 0x20, "AudioChannel::onComplete @ +0x20");
-
-constexpr int kChannelCount  = 0x40;   // `CMP EDI,0x40 ; JL` at 0x1800de154
-constexpr int kChannelStride = 0x28;
-
-using AudioCompletionFn = void (*)(void* channel, void* userData, uint32_t userValue);
-
-inline AudioChannel* ChannelAt(void* self, int index) {
-    return reinterpret_cast<AudioChannel*>(
-        static_cast<uint8_t*>(self) + static_cast<int64_t>(index) * kChannelStride);
-}
 
 using VoidThisFn = void (*)(void*);
 
 // `?_singleton@Device@Audio@@0PEAV12@EA` @ 0x1801fe760 — ordinal 4805, an
-// exported DATA symbol. Retail derefs it UNGUARDED (`MOV RCX,[0x1801fe760]`)
-// and hands the result to OnSoundBufferDeleted as `this`; the null test below
-// exists only because RT_DATA_SLOT can return a slot the mint has not filled,
-// which retail's own static could not be.
+// exported DATA symbol (carry-over 5: it stays a slot). Retail derefs it
+// UNGUARDED (`MOV RCX,[0x1801fe760]`) and hands the result to
+// OnSoundBufferDeleted as `this`; the null test below exists only because
+// RT_DATA_SLOT can return a slot the mint has not filled.
 void* AudioDeviceSingleton() {
     void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Audio@@0PEAV12@EA");
     return slot ? *slot : nullptr;
@@ -106,21 +75,6 @@ void ExternalDtor(void* p) { RT_EXPORT_ONCE(VoidThisFn, "??1External@Object@@UEA
 // four call sites here test for null OUTSIDE the call; MemFree tests again
 // inside, so the behaviour is identical.
 void MemFree(void* p) { RT_EXPORT_ONCE(VoidThisFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p); }
-
-// The System::String release idiom, spelled the way
-// vtbatch7b_stream_run_win.cpp's ReleaseString already spells it: on the LAST
-// reference the slot is left holding `str-8` (dangling, deliberately — that is
-// `ADD qword [slot],-8` at 0x1800e040e/0x1800e0438) and only a SURVIVING
-// reference nulls it.
-void ReleaseString(void** slot) {
-    uint8_t* s = static_cast<uint8_t*>(*slot);
-    if (s == nullptr) return;
-    int32_t* rc = reinterpret_cast<int32_t*>(s - 4);
-    --(*rc);
-    if (*rc != 0) { *slot = nullptr; return; }
-    *slot = s - 8;
-    MemFree(*slot);
-}
 
 }  // namespace
 
@@ -146,25 +100,30 @@ void ReleaseString(void** slot) {
 // comparison. the diff oracle records how many calls matched a channel at all;
 // the overwhelming majority of SoundBuffer deletions match none.
 // ############################################################################
-extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buffer) {
+namespace Audio {
 
-    int matched = 0;
-    for (int i = 0; i < kChannelCount; ++i) {
-        AudioChannel* ch = ChannelAt(selfv, i);
+void Device::OnSoundBufferDeleted(const SoundBuffer* buffer) {
+    for (int i = 0; i < 64; ++i) {              // `CMP EDI,0x40 ; JL` at 0x1800de154
+        AudioChannel* ch = &_channels[i];
         if (ch->source != buffer) continue;
         if ((ch->flags & 1u) == 0) continue;
-        ++matched;
 
         ch->flags |= 2u;
-        RtAudio_Device_FreeChannelPlatform(selfv, i);
+        FreeChannelPlatform(i);
 
-        void* cb = ch->onComplete;
+        Callback cb = ch->onComplete;           // read BEFORE the clears
         ch->flags &= 0xFFFFFFFCu;
         ch->source = nullptr;
         if (cb)
-            reinterpret_cast<AudioCompletionFn>(cb)(ch, ch->userData, ch->userValue);
+            cb(ch, ch->userData, ch->userValue);  // `this` is the CHANNEL
     }
+}
 
+}  // namespace Audio
+
+extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buffer) {
+    reinterpret_cast<Audio::Device*>(selfv)->Audio::Device::OnSoundBufferDeleted(          // B.3.7 bridge
+        static_cast<const Audio::SoundBuffer*>(buffer));
 }
 
 // ############################################################################
@@ -185,30 +144,29 @@ extern "C" void RtAudio_Device_OnSoundBufferDeleted(void* selfv, const void* buf
 // playing this buffer must be stopped while `ch->source == this` still matches.
 // Moving it after the frees would leave the mixer reading freed audio.
 //
-// Layout: the `SoundBuffer` in vtbatch7_soundbuffer_soundeffect.cpp (0x80
-// bytes). Offsets are used numerically here rather than through that struct,
-// which is file-local to its owner; the four this body touches are asserted
-// against that file's own static_asserts by construction — they are the same
-// four numbers, and any drift shows as a diff on this comment, not silently.
+// Layout: `Audio::SoundBuffer` (runtime/types/audio/SoundBuffer.h, 0x80).
+// The dtor stays a DOOR (the class's own `~SoundBuffer` is empty, B4b-2).
 // ############################################################################
 extern "C" void RtAudio_SoundBuffer_Dtor(void* selfv) {
-    uint8_t* const self = static_cast<uint8_t*>(selfv);
+    Audio::SoundBuffer* const self = reinterpret_cast<Audio::SoundBuffer*>(selfv);   // B.3.7 bridge
 
     *reinterpret_cast<void**>(self) = VtSoundBuffer();
 
-    RtAudio_Device_OnSoundBufferDeleted(AudioDeviceSingleton(), self);
+    reinterpret_cast<Audio::Device*>(AudioDeviceSingleton())->OnSoundBufferDeleted(self);   // B.3.7 bridge
 
-    if (*reinterpret_cast<void**>(self + 0x38) != nullptr)
-        MemFree(*reinterpret_cast<void**>(self + 0x38));    // _audioData
-    if (*reinterpret_cast<void**>(self + 0x48) != nullptr)
-        MemFree(*reinterpret_cast<void**>(self + 0x48));    // _segmentTable
+    if (self->_data != nullptr)
+        MemFree(self->_data);                                // +0x38
+    if (self->_wmaData != nullptr)
+        MemFree(self->_wmaData);                             // +0x48
 
-    ReleaseString(reinterpret_cast<void**>(self + 0x30));   // _str2
-    ReleaseString(reinterpret_cast<void**>(self + 0x28));   // _str1
+    // Descending, the mirror of the Serialize order. `~String` IS retail's
+    // inlined release idiom (the slot keeps `str-8` on the last reference and
+    // is nulled on a surviving one, runtime/types/system/String.h).
+    self->_streamPath.~String();                             // +0x30
+    self->_string28.~String();                               // +0x28
 
     *reinterpret_cast<void**>(self) = VtCompiledExternal();
-    ExternalDtor(self);                                     // JMP 0x1800bc950
-
+    ExternalDtor(self);                                      // JMP 0x1800bc950
 }
 
 // ============================================================================

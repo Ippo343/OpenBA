@@ -209,6 +209,12 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/audio/Audio.h"
+#include "../../types/audio/Device.h"
+#include "../../types/audio/SoundBuffer.h"
+#include "../../types/audio/SoundEffect.h"
+#include "../../types/system/Value.h"          // System::Time, System::Random
+#include "../engine/mainloop_internal.h"       // rtengine::AtomicResolve (B6-5)
+#include <atomic>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
@@ -268,16 +274,22 @@ inline int64_t   I64(const void* p, size_t o){ int64_t v; std::memcpy(&v, static
 inline void*     PTR(const void* p, size_t o){ void* v;   std::memcpy(&v, static_cast<const uint8_t*>(p) + o, 8); return v; }
 
 // ---- doors -----------------------------------------------------------------
-using GetAttenVolFn   = float (*)(void* scene, const void* slot, const void* listener, float m);
-using StopEffectFn    = void  (*)(void* scene, uint32_t id);
-using StopEffect3DFn  = void  (*)(void* scene, uint32_t id);
-using PlayEffectFn    = uint32_t (*)(void* scene, void* soundEffectRef,
-                                     uint32_t soundType, const int64_t* startTime);
-using PlayPlatformFn  = bool  (*)(void* device, int32_t slot, void* bufferRef,
-                                  const int64_t* startTime, float vol, float pitch, float third);
-using NextGroupFn     = void  (*)(void* rng);
+// ENDGAME B.3.7 block B4 (B7-11 / B6-5): GetAttenuatedVolume, StopEffect,
+// StopEffect3D, PlayEffect (Scene), PlayPlatform (Device) and
+// Random::NextGroup were reached BY NAME behind function-local first-call
+// caches; they are direct member calls now. The one address door left
+// (0x180050d30, Collection code) resolves through a namespace-scope atomic slot.
 using ArrayAssignFn   = void  (*)(void* dst, const void* src);
 using SetVolumeFn     = void  (*)(void* platformChannel, float volume, void* zero);
+
+std::atomic<void*> g_arrayAssignSlot{nullptr};
+ArrayAssignFn ArrayAssign16() {
+    // 0x180050d30 Array<T16>::operator= -- unexported, ported and registered
+    // by address (array.cpp lane Q J10).
+    return reinterpret_cast<ArrayAssignFn>(rtengine::AtomicResolve(g_arrayAssignSlot, [] {
+        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180050d30));
+    }));
+}
 
 void* DeviceSingleton() {
     // DATA door, by NAME: ?_singleton@Device@Audio@@0PEAV12@EA (ord 4805). The
@@ -302,33 +314,11 @@ double SecondsPerTick() {
     return slot ? *slot : 0.0;
 }
 
-// The static callback retail stamps into each device slot. Named typedef, NOT
-// an inline `void(*)()` as the first RT_EXPORT_ONCE argument -- see below.
-using OnSoundEndedFn = void (*)(void* audioChannel, void* userData, uint32_t tag);
-
+// The static callback retail stamps into each device slot's +0x20:
+// ?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z (0x1800dffe0).
+// B.3.7: the static member itself (wave29_lane_avbody.cpp), not a name lookup.
 void* OnSoundEndedThunk() {
-    // 0x1800dffe0, stamped into the device slot's +0x20 callback field. It is
-    // ?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z (ord
-    // 3283) -- a NAME door, so at cutover this follows a port of that function
-    // instead of freezing the DLL's address.
-    //
-    // WHY THE TYPEDEF, and it is not style. This was first written as
-    // `RT_EXPORT_ONCE(void(*)(), "?OnSoundEnded@...")`. It compiled, it worked,
-    // and `tools/runtime_census.py` DID NOT COUNT IT AS A DOOR: the Audio
-    // `called` column moved by 3 when this file adds 4 Audio names, and putting
-    // the type behind a typedef moved it to 4. The census's macro-door scan
-    // (RE_MACRO_DOOR, tools/runtime_census.py:258) has to find the SECOND
-    // argument of the macro, and an inline function-pointer type carries its own
-    // parentheses and commas into the first one.
-    //
-    // So an inline function-pointer type in a macro door is INVISIBLE TO THE
-    // CENSUS, silently. This is the `literal grep blind to variables` family
-    // again, from a new direction. The defect is recorded in
-    // WAVE28_LANE_MISC.md's instrument section and NOT fixed (standing warning
-    // 1); this typedef is the local workaround, kept so the row stays countable.
-    return reinterpret_cast<void*>(
-        RT_EXPORT_ONCE(OnSoundEndedFn,
-                       "?OnSoundEnded@Scene@Audio@@SAXPEAUAudioChannel@Device@2@PEAXI@Z"));
+    return reinterpret_cast<void*>(&Audio::Scene::OnSoundEnded);
 }
 
 // One MT19937 draw, exactly as retail inlines it at 0x1800df992 and 0x1800dfa0c
@@ -337,18 +327,8 @@ void* OnSoundEndedThunk() {
 uint32_t RngDraw(void* rngv) {
     uint8_t* rng = B(rngv);
     if (I32(rng, 0) == 0) {                                    // 1800df992
-        static NextGroupFn fn = nullptr;
-        static bool tried = false;
-        if (!tried) {
-            tried = true;
-            fn = reinterpret_cast<NextGroupFn>(
-                ResolveExport("?NextGroup@Random@System@@AEAAXXZ"));
-            if (!fn)
-                std::fprintf(stderr, "[RtPort] Audio::Scene::Update: "
-                                     "?NextGroup@Random@System@@ resolved NULL -- the "
-                                     "MT19937 state will never be twisted\n");
-        }
-        if (fn) fn(rng);                                       // 1800df99b
+        // `?NextGroup@Random@System@@AEAAXXZ` (0x1800c7dd0), the member.
+        reinterpret_cast<System::Random*>(rngv)->NextGroup();  // 1800df99b  B.3.7 bridge
     }
     const int32_t index = I32(rng, 0);
     uint32_t y = static_cast<uint32_t>(
@@ -368,49 +348,35 @@ uint32_t RngDraw(void* rngv) {
 // ============================================================================
 // ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z
 // ============================================================================
-extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t nowTicks,
-                                     void* rngv, const void* listenerPos, float m) {
+namespace Audio {
+
+bool Scene::Update(System::Time delta, System::Time now, System::Random& rng,
+                   const Vector3& listener, float m) {
     ++g_updates;
-    Scene* self = static_cast<Scene*>(selfv);
+    // The transcription below names the two Times by their tick counts and
+    // the RNG by its address, as the listing does.
+    const int64_t deltaTicks = delta._ticks;
+    const int64_t nowTicks   = now._ticks;
+    void* const rngv = &rng;
 
     void* device = DeviceSingleton();          // 1800df6ff, BEFORE `this` is loaded
-    self->time = nowTicks;                     // 1800df712  MOV [R15],R8
+    this->time = nowTicks;                     // 1800df712  MOV [R15],R8
 
     // ------------------------------------------------------------------
     // LOOP 1 -- the 4096 EffectSlots. 0x1800df730 .. 0x1800df819.
     // ------------------------------------------------------------------
     {
-        static GetAttenVolFn getVol = nullptr;
-        static StopEffectFn  stopFx = nullptr;
-        static StopEffect3DFn stop3D = nullptr;
-        static PlayEffectFn  playFx = nullptr;
-        static bool resolved = false;
-        if (!resolved) {
-            resolved = true;
-            getVol = reinterpret_cast<GetAttenVolFn>(ResolveExport(
-                "?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@AEBVVector3@Math@@M@Z"));
-            stopFx = reinterpret_cast<StopEffectFn>(ResolveExport(
-                "?StopEffect@Scene@Audio@@QEAAXI@Z"));
-            stop3D = reinterpret_cast<StopEffect3DFn>(ResolveExport(
-                "?StopEffect3D@Scene@Audio@@QEAAXI@Z"));
-            playFx = reinterpret_cast<PlayEffectFn>(ResolveExport(
-                "?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z"));
-            if (!getVol || !stopFx || !stop3D || !playFx)
-                std::fprintf(stderr, "[RtPort] Audio::Scene::Update loop 1: GetAttenuatedVolume=%p "
-                                     "StopEffect=%p StopEffect3D=%p PlayEffect=%p\n",
-                             (void*)getVol, (void*)stopFx, (void*)stop3D, (void*)playFx);
-        }
-
-        uint8_t* effects = reinterpret_cast<uint8_t*>(self->effects.GetData());
-        if (effects && getVol && stopFx && stop3D && playFx) {
+        uint8_t* effects = reinterpret_cast<uint8_t*>(this->effects.GetData());
+        if (effects) {
             for (size_t off = 0; off < 0x40000u; off += 0x40) {   // 1800df812
                 uint8_t* slot = effects + off;
                 if (I32(slot, 0x24) == 0) continue;               // idTag == 0
                 const int64_t soundType = I32(slot, 0x0c);
-                if (self->paused[soundType] != 0) continue;       // 1800df745
+                if (paused[soundType] != 0) continue;       // 1800df745
                 ++g_effectsSeen;
 
-                const float vol = getVol(self, slot, listenerPos, m);   // 1800df75d
+                const float vol = GetAttenuatedVolume(                    // 1800df75d
+                    *reinterpret_cast<const AttenutedEffect*>(slot), listener, m);
 
                 bool skipPlay = false;
                 // `ucomiss` + JP + JNE: an unordered (NaN) compare takes the
@@ -419,7 +385,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                     const int32_t handle = I32(slot, 0x20);
                     if (handle != 0) {
                         ++g_effectStops;
-                        stopFx(self, static_cast<uint32_t>(handle));   // 1800df777
+                        StopEffect(static_cast<uint32_t>(handle));     // 1800df777
                         std::memset(slot + 0x20, 0, 4);                // channelHandle = 0
                         skipPlay = true;                               // 1800df783 JMP
                     }
@@ -430,8 +396,10 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                         ++g_effectPlays;
                         void* ref = PTR(slot, 0x10);
                         const int64_t* start = reinterpret_cast<const int64_t*>(slot + 0x18);
-                        const uint32_t h = playFx(self, ref,
-                                                  static_cast<uint32_t>(soundType), start);
+                        const uint32_t h = PlayEffect(
+                            Object::ExternalPtr<SoundEffect>(static_cast<SoundEffect*>(ref)),
+                            static_cast<SoundType>(soundType),
+                            *reinterpret_cast<const System::Time*>(start));
                         std::memcpy(slot + 0x20, &h, 4);          // 1800df7a4
                     }
                 }
@@ -441,7 +409,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                 if (handle != 0) {                                // 1800df7ad
                     const uint32_t gen = handle >> 9;             // 1800df7b3
                     const uint32_t idx = (handle >> 1) & 0xffu;   // 1800df7b6 / MOVZX AL
-                    uint8_t* chans = reinterpret_cast<uint8_t*>(self->channels.GetData());
+                    uint8_t* chans = reinterpret_cast<uint8_t*>(channels.GetData());
                     uint8_t* ch = chans + static_cast<size_t>(idx) * 0x70;
                     if (gen == (static_cast<uint32_t>(I32(ch, 0x68)) >> 9)) {   // 1800df7cb
                         std::memcpy(ch + 0x18, &vol, 4);          // 1800df7cf  volume = vol
@@ -458,7 +426,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                     const int64_t duration = I64(effect, 0x28);   // 1800df7e0
                     if (duration != 0 && I64(slot, 0x18) >= duration) {   // 1800df7eb JL
                         ++g_effectExpired;
-                        stop3D(self, static_cast<uint32_t>(I32(slot, 0x24)));  // 1800df7f7
+                        StopEffect3D(static_cast<uint32_t>(I32(slot, 0x24)));  // 1800df7f7
                         continue;                                 // 1800df7fc JMP, NO advance
                     }
                 }
@@ -495,40 +463,15 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
     // LOOP 2 -- the 256 Channels. 0x1800df8a0 .. 0x1800dfda6.
     // ------------------------------------------------------------------
     {
-        static PlayPlatformFn playPlat = nullptr;
-        static ArrayAssignFn  arrayAssign = nullptr;
-        static bool resolved = false;
-        if (!resolved) {
-            resolved = true;
-            playPlat = reinterpret_cast<PlayPlatformFn>(ResolveExport(
-                "?PlayPlatform@Device@Audio@@AEAA_NHV?$ExternalPtr@VSoundBuffer@Audio@@@Object@@AEBVTime@System@@MMM@Z"));
-            // 0x180050d30 Array<T16>::operator= -- unexported, ported and
-            // already registered by address (array.cpp lane Q J10).
-            // NOT CONVERTED (ENDGAME B.3.2 step 2): `Collection::Array<T>
-            // ::operator=` is still the compiler-generated SHALLOW copy
-            // (Collection.h's Array banner); retail's DEEP operator= only
-            // becomes this class's own once the last bitwise copier elsewhere
-            // is gone. The call site below also walks the target as a raw
-            // `uint8_t*` offset into `self->effects` rather than through a
-            // typed `EffectSlot::positions` field, so there is no typed member
-            // to call `=` on even once it is real. Stays a by-address call.
-            arrayAssign = reinterpret_cast<ArrayAssignFn>(
-                ResolveAddr(Module::Runtime, 0x180050d30));
-            if (!playPlat || !arrayAssign)
-                std::fprintf(stderr, "[RtPort] Audio::Scene::Update loop 2: "
-                                     "PlayPlatform=%p ArrayAssign=%p\n",
-                             (void*)playPlat, (void*)arrayAssign);
-        }
-
         const double spt = SecondsPerTick();
-        uint8_t* chans = reinterpret_cast<uint8_t*>(self->channels.GetData());
-        if (!chans || !playPlat || !arrayAssign) return true;
+        uint8_t* chans = reinterpret_cast<uint8_t*>(channels.GetData());
+        if (!chans) return true;
 
         for (size_t coff = 0; coff < 0x7000u; coff += 0x70) {     // 1800dfd9f
             uint8_t* ch = chans + coff;
             if (I32(ch, 0x68) == 0) continue;                     // handleTag == 0
             const int64_t soundType = I32(ch, 0x8);
-            if (self->paused[soundType] != 0) continue;           // 1800df8b9
+            if (paused[soundType] != 0) continue;           // 1800df8b9
             ++g_channelsSeen;
 
             int64_t* startTimeP = reinterpret_cast<int64_t*>(ch + 0x10);
@@ -611,8 +554,11 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                         }
                         if (freeSlot >= 0) {
                             const int64_t* st = reinterpret_cast<const int64_t*>(ch + 0x10);
-                            if (playPlat(device, freeSlot, bufferRef, st,
-                                         mix, pitch, vThird)) {           // 1800dfb17
+                            if (reinterpret_cast<Device*>(device)->PlayPlatform(   // B.3.7 bridge
+                                    freeSlot,
+                                    Object::ExternalPtr<SoundBuffer>(static_cast<SoundBuffer*>(bufferRef)),
+                                    *reinterpret_cast<const System::Time*>(st),
+                                    mix, pitch, vThird)) {                // 1800dfb17
                                 ++g_samplesPlaced;
                                 uint8_t* s = B(device) + static_cast<size_t>(freeSlot) * 0x28;
                                 uint32_t f; std::memcpy(&f, s + 0x00, 4);
@@ -620,7 +566,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                                 std::memcpy(s + 0x08, &bufferRef, 8);     // 1800dfb3e
                                 void* cb = OnSoundEndedThunk();
                                 std::memcpy(s + 0x20, &cb, 8);            // 1800dfb4a
-                                void* scene = self;
+                                void* scene = this;
                                 std::memcpy(s + 0x10, &scene, 8);         // 1800dfb4f
                                 std::memcpy(s + 0x18, &tag, 4);           // 1800dfb58
                                 placed = s;                               // 1800dfb64
@@ -677,7 +623,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                 // channel's handleTag and clear it. NOTE, and it is retail's:
                 // the scan compares Channel::handleTag (+0x68) against
                 // EffectSlot::channelHandle (+0x20), NOT against idTag.
-                uint8_t* effects = reinterpret_cast<uint8_t*>(self->effects.GetData());
+                uint8_t* effects = reinterpret_cast<uint8_t*>(this->effects.GetData());
                 const int32_t tag = I32(ch, 0x68);
                 if (effects) {
                     for (int64_t k = 0; k < 0x1000; ++k) {                // 1800dfc8d
@@ -697,7 +643,7 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
                         // array ASSIGNED to it -- which releases its storage --
                         // rather than being memset away.
                         int64_t empty[2] = { 0, 0 };
-                        arrayAssign(slot + 0x30, empty);                  // 1800dfd10
+                        ArrayAssign16()(slot + 0x30, empty);              // 1800dfd10
                         break;
                     }
                 }
@@ -726,6 +672,19 @@ extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t no
     }
 
     return true;                                                          // 1800dfdac MOV AL,1
+}
+
+}  // namespace Audio
+
+// The door: both Times arrive BY VALUE in registers (B7-5), the Random& and
+// the Vector3& as pointers.
+extern "C" bool RtAudio_Scene_Update(void* selfv, int64_t deltaTicks, int64_t nowTicks,
+                                     void* rngv, const void* listenerPos, float m) {
+    System::Time delta; delta._ticks = deltaTicks;
+    System::Time now;   now._ticks   = nowTicks;
+    return reinterpret_cast<Audio::Scene*>(selfv)->Audio::Scene::Update(                   // B.3.7 bridge
+        delta, now, *static_cast<System::Random*>(rngv),
+        *static_cast<const Vector3*>(listenerPos), m);
 }
 
 // ============================================================================

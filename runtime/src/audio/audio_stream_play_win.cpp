@@ -88,26 +88,25 @@
 // from here). Attendance only.
 // ============================================================================
 
+// ENDGAME B.3.7 block B4: `Audio::Stream::Play` is a member of the real class
+// (runtime/types/audio/Stream.h); the `kStream*` / `kThread*` offsets that
+// lived here are its fields and System::Thread's (B6-8). The block-table grow
+// (0x18000c300) is called directly — the function-local first-call cache that
+// resolved it by address is gone (B6-5): Play is a member now.
+
 #include <windows.h>
 
 #include <cstdint>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Stream.h"
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
+// 0x18000c300 — `Collection::Array<Block>::SetSize(4)` (kSpec_Blob8ba0,
+// runtime/src/collection/array.cpp), the body registered at that address.
+namespace rtcoll { void RtColl_ArraySetSize_18000c300(void* a); }
 
 namespace {
-
-constexpr int kThreadRunFlagsOffset = 0x08;  // System::Thread::runFlags, bit0
-constexpr int kStreamStoppingOffset = 0x80;  // byte
-constexpr int kStreamWakeEvent      = 0x40;  // HANDLE, Stream's own wake event
-constexpr int kThreadFinishedEvent  = 0x28;  // System::Thread::hFinished
-constexpr int kThreadStartEvent     = 0x18;  // System::Thread::hStart
-constexpr int kStreamTrackB         = 0x7c;  // stores the 1st explicit arg
-constexpr int kStreamTrackA         = 0x78;  // stores the 2nd explicit arg
-constexpr int kStreamBufferHeader   = 0x30;  // &self[0x30], handed to FUN_18000c300
 
 uint64_t g_calls = 0;
 uint64_t g_drained = 0;  // "did work" = the mid-pass drain-and-wait branch ran
@@ -123,53 +122,37 @@ struct PlaySummary {
 };
 PlaySummary g_summary;
 
-template <typename T> inline T& Field(void* p, int off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
-
-// 0x18000c300 -- Collection::Array<T>::SetSize(4) for the Stream's 4-slot
-// streaming buffer table (element stride 0x8ba0). Out of THIS batch's scope;
-// reached by ADDRESS so the port registry gets first refusal. See the banner.
-// NOT CONVERTED (ENDGAME B.3.2 step 2): `kSpec_Blob8ba0` (array.cpp) itself
-// says "the sole caller is Engine::Play and nothing there names [the element
-// type]" — there is no `runtime/types` struct for Audio::Stream at all, so
-// `headerPtr` (`&self[0x30]`) is a raw byte offset with no typed
-// `Collection::Array<T>` field to call `.SetSize()` on. Converting this site
-// would mean inventing a Stream type header, which is member/struct work, not
-// a caller conversion.
-void GrowStreamBuffers(void* headerPtr) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18000c300));
-    if (fn) fn(headerPtr);
-}
-
 }  // namespace
 
 // ============================================================================
 // Audio::Stream::Play(int,int) -- retail 0x1800a0d10, ord 3417
 // ============================================================================
-extern "C" void RtAudio_Stream_Play(void* selfPtr, int32_t a, int32_t b) {
-    ++g_calls;
-    auto* self = static_cast<uint8_t*>(selfPtr);
+namespace Audio {
 
-    const bool midPass = (Field<uint32_t>(self, kThreadRunFlagsOffset) & 1u) != 0;  // 1800a0d1f
+void Stream::Play(int32_t channel, int32_t bytePosition) {
+    ++g_calls;
+
+    const bool midPass = (_runFlags & 1u) != 0;                            // 1800a0d1f
     if (midPass) {
         ++g_drained;
-        Field<uint8_t>(self, kStreamStoppingOffset) = 1;                     // 1800a0d2d
-        SetEvent(Field<HANDLE>(self, kStreamWakeEvent));                     // 1800a0d38
-        WaitForSingleObject(Field<HANDLE>(self, kThreadFinishedEvent),       // 1800a0d45
-                           INFINITE);
+        _stopping = 1;                                                     // 1800a0d2d
+        SetEvent(static_cast<HANDLE>(_wakeEvent));                         // 1800a0d38
+        WaitForSingleObject(static_cast<HANDLE>(_hFinished), INFINITE);    // 1800a0d45
     }
 
-    GrowStreamBuffers(self + kStreamBufferHeader);                          // 1800a0d4f
+    rtcoll::RtColl_ArraySetSize_18000c300(&_buffers);                     // 1800a0d4f
 
-    Field<uint8_t>(self, kStreamStoppingOffset) = 0;                        // 1800a0d58
-    Field<int32_t>(self, kStreamTrackB) = a;                                 // 1800a0d5f
-    Field<int32_t>(self, kStreamTrackA) = b;                                 // 1800a0d62
-    ResetEvent(Field<HANDLE>(self, kThreadFinishedEvent));                  // 1800a0d65
-    SetEvent(Field<HANDLE>(self, kThreadStartEvent));                       // tail, 1800a0d7e
+    _stopping = 0;                                                         // 1800a0d58
+    _channel = channel;                                                    // 1800a0d5f
+    _bytePosition = bytePosition;                                          // 1800a0d62
+    ResetEvent(static_cast<HANDLE>(_hFinished));                           // 1800a0d65
+    SetEvent(static_cast<HANDLE>(_hStart));                                // tail, 1800a0d7e
+}
 
+}  // namespace Audio
+
+extern "C" void RtAudio_Stream_Play(void* selfPtr, int32_t a, int32_t b) {
+    reinterpret_cast<Audio::Stream*>(selfPtr)->Audio::Stream::Play(a, b);   // B.3.7 bridge
 }
 
 // ============================================================================

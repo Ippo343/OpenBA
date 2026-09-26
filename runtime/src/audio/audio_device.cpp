@@ -88,86 +88,41 @@
 // `FreeChannelPlatform` calls slot +0x90.
 // ============================================================================
 
+// ENDGAME B.3 step 7, block B4: the anonymous-namespace `AudioChannel` and the
+// `kLockOffset` / `kPlatformReadyOffset` / `kVoice*` / `kStop*` constants that
+// lived here MOVED into runtime/types/audio/Device.h under the retail names
+// (B6-8): `Audio::Device::AudioChannel` (+0x000, stride 0x28), the embedded
+// `_stream` (+0xa00, whose `_lock` is the +0xa50 CRITICAL_SECTION, `_wakeEvent`
+// the +0xa40 HANDLE, `_stopping` the +0xa80 byte and `_runFlags` the +0xa08
+// gate), `_xaudio2` (+0xa88) and `Audio::Device::PlatformChannel` (+0xa98,
+// stride 0x20: `voice` = the +0xaa0 slot, `channel` = the +0xaa8
+// back-pointer). The four bodies below are the members; the registered doors
+// are one-line qualified delegations.
+
 #include <windows.h>
 
 #include <cstddef>
 #include <cstdint>
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Device.h"
+#include "../../types/audio/SoundBuffer.h"
 
+// The XAudio2 source-voice vtable byte offsets these bodies call. +0x90 is
+// IXAudio2Voice::DestroyVoice (FreeChannelPlatform), +0xa0 is
+// IXAudio2SourceVoice::Stop (StopPlatform) — deliberately different slots on
+// the SAME object.
 namespace {
+constexpr int kVoiceReleaseSlot = 0x90;
+constexpr int kVoiceStopSlot    = 0xA0;
 
-// ---------------------------------------------------------------------------
-// Audio::Device::AudioChannel — 0x28 bytes, 64 of them at Device+0x00.
-// Only the five fields these two bodies (and `Stop`) touch are named; the rest
-// is left as an unnamed gap rather than guessed, per PLAN §6 step 8.
-// ---------------------------------------------------------------------------
-struct AudioChannel {
-    uint32_t flags;       // +0x00  dword. bit1 tested by Update ("finished,
-                          //        reap me"); bits 0+1 cleared by the reap.
-    uint32_t _pad04;      // +0x04  never read or written by any body here
-    void*    source;      // +0x08  the sound object. Byte [+0x21] of it is the
-                          //        "this playback needs the device lock" flag
-                          //        FreeChannelPlatform and StopPlatform test.
-                          //        Cleared by the reap.
-    void*    userData;    // +0x10  2nd argument to the completion callback
-    uint32_t userValue;   // +0x18  3rd argument (a DWORD, read as R8D)
-    uint32_t _pad1c;      // +0x1c
-    void*    onComplete;  // +0x20  THE STORED COMPLETION CALLBACK — the
-                          //        `CALL RAX` that WAVE8_5.md §9 identified as
-                          //        the single root cause of all six Audio
-                          //        hold-backs. It is a faithful indirect call
-                          //        with no Runtime dependency of its own.
-};
-static_assert(sizeof(AudioChannel) == 0x28, "Audio::Device::AudioChannel must be 0x28");
-static_assert(offsetof(AudioChannel, source)     == 0x08, "AudioChannel::source @ +0x08");
-static_assert(offsetof(AudioChannel, userData)   == 0x10, "AudioChannel::userData @ +0x10");
-static_assert(offsetof(AudioChannel, userValue)  == 0x18, "AudioChannel::userValue @ +0x18");
-static_assert(offsetof(AudioChannel, onComplete) == 0x20, "AudioChannel::onComplete @ +0x20");
-
-constexpr int kChannelCount        = 0x40;   // Update's `CMP EDI,0x40 ; JL`
-constexpr int kChannelStride       = 0x28;   // cross-confirmed by Device::Stop
-constexpr int kLockOffset          = 0xA50;  // CRITICAL_SECTION
-constexpr int kPlatformReadyOffset = 0xA88;  // qword; 0 => the platform is down
-constexpr int kVoiceBaseOffset     = 0xAA0;  // voice pointer array...
-constexpr int kVoiceStride         = 0x20;   // ...stride 0x20, 64 entries
-constexpr int kVoiceReleaseSlot    = 0x90;   // vtable byte offset called by
-                                             // FreeChannelPlatform (StopPlatform
-                                             // uses +0xA0 on the same object)
-
-// ---- WAVE 23 LANE TAIL: the StopPlatform-only offsets ---------------------
-// Read off 0x1800DEA20 (disassembly in the body's banner below). They are new
-// to this file because `Stop`/`StopPlatform` are the first bodies here to take
-// the event path; lane IOA's banner already cited this function for the voice
-// array, and these are the rest of what it touches.
-constexpr int kVoiceStopSlot          = 0xA0;  // vtable byte offset StopPlatform
-                                               // calls - deliberately NOT the
-                                               // +0x90 above, see the banner
-constexpr int kVoiceChannelBackOffset = 0xAA8; // the voice record's back-pointer
-                                               // to its AudioChannel; +0x08 past
-                                               // the voice ptr in the same 0x20 cell
-constexpr int kDeviceFlagsOffset      = 0xA08; // byte; bit 0 gates the wake
-constexpr int kStopRequestedOffset    = 0xA80; // byte; set to 1 before the wake
-constexpr int kStopEventOffset        = 0xA40; // HANDLE passed to SetEvent
-
-static_assert(kVoiceChannelBackOffset == kVoiceBaseOffset + 8,
-              "the voice ptr and its channel back-pointer share one 0x20 cell");
-
-static_assert(kChannelCount * kChannelStride <= kLockOffset,
-              "the 64 channels (ending at 0xA00) must not overlap the lock at 0xA50");
-
-// The completion callback's signature, read off the three registers loaded at
-// the call: RCX = the channel record itself, RDX = its +0x10, R8D = its +0x18.
-using AudioCompletionFn = void (*)(void* channel, void* userData, uint32_t userValue);
-
-inline AudioChannel* ChannelAt(void* self, int index) {
-    // Retail sign-extends the int index (`MOVSXD RDX,EDX`) before scaling, so
-    // the arithmetic is done in 64 bits on a SIGNED value. Reproduced rather
-    // than done in `int`, which would differ for a negative index.
-    return reinterpret_cast<AudioChannel*>(
-        static_cast<uint8_t*>(self) + static_cast<int64_t>(index) * kChannelStride);
+// Retail tests byte +0x21 of the channel's SoundBuffer (IsStreamed) to decide
+// whether this playback needs the Stream's lock.
+inline bool NeedsStreamLock(const Audio::SoundBuffer* src) {
+    return src != nullptr && src->_streamed != 0;
 }
-
 }  // namespace
+
+namespace Audio {
 
 // ---------------------------------------------------------------------------
 // Audio::Device::FreeChannelPlatform(int) — retail 0x1800DE6F0, ord 2380.
@@ -196,40 +151,26 @@ inline AudioChannel* ChannelAt(void* self, int index) {
 // reference_ghidra_c_output_vs_disassembly.md; the disassembly above is what
 // this body was written from.)
 // ---------------------------------------------------------------------------
-void RtAudio_Device_FreeChannelPlatform(void* selfPtr, int index) {
-
-    auto* base = static_cast<uint8_t*>(selfPtr);
-    const bool platformUp = *reinterpret_cast<void**>(base + kPlatformReadyOffset) != nullptr;
-
-
-    if (!platformUp) {
+void Device::FreeChannelPlatform(int32_t index) {
+    if (_xaudio2 == nullptr)                          // 1800de6f6  platform down
         return;
-    }
 
-    AudioChannel* ch = ChannelAt(selfPtr, index);
-    auto* lock = reinterpret_cast<CRITICAL_SECTION*>(base + kLockOffset);
-    void** voiceSlot = reinterpret_cast<void**>(
-        base + static_cast<int64_t>(index) * kVoiceStride + kVoiceBaseOffset);
+    AudioChannel* ch = &_channels[index];             // MOVSXD: signed index
+    auto* lock = reinterpret_cast<CRITICAL_SECTION*>(StreamObject()->_lock);
+    PlatformChannel& pc = _platformChannels[index];
 
     // Entry test, on the value read NOW.
-    {
-        auto* src = static_cast<uint8_t*>(ch->source);
-        if (src && src[0x21] != 0) EnterCriticalSection(lock);
-    }
+    if (NeedsStreamLock(ch->source)) EnterCriticalSection(lock);
 
-    if (void* voice = *voiceSlot) {
+    if (void* voice = pc.voice) {
         void** vtable = *reinterpret_cast<void***>(voice);
         reinterpret_cast<void (*)(void*)>(vtable[kVoiceReleaseSlot / 8])(voice);
-        *voiceSlot = nullptr;
+        pc.voice = nullptr;
     }
 
     // Exit test, on a FRESH read — see the note above. Deliberately not the
     // cached verdict from the entry test.
-    {
-        auto* src = static_cast<uint8_t*>(ch->source);
-        if (src && src[0x21] != 0) LeaveCriticalSection(lock);
-    }
-
+    if (NeedsStreamLock(ch->source)) LeaveCriticalSection(lock);
 }
 
 // ---------------------------------------------------------------------------
@@ -257,29 +198,21 @@ void RtAudio_Device_FreeChannelPlatform(void* selfPtr, int index) {
 // The same five instructions appear verbatim in `Device::Stop`
 // (0x1800DE23F..0x1800DE268), which is the cross-check for all of it.
 // ---------------------------------------------------------------------------
-void RtAudio_Device_Update(void* selfPtr, const void* /*time — never read*/) {
-
-    int reaped = 0;
-    for (int i = 0; i < kChannelCount; ++i) {
-        AudioChannel* ch = ChannelAt(selfPtr, i);
+void Device::Update(const System::Time& /*time — never read*/) {
+    for (int i = 0; i < 64; ++i) {                    // `CMP EDI,0x40 ; JL`
+        AudioChannel* ch = &_channels[i];
         // Retail tests the LOW BYTE of the dword (`TEST byte ptr [..],0x2`)
         // and clears the whole dword; both are reproduced.
         if ((ch->flags & 2u) == 0) continue;
-        ++reaped;
 
-        RtAudio_Device_FreeChannelPlatform(selfPtr, i);
+        FreeChannelPlatform(i);
 
-        void* cb = ch->onComplete;
+        Callback cb = ch->onComplete;
         ch->flags &= 0xFFFFFFFCu;
         ch->source = nullptr;
         if (cb)
-            reinterpret_cast<AudioCompletionFn>(cb)(ch, ch->userData, ch->userValue);
+            cb(ch, ch->userData, ch->userValue);
     }
-
-    // The effectiveness control this site needs most: Update is called every
-    // frame and reaps nothing in almost all of them, so `calls=` alone would
-    // report a body that has never actually run its interesting path as
-    // heavily exercised.
 }
 
 // ---------------------------------------------------------------------------
@@ -334,39 +267,29 @@ void RtAudio_Device_Update(void* selfPtr, const void* /*time — never read*/) {
 //    This body signals an EVENT (`SetEvent` on the handle at Device+0xA40)
 //    and sets the byte at Device+0xA80 first. Both are reproduced in order.
 // ---------------------------------------------------------------------------
-void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
-
-    auto* base = static_cast<uint8_t*>(selfPtr);
-    const bool platformUp = *reinterpret_cast<void**>(base + kPlatformReadyOffset) != nullptr;
-
-
-    if (!platformUp) {
+void Device::StopPlatform(int32_t index) {
+    if (_xaudio2 == nullptr)                          // 1800dea24  platform down
         return;
+
+    AudioChannel* ch = &_channels[index];
+    PlatformChannel& pc = _platformChannels[index];
+    Audio::Stream* stream = StreamObject();
+
+    // The wake: only when the source wants the stream lock AND the stream
+    // worker is mid-pass (Thread runFlags bit 0, Device+0xa08).
+    if (NeedsStreamLock(ch->source) && (stream->_runFlags & 1) != 0) {
+        stream->_stopping = 1;                        // Device+0xa80
+        SetEvent(static_cast<HANDLE>(stream->_wakeEvent));   // Device+0xa40
     }
 
-    AudioChannel* ch = ChannelAt(selfPtr, index);
-    uint8_t* voiceCursor = base + static_cast<int64_t>(index) * kVoiceStride;
-
-    // The wake: only when the source wants the device lock AND the device's
-    // own flag byte has bit 0 set.
-    {
-        auto* src = static_cast<uint8_t*>(ch->source);
-        if (src && src[0x21] != 0 && (base[kDeviceFlagsOffset] & 1) != 0) {
-            base[kStopRequestedOffset] = 1;
-            SetEvent(*reinterpret_cast<HANDLE*>(base + kStopEventOffset));
-        }
-    }
-
-    if (void* voice = *reinterpret_cast<void**>(voiceCursor + kVoiceBaseOffset)) {
+    if (void* voice = pc.voice) {
         void** vtable = *reinterpret_cast<void***>(voice);
         reinterpret_cast<void (*)(void*, void*, uint32_t)>(
             vtable[kVoiceStopSlot / 8])(voice, nullptr, 0);
     }
 
     // Unguarded on purpose - see the banner above.
-    auto* backPtr = *reinterpret_cast<uint32_t**>(voiceCursor + kVoiceChannelBackOffset);
-    *backPtr |= 2u;
-
+    pc.channel->flags |= 2u;
 }
 
 // ---------------------------------------------------------------------------
@@ -414,24 +337,42 @@ void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
 // distinction `calls=` cannot: there is no early-out here, so the work verdict
 // is `true` and the number to read is whether the callback fired.
 // ---------------------------------------------------------------------------
-void RtAudio_Device_Stop(void* selfPtr, void* channelPtr) {
-          // no early-out; see the banner
+void Device::Stop(AudioChannel* channelPtr) {
+    // no early-out; see the banner
+    const int64_t byteDelta = reinterpret_cast<uint8_t*>(channelPtr) -
+                              reinterpret_cast<uint8_t*>(this);
+    const int index = static_cast<int>(byteDelta / static_cast<int64_t>(sizeof(AudioChannel)));
 
-    const int64_t byteDelta = static_cast<uint8_t*>(channelPtr) -
-                              static_cast<uint8_t*>(selfPtr);
-    const int index = static_cast<int>(byteDelta / kChannelStride);
-
-    RtAudio_Device_StopPlatform(selfPtr, index);
-    RtAudio_Device_FreeChannelPlatform(selfPtr, index);
+    StopPlatform(index);
+    FreeChannelPlatform(index);
 
     // ---- the reap epilogue, identical to Device::Update's ------------------
-    AudioChannel* ch = ChannelAt(selfPtr, index);
-    void* cb = ch->onComplete;
+    AudioChannel* ch = &_channels[index];
+    Callback cb = ch->onComplete;
     ch->flags &= 0xFFFFFFFCu;
     ch->source = nullptr;
     if (cb)
-        reinterpret_cast<AudioCompletionFn>(cb)(ch, ch->userData, ch->userValue);
+        cb(ch, ch->userData, ch->userValue);
+}
 
+}  // namespace Audio
+
+// ============================================================================
+// THE DOORS — one-line qualified delegations.
+// ============================================================================
+void RtAudio_Device_FreeChannelPlatform(void* selfPtr, int index) {
+    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::FreeChannelPlatform(index);        // B.3.7 bridge
+}
+void RtAudio_Device_Update(void* selfPtr, const void* time) {
+    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::Update(                         // B.3.7 bridge
+        *static_cast<const System::Time*>(time));
+}
+void RtAudio_Device_StopPlatform(void* selfPtr, int index) {
+    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::StopPlatform(index);             // B.3.7 bridge
+}
+void RtAudio_Device_Stop(void* selfPtr, void* channelPtr) {
+    reinterpret_cast<Audio::Device*>(selfPtr)->Audio::Device::Stop(                           // B.3.7 bridge
+        static_cast<Audio::Device::AudioChannel*>(channelPtr));
 }
 
 int RtAudioDeviceRegister() {
