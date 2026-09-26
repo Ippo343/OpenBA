@@ -208,8 +208,10 @@ extern void** g_pExternalFactorySingleton;
 typedef bool (*fn_IsDerivedFrom_t)(void* self, uint32_t typeId);
 extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
 
-// Type ID for External resource (used by dialog Load methods)
-extern uint32_t* g_pExternalTypeId;
+// UI::Dialog's type info (?_typeInfo@Dialog@UI@@ @ Runtime 0x1801faa88): the
+// dialog Load methods' IsDerivedFrom check on a loaded External. Named
+// g_pExternalTypeId until the ENDGAME B.3.6 closing pass (rename only).
+extern uint32_t* g_TypeId_Dialog;
 
 // UpdateLoop::LoadResources(this) — base class resource loading
 typedef void (*fn_UpdateLoop_LoadResources_t)(void* self);
@@ -679,8 +681,9 @@ extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 // CheckboxElement type ID at exref 0x1401516a8
 extern uint32_t* g_TypeId_CheckboxElement;
 
-// UI element base type ID at exref 0x1401514f8 (used by ControlUI)
-extern uint32_t* g_TypeId_UIElementBase;
+// UI::ButtonElement type info, exe slot 0x1401514f8 (used by ControlUI).
+// Named g_TypeId_UIElementBase until the B.3.6 closing pass (rename only).
+extern uint32_t* g_TypeId_ButtonElement;
 
 // UI::ImageElement type ID at exref 0x140151500 (used by EventNotifyDialog::Update,
 // ScenarioDialog, and many other dialog Update functions to check child element types)
@@ -1201,8 +1204,11 @@ extern fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform;
 // ToolbarDialog update button states helper (FUN_1400b8fd0)
 // REPLACED: now ToolbarDialog_UpdateButtons_Impl() in code/Game/Dialog/toolbardialog.cpp
 
-// ToolbarDialog exref type — for IsDerivedFrom checks on toolbar elements
-extern uint32_t* g_TypeId_ToolbarElement;  // _typeInfo_exref in ToolbarDialog Update/OnEvent
+// UI::CheckElement type info, exe slot 0x1401516a8 — ToolbarDialog's
+// IsDerivedFrom checks on toolbar buttons. Named g_TypeId_ToolbarElement until
+// the B.3.6 closing pass (rename only). Same slot as g_TypeId_CheckboxElement,
+// resolved separately (that one is filled at a different point).
+extern uint32_t* g_TypeId_CheckElement;  // _typeInfo_exref in ToolbarDialog Update/OnEvent
 
 // ToolbarDialog parent type ID (DAT_1401c5d38) — for IsDerivedFrom in case 5 (CenterOnPoint)
 extern uint32_t* g_TypeId_ToolbarDialogParent;
@@ -2029,8 +2035,9 @@ extern fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton;   // 0x140081420
 // TableElement type ID — exref 0x140151510
 extern uint32_t* g_TypeId_TableElement;
 
-// SpinnerElement / NumberElement type ID — exref 0x1401516c8
-extern uint32_t* g_TypeId_SpinnerElement;
+// UI::NumberElement type info — exe slot 0x1401516c8. Named
+// g_TypeId_SpinnerElement until the B.3.6 closing pass (rename only).
+extern uint32_t* g_TypeId_NumberElement;
 
 // TextElement type ID — exref 0x140151508
 extern uint32_t* g_TypeId_TextElement;
@@ -2041,10 +2048,12 @@ extern uint32_t* g_TypeId_LabelElement;
 // NumberEditElement type ID — exref 0x140151cb0
 extern uint32_t* g_TypeId_NumberEditElement;
 
-// SliderElement type ID — exref 0x140151cf0
+// UI::SpinnerElement type info — exe slot 0x140151cf0 (NOT SliderElement,
+// whose slot is 0x1401516d0). Named g_TypeId_SliderElement until the B.3.6
+// closing pass (rename only; the value never changed).
 // Used in TradeUI inner loops (tablePurchase child(2), tableStorage child(1),
 // tableSell child(3), tableBuy child(3))
-extern uint32_t* g_TypeId_SliderElement;
+extern uint32_t* g_TypeId_SpinnerElement;
 
 // ButtonElement type ID — exref 0x1401514f8 (same as g_TypeId_HelpButtonElem)
 // Already available as g_TypeId_HelpButtonElem
@@ -2817,9 +2826,14 @@ extern fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor;
 // Engine::MainLoop::_singleton (protected)
 extern void** g_pMainLoopSingleton;
 
-// Object::Internal type ID — exref at 0x140151660 in exe .rdata
-// Used for IsDerivedFrom checks before InternalBasePtr wrapping / GetUserData
-extern uint32_t* g_TypeId_ObjectInternal;
+// UI::Element type info — exe slot 0x140151660 (?_typeInfo@Element@UI@@).
+// Used for IsDerivedFrom checks before InternalBasePtr wrapping / GetUserData.
+// Named g_TypeId_ObjectInternal until the B.3.6 closing pass (rename only).
+// NOTE: with the exe slot unfilled (BANISHED_LIVE_ELEMENT_TIDS off) two
+// lazy fallbacks (ui_dialog_stub_factories.cpp EnsureTypeIds, debugui.cpp's
+// heal table) fill it with Object::Internal's id instead - a live divergence
+// from the slot's class, recorded in B36_RULES section 12, not changed here.
+extern uint32_t* g_TypeId_Element;
 
 // ============================================================
 // Stage 3: OptionsDialog Apply/Restore exe helpers

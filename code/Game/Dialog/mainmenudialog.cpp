@@ -468,7 +468,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         return false;
     }
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton ||
-        !g_pExternalTypeId || !g_pMemAllocSingleton) {
+        !g_TypeId_Dialog || !g_pMemAllocSingleton) {
         printf("[BuildId] missing engine singletons, skipping\n");
         return false;
     }
@@ -481,7 +481,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
         reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
             ->FindOrLoad(filenameStr));
     void* dialogResource = nullptr;
-    if (resource && fn_IsDerivedFrom(resource, *g_pExternalTypeId)) {
+    if (resource && fn_IsDerivedFrom(resource, *g_TypeId_Dialog)) {
         dialogResource = resource;
     }
     if (!dialogResource) {

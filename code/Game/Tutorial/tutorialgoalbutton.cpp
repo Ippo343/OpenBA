@@ -150,11 +150,11 @@ int TutorialGoalButton_Check(void* self) {
 
     // Check if element IsDerivedFrom Object::Internal
     uintptr_t element = elementIBP;
-    if (!fn_IsDerivedFrom || !g_TypeId_ObjectInternal) {
+    if (!fn_IsDerivedFrom || !g_TypeId_Element) {
         return 0;
     }
 
-    bool isDerived = fn_IsDerivedFrom((void*)element, *g_TypeId_ObjectInternal);
+    bool isDerived = fn_IsDerivedFrom((void*)element, *g_TypeId_Element);
     void* validElement = isDerived ? (void*)element : nullptr;
 
     // Wrap in another InternalBasePtr

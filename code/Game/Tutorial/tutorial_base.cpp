@@ -188,10 +188,10 @@ extern "C" uint32_t TutBase_CountProfessionsByType(uintptr_t worldData, uintptr_
 // Returns null when the type can't be confirmed — safe for the slider-value
 // read path (count stays 0), never feeds a non-slider into Spinner accessors.
 extern "C" void* TutBase_CastToSliderElement(void* element) {
-    if (!element || !fn_IsDerivedFrom || !g_TypeId_SliderElement || !*g_TypeId_SliderElement) {
+    if (!element || !fn_IsDerivedFrom || !g_TypeId_SpinnerElement || !*g_TypeId_SpinnerElement) {
         return nullptr;
     }
-    return fn_IsDerivedFrom(element, *g_TypeId_SliderElement) ? element : nullptr;
+    return fn_IsDerivedFrom(element, *g_TypeId_SpinnerElement) ? element : nullptr;
 }
 
 // 0x14012e5c0 — WorkComponent::CalcMaxWorkers. Computes a workplace's worker

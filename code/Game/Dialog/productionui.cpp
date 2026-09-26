@@ -66,7 +66,7 @@ static void PushElementPair(uintptr_t self, int arrayOffset,
 // BANISHED_LIVE_ELEMENT_TIDS. That gate GRADUATED into the default-on table 2026-08-22, so by
 // default both globals are now POPULATED; they are null only when someone A/Bs with
 // BANISHED_LIVE_ELEMENT_TIDS=0. We resolve PRIVATE copies by name rather than filling
-// g_TypeId_LabelElement / g_TypeId_SpinnerElement, because those globals are
+// g_TypeId_LabelElement / g_TypeId_NumberElement, because those globals are
 // shared with townhallui / helpui / toolbardialog and waking them on the default
 // path is precisely the broad change that gate exists to hold back. When the gate
 // IS on we use the registry value, so the two paths cannot disagree.
@@ -77,7 +77,7 @@ static uint32_t ProductionUI_LabelElementTypeId() {
     return s_local;
 }
 static uint32_t ProductionUI_NumberElementTypeId() {
-    if (g_TypeId_SpinnerElement && *g_TypeId_SpinnerElement) return *g_TypeId_SpinnerElement;
+    if (g_TypeId_NumberElement && *g_TypeId_NumberElement) return *g_TypeId_NumberElement;
     static uint32_t s_local = 0;
     if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("NumberElement");
     return s_local;

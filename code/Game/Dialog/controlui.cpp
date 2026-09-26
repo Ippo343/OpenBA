@@ -18,7 +18,7 @@
 // tested by Slot4/Slot7 before touching the checked byte at elem+0xd8). In
 // standalone both live in the element-type-id table in
 // standalone/reg_element_typeids.cpp, which is GATED on BANISHED_LIVE_ELEMENT_TIDS
-// and therefore off by default — so g_TypeId_UIElementBase and
+// and therefore off by default — so g_TypeId_ButtonElement and
 // g_TypeId_CheckboxElement are both normally null.
 //
 // MEASURED consequence before this fix (BANISHED_CONTROLUI_TRACE, demo pasture):
@@ -37,8 +37,8 @@
 // behind its gate. Prefer the registry value when the gate IS on so the two paths
 // can never disagree. Same idiom as pagetoggleui.cpp / productionui.cpp.
 static uint32_t ControlUI_ButtonElementTypeId() {
-    if (g_TypeId_UIElementBase && *g_TypeId_UIElementBase)
-        return *g_TypeId_UIElementBase;            // gate on: use the real slot
+    if (g_TypeId_ButtonElement && *g_TypeId_ButtonElement)
+        return *g_TypeId_ButtonElement;            // gate on: use the real slot
     static uint32_t s_local = 0;
     if (!s_local) s_local = ::Object::ResolveTypeIdByNameLazy("ButtonElement");
     return s_local;

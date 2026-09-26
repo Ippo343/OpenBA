@@ -58,13 +58,6 @@
 #include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
 
 
-// Dispatch slot addresses for element type IDs used in Serialize inner loops
-#define SLOT_BUTTON_ELEM   0x1401514f8  // ButtonElement / HelpButtonElem
-#define SLOT_LABEL_ELEM    0x140151668  // LabelElement
-#define SLOT_SLIDER_ELEM   0x140151cf0  // SliderElement
-#define SLOT_SPINNER_ELEM  0x1401516c8  // SpinnerElement
-#define SLOT_TOOLBAR_ELEM  0x1401516a8  // ToolbarElement
-
 // Retail's sell/buy tables call the min/max setter through exe .rdata dispatch slot
 // 0x140151cf8 (RefreshSellTable 0x1400841df, RefreshBuyTable 0x140083629,
 // RefreshDisplay 0x140084be8 — one shared slot for all three tables). That slot's
@@ -933,9 +926,9 @@ void TradeUI_Serialize(TradeUI* self) {
 
     // Number elements (IsDerivedFrom SpinnerElement/NumberElement)
     *(uintptr_t*)(s + 0x100) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "numberSellTotal", g_TypeId_SpinnerElement);
+        dialogElemPtr, "numberSellTotal", g_TypeId_NumberElement);
     *(uintptr_t*)(s + 0x108) = (uintptr_t)TradeUI_FindTypedElement(
-        dialogElemPtr, "numberBuyTotal", g_TypeId_SpinnerElement);
+        dialogElemPtr, "numberBuyTotal", g_TypeId_NumberElement);
 
     // Buttons (IsDerivedFrom ButtonElement)
     *(uintptr_t*)(s + 0xF0) = (uintptr_t)TradeUI_FindTypedElement(

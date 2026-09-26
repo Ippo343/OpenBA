@@ -121,13 +121,13 @@ void HotKeyToolTipUI_Slot4(void* self) {
     if (!self) return;
     if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom
         || !fn_KeyMap_GetInputForId || !fn_KeyMap_GetDeviceForId
-        || !g_TypeId_ObjectInternal) {
+        || !g_TypeId_Element) {
         return;
     }
 
     // Resolve the controlled element (the button) and read its shortcut id.
     void* obj = *(void**)((uintptr_t)self + 0x28);
-    void* elem = (obj && fn_IsDerivedFrom(obj, *g_TypeId_ObjectInternal)) ? obj : nullptr;
+    void* elem = (obj && fn_IsDerivedFrom(obj, *g_TypeId_Element)) ? obj : nullptr;
 
     uint64_t elemIbp = 0;
     new (&elemIbp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge

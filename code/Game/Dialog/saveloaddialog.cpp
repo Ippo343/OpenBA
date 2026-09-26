@@ -908,7 +908,7 @@ static int SaveLoad_ShowConfirmDialog(void* self, const char* rscPath) {
     // IsDerivedFrom check — ensure it's a valid External (matches original _typeInfo_exref)
     void* checkedRes = nullptr;
     if (externalRes) {
-        bool isExternal = fn_IsDerivedFrom(externalRes, *g_pExternalTypeId);
+        bool isExternal = fn_IsDerivedFrom(externalRes, *g_TypeId_Dialog);
         if (isExternal) checkedRes = externalRes;
     }
 
@@ -1090,7 +1090,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         void* checkedWarn = nullptr;
         if (warnExt) {
-            if (fn_IsDerivedFrom(warnExt, *g_pExternalTypeId)) {
+            if (fn_IsDerivedFrom(warnExt, *g_TypeId_Dialog)) {
                 checkedWarn = warnExt;
             }
         }

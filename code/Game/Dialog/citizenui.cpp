@@ -645,7 +645,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         // Type-check the resource
         void* checkedRes = nullptr;
         if (extResource) {
-            bool isExternal = fn_IsDerivedFrom(extResource, *g_pExternalTypeId);
+            bool isExternal = fn_IsDerivedFrom(extResource, *g_TypeId_Dialog);
             if (isExternal) checkedRes = extResource;
         }
 
@@ -773,7 +773,7 @@ void EnsureGlobals() {
     // static 0 so fn_FindComponent_CitizenAI is a safe no-op (finds nothing) instead of
     // dereferencing a null type-id pointer.
     if (!g_TypeId_CitizenAIComponent)     { g_TypeId_CitizenAIComponent = &s_profZero; }
-    if (!g_pExternalTypeId)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_pExternalTypeId = &s_ext; }
+    if (!g_TypeId_Dialog)               { s_ext = ::Object::ResolveTypeIdByNameLazy("External");           if (s_ext)  g_TypeId_Dialog = &s_ext; }
     // The Home/Profession(workplace) buttons call Toolbar_CenterOnEntity_Impl, whose
     // EditTool re-select derefs *g_TypeId_EditTool — NULL in standalone (raw exe .rdata).
     // Resolve it here so the camera snap AND the EditTool re-highlight both work; the

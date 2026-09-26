@@ -47,7 +47,7 @@ typedef int (*fn_GetWorkCapacity_t)(uintptr_t workplaceComp);
 static fn_GetWorkCapacity_t s_fn_GetWorkCapacity = nullptr;
 
 // FUN_140013920 — cast element to SliderElement (returns null if wrong type)
-// IsDerivedFrom check against g_TypeId_SliderElement (0x140151cf0).
+// IsDerivedFrom check against g_TypeId_SpinnerElement (0x140151cf0).
 typedef void* (*fn_CastToSliderElement_t)(void* element);
 static fn_CastToSliderElement_t s_fn_CastToSliderElement = nullptr;
 

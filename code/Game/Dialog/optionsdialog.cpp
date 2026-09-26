@@ -1253,7 +1253,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         if (eventData >= kInputBind_Base) {
             // FUN_140010460: IsDerivedFrom(elem, UIElementBase type) — returns elem if valid, else null
             void* clickedElem = *(void**)element;
-            bool isUIElement = g_TypeId_UIElementBase && fn_IsDerivedFrom(clickedElem, *g_TypeId_UIElementBase);
+            bool isUIElement = g_TypeId_ButtonElement && fn_IsDerivedFrom(clickedElem, *g_TypeId_ButtonElement);
             void* parent = isUIElement ? clickedElem : nullptr;
             uint8_t parentPtr[16];
             new (parentPtr) ::Object::InternalBasePtr(
@@ -1479,8 +1479,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             ->FindOrLoad(filenameObj));
     // Type check the external resource
     void* external = nullptr;
-    if (extResult && g_pExternalTypeId) {
-        bool isDerived = fn_IsDerivedFrom(extResult, *g_pExternalTypeId);
+    if (extResult && g_TypeId_Dialog) {
+        bool isDerived = fn_IsDerivedFrom(extResult, *g_TypeId_Dialog);
         if (isDerived) external = extResult;
     }
 
@@ -1557,8 +1557,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton)   // B.3.3 bridge
                 ->FindOrLoad(fnameObj2));
         void* external2 = nullptr;
-        if (extResult2 && g_pExternalTypeId) {
-            if (fn_IsDerivedFrom(extResult2, *g_pExternalTypeId)) external2 = extResult2;
+        if (extResult2 && g_TypeId_Dialog) {
+            if (fn_IsDerivedFrom(extResult2, *g_TypeId_Dialog)) external2 = extResult2;
         }
 
         // Allocate and construct MessageDialog (0xC0 bytes)

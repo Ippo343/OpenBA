@@ -91,7 +91,7 @@ static bool IsDerivedFrom_NullSafe(void* self, uint32_t typeId) {
     if (!self) return false;
     return s_fn_IsDerivedFrom_real ? s_fn_IsDerivedFrom_real(self, typeId) : false;
 }
-uint32_t* g_pExternalTypeId = nullptr;
+uint32_t* g_TypeId_Dialog = nullptr;
 fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources = nullptr;
 fn_ListCleanup_t fn_ListCleanup = nullptr;
 
@@ -121,11 +121,11 @@ fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId = nullptr;
 // CheckboxElement type ID (exref)
 uint32_t* g_TypeId_CheckboxElement = nullptr;
 
-// UI element base type ID (exref)
-uint32_t* g_TypeId_UIElementBase = nullptr;
+// UI::ButtonElement type info (exe slot 0x1401514f8)
+uint32_t* g_TypeId_ButtonElement = nullptr;
 
-// Object::Internal type ID (exref 0x140151660)
-uint32_t* g_TypeId_ObjectInternal = nullptr;
+// UI::Element type info (exe slot 0x140151660)
+uint32_t* g_TypeId_Element = nullptr;
 
 // UI::ImageElement type ID (exref 0x140151500)
 uint32_t* g_TypeId_ImageElement = nullptr;
@@ -341,7 +341,7 @@ fn_CameraSys_ComputeViewTransform_t fn_CameraSys_ComputeViewTransform = nullptr;
 // fn_ToolbarDialog_CloseSubDialog — inlined as ToolbarDialog_CloseSubDialog_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_ChangeSpeed — inlined as ToolbarDialog_ChangeSpeed_Impl in toolbardialog.cpp
 // fn_ToolbarDialog_UpdateButtons — inlined as ToolbarDialog_UpdateButtons_Impl in toolbardialog.cpp
-uint32_t* g_TypeId_ToolbarElement = nullptr;
+uint32_t* g_TypeId_CheckElement = nullptr;
 uint32_t* g_TypeId_ToolbarDialogParent = nullptr;
 uint32_t* g_TypeId_ComboElement = nullptr;
 fn_FindDialogByName_t fn_FindDialogByName = nullptr;
@@ -535,11 +535,11 @@ fn_Building_GetOrderName_t fn_Building_GetOrderName = nullptr;
 fn_Building_GetBuyEntries_t fn_Building_GetBuyEntries = nullptr;
 fn_TradeUI_OnTradeButton_t fn_TradeUI_OnTradeButton = nullptr;
 uint32_t* g_TypeId_TableElement = nullptr;
-uint32_t* g_TypeId_SpinnerElement = nullptr;
+uint32_t* g_TypeId_NumberElement = nullptr;
 uint32_t* g_TypeId_TextElement = nullptr;
 uint32_t* g_TypeId_LabelElement = nullptr;
 uint32_t* g_TypeId_NumberEditElement = nullptr;
-uint32_t* g_TypeId_SliderElement = nullptr;
+uint32_t* g_TypeId_SpinnerElement = nullptr;
 uint32_t* g_TypeId_SelectDescription = nullptr;
 fn_Building_GetSellableCount_t fn_Building_GetSellableCount = nullptr;
 fn_StorageTree_Insert_t fn_StorageTree_Insert = nullptr;
@@ -1070,8 +1070,8 @@ bool EngineFuncsInit() {
         fn_IsDerivedFrom = &IsDerivedFrom_NullSafe;
     }
 
-    // Type ID for External resource (dialog resources)
-    g_pExternalTypeId = reinterpret_cast<uint32_t*>(
+    // UI::Dialog type info (?_typeInfo@Dialog@UI@@) — dialog resources
+    g_TypeId_Dialog = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Runtime, 0x1801faa88));
 
     fn_UpdateLoop_LoadResources = reinterpret_cast<fn_UpdateLoop_LoadResources_t>(
@@ -1227,14 +1227,14 @@ bool EngineFuncsInit() {
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401514f8));
         if (exref && *exref) {
-            g_TypeId_UIElementBase = reinterpret_cast<uint32_t*>(*exref);
+            g_TypeId_ButtonElement = reinterpret_cast<uint32_t*>(*exref);
         }
     }
     // Object::Internal type ID: exref at 0x140151660 (used by BuildRequirementUI::Slot4)
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151660));
         if (exref && *exref) {
-            g_TypeId_ObjectInternal = reinterpret_cast<uint32_t*>(*exref);
+            g_TypeId_Element = reinterpret_cast<uint32_t*>(*exref);
         }
     }
     // UI::ImageElement type ID: exref at 0x140151500 (used by EventNotifyDialog::Update and others)
@@ -1618,7 +1618,7 @@ bool EngineFuncsInit() {
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516a8));
         if (exref && *exref) {
-            g_TypeId_ToolbarElement = reinterpret_cast<uint32_t*>(*exref);
+            g_TypeId_CheckElement = reinterpret_cast<uint32_t*>(*exref);
         }
     }
     // ToolbarDialog parent type ID: direct uint32 at DAT_1401c5d38, used in case 5 (CenterOnPoint)
@@ -2130,7 +2130,7 @@ bool EngineFuncsInit() {
     // SpinnerElement type ID — dispatch slot at 0x1401516c8 contains a POINTER to the type ID
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401516c8));
-        if (exref && *exref) g_TypeId_SpinnerElement = reinterpret_cast<uint32_t*>(*exref);
+        if (exref && *exref) g_TypeId_NumberElement = reinterpret_cast<uint32_t*>(*exref);
     }
     // TextElement type ID — exref at 0x140151508
     {
@@ -2150,7 +2150,7 @@ bool EngineFuncsInit() {
     // SliderElement type ID — exref at 0x140151cf0
     {
         void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151cf0));
-        if (exref && *exref) g_TypeId_SliderElement = reinterpret_cast<uint32_t*>(*exref);
+        if (exref && *exref) g_TypeId_SpinnerElement = reinterpret_cast<uint32_t*>(*exref);
     }
     // SelectDescription type ID — DAT_1401c48a8
     g_TypeId_SelectDescription = reinterpret_cast<uint32_t*>(
@@ -2438,8 +2438,8 @@ bool EngineFuncsInit() {
     printf("  ExtFactory::_singleton    = %p -> %p\n", (void*)g_pExternalFactorySingleton,
            g_pExternalFactorySingleton ? *g_pExternalFactorySingleton : nullptr);
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
-    printf("  ExternalTypeId            = %p -> 0x%x\n", (void*)g_pExternalTypeId,
-           g_pExternalTypeId ? *g_pExternalTypeId : 0);
+    printf("  Dialog TypeId             = %p -> 0x%x\n", (void*)g_TypeId_Dialog,
+           g_TypeId_Dialog ? *g_TypeId_Dialog : 0);
     printf("  UpdateLoop::LoadResources = %p\n", (void*)fn_UpdateLoop_LoadResources);
     printf("  ListCleanup               = %p\n", (void*)fn_ListCleanup);
     printf("  Map::Find                 = %p\n", (void*)fn_Map_Find);

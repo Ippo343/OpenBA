@@ -298,7 +298,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         // Row child 2: NumberElement (current count display)
         uint64_t c2Buf[2] = {0, 0};
         ::new (static_cast<void*>(c2Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
-        void* c2Elem = CastElement(*(void**)c2Buf, g_TypeId_SpinnerElement);
+        void* c2Elem = CastElement(*(void**)c2Buf, g_TypeId_NumberElement);
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c2Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x18) = numIBP;
@@ -306,7 +306,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         // Row child 3: NumberElement (another counter)
         uint64_t c3Buf[2] = {0, 0};
         ::new (static_cast<void*>(c3Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(3));  // B.3.6 bridge
-        void* c3Elem = CastElement(*(void**)c3Buf, g_TypeId_SpinnerElement);
+        void* c3Elem = CastElement(*(void**)c3Buf, g_TypeId_NumberElement);
         uint64_t spinIBP = 0;
         new (&spinIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c3Elem));   // B.3.3 bridge
         *(uint64_t*)(profEntry + 0x20) = spinIBP;
@@ -479,7 +479,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         for (int col = 0; col < 5; col++) {
             uint64_t cBuf[2] = {0, 0};
             ::new (static_cast<void*>(cBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(indices[col]));  // B.3.6 bridge
-            void* cElem = CastElement(*(void**)cBuf, g_TypeId_SpinnerElement);
+            void* cElem = CastElement(*(void**)cBuf, g_TypeId_NumberElement);
             uint64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(cElem));   // B.3.3 bridge
             *(uint64_t*)(entry + col * 8) = ibp;
@@ -607,7 +607,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         ::new (static_cast<void*>(cellBuf2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(i));  // B.3.6 bridge
         uint64_t sub1[2] = {0, 0};
         ::new (static_cast<void*>(sub1)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf2)->Child(1));  // B.3.6 bridge
-        void* numElem = CastElement(*(void**)sub1, g_TypeId_SpinnerElement);
+        void* numElem = CastElement(*(void**)sub1, g_TypeId_NumberElement);
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(numElem));   // B.3.3 bridge
 
@@ -2160,7 +2160,7 @@ uint32_t GetTypeId(void*) {
 // All lazily filled from the live runtime type registry (valid after
 // Object::Factory::Startup). Registered names Ghidra-verified this session via the
 // .rdata name-table / RegisterType writers (the engine_funcs labels now match):
-//   exref 0x1401516c8 "g_TypeId_SpinnerElement"      -> UI::NumberElement
+//   exref 0x1401516c8 "g_TypeId_NumberElement"      -> UI::NumberElement
 //   DAT   0x1401c7d98 "g_TypeId_StateMachineComponent_FC" -> StateMachineComponent
 //   DAT   0x1401c4b80 "g_TypeId_TradeComponent_FC"   -> TradeComponent
 //   DAT   0x1401c7318 "g_TypeId_ComponentDescription_FC"      -> ComponentDescription
@@ -2172,7 +2172,7 @@ void EnsureGlobals() {
         { &g_TypeId_TableElement,             "TableElement" },
         { &g_TypeId_LabelElement,             "LabelElement" },
         { &g_TypeId_TextElement,              "TextElement" },
-        { &g_TypeId_SpinnerElement,           "NumberElement" },
+        { &g_TypeId_NumberElement,           "NumberElement" },
         { &g_TypeId_NumberEditElement,        "NumberEditElement" },
         { &g_TypeId_ComboElement,             "ComboElement" },
         { &g_TypeId_HelpButtonElem,           "ButtonElement" },
@@ -2201,7 +2201,7 @@ void EnsureGlobals() {
 // unguarded must be live, or a null-deref faults (no SEH under MinGW).
 bool Ready() {
     if (!(g_TypeId_TabElement && g_TypeId_TableElement && g_TypeId_LabelElement &&
-          g_TypeId_TextElement && g_TypeId_SpinnerElement && g_TypeId_NumberEditElement &&
+          g_TypeId_TextElement && g_TypeId_NumberElement && g_TypeId_NumberEditElement &&
           g_TypeId_ComboElement && g_TypeId_HelpButtonElem && g_TypeId_ImageElement &&
           g_TypeId_StringTable && g_TypeId_CitizenDescription && g_TypeInfo_ValueDescription &&
           g_TypeId_SelectDescription && g_TypeId_ComponentDescription_FC && g_TypeId_StateMachineComponent_FC &&
@@ -2275,7 +2275,7 @@ void DiagPrint(const char* where, void* self) {
     const N tids[] = {
         {"TabElement", g_TypeId_TabElement}, {"TableElement", g_TypeId_TableElement},
         {"LabelElement", g_TypeId_LabelElement}, {"TextElement", g_TypeId_TextElement},
-        {"NumberElement", g_TypeId_SpinnerElement}, {"NumberEditElement", g_TypeId_NumberEditElement},
+        {"NumberElement", g_TypeId_NumberElement}, {"NumberEditElement", g_TypeId_NumberEditElement},
         {"ComboElement", g_TypeId_ComboElement}, {"ButtonElement", g_TypeId_HelpButtonElem},
         {"ImageElement", g_TypeId_ImageElement}, {"StringTable", g_TypeId_StringTable},
         {"CitizenDescription", g_TypeId_CitizenDescription},

@@ -137,14 +137,14 @@ namespace uistub_BuildRequirementUI {
         if (!g_TypeId_ComponentEntity)       { s_entity=::Object::ResolveTypeIdByNameLazy("ComponentEntity");      if(s_entity) g_TypeId_ComponentEntity=&s_entity; }
         if (!g_TypeId_ResourceComponent)     { s_buildDesc=::Object::ResolveTypeIdByNameLazy("BuildDescription");  if(s_buildDesc) g_TypeId_ResourceComponent=&s_buildDesc; }
         if (!g_TypeId_RawMaterialDescription){ s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
-        if (!g_TypeId_ObjectInternal)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_ObjectInternal=&s_internal; }
+        if (!g_TypeId_Element)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_Element=&s_internal; }
     }
     void Slot4(void* self) {
         EnsureTypeIds();
         // The real reimpl unconditionally dereferences these globals; if any failed
         // to resolve, skip rather than fault.
         if (!self || !g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
-            || !g_TypeId_ObjectInternal || !g_TypeId_ToolbarDescription_FC
+            || !g_TypeId_Element || !g_TypeId_ToolbarDescription_FC
             || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
         BuildRequirementUI_Slot4(reinterpret_cast<BuildRequirementUI*>(self));
     }
@@ -181,20 +181,20 @@ namespace uistub_HotKeyToolTipUI {
         if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
         if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
     }
-    // The reimpl unconditionally dereferences g_TypeId_ObjectInternal; in
+    // The reimpl unconditionally dereferences g_TypeId_Element; in
     // standalone it resolves from a raw exe .rdata addr -> null. Lazy-fill it
     // from the live Factory tree (post-Engine::Startup). NB: Object::Internal is
     // registered under the simple name "Internal". Idempotent.
     void EnsureTypeIds() {
         static uint32_t s_internal=0;
-        if (!g_TypeId_ObjectInternal) {
+        if (!g_TypeId_Element) {
             s_internal=::Object::ResolveTypeIdByNameLazy("Internal");
-            if (s_internal) g_TypeId_ObjectInternal=&s_internal;
+            if (s_internal) g_TypeId_Element=&s_internal;
         }
     }
     void Slot4(void* self) {
         EnsureTypeIds();
-        if (!self || !g_TypeId_ObjectInternal) return;
+        if (!self || !g_TypeId_Element) return;
         Game::HotKeyToolTipUI_Slot4(self);
     }
     StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
@@ -940,7 +940,7 @@ namespace uistub_ProductionUI {
     // are already registered+filled, ungated, by reg_action_child_ctors2, and
     // TrackerComponent (0x1401c4b10) by reg_tracker_typeid.cpp. The two ELEMENT ids
     // are resolved privately inside productionui.cpp (ProductionUI_TypeIdsReady) —
-    // deliberately NOT published into g_TypeId_LabelElement / g_TypeId_SpinnerElement,
+    // deliberately NOT published into g_TypeId_LabelElement / g_TypeId_NumberElement,
     // which reg_element_typeids.cpp owns and keeps behind BANISHED_LIVE_ELEMENT_TIDS.
     bool Ready() {
         bool ok = g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity != 0

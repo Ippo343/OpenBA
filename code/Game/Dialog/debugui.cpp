@@ -909,7 +909,7 @@ void DebugUI_Slot7(DebugUI* self) {
         ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(sliderDay)->Child(0));  // B.3.6 bridge
         void* childRaw = *(void**)childBuf;
         // IsDerivedFrom check + IBP wrap (matches original)
-        bool isText = childRaw && fn_IsDerivedFrom(childRaw, *g_TypeId_ObjectInternal);
+        bool isText = childRaw && fn_IsDerivedFrom(childRaw, *g_TypeId_Element);
         void* textChild = isText ? childRaw : nullptr;
         uint8_t textIBP[8];
         new (textIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textChild));   // B.3.3 bridge
@@ -1140,9 +1140,10 @@ static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
     if (!rawElem) printf("[DebugUI::Slot4] FindElemBase('%s') = NULL\n", name);
     else printf("[DebugUI::Slot4] FindElemBase('%s') = %p\n", name, rawElem);
 #endif
-    // Original uses g_TypeId_ObjectInternal (Object::Internal base class),
-    // NOT g_TypeId_UIElementBase which excludes sliders/images/numbers.
-    if (!rawElem || !fn_IsDerivedFrom(rawElem, *g_TypeId_ObjectInternal)) {
+    // Original uses g_TypeId_Element (exe slot 0x140151660 = UI::Element;
+    // the lazy heal below fills it with Object::Internal's id when unfilled),
+    // NOT g_TypeId_ButtonElement which excludes sliders/images/numbers.
+    if (!rawElem || !fn_IsDerivedFrom(rawElem, *g_TypeId_Element)) {
         rawElem = nullptr;
     }
     uint8_t basePtrBuf[8];
@@ -1522,7 +1523,7 @@ void DebugUI_Slot4(DebugUI* self) {
 //   g_TypeId_CitizenDescription(0x1401c7190)    -> "CitizenDescription"
 //   g_TypeId_DiseaseDescription(0x1401c5948)    -> "Disease"
 //   g_TypeId_DrawableType(0x1401c47c8)          -> "PopulationDescription"
-//   g_TypeId_ObjectInternal                     -> "Internal"
+//   g_TypeId_Element                     -> "Internal"
 //   g_TypeId_CitizenComponent_FC(0x1401c7158) -> "CitizenComponent" (name now correct)
 //     (via GetTypeIdByName, matching the proven CitizenUI heal)
 // g_pEngineSingleton (used by Slot8) is null in standalone; Slot8 already opens
@@ -1657,7 +1658,7 @@ void EnsureGlobals() {
         { &g_TypeId_CitizenDescription,     &s_citDesc,   "CitizenDescription"     },
         { &g_TypeId_DiseaseDescription,     &s_disease,   "Disease"                },
         { &g_TypeId_DrawableType,           &s_drawable,  "PopulationDescription"  },
-        { &g_TypeId_ObjectInternal,         &s_internal,  "Internal"               },
+        { &g_TypeId_Element,         &s_internal,  "Internal"               },
     };
     for (const Heal& h : heals) {
         // A non-null global is not necessarily a USABLE one: some of these .rdata
@@ -1685,7 +1686,7 @@ void W_Slot4(void* self) {
     // DiseaseDescription (diseaseCombo populate) and DrawableType (drawCombo
     // populate). Skip the whole setup rather than fault if any failed to
     // resolve; all three reliably resolve post-Engine::Startup.
-    if (!self || !g_TypeId_ObjectInternal || !*g_TypeId_ObjectInternal
+    if (!self || !g_TypeId_Element || !*g_TypeId_Element
         || !g_TypeId_DiseaseDescription || !*g_TypeId_DiseaseDescription
         || !g_TypeId_DrawableType || !*g_TypeId_DrawableType) {
         return;
@@ -1694,14 +1695,14 @@ void W_Slot4(void* self) {
 }
 void W_Slot7(void* self) {
     EnsureGlobals();
-    if (!self || !g_TypeId_ObjectInternal) return;  // FindElemBase / child deref
+    if (!self || !g_TypeId_Element) return;  // FindElemBase / child deref
     DebugUI_Slot7(reinterpret_cast<DebugUI*>(self));
 }
 void W_OnUpdate(void* self, void* /*time*/) {   // +0x40 per-frame
     if (!self) return;
     EnsureGlobals();
     DebugUI_Slot8(reinterpret_cast<DebugUI*>(self));         // perf counters (self-guarded)
-    if (g_TypeId_ObjectInternal)
+    if (g_TypeId_Element)
         DebugUI_Slot7(reinterpret_cast<DebugUI*>(self));     // keep swatches/day live
 }
 void W_Slot9(void* self, void* p2, int msg, int id) {

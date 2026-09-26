@@ -175,7 +175,7 @@ extern "C" void ToolUI_InitChildDialogVtable() {
 //   - fn_UI_CloseDialog, fn_InternalBasePtr_Ctor, fn_IsDerivedFrom,
 //     fn_MemAlloc, fn_DialogInstance_Ctor, fn_UI_AddDialog  — engine_funcs exports
 //   - ::Object::ExternalFactory::FindOrLoad — member call (B.3.3)
-//   - g_pGameWorldSingleton, g_pExternalFactorySingleton, g_pExternalTypeId,
+//   - g_pGameWorldSingleton, g_pExternalFactorySingleton, g_TypeId_Dialog,
 //     g_pMemAllocSingleton  — singleton globals
 //   - DWORD_1401c7f58  — exe type-id storage global (ResolveAddr, lazily)
 //   - g_ToolUI_ChildDialog_Vtable_Standalone (this file) — registered @ 0x14015f5a0
@@ -209,8 +209,8 @@ extern "C" void* ToolUI_OpenToolDialog_ff9e0(void* param_1, void* param_2, uint6
                 reinterpret_cast<::Object::ExternalFactory*>(*g_pExternalFactorySingleton);  // B.3.3 bridge
             obj = const_cast<void*>(static_cast<const void*>(efactory->FindOrLoad(fname)));
         }
-        if (obj && fn_IsDerivedFrom && g_pExternalTypeId &&
-            fn_IsDerivedFrom(obj, *g_pExternalTypeId)) {
+        if (obj && fn_IsDerivedFrom && g_TypeId_Dialog &&
+            fn_IsDerivedFrom(obj, *g_TypeId_Dialog)) {
             resource = obj;
         }
     }

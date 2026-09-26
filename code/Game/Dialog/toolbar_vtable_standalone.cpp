@@ -31,7 +31,7 @@
 //   g_TypeId_ToolbarDescription_FC = "ToolbarDescription" (0x1401c7f58, ctor + UpdateButtons)
 //   g_TypeId_HelpButtonElem            = "ButtonElement"      (exref 0x1401514f8, ctor cast)
 //   g_TypeId_ImageElement              = "ImageElement"       (exref 0x140151500, ctor sprite)
-//   g_TypeId_ToolbarElement            = "CheckElement"       (exref 0x1401516a8, Update)
+//   g_TypeId_CheckElement            = "CheckElement"       (exref 0x1401516a8, Update)
 //   g_TypeId_TextElement               = "TextElement"        (exref 0x140151508, Update SpeedDisplay)
 //
 // Provides the standalone exe vtable + type-ids for the toolbar.
@@ -167,7 +167,7 @@ extern "C" void ToolbarStandalone_Init() {
     if (!g_TypeId_ToolbarDescription_FC) g_TypeId_ToolbarDescription_FC = &s_tid_ToolbarDesc;
     if (!g_TypeId_HelpButtonElem)            g_TypeId_HelpButtonElem = &s_tid_Button;
     if (!g_TypeId_ImageElement)              g_TypeId_ImageElement = &s_tid_Image;
-    if (!g_TypeId_ToolbarElement)            g_TypeId_ToolbarElement = &s_tid_Check;
+    if (!g_TypeId_CheckElement)            g_TypeId_CheckElement = &s_tid_Check;
     if (!g_TypeId_TextElement)               g_TypeId_TextElement = &s_tid_Text;
 
     fprintf(stderr, "[HUD] ToolbarStandalone_Init: vtable=%p [+18 Persist=%p +38 OnUpdate=%p "

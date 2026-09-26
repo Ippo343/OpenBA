@@ -29,14 +29,17 @@
 // ── Names are from the binary, not from our labels ───────────────────────────
 // Every name below was dumped from Application-x64.exe's own .rdata by following
 // slot -> RVA -> C string, then confirmed to be an export of Runtime-x64.dll.
-// Two of our long-standing labels are WRONG and are preserved here only as
-// cross-references, because the globals they name are used all over the tree:
+// Two long-standing labels WERE wrong; the ENDGAME B.3.6 closing pass renamed
+// the globals to the class the slot names (values unchanged):
 //
-//   0x1401516c8  g_TypeId_SpinnerElement  is actually  UI::NumberElement
-//   0x140151cf0  g_TypeId_SliderElement   is actually  UI::SpinnerElement
+//   0x1401516c8  g_TypeId_SpinnerElement -> g_TypeId_NumberElement   (UI::NumberElement)
+//   0x140151cf0  g_TypeId_SliderElement  -> g_TypeId_SpinnerElement  (UI::SpinnerElement)
+//   (and g_TypeId_UIElementBase -> _ButtonElement, _ToolbarElement ->
+//    _CheckElement, _ObjectInternal -> _Element, g_pExternalTypeId -> _Dialog)
 //
 // The real UI::SliderElement slot is 0x1401516d0 and had never been referenced by
-// anything in the tree. Note what that means for tradeui.cpp:56's SLOT_SLIDER_ELEM
+// anything in the tree. Note what that meant for tradeui.cpp's SLOT_SLIDER_ELEM (an
+// unused #define, deleted by the B.3.6 closing pass)
 // and the "SliderElement has NO exported SetMinMax" comment at tradeui.cpp:61 —
 // those were reasoning about the SpinnerElement slot under a Slider name. Nothing
 // here changes their behaviour; they are flagged, not fixed.
@@ -89,14 +92,14 @@ const ElementTypeSlot kElementTypeSlots[] = {
     {0x140151510, "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A",        "TableElement"},
     {0x140151668, "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A",        "LabelElement"},
     {0x140151690, "?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A",        "HelpComboElem/ComboElement"},
-    {0x1401516a8, "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A",        "ToolbarElement/CheckElement"},
-    {0x1401516c8, "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A",       "SpinnerElement(=NumberElement)"},
+    {0x1401516a8, "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A",        "CheckElement/CheckboxElement"},
+    {0x1401516c8, "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A",       "NumberElement"},
     {0x1401516d0, "?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A",       "SliderElement (the REAL one)"},
     {0x1401517e8, "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A",       "HelpFirstElem/ScrollElement"},
     {0x1401517f0, "?_typeInfo@DocumentTextElement@UI@@0VBaseTypeInfo@Object@@A", "HelpDocTextElem"},
     {0x1401517f8, "?_typeInfo@ContainerElement@UI@@0VBaseTypeInfo@Object@@A",    "HelpContainerElem"},
     {0x140151cb0, "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A",   "NumberEditElement"},
-    {0x140151cf0, "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A",      "SliderElement(=SpinnerElement)"},
+    {0x140151cf0, "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A",      "SpinnerElement"},
     // Remainder of the UI element table. No current reader needs these, but the
     // whole point of this file is that a partial table costs one crash per missing
     // entry, and the derivation below is mechanical, so completing it is free.

@@ -77,8 +77,8 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
                     ->FindOrLoad(filename));
             // Accept the loaded resource if it is External-derived — the same guard the
             // exe applies (IsDerivedFrom(External)) before using it as the popup's
-            // external context. g_pExternalTypeId is filled by EnsureGlobals each tick.
-            if (found && (!g_pExternalTypeId || fn_IsDerivedFrom(found, *g_pExternalTypeId)))
+            // external context. g_TypeId_Dialog is filled by EnsureGlobals each tick.
+            if (found && (!g_TypeId_Dialog || fn_IsDerivedFrom(found, *g_TypeId_Dialog)))
                 s_popupRes = found;
         }
     }
@@ -921,15 +921,15 @@ namespace eventnotify_sa {
 void* GetVtable();  // fwd
 
 // Slot7 dereferences g_pNotifyTimerDuration (raw exe .rdata -> NULL in standalone)
-// and, on the popup path, g_pExternalTypeId. Lazy-fill both so the ribbon tick
+// and, on the popup path, g_TypeId_Dialog. Lazy-fill both so the ribbon tick
 // can't null-deref. The timer duration is a byte-faithful 30.0s (exe DAT_1401721cc).
 void EnsureGlobals() {
     static float s_notifyTimer = 30.0f;
     if (!g_pNotifyTimerDuration) g_pNotifyTimerDuration = &s_notifyTimer;
     static uint32_t s_ext = 0;
-    if (!g_pExternalTypeId) {
+    if (!g_TypeId_Dialog) {
         s_ext = ::Object::ResolveTypeIdByNameLazy("External");
-        if (s_ext) g_pExternalTypeId = &s_ext;
+        if (s_ext) g_TypeId_Dialog = &s_ext;
     }
     static uint32_t s_img = 0;
     if (!g_TypeId_ImageElement) {

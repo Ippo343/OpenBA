@@ -1506,7 +1506,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
                 if (!elem) continue;
 
                 // IsDerivedFrom check, then cast
-                bool isDerived = fn_IsDerivedFrom(elem, *g_TypeId_ToolbarElement);
+                bool isDerived = fn_IsDerivedFrom(elem, *g_TypeId_CheckElement);
                 void* typedElem = isDerived ? elem : nullptr;
 
                 // InternalBasePtr::Ctor to create a local ref
@@ -1636,7 +1636,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         // CheckPtr resolves lazy/weak InternalBasePtr before dereference
         // IsDerivedFrom check on the element
         void* elemObj = *(void**)element;
-        bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_ToolbarElement);
+        bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_CheckElement);
         void* typedElem = isDerived ? elemObj : nullptr;
 
         int64_t localElemRef;
@@ -1849,7 +1849,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         void* elemObj = *(void**)element;
         void* castResult = nullptr;
         // FUN_140010e70: IsDerivedFrom check + cast
-        bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_ToolbarElement);
+        bool isDerived = fn_IsDerivedFrom(elemObj, *g_TypeId_CheckElement);
         if (isDerived) castResult = elemObj;
 
         int64_t localElemRef;
