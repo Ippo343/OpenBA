@@ -44,6 +44,8 @@
 #include "Player/edittool_funcs.h"
 #include "options.h"
 #include "ui/UserInterface.h"
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -76,7 +78,7 @@ void PanelHoldClick(int frameNum) {
             }
         }
     }
-    if (s_every < 0 || !s_heldDialog || !fn_DialogInstance_GetController) return;
+    if (s_every < 0 || !s_heldDialog) return;
     if (frameNum < s_heldAtFrame + s_every || ((frameNum - s_heldAtFrame) % s_every) != 0) return;
     const uint32_t tid = ::Object::GetTypeIdByName(s_ctrl);
     // Find the controller the way the tutorial's FindUIElementByPath does: walk the UI
@@ -114,7 +116,8 @@ void PanelHoldClick(int frameNum) {
             std::fflush(stderr);
         }
         uint64_t ctrlIBP = 0;
-        fn_DialogInstance_GetController(dlgInst, &ctrlIBP, tid);
+        ::new (&ctrlIBP) Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(dlgInst)->GetController(tid));  // B.3.6 bridge
         ctrl = reinterpret_cast<void*>(ctrlIBP);
     }
     s_listed = true;

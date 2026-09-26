@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // code/Game/Dialog/mod_dialog_vtables.cpp -- BANISHED_PAUSEMENU_CLICKS targets
 extern "C" void* ModDialog_LastOpened();
@@ -85,16 +86,6 @@ void Init() {
 // a hundred frames after the menu opened), but the engine's own answer cannot be
 // fooled -- GameUpdateLoop::Update reads exactly this to decide whether to tick
 // the world.
-typedef bool (*PausesGame_t)(void* ui);
-PausesGame_t PausesGame() {
-    static PausesGame_t fn = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        fn = reinterpret_cast<PausesGame_t>(ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
-    }
-    return fn;
-}
 
 // Where `dlg` sits in UserInterface's dialog array (data +0x28, count +0x30) --
 // the array ToolbarUtility_HarnessDriveController walks. Diagnostic only; the
@@ -113,7 +104,7 @@ int DialogListIndex(void* ui, void* dlg, int* outCount) {
     return -1;
 }
 
-int Paused(void* ui) { PausesGame_t pg = PausesGame(); return pg ? (int)pg(ui) : -1; }
+int Paused(void* ui) { return (int)reinterpret_cast<UI::UserInterface*>(ui)->PausesGame(); }  // B.3.6 bridge
 
 }  // namespace
 

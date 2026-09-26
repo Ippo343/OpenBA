@@ -55,6 +55,9 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "system/Filename.h"   // -Iruntime/types
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
+#include "ui/Sprite.h"          // ENDGAME B.3.6 UI callers (K4)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 #include <cstring>
 
 namespace {
@@ -185,11 +188,6 @@ static void EnsureUISoundsLoaded() {
 extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) return;
-    if (!fn_Sprite_Ctor) {
-        printf("[SpriteSheetLoad] WARN: missing engine fns, skipping\n");
-        return;
-    }
-
     void* keyMap = *g_pKeyMapSingleton;
     void* factory = *g_pExternalFactorySingleton;
     ::Object::ExternalFactory* efactory =
@@ -215,9 +213,9 @@ extern "C" void StandaloneEnsureSpriteSheetLoaded() {
     auto buildSprite = [&](uintptr_t kmOffset, const char* name) {
         uint8_t spriteBuf[16] = {};
         const System::String nameStr(name);
-        fn_Sprite_Ctor(spriteBuf,
-                       reinterpret_cast<uint64_t>(spriteSheet),
-                       &nameStr);
+        ::new (spriteBuf) UI::Sprite(
+            Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
+            nameStr);
         *reinterpret_cast<uint64_t*>(kmBase + kmOffset)       =
             *reinterpret_cast<uint64_t*>(&spriteBuf[0]);
         *reinterpret_cast<uint64_t*>(kmBase + kmOffset + 8)   =
@@ -343,19 +341,16 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     void* arrowCursor = keyMap
         ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(keyMap) + 0x28)
         : nullptr;
-    if (fn_UI_SetCursor && arrowCursor) {
-        fn_UI_SetCursor(ui, reinterpret_cast<uint64_t>(arrowCursor));
+    if (arrowCursor) {
+        reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
+            Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(arrowCursor)));
         printf("[MenuDLT::Startup] UI::SetCursor(ui=%p, arrow=%p)\n", ui, arrowCursor);
     } else {
         printf("[MenuDLT::Startup] WARN: skipping SetCursor (fn=%p arrow=%p)\n",
                (void*)fn_UI_SetCursor, arrowCursor);
     }
-    if (fn_UI_EnableCursor) {
-        fn_UI_EnableCursor(ui, true);
-        printf("[MenuDLT::Startup] UI::EnableCursor(true) called on ui=%p\n", ui);
-    } else {
-        printf("[MenuDLT::Startup] WARN: fn_UI_EnableCursor is NULL\n");
-    }
+    reinterpret_cast<UI::UserInterface*>(ui)->EnableCursor(true);  // B.3.6 bridge
+    printf("[MenuDLT::Startup] UI::EnableCursor(true) called on ui=%p\n", ui);
 
     // Trigger Startup-reveal fade — instant black -> animated reveal over ~0.25s.
     // Without this, the splash->menu transition hard-cuts. The original calls
@@ -619,8 +614,8 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
         MenuDialogLoopT_DrawScene_PhaseA(self, alpha, context);
     }
 
-    if (fn_UI_Draw && context) {
-        fn_UI_Draw(ui, context);
+    if (context) {
+        reinterpret_cast<UI::UserInterface*>(ui)->Draw(*reinterpret_cast<Video::Context*>(context));  // B.3.6 bridge
     } else if (trace) {
         printf("[MenuDLT::Draw] WARN: skipping UI::Draw (fn_UI_Draw=%p ctx=%p)\n",
                (void*)fn_UI_Draw, context);

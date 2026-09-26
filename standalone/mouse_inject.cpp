@@ -582,7 +582,6 @@ bool FindTarget(UI::UserInterface* ui, Target* out, bool dump) {
 // verifies is the ported bodies on that arm, not that gameplay reaches it.
 //
 // Off by default: unset (or `0`, or empty) writes nothing and prints nothing.
-using SetTipStringFn   = void  (*)(void* elem, const System::String* str);
 
 // Applied ONCE per (element) so a 20-frame hold does not re-release and
 // re-acquire the same string 20 times — SetToolTipString's release arm is real
@@ -593,20 +592,8 @@ void ApplyToolTipString(UI::Element* elem) {
     static UI::Element* applied = nullptr;
     if (applied == elem) return;
 
-    // ENDGAME B.3.1 step 2: the String ctor and dtor are System::String's own,
-    // so only UI::Element::SetToolTipString is still a resolve.
-    static SetTipStringFn   setFn  = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried  = true;
-        setFn  = reinterpret_cast<SetTipStringFn>(ResolveExport(
-            "?SetToolTipString@Element@UI@@QEAAXAEBVString@System@@@Z"));
-    }
-    if (!setFn) {
-        fprintf(stderr, "[MouseInject/tipstr] set=%p -- did not resolve, "
-                        "+0x58 left alone\n", (void*)setFn);
-        return;
-    }
+    // ENDGAME B.3.1 step 2: the String ctor and dtor are System::String's own;
+    // B.3.6: UI::Element::SetToolTipString is a member call on the real class.
 
     void* const before = elem->_toolTipString;
     {
@@ -616,7 +603,7 @@ void ApplyToolTipString(UI::Element* elem) {
                             "+0x58 left alone\n");
             return;
         }
-        setFn(elem, &str);
+        elem->SetToolTipString(str);   // B.3.6: `elem` IS a UI::Element*
         // Our local reference is released here; the element now holds the only
         // one — `str`'s destructor, at the end of this scope.
     }
@@ -641,22 +628,7 @@ void ApplyToolTipString(UI::Element* elem) {
 // the tree had ever called BeginDragDrop; it is an ordinary export and this is
 // the public API a dragging element uses, so the drag we start is a REAL one —
 // we are not writing +0x60 by hand.
-using BeginDragDropFn = void (*)(void* ui, void** dlgPtr, void** elemPtr,
-                                 int32_t x, int32_t y, uint32_t id, void* data);
-
 void StartDrag(UI::UserInterface* ui, const Target& t) {
-    static BeginDragDropFn fn = nullptr;
-    static bool tried = false;
-    if (!tried) {
-        tried = true;
-        fn = reinterpret_cast<BeginDragDropFn>(ResolveExport(
-            "?BeginDragDrop@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@"
-            "V?$InternalPtr@VElement@UI@@@4@HHIPEAX@Z"));
-    }
-    if (!fn) {
-        fprintf(stderr, "[MouseInject] BeginDragDrop did not resolve -- no drag\n");
-        return;
-    }
     // Both InternalPtr<> parameters go by hidden reference, the same way
     // element_vtable.cpp:747 and userinterface_hover.cpp pass them.
     //
@@ -681,7 +653,9 @@ void StartDrag(UI::UserInterface* ui, const Target& t) {
     void* elemLocal = t.elem;
 
     int32_t dragX = t.cx, dragY = t.cy;
-    fn(ui, &dlgLocal, &elemLocal, dragX, dragY, 0x4D4F5553u /*'MOUS'*/, nullptr);
+    ui->BeginDragDrop(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgLocal),  // B.3.6 bridge
+                      reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemLocal),
+                      dragX, dragY, 0x4D4F5553u /*'MOUS'*/, nullptr);
     ++g_s.dragStarted;
     printf("[MouseInject] BeginDragDrop(dlg=%p, x=%d, y=%d) -> _dragDropDialog=%p\n",
            (void*)t.dlg, (int)t.cx, (int)t.cy, ui->_dragDropDialog);

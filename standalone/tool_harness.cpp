@@ -26,6 +26,8 @@
 #include <cstdlib>
 #include <cstring>
 #include <cstdint>
+#include <new>
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // Standalone factory from code/Game/Player/removaltool.cpp (extern "C").
 // Returns a freshly MemAlloc'd RemovalTool (0x40 bytes) with its standalone
@@ -1099,11 +1101,12 @@ void FireMarkRemoval() {
 // SA_DialogEntityAlive is the correct, sufficient fix. The Tick never derefs rawDS
 // past +0x28, so the observation itself stays crash-free.
 void* GetControllerByName(void* dialog, const char* name) {
-    if (!dialog || !fn_DialogInstance_GetController) return nullptr;
+    if (!dialog) return nullptr;
     uint32_t tid = ::Object::GetTypeIdByName(name);
     if (tid == 0 || tid == 0xFFFFFFFFu) return nullptr;
     uintptr_t buf[2] = {};
-    fn_DialogInstance_GetController(dialog, buf, tid);
+    ::new (buf) Object::InternalPtr<UI::DialogController>(
+        reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(tid));  // B.3.6 bridge
     void* ctrl = reinterpret_cast<void*>(buf[0]);
     return ctrl;
 }
