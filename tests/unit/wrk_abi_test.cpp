@@ -30,6 +30,7 @@
 #include "Work/ConsumeProduce.h"
 #include "Work/FireWork.h"
 #include "Work/FishingWork.h"
+#include "Work/ForesterWork.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -192,6 +193,13 @@ UNIT_TEST(wrk_leaf_fishingwork) {
     CHECK_EQ(offsetof(FishingWork, spotCount), (size_t)0x60);
     CHECK_EQ(offsetof(FishingWork, spotCapacity), (size_t)0x64);
     CHECK_EQ(offsetof(FishingWork, retryCount), (size_t)0x68);
+}
+
+UNIT_TEST(wrk_leaf_foresterwork) {
+    WRK_LEAF_SHAPE(ForesterWork, AutoPickupWork, 0x60);
+    CHECK_EQ(offsetof(ForesterWork, _field48), (size_t)0x48);
+    CHECK_EQ(offsetof(ForesterWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(ForesterWork, _field58), (size_t)0x58);
 }
 
 // ===========================================================================
