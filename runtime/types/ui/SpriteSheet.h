@@ -1,5 +1,5 @@
 #pragma once
-// UI::SpriteSheet -- binary-compatible struct definition.
+// UI::SpriteSheet -- a real class (ENDGAME B.3.6 block D) and UI::SpriteInfo.
 // Runtime-x64.dll class, 0x58 bytes.
 //
 // Inheritance: Object::Base -> Object::External -> UI::SpriteSheet
@@ -40,6 +40,13 @@
 
 #include <cstdint>
 #include <cstddef>
+
+#include "../object/External.h"
+
+namespace System   { class Filename; class String; }
+namespace Graphics { class MaterialInstance; }
+
+namespace UI {
 
 // ============================================================
 // UI::SpriteSheet::SpriteInfo (0x38 bytes per entry)
@@ -134,89 +141,114 @@ static_assert(offsetof(SpriteInfo, v0) == 0x28, "v0 at +0x28");
 static_assert(offsetof(SpriteInfo, u1) == 0x2C, "u1 at +0x2C");
 static_assert(offsetof(SpriteInfo, v1) == 0x30, "v1 at +0x30");
 
-// ============================================================
-// UI::SpriteSheet (0x58 bytes)
-// ============================================================
+// ============================================================================
+// UI::SpriteSheet — 0x58 bytes, NINE slots, `Object::External`.
+// ============================================================================
+// ENDGAME B.3.6 block D: the real class under retail's name (RULE B6-4.2 — the
+// bare `struct SpriteSheet` this header carried folds in; `::SpriteSheet` and
+// `::SpriteInfo` stay as global transition aliases below).
 //
-// GetSpriteIndexFromName algorithm (0x1800031f0), identical in shape to
-// StringTable::GetIndexFromName (see StringTable.h) except for the 0x38 vs
-// 0x10 entry stride:
-//   Linear scan: for i = 0..m_spriteCount-1:
-//     entry = m_sprites[i]  (stride 0x38, name at entry+0x00)
-//     Compare lengths first (length at charPtr[-8], RtSystem::StringLength)
-//     If lengths equal, compare chars byte-by-byte (case-sensitive)
-//     If match, return i
-//   Return -1 on not found
+// `??_7SpriteSheet@UI@@6B@` @ 0x180154590 (B36_SLOTS.md section 1):
+//   [0] +0x00 0x1800037b0  (unexported) vector deleting dtor — RT_DELDTOR row
+//                          (~SpriteSheet 0x18011d670, sizeof 0x58)
+//   [1] +0x08 0x180002e50  ?TypeName@SpriteSheet@UI@@UEBAPEBDXZ
+//   [2] +0x10 0x180002e30  ?Type@SpriteSheet@UI@@UEBAIXZ
+//   [3] +0x18 0x18011d710  ?GetFileVersion@SpriteSheet@UI@@UEBAHXZ  (MOV EAX,6)
+//   [4] +0x20 0x18011d720  ?Compile@SpriteSheet@UI@@…  — OVERRIDDEN (RULE B6-1.5)
+//   [5] +0x28 0x18011d730  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z
+//   [6] +0x30 0x180003080  ?Reconstruct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ
+//   [7] +0x38 0x180003180  ?Destruct@SpriteSheet@UI@@UEAAXXZ
+//   [8] +0x40 0x180003100  ?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ — B6-1.1
 //
-// GetSpriteNameFromIndex (0x1800032d0, NOT in Wave 7 lane F's scope):
-//   Returns m_sprites[index].name as System::String (with refcount bump)
-//   No bounds checking observed
+// ABSTRACT (slot 0 `= 0`, the RT_DELDTOR row stays), NO REAL CONSTRUCTOR: the
+// exe's `thumb_vtables.cpp` constructs bare SpriteSheets through the
+// `??0SpriteSheet@UI@@QEAA@XZ` DOOR and copies slots 1..8 off the minted
+// table (B6-3, B36_RULES 3.3), and `saveload_draw.cpp` stamps the minted table
+// by hand. The protected `= default` ctor exists for the unit test's probe.
 //
-// Object::External's own three fields (vtable, filename, +0x10, +0x18) are
-// NOT re-derived this wave; they are carried over from the pre-existing
-// header, which cites SpriteSheet's ctor for them and that citation still
-// holds (the ctor zeroes +0x08/+0x10/+0x18 before stamping SpriteSheet's own
-// vtable, exactly as this file's ctor evidence below shows).
-struct SpriteSheet {
-    // --- Object::External base (0x08 bytes visible) ---
-    void*       vtable;             // +0x00  ??_7SpriteSheet@UI@@6B@ (0x180154590, EXPORTED)
-    char*       m_filename;         // +0x08  System::Filename data ptr (sheet resource path)
+// THE FIELD NAMES ARE THE ONES THE TREE ALREADY SPELLS, and they stay public:
+// ~16 unconverted runtime/src/ui TUs and saveload_draw.cpp read them through
+// the `::SpriteSheet` alias. Three are now NAMED BY EVIDENCE in comments only
+// (renaming would touch other blocks' files): +0x30 is the sheet's
+// `ExternalPtr<Graphics::MaterialInstance>` (Serialize hands it to that
+// instantiation's Serialize, 0x180014520; `GetMaterialInstance` 0x180003320 /
+// `SetMaterial` 0x1800034a0 are its accessors), and +0x48/+0x4C/+0x50 are
+// `Set`'s two ints and its bool (sprite.cpp, 0x1800034f0).
+class SpriteSheet : public Object::External {
+public:
+    using SpriteInfo = ::UI::SpriteInfo;
 
-    // --- External/Container fields ---
-    void*       m_field10;          // +0x10  container/resource ptr (zeroed, then copied via FUN_180006890)
-    void*       m_field18;          // +0x18  container/resource ptr (part of +0x10 pair)
+    // [0] 0x1800037b0 — pure on purpose; the deleting-dtor row is not retired.
+    Object::Base* DeletingDtor(unsigned flags) override = 0;
 
-    // --- SpriteSheet-specific fields ---
+    const char* TypeName() const override;              // [1] 0x180002e50
+    uint32_t    Type() const override;                  // [2] 0x180002e30
+    int32_t     GetFileVersion() const override;        // [3] 0x18011d710
+    CompileResult Compile(const System::Filename& path) override;  // [4] 0x18011d720 — OVERRIDE
+    bool        Serialize(void* stream) override;       // [5] 0x18011d730
+    Object::External* Reconstruct() override;           // [6] 0x180003080
+    void        Destruct() override;                    // [7] 0x180003180
+    virtual Object::External* Construct();              // [8] 0x180003100 — B6-1.1
+
+    // ---- ported non-virtual members (runtime/src/ui/sprite.cpp) ------------
+    int32_t GetSpriteCount() const;                                   // 0x180003190
+    int32_t GetSpriteIndexFromName(const System::String& name) const; // 0x1800031f0
+    // RETSLOT in retail; a plain by-value return here (not a vtable slot).
+    System::String GetSpriteNameFromIndex(int32_t index) const;       // 0x1800032d0
+    void GetUVs(int32_t index, float& u0, float& v0, float& u1, float& v1) const;  // 0x180003330
+    void AddSpriteInfo(const System::String& name, const System::String& group,
+                       int32_t x, int32_t y, int32_t width, int32_t height); // 0x180003390
+    void SetSpriteInfo(int32_t index, int32_t width, int32_t height,
+                       float u0, float v0, float u1, float v1);        // 0x180003460
+    void Set(int32_t p1, int32_t p2, const System::String& p3,
+             const System::String& p4, bool p5);                       // 0x1800034f0
+    static uint32_t TypeId();                                          // 0x180002e40
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    int32_t Width(int32_t index) const;                     // 0x1800031a0
+    int32_t Height(int32_t index) const;                    // 0x1800031c0
+    bool    IsValid(int32_t index) const;                   // 0x1800031e0
+    // RETSLOT in retail; by value here.
+    Object::ExternalPtr<Graphics::MaterialInstance> GetMaterialInstance() const;  // 0x180003320
+    void    SetMaterial(Object::ExternalPtr<Graphics::MaterialInstance> material); // 0x1800034a0
+    SpriteSheet(const SpriteSheet& src);                    // 0x1800035d0
+    SpriteSheet& operator=(const SpriteSheet& src);         // 0x1800036b0
+    // The reflection statics keep their DOORS (B36_RULES section 7):
+    // `??2`/`??3` in spritesheet_new.cpp, the two factories in
+    // ui_factory_wave28.cpp (the fragment pass's).
+    static void* operator new(std::size_t bytes);              // 0x180002e60  (door)
+    static void* operator new(std::size_t bytes, void* place); // 0x180002ed0
+    static void  operator delete(void* p);                     // 0x180002ee0  (door)
+    static Object::Base* CreateNewObject();                    // 0x180002f40  (door)
+    static Object::Base* CreateInPlaceObject(void* place);     // 0x180003000  (door)
+
+protected:
+    // NOT retail's `??0SpriteSheet@UI@@QEAA@XZ` (0x18011d600, the door in
+    // sprite.cpp) — see the banner.
+    SpriteSheet() = default;
+    // `??1SpriteSheet@UI@@UEAA@XZ` 0x18011d670. NON-VIRTUAL, DEFINED EMPTY: the
+    // registered dtor door (spritesheet_new.cpp) does retail's release.
+    ~SpriteSheet();
+
+public:
+    // ---- the 0x38 bytes SpriteSheet adds after Object::External ------------
     SpriteInfo* m_sprites;          // +0x20  Collection::Array<SpriteInfo>._data
-    int32_t     m_spriteCount;      // +0x28  Collection::Array<SpriteInfo>._size
+    int32_t     m_spriteCount;      // +0x28  Collection::Array<SpriteInfo>._size  (GetSpriteCount)
     int32_t     m_spriteCapacity;   // +0x2C  Collection::Array<SpriteInfo>._capacity
-
-    uint64_t    m_field30;          // +0x30  Object::ExternalPtr<Graphics::MaterialInstance>
-                                    //        IDENTIFIED Wave 10B lane SS: Serialize
-                                    //        (0x18011d730) hands &this+0x30 to
-                                    //        `CALL 0x180014520`, which is one of the
-                                    //        twenty-five ExternalPtr<T>::Serialize
-                                    //        instantiations lane EXTPTR measured and
-                                    //        tabulated — WAVE10_LANE_EXTPTR.md:79 names
-                                    //        that copy's type id as
-                                    //        Graphics::MaterialInstance. So this is the
-                                    //        sheet's material handle, not an anonymous
-                                    //        qword. Left as uint64_t rather than renamed:
-                                    //        nothing in the tree reads it yet, and a
-                                    //        rename would be a change with no evidence
-                                    //        behind its NAME beyond the type id.
-
-    char*       m_textureName;      // +0x38  System::String data ptr (refcounted, texture name?)
-    char*       m_groupName;        // +0x40  System::String data ptr (refcounted, group/atlas name?)
-
-    int32_t     m_field48;          // +0x48  unknown int
-    int32_t     m_field4C;          // +0x4C  unknown int
-
-    uint8_t     m_field50;          // +0x50  unknown byte (single byte copy in copy ctor)
-    uint8_t     _pad51[7];          // +0x51  padding to 8-byte alignment (0x58 total).
-                                    //        CONFIRMED never written by the ctor (Wave 7
-                                    //        integration, 2026-09-07) -- its disassembly ends
-                                    //        `MOV byte ptr [RCX+0x50],DL` / `RET`, retail
-                                    //        0x18011d65d. See kSpriteSheetWrittenBytes below.
+    uint64_t    m_field30;          // +0x30  ExternalPtr<Graphics::MaterialInstance> (banner)
+    char*       m_textureName;      // +0x38  System::String data ptr — Set's p3
+    char*       m_groupName;        // +0x40  System::String data ptr — Set's p4
+    int32_t     m_field48;          // +0x48  Set's p1
+    int32_t     m_field4C;          // +0x4C  Set's p2
+    uint8_t     m_field50;          // +0x50  Set's p5 (bool)
+    uint8_t     _pad51[7];          // +0x51  NEVER WRITTEN by the ctor (its last
+                                    //        store is `MOV byte ptr [RCX+0x50],DL`,
+                                    //        0x18011d65d) — kSpriteSheetWrittenBytes
 };
 
-// Bytes a diff oracle may compare between two freshly-constructed SpriteSheet
-// objects. The ctor writes through and including +0x50 (0x51 bytes total) and
-// never touches +0x51..+0x57 -- comparing the full 0x58-byte sizeof() reports
-// a divergence on whatever the allocator happened to leave there, which is
-// unrelated between a real object and a diff oracle's scratch buffer. Same
-// class of mistake as kSpriteInfoWrittenBytes above; caught the same way
-// (Wave 7 integration run, 100% divergence on UI::SpriteSheet::SpriteSheet()
-// until this constant was introduced -- theirs was uniformly 0xCD poison at
-// +0x51, proving retail's ctor never writes there, while ours held real
-// uninitialized heap bytes).
-inline constexpr size_t kSpriteSheetWrittenBytes = 0x51;
-
-static_assert(sizeof(SpriteSheet) == 0x58, "SpriteSheet must be 0x58 bytes");
-static_assert(offsetof(SpriteSheet, vtable) == 0x00, "vtable at +0x00");
-static_assert(offsetof(SpriteSheet, m_filename) == 0x08, "m_filename at +0x08");
-static_assert(offsetof(SpriteSheet, m_field10) == 0x10, "m_field10 at +0x10");
-static_assert(offsetof(SpriteSheet, m_field18) == 0x18, "m_field18 at +0x18");
+static_assert(sizeof(SpriteSheet) == 0x58,
+              "UI::SpriteSheet is 0x58 bytes (MOV EDX,0x58 in slot 0, 0x1800037b0)");
+static_assert(alignof(SpriteSheet) == 8, "UI::SpriteSheet aligns to 8 (the vptr)");
 static_assert(offsetof(SpriteSheet, m_sprites) == 0x20, "m_sprites at +0x20");
 static_assert(offsetof(SpriteSheet, m_spriteCount) == 0x28, "m_spriteCount at +0x28");
 static_assert(offsetof(SpriteSheet, m_spriteCapacity) == 0x2C, "m_spriteCapacity at +0x2C");
@@ -226,3 +258,19 @@ static_assert(offsetof(SpriteSheet, m_groupName) == 0x40, "m_groupName at +0x40"
 static_assert(offsetof(SpriteSheet, m_field48) == 0x48, "m_field48 at +0x48");
 static_assert(offsetof(SpriteSheet, m_field4C) == 0x4C, "m_field4C at +0x4C");
 static_assert(offsetof(SpriteSheet, m_field50) == 0x50, "m_field50 at +0x50");
+static_assert(offsetof(SpriteSheet, m_sprites) == sizeof(Object::External),
+              "SpriteSheet's own bytes begin right after Object::External");
+
+}  // namespace UI
+
+// Bytes a diff oracle may compare between two freshly-constructed SpriteSheet
+// objects. The ctor writes through and including +0x50 (0x51 bytes total) and
+// never touches +0x51..+0x57 -- comparing the full 0x58-byte sizeof() reports
+// a divergence on whatever the allocator happened to leave there, which is
+// unrelated between a real object and a diff oracle's scratch buffer.
+inline constexpr size_t kSpriteSheetWrittenBytes = 0x51;
+
+// RULE B6-4.2 transition aliases: the bare names ~16 runtime/src/ui TUs,
+// saveload_draw.cpp and runtime/types/common.h spell.
+using SpriteSheet = UI::SpriteSheet;
+using SpriteInfo  = UI::SpriteInfo;

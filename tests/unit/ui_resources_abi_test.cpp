@@ -33,6 +33,7 @@
 #include "runtime/types/ui/CharacterSet.h"
 #include "runtime/types/ui/Cursor.h"
 #include "runtime/types/ui/StringTable.h"
+#include "runtime/types/ui/SpriteSheet.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -232,6 +233,55 @@ UNIT_TEST(ui_stringtable_slot_order_is_retails) {
     CheckCompileInherited(raw);
 }
 
+// Slot 4 is the class's OWN body on Font and SpriteSheet (RULE B6-1.5): a
+// different pointer from Object::External's, that runs the class's marker and
+// answers retail's 1. `?AW4CompileResult` is a 4-byte enum, returned in EAX
+// with no hidden slot, so the raw call is safe.
+void CheckCompileOverridden(void* raw) {
+    BareExternalProbe bare;
+    CHECK(VTableOf(raw)[kCompile / 8] != VTableOf(static_cast<void*>(&bare))[kCompile / 8]);
+    using CompileFn = uint32_t (*)(void*, const void*);
+    Reset();
+    const uint32_t r = SlotAt<CompileFn>(raw, kCompile)(raw, nullptr);
+    CHECK_EQ(g_lastMark, kCompile / 8);
+    CHECK_EQ(r, 1u);
+}
+
+// ---------------------------------------------------------------------------
+// UI::SpriteSheet
+// ---------------------------------------------------------------------------
+struct SpriteSheetProbe final : UI::SpriteSheet {
+    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+};
+
+UNIT_TEST(ui_spritesheet_layout) {
+    CHECK_EQ((int)sizeof(UI::SpriteSheet), 0x58);
+    CHECK_EQ((int)alignof(UI::SpriteSheet), 8);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_sprites),     0x20);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_spriteCount), 0x28);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_field30),     0x30);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_textureName), 0x38);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_groupName),   0x40);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_field48),     0x48);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_field50),     0x50);
+    CHECK_EQ((int)offsetof(UI::SpriteSheet, m_sprites), (int)sizeof(Object::External));
+    CHECK_EQ((int)sizeof(UI::SpriteInfo), 0x38);
+    CHECK_EQ((int)offsetof(UI::SpriteInfo, width), 0x1c);
+    CHECK_EQ((int)offsetof(UI::SpriteInfo, u0), 0x24);
+    CHECK((std::is_base_of<Object::External, UI::SpriteSheet>::value));
+    CHECK(std::is_abstract<UI::SpriteSheet>::value);
+    CHECK((std::is_same<::SpriteSheet, UI::SpriteSheet>::value));
+    CHECK((std::is_same<::SpriteInfo, UI::SpriteInfo>::value));
+    CHECK((std::is_same<UI::SpriteSheet::SpriteInfo, UI::SpriteInfo>::value));
+}
+
+UNIT_TEST(ui_spritesheet_slot_order_is_retails) {
+    SpriteSheetProbe probe;
+    void* raw = static_cast<void*>(&probe);
+    CheckNineSlots(raw);
+    CheckCompileOverridden(raw);
+}
+
 }  // namespace
 
 // ############################################################################
@@ -265,5 +315,18 @@ Object::External* StringTable::Reconstruct() { Note(this, kReconstruct / 8); ret
 void        StringTable::Destruct() { Note(this, kDestruct / 8); }
 Object::External* StringTable::Construct() { Note(this, kConstruct / 8); return this; }
 StringTable::~StringTable() {}
+
+const char* SpriteSheet::TypeName() const { Note(this, kTypeName / 8); return "SpriteSheet"; }
+uint32_t    SpriteSheet::Type() const { Note(this, kType / 8); return 0u; }
+int32_t     SpriteSheet::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 6; }
+// The OVERRIDE of slot 4; answers retail's 1 (0x18011d720).
+Object::External::CompileResult SpriteSheet::Compile(const System::Filename&) {
+    Note(this, kCompile / 8); return 1u;
+}
+bool        SpriteSheet::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+Object::External* SpriteSheet::Reconstruct() { Note(this, kReconstruct / 8); return this; }
+void        SpriteSheet::Destruct() { Note(this, kDestruct / 8); }
+Object::External* SpriteSheet::Construct() { Note(this, kConstruct / 8); return this; }
+SpriteSheet::~SpriteSheet() {}
 
 }  // namespace UI

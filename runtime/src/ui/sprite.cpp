@@ -139,9 +139,7 @@ namespace UI {
 Sprite::Sprite(Object::ExternalPtr<SpriteSheet> sheet, const System::String& name)
     : spriteSheet(sheet.Get()) {
     if (spriteSheet != nullptr) {
-        const auto* s = static_cast<const ::SpriteSheet*>(spriteSheet);
-        const char* key = name._data;
-        spriteIndex = SpriteIndexFromName(s->m_sprites, s->m_spriteCount, key);
+        spriteIndex = static_cast<const SpriteSheet*>(spriteSheet)->GetSpriteIndexFromName(name);
     } else {
         spriteIndex = -1;
     }
@@ -163,14 +161,14 @@ Object::ExternalPtr<SpriteSheet> Sprite::GetSpriteSheet() const {
 // guard retail lacks.
 int32_t Sprite::Width() const {
     if (spriteIndex < 0) return 0;
-    const auto* sheet = static_cast<const ::SpriteSheet*>(spriteSheet);
+    const auto* sheet = static_cast<const SpriteSheet*>(spriteSheet);
     return sheet->m_sprites[spriteIndex].width;
 }
 
 // Sprite::Height() const — retail 0x180030c10. Same no-bound-check note.
 int32_t Sprite::Height() const {
     if (spriteIndex < 0) return 0;
-    const auto* sheet = static_cast<const ::SpriteSheet*>(spriteSheet);
+    const auto* sheet = static_cast<const SpriteSheet*>(spriteSheet);
     return sheet->m_sprites[spriteIndex].height;
 }
 
@@ -216,17 +214,18 @@ int RtUi_Sprite_Height(const void* spriteRaw) {
 }
 
 // ============================================================================
-// UI::SpriteSheet
+// UI::SpriteSheet — the non-virtual members (ENDGAME B.3.6 block D). The class
+// is runtime/types/ui/SpriteSheet.h; its slots are in spritesheet_vtable.cpp.
 // ============================================================================
 
-// SpriteSheet::SpriteSheet() — retail 0x18011d600. Stamps Object::Base's
-// vtable, then Object::External's, zeroes External's three fields, stamps
-// SpriteSheet's own (EXPORTED, ??_7SpriteSheet@UI@@6B@ — PLAN §2.2 item D),
-// then zeroes the rest of the object. The two intermediate vtable stores are
-// dead by the time the ctor returns but are kept, matching the
-// Achievement::Achievement precedent (runtime/src/achievement/
-// achievement_manager.cpp): they ARE the body, and a debugger break between
-// them would observe the intermediate value.
+// SpriteSheet::SpriteSheet() — retail 0x18011d600. THE CTOR DOOR, KEPT (B6-3:
+// the exe's thumb_vtables.cpp constructs bare SpriteSheets through it; the
+// class has no real ctor). Stamps Object::Base's vtable, then Object::External's,
+// zeroes External's three fields, stamps SpriteSheet's own (EXPORTED,
+// ??_7SpriteSheet@UI@@6B@ — PLAN §2.2 item D), then zeroes the rest of the
+// object. The two intermediate vtable stores are dead by the time the ctor
+// returns but are kept, matching the Achievement::Achievement precedent
+// (runtime/src/achievement/achievement_manager.cpp): they ARE the body.
 void* RtUi_SpriteSheet_Ctor(void* selfRaw) {
     auto* self = static_cast<uint8_t*>(selfRaw);
     auto qword = [](uint8_t* p, size_t off) -> void*& {
@@ -253,102 +252,70 @@ void* RtUi_SpriteSheet_Ctor(void* selfRaw) {
     return selfRaw;
 }
 
-// SpriteSheet::GetSpriteCount() const — retail 0x180003190.
-int RtUi_SpriteSheet_GetSpriteCount(const void* selfRaw) {
-    const auto* self = static_cast<const SpriteSheet*>(selfRaw);
-    const int ours = self->m_spriteCount;
+namespace UI {
 
-    return ours;
-}
+// SpriteSheet::GetSpriteCount() const — retail 0x180003190.
+int32_t SpriteSheet::GetSpriteCount() const { return m_spriteCount; }
 
 // SpriteSheet::GetSpriteIndexFromName(String const&) const — retail 0x1800031f0.
-int RtUi_SpriteSheet_GetSpriteIndexFromName(const void* selfRaw, const void* nameStrPtr) {
-    const auto* self = static_cast<const SpriteSheet*>(selfRaw);
-    const char* key = *reinterpret_cast<char* const*>(nameStrPtr);
-    const int ours = SpriteIndexFromName(self->m_sprites, self->m_spriteCount, key);
-
-    return ours;
+int32_t SpriteSheet::GetSpriteIndexFromName(const System::String& name) const {
+    return SpriteIndexFromName(m_sprites, m_spriteCount, name._data);
 }
 
 // SpriteSheet::GetSpriteNameFromIndex(int) const — retail 0x1800032d0.
 //
-// WAVE 10 LANE UI4. Not part of Wave 7's SpriteSheet set; it is here because
-// this lane's port of SpriteCapture::AddSprite CALLS it, and porting AddSprite
-// therefore turned a symbol nothing in the tree referenced into a NEW unported
-// census row. That growth is the documented shape of
-// reference_porting_can_grow_the_cutover_surface.md — the answer is to close
-// the callee, not to route around it.
+// WAVE 10 LANE UI4. Reached by SpriteCapture::AddSprite. Eighteen instructions,
+// and NO bounds check of any kind: the index is scaled straight into
+// `m_sprites` by `IMUL RAX,RAX,0x38`. Same faithfulness call as GetUVs below,
+// and CLAUDE.md's rule — do not add a guard retail lacks.
 //
-// Eighteen instructions, and NO bounds check of any kind: the index is scaled
-// straight into `m_sprites` by `IMUL RAX,RAX,0x38`. Same faithfulness call as
-// GetUVs below, and CLAUDE.md's rule — do not add a guard retail lacks.
-//
-// The return is a System::String BY VALUE, so the ABI is
-// (this, hidden-return-slot, index) with the slot handed back in RAX. Getting
-// that arity wrong is reference_hidden_retslot_wild_write.md's failure mode.
-void* RtUi_SpriteSheet_GetSpriteNameFromIndex(const void* selfRaw, void* retval, int index) {
-    const auto* self = static_cast<const SpriteSheet*>(selfRaw);
-
-    auto* ret = static_cast<RtSystem::String*>(retval);
-    ret->data = nullptr;                       // 0x1800032f4, before the load
-    char* name = self->m_sprites[index].name;
+// RETSLOT in retail: the door keeps (this, hidden-return-slot, index) and
+// placement-news this member's prvalue into the slot.
+System::String SpriteSheet::GetSpriteNameFromIndex(int32_t index) const {
+    System::String out;                        // 0x1800032f4, null before the load
+    char* name = m_sprites[index].name;
     if (name) {
-        ret->data = name;
         RtSystem::StringRefCount(name) += 1;   // 0x180003302
+        out._data = name;
     }
-
-    return retval;                             // retail returns the slot in RAX
+    return out;
 }
 
 // SpriteSheet::GetUVs(int, float&, float&, float&, float&) const — retail
 // 0x180003330. NO upper-bound check (only `index < 0` is guarded), matching
 // retail exactly — CLAUDE.md: do not add a guard retail lacks.
-void RtUi_SpriteSheet_GetUVs(const void* selfRaw, int index, float* u0, float* v0, float* u1, float* v1) {
-    // WAVE 10 LANE UI4's probe trigger. This is a live per-frame call site
-    // (the status-icon geometry builder), which is what makes it a point past
-    // Engine::Startup — the MemoryAllocator singleton the SpriteCapture probe
-    // needs does not exist at registration time. Costs one bool test, and only
-    // when the diff harness is on; see runtime/src/ui/spritecapture_probe.cpp.
-    const auto* self = static_cast<const SpriteSheet*>(selfRaw);
+void SpriteSheet::GetUVs(int32_t index, float& u0, float& v0, float& u1, float& v1) const {
     float ou0 = 0.0f, ov0 = 0.0f, ou1 = 0.0f, ov1 = 0.0f;
     if (index >= 0) {
-        const SpriteInfo& e = self->m_sprites[index];
+        const SpriteInfo& e = m_sprites[index];
         ou0 = e.u0; ov0 = e.v0; ou1 = e.u1; ov1 = e.v1;
     }
-    *u0 = ou0; *v0 = ov0; *u1 = ou1; *v1 = ov1;
-
+    u0 = ou0; v0 = ov0; u1 = ou1; v1 = ov1;
 }
 
 // SpriteSheet::SetSpriteInfo(int,int,int,float,float,float,float) — retail
 // 0x180003460. Mutates ONE existing SpriteInfo entry in place; no allocation,
-// no refcounted field touched, so the whole 0x38-byte entry is a clean
-// scratch-replica byte oracle. No bound check on `index`, matching retail.
-void RtUi_SpriteSheet_SetSpriteInfo(void* selfRaw, int index, int width, int height,
-                                     float u0, float v0, float u1, float v1) {
-    auto* self = static_cast<SpriteSheet*>(selfRaw);
-    SpriteInfo& e = self->m_sprites[index];
-
+// no refcounted field touched. No bound check on `index`, matching retail.
+void SpriteSheet::SetSpriteInfo(int32_t index, int32_t width, int32_t height,
+                                float u0, float v0, float u1, float v1) {
+    SpriteInfo& e = m_sprites[index];
     e.width = width; e.height = height;
     e.u0 = u0; e.v0 = v0; e.u1 = u1; e.v1 = v1;
-
 }
 
 // SpriteSheet::AddSpriteInfo(String const&,String const&,int,int,int,int) —
-// retail 0x180003390. See the file header for the scratch-replica oracle
-// design and for why this does not need retail's own pre-bump/post-release
+// retail 0x180003390. This does not need retail's own pre-bump/post-release
 // dance around the new element's refcounts (the growth helper's own
-// copy-construct step supplies the ONE bump the caller-visible contract
-// needs; the dance nets to the same +1 either way — verified by hand against
-// the decompile of both 0x180003390 and its internal helper 0x180004e30).
-void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const void* groupStrPtr,
-                                     int x, int y, int width, int height) {
-    auto* self = static_cast<SpriteSheet*>(selfRaw);
-
-    const int32_t     oldCount = self->m_spriteCount;
+// copy-construct step supplies the ONE bump the caller-visible contract needs;
+// the dance nets to the same +1 either way — verified by hand against the
+// decompile of both 0x180003390 and its internal helper 0x180004e30).
+void SpriteSheet::AddSpriteInfo(const System::String& name, const System::String& group,
+                                int32_t x, int32_t y, int32_t width, int32_t height) {
+    const int32_t oldCount = m_spriteCount;
 
     SpriteInfo newEntry{};
-    newEntry.name        = *reinterpret_cast<char* const*>(nameStrPtr);
-    newEntry.group       = *reinterpret_cast<char* const*>(groupStrPtr);
+    newEntry.name        = name._data;
+    newEntry.group       = group._data;
     newEntry.x           = x;
     newEntry.y           = y;
     newEntry._reserved18 = 0;
@@ -357,30 +324,58 @@ void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const
     newEntry.u0 = newEntry.v0 = newEntry.u1 = newEntry.v1 = 0.0f;
     newEntry._pad34      = 0;
 
-    // Delegate the array mechanics (grow-if-needed, copy-construct with
-    // refcount bump, free the old buffer) to Collection::Array<SpriteInfo>'s
-    // append-by-one body, which follows the growth policy documented in
-    // runtime/types/collection/Collection.h.
-    //
-    // *** WAVE 9 LANE Q, 2026-09-07: this is no longer "retail's own unexported
-    // helper". *** 0x180004e30 is a registered port (kSpec_Sprite38 in
-    // runtime/src/collection/array.cpp), one of the three NON-TRIVIAL element
-    // types in that lane. It still calls retail's per-element copy-assign at
-    // 0x180004220 by address, so the ONE refcount bump the note above relies on
-    // is unchanged -- but the container algebra around it is ours now, and it
-    // ENDGAME B.3.2 step 2 — the by-address forwarder is GONE. `m_sprites` +
-    // `m_spriteCount` + `m_spriteCapacity` (SpriteSheet.h, +0x20/+0x28/+0x2C)
-    // are the {data,size,capacity} triple `Collection::Array<SpriteInfo>`
-    // would use, laid out contiguously and asserted at those offsets, so the
-    // conversion bridges at the use site rather than retyping `SpriteSheet`.
-    // `kSpec_Sprite38` (0x180004e30) is NON-TRIVIAL — a String refcount bump
-    // in its element assign — so it stays the hand-derived `ExplicitSpec`, not
-    // a trait-derived `Array<SpriteInfo>`.
-    rtcoll::AsArray<&rtcoll::kSpec_Sprite38>(&self->m_sprites)
+    // The array mechanics (grow-if-needed, copy-construct with refcount bump,
+    // free the old buffer) are Collection::Array<SpriteInfo>'s append-by-one
+    // body. `m_sprites` + `m_spriteCount` + `m_spriteCapacity` (+0x20/+0x28/
+    // +0x2C) are the {data,size,capacity} triple `Collection::Array<SpriteInfo>`
+    // would use, so the call bridges at the use site. `kSpec_Sprite38`
+    // (0x180004e30) is NON-TRIVIAL — a String refcount bump in its element
+    // assign — so it stays the hand-derived `ExplicitSpec`.
+    rtcoll::AsArray<&rtcoll::kSpec_Sprite38>(&m_sprites)
         ->SetSizeFill(oldCount + 1, &newEntry);
-
 }
 
+}  // namespace UI
+
+// ---- the doors ---------------------------------------------------------------
+int RtUi_SpriteSheet_GetSpriteCount(const void* selfRaw) {
+    return reinterpret_cast<const UI::SpriteSheet*>(selfRaw)               // B.3.6 bridge
+        ->UI::SpriteSheet::GetSpriteCount();
+}
+
+int RtUi_SpriteSheet_GetSpriteIndexFromName(const void* selfRaw, const void* nameStrPtr) {
+    return reinterpret_cast<const UI::SpriteSheet*>(selfRaw)               // B.3.6 bridge
+        ->UI::SpriteSheet::GetSpriteIndexFromName(
+            *static_cast<const System::String*>(nameStrPtr));
+}
+
+// RETSLOT: `(this, ret, index)`, the slot handed back in RAX. Getting that arity
+// wrong is reference_hidden_retslot_wild_write.md's failure mode.
+void* RtUi_SpriteSheet_GetSpriteNameFromIndex(const void* selfRaw, void* retval, int index) {
+    new (retval) System::String(
+        reinterpret_cast<const UI::SpriteSheet*>(selfRaw)                  // B.3.6 bridge
+            ->UI::SpriteSheet::GetSpriteNameFromIndex(index));
+    return retval;                             // retail returns the slot in RAX
+}
+
+void RtUi_SpriteSheet_GetUVs(const void* selfRaw, int index, float* u0, float* v0, float* u1, float* v1) {
+    reinterpret_cast<const UI::SpriteSheet*>(selfRaw)                      // B.3.6 bridge
+        ->UI::SpriteSheet::GetUVs(index, *u0, *v0, *u1, *v1);
+}
+
+void RtUi_SpriteSheet_SetSpriteInfo(void* selfRaw, int index, int width, int height,
+                                     float u0, float v0, float u1, float v1) {
+    reinterpret_cast<UI::SpriteSheet*>(selfRaw)                            // B.3.6 bridge
+        ->UI::SpriteSheet::SetSpriteInfo(index, width, height, u0, v0, u1, v1);
+}
+
+void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const void* groupStrPtr,
+                                     int x, int y, int width, int height) {
+    reinterpret_cast<UI::SpriteSheet*>(selfRaw)                            // B.3.6 bridge
+        ->UI::SpriteSheet::AddSpriteInfo(*static_cast<const System::String*>(nameStrPtr),
+                                         *static_cast<const System::String*>(groupStrPtr),
+                                         x, y, width, height);
+}
 // ============================================================================
 // UI::StringTable — the non-virtual members (ENDGAME B.3.6 block D). The class
 // is runtime/types/ui/StringTable.h; its slots are in stringtable_factory.cpp.
@@ -680,26 +675,29 @@ inline void RtUi_SpriteSheetAssignString(char*& slot, char* const* src) {
 
 }  // namespace
 
+namespace UI {
+
+void SpriteSheet::Set(int32_t p1, int32_t p2, const System::String& p3,
+                      const System::String& p4, bool p5) {
+    // p4 -> +0x40 FIRST, then p3 -> +0x38. Retail's order, not source order.
+    RtUi_SpriteSheetAssignString(m_groupName,   &p4._data);
+    RtUi_SpriteSheetAssignString(m_textureName, &p3._data);
+
+    // The three scalars, in retail's store order: +0x4C, then +0x50, then +0x48.
+    m_field4C = p2;
+    m_field50 = static_cast<uint8_t>(p5);
+    m_field48 = p1;
+}
+
+}  // namespace UI
+
 extern "C" void RtUi_SpriteSheet_Set(void* selfRaw, int p1, int p2,
                                      const void* p3Raw, const void* p4Raw,
                                      bool p5) {
-          // no early-out at function scope
-
-    auto* self = static_cast<SpriteSheet*>(selfRaw);
-
-    // p4 -> +0x40 FIRST, then p3 -> +0x38. Retail's order, not source order.
-    RtUi_SpriteSheetAssignString(self->m_groupName,
-                                 static_cast<char* const*>(p4Raw));
-    RtUi_SpriteSheetAssignString(self->m_textureName,
-                                 static_cast<char* const*>(p3Raw));
-
-    // The three scalars, in retail's store order: +0x4C, then +0x50, then +0x48.
-    self->m_field4C = p2;
-    self->m_field50 = static_cast<uint8_t>(p5);
-    self->m_field48 = p1;
-
+    reinterpret_cast<UI::SpriteSheet*>(selfRaw)                            // B.3.6 bridge
+        ->UI::SpriteSheet::Set(p1, p2, *static_cast<const System::String*>(p3Raw),
+                               *static_cast<const System::String*>(p4Raw), p5);
 }
-
 int RtUiSpriteRegister() {
     int n = 0;
 

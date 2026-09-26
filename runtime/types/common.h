@@ -21,7 +21,8 @@ struct VideoContext;          // Video::Context (already in engine/types/common.
 // ============================================================
 
 struct MaterialInstance;      // Graphics::MaterialInstance
-struct SpriteSheet;          // Graphics::SpriteSheet
+namespace UI { class SpriteSheet; }   // UI::SpriteSheet (was mislabelled Graphics::)
+using SpriteSheet = UI::SpriteSheet;  // ENDGAME B.3.6 block D: RULE B6-4.2 alias
 
 // ============================================================
 // Object namespace
