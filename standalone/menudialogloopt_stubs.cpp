@@ -57,6 +57,8 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include "ui/Sprite.h"          // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes
+#include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
 #include <new>
 #include <cstring>
 
@@ -280,10 +282,6 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     // M2 wiring (SplashDLT → Loader::Load → MenuDLT::Load → DialogLoopT::Load)
     // populates m_dialogExternal before this fires, so DialogInstance::DialogInstance
     // and the UI list iteration both have valid data to read.
-    if (!fn_DialogLoopT_Startup) {
-        printf("[MenuDLT::Startup] fn_DialogLoopT_Startup is NULL — staying as stub\n");
-        return;
-    }
     if (!dialogExt) {
         printf("[MenuDLT::Startup] WARN: m_dialogExternal is NULL, skipping Startup "
                "(would crash in DialogInstance ctor)\n");
@@ -314,8 +312,11 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
     }
 
     {
-        StallDebug::Phase dialogPhase("MenuDLT fn_DialogLoopT_Startup");
-        fn_DialogLoopT_Startup(self);
+        StallDebug::Phase dialogPhase("MenuDLT DialogLoopT::Startup");
+        // ENDGAME B.3.7: QUALIFIED (slot 1 is VIRTUAL on the base; this is the
+        // exe table's own Startup).
+        reinterpret_cast<Engine::DialogLoopT*>(self)                         // B.3.7 bridge
+            ->Engine::DialogLoopT::Startup();
     }
     void* dialogInst = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x38);
     printf("[MenuDLT::Startup] DialogLoopT::Startup returned, m_dialogInstance=%p\n",
@@ -521,21 +522,17 @@ bool Stub_Update(UpdateLoop* self, void* time) {
             fprintf(stderr, "[MenuDLT::Update] STAGE C entry: pendingLoop=%p "
                     "fade settled (rate=0) -> MainLoop::SetNextLoop\n", pendingLoop);
             fflush(stderr);
-            if (fn_MainLoop_SetNextLoop && mainLoop) {
-                fn_MainLoop_SetNextLoop(mainLoop, pendingLoop);
+            if (mainLoop) {
+                reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(  // B.3.7 bridge
+                    reinterpret_cast<Engine::UpdateLoop*>(pendingLoop));
             } else {
                 fprintf(stderr, "[MenuDLT::Update] WARN: cannot advance "
-                        "(fn_MainLoop_SetNextLoop=%p mainLoop=%p)\n",
-                        (void*)fn_MainLoop_SetNextLoop, mainLoop);
+                        "(mainLoop=%p)\n", mainLoop);
                 fflush(stderr);
             }
         }
     }
 
-    if (!fn_DialogLoopT_Update) {
-        printf("[MenuDLT::Update] fn_DialogLoopT_Update is NULL, returning false\n");
-        return false;
-    }
     // Wave 10D lane MOUSE: the menu half of the cursor route. The menu UI is
     // MenuDLT+0x38 (DialogInstance) -> +0x10 (UserInterface), the same walk
     // ModalDriver::RunSelfTest uses above. No-op unless BANISHED_MOUSE_INJECT.
@@ -548,7 +545,10 @@ bool Stub_Update(UpdateLoop* self, void* time) {
                 reinterpret_cast<uintptr_t>(menuDlg) + 0x10);
         MouseInject::PreUpdate(menuUI);
     }
-    bool result = fn_DialogLoopT_Update(self, time);
+    // ENDGAME B.3.7: QUALIFIED (slot 3 is VIRTUAL on the base; this is the
+    // exe table's own Update).
+    bool result = reinterpret_cast<Engine::DialogLoopT*>(self)               // B.3.7 bridge
+        ->Engine::DialogLoopT::Update(*reinterpret_cast<const System::Time*>(time));
     if (menuUI) MouseInject::PostUpdate(menuUI);
 
     // Restore the original dt so MainLoop's frame accounting stays correct.
@@ -662,11 +662,9 @@ void Stub_Load(UpdateLoop* self) {
     // invisible to the user — see Stub_Startup below).
     void* dialogExtBefore = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Load] self=%p m_dialogExternal(before)=%p\n", (void*)self, dialogExtBefore);
-    if (!fn_DialogLoopT_Load) {
-        printf("[MenuDLT::Load] fn_DialogLoopT_Load is NULL — cannot load dialog rsc\n");
-        return;
-    }
-    fn_DialogLoopT_Load(self);
+    // ENDGAME B.3.7: QUALIFIED (slot 6 is VIRTUAL on the base; this is the exe
+    // table's own Load, dispatched by Loader::Run on the loader thread).
+    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Load();  // B.3.7 bridge
     void* dialogExtAfter = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x30);
     printf("[MenuDLT::Load] m_dialogExternal(after)=%p (PhaseA deferred to Startup)\n",
            dialogExtAfter);

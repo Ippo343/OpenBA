@@ -39,6 +39,8 @@
 #include <cstdio>
 #include <cstdint>
 #include "system/String.h"   // -Iruntime/types
+#include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes
+#include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
 #include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Random
 #include "object/External.h"                 // ENDGAME B.3.6 UI callers (K4)
 #include "runtime/types/ui/DialogInstance.h" // ENDGAME B.3.6 UI callers (K4)
@@ -159,7 +161,7 @@ void Stub_Startup(UpdateLoop* self) {
     // but standalone has no thread — so we call DialogLoaderLoopT::Load on
     // ourselves synchronously here. Reads m_dialogFilename @ +0x48 and writes
     // the loaded External to m_dialogExternal @ +0x50.
-    if (!ll->m_dialogExternal && fn_DialogLoaderLoopT_Load) {
+    if (!ll->m_dialogExternal) {
         StallDebug::Phase ownLoadPhase("SplashDLT own-rsc DialogLoaderLoopT::Load");
         // Bracket the load so resolve_standalone logs every exe-side resolution
         // and the bulk NullFactory marks any hits with [TRACE!]. m_dialogFilename
@@ -167,10 +169,14 @@ void Stub_Startup(UpdateLoop* self) {
         // we just tag with self pointer (each splash loop has a unique address).
         char label[96];
         std::snprintf(label, sizeof(label),
-                      "fn_DialogLoaderLoopT_Load (Stub_Startup) self=%p",
+                      "DialogLoaderLoopT::Load (Stub_Startup) self=%p",
                       (void*)self);
         TraceExeBegin(label);
-        fn_DialogLoaderLoopT_Load(self);
+        // ENDGAME B.3.7: QUALIFIED -- slot 6 is VIRTUAL on the base and this
+        // object wears the exe table, so an unqualified call would re-enter
+        // Stub_Load.
+        reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                   // B.3.7 bridge
+            ->Engine::DialogLoaderLoopT::Load();
         TraceExeEnd(label);
         printf("[SplashDLT::Startup] DialogLoaderLoopT::Load returned, "
                "m_dialogExternal=%p\n", ll->m_dialogExternal);
@@ -191,12 +197,15 @@ void Stub_Startup(UpdateLoop* self) {
     // docs/runtime_port/endgame_b/LOADER_READ_SPIN_GHIDRA.md §Q5). The loader
     // thread it starts loads m_nextLoop's resources while the main thread below
     // animates this splash, which is exactly retail's shape.
-    if (ll->m_dialogExternal && fn_DialogLoaderLoopT_Startup) {
-        StallDebug::Phase chainPhase("SplashDLT fn_DialogLoaderLoopT_Startup");
+    if (ll->m_dialogExternal) {
+        StallDebug::Phase chainPhase("SplashDLT DialogLoaderLoopT::Startup");
         printf("[SplashDLT::Startup] invoking DialogLoaderLoopT::Startup "
                "(creates dialog + pushes to UI, then kicks the ONE "
                "Engine::Loader thread for next)\n");
-        fn_DialogLoaderLoopT_Startup(self);
+        // ENDGAME B.3.7: QUALIFIED (slot 1 is VIRTUAL on the base; this is
+        // Stub_Startup itself).
+        reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                   // B.3.7 bridge
+            ->Engine::DialogLoaderLoopT::Startup();
         // Arm the gate the moment the kick has happened; Stub_Update polls it
         // in the same place retail polls LoaderLoop::IsFinished.
         EngineLoader::NoteKicked();
@@ -205,8 +214,7 @@ void Stub_Startup(UpdateLoop* self) {
                ll->m_dialogInstance, (int)EngineLoader::IsBusy());
     } else {
         printf("[SplashDLT::Startup] WARN: skipping DialogLoaderLoopT::Startup "
-               "(rsc=%p fn=%p)\n", ll->m_dialogExternal,
-               (void*)fn_DialogLoaderLoopT_Startup);
+               "(rsc=%p)\n", ll->m_dialogExternal);
     }
 
     // Step 3 USED TO BE HERE and is gone. It kicked next->vtable->Load a SECOND
@@ -478,8 +486,9 @@ bool Stub_Update(UpdateLoop* self, void* time) {
                "fade-alpha=%.3f -> transition next=%p\n",
                (void*)self, (long long)ll->m_elapsedTicks,
                (long long)ll->m_delayTicks, alpha, (void*)next);
-        if (next && fn_MainLoop_SetNextLoop && mainLoop) {
-            fn_MainLoop_SetNextLoop(mainLoop, next);
+        if (next && mainLoop) {
+            reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(      // B.3.7 bridge
+                reinterpret_cast<Engine::UpdateLoop*>(next));
         }
         return false;
     }
@@ -537,20 +546,21 @@ void Stub_Load(UpdateLoop* self) {
     DialogLoaderLoopT* ll = reinterpret_cast<DialogLoaderLoopT*>(self);
     printf("[SplashDLT::Load] self=%p m_dialogExternal(before)=%p\n",
            (void*)self, ll->m_dialogExternal);
-    if (fn_DialogLoaderLoopT_Load) {
+    {
         // Same bracket pattern as Stub_Startup. Stub_Load gets called when our
         // Stub_Startup synchronously drives `next->vtable->Load` on the next
         // splash loop, so this captures the *second* splash's load too.
         char label[96];
         std::snprintf(label, sizeof(label),
-                      "fn_DialogLoaderLoopT_Load (Stub_Load) self=%p",
+                      "DialogLoaderLoopT::Load (Stub_Load) self=%p",
                       (void*)self);
         TraceExeBegin(label);
-        fn_DialogLoaderLoopT_Load(self);
+        // ENDGAME B.3.7: QUALIFIED. This stub IS the exe table's slot 6, so an
+        // unqualified `->Load()` would call itself forever.
+        reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                   // B.3.7 bridge
+            ->Engine::DialogLoaderLoopT::Load();
         TraceExeEnd(label);
         printf("[SplashDLT::Load] m_dialogExternal(after)=%p\n", ll->m_dialogExternal);
-    } else {
-        printf("[SplashDLT::Load] WARN: fn_DialogLoaderLoopT_Load is NULL\n");
     }
 }
 
