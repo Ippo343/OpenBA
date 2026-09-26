@@ -30,6 +30,7 @@
 #include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -259,8 +260,8 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
 
     // 10. Get device type for this key
     int deviceType = 0;
-    if (fn_KeyMap_GetDeviceForId && keymap)
-        deviceType = fn_KeyMap_GetDeviceForId(keymap, keyId, 0);
+    if (keymap)
+        deviceType = reinterpret_cast<const Input::KeyMap*>(keymap)->GetDeviceForId(keyId, 0);  // B.3.7 bridge
 
     // 11. Resolve hotkey ref again (matches original)
     if (s_fn_ResolveHotkeyRef)
@@ -268,8 +269,8 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
 
     // 12. Get input index for this key
     int inputIndex = 0;
-    if (fn_KeyMap_GetInputForId && keymap)
-        inputIndex = fn_KeyMap_GetInputForId(keymap, keyId, 0);
+    if (keymap)
+        inputIndex = reinterpret_cast<const Input::KeyMap*>(keymap)->GetInputForId(keyId, 0);  // B.3.7 bridge
 
     // 13. Get key name as UI::String
     uint8_t uiStr[16] = {};
