@@ -578,7 +578,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
                 uint64_t nullChild = 0;
                 new (&nullChild) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
                 reinterpret_cast<UI::Element*>(table)->AddChild(  // B.3.6 bridge
-                    *reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullChild));
+                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullChild));
             }
         }
     }

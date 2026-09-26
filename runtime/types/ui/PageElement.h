@@ -81,9 +81,8 @@ public:
     // ---- non-virtual ------------------------------------------------------
     // 0x1800d5100 — `MOV EAX,[RCX+0xc0] ; RET`.
     int32_t GetActivePage() const { return _activePage; }
-    // 0x1800d5110 — PORTED, but the body is the registered door
-    // `PageElement_SetActivePage` in widgets_layout.cpp (fragment pass). Declared
-    // here so no later block edits this header; undefined until then.
+    // 0x1800d5110 — PORTED; DEFINED in widgets_layout.cpp (fragment pass), whose
+    // registered door delegates to it.
     void SetActivePage(int32_t page);
 
     // ---- exported, NOT PORTED as members ----------------------------------

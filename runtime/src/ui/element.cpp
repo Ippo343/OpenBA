@@ -429,18 +429,18 @@ namespace UI {
 // ---- ?AddChild@  0x180115df0 -----------------------------------------------
 // `child` is an `Object::InternalPtr<Element>` passed BY VALUE, which MSVC
 // hands over as a pointer to the caller's 8-byte temporary (the disassembly's
-// first act is `MOV RAX,[RDX]`); the door below keeps that shape and this
-// member takes the handle itself.
+// first act is `MOV RAX,[RDX]`, then `MOV R8,RDX`): RULE B6-11, so the member
+// takes that pointer (B.3.6 closing pass; it took the handle by value before)
+// and passes it on as SetSizeFill's fill argument exactly as retail does.
 //
 // retail 0x180076900 — kSpec_Fill8Z, trait-equivalent for `Element*` (see
 // dialog_create.cpp's banner): `_children` is the trait-derived
 // `Array<Element*>` instantiation already. The fill argument is the address of
 // an 8-byte handle holding the child pointer — the same bytes retail hands it.
-void Element::AddChild(Object::InternalPtr<Element> child) {
-    Element* const c = child.Get();
+void Element::AddChild(Object::InternalPtr<Element>* child) {
+    Element* const c = child->Get();
     if (c) c->_parent = this;
-    Element* fill = c;
-    _children.SetSizeFill(_children.GetSize() + 1, &fill);
+    _children.SetSizeFill(_children.GetSize() + 1, child);
     SetNeedsSizeCalc();
 }
 
@@ -847,8 +847,7 @@ void ContainerElement::SetOffsets(int32_t x, int32_t y) {
 // ============================================================================
 
 void RtUi_Element_AddChild(Element* self, void** child) {
-    self->UI::Element::AddChild(
-        Object::InternalPtr<Element>(static_cast<Element*>(*child)));
+    self->UI::Element::AddChild(reinterpret_cast<Object::InternalPtr<Element>*>(child));
 }
 
 void* RtUi_Element_Child(Element* self, void** ret, int index) {

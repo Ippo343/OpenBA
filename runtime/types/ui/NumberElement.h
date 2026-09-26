@@ -3,8 +3,10 @@
 // runtime/types/ui/NumberElement.h — UI::NumberElement, binary-compatible layout
 // ============================================================================
 // Wave 7 lane D. NumberElement is a SIBLING of NumberEditElement, not related
-// to it — it is a read-only numeric display (extends TextElement directly,
-// not EditElement), proven by its own SetValue pair
+// to it — it is a read-only numeric display deriving from `UI::Element`
+// directly (`?_ParentTypeName@NumberElement@UI@@` returns "Element" and the
+// ctor calls `??0Element`; the old "extends TextElement" here was wrong, block
+// C3), not from EditElement, proven by its own SetValue pair
 // (0x180118d50 int / 0x180118db0 float), which never touch +0xC8/+0xE0/+0xF8
 // the way EditElement's family does. It stores a TAGGED UNION of an int and a
 // float value plus a discriminant:
@@ -179,8 +181,7 @@ public:
         return static_cast<NumberDescription::NumberType>(_mode);
     }
     // ?SetValue@NumberElement@UI@@QEAAXH@Z / QEAAXM@Z — a non-virtual overload
-    // pair (THE DOOR DECIDES). Bodies are widgets_input.cpp's doors (fragment
-    // pass); declared, left undefined.
+    // pair (THE DOOR DECIDES). Both DEFINED in widgets_input.cpp (fragment pass).
     void SetValue(int32_t value);                                // 0x180118d50
     void SetValue(float value);                                  // 0x180118db0
 

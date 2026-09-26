@@ -71,7 +71,7 @@
 #include <type_traits>
 
 #include "ButtonElement.h"
-#include "Sprite.h"                     // ::Sprite (block D folds it into UI::Sprite)
+#include "Sprite.h"                     // UI::Sprite (the global ::Sprite is its alias)
 #include "../collection/Collection.h"
 
 namespace UI {
@@ -88,10 +88,9 @@ public:
                 const UpdateState& state) override;               // [7] 0x1801125d0
     // [8] Enable — ButtonElement's, inherited.
 
-    // ---- PORTED, but the body is in ANOTHER FILE (widgets_input.cpp, the
-    // fragment pass's): declared so nothing edits this header later; the
-    // registered door there is the definition until the fragment pass moves it.
-    int32_t AddItem(const ::Sprite& sprite, const System::String& text,
+    // ---- PORTED; the member bodies are DEFINED in widgets_input.cpp (moved
+    // there by the fragment pass), whose registered doors delegate to them.
+    int32_t AddItem(const UI::Sprite& sprite, const System::String& text,
                     void* userData);                              // 0x1800750b0
     int32_t GetCurrentItem() const;                               // 0x180075160
     int32_t GetItemCount() const;                                 // 0x180075180

@@ -64,8 +64,7 @@ public:
     // ---- non-virtual ---------------------------------------------------------
     int32_t GetMaxValue() const { return _max; }                 // 0x180046430
     int32_t GetMinValue() const { return _min; }                 // 0x180046440
-    // The three bodies below are widgets_input.cpp's doors (fragment pass);
-    // declared, left undefined.
+    // The three bodies below are DEFINED in widgets_input.cpp (fragment pass).
     int32_t GetValue() const;                                    // 0x1800d4b50
     void    SetMinMax(int32_t minValue, int32_t maxValue);       // 0x1800d4b70
     void    SetValue(int32_t value);                             // 0x1800d4bb0

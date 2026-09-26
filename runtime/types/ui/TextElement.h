@@ -150,8 +150,7 @@ public:
     void CacheText();                                            // 0x18011ec10
     void SetParameterCount();                                    // 0x18011e8e0
 
-    // ---- exported; the body is ANOTHER FILE'S door (widgets_layout.cpp) -----
-    // Declared, left undefined until the fragment pass moves them.
+    // ---- exported; DEFINED in widgets_layout.cpp (fragment pass) ----------
     // ?SetParameter@TextElement@UI@@QEAAXHAEBVString@System@@@Z  0x18011e9b0
     //   (`AEBV` — a const reference.)
     void SetParameter(int32_t index, const System::String& value);

@@ -75,9 +75,8 @@ public:
     void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x180118850
     // [7..11] Element's, inherited.
 
-    // ---- non-virtual — PORTED, but the bodies are registered doors in
-    // widgets_layout.cpp (fragment pass): declared so no later block edits
-    // this header, undefined until the fragment pass moves them.
+    // ---- non-virtual — PORTED; the four bodies are DEFINED in
+    // widgets_layout.cpp (fragment pass), whose registered doors delegate.
     // `?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ` is a hidden-retslot
     // export; the door keeps `(this, ret)` and the member returns by value.
     Sprite GetSprite() const;                                     // 0x1801182a0  RETSLOT door

@@ -120,8 +120,8 @@ public:
     // [7] Update .. [11] GetBorder — Element's
 
     // ---- non-virtual members ----------------------------------------------
-    // Bodies in runtime/src/ui/widgets_layout.cpp (another block's file; the
-    // registered door is the definition until the fragment pass moves it).
+    // DEFINED in runtime/src/ui/widgets_layout.cpp (moved there by the fragment
+    // pass; the registered doors delegate to them).
     void RemoveGraphs();                                          // 0x180040610
     void AddGraph(uint32_t colour);                               // 0x180040620
     void AddGraphPoint(int32_t graph, int32_t value);             // 0x180040690

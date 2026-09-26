@@ -22,7 +22,7 @@
 //   * the old bare POD moved to `RtUI::LabelElement` (B4b-1) with its TextElement
 //     names CORRECTED to TextElement's and every one of its offset asserts kept.
 //     Its one remaining user is runtime/src/ui/element_sprite_debug.cpp, which
-//     reads the sprite triple.
+//     reads the sprite triple for a debug print (the calls there are members).
 //
 // LabelElement's OWN LAYOUT, every field a store of `??0LabelElement@UI@@QEAA@XZ`
 // (0x1800d2620, read as DISASSEMBLY by block C3; `CALL ??0TextElement` first):
@@ -142,13 +142,13 @@ public:
     void SetColor(uint32_t color) override;                      // [10] 0x180042970
 
     // ?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ  0x1800429d0 — RETSLOT in
-    // retail; by value here. Its registered door is widgets_layout.cpp's
-    // (fragment pass); declared, left undefined.
+    // retail; by value here. DEFINED in widgets_layout.cpp (fragment pass),
+    // whose registered door placement-news the result.
     Sprite GetSprite() const;
     // ?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z  0x180042980. `VSprite@2@`
     // is the 0x10-byte UI::Sprite BY VALUE, which MSVC passes by HIDDEN POINTER
     // (the RULE B6-11 shape): declared with the pointer, in retail order. Its
-    // body is widgets_layout.cpp's door (fragment pass); declared, undefined.
+    // body is DEFINED in widgets_layout.cpp (fragment pass).
     void SetSprite(const Sprite* sprite);
     // ?SetSpriteColor@LabelElement@UI@@QEAAXI@Z  0x1800429f0 —
     // `MOV [RCX+0x128],EDX / RET`, the whole body.

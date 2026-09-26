@@ -544,7 +544,7 @@ void* ComboElement::GetItemData(int32_t index) const {
 // re-reads `_strings._size` AFTER all three appends, so it is the post-append
 // size minus one — which equals the index just written. If a growth helper had
 // failed to grow, retail would return the stale index and so does this.
-int32_t ComboElement::AddItem(const ::Sprite& sprite, const System::String& text,
+int32_t ComboElement::AddItem(const UI::Sprite& sprite, const System::String& text,
                               void* userData) {
     rtcoll::AsArray<&rtcoll::kSpec_StringRef>(&_strings)
         ->SetSizeFill(_strings._size + 1, &text);                  // 0x180034860

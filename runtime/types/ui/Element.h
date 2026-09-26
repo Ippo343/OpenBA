@@ -85,15 +85,17 @@ struct UserInterface;      // block E (a struct in the tree today)
 // block A (B4b-1). Field-for-field identical to the class below and
 // cross-asserted against it at the bottom of this file.
 //
-// WHY A POD SURVIVES, contrary to "prefer one definition and an alias": seven
-// leaf headers (`ComboElement.h`, `EditElement.h`, `NumberElement.h`,
-// `ProgressElement.h`, `RadioElement.h`, `SliderElement.h`, `SpinnerElement.h`)
-// hold `Element base;` BY VALUE, and `UI::Element` is ABSTRACT (slot 4
-// `ComputeSize` is `_purecall` in retail), which a data member cannot be. They
-// now spell `RtUI::Element base;`. The pointer members name the REAL class, so
-// `pod->_parent` and `pod->_children[i]` are `UI::Element*` and no caller needs
-// a bridge to walk the tree from a POD. The POD dies when the C blocks give
-// those seven leaves real classes deriving from `UI::Element`.
+// WHY A POD SURVIVES, contrary to "prefer one definition and an alias": when
+// block A ran, seven leaf headers held `Element base;` BY VALUE, and
+// `UI::Element` is ABSTRACT (slot 4 `ComputeSize` is `_purecall` in retail),
+// which a data member cannot be. The C blocks turned those leaves into real
+// classes deriving from `UI::Element`; as of the B.3.6 closing pass the
+// `RtUI::` PODs that still embed `RtUI::Element base;` are FOUR:
+// `EditElement.h`, `NumberElement.h`, `ProgressElement.h`, `SpinnerElement.h`
+// (`ComboElement.h`, `RadioElement.h` and `SliderElement.h` no longer do). The
+// pointer members name the REAL class, so `pod->_parent` and
+// `pod->_children[i]` are `UI::Element*` and no caller needs a bridge to walk
+// the tree from a POD. The POD dies with the last of those four.
 // ############################################################################
 namespace RtUI {
 
@@ -391,7 +393,10 @@ public:
     // Each keeps its registered door, now a QUALIFIED delegation. The retslot
     // ones return by value here (both ends of a C++ call are this GCC); the
     // door keeps retail's `(this, ret, …)` shape and placement-news the result.
-    void AddChild(Object::InternalPtr<Element> child);            // 0x180115df0
+    // `V?$InternalPtr` BY VALUE arrives by HIDDEN POINTER (RULE B6-11): retail
+    // 0x180115df0 opens `MOV RAX,[RDX]` and hands that same RDX to SetSizeFill
+    // as the fill (`MOV R8,RDX`), so the member takes the pointer.
+    void AddChild(Object::InternalPtr<Element>* child);           // 0x180115df0
     void AdjustUpperLeft(int32_t dx, int32_t dy);                 // 0x180115840
     Object::InternalPtr<Element> Child(int32_t index);            // 0x180035540 RETSLOT (non-const)
     int32_t ChildCount() const;                                   // 0x180035530
@@ -426,9 +431,8 @@ public:
     void SetToolTipString(const System::String& text);            // 0x1800356e0
     void SetUserData(Object::Base* userData);                     // 0x180115560
 
-    // ---- PORTED, but the body is in ANOTHER BLOCK'S FILE (fragment pass) ---
-    // Declared so no later block edits this header; the registered door in
-    // that file is the definition until the fragment pass moves it.
+    // ---- PORTED; DEFINED in another block's file (moved there by the
+    // fragment pass), whose registered door delegates to the member.
     void RemoveChildren();                                        // 0x180115570  widgets_layout.cpp
     System::String GetToolTipString() const;                      // 0x1800356a0  tooltipdialog.cpp (RETSLOT)
 

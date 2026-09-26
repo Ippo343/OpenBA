@@ -94,8 +94,8 @@ public:
     // ---- non-virtual members -----------------------------------------------
     int32_t GetRowCount() const    { return _rowCount; }          // 0x180079450 MOV EAX,[RCX+0xc0]
     int32_t GetColumnCount() const { return _columnCount; }       // 0x180079460 MOV EAX,[RCX+0xc4]
-    // PORTED, bodies in ANOTHER BLOCK'S FILE — fragment pass; declared so no
-    // later block edits this header. Retail passes the by-value InternalPtr as
+    // PORTED; DEFINED in the files named on each line (fragment pass). Retail
+    // passes the by-value InternalPtr as
     // the ADDRESS of the caller's temporary, so it is spelled as that pointer.
     int32_t GetRowHeight(int32_t row);                            // 0x18011e090  element_bodies_b5.cpp
     int32_t GetColumnWidth(int32_t column);                       // 0x18011e1a0  element_bodies_b5.cpp

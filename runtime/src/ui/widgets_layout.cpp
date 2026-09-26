@@ -402,7 +402,7 @@ System::String DocumentTextElement::GetLink(int32_t index) const {
 // is a POD, non-refcounted 16-byte value, passed by HIDDEN POINTER (RULE
 // B6-11). Retail's own copy is two unconditional 8-byte MOV pairs
 // (`MOV RAX,[RDX]`/`[RCX+0xc0],RAX` then `+0x8`/`+0xc8`) -- the full 16.
-void DocumentTextElement::SetText(const ::UIString* text) {
+void DocumentTextElement::SetText(const UI::String* text) {
     _text = *text;
     WalkDirty(this);
 }

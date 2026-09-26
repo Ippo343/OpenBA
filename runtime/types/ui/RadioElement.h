@@ -70,10 +70,9 @@ public:
     // ---- non-virtual ------------------------------------------------------
     // 0x1800d56e0 — `MOV EAX,[RCX+0xd0] ; RET`.
     int32_t GetActiveRadio() const { return _activeIndex; }
-    // PORTED, but the bodies are registered doors in widgets_input.cpp
-    // (fragment pass): `RtUi_RadioElement_SetActiveRadio` (0x1800d56f0) and
-    // `RtUi_RadioElement_FindCheckBoxes` (0x180047c00). Declared so no later
-    // block edits this header; undefined until the fragment pass moves them.
+    // PORTED; both DEFINED in widgets_input.cpp (fragment pass), where the
+    // registered doors `RtUi_RadioElement_SetActiveRadio` (0x1800d56f0) and
+    // `RtUi_RadioElement_FindCheckBoxes` (0x180047c00) delegate to them.
     void SetActiveRadio(int32_t index);                           // 0x1800d56f0
     void FindCheckBoxes();                                        // 0x180047c00
 

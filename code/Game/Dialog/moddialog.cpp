@@ -298,7 +298,7 @@ void ModDialog_Slot4(ModDialog* self) {
         // Add cloned element to tableMods
         void* tableElem = *(void**)(s + 0xC8);
 
-        reinterpret_cast<UI::Element*>(tableElem)->AddChild(*reinterpret_cast<Object::InternalPtr<UI::Element>*>(&clonedElem));  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(tableElem)->AddChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&clonedElem));  // B.3.6 bridge
 
         // Find child elements by name in the cloned row
         uint8_t textModNameBuf[8] = {};

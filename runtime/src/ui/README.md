@@ -83,9 +83,43 @@ confirm against the retail DLL before porting one.
 - `UserInterface.cpp`
 - `UserInterface.h`
 
-## Ported here
+## Status (ENDGAME B.3.6 closing pass, 2026-09-26)
 
-- `element_sprite_debug.cpp`
-- `element_sprite_debug.h`
-- `sprite_debug.cpp`
-- `sprite_debug.h`
+Every Runtime UI class is a REAL C++ class under its retail name: 68 polymorphic
+(`UI::Element` + 27 leaf elements, `UI::ElementDescription` + 27 leaf
+descriptions, the dialog family `Dialog` / `DialogInstance` / `DialogController` /
+`DialogControllerConfig` / `ComboDialog` / `ToolTipDialog`, and the resources
+`CharacterSet` / `Cursor` / `Font` / `SpriteCapture` / `SpriteSheet` /
+`StringTable`) and 5 non-polymorphic (`UserInterface`, `SpriteContext`, `Sprite`,
+`String`, `Element::UpdateState`). Declarations live in `runtime/types/ui/<Class>.h`
+(one header per class; `Element::UpdateState` is nested in `Element.h`). Rules
+and history: `docs/runtime_port/endgame_b/B36_RULES.md`; numbers:
+`docs/runtime_port/endgame_b/b36_session/CLOSE_NUMBERS.md`.
+
+Where the member bodies are:
+- one file per class, lowercased: `<class>.cpp` for each of the 27 leaf
+  elements and 27 leaf descriptions, `characterset.cpp`, `cursor.cpp`, `font.cpp`,
+  `combodialog.cpp`, `tooltipdialog.cpp`, `dialogcontrollerconfig.cpp`;
+- `Element`: `element.cpp` + `element_vtable.cpp`; `ElementDescription`:
+  `dialog.cpp` + `elementdescription_serialize.cpp`;
+- `DialogInstance`: `dialog.cpp`, `dialog_create.cpp`, `dialog_settings.cpp`
+  (`EndHover` in `userinterface_hover.cpp`); `Dialog`: `dialog_vtable.cpp`,
+  `dialog.cpp`; `DialogController`: `dialog_controller_base.cpp`;
+- `UserInterface`: `userinterface*.cpp`; `SpriteContext`: `spritecontext*.cpp`;
+  `SpriteCapture`: `spritecapture_class.cpp`, `spritecapture.cpp`;
+  `SpriteSheet`: `spritesheet_vtable.cpp`, `sprite.cpp`; `StringTable`:
+  `stringtable_factory.cpp`, `sprite.cpp`; `Sprite` and `String`: `sprite.cpp`;
+- FRAGMENT files (bodies of several classes, kept where the Wave-7 lanes put
+  them): `widgets_input.cpp` (Combo/Spinner/NumberEdit/Number/Radio/Edit/Slider/
+  Progress non-slot members), `widgets_layout.cpp` (Table/Image/Label/Text/
+  DocumentText/Tab/Page/Graph and `Element::RemoveChildren`),
+  `element_bodies_b5.cpp` (thirteen assorted leaf bodies), `documenttext.cpp`,
+  `textelement_cachetext.cpp`, `tabelement_addtab.cpp`;
+- factory / allocator doors, not members: `ui_factory_wave28.cpp`,
+  `factory_ui1.cpp`(+`.inc`), `spritesheet_new.cpp`, `description_dtors.cpp`,
+  `ui_operator_delete.cpp`; the aggregator is `rt_ui_port.cpp`.
+
+Every registered export door is a one-line QUALIFIED delegation to its member;
+ctor/dtor doors, the minted vtables and the deleting-dtor rows stay until the
+end of B.3 (B36_RULES section 7). `element_sprite_debug.cpp` and
+`sprite_debug.cpp` are debug-print wrappers over the members, not ports.

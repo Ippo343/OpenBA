@@ -88,8 +88,8 @@ public:
                 const UpdateState& state) override;
 
     // ---- non-virtual members ----------------------------------------------
-    // Bodies in runtime/src/ui/widgets_input.cpp (the registered doors are the
-    // definitions until the fragment pass moves them).
+    // DEFINED in runtime/src/ui/widgets_input.cpp (fragment pass), except
+    // GetMinValue; the registered doors delegate to them.
     int32_t GetMaxValue() const;                                  // 0x1800d7cb0
     int32_t GetValue() const;                                     // 0x1800d7cf0
     bool    IsActive() const;                                     // 0x1800d7c30
