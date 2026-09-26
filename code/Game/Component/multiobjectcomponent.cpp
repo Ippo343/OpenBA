@@ -299,10 +299,9 @@ static const bool s_multiObjectStateTableBuilt = (MultiObjectComponent_PopulateS
 // 0x140125a70. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer (+0x40); +0x48 = +0x50 = 0;
 // +0x58 = 1; then `_flags |= 2` (0x82).
-// PORT GAP (retail 0x140125ad8 `MOV dword [RBX+0x58],1`) — B38 D9: the tree's factory
-// zero-filled the body, so +0x58 starts 0 here as before.
+// (+0x58 is the cell count the bridge/fence tools stamp; the tree's factory zeroed it.)
 MultiObjectComponent::MultiObjectComponent()
-    : _controller(this), field48(nullptr), field50(nullptr), multiCount(0), _pad5C{} {
+    : _controller(this), field48(nullptr), field50(nullptr), multiCount(1), _pad5C{} {
     OrFlagsInCtor(0x2);
 }
 

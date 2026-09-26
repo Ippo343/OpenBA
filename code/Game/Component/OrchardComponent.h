@@ -55,7 +55,7 @@ public:
     StateController _controller;   // +0x28 the embedded controller (D6)
     uint8_t  orchardFlag;          // +0x48 work enabled (byte)
     uint8_t  _pad49[3];            // +0x49
-    int32_t  orchardId;            // +0x4c the chosen tree type (-1 in retail's ctor)
+    int32_t  orchardId;            // +0x4c the last-harvest year (-1 = never; retail ctor)
     void*    field50;              // +0x50 the tree-slot array
     void*    field58;              // +0x58 its count / capacity
     void*    field60;              // +0x60 (Startup clears it)

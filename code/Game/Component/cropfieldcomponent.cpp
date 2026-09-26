@@ -532,10 +532,10 @@ extern "C" void CropFieldComponent_CommandVSlot(void* selfV, int cmdId) {
 // 0x14011afd0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer; +0x48 (word) = 0x100; +0x50 =
 // +0x58 = +0x60 = 0; `_flags |= 0x80` (already set by Component()).
-// PORT GAP (retail 0x14011b030 `MOV word [RBX+0x48],0x100`, i.e. +0x49 = 1) — B38 D9:
-// the tree's factory zero-filled the body, so +0x49 starts 0 here as before.
+// `MOV word [RBX+0x48],0x100`: +0x48 (work enabled) = 0, +0x49 ("a crop type is
+// set") = 1; the tree's factory zero-filled both.
 CropFieldComponent::CropFieldComponent()
-    : _controller(this), cropFlags(0), _pad4A{}, field50(nullptr), field58(nullptr),
+    : _controller(this), cropFlags(0x100), _pad4A{}, field50(nullptr), field58(nullptr),
       field60(nullptr) {
     OrFlagsInCtor(0x80);
 }

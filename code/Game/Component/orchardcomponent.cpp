@@ -774,10 +774,11 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
 // 0x140051f40. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
 // `_controller(this)` is the member's back-pointer; +0x48 = 0; +0x4c = -1; +0x50 =
 // +0x58 = +0x60 = 0; `_flags |= 0x80` (already set by Component()).
-// PORT GAP (retail 0x140051fa3 `MOV dword [RBX+0x4c],0xffffffff`) — B38 D9: the tree's
-// factory zero-filled the body, so +0x4c starts 0 here as before.
+// +0x4c is the last-harvest year the state-10 harvest gate compares with the current
+// year: -1 means "never harvested". The tree's factory zero-filled it, which read as
+// "already harvested in year 0".
 OrchardComponent::OrchardComponent()
-    : _controller(this), orchardFlag(0), _pad49{}, orchardId(0), field50(nullptr),
+    : _controller(this), orchardFlag(0), _pad49{}, orchardId(-1), field50(nullptr),
       field58(nullptr), field60(nullptr) {
     OrFlagsInCtor(0x80);
 }

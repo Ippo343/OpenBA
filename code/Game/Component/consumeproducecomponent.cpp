@@ -274,11 +274,10 @@ extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void*, uintptr_t*);
 
 // 0x140119050: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
 // +0x50 = -1, +0x58 = +0x60 = 0 (qwords), +0x68 = 0, `_flags |= 0x80` (already
-// set by Component()).
-// PORT GAP (retail 0x14011907b `MOV dword [RBX+0x50],0xffffffff`) — B38 D9: the
-// tree's factory zero-filled the body, so +0x50 starts 0 here as before.
+// set by Component()). +0x50 = -1 is "no recipe selected" until Startup (slot 4)
+// reads the description's +0x4c; the tree's factory zero-filled it (recipe 0).
 ConsumeProduceComponent::ConsumeProduceComponent()
-    : ResourceProduceComponent(), consumeResourceId(0), _pad54{}, consumeRates(nullptr),
+    : ResourceProduceComponent(), consumeResourceId(-1), _pad54{}, consumeRates(nullptr),
       consumeCount(0), consumeCapacity(0), consumeState(0), _pad6C{} {
     OrFlagsInCtor(0x80);
 }
