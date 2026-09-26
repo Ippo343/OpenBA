@@ -188,15 +188,8 @@ namespace WorkPlaceUIAddr {
 // --- BuildRequirementUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/BuildRequirementUI.h"
 
-// --- BuildUI (0x50) ---
-struct BuildUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-    uint64_t data48;           // +0x48: zeroed
-};
-static_assert(sizeof(BuildUI) == 0x50, "BuildUI size mismatch");
+// --- BuildUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/BuildUI.h"
 
 // --- CemeteryUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/CemeteryUI.h"
@@ -352,45 +345,17 @@ struct EventLogUI {
 };
 static_assert(sizeof(EventLogUI) == 0x80, "EventLogUI size mismatch");
 
-// --- HelpUI (0x78) ---
-// Has separate Ctor (0x14006a920). Inits +0x30..+0x58=0, +0x60=-1, +0x68=0, +0x70=0.
-struct HelpUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-    uint64_t data48;           // +0x48: zeroed
-    uint64_t data50;           // +0x50: zeroed
-    uint64_t data58;           // +0x58: zeroed
-    int64_t  data60;           // +0x60: initialized to -1 (0xFFFFFFFFFFFFFFFF)
-    uint64_t data68;           // +0x68: zeroed
-    uint64_t data70;           // +0x70: zeroed
-};
-static_assert(sizeof(HelpUI) == 0x78, "HelpUI size mismatch");
-static_assert(offsetof(HelpUI, data60) == 0x60, "");
+// --- HelpUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/HelpUI.h"
 
 // --- HotKeyToolTipUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/HotKeyToolTipUI.h"
 
-// --- ImmigrationUI (0x50) ---
-struct ImmigrationUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38
-    uint64_t data40;           // +0x40
-    uint64_t data48;           // +0x48
-};
-static_assert(sizeof(ImmigrationUI) == 0x50, "ImmigrationUI size mismatch");
+// --- ImmigrationUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/ImmigrationUI.h"
 
-// --- MapUI (0x50) ---
-struct MapUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38
-    uint64_t data40;           // +0x40
-    uint64_t data48;           // +0x48
-};
-static_assert(sizeof(MapUI) == 0x50, "MapUI size mismatch");
+// --- MapUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/MapUI.h"
 
 // --- ModBrowseUI (0x30) ---
 // No subclass fields.
@@ -424,16 +389,8 @@ struct OrchardUI {
 };
 static_assert(sizeof(OrchardUI) == 0x48, "OrchardUI size mismatch");
 
-// --- PageToggleUI (0x48) ---
-// Factory inits: +0x30=0, +0x38=0, +0x40(u32)=0
-struct PageToggleUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint32_t data40;           // +0x40: zeroed (u32 write)
-    uint8_t  _pad44[4];        // +0x44: gap
-};
-static_assert(sizeof(PageToggleUI) == 0x48, "PageToggleUI size mismatch");
+// --- PageToggleUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/PageToggleUI.h"
 
 // --- PastureUI (0x40) --- extends SelectResourceUI
 // Factory: SelectResourceUI vtable -> InternalBasePtr@+0x30 -> override vtable, +0x38=0
@@ -444,33 +401,11 @@ struct PastureUI {
 };
 static_assert(sizeof(PastureUI) == 0x40, "PastureUI size mismatch");
 
-// --- ProductionUI (0x50) ---
-// Factory uses _eh_vector_constructor_iterator_ for 2 items of 0x10 bytes at +0x30
-struct ProductionUI {
-    DialogController base;     // +0x00
-    uint8_t  vectorItems[0x20];// +0x30: 2x 0x10-byte items (constructor-initialized)
-};
-static_assert(sizeof(ProductionUI) == 0x50, "ProductionUI size mismatch");
+// --- ProductionUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/ProductionUI.h"
 
-// --- ProfessionUI (0x78) ---
-// Has separate Ctor (0x1400775a0). Inits +0x30..+0x60=0, +0x68(u32)=0, +0x70(u32)=0.
-struct ProfessionUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-    uint64_t data48;           // +0x48: zeroed
-    uint64_t data50;           // +0x50: zeroed
-    uint64_t data58;           // +0x58: zeroed
-    uint64_t data60;           // +0x60: zeroed
-    uint32_t data68;           // +0x68: zeroed (u32 write)
-    uint8_t  _pad6C[4];        // +0x6C: gap
-    uint32_t data70;           // +0x70: zeroed (u32 write)
-    uint8_t  _pad74[4];        // +0x74: gap
-};
-static_assert(sizeof(ProfessionUI) == 0x78, "ProfessionUI size mismatch");
-static_assert(offsetof(ProfessionUI, data30) == 0x30, "");
-static_assert(offsetof(ProfessionUI, data68) == 0x68, "");
+// --- ProfessionUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/ProfessionUI.h"
 
 // --- RadiusUI (0x38) ---
 // Factory inits: +0x30(u32)=0xFFFFFFFF
@@ -490,13 +425,8 @@ struct ResidenceUI {
 };
 static_assert(sizeof(ResidenceUI) == 0x40, "ResidenceUI size mismatch");
 
-// --- ResourceLimitUI (0x40) ---
-struct ResourceLimitUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-};
-static_assert(sizeof(ResourceLimitUI) == 0x40, "ResourceLimitUI size mismatch");
+// --- ResourceLimitUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/ResourceLimitUI.h"
 
 // --- SelectResourceUI (abstract) ---
 // No instantiation. Placeholder factory. Base for CropUI, OrchardUI, PastureUI.
@@ -609,24 +539,8 @@ static_assert(sizeof(StorageUI) == 0x40, "StorageUI size mismatch");
 // --- TitleDescToolTipUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/TitleDescToolTipUI.h"
 
-// --- ToolUI (0x58) ---
-// Factory inits: +0x30=0, +0x38=0, +0x40(u16)=0, +0x44(u64)=0, +0x4C(u16)=0, +0x50=0
-struct ToolUI {
-    DialogController base;     // +0x00
-    void*    componentData;    // +0x30: BuildComponent or sub-component ptr
-    void*    labelTitle;       // +0x38: TextElement "labelTitle"
-    uint8_t  hasBorderTitle;   // +0x40: borderTitle element exists (enables title drag)
-    uint8_t  isDragging;       // +0x41: currently dragging dialog
-    uint8_t  _pad42[2];        // +0x42: gap
-    int32_t  dragOffsetX;      // +0x44: mouse offset from dialog left
-    int32_t  dragOffsetY;      // +0x48: mouse offset from dialog top
-    uint8_t  hasTitleDragZone; // +0x4C: borderTitle has drag zone enabled
-    uint8_t  isDragPending;    // +0x4D: waiting for mouse movement threshold
-    uint8_t  _pad4E[2];        // +0x4E: gap
-    int32_t  dragStartX;       // +0x50: drag start mouse X
-    int32_t  dragStartY;       // +0x54: drag start mouse Y
-};
-static_assert(sizeof(ToolUI) == 0x58, "ToolUI size mismatch");
+// --- ToolUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/ToolUI.h"
 
 // --- TownHallUI (0x1E8) ---
 // Has separate Ctor (0x140081280). Second-largest panel.
@@ -713,48 +627,8 @@ static_assert(offsetof(TownHallUI, cachedGameTick) == 0x148, "");
 static_assert(offsetof(TownHallUI, graphData) == 0x160, "");
 static_assert(offsetof(TownHallUI, agriBSTCount) == 0x1E0, "");
 
-// --- TradeUI (0x148) ---
-// Has separate Ctor (0x140086b80). Inits +0x30..+0x140=0 (all zeroed qwords).
-struct TradeUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38
-    uint64_t data40;           // +0x40
-    uint64_t data48;           // +0x48
-    uint64_t data50;           // +0x50
-    uint64_t data58;           // +0x58
-    uint64_t data60;           // +0x60
-    uint64_t data68;           // +0x68
-    uint64_t data70;           // +0x70
-    uint64_t data78;           // +0x78
-    uint64_t data80;           // +0x80
-    uint64_t data88;           // +0x88
-    uint64_t data90;           // +0x90
-    uint64_t data98;           // +0x98
-    uint64_t dataA0;           // +0xA0
-    uint64_t dataA8;           // +0xA8
-    uint64_t dataB0;           // +0xB0
-    uint64_t dataB8;           // +0xB8
-    uint64_t dataC0;           // +0xC0
-    uint64_t dataC8;           // +0xC8
-    uint64_t dataD0;           // +0xD0
-    uint64_t dataD8;           // +0xD8
-    uint64_t dataE0;           // +0xE0
-    uint64_t dataE8;           // +0xE8
-    uint64_t dataF0;           // +0xF0
-    uint64_t dataF8;           // +0xF8
-    uint64_t data100;          // +0x100
-    uint64_t data108;          // +0x108
-    uint64_t data110;          // +0x110
-    uint64_t data118;          // +0x118
-    uint64_t data120;          // +0x120
-    uint64_t data128;          // +0x128
-    uint64_t data130;          // +0x130
-    uint64_t data138;          // +0x138
-    uint64_t data140;          // +0x140
-};
-static_assert(sizeof(TradeUI) == 0x148, "TradeUI size mismatch");
-static_assert(offsetof(TradeUI, data30) == 0x30, "");
+// --- TradeUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/TradeUI.h"
 
 // --- TutorialUI (0x60) ---
 // Factory inits: +0x30..+0x58=0 (6 qwords)

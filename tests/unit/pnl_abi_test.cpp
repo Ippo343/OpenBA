@@ -23,10 +23,20 @@
 // @@PANEL-INCLUDES-BEGIN
 #include "Dialog/AttendanceUI.h"
 #include "Dialog/BuildRequirementUI.h"
+#include "Dialog/BuildUI.h"
 #include "Dialog/CemeteryUI.h"
 #include "Dialog/ConsumeProduceUI.h"
+#include "Dialog/HelpUI.h"
 #include "Dialog/HotKeyToolTipUI.h"
+#include "Dialog/ImmigrationUI.h"
+#include "Dialog/MapUI.h"
+#include "Dialog/PageToggleUI.h"
+#include "Dialog/ProductionUI.h"
+#include "Dialog/ProfessionUI.h"
+#include "Dialog/ResourceLimitUI.h"
 #include "Dialog/TitleDescToolTipUI.h"
+#include "Dialog/ToolUI.h"
+#include "Dialog/TradeUI.h"
 // @@PANEL-INCLUDES-END
 
 #include <cstdint>
@@ -126,6 +136,13 @@ UNIT_TEST(pnl_BuildRequirementUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&BuildRequirementUI::OnCreated), (uintptr_t)0x20);   // 0x14005e7c0
 }
 
+UNIT_TEST(pnl_BuildUI_layout_and_slots) {
+    CheckPanelShape<BuildUI>((size_t)0x50);
+    CHECK_EQ(SlotOffset(&BuildUI::OnCreated), (uintptr_t)0x20);   // 0x1400b1f40
+    CHECK_EQ(SlotOffset(&BuildUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400b1a50
+    CHECK_EQ(SlotOffset(&BuildUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400b1ea0
+}
+
 UNIT_TEST(pnl_CemeteryUI_layout_and_slots) {
     CheckPanelShape<CemeteryUI>((size_t)0x38);
     CHECK_EQ(SlotOffset(&CemeteryUI::OnCreated), (uintptr_t)0x20);   // 0x14005f090
@@ -139,16 +156,86 @@ UNIT_TEST(pnl_ConsumeProduceUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&ConsumeProduceUI::OnElementEvent), (uintptr_t)0x48);   // 0x14005f330
 }
 
+UNIT_TEST(pnl_HelpUI_layout_and_slots) {
+    CheckPanelShape<HelpUI>((size_t)0x78);
+    CHECK_EQ(SlotOffset(&HelpUI::OnCreated), (uintptr_t)0x20);   // 0x14006a500
+    CHECK_EQ(SlotOffset(&HelpUI::OnOpened), (uintptr_t)0x28);   // 0x14006a4f0
+    CHECK_EQ(SlotOffset(&HelpUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14006a230
+    CHECK_EQ(SlotOffset(&HelpUI::OnElementEvent), (uintptr_t)0x48);   // 0x14006a290
+}
+
 UNIT_TEST(pnl_HotKeyToolTipUI_layout_and_slots) {
     CheckPanelShape<HotKeyToolTipUI>((size_t)0x30);
     CHECK_EQ(SlotOffset(&HotKeyToolTipUI::Persist), (uintptr_t)0x18);   // 0x14006ab80
     CHECK_EQ(SlotOffset(&HotKeyToolTipUI::OnCreated), (uintptr_t)0x20);   // 0x14006a980
 }
 
+UNIT_TEST(pnl_ImmigrationUI_layout_and_slots) {
+    CheckPanelShape<ImmigrationUI>((size_t)0x50);
+    CHECK_EQ(SlotOffset(&ImmigrationUI::OnCreated), (uintptr_t)0x20);   // 0x14006b330
+    CHECK_EQ(SlotOffset(&ImmigrationUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14006b130
+    CHECK_EQ(SlotOffset(&ImmigrationUI::OnElementEvent), (uintptr_t)0x48);   // 0x14006b300
+}
+
+UNIT_TEST(pnl_MapUI_layout_and_slots) {
+    CheckPanelShape<MapUI>((size_t)0x50);
+    CHECK_EQ(SlotOffset(&MapUI::Persist), (uintptr_t)0x18);   // 0x14006ce80
+    CHECK_EQ(SlotOffset(&MapUI::OnCreated), (uintptr_t)0x20);   // 0x14006ca80
+    CHECK_EQ(SlotOffset(&MapUI::OnElementEvent), (uintptr_t)0x48);   // 0x14006c9e0
+}
+
+UNIT_TEST(pnl_PageToggleUI_layout_and_slots) {
+    CheckPanelShape<PageToggleUI>((size_t)0x48);
+    CHECK_EQ(SlotOffset(&PageToggleUI::Persist), (uintptr_t)0x18);   // 0x1400759a0
+    CHECK_EQ(SlotOffset(&PageToggleUI::OnCreated), (uintptr_t)0x20);   // 0x140075850
+    CHECK_EQ(SlotOffset(&PageToggleUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140075780
+    CHECK_EQ(SlotOffset(&PageToggleUI::OnElementEvent), (uintptr_t)0x48);   // 0x140075710
+}
+
+UNIT_TEST(pnl_ProductionUI_layout_and_slots) {
+    CheckPanelShape<ProductionUI>((size_t)0x50);
+    CHECK_EQ(SlotOffset(&ProductionUI::Persist), (uintptr_t)0x18);   // 0x140076300
+    CHECK_EQ(SlotOffset(&ProductionUI::OnCreated), (uintptr_t)0x20);   // 0x140075da0
+    CHECK_EQ(SlotOffset(&ProductionUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140075a20
+}
+
+UNIT_TEST(pnl_ProfessionUI_layout_and_slots) {
+    CheckPanelShape<ProfessionUI>((size_t)0x78);
+    CHECK_EQ(SlotOffset(&ProfessionUI::OnOpened), (uintptr_t)0x28);   // 0x140076ca0
+    CHECK_EQ(SlotOffset(&ProfessionUI::OnUpdate), (uintptr_t)0x40);   // 0x1400765a0
+    CHECK_EQ(SlotOffset(&ProfessionUI::OnElementEvent), (uintptr_t)0x48);   // 0x140076c10
+}
+
+UNIT_TEST(pnl_ResourceLimitUI_layout_and_slots) {
+    CheckPanelShape<ResourceLimitUI>((size_t)0x40);
+    CHECK_EQ(SlotOffset(&ResourceLimitUI::OnCreated), (uintptr_t)0x20);   // 0x140077970
+    CHECK_EQ(SlotOffset(&ResourceLimitUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400778d0
+    CHECK_EQ(SlotOffset(&ResourceLimitUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400777e0
+}
+
 UNIT_TEST(pnl_TitleDescToolTipUI_layout_and_slots) {
     CheckPanelShape<TitleDescToolTipUI>((size_t)0x30);
     CHECK_EQ(SlotOffset(&TitleDescToolTipUI::Persist), (uintptr_t)0x18);   // 0x14007b8a0
     CHECK_EQ(SlotOffset(&TitleDescToolTipUI::OnCreated), (uintptr_t)0x20);   // 0x14007b730
+}
+
+UNIT_TEST(pnl_ToolUI_layout_and_slots) {
+    CheckPanelShape<ToolUI>((size_t)0x58);
+    CHECK_EQ(SlotOffset(&ToolUI::Persist), (uintptr_t)0x18);   // 0x14007c070
+    CHECK_EQ(SlotOffset(&ToolUI::OnCreated), (uintptr_t)0x20);   // 0x14007bd70
+    CHECK_EQ(SlotOffset(&ToolUI::OnUpdate), (uintptr_t)0x40);   // 0x14007b9b0
+    CHECK_EQ(SlotOffset(&ToolUI::OnElementEvent), (uintptr_t)0x48);   // 0x14007bc30
+}
+
+UNIT_TEST(pnl_TradeUI_layout_and_slots) {
+    CheckPanelShape<TradeUI>((size_t)0x148);
+    CHECK_EQ(SlotOffset(&TradeUI::OnCreated), (uintptr_t)0x20);   // 0x140084dd0
+    CHECK_EQ(SlotOffset(&TradeUI::OnOpened), (uintptr_t)0x28);   // 0x140082a70
+    CHECK_EQ(SlotOffset(&TradeUI::OnClosed), (uintptr_t)0x30);   // 0x140082a00
+    CHECK_EQ(SlotOffset(&TradeUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140082150
+    CHECK_EQ(SlotOffset(&TradeUI::OnUpdate), (uintptr_t)0x40);   // 0x1400827b0
+    CHECK_EQ(SlotOffset(&TradeUI::OnElementEvent), (uintptr_t)0x48);   // 0x140081f20
+    CHECK_EQ(SlotOffset(&TradeUI::OnSerializeSettings), (uintptr_t)0x50);   // 0x1400868c0
 }
 // @@PANEL-TESTS-END
 
