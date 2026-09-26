@@ -37,7 +37,14 @@
 //
 // The CELLS are UI::Element::_children itself (+0xA0), indexed
 // `_colCount * row + col`; there is no second array.
+//
+// ENDGAME B.3.6 block C4: the layout is the real class in runtime/types/ui/
+// TableElement.h. Every slot body below is a MEMBER; each registered door is a
+// one-line QUALIFIED delegation; ctor/dtor stay DOORS. RULE B6-5: the vtable
+// and type-info record are cached in namespace-scope std::atomic slots.
 // ============================================================================
+
+#include <atomic>
 
 #include "widget_common.h"
 #include "../../types/ui/TableElement.h"
@@ -46,56 +53,42 @@ using namespace rtui;
 
 namespace {
 
-constexpr int kRowCount = 0xC0;
-constexpr int kColCount = 0xC4;
-constexpr int kSpacing  = 0xC8;
-constexpr int kRowSizes = 0xD0;
-constexpr int kColSizes = 0xE0;
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
 
-static_assert(kRowCount == UI::TableElementOffsets::kRowCount, "");
-static_assert(kColCount == UI::TableElementOffsets::kColCount, "");
-static_assert(kRowSizes == UI::TableElementOffsets::kRowSizes, "");
-static_assert(kColSizes == UI::TableElementOffsets::kColSizes, "");
-
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A");
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7TableElement@UI@@6B@"); }
+const uint8_t* TypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@TableElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* Vtable() { return AtomicExport(g_vtable, "??_7TableElement@UI@@6B@"); }
 
+// `?GetRowHeight@` (0x18011e090) / `?GetColumnWidth@` (0x18011e1a0) — declared
+// on the class, bodies still element_bodies_b5.cpp's doors (fragment pass).
 using ExtentFn = int32_t (*)(void* self, int32_t index);
 
 }  // namespace
 
-extern "C" uint32_t RtUi_TableElement_Type(const void*) {
+// ============================================================================
+// The member bodies (ENDGAME B.3.6 block C4)
+// ============================================================================
+namespace UI {
+
+uint32_t TableElement::Type() const {
     const uint8_t* ti = TypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_TableElement_TypeName(const void*) {
+const char* TableElement::TypeName() const {
     const uint8_t* ti = TypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
-
-// ??0TableElement@UI@@QEAA@XZ   0x18011e2f0
-extern "C" void* RtUi_TableElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = Vtable();
-    I32(self, kRowCount) = 0;
-    I32(self, kColCount) = 0;
-    I32(self, kSpacing)  = 0;
-    PTR(self, kRowSizes)     = nullptr;
-    PTR(self, kRowSizes + 8) = nullptr;
-    PTR(self, kColSizes)     = nullptr;
-    PTR(self, kColSizes + 8) = nullptr;
-    return self;
-}
-
-// ??1TableElement@UI@@UEAA@XZ   0x18011e2a0
-extern "C" void RtUi_TableElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(B(self, kColSizes));
-    RtAddr<ArrayDtorFn>(0x18001c750ull)(B(self, kRowSizes));
-    ElementDtor(self);
 }
 
 // ---------------------------------------------------------------------------
@@ -105,119 +98,164 @@ extern "C" void RtUi_TableElement_Dtor(void* self) {
 // The "first non-empty" flag is what keeps a leading zero-width column from
 // contributing a gap.
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_TableElement_ComputeSize(void* self) {
-    if ((U32(self, kElFlags) & kFlagNeedsSizeCalc) == 0) return;
+void TableElement::ComputeSize() {
+    if ((_flags & kFlagNeedsSizeCalc) == 0) return;
 
-    I32(self, kElLayoutWidth)  = 0;     // one qword store
-    I32(self, kElLayoutHeight) = 0;
+    _layoutWidth  = 0;     // one qword store
+    _layoutHeight = 0;
 
     bool first = true;
-    for (int32_t c = 0; c < I32(self, kColCount); ++c) {
-        int32_t* cols = reinterpret_cast<int32_t*>(PTR(self, kColSizes));
-        cols[c] = RtAddr<ExtentFn>(0x18011e1a0ull)(self, c);   // GetColumnWidth
-        cols = reinterpret_cast<int32_t*>(PTR(self, kColSizes));
-        I32(self, kElLayoutWidth) = I32(self, kElLayoutWidth) + cols[c];
+    for (int32_t c = 0; c < _columnCount; ++c) {
+        int32_t* cols = _columnSizes._data;                                 // loaded BEFORE the call
+        cols[c] = RtAddr<ExtentFn>(0x18011e1a0ull)(this, c);                // GetColumnWidth
+        cols = _columnSizes._data;                                          // re-read
+        _layoutWidth = _layoutWidth + cols[c];
         if (cols[c] != 0) {
             if (first) first = false;
-            else I32(self, kElLayoutWidth) = I32(self, kSpacing) + I32(self, kElLayoutWidth);
+            else _layoutWidth = _spacing + _layoutWidth;
         }
     }
 
     first = true;
-    for (int32_t r = 0; r < I32(self, kRowCount); ++r) {
-        int32_t* rows = reinterpret_cast<int32_t*>(PTR(self, kRowSizes));
-        rows[r] = RtAddr<ExtentFn>(0x18011e090ull)(self, r);   // GetRowHeight
-        rows = reinterpret_cast<int32_t*>(PTR(self, kRowSizes));
-        I32(self, kElLayoutHeight) = rows[r] + I32(self, kElLayoutHeight);
+    for (int32_t r = 0; r < _rowCount; ++r) {
+        int32_t* rows = _rowSizes._data;                                    // loaded BEFORE the call
+        rows[r] = RtAddr<ExtentFn>(0x18011e090ull)(this, r);                // GetRowHeight
+        rows = _rowSizes._data;                                             // re-read
+        _layoutHeight = rows[r] + _layoutHeight;
         if (rows[r] != 0) {
             if (first) first = false;
-            else I32(self, kElLayoutHeight) = I32(self, kSpacing) + I32(self, kElLayoutHeight);
+            else _layoutHeight = _spacing + _layoutHeight;
         }
     }
 
-    U32(self, kElFlags) &= ~kFlagNeedsSizeCalc;
+    _flags &= ~kFlagNeedsSizeCalc;
 }
 
 // ---------------------------------------------------------------------------
 // slot 5 — ?ComputeLayout@TableElement@UI@@UEAAXHHHH@Z   0x18011dd10
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_TableElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
+void TableElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (Element* border = static_cast<Element*>(_border))
+        border->ComputeLayout(x, y, right, bottom);
 
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
+    ComputeSize();                                            // slot 4, virtual
 
-    int32_t w = I32(self, kElLayoutWidth);
-    int32_t h = I32(self, kElLayoutHeight);
-    const int32_t align = I32(self, kElAlignment);
+    int32_t w = _layoutWidth;
+    int32_t h = _layoutHeight;
+    const int32_t align = _alignment;
 
     if (right  < w + x) x = right  - w;
     if (bottom < h + y) y = bottom - h;
 
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t aw = (right  - _rightPad)  - px;
+    const int32_t ah = (bottom - _bottomPad) - py;
 
-    if ((U32(self, kElFlags) & kFlagStretchX) != 0) w = aw;
-    if ((U32(self, kElFlags) & kFlagStretchY) != 0) h = ah;
+    if ((_flags & kFlagStretchX) != 0) w = aw;
+    if ((_flags & kFlagStretchY) != 0) h = ah;
 
     switch (align) {
         case 1: case 4: case 7: px = ((aw >> 1) - (w >> 1)) + px; break;
-        case 2: case 5: case 8: px = (right - I32(self, kElRightPad)) - w; break;
+        case 2: case 5: case 8: px = (right - _rightPad) - w; break;
         default: break;
     }
     if (align > 2) {
         if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
-        else if (align < 9) py = (bottom - I32(self, kElBottomPad)) - h;
+        else if (align < 9) py = (bottom - _bottomPad) - h;
     }
 
-    I32(self, kElLayoutRight)  = px + w;
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutBottom) = py + h;
+    _layoutRight  = px + w;
+    _layoutLeft   = px;
+    _layoutTop    = py;
+    _layoutBottom = py + h;
 
     int32_t cellTop = py;
-    for (int32_t r = 0; r < I32(self, kRowCount); ++r) {
-        const int32_t rowH = reinterpret_cast<int32_t*>(PTR(self, kRowSizes))[r];
+    for (int32_t r = 0; r < _rowCount; ++r) {
+        const int32_t rowH = _rowSizes._data[r];
         int32_t cellLeft = px;
-        for (int32_t c = 0; c < I32(self, kColCount); ++c) {
-            const int32_t colW = reinterpret_cast<int32_t*>(PTR(self, kColSizes))[c];
-            void* cell = reinterpret_cast<void**>(PTR(self, kElChildren))
-                             [I32(self, kColCount) * r + c];
-            if (cell != nullptr && (U32(cell, kElFlags) & kFlagHidden) == 0) {
-                reinterpret_cast<ComputeLayoutSlotFn>(VTable(cell)[kVtComputeLayout / 8])(
-                    cell, cellLeft, cellTop, colW + cellLeft, cellTop + rowH);
-            }
+        for (int32_t c = 0; c < _columnCount; ++c) {
+            const int32_t colW = _columnSizes._data[c];
+            Element* cell = _children[_columnCount * r + c];
+            if (cell != nullptr && (cell->_flags & kFlagHidden) == 0)
+                cell->ComputeLayout(cellLeft, cellTop, colW + cellLeft, cellTop + rowH);
             cellLeft += colW;
-            if (colW > 0) cellLeft += I32(self, kSpacing);
+            if (colW > 0) cellLeft += _spacing;
         }
         cellTop += rowH;
-        if (rowH > 0) cellTop += I32(self, kSpacing);
+        if (rowH > 0) cellTop += _spacing;
     }
 }
 
 // ---------------------------------------------------------------------------
 // slot 6 — ?Draw@TableElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x18011dc20
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_TableElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
+void TableElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    if (Element* border = static_cast<Element*>(_border))
+        border->Draw(context, alpha);
 
-    if ((U32(me, kElFlags) & kFlagDimColor) != 0) alpha >>= 1;
+    if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
 
-    for (int32_t r = 0; r < I32(me, kRowCount); ++r) {
-        int32_t cols = I32(me, kColCount);
+    for (int32_t r = 0; r < _rowCount; ++r) {
+        int32_t cols = _columnCount;
         for (int32_t c = 0; c < cols; ++c) {
-            void* cell = reinterpret_cast<void**>(PTR(me, kElChildren))[cols * r + c];
-            if (cell != nullptr && (U32(cell, kElFlags) & kFlagHidden) == 0)
-                reinterpret_cast<DrawSlotFn>(VTable(cell)[kVtDraw / 8])(cell, ctx, alpha);
-            cols = I32(me, kColCount);
+            Element* cell = _children[cols * r + c];
+            if (cell != nullptr && (cell->_flags & kFlagHidden) == 0)
+                cell->Draw(context, alpha);
+            cols = _columnCount;
         }
     }
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+using UI::TableElement;
+
+extern "C" uint32_t RtUi_TableElement_Type(const TableElement* self) {
+    return self->UI::TableElement::Type();
+}
+extern "C" const char* RtUi_TableElement_TypeName(const TableElement* self) {
+    return self->UI::TableElement::TypeName();
+}
+extern "C" void RtUi_TableElement_ComputeSize(TableElement* self) {
+    self->UI::TableElement::ComputeSize();
+}
+extern "C" void RtUi_TableElement_ComputeLayout(TableElement* self, int32_t x, int32_t y,
+                                                int32_t right, int32_t bottom) {
+    self->UI::TableElement::ComputeLayout(x, y, right, bottom);
+}
+extern "C" void RtUi_TableElement_Draw(const TableElement* self, void* ctx, uint8_t alpha) {
+    self->UI::TableElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+
+// ??0TableElement@UI@@QEAA@XZ   0x18011e2f0 — a DOOR (B4b-2)
+extern "C" void* RtUi_TableElement_Ctor(void* selfv) {   // returns this in RAX, as every MSVC ctor does
+    ElementCtor(selfv);
+    PTR(selfv, 0x00) = Vtable();
+    TableElement* self = reinterpret_cast<TableElement*>(selfv);   // B.3.6 bridge
+    self->_rowCount    = 0;
+    self->_columnCount = 0;
+    self->_spacing     = 0;
+    self->_rowSizes._data        = nullptr;
+    self->_rowSizes._size        = 0;
+    self->_rowSizes._capacity    = 0;
+    self->_columnSizes._data     = nullptr;
+    self->_columnSizes._size     = 0;
+    self->_columnSizes._capacity = 0;
+    return selfv;
+}
+
+// ??1TableElement@UI@@UEAA@XZ   0x18011e2a0 — a DOOR (B4b-2)
+extern "C" void RtUi_TableElement_Dtor(void* selfv) {
+    PTR(selfv, 0x00) = Vtable();
+    TableElement* self = reinterpret_cast<TableElement*>(selfv);   // B.3.6 bridge
+    RtAddr<ArrayDtorFn>(0x18001c750ull)(&self->_columnSizes);
+    RtAddr<ArrayDtorFn>(0x18001c750ull)(&self->_rowSizes);
+    ElementDtor(selfv);
 }
 
 // ============================================================================

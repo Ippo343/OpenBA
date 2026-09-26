@@ -1,0 +1,120 @@
+#pragma once
+// ============================================================================
+// runtime/types/ui/TableDescription.h — UI::TableDescription, the REAL C++
+// class (ENDGAME B.3 step 6, block C4)
+// ============================================================================
+//
+// PARENT `UI::ElementDescription` — READ, not inferred:
+//     ?_ParentTypeName@TableDescription@UI@@CAPEBDXZ @0x180078ea0 -> "ElementDescription"
+//
+// RULE B5-15 / B6-7 — THE TWO NAME LITERALS, RECORDED, NOT USED (slots 1/2 keep
+// reading the minted `?_typeInfo@TableDescription@UI@@…`, 0x1801fae40):
+//     ?_TypeName@TableDescription@UI@@CAPEBDXZ       @0x180078e90 -> "TableDescription"
+//     ?_ParentTypeName@TableDescription@UI@@CAPEBDXZ @0x180078ea0 -> "ElementDescription"
+//
+// `??_7TableDescription@UI@@6B@` @ 0x1801592c0, TEN slots (B36_SLOTS.md
+// section 1; sizeof from `MOV EDX,0x98` in slot 0 0x180079210):
+//   [0] 0x180079210 deleting dtor (row)  [1] 0x180078ed0 TypeName
+//   [2] 0x180078eb0 Type                 [3] 0x18011e6e0 GetFileVersion
+//   [4] 0x1800066e0 External::Compile INHERITED
+//   [5] 0x18011e590 Serialize            [6] 0x180079050 Reconstruct
+//   [7] 0x180079080 Destruct             [8] 0x18011e350 CreateInstance RETSLOT
+//   [9] 0x180079070 Construct            INTRODUCED by the leaf (RULE B6-1.1)
+//
+// ABSTRACT (slot 0 pure), no real ctor: every live one is built by the
+// `??0TableDescription` DOOR (tabledescription.cpp) and wears the MINTED table.
+//
+// LAYOUT (RULE B6-8) — MOVED here from tabledescription.cpp's raw offsets.
+// Evidence: `??0TableDescription@UI@@QEAA@XZ` (0x18011e7a0), tail:
+//     MOV dword [RCX+0x68],1 ; MOV qword [RCX+0x6c],1   (UNALIGNED: +0x6c = 1, +0x70 = 0)
+//     MOV qword [RCX+0x78/0x80/0x88/0x90],0
+// +0x74 is written by NOTHING (the unaligned qword stops at +0x73): an explicit
+// pad. Serialize (0x18011e590): kScalarInt over +0x68/+0x6c/+0x70, then the
+// +0x78 cell array (count, Array<Cell>::SetSize 0x1800799a0, per cell two
+// kScalarInt and ExternalPtr<ElementDescription> 0x180038f90). +0x88 is written
+// by the ctor and touched by nothing else in the class (`_unknown88`); +0x90 is a
+// System::String only ~TableDescription (0x18011e6f0) releases (`_unknown90`).
+// CreateInstance (0x18011e350) loops a over [0, +0x68) against cell.column and
+// b over [0, +0x6c) against cell.row, and stores +0x68 to TableElement +0xc4
+// (column count) and +0x6c to +0xc0 (row count): that is what names them.
+// ============================================================================
+
+#include <cstddef>
+#include <cstdint>
+
+#include "ElementDescription.h"
+#include "../collection/Collection.h"
+
+namespace UI {
+
+class Dialog;
+class Element;
+
+class TableDescription : public ElementDescription {
+public:
+    // One cell description: `Array<Cell>` stride 0x10 (0x1800799a0's spec). A
+    // negative column or row is a wildcard (see CreateInstance's four-tier pick).
+    struct Cell {
+        int32_t column;          // +0x00  kScalarInt
+        int32_t row;             // +0x04  kScalarInt
+        void*   desc;            // +0x08  ExternalPtr<UI::ElementDescription>
+    };
+
+    // ---- the ten slots, in measured order ----------------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180079210
+    const char*   TypeName() const override;                      // [1] 0x180078ed0
+    uint32_t      Type() const override;                          // [2] 0x180078eb0
+    int32_t       GetFileVersion() const override;                // [3] 0x18011e6e0
+    bool          Serialize(void* stream) override;               // [5] 0x18011e590
+    Object::External* Reconstruct() override;                     // [6] 0x180079050
+    void          Destruct() override;                            // [7] 0x180079080
+    Object::InternalPtr<Element>* CreateInstance(
+        Object::InternalPtr<Element>* ret,
+        const Dialog* dialog) const override;                     // [8] 0x18011e350 RETSLOT
+    virtual Object::External* Construct();                        // [9] 0x180079070
+
+    // ---- exported, not ported: declared, deliberately undefined ------------
+    TableDescription(const TableDescription& src);                // 0x180079090
+    TableDescription& operator=(const TableDescription& src);     // 0x180079130
+    static uint32_t      TypeId();                                // 0x180078ec0
+    static Object::Base* CreateNewObject();                       // 0x180078fc0  ui_factory_wave28.cpp door
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180079040  ui_factory_wave28.cpp door
+
+protected:
+    // NOT retail's `??0TableDescription@UI@@QEAA@XZ` (0x18011e7a0, the door).
+    TableDescription() = default;
+    // `??1TableDescription@UI@@UEAA@XZ` (0x18011e6f0): non-virtual, not defined
+    // in the real build; the door `RtUi_TableDescription_Dtor` is.
+    ~TableDescription();
+
+private:
+    static const char* _TypeName();                               // 0x180078e90 -> "TableDescription"
+    static const char* _ParentTypeName();                         // 0x180078ea0 -> "ElementDescription"
+    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fae40 (minted)
+
+public:
+    // ---- the 0x30 bytes after ElementDescription ---------------------------
+    int32_t  _columnCount;        // +0x68  ctor 1; -> TableElement::_columnCount (+0xc4)
+    int32_t  _rowCount;           // +0x6c  ctor 1; -> TableElement::_rowCount    (+0xc0)
+    int32_t  _spacing;            // +0x70  ctor 0; -> TableElement::_spacing     (+0xc8)
+    uint32_t _pad74;              // +0x74  written by nothing
+    Collection::Array<Cell> _cells;   // +0x78 .. +0x87  ~Array 0x180079870
+    uint64_t _unknown88;          // +0x88  ctor 0; no body of this class reads it
+    char*    _unknown90;          // +0x90  System::String; only the dtor touches it
+};
+
+static_assert(sizeof(TableDescription::Cell) == 0x10, "Array<Cell> stride (0x1800799a0)");
+static_assert(offsetof(TableDescription::Cell, desc) == 0x08, "");
+static_assert(sizeof(TableDescription) == 0x98,
+              "UI::TableDescription is 0x98 bytes (MOV EDX,0x98 in its slot-0 "
+              "vector deleting destructor 0x180079210)");
+static_assert(alignof(TableDescription) == 8, "UI::TableDescription aligns to 8");
+static_assert(offsetof(TableDescription, _columnCount) == sizeof(ElementDescription), "");
+static_assert(offsetof(TableDescription, _columnCount) == 0x68, "");
+static_assert(offsetof(TableDescription, _rowCount)    == 0x6c, "");
+static_assert(offsetof(TableDescription, _spacing)     == 0x70, "");
+static_assert(offsetof(TableDescription, _cells)       == 0x78, "");
+static_assert(offsetof(TableDescription, _unknown88)   == 0x88, "");
+static_assert(offsetof(TableDescription, _unknown90)   == 0x90, "");
+
+}  // namespace UI

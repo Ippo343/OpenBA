@@ -43,3 +43,106 @@ constexpr int kParent     = offsetof(UI::Element, _parent); // 0x98
 constexpr uint32_t kDirtyBit = UI::kElementFlagNeedsSizeCalc;
 
 } } // namespace UI::TableElementOffsets
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block C4) — `UI::TableElement`, the REAL C++ class
+// ############################################################################
+//
+// PARENT `UI::Element` — READ, not inferred:
+//     ?_ParentTypeName@TableElement@UI@@CAPEBDXZ @0x1800792a0 -> "Element"
+//
+// RULE B5-15 / B6-7 — THE TWO NAME LITERALS, RECORDED, NOT USED (slots 1/2 keep
+// reading the minted `?_typeInfo@TableElement@UI@@…`, 0x1801fae78):
+//     ?_TypeName@TableElement@UI@@CAPEBDXZ       @0x180079290 -> "TableElement"
+//     ?_ParentTypeName@TableElement@UI@@CAPEBDXZ @0x1800792a0 -> "Element"
+//
+// `??_7TableElement@UI@@6B@` @ 0x180159260, TWELVE slots (B36_SLOTS.md
+// section 1; sizeof from `MOV EDX,0xf0` in slot 0 0x180079600):
+//   [0] 0x180079600 deleting dtor (row)  [1] 0x1800792d0 TypeName
+//   [2] 0x1800792b0 Type                 [3] Element::Persist INHERITED
+//   [4] 0x18011df60 ComputeSize          [5] 0x18011dd10 ComputeLayout
+//   [6] 0x18011dc20 Draw                 [7] Element::Update INHERITED
+//   [8]..[11] Element's, INHERITED
+//
+// ABSTRACT (slot 0 pure), no real ctor: every live one is built by the
+// `??0TableElement` DOOR (tableelement.cpp) and wears the MINTED table.
+//
+// LAYOUT (RULE B6-8) — the offsets above, now named; `??0TableElement@UI@@
+// QEAA@XZ` (0x18011e2f0), read as disassembly, adds +0xc8:
+//     MOV qword [RBX+0xc0],0 ; MOV dword [RBX+0xc8],0
+//     MOV qword [RBX+0xd0/0xd8/0xe0/0xe8],0
+// +0xcc is written by nothing (explicit pad). TableDescription::CreateInstance
+// (0x18011e350) copies the description's column count to +0xc4 and its row
+// count to +0xc0 — crossed in memory order — and its +0x70 to +0xc8, the gap
+// ComputeSize/ComputeLayout insert between two non-empty rows or columns.
+// ~TableElement (0x18011e2a0) destroys _columnSizes first, then _rowSizes.
+// ############################################################################
+namespace UI {
+
+class TableElement : public Element {
+public:
+    // ---- the twelve slots, in measured order -------------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180079600
+    const char* TypeName() const override;                        // [1] 0x1800792d0
+    uint32_t    Type() const override;                            // [2] 0x1800792b0
+    void ComputeSize() override;                                  // [4] 0x18011df60
+    void ComputeLayout(int32_t x, int32_t y,
+                       int32_t right, int32_t bottom) override;   // [5] 0x18011dd10
+    void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x18011dc20
+    // [7] Update and [8]..[11] — Element's, inherited.
+
+    // ---- non-virtual members -----------------------------------------------
+    int32_t GetRowCount() const    { return _rowCount; }          // 0x180079450 MOV EAX,[RCX+0xc0]
+    int32_t GetColumnCount() const { return _columnCount; }       // 0x180079460 MOV EAX,[RCX+0xc4]
+    // PORTED, bodies in ANOTHER BLOCK'S FILE — fragment pass; declared so no
+    // later block edits this header. Retail passes the by-value InternalPtr as
+    // the ADDRESS of the caller's temporary, so it is spelled as that pointer.
+    int32_t GetRowHeight(int32_t row);                            // 0x18011e090  element_bodies_b5.cpp
+    int32_t GetColumnWidth(int32_t column);                       // 0x18011e1a0  element_bodies_b5.cpp
+    void SetChild(Object::InternalPtr<Element>* child, int32_t index);          // 0x18011daa0  widgets_layout.cpp
+    void SetChild(Object::InternalPtr<Element>* child, int32_t column,
+                  int32_t row);                                   // 0x18011db50  widgets_layout.cpp
+    void SetSize(int32_t rows, int32_t columns);                  // 0x18011db90  widgets_layout.cpp
+
+    TableElement(const TableElement& src);                        // 0x180079470  not ported
+    TableElement& operator=(const TableElement& src);             // 0x180079520  not ported
+    static uint32_t      TypeId();                                // 0x1800792c0  not ported
+    static Object::Base* CreateNewObject();                       // 0x1800793c0  ui_factory_wave28.cpp door
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180079440  ui_factory_wave28.cpp door
+
+protected:
+    // NOT retail's `??0TableElement@UI@@QEAA@XZ` (0x18011e2f0, the door).
+    TableElement() = default;
+    // `??1TableElement@UI@@UEAA@XZ` (0x18011e2a0): non-virtual, not defined in
+    // the real build; the retail body is the door `RtUi_TableElement_Dtor`.
+    ~TableElement();
+
+private:
+    static const char* _TypeName();                               // 0x180079290 -> "TableElement"
+    static const char* _ParentTypeName();                         // 0x1800792a0 -> "Element"
+    static Object::BaseTypeInfo _typeInfo;                        // 0x1801fae78 (minted)
+
+public:
+    // ---- the 0x30 bytes after Element --------------------------------------
+    // The CELLS are Element::_children itself, row-major, `_columnCount * row + col`.
+    int32_t  _rowCount;          // +0xc0  ctor 0 (one qword with +0xc4); GetRowCount
+    int32_t  _columnCount;       // +0xc4  ctor 0; GetColumnCount
+    int32_t  _spacing;           // +0xc8  ctor 0; gap between two non-empty rows/columns
+    uint32_t _padcc;             // +0xcc  written by nothing
+    Collection::Array<int32_t> _rowSizes;      // +0xd0  per-row extent, ComputeSize
+    Collection::Array<int32_t> _columnSizes;   // +0xe0  per-column extent, ComputeSize
+};
+
+static_assert(sizeof(TableElement) == 0xf0,
+              "UI::TableElement is 0xf0 bytes (MOV EDX,0xf0 in its slot-0 "
+              "vector deleting destructor 0x180079600)");
+static_assert(alignof(TableElement) == 8, "UI::TableElement aligns to 8");
+static_assert(offsetof(TableElement, _rowCount) == sizeof(Element), "");
+static_assert(offsetof(TableElement, _rowCount)    == TableElementOffsets::kRowCount, "");
+static_assert(offsetof(TableElement, _columnCount) == TableElementOffsets::kColCount, "");
+static_assert(offsetof(TableElement, _spacing)     == 0xc8, "");
+static_assert(offsetof(TableElement, _rowSizes)    == TableElementOffsets::kRowSizes, "");
+static_assert(offsetof(TableElement, _columnSizes) == TableElementOffsets::kColSizes, "");
+static_assert(offsetof(TableElement, _children)    == TableElementOffsets::kCells, "");
+
+}  // namespace UI
