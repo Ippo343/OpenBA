@@ -37,6 +37,7 @@
 // cannot understate rather than from one that can.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -45,6 +46,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/save/SaveLoad.h"
 #include "../../types/video/ImageBuffer.h"
+#include "saveload_internal.h"   // RtSaveDetail::AtomicAddr (RULE B6-5)
 
 using RtSave::SaveInfo;
 
@@ -72,26 +74,35 @@ namespace {
 // message_callbacks.cpp:91 already reach the allocator this way for exactly
 // the same open-coded shape. Calling the composed symbol keeps this file free
 // of <windows.h> (PLAN §4.1) at the cost of nothing observable.
-void* MemAlloc(uint64_t bytes, int align) {
+//
+// ENDGAME B.3.7 B2 (RULE B6-5): the three first-call caches below were
+// function-local `static` pointers read and written without synchronisation;
+// SetThumbnail is a member now, so they are namespace-scope atomic slots with
+// the `AtomicAddr` shape (cache a hit, RETRY a miss). The null tests that
+// follow each resolve are the pre-existing miss contract, unchanged.
+std::atomic<void*> g_memAllocSlot{nullptr};
+std::atomic<void*> g_imageBufferCtorSlot{nullptr};
+std::atomic<void*> g_deviceSingletonSlot{nullptr};
+
+void* SaveInfoMemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;   // cache a hit, RETRY a miss (RtResolveCached contract)
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    Fn fn = reinterpret_cast<Fn>(
+        RtSaveDetail::AtomicAddr(g_memAllocSlot, Module::Runtime, 0x1800c7a50));
     return fn ? fn(bytes, align) : nullptr;
 }
 
 // ??0ImageBuffer@Video@@QEAA@XZ, 0x1800f2580. Ported (buffers.cpp:1450).
 void ImageBufferCtor(void* self) {
     using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800f2580));
+    Fn fn = reinterpret_cast<Fn>(
+        RtSaveDetail::AtomicAddr(g_imageBufferCtorSlot, Module::Runtime, 0x1800f2580));
     if (fn) fn(self);
 }
 
 // ?_singleton@Device@Video@@0PEAV12@EA, 0x1801fe7a8 — the SLOT, not the Device.
 void** DeviceSingletonSlot() {
-    static void** slot = nullptr;
-    if (!slot) slot = reinterpret_cast<void**>(ResolveAddr(Module::Runtime, 0x1801fe7a8));
-    return slot;
+    return reinterpret_cast<void**>(
+        RtSaveDetail::AtomicAddr(g_deviceSingletonSlot, Module::Runtime, 0x1801fe7a8));
 }
 
 // ---------------------------------------------------------------------------
@@ -153,8 +164,13 @@ int SaveInfoCompareImpl(const void* a, const void* b) {
 // ============================================================================
 // It is passed to qsort as DATA, so retail never "calls" it from a site we can
 // wrap; the sweep below is the verification, not a call-site oracle.
-extern "C" int RtSave_SaveInfo_Compare(const void* a, const void* b) {
+int Save::SaveLoad::SaveInfo::Compare(const void* a, const void* b) {
     return SaveInfoCompareImpl(a, b);
+}
+
+// The registered address door (0x1800c3db0).
+extern "C" int RtSave_SaveInfo_Compare(const void* a, const void* b) {
+    return Save::SaveLoad::SaveInfo::Compare(a, b);
 }
 
 // ============================================================================
@@ -195,12 +211,12 @@ extern "C" int RtSave_SaveInfo_Compare(const void* a, const void* b) {
 // `MOV RAX,[RDI]`. That is a fault on OOM in the shipped binary. Transcribed
 // as written (CLAUDE.md: do not "fix" a faithful crash).
 // ============================================================================
-extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w, int h) {
-    void* mem = MemAlloc(0x68, 8);
+void Save::SaveLoad::SaveInfo::SetThumbnail(void* pixels, int32_t w, int32_t h) {
+    void* mem = SaveInfoMemAlloc(0x68, 8);
     if (mem != nullptr) ImageBufferCtor(mem);
     ImageBuffer* img = static_cast<ImageBuffer*>(mem);   // == RAX; see the banner
 
-    row->imageBuffer = img;
+    imageBuffer = img;
 
     // vtable slot 9 (+0x48):
     //   ?Create@ImageBuffer@Video@@UEAA_N W4ImageType W4Usage W4Format I H H
@@ -242,17 +258,19 @@ extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w,
     void* data = img->platformData;                    // +0x60
     reinterpret_cast<Video::ImageBufferData*>(data)->Update(pixels, w, h);  // B.3.5 bridge
 
-    row->thumbPixels = pixels;   // +0x28
-    row->thumbWidth  = w;        // +0x20
-    row->thumbHeight = h;        // +0x24
+    thumbPixels = pixels;   // +0x28
+    thumbWidth  = w;        // +0x20
+    thumbHeight = h;        // +0x24
 
     RtVideoDeviceUnlock(devSlot);
 
-    // SHADOW — a SELF-CHECK, not an oracle (it never consults the DLL). It can
-    // only say "the three stores landed and the buffer was published"; it
-    // cannot say the Create arguments are right. The Create arguments are
-    // verified by TRANSCRIPTION against the immediates in the listing, and this
-    // file says so rather than letting a green site imply more.
+    // The Create arguments are verified by TRANSCRIPTION against the
+    // immediates in the listing.
+}
+
+// The registered address door (0x1800c3de0): `(row, pixels, w, h)`.
+extern "C" void RtSave_SaveInfo_SetThumbnail(SaveInfo* row, void* pixels, int w, int h) {
+    row->Save::SaveLoad::SaveInfo::SetThumbnail(pixels, w, h);
 }
 
 // ============================================================================

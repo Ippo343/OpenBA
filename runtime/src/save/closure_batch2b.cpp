@@ -11,11 +11,14 @@
 // LoadMetaData (0x1800c1b30) / SaveMetaData (0x1800c1490).
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <new>          // placement new into the raw destination bytes
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
+#include "../../types/save/SaveLoad.h"
+#include "saveload_internal.h"   // RtSaveDetail::AtomicAddr (RULE B6-5)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -49,11 +52,11 @@ void MetaEntryArrayAssign(void* dst, const void* src) {
 // The unexported `operator delete` COMDAT copy 0x180006a10 — the one
 // runtime/src/video/context_lifecycle.cpp:702 already registers. Same body as
 // ?MemFree@MemoryAllocator@System@@ and null-guarded inside.
+// RULE B6-5: a namespace-scope atomic slot, not a function-local first-call cache.
+std::atomic<void*> g_guardedFreeSlot{nullptr};
 void GuardedFree(void* p) {
     using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180006a10));
-    fn(p);
+    reinterpret_cast<Fn>(RtSaveDetail::AtomicAddr(g_guardedFreeSlot, Module::Runtime, 0x180006a10))(p);
 }
 
 // `System::String`'s adopt-a-reference idiom, inlined by retail at both sites:
@@ -93,31 +96,39 @@ inline void AdoptString(void* dst, const void* src) {
 //   +0x48..+0x57 is the whole 16-byte Array header; nothing else is written and
 //   sizeof is 0x58, so there is no unwritten tail.
 //
-// NO STRUCT HEADER for this type, deliberately: the body is the only witness
-// this batch has for the layout (the fields' MEANINGS are unknown — two of the
-// nine are Strings and the rest are opaque), and a runtime/types/ header whose
-// field names were guessed would be believed later. Raw offsets with the
-// transcription above are honest about what is known.
-// ============================================================================
-extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
-    uint8_t* d = static_cast<uint8_t*>(self);
-    const uint8_t* s = static_cast<const uint8_t*>(src);
+// ENDGAME B.3.7 B2: this record IS `Save::SaveLoad::SaveInfo` — the element of
+// `SaveLoad::_saves` (+0x50) that 0x1800332d0 grows — and the field meanings
+// this banner used to call unknown are all pinned now (SaveLoad.h's SaveInfo
+// banner). The transcription above is unchanged; it moved onto the class as the
+// copy constructor, and the registered address door delegates to it.
+//
+// C++ runs the two class-type member initialisers (`thumbnail`, `mods`) before
+// the body, so the +0x48/+0x50 zeroing lands ahead of the scalar copies rather
+// than after +0x44 as in retail. Every one of those stores is into the NEW
+// object, which nothing else can see until the constructor returns, so the
+// reordering is not observable; the String AddRefs and the Array assign — the
+// stores into shared state — keep retail's order.
+Save::SaveLoad::SaveInfo::SaveInfo(const SaveInfo& other)
+    : thumbnail(other.thumbnail),   // +0x00 / +0x08: two qwords verbatim (pad0C too)
+      mods() {                      // +0x48 / +0x50: ZEROED, assigned below
+    AdoptString(&description, &other.description);               // +0x10
+    imageBuffer = other.imageBuffer;                             // +0x18
+    thumbWidth  = other.thumbWidth;                              // +0x20
+    thumbHeight = other.thumbHeight;                             // +0x24
+    thumbPixels = other.thumbPixels;                             // +0x28
+    sortKey     = other.sortKey;                                 // +0x30
+    AdoptString(&name, &other.name);                             // +0x38
+    saveIndex   = other.saveIndex;                               // +0x40
+    field44     = other.field44;                                 // +0x44
+    // 0x180033f30 — `Array<ModInfo>::operator=`, the ported J4 forwarder
+    // (array_destroy.cpp), called directly by name.
+    MetaEntryArrayAssign(&mods, &other.mods);
+}
 
-    *reinterpret_cast<uint64_t*>(d + 0x00) = *reinterpret_cast<const uint64_t*>(s + 0x00);
-    *reinterpret_cast<uint64_t*>(d + 0x08) = *reinterpret_cast<const uint64_t*>(s + 0x08);
-    AdoptString(d + 0x10, s + 0x10);
-    *reinterpret_cast<uint64_t*>(d + 0x18) = *reinterpret_cast<const uint64_t*>(s + 0x18);
-    *reinterpret_cast<uint32_t*>(d + 0x20) = *reinterpret_cast<const uint32_t*>(s + 0x20);
-    *reinterpret_cast<uint32_t*>(d + 0x24) = *reinterpret_cast<const uint32_t*>(s + 0x24);
-    *reinterpret_cast<uint64_t*>(d + 0x28) = *reinterpret_cast<const uint64_t*>(s + 0x28);
-    *reinterpret_cast<uint64_t*>(d + 0x30) = *reinterpret_cast<const uint64_t*>(s + 0x30);
-    AdoptString(d + 0x38, s + 0x38);
-    *reinterpret_cast<uint32_t*>(d + 0x40) = *reinterpret_cast<const uint32_t*>(s + 0x40);
-    *reinterpret_cast<uint32_t*>(d + 0x44) = *reinterpret_cast<const uint32_t*>(s + 0x44);
-    *reinterpret_cast<uint64_t*>(d + 0x48) = 0;
-    *reinterpret_cast<uint64_t*>(d + 0x50) = 0;
-    MetaEntryArrayAssign(d + 0x48, s + 0x48);
-    return self;
+// The registered address door (0x180032f70): `(dst, src)`, `dst` in RAX.
+extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
+    return new (self) Save::SaveLoad::SaveInfo(
+        *static_cast<const Save::SaveLoad::SaveInfo*>(src));
 }
 
 // ============================================================================
@@ -138,8 +149,8 @@ extern "C" void* RtSave_MetaData_CopyCtor(void* self, const void* src) {
 // NOT guarded here for the same reason it is not there.
 // ============================================================================
 extern "C" void* RtSave_SavedState_Delete(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
-    if (void* buf = *reinterpret_cast<void**>(p + 8)) GuardedFree(buf);
+    Save::SavedState* const state = static_cast<Save::SavedState*>(self);
+    if (void* buf = state->_data) GuardedFree(buf);
     GuardedFree(self);
     return self;   // MOV RAX,<this> — retail returns the (now freed) pointer
 }

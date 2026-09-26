@@ -93,6 +93,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_sink.h"
 #include "saveload_internal.h"
@@ -127,17 +128,6 @@ struct SlotRow {
 };
 static_assert(sizeof(SlotRow) == 12, "Persistence slot row is 12 bytes (ADD RCX,0xc)");
 
-const void* MemAllocTarget() {
-    static const void* p = reinterpret_cast<const void*>(
-        RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    return p;
-}
-const void* MemFreeTarget() {
-    static const void* p = reinterpret_cast<const void*>(
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-    return p;
-}
-
 // ---------------------------------------------------------------------------
 // Step 2 on its own, because both the body and screen A's driver need it and a
 // second transcription is a second thing to drift.
@@ -168,52 +158,71 @@ uint32_t LookupSlotSize(const uint8_t* persistence, int32_t id, bool* found) {
 // ============================================================================
 // The body, written against the live sink (rt_sink.h).
 // ============================================================================
-SaveBlock* RtSave_SavedState_SetupLoadBody(SavedState* self, SaveBlock* ret,
-                                           RtSink& out) {
+// ENDGAME B.3.7 B2: the body is the member. `ret` is the member's own return
+// value (NRVO), so the five stores into the SaveBlock land where retail's do:
+// in the caller's hidden slot, via the door below.
+SaveBlock Save::SavedState::SetupLoad() {
+    RtSink out;                                                 // the live sink
+    SaveBlock result;
+    SaveBlock* const ret = &result;
+
     // ---- 1. free the previous buffer ---------------------------------------
-    void* old = out.ReadPtr(&self->_data);
-    if (old != nullptr) {
-        if (out.Call("System::MemoryAllocator::MemFree(this->_data)",
-                     MemFreeTarget(), reinterpret_cast<int64_t>(old))) {
-            MemFree(old);
-        }
-    }
+    void* old = out.ReadPtr(&_data);
+    if (old != nullptr) MemFree(old);
 
     // ---- 2. the slot-table lookup ------------------------------------------
     const uint8_t* persistence = PersistenceSingleton();
     const uint32_t size = LookupSlotSize(persistence,
-                                         static_cast<int32_t>(out.ReadU32(&self->_id)),
+                                         static_cast<int32_t>(out.ReadU32(&_id)),
                                          nullptr);
 
     // ---- 3. publish the size ------------------------------------------------
-    out.U32(&self->_size, size,
+    out.U32(&_size, size,
             "SavedState::_size = Persistence slot-table size (0 when absent)");
 
     // ---- 4. the fresh buffer ------------------------------------------------
-    void* buf = nullptr;
-    if (out.Call("System::MemoryAllocator::MemAlloc(this->_size, 4)",
-                 MemAllocTarget(), static_cast<int64_t>(size), 4)) {
-        buf = MemAlloc(size, 4);
-    }
-    out.Ptr(&self->_data, buf, "SavedState::_data = MemAlloc(_size, 4)");
+    void* buf = MemAlloc(size, 4);
+    out.Ptr(&_data, buf, "SavedState::_data = MemAlloc(_size, 4)");
 
     // ---- 5. fill the return slot -------------------------------------------
     // Retail re-reads _size and _id from `this` here rather than reusing the
     // registers it already has, so these go through the sink's read-back.
     out.Ptr(&ret->data, buf, "SaveBlock::data = this->_data");
-    out.U32(&ret->size, out.ReadU32(&self->_size), "SaveBlock::size = this->_size");
-    out.U32(&ret->id,   out.ReadU32(&self->_id),   "SaveBlock::id = this->_id");
-    return ret;
+    out.U32(&ret->size, out.ReadU32(&_size), "SaveBlock::size = this->_size");
+    out.U32(&ret->id,   out.ReadU32(&_id),   "SaveBlock::id = this->_id");
+    return result;
+}
+
+// ?GetSaveBlock@SavedState@Save@@QEBA?AUSaveBlock@Persistence@IO@@XZ
+// 0x1800c0d50, read whole: `MOV RAX,[RCX+8] ; MOV [RDX],RAX ;
+// MOV EAX,[RCX+4] ; MOV [RDX+8],EAX ; MOV EAX,[RCX] ; MOV [RDX+0xc],EAX ;
+// MOV RAX,RDX ; RET`. Defined, not registered (no caller in the tree).
+SaveBlock Save::SavedState::GetSaveBlock() const {
+    SaveBlock result;
+    result.data = _data;
+    result.size = _size;
+    result.id   = _id;
+    return result;
+}
+
+// ?Discard@SavedState@Save@@QEAAXXZ 0x1800c0d70, read whole:
+// `MOV RCX,[RCX+8] ; TEST ; JZ ; CALL MemFree ; XOR EAX,EAX ;
+// MOV [RBX+4],EAX ; MOV [RBX+8],RAX`. The zero stores are unconditional.
+// Defined, not registered (no caller in the tree).
+void Save::SavedState::Discard() {
+    if (_data != nullptr) MemFree(_data);
+    _size = 0;
+    _data = nullptr;
 }
 
 // ============================================================================
 // The registered entry point.
 //
-// `this` in RCX, the hidden 0x10-byte return slot in RDX, the slot back in RAX.
+// `this` in RCX, the hidden 0x10-byte return slot in RDX, the slot back in RAX
+// (B5-12: the door keeps retail's order and placement-news the prvalue).
 // ============================================================================
 SaveBlock* RtSave_SavedState_SetupLoad(SavedState* self, SaveBlock* ret) {
-    RtSink live;
-    return RtSave_SavedState_SetupLoadBody(self, ret, live);
+    return new (ret) SaveBlock(self->Save::SavedState::SetupLoad());
 }
 
 // ============================================================================
