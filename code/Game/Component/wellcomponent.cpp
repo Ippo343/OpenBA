@@ -18,6 +18,7 @@
 //
 
 #include "Component/wellcomponent_funcs.h"
+#include "Component/MapComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -31,9 +32,6 @@
 // ============================================================
 // Resolved helpers
 // ============================================================
-
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 
 // FUN_140091ba0 — on entity (un)register, scan the manager's entity array for the
 // matching IBP and, if found, clear its natural-resource grid mark + null the slot.
@@ -57,68 +55,10 @@ static fn_MemAllocStatic_t s_fn_MemAllocStatic = nullptr;
 static fn_MemFreeStatic_t  s_fn_MemFreeStatic  = nullptr;
 
 typedef bool     (*fn_WellIsDerived_t)(const void* obj, uint32_t tid);
-typedef uint32_t (*fn_WellGetTypeId_t)(void* self);
 static fn_WellIsDerived_t s_fn_WellIsDerived = nullptr;
 
-// The tile-position component the registrar looks for. 0x1401c79e0 is labelled three
-// different ways across this repo (MapComponent twice, FootprintComponent once,
-// "NaturalResource entity-data" once), so resolve it BY NAME and let the run settle it:
-// the field this code reads (int16 x/y at +0x28/+0x2a) is the same pair the already-
-// working unregister path reaches through FUN_140004680, which agrees on MapComponent.
-static uint32_t WellMapComponentTypeId() {
-    static uint32_t id = 0;
-    if (!id || id == 0xFFFFFFFFu) id = ::Object::GetTypeIdByName("MapComponent");
-    return id;
-}
 
-// ============================================================
-// WellComponent::Shutdown (vtable slot [3], 0x14005cfa0)
-// ============================================================
-// Component_Serialize + two empty serializer blocks (controller compat).
 
-void WellComponent_Shutdown(WellComponent* self, void* stream) {
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // First empty serializer block (component section)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    // Second empty serializer block (controller section)
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// WellComponent::OnRemove (vtable slot [7], 0x14005cf60)
-// ============================================================
-// UNregisters the owning entity from the TownManager water-source list. The
-// matching REGISTER is the state-2 enter at the bottom of this file.
-
-void WellComponent_OnRemove(WellComponent* self) {
-    // ⚠ FIXED 2026-08-22 (fire lane): retail 0x14005cf60 is
-    //     InternalBasePtr::InternalBasePtr(&local, param_1)   // param_1 == THIS
-    //     FUN_140091ba0(*(gw + 0xf0), &local)
-    // — it wraps the COMPONENT, not the owner entity. This passed `self->owner`,
-    // so the IBP handed to 0x140091ba0 identified the wrong object and its
-    // scan-for-matching-IBP could never hit. Latent while WellComponent was inert
-    // (slot 7 was never installed); it matters now that the FireWork spiral search
-    // depends on wells being findable in the gw+0xf0 entity index.
-    uint8_t basePtr[24];
-    if (fn_InternalBasePtr_Ctor)
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-
-    // *(GameWorld + 0xF0) is the TownManager itself -- not a "water source array".
-    // 0x140091ba0 takes the manager and indexes its own +0xe0/+0xe8 pair.
-    if (s_pWorldManager && *s_pWorldManager && s_fn_ArrayPushEntity) {
-        void* gameWorld = *s_pWorldManager;
-        void* townMgr = *reinterpret_cast<void**>(
-            reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
-        s_fn_ArrayPushEntity(townMgr, basePtr);
-    }
-}
 
 // FUN_140004680 — MapComponent/resData finder used by the remove scan (registered).
 typedef void* (*fn_FindMapResData_t)(int64_t resData, void* outIBP);
@@ -210,9 +150,6 @@ void WellComp_UnregisterEntity_91ba0(int64_t manager, void* param2) {
 // ============================================================
 void WellComponent_InitFuncs() {
     if (s_initialized) return;
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     uintptr_t slot;
 
@@ -338,7 +275,10 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
     int64_t held = *reinterpret_cast<int64_t*>(ibp);
     int64_t entity = *reinterpret_cast<int64_t*>(held + 0x10);
 
-    const uint32_t tidMap = WellMapComponentTypeId();
+    // The tile-position component (ti cell 0x1401c79e0, labelled MapComponent /
+    // FootprintComponent / "NaturalResource entity-data" across the repo; the int16
+    // x/y at +0x28/+0x2a this reads are MapComponent's, as FUN_140004680 agrees).
+    const uint32_t tidMap = MapComponent::TypeId();
     void* mapComp = nullptr;
     const int compCount = *reinterpret_cast<int*>(entity + 0x38);
     const int64_t comps = *reinterpret_cast<int64_t*>(entity + 0x30);
@@ -346,9 +286,7 @@ void WellComp_RegisterEntity_91cb0(int64_t townMgr, void* ibp) {
         void* slot = reinterpret_cast<void*>(comps + static_cast<int64_t>(i) * 8);
         void* comp = *reinterpret_cast<void**>(slot);
         if (!comp) continue;
-        void** vt = *reinterpret_cast<void***>(comp);
-        if (!vt || !vt[2]) continue;
-        if (reinterpret_cast<fn_WellGetTypeId_t>(vt[2])(comp) != tidMap) continue;
+        if (reinterpret_cast<Object::Base*>(comp)->Type() != tidMap) continue;   // B.3.8 bridge
         // Retail re-reads the slot and confirms with IsDerivedFrom before accepting.
         if (s_fn_WellIsDerived && s_fn_WellIsDerived(comp, tidMap)) mapComp = comp;
         break;
@@ -406,7 +344,7 @@ extern "C" char WellComponent_EnterBuilt(void* comp, void* /*sm*/) {
 // WellComponent state-3 "demolish" enter — 0x14005cee0. Byte-identical to the slot-7
 // removal hook (0x14005cf60): wrap the component, call the unregister.
 extern "C" char WellComponent_EnterDemolish(void* comp, void* /*sm*/) {
-    WellComponent_OnRemove(reinterpret_cast<WellComponent*>(comp));
+    reinterpret_cast<WellComponent*>(comp)->WellComponent::OnRemove();   // B.3.8 bridge (retail: an identical body, not a dispatch)
     return 0;
 }
 
@@ -461,17 +399,57 @@ Object::Base* WellComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [3] 0x14005cfa0. Slot 3 is the FIRST call into this class on a load-from-save
-// (PersistObject creates the object and dispatches slot 3 before Startup), so
-// the lazy resolver runs first, as the old VSlot did — the body's own helpers
-// are null until it has.
+// ============================================================
+// WellComponent::Shutdown (vtable slot [3], 0x14005cfa0)
+// ============================================================
+// Component_Serialize + two empty serializer blocks (controller compat).
+
 void WellComponent::Persist(void* stream) {
+    // Slot 3 is the FIRST call into this class on a load-from-save (PersistObject
+    // creates the object and dispatches slot 3 before Startup): the lazy resolver
+    // runs here so OnRemove finds its helpers.
     WellComponent_InitFuncs();
-    WellComponent_Shutdown(this, stream);
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // First empty serializer block (component section)
+    alignas(8) uint8_t serializer1[24];
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
+
+    // Second empty serializer block (controller section)
+    alignas(8) uint8_t serializer2[24];
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
 }
 
-// [7] 0x14005cf60.
-void WellComponent::OnRemove() { WellComponent_OnRemove(this); }
+// ============================================================
+// WellComponent::OnRemove (vtable slot [7], 0x14005cf60)
+// ============================================================
+// UNregisters the owning entity from the TownManager water-source list. The
+// matching REGISTER is the state-2 enter at the bottom of this file.
+
+void WellComponent::OnRemove() {
+    // ⚠ FIXED 2026-08-22 (fire lane): retail 0x14005cf60 is
+    //     InternalBasePtr::InternalBasePtr(&local, param_1)   // param_1 == THIS
+    //     FUN_140091ba0(*(gw + 0xf0), &local)
+    // — it wraps the COMPONENT, not the owner entity. This passed `owner`,
+    // so the IBP handed to 0x140091ba0 identified the wrong object and its
+    // scan-for-matching-IBP could never hit. Latent while WellComponent was inert
+    // (slot 7 was never installed); it matters now that the FireWork spiral search
+    // depends on wells being findable in the gw+0xf0 entity index.
+    uint8_t basePtr[24];
+    if (fn_InternalBasePtr_Ctor)
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+
+    // *(GameWorld + 0xF0) is the TownManager itself -- not a "water source array".
+    // 0x140091ba0 takes the manager and indexes its own +0xe0/+0xe8 pair.
+    if (s_pWorldManager && *s_pWorldManager && s_fn_ArrayPushEntity) {
+        void* gameWorld = *s_pWorldManager;
+        void* townMgr = *reinterpret_cast<void**>(
+            reinterpret_cast<uintptr_t>(gameWorld) + 0xF0);
+        s_fn_ArrayPushEntity(townMgr, basePtr);
+    }
+}
 
 // create 0x14000fc80: MemAlloc(0x48, 8), then the ctor.
 void* WellComponent::CreateNewObject() {

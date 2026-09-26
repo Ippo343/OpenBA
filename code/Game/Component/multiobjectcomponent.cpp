@@ -24,9 +24,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // IsDerivedFrom — dispatched
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
@@ -40,84 +37,6 @@ static uint32_t* s_pComponentEntityTypeId = nullptr;  // TypeInfo_ComponentEntit
 
 static bool s_initialized = false;
 
-// ============================================================
-// MultiObjectComponent::Shutdown (0x140125880)
-// ============================================================
-// Component_Serialize + empty serializer block + second serializer:
-//   serialize count from +0x50, resize array if loading, serialize each IBP
-//   with IsDerivedFrom validation, serialize multiCount at +0x58.
-//   After loading, remove null entries from array (compact).
-
-void MultiObjectComponent_Shutdown(MultiObjectComponent* self, void* stream) {
-    MultiObjectComponent_InitFuncs();
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // First empty serializer block (controller section)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    // Second serializer block with entity array + multiCount
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    int localCount = *(int*)((uintptr_t)self + 0x50);
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
-
-    // If loading (stream+8 == 0), resize array
-    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        GameColl::AsArray<GameColl::Ptr8>((void*)((uintptr_t)self + 0x48))
-            .SetSize(localCount);
-    }
-
-    // Serialize each InternalBasePtr in the array
-    void* arrayBase = *(void**)((uintptr_t)self + 0x48);
-    if (localCount > 0) {
-        for (int i = 0; i < localCount; i++) {
-            void* ibp = (void*)((uintptr_t)arrayBase + (uintptr_t)i * 8);
-            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
-
-            // Validate: if not ComponentEntity, null it out
-            void* ptr = *(void**)ibp;
-            if (ptr != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
-                if (!s_fn_IsDerivedFrom_d(ptr, *s_pComponentEntityTypeId)) {
-                    *(uintptr_t*)ibp = 0;
-                }
-            }
-        }
-    }
-
-    // Serialize multiCount at +0x58
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>((uintptr_t)self + 0x58), nullptr);   // B.3.4 bridge
-
-    // On load: compact array — remove null entries
-    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        int count = *(int*)((uintptr_t)self + 0x50);
-        for (int i = 0; i < count; /* no increment */) {
-            void* arr = *(void**)((uintptr_t)self + 0x48);
-            uintptr_t entryAddr = (uintptr_t)arr + (uintptr_t)i * 8;
-            if (*(uintptr_t*)entryAddr == 0) {
-                // Shift remaining entries down
-                for (int j = i; j < count - 1; j++) {
-                    uintptr_t curAddr = (uintptr_t)arr + (uintptr_t)j * 8;
-                    uintptr_t nextAddr = curAddr + 8;
-                    // Clear then copy
-                    *(uintptr_t*)curAddr = 0;
-                    *(uintptr_t*)curAddr = *(uintptr_t*)nextAddr;
-                }
-                count--;
-                *(int*)((uintptr_t)self + 0x50) = count;
-                // Don't increment i, re-check this slot
-            } else {
-                i++;
-            }
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // MultiObjectComponent::OnCreate (0x1401257C0)
@@ -159,8 +78,6 @@ void MultiObjectComponent_OnCreate(MultiObjectComponent* self) {
 void MultiObjectComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     s_fn_MarkForRemoval = reinterpret_cast<fn_MarkForRemoval_t>(
         ResolveAddr(Module::Exe, 0x1400c2ea0));
     s_pGameState = reinterpret_cast<void**>(
@@ -182,46 +99,12 @@ void MultiObjectComponent_InitFuncs() {
 // OnEvent member, at the bottom of this file.
 #include "Object/factory_registration.h"
 #include "Component/controller_state_table.h"
+#include "Component/MapComponent.h"
+#include "Component/FloorComponent.h"
 
-// -- slot 12 (+0x60) -- retail 0x140125490 -- the child-entity MESSAGE FORWARDER -----
-// Pure relay, no message filter: for every child entity in the array at +0x48 (count at
-// +0x50), dispatch slot 12 on EVERY component that child carries, with the same msgId.
-//
-// This is how a multi-part structure's parts learn that the structure finished. It was
-// inert, and that is why a completed Tunnel had no terrain deformation: Tunnel.rsc's own
-// `TerraformDescription terraform {}` block is EMPTY -- the floor/ceiling picking meshes
-// live on Template/TunnelStart.rsc, i.e. on the two MOUTH SEGMENTS, not on the master.
-// BuildComponent state 8 broadcasts msg 4 to the master only (0x1400c2b70 walks ONE
-// entity), so without this forwarder the segments that actually own the meshes were never
-// told, and their TerraformComponent slot 12 never ran.
-//
-// Measured 2026-08-22: with terraform live but this still inert, the trace showed exactly
-// one "msg 4 -> deform" (the master), both mesh passes correctly skipped on a null mesh,
-// and FootprintPass converting 18 cells -- master-level work only, no carve.
+// 0x140125490 door: registered by address (standalone/reg_terraform_live.cpp).
 extern "C" void MultiObjectComponent_Slot12(void* selfV, int msgId) {
-    MultiObjectComponent_InitFuncs();
-    const uintptr_t self = reinterpret_cast<uintptr_t>(selfV);
-
-    const int childCount = *reinterpret_cast<int*>(self + 0x50);
-    const uintptr_t children = *reinterpret_cast<uintptr_t*>(self + 0x48);
-    if (childCount <= 0 || !children) return;
-
-    for (int i = 0; i < childCount; ++i) {
-        void** childSlot = reinterpret_cast<void**>(children + static_cast<uintptr_t>(i) * 8);
-        uintptr_t child = reinterpret_cast<uintptr_t>(*childSlot);
-        if (!child) continue;
-
-        const int compCount = *reinterpret_cast<int*>(child + 0x38);
-        const uintptr_t comps = *reinterpret_cast<uintptr_t*>(child + 0x30);
-        for (int k = 0; k < compCount && comps; ++k) {
-            void* comp = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(k) * 8);
-            if (!comp) continue;
-            typedef void (*MsgSlot_t)(void*, int);
-            MsgSlot_t fn = *reinterpret_cast<MsgSlot_t*>(
-                *reinterpret_cast<uintptr_t*>(comp) + 0x60);
-            if (fn) fn(comp, msgId);
-        }
-    }
+    reinterpret_cast<MultiObjectComponent*>(selfV)->MultiObjectComponent::OnEvent(msgId);   // B.3.8 bridge
 }
 
 // ============================================================================
@@ -247,9 +130,7 @@ static void* MultiObject_FindComponent(uintptr_t entity, uint32_t tid) {
     const uintptr_t comps = *reinterpret_cast<uintptr_t*>(entity + 0x30);
     for (int i = 0; i < n; ++i) {
         void* c = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(i) * 8);
-        typedef uint32_t (*GetTypeId_t)(void*);
-        const uint32_t id = reinterpret_cast<GetTypeId_t>(
-            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+        const uint32_t id = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
         if (id == tid)
             return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
     }
@@ -268,15 +149,12 @@ static void* MultiObject_FindComponent(uintptr_t entity, uint32_t tid) {
 // multi-object structure carries one (a faithful crash if not, not a guard here).
 static char MultiObject_State2Enter(void* data, void* /*sm*/) {
     const uintptr_t self = reinterpret_cast<uintptr_t>(data);
-    const uint32_t* pTidMap   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
-    const uint32_t* pTidFloor = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c76d0));
-    if (!pTidMap || !pTidFloor) return 0;   // the registry is not up (never after boot)
     for (int i = 0; i < *reinterpret_cast<int*>(self + 0x50); ++i) {
         const uintptr_t child = *reinterpret_cast<uintptr_t*>(
             *reinterpret_cast<uintptr_t*>(self + 0x48) + static_cast<uintptr_t>(i) * 8);
-        void* map = MultiObject_FindComponent(child, *pTidMap);
+        void* map = MultiObject_FindComponent(child, MapComponent::TypeId());
         MapComponent_sub_41b0(reinterpret_cast<int64_t>(map));
-        void* floor = MultiObject_FindComponent(child, *pTidFloor);
+        void* floor = MultiObject_FindComponent(child, FloorComponent::TypeId());
         if (floor) FloorComponent_SubF390(floor);
     }
     return 0;
@@ -332,11 +210,120 @@ void* MultiObjectComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MultiObjectComponent());
 }
 
-// [3] 0x140125880 — the child-entity list (+0x48/+0x50/+0x58); resolves at its top.
-void MultiObjectComponent::Persist(void* stream) { MultiObjectComponent_Shutdown(this, stream); }
-// [12] 0x140125490 — relay the event to every child's components (the body above,
-// also registered by address from standalone/reg_terraform_live.cpp).
-void MultiObjectComponent::OnEvent(int eventId) { MultiObjectComponent_Slot12(this, eventId); }
+// ============================================================
+// MultiObjectComponent::Shutdown (0x140125880)
+// ============================================================
+// Component_Serialize + empty serializer block + second serializer:
+//   serialize count from +0x50, resize array if loading, serialize each IBP
+//   with IsDerivedFrom validation, serialize multiCount at +0x58.
+//   After loading, remove null entries from array (compact).
+
+void MultiObjectComponent::Persist(void* stream) {
+    MultiObjectComponent_InitFuncs();
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // First empty serializer block (controller section)
+    alignas(8) uint8_t serializer1[24];
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
+
+    // Second serializer block with entity array + multiCount
+    alignas(8) uint8_t serializer2[24];
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    int localCount = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x50);
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(localCount, nullptr);   // B.3.4 bridge
+
+    // If loading (stream+8 == 0), resize array
+    // B.3.2 bridge: FUN_1400032e0 is Collection::Array<void*>::SetSize(n)
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        GameColl::AsArray<GameColl::Ptr8>((void*)(reinterpret_cast<uintptr_t>(this) + 0x48))
+            .SetSize(localCount);
+    }
+
+    // Serialize each InternalBasePtr in the array
+    void* arrayBase = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x48);
+    if (localCount > 0) {
+        for (int i = 0; i < localCount; i++) {
+            void* ibp = (void*)((uintptr_t)arrayBase + (uintptr_t)i * 8);
+            reinterpret_cast<Object::InternalBasePtr*>(ibp)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
+
+            // Validate: if not ComponentEntity, null it out
+            void* ptr = *(void**)ibp;
+            if (ptr != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
+                if (!s_fn_IsDerivedFrom_d(ptr, *s_pComponentEntityTypeId)) {
+                    *(uintptr_t*)ibp = 0;
+                }
+            }
+        }
+    }
+
+    // Serialize multiCount at +0x58
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(this) + 0x58), nullptr);   // B.3.4 bridge
+
+    // On load: compact array — remove null entries
+    if (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
+        int count = *(int*)(reinterpret_cast<uintptr_t>(this) + 0x50);
+        for (int i = 0; i < count; /* no increment */) {
+            void* arr = *(void**)(reinterpret_cast<uintptr_t>(this) + 0x48);
+            uintptr_t entryAddr = (uintptr_t)arr + (uintptr_t)i * 8;
+            if (*(uintptr_t*)entryAddr == 0) {
+                // Shift remaining entries down
+                for (int j = i; j < count - 1; j++) {
+                    uintptr_t curAddr = (uintptr_t)arr + (uintptr_t)j * 8;
+                    uintptr_t nextAddr = curAddr + 8;
+                    // Clear then copy
+                    *(uintptr_t*)curAddr = 0;
+                    *(uintptr_t*)curAddr = *(uintptr_t*)nextAddr;
+                }
+                count--;
+                *(int*)(reinterpret_cast<uintptr_t>(this) + 0x50) = count;
+                // Don't increment i, re-check this slot
+            } else {
+                i++;
+            }
+        }
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
+}
+// -- slot 12 (+0x60) -- retail 0x140125490 -- the child-entity MESSAGE FORWARDER -----
+// Pure relay, no message filter: for every child entity in the array at +0x48 (count at
+// +0x50), dispatch slot 12 on EVERY component that child carries, with the same msgId.
+//
+// This is how a multi-part structure's parts learn that the structure finished. It was
+// inert, and that is why a completed Tunnel had no terrain deformation: Tunnel.rsc's own
+// `TerraformDescription terraform {}` block is EMPTY -- the floor/ceiling picking meshes
+// live on Template/TunnelStart.rsc, i.e. on the two MOUTH SEGMENTS, not on the master.
+// BuildComponent state 8 broadcasts msg 4 to the master only (0x1400c2b70 walks ONE
+// entity), so without this forwarder the segments that actually own the meshes were never
+// told, and their TerraformComponent slot 12 never ran.
+//
+// Measured 2026-08-22: with terraform live but this still inert, the trace showed exactly
+// one "msg 4 -> deform" (the master), both mesh passes correctly skipped on a null mesh,
+// and FootprintPass converting 18 cells -- master-level work only, no carve.
+void MultiObjectComponent::OnEvent(int eventId) {
+    MultiObjectComponent_InitFuncs();
+    const uintptr_t self = reinterpret_cast<uintptr_t>(this);
+
+    const int childCount = *reinterpret_cast<int*>(self + 0x50);
+    const uintptr_t children = *reinterpret_cast<uintptr_t*>(self + 0x48);
+    if (childCount <= 0 || !children) return;
+
+    for (int i = 0; i < childCount; ++i) {
+        void** childSlot = reinterpret_cast<void**>(children + static_cast<uintptr_t>(i) * 8);
+        uintptr_t child = reinterpret_cast<uintptr_t>(*childSlot);
+        if (!child) continue;
+
+        const int compCount = *reinterpret_cast<int*>(child + 0x38);
+        const uintptr_t comps = *reinterpret_cast<uintptr_t*>(child + 0x30);
+        for (int k = 0; k < compCount && comps; ++k) {
+            void* comp = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(k) * 8);
+            if (!comp) continue;
+            reinterpret_cast<Component*>(comp)->OnEvent(eventId);   // B.3.8 bridge (slot 12, +0x60)
+        }
+    }
+}
 
 DEFINE_EXE_VTABLE(MultiObjectComponent, "_ZTV20MultiObjectComponent")
 DEFINE_EXE_TYPE(MultiObjectComponent, "ControllerComponent")

@@ -27,9 +27,6 @@
 // Resolved helpers
 // ============================================================
 
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // IsDerivedFrom
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
@@ -43,56 +40,6 @@ static uint32_t* s_pComponentEntityTypeId = nullptr;
 
 static bool s_initialized = false;
 
-// ============================================================
-// NomadComponent::Shutdown (0x14004fc40)
-// ============================================================
-// Component_Serialize + empty controller serializer + second serializer:
-//   IBP at +0x28, Vector3 at +0x30, Vector3 at +0x3C, int at +0x50, Time at +0x48
-
-void NomadComponent_Shutdown(NomadComponent* self, void* stream) {
-    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
-    // but never called anywhere, so every s_fn_* below stayed null and load silently
-    // skipped this component's fields.
-    NomadComponent_InitFuncs();
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    if (s_fn_Component_Serialize)
-        s_fn_Component_Serialize(self, stream);
-
-    // Empty controller serializer block
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
-
-    // Main data serializer
-    alignas(8) uint8_t serializer2[24];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize IBP at +0x28
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
-
-    // Validate IBP after deserialize
-    void* ibpVal = *(void**)(selfAddr + 0x28);
-    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
-        if (!s_fn_IsDerivedFrom_d(ibpVal, *s_pComponentEntityTypeId)) {
-            *(uintptr_t*)(selfAddr + 0x28) = 0;
-        }
-    }
-
-    // Serialize Vector3 at +0x30 (12 bytes)
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x30)->Serialize(serializer2);   // B.3.1 bridge
-
-    // Serialize Vector3 at +0x3C (12 bytes)
-    reinterpret_cast<Math::Vector3*>(selfAddr + 0x3C)->Serialize(serializer2);   // B.3.1 bridge
-
-    // Serialize int at +0x50
-    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x50), nullptr);   // B.3.4 bridge
-
-    // Serialize Time at +0x48
-    reinterpret_cast<System::Time*>((void*)(selfAddr + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
-}
 
 // ============================================================
 // NomadComponent::OnCreate (0x14004fd20)
@@ -496,8 +443,6 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
 void NomadComponent_InitFuncs() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     s_fn_RegisterNomad = reinterpret_cast<fn_RegisterNomad_t>(
         ResolveAddr(Module::Exe, 0x140103480));
     s_pGameState = reinterpret_cast<void**>(
@@ -562,8 +507,55 @@ void* NomadComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) NomadComponent());
 }
 
-// [3] 0x14004fc40.
-void NomadComponent::Persist(void* stream) { NomadComponent_Shutdown(this, stream); }
+// ============================================================
+// NomadComponent::Persist (vtable slot [3], 0x14004fc40)
+// ============================================================
+// Component_Serialize + empty controller serializer + second serializer:
+//   IBP at +0x28, Vector3 at +0x30, Vector3 at +0x3C, int at +0x50, Time at +0x48
+
+void NomadComponent::Persist(void* stream) {
+    // resolver call added at top, save/load wave 2026-08-28: InitFuncs was declared
+    // but never called anywhere, so every s_fn_* below stayed null and load silently
+    // skipped this component's fields.
+    NomadComponent_InitFuncs();
+    uintptr_t selfAddr = reinterpret_cast<uintptr_t>(this);
+
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Empty controller serializer block
+    alignas(8) uint8_t serializer1[24];
+    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();                                       // B.3.4 bridge
+
+    // Main data serializer
+    alignas(8) uint8_t serializer2[24];
+    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize IBP at +0x28
+    reinterpret_cast<Object::InternalBasePtr*>((void*)(selfAddr + 0x28))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4 bridge
+
+    // Validate IBP after deserialize
+    void* ibpVal = *(void**)(selfAddr + 0x28);
+    if (ibpVal != nullptr && s_fn_IsDerivedFrom_d && s_pComponentEntityTypeId) {
+        if (!s_fn_IsDerivedFrom_d(ibpVal, *s_pComponentEntityTypeId)) {
+            *(uintptr_t*)(selfAddr + 0x28) = 0;
+        }
+    }
+
+    // Serialize Vector3 at +0x30 (12 bytes)
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x30)->Serialize(serializer2);   // B.3.1 bridge
+
+    // Serialize Vector3 at +0x3C (12 bytes)
+    reinterpret_cast<Math::Vector3*>(selfAddr + 0x3C)->Serialize(serializer2);   // B.3.1 bridge
+
+    // Serialize int at +0x50
+    reinterpret_cast<IO::Serializer*>(serializer2)->Serialize(*reinterpret_cast<int*>(selfAddr + 0x50), nullptr);   // B.3.4 bridge
+
+    // Serialize Time at +0x48
+    reinterpret_cast<System::Time*>((void*)(selfAddr + 0x48))->Serialize(*reinterpret_cast<IO::Serializer*>(serializer2));   // B.3.4b bridge
+
+    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();                                       // B.3.4 bridge
+}
 
 // [7] 0x14004fd20 — the removed-from-world broadcast: hand the owner entity to the
 // player/selection manager's removal notify (0x140103480, "TradeWork_impl_3480" in

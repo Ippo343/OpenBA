@@ -29,10 +29,6 @@
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
 
-// Component_Serialize (base class) — at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // MapComponent_sub_41b0 — map overlay update helper (0x1401241b0)
 typedef void (*fn_MapUpdateOverlay_t)(void* self);
 static fn_MapUpdateOverlay_t s_fn_MapUpdateOverlay = nullptr;
@@ -60,8 +56,6 @@ static void EnsureHelpers() {
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
 
     // Direct exe addresses
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
 
     s_fn_MapUpdateOverlay = reinterpret_cast<fn_MapUpdateOverlay_t>(
         ResolveAddr(Module::Exe, 0x1401241b0));
@@ -116,42 +110,6 @@ static void* GetMapDescription(MapComponent* self) {
     return derived ? obj : nullptr;
 }
 
-// ============================================================
-// MapComponent::Shutdown (vtable slot [3], 0x1401243e0)
-// ============================================================
-// Serializes tile coordinates and extra int field.
-//
-// Original disassembly:
-//   CALL Component_Serialize (0x1401189b0)
-//   CALL Serializer_Ctor(local, stream, 0)
-//   CALL Serialize_Short(&tileX0, nullptr) x4
-//   CALL Serialize_Int(&extraField, nullptr)
-//   CALL Serializer_Dtor(local)
-
-void MapComponent_Shutdown(MapComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base Component_Serialize
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    // Create local IO::Serializer (24 bytes on stack)
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize 4 uint16 tile coords as shorts
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX0), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY0), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileX1), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&self->tileY1), nullptr);   // B.3.4 bridge
-
-    // Serialize extra int at +0x30
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->extraField, nullptr);   // B.3.4 bridge
-
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // MapComponent::Draw (vtable slot [6], 0x140124370)
@@ -435,8 +393,38 @@ MapComponent::MapComponent()
     OrFlagsInCtor(0x3);
 }
 
-// [3] 0x1401243e0
-void MapComponent::Persist(void* stream) { MapComponent_Shutdown(this, stream); }
+// ============================================================
+// MapComponent::Persist (vtable slot [3], 0x1401243e0)
+// ============================================================
+// Serializes tile coordinates and extra int field.
+//
+// Original disassembly:
+//   CALL Component_Serialize (0x1401189b0)
+//   CALL Serializer_Ctor(local, stream, 0)
+//   CALL Serialize_Short(&tileX0, nullptr) x4
+//   CALL Serialize_Int(&extraField, nullptr)
+//   CALL Serializer_Dtor(local)
+
+void MapComponent::Persist(void* stream) {
+    // Call base Component_Serialize
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    // Create local IO::Serializer (24 bytes on stack)
+    alignas(8) uint8_t serializer[24];
+    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // Serialize 4 uint16 tile coords as shorts
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileX0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileY0), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileX1), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<short*>(&tileY1), nullptr);   // B.3.4 bridge
+
+    // Serialize extra int at +0x30
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(extraField, nullptr);   // B.3.4 bridge
+
+    // Destroy serializer
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+}
 
 // [6] 0x140124370
 void MapComponent::OnAdded() {
