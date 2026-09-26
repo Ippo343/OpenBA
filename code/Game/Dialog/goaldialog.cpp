@@ -7,6 +7,17 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -43,9 +54,9 @@ void GoalDialog_Slot4(GoalDialog* self) {
     {
         System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* buttonOk = *(void**)retBuf;
-        if (buttonOk) fn_Element_SetElementId(buttonOk, 100);
+        if (buttonOk) reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(100);  // B.3.6 bridge
     }
 
     // Get GoalList from game world singleton at +0x150
@@ -60,7 +71,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
         {
             System::String nameStr("tableGoal");
             uint8_t retBuf[16];
-            fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
             tableGoal = *(void**)retBuf;
         }
 
@@ -70,20 +81,20 @@ void GoalDialog_Slot4(GoalDialog* self) {
         for (int i = 0; i < goalCount; i++) {
             // Create row element from dialog template[0]
             uint8_t templateBuf[16] = {0};
-            fn_Dialog_GetTemplate(dialog, templateBuf, 0);
+            ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(0));  // B.3.6 bridge
             void* elemDesc = *(void**)templateBuf;
 
             // Call ElementDescription::Create(this, retval, dialog) via vtable+0x40
             uint8_t newElemBuf[16] = {0};
             if (elemDesc) {
-                void** vtbl = *(void***)elemDesc;
-                typedef void (*CreateFn)(void*, void*, void*);
-                ((CreateFn)vtbl[8])(elemDesc, newElemBuf, dialog);
+                reinterpret_cast<const UI::ElementDescription*>(elemDesc)->CreateInstance(  // B.3.6 bridge
+                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf),
+                    reinterpret_cast<const UI::Dialog*>(dialog));
             }
 
             // Insert the new element as a child of the table
             if (tableGoal) {
-                fn_TableElement_SetChild2(tableGoal, newElemBuf, i);
+                reinterpret_cast<UI::TableElement*>(tableGoal)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf), i);  // B.3.6 bridge
             }
 
             // Find sub-elements within the new row
@@ -96,7 +107,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
             {
                 System::String nameStr("textGoal");
                 uint8_t retBuf[16];
-                fn_FindElement(newElem, retBuf, &nameStr);
+                ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(newElem)->FindElement(nameStr));  // B.3.6 bridge
                 textGoal = *(void**)retBuf;
             }
 
@@ -104,7 +115,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
             {
                 System::String nameStr("imageComplete");
                 uint8_t retBuf[16];
-                fn_FindElement(newElem, retBuf, &nameStr);
+                ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(newElem)->FindElement(nameStr));  // B.3.6 bridge
                 imageComplete = *(void**)retBuf;
             }
 
@@ -112,7 +123,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
             {
                 System::String nameStr("imageFail");
                 uint8_t retBuf[16];
-                fn_FindElement(newElem, retBuf, &nameStr);
+                ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(newElem)->FindElement(nameStr));  // B.3.6 bridge
                 imageFail = *(void**)retBuf;
             }
 
@@ -135,17 +146,17 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
                 // Construct UI::String from StringTable + text
                 uint8_t uiStr[16] = {0};
-                fn_UIString_Ctor(uiStr, stringTable, &textStr);
+                ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), textStr);  // B.3.6 bridge
 
                 // Set text on textGoal element
                 if (textGoal) {
-                    fn_TextElement_SetText(textGoal, uiStr);
+                    reinterpret_cast<UI::TextElement*>(textGoal)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
                 }
             }
 
             // Hide both complete and fail images initially
-            if (imageComplete) fn_Element_SetFlagsOnOff(imageComplete, 1, 0);
-            if (imageFail) fn_Element_SetFlagsOnOff(imageFail, 1, 0);
+            if (imageComplete) reinterpret_cast<UI::Element*>(imageComplete)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+            if (imageFail) reinterpret_cast<UI::Element*>(imageFail)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
             // Push entry {imageComplete, imageFail, textGoal} to array at +0xB8.
             // B.3.2 bridge: GoalDialog+0xB8 is Collection::Array<{imageComplete,
@@ -166,7 +177,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
     {
         System::String nameStr("textScenario");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         textScenario = *(void**)retBuf;
     }
 
@@ -183,19 +194,19 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
         // Construct UI::String from StringTable + title
         uint8_t uiStr[16] = {0};
-        fn_UIString_Ctor(uiStr, stringTable, &titleStr);
+        ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), titleStr);  // B.3.6 bridge
 
         // Convert UI::String to System::String for SetParameter
         System::String sysStr;
-        fn_UIString_ToSystemString(uiStr, &sysStr);
+        ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
 
         // Set as parameter 0 on textScenario
         if (textScenario) {
-            fn_TextElement_SetParameter(textScenario, 0, &sysStr);
+            reinterpret_cast<UI::TextElement*>(textScenario)->SetParameter(0, sysStr);  // B.3.6 bridge
         }
     } else {
         // No achievement/scenario — hide textScenario
-        if (textScenario) fn_Element_SetFlagsOnOff(textScenario, 1, 0);
+        if (textScenario) reinterpret_cast<UI::Element*>(textScenario)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     }
 }
 
@@ -236,11 +247,11 @@ void GoalDialog_Slot6(GoalDialog* self) {
 
         // Met indicator: show if met, hide if not
         void* metElem = *(void**)(entryArray + entryOffset);
-        fn_Element_SetFlagsOnOff(metElem, isMet ? 0 : 1, isMet ? 1 : 0);
+        reinterpret_cast<UI::Element*>(metElem)->SetFlagsOnOff(isMet ? 0 : 1, isMet ? 1 : 0);  // B.3.6 bridge
 
         // Failed indicator: show if failed, hide if not
         void* failedElem = *(void**)(entryArray + 8 + entryOffset);
-        fn_Element_SetFlagsOnOff(failedElem, hasFailed ? 0 : 1, hasFailed ? 1 : 0);
+        reinterpret_cast<UI::Element*>(failedElem)->SetFlagsOnOff(hasFailed ? 0 : 1, hasFailed ? 1 : 0);  // B.3.6 bridge
     }
 }
 
@@ -266,6 +277,6 @@ void GoalDialog_Slot8(GoalDialog* self, void* /*param2*/, int param3, int param4
     if (param3 == 0x12 && param4 == 100) {
         uint8_t selfIBP[16];
         new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
 }

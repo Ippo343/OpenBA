@@ -1,3 +1,11 @@
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -15,17 +23,17 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
     // Find imageIcon element
     uint8_t retBuf[16];
     { System::String nameStr("imageIcon");
-      fn_DialogInstance_FindElement(self, retBuf, &nameStr); }
+      ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr)); }  // B.3.6 bridge
     void* imageIcon = *(void**)retBuf;
 
     // Find textEvent element
     { System::String nameStr("textEvent");
-      fn_DialogInstance_FindElement(self, retBuf, &nameStr); }
+      ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr)); }  // B.3.6 bridge
     void* textEvent = *(void**)retBuf;
 
     // Find buttonOk element
     { System::String nameStr("buttonOk");
-      fn_DialogInstance_FindElement(self, retBuf, &nameStr); }
+      ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr)); }  // B.3.6 bridge
     void* buttonOk = *(void**)retBuf;
 
     // Get event entry from world event list
@@ -43,13 +51,13 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
 
     // Get current sprite from imageIcon (16 bytes: sheetPtr + index)
     uint8_t oldSprite[16];
-    fn_ImageElement_GetSprite(imageIcon, oldSprite);
+    ::new (oldSprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(imageIcon)->GetSprite());  // B.3.6 bridge
     void* sheetPtr = *(void**)oldSprite;
 
     // Build new sprite: same sheet, new index from name
     int newIndex = -1;
     if (sheetPtr) {
-        newIndex = fn_SpriteSheet_GetSpriteIndexFromName(sheetPtr, &fmtStr);
+        newIndex = reinterpret_cast<const UI::SpriteSheet*>(sheetPtr)->GetSpriteIndexFromName(fmtStr);  // B.3.6 bridge
     }
 
     // Construct 16-byte Sprite: {sheetPtr, index(4b) + pad(4b)}
@@ -59,13 +67,13 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
     *(int32_t*)(newSprite + 12) = 0;
 
     // Set new sprite on imageIcon
-    fn_ImageElement_SetSprite(imageIcon, newSprite);
+    reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(newSprite));  // B.3.6 bridge
 
     // Set text parameter 0 on textEvent to event text string at eventEntry+0x08
-    fn_TextElement_SetParameter(textEvent, 0, eventEntry + 0x08);
+    reinterpret_cast<UI::TextElement*>(textEvent)->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));  // B.3.6 bridge
 
     // Set button ID 200 on buttonOk
-    fn_Element_SetElementId(buttonOk, 200);
+    reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(200);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -80,7 +88,7 @@ void EventPopupDialog_Slot8(EventPopupDialog* self, void* /*param2*/, int param3
     if (param3 == 0x12 && param4 == 200) {
         uint8_t selfIBP[16];
         new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
 }
 
