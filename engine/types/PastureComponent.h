@@ -22,32 +22,7 @@ namespace PastureComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x140163f10;
 }
 
-struct PastureComponent {
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    // Own data
-    void*    field28;           // +0x28: zeroed
-    void*    field30;           // +0x30: zeroed
-    void*    field38;           // +0x38: zeroed
-    uint8_t  _pad40[4];         // +0x40: implicit padding
-    uint32_t field44;           // +0x44: zeroed (dword)
-
-    // Controller sub-object at +0x48
-    void*    controllerVtable;  // +0x48
-    void*    controllerData0;   // +0x50
-    void*    controllerData1;   // +0x58
-    void*    selfPtr;           // +0x60
-};
-
-static_assert(sizeof(PastureComponent) == 0x68, "PastureComponent size mismatch");
-static_assert(offsetof(PastureComponent, vtable) == 0x00, "");
-static_assert(offsetof(PastureComponent, flags) == 0x20, "");
-static_assert(offsetof(PastureComponent, field28) == 0x28, "");
-static_assert(offsetof(PastureComponent, field44) == 0x44, "");
-static_assert(offsetof(PastureComponent, controllerVtable) == 0x48, "");
-static_assert(offsetof(PastureComponent, selfPtr) == 0x60, "");
+// ENDGAME B.3.8 MI-B: the POD is gone — `PastureComponent` is a real class now
+// (code/Game/Component/PastureComponent.h, compiler vtable). This forwarder keeps the old
+// include spelling working until the closing pass deletes it (B8-4).
+#include "Component/PastureComponent.h"

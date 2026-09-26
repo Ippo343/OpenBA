@@ -18,25 +18,6 @@
 #include <new>
 
 // ============================================================
-// Resolved helpers
-// ============================================================
-
-// ResourceProduceComponent::Shutdown (base) at 0x14012b4a0
-typedef void (*fn_ResourceProduceShutdown_t)(void* self, void* stream);
-static fn_ResourceProduceShutdown_t s_fn_ResourceProduceShutdown = nullptr;
-
-static bool s_initialized = false;
-
-static void EnsureHelpers() {
-    if (s_initialized) return;
-
-    s_fn_ResourceProduceShutdown = reinterpret_cast<fn_ResourceProduceShutdown_t>(
-        ResolveAddr(Module::Exe, 0x14012b4a0));
-
-    s_initialized = true;
-}
-
-// ============================================================
 // ForesterComponent::Shutdown (vtable slot [3], 0x14011f960)
 // ============================================================
 // ResourceProduceComponent::Shutdown(self, stream)
@@ -46,12 +27,8 @@ static void EnsureHelpers() {
 // ~Serializer()
 
 void ForesterComponent_Shutdown(ForesterComponent* self, void* stream) {
-    EnsureHelpers();
-
-    // Call base ResourceProduceComponent::Shutdown
-    if (s_fn_ResourceProduceShutdown) {
-        s_fn_ResourceProduceShutdown(self, stream);
-    }
+    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
+    self->ResourceProduceComponent::Persist(stream);
 
     // Serialize ForesterComponent's own fields
     alignas(8) uint8_t serializer[24];
@@ -67,15 +44,9 @@ void ForesterComponent_Shutdown(ForesterComponent* self, void* stream) {
 }
 
 // ============================================================
-// Init: resolve function pointers
+// Init: nothing left to resolve (the base Persist is a direct member call now)
 // ============================================================
-void ForesterComponent_InitFuncs() {
-    EnsureHelpers();
-#ifdef _DEBUG
-    printf("[ForesterComponent] Funcs resolved: ResourceProduceShutdown=%p\n",
-           (void*)s_fn_ResourceProduceShutdown);
-#endif
-}
+void ForesterComponent_InitFuncs() {}
 
 // ============================================================
 // Vtable slots 13/14 — the panel COMMAND pair
@@ -84,8 +55,6 @@ void ForesterComponent_InitFuncs() {
 // ForesterComponent OVERRIDES both. Byte-verified from vtable_ForesterComponent
 // (0x140163460): slot 13 = 0x14011f920, slot 14 = 0x14011f890.
 //
-extern "C" void ResourceProduceComponent_Command(void* self);  // base slot 14, 0x14012b5a0
-
 // The forester lodge has TWO independent work toggles, not one:
 //   self+0x50 = "plant trees"   (command id 1)
 //   self+0x51 = "cut trees"     (command id 2)
@@ -102,8 +71,8 @@ extern "C" void ResourceProduceComponent_Command(void* self);  // base slot 14, 
 // retail deliberately never does that here.
 //
 // ⚠ Unlike the ResourceProduce base slot 13, this one DOES read its command-id argument.
-extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+uint32_t ForesterComponent::CommandMask(int cmd) {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
     if (cmd == 1) return *reinterpret_cast<char*>(comp + 0x50) ? 3 : 1;
     if (cmd == 2) return *reinterpret_cast<char*>(comp + 0x51) ? 3 : 1;
     return 1;
@@ -117,11 +86,11 @@ extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd) {
 // test is the whole point of the override, not an optimisation.
 //
 // The tail call Ghidra prints as `HerbalistComponent_Slot14(param_1)` is address
-// 0x14012b5a0 — the ResourceProduce BASE slot-14 body, already ported as
-// ResourceProduceComponent_Command. The "Herbalist" name is a subclass label Ghidra
-// attached to a base-vtable body; it is not the herbalist's function.
-extern "C" void ForesterComponent_Command(void* self, int cmd) {
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+// 0x14012b5a0 — the ResourceProduce BASE slot-14 body (ResourceProduceComponent::
+// Command, a direct call: qualified here). The "Herbalist" name is a subclass label
+// Ghidra attached to a base-vtable body; it is not the herbalist's function.
+void ForesterComponent::Command(int cmd) {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
     char* const plant = reinterpret_cast<char*>(comp + 0x50);
     char* const cut   = reinterpret_cast<char*>(comp + 0x51);
 
@@ -136,97 +105,57 @@ extern "C" void ForesterComponent_Command(void* self, int cmd) {
     const bool nowActive = !nowIdle;
 
     if ((wasIdle && nowActive) || (wasActive && nowIdle))
-        ResourceProduceComponent_Command(self);
+        ResourceProduceComponent::Command(cmd);
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// The by-address doors of slots 13/14 (standalone/reg_component_economy.cpp:144-145).
+extern "C" uint8_t ForesterComponent_CommandMask(void* self, int cmd) {
+    return static_cast<uint8_t>(
+        reinterpret_cast<ForesterComponent*>(self)->ForesterComponent::CommandMask(cmd));   // B.3.8 bridge
+}
+extern "C" void ForesterComponent_Command(void* self, int cmd) {
+    reinterpret_cast<ForesterComponent*>(self)->ForesterComponent::Command(cmd);   // B.3.8 bridge
+}
+
+// ============================================================================
+// ENDGAME B.3.8 MI-B — ForesterComponent as a REAL class (ForesterComponent.h).
+//
+// Before: a hand-expanded CONTROLLER_LIVE_FACTORY_STATES (48-slot table filled per
+// create, Inert_ScalarDtor in slot 0, the shared RP dispatcher stamped at +0x28, the
+// ctor's 0x101 store written by the factory). After: the compiler's 22-slot vtable,
+// a real ctor/dtor chain, the controller the base's member (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
 
-// Promoted 2026-08-15 from the hand-expanded inert factory (which reached only slots
-// 13/14) to a full live ControllerComponent.
-//
-// The previous wave made the two work checkboxes clickable, but the lodge still did
-// nothing: ForesterComponent is a ResourceProduceComponent subclass, so all of its
-// production runs off the SHARED ResourceProduce state machine (idle 2 -> producing 13
-// -> paused 14), and that machine was never linked because slots 16/17
-// (GetDefaultState / CreateState) still held the inert stub. A clickable checkbox on a
-// state machine that does not exist is exactly the "live command pair, inert
-// controller" shape the coverage harness reported as 17/22.
-//
-// Size 0x58 / Flags 0x80 / NodeOff 0x28 / DefState 2 all come from
-// ForesterComponent_Ctor (0x14011fa40) -> ResourceProduceComponent_Ctor, the same
-// derivation as fishingcomponent.cpp.
-//
-// ⚠ NOT the macro. ForesterComponent_Ctor's own body is two stores:
-//       *(ComponentVtable**)self = &vtable_ForesterComponent;
-//       *(uint16*)(self + 0x50)  = 0x101;
-// and that second store is behaviour, not padding: it is what makes a freshly-built
-// lodge default to "plant AND cut both ON". Our factories zero-fill the body, so under
-// CONTROLLER_LIVE_FACTORY_STATES every lodge in the game would be born with both work
-// flags OFF — slot 13 would grey nothing but slot 14's edge test would see an idle
-// lodge, and CreateWork's re-arm (see resourceproduce_creatework.cpp) would be the only
-// thing ever turning them on. CONTROLLER_LIVE_FACTORY_STATES' PopulateFn takes no
-// arguments, so it cannot reach the instance; the macro is hand-expanded here purely to
-// get `mem` in scope for the ctor default.
-extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
-extern "C" void   RPCtrl_PopulateTable();
-extern "C" uintptr_t* ForesterComponent_CreateWork(void*, uintptr_t*);   // slot 18
+extern "C" uintptr_t* ForesterComponent_CreateWork(void*, uintptr_t*);   // resourceproduce_creatework.cpp
 
-static uint32_t ForesterComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ForesterComponent");
-    return cached;
-}
-static void* ForesterComponent_LiveGetTypeInfo(void*) {
-    static void* cached = nullptr;
-    if (!cached) cached = ::Object::GetTypeInfoByName("ForesterComponent");
-    return cached;
-}
-static int   ForesterComponent_GetDefaultState(void*) { return 2; }      // slot 16
-static void* ForesterComponent_CreateState(void* self) {                 // slot 17
-    return reinterpret_cast<uint8_t*>(self) + 0x28;
-}
-static void* ForesterComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+// 0x14011fa40: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
+// `MOV word [RBX+0x50],0x101` — a freshly built lodge plants AND cuts.
+ForesterComponent::ForesterComponent()
+    : ResourceProduceComponent(), foresterFlags(0x101), _pad52{} {}
 
-// Must run AFTER InitInertTyped/MakeInertTyped — FillTypedVtable erases static-init
-// writes, so every real slot is (re)installed from in here on every instance creation.
-static void ForesterComponent_InstallLive(void* mem) {
-    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
-    // does not care whether this component's live feature is enabled. Wired
-    // UNCONDITIONALLY, ahead of the gameplay slots.
-    // See reference_vtable_slot3_serialize_never_installed.
-    ForesterComponent_LiveVtable[3]  = reinterpret_cast<void*>(&ForesterComponent_Shutdown);
-    ForesterComponent_LiveVtable[1]  = reinterpret_cast<void*>(&ForesterComponent_LiveGetTypeInfo);
-    ForesterComponent_LiveVtable[13] = reinterpret_cast<void*>(&ForesterComponent_CommandMask);
-    ForesterComponent_LiveVtable[14] = reinterpret_cast<void*>(&ForesterComponent_Command);
-    ForesterComponent_LiveVtable[16] = reinterpret_cast<void*>(&ForesterComponent_GetDefaultState);
-    ForesterComponent_LiveVtable[17] = reinterpret_cast<void*>(&ForesterComponent_CreateState);
-    ForesterComponent_LiveVtable[18] = reinterpret_cast<void*>(&ForesterComponent_CreateWork);
-    RPCtrl_PopulateTable();
-    if (!mem) return;
-    uint8_t* const p = reinterpret_cast<uint8_t*>(mem);
-    // Embedded state node at +0x28: node vtable at +0x00, owning component at +0x18.
-    *reinterpret_cast<void**>(p + 0x28)        = reinterpret_cast<void*>(RPCtrl_NodeVtable());
-    *reinterpret_cast<void**>(p + 0x28 + 0x18) = mem;
-    // ForesterComponent_Ctor's own two-store body (see the block comment above).
-    *reinterpret_cast<uint16_t*>(p + 0x50) = 0x101;
+// [0] 0x140034a70: restamps + ~Internal (the compiler chain), MemFree on &1.
+Object::Base* ForesterComponent::DeletingDtor(unsigned flags) {
+    this->~ForesterComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-extern "C" void* ForesterComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x80,
-        ForesterComponent_LiveVtable,
-        reinterpret_cast<void*>(&ForesterComponent_LiveGetTypeId));
-    ForesterComponent_InstallLive(p);
-    return p;
+
+// create 0x140034870: MemAlloc(0x58, 8), then the ctor.
+void* ForesterComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ForesterComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ForesterComponent());
 }
-static void* ForesterComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x80,
-        ForesterComponent_LiveVtable,
-        reinterpret_cast<void*>(&ForesterComponent_LiveGetTypeId));
-    ForesterComponent_InstallLive(mem);
-    return mem;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ForesterComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ForesterComponent());
 }
-REGISTER_TYPE(ForesterComponent, "ResourceProduceComponent",
-              &ForesterComponent_Factory, &ForesterComponent_CreateInPlace);
+
+void       ForesterComponent::Persist(void* stream)     { ForesterComponent_Shutdown(this, stream); }        // [3]  0x14011f960
+uintptr_t* ForesterComponent::CreateWork(uintptr_t* out) { return ForesterComponent_CreateWork(this, out); } // [18] 0x14011f780
+
+DEFINE_EXE_VTABLE(ForesterComponent, "_ZTV17ForesterComponent")
+DEFINE_EXE_TYPE(ForesterComponent, "ResourceProduceComponent")

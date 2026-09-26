@@ -9,35 +9,13 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "ResourceProduceComponent.h"
 
 namespace FishingComponentAddr {
     constexpr uintptr_t Factory = 0x140034350;
     constexpr uintptr_t Vtable  = 0x140163230;
 }
 
-struct FishingComponent {
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-    void*    controllerVtable;  // +0x28
-    void*    controllerData0;   // +0x30
-    void*    controllerData1;   // +0x38
-    void*    selfPtr;           // +0x40
-    uint8_t  produceFlag;       // +0x48
-    uint8_t  _pad49[7];         // +0x49
-
-    uint8_t  fishingFlag;       // +0x50: initialized to 0 (serialized as bool)
-    uint8_t  _pad51[3];         // +0x51: padding
-    float    fishingRate;        // +0x54: serialized by Shutdown (float field)
-};
-
-static_assert(sizeof(FishingComponent) == 0x58, "FishingComponent size mismatch");
-static_assert(offsetof(FishingComponent, vtable) == 0x00, "");
-static_assert(offsetof(FishingComponent, controllerVtable) == 0x28, "");
-static_assert(offsetof(FishingComponent, selfPtr) == 0x40, "");
-static_assert(offsetof(FishingComponent, fishingFlag) == 0x50, "");
-static_assert(offsetof(FishingComponent, fishingRate) == 0x54, "");
+// ENDGAME B.3.8 MI-B: the POD is gone — `FishingComponent` is a real class now
+// (code/Game/Component/FishingComponent.h, compiler vtable). This forwarder keeps the old
+// include spelling working until the closing pass deletes it (B8-4).
+#include "Component/FishingComponent.h"
