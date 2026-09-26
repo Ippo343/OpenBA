@@ -182,6 +182,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../funcs/rt_libm.h"
 #include "../../types/audio/Audio.h"
+#include "../../types/audio/SoundEffect.h"
 
 namespace rtavbody29 {
 
@@ -215,9 +216,17 @@ inline float FalloffCeiling() {
 }
 
 // The first 12 bytes of a Math::Vector3, which is all either body reads.
-struct Vec3 { float x, y, z; };
-
 }  // namespace
+}  // namespace rtavbody29
+
+// ############################################################################
+// ENDGAME B.3.7 block B4: the three bodies are members of `Audio::Scene` now
+// (runtime/types/audio/Audio.h); the registered doors below delegate. The
+// attendance counters stay in `rtavbody29`.
+// ############################################################################
+namespace Audio {
+
+using namespace rtavbody29;
 
 // ---------------------------------------------------------------------------
 // ?GetVolumeForPosition@Scene@Audio@@AEBAMAEBVVector3@Math@@MM0@Z   0x1800dfed0
@@ -227,14 +236,11 @@ struct Vec3 { float x, y, z; };
 //   XMM2 = maxDistance, XMM3 = minDistance
 //   [RSP+0x28 @entry] = const Vector3& listener position
 // ---------------------------------------------------------------------------
-extern "C" float RtAudio_Scene_GetVolumeForPosition(const void* /*self*/,
-                                                    const void* srcPos,
-                                                    float maxDist,
-                                                    float minDist,
-                                                    const void* listenerPos) {
+float Scene::GetVolumeForPosition(const Vector3& srcPos, float maxDist, float minDist,
+                                  const Vector3& listenerPos) const {
     ++g_volForPosCalls;
-    const Vec3* const s = static_cast<const Vec3*>(srcPos);
-    const Vec3* const l = static_cast<const Vec3*>(listenerPos);
+    const Vector3* const s = &srcPos;
+    const Vector3* const l = &listenerPos;
 
     // SUBSS/MULSS/ADDSS in retail's order: (dy*dy + dx*dx) + dz*dz.
     // The ORDER IS TRANSCRIBED, not tidied into x+y+z: float addition is not
@@ -266,21 +272,18 @@ extern "C" float RtAudio_Scene_GetVolumeForPosition(const void* /*self*/,
 //   RCX = this, RDX = const AttenutedEffect&, R8 = const Vector3& listener,
 //   XMM3 = radius bias (added to the effect's max-distance base)
 // ---------------------------------------------------------------------------
-extern "C" float RtAudio_Scene_GetAttenuatedVolume(const void* self,
-                                                   const void* effectPtr,
-                                                   const void* listenerPos,
-                                                   float radiusBias) {
+float Scene::GetAttenuatedVolume(const AttenutedEffect& effect, const Vector3& listenerPos,
+                                 float radiusBias) const {
     ++g_attenCalls;
-    const EffectSlot* const eff = static_cast<const EffectSlot*>(effectPtr);
+    const AttenutedEffect* const eff = &effect;
 
-    // MOV RAX,[RDX+0x10] -- the SoundEffect. Unguarded in retail; transcribed.
-    const uint8_t* const def =
-        *reinterpret_cast<const uint8_t* const*>(
-            reinterpret_cast<const uint8_t*>(eff) + 0x10);
+    // FAITHFUL UNGUARDED DEREF of the effect's SoundEffect (+0x10). B.3.7: the
+    // two floats are `SoundEffect::GetRadius` / `GetInnerRadius` (+0x20/+0x24).
+    const SoundEffect* const def =
+        reinterpret_cast<const SoundEffect*>(eff->soundEffectRef);   // B.3.7 bridge
 
-    float f20, f24;
-    std::memcpy(&f20, def + 0x20, sizeof(f20));   // maxDistanceBase (reader-only name)
-    std::memcpy(&f24, def + 0x24, sizeof(f24));   // minDistance     (reader-only name)
+    const float f20 = def->_radius;               // maxDistanceBase
+    const float f24 = def->_innerRadius;          // minDistance
 
     // BOTH HOISTED, exactly as retail hoists them. See the header.
     const float minDist = f24;                    // MOVSS XMM8,[RAX+0x24]
@@ -292,8 +295,9 @@ extern "C" float RtAudio_Scene_GetAttenuatedVolume(const void* self,
     if (count == 0) {
         // TEST EAX,EAX / JNZ not taken: the effect's OWN position is used.
         ++g_attenSingle;
-        best = RtAudio_Scene_GetVolumeForPosition(self, eff, maxDist, minDist,
-                                                  listenerPos);
+        // The slot's own position (+0x00..+0x0b) read as a Vector3.
+        best = GetVolumeForPosition(*reinterpret_cast<const Vector3*>(&eff->posX),   // B.3.7 bridge
+                                    maxDist, minDist, listenerPos);
     } else if (count > 0) {
         // JLE after the JNZ: a NEGATIVE count skips the loop and leaves best=0.
         const EmitterInstance* e = eff->positions._data;
@@ -302,8 +306,8 @@ extern "C" float RtAudio_Scene_GetAttenuatedVolume(const void* self,
             // MULSS XMM0,[RDI] where RDI = element + 0xc -- the per-emitter
             // volume, applied to THIS candidate before the comparison.
             const float v =
-                RtAudio_Scene_GetVolumeForPosition(self, e, maxDist, minDist,
-                                                   listenerPos) * e->volume;
+                GetVolumeForPosition(*reinterpret_cast<const Vector3*>(&e->x),       // B.3.7 bridge
+                                     maxDist, minDist, listenerPos) * e->volume;
             // COMISS/JBE: strictly greater, and a NaN candidate is discarded.
             if (v > best) best = v;
         }
@@ -320,8 +324,7 @@ extern "C" float RtAudio_Scene_GetAttenuatedVolume(const void* self,
 //   (the Scene, as stored into the device slot by PlayPlatform's caller),
 //   R8D = the channel handle tag.
 // ---------------------------------------------------------------------------
-extern "C" void RtAudio_Scene_OnSoundEnded(void* audioChannel, void* userData,
-                                           uint32_t tag) {
+void Scene::OnSoundEnded(Device::AudioChannel* audioChannel, void* userData, uint32_t tag) {
     ++g_endedCalls;
     Scene* const scene = static_cast<Scene*>(userData);
 
@@ -361,6 +364,30 @@ extern "C" void RtAudio_Scene_OnSoundEnded(void* audioChannel, void* userData,
     *flagByte = static_cast<uint8_t>(*flagByte | 0x02u);   // OR byte, NOT dword
 }
 // ---- registration ----------------------------------------------------------
+}  // namespace Audio
+
+// ============================================================================
+// THE DOORS — one-line qualified delegations.
+// ============================================================================
+extern "C" float RtAudio_Scene_GetVolumeForPosition(const void* self, const void* srcPos,
+                                                    float maxDist, float minDist,
+                                                    const void* listenerPos) {
+    return reinterpret_cast<const Audio::Scene*>(self)->Audio::Scene::GetVolumeForPosition(   // B.3.7 bridge
+        *static_cast<const Vector3*>(srcPos), maxDist, minDist,
+        *static_cast<const Vector3*>(listenerPos));
+}
+extern "C" float RtAudio_Scene_GetAttenuatedVolume(const void* self, const void* effectPtr,
+                                                   const void* listenerPos, float radiusBias) {
+    return reinterpret_cast<const Audio::Scene*>(self)->Audio::Scene::GetAttenuatedVolume(    // B.3.7 bridge
+        *static_cast<const Audio::Scene::AttenutedEffect*>(effectPtr),
+        *static_cast<const Vector3*>(listenerPos), radiusBias);
+}
+extern "C" void RtAudio_Scene_OnSoundEnded(void* audioChannel, void* userData, uint32_t tag) {
+    Audio::Scene::OnSoundEnded(static_cast<Audio::Device::AudioChannel*>(audioChannel), userData, tag);
+}
+
+namespace rtavbody29 {
+
 int Register() {
     int count = 0;
     RegisterRuntimeExport("?GetVolumeForPosition@Scene@Audio@@AEBAMAEBVVector3@Math@@MM0@Z",

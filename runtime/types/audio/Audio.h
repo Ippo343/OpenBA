@@ -1,6 +1,6 @@
 #pragma once
 // ============================================================================
-// runtime/types/audio/Audio.h — Audio::Scene / Audio::Configuration layouts
+// runtime/types/audio/Audio.h — Audio::Scene / Audio::Configuration (real classes)
 // ============================================================================
 //
 // Wave 8, lane C of the Runtime-x64.dll port (docs/runtime_port/PLAN.md §4.2,
@@ -73,128 +73,286 @@
 //       already cross-checked there).
 //   ?Save@Configuration@Audio@@…               0x1800dde10
 //   ?Startup@Configuration@Audio@@…            0x1800ddee0
+//
+// ENDGAME B.3 step 7, block B4: the `RtAudio::` PODs this header used to carry
+// ARE the classes now (one definition, B7-6): `Audio::Scene` with its three
+// nested value types and `Audio::Configuration`, both NON-polymorphic. The
+// `RtAudio::` names survive as aliases for the unconverted includers
+// (runtime/src/engine/singleton_ctors.cpp asserts a Configuration offset).
+// The other four Audio classes have their own headers beside this one:
+// SoundBuffer.h, SoundEffect.h, Stream.h, Device.h. THREE classes are spelled
+// `Scene` (`Audio::Scene`, `Picking::Scene`, the Graphics one): always qualify.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 #include "../collection/Collection.h"
+#include "../../../engine/types/common.h"   // Vector3
+#include "../object/External.h"             // Object::ExternalPtr
+#include "Device.h"                         // Device::AudioChannel (OnSoundEnded)
 
-namespace RtAudio {
+namespace System { class Time; class Random; }
 
-// ============================================================
-// Audio::Scene::Channel — one 2D/general playback slot, 0x70 (112) bytes.
-// Pinned by Scene::PlayEffect (writes +0x00/+0x08/+0x10/+0x68), Scene::Update
-// (+0x18 volume, +0x1c pitch, +0x6c "started" flag), Scene::StopEffect /
-// Scene::PauseEffect (+0x20..+0x5f eight platform-channel pointers, +0x60..
-// +0x67 eight per-sub-channel flag bytes — the default-construct pattern in
-// FUN_180051020 zeroes all of +0x00..+0x67 and +0x6c..+0x6f but sets +0x18
-// and +0x1c to 1.0f, matching StopEffect's identical reset pattern).
-// ============================================================
-struct Channel {
-    uint64_t soundEffectRef;      // +0x00  Object::ExternalPtr<SoundEffect>
-    uint32_t soundType;           // +0x08  Audio::Scene::SoundType
-    uint32_t _pad0c;              // +0x0c  never read/written (alignment)
-    int64_t  startTime;           // +0x10  System::Time ticks
-    float    volume;              // +0x18  default 1.0f
-    float    pitch;               // +0x1c  default 1.0f
-    void*    platformChannel[8];  // +0x20  up to 8 live Audio::Device sub-channels
-    uint8_t  channelFlags[8];     // +0x60  one byte per platformChannel slot
-    uint32_t handleTag;           // +0x68  see the handle-encoding note above
-    uint8_t  started;             // +0x6c  "has been given a start reference tick"
-    uint8_t  _pad6d[3];           // +0x6d..+0x6f
+namespace Audio {
+
+class SoundEffect;
+
+// ============================================================================
+// Audio::Scene — 0x38 (56) bytes, NON-polymorphic, concrete.
+//
+// NO VTABLE: the ctor's first store is `*(undefined8*)this = 0` (Scene::time),
+// and there is no `??_7Scene@Audio@@` export.
+//
+// HELD BY VALUE (B37_RULES 2.4 and its addendum): the exe's MenuDialogLoopT
+// embeds one at +0xb30 and GameUpdateLoop::Load allocates another
+// (`MemAlloc(0x38,8)` at 0x14009706a); both holders are unconverted exe PODs
+// that construct in place through the ctor DOOR (`??0Scene@Audio@@QEAA@XZ`,
+// runtime/src/audio/audio.cpp, reached from engine_funcs.h's
+// MenuDialogLoopT_Ctor). By the B4b-3 ruling a POD holding a POD does not
+// trigger B5-4's `= default` + `friend`: CONCRETE, PUBLIC members, NO C++
+// default constructor (the user-declared copy constructor below suppresses the
+// implicit one), so only the door builds a Scene. Retail's copy constructor
+// (0x180050a50) is DEEP (two Array copies), so the class is not trivially
+// copyable (B7-8).
+//
+// THE DESTRUCTOR IS THE IMPLICIT ONE, and that is retail's
+// `??1Scene@Audio@@QEAA@XZ` (0x1800e0120): the AttenutedEffect range-destroy
+// (FUN_180052110, which frees each slot's `positions` buffer), the +0x20
+// buffer, then the +0x10 buffer — i.e. `~Array<AttenutedEffect>` then
+// `~Array<Channel>`, reverse declaration order. The dtor door calls it.
+//
+// THREADS: GameUpdateLoop's slot-6 Load constructs one on the LOADER thread;
+// the main thread updates it every frame.
+// ============================================================================
+class Scene {
+public:
+    // ------------------------------------------------------------------------
+    // Scene::Channel — one 2D/general playback slot, 0x70 (112) bytes.
+    // Pinned by Scene::PlayEffect (writes +0x00/+0x08/+0x10/+0x68), Scene::Update
+    // (+0x18 volume, +0x1c pitch, +0x6c "started" flag), Scene::StopEffect /
+    // Scene::PauseEffect (+0x20..+0x5f eight platform-channel pointers, +0x60..
+    // +0x67 eight per-sub-channel flag bytes — the default-construct pattern in
+    // FUN_180051020 zeroes all of +0x00..+0x67 and +0x6c..+0x6f but sets +0x18
+    // and +0x1c to 1.0f, matching StopEffect's identical reset pattern).
+    // The NAME is descriptive: no mangled signature names this record.
+    // ------------------------------------------------------------------------
+    struct Channel {
+        uint64_t soundEffectRef;      // +0x00  Object::ExternalPtr<SoundEffect>
+        uint32_t soundType;           // +0x08  Audio::Scene::SoundType
+        uint32_t _pad0c;              // +0x0c  never read/written (alignment)
+        int64_t  startTime;           // +0x10  System::Time ticks
+        float    volume;              // +0x18  default 1.0f
+        float    pitch;               // +0x1c  default 1.0f
+        Device::AudioChannel* platformChannel[8]; // +0x20  up to 8 live Device channels
+        uint8_t  channelFlags[8];     // +0x60  one byte per platformChannel slot
+        uint32_t handleTag;           // +0x68  see the handle-encoding note above
+        uint8_t  started;             // +0x6c  "has been given a start reference tick"
+        uint8_t  _pad6d[3];           // +0x6d..+0x6f
+    };
+
+    // A {x,y,z,volume} instance record inside AttenutedEffect::positions.
+    // Pinned by AddEmitter (builds this exact 16-byte value on the stack before
+    // calling the array SetSize/insert) and MoveEmitter/SetEmitterVolume/
+    // RemoveEmitter, which all stride the nested array in 16-byte steps.
+    struct EmitterInstance {
+        float x, y, z;
+        float volume;
+    };
+
+    // ------------------------------------------------------------------------
+    // Scene::AttenutedEffect (retail's own spelling, from the mangled
+    // `?GetAttenuatedVolume@Scene@Audio@@AEBAMAEBUAttenutedEffect@12@...`) — one
+    // id-keyed slot in the 4096-entry table, 0x40 (64) bytes. Shared by the
+    // ambient-emitter API (AddEmitter/..., which use `positions`) and the
+    // 3D-effect API (PlayEffect3D/..., which use `pos`, `soundEffectRef`,
+    // `channelHandle`). `EffectSlot` is this tree's older name for it.
+    // ------------------------------------------------------------------------
+    struct AttenutedEffect {
+        float               posX, posY, posZ;  // +0x00  PlayEffect3D's own position
+        uint32_t            soundType;         // +0x0c
+        uint64_t            soundEffectRef;    // +0x10  ExternalPtr<SoundEffect>
+        int64_t             startTime;         // +0x18  System::Time ticks
+        uint32_t            channelHandle;     // +0x20  into the Channel table, 0 = none
+        uint32_t            idTag;             // +0x24  see the handle-encoding note above
+        float               baseVolume;        // +0x28  default 1.0f
+        uint32_t            _pad2c;            // +0x2c
+        Collection::Array<EmitterInstance> positions; // +0x30  (0x10 bytes: data/size/cap)
+    };
+    using EffectSlot = AttenutedEffect;
+
+    // `?AW4SoundType@Scene@Audio@@` — a 4-byte enum passed in a register. Values
+    // 0..4 index `paused[5]` and Update's volume table (1 UI, 2 music, 3 ambient,
+    // 4 effect by the Configuration field each one reads; 0 is silent). The
+    // ENUMERATOR NAMES are not in the binary, so none is invented.
+    enum SoundType : int32_t {};
+
+    // ---- PORTED members (bodies in runtime/src/audio/) ---------------------
+    // B7-5: `ExternalPtr<SoundEffect>` by value is a BARE register pointer; the
+    // two `System::Time` by value in Update are REGISTER values (8 bytes).
+    int32_t  GetEmitterCount(uint32_t id) const;                                   // 0x1800dec00
+    void     MoveEmitter(uint32_t id, const Vector3& oldPos, const Vector3& newPos); // 0x1800dec40
+    void     RemoveEmitter(uint32_t id, const Vector3& pos);                        // 0x1800decf0
+    void     SetEmitterVolume(uint32_t id, const Vector3& pos, float volume);       // 0x1800ded60
+    void     AddEmitter(uint32_t id, const Vector3& pos, float volume);             // 0x1800dedf0
+    uint32_t FindEffect3D(Object::ExternalPtr<SoundEffect> effect);                // 0x1800dee70
+    uint32_t PlayEffect3D(Object::ExternalPtr<SoundEffect> effect, SoundType type,
+                          const System::Time& time, const Vector3& pos);           // 0x1800deeb0
+    uint32_t PlayEffect(Object::ExternalPtr<SoundEffect> effect, SoundType type,
+                        const System::Time& time);                                 // 0x1800def60
+    void     Pause(int32_t soundType, bool paused);                                // 0x1800df070
+    void     StopAll();                                                            // 0x1800df150
+    void     StopEffect3D(uint32_t id);                                            // 0x1800df370
+    void     PauseEffect(uint32_t handle);                                         // 0x1800df4a0
+    void     StopEffect(uint32_t handle);                                          // 0x1800df550
+    bool     IsEffectPlaying(uint32_t handle) const;                               // 0x1800df680
+    bool     Update(System::Time delta, System::Time now, System::Random& rng,
+                    const Vector3& listener, float radiusBias);                     // 0x1800df6c0
+    // `void*` is an IO::Serializer&.
+    void     Serialize(void* serializer);                                          // 0x1800e0050
+    // Retail's are PRIVATE (`AEBA`); public here because their doors call them.
+    int32_t  FindFree3DEffect(Object::ExternalPtr<SoundEffect> effect, const System::Time& time,
+                              const Vector3& pos) const;                           // 0x1800deae0
+    float    GetAttenuatedVolume(const AttenutedEffect& effect, const Vector3& listener,
+                                 float radiusBias) const;                          // 0x1800dfde0
+    float    GetVolumeForPosition(const Vector3& pos, float maxDist, float minDist,
+                                  const Vector3& listener) const;                  // 0x1800dfed0
+    // The completion callback Update stamps into every Device channel it
+    // starts (`Device::AudioChannel::onComplete`).
+    static void OnSoundEnded(Device::AudioChannel* channel, void* scene, uint32_t tag); // 0x1800dffe0
+
+    // ---- exported one-line accessor: faithful inline body, NOT REGISTERED --
+    // `MOVSXD RAX,EDX ; MOVZX EAX,byte [RAX+RCX+0x30]` — unchecked index.
+    bool IsPaused(int32_t soundType) const { return paused[soundType] != 0; }     // 0x180050990
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    Scene(const Scene& src);                                                       // 0x180050a50  (deep)
+    Scene& operator=(const Scene& src);                                            // 0x180050ad0
+    static void* operator new(std::size_t bytes);                                  // 0x1800508b0
+    static void* operator new(std::size_t bytes, void* place);                     // 0x180050920
+    static void  operator delete(void* p);                                         // 0x180050930
+    void SetEffectVolume3D(uint32_t id, float volume);                             // 0x1800df000
+    void SetEffectVolume(uint32_t handle, float volume);                           // 0x1800df040
+    void UnpauseEffect(uint32_t handle);                                           // 0x1800df470  (Pause inlines it)
+    void SoundEnded(Device::AudioChannel* channel, uint32_t tag);                  // 0x1800dff70  (OnSoundEnded inlines it)
+private:
+    int32_t FindFreeEffect() const;                                                // 0x1800debc0
+
+public:
+    // `??0Scene@Audio@@QEAA@XZ` 0x1800e0160 is the DOOR (audio.cpp); no C++
+    // default constructor exists (see the banner).
+
+    // ---- THE 0x38 BYTES ----------------------------------------------------
+    int64_t  time;                    // +0x00  current System::Time ticks (set every Update)
+    int32_t  playGeneration;          // +0x08  starts at 1; ++ on every PlayEffect/PlayEffect3D
+    uint32_t _pad0c;                  // +0x0c
+    Collection::Array<Channel>          channels; // +0x10  fixed at 256 entries after ctor
+    Collection::Array<AttenutedEffect>  effects;  // +0x20  fixed at 4096 entries after ctor
+    uint8_t  paused[5];               // +0x30  one flag per Audio::Scene::SoundType (0..4)
+    uint8_t  _pad35[3];               // +0x35..+0x37
 };
-static_assert(sizeof(Channel) == 0x70, "Audio::Scene::Channel must be 0x70 bytes");
-static_assert(offsetof(Channel, soundEffectRef) == 0x00, "Channel::soundEffectRef @ +0x00");
-static_assert(offsetof(Channel, soundType)      == 0x08, "Channel::soundType @ +0x08");
-static_assert(offsetof(Channel, startTime)      == 0x10, "Channel::startTime @ +0x10");
-static_assert(offsetof(Channel, volume)         == 0x18, "Channel::volume @ +0x18");
-static_assert(offsetof(Channel, pitch)          == 0x1c, "Channel::pitch @ +0x1c");
-static_assert(offsetof(Channel, platformChannel) == 0x20, "Channel::platformChannel @ +0x20");
-static_assert(offsetof(Channel, channelFlags)   == 0x60, "Channel::channelFlags @ +0x60");
-static_assert(offsetof(Channel, handleTag)      == 0x68, "Channel::handleTag @ +0x68");
-static_assert(offsetof(Channel, started)        == 0x6c, "Channel::started @ +0x6c");
 
-// A {x,y,z,volume} instance record inside EffectSlot::positions. Pinned by
-// AddEmitter (builds this exact 16-byte value on the stack before calling
-// the array SetSize/insert) and MoveEmitter/SetEmitterVolume/RemoveEmitter,
-// which all stride the nested array in 16-byte (4-float) steps.
-struct EmitterInstance {
-    float x, y, z;
-    float volume;
-};
-static_assert(sizeof(EmitterInstance) == 0x10, "EmitterInstance must be 16 bytes");
+static_assert(sizeof(Scene::Channel) == 0x70, "Audio::Scene::Channel must be 0x70 bytes");
+static_assert(offsetof(Scene::Channel, soundEffectRef)  == 0x00, "Channel::soundEffectRef @ +0x00");
+static_assert(offsetof(Scene::Channel, soundType)       == 0x08, "Channel::soundType @ +0x08");
+static_assert(offsetof(Scene::Channel, startTime)       == 0x10, "Channel::startTime @ +0x10");
+static_assert(offsetof(Scene::Channel, volume)          == 0x18, "Channel::volume @ +0x18");
+static_assert(offsetof(Scene::Channel, pitch)           == 0x1c, "Channel::pitch @ +0x1c");
+static_assert(offsetof(Scene::Channel, platformChannel) == 0x20, "Channel::platformChannel @ +0x20");
+static_assert(offsetof(Scene::Channel, channelFlags)    == 0x60, "Channel::channelFlags @ +0x60");
+static_assert(offsetof(Scene::Channel, handleTag)       == 0x68, "Channel::handleTag @ +0x68");
+static_assert(offsetof(Scene::Channel, started)         == 0x6c, "Channel::started @ +0x6c");
+
+static_assert(sizeof(Scene::EmitterInstance) == 0x10, "EmitterInstance must be 16 bytes");
 // BATCH 8b: the four offsets, pinned by the inner-array serialize
 // (0x180051e00, runtime/src/audio/audio_effectslot_serialize.cpp), which emits
 // `kArrayFloat(n=3, &e[0])` then `kScalarFloat(&e[0]+0xc)` and strides 0x10.
 // The widths are not inferred from the field types: each comes from the
 // ReaderWriter vtable slot the body picks (Serializer.h `rw_vtbl`).
-static_assert(offsetof(EmitterInstance, x)      == 0x00, "0x180051e5a MOV R8,RBX");
-static_assert(offsetof(EmitterInstance, y)      == 0x04, "kArrayFloat n=3 from +0x00");
-static_assert(offsetof(EmitterInstance, z)      == 0x08, "kArrayFloat n=3 from +0x00");
-static_assert(offsetof(EmitterInstance, volume) == 0x0c, "0x180051e6b LEA RDX,[RBX+0xc]");
+static_assert(offsetof(Scene::EmitterInstance, x)      == 0x00, "0x180051e5a MOV R8,RBX");
+static_assert(offsetof(Scene::EmitterInstance, y)      == 0x04, "kArrayFloat n=3 from +0x00");
+static_assert(offsetof(Scene::EmitterInstance, z)      == 0x08, "kArrayFloat n=3 from +0x00");
+static_assert(offsetof(Scene::EmitterInstance, volume) == 0x0c, "0x180051e6b LEA RDX,[RBX+0xc]");
 
-// ============================================================
-// Audio::Scene::EffectSlot — one id-keyed slot in the 4096-entry table,
-// 0x40 (64) bytes. Shared by the ambient-emitter API (AddEmitter/…, which use
-// `positions`) and the 3D-effect API (PlayEffect3D/…, which use `pos`,
-// `soundEffectRef`, `channelHandle`). See the file header for which fields
-// which caller uses.
-// ============================================================
-struct EffectSlot {
-    float               posX, posY, posZ;  // +0x00  PlayEffect3D's own position
-    uint32_t             soundType;         // +0x0c
-    uint64_t             soundEffectRef;     // +0x10  ExternalPtr<SoundEffect>
-    int64_t               startTime;          // +0x18  System::Time ticks
-    uint32_t               channelHandle;      // +0x20  into the Channel table, 0 = none
-    uint32_t               idTag;              // +0x24  see the handle-encoding note above
-    float                   baseVolume;         // +0x28  default 1.0f
-    uint32_t                 _pad2c;             // +0x2c
-    Collection::Array<EmitterInstance> positions; // +0x30  (0x10 bytes: data/size/cap)
-};
-static_assert(sizeof(EffectSlot) == 0x40, "Audio::Scene::EffectSlot must be 0x40 bytes");
-static_assert(offsetof(EffectSlot, posX)           == 0x00, "EffectSlot::posX @ +0x00");
-static_assert(offsetof(EffectSlot, soundType)      == 0x0c, "EffectSlot::soundType @ +0x0c");
-static_assert(offsetof(EffectSlot, soundEffectRef) == 0x10, "EffectSlot::soundEffectRef @ +0x10");
-static_assert(offsetof(EffectSlot, startTime)      == 0x18, "EffectSlot::startTime @ +0x18");
-static_assert(offsetof(EffectSlot, channelHandle)  == 0x20, "EffectSlot::channelHandle @ +0x20");
-static_assert(offsetof(EffectSlot, idTag)          == 0x24, "EffectSlot::idTag @ +0x24");
-static_assert(offsetof(EffectSlot, baseVolume)     == 0x28, "EffectSlot::baseVolume @ +0x28");
-static_assert(offsetof(EffectSlot, positions)      == 0x30, "EffectSlot::positions @ +0x30");
+static_assert(sizeof(Scene::AttenutedEffect) == 0x40, "Audio::Scene::AttenutedEffect must be 0x40 bytes");
+static_assert(offsetof(Scene::AttenutedEffect, posX)           == 0x00, "posX @ +0x00");
+static_assert(offsetof(Scene::AttenutedEffect, soundType)      == 0x0c, "soundType @ +0x0c");
+static_assert(offsetof(Scene::AttenutedEffect, soundEffectRef) == 0x10, "soundEffectRef @ +0x10");
+static_assert(offsetof(Scene::AttenutedEffect, startTime)      == 0x18, "startTime @ +0x18");
+static_assert(offsetof(Scene::AttenutedEffect, channelHandle)  == 0x20, "channelHandle @ +0x20");
+static_assert(offsetof(Scene::AttenutedEffect, idTag)          == 0x24, "idTag @ +0x24");
+static_assert(offsetof(Scene::AttenutedEffect, baseVolume)     == 0x28, "baseVolume @ +0x28");
+static_assert(offsetof(Scene::AttenutedEffect, positions)      == 0x30, "positions @ +0x30");
 
-// ============================================================
-// Audio::Scene — 0x38 (56) bytes. NO VTABLE: the ctor's first store is
-// `*(undefined8*)this = 0` (Scene::_time), not a vtable pointer, and there is
-// no `??_7Scene@Audio@@` export. Consistent with WAVE8.md's prediction.
-// ============================================================
-struct Scene {
-    int64_t  time;                    // +0x00  current System::Time ticks (set every Update)
-    int32_t  playGeneration;          // +0x08  starts at 1; ++ on every PlayEffect/PlayEffect3D
-    uint32_t _pad0c;                  // +0x0c
-    Collection::Array<Channel>     channels; // +0x10  fixed at 256 entries after ctor
-    Collection::Array<EffectSlot>  effects;  // +0x20  fixed at 4096 entries after ctor
-    uint8_t  paused[5];               // +0x30  one flag per Audio::Scene::SoundType (0..4)
-    uint8_t  _pad35[3];               // +0x35..+0x37
-};
-static_assert(sizeof(Scene) == 0x38, "Audio::Scene must be 0x38 bytes (see engine_funcs.h comment)");
+static_assert(sizeof(Scene::SoundType) == 4, "`W4SoundType` is a 4-byte enum in a register");
+static_assert(sizeof(Scene) == 0x38, "Audio::Scene must be 0x38 bytes (exe MemAlloc(0x38,8) 0x14009706a)");
+static_assert(alignof(Scene) == 8, "Audio::Scene aligns to 8");
+static_assert(!std::is_polymorphic<Scene>::value, "Audio::Scene has no vtable");
+static_assert(!std::is_default_constructible<Scene>::value,
+              "only the ctor DOOR builds a Scene (B37_RULES 2.4 addendum)");
+static_assert(!std::is_trivially_copyable<Scene>::value, "B7-8: retail's copy ctor is deep");
 static_assert(offsetof(Scene, time)           == 0x00, "Scene::time @ +0x00");
 static_assert(offsetof(Scene, playGeneration) == 0x08, "Scene::playGeneration @ +0x08");
 static_assert(offsetof(Scene, channels)       == 0x10, "Scene::channels @ +0x10");
 static_assert(offsetof(Scene, effects)        == 0x20, "Scene::effects @ +0x20");
 static_assert(offsetof(Scene, paused)         == 0x30, "Scene::paused @ +0x30");
 
-// ============================================================
-// Audio::Configuration — 4 persisted volume sliders, 0x10 bytes. NO VTABLE
-// (same evidence class as Scene: Save/Startup only ever touch +0x00..+0x0f
-// as four plain int32s, never a vtable slot). Pinned by
-// Audio::Configuration::Save (0x1800dde10), which reads exactly these four
-// offsets and nothing else.
-// ============================================================
-struct Configuration {
+// ============================================================================
+// Audio::Configuration — 4 persisted volume sliders, 0x10 bytes, NON-polymorphic.
+// Pinned by Save (0x1800dde10), which reads exactly these four offsets, by the
+// ctor (0x1800ddeb0: 100/50/100/100) and by the eight accessors 0x18000d4a0..
+// 0x18000d510 (one `MOV` each, UI/Music/Ambient/Effect at +0/+4/+8/+0xc).
+// Allocated by `Engine::Startup` (`MemAlloc(0x10)` 0x1800dbd00) and built by
+// the `Ctor_AudioConfiguration` DOOR (singleton_ctors.cpp, owner-retained): no
+// C++ constructor is declared. `_singleton` (0x1801fe758) stays a data slot.
+// ============================================================================
+class Configuration {
+public:
+    // ---- PORTED members ----------------------------------------------------
+    void Save();                                                   // 0x1800dde10
+    bool Startup();                                                // 0x1800ddee0
+    // `??1Configuration@Audio@@QEAA@XZ` 0x1800de0d0: clears `_singleton`, frees
+    // nothing (the caller does). Its door calls it.
+    ~Configuration();
+
+    // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
+    int32_t GetUIVolume() const      { return uiVolume; }        // 0x18000d4a0
+    int32_t GetMusicVolume() const   { return musicVolume; }     // 0x18000d4b0
+    int32_t GetAmbientVolume() const { return ambientVolume; }   // 0x18000d4c0
+    int32_t GetEffectVolume() const  { return effectVolume; }    // 0x18000d4d0
+    void SetUIVolume(int32_t v)      { uiVolume = v; }           // 0x18000d4e0
+    void SetMusicVolume(int32_t v)   { musicVolume = v; }        // 0x18000d4f0
+    void SetAmbientVolume(int32_t v) { ambientVolume = v; }      // 0x18000d500
+    void SetEffectVolume(int32_t v)  { effectVolume = v; }       // 0x18000d510
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    static Configuration* Get();                                 // 0x18000d490 (reads _singleton)
+    void Shutdown();                                             // 0x1800ddea0
+    Configuration& operator=(const Configuration& src);          // 0x18000d470
+
     int32_t uiVolume;       // +0x00
     int32_t musicVolume;    // +0x04
     int32_t ambientVolume;  // +0x08
     int32_t effectVolume;   // +0x0c
 };
-static_assert(sizeof(Configuration) == 0x10, "Audio::Configuration (ported fields) must be 0x10 bytes");
+static_assert(sizeof(Configuration) == 0x10, "Audio::Configuration must be 0x10 bytes (MemAlloc 0x1800dbd00)");
+static_assert(alignof(Configuration) == 4, "Audio::Configuration aligns to 4");
+static_assert(!std::is_polymorphic<Configuration>::value, "Audio::Configuration has no vtable");
+static_assert(offsetof(Configuration, uiVolume)      == 0x00, "GetUIVolume 0x18000d4a0: MOV EAX,[RCX]");
+static_assert(offsetof(Configuration, musicVolume)   == 0x04, "GetMusicVolume: MOV EAX,[RCX+0x4]");
+static_assert(offsetof(Configuration, ambientVolume) == 0x08, "GetAmbientVolume: MOV EAX,[RCX+0x8]");
+static_assert(offsetof(Configuration, effectVolume)  == 0x0c, "GetEffectVolume: MOV EAX,[RCX+0xc]");
 
+}  // namespace Audio
+
+// ----------------------------------------------------------------------------
+// The pre-B.3.7 spellings, kept as ALIASES of the classes (one definition per
+// layout, B7-6) until their last user converts.
+// ----------------------------------------------------------------------------
+namespace RtAudio {
+using Scene           = Audio::Scene;
+using Channel         = Audio::Scene::Channel;
+using EmitterInstance = Audio::Scene::EmitterInstance;
+using EffectSlot      = Audio::Scene::AttenutedEffect;
+using Configuration   = Audio::Configuration;
 }  // namespace RtAudio
