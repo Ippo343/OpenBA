@@ -66,9 +66,6 @@ int AutoPickupWork::Cleanup() {
 
 DEFINE_EXE_VTABLE(AutoPickupWork, "_ZTV14AutoPickupWork")
 
-// B38 D5: the exe address serves the COMPILER's table while by-address readers remain
-// (the unconverted AutoPickupWork leaves' dtors re-stamp it on the way down the chain).
-extern "C" void RegisterAutoPickupWorkVtable() {
-    RegisterExeAddr(AutoPickupWorkAddr::Vtable,
-                    reinterpret_cast<uintptr_t>(AutoPickupWork::Vtable()));   // 0x140160fa0
-}
+// No RegisterExeAddr(0x140160fa0): its only by-address readers were the leaves' dtors
+// re-stamping it on the way down the chain, and every AutoPickupWork leaf is a real
+// class now (the compiler's chain does that stamp).

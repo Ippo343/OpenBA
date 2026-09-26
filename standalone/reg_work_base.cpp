@@ -9,7 +9,7 @@
 // Safety: every address below was verified as a real function ENTRY in Ghidra
 // (get_function_by_address Entry == address) and is a faithful 1:1 port.
 #include "resolve.h"
-#include "Work/work_base_standalone.h"   // RegisterWorkBaseVtable / RegisterAutoPickupWorkVtable
+#include "Work/work_base_standalone.h"   // RegisterWorkBaseVtable
 #include <cstdint>
 
 // FindComponent family (work_base_reimpl.cpp) — void* fn(uintptr_t entity, void* retIBP)
@@ -52,11 +52,8 @@ void RegisterWorkBaseBatch() {
     RegisterExeAddr(0x1400a00f0, reinterpret_cast<uintptr_t>(&WorkBase_ValidateCell_a00f0));
     RegisterExeAddr(0x1400f72e0, reinterpret_cast<uintptr_t>(&Work_Ctor25_Impl));
 
-    // The two BASE vtables of the Work hierarchy. Registered nowhere until now, so ~9
-    // files resolved them to 0 and wrote NULL into the object's vtable pointer on every
-    // base ctor/dtor step. Latent rather than fatal — the dtor chain calls
-    // Object::Internal::~Internal through a raw pointer, not through the object — but the
-    // writes are load-bearing in retail and were doing nothing here.
+    // The Work BASE table (ENDGAME B.3.8: the compiler's, Work::Vtable()); by-address
+    // readers remain (Work_Ctor25_Impl, clearareacomponent_states.cpp). AutoPickupWork's
+    // 0x140160fa0 row is gone: its last readers were the leaves' hand-written dtors.
     RegisterWorkBaseVtable();         // 0x140161a80  Work
-    RegisterAutoPickupWorkVtable();   // 0x140160fa0  AutoPickupWork
 }
