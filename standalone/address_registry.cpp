@@ -233,7 +233,6 @@ extern "C" {
     void RegisterEditToolVtable();
     void RegisterPathToolVtable();
     void RegisterPathToolSetSelected();   // dd710 route-builder (pathtool_setselected.cpp)
-    void RegisterPlacementToolVtable();
 }
 
 // ============================================================
@@ -1987,7 +1986,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterEditToolVtable();
     RegisterPathToolVtable();
     RegisterPathToolSetSelected();
-    RegisterPlacementToolVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the

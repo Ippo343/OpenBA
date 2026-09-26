@@ -171,30 +171,6 @@ static void EnsureFuncs() {
 }
 
 // ============================================================
-// PlacementTool vtable addresses (for vtable chain in Dtor)
-// ============================================================
-static void* s_vtable_PlacementTool = nullptr;
-static void* s_vtable_Tool          = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_PlacementTool) {
-        s_vtable_PlacementTool = (void*)ResolveAddr(Module::Exe, PlacementToolAddr::Vtable);
-        s_vtable_Tool          = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
-}
-
-// Object::Internal::~Internal — resolved via dispatch slot at 0x140152770
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
-
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
-
-// ============================================================
 // Helper: get KeyMap object from external reference (triple deref)
 // ============================================================
 static inline void* GetKeyMap() {
@@ -209,31 +185,17 @@ static inline uintptr_t GetGameWorld() {
 }
 
 // ============================================================
-// PlacementTool::Dtor (vtable +0x00, Slot0) — Scalar deleting destructor
+// PlacementTool::DeletingDtor (vtable +0x00) — 0x14002dc90
 // ============================================================
-// Resets vtable chain: PlacementTool -> Tool, then calls
-// Object::Internal::~Internal for base cleanup. If flags & 1,
-// frees the memory allocation.
-// Original: 0x14002dc90
-void* PlacementTool_Dtor_Impl(PlacementTool* self, uint32_t flags) {
-    EnsureVtables();
-    EnsureInternalDtor();
-
-    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
-    self->vtable = s_vtable_PlacementTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+// ENDGAME B.3.8 TOOL: the hand-rolled PlacementTool_Dtor_Impl restamped the
+// Placement and Tool tables read by address — Tool's UNREGISTERED, so it
+// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
+// restamps the real tables, then runs Object::Internal::~Internal. Retail's
+// dtor frees nothing: slot 5 (Shutdown) releases the preview.
+Object::Base* PlacementTool::DeletingDtor(unsigned flags) {
+    this->~PlacementTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -1004,7 +966,7 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
     // CheckPtr on IBP at +0x18
 
     // Read resolved pointer, check IsDerivedFrom RotationSetting
-    void* ibpVal = self->_field18;
+    void* ibpVal = self->toolSetting;
     void* rotSetting = nullptr;
     if (fn_IsDerivedFrom && s_pTypeId_RotationSetting && ibpVal) {
         bool isDerived = fn_IsDerivedFrom(ibpVal, *s_pTypeId_RotationSetting);
@@ -1099,72 +1061,57 @@ void PlacementTool_Startup_Impl(PlacementTool* self) {
 }
 
 // ============================================================
-// Standalone factory + vtable (factory cascade).
-// PlacementTool: size 0x70, parent Tool, 13-slot vtable @ 0x140161d20.
-// (PlacementTool_Ctor's ~25-resource slot-map init is elided; dormant type.)
+// PlacementTool members (PlacementTool.h) — ENDGAME B.3.8 TOOL.
+// The hand-built g_PlacementTool_Vtable[13], its slot stubs, the in-place _SA
+// factory, the post-alloc -1 patch-up and RegisterPlacementToolVtable are
+// gone: the compiler builds the table, the real ctor writes retail's -1
+// sentinels (the zero-fill once made Serialize remove scene object 0), and
+// nothing reads 0x140161d20 back by address (the old dtor was the only
+// reader). Inherited from Tool, as in retail: [10] false.
 // ============================================================
-#include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
+#include "Player/RotationSetting.h"
+#include <new>
 
-static uint32_t PlacementTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PlacementTool");
-    return c;
+void PlacementTool::Startup() { PlacementTool_Startup_Impl(this); }            // [4]
+void PlacementTool::Shutdown() { PlacementTool_Shutdown2_Impl(this); }         // [5]
+char PlacementTool::OnKey(char active) {                                       // [6]
+    return static_cast<char>(PlacementTool_OnKey_Impl(this, active));
 }
-// +0x58 (Slot11) GetToolSettingTypeId — faithful port of FencedTool_Slot11
-// (0x140026920): `*ret = TypeInfo_RotationSetting; return ret;`. SetEditMode
-// (FUN_140102b60 / Toolbar_ShowGroup_Impl) calls this on first activation and
-// DEREFERENCES the returned pointer, so a Tool_Ret0 stub (returns 0 → *0) would
-// crash. Returns the live RotationSetting factory type-id.
-static uint32_t* PlacementTool_GetSettingType(void*, uint32_t* ret) {
-    static uint32_t s_tid = 0;
-    if (!s_tid) s_tid = ::Object::GetTypeIdByName("RotationSetting");
-    if (ret) *ret = s_tid;
+void PlacementTool::Update(void* time, char active) {                          // [7]
+    PlacementTool_Serialize_Impl(this, time, active);
+}
+void PlacementTool::Draw(void* context, char active) {                         // [8]
+    PlacementTool_Draw_Impl(this, context, active);
+}
+
+// [11] 0x140026920 (shared with FencedTool): `*ret = TypeInfo_RotationSetting`.
+// SetEditMode builds the RotationSetting from this id on first activation and
+// dereferences the returned slot. The class static replaces the old
+// function-local lazy cache (B6-5).
+Object::Type* PlacementTool::GetSettingType(Object::Type* ret) const {
+    *ret = Object::Type(RotationSetting::TypeId());
     return ret;
 }
-// +0x60 (Slot12) GetCursorId — exe body is literally `MOV EAX,5; RET`.
-static int PlacementTool_GetCursor(void*) { return 5; }
-static void* g_PlacementTool_Vtable[13] = {
-    (void*)&PlacementTool_Dtor_Impl,      // +0x00 Dtor
-    (void*)&Tool_Slot1,                   // +0x08
-    (void*)&PlacementTool_GetTypeId,      // +0x10 GetTypeId
-    (void*)&Tool_Persist,                 // +0x18 Serialize (base)
-    (void*)&PlacementTool_Startup_Impl,   // +0x20 Startup
-    (void*)&PlacementTool_Shutdown2_Impl, // +0x28 Shutdown2
-    (void*)&PlacementTool_OnKey_Impl,     // +0x30 OnKey
-    (void*)&PlacementTool_Serialize_Impl, // +0x38 Serialize (preview)
-    (void*)&PlacementTool_Draw_Impl,      // +0x40 Draw
-    (void*)&Tool_Ret0,                    // +0x48 Slot9 (can-deactivate? returns 0)
-    (void*)&Tool_Ret0,                    // +0x50 Slot10
-    (void*)&PlacementTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId
-    (void*)&PlacementTool_GetCursor,      // +0x60 Slot12 GetCursorId (=5)
-};
-extern "C" void RegisterPlacementToolVtable() {
-    RegisterExeAddr(0x140161d20, (uintptr_t)g_PlacementTool_Vtable);
+
+// create 0x14002dc40: MemAlloc(0x70, 8), then the ctor 0x1400fe850.
+void* PlacementTool::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PlacementTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PlacementTool());
 }
-// PlacementTool_Ctor (0x1400fe850) inits the preview-state caches to -1: +0x50/+0x54
-// (lastStartCol/Row), +0x58 lastCenterCell, +0x5c radiusDisplayIdx, +0x60 sceneObjectIdx.
-// Tool_Alloc/InitInPlace only ZEROES [0x10,size) — leaving these 0, which Serialize
-// reads as a live scene/highlight index and removes → crash on the bogus index 0.
-static void PlacementTool_InitCtorFields_SA(void* p) {
-    if (!p) return;
-    uint8_t* t = static_cast<uint8_t*>(p);
-    *reinterpret_cast<int64_t*>(t + 0x50) = -1;   // lastStartCol / lastStartRow
-    *reinterpret_cast<int64_t*>(t + 0x58) = -1;   // lastCenterCell / radiusDisplayIdx
-    *reinterpret_cast<int32_t*>(t + 0x60) = -1;   // sceneObjectIdx
+// createInPlace 0x14002dc80: `if (storage) ctor(storage)`.
+void* PlacementTool::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PlacementTool());
 }
-extern "C" void* PlacementTool_CreateInPlace_SA(void* mem) {
-    void* p = Tool_InitInPlace(mem, 0x70, g_PlacementTool_Vtable, 0);
-    PlacementTool_InitCtorFields_SA(p);
-    return p;
-}
-extern "C" void* PlacementTool_Factory_SA(void) {
-    void* p = Tool_Alloc(0x70, g_PlacementTool_Vtable, 0);
-    PlacementTool_InitCtorFields_SA(p);
-    return p;
-}
-REGISTER_TYPE(PlacementTool, "Tool", &PlacementTool_Factory_SA, &PlacementTool_CreateInPlace_SA);
+
+// Kept for standalone/tool_harness.cpp (outside this block's files): the
+// reflected create, by its old name.
+extern "C" void* PlacementTool_Factory_SA(void) { return PlacementTool::CreateNewObject(); }
+
+DEFINE_EXE_VTABLE(PlacementTool, "_ZTV13PlacementTool")
+DEFINE_EXE_TYPE(PlacementTool, "Tool")
 
 // ============================================================
 // Standalone tool-harness probe (NOT a faithful reimpl — scaffolding for
