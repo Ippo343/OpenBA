@@ -12,6 +12,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -324,9 +329,9 @@ void EntityUI_Slot4(EntityUI* self) {
         System::String nameStr("buttonCenter");
         uint8_t retBuf[16];
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
-        fn_Element_SetElementId(elem, 0x65);
+        reinterpret_cast<UI::Element*>(elem)->SetElementId(0x65);  // B.3.6 bridge
     }
 
     // Find "checkPin" element → store at +0x38, set ID 100
@@ -334,16 +339,16 @@ void EntityUI_Slot4(EntityUI* self) {
         System::String nameStr("checkPin");
         uint8_t retBuf[16];
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0x38) = *(void**)retBuf;
-        fn_Element_SetElementId(*(void**)(s + 0x38), 100);
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x38))->SetElementId(100);  // B.3.6 bridge
     }
 
     // Get dialog controller, check if it's a ToolUI type
     {
         void* dialogInst = *(void**)(s + 0x18);
         uint8_t ctrlBuf[16];
-        fn_DialogInstance_GetController(dialogInst, ctrlBuf, *g_TypeId_ToolUI);
+        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(*g_TypeId_ToolUI));  // B.3.6 bridge
         void* controller = *(void**)ctrlBuf;
 
         void* toolUI = nullptr;
@@ -369,7 +374,7 @@ void EntityUI_Slot4(EntityUI* self) {
         System::String nameStr("pages");
         uint8_t retBuf[16];
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0x40) = *(void**)retBuf;
     }
 }
@@ -473,7 +478,7 @@ void EntityUI_Slot7(EntityUI* self) {
                 // build-state pageIdx instead of 4: clicking the statistics button showed
                 // the production page for one frame and the panel snapped back to the
                 // default page every frame after (the reported 'statistics flicker').
-                int activePage = pagesElem ? fn_PageElement_GetActivePage(pagesElem) : 0;
+                int activePage = pagesElem ? reinterpret_cast<const UI::PageElement*>(pagesElem)->GetActivePage() : 0;  // B.3.6 bridge
                 const int staleIdx = pageIdx;   // what the pre-fix port wrote back
                 pageIdx = activePage;
                 if (activePage != 4) {
@@ -525,7 +530,7 @@ void EntityUI_Slot8(EntityUI* self) {
     // Get ToolUI controller from dialog
     dialogInst = *(void**)(s + 0x18);
     uint8_t ctrlBuf[16];
-    fn_DialogInstance_GetController(dialogInst, ctrlBuf, *g_TypeId_ToolUI);
+    ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(*g_TypeId_ToolUI));  // B.3.6 bridge
     void* controller = *(void**)ctrlBuf;
 
     void* toolUI = nullptr;
@@ -557,7 +562,7 @@ void EntityUI_Slot8(EntityUI* self) {
     void* userInterface = *(void**)((uintptr_t)dialogInst + 0x10);
 
     uint8_t dialogAtPosBuf[16];
-    fn_UI_GetFirstContainedDialog(userInterface, dialogAtPosBuf, mouseX, mouseY);
+    ::new (dialogAtPosBuf) Object::InternalPtr<UI::DialogInstance>(reinterpret_cast<const UI::UserInterface*>(userInterface)->GetFirstContainedDialog(mouseX, mouseY));  // B.3.6 bridge
     void* dialogAtPos = *(void**)dialogAtPosBuf;
 
     // Check if the dialog at mouse position is this dialog, and entity exists
@@ -700,7 +705,7 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
         // Get ToolUI controller
         void* dialogInst = *(void**)(s + 0x18);
         uint8_t ctrlBuf[16];
-        fn_DialogInstance_GetController(dialogInst, ctrlBuf, *g_TypeId_ToolUI);
+        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(*g_TypeId_ToolUI));  // B.3.6 bridge
         void* controller = *(void**)ctrlBuf;
 
         void* toolUI = nullptr;

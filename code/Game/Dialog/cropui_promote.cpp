@@ -33,6 +33,8 @@
 #include <cstdio>
 #include "dialog_controller_vtable.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 namespace {
 
@@ -155,7 +157,7 @@ void W_Slot4(void* self) {
     {
         System::String nameStr("yield");
         void* parentElem = *reinterpret_cast<void**>(s + 0x20);
-        fn_FindElement(parentElem, &found, &nameStr);
+        ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
     }
 
     void* raw = reinterpret_cast<void*>(found);

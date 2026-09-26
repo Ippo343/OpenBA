@@ -12,6 +12,14 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -107,18 +115,18 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
                         if (combo) {
                             // Create UI::String from SelectDescription name
                             uint8_t uiStrBuf[16];
-                            fn_UIString_Ctor(uiStrBuf,
-                                            *(uint64_t*)((uintptr_t)subObj + 0x30),
-                                            (void*)((uintptr_t)subObj + 0x38));
+                            ::new (uiStrBuf) UI::String(
+                                            Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)subObj + 0x30))),
+                                            *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x38));  // B.3.6 bridge
                             // Convert to System::String
                             System::String sysStr;
-                            fn_UIString_ToSystemString(uiStrBuf, &sysStr);
+                            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
 
                             // Create Sprite from SelectDescription icon
                             uint8_t spriteBuf[16];
-                            fn_Sprite_Ctor(spriteBuf,
-                                          *(uint64_t*)((uintptr_t)subObj + 0x20),
-                                          (void*)((uintptr_t)subObj + 0x28));
+                            ::new (spriteBuf) UI::Sprite(
+                                          Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)subObj + 0x20))),
+                                          *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x28));  // B.3.6 bridge
 
                             // Add item to combo with index as userData
                             fn_ComboElement_AddItem(combo, spriteBuf, &sysStr,
@@ -202,7 +210,7 @@ void CropUI_Slot4(CropUI* self) {
     System::String nameBuf("selectResource");
 
     uint8_t elemBuf[8] = {0};
-    fn_DialogInstance_FindElement(dialogInst, elemBuf, &nameBuf);
+    ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameBuf));  // B.3.6 bridge
     void* foundElem = *(void**)elemBuf;
 
     // Wrap in InternalBasePtr, store at +0x30
@@ -211,7 +219,7 @@ void CropUI_Slot4(CropUI* self) {
     self->internalBasePtr = *(uint64_t*)basePtrBuf;
 
     // Set element ID 500
-    fn_Element_SetElementId((void*)self->internalBasePtr, 500);
+    reinterpret_cast<UI::Element*>(self->internalBasePtr)->SetElementId(500);  // B.3.6 bridge
 
     // Populate the combo with available crop types
     CropUI_PopulateCombo(self);
@@ -244,10 +252,7 @@ void CropUI_Slot7(CropUI* self) {
     int itemCount = fn_ComboElement_GetItemCount(combo);
 
     // Virtual call: vtable[8] = SetEnabled(hasItems)
-    typedef void (*fn_VSlot8_t)(void* self, bool param);
-    void** vtable = *(void***)combo;
-    fn_VSlot8_t vfunc = (fn_VSlot8_t)vtable[8];
-    vfunc(combo, itemCount > 0);
+    reinterpret_cast<UI::Element*>(combo)->Enable(itemCount > 0);  // B.3.6 bridge: Element slot 8 Enable
 }
 
 // ============================================================
