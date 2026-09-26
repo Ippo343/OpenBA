@@ -51,92 +51,68 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
-namespace {
+#include "object/Internal.h"
+#include "Dialog/ResourceLimitUIConfig.h"
 
-constexpr uintptr_t kVtable = 0x14015d250;
-constexpr int       kSlots  = 9;
+// ============================================================================
+// ENDGAME B.3.8 PNL — ResourceLimitUIConfig as a REAL class (ResourceLimitUIConfig.h). The hand-built
+// 9-slot table, its Init/Factory/CreateInPlace entry points and the lazy
+// GetTypeId cache are gone; the compiler emits the table.
+// ============================================================================
 
-void* g_vt[kSlots];
-
-
-void Init(void* self) {
-    if (fn_External_External) fn_External_External(self);
-    *reinterpret_cast<void**>(self) = g_vt;
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(self) + 0x20) = 0;
+// [0] 0x140013880: ~ResourceLimitUIConfig (restamp + ~DialogControllerConfig + ~External, all
+// the compiler's), MemFree on &1.
+Object::Base* ResourceLimitUIConfig::DeletingDtor(unsigned flags) {
+    this->~ResourceLimitUIConfig();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-uint32_t GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ResourceLimitUIConfig");
-    return cached;
+// [4] The tree's table answered 0 here; retail inherits External::Compile.
+// Kept as the tree had it until the titled behaviour commit.
+Object::External::CompileResult ResourceLimitUIConfig::Compile(const System::Filename& /*path*/) {
+    return 0;
 }
 
-// vtable idx5 (0x140077b10) — read this row's resource index.
-char Serialize(void* self, void* stream) {
-    if (!self) return 1;
-    uint8_t* c = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(c + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    return 1;
+// [5] 0x140077b10 — read this row's resource index.
+bool ResourceLimitUIConfig::Serialize(void* stream) {
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    serializer.Serialize(_resourceIndex, nullptr);
+    return true;
 }
 
-void* Dtor(void* self, uint32_t flags) {
-    *reinterpret_cast<void**>(self) = g_vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140013830 — destroy in place, construct again.
+Object::External* ResourceLimitUIConfig::Reconstruct() {
+    this->~ResourceLimitUIConfig();
+    return new (this) ResourceLimitUIConfig();
 }
 
-int   GetVersion(void*) { return 1; }
-int   Return0(void*)    { return 0; }
-void* ReturnNull(void*, ...) { return nullptr; }
+// [7] PORT GAP (retail 0x140001640 = DeletingDtor(0)) — the tree's table held
+// `return 0` here; kept until the titled behaviour commit. B38 D9.
+void ResourceLimitUIConfig::Destruct() {}
 
-}  // namespace
+// [8] 0x1400137e0 — placement construction (MSVC folded it with createInPlace).
+Object::External* ResourceLimitUIConfig::Construct() { return new (this) ResourceLimitUIConfig(); }
 
-extern "C" void* ResourceLimitUIConfig_CreateInPlace(void* mem);
-
-namespace {
-
-void* Reconstruct(void* self) {
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    return ResourceLimitUIConfig_CreateInPlace(self);
-}
-
-struct VtblInit {
-    VtblInit() {
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[1] = reinterpret_cast<void*>(&ReturnNull);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[3] = reinterpret_cast<void*>(&GetVersion);
-        g_vt[4] = reinterpret_cast<void*>(&Return0);
-        g_vt[5] = reinterpret_cast<void*>(&Serialize);
-        g_vt[6] = reinterpret_cast<void*>(&Reconstruct);
-        g_vt[7] = reinterpret_cast<void*>(&Return0);
-        g_vt[8] = reinterpret_cast<void*>(&ResourceLimitUIConfig_CreateInPlace);
-    }
-} g_vtblInit;
-
-}  // namespace
-
-extern "C" void RegisterResourceLimitUIConfigVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_vt));
-}
-
-extern "C" void* ResourceLimitUIConfig_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+// create 0x140013780: MemAlloc(0x28, 8), then the ctor.
+void* ResourceLimitUIConfig::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ResourceLimitUIConfig), 8);
     if (!p) return nullptr;
-    Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) ResourceLimitUIConfig());
+}
+// createInPlace 0x1400137e0.
+void* ResourceLimitUIConfig::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ResourceLimitUIConfig());
 }
 
-extern "C" void* ResourceLimitUIConfig_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    Init(mem);
-    return mem;
+DEFINE_EXE_VTABLE(ResourceLimitUIConfig, "_ZTV21ResourceLimitUIConfig")
+
+// D5: no by-address reader of 0x14015d250 remains in the tree; the row is kept
+// (serving the compiler table) only because reg_controlui.cpp calls this function —
+// the closing pass deletes both.
+extern "C" void RegisterResourceLimitUIConfigVtable() {
+    RegisterExeAddr(0x14015d250, reinterpret_cast<uintptr_t>(ResourceLimitUIConfig::Vtable()));
 }
 
-REGISTER_TYPE(ResourceLimitUIConfig, "UI::DialogControllerConfig",
-              &ResourceLimitUIConfig_Factory, &ResourceLimitUIConfig_CreateInPlace);
+DEFINE_EXE_TYPE(ResourceLimitUIConfig, "UI::DialogControllerConfig")

@@ -47,76 +47,61 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
-static void* g_StatusIconUIConfig_Vtable[9];
+#include "object/Internal.h"
+#include "Dialog/StatusIconUIConfig.h"
 
-static void StatusIconUIConfig_Init(void* self) {
-    if (fn_External_External) fn_External_External(self);
-    *reinterpret_cast<void**>(self) = g_StatusIconUIConfig_Vtable;
-    // Retail writes a single byte here (`this[0x20] = 0` on a char-typed this).
-    *(reinterpret_cast<uint8_t*>(self) + 0x20) = 0;
+// ============================================================================
+// ENDGAME B.3.8 PNL — StatusIconUIConfig as a REAL class (StatusIconUIConfig.h). The hand-built
+// 9-slot table, its Init/Factory/CreateInPlace entry points and the lazy
+// GetTypeId cache are gone; the compiler emits the table.
+// ============================================================================
+
+// [0] 0x140014320: ~StatusIconUIConfig (restamp + ~DialogControllerConfig + ~External, all
+// the compiler's), MemFree on &1.
+Object::Base* StatusIconUIConfig::DeletingDtor(unsigned flags) {
+    this->~StatusIconUIConfig();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static uint32_t StatusIconUIConfig_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StatusIconUIConfig");
-    return cached;
+// [4] The tree's table answered 0 here; retail inherits External::Compile.
+// Kept as the tree had it until the titled behaviour commit.
+Object::External::CompileResult StatusIconUIConfig::Compile(const System::Filename& /*path*/) {
+    return 0;
 }
 
-// vtable +0x28 (0x14007b400): deserialize _showOnMainPage.
-static bool StatusIconUIConfig_Serialize(void* self, void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    return true;   // retail: MOV AL,1
+// [5] 0x14007b400 — deserialize _showOnMainPage (ONE byte; retail MOV AL,1).
+bool StatusIconUIConfig::Serialize(void* stream) {
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    serializer.Serialize(_showOnMainPage, nullptr);
+    return true;
 }
 
-static void* StatusIconUIConfig_Dtor(void* self, uint32_t flags) {
-    *reinterpret_cast<void**>(self) = g_StatusIconUIConfig_Vtable;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400142e0 — destroy in place, construct again.
+Object::External* StatusIconUIConfig::Reconstruct() {
+    this->~StatusIconUIConfig();
+    return new (this) StatusIconUIConfig();
 }
 
-static int   StatusIconUIConfig_GetVersion(void*) { return 1; }   // 0x14007b450
-static int   StatusIconUIConfig_Return0(void*)    { return 0; }
-static void* StatusIconUIConfig_ReturnNull(void*, ...) { return nullptr; }
+// [7] PORT GAP (retail 0x140001640 = DeletingDtor(0)) — the tree's table held
+// `return 0` here; kept until the titled behaviour commit. B38 D9.
+void StatusIconUIConfig::Destruct() {}
 
-extern "C" void* StatusIconUIConfig_CreateInPlace(void* mem);
+// [8] 0x1400142a0 — placement construction (MSVC folded it with createInPlace).
+Object::External* StatusIconUIConfig::Construct() { return new (this) StatusIconUIConfig(); }
 
-// vtable +0x30 (0x1400142e0): destroy-then-reconstruct in place.
-static void* StatusIconUIConfig_Reconstruct(void* self) {
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    return StatusIconUIConfig_CreateInPlace(self);
-}
-
-struct StatusIconUIConfig_VtblInit {
-    StatusIconUIConfig_VtblInit() {
-        g_StatusIconUIConfig_Vtable[0] = reinterpret_cast<void*>(&StatusIconUIConfig_Dtor);
-        g_StatusIconUIConfig_Vtable[1] = reinterpret_cast<void*>(&StatusIconUIConfig_ReturnNull);
-        g_StatusIconUIConfig_Vtable[2] = reinterpret_cast<void*>(&StatusIconUIConfig_GetTypeId);
-        g_StatusIconUIConfig_Vtable[3] = reinterpret_cast<void*>(&StatusIconUIConfig_GetVersion);
-        g_StatusIconUIConfig_Vtable[4] = reinterpret_cast<void*>(&StatusIconUIConfig_Return0);
-        g_StatusIconUIConfig_Vtable[5] = reinterpret_cast<void*>(&StatusIconUIConfig_Serialize);
-        g_StatusIconUIConfig_Vtable[6] = reinterpret_cast<void*>(&StatusIconUIConfig_Reconstruct);
-        g_StatusIconUIConfig_Vtable[7] = reinterpret_cast<void*>(&StatusIconUIConfig_Return0);
-        g_StatusIconUIConfig_Vtable[8] = reinterpret_cast<void*>(&StatusIconUIConfig_CreateInPlace);
-    }
-} g_StatusIconUIConfig_vtblInit;
-
-extern "C" void* StatusIconUIConfig_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+// create 0x140014250: MemAlloc(0x28, 8), then the ctor.
+void* StatusIconUIConfig::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconUIConfig), 8);
     if (!p) return nullptr;
-    StatusIconUIConfig_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) StatusIconUIConfig());
+}
+// createInPlace 0x1400142a0.
+void* StatusIconUIConfig::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StatusIconUIConfig());
 }
 
-extern "C" void* StatusIconUIConfig_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    StatusIconUIConfig_Init(mem);
-    return mem;
-}
+DEFINE_EXE_VTABLE(StatusIconUIConfig, "_ZTV18StatusIconUIConfig")
 
-REGISTER_TYPE(StatusIconUIConfig, "UI::DialogControllerConfig",
-              &StatusIconUIConfig_Factory, &StatusIconUIConfig_CreateInPlace);
+DEFINE_EXE_TYPE(StatusIconUIConfig, "UI::DialogControllerConfig")
