@@ -41,14 +41,15 @@ bool AutoPickupDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400034d0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
-// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
-// this commit changes no behaviour. D9 #10 transcribes it for every description.
-Object::External* AutoPickupDescription::Reconstruct() { return nullptr; }
+// [6] 0x1400034d0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* AutoPickupDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) AutoPickupDescription();
+}
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void AutoPickupDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void AutoPickupDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140003520: AutoPickupComponent's type id through the hidden return slot.
 Object::Type* AutoPickupDescription::GetComponentType(Object::Type* ret) const {

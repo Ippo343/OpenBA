@@ -198,14 +198,15 @@ bool ToolbarDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400394e0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
-// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
-// this commit changes no behaviour. D9 #10 transcribes it for every description.
-Object::External* ToolbarDescription::Reconstruct() { return nullptr; }
+// [6] 0x1400394e0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* ToolbarDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) ToolbarDescription();
+}
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void ToolbarDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void ToolbarDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
 // a data-only description builds no component.
@@ -214,9 +215,10 @@ Object::Type* ToolbarDescription::GetComponentType(Object::Type* ret) const {
     return ret;
 }
 
-// [9] 0x1400394d0 — PORT GAP (retail: placement-new on `this`). The hand-built
-// table had a `return nullptr` guard here; kept until D9 #10's commit.
-Object::External* ToolbarDescription::Construct() { return nullptr; }
+// [9] 0x1400394d0: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* ToolbarDescription::Construct() {
+    return new (static_cast<void*>(this)) ToolbarDescription();
+}
 
 // create 0x140039490: MemAlloc(0x68, 8), then the (inlined) ctor.
 void* ToolbarDescription::CreateNewObject() {

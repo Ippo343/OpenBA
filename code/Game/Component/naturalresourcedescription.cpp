@@ -126,9 +126,8 @@ Object::External* NaturalResourceDescription::Reconstruct() {
     return new (static_cast<void*>(this)) NaturalResourceDescription();
 }
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void NaturalResourceDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void NaturalResourceDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140036640: NaturalResourceComponent's type id through the hidden return slot.
 Object::Type* NaturalResourceDescription::GetComponentType(Object::Type* ret) const {
@@ -136,9 +135,10 @@ Object::Type* NaturalResourceDescription::GetComponentType(Object::Type* ret) co
     return ret;
 }
 
-// [9] 0x140036610 — PORT GAP (retail: placement-new on `this`). The hand-built
-// table had a `return nullptr` guard here; kept until D9 #10's commit.
-Object::External* NaturalResourceDescription::Construct() { return nullptr; }
+// [9] 0x140036610: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* NaturalResourceDescription::Construct() {
+    return new (static_cast<void*>(this)) NaturalResourceDescription();
+}
 
 // create 0x1400365d0: MemAlloc(0x88, 8), then the (inlined) ctor.
 void* NaturalResourceDescription::CreateNewObject() {

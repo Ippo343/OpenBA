@@ -49,9 +49,8 @@ Object::External* StorageLocationDescription::Reconstruct() {
     return new (static_cast<void*>(this)) StorageLocationDescription();
 }
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void StorageLocationDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void StorageLocationDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140038f50: StorageLocationComponent's type id through the hidden return slot.
 Object::Type* StorageLocationDescription::GetComponentType(Object::Type* ret) const {
@@ -59,9 +58,10 @@ Object::Type* StorageLocationDescription::GetComponentType(Object::Type* ret) co
     return ret;
 }
 
-// [9] 0x140038eb0 — PORT GAP (retail: placement-new on `this`). The hand-built
-// table had a `return nullptr` guard here; kept until D9 #10's commit.
-Object::External* StorageLocationDescription::Construct() { return nullptr; }
+// [9] 0x140038eb0: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* StorageLocationDescription::Construct() {
+    return new (static_cast<void*>(this)) StorageLocationDescription();
+}
 
 // create 0x140038e50: MemAlloc(0x28, 8), then the (inlined) ctor.
 void* StorageLocationDescription::CreateNewObject() {

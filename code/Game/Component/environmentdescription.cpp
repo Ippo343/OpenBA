@@ -126,14 +126,15 @@ bool EnvironmentDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140019170 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
-// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
-// this commit changes no behaviour. D9 #10 transcribes it.
-Object::External* EnvironmentDescription::Reconstruct() { return nullptr; }
+// [6] 0x140019170: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* EnvironmentDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) EnvironmentDescription();
+}
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void EnvironmentDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void EnvironmentDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140019160: placement-new on `this` (folded with createInPlace). The
 // hand-built table already held createInPlace here.

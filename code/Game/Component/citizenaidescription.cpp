@@ -48,9 +48,8 @@ Object::External* CitizenAIDescription::Reconstruct() {
     return new (static_cast<void*>(this)) CitizenAIDescription();
 }
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void CitizenAIDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void CitizenAIDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14002fc80: CitizenAIComponent's type id through the hidden return slot.
 Object::Type* CitizenAIDescription::GetComponentType(Object::Type* ret) const {
@@ -58,9 +57,10 @@ Object::Type* CitizenAIDescription::GetComponentType(Object::Type* ret) const {
     return ret;
 }
 
-// [9] 0x14002fbe0 — PORT GAP (retail: placement-new on `this`). The hand-built
-// table had a `return nullptr` guard here; kept until D9 #10's commit.
-Object::External* CitizenAIDescription::Construct() { return nullptr; }
+// [9] 0x14002fbe0: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* CitizenAIDescription::Construct() {
+    return new (static_cast<void*>(this)) CitizenAIDescription();
+}
 
 // create 0x14002fb80: MemAlloc(0x20, 8), then the (inlined) ctor.
 void* CitizenAIDescription::CreateNewObject() {

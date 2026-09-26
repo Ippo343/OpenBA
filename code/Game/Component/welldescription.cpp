@@ -33,13 +33,15 @@ bool WellDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000fd90 / [7] 0x140001640 — PORT GAP (B38_RULES D3, D9 list). Retail:
-// Reconstruct = DeletingDtor(0) then the ctor again on `this`; Destruct =
-// DeletingDtor(0). The hand-built table had `return 0` stubs in both slots; the
-// pilot keeps them so it changes no behaviour. Block K1 transcribes retail's
-// bodies for all 78 descriptions in ONE titled behaviour-change commit.
-Object::External* WellDescription::Reconstruct() { return nullptr; }
-void              WellDescription::Destruct() {}
+// [6] 0x14000fd90 / [7] 0x140001640. Retail:
+// Reconstruct = a virtual DeletingDtor(0) then the ctor again on `this`
+// (0x14000fda7 `CALL [RAX]` with EDX=0, then the inlined ctor); Destruct =
+// the shared `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`. D9 #10 (block K1).
+Object::External* WellDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) WellDescription();
+}
+void WellDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000fde0: WellComponent's type id through the hidden return slot.
 Object::Type* WellDescription::GetComponentType(Object::Type* ret) const {

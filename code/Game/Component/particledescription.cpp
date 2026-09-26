@@ -146,9 +146,8 @@ Object::External* ParticleDescription::Reconstruct() {
     return new (static_cast<void*>(this)) ParticleDescription();
 }
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void ParticleDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void ParticleDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000a4f0: ParticleComponent's type id through the hidden return slot.
 Object::Type* ParticleDescription::GetComponentType(Object::Type* ret) const {
@@ -156,9 +155,10 @@ Object::Type* ParticleDescription::GetComponentType(Object::Type* ret) const {
     return ret;
 }
 
-// [9] 0x14000a430 — PORT GAP (retail: placement-new on `this`). The hand-built
-// table had a `return nullptr` guard here; kept until D9 #10's commit.
-Object::External* ParticleDescription::Construct() { return nullptr; }
+// [9] 0x14000a430: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* ParticleDescription::Construct() {
+    return new (static_cast<void*>(this)) ParticleDescription();
+}
 
 // create 0x14000a3c0: MemAlloc(0x38, 8), then the (inlined) ctor.
 void* ParticleDescription::CreateNewObject() {

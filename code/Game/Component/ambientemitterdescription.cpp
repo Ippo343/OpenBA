@@ -98,14 +98,15 @@ bool AmbientEmitterDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400015e0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
-// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
-// this commit changes no behaviour. D9 #10 transcribes it for every description.
-Object::External* AmbientEmitterDescription::Reconstruct() { return nullptr; }
+// [6] 0x1400015e0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* AmbientEmitterDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) AmbientEmitterDescription();
+}
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void AmbientEmitterDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void AmbientEmitterDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140001650: AmbientEmitterComponent's type id through the hidden return slot.
 Object::Type* AmbientEmitterDescription::GetComponentType(Object::Type* ret) const {
@@ -113,9 +114,10 @@ Object::Type* AmbientEmitterDescription::GetComponentType(Object::Type* ret) con
     return ret;
 }
 
-// [9] 0x140001580 — PORT GAP (retail: placement-new on `this`). The hand-built
-// table had a `return nullptr` guard here; kept until D9 #10's commit.
-Object::External* AmbientEmitterDescription::Construct() { return nullptr; }
+// [9] 0x140001580: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* AmbientEmitterDescription::Construct() {
+    return new (static_cast<void*>(this)) AmbientEmitterDescription();
+}
 
 // create 0x140001510: MemAlloc(0x38, 8), then the (inlined) ctor.
 void* AmbientEmitterDescription::CreateNewObject() {

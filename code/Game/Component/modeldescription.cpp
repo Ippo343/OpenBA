@@ -134,9 +134,8 @@ Object::External* ModelDescription::Reconstruct() {
     return new (static_cast<void*>(this)) ModelDescription();
 }
 
-// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept until D9 #10's commit.
-void ModelDescription::Destruct() {}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void ModelDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140035a60: ModelComponent's type id through the hidden return slot.
 Object::Type* ModelDescription::GetComponentType(Object::Type* ret) const {
@@ -144,9 +143,10 @@ Object::Type* ModelDescription::GetComponentType(Object::Type* ret) const {
     return ret;
 }
 
-// [9] 0x1400359a0 — PORT GAP (retail: placement-new on `this`). The hand-built
-// table had a `return nullptr` guard here; kept until D9 #10's commit.
-Object::External* ModelDescription::Construct() { return nullptr; }
+// [9] 0x1400359a0: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* ModelDescription::Construct() {
+    return new (static_cast<void*>(this)) ModelDescription();
+}
 
 // create 0x140035930: MemAlloc(0x40, 8), then the (inlined) ctor.
 void* ModelDescription::CreateNewObject() {
