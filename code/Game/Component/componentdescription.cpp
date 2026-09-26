@@ -20,6 +20,7 @@
 // aren't mapped). Mirrors mapgenerator.cpp (deserialize) + statgoal.cpp (scaffolding)
 // + serialize_struct60b_serialize.cpp (the proven External-array FindOrLoad body).
 
+#include "Component/ComponentDescription.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -28,14 +29,9 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <cstdio>
+#include <atomic>
 #include <new>
 
-static constexpr uintptr_t kVtableAddr = 0x140162a00;
-static constexpr int       kSize       = 0x38;
-static constexpr int       OFF_CATEGORY = 0x20;
-static constexpr int       OFF_ARRAY    = 0x28;
-static constexpr int       OFF_COUNT    = 0x30;
-static constexpr int       OFF_CAP      = 0x34;
 
 // ---- internal: serializer "stream error" word (serializer->stream + 8 == 0 ⇒ ok)
 static inline int SerStreamErr(void* serializer) {
@@ -52,11 +48,14 @@ static inline int SerStreamErr(void* serializer) {
 // (sub-descriptions self-identify their type in the package; we trust it).
 // Exported so other description types with External-ref arrays (AnimalDescription,
 // etc.) reuse this exact proven loop.
+// B6-5: descriptions load on the loader thread; the one-shot log flag is an atomic
+// at namespace scope (was a function-local plain bool).
+static std::atomic<bool> s_warnedUnwired{false};
+
 extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase) {
     if (!serializer || count <= 0 || !arrayBase) return;
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
-        static bool warned = false;
-        if (!warned) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); warned = true; }
+        if (!s_warnedUnwired.exchange(true)) { fprintf(stderr, "[ComponentDescription] sub-array primitives unwired — skip %d\n", count); fflush(stderr); }
         return;
     }
     void* factory = *g_pExternalFactorySingleton;
@@ -121,107 +120,90 @@ extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayB
     }
 }
 
+
 // ============================================================
-// Ctor / Serialize / Dtor
+// ComponentDescription — ENDGAME B.3.8 K1: a REAL class (ComponentDescription.h)
+// with a compiler-generated 9-slot vtable. The hand-built 11-slot table (slot 8
+// null, slot 9 past retail's end holding createInPlace) and its
+// RegisterExeAddr(0x140162a00) row are gone: nothing in the tree reads that
+// address back (B38_RULES D5).
 // ============================================================
-extern "C" void* ComponentDescription_CtorImpl(void* mem) {
-    if (!mem) return nullptr;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    if (fn_External_External) fn_External_External(mem);     // Object::External base
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    *(int32_t*)(s + OFF_CATEGORY) = 6;                       // default category
-    *(void**)(s + OFF_ARRAY)      = nullptr;
-    *(int32_t*)(s + OFF_COUNT)    = 0;
-    *(int32_t*)(s + OFF_CAP)      = 0;
-    return mem;
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
+
+// ctor (inlined into create 0x140031f30 / createInPlace 0x140031f90):
+// `??0External@Object@@`, the stamp (the compiler's), then the defaults.
+ComponentDescription::ComponentDescription()
+    : Object::External(),
+      _category(6),                 // default category
+      _subDescs(nullptr),
+      _subDescCount(0),
+      _subDescCap(0) {}
+
+// dtor (slot 0 0x140032030 minus the stamps): free the sub-description pointer
+// array (the sub-descriptions themselves are owned by the ExternalFactory cache,
+// not freed here). The compiler then runs ~External.
+ComponentDescription::~ComponentDescription() {
+    if (_subDescs && fn_MemFreeStatic) fn_MemFreeStatic(_subDescs);
+    _subDescs = nullptr;
+    _subDescCount = 0;
 }
 
-extern "C" void ComponentDescription_Serialize(void* self, void* stream) {
-    if (!self) return;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serBuf[24];
-    ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x140032030: ~ComponentDescription -> ~External, MemFree on &1.
+Object::Base* ComponentDescription::DeletingDtor(unsigned flags) {
+    this->~ComponentDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [5] 0x140118af0.
+bool ComponentDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
     // category enum (+0x20) through the UINT door. `serBuf + 8` was the
     // ReaderWriter, not an Encoding, and vtable +0x98 is rw_vtbl::kScalarUInt.
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + OFF_CATEGORY), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    ser.Serialize(*reinterpret_cast<unsigned int*>(&_category), nullptr);   // 0x98 = uint door
 
     // sub-description count (+0x30) + fresh array resize (+0x28, stride 8)
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(s + OFF_COUNT), nullptr);   // B.3.4 bridge
-    int count = *(int32_t*)(s + OFF_COUNT);
-    if (SerStreamErr(serBuf) == 0 && count > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
+    ser.Serialize(_subDescCount, nullptr);
+    int count = _subDescCount;
+    if (SerStreamErr(&ser) == 0 && count > 0 && fn_MemAlloc && g_pMemAllocSingleton) {
         void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 8, 8);
-        *(void**)(s + OFF_ARRAY) = buf;
-        *(int32_t*)(s + OFF_CAP) = count;
-        if (buf) for (int i = 0; i < count; ++i) ((void**)buf)[i] = nullptr;
+        _subDescs = static_cast<void**>(buf);
+        _subDescCap = count;
+        if (buf) for (int i = 0; i < count; ++i) static_cast<void**>(buf)[i] = nullptr;
     }
 
     // load each sub-description (FUN_140032090)
-    Desc_LoadExternalArray(serBuf, count, *(void**)(s + OFF_ARRAY));
-
-    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
+    Desc_LoadExternalArray(&ser, count, _subDescs);
+    return true;
 }
 
-extern "C" void* ComponentDescription_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    // free the sub-description pointer array (the sub-descriptions themselves are
-    // owned by the ExternalFactory cache, not freed here)
-    void* arr = *(void**)(s + OFF_ARRAY);
-    if (arr && fn_MemFreeStatic) fn_MemFreeStatic(arr);
-    *(void**)(s + OFF_ARRAY) = nullptr;
-    *(int32_t*)(s + OFF_COUNT) = 0;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140031fe0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it.
+Object::External* ComponentDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void ComponentDescription::Destruct() {}
+
+// [8] 0x140031f90 — PORT GAP (retail: placement-new on `this`, folded with
+// createInPlace). The hand-built table had a null stub in slot 8; kept until
+// D9 #10's commit.
+Object::External* ComponentDescription::Construct() { return nullptr; }
+
+// create 0x140031f30: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* ComponentDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ComponentDescription), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ComponentDescription());
+}
+// createInPlace 0x140031f90.
+void* ComponentDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ComponentDescription());
 }
 
-// ============================================================
-// Standalone factory scaffolding
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ComponentDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ComponentDescription");
-    return cached;
-}
-static int   CD_VtblStub_Return2(void* /*self*/) { return 2; }  // GetVersion = 2
-static int   CD_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* CD_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-extern "C" void* ComponentDescription_CreateInPlace(void* mem);
-
-// vtable @ 0x140162a00. Every slot filled with a safe stub (the Runtime
-// External::Load calls GetVersion at +0x18 before Serialize — a null slot there
-// faults). GetVersion=2 (verified: exe body mov eax,2; ret).
-static void* g_CD_Vtable[11] = {
-    reinterpret_cast<void*>(&ComponentDescription_Dtor),     // +0x00 dtor
-    reinterpret_cast<void*>(&CD_VtblStub_ReturnNull),        // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&ComponentDescription_GetTypeId),// +0x10 GetTypeId
-    reinterpret_cast<void*>(&CD_VtblStub_Return2),           // +0x18 GetVersion=2
-    reinterpret_cast<void*>(&CD_VtblStub_Return0),           // +0x20 Compile thunk
-    reinterpret_cast<void*>(&ComponentDescription_Serialize),// +0x28 Serialize
-    reinterpret_cast<void*>(&CD_VtblStub_Return0),           // +0x30 Cleanup
-    reinterpret_cast<void*>(&CD_VtblStub_Return0),           // +0x38 GetDesc forwarder
-    reinterpret_cast<void*>(&CD_VtblStub_ReturnNull),        // +0x40
-    reinterpret_cast<void*>(&ComponentDescription_CreateInPlace), // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CD_VtblStub_ReturnNull),        // +0x50 guard
-};
-
-extern "C" void RegisterComponentDescriptionVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_CD_Vtable));
-}
-
-extern "C" void* ComponentDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, kSize, 8);
-    return p ? ComponentDescription_CtorImpl(p) : nullptr;
-}
-extern "C" void* ComponentDescription_CreateInPlace(void* mem) {
-    return mem ? ComponentDescription_CtorImpl(mem) : nullptr;
-}
-
-REGISTER_TYPE(ComponentDescription, "Object::External",
-              &ComponentDescription_Factory, &ComponentDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(ComponentDescription, "_ZTV20ComponentDescription")
+DEFINE_EXE_TYPE(ComponentDescription, "Object::External")

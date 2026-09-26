@@ -77,12 +77,10 @@ extern "C" {
     void RegisterTerrainGeneratorVtable();
 
     // M5 5c Foundation C — entity description types (template sub-descriptions).
-    void RegisterComponentDescriptionVtable();
     void RegisterToolbarDescriptionStringArrayResize();   // FUN_140028860 (the table row went with ToolbarDescription's real class, B.3.8 K1)
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
     // wave 2 (economy / farming / services / tools)
     void RegisterCaptureBoxDescriptionVtable();
-    void RegisterEnvironmentDescriptionVtable();
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFireComponentVtable();
@@ -1741,12 +1739,10 @@ static void RegisterVtablesAndTypeIds() {
     // resolves a real factory + Serialize instead of NullFactory. The matching
     // REGISTER_TYPE entries live next to the reimpls in code/Game/Component/
     // <type>.cpp; their NullFactory stubs were removed from factory_registrations_bulk.
-    RegisterComponentDescriptionVtable();
     RegisterToolbarDescriptionStringArrayResize();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
     // wave 2 (economy / farming / services / tools)
     RegisterCaptureBoxDescriptionVtable();
-    RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireComponentVtable();
     RegisterFrustumOutlineDescriptionVtable();

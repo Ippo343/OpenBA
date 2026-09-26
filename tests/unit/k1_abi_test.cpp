@@ -98,6 +98,8 @@
 #include "Component/TradeDescription.h"
 #include "Component/UIDescription.h"
 #include "Component/ToolbarDescription.h"
+#include "Component/ComponentDescription.h"
+#include "Component/EnvironmentDescription.h"
 #include "RawMaterialDescription.h"          // engine/types forwarder (B8-4)
 #include "DiseaseComponent.h"                // engine/types: its DiseaseDescription forwards
 
@@ -244,6 +246,35 @@ UNIT_TEST(k1_ui_trade_build_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<TradeDescription>(0x70), 0);
     CHECK_EQ(CheckDescriptionLeaf<UIDescription>(0x48), 0);
     CHECK_EQ(CheckDescriptionLeaf<ToolbarDescription>(0x68), 0);
+}
+
+// The two DIRECT Object::External leaves: 9 slots, slot 8 = Construct.
+template <typename D>
+int CheckExternalLeaf(size_t size) {
+    int bad = 0;
+    bad += sizeof(D) != size;
+    bad += alignof(D) != 8;
+    bad += !std::is_polymorphic<D>::value;
+    bad += std::is_abstract<D>::value;
+    bad += std::has_virtual_destructor<D>::value;
+    bad += std::is_base_of<Description, D>::value;
+    bad += !(std::is_base_of<Object::External, D>::value);
+    bad += SlotOffset(&D::DeletingDtor)     != 0x00;
+    bad += SlotOffset(&D::TypeName)         != 0x08;
+    bad += SlotOffset(&D::Type)             != 0x10;
+    bad += SlotOffset(&D::GetFileVersion)   != 0x18;
+    bad += SlotOffset(&D::Compile)          != 0x20;
+    bad += SlotOffset(&D::Serialize)        != 0x28;
+    bad += SlotOffset(&D::Reconstruct)      != 0x30;
+    bad += SlotOffset(&D::Destruct)         != 0x38;
+    bad += SlotOffset(&D::Construct)        != 0x40;
+    return bad;
+}
+
+UNIT_TEST(k1_direct_external_descriptions) {
+    CHECK_EQ(CheckExternalLeaf<ComponentDescription>(0x38), 0);
+    CHECK_EQ(CheckExternalLeaf<EnvironmentDescription>(0x1b8), 0);
+    CHECK_EQ(offsetof(EnvironmentDescription, _months), (size_t)0x38);
 }
 
 }  // namespace
