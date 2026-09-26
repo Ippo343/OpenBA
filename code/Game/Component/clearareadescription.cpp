@@ -20,103 +20,90 @@
 //   8. int (+0x30)
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (ClearAreaDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162760) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/ClearAreaDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-namespace {
-constexpr uintptr_t kVtable  = 0x140162760;
-constexpr int       kVersion = 6;
+// ctor (inlined into create 0x140030f00 / createInPlace 0x140030f80):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+ClearAreaDescription::ClearAreaDescription()
+    : Description(),
+      _descRef(nullptr),
+      _flag0(true),
+      _flag1(false),
+      _flag2(true),
+      _flag3(false),
+      _flag4(true),
+      _flag5(false),
+      _value(-1) {}
+
+// [0] 0x140031060: ~ClearAreaDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ClearAreaDescription::DeletingDtor(unsigned flags) {
+    this->~ClearAreaDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* ClearAreaDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t s = (uintptr_t)mem;
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(uint64_t*)(s + 0x20) = 0;            // _descRef
-    *(uint32_t*)(s + 0x28) = 0x00010001;   // _flag0..3 = 1,0,1,0
-    *(uint16_t*)(s + 0x2c) = 0x0001;       // _flag4,5  = 1,0
-    *(uint32_t*)(s + 0x30) = 0xffffffff;   // _value = -1
-    return mem;
-}
-
-// Serialize (vtable +0x28, FUN_1401180f0)
-void ClearAreaDescription_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-    alignas(8) uint8_t serializer[24];
-    if (!fn_ExternalPtr_Serialize2) {
-        return;
-    }
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
+// [5] 0x1401180f0: stream order as retail.
+bool ClearAreaDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // 1. ExternalPtr (+0x20). Same stream layout as the StringTable ExternalPtr
     //    helper (FUN_14000bf40); only the validated typeId differs (trusted in
     //    standalone via IsDerivedFromOrTrust).
-    fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
-
-    // 2..7. six bools
-    for (int i = 0; i < 6; ++i) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x28 + i), nullptr);   // B.3.4 bridge
-    }
-    // 8. int (+0x30)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    ser.Serialize(_flag0, nullptr);
+    ser.Serialize(_flag1, nullptr);
+    ser.Serialize(_flag2, nullptr);
+    ser.Serialize(_flag3, nullptr);
+    ser.Serialize(_flag4, nullptr);
+    ser.Serialize(_flag5, nullptr);
+    ser.Serialize(_value, nullptr);
+    return true;
 }
 
-// Dtor (vtable +0x00, FUN_140031060) — scalar fields only, no heap.
-void* ClearAreaDescription_Dtor(void* self, uint32_t flags) {
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable);
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140030fe0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* ClearAreaDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) ClearAreaDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void ClearAreaDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t ClearAreaDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ClearAreaDescription");
-    return cached;
+// [8] 0x140031050: ClearAreaComponent's type id through the hidden return slot.
+Object::Type* ClearAreaDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("ClearAreaComponent");
+    return ret;
 }
-static int   Vtbl_GetVersion(void*) { return kVersion; }
-static int   Vtbl_Return0(void*) { return 0; }
-static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* ClearAreaDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "ClearAreaComponent"); }
-
-static void* g_Vtable[11] = {
-    reinterpret_cast<void*>(&ClearAreaDescription_Dtor),      // +0x00
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),                // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&ClearAreaDescription_GetTypeId), // +0x10
-    reinterpret_cast<void*>(&Vtbl_GetVersion),                // +0x18 (=6)
-    reinterpret_cast<void*>(&Vtbl_Return0),                   // +0x20 Compile
-    reinterpret_cast<void*>(&ClearAreaDescription_Serialize), // +0x28
-    reinterpret_cast<void*>(&Vtbl_Return0),                   // +0x30 Cleanup
-    reinterpret_cast<void*>(&Vtbl_Return0),                   // +0x38 GetDesc
-    reinterpret_cast<void*>(&ClearAreaDescription_GetComponentTypeId),                // +0x40 Slot8
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),                // +0x48 guard
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),                // +0x50 guard
-};
-
-extern "C" void RegisterClearAreaDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_Vtable));
+// [9] 0x140030f80: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* ClearAreaDescription::Construct() {
+    return new (static_cast<void*>(this)) ClearAreaDescription();
 }
-extern "C" void* ClearAreaDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+
+// create 0x140030f00: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* ClearAreaDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ClearAreaDescription), 8);
     if (!p) return nullptr;
-    return ClearAreaDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) ClearAreaDescription());
 }
-extern "C" void* ClearAreaDescription_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    return ClearAreaDescription_Ctor_Impl(mem);
+// createInPlace 0x140030f80.
+void* ClearAreaDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ClearAreaDescription());
 }
 
-REGISTER_TYPE(ClearAreaDescription, "Description",
-              &ClearAreaDescription_Factory, &ClearAreaDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(ClearAreaDescription, "_ZTV20ClearAreaDescription")
+DEFINE_EXE_TYPE(ClearAreaDescription, "Description")

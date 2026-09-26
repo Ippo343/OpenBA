@@ -36,6 +36,8 @@
 #include "runtime/types/ui/DialogControllerConfig.h"
 #include "runtime/types/ui/Element.h"
 #include "runtime/types/ui/ElementDescription.h"
+#include "runtime/types/ui/SpriteSheet.h"
+#include "runtime/types/ui/SpriteCapture.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -54,6 +56,8 @@ extern InternalFactory* g_unitInternalFactory;
 extern const void* const g_rbDiVtGroup[] __asm__("_ZTVN2UI14DialogInstanceE");
 extern const void* const g_rbElVtGroup[] __asm__("_ZTVN2UI7ElementE");
 extern const void* const g_rbEdVtGroup[] __asm__("_ZTVN2UI18ElementDescriptionE");
+extern const void* const g_rbSsVtGroup[] __asm__("_ZTVN2UI11SpriteSheetE");
+extern const void* const g_rbScVtGroup[] __asm__("_ZTVN2UI13SpriteCaptureE");
 
 namespace {
 
@@ -394,6 +398,53 @@ UNIT_TEST(rb_ui_bases_shape) {
     CHECK(!std::has_virtual_destructor<UI::DialogControllerConfig>::value);
     CHECK(!std::has_virtual_destructor<UI::Element>::value);
     CHECK(!std::has_virtual_destructor<UI::ElementDescription>::value);
+}
+
+// ===========================================================================
+// PART D — the two UI resources the exe instantiates itself (B38_SLOTS
+// section 4: SpriteSheet 0x14015c3b0, SpriteCapture 0x14015d550). Their
+// InitFields are inline (the REAL retail bodies, 0x18011d600 / 0x1800d9140);
+// their virtuals and the out-of-line dtors are ui_resources_abi_test.cpp's
+// markers. Slot 0 is the exe scalar deleting dtor (0x1400121e0 / 0x140013f80).
+// ===========================================================================
+UNIT_TEST(rb_spritesheet_ctor_is_retail_0x18011d600_and_concrete) {
+    alignas(8) unsigned char buf[sizeof(UI::SpriteSheet)];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::SpriteSheet* s = ::new (static_cast<void*>(buf)) UI::SpriteSheet();
+    CHECK(VptrOf(s) == &g_rbSsVtGroup[2]);
+    for (size_t off = 0x08; off < 0x50; off += 8) CHECK_EQ(Q(s, off), (uint64_t)0);
+    CHECK_EQ((int)By(s, 0x50), 0);
+    CHECK_EQ((int)By(s, 0x51), 0xCD);            // never written
+    alignas(8) unsigned char raw[sizeof(UI::SpriteSheet)];
+    std::memset(raw, 0xCD, sizeof raw);
+    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+    UI::SpriteSheet::DoorBody::Init(reinterpret_cast<UI::SpriteSheet*>(raw));
+    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    s->DeletingDtor(0);                           // destruct only (stack buffer)
+
+    void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteSheet), 8);
+    UI::SpriteSheet* h = ::new (mem) UI::SpriteSheet();
+    using Slot0 = Object::Base* (*)(void*, unsigned);
+    CHECK(static_cast<void*>(reinterpret_cast<Slot0>(const_cast<void*>(g_rbSsVtGroup[2]))(h, 1u)) == mem);
+}
+
+UNIT_TEST(rb_spritecapture_ctor_is_retail_0x1800d9140_and_concrete) {
+    alignas(8) unsigned char buf[sizeof(UI::SpriteCapture)];
+    std::memset(buf, 0xCD, sizeof buf);
+    UI::SpriteCapture* c = ::new (static_cast<void*>(buf)) UI::SpriteCapture();
+    CHECK(VptrOf(c) == &g_rbScVtGroup[2]);
+    for (size_t off = 0x08; off < 0x58; off += 8) CHECK_EQ(Q(c, off), (uint64_t)0);
+    alignas(8) unsigned char raw[sizeof(UI::SpriteCapture)];
+    std::memset(raw, 0xCD, sizeof raw);
+    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+    UI::SpriteCapture::DoorBody::Init(reinterpret_cast<UI::SpriteCapture*>(raw));
+    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    c->DeletingDtor(0);
+
+    void* mem = Object::detail::InternalMemAlloc(sizeof(UI::SpriteCapture), 8);
+    UI::SpriteCapture* h = ::new (mem) UI::SpriteCapture();
+    using Slot0 = Object::Base* (*)(void*, unsigned);
+    CHECK(static_cast<void*>(reinterpret_cast<Slot0>(const_cast<void*>(g_rbScVtGroup[2]))(h, 1u)) == mem);
 }
 
 }  // namespace

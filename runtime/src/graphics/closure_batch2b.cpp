@@ -247,9 +247,8 @@ Geometry::Geometry(const Geometry& src) {
 // class's destructor CANNOT avoid — and a missing definition would surface as an
 // undefined reference in whichever later block defines one, a long way from the
 // cause.
-Geometry::~Geometry() {
-    RtGraphics_Geometry_Dtor(reinterpret_cast<RtGraphics::Geometry*>(this));  // B.3.5 bridge
-}
+// ENDGAME B.3.8 block RB: `~Geometry()` is inline in Geometry.h now, ONE body
+// (`ReleaseFields`, scene.cpp) with the door `RtGraphics_Geometry_Dtor`.
 
 }  // namespace Graphics
 

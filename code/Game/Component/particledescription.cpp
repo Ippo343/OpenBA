@@ -30,18 +30,23 @@
 // Tail: materialRef ExternalPtr (+0x20).
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (ParticleDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015a310) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/ParticleDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/String.h"
-#include <new>
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "system/Value.h"
 #include <cstdint>
-#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include <new>
 
 namespace {
-constexpr uintptr_t kVtable = 0x14015a310;
-
+// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
 void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
@@ -53,7 +58,6 @@ void* AllocArray(void* header, int count, int stride) {
     return buf;
 }
 
-// Init a Time field (8 bytes) to `seconds` via the Runtime Time ctor.
 void InitTime(void* field, float seconds) {
     if (fn_Time_Ctor_Float) {
         fn_Time_Ctor_Float(field, seconds);
@@ -61,39 +65,50 @@ void InitTime(void* field, float seconds) {
         *(uint64_t*)field = 0;
     }
 }
-} // namespace
+}  // namespace
 
-extern "C" void* ParticleDescription_Ctor_Impl(void* mem);
+// ctor (inlined into create 0x14000a3c0 / createInPlace 0x14000a430):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+ParticleDescription::ParticleDescription()
+    : Description(),
+      _materialRef(nullptr),
+      _emitters(nullptr),
+      _emitterCount(0),
+      _emitterCap(0) {}
 
-extern "C" void* ParticleDescription_Ctor_Impl(void* mem) {
-    if (!mem) return nullptr;
-    if (fn_External_External) fn_External_External(mem);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)mem = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    *(uint64_t*)(s + 0x20) = 0;   // materialRef
-    *(uint64_t*)(s + 0x28) = 0;   // emitterArray
-    *(uint64_t*)(s + 0x30) = 0;   // emitterCount + cap
-    return mem;
+// dtor (slot 0 0x14000a500 minus the stamps): destroys each emitter's String, then frees the emitter array.
+// The compiler then chains ~Description -> ~External.
+ParticleDescription::~ParticleDescription() {
+    uint8_t* e = static_cast<uint8_t*>(_emitters);
+    int count = _emitterCount;
+    if (e) {
+        for (int i = 0; i < count; ++i) reinterpret_cast<System::String*>(e + i * 0x28 + 0x08)->~String();  // B.3.1 bridge
+        if (fn_MemFreeStatic) fn_MemFreeStatic(e);
+    }
+    _emitters = nullptr;
+    _emitterCount = 0;
+    _emitterCap = 0;
 }
 
-// Serialize (vtable +0x28, exe 0x140053460)
-extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
-    if (!fn_ExternalPtr_Serialize3) {
-        return;
-    }
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x14000a500: ~ParticleDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ParticleDescription::DeletingDtor(unsigned flags) {
+    this->~ParticleDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);            // emitterCount   // B.3.4 bridge
-    int count = *(int32_t*)(s + 0x30);
-
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+// [5] 0x140053460: stream order as retail.
+bool ParticleDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize3) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_emitterCount, nullptr);   // emitterCount
+    int count = _emitterCount;
+    
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     uint8_t* e;
     if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(s + 0x28, count, 0x28));
+        e = reinterpret_cast<uint8_t*>(AllocArray(&_emitters, count, 0x28));
         for (int i = 0; i < count; ++i) {
             uint8_t* el = e + i * 0x28;
             *(uint64_t*)(el + 0x00) = 0;       // ref
@@ -106,104 +121,56 @@ extern "C" void ParticleDescription_Serialize(void* self, void* stream) {
             InitTime(el + 0x20, 1.0f);          // t1 default 1.0 (g_fUVScale)
         }
     } else {
-        e = *(uint8_t**)(s + 0x28);
+        e = static_cast<uint8_t*>(_emitters);
     }
-
+    
     for (int i = 0; i < count; ++i, e += 0x28) {
-        fn_ExternalPtr_Serialize3(e + 0x00, ser);           // ref (elem+0)
-        reinterpret_cast<System::String*>(e + 0x08)->Serialize(ser);               // B.3.1 bridge: String (elem+8)
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x10), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x11), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x12), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(e + 0x13), nullptr);   // B.3.4 bridge
-        reinterpret_cast<System::Time*>(e + 0x20)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));                 // t1 (elem+0x20) FIRST   // B.3.4b bridge
-        reinterpret_cast<System::Time*>(e + 0x18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));                 // t0 (elem+0x18) SECOND   // B.3.4b bridge
+        fn_ExternalPtr_Serialize3(e + 0x00, &ser);                                 // ref (elem+0)
+        reinterpret_cast<System::String*>(e + 0x08)->Serialize(&ser);             // B.3.1 bridge: String (elem+8)
+        ser.Serialize(*reinterpret_cast<bool*>(e + 0x10), nullptr);
+        ser.Serialize(*reinterpret_cast<bool*>(e + 0x11), nullptr);
+        ser.Serialize(*reinterpret_cast<bool*>(e + 0x12), nullptr);
+        ser.Serialize(*reinterpret_cast<bool*>(e + 0x13), nullptr);
+        reinterpret_cast<System::Time*>(e + 0x20)->Serialize(ser);                // t1 (elem+0x20) FIRST   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(e + 0x18)->Serialize(ser);                // t0 (elem+0x18) SECOND  // B.3.4b bridge
     }
-
-    fn_ExternalPtr_Serialize3(s + 0x20, ser);              // materialRef (+0x20)
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    
+    fn_ExternalPtr_Serialize3(&_materialRef, &ser);   // materialRef (+0x20)
+    return true;
 }
 
-// Dtor (vtable +0x00, exe 0x14000a500)
-extern "C" void* ParticleDescription_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)self = s_vtable;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t* e = *(uint8_t**)(s + 0x28);
-    int count = *(int32_t*)(s + 0x30);
-    if (e) {
-        for (int i = 0; i < count; ++i) reinterpret_cast<System::String*>(e + i * 0x28 + 0x08)->~String();  // B.3.1 bridge
-        if (fn_MemFreeStatic) fn_MemFreeStatic(e);
-    }
-    *(uint64_t*)(s + 0x28) = 0;
-    *(uint64_t*)(s + 0x30) = 0;
-
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x14000a490: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* ParticleDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) ParticleDescription();
 }
 
-// Cleanup (vtable +0x30, exe 0x14000a490)
-extern "C" void ParticleDescription_Cleanup(void* self) {
-    typedef void* (*fn_dtor_t)(void*, uint32_t);
-    fn_dtor_t dtor = *(fn_dtor_t*)(*(uintptr_t*)self);
-    if (dtor) dtor(self, 0);
-    ParticleDescription_Ctor_Impl(self);
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void ParticleDescription::Destruct() { DeletingDtor(0); }
+
+// [8] 0x14000a4f0: ParticleComponent's type id through the hidden return slot.
+Object::Type* ParticleDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("ParticleComponent");
+    return ret;
 }
 
-// Slot8 (vtable +0x40, exe 0x14000a4f0)
-extern "C" void* ParticleDescription_Slot8(void* self) {
-    if (!self) return nullptr;
-    ParticleDescription_Ctor_Impl(self);
-    return self;
+// [9] 0x14000a430: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* ParticleDescription::Construct() {
+    return new (static_cast<void*>(this)) ParticleDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ParticleDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ParticleDescription");
-    return cached;
-}
-static int  ParticleDescription_Ver(void*)        { return 7; }
-static int  ParticleDescription_Ret0(void*)       { return 0; }
-static void* ParticleDescription_RetNull(void*, ...) { return nullptr; }
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* ParticleDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "ParticleComponent"); }
-
-static void* g_ParticleDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&ParticleDescription_Dtor),       // +0x00
-    reinterpret_cast<void*>(&ParticleDescription_RetNull),    // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&ParticleDescription_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&ParticleDescription_Ver),        // +0x18 GetVersion (7)
-    reinterpret_cast<void*>(&ParticleDescription_Ret0),       // +0x20 Compile
-    reinterpret_cast<void*>(&ParticleDescription_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&ParticleDescription_Cleanup),    // +0x30 Cleanup
-    reinterpret_cast<void*>(&ParticleDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&ParticleDescription_GetComponentTypeId),      // +0x40 Slot8
-    reinterpret_cast<void*>(&ParticleDescription_RetNull),    // +0x48 guard
-    reinterpret_cast<void*>(&ParticleDescription_RetNull),    // +0x50 guard
-};
-
-extern "C" void RegisterParticleDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_ParticleDescription_Vtable));
-}
-
-extern "C" void* ParticleDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+// create 0x14000a3c0: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* ParticleDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ParticleDescription), 8);
     if (!p) return nullptr;
-    return ParticleDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) ParticleDescription());
 }
-extern "C" void* ParticleDescription_CreateInPlace(void* mem) {
-    return ParticleDescription_Ctor_Impl(mem);
+// createInPlace 0x14000a430.
+void* ParticleDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ParticleDescription());
 }
 
-REGISTER_TYPE(ParticleDescription, "Description",
-              &ParticleDescription_Factory, &ParticleDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(ParticleDescription, "_ZTV19ParticleDescription")
+DEFINE_EXE_TYPE(ParticleDescription, "Description")

@@ -464,15 +464,29 @@ public:
     void     SetDetailId(int id);                        // 0x180015880  not ported
     int      GetDetailId() const;                        // 0x180015890  not ported
 
+    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
+    // D1): `RtGraphics_Geometry_Ctor` / `_Dtor` (scene.cpp) stamp the MINTED
+    // table themselves, for the still-unconverted subclasses, then call these.
+    struct DoorBody {
+        static void Init(Geometry* g)    { g->InitFields(); }
+        static void Release(Geometry* g) { g->ReleaseFields(); }
+    };
+
 protected:
+    // `??0Geometry@Graphics@@QEAA@XZ` @ 0x1800a4270 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1): the vptr store is the compiler's,
+    // the 46 field stores are ONE body with the door (`InitFields`).
+    Geometry() { InitFields(); }
     // `??1Geometry@Graphics@@UEAA@XZ` @ 0x1800a41c0. NON-VIRTUAL (decision 2),
-    // protected because this is a base. The body is scene.cpp's door and is
-    // NOT moved here: it re-stamps the vtable, detaches every child and frees
-    // `_attached`, and a compiler-run `~Array` on top of that explicit free
-    // would be retail's own decomposition run twice (the `Object::External::
-    // _refs` discussion in External.h). Declared, deliberately undefined:
-    // nothing in the tree destroys one of these as a C++ object.
-    ~Geometry();
+    // protected because this is a base. The compiler restamps on entry; the
+    // body (detach every child, free `_attached`) is ONE body with the door.
+    // `_attached`'s implicit ~Array after it is a no-op on the zeroed header.
+    ~Geometry() { ReleaseFields(); }
+
+private:
+    void InitFields();      // 0x1800a4270 minus the vptr store (scene.cpp)
+    void ReleaseFields();   // 0x1800a41c0 minus the restamp (scene.cpp)
+public:
 
 public:
     // ---- the 0xB8 bytes after the vptr ------------------------------------

@@ -642,22 +642,36 @@ extern "C" MaterialInstance* RtGraphics_MaterialInstance_Ctor(MaterialInstance* 
     self->external_10 = nullptr;
     self->external_18 = nullptr;
     self->vptr = vtMaterialInstance;
-    self->shaderClass = 0;
-    self->hasRenderTexture = 0;
-    self->hasRenderedTexture = 0;
-    self->material = nullptr;
-    self->parameters._data = nullptr;
-    self->parameters._size = 0;
-    self->parameters._capacity = 0;
-    self->constants._data = nullptr;
-    self->constants._size = 0;
-    self->constants._capacity = 0;
-    self->textures._data = nullptr;
-    self->textures._size = 0;
-    self->textures._capacity = 0;
+    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores are ONE body with
+    // the real constructor `Graphics::MaterialInstance()` (Material.h).
+    ::Graphics::MaterialInstance::DoorBody::Init(
+        reinterpret_cast<::Graphics::MaterialInstance*>(self));   // B.3.8 bridge
 
     return self;
 }
+
+// ============================================================================
+// Graphics::MaterialInstance::~MaterialInstance — 0x180103a00 (ENDGAME B.3.8
+// block RB). Retail: restamp, then three retail `~Array` bodies in this order
+//     0x180004d60 (+0x50 _textures), 0x180004c80 (+0x40 _constants),
+//     0x180004b70 (+0x30 _parameters)
+// then ~External. The restamp and ~External are the compiler's chain; the
+// three calls are `ReleaseFields`, reached BY ADDRESS exactly as the door in
+// deleting_dtor_leaves.cpp reaches them (each resolves to its ported J-row,
+// which zeroes the header, so the compiler's implicit member ~Arrays after
+// the body are no-ops).
+// ============================================================================
+namespace Graphics {
+MaterialInstance::~MaterialInstance() { ReleaseFields(); }
+
+void MaterialInstance::ReleaseFields() {
+    using ArrayDtorFn = void* (*)(void*);
+    uint8_t* const d = reinterpret_cast<uint8_t*>(this);
+    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004d60))(d + 0x50);
+    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004c80))(d + 0x40);
+    reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x180004b70))(d + 0x30);
+}
+}  // namespace Graphics
 
 // ?SetMaterial@MaterialInstance@Graphics@@QEAAXV?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z
 // — retail 0x180103340. One store.

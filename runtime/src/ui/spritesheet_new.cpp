@@ -89,6 +89,7 @@
 #include <cstdlib>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.8 RB: the shared ctor/dtor body
 
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
 // must not be included from runtime/src (rt_port.h explains why). Declared here
@@ -200,6 +201,22 @@ extern "C" void RtUi_SpriteSheet_Dtor(void* self) {
     void* vtbl = RT_DATA_SLOT(void*, "??_7SpriteSheet@UI@@6B@");
     if (vtbl) *reinterpret_cast<void**>(p) = vtbl;
 
+    // ENDGAME B.3.8 block RB (RULE B8-1): the two String releases and the
+    // m_sprites array destroy are ONE body with the real destructor
+    // `UI::SpriteSheet::~SpriteSheet()` — `ReleaseFields`, below.
+    UI::SpriteSheet::DoorBody::Release(reinterpret_cast<UI::SpriteSheet*>(self));   // B.3.8 bridge
+
+    using ExternalDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExternalDtorFn, "??1External@Object@@UEAA@XZ")(self);
+}
+
+// ============================================================================
+// UI::SpriteSheet::ReleaseFields — ??1SpriteSheet 0x18011d670 between the
+// restamp and the ~External tail (ENDGAME B.3.8 block RB). Moved verbatim from
+// the door above; `p` is `this`.
+// ============================================================================
+void UI::SpriteSheet::ReleaseFields() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
     auto release = [](uint8_t* slot) {
         uint8_t* str = *reinterpret_cast<uint8_t**>(slot);
         if (!str) return;
@@ -231,9 +248,6 @@ extern "C" void RtUi_SpriteSheet_Dtor(void* self) {
     if (!arrayDtor) arrayDtor = reinterpret_cast<ArrayDtorFn>(
         ResolveAddr(Module::Runtime, 0x180004f50));
     arrayDtor(p + 0x20);   // m_sprites, Array<SpriteInfo>
-
-    using ExternalDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExternalDtorFn, "??1External@Object@@UEAA@XZ")(self);
 }
 
 // ============================================================================

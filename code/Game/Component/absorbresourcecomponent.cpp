@@ -53,78 +53,9 @@ void AbsorbResourceComponent_Shutdown(AbsorbResourceComponent* self, void* strea
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();                                       // B.3.4 bridge
 }
 
-// ============================================================
-// Reimpl of FUN_1401189b0 (Component_Serialize — the shared Component base
-//   serialize used by every Component subclass)
-// ============================================================
-// Persist the Object base, then serialize the owner InternalBasePtr (+0x10) with a
-// ComponentEntity type-check, a uint capability word (+0x20), and the external
-// description reference (+0x18) via Component_helper_1d10.
-// Dispatch slots (exe .rdata): Persist 0x1401515e0, Serializer ctor 0x140152ad8,
-// IBP::Serialize 0x140152aa0, IsDerivedFrom 0x140152a98, Serialize-uint 0x140152a50,
-// Serializer dtor 0x140152ad0. Direct: helper_1d10 0x140031d10.
-typedef void (*fn_CS_Persist_t)(void* self, void* stream);
-typedef bool (*fn_CS_IsDerived_t)(void* obj, uint32_t tid);
-typedef void (*fn_CS_Helper1d10_t)(void* extRef, void* ser);
-static fn_CS_Persist_t    s_cs_Persist = nullptr;
-static fn_CS_IsDerived_t  s_cs_IsDerived = nullptr;
-static fn_CS_Helper1d10_t s_cs_Helper1d10 = nullptr;
-static uint32_t*         s_cs_pTId_CompEntity = nullptr;  // DWORD_1401c5d70
-static bool s_csResolved = false;
-static void EnsureComponentSerializeHelpers() {
-    if (s_csResolved) return;
-    uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x1401515e0);
-    if (slot) s_cs_Persist = *reinterpret_cast<fn_CS_Persist_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_cs_IsDerived = *reinterpret_cast<fn_CS_IsDerived_t*>(slot);
-    s_cs_Helper1d10 = reinterpret_cast<fn_CS_Helper1d10_t>(ResolveAddr(Module::Exe, 0x140031d10));
-    s_cs_pTId_CompEntity = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5d70));
-    s_csResolved = true;
-}
-
-// ============================================================
-// Reimpl of Component_helper_1d10 (0x140031d10) — Component reg wave B.
-// This is the canonical Object::ExternalPtr<T>::Serialize body specialised for the
-// Description-family External validated against DAT_1401c72e0 (a Description type id,
-// xref'd from Description_Register). It is byte-identical to the other ExternalPtr<T>
-// serialize bodies, so we delegate to the shared ExternalPtrSerializeGeneric rather
-// than re-port the read/write/FindOrLoad/IsDerivedFrom logic. Closure-safe: only the
-// engine serialize/factory externals. The typeId is resolved at call time; a null
-// typeId makes the generic body load without validation (cascade-safe).
-// ============================================================
-void Component_Helper1d10_Reimpl(void* extRefField, void* serializer) {
-    static const uint32_t* s_typeId = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_typeId = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c72e0));
-        s_resolved = true;
-    }
-    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(extRefField), serializer,
-                                s_typeId, "Description");
-}
-
-void Component_SerializeReimpl(void* selfP, void* stream) {
-    EnsureComponentSerializeHelpers();
-    uintptr_t self = (uintptr_t)selfP;
-
-    if (s_cs_Persist) s_cs_Persist(selfP, stream);
-
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<Object::InternalBasePtr*>((void*)(self + 0x10))->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    void* owner = *(void**)(self + 0x10);
-    if (owner && s_cs_IsDerived && s_cs_pTId_CompEntity &&
-        !s_cs_IsDerived(owner, *s_cs_pTId_CompEntity)) {
-        *(uint64_t*)(self + 0x10) = 0;
-    }
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(self + 0x20), nullptr);   // B.3.4 bridge
-    if (s_cs_Helper1d10) s_cs_Helper1d10((void*)(self + 0x18), ser);
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
+// Component::Persist (0x1401189b0) and ExternalPtr<Description>::Serialize
+// (0x140031d10), whose ported bodies lived here, are in component.cpp
+// (ENDGAME B.3.8 K1); their registered doors keep the old names.
 
 // ============================================================
 // Init: resolve function pointers

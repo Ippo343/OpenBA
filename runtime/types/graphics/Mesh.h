@@ -38,6 +38,7 @@
 // ENDGAME B.3.5 block G: the real `Graphics::EdgeMesh` at the bottom of this
 // file derives from `Object::External` and holds four `Object::ExternalPtr<T>`.
 #include "../object/External.h"
+#include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
 
 namespace RtGraphics {
 
@@ -478,8 +479,29 @@ public:
     MeshInstance(const MeshInstance& src);
     MeshInstance& operator=(const MeshInstance& src);   // 0x1800171e0  not ported
 
+    // ---- construction (ENDGAME B.3.8 block RB, B38_RULES D1/D2) -----------
+    // ??0MeshInstance@Graphics@@QEAA@XZ 0x1800fffc0 — the REAL constructor,
+    // PUBLIC: the exe instantiates the class itself (its table copy
+    // 0x14015e240; MenuScene, MainMenuDialog, PlacementTool, TimeGoalInstance).
+    // Geometry() and the stamp are the compiler's; the field stores are ONE
+    // body with the door `RtGraphics_MeshInstance_Ctor` (mesh.cpp).
+    MeshInstance() { InitFields(); }
+
+    // The doors' way onto the shared bodies.
+    struct DoorBody {
+        static void Init(MeshInstance* m)    { m->InitFields(); }
+        static void Release(MeshInstance* m) { m->ReleaseFields(); }
+    };
+
     // ---- the nine slots ---------------------------------------------------
-    Geometry* DeletingDtor(unsigned flags) override = 0;                 // [0] 0x180017330
+    // [0] CONCRETE: the exe copy's slot 0 is its scalar deleting dtor
+    // 0x140019e80 (`CALL [??1MeshInstance]; if (flags & 1) MemFree`). The
+    // DLL's 0x180017330 stays the mint's RT_DELDTOR row for the doors.
+    Geometry* DeletingDtor(unsigned flags) override {
+        this->~MeshInstance();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Update(const System::Time& time) override;                      // [1] 0x180100800
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -559,12 +581,16 @@ protected:
     // `??1MeshInstance@Graphics@@UEAA@XZ` @ 0x180017060, `UEAA` because retail's
     // is virtual — the non-virtual `QEAA` spelling is a name the DLL does not
     // contain (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md). NON-VIRTUAL
-    // here (ENDGAME decision 2). The body stays in its door in `mesh.cpp`: it
-    // frees the three Array buffers through retail's own out-of-line
-    // `Array<T>::~Array` and then runs `~Geometry`, and a compiler-emitted
-    // member/base destructor chain on top of that would be retail's own
-    // decomposition run twice. Declared, deliberately undefined.
-    ~MeshInstance();
+    // here (ENDGAME decision 2). ENDGAME B.3.8 block RB: the body (the three
+    // retail `~Array` calls, nodes / layers / materials) is ONE body with the
+    // door `RtGraphics_MeshInstance_Dtor`; each of those zeroes its header, so
+    // the compiler's implicit member ~Arrays after it are no-ops, and then
+    // ~Geometry runs — retail's order.
+    ~MeshInstance() { ReleaseFields(); }
+
+private:
+    void InitFields();      // 0x1800fffc0 minus Geometry() and the stamp (mesh.cpp)
+    void ReleaseFields();   // 0x180017060 minus ~Geometry (mesh.cpp)
 
 public:
     RtGraphics::ExternalPtr                        _mesh;         // +0xc0  ExternalPtr<GraphicsMesh>

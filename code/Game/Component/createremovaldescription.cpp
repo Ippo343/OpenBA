@@ -27,124 +27,107 @@
 //
 // Field knowledge harvested from engine/reimpl/createremovaldescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (CreateRemovalDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162d80) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/CreateRemovalDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "Component/coll_bridge.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kCreateRemovalDescriptionVtable = 0x140162d80;
+// ctor (inlined into create 0x140032b70 / createInPlace 0x140032be0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+CreateRemovalDescription::CreateRemovalDescription()
+    : Description(),
+      _b20(false),
+      _refs(nullptr),
+      _refCount(0),
+      _refCap(0),
+      _ref38(nullptr),
+      _b40(false),
+      _b41(false),
+      _b42(false),
+      _b43(false) {}
 
-static void CreateRemovalDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kCreateRemovalDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint8_t*) (s + 0x20) = 0;   // bool
-    *(uint64_t*)(s + 0x28) = 0;   // array base
-    *(uint64_t*)(s + 0x30) = 0;   // count (+cap)
-    *(uint64_t*)(s + 0x38) = 0;   // ExternalPtr
-    *(uint32_t*)(s + 0x40) = 0;   // 4 bools
+// dtor (slot 0 0x140032ca0 minus the stamps): frees the ExternalPtr array.
+// The compiler then chains ~Description -> ~External.
+CreateRemovalDescription::~CreateRemovalDescription() {
+    if (fn_MemFreeStatic && _refs) fn_MemFreeStatic(_refs);   // heap ExternalPtr array
+    _refs = nullptr;
+    _refCount = 0;
+    _refCap = 0;
 }
 
-void CreateRemovalDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalRefArray_Serialize || !fn_ExternalPtr_BuildSerialize) {
-        return;
-    }
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x140032ca0: ~CreateRemovalDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* CreateRemovalDescription::DeletingDtor(unsigned flags) {
+    this->~CreateRemovalDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // bool +0x20   // B.3.4 bridge
-
-    int count = *(int*)(s + 0x30);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);      // int count   // B.3.4 bridge
-
+// [5] 0x140119ac0: stream order as retail.
+bool CreateRemovalDescription::Serialize(void* stream) {
+    if (!fn_ExternalRefArray_Serialize || !fn_ExternalPtr_BuildSerialize) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_b20, nullptr);
+    int count = _refCount;
+    ser.Serialize(count, nullptr);   // a local copy, as retail
     // On load (stream mode == 0): resize the heap ExternalPtr array at +0x28.
-    void* serField0 = *(void**)serializer;
-    if (serField0 && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    if (*reinterpret_cast<void**>(&ser) && static_cast<int>(ser.GetDirection()) == 0) {
         // B.3.2: Collection::Array<T>::SetSize — retail 0x140001bb0, stride 8 align 8, new tail zeroed.
         // Element is the 8-byte ExternalPtr slot the ExternalRefArray serializer walks below.
-        GameColl::ArrayAt<GameColl::Ptr8>(s, 0x28).SetSize(count);
+        GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(&_refs)).SetSize(count);
     }
-
-    fn_ExternalRefArray_Serialize(serializer, count, *(void**)(s + 0x28), nullptr); // ExtPtr[count]
-    fn_ExternalPtr_BuildSerialize(s + 0x38, serializer);  // ExternalPtr +0x38
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // bool +0x40   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x41), nullptr);   // bool +0x41   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x42), nullptr);   // bool +0x42   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x43), nullptr);   // bool +0x43   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    fn_ExternalRefArray_Serialize(&ser, count, _refs, nullptr);   // ExtPtr[count] (0x1400049c0)
+    fn_ExternalPtr_BuildSerialize(&_ref38, &ser);
+    ser.Serialize(_b40, nullptr);
+    ser.Serialize(_b41, nullptr);
+    ser.Serialize(_b42, nullptr);
+    ser.Serialize(_b43, nullptr);
+    return true;
 }
 
-void* CreateRemovalDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kCreateRemovalDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_MemFreeStatic && *(void**)(s + 0x28)) {
-        fn_MemFreeStatic(*(void**)(s + 0x28));   // heap ExternalPtr array
-    }
-    *(uint64_t*)(s + 0x28) = 0;
-    *(uint64_t*)(s + 0x30) = 0;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140032c40: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* CreateRemovalDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) CreateRemovalDescription();
 }
 
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void CreateRemovalDescription::Destruct() { DeletingDtor(0); }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CreateRemovalDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CreateRemovalDescription");
-    return cached;
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* CreateRemovalDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
 }
 
-static int   CreateRemovalDescription_VtblStub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   CreateRemovalDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* CreateRemovalDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* CreateRemovalDescription_CreateInPlace(void* memory);
-
-static void* g_CreateRemovalDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CreateRemovalDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&CreateRemovalDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&CreateRemovalDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&CreateRemovalDescription_VtblStub_Return1),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&CreateRemovalDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&CreateRemovalDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&CreateRemovalDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&CreateRemovalDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&CreateRemovalDescription_VtblStub_ReturnNull),// +0x40 Slot8
-    reinterpret_cast<void*>(&CreateRemovalDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CreateRemovalDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterCreateRemovalDescriptionVtable() {
-    RegisterExeAddr(kCreateRemovalDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_CreateRemovalDescription_Vtable));
+// [9] 0x140032be0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* CreateRemovalDescription::Construct() {
+    return new (static_cast<void*>(this)) CreateRemovalDescription();
 }
 
-extern "C" void* CreateRemovalDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+// create 0x140032b70: MemAlloc(0x48, 8), then the (inlined) ctor.
+void* CreateRemovalDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CreateRemovalDescription), 8);
     if (!p) return nullptr;
-    CreateRemovalDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) CreateRemovalDescription());
+}
+// createInPlace 0x140032be0.
+void* CreateRemovalDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CreateRemovalDescription());
 }
 
-static void* CreateRemovalDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    CreateRemovalDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(CreateRemovalDescription, "Description",
-              &CreateRemovalDescription_Factory, &CreateRemovalDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(CreateRemovalDescription, "_ZTV24CreateRemovalDescription")
+DEFINE_EXE_TYPE(CreateRemovalDescription, "Description")

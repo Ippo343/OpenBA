@@ -56,6 +56,7 @@
 
 #include "Geometry.h"
 #include "Light.h"      // ENDGAME B.3.5 block E: Graphics::Light, the real base
+#include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
 
 namespace RtGraphics {
 
@@ -129,7 +130,26 @@ public:
     SunLight(const SunLight& src);                 // 0x180064410  not ported
     SunLight& operator=(const SunLight& src);      // 0x180064510  not ported
 
-    Geometry* DeletingDtor(unsigned flags) override = 0;                 // [0] 0x180064620
+    // ??0SunLight@Graphics@@QEAA@XZ 0x1801081f0 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, B38_RULES D1), PUBLIC: the exe instantiates the
+    // class itself (table copy 0x14015e290, MenuScene / MainMenuDialog,
+    // `MemAlloc(0x108)`). Geometry(), the Light stamp and the SunLight stamp
+    // are the compiler's; the rest is ONE body with `Graphics_SunLight_Ctor`.
+    SunLight() { InitFields(); }
+
+    struct DoorBody {   // the doors' way onto the shared bodies
+        static void Init(SunLight* s)    { s->InitFields(); }
+        static void Release(SunLight* s) { s->ReleaseFields(); }
+    };
+
+    // [0] CONCRETE: the exe copy's slot 0 is its scalar deleting dtor
+    // 0x140019e40 (~SunLight, MemFree on flags & 1). The DLL's 0x180064620
+    // stays the mint's RT_DELDTOR row for the doors.
+    Geometry* DeletingDtor(unsigned flags) override {
+        this->~SunLight();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Update(const System::Time& time) override;                      // [1] 0x1801067a0
     void Draw(Video::Context& context, const Camera& camera,
               ExternalPtrHandle material,
@@ -166,7 +186,14 @@ public:
     Camera GetSunCamera(Renderer& renderer) const;   // 0x180107010
 
 protected:
-    ~SunLight();     // 0x180108160  PORTED, body in sunlight.cpp
+    // 0x180108160: restamp (the compiler's), the two image buffers and the
+    // render buffer (ONE body with `Graphics_SunLight_Dtor`), then ~Light
+    // (empty) and ~Geometry — the compiler's chain, retail's tail call.
+    ~SunLight() { ReleaseFields(); }
+
+private:
+    void InitFields();      // sunlight.cpp
+    void ReleaseFields();   // sunlight.cpp
 
 public:
     float    _dirX;             // +0xC0  ctor 0.0f

@@ -376,27 +376,8 @@ int PastureUI_Slot13(PastureUI* self) {
 #include "Object/factory_registration.h"
 #include <cstdlib>
 #include <cstdio>
-#include "dialog_controller_vtable.h"
 
 namespace pastureui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PastureUI");
-    return c;
-}
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 static void Trace(const char* what, void* self) {
     fprintf(stderr, "[PastureUI] %s self=%p\n", what, self);
@@ -448,49 +429,65 @@ void W_Slot9(void* self, void* p2, int p3, int p4) {
     Trace("Slot9(event)", self);
     PastureUI_Slot9(reinterpret_cast<PastureUI*>(self), p2, p3, p4);
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0]  = reinterpret_cast<void*>(&Dtor);
-        g_vt[2]  = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4]  = reinterpret_cast<void*>(&W_Slot4);
-        g_vt[7]  = reinterpret_cast<void*>(&W_Slot7);
-        g_vt[8]  = reinterpret_cast<void*>(&W_Slot8);
-        g_vt[9]  = reinterpret_cast<void*>(&W_Slot9);
-        g_vt[11] = reinterpret_cast<void*>(&PastureUI_Slot11);
-        g_vt[12] = reinterpret_cast<void*>(&PastureUI_Slot12);
-        g_vt[13] = reinterpret_cast<void*>(&PastureUI_Slot13);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's PastureUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "PastureUI", &StubNop);
-
-// PastureUI object size 0x40 (header comment; +0x30 combo IBP, +0x38 slider IBP).
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x40); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x40), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace pastureui_sa
 
-REGISTER_TYPE(PastureUI, "SelectResourceUI",
-              &pastureui_sa::Factory, &pastureui_sa::InPlace);
+// [4] 0x1400b5090
+void PastureUI::OnCreated() {
+    pastureui_sa::W_Slot4(this);
+}
+
+// [7] 0x1400b4e50
+void PastureUI::OnUpdateLayout() {
+    pastureui_sa::W_Slot7(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void PastureUI::OnUpdate(const System::Time& /*time*/) {
+    pastureui_sa::W_Slot8(this);
+}
+
+// [9] 0x1400b4e20
+void PastureUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    pastureui_sa::W_Slot9(this, element, a, b);
+}
+
+// [11] 0x1400b4c40
+void PastureUI::SetResource(int64_t type) {
+    ::PastureUI_Slot11(this, type);
+}
+
+// [12] 0x1400b4d00
+void* PastureUI::GetResource(void* out) {
+    return ::PastureUI_Slot12(this, out);
+}
+
+// [13] 0x1400b4cf0
+int PastureUI::GetCategory() {
+    return ::PastureUI_Slot13(this);
+}
+
+// [0] 0x140020ee0: ~PastureUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* PastureUI::DeletingDtor(unsigned flags) {
+    this->~PastureUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140020e10: MemAlloc(0x40, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* PastureUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PastureUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PastureUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* PastureUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PastureUI());
+}
+
+DEFINE_EXE_VTABLE(PastureUI, "_ZTV9PastureUI")
+DEFINE_EXE_TYPE(PastureUI, "SelectResourceUI")

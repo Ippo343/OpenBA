@@ -22,105 +22,81 @@
 //
 // Field knowledge harvested from engine/reimpl/selectdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (SelectDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015a5f0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/SelectDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "system/String.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kSelectDescriptionVtable = 0x14015a5f0;
+// ctor (inlined into create 0x14000bb90 / createInPlace 0x14000bc00):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+SelectDescription::SelectDescription()
+    : Description(),
+      _ref20(nullptr),
+      _ref30(nullptr),
+      _u40(0) {}
 
-static void SelectDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kSelectDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x20) = 0;   // ExternalPtr
-    *(uint64_t*)(s + 0x28) = 0;   // String
-    *(uint64_t*)(s + 0x30) = 0;   // ExternalPtr
-    *(uint64_t*)(s + 0x38) = 0;   // String
-    *(uint32_t*)(s + 0x40) = 0;   // enum
+// [0] 0x14000bcc0: ~SelectDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* SelectDescription::DeletingDtor(unsigned flags) {
+    this->~SelectDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void SelectDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) {
-        return;
-    }
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    fn_ExternalPtr_Serialize(s + 0x20, serializer);          // ExternalPtr +0x20
-    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);             // B.3.1 bridge: String      +0x28
-    fn_ExternalPtr_Serialize2(s + 0x30, serializer);         // ExternalPtr +0x30
-    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);             // B.3.1 bridge: String      +0x38
-    reinterpret_cast<IO::Serializer*>(serializer)
-        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x40), nullptr);     // B.3.4 bridge  (enum +0x40)
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140055630: stream order as retail.
+bool SelectDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize || !fn_ExternalPtr_Serialize2) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    fn_ExternalPtr_Serialize(&_ref20, &ser);
+    _s28.Serialize(&ser);
+    fn_ExternalPtr_Serialize2(&_ref30, &ser);
+    _s38.Serialize(&ser);
+    ser.Serialize(_u40, nullptr);
+    return true;
 }
 
-void* SelectDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kSelectDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    reinterpret_cast<System::String*>(s + 0x38)->~String();   // B.3.1 bridge: String +0x38
-    reinterpret_cast<System::String*>(s + 0x28)->~String();   // B.3.1 bridge: String +0x28
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x14000bc60: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* SelectDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) SelectDescription();
 }
 
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void SelectDescription::Destruct() { DeletingDtor(0); }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t SelectDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("SelectDescription");
-    return cached;
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* SelectDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
 }
 
-static int   SelectDescription_VtblStub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   SelectDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* SelectDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* SelectDescription_CreateInPlace(void* memory);
-
-static void* g_SelectDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&SelectDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&SelectDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&SelectDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&SelectDescription_VtblStub_Return1),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&SelectDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&SelectDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&SelectDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&SelectDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&SelectDescription_VtblStub_ReturnNull),// +0x40 Slot8
-    reinterpret_cast<void*>(&SelectDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&SelectDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterSelectDescriptionVtable() {
-    RegisterExeAddr(kSelectDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_SelectDescription_Vtable));
+// [9] 0x14000bc00: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* SelectDescription::Construct() {
+    return new (static_cast<void*>(this)) SelectDescription();
 }
 
-extern "C" void* SelectDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+// create 0x14000bb90: MemAlloc(0x48, 8), then the (inlined) ctor.
+void* SelectDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SelectDescription), 8);
     if (!p) return nullptr;
-    SelectDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) SelectDescription());
+}
+// createInPlace 0x14000bc00.
+void* SelectDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) SelectDescription());
 }
 
-static void* SelectDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    SelectDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(SelectDescription, "Description",
-              &SelectDescription_Factory, &SelectDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(SelectDescription, "_ZTV17SelectDescription")
+DEFINE_EXE_TYPE(SelectDescription, "Description")

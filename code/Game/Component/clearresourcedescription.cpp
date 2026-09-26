@@ -6,79 +6,64 @@
 // Factory 0x14014e950-area (MemAlloc 0x20 + vtable only, no defaults).
 // Serialize (vtable +0x28, 0x140118730): Serializer ctor/dtor only, no payload.
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (ClearResourceDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401628d0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/ClearResourceDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kClearResourceDescriptionVtable = 0x1401628d0;
-
-static void ClearResourceDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kClearResourceDescriptionVtable);
+// [0] 0x140031710: ~ClearResourceDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ClearResourceDescription::DeletingDtor(unsigned flags) {
+    this->~ClearResourceDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void ClearResourceDescription_Serialize(void* self, void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    // No payload fields.
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+// [5] 0x140118730: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool ClearResourceDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* ClearResourceDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kClearResourceDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400316b0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* ClearResourceDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) ClearResourceDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void ClearResourceDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t ClearResourceDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ClearResourceDescription");
-    return cached;
+// [8] 0x140031700: ClearResourceComponent's type id through the hidden return slot.
+Object::Type* ClearResourceDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("ClearResourceComponent");
+    return ret;
 }
-static int   ClearResourceDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   ClearResourceDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* ClearResourceDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* ClearResourceDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* ClearResourceDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "ClearResourceComponent"); }
-
-static void* g_ClearResourceDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&ClearResourceDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&ClearResourceDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&ClearResourceDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&ClearResourceDescription_Stub_Return1),    // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&ClearResourceDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&ClearResourceDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&ClearResourceDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&ClearResourceDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&ClearResourceDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&ClearResourceDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&ClearResourceDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterClearResourceDescriptionVtable() {
-    RegisterExeAddr(kClearResourceDescriptionVtable, reinterpret_cast<uintptr_t>(g_ClearResourceDescription_Vtable));
+// [9] 0x140031660: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* ClearResourceDescription::Construct() {
+    return new (static_cast<void*>(this)) ClearResourceDescription();
 }
-extern "C" void* ClearResourceDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+
+// create 0x140031600: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* ClearResourceDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ClearResourceDescription), 8);
     if (!p) return nullptr;
-    ClearResourceDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) ClearResourceDescription());
 }
-static void* ClearResourceDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    ClearResourceDescription_Init(memory);
-    return memory;
+// createInPlace 0x140031660.
+void* ClearResourceDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ClearResourceDescription());
 }
-REGISTER_TYPE(ClearResourceDescription, "Description",
-              &ClearResourceDescription_Factory, &ClearResourceDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(ClearResourceDescription, "_ZTV24ClearResourceDescription")
+DEFINE_EXE_TYPE(ClearResourceDescription, "Description")

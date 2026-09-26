@@ -9,79 +9,64 @@
 // Serialize (vtable +0x28, 0x14004f350): Serializer ctor + dtor only (no stream fields).
 // ToolKit fields: products array (lives on the ConsumeProduce parent block, not here).
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (MineDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140159f50) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/MineDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kMineDescriptionVtable = 0x140159f50;
-
-static void MineDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kMineDescriptionVtable);
+// [0] 0x140008f40: ~MineDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* MineDescription::DeletingDtor(unsigned flags) {
+    this->~MineDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void MineDescription_Serialize(void* self, void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    // No stream fields.
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+// [5] 0x14004f350: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool MineDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* MineDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kMineDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140008ee0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* MineDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) MineDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void MineDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t MineDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MineDescription");
-    return cached;
+// [8] 0x140008f30: MineComponent's type id through the hidden return slot.
+Object::Type* MineDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("MineComponent");
+    return ret;
 }
-static int   MineDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   MineDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* MineDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* MineDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* MineDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "MineComponent"); }
-
-static void* g_MineDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&MineDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&MineDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&MineDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&MineDescription_Stub_Return1),    // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&MineDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&MineDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&MineDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&MineDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&MineDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&MineDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&MineDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterMineDescriptionVtable() {
-    RegisterExeAddr(kMineDescriptionVtable, reinterpret_cast<uintptr_t>(g_MineDescription_Vtable));
+// [9] 0x140008e90: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* MineDescription::Construct() {
+    return new (static_cast<void*>(this)) MineDescription();
 }
-extern "C" void* MineDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+
+// create 0x140008e30: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* MineDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MineDescription), 8);
     if (!p) return nullptr;
-    MineDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) MineDescription());
 }
-static void* MineDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    MineDescription_Init(memory);
-    return memory;
+// createInPlace 0x140008e90.
+void* MineDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) MineDescription());
 }
-REGISTER_TYPE(MineDescription, "Description",
-              &MineDescription_Factory, &MineDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(MineDescription, "_ZTV15MineDescription")
+DEFINE_EXE_TYPE(MineDescription, "Description")

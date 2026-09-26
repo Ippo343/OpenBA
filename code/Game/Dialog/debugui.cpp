@@ -1623,26 +1623,8 @@ void DebugUI_SetDayLighting(DebugUI* self, int month) {
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
-#include "dialog_controller_vtable.h"
 
 namespace debugui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("DebugUI");
-    return c;
-}
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 // Idempotent heal of the exe-.rdata type-id globals. Safe to call on every slot
 // entry; each `if (*global)` short-circuits once filled.
@@ -1713,47 +1695,51 @@ void W_Slot9(void* self, void* p2, int msg, int id) {
     if (self) DebugUI_Slot9(reinterpret_cast<DebugUI*>(self),
                             reinterpret_cast<uint64_t>(p2), msg, id);
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
-        // g_vt[6] stays StubNop (Slot6 is a bare-return no-op in the exe)
-        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's DebugUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "DebugUI", &StubNop);
-
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x130); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x130), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace debugui_sa
 
-REGISTER_TYPE(DebugUI, "DialogController",
-              &debugui_sa::Factory, &debugui_sa::InPlace);
+// [4] 0x1400619e0
+void DebugUI::OnCreated() {
+    debugui_sa::W_Slot4(this);
+}
+
+// [7] 0x140061280
+void DebugUI::OnUpdateLayout() {
+    debugui_sa::W_Slot7(this);
+}
+
+// [8] 0x1400610c0
+void DebugUI::OnUpdate(const System::Time& time) {
+    debugui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [9] 0x140060bc0
+void DebugUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                             int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    debugui_sa::W_Slot9(this, element, a, b);
+}
+
+// [0] 0x140010f10: ~DebugUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* DebugUI::DeletingDtor(unsigned flags) {
+    this->~DebugUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140010ec0: MemAlloc(0x130, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* DebugUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DebugUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) DebugUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* DebugUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DebugUI());
+}
+
+DEFINE_EXE_VTABLE(DebugUI, "_ZTV7DebugUI")
+DEFINE_EXE_TYPE(DebugUI, "DialogController")
 
