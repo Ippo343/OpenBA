@@ -32,57 +32,16 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// Vtable addresses (for vtable chain reset in Dtor)
+// DragPlacementTool::DeletingDtor (vtable +0x00) — 0x14002d900
 // ============================================================
-static void* s_vtable_DragPlacementTool = nullptr;
-static void* s_vtable_DragTool          = nullptr;
-static void* s_vtable_Tool              = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_DragPlacementTool) {
-        s_vtable_DragPlacementTool = (void*)ResolveAddr(Module::Exe, DragPlacementToolAddr::Vtable);
-        s_vtable_DragTool          = (void*)ResolveAddr(Module::Exe, DragToolAddr::Vtable);
-        s_vtable_Tool              = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
-}
-
-// Object::Internal::~Internal — resolved via dispatch slot at 0x140152770
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
-
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
-
-// ============================================================
-// DragPlacementTool::Dtor (vtable +0x00, Slot0)
-// ============================================================
-// Resets vtable chain: DragPlacementTool -> DragTool -> Tool,
-// calls Object::Internal::~Internal, conditionally frees memory.
-// Original: 0x14002d900
-void* DragPlacementTool_Dtor(DragPlacementTool* self, uint32_t flags) {
-    EnsureVtables();
-    EnsureInternalDtor();
-
-    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
-    self->vtable = s_vtable_DragPlacementTool;
-    self->vtable = s_vtable_DragTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+// ENDGAME B.3.8 TOOL: the hand-rolled DragPlacementTool_Dtor restamped the
+// leaf, DragTool and Tool tables read by address — the last two UNREGISTERED,
+// so it stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor
+// chain restamps the real tables, then runs Object::Internal::~Internal.
+Object::Base* DragPlacementTool::DeletingDtor(unsigned flags) {
+    this->~DragPlacementTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -685,56 +644,43 @@ bool DragPlacementTool_CalcPath(DragPlacementTool* self, int startCell, int endC
 }
 
 // ============================================================
-// Standalone factory + vtable (factory cascade).
-// DragPlacementTool: size 0x48, parent DragTool, 15-slot vtable @ 0x140161b90.
+// DragPlacementTool members (DragPlacementTool.h) — ENDGAME B.3.8 TOOL.
+// The hand-built g_DragPlacementTool_Vtable[15], its slot stubs, the _SA
+// factories and RegisterDragPlacementToolVtable are gone: the compiler builds
+// the table, and nothing reads 0x140161b90 back by address (the old dtor was
+// the only reader). Inherited from the bases, as in retail: [6]
+// DragTool::OnKey (0x1400fc6b0), [9] DragTool::OnCancel (0x1400fc640), [10]
+// false, [11] no setting (0x140004950 `*ret = 0`; SetEditMode dereferences
+// the slot), [12] cursor 5 (0x1400fc9d0).
 // ============================================================
-#include "tool_base_standalone.h"
-#include "Player/dragtool.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
+#include <new>
 
-static uint32_t DragPlacementTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("DragPlacementTool");
-    return c;
+void DragPlacementTool::Startup() { DragPlacementTool_Startup(this); }        // [4]
+void DragPlacementTool::Draw(void* context, char active) {                     // [8]
+    DragPlacementTool_Draw_Impl(this, context, active);
 }
-// Retail vtable 0x140161b90 slots 9/11/12 are literally the same three functions
-// BridgeTool/RoadTool/FencedTool use (read straight out of .rdata):
-//   +0x48 slot9  = 0x1400fc640  DragTool cancel-drag / allow-teardown
-//   +0x58 slot11 = 0x140004950  GetToolSettingTypeId — `*ret = 0; return ret;`
-//   +0x60 slot12 = 0x1400fc9d0  cursor id — `return 5`
-// Slot 11 must be real before this tool can be reached at all: SetEditMode
-// DEREFERENCES its return (entityui.cpp), so the Tool_Ret0 stub (nullptr) was a
-// guaranteed null-deref on activation — the same trap BridgeTool hit.
-extern "C" int DragTool_CancelDrag_Impl(void* self);
-static uint32_t* DragPlacementTool_GetSettingType(void*, uint32_t* ret) {
-    *ret = 0;
-    return ret;
+bool DragPlacementTool::CalcPath(int startCell, int endCell) {                 // [13]
+    return DragPlacementTool_CalcPath(this, startCell, endCell);
 }
-static int DragPlacementTool_Slot12(void*) { return 5; }
+int DragPlacementTool::CalcCost(int startCell, int endCell, uint32_t* outValid, // [14]
+                                int* outCostA, int* outCostB, int* outLength) {
+    return static_cast<int>(DragPlacementTool_CalcCost(this, startCell, endCell, outValid,
+                                                       outCostA, outCostB,
+                                                       reinterpret_cast<uint32_t*>(outLength)));
+}
 
-static void* g_DragPlacementTool_Vtable[15] = {
-    (void*)&DragPlacementTool_Dtor,      // +0x00 Dtor
-    (void*)&Tool_Slot1,                  // +0x08
-    (void*)&DragPlacementTool_GetTypeId, // +0x10 GetTypeId
-    (void*)&Tool_Persist,                // +0x18 Serialize
-    (void*)&DragPlacementTool_Startup,   // +0x20 Startup
-    (void*)&Tool_Ret0,                   // +0x28
-    (void*)&DragTool_OnKey,              // +0x30 OnKey (base)
-    (void*)&Tool_Ret0,                   // +0x38
-    (void*)&DragPlacementTool_Draw_Impl, // +0x40 Draw
-    (void*)&DragTool_CancelDrag_Impl,    // +0x48 Slot9 cancel drag (retail 0x1400fc640)
-    (void*)&Tool_Ret0,                   // +0x50 retail 0x1400268a0 = shared `return 0`
-    (void*)&DragPlacementTool_GetSettingType, // +0x58 Slot11 (retail 0x140004950, *ret=0)
-    (void*)&DragPlacementTool_Slot12,    // +0x60 cursor id (retail 0x1400fc9d0 = 5)
-    (void*)&DragPlacementTool_CalcPath,  // +0x68 CalcPath
-    (void*)&DragPlacementTool_CalcCost,  // +0x70 CalcCost
-};
-extern "C" void RegisterDragPlacementToolVtable() {
-    RegisterExeAddr(0x140161b90, (uintptr_t)g_DragPlacementTool_Vtable);
+// create 0x14002d8b0: MemAlloc(0x48, 8), then the ctor 0x1400fc530.
+void* DragPlacementTool::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DragPlacementTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) DragPlacementTool());
 }
-extern "C" void* DragPlacementTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x48, g_DragPlacementTool_Vtable, 1);}
-extern "C" void* DragPlacementTool_Factory_SA(void) {
-    return Tool_Alloc(0x48, g_DragPlacementTool_Vtable, 1);
+// createInPlace 0x14002d8f0: `if (storage) ctor(storage)`.
+void* DragPlacementTool::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DragPlacementTool());
 }
-REGISTER_TYPE(DragPlacementTool, "DragTool", &DragPlacementTool_Factory_SA, &DragPlacementTool_CreateInPlace_SA);
+
+DEFINE_EXE_VTABLE(DragPlacementTool, "_ZTV17DragPlacementTool")
+DEFINE_EXE_TYPE(DragPlacementTool, "DragTool")
