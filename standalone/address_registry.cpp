@@ -230,7 +230,6 @@ extern "C" {
 
     // Factory cascade — Tool family (Object::Internal -> Tool / DragTool /
     // ToolSetting; shared base in code/Game/Player/tool_base_standalone.cpp).
-    void RegisterPathToolVtable();
     void RegisterPathToolSetSelected();   // dd710 route-builder (pathtool_setselected.cpp)
 }
 
@@ -1982,7 +1981,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTutorialStepVtable();
 
     // Factory cascade — Tool family (shared base tool_base_standalone.cpp).
-    RegisterPathToolVtable();
     RegisterPathToolSetSelected();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
