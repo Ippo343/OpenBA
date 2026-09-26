@@ -94,6 +94,10 @@
 #include "Component/ParticleDescription.h"
 #include "Component/ImmigrationDescription.h"
 #include "Component/ConsumeProduceDescription.h"
+#include "Component/BuildDescription.h"
+#include "Component/TradeDescription.h"
+#include "Component/UIDescription.h"
+#include "Component/ToolbarDescription.h"
 #include "RawMaterialDescription.h"          // engine/types forwarder (B8-4)
 #include "DiseaseComponent.h"                // engine/types: its DiseaseDescription forwards
 
@@ -233,6 +237,13 @@ UNIT_TEST(k1_production_description_leaves) {
     CHECK_EQ(offsetof(RawMaterialDescription, _weight), (size_t)0x48);
     CHECK_EQ(offsetof(RawMaterialDescription, _flags), (size_t)0x5c);
     CHECK_EQ(offsetof(DiseaseDescription, spreadRadius), (size_t)0x40);
+}
+
+UNIT_TEST(k1_ui_trade_build_description_leaves) {
+    CHECK_EQ(CheckDescriptionLeaf<BuildDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<TradeDescription>(0x70), 0);
+    CHECK_EQ(CheckDescriptionLeaf<UIDescription>(0x48), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ToolbarDescription>(0x68), 0);
 }
 
 }  // namespace

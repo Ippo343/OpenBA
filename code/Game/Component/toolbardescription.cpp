@@ -35,39 +35,18 @@
 //   11. int (+0x60)
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (ToolbarDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140164980) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/ToolbarDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "system/String.h"
-#include <new>
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
-#if defined(_DEBUG)
-#include <cstdio>
-#include <cstdlib>
-#endif
-
-namespace {
-constexpr uintptr_t kVtable  = 0x140164980;
-constexpr int       kVersion = 4;
-}
-
-static void* ToolbarDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t s = (uintptr_t)mem;
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(uint64_t*)(s + 0x20) = 0;   // _descRef
-    *(uint64_t*)(s + 0x28) = 0;   // _name (empty String)
-    *(uint64_t*)(s + 0x30) = 0;   // _iconRef
-    *(uint64_t*)(s + 0x38) = 0;   // _str1
-    *(uint64_t*)(s + 0x40) = 0;   // _str2
-    *(uint64_t*)(s + 0x48) = 0;   // _str3
-    *(uint64_t*)(s + 0x50) = 0;   // _entries ptr
-    *(uint64_t*)(s + 0x58) = 0;   // count + cap
-    *(uint32_t*)(s + 0x60) = 0xffffffff;  // _val0 = -1
-    *(uint32_t*)(s + 0x64) = 0;   // _val1
-    return mem;
-}
+#include <new>
 
 // FUN_140028860 — System::String dynamic-array resize.
 // Header layout: +0x00 String* buffer, +0x08 int count, +0x0c int capacity; each
@@ -122,33 +101,64 @@ extern "C" void ToolbarDescription_StringArrayResize(void* hdr, unsigned newCoun
     }
 }
 
-// Serialize (vtable +0x28, 0x14012da30)
-void ToolbarDescription_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-    alignas(8) uint8_t serializer[24];
-    if (!fn_ExternalPtr_Serialize2) {
-        return;
-    }
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// ctor (inlined into create 0x140039490 / createInPlace 0x1400394d0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+ToolbarDescription::ToolbarDescription()
+    : Description(),
+      _descRef(nullptr),
+      _iconRef(nullptr),
+      _entries(nullptr),
+      _entryCount(0),
+      _entryCap(0),
+      _val0(-1),
+      _val1(0) {}
 
+// dtor (slot 0 0x140039500 minus the stamps): destroys the String array's elements and frees it; the four String members follow (0x14012db70).
+// The compiler then chains ~Description -> ~External.
+ToolbarDescription::~ToolbarDescription() {
+    {
+        uint8_t* buf = static_cast<uint8_t*>(_entries);
+        int n = _entryCount;
+        if (buf) {
+            for (int i = 0; i < n; ++i) reinterpret_cast<System::String*>(buf + (size_t)i * 8)->~String();  // B.3.1 bridge
+        }
+    }
+    if (fn_MemFreeStatic) fn_MemFreeStatic(_entries);
+    _entries = nullptr;
+    _entryCount = 0;
+    _entryCap = 0;
+}
+
+// [0] 0x140039500: ~ToolbarDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ToolbarDescription::DeletingDtor(unsigned flags) {
+    this->~ToolbarDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [5] 0x14012da30: stream order as retail.
+bool ToolbarDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // +0x20 in the exe uses FUN_14000bd30; +0x30 uses FUN_14000bf40. Both have
     // a byte-identical stream layout (only the validated typeId differs, trusted
     // in standalone). Use the registered Serialize2 for both.
-    fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);  // 1. _descRef
-    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);      // B.3.1 bridge: 2. _name
-    fn_ExternalPtr_Serialize2((void*)(s + 0x30), serializer);  // 3. _iconRef (StringTable)
-    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);      // B.3.1 bridge: 4. _str1
-    reinterpret_cast<System::String*>(s + 0x40)->Serialize(serializer);      // B.3.1 bridge: 5. _str2
-    reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializer);      // B.3.1 bridge: 6. _str3
-
+    fn_ExternalPtr_Serialize2(&_descRef, &ser);   // 1. _descRef
+    _name.Serialize(&ser);                        // 2. _name
+    fn_ExternalPtr_Serialize2(&_iconRef, &ser);   // 3. _iconRef (StringTable)
+    _str1.Serialize(&ser);                        // 4.
+    _str2.Serialize(&ser);                        // 5.
+    _str3.Serialize(&ser);                        // 6.
+    
     // 7. count — serialize through a LOCAL, exactly like the exe (local_res8), NOT
     //    straight into +0x58. +0x58 is the resize's own count field: if we wrote the
     //    new count there first, the resize below would see oldCount==newCount and
     //    skip the allocation (leaving +0x50 NULL — the "cost ???" bug). The resize
     //    itself writes +0x58 once it has grown the buffer.
-    int count = *(int32_t*)(s + 0x58);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-
+    int count = _entryCount;
+    ser.Serialize(count, nullptr);
+    
     // 8. on load, resize the String array (+0x50) to count. ResolveAddr(Exe, 0x140028860)
     //    is NULL in the standalone exe, so
     //    fall back to the reimpl above (otherwise +0x50 stays NULL and the two
@@ -168,101 +178,73 @@ void ToolbarDescription_Serialize(void* self, void* stream) {
     //     14012dadc  LEA RCX,[RSI + 0x50]
     //     14012dae0  CALL 0x140028860                 ; Array<String>::SetSize
     // Byte-for-byte the same five instructions as 0x1400431f0.
-    bool loading = (static_cast<int>(
-        reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0);   // B.3.4 bridge
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);
     if (loading) {
-        if (fn_StringArray_Resize) fn_StringArray_Resize((void*)(s + 0x50), count);
-        else ToolbarDescription_StringArrayResize((void*)(s + 0x50), (unsigned)count);
+        if (fn_StringArray_Resize) fn_StringArray_Resize(&_entries, count);
+        else ToolbarDescription_StringArrayResize(&_entries, (unsigned)count);
     }
-
+    
     // 9. per-element String::Serialize (stride 8)
-    uint8_t* buf = *(uint8_t**)(s + 0x50);
+    uint8_t* buf = static_cast<uint8_t*>(_entries);
     if (buf) {
         for (int i = 0; i < count; ++i) {
-            reinterpret_cast<System::String*>(buf + (size_t)i * 8)->Serialize(serializer);  // B.3.1 bridge
+            reinterpret_cast<System::String*>(buf + (size_t)i * 8)->Serialize(&ser);  // B.3.1 bridge
         }
     }
-
+    
     // 10/11. two ints (note: +0x64 BEFORE +0x60 in the original stream)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x64), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-
-#if defined(_DEBUG)
-    if (loading && count > 0) {
-    }
-#endif
+    ser.Serialize(_val1, nullptr);
+    ser.Serialize(_val0, nullptr);
+    return true;
 }
 
-// Dtor (vtable +0x00, 0x140039500 / cleanup 0x14012db70).
-// Destroys the String array (+0x50) elements + buffer, then the four String
-// fields, then the base External.
+// [6] 0x1400394e0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* ToolbarDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void ToolbarDescription::Destruct() {}
+
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* ToolbarDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
+}
+
+// [9] 0x1400394d0 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* ToolbarDescription::Construct() { return nullptr; }
+
+// create 0x140039490: MemAlloc(0x68, 8), then the (inlined) ctor.
+void* ToolbarDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ToolbarDescription), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ToolbarDescription());
+}
+// createInPlace 0x1400394d0.
+void* ToolbarDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ToolbarDescription());
+}
+
+// The complete-object teardown door: standalone/reg_code_lane6.cpp registers a
+// one-arg adapter over this at retail's cleanup 0x14012db70 (flags 0 = do not
+// free). Kept as a one-line delegation (B38 D5: reached by address).
 void* ToolbarDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable);
-
-    {
-        uint8_t* buf = *(uint8_t**)(s + 0x50);
-        int n = *(int32_t*)(s + 0x58);
-        if (buf) {
-            for (int i = 0; i < n; ++i) reinterpret_cast<System::String*>(buf + (size_t)i * 8)->~String();  // B.3.1 bridge
-        }
-    }
-    if (fn_MemFreeStatic) fn_MemFreeStatic(*(void**)(s + 0x50));
-    *(uint64_t*)(s + 0x50) = 0;
-    *(uint64_t*)(s + 0x58) = 0;
-    reinterpret_cast<System::String*>(s + 0x48)->~String();  // B.3.1 bridge
-    reinterpret_cast<System::String*>(s + 0x40)->~String();  // B.3.1 bridge
-    reinterpret_cast<System::String*>(s + 0x38)->~String();  // B.3.1 bridge
-    reinterpret_cast<System::String*>(s + 0x28)->~String();  // B.3.1 bridge
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    return reinterpret_cast<ToolbarDescription*>(self)->DeletingDtor(flags);   // B.3.8 bridge
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ToolbarDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ToolbarDescription");
-    return cached;
-}
-static int   Vtbl_GetVersion(void*) { return kVersion; }
-static int   Vtbl_Return0(void*) { return 0; }
-static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
-
-static void* g_Vtable[11] = {
-    reinterpret_cast<void*>(&ToolbarDescription_Dtor),      // +0x00
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),              // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&ToolbarDescription_GetTypeId), // +0x10
-    reinterpret_cast<void*>(&Vtbl_GetVersion),              // +0x18 (=4)
-    reinterpret_cast<void*>(&Vtbl_Return0),                 // +0x20 Compile
-    reinterpret_cast<void*>(&ToolbarDescription_Serialize), // +0x28
-    reinterpret_cast<void*>(&Vtbl_Return0),                 // +0x30 Cleanup
-    reinterpret_cast<void*>(&Vtbl_Return0),                 // +0x38 GetDesc
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),              // +0x40 Slot8
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),              // +0x48 guard
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),              // +0x50 guard
-};
-
-extern "C" void RegisterToolbarDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_Vtable));
-    // FUN_140028860 String-array resize — register for resolve-by-address callers
-    // (TutorialSetupDialog_Slot5, and fn_StringArray_Resize if resolved after this).
+// FUN_140028860 String-array resize — register for resolve-by-address callers
+// (TutorialSetupDialog_Slot5, and fn_StringArray_Resize if resolved after this).
+// The ToolbarDescription table row (0x140164980) that this function also carried
+// is gone with the hand-built table (no by-address reader, B38 D5).
+#include "resolve.h"
+extern "C" void RegisterToolbarDescriptionStringArrayResize() {
     RegisterExeAddr(0x140028860, reinterpret_cast<uintptr_t>(&ToolbarDescription_StringArrayResize));
 }
-extern "C" void* ToolbarDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
-    if (!p) return nullptr;
-    return ToolbarDescription_Ctor_Impl(p);
-}
-extern "C" void* ToolbarDescription_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    return ToolbarDescription_Ctor_Impl(mem);
-}
 
-REGISTER_TYPE(ToolbarDescription, "Description",
-              &ToolbarDescription_Factory, &ToolbarDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(ToolbarDescription, "_ZTV18ToolbarDescription")
+DEFINE_EXE_TYPE(ToolbarDescription, "Description")

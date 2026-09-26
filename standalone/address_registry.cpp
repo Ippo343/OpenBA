@@ -78,9 +78,7 @@ extern "C" {
 
     // M5 5c Foundation C — entity description types (template sub-descriptions).
     void RegisterComponentDescriptionVtable();
-    void RegisterBuildDescriptionVtable();
-    void RegisterUIDescriptionVtable();
-    void RegisterToolbarDescriptionVtable();
+    void RegisterToolbarDescriptionStringArrayResize();   // FUN_140028860 (the table row went with ToolbarDescription's real class, B.3.8 K1)
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
     // wave 2 (economy / farming / services / tools)
     void RegisterCaptureBoxDescriptionVtable();
@@ -89,7 +87,6 @@ extern "C" {
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFireComponentVtable();
     void RegisterFrustumOutlineDescriptionVtable();
-    void RegisterTradeDescriptionVtable();
     void RegisterWellDescriptionVtable();
     void RegisterAnimAudioEventVtable();
     void RegisterAmbientExternalPtrSerialize();
@@ -1745,9 +1742,7 @@ static void RegisterVtablesAndTypeIds() {
     // REGISTER_TYPE entries live next to the reimpls in code/Game/Component/
     // <type>.cpp; their NullFactory stubs were removed from factory_registrations_bulk.
     RegisterComponentDescriptionVtable();
-    RegisterBuildDescriptionVtable();
-    RegisterUIDescriptionVtable();
-    RegisterToolbarDescriptionVtable();
+    RegisterToolbarDescriptionStringArrayResize();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
     // wave 2 (economy / farming / services / tools)
     RegisterCaptureBoxDescriptionVtable();
@@ -1755,7 +1750,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireComponentVtable();
     RegisterFrustumOutlineDescriptionVtable();
-    RegisterTradeDescriptionVtable();
     RegisterWellDescriptionVtable();
 
     // M5 5c citizens — AnimAudioEvent (Graphics::AnimationEvent subclass) is part of

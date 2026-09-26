@@ -32,155 +32,25 @@
 //   6. int (+0x20)
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (UIDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140164a70) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/UIDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "system/String.h"
-#include "options.h"
 #include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include <cstdint>
+#include "options.h"
+#include "system/String.h"
 #include <cstdio>
-#include <cstdlib>
+#include <cstdint>
 #include <new>
 
-namespace {
-constexpr uintptr_t kVtable  = 0x140164a70;
-constexpr int       kVersion = 4;
-
-typedef void (*fn_Type_Serialize_t)(void* type, void* serializer);
-fn_Type_Serialize_t s_fn_Type_Serialize = nullptr;
-bool s_resolved = false;
-
-void EnsureResolved() {
-    if (s_resolved) return;
-    // Object::Type::Serialize via IAT dispatch slot 0x1401516b0.
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x1401516b0);
-    if (slot) s_fn_Type_Serialize = *reinterpret_cast<fn_Type_Serialize_t*>(slot);
-    s_resolved = true;
-}
-}
-
-static void* UIDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t s = (uintptr_t)mem;
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(uint32_t*)(s + 0x20) = 0;   // _valTail
-    *(uint64_t*)(s + 0x28) = 0;   // _descRef
-    *(uint64_t*)(s + 0x30) = 0;   // _entries ptr
-    *(uint64_t*)(s + 0x38) = 0;   // count + cap
-    *(uint32_t*)(s + 0x40) = 0;   // _valHead
-    return mem;
-}
-
-// Serialize (vtable +0x28, FUN_14012de80)
-void UIDescription_Serialize(void* self, void* stream) {
-    EnsureResolved();
-    uintptr_t s = (uintptr_t)self;
-    alignas(8) uint8_t serializer[24];
-    if (!fn_ExternalPtr_Serialize2) {
-        return;
-    }
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
-    //    to the registered Serialize2 (typeId trusted in standalone).
-    fn_ExternalPtr_Serialize2((void*)(s + 0x28), serializer);
-    // 2. int (+0x40)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    // 3. count (+0x38)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge
-    int count = *(int32_t*)(s + 0x38);
-
-    // 4. on load, allocate/zero the element array (+0x30), stride 0x28.
-    //    Fresh-load: count/cap are 0 from the ctor, so the exe resize helper
-    //    (FUN_140039a50) collapses to "alloc count*0x28 + zero each element".
-    // Ensure the element array (+0x30, stride 0x28) has room for `count` elements.
-    // The exe calls a resize helper (FUN_140039a50) that is load/save-agnostic:
-    // on LOAD `count` was just read from the stream and the array is empty (fresh
-    // object) so it allocates; on SAVE the array already holds `count` elements so
-    // it is a no-op. We reproduce that directly rather than sniff a load/save flag
-    // — the previous `*(serObj+8)==0` heuristic was WRONG (that slot holds stream
-    // payload bytes, never a clean 0/1), so it was ALWAYS false and the array was
-    // NEVER allocated → every UIDescription dialog lost its sub-controllers.
-    int cap = *(int32_t*)(s + 0x3c);
-    uint8_t* arr = *(uint8_t**)(s + 0x30);
-    if (count > 0 && (arr == nullptr || cap < count)) {
-        if (fn_MemAlloc && g_pMemAllocSingleton) {
-            void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 0x28, 8);
-            *(void**)(s + 0x30) = buf;
-            *(int32_t*)(s + 0x3c) = buf ? count : 0;
-            if (buf) {
-                uint8_t* e = reinterpret_cast<uint8_t*>(buf);
-                for (int i = 0; i < count; ++i, e += 0x28) {
-                    *(uint64_t*)(e + 0x00) = 0;
-                    *(uint64_t*)(e + 0x08) = 0;
-                    *(uint64_t*)(e + 0x10) = 0;
-                    *(uint64_t*)(e + 0x18) = 0;
-                    *(uint64_t*)(e + 0x20) = 0;  // String (empty)
-                }
-            }
-        }
-    }
-    *(int32_t*)(s + 0x38) = count;
-    if (Opt().mapTrace)
-        printf("[UIDescSer] self=%p count=%d entries=%p cap->%d\n",
-               self, count, *(void**)(s + 0x30), *(int32_t*)(s + 0x3c));
-
-    // 5. per-element serialize
-    uint8_t* buf = *(uint8_t**)(s + 0x30);
-    if (buf) {
-        uint8_t* e = buf;
-        for (int i = 0; i < count; ++i, e += 0x28) {
-            if (s_fn_Type_Serialize) s_fn_Type_Serialize(e + 0x00, serializer);
-            fn_ExternalPtr_Serialize2(e + 0x08, serializer);
-            fn_ExternalPtr_Serialize2(e + 0x10, serializer);
-            fn_ExternalPtr_Serialize2(e + 0x18, serializer);
-            reinterpret_cast<System::String*>(e + 0x20)->Serialize(serializer);  // B.3.1 bridge
-        }
-    }
-
-    // 6. int (+0x20)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
-// Dtor (vtable +0x00, FUN_140039700 / element cleanup FUN_1400397d0).
-// Destroys each element's String (+0x20), frees the element-array buffer, then
-// the base External.
-void* UIDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable);
-
-    uint8_t* buf = *(uint8_t**)(s + 0x30);
-    int n = *(int32_t*)(s + 0x38);
-    if (buf) {
-        uint8_t* e = buf;
-        for (int i = 0; i < n; ++i, e += 0x28) reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
-    }
-    if (fn_MemFreeStatic) fn_MemFreeStatic(buf);
-    *(uint64_t*)(s + 0x30) = 0;
-    *(uint64_t*)(s + 0x38) = 0;
-
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t UIDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("UIDescription");
-    return cached;
-}
-static int   Vtbl_GetVersion(void*) { return kVersion; }
-static int   Vtbl_Return0(void*) { return 0; }
-static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
-
 // ---------------------------------------------------------------------------
-// UIDescription::GetComponentTypeId (vtable +0x40, exe 0x1400396e0)
+// [8] exe 0x1400396e0 — UIDescription::GetComponentType, defined below
 //
 //   83 79 20 00     CMP  dword [RCX+0x20], 0
 //   7E 0C           JLE  zero
@@ -203,46 +73,142 @@ static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
 // identity transform and a MapComponent with a zeroed footprint. The building
 // still drew (its real ModelComponent is the one in the Scene), but the tutorial
 // arrow and the selection outline both placed themselves at the world origin.
-//
-// 0x1401c7fc8 is written by UIComponent_RegisterType (0x14014fd75) and is
-// unregistered in standalone, so resolve by VALUE with a name fallback.
-static void* UIDescription_GetComponentTypeId(void* self, uint32_t* outTypeId) {
-    if (!outTypeId) return outTypeId;
-    static uint32_t s_tid_UIComponent = 0;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    *outTypeId = (*reinterpret_cast<int32_t*>(s + 0x20) > 0)
-                     ? ResolveExeTypeId(0x1401c7fc8, "UIComponent", &s_tid_UIComponent)
-                     : 0u;
-    return outTypeId;
+
+// ctor (inlined into create 0x1400395b0 / createInPlace 0x140039620):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+UIDescription::UIDescription()
+    : Description(),
+      _valTail(0),
+      _descRef(nullptr),
+      _entries(nullptr),
+      _entryCount(0),
+      _entryCap(0),
+      _valHead(0) {}
+
+// dtor (slot 0 0x140039700 minus the stamps): FUN_140039700 / element cleanup FUN_1400397d0.
+// The compiler then chains ~Description -> ~External.
+UIDescription::~UIDescription() {
+    // Destroys each element's String (+0x20), frees the element-array buffer.
+    uint8_t* buf = static_cast<uint8_t*>(_entries);
+    int n = _entryCount;
+    if (buf) {
+        uint8_t* e = buf;
+        for (int i = 0; i < n; ++i, e += 0x28) reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
+    }
+    if (fn_MemFreeStatic) fn_MemFreeStatic(buf);
+    _entries = nullptr;
+    _entryCount = 0;
+    _entryCap = 0;
 }
 
-static void* g_Vtable[11] = {
-    reinterpret_cast<void*>(&UIDescription_Dtor),      // +0x00
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),         // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&UIDescription_GetTypeId), // +0x10
-    reinterpret_cast<void*>(&Vtbl_GetVersion),         // +0x18 (=4)
-    reinterpret_cast<void*>(&Vtbl_Return0),            // +0x20 Compile
-    reinterpret_cast<void*>(&UIDescription_Serialize), // +0x28
-    reinterpret_cast<void*>(&Vtbl_Return0),            // +0x30 Cleanup
-    reinterpret_cast<void*>(&Vtbl_Return0),            // +0x38 GetDesc
-    reinterpret_cast<void*>(&UIDescription_GetComponentTypeId), // +0x40 GetComponentTypeId
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),         // +0x48 guard
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),         // +0x50 guard
-};
-
-extern "C" void RegisterUIDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_Vtable));
+// [0] 0x140039700: ~UIDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* UIDescription::DeletingDtor(unsigned flags) {
+    this->~UIDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-extern "C" void* UIDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+
+// [5] 0x14012de80: stream order as retail.
+bool UIDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    // Object::Type::Serialize via IAT dispatch slot 0x1401516b0 — resolved per
+    // call (was a non-atomic first-call cache; B6-5, the loader thread loads these).
+    typedef void (*fn_Type_Serialize_t)(void* type, void* serializer);
+    fn_Type_Serialize_t typeSer = nullptr;
+    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401516b0))
+        typeSer = *reinterpret_cast<fn_Type_Serialize_t*>(slot);
+    
+    // 1. _descRef ExternalPtr (+0x28). FUN_140028650 — identical stream layout
+    //    to the registered Serialize2 (typeId trusted in standalone).
+    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    // 2. int (+0x40)
+    ser.Serialize(_valHead, nullptr);
+    // 3. count (+0x38)
+    ser.Serialize(_entryCount, nullptr);
+    int count = _entryCount;
+    
+    // 4. Ensure the element array (+0x30, stride 0x28) has room for `count` elements.
+    // The exe calls a resize helper (FUN_140039a50) that is load/save-agnostic:
+    // on LOAD `count` was just read from the stream and the array is empty (fresh
+    // object) so it allocates; on SAVE the array already holds `count` elements so
+    // it is a no-op. We reproduce that directly rather than sniff a load/save flag
+    // — the previous `*(serObj+8)==0` heuristic was WRONG (that slot holds stream
+    // payload bytes, never a clean 0/1), so it was ALWAYS false and the array was
+    // NEVER allocated → every UIDescription dialog lost its sub-controllers.
+    int cap = _entryCap;
+    uint8_t* arr = static_cast<uint8_t*>(_entries);
+    if (count > 0 && (arr == nullptr || cap < count)) {
+        if (fn_MemAlloc && g_pMemAllocSingleton) {
+            void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 0x28, 8);
+            _entries = buf;
+            _entryCap = buf ? count : 0;
+            if (buf) {
+                uint8_t* e = reinterpret_cast<uint8_t*>(buf);
+                for (int i = 0; i < count; ++i, e += 0x28) {
+                    *(uint64_t*)(e + 0x00) = 0;
+                    *(uint64_t*)(e + 0x08) = 0;
+                    *(uint64_t*)(e + 0x10) = 0;
+                    *(uint64_t*)(e + 0x18) = 0;
+                    *(uint64_t*)(e + 0x20) = 0;  // String (empty)
+                }
+            }
+        }
+    }
+    _entryCount = count;
+    if (Opt().mapTrace)
+        printf("[UIDescSer] self=%p count=%d entries=%p cap->%d\n",
+               static_cast<void*>(this), count, _entries, _entryCap);
+    
+    // 5. per-element serialize
+    uint8_t* buf = static_cast<uint8_t*>(_entries);
+    if (buf) {
+        uint8_t* e = buf;
+        for (int i = 0; i < count; ++i, e += 0x28) {
+            if (typeSer) typeSer(e + 0x00, &ser);
+            fn_ExternalPtr_Serialize2(e + 0x08, &ser);
+            fn_ExternalPtr_Serialize2(e + 0x10, &ser);
+            fn_ExternalPtr_Serialize2(e + 0x18, &ser);
+            reinterpret_cast<System::String*>(e + 0x20)->Serialize(&ser);  // B.3.1 bridge
+        }
+    }
+    ser.Serialize(_valTail, nullptr);
+    return true;
+}
+
+// [6] 0x140039680 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* UIDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void UIDescription::Destruct() {}
+
+// [8] 0x1400396e0: UIComponent's type id when _valTail > 0, else 0 (see above).
+// The tree read the id through a first-call cache over the exe cell 0x1401c7fc8;
+// the by-name lookup is the same registered id, without the lazy static (B6-5).
+Object::Type* UIDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = (_valTail > 0) ? ::Object::GetTypeIdByName("UIComponent") : 0u;
+    return ret;
+}
+
+// [9] 0x140039620 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* UIDescription::Construct() { return nullptr; }
+
+// create 0x1400395b0: MemAlloc(0x48, 8), then the (inlined) ctor.
+void* UIDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(UIDescription), 8);
     if (!p) return nullptr;
-    return UIDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) UIDescription());
 }
-extern "C" void* UIDescription_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    return UIDescription_Ctor_Impl(mem);
+// createInPlace 0x140039620.
+void* UIDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) UIDescription());
 }
 
-REGISTER_TYPE(UIDescription, "Description",
-              &UIDescription_Factory, &UIDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(UIDescription, "_ZTV13UIDescription")
+DEFINE_EXE_TYPE(UIDescription, "Description")
