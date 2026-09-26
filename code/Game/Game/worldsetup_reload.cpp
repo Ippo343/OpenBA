@@ -44,6 +44,7 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "Game/GameLoaderLoop.h"   // ENDGAME B.3.8 LOOP
+#include "Game/GameLoadDialogLoopT.h"
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -108,23 +109,17 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     void* pDlLoop = nullptr;
     void* dlLoop = fn_MemAlloc(g_pMemAllocSingleton, 0xb60, 4);
     if (dlLoop) {
-        uintptr_t dl = reinterpret_cast<uintptr_t>(dlLoop);
         uint64_t delayTime[1];
         fn_Time_Ctor_Float((void*)delayTime, 1.0f);
 
         System::String loadingName;
         GetLoadingSoundString(&loadingName);   // FUN_140099130, inline in engine_funcs.h
 
-        fn_DialogLoaderLoopT_Ctor(dlLoop, &loadingName, pGameLoop, (void*)delayTime);
-
-        *reinterpret_cast<void**>(dlLoop) = (void*)g_GameLoadDialogLoopT_Vtable;
-        *reinterpret_cast<uint32_t*>(dl + 0x188) = 0xFF000000;
-        *reinterpret_cast<uint32_t*>(dl + 0x18C) = 0xFF000000;
-        *reinterpret_cast<uint8_t*>(dl + 0x190)  = 0;   // retail `this[400]`
-        fn_Random_Default_Ctor((void*)(dl + 0x194));
-        *reinterpret_cast<uint64_t*>(dl + 0xB58) = 0;
-        *reinterpret_cast<uint8_t*>(dl + 0x40)   = 0;
-        pDlLoop = dlLoop;
+        // ENDGAME B.3.8 LOOP: the real class; its ctor is the subclass field
+        // init retail inlines here (colours, +0x190, Random, +0xB58, +0x40).
+        pDlLoop = ::new (dlLoop) GameLoadDialogLoopT(
+            loadingName, static_cast<Engine::UpdateLoop*>(pGameLoop),       // B.3.8 bridge
+            *reinterpret_cast<const System::Time*>(delayTime));
     }
 
     // --- Step 3: outer LoaderLoop (0x48) -------------------------------------

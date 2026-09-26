@@ -22,6 +22,7 @@
 
 #include "Game/InnerLoaderLoop.h"
 #include "Game/GameLoaderLoop.h"
+#include "Game/GameLoadDialogLoopT.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -50,6 +51,18 @@ UNIT_TEST(loop_sizes_match_retail) {
     CHECK_EQ(sizeof(GameLoaderLoop),  (size_t)0x48);   // MemAlloc(0x48) at all 7 sites
     CHECK_EQ(alignof(InnerLoaderLoop), (size_t)8);
     CHECK_EQ(alignof(GameLoaderLoop),  (size_t)8);
+    CHECK_EQ(sizeof(GameLoadDialogLoopT), (size_t)0xb60);   // MemAlloc(0xb60, 4) at all 7 sites
+    CHECK_EQ(alignof(GameLoadDialogLoopT), (size_t)8);
+}
+
+UNIT_TEST(loop_member_offsets) {
+    CHECK_EQ(offsetof(GameLoadDialogLoopT, _dialogExternal), (size_t)0x50);   // base's
+    CHECK_EQ(offsetof(GameLoadDialogLoopT, _ui),             (size_t)0x60);   // base's
+    CHECK_EQ(offsetof(GameLoadDialogLoopT, _fadeColor1),     (size_t)0x188);
+    CHECK_EQ(offsetof(GameLoadDialogLoopT, _fadeColor2),     (size_t)0x18c);
+    CHECK_EQ(offsetof(GameLoadDialogLoopT, _fadeDone),       (size_t)0x190);
+    CHECK_EQ(offsetof(GameLoadDialogLoopT, _random),         (size_t)0x194);
+    CHECK_EQ(offsetof(GameLoadDialogLoopT, _tipTimer),       (size_t)0xb58);
 }
 
 // ===========================================================================
@@ -64,6 +77,10 @@ UNIT_TEST(loop_classes_shape) {
     CHECK(std::is_final<GameLoaderLoop>::value);
     CHECK(!std::has_virtual_destructor<InnerLoaderLoop>::value);
     CHECK(!std::has_virtual_destructor<GameLoaderLoop>::value);
+    CHECK((std::is_base_of<Engine::DialogLoaderLoopT, GameLoadDialogLoopT>::value));
+    CHECK(!std::is_abstract<GameLoadDialogLoopT>::value);
+    CHECK(std::is_final<GameLoadDialogLoopT>::value);
+    CHECK(!std::has_virtual_destructor<GameLoadDialogLoopT>::value);
 }
 
 // ===========================================================================
@@ -78,6 +95,23 @@ UNIT_TEST(loop_loaderloop_slots) {
     CHECK_EQ(SlotOffset(&GameLoaderLoop::DeletingDtor),         S(0));
     // Both tables are 12 slots: the last is AllowsModChanges, UpdateLoop's.
     CHECK_EQ(SlotOffset(&Engine::UpdateLoop::AllowsModChanges), S(11));
+}
+
+UNIT_TEST(loop_splash_slots) {
+    // 0x140158800: own [0], [1], [2], [3], [12].
+    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::DeletingDtor),     S(0));
+    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::Startup),          S(1));
+    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::Shutdown),         S(2));
+    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::Update),           S(3));
+    CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::CreateLoopDialog), S(12));
+}
+
+// The retslot slot 12: RCX = this, RDX = the caller's InternalPtr slot, RAX =
+// the slot back (B6-2). Declared type checked; the body is not linked here.
+UNIT_TEST(loop_splash_slot12_is_retslot_first) {
+    using Ret = Object::InternalPtr<UI::DialogInstance>;
+    CHECK((std::is_same<decltype(&GameLoadDialogLoopT::CreateLoopDialog),
+                        Ret* (GameLoadDialogLoopT::*)(Ret*)>::value));
 }
 
 }  // namespace

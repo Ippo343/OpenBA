@@ -44,6 +44,7 @@
 #include "Game/inputbindings.h"
 #include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP
 #include "Game/GameLoaderLoop.h"    // ENDGAME B.3.8 LOOP
+#include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
 #include "stall_debug.h"
 #include "boot_state_watchdog.h"
 #include <cstdio>
@@ -703,16 +704,14 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
                             System::String fileStr(filename);
 
-                            fn_DialogLoaderLoopT_Ctor(dlt, &fileStr, next, &delayTime);
-
-                            uintptr_t lp = reinterpret_cast<uintptr_t>(dlt);
-                            *(void***)lp = g_GameLoadDialogLoopT_Vtable;
-                            *reinterpret_cast<uint32_t*>(lp + 0x188) = 0xff000000;  // color1
-                            *reinterpret_cast<uint32_t*>(lp + 0x18c) = 0xff000000;  // color2
-                            *reinterpret_cast<uint8_t*>(lp + 0x190) = 0;            // fade-done
-                            fn_Random_Default_Ctor(reinterpret_cast<void*>(lp + 0x194));
-                            *reinterpret_cast<uint64_t*>(lp + 0xb58) = 0;           // text timer
-                            *reinterpret_cast<uint8_t*>(lp + 0x40) = 0;             // m_autoAdvance
+                            // ENDGAME B.3.8 LOOP: the real class. Its ctor is the
+                            // one retail inlines here: DialogLoaderLoopT(file, next,
+                            // delay), the 0x140158800 stamp (the compiler's), the
+                            // two fade colours, Random at +0x194, the tip timer,
+                            // _autoAdvance = 0.
+                            ::new (static_cast<void*>(dlt)) GameLoadDialogLoopT(
+                                fileStr, reinterpret_cast<Engine::UpdateLoop*>(next),   // B.3.8 bridge
+                                *reinterpret_cast<const System::Time*>(&delayTime));
 
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p, "
                                    "delay=%.2fs\n",
