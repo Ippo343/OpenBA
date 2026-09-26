@@ -47,6 +47,12 @@
 // another agent's class, so the base is spelled here as an opaque 0xa8-byte
 // prefix with only the fields LabelDescription's own bodies touch named.
 //
+// ENDGAME B.3.6 fragment pass F2: ALL TEN structs are retired. Each layout
+// below survives as its evidence comment; the definition is the real class in
+// runtime/types/ui/<X>Description.h, and `RtUI::<X>Description` is an alias of
+// it (the block at the bottom of this file). What this header still OWNS is
+// the kVtbl* export names.
+//
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
 // ============================================================================
 
@@ -113,39 +119,8 @@ namespace RtUI {
 // The widest of the ten. Four separate arrays, each with its OWN
 // Array<T>::SetSize and Array<T>::Serialize pair, plus a fifth container at
 // +0xe0 serialized whole by 0x18003dc90.
-struct DocumentTextDescription {
-    ElementDescription _base;      // +0x00
-    void*   _stringTable;          // +0x68  0x1800042a0 @ 0x1800cf8f7
-    char*   _textName;             // +0x70  0x1800c9930 @ 0x1800cf904
-    void*   _spriteSheet;          // +0x78  0x180004590 @ 0x1800cf911
-    char*   _spriteName;           // +0x80  0x1800c9930 @ 0x1800cf967
-    void*   _names;                // +0x88  Array<System::String> data
-    int32_t _namesSize;            // +0x90  kScalarInt @ 0x1800cf91e
-    int32_t _namesCapacity;        // +0x94
-    uint32_t _word98;              // +0x98  kScalarUInt @ 0x1800cf97e
-    uint32_t _word9c;              // +0x9c  kScalarUInt @ 0x1800cf995
-    uint32_t _worda0;              // +0xa0  kScalarUInt @ 0x1800cf9ac
-    int32_t  _worda4;              // +0xa4  kScalarInt  @ 0x1800cf9c3
-    int32_t  _worda8;              // +0xa8  kScalarInt  @ 0x1800cf9da
-    int32_t  _padac;               // +0xac
-    void*   _arrayB0;              // +0xb0  SetSize 0x18003e600 / ser 0x18003e710
-    int32_t _arrayB0Size;          // +0xb8  kScalarInt @ 0x1800cf9ea
-    int32_t _arrayB0Capacity;      // +0xbc
-    void*   _arrayC0;              // +0xc0  SetSize 0x18003ea50 / ser 0x18003eb60
-    int32_t _arrayC0Size;          // +0xc8  kScalarInt @ 0x1800cfa33
-    int32_t _arrayC0Capacity;      // +0xcc
-    int32_t* _arrayD0;             // +0xd0  SetSize 0x18003eea0, ints serialized inline
-    int32_t _arrayD0Size;          // +0xd8  kScalarInt @ 0x1800cfa7c
-    int32_t _arrayD0Capacity;      // +0xdc
-    void*   _containerE0;          // +0xe0  0x18003dc90 @ 0x1800cfade
-};
-static_assert(offsetof(DocumentTextDescription, _names)       == 0x88, "DocText+0x88");
-static_assert(offsetof(DocumentTextDescription, _namesSize)   == 0x90, "DocText+0x90");
-static_assert(offsetof(DocumentTextDescription, _arrayB0)     == 0xb0, "DocText+0xb0");
-static_assert(offsetof(DocumentTextDescription, _arrayC0)     == 0xc0, "DocText+0xc0");
-static_assert(offsetof(DocumentTextDescription, _arrayD0)     == 0xd0, "DocText+0xd0");
-static_assert(offsetof(DocumentTextDescription, _containerE0) == 0xe0, "DocText+0xe0");
-static_assert(sizeof(DocumentTextDescription) == 0xe8, "sizeof(UI::DocumentTextDescription)==0xe8");
+// RtUI::DocumentTextDescription is now an ALIAS of the real class UI::DocumentTextDescription (DocumentTextDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::EditDescription — 0x88
@@ -156,18 +131,8 @@ static_assert(sizeof(DocumentTextDescription) == 0xe8, "sizeof(UI::DocumentTextD
 // ---------------------------------------------------------------------------
 // UI::GraphDescription — 0x88
 // ---------------------------------------------------------------------------
-struct GraphDescription {
-    ElementDescription _base;      // +0x00
-    int32_t  _word68;              // +0x68  kScalarInt  @ 0x1800d1a87
-    int32_t  _word6c;              // +0x6c  kScalarInt  @ 0x1800d1a9c
-    int32_t  _word70;              // +0x70  kScalarInt  @ 0x1800d1ab1
-    uint32_t _word74;              // +0x74  kScalarUInt @ 0x1800d1ac6
-    void*    _spriteSheet;         // +0x78  0x180004590 @ 0x1800d1ad3
-    char*    _spriteName;          // +0x80  0x1800c9930 @ 0x1800d1ae1
-};
-static_assert(offsetof(GraphDescription, _spriteSheet) == 0x78, "Graph+0x78");
-static_assert(offsetof(GraphDescription, _spriteName)  == 0x80, "Graph+0x80");
-static_assert(sizeof(GraphDescription) == 0x88, "sizeof(UI::GraphDescription)==0x88");
+// RtUI::GraphDescription is now an ALIAS of the real class UI::GraphDescription (GraphDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::LabelDescription — 0xb8 — UI::TextDescription (0xa8) + two fields
@@ -209,8 +174,8 @@ constexpr const char* kVtblContainerElement   = "??_7ContainerElement@UI@@6B@"; 
 // ENDGAME B.3.6 fragment pass F2 (RULE B6-4.4) — the PODs that became ALIASES.
 // ---------------------------------------------------------------------------
 // Each of these had a field-identical real class under the retail name by the
-// end of wave 2 (blocks C1, C3, C4 cross-asserted every offset against the
-// POD), and nothing embeds any of them by value, so the POD is retired and the
+// end of wave 2 (blocks C1, C3, C4, C5 cross-asserted every offset against
+// the POD), and nothing embeds any of them by value, so the POD is retired and the
 // old spelling names the class. The class headers carry the absolute offsets
 // the PODs used to pin. A FORWARD declaration is enough for the alias, which
 // keeps this header free of the class headers (they include this one for the
@@ -222,7 +187,9 @@ class CheckDescription;
 class ClipRegionDescription;
 class ComboDescription;
 class ContainerDescription;
+class DocumentTextDescription;
 class EditDescription;
+class GraphDescription;
 class LabelDescription;
 }  // namespace UI
 
@@ -233,6 +200,8 @@ using CheckDescription = UI::CheckDescription;
 using ClipRegionDescription = UI::ClipRegionDescription;
 using ComboDescription = UI::ComboDescription;
 using ContainerDescription = UI::ContainerDescription;
+using DocumentTextDescription = UI::DocumentTextDescription;
 using EditDescription = UI::EditDescription;
+using GraphDescription = UI::GraphDescription;
 using LabelDescription = UI::LabelDescription;
 }  // namespace RtUI

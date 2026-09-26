@@ -262,9 +262,9 @@ Object::InternalPtr<Element>* ProgressDescription::CreateInstance(
 
     void* slot = elem;                                                  // 180119d80
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);            // 180119d8b
+    // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 180119d8b
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     uint64_t idxSlot;                                                   // [RBP-0x10]
     char* const* const names[6] = { &_fillLeftName,  &_fillMiddleName,  &_fillRightName,

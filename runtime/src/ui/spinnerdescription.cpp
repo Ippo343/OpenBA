@@ -259,9 +259,9 @@ Object::InternalPtr<Element>* SpinnerDescription::CreateInstance(
 
     void* slot = elem;                                                  // 1800d873c
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);            // 1800d8749
+    // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 1800d8749
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     AddChild(dialog, &slot, elem, _editDescription);                    // 1800d874e
     AddChild(dialog, &slot, elem, _upDescription);                      // 1800d87a6

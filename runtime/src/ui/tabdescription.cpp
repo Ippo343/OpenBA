@@ -327,9 +327,9 @@ Object::InternalPtr<Element>* TabDescription::CreateInstance(
     void* slotB = nullptr;                                              // [RSP+0x78]
 
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slotA);           // 1800da4a0
+    // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 1800da4a0
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slotA));  // B.3.6 bridge
 
     AddChild(dialog, &slotA, elem, _stripBackdropDescription);          // 1800da4b1
     AddChild(dialog, &slotA, elem, _pageBackdropDescription);           // 1800da502
