@@ -450,7 +450,7 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
                                              int*         height,
                                              int*         version,
                                              ModArray*    mods) {
-    self->Save::SaveLoad::LoadMetaData(*reinterpret_cast<System::String*>(description),
+    self->Save::SaveLoad::LoadMetaData(*reinterpret_cast<System::String*>(description),   // B.3.7 bridge
                                        pixels, *width, *height, *version, *mods);
 }
 
