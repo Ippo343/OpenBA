@@ -29,6 +29,8 @@
 #include "object/Internal.h"  // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
 #include "Component/CaptureBoxDescription.h"
+#include "Component/CaptureBoxElement.h"
+#include "ui/Sprite.h"
 #include <cstdint>
 #include <new>
 
@@ -73,12 +75,31 @@ Object::External* CaptureBoxDescription::Reconstruct() { return nullptr; }
 // hand-built table had a `return 0` stub; kept.
 void CaptureBoxDescription::Destruct() {}
 
-// [8] 0x1400790a0. PORT GAP (retail builds a CaptureBoxElement, applies the
-// generic ElementDescription fields and the +0x68/+0x70 sprite). The hand-built
-// table had a `return null` stub; kept.
+// [8] 0x1400790a0 — CreateInstance (RETSLOT: RCX this, RDX the caller's
+// InternalPtr<Element>). Transcribed:
+//   1. MemAlloc(0xe0, 8) + the CaptureBoxElement ctor (inlined in retail);
+//   2. wrap it in an InternalBasePtr and run the non-virtual
+//      ElementDescription::CreateInstance (0x1401518d0: the generic fields);
+//   3. element+0xc0 = Sprite(ExternalPtr +0x68, String +0x70) (0x1401514c8);
+//   4. *ret = the element; return ret.
+// (The frustum twin, 0x14006c340, has the same shape plus the size copy.)
 Object::InternalPtr<UI::Element>* CaptureBoxDescription::CreateInstance(
-        Object::InternalPtr<UI::Element>*, const UI::Dialog*) const {
-    return nullptr;
+        Object::InternalPtr<UI::Element>* ret, const UI::Dialog* /*dialog*/) const {
+    void* elem = CaptureBoxElement::CreateNewObject();
+
+    uint8_t ibp[16] = {};
+    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
+    // Non-virtual applier; QUALIFIED (the slot-8 override hides the base overload).
+    UI::ElementDescription::CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ibp));
+    CaptureBoxElement* e = *reinterpret_cast<CaptureBoxElement**>(ibp);
+
+    e->_lineSprite = UI::Sprite(
+        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(_spriteSheet)),  // B.3.6 bridge
+        _spriteName);
+    *reinterpret_cast<void**>(ret) = e;
+    return ret;
 }
 
 // [9] 0x140013df0 — placement construction on `this` (the createInPlace body).
