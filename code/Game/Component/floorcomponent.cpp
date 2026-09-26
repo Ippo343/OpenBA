@@ -27,6 +27,7 @@
 #include <cstdio>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 // BANISHED_FLOOR_TRACE (code/Game/Game/mapquery.cpp) — shared with the consumer side.
 
@@ -224,11 +225,6 @@ static uint32_t* s_pNatResTypeId = nullptr;
 // of the wrong object's +0x148. Disassembly-verified 2026-08-29.
 typedef void* (*fn_EntityAccessor_t)(void* entity, void* outIBP);
 static fn_EntityAccessor_t s_fn_EntityAccessor = nullptr;
-typedef uint32_t (*fn_SceneAddMesh_t)(void* scene, void* mesh, void* xform,
-                                      int a, int b, int c, int d);
-static fn_SceneAddMesh_t s_fn_SceneAddMesh = nullptr;
-typedef void (*fn_SceneRemoveMesh_t)(void* scene, uint32_t meshId);
-static fn_SceneRemoveMesh_t s_fn_SceneRemoveMesh = nullptr;
 
 static bool s_subResolved = false;
 static void EnsureSubHelpers() {
@@ -246,12 +242,10 @@ static void EnsureSubHelpers() {
     // ⚠ OPEN: the call below passes 0 for the OWNER argument, so a floor's pick mesh has no
     // owner entity. That is a separate, untested question from the address — flagging rather
     // than silently changing it.
-    s_fn_SceneAddMesh    = reinterpret_cast<fn_SceneAddMesh_t>(ResolveAddr(Module::Runtime, 0x1801252e0));
     // 0x180125290 = Picking::Scene::RemoveMesh (Ghidra-verified function START).
     // The previous 0x1800f8f50 was MID-FUNCTION inside Frustum::Contains — every
     // floor removal jumped into its middle with garbage registers (found in the
     // save/load-wave mid-function address sweep, 2026-08-28).
-    s_fn_SceneRemoveMesh = reinterpret_cast<fn_SceneRemoveMesh_t>(ResolveAddr(Module::Runtime, 0x180125290));
     s_subResolved = true;
 }
 
@@ -297,8 +291,7 @@ void FloorComponent_RemoveFloorMesh(void* scene, uint32_t floorId,
         }
     }
     // Picking::Scene is at (mapInfo + 2 ints) = scene + 8.
-    if (s_fn_SceneRemoveMesh)
-        s_fn_SceneRemoveMesh(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mapInfo) + 8), floorId);
+    reinterpret_cast<Picking::Scene*>(reinterpret_cast<uintptr_t>(mapInfo) + 8)->RemoveMesh(floorId);   // B.3.7 bridge
 }
 
 // Reimpl of FUN_14011f390 (place floor mesh: increment footprint counters, add mesh to Picking::Scene)
@@ -392,9 +385,9 @@ void FloorComponent_SubF390(void* selfV) {
     }
 
     uint32_t meshId = 0;
-    if (s_fn_SceneAddMesh)
-        meshId = s_fn_SceneAddMesh(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(mapInfo) + 8),
-                                   mesh, xform, 0, 0, 0, 0);
+    meshId = reinterpret_cast<Picking::Scene*>(reinterpret_cast<uintptr_t>(mapInfo) + 8)->AddMesh(   // B.3.7 bridge
+        Object::ExternalPtr<Picking::PickingMesh>(reinterpret_cast<Picking::PickingMesh*>(mesh)),
+        *reinterpret_cast<const Math::Transform*>(xform), nullptr, 0, 0, nullptr);
     *reinterpret_cast<uint8_t*>(self + 5) = 1;
     *reinterpret_cast<uint32_t*>(sb + 0x2c) = meshId;
 

@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
+#include "picking/PickingMesh.h"   // ENDGAME B.3.7 callers (K2)
 #include <cstdint>
 #include <cstdio>
 #include <new>
@@ -277,7 +278,6 @@ void TerraformComponent_RegionRecalc(void* terrainGridV, int x, int y) {
 #include <cstdlib>
 
 typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
-typedef void* (*fn_MeshVertices_t)(void* mesh, int lod);
 typedef float* (*fn_TerrainSample_t)(int* tileGrid, float* out, const float* in,
                                      char flag, void* extra);
 typedef void* (*fn_TfMemAlloc_t)(uint64_t size, int align);
@@ -286,7 +286,6 @@ typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
 
 static fn_FindCompOut_t     s_fn_FindComp_Model  = nullptr;  // 0x140003f60 (ModelComponent)
 static fn_FindCompOut_t     s_fn_FindComp_Map    = nullptr;  // 0x140004680 (MapComponent)
-static fn_MeshVertices_t    s_fn_MeshVertices    = nullptr;  // slot 0x140151478
 static fn_TerrainSample_t   s_fn_TerrainSample   = nullptr;  // 0x14009f3e0
 static fn_TfMemAlloc_t      s_fn_MemAlloc        = nullptr;  // slot 0x140152b60
 static fn_TfMemFree_t       s_fn_MemFree         = nullptr;  // slot 0x140152b68
@@ -304,8 +303,6 @@ static void TerraformDeformResolve() {
     s_pCellStep         = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140151478);
-    if (slot) s_fn_MeshVertices = *reinterpret_cast<fn_MeshVertices_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b60);
     if (slot) s_fn_MemAlloc = *reinterpret_cast<fn_TfMemAlloc_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152b68);
@@ -407,8 +404,6 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
     // The owner's ModelComponent carries the placed transform at +0x148.
     void* model = TerraformFindComp(s_fn_FindComp_Model, TerraformOwnerEntity(selfA));
     if (!model) { bail("owner has no ModelComponent (finder 0x140003f60 returned null)"); return; }
-    // Name the exact slot — "one of three is null" cost a whole run to narrow once.
-    if (!s_fn_MeshVertices)  { bail("slot 0x140151478 PickingMesh::Vertices unresolved"); return; }
     // Retail copy-constructs a Transform on the stack (??0Transform@Math@@QEAA@AEBV01@@Z,
     // slot 0x140151418) from the ModelComponent's +0x148.
     const Math::Transform xform(*reinterpret_cast<const Math::Transform*>(
@@ -432,13 +427,16 @@ void TerraformComponent_MeshPass(TerraformComponent* self, bool ceiling) {
     const uint32_t notMask  = ~modifyBits;
 
     int applied = 0;
-    void* verts = s_fn_MeshVertices(mesh, 0);
+    // Picking::PickingMesh::Vertices (import slot 0x140151478) — a reference return.
+    void* verts = const_cast<void*>(static_cast<const void*>(
+        &reinterpret_cast<const Picking::PickingMesh*>(mesh)->Vertices(0)));   // B.3.7 bridge
     const int vertCount = verts
         ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(verts) + 8) : 0;
 
     for (int i = 0; i < vertCount; ++i) {
         // Re-query per iteration exactly as retail does.
-        void* arr = s_fn_MeshVertices(mesh, 0);
+        void* arr = const_cast<void*>(static_cast<const void*>(
+            &reinterpret_cast<const Picking::PickingMesh*>(mesh)->Vertices(0)));   // B.3.7 bridge
         if (!arr) break;
         const uint8_t* data = *reinterpret_cast<const uint8_t**>(arr);
         const void* localVtx = data + static_cast<size_t>(i) * 0xC;

@@ -27,6 +27,7 @@
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -803,16 +804,18 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     float hitNormal[3] = {0.0f, 0.0f, 0.0f};
     float hitPoint[3] = {0.0f, 0.0f, 0.0f};
 
-    if (s_fn_PickingIntersect && pickingScene) {
+    if (pickingScene) {
         // NO reset here — retail deliberately carries the map hit test's shortened
         // distance into the pick (see the maxDist declaration). Re-stamping 400.0f is
         // what let the pick reach through terrain.
-        int hitId = s_fn_PickingIntersect(pickingScene, rayOrigin, rayDir,
-                                           &maxDist, hitPoint, hitNormal);
+        int hitId = reinterpret_cast<const Picking::Scene*>(pickingScene)->Intersect(   // B.3.7 bridge
+            *reinterpret_cast<const Vector3*>(rayOrigin), *reinterpret_cast<const Vector3*>(rayDir),
+            *reinterpret_cast<const Math::Scalar*>(&maxDist),
+            *reinterpret_cast<Vector3*>(hitPoint), *reinterpret_cast<Vector3*>(hitNormal));
         if (hitId >= 0) {
             // Get the entity associated with this picking hit
             if (s_fn_PickingGetUserData) {
-                void* userData = s_fn_PickingGetUserData(pickingScene, hitId);
+                void* userData = reinterpret_cast<const Picking::Scene*>(pickingScene)->GetUserData(static_cast<uint32_t>(hitId));   // B.3.7 bridge
                 uintptr_t pickIBP = 0;
                 if (s_fn_IBPCtor) s_fn_IBPCtor(&pickIBP, userData);
                 foundEntity = pickIBP;
@@ -1055,7 +1058,7 @@ extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
     // Citizens register with low pick-ids (0..N). Probe the first several; the first
     // that yields a live userData entity gets selected.
     for (int id = 0; id < 16; id++) {
-        void* userData = s_fn_PickingGetUserData(scene, id);
+        void* userData = reinterpret_cast<const Picking::Scene*>(scene)->GetUserData(static_cast<uint32_t>(id));   // B.3.7 bridge
         if (!userData) continue;
         printf("[EditSel] citizen pick-id %d -> entity=%p; selecting...\n", id, userData);
         uintptr_t entityParam = (uintptr_t)userData;

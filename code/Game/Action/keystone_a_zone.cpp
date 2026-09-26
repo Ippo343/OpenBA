@@ -33,6 +33,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Thread.h"     // ENDGAME B.3.4b System callers
+#include "application/Application.h"   // ENDGAME B.3.7 callers (K2)
 
 // Match the action_pf_*.cpp decompile token aliases.
 typedef unsigned int  uint;
@@ -41,10 +42,8 @@ namespace {
 
 // ---- Runtime-DLL exports (resolved by mangled name, exactly as action_pf_astar.cpp).
 typedef void* (*fn_MemAllocSA_t)(uint64_t size, int align);
-typedef void  (*fn_YieldToThreads_t)(void* app);
 
 static fn_MemAllocSA_t    s_fn_MemAllocSA  = nullptr;
-static fn_YieldToThreads_t s_fn_Yield      = nullptr;
 
 // ---- Exe sub-callees in this batch's closure (all registered elsewhere). ----
 // 0x1400a6a30 Pf_EnqueueCmd1 (reg), 0x1400a68b0 Pf_EnqueueCmd4 (reg),
@@ -66,7 +65,6 @@ static bool s_init = false;
 static void EnsureFns() {
     if (s_init) return;
     s_fn_MemAllocSA  = reinterpret_cast<fn_MemAllocSA_t>(ResolveExport("?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"));
-    s_fn_Yield       = reinterpret_cast<fn_YieldToThreads_t>(ResolveExport("?YieldToThreads@Application@1@QEAAXXZ"));
 
     s_fn_EnqCmd1  = reinterpret_cast<fn_EnqCmd1_t>(ResolveAddr(Module::Exe, 0x1400a6a30));
     s_fn_EnqCmd4  = reinterpret_cast<fn_EnqCmd4_t>(ResolveAddr(Module::Exe, 0x1400a68b0));
@@ -156,7 +154,7 @@ int RoadTool_helper_6e30(int64_t param_1, uint param_2, uint64_t param_3,
             }
         }
         // Application::Application::YieldToThreads(*g_pAppSingleton)
-        if (s_fn_Yield && g_pAppSingleton) s_fn_Yield(*g_pAppSingleton);
+        if (g_pAppSingleton) reinterpret_cast< ::Application::Application*>(*g_pAppSingleton)->YieldToThreads();   // B.3.7 bridge
         reinterpret_cast<System::CriticalSection*>(param_1 + 0x30)->Lock();   // B.3.4b bridge
         if (*reinterpret_cast<int*>(param_1 + 0x70) > 0 &&
             (*reinterpret_cast<uint8_t*>(param_1 + 8) & 1) == 0) {

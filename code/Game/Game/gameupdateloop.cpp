@@ -51,6 +51,9 @@
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
+#include "save/SaveLoad.h"                    // ENDGAME B.3.7 callers (K2)
+#include "engine/MainLoop.h"                  // ENDGAME B.3.7 callers (K2)
 
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
@@ -189,26 +192,6 @@ static fn_GUL_AudioSceneUpdate_t fn_GUL_AudioSceneUpdate = nullptr;
 typedef void (*fn_Audio_Scene_StopAll_t)(void* scene);
 static fn_Audio_Scene_StopAll_t fn_Audio_Scene_StopAll = nullptr;
 
-// Achievement::AchievementInstance::Update(this, Time const&)
-typedef void (*fn_AchievementInstance_Update_t)(void* self, void* time);
-static fn_AchievementInstance_Update_t fn_AchievementInstance_Update = nullptr;
-
-// Achievement::AchievementInstance::IsMet(this) -> bool
-typedef bool (*fn_AchievementInstance_IsMet_t)(void* self);
-static fn_AchievementInstance_IsMet_t fn_AchievementInstance_IsMet = nullptr;
-
-// Achievement::AchievementInstance::HasFailed(this) -> bool
-typedef bool (*fn_AchievementInstance_HasFailed_t)(void* self);
-static fn_AchievementInstance_HasFailed_t fn_AchievementInstance_HasFailed = nullptr;
-
-// Achievement::AchievementManager::Update(this, Time const&)
-typedef void (*fn_AchievementManager_Update_t)(void* self, void* time);
-static fn_AchievementManager_Update_t fn_AchievementManager_Update = nullptr;
-
-// Achievement::AchievementManager::SetEventHandler(this, handler)
-typedef void (*fn_AchievementManager_SetEventHandler_t)(void* self, void* handler);
-static fn_AchievementManager_SetEventHandler_t fn_AchievementManager_SetEventHandler = nullptr;
-
 // Graphics::Scene::Clean(this) — moved to engine_funcs.{h,cpp}; reuse the
 // project-wide extern so MenuDLT can also call it.
 
@@ -230,10 +213,6 @@ static fn_AchievementManager_SetEventHandler_t fn_AchievementManager_SetEventHan
 // Graphics::Renderer::~Renderer(this)
 typedef void (*fn_Graphics_Renderer_Dtor_t)(void* self);
 static fn_Graphics_Renderer_Dtor_t fn_Graphics_Renderer_Dtor = nullptr;
-
-// Save::SaveLoad::Draw(this, Context*, Material*)
-typedef void (*fn_SaveLoad_Draw_t)(void* self, void* ctx, void* material);
-static fn_SaveLoad_Draw_t fn_SaveLoad_Draw = nullptr;
 
 // ENDGAME B.3.5: the `?SetTime@Context@Video@@QEAAXM@Z` and
 // `?SetCamera@Context@Video@@QEAAXAEBVMatrix@Math@@0@Z` caches (typedefs,
@@ -514,40 +493,6 @@ static void EnsureInit() {
         ResolveAddr(Module::Exe, 0x1401026a0));
     fn_PlayerController_CalcTransform = reinterpret_cast<fn_PlayerController_CalcTransform_t>(
         ResolveAddr(Module::Exe, 0x1400983f0));
-    // AchievementInstance methods — retail reaches them through .rdata dispatch
-    // slots (0x140152058 / 0x140152048 / 0x140152060). Those slots are unregistered
-    // in standalone, so ResolveAddr returns 0 and the old code left all three NULL.
-    //
-    // That WAS harmless only while nothing ever built an AchievementInstance. Step 32
-    // of GameUpdateLoop::Load now does (that is what starts a scenario/tutorial), so
-    // the +0x150 guard in Update stopped being the thing that kept these unreached —
-    // the first tick of a tutorial called Update through a null pointer and died with
-    // EXEC-of-0. They are plain Runtime exports; resolve them by name and fall back to
-    // the dispatch slot only if an export ever goes missing.
-    {
-        fn_AchievementInstance_Update = reinterpret_cast<fn_AchievementInstance_Update_t>(
-            ResolveExport("?Update@AchievementInstance@Achievement@@QEAAXAEBVTime@System@@@Z"));
-        fn_AchievementInstance_IsMet = reinterpret_cast<fn_AchievementInstance_IsMet_t>(
-            ResolveExport("?IsMet@AchievementInstance@Achievement@@QEBA_NXZ"));
-        fn_AchievementInstance_HasFailed = reinterpret_cast<fn_AchievementInstance_HasFailed_t>(
-            ResolveExport("?HasFailed@AchievementInstance@Achievement@@QEBA_NXZ"));
-
-        if (!fn_AchievementInstance_Update) {
-            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152058);
-            if (slot) fn_AchievementInstance_Update =
-                *reinterpret_cast<fn_AchievementInstance_Update_t*>(slot);
-        }
-        if (!fn_AchievementInstance_IsMet) {
-            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152048);
-            if (slot) fn_AchievementInstance_IsMet =
-                *reinterpret_cast<fn_AchievementInstance_IsMet_t*>(slot);
-        }
-        if (!fn_AchievementInstance_HasFailed) {
-            uintptr_t slot = ResolveAddr(Module::Exe, 0x140152060);
-            if (slot) fn_AchievementInstance_HasFailed =
-                *reinterpret_cast<fn_AchievementInstance_HasFailed_t*>(slot);
-        }
-    }
     fn_QuickSave = reinterpret_cast<fn_QuickSave_t>(
         ResolveAddr(Module::Exe, 0x140095da0));
     fn_CalcWindFactor = reinterpret_cast<fn_CalcWindFactor_t>(
@@ -633,8 +578,6 @@ static void EnsureInit() {
     // fn_Vector3_Normalize — removed 2026-07-31, see the note at its former declaration.
     // fn_MainLoop_SetNextLoop — resolved by EngineFuncsInit()
     // fn_ImageBuffer_CopyToTexture — resolved by EngineFuncsInit()
-    fn_SaveLoad_Draw = reinterpret_cast<fn_SaveLoad_Draw_t>(
-        ResolveExport("?Draw@SaveLoad@Save@@QEAAXAEAVContext@Video@@V?$ExternalPtr@VMaterial@Graphics@@@Object@@@Z"));
     fn_Graphics_Scene_Dtor = reinterpret_cast<fn_Graphics_Scene_Dtor_t>(
         ResolveExport("??1Scene@Graphics@@QEAA@XZ"));
     fn_Audio_Scene_Dtor = reinterpret_cast<fn_Audio_Scene_Dtor_t>(
@@ -643,10 +586,6 @@ static void EnsureInit() {
         ResolveExport("??1Scene@Picking@@QEAA@XZ"));
     fn_AnimationManager_Dtor = reinterpret_cast<fn_AnimationManager_Dtor_t>(
         ResolveExport("??1AnimationManager@Graphics@@QEAA@XZ"));
-    fn_AchievementManager_Update = reinterpret_cast<fn_AchievementManager_Update_t>(
-        ResolveExport("?Update@AchievementManager@Achievement@@QEAAXAEBVTime@System@@@Z"));
-    fn_AchievementManager_SetEventHandler = reinterpret_cast<fn_AchievementManager_SetEventHandler_t>(
-        ResolveExport("?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z"));
     fn_Time_Ctor_Seconds = reinterpret_cast<fn_Time_Ctor_Seconds_t>(
         ResolveExport("??0Time@System@@QEAA@M@Z"));
     fn_App_IsPaused = reinterpret_cast<fn_App_IsPaused_t>(
@@ -683,9 +622,6 @@ static void EnsureInit() {
     CHECK_FN(fn_MusicPlayer_Update);
     CHECK_FN(fn_EntityUI_Update);
     CHECK_FN(fn_PlayerController_CalcTransform);
-    CHECK_FN(fn_AchievementInstance_Update);
-    CHECK_FN(fn_AchievementInstance_IsMet);
-    CHECK_FN(fn_AchievementInstance_HasFailed);
     CHECK_FN(fn_QuickSave);
     CHECK_FN(fn_CalcWindFactor);
     CHECK_FN(fn_GUL_AudioSceneUpdate);
@@ -694,8 +630,6 @@ static void EnsureInit() {
     CHECK_FN(fn_Time_Ctor_Seconds);
     CHECK_FN(fn_App_IsPaused);
     CHECK_FN(fn_ExternalList_Find);
-    CHECK_FN(fn_SaveLoad_Draw);
-    CHECK_FN(fn_AchievementManager_Update);
     CHECK_FN(fn_EventNotifier_Fire);
     CHECK_FN(fn_EventNotifier_FireWithName);
     #undef CHECK_FN
@@ -1228,14 +1162,15 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                self->m_scenarioInstance, (int)self->m_scenarioCompleted);
         if (self->m_scenarioInstance != nullptr && self->m_scenarioCompleted == 0) {
             TRACE("[GameUpdateLoop::Update] calling AchievementInstance::Update...\n");
-            fn_AchievementInstance_Update(*(void**)((uintptr_t)self + 0x150), time);
+            reinterpret_cast<Achievement::AchievementInstance*>(*(void**)((uintptr_t)self + 0x150))->Update(   // B.3.7 bridge
+                *reinterpret_cast<const System::Time*>(time));
             TRACE("[GameUpdateLoop::Update] AchievementInstance::Update done\n");
 
-            bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
+            bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)self + 0x150))->IsMet();   // B.3.7 bridge
             TRACE("[GameUpdateLoop::Update] AchievementInstance::IsMet = %d\n", (int)isMet);
 
             if (!isMet) {
-                bool hasFailed = fn_AchievementInstance_HasFailed(*(void**)((uintptr_t)self + 0x150));
+                bool hasFailed = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)self + 0x150))->HasFailed();   // B.3.7 bridge
                 TRACE("[GameUpdateLoop::Update] AchievementInstance::HasFailed = %d\n", (int)hasFailed);
                 if (hasFailed) {
                     TRACE("[GameUpdateLoop::Update] calling OnScenarioComplete (failed)...\n");
@@ -1344,7 +1279,8 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
                         fflush(stderr);
                     }
                 } else {
-                    fn_AchievementManager_Update(achievementMgr, scaledTime);
+                    reinterpret_cast<Achievement::AchievementManager*>(achievementMgr)->Update(   // B.3.7 bridge
+                        *reinterpret_cast<const System::Time*>(scaledTime));
                 }
 
                 if (modGate) *modGate = savedGate;   // restore before anything else reads it
@@ -1560,9 +1496,9 @@ post_simulation:
     }
 
     // Step 14: SaveLoad::Update if active
-    if (self->m_saveLoad != nullptr && fn_SaveLoad_Update) {  // [GUARD-M5]
+    if (self->m_saveLoad != nullptr) {  // [GUARD-M5]
         TRACE("[GameUpdateLoop::Update] calling SaveLoad::Update...\n");
-        fn_SaveLoad_Update(self->m_saveLoad, time);
+        reinterpret_cast<Save::SaveLoad*>(self->m_saveLoad)->Update(*reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
         TRACE("[GameUpdateLoop::Update] SaveLoad::Update done\n");
     }
 
@@ -1627,7 +1563,8 @@ post_simulation:
         float fadeProgress = *(float*)((uintptr_t)self->m_userInterface + 0xf0);
         if (fadeProgress == 0.0f) {
             TRACE("[GameUpdateLoop::Update] transitioning to next loop %p\n", self->m_nextLoop);
-            if (fn_MainLoop_SetNextLoop) fn_MainLoop_SetNextLoop(*g_pMainLoopSingleton, self->m_nextLoop);
+            reinterpret_cast<Engine::MainLoop*>(*g_pMainLoopSingleton)->SetNextLoop(   // B.3.7 bridge
+                reinterpret_cast<Engine::UpdateLoop*>(self->m_nextLoop));
         }
     }
 
@@ -1875,7 +1812,10 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         TRACE("[GameUpdateLoop::Draw] calling SaveLoad::Draw...\n");
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        fn_SaveLoad_Draw(self->m_saveLoad, videoCtx, self->m_uiMaterial);
+        // Save::SaveLoad::Draw — the ExternalPtr<Material> is a bare register value (B7-5).
+        reinterpret_cast<Save::SaveLoad*>(self->m_saveLoad)->Draw(   // B.3.7 bridge
+            *reinterpret_cast<Video::Context*>(videoCtx),
+            Object::ExternalPtr<Graphics::Material>(reinterpret_cast<Graphics::Material*>(self->m_uiMaterial)));
         TRACE("[GameUpdateLoop::Draw] SaveLoad::Draw done\n");
     }
 
@@ -2415,7 +2355,7 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
     TRACE("[GameUpdateLoop::Shutdown] clearing achievement event handler...\n");
     if (g_ppAchievementManager && *g_ppAchievementManager && **g_ppAchievementManager) {
         void* achievementMgr = **g_ppAchievementManager;
-        fn_AchievementManager_SetEventHandler(achievementMgr, nullptr);
+        reinterpret_cast<Achievement::AchievementManager*>(achievementMgr)->SetEventHandler(nullptr);   // B.3.7 bridge
     }
 
     // Clear game flags (remove 0x100 bit)
@@ -2737,7 +2677,7 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
+        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)self + 0x150))->IsMet();   // B.3.7 bridge
 
         // 0x1c = scenario won (28), 0x1d = scenario failed (29). IsMet=1 -> 0x1c.
         // (The IDs were documented inverted here; the live string table settles it —
@@ -2750,7 +2690,10 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
 
         // Get achievement title (non-trivial return: self, retval)
         System::String titleStr;
-        fn_Achievement_GetTitle(achievement, &titleStr);
+        // B.3.7 bridge: GetTitle returns System::String BY VALUE; constructed
+        // straight into titleStr's storage (one AddRef, as the door did).
+        ::new (&titleStr) System::String(
+            reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());   // B.3.7 bridge
 
         // Build UI::String from achievement name (B.3.6: the old `uint8_t uiStr[24]`
         // scratch, whose only uses were this ctor and the conversion below).
@@ -2769,7 +2712,7 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
-        bool isMet = fn_AchievementInstance_IsMet(*(void**)((uintptr_t)self + 0x150));
+        bool isMet = reinterpret_cast<const Achievement::AchievementInstance*>(*(void**)((uintptr_t)self + 0x150))->IsMet();   // B.3.7 bridge
 
         // 0x1a = scenario won with name (26), 0x1b = scenario failed with name (27)
         int eventType = 0x1b - (int)isMet;

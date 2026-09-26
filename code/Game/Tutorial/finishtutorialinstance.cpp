@@ -21,6 +21,8 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "achievement/Goal.h"   // ENDGAME B.3.7 callers (K2): QUALIFIED base calls
+#include "object/TypeInfo.h"    // ENDGAME B.3.7 callers (K2): Object::Base::IsDerivedFrom
 #include <new>
 
 // No class-level resolved state needed — all resolved lazily in individual functions.
@@ -46,10 +48,9 @@
 void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
-    // Call GoalInstance base persist
-    if (fn_GoalInstance_Persist) {
-        fn_GoalInstance_Persist(self, stream);
-    }
+    // Achievement::GoalInstance::Persist (slot 3, 0x18009ef70) — QUALIFIED (B7-13):
+    // an unqualified call would dispatch through this exe table back into this slot.
+    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::Persist(stream);   // B.3.7 bridge
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
@@ -61,31 +62,19 @@ void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
     // Type-check: if deserialized object is not a TutorialInstance, null it out
     void* obj = *(void**)(s + 0x20);
     if (obj != nullptr) {
-        // IsDerivedFrom check — use fn_IsDerivedFrom dispatch slot
-        // The original uses TypeInfo_TutorialInstance for the check.
-        // For safety, we read the fn_IsDerivedFrom from the dispatch slot.
-        typedef bool (*fn_IsDerivedFrom_t)(void* obj, void* typeInfo);
-        static fn_IsDerivedFrom_t s_fn_IsDerivedFrom = nullptr;
-        static void* s_typeInfo = nullptr;
-        if (!s_fn_IsDerivedFrom) {
-            // fn_IsDerivedFrom is at a dispatch slot — resolve from exe .rdata
-            void** slot = (void**)ResolveAddr(Module::Exe, 0x140151c08);
-            if (slot && *slot) {
-                s_fn_IsDerivedFrom = (fn_IsDerivedFrom_t)*slot;
-            }
-            // TypeInfo_TutorialInstance referenced in the original code
-            // The decompilation references "TypeInfo_TutorialInstance" which is
-            // a .rdata pointer. Need to find the actual address.
-            void** tiSlot = (void**)ResolveAddr(Module::Exe, 0x1401c67e0);
-            if (tiSlot) {
-                s_typeInfo = tiSlot;
-            }
-        }
-        if (s_fn_IsDerivedFrom && s_typeInfo) {
-            bool isDerived = s_fn_IsDerivedFrom(obj, s_typeInfo);
-            if (!isDerived) {
-                *(uint64_t*)(s + 0x20) = 0;
-            }
+        // Object::Base::IsDerivedFrom (import slot 0x140152a98) against the id in
+        // TypeInfo_TutorialInstance (dword 0x1401c6668), exactly retail's
+        // 0x1400d7c3a `MOV EDX,[0x1401c6668]` / 0x1400d7c40 `CALL [0x140152a98]`.
+        // This used to resolve import slot 0x140151c08 — which is
+        // `?Save@Configuration@Audio@@QEAAXXZ`, not IsDerivedFrom, and unregistered —
+        // and the unrelated storage 0x1401c67e0, so the check silently never ran
+        // (CALLER_SURFACE.md 6.2, B37_RULES 6.3). 0x1401c6668 is registered and
+        // filled after Factory::Startup by standalone/reg_tutorial_typeid.cpp.
+        const uint32_t tidTutorialInstance =
+            *reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c6668));
+        bool isDerived = reinterpret_cast<const Object::Base*>(obj)->IsDerivedFrom(tidTutorialInstance);   // B.3.7 bridge
+        if (!isDerived) {
+            *(uint64_t*)(s + 0x20) = 0;
         }
     }
 
