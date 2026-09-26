@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-struct ShowTool;
+class ShowTool;
 
 // ShowTool::Serialize -- serialize all fields
 void ShowTool_Serialize_Impl(void* self, void* stream);
@@ -12,9 +12,6 @@ void ShowTool_Serialize_Impl(void* self, void* stream);
 // ShowTool::AbstractImpl (_purecall) -- show/hide tool based on toolId
 // Returns int per bug class 7. RDX = actionStack (bug class 6).
 int ShowTool_AbstractImpl_Impl(void* self, void* actionStack);
-
-// ShowTool::Exit -- 3 bytes (ret 0), unhookable but implemented for standalone exe
-int ShowTool_Exit_Impl(void* self);
 
 // ShowTool::CheckEntity -- hides tool on entity at +0x20
 void ShowTool_CheckEntity_Impl(void* self);

@@ -144,31 +144,6 @@ bool CreateNaturalResource_ResolveFuncs() {
 }
 
 // ============================================================
-// ScalarDtor (0x140022240)
-// Set vtables to CreateNaturalResource then Action, call ~Internal, optionally free.
-// ============================================================
-void* CreateNaturalResource_ScalarDtor_Impl(CreateNaturalResource* self, uint32_t flags) {
-    // Set CreateNaturalResource vtable (for correct virtual dispatch during destruction)
-    self->vtable = (void*)ResolveAddr(Module::Exe, CreateNaturalResourceAddr::Vtable);
-    // Set Action base vtable (base class destructor phase)
-    // Action vtable at 0x14015f700 (base Action vtable)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x14015f700);
-
-    // If entity ref at +0x10 is non-null, delete it
-    if (self->entity != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
-    }
-
-    // Call Object::Internal::~Internal
-    fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
-}
-
-// ============================================================
 // Serialize (0x1400c6890)
 // Serializes: status(+0x18), typeRef(+0x20), int(+0x30), versioned entity(+0x28)
 // ============================================================
@@ -362,42 +337,56 @@ int CreateNaturalResource_GetTarget_Impl(CreateNaturalResource* self, void* para
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fca0 (10 slots), size 0x38, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class CreateNaturalResource (CreateNaturalResource.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_CreateNaturalResource_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t CreateNaturalResource_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("CreateNaturalResource");
-    return c;
+// create 0x1400221d0 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+CreateNaturalResource::CreateNaturalResource()
+    : descEntity(nullptr),
+      parentEntity(nullptr),
+      cellIndex(0),
+      _pad34{} {}
+
+// [0] 0x140022240
+Object::Base* CreateNaturalResource::DeletingDtor(unsigned flags) {
+    this->~CreateNaturalResource();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_CreateNaturalResource_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&CreateNaturalResource_GetTypeId,           // +0x10 GetTypeId
-    (void*)&CreateNaturalResource_Serialize_Impl,      // +0x18 Serialize
-    (void*)&CreateNaturalResource_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
-    (void*)&CreateNaturalResource_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c6890
+void CreateNaturalResource::Persist(void* stream) { CreateNaturalResource_Serialize_Impl(this, stream); }
+// [4] 0x1400c6650
+int  CreateNaturalResource::AbstractImpl(void* actionStack) { return CreateNaturalResource_AbstractImpl_Impl(this, actionStack); }
+// [9] 0x1400c6610
+bool CreateNaturalResource::GetTarget(void* param) { return CreateNaturalResource_GetTarget_Impl(this, param) != 0; }
 
+void* CreateNaturalResource::CreateNewObject() {
+    CreateNaturalResource_ResolveFuncs();
+    void* p = Object::detail::InternalMemAlloc(sizeof(CreateNaturalResource), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CreateNaturalResource());
+}
+void* CreateNaturalResource::CreateInPlaceObject(void* storage) {
+    CreateNaturalResource_ResolveFuncs();
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CreateNaturalResource());
+}
+
+DEFINE_EXE_VTABLE(CreateNaturalResource, "_ZTV21CreateNaturalResource")
+
+// B38 D5: 0x14015fca0 is still read back BY ADDRESS outside this block
+// (work_act_hunt.cpp:127),
+// so the row stays, serving the compiler table (every such reader builds the
+// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterCreateNaturalResourceVtable() {
-    RegisterExeAddr(0x14015fca0, (uintptr_t)g_CreateNaturalResource_Vtable);
+    RegisterExeAddr(0x14015fca0, reinterpret_cast<uintptr_t>(CreateNaturalResource::Vtable()));
 }
-extern "C" void* CreateNaturalResource_CreateInPlace(void* mem) {
-    CreateNaturalResource_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x38, g_CreateNaturalResource_Vtable);
-}
-extern "C" void* CreateNaturalResource_Factory(void) {
-    CreateNaturalResource_ResolveFuncs();
-    return Action_Alloc(0x38, g_CreateNaturalResource_Vtable);
-}
-REGISTER_TYPE(CreateNaturalResource, "Action", &CreateNaturalResource_Factory, &CreateNaturalResource_CreateInPlace);
+
+DEFINE_EXE_TYPE(CreateNaturalResource, "Action")

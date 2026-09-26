@@ -79,30 +79,6 @@ bool AnimateNaturalResource_ResolveFuncs() {
 }
 
 // ============================================================
-// ScalarDtor (vtable slot 0)
-// Sets vtables, calls DeletePtr on entity ref, ~Internal, optionally free.
-// ============================================================
-void* AnimateNaturalResource_ScalarDtor_Impl(AnimateNaturalResource* self, uint32_t flags) {
-    // Set AnimateNaturalResource vtable
-    self->vtable = (void*)ResolveAddr(Module::Exe, AnimateNaturalResourceAddr::Vtable);
-    // Set Action base vtable (destructor chain)
-    uintptr_t actionVtable = ResolveAddr(Module::Exe, 0x14015faa0);
-    self->vtable = (void*)actionVtable;
-
-    // DeletePtr on entity IBP at +0x10 if non-null
-    if (self->entity != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
-    }
-
-    fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
-}
-
-// ============================================================
 // Serialize (0x1400c5660, vtable slot 3)
 // Serializes status, entity ref with type check, animIndex, waitForAnim.
 // ============================================================
@@ -116,7 +92,7 @@ void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* s
 
     // Serialize status (version 0)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->_status), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity ref + extra fields (version 0)
@@ -196,42 +172,57 @@ bool AnimateNaturalResource_GetTarget_Impl(AnimateNaturalResource* self, void* p
 // }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fb10 (10 slots), size 0x30, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class AnimateNaturalResource (AnimateNaturalResource.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_AnimateNaturalResource_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t AnimateNaturalResource_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("AnimateNaturalResource");
-    return c;
+// create 0x140021dc0 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+AnimateNaturalResource::AnimateNaturalResource()
+    : _field20(nullptr),
+      animIndex(0),
+      waitForAnim(0),
+      _pad2D{} {}
+
+// [0] 0x140021e30
+Object::Base* AnimateNaturalResource::DeletingDtor(unsigned flags) {
+    this->~AnimateNaturalResource();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_AnimateNaturalResource_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&AnimateNaturalResource_GetTypeId,           // +0x10 GetTypeId
-    (void*)&AnimateNaturalResource_Serialize_Impl,      // +0x18 Serialize
-    (void*)&AnimateNaturalResource_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&AnimateNaturalResource_Execute_Impl,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
-    (void*)&AnimateNaturalResource_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c5660
+void AnimateNaturalResource::Persist(void* stream) { AnimateNaturalResource_Serialize_Impl(this, stream); }
+// [4] 0x1400c5600
+int  AnimateNaturalResource::AbstractImpl(void* actionStack) { return AnimateNaturalResource_AbstractImpl_Impl(this, actionStack); }
+// [5] 0x1400c55b0
+int  AnimateNaturalResource::Execute(void* actionStack, void* time) { return AnimateNaturalResource_Execute_Impl(this, actionStack, time); }
+// [8] 0x1400c55a0 — the leaf's own `RET 0` (same bytes as the base body)
+void AnimateNaturalResource::CheckEntity() {}
+// [9] 0x1400c5560
+bool AnimateNaturalResource::GetTarget(void* param) { return AnimateNaturalResource_GetTarget_Impl(this, param); }
 
-extern "C" void RegisterAnimateNaturalResourceVtable() {
-    RegisterExeAddr(0x14015fb10, (uintptr_t)g_AnimateNaturalResource_Vtable);
-}
-extern "C" void* AnimateNaturalResource_CreateInPlace(void* mem) {
+void* AnimateNaturalResource::CreateNewObject() {
     AnimateNaturalResource_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x30, g_AnimateNaturalResource_Vtable);
+    void* p = Object::detail::InternalMemAlloc(sizeof(AnimateNaturalResource), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AnimateNaturalResource());
 }
-extern "C" void* AnimateNaturalResource_Factory(void) {
+void* AnimateNaturalResource::CreateInPlaceObject(void* storage) {
     AnimateNaturalResource_ResolveFuncs();
-    return Action_Alloc(0x30, g_AnimateNaturalResource_Vtable);
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AnimateNaturalResource());
 }
-REGISTER_TYPE(AnimateNaturalResource, "Action", &AnimateNaturalResource_Factory, &AnimateNaturalResource_CreateInPlace);
+
+DEFINE_EXE_VTABLE(AnimateNaturalResource, "_ZTV22AnimateNaturalResource")
+
+// B38 D5: every by-address reader of 0x14015fb10 was inside this block and now
+// builds the object with the real ctor, so the row is gone. The function stays
+// until the coordinator's address_registry hunk drops its call.
+extern "C" void RegisterAnimateNaturalResourceVtable() {}
+
+DEFINE_EXE_TYPE(AnimateNaturalResource, "Action")

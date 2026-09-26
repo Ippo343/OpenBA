@@ -12,13 +12,11 @@
 //   0x1400c6a20  CreateNaturalResource_Action_CopyCtor (trivial field-copy ctor)
 //   0x1400c29a0  Entity_impl_29a0  (heading-toward-path-target; returns float XMM0)
 //
+// ENDGAME B.3.8 ACT: the four ctors are the classes' REAL constructors now
+// (ShowTool, RemoveNaturalResource, AnimateNaturalResource,
+// CreateNaturalResource — defined below, next to their by-address doors); the
+// compiler stamps the vtables, so the ResolveAddr'd tables are gone.
 // Closure (all already registered elsewhere — bodies NOT duplicated):
-//   vtable_Action               0x14015faa0  (base, immediately overwritten — null-safe)
-//   vtable_ShowTool             0x1401589b0  (showtool.cpp)
-//   vtable_RemoveNaturalResource 0x140160050 (removenaturalresource.cpp)
-//   vtable_AnimateNaturalResource 0x14015fb10(animatenaturalresource.cpp)
-//   vtable_CreateNaturalResource 0x14015fca0 (createnaturalresource.cpp)
-//   Object::Internal::Internal   IAT 0x140152768 (fn_ObjectInternal_Ctor)
 //   Entity_ClearPathQueue        0x140003f60 (reg_action_cnr)
 //   FUN_140004680                0x140004680 (reg_component_nature)
 //   CharacterComponent_impl_f3e0 0x14009f3e0 (mapquery.cpp / cell->world)
@@ -27,19 +25,17 @@
 //
 // Registration: RegisterActionChildCtorsBatch() in standalone/reg_action_child_ctors.cpp.
 
+#include "Action/AnimateNaturalResource.h"
+#include "Action/CreateNaturalResource.h"
+#include "Action/RemoveNaturalResource.h"
+#include "Action/ShowTool.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "math/Math.h"
 #include <cstdint>
+#include <new>
 
 namespace {
-
-// --- Vtable addresses (exe .rdata), resolved lazily once. ---
-static uintptr_t s_vt_Action     = 0;  // 0x14015faa0
-static uintptr_t s_vt_ShowTool   = 0;  // 0x1401589b0
-static uintptr_t s_vt_RemoveNR   = 0;  // 0x140160050
-static uintptr_t s_vt_AnimateNR  = 0;  // 0x14015fb10
-static uintptr_t s_vt_CreateNR   = 0;  // 0x14015fca0
 
 // --- Registered exe sub-callees for Entity_impl_29a0. ---
 // Entity_ClearPathQueue / FUN_140004680: member-style (RCX=inner, RDX=retIBP) -> retIBP.
@@ -57,11 +53,6 @@ static fn_cellToWorld_t  s_fn_CellToWorld     = nullptr;  // 0x14009f3e0
 static bool s_init = false;
 static void EnsureInit() {
     if (s_init) return;
-    s_vt_Action    = ResolveAddr(Module::Exe, 0x14015faa0);
-    s_vt_ShowTool  = ResolveAddr(Module::Exe, 0x1401589b0);
-    s_vt_RemoveNR  = ResolveAddr(Module::Exe, 0x140160050);
-    s_vt_AnimateNR = ResolveAddr(Module::Exe, 0x14015fb10);
-    s_vt_CreateNR  = ResolveAddr(Module::Exe, 0x14015fca0);
     s_fn_ClearPathQueue = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_GetCellNode    = reinterpret_cast<fn_entityGetIBP_t>(ResolveAddr(Module::Exe, 0x140004680));
     s_fn_CellToWorld    = reinterpret_cast<fn_cellToWorld_t >(ResolveAddr(Module::Exe, 0x14009f3e0));
@@ -76,18 +67,14 @@ static void EnsureInit() {
 //   Base Internal ctor; Action vtable -> ShowTool vtable; +0x20 = *param_2; +0x28 = toolType.
 // ============================================================
 void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
-    s[0x18]                                 = 0;
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_ShowTool;
-    *reinterpret_cast<uint64_t*>(s + 0x20)  = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20)  = *reinterpret_cast<uint64_t*>(param_2);
-    *reinterpret_cast<int32_t*>(s + 0x28)   = toolType;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (ShowTool.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) ShowTool(param_2, toolType));
 }
+
+// 0x140042890: Action() (Internal, +0x10/+0x18 = 0), then +0x20 = *param_2 (the
+// door's double store `+0x20 = 0; +0x20 = *param_2` keeps only the second), +0x28.
+ShowTool::ShowTool(void* entity, int toolId)
+    : _field20(*static_cast<void**>(entity)), _field28(toolId) {}
 
 // ============================================================
 // FUN_1400cadf0 — RemoveNaturalResource_Action_CopyCtor
@@ -95,20 +82,15 @@ void* ActChild_ShowToolCtor_42890(void* self, void* param_2, int toolType) {
 //   +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
 // ============================================================
 void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* param_3, uint8_t param_4) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
-    s[0x18]                                 = 0;
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_RemoveNR;
-    *reinterpret_cast<uint64_t*>(s + 0x20)  = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20)  = *param_3;
-    *reinterpret_cast<uint64_t*>(s + 0x28)  = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28)  = *param_2;
-    s[0x30]                                 = param_4;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (RemoveNaturalResource.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) RemoveNaturalResource(param_2, param_3, param_4));
 }
+
+// 0x1400cadf0: +0x20 = *param_3 ; +0x28 = *param_2 ; +0x30 = param_4.
+RemoveNaturalResource::RemoveNaturalResource(uint64_t* p2, uint64_t* p3, uint8_t flag)
+    : _field20(reinterpret_cast<void*>(*p3)),
+      _field28(reinterpret_cast<void*>(*p2)),
+      _field30(flag) {}
 
 // ============================================================
 // FUN_1400c57d0 — AnimateNaturalResource_Action_CopyCtor
@@ -116,19 +98,15 @@ void* ActChild_RemoveNRCopyCtor_cadf0(void* self, uint64_t* param_2, uint64_t* p
 //   +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
 // ============================================================
 void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t param_3, uint8_t param_4) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
-    s[0x18]                                 = 0;
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_AnimateNR;
-    *reinterpret_cast<uint64_t*>(s + 0x20)  = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20)  = *param_2;
-    *reinterpret_cast<uint32_t*>(s + 0x28)  = param_3;
-    s[0x2c]                                 = param_4;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (AnimateNaturalResource.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) AnimateNaturalResource(param_2, param_3, param_4));
 }
+
+// 0x1400c57d0: +0x20 = *param_2 ; +0x28 = param_3 ; +0x2c = param_4.
+AnimateNaturalResource::AnimateNaturalResource(uint64_t* entity, uint32_t animIndexArg, uint8_t wait)
+    : _field20(reinterpret_cast<void*>(*entity)),
+      animIndex(static_cast<int32_t>(animIndexArg)),
+      waitForAnim(wait) {}
 
 // ============================================================
 // FUN_1400c6a20 — CreateNaturalResource_Action_CopyCtor
@@ -136,19 +114,15 @@ void* ActChild_AnimateNRCopyCtor_c57d0(void* self, uint64_t* param_2, uint32_t p
 //   +0x20 = param_2 ; +0x28 = *param_3 ; +0x30 = param_4.
 // ============================================================
 void* ActChild_CreateNRCopyCtor_c6a20(void* self, uint64_t param_2, uint64_t* param_3, uint32_t param_4) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10)  = 0;
-    s[0x18]                                 = 0;
-    *reinterpret_cast<uintptr_t*>(s)        = s_vt_CreateNR;
-    *reinterpret_cast<uint64_t*>(s + 0x20)  = param_2;
-    *reinterpret_cast<uint64_t*>(s + 0x28)  = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28)  = *param_3;
-    *reinterpret_cast<uint32_t*>(s + 0x30)  = param_4;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (CreateNaturalResource.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) CreateNaturalResource(param_2, param_3, param_4));
 }
+
+// 0x1400c6a20: +0x20 = param_2 (raw) ; +0x28 = *param_3 ; +0x30 = param_4.
+CreateNaturalResource::CreateNaturalResource(uint64_t desc, uint64_t* parent, uint32_t cell)
+    : descEntity(reinterpret_cast<void*>(desc)),
+      parentEntity(reinterpret_cast<void*>(*parent)),
+      cellIndex(static_cast<int32_t>(cell)) {}
 
 // ============================================================
 // FUN_1400c29a0 — Entity_impl_29a0

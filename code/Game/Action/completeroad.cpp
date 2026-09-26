@@ -102,42 +102,55 @@ int CompleteRoad_AbstractImpl_Impl(void* self, void* actionStack) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fb70 (10 slots), size 0x30, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class CompleteRoad (CompleteRoad.h) — ENDGAME B.3.8 ACT. The hand-built
+// g_CompleteRoad_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits the
+// table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t CompleteRoad_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("CompleteRoad");
-    return c;
+// create 0x140021ec0 (inlined ctor). The tree's factory zeroed every field
+// above +0x10; kept (B38 B8-13 / D1: no behaviour change in this step).
+CompleteRoad::CompleteRoad()
+    : roadTileIndex(0), roadType(0), roadDirection(0), _pad29{} {}
+
+// 0x1400c59d0 (ActChild_CompleteRoadCopyCtor_c59d0 is its registered door):
+// +0x20 = tileIndex (R8D), +0x24 = roadType (EDX), +0x28 = direction (R9B).
+CompleteRoad::CompleteRoad(uint32_t roadTypeArg, uint32_t tileIndex, uint8_t direction)
+    : roadTileIndex(static_cast<int32_t>(tileIndex)),
+      roadType(static_cast<int32_t>(roadTypeArg)),
+      roadDirection(direction) {}
+
+// [0] 0x140021f30: stamp 0x14015fb70, then Action's dtor, MemFree on &1.
+Object::Base* CompleteRoad::DeletingDtor(unsigned flags) {
+    this->~CompleteRoad();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_CompleteRoad_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&CompleteRoad_GetTypeId,           // +0x10 GetTypeId
-    (void*)&CompleteRoad_Serialize_Impl,      // +0x18 Serialize
-    (void*)&CompleteRoad_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
-    (void*)&Action_BaseGetTarget, // +0x48 GetTarget
-};
+void CompleteRoad::Persist(void* stream) { CompleteRoad_Serialize_Impl(this, stream); }        // [3] 0x1400c5880
+int  CompleteRoad::AbstractImpl(void* actionStack) {                                           // [4] 0x1400c5850
+    return CompleteRoad_AbstractImpl_Impl(this, actionStack);
+}
 
-extern "C" void RegisterCompleteRoadVtable() {
-    RegisterExeAddr(0x14015fb70, (uintptr_t)g_CompleteRoad_Vtable);
-}
-extern "C" void* CompleteRoad_CreateInPlace(void* mem) {
+void* CompleteRoad::CreateNewObject() {
     CompleteRoad_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x30, g_CompleteRoad_Vtable);
+    void* p = Object::detail::InternalMemAlloc(sizeof(CompleteRoad), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CompleteRoad());
 }
-extern "C" void* CompleteRoad_Factory(void) {
+void* CompleteRoad::CreateInPlaceObject(void* storage) {
     CompleteRoad_ResolveFuncs();
-    return Action_Alloc(0x30, g_CompleteRoad_Vtable);
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CompleteRoad());
 }
-REGISTER_TYPE(CompleteRoad, "Action", &CompleteRoad_Factory, &CompleteRoad_CreateInPlace);
+
+DEFINE_EXE_VTABLE(CompleteRoad, "_ZTV12CompleteRoad")
+
+// B38 D5: 0x14015fb70 had one by-address reader, action_child_ctors2.cpp's
+// door, which now builds the object with the real ctor — so the row is gone.
+// The function stays until the coordinator's address_registry hunk drops its call.
+extern "C" void RegisterCompleteRoadVtable() {}
+
+DEFINE_EXE_TYPE(CompleteRoad, "Action")

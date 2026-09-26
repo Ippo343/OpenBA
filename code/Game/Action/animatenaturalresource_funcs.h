@@ -4,10 +4,7 @@
 
 #include <cstdint>
 
-struct AnimateNaturalResource;
-
-// AnimateNaturalResource::ScalarDtor — set vtables, call ~Internal, optionally free
-void* AnimateNaturalResource_ScalarDtor_Impl(AnimateNaturalResource* self, uint32_t flags);
+class AnimateNaturalResource;
 
 // AnimateNaturalResource::Serialize — serialize status, entity ref, animIndex, waitForAnim
 void AnimateNaturalResource_Serialize_Impl(AnimateNaturalResource* self, void* stream);

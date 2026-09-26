@@ -5,12 +5,6 @@
 #include "PathTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00, Slot0): Scalar deleting destructor.
-// Resets vtable to PathTool -> Tool, calls Object::Internal::~Internal,
-// conditionally frees memory if flags & 1.
-// Original: 0x140026b70
-void* PathTool_Dtor(PathTool* self, uint32_t flags);
-
 // OnKey (vtable +0x30, Slot6): Path creation input handler (multi-point, NOT drag-based).
 // On key-down with Pressed(0,5): ray-picks map cell under cursor, resolves entity at cell,
 // highlights/selects the entity for path placement by calling helper functions.

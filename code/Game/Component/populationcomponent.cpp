@@ -567,85 +567,64 @@ void PopulationComponent_InitFuncs() {
 }
 
 // ============================================================
-// Standalone factory (Foundation D — component instantiation)
+// ENDGAME B.3.8 CIT — PopulationComponent as a REAL class (PopulationComponent.h)
 // ============================================================
-// In the standalone exe the original is not mapped, so the engine's
-// Object::Factory::CreateObject(typeId) must resolve to a C++ factory here — the
-// component analogue of the Foundation C description factories. Without it the
-// type stays NullFactory and ComponentEntity_CtorFromDescription gets a null
-// component (silently) — the entity spawns but is empty.
-//
-// Produces an inert-but-valid component via the shared infrastructure (see
-// component_factory_base.h): correct size (0x70) + Object::Internal base + shared
-// stub vtable + the real capability flags (+0x20 = 0xCB, from PopulationComponent_Ctor
-// 0x1400546d0) + zeroed body. The component still registers in the world entity
-// list and its update/draw buckets; the stubbed Update/Draw are safe no-ops until
-// the real methods get true standalone reimpls.
+// Before: a 48-slot hand-built PopulationComponent_LiveVtable filled at every
+// create (slots 3 Serialize, 4 Startup, 6 OnAdd, 7 OnRemove, 9 Update),
+// Inert_ScalarDtor in slot 0. After: the compiler's 16-slot vtable and a real
+// ctor/dtor chain (B38_RULES D1, D2). Pair with a live HerdComponent: Startup
+// creates the herd entities.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/PopulationComponent.h"
 
-// Live bring-up (env BANISHED_LIVE_POPULATION or global the global live-components switch).
-// Slot 4 Startup does the body init retail does at spawn — description at +0x28,
-// habitability grid at +0x38/+0x40, herd grid dim at +0x48 — and, crucially,
-// creates the wild-animal herd entities. Slot 9 Update then has the +0x28 owner
-// and +0x40 cell count it needs for real density simulation.
-//
-// Pair with BANISHED_LIVE_HERD so the herds it creates actually tick.
-//
-// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_S to ALSO
-// wire slot 3 (Serialize, retail 0x1400544a0 — Ghidra mislabels it "Shutdown",
-// body PopulationComponent_Serialize_Real in animalwave_serialize.cpp, registered
-// in reg_animal_serialize.cpp) UNCONDITIONALLY. Ported but never installed: a
-// loaded save's PopulationComponent kept the base-Component serialize, so the
-// PopulationDescription backref, habitability grid, density cells, and herd-entity
-// list all reset to null/0 on load.
+// Retail 0x1400544a0 (animalwave_serialize.cpp; Ghidra calls it "Shutdown").
 extern "C" void PopulationComponent_Serialize_Real(void* self, void* stream);
 
-static uint32_t PopulationComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PopulationComponent");
-    return cached;
+// 0x1400546d0. Component() is the CALL 0x1401188b0; the 0x14015a360 stamp is
+// the compiler's; every field = 0; flags |= 0xcb.
+PopulationComponent::PopulationComponent()
+    : field28(nullptr), field30(0), _pad34{}, field38(nullptr), field40(nullptr),
+      field48(0), _pad4C{}, field50(nullptr), field58(nullptr), field60(nullptr),
+      field68(nullptr) {
+    OrFlagsInCtor(0xcb);
 }
-static void* PopulationComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void PopulationComponent_UpdateVSlot(void* s, void* t) {
-    PopulationComponent_Update(reinterpret_cast<PopulationComponent*>(s),
-                                reinterpret_cast<int64_t*>(t));
+
+// [0] 0x14000b0a0. PORT GAP (retail 0x140054660 frees the +0x50 and +0x38
+// arrays first) — the tree's Inert_ScalarDtor never did; kept
+// (PopulationComponent.h).
+Object::Base* PopulationComponent::DeletingDtor(unsigned flags) {
+    this->~PopulationComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void PopulationComponent_StartupVSlot(void* s) {
-    PopulationComponent_Startup(reinterpret_cast<PopulationComponent*>(s));
+
+void PopulationComponent::Persist(void* stream) { PopulationComponent_Serialize_Real(this, stream); }   // [3] 0x1400544a0
+void PopulationComponent::Startup()  { PopulationComponent_Startup(this); }                              // [4] 0x140054220
+// Town-registry membership (retail slots 6/7), a pair: slot 7 is the only
+// remover of what slot 6 appends.
+void PopulationComponent::OnAdded()  { PopulationComponent_OnAdd(this); }                                // [6] 0x1400541c0
+void PopulationComponent::OnRemove() { PopulationComponent_OnRemove(this); }                             // [7] 0x140054180
+
+// [9] 0x140054070. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void PopulationComponent::Update(void* time) {
+    PopulationComponent_Update(this, static_cast<int64_t*>(time));
 }
-static void PopulationComponent_OnAddVSlot(void* s) { PopulationComponent_OnAdd(s); }
-static void PopulationComponent_OnRemoveVSlot(void* s) { PopulationComponent_OnRemove(s); }
-static void PopulationComponent_SerializeVSlot(void* self, void* stream) {
-    PopulationComponent_Serialize_Real(self, stream);
+
+void PopulationComponent::Slot11() {}                             // [11] 0x140054210: retail's own `RET`
+
+// create 0x14000af50: MemAlloc(0x70, 8), then the ctor.
+void* PopulationComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PopulationComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PopulationComponent());
 }
-static void PopulationComponent_FinishLiveVtable() {
-    PopulationComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&PopulationComponent_StartupVSlot);
-    PopulationComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&PopulationComponent_UpdateVSlot);
-    // Town-registry membership (retail slots 6/7). Installed as a pair: slot 7
-    // is the only remover of what slot 6 appends.
-    PopulationComponent_LiveVtable[6] =
-        reinterpret_cast<void*>(&PopulationComponent_OnAddVSlot);
-    PopulationComponent_LiveVtable[7] =
-        reinterpret_cast<void*>(&PopulationComponent_OnRemoveVSlot);
-    PopulationComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&PopulationComponent_SerializeVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* PopulationComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PopulationComponent());
 }
-extern "C" void* PopulationComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x70, 0xCB,
-        PopulationComponent_LiveVtable,
-        reinterpret_cast<void*>(&PopulationComponent_LiveGetTypeId));
-    PopulationComponent_FinishLiveVtable();
-    return p;
-}
-static void* PopulationComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x70, 0xCB,
-        PopulationComponent_LiveVtable,
-        reinterpret_cast<void*>(&PopulationComponent_LiveGetTypeId));
-    PopulationComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(PopulationComponent, "Component",
-              &PopulationComponent_Factory, &PopulationComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(PopulationComponent, "_ZTV19PopulationComponent")
+DEFINE_EXE_TYPE(PopulationComponent, "Component")
