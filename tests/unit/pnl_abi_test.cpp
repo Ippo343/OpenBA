@@ -37,6 +37,8 @@
 #include "Dialog/HotKeyToolTipUI.h"
 #include "Dialog/ImmigrationUI.h"
 #include "Dialog/MapUI.h"
+#include "Dialog/ModBrowseUI.h"
+#include "Dialog/NoiseUI.h"
 #include "Dialog/OrchardUI.h"
 #include "Dialog/PageToggleUI.h"
 #include "Dialog/PastureUI.h"
@@ -45,6 +47,7 @@
 #include "Dialog/RadiusUI.h"
 #include "Dialog/ResidenceUI.h"
 #include "Dialog/ResourceLimitUI.h"
+#include "Dialog/SpriteCaptureUI.h"
 #include "Dialog/StatusBarUI.h"
 #include "Dialog/StatusIconUI.h"
 #include "Dialog/StorageCapacityUI.h"
@@ -283,6 +286,18 @@ UNIT_TEST(pnl_MapUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&MapUI::OnElementEvent), (uintptr_t)0x48);   // 0x14006c9e0
 }
 
+UNIT_TEST(pnl_ModBrowseUI_layout_and_slots) {
+    CheckPanelShape<ModBrowseUI>((size_t)0x30);
+    CHECK_EQ(SlotOffset(&ModBrowseUI::Persist), (uintptr_t)0x18);   // 0x14006d390
+}
+
+UNIT_TEST(pnl_NoiseUI_layout_and_slots) {
+    CheckPanelShape<NoiseUI>((size_t)0x70);
+    CHECK_EQ(SlotOffset(&NoiseUI::Persist), (uintptr_t)0x18);   // 0x140071bb0
+    CHECK_EQ(SlotOffset(&NoiseUI::OnCreated), (uintptr_t)0x20);   // 0x1400714c0
+    CHECK_EQ(SlotOffset(&NoiseUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400714a0
+}
+
 UNIT_TEST(pnl_OrchardUI_layout_and_slots) {
     CheckPanelShape<OrchardUI>((size_t)0x48);
     CHECK_EQ(SlotOffset(&OrchardUI::OnCreated), (uintptr_t)0x20);   // 0x1400755b0
@@ -347,6 +362,14 @@ UNIT_TEST(pnl_ResourceLimitUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&ResourceLimitUI::OnCreated), (uintptr_t)0x20);   // 0x140077970
     CHECK_EQ(SlotOffset(&ResourceLimitUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400778d0
     CHECK_EQ(SlotOffset(&ResourceLimitUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400777e0
+}
+
+UNIT_TEST(pnl_SpriteCaptureUI_layout_and_slots) {
+    CheckPanelShape<SpriteCaptureUI>((size_t)0x70);
+    CHECK_EQ(SlotOffset(&SpriteCaptureUI::Persist), (uintptr_t)0x18);   // 0x140079850
+    CHECK_EQ(SlotOffset(&SpriteCaptureUI::OnCreated), (uintptr_t)0x20);   // 0x140079640
+    CHECK_EQ(SlotOffset(&SpriteCaptureUI::OnUpdate), (uintptr_t)0x40);   // 0x1400793a0
+    CHECK_EQ(SlotOffset(&SpriteCaptureUI::OnElementEvent), (uintptr_t)0x48);   // 0x140079620
 }
 
 UNIT_TEST(pnl_StatusBarUI_layout_and_slots) {

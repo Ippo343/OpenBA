@@ -41,7 +41,6 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include "dialog_controller_vtable.h"
 #include "object/Internal.h"
 #include <new>
 // ENDGAME B.3.8 PNL: the DialogController classes this file registers.
@@ -54,10 +53,13 @@
 #include "Dialog/HotKeyToolTipUI.h"
 #include "Dialog/ImmigrationUI.h"
 #include "Dialog/MapUI.h"
+#include "Dialog/ModBrowseUI.h"
+#include "Dialog/NoiseUI.h"
 #include "Dialog/PageToggleUI.h"
 #include "Dialog/ProductionUI.h"
 #include "Dialog/ProfessionUI.h"
 #include "Dialog/ResourceLimitUI.h"
+#include "Dialog/SpriteCaptureUI.h"
 #include "Dialog/TitleDescToolTipUI.h"
 #include "Dialog/ToolUI.h"
 #include "Dialog/TradeUI.h"
@@ -886,26 +888,73 @@ void* MapUI::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(MapUI, "_ZTV5MapUI")
 DEFINE_EXE_TYPE(MapUI, "UI::DialogController")
-UI_DIALOG_STUB(ModBrowseUI,         "UI::DialogController", 0x30);
-UI_DIALOG_STUB(NoiseUI,             "UI::DialogController", 0x70);
+// ---- ModBrowseUI / NoiseUI: ENDGAME B.3.8 PNL — the real classes -------------
+// Until B.3.8 these two were UI_DIALOG_STUB rows: the reflected factory built a
+// 48-slot all-nop object (no base ctor, no base dtor) that was the ONLY
+// registration of either name (B38 D4). The factory now builds the real class.
+// Neither class's own retail bodies are wired yet: ModBrowseUI has none past
+// its `RET 0` slot 3; NoiseUI's slot 4 / slot 9 bodies are ported in
+// noiseui.cpp (NoiseUI_Slot4 / NoiseUI_Slot9) but were never reached through
+// the stub, so they stay PORT GAPs here and wiring them is its own titled
+// commit.
 
-// Wave 10D lane VTFID: the same inherited-slot fix as the hand-written blocks.
-// These three go through the UI_DIALOG_STUB macro, whose body is shared with the
-// UI::DialogInstance and UI::DialogControllerConfig types further down; those
-// have a DIFFERENT base and a different vtable, so the registration is written
-// out here per type rather than folded into the macro, where it would register
-// twenty tables whose base this fix knows nothing about.
-namespace {
-struct StubMacroDlgCtrlReg {
-    StubMacroDlgCtrlReg() {
-        void* stub = reinterpret_cast<void*>(&StubNop);
-        ::UIDialogControllerVtable::Register(uistub_ModBrowseUI::g_vt,
-                                             kStubVtableSlots, "ModBrowseUI", stub);
-        ::UIDialogControllerVtable::Register(uistub_NoiseUI::g_vt,
-                                             kStubVtableSlots, "NoiseUI", stub);
-    }
-} g_stubMacroDlgCtrlReg;
-}  // namespace
+// [4] PORT GAP (retail 0x1400714c0; ported as NoiseUI_Slot4, unwired) — the
+// tree's stub held a no-op; kept. B38 D3.2.
+void NoiseUI::OnCreated() {}
+// [9] PORT GAP (retail 0x1400714a0; ported as NoiseUI_Slot9, unwired) — kept a no-op.
+void NoiseUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t /*a*/,
+                             int32_t /*b*/, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
+                             void* /*userData*/) {}
+
+// [0] 0x140012720: ~ModBrowseUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* ModBrowseUI::DeletingDtor(unsigned flags) {
+    this->~ModBrowseUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400126d0: MemAlloc(0x30, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* ModBrowseUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ModBrowseUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ModBrowseUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* ModBrowseUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ModBrowseUI());
+}
+
+DEFINE_EXE_VTABLE(ModBrowseUI, "_ZTV11ModBrowseUI")
+DEFINE_EXE_TYPE(ModBrowseUI, "UI::DialogController")
+
+// [0] 0x140012da0: ~NoiseUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* NoiseUI::DeletingDtor(unsigned flags) {
+    this->~NoiseUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140012d30: MemAlloc(0x70, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* NoiseUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NoiseUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) NoiseUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* NoiseUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) NoiseUI());
+}
+
+DEFINE_EXE_VTABLE(NoiseUI, "_ZTV7NoiseUI")
+DEFINE_EXE_TYPE(NoiseUI, "UI::DialogController")
 // ---- PageToggleUI: PROMOTED to the real reimpl (production-statistics button) --
 // PageToggleUI drives the `checkProduction` CheckElement that Dialog/Production.rsc
 // inserts into a workplace dialog's title bar (userTitle0). It is the ONLY thing
@@ -1358,18 +1407,46 @@ void* ResourceLimitUI::CreateInPlaceObject(void* storage) {
 
 DEFINE_EXE_VTABLE(ResourceLimitUI, "_ZTV15ResourceLimitUI")
 DEFINE_EXE_TYPE(ResourceLimitUI, "UI::DialogController")
-UI_DIALOG_STUB(SpriteCaptureUI,     "UI::DialogController", 0x70);
+// ---- SpriteCaptureUI: ENDGAME B.3.8 PNL — the real class --------------------
+// Was a UI_DIALOG_STUB row (48-slot all-nop object, the only registration of
+// the name; B38 D4). Its slot 4 / 8 bodies are ported in spritecaptureui.cpp
+// (SpriteCaptureUI_Serialize / SpriteCaptureUI_OnCreate) but were never reached
+// through the stub; they stay PORT GAPs (no-ops, as the stub had them) and
+// wiring them is its own titled commit.
 
-// Wave 10D lane VTFID — see the ModBrowseUI/NoiseUI note above.
-namespace {
-struct SpriteCaptureDlgCtrlReg {
-    SpriteCaptureDlgCtrlReg() {
-        ::UIDialogControllerVtable::Register(uistub_SpriteCaptureUI::g_vt,
-                                             kStubVtableSlots, "SpriteCaptureUI",
-                                             reinterpret_cast<void*>(&StubNop));
-    }
-} g_spriteCaptureDlgCtrlReg;
-}  // namespace
+// [4] PORT GAP (retail 0x140079640; ported as SpriteCaptureUI_Serialize, unwired).
+void SpriteCaptureUI::OnCreated() {}
+// [8] PORT GAP (retail 0x1400793a0; ported as SpriteCaptureUI_OnCreate, unwired).
+void SpriteCaptureUI::OnUpdate(const System::Time& /*time*/) {}
+// [9] PORT GAP (retail 0x140079620; not ported).
+void SpriteCaptureUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
+                                     int32_t /*a*/, int32_t /*b*/, int32_t /*c*/,
+                                     int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {}
+
+// [0] 0x140013fc0: ~SpriteCaptureUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* SpriteCaptureUI::DeletingDtor(unsigned flags) {
+    this->~SpriteCaptureUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140013d10: MemAlloc(0x70, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* SpriteCaptureUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SpriteCaptureUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) SpriteCaptureUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* SpriteCaptureUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) SpriteCaptureUI());
+}
+
+DEFINE_EXE_VTABLE(SpriteCaptureUI, "_ZTV15SpriteCaptureUI")
+DEFINE_EXE_TYPE(SpriteCaptureUI, "UI::DialogController")
 // ---- StatusBarUI: PROMOTED to real SA vtable (statusbarui.cpp) — the toolbar
 //      "town status" utility dialog (group 4, next to Map) now renders the town
 //      name title + population/resources/weather/hearts/stars instead of zeros ----
