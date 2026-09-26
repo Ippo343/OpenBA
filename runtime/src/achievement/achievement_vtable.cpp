@@ -159,15 +159,14 @@
 // (reference_porting_can_grow_the_cutover_surface.md).
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
-#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_PtrZero bridge
 
-using RtAchievement::AchievementInstance;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
@@ -176,23 +175,17 @@ using rt::io::Stream;
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
-// achievement_manager.cpp, Wave 5 lane B — the byte-faithful port of
-// ??0Achievement@0@QEAA@XZ (0x18009e240) and its thirteen stores.
+// achievement_manager.cpp — the byte-faithful ??0Achievement@0@QEAA@XZ
+// (0x18009e240) and its thirteen stores. A constructor DOOR, not a member: it
+// stamps the MINTED tables (B4b-2 / B7-3).
 extern void* RtAch_Achievement_Ctor(void* selfRaw);
-
-extern "C" void* RtAch_Achievement_Construct(void*);
-extern "C" void* RtAch_Achievement_Reconstruct(void*);
-extern "C" void  RtAch_Achievement_Destruct(void*);
 
 namespace {
 
 // ---------------------------------------------------------------------------
-// The codec prologue, WITH the version argument exposed.
+// The codec prologue, WITH the version argument exposed (Persist passes 1 for
+// the outer codec and 0 for the inner one — see the banner).
 // ---------------------------------------------------------------------------
-// Deliberately NOT shared with goal_serialize.cpp / achievement_serialize.cpp:
-// those two hardcode version 0 and are gated by a different env switch, and a
-// shared helper would make one lane's kill switch silently affect the other's
-// bodies. The duplication is the same one those two files already record.
 ReaderWriter* MakeCodecVersioned(Stream* stream, Serializer* ser, int version) {
     ser->stream = stream;
     ser->readerWriter = nullptr;
@@ -209,148 +202,87 @@ ReaderWriter* MakeCodecVersioned(Stream* stream, Serializer* ser, int version) {
     return rw;
 }
 
-// `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor. Retail runs
-// it for BOTH codecs, inner first.
+// `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
     using DtorFn = void (*)(ReaderWriter*, int);
     reinterpret_cast<DtorFn>(rw->vtable[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
 }
 
+// Two unexported template instantiations reached by ADDRESS (no mangled name
+// exists). Both addresses are REGISTERED by runtime/src/object/
+// (external_ptr_serialize.cpp, internal_ptr_array_serialize.cpp), so
+// ResolveAddr — registry first — lands on the ports.
+//   0x180006d10  ExternalPtr<Achievement::Achievement>::Serialize
+//   0x180009fa0  serialize N InternalPtr<Achievement::GoalInstance>
+// ENDGAME B.3.7: namespace-scope ATOMIC caches (RULE B6-5 — Persist runs on
+// the LOADER thread on every save load, B37_RULES §5), not function-local
+// statics.
+std::atomic<void*> g_ptrSerAchievement{nullptr};
+std::atomic<void*> g_serGoalInstancePtrs{nullptr};
+
+void* RuntimeAddr(std::atomic<void*>& slot, uintptr_t addr) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, addr));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
 using PtrSerializeFn   = void (*)(void*, Serializer*);
-using ArraySetSizeFn   = void (*)(void*, int);
 using ArraySerializeFn = void (*)(Serializer*, int, void*);
-
-// ---- ADDRESS DOOR -----------------------------------------------------------
-// SYMBOL:      Object::ExternalPtr<Achievement::Achievement>::Serialize,
-//              Runtime 0x180006d10. UNEXPORTED template instantiation — there
-//              is no mangled name to ask for, which is why this is an address
-//              door and not a name door (contrast §4 #4: `AEAA` private members
-//              ARE exported; this one genuinely is not in the export table).
-//              Identified from its own bytes: at 0x180006d68 it loads
-//              `[0x1801f9898]`, which is `?_typeInfo@Achievement@1@` — the
-//              class it is instantiated for.
-// CONDITION:   reached only from AchievementInstance::Persist below, once per
-//              call, on BOTH directions.
-// CONSEQUENCE: at cutover this address resolves to nothing unless something
-//              registers it, and Persist then calls null. It is CALLED, not
-//              reimplemented; whoever runs the cutover attempt that first
-//              reaches a save/load must either port it or accept a dead
-//              Persist. Same standing cost as the four doors
-//              achievement_serialize.cpp opened.
-PtrSerializeFn ExternalPtrSerialize_Achievement() {
-    static PtrSerializeFn f = nullptr;
-    if (!f) f = reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, 0x180006d10));
-    return f;
-}
-
-// ---- ENDGAME B.3.2 step 2 -----------------------------------------------
-// SYMBOL:      Collection::Array<Object::InternalPtr<Achievement::GoalInstance>>
-//              ::SetSize, Runtime 0x180009d70 — the by-address forwarder that
-//              stood here is GONE. It is a DIFFERENT instantiation from the
-//              0x180008d60 that achievement_serialize.cpp uses (that one is
-//              Array<InternalPtr<AchievementInstance>>), but it is the SAME
-//              spec row, `kSpec_PtrZero` (array.cpp), which array.cpp's own
-//              J3_ENTRY2 table confirms: {8,8,Assign8Z,InitZero8,null,byteCopy}.
-//              Assign8Z's zero-then-copy double write is not what a trivial
-//              pointer's trait-derived assign would do, so it is NOT
-//              trait-equivalent even though `GoalInstanceView*` is a plain
-//              pointer — kept as a hand-derived `rtcoll::AsArray<&kSpec_PtrZero>`
-//              bridge over `self->goalList.goals`, the real member
-//              (GoalList's only field, at +0x00 — the old code passed
-//              `&self->goalList` itself, which is bit-identical). The
-//              0x180009d70 row stays registered in array.cpp; it is now
-//              REACHED THROUGH THIS BRIDGE, not called by address, so the
-//              "unported, calls null" consequence this banner used to record
-//              no longer applies here (goal_list.cpp still reaches the same
-//              row unconditionally, also via a bridge — see there).
-
-// ---- ADDRESS DOOR -----------------------------------------------------------
-// SYMBOL:      the N-element serializer for
-//              Object::InternalPtr<Achievement::GoalInstance>,
-//              Runtime 0x180009fa0. Signature (Serializer*, int count, T* data),
-//              the same shape as the 0x180009a20 that achievement_serialize.cpp
-//              opened for InternalPtr<AchievementInstance>.
-// CONDITION:   both directions, once per Persist.
-// CONSEQUENCE: this is the MUTATING tail — it ends in PersistObject, which
-//              mutates the pointer and the global Object::Factory. It is why
-//              the oracle above is a prefix, and it is unported, so at cutover
-//              it resolves to nothing.
-ArraySerializeFn SerializeGoalInstancePtrs() {
-    static ArraySerializeFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArraySerializeFn>(ResolveAddr(Module::Runtime, 0x180009fa0));
-    return f;
-}
 
 }  // namespace
 
+namespace Achievement {
+
 // ============================================================================
-// void Achievement::Achievement::Destruct()
-// ?Destruct@Achievement@1@UEAAXXZ                          retail 0x180001370
-//
-// `this->vtable[0](this, 0)` and nothing else. Slot 0 is the scalar-deleting
-// destructor; flags 0 means destroy in place and do NOT free the storage.
-//
-// The deref of `this->vtable` is unguarded in retail and stays unguarded here.
+// void Achievement::Destruct() — SLOT 7   ?Destruct@Achievement@1@UEAAXXZ  0x180001370
+//     MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]
+// `this->DeletingDtor(0)` — slot 0 with the free bit CLEAR. VIRTUAL on purpose:
+// on the exe's Scenario it runs Scenario's destructor.
 // ============================================================================
-extern "C" void RtAch_Achievement_Destruct(void* self) {
-    void* const* vtable = *static_cast<void* const* const*>(self);
-    using DeletingDtorFn = void (*)(void*, int);
-    reinterpret_cast<DeletingDtorFn>(vtable[0])(self, 0);
+void Achievement::Destruct() {
+    DeletingDtor(0);
 }
 
 // ============================================================================
-// Object::External* Achievement::Achievement::Reconstruct()
-// ?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ    retail 0x180001270
-//
-// Destruct-in-place through the VIRTUAL slot 0, then re-run the Achievement
-// constructor over the same storage, then return `this`.
-//
-// The virtual call is what makes this different from "call the destructor":
-// on an EXE subclass (Scenario) it destroys the SUBCLASS, and the
-// reconstruction then rebuilds only the Achievement prefix — leaving a
-// subclass object with a base-class vptr. That is what retail does and it is
-// what the loader relies on, because the caller re-stamps afterwards.
+// Object::External* Achievement::Reconstruct() — SLOT 6   0x180001270
+// Destruct in place through the VIRTUAL slot 0, then the constructor's
+// thirteen stores over the same storage (the ctor DOOR — the minted tables),
+// then `return this`. On a Scenario this leaves a base-class vptr; the caller
+// re-stamps. Retail's.
 // ============================================================================
-extern "C" void* RtAch_Achievement_Reconstruct(void* self) {
-    void* const* vtable = *static_cast<void* const* const*>(self);
-    using DeletingDtorFn = void (*)(void*, int);
-    reinterpret_cast<DeletingDtorFn>(vtable[0])(self, 0);
-
-    RtAch_Achievement_Ctor(self);
-    return self;
+Object::External* Achievement::Reconstruct() {
+    DeletingDtor(0);
+    RtAch_Achievement_Ctor(this);
+    return this;
 }
 
 // ============================================================================
-// Object::External* Achievement::Achievement::Construct()
-// ?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ      retail 0x1800012f0
-//
-// `if (!this) return nullptr;` then the constructor's thirteen stores, then
-// return `this`. The null test is RETAIL'S — `TEST RCX,RCX / JZ` at
-// 0x180001301 — not a guard added by this port. It is the one place in this
-// family where retail does check, and dropping it would change behaviour just
-// as adding one elsewhere would.
+// Object::External* Achievement::Construct() — SLOT 8   0x1800012f0
+// `TEST RCX,RCX / JZ -> return nullptr`, then the thirteen stores, `return
+// this`. The null test is RETAIL'S; it stays in the registered DOOR (the B.3.5
+// brief: "a retail null-`this` test stays in the door"), because a member
+// cannot be called on a null `this`.
 // ============================================================================
-extern "C" void* RtAch_Achievement_Construct(void* self) {
-    if (!self) return nullptr;
-    RtAch_Achievement_Ctor(self);
-    return self;
+Object::External* Achievement::Construct() {
+    RtAch_Achievement_Ctor(this);
+    return this;
 }
 
 // ============================================================================
-// void Achievement::AchievementInstance::Persist(IO::Stream&)
-// ?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
-//                                                          retail 0x18009e4a0
+// void AchievementInstance::Persist(IO::Stream&) — SLOT 3
+// ?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z  0x18009e4a0
 //
-// VIRTUAL (UEAA). RCX = this, RDX = the Stream. See this file's banner for the
-// full transcription, the two-codec nesting, the version-1 argument and the
-// stated limits of the prefix oracle.
-//
-// PORTING THIS COMPLETES ??_7AchievementInstance@Achievement@@6B@ at 4/4.
+// TWO CODECS, NESTED, WITH DIFFERENT VERSIONS (outer 1, inner 0), and a real
+// early return when the outer reports version 0 — see the banner.
 // ============================================================================
-extern "C" void RtAch_AchievementInstance_Persist(AchievementInstance* self, Stream* stream) {
-    // The OUTER codec, version 1. See the banner: every sibling in this family
-    // passes 0 here and this one does not.
+void AchievementInstance::Persist(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
+
+    // The OUTER codec, version 1 (MOV R8D,1 at 0x18009e4c9).
     Serializer outer;
     ReaderWriter* rwOuter = MakeCodecVersioned(stream, &outer, 1);
 
@@ -360,47 +292,60 @@ extern "C" void RtAch_AchievementInstance_Persist(AchievementInstance* self, Str
         rwOuter->vtable[rt::io::rw_vtbl::kGetVersion / 8])(rwOuter);
 
     if (version == 0) {
-        // The optional block is absent in this stream's format. Retail skips it
-        // and destroys only the outer codec — the inner one was never built.
+        // Absent in this stream's format: skip, destroy only the outer codec.
         reinterpret_cast<SkipFn>(
             rwOuter->vtable[rt::io::rw_vtbl::kSkip / 8])(rwOuter);
         DestroyCodec(rwOuter);
         return;
     }
 
-    ExternalPtrSerialize_Achievement()(&self->achievement, &outer);   // +0x20
+    reinterpret_cast<PtrSerializeFn>(RuntimeAddr(g_ptrSerAchievement, 0x180006d10))(
+        &_achievement, &outer);                                       // +0x20
 
-    // The INNER codec, version 0, built over the SAME stream.
+    // The INNER codec, version 0 (XOR R8D,R8D at 0x18009e522).
     Serializer inner;
     ReaderWriter* rwInner = MakeCodecVersioned(stream, &inner, 0);
 
-    int count = self->goalList.goals.GetSize();                      // +0x18
+    int count = _goalList._goals.GetSize();                         // +0x18
     using IntFn = void (*)(ReaderWriter*, int*, const char*);
     reinterpret_cast<IntFn>(rwInner->vtable[rt::io::rw_vtbl::kScalarInt / 8])(
         rwInner, &count, nullptr);
 
     if (stream->direction == rt::io::kDirectionReading) {
-        // retail 0x180009d70 — kSpec_PtrZero; see the banner above.
-        rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->goalList.goals)->SetSize(count);
+        // retail 0x180009d70 — `_goals` names kSpec_PtrZero in its type.
+        _goalList._goals.SetSize(count);
     }
-    SerializeGoalInstancePtrs()(&inner, count, self->goalList.goals.GetData());
+    reinterpret_cast<ArraySerializeFn>(RuntimeAddr(g_serGoalInstancePtrs, 0x180009fa0))(
+        &inner, count, _goalList._goals.GetData());
 
     DestroyCodec(rwInner);
     DestroyCodec(rwOuter);
 }
 
-// ---- Registration ----------------------------------------------------------
-// All four are gated by RT_ACHMGR with achievement_manager.cpp,
-// achievement_state.cpp and achievement_serialize.cpp — class atomicity
-// (PLAN §4.1 decision 5).
-//
-// Every one of the four is a slot of a MINTED, UNPROMOTED vtable, so
-// registering them changes no dispatch today. They are registered anyway,
-// because an unregistered body is indistinguishable from an absent one to the
-// census (reference_half_registered_port_reads_as_absent.md) and because these
-// slots are exactly what the COMPLETE-ness of the two rows was waiting on.
-// By NAME and by ADDRESS both: the slots are RT_MINT_NAMED, and the address
-// door makes a by-address call site land on the same body.
+}  // namespace Achievement
+
+// ============================================================================
+// The registered doors — QUALIFIED delegations.
+// ============================================================================
+extern "C" void RtAch_Achievement_Destruct(Achievement::Achievement* self) {
+    self->Achievement::Achievement::Destruct();
+}
+
+extern "C" void* RtAch_Achievement_Reconstruct(Achievement::Achievement* self) {
+    return self->Achievement::Achievement::Reconstruct();
+}
+
+extern "C" void* RtAch_Achievement_Construct(Achievement::Achievement* self) {
+    // The retail null test (0x180001301) stays IN THE DOOR.
+    if (!self) return nullptr;
+    return self->Achievement::Achievement::Construct();
+}
+
+extern "C" void RtAch_AchievementInstance_Persist(Achievement::AchievementInstance* self, void* stream) {
+    self->Achievement::AchievementInstance::Persist(stream);
+}
+
+// ---- Registration (unchanged) ----------------------------------------------
 int RtAchVtableRegister() {
     int n = 0;
 

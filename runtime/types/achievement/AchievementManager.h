@@ -1,226 +1,308 @@
 #pragma once
 // ============================================================================
-// runtime/types/achievement/AchievementManager.h — Wave 5, lane B
-// Achievement::Achievement / AchievementInstance / AchievementManager layouts
+// runtime/types/achievement/AchievementManager.h
+// Achievement::Achievement / AchievementInstance / AchievementManager
 // ============================================================================
+// Wave 5, lane B pinned these layouts; ENDGAME B.3.7 block B3 turned them into
+// real C++ classes under retail's names (B37_RULES.md §1, §2, rules B7-3,
+// B7-5, B7-6, B7-13). The old `RtAchievement::` PODs and the lane-local
+// `GoalListView` / `GoalInstanceView` are GONE: every user was inside this
+// block's file set and converted with it (B7-6: `GoalListView` folds into
+// `Achievement::GoalList`, Goal.h).
 //
 // Every offset below is pinned by a named instruction in RETAIL
-// Runtime-x64.dll (image base 0x180000000), read in Ghidra on 2026-09-06.
-// Runtime-x64-profile.dll (the ToolKit build) is used here for NAMES ONLY, per
-// PLAN.md §6 step 1 and reference_encoding_vtable_offsets_differ_between_builds.md.
-//
-// The two builds AGREE on this class's layout, and that was checked rather
-// than assumed: the profile ctor (0x180028b40) zeroes exactly the same nine
-// slots +0x00..+0x40 as retail's (0x18009eb00), and the profile's
-// GetAchievementInstance (0x1800293a0) bounds-checks against +0x20 and indexes
-// through +0x18 exactly as retail's (0x18009e8f0) does. Where a name below
-// came out of the profile build it says so; where it is OUR name it says that
-// too.
+// Runtime-x64.dll (image base 0x180000000). Runtime-x64-profile.dll is used for
+// NAMES ONLY (reference_encoding_vtable_offsets_differ_between_builds.md).
 //
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
+#include "Goal.h"
 #include "../collection/Collection.h"
 #include "../object/External.h"
 #include "../object/Internal.h"
 #include "../system/String.h"
 #include "../system/Value.h"
 
-namespace RtAchievement {
+namespace UI { class StringTable; class SpriteSheet; }
+namespace IO { class Stream; }
 
-// ============================================================
-// Achievement::GoalList — the goal-instance array a GoalList IS.
-//
-// LANE OWNERSHIP NOTE: Achievement::Goal / GoalInstance / GoalList are Wave 5
-// LANE A's types, and lane A owns `runtime/src/achievement/goal.cpp` and any
-// header it writes for them. This struct is deliberately named `GoalListView`
-// and holds ONLY what lane B's three functions read, so the two lanes cannot
-// collide on a type name. When lane A lands a real `GoalList`, this view
-// should be deleted and its users pointed at that.
-//
-// GoalList is exactly a Collection::Array<InternalPtr<GoalInstance>>, 16 bytes:
-//   ?GetGoalCount@GoalList@Achievement@@QEBAHXZ (0x180001700) is `MOV EAX,[RCX+8]`
-//   ?GetGoal@GoalList@Achievement@@QEBA... (0x180001710) indexes `*(this+0x00)`
-//   AchievementInstance::IsMet (0x18009e2f0) walks `*(this+0x10)` bounded by
-//     `*(int*)(this+0x18)` — i.e. the GoalList embedded at instance+0x10.
-// ============================================================
-struct GoalInstanceView;
+namespace Achievement {
 
-struct GoalListView {
-    Collection::Array<GoalInstanceView*> goals;   // +0x00 {_data, _size, _capacity}
+class AchievementInstance;
+
+// ============================================================================
+// Achievement::Achievement — an Object::External subclass, 0x58 bytes. NINE
+// slots. RULE B7-3: POLYMORPHIC (the inventory missed it — its vftable is
+// mangled with the back-reference `??_7Achievement@0@6B@`, B7-11), and the exe
+// builds `Scenario` on it (0x14015f020, code/Game/Game/scenario.cpp), so it is
+// ABSTRACT-BY-POLICY: slot 0 `= 0`, ctor door kept, no real constructor.
+//
+// `??_7Achievement@0@6B@` @ 0x180154740 (B37_SLOTS.md §1):
+//   [0] +0x00 0x180001680  vector deleting dtor (MOV EDX,0x58)
+//   [1] +0x08 0x180001040  ?TypeName@Achievement@1@UEBAPEBDXZ
+//   [2] +0x10 0x180001020  ?Type@Achievement@1@UEBAIXZ
+//   [3] +0x18 0x18009e170  ?GetFileVersion@Achievement@1@UEBAHXZ      (`return 3`)
+//   [4] +0x20 0x1800066e0  ?Compile@External@Object@@…  INHERITED
+//   [5] +0x28 0x18009e070  ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z
+//   [6] +0x30 0x180001270  ?Reconstruct@Achievement@1@UEAAPEAVExternal@Object@@XZ
+//   [7] +0x38 0x180001370  ?Destruct@Achievement@1@UEAAXXZ
+//   [8] +0x40 0x1800012f0  ?Construct@Achievement@1@UEAAPEAVExternal@Object@@XZ  (B5-16)
+// Literal (B7-2): ?_ParentTypeName@Achievement@1@ 0x180001010 -> "Object::External".
+//
+// FIELDS, each by the one-instruction accessor that reads it, cross-checked
+// against ?Serialize@Achievement@1@ (0x18009e070), which streams them in this
+// order: ExternalPtr, String, String, ExternalPtr, String, then the goal
+// array's count (+0x50) and body (+0x48).
+// ============================================================================
+class Achievement : public Object::External {
+public:
+    // ---- the nine slots, in retail order -----------------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x180001680 — pure (B7-3/B7-13)
+    const char* TypeName() const override;                    // [1] 0x180001040
+    uint32_t    Type() const override;                        // [2] 0x180001020
+    int32_t     GetFileVersion() const override;              // [3] 0x18009e170
+    //          Compile                                       // [4] External's, inherited
+    bool        Serialize(void* stream) override;             // [5] 0x18009e070 (IO::Stream&)
+    Object::External* Reconstruct() override;                 // [6] 0x180001270
+    void        Destruct() override;                          // [7] 0x180001370
+    virtual Object::External* Construct();                    // [8] 0x1800012f0
+
+    // ---- non-slot exported members (all `@Achievement@1@`, B7-11) ----------
+    // The retslot ones return the prvalue; each registered door keeps
+    // `(this, ret)` and placement-news it (B5-12).
+    Object::ExternalPtr<UI::StringTable> GetStringTable() const { return _stringTable; }  // 0x180001380
+    Object::ExternalPtr<UI::SpriteSheet> GetSpriteSheet() const { return _spriteSheet; }  // 0x180001390
+    System::String GetSpriteName() const;                     // 0x1800013a0
+    System::String GetTitle() const;                          // 0x1800013e0
+    System::String GetDescription() const;                    // 0x180001420
+    const GoalArray& GetGoalList() const { return _goals; }   // 0x180001460 — `LEA RAX,[RCX+0x48]`
+    // ?CreateInstance@Achievement@1@QEBA?AV?$InternalPtr@VAchievementInstance@… 0x18009df80
+    Object::InternalPtr<AchievementInstance> CreateInstance() const;
+
+    static uint32_t TypeId();                                 // 0x180001030 — not ported
+    static void* operator new(std::size_t bytes);             // 0x180001050 — not ported
+    static void* operator new(std::size_t bytes, void* place);// 0x1800010c0 — not ported
+    static void  operator delete(void* p);                    // 0x1800010d0 — not ported
+    // 0x180001130 / 0x1800011f0 — ported as the generated factory rows in
+    // rt_factories_achievement.inc (RtFactNew_/RtFactIP_Achievement_Achievement),
+    // which stamp the MINTED tables; not members.
+    static Object::Base* CreateNewObject();
+    static Object::Base* CreateInPlaceObject(void* place);
+    Achievement(const Achievement& other);                    // 0x180001470 — not ported
+    Achievement& operator=(const Achievement& other);         // 0x180001550 — not ported
+
+    // ??1Achievement@0@UEAA@XZ  0x18009e180. NON-virtual, PUBLIC (the exe's
+    // Scenario slot 0 runs it explicitly — scenario.cpp:112, a caller-batch
+    // site). Retail: re-stamp, ~Array(+0x48), release +0x40, +0x30, +0x28,
+    // then ~External. The body is EMPTY: the compiler destroys the members in
+    // REVERSE DECLARATION ORDER — `_goals`, `_spriteName`, `_description`,
+    // `_title` (the two ExternalPtrs are trivial) — which is exactly retail's
+    // order, then runs ~External().
+    ~Achievement();
+
+protected:
+    Achievement() = default;   // NOT retail's 0x18009e240 — door (B4b-2, B7-3)
+
+private:
+    //   0x180001000  ?_TypeName@Achievement@1@       -> "Achievement"
+    //   0x180001010  ?_ParentTypeName@Achievement@1@ -> "Object::External"
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    Object::ExternalPtr<UI::StringTable> _stringTable;   // +0x20  GetStringTable 0x180001380
+    System::String                       _title;         // +0x28  GetTitle       0x1800013e0
+    System::String                       _description;   // +0x30  GetDescription 0x180001420
+    Object::ExternalPtr<UI::SpriteSheet> _spriteSheet;   // +0x38  GetSpriteSheet 0x180001390
+    System::String                       _spriteName;    // +0x40  GetSpriteName  0x1800013a0
+    GoalArray                            _goals;         // +0x48  GetGoalList    0x180001460
 };
-static_assert(sizeof(GoalListView) == 0x10, "Achievement::GoalList is 16 bytes");
+static_assert(sizeof(Achievement) == 0x58, "Achievement::Achievement is 0x58 bytes (slot 0 MOV EDX,0x58; ctor's last store +0x50)");
+static_assert(alignof(Achievement) == 8, "Achievement::Achievement aligns to 8");
+static_assert(offsetof(Achievement, _stringTable) == 0x20, "Achievement::_stringTable @ +0x20");
+static_assert(offsetof(Achievement, _title)       == 0x28, "Achievement::_title @ +0x28");
+static_assert(offsetof(Achievement, _description) == 0x30, "Achievement::_description @ +0x30");
+static_assert(offsetof(Achievement, _spriteSheet) == 0x38, "Achievement::_spriteSheet @ +0x38");
+static_assert(offsetof(Achievement, _spriteName)  == 0x40, "Achievement::_spriteName @ +0x40");
+static_assert(offsetof(Achievement, _goals)       == 0x48, "Achievement::_goals @ +0x48 (Serialize reads its count at +0x50)");
 
-// ============================================================
-// Achievement::GoalInstance — only its flag word is in lane B's scope.
-//
-// AchievementInstance::IsMet (0x18009e2f0) and ::HasFailed (0x18009e2b0) read
-// ONE dword, at +0x10, and test two bits of it:
-//     bit 0  (0x1)  met
-//     bit 1  (0x2)  failed
-// IsMet requires bit 0 set AND bit 1 clear on every goal; HasFailed is true if
-// bit 1 is set on any goal. Nothing else about GoalInstance is read here — its
-// real layout is lane A's.
-// ============================================================
-struct GoalInstanceView {
-    void*    vptr;    // +0x00
-    uint64_t _pad08;  // +0x08
-    uint32_t flags;   // +0x10 — bit 0 met, bit 1 failed
-};
-static_assert(offsetof(GoalInstanceView, flags) == 0x10, "GoalInstance flags @ +0x10");
-
-namespace goalflags {
-    constexpr uint32_t kMet    = 0x1;
-    constexpr uint32_t kFailed = 0x2;
-}
-
-// ============================================================
-// Achievement::Achievement — an Object::External subclass, 0x58 bytes.
-//
-// SIZE is pinned by the default ctor ??0Achievement@0@QEAA@XZ (0x18009e240),
-// whose last store is the qword at +0x50; the array at +0x48 therefore ends at
-// +0x58. FIELDS, each by the one-instruction accessor that reads it:
-//   +0x20 ?GetStringTable@  (0x180001380)  `*retval = *(this+0x20)`
-//   +0x28 ?GetTitle@        (0x1800013e0)  `*(this+0x28)`
-//   +0x30 ?GetDescription@  (0x180001420)  `*(this+0x30)`
-//   +0x38 ?GetSpriteSheet@  (0x180001390)  `*retval = *(this+0x38)`
-//   +0x40 ?GetSpriteName@   (0x1800013a0)  `*(this+0x40)`
-//   +0x48 ?GetGoalList@     (0x180001460)  `return this+0x48`
-// and cross-checked field-for-field against ?Serialize@Achievement@1@
-// (0x18009e070), which streams them in exactly that order:
-//   ExternalPtr, String, String, ExternalPtr, String, then an int count at
-//   +0x50 followed by the array body at +0x48.
-// ============================================================
-struct Achievement {
-    RtObject::External base;                      // +0x00 .. +0x1f
-    void*              stringTable;               // +0x20 ExternalPtr<UI::StringTable>
-    RtSystem::String   title;                     // +0x28
-    RtSystem::String   description;               // +0x30
-    void*              spriteSheet;               // +0x38 ExternalPtr<UI::SpriteSheet>
-    RtSystem::String   spriteName;                // +0x40
-    Collection::Array<void*> goals;               // +0x48 Array<ExternalPtr<Goal>>
-};
-static_assert(offsetof(Achievement, stringTable) == 0x20, "Achievement::_stringTable @ +0x20");
-static_assert(offsetof(Achievement, title)       == 0x28, "Achievement::_title @ +0x28");
-static_assert(offsetof(Achievement, description) == 0x30, "Achievement::_description @ +0x30");
-static_assert(offsetof(Achievement, spriteSheet) == 0x38, "Achievement::_spriteSheet @ +0x38");
-static_assert(offsetof(Achievement, spriteName)  == 0x40, "Achievement::_spriteName @ +0x40");
-static_assert(offsetof(Achievement, goals)       == 0x48, "Achievement::_goals @ +0x48");
-static_assert(sizeof(Achievement) == 0x58, "Achievement is 0x58 bytes (ctor's last store is +0x50)");
-
-// ============================================================
+// ============================================================================
 // Achievement::AchievementInstance — an Object::Internal subclass, 0x28 bytes.
+// FOUR slots. The exe subclasses it in retail (table 0x14015e350, built in
+// GameUpdateLoop's slot-6 Load ON THE LOADER THREAD); the standalone never
+// registers that table, so the object keeps the Runtime one. Abstract-by-
+// policy all the same (B7-13).
 //
-// SIZE IS MEASURED, not inferred: ?CreateInstance@Achievement@1@ (0x18009df80)
-// asks the allocator for exactly `Allocate(_singleton, 0x28, 8)` and then
-// constructs an AchievementInstance in it.
+// `??_7AchievementInstance@Achievement@@6B@` @ 0x180154700:
+//   [0] +0x00 0x180001a90  vector deleting dtor (MOV EDX,0x28; ~GoalList(+0x10), ~Internal)
+//   [1] +0x08 0x1800017c0  TypeName   [2] +0x10 0x1800017a0  Type
+//   [3] +0x18 0x18009e4a0  ?Persist@AchievementInstance@Achievement@@UEAAXAEAVStream@IO@@@Z
+// Literal: 0x180001790 -> "Object::Internal".
 //
-// The ctor ??0AchievementInstance@Achievement@@QEAA@XZ (0x18009e3b0), read as
-// bytes:
-//     CALL 0x1800bfd10                 ; Object::Internal::Internal(this)
-//     LEA  RAX,[0x180154700]           ; ??_7AchievementInstance@Achievement@@6B@
-//     MOV  [RBX],RAX                   ; ... stamped over Internal's vtable
-//     LEA  RAX,[RBX+0x10]; MOV [RAX],0; MOV [RAX+8],0   ; the GoalList
-//     MOV  [RBX+0x20],0                ; the ExternalPtr<Achievement>
-// and +0x20 is confirmed independently by SetAchievement (0x18009e440), whose
-// first store is `MOV [RCX+0x20],RDX`, and by GetGoalList (0x180001960),
-// `LEA RAX,[RCX+0x10]`.
-// ============================================================
-struct AchievementInstance {
-    RtObject::Internal base;          // +0x00 .. +0x0f (vptr, factoryIndex, generation)
-    GoalListView       goalList;      // +0x10 .. +0x1f
-    Achievement*       achievement;   // +0x20 ExternalPtr<Achievement>
+// ??0AchievementInstance (0x18009e3b0): CALL ??0Internal; stamp 0x180154700;
+// zero the GoalList (+0x10, two qwords) and +0x20. SetAchievement (0x18009e440)
+// `MOV [RCX+0x20],RDX` — the ExternalPtr<Achievement> arrives BARE (B7-5);
+// GetGoalList (0x180001960) `LEA RAX,[RCX+0x10]`. CreateInstance allocates 0x28.
+// ============================================================================
+class AchievementInstance : public Object::Internal {
+public:
+    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x180001a90 — pure (B7-13)
+    const char* TypeName() const override;                    // [1] 0x1800017c0
+    uint32_t    Type() const override;                        // [2] 0x1800017a0
+    void        Persist(void* stream) override;               // [3] 0x18009e4a0 (IO::Stream&)
+
+    // ?GetAchievement@AchievementInstance…QEBA?AV?$ExternalPtr@VAchievement@1@… 0x180001950
+    Object::ExternalPtr<Achievement> GetAchievement() const { return _achievement; }
+    const GoalList& GetGoalList() const { return _goalList; }  // 0x180001960
+    bool HasFailed() const;                                   // 0x18009e2b0
+    bool IsMet() const;                                       // 0x18009e2f0
+    void Update(const System::Time& time);                    // 0x18009e340
+    // ?SetAchievement@…QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z 0x18009e440
+    // — ExternalPtr by value arrives BARE in RDX (B7-5): a register value here.
+    void SetAchievement(Object::ExternalPtr<Achievement> achievement);
+
+    static uint32_t TypeId();                                 // 0x1800017b0 — not ported
+    static void* operator new(std::size_t bytes);             // 0x1800017d0 — not ported
+    static void* operator new(std::size_t bytes, void* place);// 0x180001840 — not ported
+    static void  operator delete(void* p);                    // 0x180001850 — not ported
+    static Object::Base* CreateNewObject();                   // 0x1800018b0 — factory row
+    AchievementInstance(const AchievementInstance& other);    // 0x180001970 — not ported
+    AchievementInstance& operator=(const AchievementInstance& other);  // 0x1800019f0 — not ported
+
+    // ??1AchievementInstance@Achievement@@UEAA@XZ  0x18009e400. NON-virtual,
+    // PUBLIC. Retail: re-stamp, ~GoalList(this+0x10), tail-jump ~Internal.
+    // EMPTY body: the compiler destroys `_goalList` (a real GoalList — its
+    // ~GoalList deletes every instance) and then runs ~Internal(). The
+    // REGISTERED door for this address is `RtAchievement_AchievementInstance_Dtor`
+    // in runtime/src/object/deleting_dtor_leaves.cpp (the coordinator's file)
+    // and is untouched by this block.
+    ~AchievementInstance();
+
+protected:
+    AchievementInstance() = default;   // NOT retail's 0x18009e3b0 — door (B4b-2)
+
+private:
+    //   0x180001780  ?_TypeName@AchievementInstance@…       -> "AchievementInstance"
+    //   0x180001790  ?_ParentTypeName@AchievementInstance@… -> "Object::Internal"
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    GoalList                         _goalList;      // +0x10 .. +0x1f  held BY VALUE (B7-8)
+    Object::ExternalPtr<Achievement> _achievement;   // +0x20
 };
-static_assert(offsetof(AchievementInstance, goalList)    == 0x10, "AchievementInstance::_goalList @ +0x10");
-static_assert(offsetof(AchievementInstance, achievement) == 0x20, "AchievementInstance::_achievement @ +0x20");
 static_assert(sizeof(AchievementInstance) == 0x28,
-              "AchievementInstance is 0x28 bytes (CreateInstance allocates exactly 0x28)");
+              "AchievementInstance is 0x28 bytes (slot 0 MOV EDX,0x28; CreateInstance allocates 0x28)");
+static_assert(alignof(AchievementInstance) == 8, "AchievementInstance aligns to 8");
+static_assert(offsetof(AchievementInstance, _goalList)    == 0x10, "AchievementInstance::_goalList @ +0x10 (GetGoalList 0x180001960)");
+static_assert(offsetof(AchievementInstance, _achievement) == 0x20, "AchievementInstance::_achievement @ +0x20 (SetAchievement 0x18009e440)");
 
-// ??_7AchievementInstance@Achievement@@6B@ — an EXPORTED data symbol
-// (ordinal 1383) whose address is the very value the ctor stamps. Recorded
-// here so the ctor port never has to clone slots out of a live object; see
-// PLAN.md §2.2 D.
-constexpr uintptr_t kAchievementInstanceVtableGhidra = 0x180154700;
-
-// ============================================================
+// ============================================================================
 // Achievement::AchievementManager — 0x48 bytes, a process singleton.
+// NON-POLYMORPHIC (B37_SLOTS §7: the ctor 0x18009eb00 zeroes +0x00..+0x40 and
+// stamps no vtable).
 //
-// SIZE from the ctor ??0AchievementManager@Achievement@@QEAA@XZ (0x18009eb00),
-// which zeroes eight qwords +0x00..+0x38 and one dword at +0x40.
+// Allocated by `Engine::Startup` (`MemAlloc(0x48)` at 0x1800dbe42) with the
+// constructor INLINED there, so the ctor stays the door in
+// runtime/src/engine/engine_lifecycle.cpp (block B1's file); `_singleton`
+// stays an RT_DATA_SLOT / manifest row until the end of B.3 (carry-over 5).
+// `PlatformStartup` is ported in B1's platform_startup_win.cpp and moves in the
+// fragment pass; it is DECLARED here so no one has to edit this header.
 //
-// THREE OF THE SIX FIELD NAMES ARE THE ENGINE'S OWN, recovered from
-// Runtime-x64-profile.dll's assert strings (`Achievement\AchievementManager.cpp`):
-//     "_achievements"                        -> +0x00
-//     "!_completed[_lastAchievementUpdate]"  -> +0x08 and +0x40
-// `_instances`, `_eventHandler` and `_updateTimes` are OUR names; the profile
-// build's asserts for those three only quote Array.h's generic
-// "index >= 0 && index < _size", which names no member.
+// THREE OF THE SIX FIELD NAMES ARE THE ENGINE'S OWN, from the profile build's
+// assert strings (`Achievement\AchievementManager.cpp`): `_achievements` (+0x00),
+// `_completed` and `_lastAchievementUpdate` ("!_completed[_lastAchievementUpdate]").
+// `_instances`, `_eventHandler` and `_updateTimes` are OUR names.
 //
-// FIELD PINS, one decompiled body each:
-//   +0x00 GetAchievementCount (0x1800079b0) = `*(int*)(*(void**)this + 0x28)`
-//         — i.e. this->_achievements->_count. THIS IS THE FIELD BEHIND THE
-//         RECORDED "GetAchievementCount faults on a READ of 0x28" NOTE: the
-//         `this` is fine, `_achievements` is the null one.
-//   +0x08 IsAchievementAwarded (0x1800079c0) = `*(byte*)(index + *(this+8))`
-//   +0x10 the same array's _size, bounded in ReadAchievements (0x18009eb90)
-//   +0x18 GetAchievementInstance (0x18009e8f0) = `*(void**)(*(this+0x18) + i*8)`
-//   +0x20 its _size, the loop bound in Reset (0x18009e5c0) and Update
-//   +0x28 SetEventHandler (0x18009e6b0) = `*(void**)(this+0x28) = handler`
-//   +0x30 Update (0x18009e6c0) `*(qword*)(*(this+0x30) + i*8) += time.ticks`
-//   +0x38 its _size (profile Update asserts against +0x38 for that same index)
-//   +0x40 Update's rotating cursor, `_lastAchievementUpdate`
+// FIELD PINS, one retail body each:
+//   +0x00 GetAchievementCount (0x1800079b0) = this->_achievements->_count —
+//         UNGUARDED: a manager that never had SetAchievements faults on a read
+//         of 0x28, which is the recorded symptom and the only signal.
+//   +0x08 IsAchievementAwarded (0x1800079c0) one byte of `_completed`.
+//   +0x18 GetAchievementInstance (0x18009e8f0) `*(this+0x18)[i]`; +0x20 its _size.
+//   +0x28 SetEventHandler (0x18009e6b0).
+//   +0x30 Update (0x18009e6c0) `(*(this+0x30))[i] += time` — an
+//         Array<System::Time> of ACCUMULATED per-achievement time.
+//   +0x40 Update's rotating cursor.
+// The profile build's COPY CONSTRUCTOR (0x180029a40) walks the whole object in
+// exactly this shape: three deep-copied Arrays, two raw pointers, one int.
 //
-// WHAT +0x30 ACTUALLY IS, because it is not obvious from retail alone: an
-// Array<System::Time> of ACCUMULATED per-achievement time. Every tick, every
-// not-yet-completed achievement's slot gets the frame delta added; when an
-// achievement's turn comes round the cursor, its whole accumulated total is
-// handed to AchievementInstance::Update and the slot is zeroed. So each
-// instance is updated once every _size ticks with _size ticks' worth of time.
-// (Retail inlines all of this; the profile build spells the call out as
-// `AchievementInstance::Update(inst, _updateTimes[_lastAchievementUpdate])`.)
-//
-// INDEPENDENT WHOLE-STRUCT CONFIRMATION: the profile build's COPY CONSTRUCTOR
-// ??0AchievementManager@Achievement@@QEAA@AEBV01@@Z (0x180029a40) walks the
-// entire object once, and its shape is exactly the six fields below —
-//     +0x00 copied as a raw qword                 (a non-owning pointer)
-//     +0x08 zeroed, then a 1-byte-element Array copy helper
-//     +0x18 zeroed, then an 8-byte-element Array copy helper
-//     +0x28 copied as a raw qword                 (a function pointer)
-//     +0x30 zeroed, then an 8-byte-element Array copy helper
-//     +0x40 copied as a raw dword
-// — three Arrays needing deep copies, two raw pointers and one int, in this
-// order. No field is missed and none is left over.
-// ============================================================
-struct AchievementManager {
-    RtObject::ExternalList*                    achievements;           // +0x00 `_achievements`
-    Collection::Array<uint8_t>                 completed;              // +0x08 `_completed`
-    Collection::Array<AchievementInstance*>    instances;              // +0x18 (our name)
-    void                                    (*eventHandler)(int);      // +0x28 (our name)
-    Collection::Array< ::Time>                 updateTimes;            // +0x30 (our name)
-    int32_t                                    lastAchievementUpdate;  // +0x40 `_lastAchievementUpdate`
-    int32_t                                    _pad44;                 // +0x44 — never read or written
+// THE THREE ARRAYS NAME THEIR RETAIL ROWS IN THEIR TYPES (0x180008b90
+// kSpec_Bool, 0x180008d60 kSpec_PtrZero, 0x180008ff0 kSpec_U64Zero — none is
+// trait-equivalent, achievement_manager.cpp says why for each), which is what
+// lets SetSize be a plain member call instead of an `AsArray` bridge. Their
+// destructors are each 0x1800c7ad0's free-then-zero with no element destroy,
+// so the compiler-emitted member destruction IS ??1AchievementManager's tail.
+// ============================================================================
+class AchievementManager {
+public:
+    using CompletedArray = Collection::Array<bool, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&rtcoll::kSpec_Bool>>;
+    using InstanceArray  = Collection::Array<Object::InternalPtr<AchievementInstance>,
+                                             Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&rtcoll::kSpec_PtrZero>>;
+    using TimeArray      = Collection::Array<System::Time, Collection::DefaultAllocator,
+                                             Collection::ExplicitSpec<&rtcoll::kSpec_U64Zero>>;
+    using EventHandler   = void (*)(int);
+
+    // ??0AchievementManager@Achievement@@QEAA@XZ 0x18009eb00 — the DOOR in
+    // runtime/src/engine/engine_lifecycle.cpp (B1). Declared, defined nowhere.
+    AchievementManager();
+    // ??1AchievementManager@Achievement@@QEAA@XZ 0x18009eab0 — real (see the body).
+    ~AchievementManager();
+    AchievementManager(const AchievementManager& other);            // 0x1800079e0 — not ported
+    AchievementManager& operator=(const AchievementManager& other); // 0x180007a70 — not ported
+
+    static AchievementManager* Get();                          // 0x1800079d0
+    int  GetAchievementCount() const;                          // 0x1800079b0
+    bool IsAchievementAwarded(int index) const;                // 0x1800079c0
+    Object::ExternalPtr<Achievement> GetAchievement(int index) const;                  // 0x18009e8a0 retslot
+    Object::InternalPtr<AchievementInstance> GetAchievementInstance(int index) const;  // 0x18009e8f0 retslot
+    void SetEventHandler(EventHandler handler);                // 0x18009e6b0
+    // ?SetAchievements@…QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z
+    // 0x18009e860 — the ExternalPtr arrives BARE in RDX (B7-5: `MOV [RCX],RDX`).
+    void SetAchievements(Object::ExternalPtr<Object::ExternalList> list);
+    void Reset();                                              // 0x18009e5c0
+    void Update(const System::Time& time);                     // 0x18009e6c0
+    void Persist(IO::Stream& stream);                          // 0x18009e910
+    void RemoveAll();                                          // 0x18009e9d0
+    void ReadAchievements();                                   // 0x18009eb90
+    bool SetAchievementMet(int index);                         // 0x18009eca0
+    bool Startup();                                            // 0x18009eaa0 — not ported (no caller)
+    void Shutdown();                                           // 0x18009ea90 — not ported (no caller)
+
+private:
+    // The four private `AEAA` platform hooks (exported — this DLL exports its
+    // privates, reference_aeaa_is_private_not_unexported.md).
+    void PlatformConstruct();                                  // 0x18009eb50 — not ported
+    void PlatformDestruct();                                   // 0x18009eb60 — not ported
+    bool PlatformStartup();                                    // 0x18009eb70 — B1's door (fragment)
+    void PlatformShutdown();                                   // 0x18009eb80 — not ported
+
+public:
+    Object::ExternalList* _achievements;           // +0x00 `_achievements`
+    CompletedArray        _completed;              // +0x08 `_completed`
+    InstanceArray         _instances;              // +0x18 (our name)
+    EventHandler          _eventHandler;           // +0x28 (our name)
+    TimeArray             _updateTimes;            // +0x30 (our name)
+    int32_t               _lastAchievementUpdate;  // +0x40 `_lastAchievementUpdate`
+    int32_t               _pad44;                  // +0x44 never read or written
 };
-static_assert(offsetof(AchievementManager, achievements)          == 0x00, "_achievements @ +0x00");
-static_assert(offsetof(AchievementManager, completed)             == 0x08, "_completed @ +0x08");
-static_assert(offsetof(AchievementManager, instances)             == 0x18, "instances @ +0x18");
-static_assert(offsetof(AchievementManager, eventHandler)          == 0x28, "eventHandler @ +0x28");
-static_assert(offsetof(AchievementManager, updateTimes)           == 0x30, "updateTimes @ +0x30");
-static_assert(offsetof(AchievementManager, lastAchievementUpdate) == 0x40, "_lastAchievementUpdate @ +0x40");
 static_assert(sizeof(AchievementManager) == 0x48,
-              "AchievementManager is 0x48 bytes (ctor zeroes +0x00..+0x40)");
+              "AchievementManager is 0x48 bytes (Engine::Startup MemAlloc(0x48) at 0x1800dbe42)");
+static_assert(alignof(AchievementManager) == 8, "AchievementManager aligns to 8");
+static_assert(offsetof(AchievementManager, _achievements)          == 0x00, "_achievements @ +0x00");
+static_assert(offsetof(AchievementManager, _completed)             == 0x08, "_completed @ +0x08");
+static_assert(offsetof(AchievementManager, _instances)             == 0x18, "_instances @ +0x18");
+static_assert(offsetof(AchievementManager, _eventHandler)          == 0x28, "_eventHandler @ +0x28");
+static_assert(offsetof(AchievementManager, _updateTimes)           == 0x30, "_updateTimes @ +0x30");
+static_assert(offsetof(AchievementManager, _lastAchievementUpdate) == 0x40, "_lastAchievementUpdate @ +0x40");
+static_assert(!std::is_polymorphic<AchievementManager>::value, "no vtable (ctor 0x18009eb00)");
+static_assert(sizeof(bool) == 1, "_completed is one byte per achievement");
 
-// IO::FileSystem+0x38 — the count behind
-// ?AreUserPackFilesEnabled@FileSystem@IO@@QEBA_NXZ (retail 0x1800acfc0), which
-// AchievementManager::Update inlines as `CMP dword [RAX+0x38],0 / JG skip`:
-// if any user pack file (a mod) is mounted, achievements do not tick at all.
-//
-// runtime/types/io/FileSystem.h (Wave 4 lane D) currently buries this dword in
-// `_unknown2C` with the comment "+0x30/+0x38 a package-filename array+count
-// (NOT read by anything in this file)". True of that file, but the field IS
-// read — here — and it now has a name. See WAVE5_LANE_B.md's corrections list.
-constexpr size_t kFileSystemUserPackFileCountOffset = 0x38;
-
-}  // namespace RtAchievement
+}  // namespace Achievement

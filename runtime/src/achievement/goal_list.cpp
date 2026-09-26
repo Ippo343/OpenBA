@@ -177,33 +177,15 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/object/Internal.h"
-#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_PtrZero bridge (also declares rtcoll::MemFree)
 
-using RtAchievement::GoalList;
-namespace GoalInstanceVtbl = RtAchievement::GoalInstanceVtbl;
-namespace GoalVtbl = RtAchievement::GoalVtbl;
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
-// runtime/src/collection/array.cpp, Wave 9 lane Q — `rtcoll::MemFree`, now
-// reached through the array_internal.h include above (ENDGAME B.3.2 step 2
-// needs that header here anyway, for the `kSpec_PtrZero` bridge below), rather
-// than a hand-written forward declaration.
-//
-// It is `if (p) { Enter(alloc+0x640); Free(alloc, p); Leave; }` — the null test
-// is inside 0x1800c7ad0 — which is instruction for instruction the teardown
-// inlined at 0x18009f209..0x18009f239 here.
-
-extern "C" void RtAch_GoalList_Initialize(void*, void*);
+// runtime/src/collection/array.cpp — `rtcoll::MemFree` (declared in
+// Collection.h): `if (p) { Enter(alloc+0x640); Free(alloc, p); Leave; }`,
+// instruction for instruction the teardown inlined at 0x18009f209..0x18009f239.
 
 namespace {
 
 // `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` @ 0x1801f9940.
-// Retail reads its +0x00 (the typeId) INSIDE the loop, at 0x18009f178. Read
-// through RT_DATA_SLOT so this body follows a promotion of that row rather than
-// pinning the DLL's node — the same coupling
-// achievement_typeinfo_accessors.cpp documents.
+// Retail reads its +0x00 (the typeId) INSIDE the loop, at 0x18009f178.
 uint32_t GoalInstanceTypeId() {
     const uint8_t* node = RT_DATA_SLOT(const uint8_t*,
         "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
@@ -214,7 +196,7 @@ uint32_t GoalInstanceTypeId() {
 
 // `?_singleton@Factory@Object@@0PEAV12@EA` @ 0x1801fc6e8. RT_DATA_SLOT yields
 // the ADDRESS of the pointer variable; retail's `MOV RBX,[RIP+…]` dereferences
-// it once, which is the extra `*` below.
+// it once.
 void* FactorySingleton() {
     void** slot = RT_DATA_SLOT(void**, "?_singleton@Factory@Object@@0PEAV12@EA");
     return *slot;
@@ -222,84 +204,45 @@ void* FactorySingleton() {
 
 using CreateObjectFn   = void* (*)(const void* factory, uint32_t typeId);
 using IsDerivedFromFn  = bool  (*)(const void* self, uint32_t typeId);
-using GetInstanceTypeFn = void* (*)(const void* self, void* retSlot);
-using StartupFn        = void  (*)(void* self);
-using SetSizeFn        = void  (*)(void* array, int newSize);
 
-// Port-aware NAME doors: both of these are ported and registered in
-// runtime/src/object/type_system.cpp, so these resolve to OUR bodies.
+// Port-aware NAME doors onto Object's own ported bodies (type_system.cpp).
+// RT_EXPORT_ONCE is a constant-initialised `RtResolveCached` slot, the B6-5
+// shape (this body runs on the LOADER thread — B37_RULES §5).
 CreateObjectFn FactoryCreateObject() {
-    static void* f = nullptr;
-    return reinterpret_cast<CreateObjectFn>(
-        RtResolveCached("?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z", &f));
+    return RT_EXPORT_ONCE(CreateObjectFn, "?CreateObject@Factory@Object@@QEBAPEAVBase@2@I@Z");
 }
 IsDerivedFromFn BaseIsDerivedFrom() {
-    static void* f = nullptr;
-    return reinterpret_cast<IsDerivedFromFn>(
-        RtResolveCached("?IsDerivedFrom@Base@Object@@QEBA_NI@Z", &f));
+    return RT_EXPORT_ONCE(IsDerivedFromFn, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z");
 }
-
-// ---- ENDGAME B.3.2 step 2 -----------------------------------------------
-// SYMBOL:      Collection::Array<Object::InternalPtr<Achievement::GoalInstance>>
-//              ::SetSize, Runtime 0x180009d70. STALE PARAGRAPH BELOW, KEPT FOR
-//              THE RECORD: this claimed "nothing in this tree registers it" —
-//              that stopped being true once array.cpp's J3_ENTRY2 table (Wave 9
-//              lane Q) grew a `kSpec_PtrZero` row for it; the row is registered
-//              (array.cpp:4220) and this is the SAME spec achievement_vtable.cpp's
-//              copy of this door uses. It is still a DIFFERENT instantiation
-//              from the 0x180008d60 that achievement_serialize.cpp uses
-//              (Array<InternalPtr<AchievementInstance>>) only in ELEMENT TYPE,
-//              not in spec row — both are `kSpec_PtrZero`.
-//              [original paragraph:] "An unexported template instantiation —
-//              there is no mangled name to ask for, so this is a genuine
-//              address door... a grep of runtime/src/collection for 0x180009d70
-//              returns NOTHING, so nothing in this tree registers it."
-// CONDITION:   reached on EVERY call of GoalList::Initialize — unconditionally,
-//              not just on the read path as in achievement_vtable.cpp's copy of
-//              this same door.
-// CONSEQUENCE: NOW REACHED THROUGH A BRIDGE, NOT BY ADDRESS — see the call
-//              site below. `Assign8Z`'s zero-then-copy double write keeps this
-//              row from being trait-equivalent even though the element
-//              (`RtObject::InternalBasePtr`, a plain pointer) is trivial, so it
-//              is `rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->_goals)`, not
-//              a plain `self->_goals.SetSize(...)`.
 
 }  // namespace
 
+namespace Achievement {
+
 // ============================================================================
-// void Achievement::GoalList::Initialize(Collection::Array<ExternalPtr<Goal>>)
+// void GoalList::Initialize(Collection::Array<ExternalPtr<Goal>>)
 // ?Initialize@GoalList@Achievement@@QEAAX…@Z               retail 0x18009f0e0
 //
-// NON-virtual (QEAA). RCX = this, RDX = the caller's by-value temporary.
-// See the banner for the full byte listing, the by-value ownership rule, the
-// refcount finding and the limits of the shadow screen.
+// NON-virtual. The by-value Array arrives by HIDDEN POINTER (B7-5) and the
+// CALLEE tears it down. See the banner for the byte listing, the ownership
+// transfer, and the three unguarded derefs.
 // ============================================================================
-extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
-
-    GoalList* self = static_cast<GoalList*>(selfRaw);
-    // The source is an Array<ExternalPtr<Goal>>; ExternalPtr is one pointer
-    // (runtime/types/object/External.h static_asserts sizeof == 8), so the
-    // buffer is read as `void**` exactly as retail's `MOV RCX,[R15+RAX]` does.
-    Collection::Array<void*>* src = static_cast<Collection::Array<void*>*>(srcRaw);
-
-    // retail 0x180009d70 — kSpec_PtrZero; see the banner above.
-    rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->_goals)->SetSize(src->GetSize());
+void GoalList::Initialize(GoalArray* src) {
+    // retail 0x180009d70 — `_goals` names kSpec_PtrZero in its type.
+    _goals.SetSize(src->GetSize());
 
     // `CMP R12D,[RBP+8]` is re-read at the bottom of every pass, and both
     // `this->_data` and `src->_data` are RELOADED inside the loop — Startup()
     // may reallocate either. Kept.
-    for (int i = 0; i < self->_goals.GetSize(); ++i) {
-        void* goal = src->GetData()[i];
+    for (int i = 0; i < _goals.GetSize(); ++i) {
+        const Goal* goal = src->GetData()[i].Get();
 
-        // Object::Type GetInstanceType() — a 4-byte class returned BY VALUE,
-        // so it takes a hidden return slot in RDX and hands the slot back in
-        // RAX. goal.cpp's RtAch_Goal_GetInstanceType records the same shape:
-        // getting it wrong here is a wild write, not a wrong value.
-        void* const* goalVt = *static_cast<void* const* const*>(goal);
-        uint32_t typeSlot = 0;
-        reinterpret_cast<GetInstanceTypeFn>(
-            goalVt[GoalVtbl::kGetInstanceType / 8])(goal, &typeSlot);
-        const uint32_t instanceTypeId = typeSlot;
+        // SLOT 9, `GetInstanceType` — a VIRTUAL call, on purpose: retail
+        // `CALL [RAX+0x48]`s it, and the object is an exe subclass whose table
+        // holds its own override (TimeGoal) or Goal's (Building/Population/
+        // Stat). The retslot is spelled explicitly, in retail order (B7-4).
+        Object::Type typeSlot;
+        const uint32_t instanceTypeId = *goal->GetInstanceType(&typeSlot);
 
         void* inst = FactoryCreateObject()(FactorySingleton(), instanceTypeId);
 
@@ -308,19 +251,16 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
         // two instructions later. Faithful.
         if (!BaseIsDerivedFrom()(inst, GoalInstanceTypeId())) inst = nullptr;
 
-        self->_goals[i].ptr = static_cast<RtObject::Internal*>(inst);
+        _goals[i] = Object::InternalPtr<GoalInstance>(static_cast<GoalInstance*>(inst));
 
-        // Retail RELOADS both arrays here rather than reusing the registers it
-        // already has (0x18009f1d7..0x18009f1e2). Reproduced.
-        void* stored = self->_goals[i].ptr;
-        void* goalAgain = src->GetData()[i];
+        // Retail RELOADS both arrays here (0x18009f1d7..0x18009f1e2).
+        GoalInstance* stored = _goals[i].Get();
+        // GoalInstance::_goal @ +0x18 — UNGUARDED (the banner's deref 2). The
+        // Goal pointer MOVES out of the source array: no addref, no release.
+        stored->_goal = src->GetData()[i];
 
-        // GoalInstance::_goal @ +0x18 (runtime/types/achievement/Goal.h).
-        // UNGUARDED — see the banner's deref (2).
-        *reinterpret_cast<void**>(static_cast<uint8_t*>(stored) + 0x18) = goalAgain;
-
-        void* const* instVt = *static_cast<void* const* const*>(stored);
-        reinterpret_cast<StartupFn>(instVt[GoalInstanceVtbl::kStartup / 8])(stored);
+        // SLOT 4, `Startup` — virtual (`CALL [RAX+0x20]`).
+        stored->Startup();
     }
 
     // The by-value parameter's destructor, inlined by retail. POD teardown: the
@@ -329,19 +269,18 @@ extern "C" void RtAch_GoalList_Initialize(void* selfRaw, void* srcRaw) {
     src->_data     = nullptr;
     src->_size     = 0;    // retail zeroes _size and _capacity as ONE qword
     src->_capacity = 0;
+}
 
+}  // namespace Achievement
+
+// ---- The registered door — a QUALIFIED delegation --------------------------
+extern "C" void RtAch_GoalList_Initialize(Achievement::GoalList* self, Achievement::GoalArray* src) {
+    self->Achievement::GoalList::Initialize(src);
 }
 
 // ---- Registration ----------------------------------------------------------
-// By NAME and by ADDRESS. The name is what the census counts; the address is
-// what matters more here, because every consumer of this function found so far
-// reaches it BY ADDRESS — achievement_manager.cpp:657 transcribes
-// `CALL 0x18009f0e0` and code/Game/Game/gameupdateloop_load.cpp:1660 describes
-// the same call site. Registering the address converts those from
-// DLL-into-DLL calls into calls on this body
-// (reference_registering_an_address_converts_a_selfcheck_into_an_oracle.md).
-//
-// Gated by RT_GOAL with goal.cpp — this is lane A's class.
+// By NAME and by ADDRESS. Every consumer found so far reaches it by address
+// (the AchievementInstance / CreateInstance callers now call the member).
 int RtAchGoalListRegister() {
     int n = 0;
     RegisterRuntimeExport(
