@@ -159,7 +159,6 @@ static fn_WorkCtor25_t     s_tc_WorkCtor25 = nullptr;
 static fn_PostWork_t       s_tc_PostWork = nullptr;
 static fn_CancelWork_t     s_tc_CancelWork = nullptr;
 static fn_SetAccepting_t   s_tc_SetAccepting = nullptr;
-static void**              s_tc_TradeWorkVtable = nullptr;
 static bool s_tcWorkResolved = false;
 
 static void EnsureTradeWorkHelpers() {
@@ -170,19 +169,15 @@ static void EnsureTradeWorkHelpers() {
     s_tc_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
     s_tc_CancelWork    = reinterpret_cast<fn_CancelWork_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     s_tc_SetAccepting  = reinterpret_cast<fn_SetAccepting_t>(ResolveAddr(Module::Exe, 0x14012fc00));
-    // The TradeWork vtable is built and registered by tradework.cpp:955
-    // (RegisterTradeWorkVtable, wired at address_registry.cpp:1674).
-    s_tc_TradeWorkVtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a10));
     s_tcWorkResolved = true;
 
     // Report the OUTCOME of each dependency, not "resolve ran". A single null here
     // silently turns the toggle into a no-op that still repaints — believable and
     // wrong, the failure mode this subsystem keeps producing.
     fprintf(stderr, "[TradeComp] work deps: findWP=%p findSched=%p workCtor=%p post=%p "
-            "cancel=%p setAccept=%p vtable=%p\n",
+            "cancel=%p setAccept=%p\n",
             (void*)s_tc_FindWorkPlace, (void*)s_tc_FindWorkSched, (void*)s_tc_WorkCtor25,
-            (void*)s_tc_PostWork, (void*)s_tc_CancelWork, (void*)s_tc_SetAccepting,
-            (void*)s_tc_TradeWorkVtable);
+            (void*)s_tc_PostWork, (void*)s_tc_CancelWork, (void*)s_tc_SetAccepting);
     fflush(stderr);
 }
 
@@ -225,22 +220,18 @@ void TradeComponent_Slot14(TradeComponent* selfP) {
     char newState;
     if (enable) {
         void* work = nullptr;
-        // This allocation deliberately mirrors retail rather than going through
-        // TradeWork_Factory, but TradeWork's file-static function pointers are resolved
-        // ONLY on the factory path (TradeWork_Factory / TradeWork_CreateInPlace). Posting
-        // a hand-built work therefore handed the scheduler an object whose helpers were
-        // all still null, and WorkScheduler_Insert -> TradeWork::GetTarget faulted on the
-        // first one it used. Resolve explicitly here, exactly as the factory would.
-        // See reference_creatework_must_call_work_resolvefuncs.
-        TradeWork_ResolveFuncs();
-        if (fn_MemAlloc && g_pMemAllocSingleton && s_tc_WorkCtor25 && s_tc_TradeWorkVtable) {
-            work = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
-            if (work) {
+        // MemAlloc(0x58, 8) + the from-entity TradeWork ctor 0x1400f6ea0, as retail.
+        // ENDGAME B.3.8 MI-B: the REAL TradeWork (Work/TradeWork.h) — its default ctor
+        // runs TradeWork_ResolveFuncs (the reason the hand build had to call it) and
+        // zeroes +0x48/+0x50, the compiler stamps its table, and Work::InitFromEntity is
+        // Work_Ctor25's body (0x1400f72e0). No more read-back of 0x140161a10.
+        if (fn_MemAlloc && g_pMemAllocSingleton) {
+            void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+            if (mem) {
                 int64_t entityIBP = *(int64_t*)(self + 0x10);
-                s_tc_WorkCtor25(work, &entityIBP);
-                *(void***)work = s_tc_TradeWorkVtable;
-                *(uint64_t*)((uintptr_t)work + 0x48) = 0;
-                *(uint32_t*)((uintptr_t)work + 0x50) = 0;
+                TradeWork* tw = new (mem) TradeWork();
+                tw->InitFromEntity(&entityIBP);
+                work = mem;
             }
         }
         uint64_t workIBP[1] = {0};

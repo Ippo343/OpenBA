@@ -114,7 +114,6 @@ fn_HasWorkSlot_t  s_HasWorkSlot   = nullptr;   // 0x14012ead0
 fn_WorkCtor25_t   s_WorkCtor25    = nullptr;   // 0x1400f72e0
 fn_PostWork_t     s_PostWork      = nullptr;   // 0x14012ec60
 fn_TimeCtor_t     s_TimeCtor      = nullptr;   // dispatch slot [0x140152b00]
-void**            s_TradeWorkVtbl = nullptr;   // 0x140161a10
 // Layer 2 (merchant spawn / teardown) leaves.
 fn_EntityCopyCtor_t   s_EntityCopyCtor   = nullptr;   // 0x1400c3720
 fn_EntityListAdd_t    s_EntityListAdd    = nullptr;   // 0x1400c48a0
@@ -130,7 +129,6 @@ void Resolve() {
     s_HasWorkSlot   = reinterpret_cast<fn_HasWorkSlot_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     s_WorkCtor25    = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_PostWork      = reinterpret_cast<fn_PostWork_t>(ResolveAddr(Module::Exe, 0x14012ec60));
-    s_TradeWorkVtbl = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a10));
     s_EntityCopyCtor   = reinterpret_cast<fn_EntityCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
     s_EntityListAdd    = reinterpret_cast<fn_EntityListAdd_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
     s_StateMachineTick = reinterpret_cast<fn_StateMachineTick_t>(ResolveAddr(Module::Exe, 0x1400a9660));
@@ -142,11 +140,10 @@ void Resolve() {
     // state machine into a machine that runs and does nothing — believable and wrong.
     std::fprintf(stderr,
         "[TradeCtrl] deps: findWP=%p findSched=%p hasWork=%p workCtor=%p post=%p "
-        "timeCtor=%p tradeWorkVtbl=%p entityCopy=%p entityAdd=%p smTick=%p erase=%p\n",
+        "timeCtor=%p entityCopy=%p entityAdd=%p smTick=%p erase=%p\n",
         reinterpret_cast<void*>(s_FindWorkPlace), reinterpret_cast<void*>(s_FindSched),
         reinterpret_cast<void*>(s_HasWorkSlot),   reinterpret_cast<void*>(s_WorkCtor25),
         reinterpret_cast<void*>(s_PostWork),      reinterpret_cast<void*>(s_TimeCtor),
-        reinterpret_cast<void*>(s_TradeWorkVtbl),
         reinterpret_cast<void*>(s_EntityCopyCtor), reinterpret_cast<void*>(s_EntityListAdd),
         reinterpret_cast<void*>(s_StateMachineTick), reinterpret_cast<void*>(s_ListErase));
     std::fflush(stderr);
@@ -256,15 +253,18 @@ extern "C" void TradeComponent_ArmMerchantTimer(void* selfV) {
 // The real ctor. tradecomponent.cpp's slot-14 toggle hand-rolled this inline and
 // had to call TradeWork_ResolveFuncs() itself to compensate; going through the ctor
 // keeps the one construction path. See reference_creatework_must_call_work_resolvefuncs.
+//
+// ENDGAME B.3.8 MI-B: the object is now the REAL TradeWork (code/Game/Work/TradeWork.h):
+// its default ctor is the base init + `+0x48 = +0x50 = 0` + TradeWork_ResolveFuncs, the
+// compiler stamps TradeWork's own vtable, and Work::InitFromEntity is the body of the
+// entity-seeded base ctor 0x1400f72e0 (Work_Ctor25) — the same bytes the hand build
+// wrote, with the compiler's table in place of the 0x140161a10 read-back. The extern "C"
+// name stays: standalone/reg_trade_ctrl.cpp registers it at 0x1400f6ea0.
 extern "C" void* TradeWork_CtorFromEntity(void* mem, void* entityIBP) {
-    Resolve();
-    if (!mem || !s_WorkCtor25 || !s_TradeWorkVtbl) return nullptr;
-    TradeWork_ResolveFuncs();
+    if (!mem) return nullptr;
     uint64_t ibp[2] = {*reinterpret_cast<uint64_t*>(entityIBP), 0};
-    s_WorkCtor25(mem, ibp);
-    *reinterpret_cast<void***>(mem) = s_TradeWorkVtbl;
-    *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(mem) + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(mem) + 0x50) = 0;
+    TradeWork* work = new (mem) TradeWork();
+    work->InitFromEntity(ibp);
     return mem;
 }
 

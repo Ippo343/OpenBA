@@ -63,6 +63,10 @@
 #include "Component/controller_state_table.h"
 #include "Component/CropFieldComponent.h"
 #include "Component/coll_bridge.h"
+#include "Work/PlantArea.h"        // ENDGAME B.3.8 MI-B: the real Work classes
+#include "Work/HarvestArea.h"
+#include "Work/TendArea.h"
+#include <new>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -150,7 +154,6 @@ typedef void (*fn_PostWork_t)(uintptr_t workComp, uint32_t code, char flag, void
 typedef bool (*fn_SlotOccupied_t)(uintptr_t comp);
 typedef void (*fn_SlotRelease_t)(uintptr_t comp);
 typedef void (*fn_MapInit_t)(uintptr_t mapComp);               // 0x140124750
-typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);
 typedef uint32_t (*fn_Rand_t)(void* rng, uint32_t bound);
 
 fn_ArrayResize_t     s_slotResize   = nullptr;
@@ -162,7 +165,6 @@ fn_PostWork_t        s_postWork     = nullptr;   // 0x14012ec60
 fn_SlotOccupied_t    s_slotOccupied = nullptr;   // 0x14012ead0
 fn_SlotRelease_t     s_slotRelease  = nullptr;   // 0x14012eb50
 fn_MapInit_t         s_mapInit      = nullptr;   // 0x140124750
-fn_WorkCtor25_t      s_workCtor25   = nullptr;   // 0x1400f72e0
 const float*         s_fRipe        = nullptr;   // 0x140172144 = 0.99f
 uint32_t*            s_tidCropDesc  = nullptr;   // 0x1401c7b68
 uint32_t*            s_tidRawMatDesc= nullptr;   // 0x1401c7cb8
@@ -179,7 +181,6 @@ void CF_Resolve2() {
     s_slotOccupied = reinterpret_cast<fn_SlotOccupied_t>(ResolveAddr(Module::Exe, 0x14012ead0));
     s_slotRelease  = reinterpret_cast<fn_SlotRelease_t>(ResolveAddr(Module::Exe, 0x14012eb50));
     s_mapInit      = reinterpret_cast<fn_MapInit_t>(ResolveAddr(Module::Exe, 0x140124750));
-    s_workCtor25   = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_fRipe        = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172144));
     s_tidCropDesc  = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7b68));
     s_tidRawMatDesc= reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
@@ -206,7 +207,16 @@ void* FindInDescList(uintptr_t list, uint32_t tid) {
 // HarvestArea 0x1400ed4c0, and the state-10 TendArea build): Work_Ctor25, install the
 // leaf vtable, zero {+0x48 q, +0x50 d, +0x58 q, +0x60 q}, then — for Plant/Harvest —
 // size a per-slot byte array at +0x58 to the crop field's slot count and fill it with 1s.
-void* CF_MakeAreaWork(uintptr_t comp, int size, uintptr_t vtableAddr,
+//
+// ENDGAME B.3.8 MI-B: the work is built as its REAL class (code/Game/Work/<X>.h),
+// chosen by the caller (the class retail's ctor stamps): `new (mem) X()` runs the base
+// init, the leaf's field zeroing and its *_ResolveFuncs, the compiler stamps the
+// class's own table, and Work::InitFromEntity is Work_Ctor25's body (0x1400f72e0).
+// Same bytes as the hand build, with no read-back of the retail tables (PlantArea
+// 0x140161890, HarvestArea 0x1401614a0, TendArea 0x140161990). The tail stores below
+// are kept (they match the ctors' zeroing).
+enum class CF_AreaWork { PlantArea, HarvestArea, TendArea };
+void* CF_MakeAreaWork(uintptr_t comp, int size, CF_AreaWork kind,
                       bool perSlotArray, uint64_t descListField, bool hasDescField) {
     CF_Resolve2();
     // Each Work reimpl resolves its engine-function pointers in a *_ResolveFuncs() that
@@ -219,14 +229,16 @@ void* CF_MakeAreaWork(uintptr_t comp, int size, uintptr_t vtableAddr,
     PlantArea_ResolveFuncs();
     TendArea_ResolveFuncs();
     HarvestArea_ResolveFuncs();
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !s_workCtor25) return nullptr;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, size, 8);
     if (!mem) return nullptr;
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
-    s_workCtor25(mem, &entity);
-    if (uintptr_t vt = ResolveAddr(Module::Exe, vtableAddr))
-        *reinterpret_cast<uintptr_t*>(mem) = vt;
+    Work* work = nullptr;
+    if (kind == CF_AreaWork::PlantArea)        work = new (mem) PlantArea();     // 0x70
+    else if (kind == CF_AreaWork::HarvestArea) work = new (mem) HarvestArea();   // 0x68
+    else                                       work = new (mem) TendArea();      // 0x60
+    work->InitFromEntity(&entity);
 
     uintptr_t w = reinterpret_cast<uintptr_t>(mem);
     *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
@@ -475,7 +487,7 @@ static char CropField_State9Enter(void* self, void* /*sm*/) {
     if (s_mapInit) s_mapInit(mapIbp);
 
     // PlantArea is 0x70 and carries the desc list at +0x68 (vtable 0x140161890).
-    void* work = CF_MakeAreaWork(comp, 0x70, 0x140161890, /*perSlotArray=*/true,
+    void* work = CF_MakeAreaWork(comp, 0x70, CF_AreaWork::PlantArea, /*perSlotArray=*/true,
                                  *reinterpret_cast<uint64_t*>(comp + 0x50),
                                  /*hasDescField=*/true);
     CF_PostWork(comp, work);
@@ -515,7 +527,7 @@ static char CropField_State10Enter(void* self, void* /*sm*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     std::fprintf(stderr, "[CropXition] STATE 10 ENTER - posting TendArea\n");
     std::fflush(stderr);
-    void* work = CF_MakeAreaWork(comp, 0x60, 0x140161990, false, 0, false);
+    void* work = CF_MakeAreaWork(comp, 0x60, CF_AreaWork::TendArea, false, 0, false);
     CF_PostWork(comp, work);
     return 1;
 }
@@ -583,7 +595,7 @@ static char CropField_State11Enter(void* self, void* /*sm*/) {
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     std::fprintf(stderr, "[CropXition] STATE 11 ENTER - posting HarvestArea\n");
     std::fflush(stderr);
-    void* work = CF_MakeAreaWork(comp, 0x68, 0x1401614a0, /*perSlotArray=*/true, 0, false);
+    void* work = CF_MakeAreaWork(comp, 0x68, CF_AreaWork::HarvestArea, /*perSlotArray=*/true, 0, false);
     CF_PostWork(comp, work);
     return 1;
 }
