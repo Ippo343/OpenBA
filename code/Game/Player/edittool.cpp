@@ -28,6 +28,7 @@
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -165,14 +166,6 @@ static fn_MapHitTest_t s_fn_MapHitTest = nullptr;
 typedef void* (*fn_EntityAtCell_t)(uintptr_t entityList, void* retIBP, int cellIndex);
 static fn_EntityAtCell_t s_fn_EntityAtCell = nullptr;
 
-// Picking::Scene::Intersect — IAT dispatch slot [0x140152428]
-typedef int (*fn_PickingIntersect_t)(void* scene, void* rayOrigin, void* rayDir,
-                                      float* maxDist, void* hitPosOut, void* hitNormalOut);
-static fn_PickingIntersect_t s_fn_PickingIntersect = nullptr;
-
-// Picking::Scene::GetUserData — IAT dispatch slot [0x140152890]
-typedef void* (*fn_PickingGetUserData_t)(void* scene, int hitId);
-static fn_PickingGetUserData_t s_fn_PickingGetUserData = nullptr;
 
 // Volume::Rectangle::Ctor — IAT dispatch slot [0x1401528a8]
 typedef void (*fn_RectangleCtor_t)(void* self);
@@ -186,9 +179,6 @@ static fn_IsDerived_t s_fn_IsDerived = nullptr;
 typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
 static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
 
-// KeyMap::Pressed — IAT dispatch slot [0x140151758]
-typedef bool (*fn_KeyMapPressed_t)(uintptr_t keyMap, int slot, int keyId);
-static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
 
 // Type IDs resolved from .rdata
 static uint32_t* s_pTypeId_ToolUI = nullptr;       // DWORD at 0x1401c5788
@@ -210,9 +200,7 @@ static void EnsureEditFuncs() {
     s_fn_IsDerived        = (fn_IsDerived_t)resolveIAT(0x140152a98);
     s_fn_IBPCtor          = (fn_IBPCtor_t)resolveIAT(0x140152a90);
     s_fn_RectangleCtor    = (fn_RectangleCtor_t)resolveIAT(0x1401528a8);
-    s_fn_KeyMapPressed    = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
-    s_fn_PickingIntersect = (fn_PickingIntersect_t)resolveIAT(0x140152428);
-    s_fn_PickingGetUserData = (fn_PickingGetUserData_t)resolveIAT(0x140152890);
+
 
     // Direct exe function addresses
     s_fn_Entity_impl_0380     = (fn_Entity_impl_0380_t)ResolveAddr(Module::Exe, 0x140100380);
@@ -236,15 +224,7 @@ static void EnsureEditFuncs() {
         s_fn_IsDerived = (fn_IsDerived_t)fn_IsDerivedFrom;
     if (!s_fn_IBPCtor && fn_InternalBasePtr_Ctor)
         s_fn_IBPCtor = (fn_IBPCtor_t)fn_InternalBasePtr_Ctor;
-    if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
-        s_fn_KeyMapPressed = (fn_KeyMapPressed_t)fn_KeyMap_Pressed;
-    // Picking::Scene::Intersect / GetUserData — Runtime exports, resolved by mangled name.
-    if (!s_fn_PickingIntersect)
-        s_fn_PickingIntersect = (fn_PickingIntersect_t)ResolveExport(
-            "?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z");
-    if (!s_fn_PickingGetUserData)
-        s_fn_PickingGetUserData = (fn_PickingGetUserData_t)ResolveExport(
-            "?GetUserData@Scene@Picking@@QEBAPEAXI@Z");
+
 
     // Reposition (Startup +0x38) type-ids: raw .rdata is NULL in standalone. Fill by name so
     // the GetController(ToolUI)/(EntityUI) lookups resolve. 0x1401c5788="ToolUI",
@@ -683,11 +663,10 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     if (SelDiagOn()) {
         static int calls = 0;
         if (calls < 3) { calls++;
-            printf("[SelDiag] OnKey#%d param2=%d KMP=%p CamRay=%p MapHit=%p AtCell=%p "
-                   "Pick=%p GetUD=%p keyExref=%p\n", calls, param2,
-                   (void*)s_fn_KeyMapPressed, (void*)s_fn_CameraRay, (void*)s_fn_MapHitTest,
-                   (void*)s_fn_EntityAtCell, (void*)s_fn_PickingIntersect,
-                   (void*)s_fn_PickingGetUserData, (void*)g_pKeyMapObjectExref);
+            printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p AtCell=%p "
+                   "keyExref=%p\n", calls, param2,
+                   (void*)s_fn_CameraRay, (void*)s_fn_MapHitTest,
+                   (void*)s_fn_EntityAtCell, (void*)g_pKeyMapObjectExref);
             fflush(stdout);
         }
     }
@@ -708,8 +687,7 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     uintptr_t keyMap = *(uintptr_t*)keyMapPtr;
 
     // Check KeyMap::Pressed(keyMap, 0, 5)
-    if (!s_fn_KeyMapPressed) return 1;
-    bool pressed = s_fn_KeyMapPressed(keyMap, 0, 5);
+    bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
     if (SelDiagOn() && pressed)
         printf("[SelDiag] action-5 PRESSED (keyMap=%p) — running pick\n", (void*)keyMap);
     if (!pressed) return 1;
@@ -814,18 +792,15 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
             *reinterpret_cast<Vector3*>(hitPoint), *reinterpret_cast<Vector3*>(hitNormal));
         if (hitId >= 0) {
             // Get the entity associated with this picking hit
-            if (s_fn_PickingGetUserData) {
-                void* userData = reinterpret_cast<const Picking::Scene*>(pickingScene)->GetUserData(static_cast<uint32_t>(hitId));   // B.3.7 bridge
-                uintptr_t pickIBP = 0;
-                if (s_fn_IBPCtor) s_fn_IBPCtor(&pickIBP, userData);
-                foundEntity = pickIBP;
-            }
+            void* userData = reinterpret_cast<const Picking::Scene*>(pickingScene)->GetUserData(static_cast<uint32_t>(hitId));   // B.3.7 bridge
+            uintptr_t pickIBP = 0;
+            if (s_fn_IBPCtor) s_fn_IBPCtor(&pickIBP, userData);
+            foundEntity = pickIBP;
         }
         if (SelDiagOn())
             printf("[SelDiag] Picking hitId=%d -> foundEntity=%p\n", hitId, (void*)foundEntity);
     } else if (SelDiagOn()) {
-        printf("[SelDiag] Picking skipped (Pick=%p scene=%p)\n",
-               (void*)s_fn_PickingIntersect, pickingScene);
+        printf("[SelDiag] Picking skipped (scene=%p)\n", pickingScene);
     }
 
     // Select the found entity if valid and different from current
@@ -1047,9 +1022,9 @@ static void DumpCitizenElemTree(void* elem, int depth, int* counter) {
 extern "C" int EditTool_HarnessSelectCitizen(void* editTool) {
     EnsureEditFuncs();
     if (!editTool) { printf("[EditSel] no active EditTool\n"); return 0; }
-    if (!fn_EditTool_SelectEntity || !s_fn_PickingGetUserData) {
-        printf("[EditSel] citizen select unavailable (SelectEntity=%p GetUserData=%p)\n",
-               (void*)fn_EditTool_SelectEntity, (void*)s_fn_PickingGetUserData);
+    if (!fn_EditTool_SelectEntity) {
+        printf("[EditSel] citizen select unavailable (SelectEntity=%p)\n",
+               (void*)fn_EditTool_SelectEntity);
         return 0;
     }
     void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);

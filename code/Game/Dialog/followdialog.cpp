@@ -16,6 +16,7 @@
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "input/Input.h"   // ENDGAME B.3.7 callers (K3)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -334,7 +335,7 @@ void FollowDialog_Slot7(FollowDialog* self) {
     // Check Escape key (key ID 8) — if pressed, close the follow dialog.
     // FUN_140068f00: null back-ref on followed entity at +0xC0, then CloseDialog on self.
     void* keyMap = g_pKeyMapObjectExref ? ***(void****)g_pKeyMapObjectExref : nullptr;
-    if (keyMap && fn_KeyMap_Pressed(keyMap, 0, 8)) {
+    if (keyMap && reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 8)) {  // B.3.7 bridge
         uintptr_t followedInner = *(uintptr_t*)(s + 0xC0);
 
         // Null out back-reference: *(followedInner+0xE0) = null InternalBasePtr

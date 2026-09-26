@@ -16,6 +16,7 @@
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "input/Input.h"   // ENDGAME B.3.7 callers (K3)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -78,7 +79,7 @@ void OptionInputBindDialog_Load(OptionInputBindDialog* self) {
 
     // Scan keyboard keys (InputDevice=1, keys 0..0x68)
     for (int key = 0; key < 0x69; key++) {
-        if (fn_Input_Device_Released(inputDevice, 1, 0, key)) {
+        if (reinterpret_cast<const Input::Device*>(inputDevice)->Released(Input::Device::InputDevice::Keyboard, 0, key)) {  // B.3.7 bridge
             *(int*)(s + 0xC4) = 1;  // keyboard
             *(int*)(s + 0xC0) = key;
             // Call vtable[10] = OnOk
@@ -91,7 +92,7 @@ void OptionInputBindDialog_Load(OptionInputBindDialog* self) {
 
     // Scan mouse buttons (InputDevice=2, buttons 4..0xB)
     for (int btn = 4; btn <= 0xB; btn++) {
-        if (fn_Input_Device_Released(inputDevice, 2, 0, btn)) {
+        if (reinterpret_cast<const Input::Device*>(inputDevice)->Released(Input::Device::InputDevice::Mouse, 0, btn)) {  // B.3.7 bridge
             *(int*)(s + 0xC4) = 2;  // mouse
             *(int*)(s + 0xC0) = btn;
             // Call vtable[10] = OnOk

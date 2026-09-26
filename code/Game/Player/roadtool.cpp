@@ -25,6 +25,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "collection/Collection.h"
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 #include <cstdint>
 #include <cstdio>
 
@@ -241,10 +242,7 @@ uint64_t RoadTool_OnKey_Impl(RoadTool* self, char key) {
 
     // Read KeyMap::GetValue(0, 0x16) for the modifier flag
     uint64_t keyMap = (uint64_t)***(void****)g_pKeyMapObjectExref;
-    short val = 0;
-    if (fn_KeyMap_GetValue) {
-        val = fn_KeyMap_GetValue((void*)keyMap, 0, 0x16);
-    }
+    short val = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0x16);  // B.3.7 bridge
     self->modifierFlag = (val == 0) ? 1 : 0;
 
     return 1;

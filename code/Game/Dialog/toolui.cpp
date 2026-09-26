@@ -38,6 +38,7 @@
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
 
 // code/Game/Object/factory_registration.cpp
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
@@ -416,12 +417,12 @@ void ToolUI_Slot8(ToolUI* self) {
 
         // Get mouse X, scaled by dialog scale factor
         void* dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
-        short axisX = fn_KeyMap_GetValue(keyMap, 0, 0);
+        short axisX = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
         float scaleX = *(float*)((uintptr_t)dialogElem + 0xDC);
 
         // Get mouse Y
         dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
-        short axisY = fn_KeyMap_GetValue(keyMap, 0, 1);
+        short axisY = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
         float scaleY = *(float*)((uintptr_t)dialogElem + 0xDC);
 
         int mouseX = (int)((float)(int)axisX * scaleX);
@@ -444,7 +445,7 @@ void ToolUI_Slot8(ToolUI* self) {
         }
 
         // Check if mouse button released
-        short btn = fn_KeyMap_GetValue(keyMap, 0, 5);
+        short btn = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 5);  // B.3.7 bridge
         if (btn == 0) {
             *(uint8_t*)(s + 0x4D) = 0;
         }
@@ -457,11 +458,11 @@ void ToolUI_Slot8(ToolUI* self) {
         if (!*(uintptr_t*)(s + 0x18)) { /* dialog instance null, skip drag */ }
         else {
         void* dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
-        short axisX = fn_KeyMap_GetValue(keyMap, 0, 0);
+        short axisX = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
         float scaleX = *(float*)((uintptr_t)dialogElem + 0xDC);
 
         dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
-        short axisY = fn_KeyMap_GetValue(keyMap, 0, 1);
+        short axisY = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
         float scaleY = *(float*)((uintptr_t)dialogElem + 0xDC);
 
         int newX = (int)((float)(int)axisX * scaleX) - *(int*)(s + 0x44);
@@ -519,7 +520,7 @@ void ToolUI_Slot8(ToolUI* self) {
         }
 
         // Check if mouse button released
-        short btn = fn_KeyMap_GetValue(keyMap, 0, 5);
+        short btn = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 5);  // B.3.7 bridge
         if (btn == 0) {
             *(uint8_t*)(s + 0x41) = 0;
         }

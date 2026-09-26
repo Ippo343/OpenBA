@@ -84,7 +84,7 @@ typedef void  (*fn_EnableRefMode_t)(void* extFactory, bool on);
 typedef void  (*fn_SerializeRefTable_t)(void* extFactory, void* stream);
 typedef void  (*fn_ResetPersist_t)(void* intFactory, void* stream);
 typedef void  (*fn_ClearPersist_t)(void* intFactory);
-typedef void  (*fn_AchMgr_Persist_t)(void* mgr, void* stream);
+
 typedef void  (*fn_AudioScene_Serialize_t)(void* scene, void* serializer);
 typedef void* (*fn_CMS_Ctor_t)(void* self);
 typedef void  (*fn_CMS_Dtor_t)(void* self);
@@ -92,13 +92,13 @@ typedef bool  (*fn_CMS_Open_t)(void* self);
 typedef bool  (*fn_CMS_Create_t)(void* self);
 typedef void  (*fn_CMS_Close_t)(void* self);
 typedef void* (*fn_CMS_GetMemStream_t)(void* self);
-typedef void  (*fn_SavedState_Xfer_t)(void* state, void* memStream);
+
 
 static fn_EnableRefMode_t       s_fn_EnableRefMode = nullptr;
 static fn_SerializeRefTable_t   s_fn_SerializeRefTable = nullptr;
 static fn_ResetPersist_t        s_fn_ResetPersist = nullptr;
 static fn_ClearPersist_t        s_fn_ClearPersist = nullptr;
-static fn_AchMgr_Persist_t      s_fn_AchMgr_Persist = nullptr;
+
 static fn_AudioScene_Serialize_t s_fn_AudioScene_Serialize = nullptr;
 static fn_CMS_Ctor_t            s_fn_CMS_Ctor = nullptr;
 static fn_CMS_Dtor_t            s_fn_CMS_Dtor = nullptr;
@@ -106,8 +106,7 @@ static fn_CMS_Open_t            s_fn_CMS_Open = nullptr;
 static fn_CMS_Create_t          s_fn_CMS_Create = nullptr;
 static fn_CMS_Close_t           s_fn_CMS_Close = nullptr;
 static fn_CMS_GetMemStream_t    s_fn_CMS_GetMemStream = nullptr;
-static fn_SavedState_Xfer_t     s_fn_SavedState_Store = nullptr;
-static fn_SavedState_Xfer_t     s_fn_SavedState_Retrieve = nullptr;
+
 static void**                   s_ppIntFactory = nullptr;   // InternalFactory::_singleton cell
 static void**                   s_ppAchMgr = nullptr;       // AchievementManager::_singleton cell
 static const uint32_t*          s_pAchInstTypeId = nullptr; // AchievementInstance BaseTypeInfo (typeId at +0)
@@ -156,8 +155,7 @@ void EnsureResolved() {
         ResolveExport("?ResetPersistState@InternalFactory@Object@@QEAAXAEAVStream@IO@@@Z"));
     s_fn_ClearPersist = reinterpret_cast<fn_ClearPersist_t>(
         ResolveExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ"));
-    s_fn_AchMgr_Persist = reinterpret_cast<fn_AchMgr_Persist_t>(
-        ResolveExport("?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z"));
+
     s_fn_AudioScene_Serialize = reinterpret_cast<fn_AudioScene_Serialize_t>(
         ResolveExport("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z"));
     s_fn_CMS_Ctor = reinterpret_cast<fn_CMS_Ctor_t>(
@@ -172,10 +170,7 @@ void EnsureResolved() {
         ResolveExport("?Close@CompressedMemoryStream@IO@@UEAAXXZ"));
     s_fn_CMS_GetMemStream = reinterpret_cast<fn_CMS_GetMemStream_t>(
         ResolveExport("?GetMemoryStream@CompressedMemoryStream@IO@@QEAAAEAVMemoryStream@2@XZ"));
-    s_fn_SavedState_Store = reinterpret_cast<fn_SavedState_Xfer_t>(
-        ResolveExport("?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z"));
-    s_fn_SavedState_Retrieve = reinterpret_cast<fn_SavedState_Xfer_t>(
-        ResolveExport("?Retrieve@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z"));
+
     s_ppIntFactory = reinterpret_cast<void**>(
         ResolveExport("?_singleton@InternalFactory@Object@@0PEAV12@EA"));
     s_ppAchMgr = reinterpret_cast<void**>(
@@ -202,14 +197,12 @@ void EnsureResolved() {
     s_fn_AvlFixup_5920 = reinterpret_cast<fn_AvlFixup_5920_t>(R(0x140025920));
 
     fprintf(stderr, "[GUL::Serialize] resolved: refMode=%p refTable=%p persist=%p/%p "
-            "achP=%p audio=%p cms=%p/%p sst=%p/%p "
+            "audio=%p cms=%p/%p "
             "subs: cit=%p grid=%p goals=%p citPost=%p envPtr=%p\n",
             (void*)s_fn_EnableRefMode, (void*)s_fn_SerializeRefTable,
             (void*)s_fn_ResetPersist, (void*)s_fn_ClearPersist,
-            (void*)s_fn_AchMgr_Persist,
             (void*)s_fn_AudioScene_Serialize, (void*)s_fn_CMS_Ctor,
-            (void*)s_fn_CMS_Open, (void*)s_fn_SavedState_Store,
-            (void*)s_fn_SavedState_Retrieve, (void*)s_fn_CitList_8f760,
+            (void*)s_fn_CMS_Open, (void*)s_fn_CitList_8f760,
             (void*)s_fn_Grid_9f100, (void*)s_fn_Goals_f9240,
             (void*)s_fn_CitPost_8f580, (void*)s_fn_EnvPtrSer_192a0);
     fflush(stderr);

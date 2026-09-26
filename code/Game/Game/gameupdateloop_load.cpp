@@ -73,13 +73,10 @@ extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);       
 
 // --- Step 32 (AchievementInstance) -----------------------------------------
 // ??0AchievementInstance@Achievement@@QEAA@XZ            (Runtime 0x18009e3b0)
-// ?SetAchievement@AchievementInstance@Achievement@@QEAAXV?$ExternalPtr@VAchievement@1@@Object@@@Z
-//                                                        (Runtime 0x18009e440)
 // ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A      (BaseTypeInfo; +0 is the type id)
+// (SetAchievement is called as a member — ENDGAME B.3.7.)
 typedef void* (*fn_AchievementInstance_Ctor_t)(void* self);
-typedef void  (*fn_AchievementInstance_SetAchievement_t)(void* self, void* achievement);
 static fn_AchievementInstance_Ctor_t           s_fn_AchievementInstance_Ctor = nullptr;
-static fn_AchievementInstance_SetAchievement_t s_fn_AchievementInstance_SetAchievement = nullptr;
 static const uint32_t*                         s_AchievementTypeId = nullptr;
 
 static void EnsureAchievementFuncs() {
@@ -88,9 +85,7 @@ static void EnsureAchievementFuncs() {
     done = true;
     s_fn_AchievementInstance_Ctor = (fn_AchievementInstance_Ctor_t)
         ResolveExport("??0AchievementInstance@Achievement@@QEAA@XZ");
-    s_fn_AchievementInstance_SetAchievement = (fn_AchievementInstance_SetAchievement_t)
-        ResolveExport("?SetAchievement@AchievementInstance@Achievement@@QEAAX"
-                      "V?$ExternalPtr@VAchievement@1@@Object@@@Z");
+
     s_AchievementTypeId = (const uint32_t*)
         ResolveExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A");
 }
@@ -1275,11 +1270,6 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // We call our port directly rather than through ResolveAddr — the address IS
     // registered for any retail-shaped caller, but this is the only call site.
     {
-        typedef void (*fn_SetEventHandler_t)(void* self, void (*handler)(int));
-        static fn_SetEventHandler_t s_setEventHandler = nullptr;
-        if (!s_setEventHandler)
-            s_setEventHandler = reinterpret_cast<fn_SetEventHandler_t>(
-                ResolveExport("?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z"));
         void* achMgr = (g_ppAchievementManager && *g_ppAchievementManager)
                            ? **g_ppAchievementManager : nullptr;
         if (achMgr) {
@@ -1287,8 +1277,8 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             fprintf(stderr, "[GUL::Load] step30 AchievementManager::SetEventHandler "
                             "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", achMgr);
         } else {
-            fprintf(stderr, "[GUL::Load] step30 SetEventHandler SKIPPED (mgr=%p fn=%p)\n",
-                    achMgr, (void*)s_setEventHandler);
+            fprintf(stderr, "[GUL::Load] step30 SetEventHandler SKIPPED (mgr=%p)\n",
+                    achMgr);
         }
         fflush(stderr);
     }
@@ -1322,9 +1312,6 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     // to say why. The dialog looked healthy the whole time because it reads the
     // ACHIEVEMENT list (mgr+0x00), not the instance list.
     if (*(void**)(p + 0x58) == nullptr /*new game*/) {
-        typedef void (*AchMgrReset_t)(void* self);
-        static AchMgrReset_t s_fn_AchMgr_Reset = reinterpret_cast<AchMgrReset_t>(
-            ResolveExport("?Reset@AchievementManager@Achievement@@QEAAXXZ"));
         void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
                         ? **g_ppAchievementManager : nullptr;
         if (mgr) {
@@ -1332,9 +1319,9 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             fprintf(stderr, "[GUL::Load] step30b AchievementManager::Reset(mgr=%p) -> "
                             "instances=%d\n", mgr, *(int32_t*)((uintptr_t)mgr + 0x20));
         } else {
-            fprintf(stderr, "[GUL::Load] step30b Reset SKIPPED (fn=%p mgr=%p) — "
+            fprintf(stderr, "[GUL::Load] step30b Reset SKIPPED (mgr=%p) — "
                             "no achievement can ever be awarded\n",
-                    reinterpret_cast<void*>(s_fn_AchMgr_Reset), mgr);
+                    mgr);
         }
         fflush(stderr);
     }
@@ -1611,13 +1598,12 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
     *(void**)(p + 0x150) = nullptr;
     if (achievementId >= 0) {
         EnsureAchievementFuncs();
-        if (!s_fn_AchievementInstance_Ctor || !s_fn_AchievementInstance_SetAchievement ||
+        if (!s_fn_AchievementInstance_Ctor ||
             !fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
             !g_pKeyMapSingleton) {
-            fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved (ctor=%p set=%p "
+            fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved (ctor=%p "
                             "alloc=%p ibp=%p reslist=%p)\n",
                     (void*)s_fn_AchievementInstance_Ctor,
-                    (void*)s_fn_AchievementInstance_SetAchievement,
                     (void*)fn_MemAlloc, (void*)fn_InternalBasePtr_Ctor,
                     (void*)g_pKeyMapSingleton);
             fflush(stderr);

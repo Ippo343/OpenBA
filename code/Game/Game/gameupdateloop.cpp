@@ -55,6 +55,7 @@
 #include "save/SaveLoad.h"                    // ENDGAME B.3.7 callers (K2)
 #include "engine/MainLoop.h"                  // ENDGAME B.3.7 callers (K2)
 #include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
+#include "input/Input.h"                      // ENDGAME B.3.7 callers (K3)
 
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
@@ -401,9 +402,6 @@ static float* g_fCamParam1 = nullptr;        // 0x1401721dc
 static float* g_fCamParam2 = nullptr;        // 0x140172174
 static float* g_fCamParam3 = nullptr;        // 0x140172240
 
-// Application::Application::IsPaused (Runtime) — not yet in engine_funcs
-typedef bool (*fn_App_IsPaused_t)(void* self);
-static fn_App_IsPaused_t fn_App_IsPaused = nullptr;
 
 // DAT_1401c3de0 — some debug/editor singleton
 static void** g_pDebugSingleton = nullptr;
@@ -563,8 +561,7 @@ static void EnsureInit() {
         ResolveExport("??1AnimationManager@Graphics@@QEAA@XZ"));
     fn_Time_Ctor_Seconds = reinterpret_cast<fn_Time_Ctor_Seconds_t>(
         ResolveExport("??0Time@System@@QEAA@M@Z"));
-    fn_App_IsPaused = reinterpret_cast<fn_App_IsPaused_t>(
-        ResolveExport("?IsPaused@Application@1@QEAA_NXZ"));
+
     fn_ExternalList_Find = reinterpret_cast<fn_ExternalList_Find_t>(
         ResolveExport("?Find@ExternalList@Object@@QEBA?AV?$ExternalPtr@VExternal@Object@@@2@AEBVFilename@System@@VType@2@@Z"));
     if (!fn_ExternalList_Find) {
@@ -601,7 +598,7 @@ static void EnsureInit() {
     CHECK_FN(fn_CalcWindFactor);
     CHECK_FN(fn_MainLoop_SetNextLoop);
     CHECK_FN(fn_Time_Ctor_Seconds);
-    CHECK_FN(fn_App_IsPaused);
+
     CHECK_FN(fn_ExternalList_Find);
     CHECK_FN(fn_EventNotifier_Fire);
     CHECK_FN(fn_EventNotifier_FireWithName);
@@ -1435,7 +1432,7 @@ post_simulation:
     {
         void* keyMap = ***(void****)g_pKeyMapObjectExref;
 
-        if (fn_KeyMap_Pressed(keyMap, 0, 0x21)) {
+        if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x21)) {  // B.3.7 bridge
             self->m_quickSavePressed = 1;
         }
 
@@ -1466,7 +1463,7 @@ post_simulation:
             }
         }
 
-        if (fn_KeyMap_Pressed(keyMap, 0, 0x22)) {
+        if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x22)) {  // B.3.7 bridge
             self->m_quickLoadPressed = 1;
         }
         TRACE("[GameUpdateLoop::Update] quicksave/quickload checked (save=%d, load=%d)\n",

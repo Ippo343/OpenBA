@@ -31,6 +31,7 @@
 #include <cstring>
 #include <cmath>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
 // Vtable addresses (for vtable chain reset in Dtor)
@@ -158,7 +159,7 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
     void* keyMap = GetKeyMap();
 
     // Check rotate counter-clockwise (key 0x13)
-    bool rotLeft = fn_KeyMap_Pressed ? fn_KeyMap_Pressed(keyMap, 0, 0x13) : false;
+    bool rotLeft = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x13);  // B.3.7 bridge
     if (rotLeft) {
         // Access rotationSetting IBP at self+0x50
         void* rotSettingIBP = (void*)((uintptr_t)self + 0x50);
@@ -173,7 +174,7 @@ uint64_t FencedTool_OnKey(FencedTool* self, char key) {
         }
     } else {
         // Check rotate clockwise (key 0x14)
-        bool rotRight = fn_KeyMap_Pressed ? fn_KeyMap_Pressed(keyMap, 0, 0x14) : false;
+        bool rotRight = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x14);  // B.3.7 bridge
         if (rotRight) {
             void* rotSettingIBP = (void*)((uintptr_t)self + 0x50);
             uintptr_t rotSetting = *(uintptr_t*)rotSettingIBP;

@@ -21,6 +21,7 @@
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "input/Input.h"        // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
 // DragTool vtable addresses (for vtable chain in Dtor)
@@ -252,7 +253,10 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         }
 
         // Check if the primary action button was released
-        if (fn_KeyMap_Released && fn_KeyMap_Released(keyMap, 0, 5)) {
+        // ENDGAME B.3.7: fn_KeyMap_Released was bound only to the unregistered exe
+        // slot 0x1401528f0 and was always null, so this reset never ran; the member
+        // call restores retail's key-up path (CALLER_SURFACE.md 6, defect 1).
+        if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Released(0, 5)) {  // B.3.7 bridge
             // Reset both dragState and singleClick (original does MOV word [self+0x28], 0)
             self->dragState = 0;
             self->singleClick = 0;
@@ -261,7 +265,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
     else if (self->dragState == 0) {
         // ---- Idle state: check for drag start ----
         // fn_KeyMap_Pressed at dispatch 0x140151758 — checks if button newly pressed
-        bool pressed = fn_KeyMap_Pressed ? fn_KeyMap_Pressed(keyMap, 0, 5) : false;
+        bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
         if (pressed) {
             int cell = g_fn_ScreenToCell((uint64_t)keyMap);
             self->startCell = cell;
@@ -371,7 +375,7 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         if (self->singleClick != 0) {
             // Single-click mode: waiting for second click to confirm placement.
             // Original uses fn_KeyMap_Pressed (dispatch 0x140151758).
-            bool pressed = fn_KeyMap_Pressed ? fn_KeyMap_Pressed(keyMap, 0, 5) : false;
+            bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
             if (pressed) {
                 if (currentCell < 0) {
                     // Invalid target cell
@@ -398,9 +402,11 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         } else {
             // Normal drag mode: check if mouse button was just released.
             // Original checks: Released(0,5) || GetValue(0,5)==0
-            bool released = fn_KeyMap_Released ? fn_KeyMap_Released(keyMap, 0, 5) : false;
+            // ENDGAME B.3.7: Released used to be always false (see the key-up
+            // branch above); it now reports the release itself.
+            bool released = reinterpret_cast<const Input::KeyMap*>(keyMap)->Released(0, 5);  // B.3.7 bridge
             if (!released) {
-                short value = fn_KeyMap_GetValue ? fn_KeyMap_GetValue(keyMap, 0, 5) : 1;
+                short value = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 5);  // B.3.7 bridge
                 released = (value == 0);
             }
 

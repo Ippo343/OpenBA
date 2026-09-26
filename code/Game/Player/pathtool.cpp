@@ -21,6 +21,7 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
 // Resolved vtable pointers (set once on first call)
@@ -77,8 +78,6 @@ static fn_PathToolSetSelected_t s_fn_PathToolSetSelected = nullptr;
 // dropped-digit-typo address (0x1400c08c0, mid-function in FUN_1400c0690) and was
 // never called (PathTool::Draw uses fn_TileRender for the debug overlay). Dead code.
 
-// fn_KeyMap_Pressed dispatch slot at 0x140151758
-static void** s_dispatchSlot_KeyMapPressed = nullptr;
 
 static bool s_funcsResolved = false;
 
@@ -94,8 +93,6 @@ static void ResolvePathToolFuncs() {
     s_fn_PathToolSetSelected = reinterpret_cast<fn_PathToolSetSelected_t>(
         ResolveAddr(Module::Exe, 0x1400dd710));
 
-    s_dispatchSlot_KeyMapPressed = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140151758));
 
     s_funcsResolved = true;
 }
@@ -162,19 +159,8 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
     // Check if primary action button is pressed
     uint64_t keyMap = GetKeyMap();
 
-    // Call KeyMap::Pressed(keyMap, 0, 5) through dispatch slot
-    typedef bool (*fn_Pressed_t)(uint64_t self, int slot, int keyId);
-    fn_Pressed_t fnPressed = nullptr;
-    if (s_dispatchSlot_KeyMapPressed) {
-        fnPressed = reinterpret_cast<fn_Pressed_t>(*s_dispatchSlot_KeyMapPressed);
-    }
-    // Standalone: the IAT dispatch slot 0x140151758 is NOT populated, so *slot is null →
-    // fnPressed stays null and OnKey bailed before ever checking the click. EditTool_OnKey
-    // has this exact fallback (edittool.cpp:272); mirror it so world-clicks register.
-    if (!fnPressed && fn_KeyMap_Pressed) fnPressed = reinterpret_cast<fn_Pressed_t>(fn_KeyMap_Pressed);
-
-    if (!fnPressed) return 1;
-    bool pressed = fnPressed(keyMap, 0, 5);
+    // KeyMap::Pressed(keyMap, 0, 5) — retail calls it through exe slot 0x140151758.
+    bool pressed = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
     if (!pressed) return 1;
 
     // Get map data pointer

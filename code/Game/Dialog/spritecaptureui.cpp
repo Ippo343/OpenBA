@@ -25,6 +25,7 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/EditElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
 // SpriteCaptureUI::Serialize (vtable +0x20, 0x140079640)
@@ -118,7 +119,7 @@ void SpriteCaptureUI_OnCreate(SpriteCaptureUI* self) {
 
     // 1. If currently dragging, check if left mouse button (axis 4) was released
     if (self->dragging) {
-        short btnHeld = fn_Input_Device_GetValue(inputDevice, 2, 0, 4);
+        short btnHeld = reinterpret_cast<const Input::Device*>(inputDevice)->GetValue(Input::Device::InputDevice::Mouse, 0, 4);  // B.3.7 bridge
         if (btnHeld == 0) {
             self->dragging = 0;
             goto check_pressed;
@@ -127,19 +128,19 @@ void SpriteCaptureUI_OnCreate(SpriteCaptureUI* self) {
 
     // 2. While dragging, update anchor position to current mouse pos
     if (self->dragging) {
-        short mx = fn_Input_Device_GetValue(inputDevice, 2, 0, 0);
-        short my = fn_Input_Device_GetValue(inputDevice, 2, 0, 1);
+        short mx = reinterpret_cast<const Input::Device*>(inputDevice)->GetValue(Input::Device::InputDevice::Mouse, 0, 0);  // B.3.7 bridge
+        short my = reinterpret_cast<const Input::Device*>(inputDevice)->GetValue(Input::Device::InputDevice::Mouse, 0, 1);  // B.3.7 bridge
         self->anchorX = (int)mx;
         self->anchorY = (int)my;
     }
 
 check_pressed:
     // 3. Check for new capture start: left mouse pressed + key 0x3E held
-    if (fn_Input_Device_Pressed(inputDevice, 2, 0, 4)) {
-        short keyHeld = fn_Input_Device_GetValue(inputDevice, 1, 0, 0x3e);
+    if (reinterpret_cast<const Input::Device*>(inputDevice)->Pressed(Input::Device::InputDevice::Mouse, 0, 4)) {  // B.3.7 bridge
+        short keyHeld = reinterpret_cast<const Input::Device*>(inputDevice)->GetValue(Input::Device::InputDevice::Keyboard, 0, 0x3e);  // B.3.7 bridge
         if (keyHeld != 0) {
-            short mx = fn_Input_Device_GetValue(inputDevice, 2, 0, 0);
-            short my = fn_Input_Device_GetValue(inputDevice, 2, 0, 1);
+            short mx = reinterpret_cast<const Input::Device*>(inputDevice)->GetValue(Input::Device::InputDevice::Mouse, 0, 0);  // B.3.7 bridge
+            short my = reinterpret_cast<const Input::Device*>(inputDevice)->GetValue(Input::Device::InputDevice::Mouse, 0, 1);  // B.3.7 bridge
             self->curX   = (int)mx;
             self->curY   = (int)my;
             self->anchorX = (int)mx;
