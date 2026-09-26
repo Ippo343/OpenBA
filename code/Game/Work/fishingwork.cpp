@@ -17,7 +17,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "FishingWork.h"
+#include "Work/FishingWork.h"
+#include "Work/fishingwork_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -73,8 +74,6 @@ static uint64_t (*s_fn_TryAssignToSpot)(uintptr_t assignMgr, void* citizenIBP, i
 
 // System::MemoryAllocator::MemAlloc/MemFree — use fn_MemAlloc/fn_MemFreeStatic from engine_funcs
 
-// Work::Serialize base (0x1400f7400)
-static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
 
 // 0x1400032e0 (Array<Ptr8>::SetSize) and 0x1400021d0 (Array<int32>::SetSize) are
 // exe-side Collection::Array<T> monomorphisations -- ENDGAME B.3.2 step 2 converted
@@ -131,10 +130,6 @@ bool FishingWork_ResolveFuncs() {
     s_fn_TryAssignToSpot = reinterpret_cast<uint64_t(*)(uintptr_t, void*, int, char)>(
         ResolveAddr(Module::Exe, 0x1400f8620));
 
-    // Work::Serialize base (0x1400f7400)
-    s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
-
     // FUN_140002e10 — find PositionComponent on entity
     s_fn_FindComp_PositionEntity = reinterpret_cast<void*(*)(uintptr_t, void*)>(
         ResolveAddr(Module::Exe, 0x140002e10));
@@ -155,7 +150,6 @@ bool FishingWork_ResolveFuncs() {
               s_fn_Entity_GetSpotPosition && s_fn_MeshInstance_SetVisibility &&
               s_fn_FishingAction_Ctor && s_fn_PlayAnimation_Action_Ctor &&
               s_fn_TryAssignToSpot &&
-              s_fn_Work_Serialize &&
               s_fn_FindComp_PositionEntity && s_fn_CancelPendingActions &&
               s_typeId_1401c7660 && s_typeId_1401c7698 &&
               s_typeId_1401c4870 && s_typeId_1401c7e78 && s_typeId_1401c8070 &&
@@ -177,8 +171,6 @@ bool FishingWork_ResolveFuncs() {
            (void*)s_typeId_1401c7660, (void*)s_typeId_1401c7698,
            (void*)s_typeId_1401c4870, (void*)s_typeId_1401c7e78, (void*)s_typeId_1401c8070,
            (void*)s_typeId_1401c7158);
-    printf("[FishingWork]   WorkSer=%p\n",
-           (void*)s_fn_Work_Serialize);
     printf("[FishingWork]   FindPosEnt=%p CancelPending=%p\n",
            (void*)s_fn_FindComp_PositionEntity, (void*)s_fn_CancelPendingActions);
     if (!ok) printf("[FishingWork] ERROR: some function pointers not resolved!\n");
@@ -256,9 +248,9 @@ static inline int ClampToMap(int val, int mapSize) {
 //
 // Returns: 1 = not ready/retry, 2 = action pushed
 // ============================================================
-int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    int64_t* selfQ = (int64_t*)self;  // for 8-byte indexed access matching Ghidra
+int FishingWork::Execute(void* citizenIBP, void* /*time*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    int64_t* selfQ = (int64_t*)this;  // for 8-byte indexed access matching Ghidra
 
     // Get game world
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
@@ -477,9 +469,9 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 int priority = (int)selfQ[4];  // +0x20
                 uintptr_t ce = *(uintptr_t*)citizenIBP;
 
-                uintptr_t vt = *(uintptr_t*)self;
+                uintptr_t vt = *(uintptr_t*)this;
                 typedef uint64_t* (*VtSlot50_t)(FishingWork*, void*);
-                uint64_t* res = (*(VtSlot50_t*)(vt + 0x50))(self, &entityRef);
+                uint64_t* res = (*(VtSlot50_t*)(vt + 0x50))(this, &entityRef);
                 uint64_t actionVal = *res;
 
                 *(uint32_t*)(ce + 0x54) |= 4;
@@ -505,9 +497,9 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                 int priority = (int)selfQ[4];
                 uintptr_t ce = *(uintptr_t*)citizenIBP;
 
-                uintptr_t vt = *(uintptr_t*)self;
+                uintptr_t vt = *(uintptr_t*)this;
                 typedef uint64_t* (*VtSlot50_t)(FishingWork*, void*);
-                uint64_t* res = (*(VtSlot50_t*)(vt + 0x50))(self, &citizenRef2);
+                uint64_t* res = (*(VtSlot50_t*)(vt + 0x50))(this, &citizenRef2);
                 uint64_t actionVal = *res;
 
                 *(uint32_t*)(ce + 0x54) |= 4;
@@ -587,7 +579,7 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
             // leaves those cells unowned, so this branch should now be unreachable. It
             // stays as a tripwire: if it ever fires again the claim is back, and the
             // dock's 4-catch cap is back with it.
-            if (cellEntity == *(uintptr_t*)((uintptr_t)self + 0x10)) {
+            if (cellEntity == *(uintptr_t*)((uintptr_t)this + 0x10)) {
                 static bool s_warned = false;
                 if (!s_warned) {
                     s_warned = true;
@@ -670,7 +662,7 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
                         "[FishWork] +0x28 NULL: spot[%d] cell=%d tile=(%d,%d) "
                         "cellEntity=%p dock=%p wanted tid=0x%x (%s) — entity carries "
                         "%d component(s):\n", i, cellIdx, cx, cy, (void*)cellEnt,
-                        (void*)*(uintptr_t*)((uintptr_t)self + 0x10), want,
+                        (void*)*(uintptr_t*)((uintptr_t)this + 0x10), want,
                         wantName ? wantName : "UNREGISTERED", compCount);
                     for (int k = 0; k < compCount; ++k) {
                         uintptr_t* s2 = (uintptr_t*)(compArray + (uintptr_t)k * 8);
@@ -711,8 +703,8 @@ int FishingWork_Slot4_Impl(FishingWork* self, void* citizenIBP, void* /*time*/) 
 //
 // Returns: 1 = all valid (or no citizens), 0 = some invalid
 // ============================================================
-int FishingWork_Slot9_Impl(FishingWork* self, void* param2) {
-    int64_t* selfQ = (int64_t*)self;
+int FishingWork::Validate(void* param2) {
+    int64_t* selfQ = (int64_t*)this;
 
     int citizenCount = (int)selfQ[10];  // +0x50
     if (citizenCount <= 0) {
@@ -733,7 +725,7 @@ int FishingWork_Slot9_Impl(FishingWork* self, void* param2) {
         // Validate this citizen's task
         uintptr_t citizenIBP = citizenRef;
         uintptr_t outTask = 0;
-        char valid = (char)fn_Work_CanStartWork(self, param2, &citizenIBP, &outTask);
+        char valid = (char)fn_Work_CanStartWork(this, param2, &citizenIBP, &outTask);
 
         if (valid == '\0') {
             // Invalid — clear citizen slot
@@ -829,11 +821,11 @@ int FishingWork_Slot9_Impl(FishingWork* self, void* param2) {
 //   6. Serialize spotStates int array (+0x58)
 //   7. Serialize retryCount (+0x68)
 // ============================================================
-void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void FishingWork::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // 1. Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    // 1. Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // 2. Create IO::Serializer (version=0)
     alignas(8) uint8_t serializer[24] = {0};
@@ -907,10 +899,11 @@ void FishingWork_Serialize_Impl(FishingWork* self, void* stream) {
 //                   bits[7:4] = spot index
 // Returns: 0 (via cleared upper bytes)
 // ============================================================
-int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4) {
+int FishingWork::OnComplete(void* param2, void* param3, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
     (void)param2;
     (void)param3;
-    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Clear citizen IBP slot: citizenRefs[param4 & 0xf] = nullptr IBP
     uintptr_t nullIBP = 0;
@@ -928,7 +921,7 @@ int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32
             std::fprintf(stderr,
                 "[WILDWRITE] FishingWork::Slot6 OUT OF RANGE: work=%p entity=%p workId=%d "
                 "param4=0x%x -> spotIdx=%u (count %d, cap %d, array %p) citizenSlot=%u (count %d)\n",
-                (void*)self, *(void**)(selfAddr + 0x10), *(int*)(selfAddr + 0x20), param4,
+                (void*)this, *(void**)(selfAddr + 0x10), *(int*)(selfAddr + 0x20), param4,
                 spotIdx, *(int*)(selfAddr + 0x60), *(int*)(selfAddr + 0x64), (void*)spotStates,
                 citizenSlot, *(int*)(selfAddr + 0x50));
             RedzoneAlloc_PrintBacktrace("FishingWork::Slot6");
@@ -958,15 +951,16 @@ int FishingWork_Slot6_Impl(FishingWork* self, void* param2, void* param3, uint32
 // `2` that hit a neighbouring boundary tag was the crash in EntityList::Shutdown.
 // See [[feedback_ghidra_dropped_args]]: an indirect call's register args are not
 // in the decompile; read the disassembly for every slot that forwards.
-int FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3, uint32_t param4) {
+int FishingWork::OnCancel(void* param2, void* param3, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
     // Copy the pointed-to values
     uintptr_t copy2 = *(uintptr_t*)param2;
     uintptr_t copy3 = *(uintptr_t*)param3;
 
     // Call vtable slot +0x30 (Slot6) with the packed slot word forwarded.
-    uintptr_t vt = *(uintptr_t*)self;
+    uintptr_t vt = *(uintptr_t*)this;
     typedef int (*VtSlot30_t)(FishingWork*, void*, void*, uint32_t);
-    (*(VtSlot30_t*)(vt + 0x30))(self, &copy2, &copy3, param4);
+    (*(VtSlot30_t*)(vt + 0x30))(this, &copy2, &copy3, param4);
     return 0;
 }
 
@@ -977,8 +971,8 @@ int FishingWork_Slot7_Impl(FishingWork* self, void* param2, void* param3, uint32
 //     calls CancelPendingActions on their state machine action list
 //   - Then clears the citizen IBP slot
 // ============================================================
-int FishingWork_Slot8_Impl(FishingWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int FishingWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     int citizenCount = *(int*)(selfAddr + 0x50);
     if (citizenCount <= 0) return 0;
@@ -1011,8 +1005,8 @@ int FishingWork_Slot8_Impl(FishingWork* self) {
 // Uses FUN_140002e10 to find PositionComponent on building entity.
 // Returns param2 (hidden return pointer pattern).
 // ============================================================
-void* FishingWork_Slot10_Impl(FishingWork* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* FishingWork::GetTarget(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // CheckPtr on building entity IBP (at self+0x10)
     uintptr_t buildingEntity = *(uintptr_t*)(selfAddr + 0x10);
@@ -1030,63 +1024,59 @@ void* FishingWork_Slot10_Impl(FishingWork* self, void* param2) {
     return param2;
 }
 
+
+// [11] 0x140029860 (shared by 13 tables): `XOR EAX,EAX; CMP [RCX+0x50],EAX; SETG AL`
+// — "is anyone assigned" (+0x50 is the citizen count). The old table pointed at
+// Work_Slot11_HasActiveTasks, the same body.
+int FishingWork::GetPriority() {
+    return citizenCount > 0 ? 1 : 0;
+}
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The stamps are the compiler's. FishingWork_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+FishingWork::FishingWork()
+    : Work(), citizenRefs(nullptr), citizenCount(0), citizenCapacity(0),
+      spotStates(nullptr), spotCount(0), spotCapacity(0), retryCount(0) {
+    FishingWork_ResolveFuncs();
+}
+
+// [0] 0x14002a2c0: ~FishingWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* FishingWork::DeletingDtor(unsigned flags) {
+    this->~FishingWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161320 (13 slots), size 0x70, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// FLAGS (this file lacks several canonical functions):
-//   - slot0  ScalarDtor : NO FishingWork_ScalarDtor_Impl defined -> /*FLAG*/ nullptr
-//   - slot3  Serialize  : FishingWork_Serialize_Impl
-//   - slot4  Execute    : named FishingWork_Slot4_Impl (3-arg: self, citizenIBP, time)
-//   - slot6  OnComplete : named FishingWork_Slot6_Impl
-//   - slot7  OnCancel   : named FishingWork_Slot7_Impl
-//   - slot8  Cleanup    : named FishingWork_Slot8_Impl
-//   - slot9  Validate   : named FishingWork_Slot9_Impl
-//   - slot10 GetTarget  : named FishingWork_Slot10_Impl
-//   - slot11 GetPriority: NO FishingWork_GetPriority_Impl defined -> /*FLAG*/ nullptr
-//   - Ctor              : NO FishingWork_Ctor_Impl defined (only exe addr
-//                         FishingWork_Ctor 0x1400eabe0) -> factory cannot
-//                         construct -> /*FLAG*/ returns null until a Ctor_Impl
-//                         (or in-place exe-ctor call) is written.
-//   - ResolveFuncs      : FishingWork_ResolveFuncs() (does NOT resolve a vtable).
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_FishingWork_Vtable` (slot 0 Work_GenericScalarDtor,
+// slot 1 null, slot 2 a lazily cached id) and REGISTER_TYPE over FishingWork_Factory /
+// _CreateInPlace, both Work_GenericCtor.
+
+// create 0x14002a280: MemAlloc(sizeof, 8), then the ctor.
+void* FishingWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FishingWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) FishingWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* FishingWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) FishingWork());
+}
+
+DEFINE_EXE_VTABLE(FishingWork, "_ZTV11FishingWork")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t FishingWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("FishingWork");
-    return c;
-}
-
-static void* g_FishingWork_Vtable[13] = {
-    (void*)&Work_GenericScalarDtor,                   // +0x00 ScalarDtor (NO FishingWork_ScalarDtor_Impl)
-    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
-    (void*)&FishingWork_GetTypeId,      // +0x10 GetTypeId
-    (void*)&FishingWork_Serialize_Impl, // +0x18 Serialize
-    (void*)&FishingWork_Slot4_Impl,     // +0x20 Execute   (FishingWork_Slot4_Impl)
-    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
-    (void*)&FishingWork_Slot6_Impl,     // +0x30 OnComplete(FishingWork_Slot6_Impl)
-    (void*)&FishingWork_Slot7_Impl,     // +0x38 OnCancel  (FishingWork_Slot7_Impl)
-    (void*)&FishingWork_Slot8_Impl,     // +0x40 Cleanup   (FishingWork_Slot8_Impl)
-    (void*)&FishingWork_Slot9_Impl,     // +0x48 Validate  (FishingWork_Slot9_Impl)
-    (void*)&FishingWork_Slot10_Impl,    // +0x50 GetTarget (FishingWork_Slot10_Impl)
-    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
-    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x140161320 is still read back BY ADDRESS — FishingComponent's CreateWork
+// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
+// so the exe address serves the COMPILER's table.
 extern "C" void RegisterFishingWorkVtable() {
-    RegisterExeAddr(0x140161320, (uintptr_t)g_FishingWork_Vtable);
+    RegisterExeAddr(FishingWorkAddr::Vtable, reinterpret_cast<uintptr_t>(FishingWork::Vtable()));   // 0x140161320
 }
-extern "C" void* FishingWork_CreateInPlace(void* mem) {
-    FishingWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x70, g_FishingWork_Vtable);
-}
-extern "C" void* FishingWork_Factory(void) {
-    FishingWork_ResolveFuncs();
-    void* p = Work_Alloc(0x70);
-    return p ? Work_GenericCtor(p, 0x70, g_FishingWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(FishingWork, "Work", &FishingWork_Factory, &FishingWork_CreateInPlace);
+DEFINE_EXE_TYPE(FishingWork, "Work")

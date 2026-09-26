@@ -23,22 +23,8 @@ namespace AbsorbResourceComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x140161fb0;
 }
 
-struct AbsorbResourceComponent {
-    // ControllerComponent base (0x48 bytes) — no additional fields
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    void*    controllerVtable;  // +0x28
-    void*    controllerData0;   // +0x30
-    void*    controllerData1;   // +0x38
-    void*    selfPtr;           // +0x40
-};
-
-static_assert(sizeof(AbsorbResourceComponent) == 0x48, "AbsorbResourceComponent size mismatch");
-static_assert(offsetof(AbsorbResourceComponent, vtable) == 0x00, "");
-static_assert(offsetof(AbsorbResourceComponent, controllerVtable) == 0x28, "");
-static_assert(offsetof(AbsorbResourceComponent, selfPtr) == 0x40, "");
+// ENDGAME B.3.8 MI-A: the POD is gone — `AbsorbResourceComponent` is a real class now
+// (code/Game/Component/AbsorbResourceComponent.h, compiler vtable, controller member).
+// This forwarder keeps the old include spelling working until the closing pass
+// deletes it (B8-4).
+#include "Component/AbsorbResourceComponent.h"

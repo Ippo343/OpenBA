@@ -22,7 +22,9 @@
 // ⚠ Retail writes the vtable TWICE — first vtable_AutoPickupWork, then
 // vtable_HarvestOrchard. That is the inlined base constructor, not a bug; reproduced.
 
+#include "Work/HarvestOrchard.h"
 #include "harvestorchard_funcs.h"
+#include <new>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
@@ -30,71 +32,33 @@
 #include <cstdio>
 
 namespace {
-
-typedef void* (*fn_Work_Ctor25_t)(void* self, void* entityIBP);       // 0x1400f72e0
 typedef void* (*fn_FindOrchard_t)(int64_t entity, void* outIBP);      // 0x140005440
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
 // is gone.
-
-fn_Work_Ctor25_t s_WorkCtor25  = nullptr;
-fn_FindOrchard_t s_FindOrchard = nullptr;
-uintptr_t        s_vtableHarvest    = 0;   // 0x140161520
-uintptr_t        s_vtableAutoPickup = 0;   // 0x140161380
-bool             s_resolved    = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_WorkCtor25       = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    s_FindOrchard      = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
-    s_vtableHarvest    = ResolveAddr(Module::Exe, 0x140161520);
-    s_vtableAutoPickup = ResolveAddr(Module::Exe, 0x140161380);
-    s_resolved = s_WorkCtor25 && s_FindOrchard && s_vtableHarvest;
-    if (!s_resolved) {
-        static bool reported = false;
-        if (!reported) {
-            reported = true;
-            std::fprintf(stderr, "[HarvestOrchardCtor] UNRESOLVED:%s%s%s\n",
-                s_WorkCtor25    ? "" : " Work_Ctor25",
-                s_FindOrchard   ? "" : " FindComponent_Orchard",
-                s_vtableHarvest ? "" : " vtable_HarvestOrchard (0x140161520)");
-            std::fflush(stderr);
-        }
-    }
-}
-
+// ENDGAME B.3.8: the file-level lazy Resolve() is gone (B38 D7) — Work_Ctor25 is the
+// base ctor Work(void*), the two stamps are the compiler's (the old AutoPickupWork
+// stamp read 0x140161380, an RTTI descriptor, and was always skipped), and the finder
+// is resolved where it is used.
 }  // namespace
 
 extern "C" void OrchardDiag_NoteHarvestConstructed();
 
-extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
-    Resolve();
-    // [STANDALONE] harvestorchard.cpp's own function-pointer table is filled by
-    // HarvestOrchard_ResolveFuncs(), which is only called from its two FACTORY entry
-    // points (the deserialize path). This is the state machine's path — it allocates and
-    // builds the object directly — so without this call every s_fn_* over there stays
-    // null and the first slot the scheduler dispatches on the fresh object calls through
-    // 0. Exactly the crash PlantOrchard hit on this same shape (commit 7731647).
-    HarvestOrchard_ResolveFuncs();
-    if (!mem) return mem;
-    OrchardDiag_NoteHarvestConstructed();
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(mem);
-
-    void* entityLocal = entityIBP ? *entityIBP : nullptr;   // retail's local copy
-    if (s_WorkCtor25) s_WorkCtor25(mem, &entityLocal);
-    if (s_vtableAutoPickup) *reinterpret_cast<uintptr_t*>(s) = s_vtableAutoPickup;
-    if (s_vtableHarvest)    *reinterpret_cast<uintptr_t*>(s) = s_vtableHarvest;
+// Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
+// reads the pointer once, so passing the caller's IBP is the same read.
+HarvestOrchard::HarvestOrchard(void** entityIBP) : AutoPickupWork(entityIBP) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
     *reinterpret_cast<uint32_t*>(s + 0x50) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x58) = 0;   // byte-array base
     *reinterpret_cast<uint64_t*>(s + 0x60) = 0;   // count (+0x60) + capacity (+0x64)
 
+    auto findOrchard = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
     int64_t orchardIBP = 0;
-    if (s_FindOrchard) s_FindOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
-    if (!orchardIBP) return mem;      // SA: retail derefs unguarded below; a HarvestOrchard
+    if (findOrchard) findOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
+    if (!orchardIBP) return;          // SA: retail derefs unguarded below; a HarvestOrchard
                                       // is only ever built for an entity that has an
                                       // orchard, so this can only fire if our caller is
                                       // wrong. Same guard plantorchard_ctor.cpp carries.
@@ -114,5 +78,18 @@ extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
         base[i] = (slots && *reinterpret_cast<uint64_t*>(
                        slots + static_cast<uintptr_t>(i) * 0x28 + 8) != 0) ? 1 : 0;
     }
-    return mem;
+}
+
+// The door OrchardComponent's state 11 calls (orchardcomponent_states.cpp, block MI-B):
+// the real ctor on caller memory (B8-5).
+extern "C" void* HarvestOrchard_CtorFromEntity(void* mem, void** entityIBP) {
+    // [STANDALONE] harvestorchard.cpp's own function-pointer table is filled by
+    // HarvestOrchard_ResolveFuncs(); this is the state machine's path — it allocates and
+    // builds the object directly — so wire it here, as before, or the first slot the
+    // scheduler dispatches on the fresh object calls through 0 (the crash PlantOrchard
+    // hit on this same shape, commit 7731647).
+    HarvestOrchard_ResolveFuncs();
+    if (!mem) return mem;
+    OrchardDiag_NoteHarvestConstructed();
+    return static_cast<Object::Base*>(new (mem) HarvestOrchard(entityIBP));
 }

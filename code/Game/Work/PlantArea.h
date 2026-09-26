@@ -1,0 +1,79 @@
+#pragma once
+// ============================================================================
+// code/Game/Work/PlantArea.h — ENDGAME B.3.8 block WRK
+//
+// PlantArea — the crop-field planting work: a BST of the cells being planted
+// (+0x48, count +0x50), a per-cell validity byte array (+0x58 / +0x60) and the
+// crop description (ExternalPtr +0x68). A REAL class with a compiler-generated
+// vtable.
+//
+// RETAIL (B38_SLOTS.md §6): reflected "PlantArea", parent "Work", ti 0x1401c6c18,
+//   create 0x14002c470 (MemAlloc(0x70) + ctor 0x1400f4770); createInPlace = the
+//   imported Internal::CreateInPlaceObject (B8-13: the tree's in-place build kept)
+//   table 0x140161890, 13 slots:
+//   [0] 0x14002c4b0 scalar deleting dtor (the dtor 0x1400f4600 + MemFree on &1)
+//   [1] TypeName  [2] Type  [3] 0x1400f4540 Persist  [4] 0x1400f4010 Execute
+//   [5] = Work (0x1400f7540)  [6] 0x1400f3f60 OnComplete  [7] 0x1400f3ea0 OnCancel
+//   [8] 0x1400f4460 Cleanup  [9] 0x1400f3c70 Validate  [10] 0x1400f44e0 GetTarget
+//   [11] 0x140029860 GetPriority (`+0x50 > 0`, shared by 13 tables)
+//   [12] = Work (0x140006b10)
+//   CropFieldComponent's state machine (cropfieldcomponent_states.cpp, block MI-B)
+//   builds a PlantArea BY HAND and stamps 0x140161890; that registration serves
+//   PlantArea::Vtable() (B38 D5).
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Work/Work.h"
+#include "Object/exe_type.h"
+
+namespace PlantAreaAddr {
+    constexpr uintptr_t Ctor         = 0x1400f4770;
+    constexpr uintptr_t Vtable       = 0x140161890;
+    constexpr uintptr_t ScalarDtor   = 0x14002c4b0;
+    constexpr uintptr_t BaseDtor     = 0x1400f4600;
+    constexpr uintptr_t Serialize    = 0x1400f4540;
+    constexpr uintptr_t Slot4        = 0x1400f4010;
+    constexpr uintptr_t OnComplete   = 0x1400f3f60;
+    constexpr uintptr_t OnCancel     = 0x1400f3ea0;
+    constexpr uintptr_t Cleanup      = 0x1400f4460;
+    constexpr uintptr_t Validate     = 0x1400f3c70;
+    constexpr uintptr_t GetTarget    = 0x1400f44e0;
+}
+
+class PlantArea final : public Work {
+    DECLARE_EXE_TYPE(PlantArea)
+
+public:
+    PlantArea();                                                    // 0x1400f4770
+
+    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002c4b0
+    void  Persist(void* stream) override;                           // [3]  0x1400f4540
+    int   Execute(void* entityIBP, void* context, uint64_t arg3) override;  // [4]  0x1400f4010
+    int   OnComplete(void* param2, void* param3, int arg3) override;  // [6]  0x1400f3f60
+    int   OnCancel(void* param2, void* param3, int arg3) override;    // [7]  0x1400f3ea0
+    int   Cleanup() override;                                       // [8]  0x1400f4460
+    int   Validate(void* param2) override;                          // [9]  0x1400f3c70
+    void* GetTarget(void* outPtr) override;                         // [10] 0x1400f44e0
+    int   GetPriority() override;                                   // [11] 0x140029860
+
+    // --- PlantArea fields (+0x48) ---
+    void*    field_48;           // +0x48: BST root (assigned work items, int-keyed)
+    int32_t  field_50;           // +0x50: BST count (assigned workers)
+    uint8_t  _pad54[4];          // +0x54: padding
+    void*    field_58;           // +0x58: validity byte array (one per field cell)
+    int32_t  field_60;           // +0x60: field cell count
+    uint8_t  _pad64[4];          // +0x64: padding
+    void*    field_68;           // +0x68: ExternalPtr (crop description resource)
+
+protected:
+    ~PlantArea();                                               // 0x1400f4600: frees the validity array and the cell BST
+};
+
+static_assert(sizeof(PlantArea) == 0x70, "PlantArea is 0x70 (retail create MemAlloc)");
+static_assert(alignof(PlantArea) == 8, "PlantArea is 8-aligned");
+static_assert(offsetof(PlantArea, field_48) == 0x48, "PlantArea +0x48");
+static_assert(offsetof(PlantArea, field_50) == 0x50, "PlantArea +0x50");
+static_assert(offsetof(PlantArea, field_58) == 0x58, "PlantArea +0x58");
+static_assert(offsetof(PlantArea, field_60) == 0x60, "PlantArea +0x60");
+static_assert(offsetof(PlantArea, field_68) == 0x68, "PlantArea +0x68");

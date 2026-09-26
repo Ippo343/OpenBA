@@ -21,6 +21,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/FireWork.h"
 #include "Work/firework_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -170,8 +171,8 @@ static uint32_t WorldToCell(int gridSize, float x, float z) {
 // 7. Register work with citizen AI (CitizenAI_impl_1a30)
 // Returns: 0 = no fire, 1 = at capacity, 2 = work assigned.
 // ============================================================
-int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
-    uintptr_t s = (uintptr_t)self;
+int FireWork::Execute(void* citizenIBP, void* time, uint64_t /*arg3*/) {
+    uintptr_t s = (uintptr_t)this;
 
     // CheckPtr on the entity IBP at +0x10
 
@@ -312,9 +313,9 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
 
     // Get target entity via vtable slot 10 (+0x50)
     typedef void* (*fn_GetTarget_t)(void*, void*);
-    void** vtbl = *(void***)self;
+    void** vtbl = *(void***)this;
     uintptr_t targetIBP = 0;
-    void* targetResult = ((fn_GetTarget_t)vtbl[10])(self, &targetIBP);
+    void* targetResult = ((fn_GetTarget_t)vtbl[10])(this, &targetIBP);
     uintptr_t targetVal = *(uintptr_t*)targetResult;
 
     // Set citizen flags
@@ -344,8 +345,8 @@ int FireWork_Slot4_Impl(FireWork* self, void* citizenIBP, void* time) {
 // 5. Free the dynamic array
 // Returns: 1 if BST is now empty, 0 otherwise.
 // ============================================================
-int FireWork_Slot9_Impl(FireWork* self, void* citizenIBP) {
-    uintptr_t s = (uintptr_t)self;
+int FireWork::Validate(void* citizenIBP) {
+    uintptr_t s = (uintptr_t)this;
 
     // BST root is at +0x50
     void** bstRoot = (void**)(s + 0x50);
@@ -501,9 +502,9 @@ static bool EnsureSlot6Funcs() {
     return s_fn_BST_RemoveByKey != nullptr;
 }
 
-int FireWork_Slot6_Impl(FireWork* self, void* citizenIBP) {
+int FireWork::OnComplete(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
     if (!EnsureSlot6Funcs()) return 0;
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     // Remove citizen entry from BST at +0x50
     s_fn_BST_RemoveByKey((void*)(s + 0x50), citizenIBP);
     return 0;
@@ -517,9 +518,9 @@ int FireWork_Slot6_Impl(FireWork* self, void* citizenIBP) {
 // jumps to the BST remove-by-key function. The effect is
 // identical to Slot6 without the SUB RSP / return false wrapper.
 // ============================================================
-int FireWork_Slot7_Impl(FireWork* self, void* citizenIBP) {
+int FireWork::OnCancel(void* citizenIBP, void* /*arg2*/, int /*arg3*/) {
     if (!EnsureSlot6Funcs()) return 0;
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     // Remove citizen entry from BST at +0x50
     s_fn_BST_RemoveByKey((void*)(s + 0x50), citizenIBP);
     return 0;
@@ -548,9 +549,9 @@ static bool EnsureSlot8Funcs() {
     return s_fn_RemovePendingAction_FW != nullptr;
 }
 
-int FireWork_Slot8_Impl(FireWork* self) {
+int FireWork::Cleanup() {
     if (!EnsureSlot8Funcs()) return 0;
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     void** bstRoot = (void**)(s + 0x50);
 
     while (true) {
@@ -594,7 +595,7 @@ int FireWork_Slot8_Impl(FireWork* self) {
 // Uses hidden return pointer ABI (member function returning
 // non-trivial InternalBasePtr): RCX=this, RDX=retbuf.
 // ============================================================
-void* FireWork_Slot10_Impl(FireWork* /*self*/, void* retbuf) {
+void* FireWork::GetTarget(void* retbuf) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t mapHolder = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(mapHolder + 0x30);
@@ -602,40 +603,12 @@ void* FireWork_Slot10_Impl(FireWork* /*self*/, void* retbuf) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x1401612a0 (13 slots), size 0x60, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// FLAGS (this file lacks several canonical functions):
-//   - slot0  ScalarDtor : NO FireWork_ScalarDtor_Impl defined  -> Work_GenericScalarDtor
-//   - slot3  Serialize  : FireWork_Serialize_Impl (0x1400e9a50) — LANDED 2026-08-22
-//   - slot4  Execute    : named FireWork_Slot4_Impl  (3-arg: self, citizenIBP, time)
-//   - slot6  OnComplete : named FireWork_Slot6_Impl
-//   - slot7  OnCancel   : named FireWork_Slot7_Impl
-//   - slot8  Cleanup    : named FireWork_Slot8_Impl
-//   - slot9  Validate   : named FireWork_Slot9_Impl
-//   - slot10 GetTarget  : named FireWork_Slot10_Impl
-//   - slot5             : Work_Slot5 — retail 0x1400f7540 is also `return 0`, so this
-//                         is NOT a divergence (it was previously listed as one).
-//   - slot11            : FireWork_Slot11_Impl (0x14002a220) — LANDED 2026-08-22.
-//                         `return *(int*)(this+0x58) > 0`; was pinned to 0.
-//   - Ctor              : the REAL producer is the 3-arg 0x1400e9bd0, ported as
-//                         FireWork_CtorFull_e9bd0 (firecomponent_ignite.cpp) and
-//                         registered — FireComponent::Ignite is its only caller.
-//                         The factory below stays the generic fallback for the
-//                         type-registry cascade.
-//   - ResolveFuncs      : FireWork_ResolveFuncs() (does NOT resolve a vtable;
-//                         the original vtable install lives in the exe Ctor).
+// Slot map (the old hand-built table's notes, 2026-08-22): slot 3 Serialize
+// (0x1400e9a50), slot 11 (0x14002a220, `+0x58 > 0`) both ported; slot 5 is Work's
+// `return 0`; the real producer is the 3-arg ctor 0x1400e9bd0 (firecomponent_ignite.cpp).
 // ============================================================
-#include "work_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
-
-static uint32_t FireWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("FireWork");
-    return c;
-}
 
 // ============================================================
 // Slot3 Serialize (vtable +0x18, 0x1400e9a50) — was Work_SerializeNop.
@@ -646,28 +619,22 @@ static uint32_t FireWork_GetTypeId(void*) {
 //   Serializer::Serialize(ser, (int*)(this + 0x48))                  (the capacity)
 //   ~Serializer(ser)
 // Both sub-calls are already ported and registered (reg_work_base.cpp:49,
-// reg_work_bst.cpp:19), so this is a plain transcription.
-int FireWork_Serialize_Impl(FireWork* self, void* stream) {
-    if (!self || !stream) return 0;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+// reg_work_bst.cpp:19), so this is a plain transcription. ENDGAME B.3.8: the two
+// function-local lazy pointer caches are gone — the base call is the qualified
+// Work::Persist, the BST body is called by name (B38 D7).
+extern void WorkBST_BST_Serialize_296b0(uintptr_t* root, void* serializer);
+void FireWork::Persist(void* stream) {
+    if (!stream) return;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
-    typedef void (*FW_WorkSerialize_t)(void* self, void* stream);
-    typedef void (*FW_BSTSerialize_t)(void* bstRoot, void* serializer);
-    static FW_WorkSerialize_t s_workSer = nullptr;
-    static FW_BSTSerialize_t  s_bstSer  = nullptr;
-    if (!s_workSer)
-        s_workSer = reinterpret_cast<FW_WorkSerialize_t>(ResolveAddr(Module::Exe, 0x1400f7400));
-    if (!s_bstSer)
-        s_bstSer  = reinterpret_cast<FW_BSTSerialize_t>(ResolveAddr(Module::Exe, 0x1400296b0));
-
-    if (s_workSer) s_workSer(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     alignas(8) uint8_t ser[24];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (s_bstSer) s_bstSer(reinterpret_cast<void*>(s + 0x50), ser);
+    WorkBST_BST_Serialize_296b0(reinterpret_cast<uintptr_t*>(s + 0x50), ser);   // 0x1400296b0 (work_base_bst.cpp)
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-    return 0;
 }
 
 // ============================================================
@@ -679,38 +646,55 @@ int FireWork_Serialize_Impl(FireWork* self, void* stream) {
 // +0x48 capacity, NOT the +0x50 field the five FishingWork-family siblings read,
 // which is why work_base_standalone.h's Work_Slot11_HasActiveTasks helper is
 // explicitly documented as unusable here.
-int FireWork_Slot11_Impl(FireWork* self) {
-    if (!self) return 0;
-    return *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(self) + 0x58) > 0 ? 1 : 0;
+int FireWork::GetPriority() {
+    return *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(this) + 0x58) > 0 ? 1 : 0;
 }
 
-static void* g_FireWork_Vtable[13] = {
-    (void*)&Work_GenericScalarDtor,                // +0x00 ScalarDtor (NO FireWork_ScalarDtor_Impl)
-    (void*)&Work_Slot1,              // +0x08 slot1 (null)
-    (void*)&FireWork_GetTypeId,      // +0x10 GetTypeId
-    (void*)&FireWork_Serialize_Impl, // +0x18 Serialize (0x1400e9a50)
-    (void*)&FireWork_Slot4_Impl,     // +0x20 Execute   (FireWork_Slot4_Impl)
-    (void*)&Work_Slot5,              // +0x28 slot5 — retail 0x1400f7540 IS `return 0`;
-                                     //       Work_Slot5 is identical. NOT a divergence.
-    (void*)&FireWork_Slot6_Impl,     // +0x30 OnComplete(FireWork_Slot6_Impl)
-    (void*)&FireWork_Slot7_Impl,     // +0x38 OnCancel  (FireWork_Slot7_Impl)
-    (void*)&FireWork_Slot8_Impl,     // +0x40 Cleanup   (FireWork_Slot8_Impl)
-    (void*)&FireWork_Slot9_Impl,     // +0x48 Validate  (FireWork_Slot9_Impl)
-    (void*)&FireWork_Slot10_Impl,    // +0x50 GetTarget (FireWork_Slot10_Impl)
-    (void*)&FireWork_Slot11_Impl,    // +0x58 slot11 (0x14002a220: +0x58 > 0)
-    (void*)&Work_Slot12,             // +0x60 slot12 (void nop)
-};
+// ============================================================
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The stamps are the compiler's. FireWork_ResolveFuncs wires
+// the file's helper pointers (the old factory did the same).
+// ============================================================
+FireWork::FireWork() : Work(), _field48(nullptr), _field50(nullptr), _field58(0) {
+    FireWork_ResolveFuncs();
+}
 
+// [0] 0x14002a230: ~FireWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* FireWork::DeletingDtor(unsigned flags) {
+    this->~FireWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// ============================================================
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
+// ============================================================
+// Before: a hand-built 13-slot `g_FireWork_Vtable` (slot 0 Work_GenericScalarDtor,
+// slot 1 null, slot 2 a lazily cached id) and REGISTER_TYPE over FireWork_Factory /
+// _CreateInPlace, both Work_GenericCtor.
+
+// create 0x14002a1e0: MemAlloc(sizeof, 8), then the ctor.
+void* FireWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FireWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) FireWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* FireWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) FireWork());
+}
+
+DEFINE_EXE_VTABLE(FireWork, "_ZTV8FireWork")
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// B38 D5: 0x1401612a0 is still read back BY ADDRESS — firecomponent_ignite.cpp (block
+// CIT) builds the 3-argument FireWork (0x1400e9bd0) by hand and stamps it — so the
+// exe address serves the COMPILER's table.
 extern "C" void RegisterFireWorkVtable() {
-    RegisterExeAddr(0x1401612a0, (uintptr_t)g_FireWork_Vtable);
+    RegisterExeAddr(FireWorkAddr::Vtable, reinterpret_cast<uintptr_t>(FireWork::Vtable()));   // 0x1401612a0
 }
-extern "C" void* FireWork_CreateInPlace(void* mem) {
-    FireWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x60, g_FireWork_Vtable);
-}
-extern "C" void* FireWork_Factory(void) {
-    FireWork_ResolveFuncs();
-    void* p = Work_Alloc(0x60);
-    return p ? Work_GenericCtor(p, 0x60, g_FireWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(FireWork, "Work", &FireWork_Factory, &FireWork_CreateInPlace);
+DEFINE_EXE_TYPE(FireWork, "Work")

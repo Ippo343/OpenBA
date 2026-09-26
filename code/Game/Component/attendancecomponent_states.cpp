@@ -40,10 +40,10 @@
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
-namespace { struct AttendanceCtrlTag {}; }
+// ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
+// ControllerLive::TableController<AttendanceCtrlTag>, AttendanceComponent.h).
+#include "Component/AttendanceComponent.h"
 using AttendanceDispatch = ::ControllerLive::Dispatcher<AttendanceCtrlTag>;
-
-extern "C" void** AttendanceCtrl_NodeVtable() { return AttendanceDispatch::Vtable(); }
 
 // Ported in attendancecomponent.cpp — state 3's enter drains the waiting queue.
 extern void AttendanceComponent_ProcessQueue(void* self);

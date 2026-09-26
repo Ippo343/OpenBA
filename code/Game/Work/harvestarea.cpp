@@ -25,6 +25,7 @@
 //   ScalarDtor body (0x1400ED410) -- destructor
 //
 
+#include "Work/HarvestArea.h"
 #include "Work/harvestarea_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -105,9 +106,6 @@ static HA_TaskCancel_t s_fn_TaskCancel = nullptr;
 typedef void* (*HA_FindPosComp_t)(uintptr_t entity, void* outIBP);
 static HA_FindPosComp_t s_fn_FindPosComp = nullptr;
 
-// Work::Serialize base
-typedef void (*HA_Work_Serialize_t)(void* self, void* stream);
-static HA_Work_Serialize_t s_fn_Work_Serialize = nullptr;
 
 // Resize byte array (FUN_14000a590)
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
@@ -119,9 +117,6 @@ static HA_Work_Serialize_t s_fn_Work_Serialize = nullptr;
 typedef void (*HA_BST_RecursiveFree_t)(void* treeRoot, void* node);
 static HA_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
 
-// Object::Internal::~Internal -- tail call of dtor chain
-typedef void (*HA_ObjectInternal_Dtor_t)(void* self);
-static HA_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
 
 // MemAlloc / MemFree
 typedef void* (*HA_MemAlloc_t)(int64_t size, int align);
@@ -138,9 +133,6 @@ static uint32_t* s_typeId_CropDesc = nullptr;    // DAT_1401c7548 (FindComp_Crop
 static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 
 // Vtable pointers for dtor chain
-static void** s_vtable_HarvestArea = nullptr;
-static void** s_vtable_AutoPickupWork = nullptr;
-static void** s_vtable_Work = nullptr;
 
 static bool s_ha_funcs_resolved = false;
 
@@ -184,14 +176,8 @@ bool HarvestArea_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_FindPosComp = reinterpret_cast<HA_FindPosComp_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_Work_Serialize = reinterpret_cast<HA_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_RecursiveFree = reinterpret_cast<HA_BST_RecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x14000e320));
-    // Object::Internal::~Internal via dispatch slot (JMP [0x140152770] in dtor)
-    uintptr_t iatInternalDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatInternalDtor)
-        s_fn_ObjectInternal_Dtor = *reinterpret_cast<HA_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
     // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
     // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
@@ -209,12 +195,9 @@ bool HarvestArea_ResolveFuncs() {
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
     // Vtable addresses
-    s_vtable_HarvestArea = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401614a0));
     // ⚠ Were 0x140161380 / 0x140161300 — RTTI type descriptors ("ForesterWork\0" /
     // "FishingWork\0"), not vtables; same adjacency error harvestorchard.cpp carried.
     // The real base vtables are AutoPickupWorkAddr::Vtable / WorkAddr::Vtable.
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140160fa0));
-    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
@@ -225,11 +208,10 @@ bool HarvestArea_ResolveFuncs() {
               s_fn_ShowTool_Action_Ctor4 &&
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
-              s_fn_Work_Serialize && s_fn_BST_RecursiveFree &&
+              s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_typeId_CropDesc && s_fHalfCellOffset &&
-              s_vtable_HarvestArea && s_vtable_AutoPickupWork && s_vtable_Work;
+              s_typeId_CropDesc && s_fHalfCellOffset;
 
     s_ha_funcs_resolved = ok;
 
@@ -253,7 +235,6 @@ bool HarvestArea_ResolveFuncs() {
         if (!s_fn_ValidateTask) printf("  MISSING: ValidateTask\n");
         if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
         if (!s_fn_FindPosComp) printf("  MISSING: FindPosComp\n");
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_BST_RecursiveFree) printf("  MISSING: BST_RecursiveFree\n");
     }
 #endif
@@ -304,15 +285,15 @@ static long long g_ha_calls = 0, g_ha_auto = 0, g_ha_cap = 0, g_ha_wcap = 0,
 [[maybe_unused]] static long long g_ha_nopass = 0;
 [[maybe_unused]] static long long g_ha_nopath = 0, g_ha_ok = 0;
 
-int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
+int HarvestArea::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
     // Harvest-assignment census. State 11 posts this work; whether a citizen ever
     // ACCEPTS a harvest cell is the last unmeasured link before a deposit, and an
     // Execute that finds nothing looks exactly like an Execute that is never called.
     {
         ++g_ha_calls;
     }
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     uintptr_t citizenRef = *(uintptr_t*)entityIBP;
     void* citizenIBP = entityIBP;
@@ -527,11 +508,11 @@ int HarvestArea_Slot4_Impl(HarvestArea* self, void* entityIBP, uint64_t /*param3
                                 int priority = (int)selfQ[4];
                                 uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
-                                uintptr_t vtable = *(uintptr_t*)self;
+                                uintptr_t vtable = *(uintptr_t*)this;
                                 typedef uintptr_t* (*GetWorkEntity_t)(HarvestArea*, void*);
                                 auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
                                 uintptr_t workEntIBP[2] = {0};
-                                uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+                                uintptr_t* wResult = getWorkEntity(this, workEntIBP);
                                 uintptr_t workEnt = *wResult;
 
                                 *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -612,8 +593,9 @@ static void HarvestArea_RemoveCellNode(uintptr_t selfAddr, int key) {
 // (harvested cells re-offered, Slot4 then found no entity and re-cleared them -- a
 // wasted scan per completion) and slot 7 LACKED the primary-node removal (see below).
 // Same Slot6/Slot7 mix-up HarvestOrchard and PlantArea each paid for once already.
-int HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int HarvestArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
+    uintptr_t selfAddr = (uintptr_t)this;
     int primaryIdx = (int)(param4 & 0xFFFF);
     int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
 
@@ -646,9 +628,10 @@ int HarvestArea_Slot6_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/
 //     the node never removed the count never drops and it re-picks the same node
 //     forever: the 100%-CPU quit hang after the [Residence] ERASE burst.
 // Both symptoms are this one missing removal (2026-09-05).
-int HarvestArea_Slot7_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HarvestArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
     int primaryIdx = (int)(param4 & 0xFFFF);
     int pairedIdx  = (int)((param4 >> 16) & 0xFFFF);
 
@@ -671,8 +654,8 @@ int HarvestArea_Slot7_Impl(HarvestArea* self, void* /*param2*/, void* /*param3*/
 // ============================================================
 // Loops through BST (rightmost traversal), cancels each work item
 // via citizen AI task cleanup.
-int HarvestArea_Slot8_Impl(HarvestArea* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int HarvestArea::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -709,9 +692,9 @@ int HarvestArea_Slot8_Impl(HarvestArea* self) {
 //
 // Iterates BST in-order, validates each entry via FUN_1400f7100,
 // collects invalid ones, then removes them from BST.
-int HarvestArea_Slot9_Impl(HarvestArea* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HarvestArea::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     int* collectArray = nullptr;
     int* currentArray = nullptr;
@@ -836,8 +819,8 @@ cleanup:
 // ============================================================
 // Returns entity pointer from workplace entity ref.
 // Uses hidden return ptr ABI (RCX=self, RDX=outPtr).
-void* HarvestArea_Slot10_Impl(HarvestArea* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* HarvestArea::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // CheckPtr on self->_field10 (work entity IBP)
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
@@ -857,11 +840,11 @@ void* HarvestArea_Slot10_Impl(HarvestArea* self, void* outPtr) {
 // HarvestArea::Serialize
 // ============================================================
 // Work::Serialize + version block + BST serialize + array + int
-void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void HarvestArea::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Serialize Work base class
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create Serializer with version=0
     alignas(8) uint8_t serializerBuf[24];
@@ -915,13 +898,18 @@ void HarvestArea_Serialize_Impl(HarvestArea* self, void* stream) {
 // ============================================================
 // HarvestArea::ScalarDtor body
 // ============================================================
-// Sets vtable chain down, frees validity array, frees BST,
-// then calls Work/Internal dtor. If flags & 1, frees self.
-void* HarvestArea_ScalarDtor_Impl(HarvestArea* self, uint32_t flags) {
-    uintptr_t selfAddr = (uintptr_t)self;
+// ~HarvestArea frees the validity array and the BST; then MemFree on &1.
+// [0] 0x14002a4d0: ~HarvestArea, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* HarvestArea::DeletingDtor(unsigned flags) {
+    this->~HarvestArea();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    // Set HarvestArea vtable
-    *(void**)selfAddr = s_vtable_HarvestArea;
+// The HarvestArea / AutoPickupWork / Work stamps and the `~Internal` call are the
+// compiler's chain.
+HarvestArea::~HarvestArea() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free validity array at +0x58
     fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
@@ -937,67 +925,52 @@ void* HarvestArea_ScalarDtor_Impl(HarvestArea* self, uint32_t flags) {
     }
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
-
-    // Set AutoPickupWork vtable, then Work vtable, then call Internal dtor
-    *(void**)selfAddr = s_vtable_AutoPickupWork;
-    *(void**)selfAddr = s_vtable_Work;
-    s_fn_ObjectInternal_Dtor((void*)selfAddr);
-
-    // If flags & 1, free the object
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
 }
 
 
+
+// [11] 0x140029860 (shared by 13 tables): `+0x50 > 0` — "is anyone assigned". The
+// old table pointed at Work_Slot11_HasActiveTasks, the same body.
+int HarvestArea::GetPriority() {
+    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
+}
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The three stamps are the compiler's. HarvestArea_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+HarvestArea::HarvestArea() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(nullptr) {
+    HarvestArea_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x1401614a0 (13 slots), size 0x68, parent "AutoPickupWork".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-// Slot map ground-truthed from the real exe vtable @ 0x1401614a0:
-//   slot4 (Execute)=HarvestArea_Slot4_Impl (0x1400eccd0).
-//   slot5 = shared Work_Slot5 (0x1400f7540).
-//   slot11 (GetPriority) = 0x140029860 — the SHARED HasWorkers thunk;
-//   HarvestArea has NO own GetPriority fn in harvestarea.cpp -> FLAG.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_HarvestArea_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over HarvestArea_Factory / _CreateInPlace (both
+// Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
+
+// create 0x14002a460: MemAlloc(sizeof, 8), then the ctor.
+void* HarvestArea::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HarvestArea), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HarvestArea());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* HarvestArea::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HarvestArea());
+}
+
+DEFINE_EXE_VTABLE(HarvestArea, "_ZTV11HarvestArea")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t HarvestArea_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("HarvestArea");
-    return c;
-}
-
-static void* g_HarvestArea_Vtable[13] = {
-    (void*)&HarvestArea_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002a4d0)
-    (void*)&Work_Slot1,                   // +0x08 slot1 (null)
-    (void*)&HarvestArea_GetTypeId,        // +0x10 GetTypeId
-    (void*)&HarvestArea_Serialize_Impl,   // +0x18 Serialize (0x1400ed350)
-    (void*)&HarvestArea_Slot4_Impl,       // +0x20 Execute (0x1400eccd0)
-    (void*)&Work_Slot5,                   // +0x28 slot5 (returns 0)
-    (void*)&HarvestArea_Slot6_Impl,       // +0x30 OnComplete (0x1400ecc20)
-    (void*)&HarvestArea_Slot7_Impl,       // +0x38 OnCancel (0x1400ecb60)
-    (void*)&HarvestArea_Slot8_Impl,       // +0x40 Cleanup (0x1400ed270)
-    (void*)&HarvestArea_Slot9_Impl,       // +0x48 Validate (0x1400ec930)
-    (void*)&HarvestArea_Slot10_Impl,      // +0x50 GetTarget (0x1400ed2f0)
-    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
-    (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x1401614a0 is still read back BY ADDRESS — CropFieldComponent's state
+// machine (cropfieldcomponent_states.cpp, block MI-B) builds the work by hand and
+// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterHarvestAreaVtable() {
-    RegisterExeAddr(0x1401614a0, (uintptr_t)g_HarvestArea_Vtable);
+    RegisterExeAddr(HarvestAreaAddr::Vtable, reinterpret_cast<uintptr_t>(HarvestArea::Vtable()));   // 0x1401614a0
 }
-extern "C" void* HarvestArea_CreateInPlace(void* mem) {
-    HarvestArea_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x68, g_HarvestArea_Vtable);
-}
-extern "C" void* HarvestArea_Factory(void) {
-    HarvestArea_ResolveFuncs();
-    void* p = Work_Alloc(0x68);
-    return p ? Work_GenericCtor(p, 0x68, g_HarvestArea_Vtable) : nullptr;
-}
-REGISTER_TYPE(HarvestArea, "AutoPickupWork", &HarvestArea_Factory, &HarvestArea_CreateInPlace);
+DEFINE_EXE_TYPE(HarvestArea, "AutoPickupWork")

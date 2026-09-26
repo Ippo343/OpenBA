@@ -16,27 +16,7 @@
 #include <cstdint>
 #include <new>
 
-// ============================================================================
-// Description (the abstract base; its members live with the pilot leaf until
-// block K1 gives it its own file — B38_FILEMAP.md)
-// ============================================================================
-
-// [0] 0x140031c70: stamp 0x1401629a0, `~External`, MemFree on &1.
-Object::Base* Description::DeletingDtor(unsigned flags) {
-    this->~Description();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-// [1]/[2] over Description's BaseTypeInfo; the abstract registration stays in
-// factory_registrations_bulk.cpp (B38 D4). Every leaf overrides both.
-const char* Description::TypeName() const { return "Description"; }          // 0x140031c60
-uint32_t    Description::Type() const {                                      // 0x140031c50
-    return ::Object::GetTypeIdByName("Description");
-}
-
-// ============================================================================
-// WellDescription
-// ============================================================================
+// Description's own members (the abstract base) live in description.cpp.
 
 // [0] 0x14000fdf0: ~WellDescription (0x14005d1c0) -> ~Description -> ~External,
 // then MemFree on &1. Retail's chain; the old table's slot 0 did the same by hand.
@@ -53,13 +33,15 @@ bool WellDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x14000fd90 / [7] 0x140001640 — PORT GAP (B38_RULES D3, D9 list). Retail:
-// Reconstruct = DeletingDtor(0) then the ctor again on `this`; Destruct =
-// DeletingDtor(0). The hand-built table had `return 0` stubs in both slots; the
-// pilot keeps them so it changes no behaviour. Block K1 transcribes retail's
-// bodies for all 78 descriptions in ONE titled behaviour-change commit.
-Object::External* WellDescription::Reconstruct() { return nullptr; }
-void              WellDescription::Destruct() {}
+// [6] 0x14000fd90 / [7] 0x140001640. Retail:
+// Reconstruct = a virtual DeletingDtor(0) then the ctor again on `this`
+// (0x14000fda7 `CALL [RAX]` with EDX=0, then the inlined ctor); Destruct =
+// the shared `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`. D9 #10 (block K1).
+Object::External* WellDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) WellDescription();
+}
+void WellDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000fde0: WellComponent's type id through the hidden return slot.
 Object::Type* WellDescription::GetComponentType(Object::Type* ret) const {

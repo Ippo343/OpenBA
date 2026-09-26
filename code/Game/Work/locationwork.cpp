@@ -12,6 +12,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/LocationWork.h"
 #include "Work/locationwork_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -26,9 +27,6 @@
 // ============================================================
 
 // All typedefs prefixed with LW_ to avoid conflicts
-
-// Work::Serialize base
-typedef void  (*LW_Work_Serialize_t)(void* self, void* stream);
 
 // Entity_FindComponent_Storage (0x140006270)
 typedef void* (*LW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
@@ -73,13 +71,9 @@ typedef void (*LW_CancelAllWork_t)(void* bstRoot);
 // FUN_140002e10 — FindSubEntity
 typedef void* (*LW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
 
-// Object::Internal::~Internal
-typedef void (*LW_Internal_Dtor_t)(void* self);
-
 // fn_MemFreeStatic
 typedef void (*LW_MemFreeStatic_t)(void* ptr);
 
-static LW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 
 static LW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static LW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
@@ -109,8 +103,6 @@ static float* s_fUVScale = nullptr;
 // This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-static void** s_vtable_LocationWork = nullptr;  // 0x1401616a0
-static void** s_vtable_Work = nullptr;           // 0x140161a80
 
 static bool s_locationwork_funcs_resolved = false;
 
@@ -121,8 +113,6 @@ bool LocationWork_ResolveFuncs() {
     if (s_locationwork_funcs_resolved) return true;
 
     // Work::Serialize
-    s_fn_Work_Serialize = reinterpret_cast<LW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
 
     // Entity component finders
     s_fn_FindComp_Storage = reinterpret_cast<LW_FindComp_Storage_t>(
@@ -169,28 +159,21 @@ bool LocationWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x14017214c));
 
     // Vtable pointers for dtor
-    s_vtable_LocationWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401616a0));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize &&
-              s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
+    bool ok = s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Position &&
               s_fn_FindWalkablePos && s_fn_FindWalkablePosSub &&
               s_fn_WalkTowards_Ctor && s_fn_ValidateEntity &&
               s_fn_CancelAllWork && s_fn_FindSubEntity &&
               fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && s_typeId_RadiusDesc && s_fUVScale &&
-              s_vtable_LocationWork && s_vtable_Work;
+              fn_IsDerivedFrom && s_typeId_RadiusDesc && s_fUVScale;
 
     s_locationwork_funcs_resolved = ok;
 
 #ifdef _DEBUG
     printf("[LocationWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
@@ -203,8 +186,6 @@ bool LocationWork_ResolveFuncs() {
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
         if (!s_typeId_RadiusDesc) printf("  MISSING: typeId_RadiusDesc\n");
         if (!s_fUVScale) printf("  MISSING: fUVScale\n");
-        if (!s_vtable_LocationWork) printf("  MISSING: vtable_LocationWork\n");
-        if (!s_vtable_Work) printf("  MISSING: vtable_Work (0x140161a80)\n");
     }
 #endif
 
@@ -217,21 +198,21 @@ bool LocationWork_ResolveFuncs() {
 // Pattern: Work_Serialize + Serializer(v0) + InternalBasePtr::Serialize(+0x48)
 //   + validate IsDerivedFrom, clear if invalid
 // ============================================================
-void LocationWork_Serialize_Impl(LocationWork* self, void* stream) {
-    // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+void LocationWork::Persist(void* stream) {
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create serializer (version=0)
     alignas(8) uint8_t serializerBuf[24] = {0};
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x48
-    reinterpret_cast<Object::InternalBasePtr*>(&self->_field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&_field48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Validate: if _field48 is non-null, check IsDerivedFrom
-    if (self->_field48 != nullptr) {
-        if (!fn_IsDerivedFrom(self->_field48, s_typeId_Validate)) {
-            self->_field48 = nullptr;
+    if (_field48 != nullptr) {
+        if (!fn_IsDerivedFrom(_field48, s_typeId_Validate)) {
+            _field48 = nullptr;
         }
     }
 
@@ -251,8 +232,8 @@ void LocationWork_Serialize_Impl(LocationWork* self, void* stream) {
 // 6. If found, create WalkTowards action and assign work
 // 7. Store citizen ref at +0x48
 // ============================================================
-int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t* selfQ = (uintptr_t*)self;
+int LocationWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Step 1: Already has target?
     if (selfQ[9] != 0) {  // field +0x48
@@ -339,11 +320,11 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*par
     // Get work entity via vtable slot +0x50 (Slot10)
     uintptr_t citEntPost = *(uintptr_t*)citizenIBP;
 
-    uintptr_t vtable = *(uintptr_t*)self;
+    uintptr_t vtable = *(uintptr_t*)this;
     typedef uintptr_t* (*GetWorkEntity_t)(LocationWork*, void*);
     auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntIBP[2] = {0};
-    uintptr_t* result = getWorkEntity(self, workEntIBP);
+    uintptr_t* result = getWorkEntity(this, workEntIBP);
     uintptr_t workEntity = *result;
 
     // Set citizen flags
@@ -367,10 +348,10 @@ int LocationWork_Slot4_Impl(LocationWork* self, void* citizenIBP, uint64_t /*par
 // LocationWork::Slot6 (0x1400ef850) — clear target, return false
 // Constructs null InternalBasePtr into +0x48.
 // ============================================================
-bool LocationWork_Slot6_Impl(LocationWork* self) {
+int LocationWork::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
     uintptr_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    self->_field48 = (void*)nullIBP;
+    _field48 = (void*)nullIBP;
     return false;
 }
 
@@ -379,10 +360,10 @@ bool LocationWork_Slot6_Impl(LocationWork* self) {
 // LocationWork::Slot7 (0x1400ef820) — clear target, void return
 // Constructs null InternalBasePtr into +0x48.
 // ============================================================
-int LocationWork_Slot7_Impl(LocationWork* self) {
+int LocationWork::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
     uintptr_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    self->_field48 = (void*)nullIBP;
+    _field48 = (void*)nullIBP;
     return 0;
 }
 
@@ -392,8 +373,8 @@ int LocationWork_Slot7_Impl(LocationWork* self) {
 // If target at +0x48 exists, navigates to its AI subsystem and
 // cancels all work items.
 // ============================================================
-int LocationWork_Slot8_Impl(LocationWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int LocationWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     if (*(uintptr_t*)(selfAddr + 0x48) == 0) {
         return 0;
@@ -414,8 +395,8 @@ int LocationWork_Slot8_Impl(LocationWork* self) {
 // If invalid, clears +0x48 to null and returns false.
 // Returns true if valid (or no target).
 // ============================================================
-bool LocationWork_Slot9_Impl(LocationWork* self, void* citizenIBP) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int LocationWork::Validate(void* citizenIBP) {
+    uintptr_t selfAddr = (uintptr_t)this;
     uintptr_t targetIBP = *(uintptr_t*)(selfAddr + 0x48);
 
     if (targetIBP == 0) {
@@ -442,8 +423,8 @@ bool LocationWork_Slot9_Impl(LocationWork* self, void* citizenIBP) {
 // Returns entity from self->_field10's sub-object at +0x48.
 // IDENTICAL to HuntWork/PastureWork Slot10.
 // ============================================================
-void* LocationWork_Slot10_Impl(LocationWork* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* LocationWork::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // CheckPtr on self+0x10
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
@@ -463,12 +444,12 @@ void* LocationWork_Slot10_Impl(LocationWork* self, void* outPtr) {
 
 
 // ============================================================
-// LocationWork::Execute (0x1400f7540) — 3 bytes: XOR AL,AL; RET
-// Always returns false. Too small to hook.
+// Slot 5 is Work's (0x1400f7540, `XOR AL,AL; RET`): the old dead
+// LocationWork_Execute_Impl copy of it is gone.
 // ============================================================
-bool LocationWork_Execute_Impl(LocationWork* /*self*/) {
-    return false;
-}
+// Slot12 (+0x60) — retail 0x1400efae0, this class's own `RET 0` (every other Work
+// table shares 0x140006b10). The same behaviour; declared so the table matches.
+void LocationWork::Slot12() {}
 
 
 // ============================================================
@@ -476,8 +457,8 @@ bool LocationWork_Execute_Impl(LocationWork* /*self*/) {
 // Returns true if target entity reference is non-null.
 // Too small to hook (10 bytes).
 // ============================================================
-bool LocationWork_Slot11_Impl(LocationWork* self) {
-    return self->_field48 != nullptr;
+int LocationWork::GetPriority() {
+    return _field48 != nullptr ? 1 : 0;
 }
 
 
@@ -487,83 +468,53 @@ bool LocationWork_Slot11_Impl(LocationWork* self) {
 // Sets LocationWork vtable, then Work vtable, calls Internal dtor,
 // then conditional free.
 // ============================================================
-void* LocationWork_ScalarDtor_Impl(LocationWork* self, uint32_t flags) {
-    uintptr_t selfAddr = (uintptr_t)self;
+// [0] 0x14002a850: ~LocationWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* LocationWork::DeletingDtor(unsigned flags) {
+    this->~LocationWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// ~LocationWork is defaulted: the LocationWork then Work stamps and `~Internal` are the
+// compiler's chain — all retail's 0x14002a850 does before the free.
 
-    // Set vtable to LocationWork (cleanup phase)
-    *(void**)selfAddr = s_vtable_LocationWork;
 
-    // Set vtable to Work (base class cleanup)
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
-
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf field zeroed. The stamps are the compiler's. LocationWork_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+LocationWork::LocationWork() : Work(), _field48(nullptr) {
+    LocationWork_ResolveFuncs();
 }
 
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x1401616a0 (13 slots), size 0x50, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// FLAGS:
-//   - slot0  ScalarDtor : LocationWork_ScalarDtor_Impl  (present)
-//   - slot3  Serialize  : LocationWork_Serialize_Impl
-//   - slot4  Execute    : named LocationWork_Slot4_Impl (the vtable +0x20 slot;
-//                         NOTE LocationWork_Execute_Impl is the SEPARATE 3-byte
-//                         exe stub 0x1400f7540, NOT the vtable Execute slot).
-//   - slot6  OnComplete : named LocationWork_Slot6_Impl  (returns bool)
-//   - slot7  OnCancel   : named LocationWork_Slot7_Impl
-//   - slot8  Cleanup    : named LocationWork_Slot8_Impl
-//   - slot9  Validate   : named LocationWork_Slot9_Impl  (returns bool)
-//   - slot10 GetTarget  : named LocationWork_Slot10_Impl
-//   - slot11 GetPriority: named LocationWork_Slot11_Impl  (returns bool)
-//   - Ctor              : NO LocationWork_Ctor_Impl defined (exe ctor not noted
-//                         as a C++ _Impl) -> factory cannot construct ->
-//                         /*FLAG*/ returns null until a Ctor_Impl is written.
-//   - ResolveFuncs      : LocationWork_ResolveFuncs() (does NOT resolve a vtable).
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_LocationWork_Vtable` (slot 1 null, slot 2 a lazily
+// cached id, slot 12 the shared nop) and REGISTER_TYPE over LocationWork_Factory /
+// _CreateInPlace (both Work_GenericCtor), plus two vtable-pointer statics for the
+// dtor's stamps.
+
+// create 0x14002a810: MemAlloc(sizeof, 8), then the ctor.
+void* LocationWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(LocationWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) LocationWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* LocationWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) LocationWork());
+}
+
+DEFINE_EXE_VTABLE(LocationWork, "_ZTV12LocationWork")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t LocationWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("LocationWork");
-    return c;
-}
-
-static void* g_LocationWork_Vtable[13] = {
-    (void*)&LocationWork_ScalarDtor_Impl, // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                   // +0x08 slot1 (null)
-    (void*)&LocationWork_GetTypeId,       // +0x10 GetTypeId
-    (void*)&LocationWork_Serialize_Impl,  // +0x18 Serialize
-    (void*)&LocationWork_Slot4_Impl,      // +0x20 Execute   (LocationWork_Slot4_Impl)
-    (void*)&Work_Slot5,                   // +0x28 slot5 (returns 0)
-    (void*)&LocationWork_Slot6_Impl,      // +0x30 OnComplete(LocationWork_Slot6_Impl)
-    (void*)&LocationWork_Slot7_Impl,      // +0x38 OnCancel  (LocationWork_Slot7_Impl)
-    (void*)&LocationWork_Slot8_Impl,      // +0x40 Cleanup   (LocationWork_Slot8_Impl)
-    (void*)&LocationWork_Slot9_Impl,      // +0x48 Validate  (LocationWork_Slot9_Impl)
-    (void*)&LocationWork_Slot10_Impl,     // +0x50 GetTarget (LocationWork_Slot10_Impl)
-    (void*)&LocationWork_Slot11_Impl,     // +0x58 GetPriority(LocationWork_Slot11_Impl)
-    (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x1401616a0 is still read back BY ADDRESS — AttendanceComponent's state-2
+// enter (attendancecomponent_states.cpp, block MI-A) builds the work by hand and
+// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterLocationWorkVtable() {
-    RegisterExeAddr(0x1401616a0, (uintptr_t)g_LocationWork_Vtable);
+    RegisterExeAddr(LocationWorkAddr::Vtable, reinterpret_cast<uintptr_t>(LocationWork::Vtable()));   // 0x1401616a0
 }
-extern "C" void* LocationWork_CreateInPlace(void* mem) {
-    LocationWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x50, g_LocationWork_Vtable);
-}
-extern "C" void* LocationWork_Factory(void) {
-    LocationWork_ResolveFuncs();
-    void* p = Work_Alloc(0x50);
-    return p ? Work_GenericCtor(p, 0x50, g_LocationWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(LocationWork, "Work", &LocationWork_Factory, &LocationWork_CreateInPlace);
+DEFINE_EXE_TYPE(LocationWork, "Work")

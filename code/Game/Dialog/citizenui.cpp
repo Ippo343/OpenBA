@@ -723,26 +723,8 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
-#include "dialog_controller_vtable.h"
 
 namespace citizenui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("CitizenUI");
-    return c;
-}
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 // g_pAgeMultiplier's exe .rdata (0x140172198) is uninitialized in the standalone
 // image (unreadable / zero-fill), so fall back to 1.0 — citizen age at CitizenAI+0x3c
@@ -815,37 +797,56 @@ void W_Slot9(void* self, void* p2, int msg, int id) {
         CitizenUI_Slot9(reinterpret_cast<CitizenUI*>(self),
                         reinterpret_cast<uint64_t>(p2), msg, id);
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
-        g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
-        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's CitizenUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "CitizenUI", &StubNop);
-
-void Zero(void* p) { for (size_t o = 0; o < (size_t)0xE8; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0xE8, 8);
-    if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
-}
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
-
 }  // namespace citizenui_sa
 
-REGISTER_TYPE(CitizenUI, "UI::DialogController",
-              &citizenui_sa::Factory, &citizenui_sa::InPlace);
+// [4] 0x1400651a0
+void CitizenUI::OnCreated() {
+    citizenui_sa::W_Slot4(this);
+}
+
+// [6] 0x140065130
+void CitizenUI::OnClosed() {
+    citizenui_sa::W_Slot6(this);
+}
+
+// [7] 0x140064ae0
+void CitizenUI::OnUpdateLayout() {
+    citizenui_sa::W_Slot7(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void CitizenUI::OnUpdate(const System::Time& time) {
+    citizenui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [9] 0x1400650f0
+void CitizenUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    citizenui_sa::W_Slot9(this, element, a, b);
+}
+
+// [0] 0x140010fd0: ~CitizenUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* CitizenUI::DeletingDtor(unsigned flags) {
+    this->~CitizenUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140010f80: MemAlloc(0xe8, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* CitizenUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CitizenUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CitizenUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* CitizenUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CitizenUI());
+}
+
+DEFINE_EXE_VTABLE(CitizenUI, "_ZTV9CitizenUI")
+DEFINE_EXE_TYPE(CitizenUI, "UI::DialogController")
 

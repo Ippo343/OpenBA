@@ -174,20 +174,60 @@ void ImmigrationComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 MI-A — ImmigrationComponent as a REAL class (ImmigrationComponent.h).
+//
+// Before: CONTROLLER_LIVE_FACTORY_STATES + CONTROLLER_INSTALL_SERIALIZE (a 48-slot
+// table re-filled at every create), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<ImmigrationCtrlTag> table stamped into raw bytes at +0x28.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
-// Immigrants wave 2026-09-05: the nomad-arrival state machine (states 2/0xf/0x10/0x11,
-// immigrationcomponent_states.cpp) replaces the inert factory. Node at +0x28
-// (CreateState 0x140004080 = LEA RAX,[RCX+0x28]), default state 2 (0x1400026c0 =
-// MOV EAX,2). Opt-in BANISHED_LIVE_IMMIGRATION; off => inert, byte-unchanged.
-// Slot 3 (stream Serialize) stays wired unconditionally, save/load wave 2026-08-28.
-extern "C" void** ImmigrationCtrl_NodeVtable();
-extern "C" void   ImmigrationCtrl_PopulateTable();
-CONTROLLER_LIVE_FACTORY_STATES(ImmigrationComponent, 0x68, 0x80, 0x28, 2,
-                               ImmigrationCtrl_NodeVtable, ImmigrationCtrl_PopulateTable)
-CONTROLLER_INSTALL_SERIALIZE(ImmigrationComponent, ImmigrationComponent_Shutdown)
-REGISTER_TYPE(ImmigrationComponent, "ControllerComponent",
-              &ImmigrationComponent_Factory_Ser, &ImmigrationComponent_CreateInPlace_Ser);
+#include "Component/ImmigrationComponent.h"
+
+// The nomad-arrival state machine (states 2/0xf/0x10/0x11,
+// immigrationcomponent_states.cpp). Node at +0x28 (slot 17 0x140004080), default
+// state 2 (slot 16 0x1400026c0). The state table is built ONCE at static-init time,
+// as retail's static initializer does (B38 D6/D7).
+extern "C" void ImmigrationCtrl_PopulateTable();
+static const bool s_immigrationStateTableBuilt = (ImmigrationCtrl_PopulateTable(), true);
+
+// 0x14004e640. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48..+0x60 = 0. No flag OR.
+ImmigrationComponent::ImmigrationComponent()
+    : _controller(this), field48(nullptr), field50(0), _pad54{}, field58(nullptr), field60(nullptr) {}
+
+// [0] 0x140007b70: ~ImmigrationComponent (0x14004e5d0), MemFree on &1.
+Object::Base* ImmigrationComponent::DeletingDtor(unsigned flags) {
+    this->~ImmigrationComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x14004e5d0: the group array (+0x58 data, +0x60 count/capacity) is freed and
+// zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
+// compiler's chain.
+ImmigrationComponent::~ImmigrationComponent() {
+    Object::detail::InternalMemFree(field58);
+    field58 = nullptr;
+    field60 = nullptr;
+}
+
+// create 0x140007a20: MemAlloc(0x68, 8), then the ctor.
+void* ImmigrationComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ImmigrationComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ImmigrationComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ImmigrationComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ImmigrationComponent());
+}
+
+// [3] 0x14004e4b0.
+void ImmigrationComponent::Persist(void* stream) { ImmigrationComponent_Shutdown(this, stream); }
+
+DEFINE_EXE_VTABLE(ImmigrationComponent, "_ZTV20ImmigrationComponent")
+DEFINE_EXE_TYPE(ImmigrationComponent, "ControllerComponent")

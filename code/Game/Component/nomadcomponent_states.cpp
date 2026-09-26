@@ -284,10 +284,10 @@ extern "C" char Nomad_State2_Tick(void* data, void* /*sm*/, void* /*time*/) {
 // ============================================================
 // Dispatcher + table (replicates NomadDescription_helper_fe70, 0x14004fe70)
 // ============================================================
-namespace { struct NomadCtrlTag {}; }
+// ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
+// ControllerLive::TableController<NomadCtrlTag>, NomadComponent.h).
+#include "Component/NomadComponent.h"
 using NomadDispatch = ::ControllerLive::Dispatcher<NomadCtrlTag>;
-
-extern "C" void** NomadCtrl_NodeVtable() { return NomadDispatch::Vtable(); }
 
 extern "C" void NomadCtrl_PopulateTable() {
     using namespace ::ControllerLive;

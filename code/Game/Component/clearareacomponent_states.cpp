@@ -591,10 +591,10 @@ extern "C" char ClearArea_State2Enter(void* data, void* /*sm*/) {
 // ============================================================
 // Dispatcher + state table for the ClearAreaComponent controller.
 // ============================================================
-namespace { struct ClearAreaCtrlTag {}; }
+// ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
+// ControllerLive::TableController<ClearAreaCtrlTag>, ClearAreaComponent.h).
+#include "Component/ClearAreaComponent.h"
 using ClearAreaDispatch = ::ControllerLive::Dispatcher<ClearAreaCtrlTag>;
-
-extern "C" void** ClearAreaCtrl_NodeVtable() { return ClearAreaDispatch::Vtable(); }
 
 // Table field -> node-slot mapping (see controller_state_table.h):
 //   enterHandler (arg2 of sub_1140) -> slot +0x18 Enter    (on entry)

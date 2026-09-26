@@ -16,6 +16,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/TradeWork.h"
 #include "Work/tradework_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -55,7 +56,6 @@ typedef void* (*TrW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
 // Slot4 original exe function (too complex for clean reimpl, called directly)
 typedef uint32_t (*TrW_Slot4_Original_t)(void* self, void* citizenIBP, void* param3);
 
-static TrW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
 static TrW_BST_Serialize_t           s_fn_BST_Serialize = nullptr;
 static TrW_BSTFindRemove_t           s_fn_BSTFindRemove = nullptr;
 static TrW_BSTRemove_t               s_fn_BSTRemove = nullptr;
@@ -74,8 +74,6 @@ static TrW_FindSubEntity_t           s_fn_FindSubEntity = nullptr;
 // This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-static void** s_vtable_TradeWork = nullptr;  // 0x140161a10
-static void** s_vtable_Work = nullptr;        // 0x140161a80
 
 static bool s_trade_funcs_resolved = false;
 
@@ -86,8 +84,6 @@ bool TradeWork_ResolveFuncs() {
     if (s_trade_funcs_resolved) return true;
 
     // Direct exe function addresses
-    s_fn_Work_Serialize = reinterpret_cast<TrW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<TrW_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x14002c8a0));
     s_fn_BSTFindRemove = reinterpret_cast<TrW_BSTFindRemove_t>(
@@ -126,25 +122,18 @@ bool TradeWork_ResolveFuncs() {
     s_fn_MemFreeStatic = reinterpret_cast<TrW_MemFreeStatic_t>(fn_MemFreeStatic);
 
     // Vtable pointers for dtor
-    s_vtable_TradeWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a10));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize &&
-              s_fn_BST_Serialize && s_fn_BSTFindRemove && s_fn_BSTRemove &&
+    bool ok = s_fn_BST_Serialize && s_fn_BSTFindRemove && s_fn_BSTRemove &&
               s_fn_CancelAllWork && s_fn_ValidateEntity &&
               s_fn_MemAlloc && s_fn_MemFree &&
-              s_fn_TreeNodeCleanup && s_fn_FindSubEntity &&
-              s_vtable_TradeWork && s_vtable_Work;
+              s_fn_TreeNodeCleanup && s_fn_FindSubEntity;
 
     s_trade_funcs_resolved = ok;
 
 #ifdef _DEBUG
     printf("[TradeWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
@@ -344,11 +333,11 @@ static int TW_CommitAssign(TradeWork* self, void* param2, uint64_t resType, int 
     return 2;
 }
 
-int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
+int TradeWork::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
     TradeWork_ResolveFuncs();
     TradeWork_Slot4_Resolve();
 
-    int64_t selfA = reinterpret_cast<int64_t>(self);
+    int64_t selfA = reinterpret_cast<int64_t>(this);
     void* param2 = citizenIBP;                       // local_res10 (citizen IBP)
     uint64_t gw = g_pGameWorldSingleton ? reinterpret_cast<uint64_t>(*g_pGameWorldSingleton) : 0;
 
@@ -524,7 +513,7 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
                           reinterpret_cast<float*>(destPos), static_cast<int64_t>(resType),
                           qty, 1, 0, 1, 0, 1);
 
-        ret = TW_CommitAssign(self, param2, resType, -qty, outBuf);   // NEGATIVE qty (export)
+        ret = TW_CommitAssign(this, param2, resType, -qty, outBuf);   // NEGATIVE qty (export)
         goto cleanup;
     }
 
@@ -616,7 +605,7 @@ int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t /*param3*/,
                           reinterpret_cast<float*>(srcPos), static_cast<int64_t>(resType),
                           qtyMove, 0, 0, 0, 0, 1);
 
-        ret = TW_CommitAssign(self, param2, resType, qtyMove, outBuf);  // POSITIVE qty (import)
+        ret = TW_CommitAssign(this, param2, resType, qtyMove, outBuf);  // POSITIVE qty (import)
         goto cleanup;
     }
 
@@ -629,8 +618,8 @@ cleanup:
 // ============================================================
 // TradeWork::Slot6 -- BSTFindRemove + return false (0x1400f5d20)
 // ============================================================
-bool TradeWork_Slot6_Impl(TradeWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int TradeWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return false;
 }
 
@@ -638,8 +627,8 @@ bool TradeWork_Slot6_Impl(TradeWork* self, void* param2) {
 // ============================================================
 // TradeWork::Slot7 -- BSTFindRemove thunk (0x1400f5d10)
 // ============================================================
-int TradeWork_Slot7_Impl(TradeWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int TradeWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return 0;
 }
 
@@ -649,8 +638,8 @@ int TradeWork_Slot7_Impl(TradeWork* self, void* param2) {
 // Loops through BST at +0x48 while count > 0.
 // Extended BST nodes: left child at +0x20 (not +0x10).
 // ============================================================
-int TradeWork_Slot8_Impl(TradeWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int TradeWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     while (*(int*)(selfAddr + 0x50) > 0) {
         // Find leftmost node in BST (following +0x20 = left child for extended nodes)
@@ -676,8 +665,8 @@ int TradeWork_Slot8_Impl(TradeWork* self) {
 // Extended BST: +0x18=parent, +0x20=left, +0x28=right
 // Returns true if all valid, false otherwise.
 // ============================================================
-bool TradeWork_Slot9_Impl(TradeWork* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int TradeWork::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)(selfAddr + 0x48);
 
     void* root = *bstRootPtr;
@@ -788,7 +777,7 @@ bool TradeWork_Slot9_Impl(TradeWork* self, void* param2) {
 // TradeWork::Slot10 / GetWorkEntity (0x1400f6c50)
 // Returns entity from this->_field10's sub-object at +0x48.
 // ============================================================
-void* TradeWork_Slot10_Impl(TradeWork* self, void* outPtr) {
+void* TradeWork::GetTarget(void* outPtr) {
     // Resolve here as well as in Slot4. A TradeWork does NOT always arrive through
     // TradeWork_Factory / TradeWork_CreateInPlace: TradeComponent_Slot14 (the panel's
     // work checkbox) hand-rolls the allocation — MemAlloc + WorkCtor25 + a manual
@@ -804,7 +793,7 @@ void* TradeWork_Slot10_Impl(TradeWork* self, void* outPtr) {
     // this call's signature exactly.)
     TradeWork_ResolveFuncs();
 
-    uintptr_t selfAddr = (uintptr_t)self;
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -820,20 +809,16 @@ void* TradeWork_Slot10_Impl(TradeWork* self, void* outPtr) {
 
 
 // ============================================================
-// TradeWork::Slot11 / HasWorkers (0x140029860)
+// TradeWork::GetPriority [11] / HasWorkers (0x140029860)
 // Returns (workerCount > 0). Shared with many work classes.
 // ============================================================
-bool TradeWork_Slot11_Impl(TradeWork* self) {
-    return self->workerCount > 0;
+int TradeWork::GetPriority() {
+    // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
+    return static_cast<int32_t>(workerCount) > 0 ? 1 : 0;
 }
 
 
-// ============================================================
-// TradeWork::Execute (Slot5) -- 3 bytes, returns false.
-// ============================================================
-bool TradeWork_Execute_Impl(TradeWork* /*self*/) {
-    return false;
-}
+
 
 
 // ============================================================
@@ -841,11 +826,11 @@ bool TradeWork_Execute_Impl(TradeWork* /*self*/) {
 // Work::Serialize + Serializer(v0) + BST serialize.
 // No extra int field (unlike TendArea).
 // ============================================================
-void TradeWork_Serialize_Impl(TradeWork* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void TradeWork::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create serializer (version block, version=0)
     alignas(8) uint8_t serializerBuf[24] = {0};
@@ -862,11 +847,9 @@ void TradeWork_Serialize_Impl(TradeWork* self, void* stream) {
 // TradeWork::DtorBody
 // Sets vtable, frees extended BST nodes, calls base dtor.
 // ============================================================
-void TradeWork_DtorBody(TradeWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set vtable to TradeWork
-    *(void**)selfAddr = s_vtable_TradeWork;
+// TradeWork dtor (called by slot 0 0x14002c660). The stamps and the `~Internal` call are the compiler's chain.
+TradeWork::~TradeWork() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free BST nodes at +0x48 (extended: left at +0x20, right at +0x28)
     void* bstRoot = *(void**)(selfAddr + 0x48);
@@ -882,71 +865,63 @@ void TradeWork_DtorBody(TradeWork* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to Work base
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
 // ============================================================
 // TradeWork::ScalarDtor (0x14002c660)
 // ============================================================
-void* TradeWork_ScalarDtor_Impl(TradeWork* self, uint32_t flags) {
-    TradeWork_DtorBody(self);
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-    return self;
+// [0] 0x14002c660: ~TradeWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* TradeWork::DeletingDtor(unsigned flags) {
+    this->~TradeWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The stamps are the compiler's. TradeWork_ResolveFuncs wires
+// the file's helper pointers (the old factory did the same).
+TradeWork::TradeWork() : Work(), bstRoot(nullptr), workerCount(0), _pad54{} {
+    TradeWork_ResolveFuncs();
+}
+
+// The by-address door for slot 4 (0x1400f5d40), registered in
+// standalone/reg_work_tail_trade.cpp.
+int TradeWork_Slot4_Impl(TradeWork* self, void* citizenIBP, uint64_t param3, uint64_t param4) {
+    return self->TradeWork::Execute(citizenIBP, reinterpret_cast<void*>(param3), param4);
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161a10 (13 slots), size 0x58, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-// Slot map ground-truthed from the real exe vtable @ 0x140161a10:
-//   slot4 (Execute)=TradeWork_Slot4_Impl (0x1400f5d40, STUB). The orphaned
-//   TradeWork_Execute_Impl ("returns false") is NOT
-//   in the vtable — slot5 is the shared Work_Slot5. Do NOT use it.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_TradeWork_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over TradeWork_Factory / _CreateInPlace (both
+// Work_GenericCtor), plus two vtable-pointer statics for the dtor's stamps.
+
+// create 0x14002c620: MemAlloc(sizeof, 8), then the ctor.
+void* TradeWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TradeWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TradeWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* TradeWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TradeWork());
+}
+
+DEFINE_EXE_VTABLE(TradeWork, "_ZTV9TradeWork")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t TradeWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TradeWork");
-    return c;
-}
-
-static void* g_TradeWork_Vtable[13] = {
-    (void*)&TradeWork_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002c660)
-    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
-    (void*)&TradeWork_GetTypeId,        // +0x10 GetTypeId
-    (void*)&TradeWork_Serialize_Impl,   // +0x18 Serialize (0x1400f6cb0)
-    (void*)&TradeWork_Slot4_Impl,       // +0x20 Execute (0x1400f5d40, STUB)
-    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
-    (void*)&TradeWork_Slot6_Impl,       // +0x30 OnComplete (0x1400f5d20)
-    (void*)&TradeWork_Slot7_Impl,       // +0x38 OnCancel (0x1400f5d10)
-    (void*)&TradeWork_Slot8_Impl,       // +0x40 Cleanup (0x1400f6be0)
-    (void*)&TradeWork_Slot9_Impl,       // +0x48 Validate (0x1400f5ae0)
-    (void*)&TradeWork_Slot10_Impl,      // +0x50 GetTarget (0x1400f6c50)
-    (void*)&TradeWork_Slot11_Impl,      // +0x58 GetPriority (0x140029860)
-    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x140161a10 is still read back BY ADDRESS — TradeComponent
+// (tradecomponent.cpp, tradecomponent_states.cpp) builds the work by hand and stamps
+// it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterTradeWorkVtable() {
-    RegisterExeAddr(0x140161a10, (uintptr_t)g_TradeWork_Vtable);
+    RegisterExeAddr(TradeWorkAddr::Vtable, reinterpret_cast<uintptr_t>(TradeWork::Vtable()));   // 0x140161a10
 }
-extern "C" void* TradeWork_CreateInPlace(void* mem) {
-    TradeWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x58, g_TradeWork_Vtable);
-}
-extern "C" void* TradeWork_Factory(void) {
-    TradeWork_ResolveFuncs();
-    void* p = Work_Alloc(0x58);
-    return p ? Work_GenericCtor(p, 0x58, g_TradeWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(TradeWork, "Work", &TradeWork_Factory, &TradeWork_CreateInPlace);
+DEFINE_EXE_TYPE(TradeWork, "Work")

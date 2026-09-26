@@ -512,22 +512,26 @@ extern "C" char HappinessComponent_EnterDemolish(void* comp, void* /*sm*/) {
     return 0;
 }
 
-// ===== Standalone factory =====
-// The WellComponent pattern, with two differences read off vtable 0x1401595d0:
-// slot 17 (CreateState) is 0x140005be0 -> self+0x30, NOT self+0x28 -- HappinessComponent
-// carries its own byte at +0x28 and the controller sub-object is shifted -- and the
-// state table has a third state (13) plus the trans38 column.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — HappinessComponent as a REAL class (HappinessComponent.h).
+//
+// Before: a 48-slot hand-built `HappinessComponent_LiveVtable` filled at every
+// create (FillTypedVtable + FinishLiveVtable), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<HappinessCtrlTag> table stamped into raw bytes at +0x30.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/HappinessComponent.h"
 #include "Component/controller_state_table.h"
 
-namespace { struct HappinessCtrlTag {}; }
 using HappinessCtrlDispatch = ::ControllerLive::Dispatcher<HappinessCtrlTag>;
 
 // The retail table, transcribed from 0x14004ac10 call for call. Its RegisterState
 // instantiation (0x140005e30) copies the caller's 5th stack argument into the entry's
 // +0x18 field -- verified in the callee (it reads [rsp+0x170] into [rsp+0x48]), which is
 // the trans38 column. States 2 and 13 pass 0x14004a9a0 there; state 3 passes null.
+// Built ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
 static void HappinessComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = HappinessCtrlDispatch::table;
@@ -544,57 +548,46 @@ static void HappinessComponent_PopulateStateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);
 }
+static const bool s_happinessStateTableBuilt = (HappinessComponent_PopulateStateTable(), true);
 
-static uint32_t HappinessComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("HappinessComponent");
-    return cached;
-}
-static void* HappinessComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-static void HappinessComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
-    HappinessComponent_Shutdown(reinterpret_cast<HappinessComponent*>(s), stream);
-}
-static void HappinessComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
-    HappinessComponent_OnRemove(reinterpret_cast<HappinessComponent*>(s));
-}
-static int   HappinessComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
-static void* HappinessComponent_CreateState(void* self) {               // 0x140005be0
-    return reinterpret_cast<uint8_t*>(self) + 0x30;
+// 0x14004ab60. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// +0x28 = 0 (byte); `_controller(this)` is the member's back-pointer at +0x48; then
+// `_flags |= 2` (0x82).
+HappinessComponent::HappinessComponent() : happinessFlag(0), _pad29{}, _controller(this) {
+    OrFlagsInCtor(0x2);
 }
 
-static void HappinessComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 (Shutdown/Serialize, 0x14004aa80) is wired UNCONDITIONALLY (save/load
-    // wave 2026-08-28), same rationale as GrowthComponent/ResidenceComponent/
-    // StorageComponent: without this, a loaded save's HappinessComponent kept the
-    // base-Component no-op serialize and happinessFlag came back zeroed.
-    HappinessComponent_LiveVtable[3] = reinterpret_cast<void*>(&HappinessComponent_ShutdownVSlot);
-    HappinessComponent_LiveVtable[7]  = reinterpret_cast<void*>(&HappinessComponent_OnRemoveVSlot);
-    HappinessComponent_LiveVtable[16] = reinterpret_cast<void*>(&HappinessComponent_GetDefaultState);
-    HappinessComponent_LiveVtable[17] = reinterpret_cast<void*>(&HappinessComponent_CreateState);
-    HappinessComponent_PopulateStateTable();
-    if (mem) {
-        // Embedded state node at +0x30 (slot 17), not +0x28.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x30) =
-            reinterpret_cast<void*>(HappinessCtrlDispatch::Vtable());
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x30 + 0x18) = mem;
-    }
+// [0] 0x140005db0: ~HappinessComponent (0x14004ab00), MemFree on &1.
+Object::Base* HappinessComponent::DeletingDtor(unsigned flags) {
+    this->~HappinessComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x14004ab00: restamp + ~Internal, no own work.
+HappinessComponent::~HappinessComponent() = default;
+
+// create 0x140005ba0: MemAlloc(0x50, 8), then the ctor.
+void* HappinessComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HappinessComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HappinessComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* HappinessComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HappinessComponent());
 }
 
-extern "C" void* HappinessComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x50, 0x82,
-        HappinessComponent_LiveVtable,
-        reinterpret_cast<void*>(&HappinessComponent_LiveGetTypeId));
-    HappinessComponent_FinishLiveVtable(p);
-    return p;
-}
-static void* HappinessComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x50, 0x82,
-        HappinessComponent_LiveVtable,
-        reinterpret_cast<void*>(&HappinessComponent_LiveGetTypeId));
-    HappinessComponent_FinishLiveVtable(mem);
-    return mem;
-}
+// [3] 0x14004aa80 — happinessFlag round-trips (save/load wave 2026-08-28).
+void HappinessComponent::Persist(void* stream) { HappinessComponent_Shutdown(this, stream); }
 
-REGISTER_TYPE(HappinessComponent, "ControllerComponent",
-              &HappinessComponent_Factory, &HappinessComponent_CreateInPlace);
+// [7] 0x14004aa20.
+void HappinessComponent::OnRemove() { HappinessComponent_OnRemove(this); }
+
+// [15] 0x14004a780 — PORT GAP (HappinessComponent.h): the tree's slot 15 was the
+// inert stub, kept; porting retail's body is its own titled commit.
+void HappinessComponent::OnMessage(int /*message*/, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {}
+
+DEFINE_EXE_VTABLE(HappinessComponent, "_ZTV18HappinessComponent")
+DEFINE_EXE_TYPE(HappinessComponent, "ControllerComponent")

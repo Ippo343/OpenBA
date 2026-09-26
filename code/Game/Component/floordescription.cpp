@@ -11,90 +11,81 @@
 //     External-pointer serialize; distinct from fn_ExternalPtr_BuildSerialize)
 //   bool @ +0x28
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (FloorDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401633e0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
+#include "Component/FloorDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kFloorDescriptionVtable = 0x1401633e0;
-// Exe-internal ExternalPtr (reference-mode) serialize helper. NEEDS standalone
-// address registration (see report). Resolved at runtime via ResolveAddr.
-static const uintptr_t kExtPtrRefSerialize = 0x14000b7b0;
-typedef void (*ExtPtrRefSerialize_t)(void* field, void* serializer);
+// ctor (inlined into create 0x140034660 / createInPlace 0x1400346d0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+FloorDescription::FloorDescription()
+    : Description(),
+      _ref20(nullptr),
+      _b28(false) {}
 
-static void FloorDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kFloorDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x20) = 0;   // ExternalPtr (null)
-    *(uint8_t*) (s + 0x28) = 0;   // bool
+// [0] 0x140034790: ~FloorDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* FloorDescription::DeletingDtor(unsigned flags) {
+    this->~FloorDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void FloorDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    ExtPtrRefSerialize_t extSer =
-        (ExtPtrRefSerialize_t)ResolveAddr(Module::Exe, kExtPtrRefSerialize);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    if (extSer) extSer(s + 0x20, serializer);             // ExternalPtr +0x20
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x14011f680: stream order as retail.
+bool FloorDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    {
+        // +0x20 ExternalPtr through exe 0x14000b7b0 (resolved by address).
+        typedef void (*ExtPtrRefSerialize_t)(void* field, void* serializer);
+        ExtPtrRefSerialize_t extSer =
+            reinterpret_cast<ExtPtrRefSerialize_t>(ResolveAddr(Module::Exe, 0x14000b7b0));
+        if (extSer) extSer(&_ref20, &ser);
+    }
+    ser.Serialize(_b28, nullptr);
+    return true;
 }
 
-void* FloorDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kFloorDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140034720: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* FloorDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) FloorDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void FloorDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t FloorDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("FloorDescription");
-    return cached;
+// [8] 0x140034780: FloorComponent's type id through the hidden return slot.
+Object::Type* FloorDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("FloorComponent");
+    return ret;
 }
-static int   FloorDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   FloorDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* FloorDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* FloorDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* FloorDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "FloorComponent"); }
-
-static void* g_FloorDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&FloorDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&FloorDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&FloorDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&FloorDescription_Stub_Return1),    // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&FloorDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&FloorDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&FloorDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&FloorDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&FloorDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&FloorDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&FloorDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterFloorDescriptionVtable() {
-    RegisterExeAddr(kFloorDescriptionVtable, reinterpret_cast<uintptr_t>(g_FloorDescription_Vtable));
+// [9] 0x1400346d0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* FloorDescription::Construct() {
+    return new (static_cast<void*>(this)) FloorDescription();
 }
-extern "C" void* FloorDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+
+// create 0x140034660: MemAlloc(0x30, 8), then the (inlined) ctor.
+void* FloorDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FloorDescription), 8);
     if (!p) return nullptr;
-    FloorDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) FloorDescription());
 }
-static void* FloorDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    FloorDescription_Init(memory);
-    return memory;
+// createInPlace 0x1400346d0.
+void* FloorDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) FloorDescription());
 }
-REGISTER_TYPE(FloorDescription, "Description",
-              &FloorDescription_Factory, &FloorDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(FloorDescription, "_ZTV16FloorDescription")
+DEFINE_EXE_TYPE(FloorDescription, "Description")

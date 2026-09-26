@@ -20,59 +20,35 @@
 // Reproduced exactly: passing the caller's `entityIBP` through would hand it the
 // caller's storage.
 
+#include "Work/TendArea.h"
 #include "tendarea_funcs.h"
+#include <new>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 
-namespace {
+// ENDGAME B.3.8: the file-level lazy Resolve() is gone (B38 D7) — Work_Ctor25 is the
+// base ctor Work(void*) and the stamp is the compiler's.
 
-typedef void* (*fn_Work_Ctor25_t)(void* self, void* entityIBP);   // 0x1400f72e0
-
-fn_Work_Ctor25_t s_WorkCtor25 = nullptr;
-uintptr_t        s_vtable     = 0;
-bool             s_resolved   = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_WorkCtor25 = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    s_vtable     = ResolveAddr(Module::Exe, 0x140161990);
-    s_resolved   = s_WorkCtor25 && s_vtable;
-    if (!s_resolved) {
-        static bool reported = false;
-        if (!reported) {
-            reported = true;
-            std::fprintf(stderr, "[TendAreaCtor] UNRESOLVED:%s%s\n",
-                         s_WorkCtor25 ? "" : " Work_Ctor25",
-                         s_vtable     ? "" : " vtable_TendArea (0x140161990)");
-            std::fflush(stderr);
-        }
-    }
-}
-
-}  // namespace
-
-extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind) {
-    Resolve();
-    // [STANDALONE] tendarea.cpp's own function-pointer table is filled by
-    // TendArea_ResolveFuncs(), which is only called from its two FACTORY entry points.
-    // This is the state machine's path — it allocates and builds the object directly — so
-    // without this call every s_fn_* over there stays null and the first slot the work
-    // scheduler dispatches on the fresh object calls through 0. That is exactly the bug
-    // PlantOrchard hit on this same shape (commit 7731647); the class whose lazy Resolve()
-    // lives only in its factory is dead on any hand-rolled ctor path.
-    TendArea_ResolveFuncs();
-    if (!mem) return mem;
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(mem);
-
-    void* entityLocal = entityIBP ? *entityIBP : nullptr;   // retail's local copy
-    if (s_WorkCtor25) s_WorkCtor25(mem, &entityLocal);
-    if (s_vtable) *reinterpret_cast<uintptr_t*>(s) = s_vtable;
-
+// Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
+// reads the pointer once, so passing the caller's IBP is the same read.
+TendArea::TendArea(void** entityIBP, int kind) : Work(entityIBP) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     *reinterpret_cast<uint64_t*>(s + 0x48) = 0;
     *reinterpret_cast<uint32_t*>(s + 0x50) = 0;
     *reinterpret_cast<int32_t*> (s + 0x58) = kind;
-    return mem;
+}
+
+// The door OrchardComponent's state 10 calls (orchardcomponent_states.cpp, block MI-B):
+// the real ctor on caller memory (B8-5).
+extern "C" void* TendArea_CtorFromEntity(void* mem, void** entityIBP, int kind) {
+    // [STANDALONE] tendarea.cpp's own function-pointer table is filled by
+    // TendArea_ResolveFuncs(). This is the state machine's path — it allocates and builds
+    // the object directly — so wire it here, as before, or the first slot the work
+    // scheduler dispatches on the fresh object calls through 0 (the bug PlantOrchard hit
+    // on this same shape, commit 7731647).
+    TendArea_ResolveFuncs();
+    if (!mem) return mem;
+    return static_cast<Object::Base*>(new (mem) TendArea(entityIBP, kind));
 }

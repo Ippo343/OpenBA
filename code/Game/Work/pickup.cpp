@@ -13,6 +13,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/Pickup.h"
 #include "Work/pickup_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -48,7 +49,6 @@ typedef void  (*PiW_MemFreeStatic_t)(void* ptr);
 // Slot4/CreateWork -- original function (called through for complex logic)
 typedef int   (*PiW_Slot4_Original_t)(void* self, void* entityIBP, uint64_t param3, uint64_t param4);
 
-static PiW_Work_Serialize_t            s_fn_Work_Serialize = nullptr;
 static PiW_ArraySerialize_t            s_fn_ArraySerialize = nullptr;
 static PiW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
 static PiW_CancelAllWork_t             s_fn_CancelAllWork = nullptr;
@@ -59,11 +59,8 @@ static PiW_Slot4_Original_t            s_fn_Slot4_Original = nullptr;
 static uint32_t s_typeId_Pickup = 0;
 
 // Type index constant at DAT_1401c6be8 (for Slot1)
-static uint64_t* s_typeIndex_Pickup = nullptr;
 
 // Vtable pointers for dtor chain
-static void** s_vtable_Pickup = nullptr;  // 0x140161810
-static void** s_vtable_Work = nullptr;    // 0x140161a80
 
 static bool s_pickup_funcs_resolved = false;
 
@@ -80,8 +77,6 @@ bool Pickup_ResolveFuncs() {
     s_attempted = true;
 
     // Direct exe function addresses
-    s_fn_Work_Serialize = reinterpret_cast<PiW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_ArraySerialize = reinterpret_cast<PiW_ArraySerialize_t>(
         ResolveAddr(Module::Exe, 0x140018020));
     s_fn_ValidateEntity = reinterpret_cast<PiW_ValidateEntity_t>(
@@ -100,29 +95,21 @@ bool Pickup_ResolveFuncs() {
         s_typeId_Pickup = *reinterpret_cast<uint32_t*>(typeIdAddr);
 
     // Type index constant at DAT_1401c6be8 (for Slot1)
-    s_typeIndex_Pickup = reinterpret_cast<uint64_t*>(
-        ResolveAddr(Module::Exe, 0x1401c6be8));
 
     // Vtable pointers for dtor
-    s_vtable_Pickup = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161810));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize && s_fn_ArraySerialize &&
+    bool ok = s_fn_ArraySerialize &&
               s_fn_ValidateEntity && s_fn_CancelAllWork &&
               s_fn_Slot4_Original &&
               fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_vtable_Pickup && s_vtable_Work;
+              fn_IsDerivedFrom && g_pGameWorldSingleton;
 
     s_pickup_funcs_resolved = ok;
 
 #ifdef _DEBUG
     printf("[Pickup] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_ArraySerialize) printf("  MISSING: ArraySerialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
@@ -144,32 +131,32 @@ bool Pickup_ResolveFuncs() {
 //   + InternalBasePtr::Serialize(citizenIBP at +0x50) + IsDerivedFrom validate
 //   + if version > 0: ArraySerialize(candidateList at +0x58)
 // ============================================================
-void Pickup_Serialize_Impl(Pickup* self, void* stream) {
+void Pickup::Persist(void* stream) {
     Pickup_ResolveFuncs();   // lazy-resolve — factory-bypassed Pickups (see Slot9 note)
-    // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create serializer (version=2)
     alignas(8) uint8_t serializerBuf[24] = {0};
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 2);   // B.3.4 bridge
 
     // Serialize uint32 status at +0x48
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&status), nullptr);   // B.3.4 bridge
 
     // Serialize InternalBasePtr at +0x50
-    reinterpret_cast<Object::InternalBasePtr*>(&self->citizenIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&citizenIBP)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Validate the deserialized ptr against Pickup type
-    if (self->citizenIBP != nullptr) {
-        if (!fn_IsDerivedFrom(self->citizenIBP, s_typeId_Pickup)) {
-            self->citizenIBP = nullptr;
+    if (citizenIBP != nullptr) {
+        if (!fn_IsDerivedFrom(citizenIBP, s_typeId_Pickup)) {
+            citizenIBP = nullptr;
         }
     }
 
     // Version >= 1: serialize candidate list at +0x58
     int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     if (version > 0) {
-        s_fn_ArraySerialize(&self->candidateList, serializerBuf);
+        s_fn_ArraySerialize(&candidateList, serializerBuf);
     }
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
@@ -382,7 +369,7 @@ static void Pickup_CandAdd(PickupCandidate*& buf, int& count, int& capacity,
     if (oldBuf != buf && oldBuf && s_x_memFree) s_x_memFree(oldBuf);
 }
 
-// The port proper. Kept separate from Pickup_Slot4_Impl so the dispatcher can
+// The port proper. Kept separate from Pickup::Execute so the dispatcher can
 // fall back to the original when it resolves.
 static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
     // 0x1400f2f37: CMP [RCX+0x48],0 -> anything but "unassigned" means no work.
@@ -706,23 +693,23 @@ static int Pickup_Execute_Port(Pickup* self, void* citizenIBP, void* time) {
 }
 
 // ============================================================
-// Pickup::Slot4 dispatcher.
+// Pickup::Execute [4] 0x1400f2f00 — the dispatcher.
 //
 // When s_fn_Slot4_Original resolves (address registered) the dispatcher calls it;
 // otherwise the port runs — the address is unregistered and the old fallback
 // silently returned 1 ("no work") forever.
 // ============================================================
-int Pickup_Slot4_Impl(Pickup* self, void* entityIBP, uint64_t param3, uint64_t param4) {
-    (void)param4;  // exe reads only RCX/RDX/R8; param4 is not part of the ABI here
+int Pickup::Execute(void* entityIBP, void* context, uint64_t arg3) {
+    // exe reads only RCX/RDX/R8; arg3 is not part of the ABI here
     if (s_fn_Slot4_Original) {
-        return s_fn_Slot4_Original(self, entityIBP, param3, param4);
+        return s_fn_Slot4_Original(this, entityIBP, reinterpret_cast<uint64_t>(context), arg3);
     }
-    return Pickup_Execute_Port(self, entityIBP, reinterpret_cast<void*>(param3));
+    return Pickup_Execute_Port(this, entityIBP, context);
 }
 
 
 // ============================================================
-// Pickup::Execute (Slot5, 0x1400f38f0)
+// Pickup::Slot5 [5] 0x1400f38f0 (re-target)
 // UNIQUE to Pickup -- handles re-targeting when citizen changes
 // workplace during an active pickup.
 //
@@ -733,20 +720,20 @@ int Pickup_Slot4_Impl(Pickup* self, void* entityIBP, uint64_t param3, uint64_t p
 // 4. If different: cancel old work, re-run Slot4 for both entities
 // 5. Return false (keep executing)
 // ============================================================
-int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
+int Pickup::Slot5(void* entityIBP, void* param3) {
     // Check status != 0 and citizenIBP != null
-    if (self->status == 0 || self->citizenIBP == nullptr) {
+    if (status == 0 || citizenIBP == nullptr) {
         return 0;
     }
 
     // Check citizenIBP (+0x50)
     uintptr_t citizenEntity = *(uintptr_t*)(*(uintptr_t*)entityIBP + 0x1f0);
 
-    uintptr_t storedCitizen = (uintptr_t)self->citizenIBP;
+    uintptr_t storedCitizen = (uintptr_t)citizenIBP;
 
     if (citizenEntity != *(uintptr_t*)(storedCitizen + 0x1f0)) {
         // Citizen changed workplace -- cancel old work and re-target
-        uintptr_t oldCitizen = (uintptr_t)self->citizenIBP;
+        uintptr_t oldCitizen = (uintptr_t)citizenIBP;
 
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(oldCitizen + 0x278) + 0x48));
 
@@ -755,13 +742,13 @@ int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
         uintptr_t local_buf[1] = { newCitizenRef };
 
         // Call Slot4 via vtable (guard against freed self after CancelAllWork)
-        uintptr_t vtable = *(uintptr_t*)self;
+        uintptr_t vtable = *(uintptr_t*)this;
         if (vtable == 0) {
             return 0;  // self was freed during CancelAllWork
         }
         typedef int (*Slot4_fn)(void*, void*, void*);
         auto slot4 = *reinterpret_cast<Slot4_fn*>(vtable + 0x20);
-        int result = slot4(self, local_buf, param3);
+        int result = slot4(this, local_buf, param3);
 
         if (result == 2) {
             return 1;  // Successfully re-targeted
@@ -769,7 +756,7 @@ int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
 
         // Try again with stored citizen
         uintptr_t storedBuf[1] = { storedCitizen };
-        slot4(self, storedBuf, param3);
+        slot4(this, storedBuf, param3);
     }
 
     return 0;
@@ -781,11 +768,11 @@ int Pickup_Execute_Impl(Pickup* self, void* entityIBP, void* param3) {
 // Resets citizenIBP to null, sets status to 2 (completing).
 // Returns false.
 // ============================================================
-bool Pickup_Slot6_Impl(Pickup* self) {
+int Pickup::OnComplete(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
     uintptr_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    self->citizenIBP = (void*)nullIBP;
-    self->status = 2;
+    citizenIBP = (void*)nullIBP;
+    status = 2;
     return false;
 }
 
@@ -794,11 +781,11 @@ bool Pickup_Slot6_Impl(Pickup* self) {
 // Pickup::Slot7 / OnCancel (0x1400f2e80)
 // Resets citizenIBP to null, sets status to 0 (unassigned).
 // ============================================================
-int Pickup_Slot7_Impl(Pickup* self) {
+int Pickup::OnCancel(void* /*arg1*/, void* /*arg2*/, int /*arg3*/) {
     uintptr_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    self->citizenIBP = (void*)nullIBP;
-    self->status = 0;
+    citizenIBP = (void*)nullIBP;
+    status = 0;
     return 0;
 }
 
@@ -807,10 +794,10 @@ int Pickup_Slot7_Impl(Pickup* self) {
 // Pickup::Slot8 / CancelAll (0x1400f39f0)
 // If status == 1 (assigned), cancels the citizen's active work.
 // ============================================================
-int Pickup_Slot8_Impl(Pickup* self) {
+int Pickup::Cleanup() {
     Pickup_ResolveFuncs();   // lazy-resolve — factory-bypassed Pickups (see Slot9 note)
-    if (self->status == 1) {
-        uintptr_t citizenEntity = (uintptr_t)self->citizenIBP;
+    if (status == 1) {
+        uintptr_t citizenEntity = (uintptr_t)citizenIBP;
 
         s_fn_CancelAllWork((void*)(*(uintptr_t*)(citizenEntity + 0x278) + 0x48));
     }
@@ -824,7 +811,7 @@ int Pickup_Slot8_Impl(Pickup* self) {
 // If invalid, resets citizenIBP to null and status to 0.
 // Returns true if valid (or no citizen assigned).
 // ============================================================
-bool Pickup_Slot9_Impl(Pickup* self, void* param2) {
+int Pickup::Validate(void* param2) {
     // 🔑 LAZY-RESOLVE — REQUIRED on every entry point that touches an s_fn_* pointer.
     // Pickup_ResolveFuncs() is otherwise only called from Pickup_Factory/CreateInPlace, but
     // the Pickup works that matter here NEVER go through the factory: RawMaterialComponent::
@@ -833,8 +820,8 @@ bool Pickup_Slot9_Impl(Pickup* self, void* param2) {
     // misreported as VCALL-of-0 because RCX happened to be the Pickup). Same pattern as
     // removenaturalresource.cpp's "lazy-resolve (exe-ctor-built action)".
     Pickup_ResolveFuncs();
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t citizenRef = (uintptr_t)self->citizenIBP;
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t citizenRef = (uintptr_t)citizenIBP;
 
     if (citizenRef == 0) {
         return true;  // No citizen assigned -- nothing to validate
@@ -848,8 +835,8 @@ bool Pickup_Slot9_Impl(Pickup* self, void* param2) {
         // Entity no longer valid -- reset
         uintptr_t nullIBP = 0;
         new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        self->citizenIBP = (void*)nullIBP;
-        self->status = 0;
+        citizenIBP = (void*)nullIBP;
+        status = 0;
         return false;
     }
 
@@ -862,7 +849,7 @@ bool Pickup_Slot9_Impl(Pickup* self, void* param2) {
 // Returns the global entity from GameWorld+0xb0+0x30.
 // This is a global target, not per-instance.
 // ============================================================
-void* Pickup_Slot10_Impl(Pickup* /*self*/, void* outPtr) {
+void* Pickup::GetTarget(void* outPtr) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t entityList = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)outPtr = *(uintptr_t*)(entityList + 0x30);
@@ -875,147 +862,73 @@ void* Pickup_Slot10_Impl(Pickup* /*self*/, void* outPtr) {
 // Returns true if citizenIBP is non-null (worker assigned).
 // 10 bytes, unhookable.
 // ============================================================
-bool Pickup_Slot11_Impl(Pickup* self) {
-    return self->citizenIBP != nullptr;
+int Pickup::GetPriority() {
+    return citizenIBP != nullptr ? 1 : 0;
 }
 
 
-// ============================================================
-// Pickup::Slot1 / GetTypeIndex (0x14002bfb0)
-// Returns type index constant from DAT_1401c6be8.
-// Tiny, not hooked.
-// ============================================================
-uint64_t Pickup_Slot1_Impl(Pickup* /*self*/) {
-    if (s_typeIndex_Pickup) {
-        return *s_typeIndex_Pickup;
-    }
-    return 0;
-}
 
 
-// ============================================================
-// Pickup::Slot2 / GetTypeId (0x14002bfa0)
-// Returns Pickup type ID constant (TypeInfo_Pickup).
-// Tiny, not hooked.
-// ============================================================
-uint32_t Pickup_Slot2_Impl(Pickup* /*self*/) {
-    return s_typeId_Pickup;
-}
 
 
-// ============================================================
-// Pickup::DtorBody
-// Sets vtable to Pickup, then Work, calls Internal dtor.
-// Simpler than HuntWork -- no BST tree to free (Pickup doesn't
-// have a BST, just simple fields).
-// ============================================================
-void Pickup_DtorBody(Pickup* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
 
-    // Set vtable to Pickup
-    *(void**)selfAddr = s_vtable_Pickup;
 
-    // Set vtable to Work (dtor chain)
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
-}
+
 
 
 // ============================================================
 // Pickup::ScalarDtor (0x14002c010)
 // Calls dtor body, then conditional free based on flags.
 // ============================================================
-void* Pickup_ScalarDtor_Impl(Pickup* self, uint32_t flags) {
-    Pickup_ResolveFuncs();   // lazy-resolve — factory-bypassed Pickups (see Slot9 note)
-    Pickup_DtorBody(self);
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-    return self;
+// [0] 0x14002c010: ~Pickup, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* Pickup::DeletingDtor(unsigned flags) {
+    this->~Pickup();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// ~Pickup is defaulted: the Pickup then Work stamps and `~Internal` are the compiler's
+// chain — all retail's 0x14002c010 does before the free. (The old body's lazy
+// Pickup_ResolveFuncs() fed only its MemFree pointer, which the free no longer uses.)
+
+
+
+// Ctor 0x1400f3c00: `??0Internal`, the Work base fields, the leaf fields zeroed (the
+// two stamps are the compiler's). Pickup_ResolveFuncs wires the file's helper pointers
+// (the old factory did the same).
+Pickup::Pickup() : Work(), status(0), citizenIBP(nullptr), candidateList(nullptr) {
+    Pickup_ResolveFuncs();
 }
 
+// ============================================================
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
+// ============================================================
+// Before: a hand-built 13-slot `g_Pickup_Vtable` (slot 1 null, slot 2 a lazily cached
+// id, slot 12 Work's nop — see the PORT GAP in Work/Pickup.h), Pickup_Ctor_Impl (the
+// ctor with both stamps written by hand) and REGISTER_TYPE over Pickup_Factory /
+// _CreateInPlace, plus two vtable-pointer statics for the dtor's stamps.
 
-// ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161810 (13 slots), size 0x60, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// NOTE: Pickup's methods are named by slot number (Pickup_SlotN_Impl):
-//   slot6 OnComplete = Slot6, slot7 OnCancel = Slot7, slot8 Cleanup = Slot8,
-//   slot9 Validate = Slot9, slot10 GetTarget = Slot10, slot11 GetPriority = Slot11.
-//   slot4 Execute = Pickup_Execute_Impl (Pickup's unique Execute override).
-// ============================================================
-#include "work_base_standalone.h"
+// create 0x14002bfc0: MemAlloc(sizeof, 8), then the ctor.
+void* Pickup::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Pickup), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) Pickup());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* Pickup::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) Pickup());
+}
+
+DEFINE_EXE_VTABLE(Pickup, "_ZTV6Pickup")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// Constructor — port of Pickup_Ctor (0x1400f3c00): Object::Internal::Internal
-// -> Work base fields -> Pickup vtable + zero Pickup fields.
-static void* Pickup_Ctor_Impl(Pickup* self) {
-    fn_ObjectInternal_Ctor(self);
-
-    uintptr_t a = (uintptr_t)self;
-    // Work base vtable (intermediate, immediately overwritten)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161a80);
-    *(void**)(a + 0x10) = nullptr;
-    *(void**)(a + 0x18) = nullptr;
-    *(int32_t*)(a + 0x20) = -1;
-    *(int32_t*)(a + 0x24) = 0;
-    *(int32_t*)(a + 0x28) = -1;
-    *(int32_t*)(a + 0x2c) = 0;
-    *(void**)(a + 0x30) = nullptr;
-    *(void**)(a + 0x38) = nullptr;
-    *(int32_t*)(a + 0x40) = 0;
-
-    // Pickup vtable (our registered standalone table)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161810);
-    self->status = 0;             // +0x48
-    self->citizenIBP = nullptr;   // +0x50
-    self->candidateList = nullptr;// +0x58
-
-    return self;
-}
-
-static uint32_t Pickup_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("Pickup");
-    return c;
-}
-
-static void* g_Pickup_Vtable[13] = {
-    (void*)&Pickup_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,              // +0x08 slot1 (null)
-    (void*)&Pickup_GetTypeId,        // +0x10 GetTypeId
-    (void*)&Pickup_Serialize_Impl,   // +0x18 Serialize
-    // 🔑 Slot order verified against the exe vtable @0x140161810: [4]=0x1400f2f00 (the REAL
-    // Execute — the ~400-line "scan for nearby piles, dispatch PerformWork, set status/citizen"
-    // body; Ghidra mislabels it Pickup_Serialize), [5]=0x1400f38f0 (the re-target helper, which
-    // itself CALLS slot4 via *(vtable+0x20)). These two were swapped: the f38f0 port sat in
-    // slot4 and slot5 was a stub, so the pickup job could never run — Execute saw status==0 and
-    // returned immediately, which is precisely the case where retail does the whole job.
-    (void*)&Pickup_Slot4_Impl,       // +0x20 Execute      (0x1400f2f00)
-    (void*)&Pickup_Execute_Impl,     // +0x28 re-target    (0x1400f38f0)
-    (void*)&Pickup_Slot6_Impl,       // +0x30 OnComplete
-    (void*)&Pickup_Slot7_Impl,       // +0x38 OnCancel
-    (void*)&Pickup_Slot8_Impl,       // +0x40 Cleanup
-    (void*)&Pickup_Slot9_Impl,       // +0x48 Validate
-    (void*)&Pickup_Slot10_Impl,      // +0x50 GetTarget
-    (void*)&Pickup_Slot11_Impl,      // +0x58 GetPriority
-    (void*)&Work_Slot12,             // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x140161810 is still read back BY ADDRESS — RawMaterialComponent's Draw
+// (rawmaterialcomponent.cpp) builds the work by hand and stamps it — so the exe address
+// serves the COMPILER's table.
 extern "C" void RegisterPickupVtable() {
-    RegisterExeAddr(0x140161810, (uintptr_t)g_Pickup_Vtable);
+    RegisterExeAddr(PickupAddr::Vtable, reinterpret_cast<uintptr_t>(Pickup::Vtable()));   // 0x140161810
 }
-extern "C" void* Pickup_CreateInPlace(void* mem) {
-    Pickup_ResolveFuncs();
-    return Pickup_Ctor_Impl((Pickup*)mem);
-}
-extern "C" void* Pickup_Factory(void) {
-    Pickup_ResolveFuncs();
-    void* p = Work_Alloc(0x60);
-    return p ? Pickup_Ctor_Impl((Pickup*)p) : nullptr;
-}
-REGISTER_TYPE(Pickup, "Work", &Pickup_Factory, &Pickup_CreateInPlace);
+DEFINE_EXE_TYPE(Pickup, "Work")
