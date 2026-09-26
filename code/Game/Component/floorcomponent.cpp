@@ -456,8 +456,9 @@ void FloorComponent_InitFuncs() {
 // `if (floorId >= 0) <remove the existing mesh>` — a zeroed id would make the very first
 // placement try to remove picking-mesh 0 (someone else's mesh) before adding its own.
 //
-// Flags are 0x43 (FloorComponent_Ctor 0x14011f636: `OR EAX,0x43`). The previous 0xC3 here
-// had a spurious bit 7 and put the component in an update bucket retail never uses.
+// Flags: FloorComponent_Ctor 0x14011f636 is `OR EAX,0x43` over Component's ctor value 0x80
+// (0x1401188e6), i.e. 0xC3 like every other component's bit 7. (An earlier note here
+// read the OR alone as the whole word and stored 0x43.)
 //
 // Gated on BANISHED_LIVE_FLOOR, DEFAULT-ON since 2026-08-29 (the default-on table) — the env
 // var is now a kill-switch (=0) for A/B runs. With it off this is byte-for-byte the old
@@ -474,11 +475,9 @@ void FloorComponent_InitFuncs() {
 
 // 0x14011f600: Component() is the CALL 0x1401188b0; the 0x140163360 stamp is
 // the compiler's; +0x28 = 0, +0x2c = -1 (0x14011f62f), flags |= 0x43.
-// PORT GAP (retail 0x14011f636) — B38 D1: retail ORs 0x43 into Component's
-// 0x80 (=> 0xc3); the tree's factory STORED 0x43 (bit 7 clear). The tree's
-// value is kept here; the retail OR is its own titled commit.
+// flags |= 0x43 over Component's 0x80 (=> 0xc3), as retail 0x14011f636.
 FloorComponent::FloorComponent() : floorFlag(0), _pad29{}, floorId(-1) {
-    _flags = 0x43;
+    OrFlagsInCtor(0x43);
 }
 
 // [3] 0x14011f560 — floorFlag round-trips a save.
