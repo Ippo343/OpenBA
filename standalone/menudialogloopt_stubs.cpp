@@ -43,7 +43,6 @@
 // Stub_Draw is declared in the enclosing ANONYMOUS namespace, which links
 // against a symbol that does not exist rather than the real one.
 void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
-#include "UpdateLoop.h"
 #include "Game/menudialogloopt_funcs.h"
 #include "Game/uifade.h"
 #include "Game/MenuDialogLoopT.h"   // ENDGAME B.3.8 LOOP

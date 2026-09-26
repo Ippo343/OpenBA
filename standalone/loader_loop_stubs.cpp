@@ -33,8 +33,6 @@
 #include "resolve.h"
 #include "engine_funcs.h"
 #include "stall_debug.h"
-#include "UpdateLoop.h"
-#include "LoaderLoop.h"
 #include "options.h"
 #include "system/Thread.h"   // ENDGAME B.3.4b System callers: System::Thread
 #include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes

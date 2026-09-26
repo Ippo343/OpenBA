@@ -39,7 +39,6 @@
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
 #include "video/Device.h"
-#include "UpdateLoop.h"
 #include "Game/game.h"
 #include "Game/inputbindings.h"
 #include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP
@@ -653,7 +652,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 // Engine::DialogLoopT, drives Dialog\MainMenu.rsc).
                 //   1. MemAlloc(0xc00, 8)
                 //   2. Construct String "Dialog\\MainMenu.rsc"
-                //   3. MenuDialogLoopT_Ctor (DialogLoopT base + vtable patch +
+                //   3. MenuDialogLoopT's ctor (DialogLoopT base, the stamp,
                 //      Random + Audio::Scene + zero-init extra fields)
                 //   4. Destroy String
                 //
@@ -663,71 +662,65 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 //   - MemAlloc(0xb60, 4)
                 //   - Time(0.5f), String "Dialog\\Loading.rsc"
                 //   - Engine::DialogLoaderLoopT::DialogLoaderLoopT(self, &str, menuLoop, &time)
-                //   - patch vtable to g_GameLoadDialogLoopT_Vtable
+                //   - the 0x140158800 stamp (GameLoadDialogLoopT's ctor)
                 //   - init colors at +0x188/+0x18c (0xff000000), zero +0x190,
                 //     System::Random at +0x194, zero +0xb58 (random text timer),
-                //     zero m_autoAdvance at +0x40
-                //
-                // Both Update stubs return false so Run exits on the first tick.
-                if (g_MenuDialogLoopT_Vtable && fn_DialogLoopT_Ctor &&
-                    fn_AudioScene_Ctor && fn_Random_Default_Ctor && fn_DialogLoaderLoopT_Ctor && fn_Time_Ctor_Float &&
-                    g_GameLoadDialogLoopT_Vtable) {
+                //     zero _autoAdvance at +0x40
+                // ENDGAME B.3.8 LOOP: the five loops are real classes
+                // (code/Game/Game/*.h); each is built with its real ctor.
+                if (fn_Time_Ctor_Float) {
 
-                    UpdateLoop* menuLoop = reinterpret_cast<UpdateLoop*>(
-                        fn_MemAlloc(memAllocSingleton, 0xc00, 8));
+                    void* menuMem = fn_MemAlloc(memAllocSingleton, 0xc00, 8);
                     printf("[GameMain] MenuDLT alloc = %p (vtable=%p)\n",
-                           (void*)menuLoop, (void*)g_MenuDialogLoopT_Vtable);
+                           menuMem, MenuDialogLoopT::Vtable());
 
-                    if (menuLoop) {
+                    if (menuMem) {
                         // Construct the dialog filename string.
                         System::String menuStr("Dialog\\MainMenu.rsc");
 
                         StallDebug::Mark("settings alloc + MenuDLT alloc");
-                        // ENDGAME B.3.8 LOOP: the real class (ctor 0x14009bb00).
-                        ::new (static_cast<void*>(menuLoop)) MenuDialogLoopT(menuStr);
+                        // The real class (ctor 0x14009bb00).
+                        MenuDialogLoopT* menuLoop = ::new (menuMem) MenuDialogLoopT(menuStr);
                         StallDebug::Mark("MenuDialogLoopT_Ctor");
                         printf("[GameMain] MenuDLT ctor done, vtable=%p\n",
-                               (void*)menuLoop->vtable);
+                               *reinterpret_cast<void**>(menuLoop));
 
-                        // Helper: build a splash DialogLoaderLoopT (0xb60 bytes,
-                        // vtable @ 0x140158800) wrapping `next`. Mirrors the
-                        // identical splash setup blocks in FUN_140041ef0.
+                        // Helper: build a splash GameLoadDialogLoopT (0xb60
+                        // bytes, vtable 0x140158800) wrapping `next`. Mirrors
+                        // the identical splash setup blocks in FUN_140041ef0.
                         auto buildSplashDLT = [&](const char* filename, float delaySec,
-                                                  UpdateLoop* next, const char* tag)
-                            -> UpdateLoop* {
-                            UpdateLoop* dlt = reinterpret_cast<UpdateLoop*>(
-                                fn_MemAlloc(memAllocSingleton, 0xb60, 4));
+                                                  Engine::UpdateLoop* next, const char* tag)
+                            -> GameLoadDialogLoopT* {
+                            void* mem = fn_MemAlloc(memAllocSingleton, 0xb60, 4);
                             printf("[GameMain] %s alloc = %p (vtable=%p)\n",
-                                   tag, (void*)dlt, (void*)g_GameLoadDialogLoopT_Vtable);
-                            if (!dlt) return nullptr;
+                                   tag, mem, GameLoadDialogLoopT::Vtable());
+                            if (!mem) return nullptr;
 
                             uint64_t delayTime = 0;
                             fn_Time_Ctor_Float(&delayTime, delaySec);
 
                             System::String fileStr(filename);
 
-                            // ENDGAME B.3.8 LOOP: the real class. Its ctor is the
-                            // one retail inlines here: DialogLoaderLoopT(file, next,
-                            // delay), the 0x140158800 stamp (the compiler's), the
-                            // two fade colours, Random at +0x194, the tip timer,
-                            // _autoAdvance = 0.
-                            ::new (static_cast<void*>(dlt)) GameLoadDialogLoopT(
-                                fileStr, reinterpret_cast<Engine::UpdateLoop*>(next),   // B.3.8 bridge
-                                *reinterpret_cast<const System::Time*>(&delayTime));
+                            // Its ctor is the one retail inlines here:
+                            // DialogLoaderLoopT(file, next, delay), the stamp (the
+                            // compiler's), the two fade colours, Random at +0x194,
+                            // the tip timer, _autoAdvance = 0.
+                            GameLoadDialogLoopT* dlt = ::new (mem) GameLoadDialogLoopT(
+                                fileStr, next, *reinterpret_cast<const System::Time*>(&delayTime));
 
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p, "
                                    "delay=%.2fs\n",
-                                   tag, (void*)dlt->vtable, (void*)next, delaySec);
+                                   tag, *reinterpret_cast<void**>(dlt), (void*)next, delaySec);
                             return dlt;
                         };
 
                         // Stage 5c: Loading.rsc splash wrapping menuLoop.
-                        UpdateLoop* loadingLoop = buildSplashDLT(
+                        GameLoadDialogLoopT* loadingLoop = buildSplashDLT(
                             "Dialog\\Loading.rsc", 0.5f, menuLoop, "LoadingDLT");
 
                         // Stage 5d: ShiningRock.rsc splash wrapping LoadingDLT.
                         // Original GameMain uses DAT_140172174 = 2.0f for delay.
-                        UpdateLoop* shiningRockLoop = loadingLoop
+                        GameLoadDialogLoopT* shiningRockLoop = loadingLoop
                             ? buildSplashDLT("Dialog\\ShiningRock.rsc", 2.0f,
                                              loadingLoop, "ShiningRockDLT")
                             : nullptr;
@@ -736,24 +729,22 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         // MainLoop::Run starts. Boot is non-rendering (no swap chain
                         // Present yet from gameplay code), so blocking ~56ms here is
                         // invisible — whereas blocking those same ms inside
-                        // SplashDLT::Stub_Startup happens after Engine::Startup has
-                        // already presented at least one frame, so the user sees a
-                        // brief flash of the DX11 initial backbuffer color before
+                        // GameLoadDialogLoopT::Startup happens after Engine::Startup
+                        // has already presented at least one frame, so the user sees
+                        // a brief flash of the DX11 initial backbuffer color before
                         // the splash appears. Loading the .rsc up front populates
-                        // m_dialogExternal so Stub_Startup's fallback synchronous
-                        // load is skipped.
+                        // _dialogExternal so Startup's fallback synchronous load is
+                        // skipped.
                         StallDebug::Mark("splash DLT ctors");
                         if (shiningRockLoop) {
                             printf("[GameMain] pre-loading ShiningRock.rsc\n");
-                            // QUALIFIED: the door is the base body; the splash's
-                            // hand-built table would dispatch slot 6 to its stub.
-                            reinterpret_cast<Engine::DialogLoaderLoopT*>(shiningRockLoop)
-                                ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
+                            // QUALIFIED: the base body (slot 6 is inherited, but
+                            // say which body is meant).
+                            shiningRockLoop->Engine::DialogLoaderLoopT::Load();
                         }
                         if (loadingLoop) {
                             printf("[GameMain] pre-loading Loading.rsc\n");
-                            reinterpret_cast<Engine::DialogLoaderLoopT*>(loadingLoop)
-                                ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
+                            loadingLoop->Engine::DialogLoaderLoopT::Load();
                         }
 
                         StallDebug::Mark("splash .rsc preloads (ShiningRock + Loading)");
@@ -770,28 +761,26 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         // an on-screen, never-painted window at every boot.
                         //
                         // Arm() records the loop; the first splash runs it from
-                        // Stub_Update once it has actually revealed, so the cost
+                        // its Update once it has actually revealed, so the cost
                         // lands behind a drawn loading screen the way retail
                         // does it. After Init runs, MenuDLT struct fields
                         // (+0xb90 menuScene, +0xb98 renderer, etc.) are
                         // populated and the splash Tick(500)s the chunked PhaseB
                         // iteration each frame, keeping the splash animating
                         // through the heavy 12K-15K static-mesh loop.
-                        if (menuLoop) {
-                            printf("[GameMain] arming ChunkedSceneLoader for MenuDLT "
-                                   "(runs behind the splash, not during boot)\n");
-                            ChunkedSceneLoader::Arm(menuLoop);
-                        }
+                        printf("[GameMain] arming ChunkedSceneLoader for MenuDLT "
+                               "(runs behind the splash, not during boot)\n");
+                        ChunkedSceneLoader::Arm(menuLoop);
 
                         // Stage 5e: wrap the splash chain in two LoaderLoop layers.
                         // Inner LoaderLoop wraps shiningRockLoop, outer LoaderLoop
-                        // wraps inner. Both use fn_LoaderLoop_Ctor with delay 0.0f
-                        // (matches FUN_140041ef0). ENDGAME B.3.8 LOOP: the two
-                        // real classes (code/Game/Game/{Inner,Game}LoaderLoop.h);
-                        // their ctors run `??0LoaderLoop@Engine@@`'s body and
-                        // the compiler stamps 0x140158870's / 0x1401588d0's table.
-                        auto buildLoaderLoop = [&](UpdateLoop* next, bool inner,
-                                                   const char* tag) -> UpdateLoop* {
+                        // wraps inner, both with delay 0.0f (matches
+                        // FUN_140041ef0): the two real classes
+                        // (code/Game/Game/{Inner,Game}LoaderLoop.h), whose ctors
+                        // run `??0LoaderLoop@Engine@@`'s body while the compiler
+                        // stamps 0x140158870's / 0x1401588d0's table.
+                        auto buildLoaderLoop = [&](Engine::UpdateLoop* next, bool inner,
+                                                   const char* tag) -> Engine::UpdateLoop* {
                             if (!next) return nullptr;
                             void* mem = fn_MemAlloc(memAllocSingleton, 0x48, 4);
                             printf("[GameMain] %s alloc = %p\n", tag, mem);
@@ -801,28 +790,27 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             fn_Time_Ctor_Float(&zeroDelay, 0.0f);
                             const System::Time& delay =
                                 *reinterpret_cast<const System::Time*>(&zeroDelay);
-                            Engine::UpdateLoop* nextLoop =
-                                reinterpret_cast<Engine::UpdateLoop*>(next);   // B.3.8 bridge
                             Engine::LoaderLoop* ll = inner
-                                ? static_cast<Engine::LoaderLoop*>(::new (mem) InnerLoaderLoop(nextLoop, delay))
-                                : static_cast<Engine::LoaderLoop*>(::new (mem) GameLoaderLoop(nextLoop, delay));
+                                ? static_cast<Engine::LoaderLoop*>(::new (mem) InnerLoaderLoop(next, delay))
+                                : static_cast<Engine::LoaderLoop*>(::new (mem) GameLoaderLoop(next, delay));
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p\n",
                                    tag, *reinterpret_cast<void**>(ll), (void*)next);
-                            return reinterpret_cast<UpdateLoop*>(ll);   // B.3.8 bridge
+                            return ll;
                         };
 
-                        UpdateLoop* innerLoader = shiningRockLoop
+                        Engine::UpdateLoop* innerLoader = shiningRockLoop
                             ? buildLoaderLoop(shiningRockLoop, true, "InnerLL")
                             : nullptr;
-                        UpdateLoop* outerLoader = innerLoader
+                        Engine::UpdateLoop* outerLoader = innerLoader
                             ? buildLoaderLoop(innerLoader, false, "OuterLL")
                             : nullptr;
 
-                        UpdateLoop* topLoop = outerLoader ? outerLoader
-                                            : innerLoader ? innerLoader
-                                            : shiningRockLoop ? shiningRockLoop
-                                            : loadingLoop ? loadingLoop
-                                            : menuLoop;
+                        Engine::UpdateLoop* topLoop =
+                              outerLoader ? outerLoader
+                            : innerLoader ? innerLoader
+                            : shiningRockLoop ? static_cast<Engine::UpdateLoop*>(shiningRockLoop)
+                            : loadingLoop ? static_cast<Engine::UpdateLoop*>(loadingLoop)
+                            : static_cast<Engine::UpdateLoop*>(menuLoop);
                         const char* topTag = outerLoader ? "OuterLL"
                                            : innerLoader ? "InnerLL"
                                            : shiningRockLoop ? "ShiningRockDLT"
@@ -831,8 +819,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         if (topLoop) {
                             printf("[GameMain] Calling MainLoop::Run with %s top "
                                    "loop = %p...\n", topTag, (void*)topLoop);
-                            reinterpret_cast<Engine::MainLoop*>(ml)->Run(   // B.3.7 bridge
-                                reinterpret_cast<Engine::UpdateLoop*>(topLoop));
+                            reinterpret_cast<Engine::MainLoop*>(ml)->Run(topLoop);   // B.3.7 bridge
                             // Run has returned: no more frames will ever be
                             // rendered, so the boot-state watchdog's hang
                             // detector must switch to its teardown budget here
@@ -840,20 +827,12 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                             // (standalone/boot_state_watchdog.cpp)
                             BootState_MarkQuitting();
                             printf("[GameMain] MainLoop::Run returned "
-                                   "(top loop destroyed by Run; inner loops "
-                                   "leak — Update stub returns false on first "
-                                   "tick before transitioning)\n");
+                                   "(top loop destroyed by Run)\n");
                         }
                     }
                 } else {
                     printf("[GameMain] WARN: missing deps for splash chain — "
-                           "MenuVT=%p, SplashVT=%p, DLLT_Ctor=%p, "
-                           "DLT_Ctor=%p, AudioScene=%p, Random=%p, Time=%p\n",
-                           (void*)g_MenuDialogLoopT_Vtable,
-                           (void*)g_GameLoadDialogLoopT_Vtable,
-                           (void*)fn_DialogLoaderLoopT_Ctor,
-                           (void*)fn_DialogLoopT_Ctor, (void*)fn_AudioScene_Ctor,
-                           (void*)fn_Random_Default_Ctor, (void*)fn_Time_Ctor_Float);
+                           "Time=%p\n", (void*)fn_Time_Ctor_Float);
                 }
 
                 if (settings) {
