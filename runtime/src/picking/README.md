@@ -18,4 +18,14 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+(This section said "_nothing yet_" until the ENDGAME B.3.7 close; the
+status paragraph at the end of this file says what the files hold.)
+
+- `closure_batch2b.cpp`
+- `pickingmesh.cpp`
+- `rt_factories_picking.cpp`
+- `rt_factories_picking.inc`
+- `rt_picking_port.cpp`
+- `scene.cpp`
+- `scene_grid.cpp`
+- `scene_grid.h`

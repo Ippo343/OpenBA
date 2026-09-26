@@ -28,7 +28,7 @@ confirm against the retail DLL before porting one.
 | `message_callbacks.cpp` | `RegisterMessageCallback`, `UnregisterMessageCallback`, + `0x18000a5b0` |
 | `platform_startup_win.cpp` | `PlatformStartup`, `WindowProc`, `PlatformShutdown` (+ four cross-namespace `PlatformStartup` rows) |
 | `application_lifecycle.cpp` | `~Application`, copy ctor, `operator=`, + the Set helpers `0x18000a4f0` / `0x18000a530` / `0x18000a440` |
-| `application_lifecycle_probe.cpp` | not a port — the lockstep oracle for the file above (`RT_APPB_PROBE=1`) |
+| `application_accessors.cpp`, `application_thunks.cpp` | `Get`, `GetInstance`, `GetWindow`, `IsCursorEnabled`, `PlatformIsPaused`, `PlatformDestruct`; `Update`/`Shutdown`/`Startup` tail-call thunks (Wave 12 lane A); the old `application_lifecycle_probe.cpp` oracle is gone (A.3/A.4 deleted the probes) |
 
 `??0Application@0@QEAA@PEAX@Z` (the constructor) is ported in
 `runtime/src/engine/singleton_ctors.cpp`, with the fourteen other constructors that publish a

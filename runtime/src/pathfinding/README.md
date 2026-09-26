@@ -19,4 +19,9 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+(This section said "_nothing yet_" until the ENDGAME B.3.7 close; the
+status paragraph at the end of this file says what the files hold.)
+
+- `pointlist.cpp`
+- `rt_factories_pathfinding.cpp`
+- `rt_factories_pathfinding.inc`

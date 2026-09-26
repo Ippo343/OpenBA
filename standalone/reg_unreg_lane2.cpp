@@ -126,9 +126,11 @@ void RegisterUnregLane2() {
     //   0x140151718 GetText@StringTable    — fn_StringTable_GetText resolves by
     //       ResolveExport; citizen_updatehealth.cpp and debugui.cpp both carry their
     //       own local ResolveExport fallback too.
-    //   0x140151758 KeyMap::Pressed, 0x1401528f0 KeyMap::Released — engine_funcs.cpp
-    //       fn_KeyMap_Pressed/fn_KeyMap_Released resolve by ResolveExport; edittool.cpp/
-    //       dragtool.cpp/pathtool.cpp/placementtool.cpp all fall back to those.
+    //   0x140151758 KeyMap::Pressed, 0x1401528f0 KeyMap::Released — every tree
+    //       caller calls the Input::KeyMap member since B.3.7 (K3); the
+    //       engine_funcs globals are deleted. (This line used to say
+    //       fn_KeyMap_Released resolved by ResolveExport: it was bound ONLY to
+    //       0x1401528f0 and was always null -- B37_RULES 6.3 defect 1.)
     //   0x1401517a8 GetRoot, 0x140151dd0 SetUpperLeft, 0x140152750 GetPaddedSize —
     //       engine_funcs.cpp fn_DialogInstance_GetRoot/SetUpperLeft/fn_Element_
     //       GetPaddedSize resolve by ResolveExport + Runtime-address fallback;

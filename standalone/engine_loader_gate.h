@@ -63,7 +63,7 @@
 namespace EngineLoader {
 
 // Called immediately after the one `Loader::Load` kick (i.e. after
-// `fn_DialogLoaderLoopT_Startup` returns), to arm `IsBusy`.
+// `Engine::DialogLoaderLoopT::Startup` returns), to arm `IsBusy`.
 void NoteKicked();
 
 // True while the single Runtime `Engine::Loader` thread has a load outstanding.

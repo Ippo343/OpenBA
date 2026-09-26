@@ -348,8 +348,6 @@ static fn_EventNotifier_Fire_t fn_EventNotifier_Fire = nullptr;
 typedef void (*fn_EventNotifier_FireWithName_t)(void* notifier, int eventType, int priority, void* entityPtr, void* nameStr);
 static fn_EventNotifier_FireWithName_t fn_EventNotifier_FireWithName = nullptr;
 
-// fn_Achievement_GetTitle — available from engine_funcs.h (takes self, retval)
-
 // fn_UIString_Ctor — available from engine_funcs.h (retval, stringTable, stringName)
 
 // fn_UIString_ToSystemString — available from engine_funcs.h (self, retval)
@@ -539,7 +537,6 @@ static void EnsureInit() {
         ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
     // B.3.5: the Context::SetTime / Context::SetCamera resolves went with their caches.
     // fn_Vector3_Normalize — removed 2026-07-31, see the note at its former declaration.
-    // fn_MainLoop_SetNextLoop — resolved by EngineFuncsInit()
     // fn_ImageBuffer_CopyToTexture — resolved by EngineFuncsInit()
     fn_Graphics_Scene_Dtor = reinterpret_cast<fn_Graphics_Scene_Dtor_t>(
         ResolveExport("??1Scene@Graphics@@QEAA@XZ"));

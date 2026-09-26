@@ -205,8 +205,8 @@ void MenuDialogLoopT_BindUISounds(void* self);
 // main menu is never paused, so we always tick Update and skip the pause branch.
 //
 // Calls Audio::Scene::Update(scene@+0xb30, elapsedTime, Time(0),
-//   &Random@+0x168, &listenerVec3{0,0,0}, 0.0f). No-op if fn_Audio_Scene_Update
-// is unresolved. Caller passes the frame's System::Time pointer.
+//   &Random@+0x168, &listenerVec3{0,0,0}, 0.0f) as a member call. Caller passes
+// the frame's System::Time pointer.
 void MenuDialogLoopT_TickAudioScene(void* self, void* time);
 
 // MenuDialogLoopT_UpdateCamera_PhaseA — mirror the camera-animation block of

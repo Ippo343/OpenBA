@@ -128,9 +128,10 @@ struct UpdateLoop;   // defined by lane A in runtime/types/engine/UpdateLoop.h
 // (`RtEngine::Engine` is an ALIAS of the real class since B.3.7: Engine.h.)
 
 // Retail addresses in Runtime-x64.dll (Ghidra space, image base 0x180000000).
-// Ordinals are from the shipped export directory, read with pefile; entries
-// with no ordinal are DLL-internal (not exported) and must be reached with
-// ResolveAddr(Module::Runtime, addr).
+// Ordinals are from the shipped export directory, read with pefile. An entry
+// with no ordinal comment is NOT thereby internal: every function constant in
+// this namespace is an export (rt_export_addrs.inc, re-checked at the B.3.7
+// close) -- only the two device-slot OFFSETS below are not addresses at all.
 namespace MainLoopAddr {
     constexpr uintptr_t Singleton           = 0x1801fe750;  // ord 4813 (DATA)
 
@@ -154,7 +155,9 @@ namespace MainLoopAddr {
     constexpr uintptr_t RemovePostDraw      = 0x1800dcf90;
     constexpr uintptr_t RemovePostUpdate    = 0x1800dceb0;
 
-    // Internal, NOT exported.
+    // Filed as "Internal, NOT exported" until the B.3.7 close. ALL FIVE are
+    // exports: Update ord 4496, Frame ord 2377, Draw ord 2251, and the private
+    // (AEAA) CreateVideoContext / ReleaseVideoContext (rt_export_addrs.inc).
     //
     // *** CORRECTED 2026-09-12, WAVE 27 lane LOOPS: `Draw` DOES NOT BELONG UNDER
     // *** THIS HEADING. `?Draw@MainLoop@Engine@@QEAAXM@Z` is export ORDINAL 2251

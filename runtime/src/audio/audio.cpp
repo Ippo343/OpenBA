@@ -134,7 +134,7 @@ void* MemAlloc(uint64_t size, int align) { return rtcoll::MemAlloc(size, align);
 void MemFree(void* p) { rtcoll::MemFree(p); }
 
 // System::Timer::_secondsPerTick and Time helpers are not needed by anything
-// this lane ports (Scene::Update, the only consumer, is held back).
+// in this file (Scene::Update, their only consumer, lives in audio_scene_update.cpp).
 
 // ----------------------------------------------------------------------------
 // Collection::Array<T>::SetSize(n, fillValue) — the growth policy documented
@@ -374,7 +374,7 @@ uint32_t Scene::FindEffect3D(Object::ExternalPtr<SoundEffect> effect) {
 //                                Scene::SoundType type, const Time& time)
 // retail 0x1800def60 (the REAL, QEAA-spelled export — see the phantom-name
 // note at the top of this file). Allocates a free Channel slot; no Device
-// call happens here (that is Scene::Update, held back), so the only side
+// call happens here (that is Scene::Update, audio_scene_update.cpp), so the only side
 // effect is on Scene-owned state. Consuming a channel slot is a real mutation
 // — calling both implementations would consume two — so SHADOW, verified via
 // the DLL's own read-only IsEffectPlaying on the handle we just minted.
@@ -756,9 +756,11 @@ void Scene::Serialize(void* serializer) {
 // no fake. That is what `ProbeAudioScene` in standalone/rt_orphan_probe.cpp
 // does, and it is why these three CALLED holdbacks land here rather than
 // waiting on a tool. The remaining three (`Scene::Update`, `Device::Update`,
-// `Device::FreeChannelPlatform`) are NOT unblocked by it: the first consumes
+// `Device::FreeChannelPlatform`) were NOT unblocked by it: the first consumes
 // System::Random state and the other two are device internals, where the
-// device is the subject rather than an unreachable callee.
+// device is the subject rather than an unreachable callee. (All three have
+// since been ported: audio_scene_update.cpp and audio_device.cpp, members of the
+// real classes since ENDGAME B.3.7.)
 //
 // This is WAVE8_5.md §8's own correction happening a fifth time: a group-level
 // claim over these functions failed per-function checking. Recorded, not fixed

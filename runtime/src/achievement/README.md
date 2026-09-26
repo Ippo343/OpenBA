@@ -21,4 +21,18 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+(This section said "_nothing yet_" until the ENDGAME B.3.7 close; the
+status paragraph at the end of this file says what the files hold.)
+
+- `achievement_manager.cpp`
+- `achievement_serialize.cpp`
+- `achievement_state.cpp`
+- `achievement_typeinfo_accessors.cpp`
+- `achievement_vtable.cpp`
+- `batchc_goallist_dtor.cpp`
+- `goal.cpp`
+- `goal_list.cpp`
+- `goal_serialize.cpp`
+- `rt_achievement_port.cpp`
+- `rt_factories_achievement.cpp`
+- `rt_factories_achievement.inc`

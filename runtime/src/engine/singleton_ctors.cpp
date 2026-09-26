@@ -711,10 +711,11 @@ void* Ctor_AudioConfiguration(void* self) {
 // reason as Persistence: no caller today, and it is the only writer of
 // `?_singleton@Device@Audio@@`, which audio.cpp:880 reads.
 //
-// Audio::Stream is reached BY NAME, not by address: it is exported, it is not
-// ported yet, and asking by name is what makes this call site follow the port
-// when someone does port it. Today it resolves to the DLL, which is exactly the
-// documented shape for an unported neighbour.
+// Audio::Stream is reached BY NAME, not by address: it is exported, and asking
+// by name is what made this call site follow the port. It IS ported now
+// (runtime/src/audio/audio_stream_win.cpp registers `??0Stream@Audio@@QEAA@XZ`;
+// Audio::Stream is a real System::Thread subclass since ENDGAME B.3.7 block B4),
+// and the ctor stays a door (B4b-2: no real ctor on a polymorphic class).
 //
 // *** THIS RESIDUAL CUTOVER DEPENDENCY IS DISCHARGED. *** The paragraph that
 // stood here said: "The per-record vtable at 0x180157c60 is not an export and is
@@ -738,6 +739,10 @@ void* Ctor_AudioConfiguration(void* self) {
 // NOT discharged, and deliberately still named: Persistence's 0x180155860,
 // which this paragraph used to bracket with 0x180157c60. It was NOT re-checked
 // by this lane and nothing here should be read as a verdict on it.
+//
+// The per-record vtable 0x180157c60 is `Audio::Device::PlatformChannel`'s (the
+// IXAudio2VoiceCallback record, `GetPlatformChannel` 0x18000c720 =
+// this+0xa98+i*0x20 -- named by block B4; B37_RULES 10).
 //
 // Audio::Device HAS a type header now (runtime/types/audio/Device.h, ENDGAME
 // B.3.7 block B4): the two arrays are `Device::AudioChannel _channels[64]` at

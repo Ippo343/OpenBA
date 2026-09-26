@@ -121,10 +121,12 @@ void RegisterUnregLane3() {
         (uintptr_t)ResolveExport("?RandFloatTol@Random@System@@QEAAMXZ"));
 
     // ------------------------------------------------------------------
-    // Engine::UpdateLoop::IsRunning — REAL FIX. engine_funcs.cpp resolves
+    // Engine::UpdateLoop::IsRunning — REAL FIX (history: since B.3.7 the one
+    // consumer, populationgoal.cpp, calls the member and fn_IsRunning is gone;
+    // the row keeps the slot table faithful). engine_funcs.cpp resolved
     // fn_IsRunning SOLELY from this exe slot with no ResolveExport fallback.
     // Its only consumer, code/Game/Goal/populationgoal.cpp:139-142
-    // (PopulationGoal_Slot8, the population-goal completion check), does:
+    // (PopulationGoal_Slot8, the population-goal completion check), did:
     //     if (fn_IsRunning) { if (!fn_IsRunning(gameWorld)) return 0; }
     // — a null-guard-and-SKIP. Unregistered, the IsRunning gate is skipped
     // entirely and the goal is checked (and can report "met") even while the

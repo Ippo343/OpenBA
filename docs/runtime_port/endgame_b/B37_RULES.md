@@ -625,9 +625,82 @@ each block carries.
 | 3–4 | callers, two rounds, by directory | per `CALLER_SURFACE.md` §1.1 | the 96 unowned files of `B37_FILEMAP.md` §7.2, `dx11/src/devicedata.cpp` included | B7-11; the Scenario and FinishTutorial QUALIFIED sites; the four binding defects of §6.3 are the coordinator's call |
 | 5 | close | `engine_funcs` sweep BY BINDING including back-reference spellings and `engine_funcs.h`'s inline bodies (`MenuDialogLoopT_Ctor`); numbers | | |
 
+## 10. Coordinator's dated corrections from the blocks (2026-09-26, recorded by `b37-close`)
+
+Each item names the block that found it. Where an item contradicts §1–§9 above, the item wins; the
+text above is kept as block 0 wrote it.
+
+> **CORRECTION to B7-1.6 / §2.1 (block B3) — `Achievement::Goal` slot 8 is `CheckGoalState`, not
+> `Construct`.** `GoalInstance::CheckGoalState` (0x18009f060) is `MOV RAX,[goal]; JMP [RAX+0x40]` -- a
+> tail call into the goal's slot 8 with `this` only -- and every exe override of slot 8 returns 0/1/2
+> (a `Goal::GoalState`), so the pure slot is the goal's state check. `Goal.h` declares it
+> `virtual GoalState CheckGoalState() const = 0` (descriptive; the name is not attested). B7-1.6's "`Construct` sits at
+> slot 8 on all six External leaves" stays true for `Achievement`, `SoundBuffer`, `SoundEffect`,
+> `PointList`, `PickingMesh`; `Goal` is the exception. **`GoalList::Initialize` calls slot 9**
+> (`GetInstanceType`, B7-4), confirming `Goal.h`'s `kGetInstanceType = 0x48`. **`Object::Type` did not
+> exist in the tree**; block B3 added it as `runtime/types/object/Type.h` (one dword; its
+> `static_assert` cites `Goal::GetInstanceType` 0x18009eeb0).
+
+> **CLOSED §13.3 (block B1) — `sizeof(Engine::Engine)` is 0x6f8, PINNED.** `??4Engine@0@`
+> (0x18000c7d0) copies with `MOV R8D,0x6f8`. `Engine.h` asserts it and cites the instruction.
+> Also from B1: UpdateLoop slot 12 is declared `CreateLoopDialog` (`CreateDialog` is a `windows.h`
+> macro, B7-1.2's `kSlot_CreateDialog` stays the comment-level name); `Video::DeviceData` slot 4
+> takes a `bool` in DL (the loader-thread acquire/release of §5 — `loops.cpp` keeps the raw slot call
+> for that reason); `runtime/types/common.h`'s global forward declarations clash with
+> `video/ImageBuffer.h`; retail `MenuDialogLoopT::Shutdown` (0x14009b280) is a 12-step teardown and is
+> now transcribed (carry-over 11 CLOSED; a behaviour change, §12).
+
+> **CLOSED §13.1 and §13.2 (block B2).** `SaveLoad::Draw`'s `ExternalPtr<Graphics::Material>`
+> travels in a REGISTER (R8, homed at `[RBP+0x2b0]`) — B7-5's ExternalPtr rule holds. `ModInfo` is
+> 0x20, read from three bodies. Also from B2: `UpdateList`'s stack template DOES write +0x2c.
+
+> **FROM BLOCK B4 (Audio).** The "unnamed" voice-callback record of §1/§2.1/§5 is
+> **`Audio::Device::PlatformChannel`** — `GetPlatformChannel` (0x18000c720) returns
+> `this + 0xa98 + i*0x20`; the 0x180157c60 table is that record's `IXAudio2VoiceCallback` vtable.
+> `SoundEffect`: +0x20 `GetRadius`, +0x24 `GetInnerRadius`, +0x28 `GetMaxLength` (a `System::Time`;
+> `IsLooping` is `[+0x28] == 0`). `SoundBuffer`: +0x48 `GetWMAData`, +0x50 `GetWMALength`.
+> `Audio::Stream` has 2 slots (`Run`, `OnCompleted`), not the inventory's 9.
+
+> **FROM BLOCK B5 (Input).** `KeyMap` +0x00 is `_suspendCount` (`Suspend` 0x1800a7f90).
+> **`Input::Device` is exactly 0x1200** (§2.3 had it as the mapped size; it is the class size).
+
+> **CLOSED §13.4 (block B6) — `Pathfinding::Scene` is exactly 0x90** (the copy ctor 0x18006ca70 ends
+> at the +0x8c dword). `Picking::Scene`'s ctor and `InitGrid` were two copies of one body in the tree;
+> B6 folded them.
+
+> **FROM THE QUESTION PASS (0G / 0X), confirmed by the blocks.** The retail `Scenario` table
+> (0x14015f020) has **9 slots followed by a zero qword** (the tree's standalone array has 13); every
+> retail `Goal`-subclass table has **11 slots** (the tree's 12-slot `TimeGoal`/`FinishTutorialGoal`
+> arrays run into the adjacent GoalInstance table). `Audio::Stream` 2 slots (above).
+
+> **BINDING DEFECTS (§6.3) and their fate.**
+> 1. `fn_KeyMap_Released` (bound only to the unregistered exe slot 0x1401528f0, always null): K3
+>    converted both `dragtool.cpp` callers to `Input::KeyMap::Released`; the global was deleted by the
+>    close (commit 1). Behaviour change: the drag tool's key-release paths are live (§12).
+> 2. `finishtutorialinstance.cpp:72` resolved exe slot 0x140151c08 as "IsDerivedFrom"; the slot is
+>    `?Save@Configuration@Audio@@`. K2 made the call `Object::Base::IsDerivedFrom` per retail
+>    0x1400d7bf0. Behaviour change: the tutorial-instance type check is live (§12).
+> 3. `g_pEngineSingleton` was a second global for `MainLoop::_singleton`: FOLDED into
+>    `g_pMainLoopSingleton` by the close (commit 1). `g_pKeyMapObjectExref` is
+>    `Input::Configuration::_singleton`'s exe slot: RENAMED `g_pInputConfigSingletonExref`.
+> 4. The exe `AchievementInstance` table 0x14015e350 is still never registered (step 8).
+> 5. `citizen_assignworkplace.cpp`'s five unregistered Audio exe slots: K4 made them live member
+>    calls (behaviour change, §12).
+> 6. REPORTED, NOT FIXED: `Math::Vector3::operator==` (exe slot 0x140152a70) is still unregistered,
+>    which keeps the MoveEmitter loop in `citizen_assignworkplace.cpp` dead.
+
 ---
 
-## 13. NOT VERIFIED at block 0
+## 13. NOT VERIFIED at block 0 — status at the close (2026-09-26)
+
+CLOSED: item 1 (`Draw`'s ExternalPtr in a register, B2), 2 (`ModInfo` 0x20, B2), 3 (`Engine` 0x6f8
+pinned, B1), 4 (`Pathfinding::Scene` 0x90, B6), 5 (the five header-less classes now have headers:
+`audio/{Device,SoundBuffer,SoundEffect,Stream}.h`, `pathfinding/PointList.h`, B4/B6), 7 (the
+`engine_funcs` population re-measured BY BINDING at the close: 82 door pointers + 10 data globals,
+exactly 0X's census; `b37_session/CLOSE_NUMBERS.md` §3a). OPEN: item 6 (the exe Goal subclasses'
+slot 10, step 8). Items 8–10 describe block 0 only; the blocks built, gated and ran (§11). The
+original text is kept below as written at block 0.
+
 
 Read from RETAIL BYTES this pass: all 16 exported vtables in the set + `System::Thread` + the five Object
 parents, slot by slot; the unexported 0x180157c60 table's seven bodies (raw bytes); every `sizeof` in

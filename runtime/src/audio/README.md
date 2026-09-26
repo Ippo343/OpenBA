@@ -34,6 +34,6 @@ side -- see the block comment above those bodies for why that works without a De
 
 `rt_audio_port.cpp` -- the namespace aggregator (`RtAudioPortInit`).
 
-Still on the DLL, each with a stated reason in `audio.cpp`'s header: `Scene::Update`,
-`Device::Update`, `Device::FreeChannelPlatform`. The file names have NOT been split to match the
-original tree above yet -- that is a mechanical follow-up, not a port.
+`Scene::Update`, `Device::Update` and `Device::FreeChannelPlatform`, once listed here as still on
+the DLL, are ported (`audio_scene_update.cpp`, `audio_device.cpp`). The file names have NOT been
+split to match the original tree above yet -- that is a mechanical follow-up, not a port.

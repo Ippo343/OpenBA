@@ -83,7 +83,7 @@
 //
 //   0x1800de520  Audio::Device::Update        PORTED  audio_device.cpp:283-284
 //   0x18009fdf0  Application::PlatformUpdate  PORTED  rt_application_port.cpp:36-37
-//   0x1800e1490  Input::Device::Update        not ported — lane INPUT's, 61 instrs
+//   0x1800e1490  Input::Device::Update        PORTED input_device_update.cpp (member call below, K5)
 //   0x1800dd070  MainLoop::Update             PORTED HERE
 //   0x1800dd100  MainLoop::Frame              PORTED (W25 BODY) mainloop_frame.cpp
 //                                                and it is 684 bytes, not 683 —

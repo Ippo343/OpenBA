@@ -18,4 +18,16 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+(This section said "_nothing yet_" until the ENDGAME B.3.7 close; the
+status paragraph at the end of this file says what the files hold.)
+
+- `closure_batch2b.cpp`
+- `rt_save_port.cpp`
+- `savedstate_setupload.cpp`
+- `saveload.cpp`
+- `saveload_draw.cpp`
+- `saveload_internal.h`
+- `saveload_loadmeta.cpp`
+- `saveload_meta.cpp`
+- `saveload_saveinfo.cpp`
+- `saveload_update.cpp`

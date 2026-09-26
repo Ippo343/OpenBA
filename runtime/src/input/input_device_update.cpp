@@ -96,6 +96,10 @@
 // ---------------------------------------------------------------------------
 // ZERO CALLERS TODAY — MEASURED, NOT ASSUMED, AND IT IS THE POINT OF THE PORT
 // ---------------------------------------------------------------------------
+// [B.3.7 close: HISTORICAL. `Engine::MainLoop::Run` is ported
+// (runtime/src/engine/mainloop_run.cpp) and calls `Input::Device::Update` as a
+// member every frame; `fn_InputDevice_Update` is deleted. The account below is
+// kept as written.]
 // `engine/funcs/engine_funcs.cpp:1554` resolves
 // `?Update@Device@Input@@...` into `fn_InputDevice_Update` at init and
 // **NOTHING IN THE TREE EVER CALLS IT** — grepped across code/, engine/,

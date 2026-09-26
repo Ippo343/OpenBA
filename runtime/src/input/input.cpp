@@ -391,10 +391,10 @@ bool KeyMap::Pressed(int32_t joystick, int32_t id) const {
 // descent (`CMP R8B,R9B ; JC left ; CMP R9B,R8B ; JNC found`), same miss path
 // (`XOR EAX,EAX` and then the unguarded slot reads through 0), same suspend
 // short-circuit (`MOV EBX,[RCX] ; TEST EBX,EBX ; JLE` then `CMP [..+0x10],1`),
-// same joystick stride (`IMUL R8,R8,0x1b0`). Its tree caller
-// (`fn_KeyMap_Released`, dragtool.cpp) is bound to the UNREGISTERED exe slot
-// 0x1401528f0 (B37_RULES 6.3 defect 1, not this block's to fix), so this body
-// is registered for the day that binding is repaired.
+// same joystick stride (`IMUL R8,R8,0x1b0`). Its tree callers (dragtool.cpp x2)
+// used `fn_KeyMap_Released`, bound only to the UNREGISTERED exe slot 0x1401528f0
+// and so always null (B37_RULES 6.3 defect 1). Caller batch K3 made both member
+// calls and the B.3.7 close deleted the global: this body is live.
 bool KeyMap::Released(int32_t joystick, int32_t id) const {
     return ReadBoundState<bool>(this, joystick, id,
         [](const State& s) -> bool { return s.released; });

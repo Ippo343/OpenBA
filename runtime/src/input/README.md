@@ -38,9 +38,7 @@ live in `runtime/src/collection/set_avl_e24.cpp`, not here: they are
 element-type-agnostic within the 0x18-byte instantiation and MSVC folds one copy
 per matching node header, so they are not Input's to own.
 
-**Not ported:** `?Update@Device@Input@@` and its three helpers — see
-`docs/runtime_port/WAVE9_LANE_INPUT.md` §6 for the measured blocker (the two
-pollers need a `GetDeviceState` recorder before they have an oracle; the COM
-surface is exactly two `IDirectInputDevice8` slots). Also `?Suspend@`,
-`?GetIdList@`, `?GetNormalizedValue@` and the KeyMap ctor/dtor/assign exports,
-none of which our tree calls.
+`?Update@Device@Input@@` and its helpers, once listed here as not ported, are in
+`input_device_update.cpp` (MainLoop::Run calls the member every frame). Members
+still declared and not ported carry a `// not ported` marker in
+`runtime/types/input/Input.h` / `Device.h`.
