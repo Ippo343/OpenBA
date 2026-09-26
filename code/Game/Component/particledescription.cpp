@@ -6,7 +6,9 @@
 // BaseTypeInfo @ 0x1401c4758, parent "Description", file version 7.
 //
 // Field layout (from ParticleDescription_Factory @ exe and Serialize @ 0x140053460):
-//   +0x20  External* materialRef  (ExternalPtr; FUN_14000ab20)
+//   +0x20  External* materialRef  (ExternalPtr<Pathfinding::PointList>; FUN_14000ab20
+//          type-checks it against ?_typeInfo@PointList@Pathfinding@@, B37_RULES 6.2 —
+//          it is not a material; the name is historical)
 //   +0x28  void*  emitterArray    (dyn-array of emitter entries, 0x28 stride)
 //   +0x30  int32  emitterCount
 //

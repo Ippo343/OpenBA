@@ -6,7 +6,9 @@
 //
 // Field layout (from Factory InteractDescription_sub_3710 + Serialize
 // FUN_140123500 + dtor FUN_140035280):
-//   +0x20: void*  _descRef        ExternalPtr (Description)   (default 0)
+//   +0x20: void*  _descRef        ExternalPtr<Pathfinding::PointList> (default 0) —
+//          the exe's serializer 0x14000ab20 type-checks it against
+//          ?_typeInfo@PointList@Pathfinding@@ (import 0x140151448), B37_RULES 6.2
 //   +0x28: { void* data; int count; int cap }   _useNodes   (0x18-stride, default empty)
 //   +0x38: { void* data; int count; int cap }   _buildNodes (0x18-stride, default empty)
 //   +0x48: { void* data; int count; int cap }   _createNodes(0x18-stride, default empty)
@@ -18,8 +20,8 @@
 //   STREAM-ACCURATE part: exactly ONE field is read from the stream —
 //     ExternalPtr serialize (+0x20)  FUN_14000ab20 (identical layout to Serialize2).
 //   POST-LOAD build (load only, computed — NOT streamed, so it never desyncs the
-//   stream cursor): walks the resolved external's child array (data @ +0x30,
-//   count @ +0x38, stride 0x18). For each child whose name String == "use" /
+//   stream cursor): walks the resolved PointList's `_points` array
+//   (Pathfinding::PointList::Point, stride 0x18). For each child whose name String == "use" /
 //   "build" / "create", builds a 0x18-byte node {offset.xyz (child +0x8/+0xc/+0x10),
 //   dir = Vector3::FromYawPitch(yaw=child+0x14, pitch=0)} and appends to the
 //   corresponding node array (+0x28 / +0x38 / +0x48).
@@ -32,6 +34,7 @@
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
+#include "pathfinding/PointList.h"   // ENDGAME B.3.7 callers (K2)
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -100,8 +103,10 @@ void InteractDescription_Serialize(void* self, void* stream) {
     bool loading = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
     void* ext = *(void**)(s + 0x20);
     if (loading && ext) {
-        uint8_t* children = *(uint8_t**)((uintptr_t)ext + 0x30);
-        int childCount = *(int32_t*)((uintptr_t)ext + 0x38);
+        // Pathfinding::PointList::_points (+0x30; Points() is LEA RAX,[RCX+0x30]).
+        const Pathfinding::PointList* pointList = reinterpret_cast<const Pathfinding::PointList*>(ext);   // B.3.7 bridge
+        uint8_t* children = reinterpret_cast<uint8_t*>(pointList->_points._data);
+        int childCount = pointList->_points._size;
         for (int i = 0; children && i < childCount; ++i) {
             uint8_t* child = children + (size_t)i * 0x18;  // {String@0, f@8, f@0xc, f@0x10, yaw@0x14}
             float yaw   = *(float*)(child + 0x14);

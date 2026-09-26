@@ -59,6 +59,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 namespace {
 
@@ -424,7 +425,9 @@ static int RegisterCitizenPickMesh(uint8_t* self) {
     void* scene = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x70);
     void* owner = *reinterpret_cast<void**>(pickComp + 0x30);   // entity IBP value
-    uint32_t id = s_fn_pickAddMesh(scene, meshHandle, xform, owner, 0, 0, nullptr);
+    uint32_t id = reinterpret_cast<Picking::Scene*>(scene)->AddMesh(   // B.3.7 bridge
+        Object::ExternalPtr<Picking::PickingMesh>(reinterpret_cast<Picking::PickingMesh*>(meshHandle)),
+        *reinterpret_cast<const Math::Transform*>(xform), owner, 0, 0, nullptr);
     *reinterpret_cast<uint32_t*>(pickComp + 0x28) = id;
     return static_cast<int>(id);
 }
@@ -684,7 +687,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
             if (!PerfX::PickCullSkip(reinterpret_cast<void*>(model), pickScene, pickId,
                                      reinterpret_cast<PerfX::PickXfCtor_t>(s_slot_xfCtor),
                                      reinterpret_cast<PerfX::PickSetXf_t>(s_slot_pickXf))) {
-                if (s_slot_pickXf) s_slot_pickXf(pickScene, pickId, localXform);
+                reinterpret_cast<Picking::Scene*>(pickScene)->SetTransform(pickId, *reinterpret_cast<const Math::Transform*>(localXform));   // B.3.7 bridge
             }
         }
     }

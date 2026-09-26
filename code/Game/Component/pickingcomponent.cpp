@@ -19,6 +19,7 @@
 #include <cstring>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.4 caller batch G
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 // ============================================================
 // Resolved helpers
@@ -30,10 +31,6 @@ static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
 // IsDerivedFrom
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
 static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_d = nullptr;
-
-// Picking::Scene::RemoveMesh — dispatched through [0x140152438]
-typedef void (*fn_RemoveMesh_t)(void* scene, uint32_t meshId);
-static fn_RemoveMesh_t s_fn_RemoveMesh = nullptr;
 
 static uint32_t* s_pComponentEntityTypeId = nullptr;
 
@@ -76,9 +73,10 @@ void PickingComponent_Shutdown(PickingComponent* self, void* stream) {
 
 void PickingComponent_OnCreate(PickingComponent* self) {
     if ((int)self->pickingId >= 0) {
-        if (s_fn_RemoveMesh && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
+        if (g_pGameWorldSingleton && *g_pGameWorldSingleton) {
             void* pickingScene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
-            s_fn_RemoveMesh(pickingScene, (uint32_t)self->pickingId);
+            // Picking::Scene::RemoveMesh (import slot 0x140152438, Runtime 0x180125290).
+            reinterpret_cast<Picking::Scene*>(pickingScene)->RemoveMesh((uint32_t)self->pickingId);   // B.3.7 bridge
         }
         self->pickingId = -1;
     }
@@ -106,13 +104,7 @@ void PickingComponent_OnCreate(PickingComponent* self) {
 // and is only exercised from the SA start-town spawn.
 namespace Object { uint32_t GetTypeIdByName(const char* name); }
 
-// Picking::Scene::AddMesh — member fn (this=RCX): RDX=mesh ExternalPtr, R8=&Transform,
-// R9=userData, then 3 trailing args (int,int,cb) all 0. Returns uint32 meshId.
-typedef uint32_t (*fn_PickingAddMesh_t)(void* scene, void* meshExtPtr, const void* xform,
-                                        void* userData, int a, int b, void* cb);
-static fn_PickingAddMesh_t s_fn_AddMesh = nullptr;
 static uint32_t s_tidModelComponent = 0;
-static bool s_addMeshInit = false;
 
 // forward decl
 namespace { uint32_t PC_ModelTypeId(); }
@@ -142,13 +134,6 @@ static void* PC_FindModelComponent(void* entity) {
 void PickingComponent_RegisterMesh(void* pc) {
     if (!pc) return;
     PickingComponent_InitFuncs();
-    if (!s_addMeshInit) {
-        s_fn_AddMesh = (fn_PickingAddMesh_t)ResolveExport(
-            "?AddMesh@Scene@Picking@@QEAAIV?$ExternalPtr@VPickingMesh@Picking@@@Object@@"
-            "AEBVTransform@Math@@PEAXHHP6AX2HHAEBVVector3@6@33@Z@Z");
-        s_addMeshInit = true;
-    }
-    if (!s_fn_AddMesh) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     uint8_t* p = (uint8_t*)pc;
@@ -212,7 +197,11 @@ void PickingComponent_RegisterMesh(void* pc) {
     void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x70);
     if (!scene) return;
 
-    uint32_t meshId = s_fn_AddMesh(scene, mesh, xform, userData, 0, 0, nullptr);
+    // Picking::Scene::AddMesh (Runtime 0x1801252e0): the ExternalPtr is a bare
+    // register value (B7-5), the Transform by reference, three trailing zeros.
+    uint32_t meshId = reinterpret_cast<Picking::Scene*>(scene)->AddMesh(   // B.3.7 bridge
+        Object::ExternalPtr<Picking::PickingMesh>(reinterpret_cast<Picking::PickingMesh*>(mesh)),
+        *reinterpret_cast<const Math::Transform*>(xform), userData, 0, 0, nullptr);
     *(int32_t*)(p + 0x28) = (int32_t)meshId;      // store pickingId
 
     static int s_logged = 0;
@@ -299,21 +288,6 @@ void PickingComponent_InitFuncs() {
     uintptr_t slot;
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_d = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    // Picking::Scene::RemoveMesh. The exe dispatch slot 0x140152438 is NOT registered
-    // in standalone, so ResolveAddr(Exe, slot) returned 0 and s_fn_RemoveMesh stayed
-    // null — OnCreate then reset pickingId WITHOUT removing the mesh, so a removed
-    // building's pick mesh dangled in Picking::Scene with userData=freed entity and the
-    // foundation click crashed in EditTool_SelectEntity_Impl (2026-07-21). Resolve the
-    // Runtime export directly instead (verified 0x180125290 = Picking::Scene::RemoveMesh
-    // (Scene*, uint) — the pair of the AddMesh 0x1801252e0 that RegisterMesh uses; the
-    // other RemoveMesh 0x18010c3c0 is Collision::Scene, wrong one).
-    s_fn_RemoveMesh = reinterpret_cast<fn_RemoveMesh_t>(
-        ResolveAddr(Module::Runtime, 0x180125290));
-    if (!s_fn_RemoveMesh) {  // fallback: exe dispatch slot, if it ever gets registered
-        slot = ResolveAddr(Module::Exe, 0x140152438);
-        if (slot) s_fn_RemoveMesh = *reinterpret_cast<fn_RemoveMesh_t*>(slot);
-    }
 
     s_initialized = true;
 }

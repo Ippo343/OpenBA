@@ -43,6 +43,7 @@
 #include "perf_terrain.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "picking/PickingMesh.h"   // ENDGAME B.3.7 callers (K2)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -61,14 +62,12 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
 namespace {
 
 typedef void  (*fn_FindCompOut_t)(void* entity, void* outIbp);
-typedef void* (*fn_MeshVertices_t)(void* mesh, int lod);
 typedef bool  (*fn_IsDerivedFromId_t)(void* self, uint32_t typeId);
 
 fn_FindCompOut_t     s_fn_FindComp_Model = nullptr;   // 0x140003f60
 fn_FindCompOut_t     s_fn_FindComp_Map   = nullptr;   // 0x140004680
 fn_FindCompOut_t     s_fn_FindComp_Decal = nullptr;   // 0x14000b630
 fn_FindCompOut_t     s_fn_FindComp_CP    = nullptr;   // 0x14000b6f0
-fn_MeshVertices_t    s_fn_MeshVertices   = nullptr;   // slot 0x140151478
 fn_IsDerivedFromId_t s_fn_IsDerivedFrom  = nullptr;   // slot 0x140152a98
 bool s_deformInit = false;
 
@@ -90,7 +89,6 @@ void QuarryDeformResolve() {
     s_fn_FindComp_CP    = reinterpret_cast<fn_FindCompOut_t>(ResolveAddr(Module::Exe, 0x14000b6f0));
 
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140151478); if (slot) s_fn_MeshVertices  = *reinterpret_cast<fn_MeshVertices_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a98); if (slot) s_fn_IsDerivedFrom = *reinterpret_cast<fn_IsDerivedFromId_t*>(slot);
 
     struct RF { static void Get(uintptr_t a, float& dst) {
@@ -207,7 +205,6 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
     void* entity = QuarryOwnerEntity(self);
     void* model  = QuarryFindComp(s_fn_FindComp_Model, entity);
     if (!model) { QuarryBail("ApplyDepth", "owner has no ModelComponent (finder 0x140003f60 returned null)"); return; }
-    if (!s_fn_MeshVertices)  { QuarryBail("ApplyDepth", "slot 0x140151478 PickingMesh::Vertices unresolved"); return; }
 
     // Retail copy-constructs a Transform on the stack (??0Transform@Math@@QEAA@AEBV01@@Z,
     // slot 0x140151418) from the ModelComponent's +0x148.
@@ -227,13 +224,16 @@ extern "C" void QuarryComponent_ApplyDepth(void* selfV, float depth) {
     const float     half        = static_cast<float>(*reinterpret_cast<int*>(terrainGrid + 0xC0) >> 1);
     if (!heightArray) { QuarryBail("ApplyDepth", "terrainGrid+0xD8 heightmap null"); return; }
 
-    void* verts = s_fn_MeshVertices(mesh, 0);
+    // Picking::PickingMesh::Vertices (import slot 0x140151478) — a reference return.
+    void* verts = const_cast<void*>(static_cast<const void*>(
+        &reinterpret_cast<const Picking::PickingMesh*>(mesh)->Vertices(0)));   // B.3.7 bridge
     const int vertCount = verts
         ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(verts) + 8) : 0;
 
     for (int i = 0; i < vertCount; ++i) {
         // Re-query per iteration exactly as retail does.
-        void* arr = s_fn_MeshVertices(mesh, 0);
+        void* arr = const_cast<void*>(static_cast<const void*>(
+            &reinterpret_cast<const Picking::PickingMesh*>(mesh)->Vertices(0)));   // B.3.7 bridge
         if (!arr) break;
         const uint8_t* data = *reinterpret_cast<const uint8_t**>(arr);
         if (!data) break;
