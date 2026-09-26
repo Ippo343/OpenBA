@@ -159,7 +159,9 @@ docs/runtime_port/endgame_c/FLAGS.md (historical).]`
    non-virtual bases out in declaration order first, so `class BuildComponent : public
    Component, public ControllerComponent` puts the second vptr at +0x28 as retail does;
    keep base order, assert the offset, and the compiler emits the this-adjusting thunks
-   retail hand-wrote. **When the last hand-built array is gone**, one mechanical pass may
+   retail hand-wrote. `[CORRECTED 2026-09-26, endgame_b/B38_RULES.md §0.1: there is NO
+   multiple inheritance in the exe — the "second vptr" is an embedded MEMBER at a per-class
+   offset, 29 classes not 56; step 8 embeds it by value (D6).]` **When the last hand-built array is gone**, one mechanical pass may
    replace `DeletingDtor` with `virtual ~T()` and `Destroy` with `delete`; that is the
    "normal virtual cutover" and it changes nothing observable because by then every vtable
    is compiler-generated and every delete goes through the helper.
