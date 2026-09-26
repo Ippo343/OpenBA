@@ -42,6 +42,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 
 // EventLog::AddEvent (0x140095580) — ported by the tornado lane (eventlog.cpp).
 extern "C" void EventLog_AddEvent(void* eventLog, int eventType, int severity, void* entityIBP);
@@ -254,19 +255,21 @@ extern "C" void FireComp_StartAudioEmitter_42c60(void* ambientComp, int idx) {
             *soundRef = *reinterpret_cast<uint64_t*>(soundArr + static_cast<int64_t>(idx) * 8);
     }
 
-    if (!fn_Audio_Scene_FindEffect3D || !fn_Audio_Scene_PlayEffect3D ||
-        !fn_Audio_Scene_AddEmitter) return;
-
-    uint32_t handle = fn_Audio_Scene_FindEffect3D(scene, *soundRef);
+    uint32_t handle = reinterpret_cast<Audio::Scene*>(scene)->FindEffect3D(
+        reinterpret_cast<Audio::SoundEffect*>(*soundRef));   // B.3.7 bridge
     *entry = handle;
     if (handle == 0) {
         int64_t t0 = MakeTime(0.0f);
         float   posZero[3] = { 0.0f, 0.0f, 0.0f };
-        handle = fn_Audio_Scene_PlayEffect3D(scene, *soundRef, 3, &t0, posZero);
+        handle = reinterpret_cast<Audio::Scene*>(scene)->PlayEffect3D(
+            reinterpret_cast<Audio::SoundEffect*>(*soundRef), static_cast<Audio::Scene::SoundType>(3),
+            *reinterpret_cast<const System::Time*>(&t0),
+            *reinterpret_cast<const Vector3*>(posZero));   // B.3.7 bridge
         *entry = handle;
     }
-    fn_Audio_Scene_AddEmitter(scene, *entry, reinterpret_cast<void*>(a + 0x28),
-                              *reinterpret_cast<float*>(entry + 1));
+    reinterpret_cast<Audio::Scene*>(scene)->AddEmitter(
+        *entry, *reinterpret_cast<const Vector3*>(a + 0x28),
+        *reinterpret_cast<float*>(entry + 1));   // B.3.7 bridge
 }
 
 // ============================================================
@@ -349,12 +352,11 @@ extern "C" void FireComponent_Extinguish_4c0(void* self) {
                 + base);
             void* scene = *reinterpret_cast<void**>(gw + 0x78);
             void* pos = reinterpret_cast<void*>(ambIbp + 0x28);
-            if (scene && fn_Audio_Scene_RemoveEmitter) {
-                fn_Audio_Scene_RemoveEmitter(scene, *handle, pos);
-                if (fn_Audio_Scene_GetEmitterCount &&
-                    fn_Audio_Scene_GetEmitterCount(scene, *handle) == 0 &&
-                    fn_Audio_Scene_StopEffect3D)
-                    fn_Audio_Scene_StopEffect3D(scene, *handle);
+            if (scene) {
+                reinterpret_cast<Audio::Scene*>(scene)->RemoveEmitter(
+                    *handle, *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
+                if (reinterpret_cast<Audio::Scene*>(scene)->GetEmitterCount(*handle) == 0)   // B.3.7 bridge
+                    reinterpret_cast<Audio::Scene*>(scene)->StopEffect3D(*handle);   // B.3.7 bridge
             }
             *handle = 0;
         }

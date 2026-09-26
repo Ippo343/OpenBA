@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -210,8 +211,6 @@ extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
     int count = *(int*)(s + 0x40);
     if (count <= 0) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    if (!fn_Audio_Scene_FindEffect3D || !fn_Audio_Scene_PlayEffect3D ||
-        !fn_Audio_Scene_AddEmitter) return;
 
     void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x78);
     if (!scene) return;
@@ -230,15 +229,20 @@ extern "C" void AmbientEmitterAudioSetup_Reimpl(void* self) {
         if (*soundRef == 0 && soundArray)
             *soundRef = reinterpret_cast<const uint64_t*>(soundArray)[i];
 
-        uint32_t handle = fn_Audio_Scene_FindEffect3D(scene, *soundRef);
+        uint32_t handle = reinterpret_cast<Audio::Scene*>(scene)->FindEffect3D(
+            reinterpret_cast<Audio::SoundEffect*>(*soundRef));   // B.3.7 bridge
         *(uint32_t*)(entry + 0) = handle;
         if (handle == 0) {
             int64_t timeZero = 0;                 // System::Time(0)
             float   posZero[3] = { 0.0f, 0.0f, 0.0f };
-            handle = fn_Audio_Scene_PlayEffect3D(scene, *soundRef, 3, &timeZero, posZero);
+            handle = reinterpret_cast<Audio::Scene*>(scene)->PlayEffect3D(
+                reinterpret_cast<Audio::SoundEffect*>(*soundRef), static_cast<Audio::Scene::SoundType>(3),
+                *reinterpret_cast<const System::Time*>(&timeZero),
+                *reinterpret_cast<const Vector3*>(posZero));   // B.3.7 bridge
             *(uint32_t*)(entry + 0) = handle;
         }
-        fn_Audio_Scene_AddEmitter(scene, handle, pos, *(float*)(entry + 4));
+        reinterpret_cast<Audio::Scene*>(scene)->AddEmitter(
+            handle, *reinterpret_cast<const Vector3*>(pos), *(float*)(entry + 4));   // B.3.7 bridge
     }
 }
 
