@@ -85,6 +85,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
+#include "../../types/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration
 #include "../../types/system/String.h"
 #include "../../types/io/Modification.h"
 #include "../system/string.h"
@@ -283,7 +284,7 @@ void ResetConfigurations(EngineT* self) {
             if (void** s = AudioConfigSingletonSlot()) *s = p;
         }
         self->_audioConfiguration = p;
-        RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Audio@@QEAA_NXZ")(p);
+        reinterpret_cast<Audio::Configuration*>(p)->Startup();   // B.3.7 bridge
     }
 }
 

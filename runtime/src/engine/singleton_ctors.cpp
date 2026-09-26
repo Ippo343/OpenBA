@@ -739,10 +739,11 @@ void* Ctor_AudioConfiguration(void* self) {
 // which this paragraph used to bracket with 0x180157c60. It was NOT re-checked
 // by this lane and nothing here should be read as a verdict on it.
 //
-// NO TYPE HEADER for Audio::Device — Audio.h models Scene, Channel, EffectSlot
-// and Configuration, not the device. The two array shapes above are pinned by
-// this constructor and by nothing else, so they are transcribed as offsets and
-// left unnamed rather than turned into a struct on one witness.
+// Audio::Device HAS a type header now (runtime/types/audio/Device.h, ENDGAME
+// B.3.7 block B4): the two arrays are `Device::AudioChannel _channels[64]` at
+// +0x000 and `Device::PlatformChannel _platformChannels[64]` at +0xa98, with
+// the Stream by value at +0xa00. This constructor is still the DOOR (B7-12: no
+// real Device ctor this step), so it keeps writing the offsets it transcribed.
 // ===========================================================================
 void* Ctor_AudioDevice(void* self) {
     using StreamCtorFn = void* (*)(void*);

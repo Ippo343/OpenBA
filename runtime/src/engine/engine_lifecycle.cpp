@@ -202,6 +202,7 @@
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformStartup / PlatformShutdown
 #include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: the ctor door's named fields
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
+#include "../../types/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration / Device
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
 
@@ -655,8 +656,8 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (audioConfiguration)
         RT_EXPORT_ONCE(CtorFn, "??0Configuration@Audio@@QEAA@XZ")(audioConfiguration);
     _audioConfiguration = audioConfiguration;
-    if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Audio@@QEAA_NXZ")(
-            audioConfiguration)) {
+    if (!reinterpret_cast<Audio::Configuration*>(audioConfiguration)
+             ->Startup()) {                                  // B.3.7 bridge
         g_startupFailAt = 8;
         return 0;
     }
@@ -699,8 +700,8 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (audioDevice)
         RT_EXPORT_ONCE(CtorFn, "??0Device@Audio@@QEAA@XZ")(audioDevice);
     _audioDevice = audioDevice;
-    if (!RT_EXPORT_ONCE(BoolThisFn, "?PlatformStartup@Device@Audio@@AEAA_NXZ")(
-            audioDevice)) {
+    if (!reinterpret_cast<Audio::Device*>(audioDevice)
+             ->PlatformStartup()) {                          // B.3.7 bridge
         g_startupFailAt = 12;
         return 0;
     }
@@ -812,7 +813,7 @@ void Engine::Engine::Shutdown() {
         ++steps;
     }
     if (void* p = _audioConfiguration) {
-        RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Audio@@QEAAXXZ")(p); ++steps;
+        reinterpret_cast<Audio::Configuration*>(p)->Save(); ++steps;   // B.3.7 bridge
     }
     if (void* p = _videoDevice) {
         reinterpret_cast<Video::Device*>(p)->PlatformShutdown();  // B.3.5 bridge
