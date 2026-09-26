@@ -64,14 +64,8 @@ namespace RtUI {
 // pieces of a nine-slice border. Serialize (0x18010fe20) runs 0x180004590 over
 // +0x68 and 0x1800c9930 over +0x70 .. +0xb0 in ascending order;
 // ~BorderDescription (0x18010fb20) releases the nine in DESCENDING order.
-struct BorderDescription {
-    ElementDescription _base;      // +0x00
-    void*  _spriteSheet;           // +0x68  LEA RCX,[RDI+0x68] @ 0x18010fe6f
-    char*  _spriteName[9];         // +0x70 .. +0xb0  @ 0x18010fe7d .. 0x18010feff
-};
-static_assert(offsetof(BorderDescription, _spriteSheet) == 0x68, "BorderDescription+0x68");
-static_assert(offsetof(BorderDescription, _spriteName)  == 0x70, "BorderDescription+0x70");
-static_assert(sizeof(BorderDescription) == 0xb8, "sizeof(UI::BorderDescription)==0xb8");
+// RtUI::BorderDescription is now an ALIAS of the real class UI::BorderDescription (BorderDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::ButtonDescription — 0xa0
@@ -80,56 +74,28 @@ static_assert(sizeof(BorderDescription) == 0xb8, "sizeof(UI::BorderDescription)=
 // states a button owns) and four ints. Serialize (0x1801113e0) runs
 // 0x180038f90 over +0x68 .. +0x88 and the kScalarUInt slot (+0x98) over the
 // four dwords at +0x90 .. +0x9c.
-struct ButtonDescription {
-    ElementDescription _base;      // +0x00
-    void*   _childDesc[5];         // +0x68 .. +0x88  @ 0x18011142f .. 0x18011146a
-    int32_t _word90;               // +0x90  also fed to child[4]'s vt[0x50]
-    int32_t _word94;               // +0x94
-    int32_t _word98;               // +0x98
-    int32_t _word9c;               // +0x9c
-};
-static_assert(offsetof(ButtonDescription, _childDesc) == 0x68, "ButtonDescription+0x68");
-static_assert(offsetof(ButtonDescription, _word90)    == 0x90, "ButtonDescription+0x90");
-static_assert(offsetof(ButtonDescription, _word9c)    == 0x9c, "ButtonDescription+0x9c");
-static_assert(sizeof(ButtonDescription) == 0xa0, "sizeof(UI::ButtonDescription)==0xa0");
+// RtUI::ButtonDescription is now an ALIAS of the real class UI::ButtonDescription (ButtonDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::CheckDescription — 0xa8 — ButtonDescription + one child description
 // ---------------------------------------------------------------------------
-struct CheckDescription {
-    ButtonDescription _base;       // +0x00
-    void*             _checkDesc;  // +0xa0  MOV [RBX+0xa0],0 @ 0x180048881
-};
-static_assert(offsetof(CheckDescription, _checkDesc) == 0xa0, "CheckDescription+0xa0");
-static_assert(sizeof(CheckDescription) == 0xa8, "sizeof(UI::CheckDescription)==0xa8");
+// RtUI::CheckDescription is now an ALIAS of the real class UI::CheckDescription (CheckDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::ClipRegionDescription — 0x78
 // ---------------------------------------------------------------------------
 // Two ints that both start at 0x64 (`MOV dword [RCX+0x68],0x64` /
 // `[RCX+0x6c],0x64` at 0x180037d66/0x180037d6d) and one child description.
-struct ClipRegionDescription {
-    ElementDescription _base;      // +0x00
-    int32_t _width;                // +0x68  kScalarInt @ 0x1800cc067
-    int32_t _height;               // +0x6c  kScalarInt @ 0x1800cc07c
-    void*   _childDesc;            // +0x70  0x180038f90 @ 0x1800cc089
-};
-static_assert(offsetof(ClipRegionDescription, _width)     == 0x68, "ClipRegion+0x68");
-static_assert(offsetof(ClipRegionDescription, _childDesc) == 0x70, "ClipRegion+0x70");
-static_assert(sizeof(ClipRegionDescription) == 0x78, "sizeof(UI::ClipRegionDescription)==0x78");
+// RtUI::ClipRegionDescription is now an ALIAS of the real class UI::ClipRegionDescription (ClipRegionDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::ComboDescription — 0xb8 — ButtonDescription + two child descs + a table
 // ---------------------------------------------------------------------------
-struct ComboDescription {
-    ButtonDescription _base;       // +0x00
-    void*             _listDesc;   // +0xa0  0x180038f90 @ 0x180112a0f
-    void*             _itemDesc;   // +0xa8  0x180038f90 @ 0x180112a20
-    void*             _stringTable;// +0xb0  0x1800042a0 @ 0x180112a31
-};
-static_assert(offsetof(ComboDescription, _listDesc)    == 0xa0, "Combo+0xa0");
-static_assert(offsetof(ComboDescription, _stringTable) == 0xb0, "Combo+0xb0");
-static_assert(sizeof(ComboDescription) == 0xb8, "sizeof(UI::ComboDescription)==0xb8");
+// RtUI::ComboDescription is now an ALIAS of the real class UI::ComboDescription (ComboDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::ContainerDescription — 0x90
@@ -138,21 +104,8 @@ static_assert(sizeof(ComboDescription) == 0xb8, "sizeof(UI::ComboDescription)==0
 // at 0x1800ccf9d and 0x1800ccfaf, over +0x70 and +0x71) and the applier copies
 // them with MOVZX/MOV byte at 0x1800ccdb4/0x1800ccdbf. +0x72/+0x73 are never
 // named by any body.
-struct ContainerDescription {
-    ElementDescription _base;      // +0x00
-    int32_t _width;                // +0x68  kScalarInt @ 0x1800ccf27
-    int32_t _height;               // +0x6c  kScalarInt @ 0x1800ccf3c
-    uint8_t _flag70;               // +0x70  kScalarBool @ 0x1800ccf96
-    uint8_t _flag71;               // +0x71  kScalarBool @ 0x1800ccfa8
-    uint8_t _pad72[2];             // +0x72
-    int32_t _word74;               // +0x74  kScalarInt @ 0x1800ccf51
-    void*   _childDesc[3];         // +0x78,+0x80,+0x88  0x180038f90 x3
-};
-static_assert(offsetof(ContainerDescription, _flag70)    == 0x70, "Container+0x70");
-static_assert(offsetof(ContainerDescription, _flag71)    == 0x71, "Container+0x71");
-static_assert(offsetof(ContainerDescription, _word74)    == 0x74, "Container+0x74");
-static_assert(offsetof(ContainerDescription, _childDesc) == 0x78, "Container+0x78");
-static_assert(sizeof(ContainerDescription) == 0x90, "sizeof(UI::ContainerDescription)==0x90");
+// RtUI::ContainerDescription is now an ALIAS of the real class UI::ContainerDescription (ContainerDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::DocumentTextDescription — 0xe8
@@ -197,19 +150,8 @@ static_assert(sizeof(DocumentTextDescription) == 0xe8, "sizeof(UI::DocumentTextD
 // ---------------------------------------------------------------------------
 // UI::EditDescription — 0x88
 // ---------------------------------------------------------------------------
-struct EditDescription {
-    ElementDescription _base;      // +0x00
-    void*   _ptr68;                // +0x68  0x18003f1e0 @ 0x1800d115f
-    char*   _string70;             // +0x70  0x1800c9930 @ 0x1800d116d
-    int32_t _word78;               // +0x78  kScalarInt  @ 0x1800d1183
-    uint8_t _flag7c;               // +0x7c  kScalarBool @ 0x1800d1198
-    uint8_t _pad7d[3];             // +0x7d
-    char*   _string80;             // +0x80  0x1800c9930 @ 0x1800d11a2
-};
-static_assert(offsetof(EditDescription, _string70) == 0x70, "Edit+0x70");
-static_assert(offsetof(EditDescription, _flag7c)   == 0x7c, "Edit+0x7c");
-static_assert(offsetof(EditDescription, _string80) == 0x80, "Edit+0x80");
-static_assert(sizeof(EditDescription) == 0x88, "sizeof(UI::EditDescription)==0x88");
+// RtUI::EditDescription is now an ALIAS of the real class UI::EditDescription (EditDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // UI::GraphDescription — 0x88
@@ -236,21 +178,8 @@ static_assert(sizeof(GraphDescription) == 0x88, "sizeof(UI::GraphDescription)==0
 // `_base3c` is `ElementDescription`'s +0x3c, which LabelDescription's applier
 // copies to the element's +0x128 (`MOV EAX,[RSI+0x3c]` @ 0x1800d27f1) — the
 // one field of the base this class reads.
-struct LabelDescription {
-    uint8_t  _textDescriptionBase[0x90];  // +0x00 .. +0x8f  (incl. ElementDescription)
-    uint32_t _word90;              // +0x90  kScalarUInt @ 0x1800d2899
-    uint32_t _word94;              // +0x94  kScalarUInt @ 0x1800d28b1
-    int32_t  _word98;              // +0x98  kScalarInt  @ 0x1800d28c9
-    int32_t  _word9c;              // +0x9c  kScalarInt  @ 0x1800d28e1
-    int32_t  _worda0;              // +0xa0  kScalarInt  @ 0x1800d28f9
-    int32_t  _worda4;              // +0xa4  kScalarInt  @ 0x1800d2911
-    void*    _spriteSheet;         // +0xa8  0x180004590 @ 0x1800d286f
-    char*    _spriteName;          // +0xb0  0x1800c9930 @ 0x1800d2880
-};
-static_assert(offsetof(LabelDescription, _word90)      == 0x90, "Label+0x90");
-static_assert(offsetof(LabelDescription, _spriteSheet) == 0xa8, "Label+0xa8");
-static_assert(offsetof(LabelDescription, _spriteName)  == 0xb0, "Label+0xb0");
-static_assert(sizeof(LabelDescription) == 0xb8, "sizeof(UI::LabelDescription)==0xb8");
+// RtUI::LabelDescription is now an ALIAS of the real class UI::LabelDescription (LabelDescription.h);
+// see the alias block at the bottom of this file.
 
 // ---------------------------------------------------------------------------
 // The exported vtables and BaseTypeInfo statics these ten classes stamp and
@@ -274,4 +203,36 @@ constexpr const char* kVtblCheckElement       = "??_7CheckElement@UI@@6B@";     
 constexpr const char* kVtblClipRegionElement  = "??_7ClipRegionElement@UI@@6B@";  // 0x1801562f0
 constexpr const char* kVtblContainerElement   = "??_7ContainerElement@UI@@6B@";   // 0x1801564b0
 
+}  // namespace RtUI
+
+// ---------------------------------------------------------------------------
+// ENDGAME B.3.6 fragment pass F2 (RULE B6-4.4) — the PODs that became ALIASES.
+// ---------------------------------------------------------------------------
+// Each of these had a field-identical real class under the retail name by the
+// end of wave 2 (blocks C1, C3, C4 cross-asserted every offset against the
+// POD), and nothing embeds any of them by value, so the POD is retired and the
+// old spelling names the class. The class headers carry the absolute offsets
+// the PODs used to pin. A FORWARD declaration is enough for the alias, which
+// keeps this header free of the class headers (they include this one for the
+// kVtbl* names above).
+namespace UI {
+class BorderDescription;
+class ButtonDescription;
+class CheckDescription;
+class ClipRegionDescription;
+class ComboDescription;
+class ContainerDescription;
+class EditDescription;
+class LabelDescription;
+}  // namespace UI
+
+namespace RtUI {
+using BorderDescription = UI::BorderDescription;
+using ButtonDescription = UI::ButtonDescription;
+using CheckDescription = UI::CheckDescription;
+using ClipRegionDescription = UI::ClipRegionDescription;
+using ComboDescription = UI::ComboDescription;
+using ContainerDescription = UI::ContainerDescription;
+using EditDescription = UI::EditDescription;
+using LabelDescription = UI::LabelDescription;
 }  // namespace RtUI

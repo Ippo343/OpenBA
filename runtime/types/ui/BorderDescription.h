@@ -36,7 +36,7 @@
 #include <type_traits>
 
 #include "ElementDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::BorderDescription (the layout POD)
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::BorderDescription aliases this class
 
 namespace UI {
 
@@ -87,8 +87,7 @@ static_assert(sizeof(BorderDescription) == 0xb8,
 static_assert(alignof(BorderDescription) == 8, "UI::BorderDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<BorderDescription>::value, "ENDGAME decision 2");
 static_assert(offsetof(BorderDescription, _spriteSheet) == sizeof(ElementDescription), "");
-static_assert(sizeof(BorderDescription) == sizeof(RtUI::BorderDescription), "");
-static_assert(offsetof(BorderDescription, _spriteSheet) == offsetof(RtUI::BorderDescription, _spriteSheet), "");
-static_assert(offsetof(BorderDescription, _spriteName)  == offsetof(RtUI::BorderDescription, _spriteName), "");
+static_assert(offsetof(BorderDescription, _spriteSheet) == 0x68, "");
+static_assert(offsetof(BorderDescription, _spriteName)  == 0x70, "");
 
 }  // namespace UI

@@ -38,7 +38,7 @@
 #include <type_traits>
 
 #include "ButtonDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::ComboDescription (the layout POD)
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::ComboDescription aliases this class
 
 namespace UI {
 
@@ -94,9 +94,8 @@ static_assert(sizeof(ComboDescription) == 0xb8,
 static_assert(alignof(ComboDescription) == 8, "UI::ComboDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<ComboDescription>::value, "ENDGAME decision 2");
 static_assert(offsetof(ComboDescription, _listDesc) == sizeof(ButtonDescription), "");
-static_assert(sizeof(ComboDescription) == sizeof(RtUI::ComboDescription), "");
-static_assert(offsetof(ComboDescription, _listDesc)    == offsetof(RtUI::ComboDescription, _listDesc), "");
-static_assert(offsetof(ComboDescription, _itemDesc)    == offsetof(RtUI::ComboDescription, _itemDesc), "");
-static_assert(offsetof(ComboDescription, _stringTable) == offsetof(RtUI::ComboDescription, _stringTable), "");
+static_assert(offsetof(ComboDescription, _listDesc)    == 0xa0, "");
+static_assert(offsetof(ComboDescription, _itemDesc)    == 0xa8, "");
+static_assert(offsetof(ComboDescription, _stringTable) == 0xb0, "");
 
 }  // namespace UI
