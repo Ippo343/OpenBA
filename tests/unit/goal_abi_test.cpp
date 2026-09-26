@@ -201,3 +201,40 @@ UNIT_TEST(tutorialgoal_family_is_retail) {
     CHECK_EQ(sizeof(TutorialGoalGameSpeed), (size_t)0x28);
     CHECK_EQ(offsetof(TutorialGoalCount, elementName), (size_t)0x48);
 }
+
+// ===========================================================================
+// TutorialSetup (abstract, 11 slots) and its leaves (12 slots)
+// ===========================================================================
+#include "Tutorial/TutorialSetup.h"
+#include "Tutorial/TutorialSetupCamera.h"
+#include "Tutorial/TutorialSetupGameSpeed.h"
+#include "Tutorial/TutorialSetupRestrictPlayer.h"
+
+namespace {
+template <typename T>
+void CheckTutorialSetupSlots() {
+    CheckExternalSlots<T>();
+    CHECK_EQ(SlotOffset(&T::Begin),  (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&T::Update), (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&T::End),    (uintptr_t)0x50);
+}
+template <typename T>
+void CheckTutorialSetupLeaf() {
+    CheckTutorialSetupSlots<T>();
+    CHECK_EQ(SlotOffset(&T::Construct), (uintptr_t)0x58);
+    CheckShape<T, TutorialSetup>(false);
+}
+}  // namespace
+
+UNIT_TEST(tutorialsetup_family_is_retail) {
+    CheckTutorialSetupSlots<TutorialSetup>();
+    CheckShape<TutorialSetup, Object::External>(true);
+    CHECK_EQ(sizeof(TutorialSetup), (size_t)0x20);
+    CheckTutorialSetupLeaf<TutorialSetupCamera>();
+    CheckTutorialSetupLeaf<TutorialSetupGameSpeed>();
+    CheckTutorialSetupLeaf<TutorialSetupRestrictPlayer>();
+    CHECK_EQ(sizeof(TutorialSetupCamera),         (size_t)0x30);
+    CHECK_EQ(sizeof(TutorialSetupGameSpeed),      (size_t)0x28);
+    CHECK_EQ(sizeof(TutorialSetupRestrictPlayer), (size_t)0x68);
+    CHECK_EQ(offsetof(TutorialSetupRestrictPlayer, cameraRefCached), (size_t)0x60);
+}

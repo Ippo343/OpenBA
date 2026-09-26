@@ -128,9 +128,6 @@ extern "C" {
     void RegisterTutorialImageHotKeyVtable();
     void RegisterTutorialImageInputKeyVtable();
     void RegisterTutorialImageToolbarIconVtable();
-    void RegisterTutorialSetupCameraVtable();
-    void RegisterTutorialSetupGameSpeedVtable();
-    void RegisterTutorialSetupRestrictPlayerVtable();
     void RegisterTutorialStepVtable();
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
@@ -1793,9 +1790,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTutorialImageHotKeyVtable();
     RegisterTutorialImageInputKeyVtable();
     RegisterTutorialImageToolbarIconVtable();
-    RegisterTutorialSetupCameraVtable();
-    RegisterTutorialSetupGameSpeedVtable();
-    RegisterTutorialSetupRestrictPlayerVtable();
     RegisterTutorialStepVtable();
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.

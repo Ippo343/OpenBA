@@ -43,6 +43,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Tutorial/TutorialSetupRestrictPlayer.h"
 #include "Game/serialize_externals.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
@@ -755,9 +756,8 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
     {
         int n = *reinterpret_cast<int32_t*>(step + 0x58);
         uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x50);
-        static uint32_t s_restrictTid = 0;
-        if (!s_restrictTid)
-            s_restrictTid = ::Object::GetTypeIdByName("TutorialSetupRestrictPlayer");
+        // ENDGAME B.3.8: the class's own record (was a lazy GetTypeIdByName cache).
+        const uint32_t s_restrictTid = TutorialSetupRestrictPlayer::TypeId();
 
         for (int pass = 0; pass < 2; ++pass) {
             for (int i = 0; i < n && data; ++i) {

@@ -73,7 +73,7 @@ static uint32_t* TypeIdProfessionDesc() {     // 0x1401c5a98 (cases 1, 3, 6)
 }
 
 // ============================================================
-//BST lookup helper — searches a binary search tree keyed by pointer
+// BST lookup helper — searches a binary search tree keyed by pointer
 // ============================================================
 // BST node layout (8 bytes each slot):
 //   [0] = key (pointer value used as comparison key)
@@ -220,7 +220,7 @@ Object::External* TutorialGoalCount::Reconstruct() {
 void TutorialGoalCount::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-//TutorialGoalCount::Check (vtable +0x40, 0x1400df290)
+// TutorialGoalCount::Check (vtable +0x40, 0x1400df290)
 // ============================================================
 // 11-case switch on countMode (+0x20). Counts a game metric and
 // compares against targetCount (+0x24). If greaterOrEqual (+0x28),

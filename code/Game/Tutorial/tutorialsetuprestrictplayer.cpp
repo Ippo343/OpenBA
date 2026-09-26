@@ -19,7 +19,9 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialsetuprestrictplayer_funcs.h"
+#include "Tutorial/TutorialSetupRestrictPlayer.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -33,22 +35,10 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 
 // ============================================================
-// Local function pointers resolved once
+// ENDGAME B.3.8: the String::Serialize / Filename ctor+dtor dispatch-slot
+// pointers this file filled lazily are gone — the Serialize member calls
+// System::String::Serialize and scopes a System::Filename directly (B6-5).
 // ============================================================
-
-// System::String::Serialize(this, serializer) — dispatch slot 0x140151238
-typedef void (*fn_StringSerialize_t)(void* self, void* serializer);
-static fn_StringSerialize_t s_fn_StringSerialize = nullptr;
-
-// System::Filename::Filename(this) — dispatch slot 0x140151d40
-typedef void* (*fn_FilenameCtor_t)(void* self);
-static fn_FilenameCtor_t s_fn_FilenameCtor = nullptr;
-
-// System::Filename::~Filename(this) — dispatch slot 0x1401529e8
-typedef void (*fn_FilenameDtor_t)(void* self);
-static fn_FilenameDtor_t s_fn_FilenameDtor = nullptr;
-
-static bool s_funcsResolved = false;
 
 // ============================================================
 // TutRestrict_ResolveRefOrLoad — ExternalRef resolve with a load-on-miss tail
@@ -119,69 +109,40 @@ static void TutRestrict_ResolveRefOrLoad(void* ref) {
 }
 
 
-static void EnsureFuncsResolved() {
-    if (s_funcsResolved) return;
-    s_funcsResolved = true;
+// ============================================================
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
+// ============================================================
+// ctor 0x1400e3220 (createInPlace 0x140028b80 null-checks then runs it):
+// External(), the TutorialSetup and TutorialSetupRestrictPlayer stamps (the
+// compiler's), then the fields.
+TutorialSetupRestrictPlayer::TutorialSetupRestrictPlayer()
+    : restrictMinX(-1), restrictMinChunkRow(-1),      // one qword store of -1
+      restrictMaxX(-1), restrictMaxChunkCol(-1),      // one qword store of -1
+      restrictToolFlags(0), _pad34{},
+      toolRefString(0), toolRefStamp(-1), _pad44{}, toolRefCached(nullptr),
+      cameraRefString(0), cameraRefStamp(-1), _pad5C{}, cameraRefCached(nullptr) {}
 
-    auto loadExref = [](uintptr_t addr) -> void* {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, addr));
-        return (slot && *slot) ? *slot : nullptr;
-    };
-
-    s_fn_StringSerialize = (fn_StringSerialize_t)         loadExref(0x140151238);
-    s_fn_FilenameCtor    = (fn_FilenameCtor_t)            loadExref(0x140151d40);
-    s_fn_FilenameDtor    = (fn_FilenameDtor_t)            loadExref(0x1401529e8);
-
-#ifdef _DEBUG
-    printf("[TutorialSetupRestrictPlayer] StringSerialize=%p\n",
-           (void*)s_fn_StringSerialize);
-#endif
+// The dtor inside [0] 0x140028bb0: ~String +0x50, ~String +0x38; the compiler
+// re-stamps TutorialSetup and runs ~External.
+TutorialSetupRestrictPlayer::~TutorialSetupRestrictPlayer() {
+    reinterpret_cast<System::String*>(&cameraRefString)->~String();   // B.3.1 bridge
+    reinterpret_cast<System::String*>(&toolRefString)->~String();     // B.3.1 bridge
 }
 
-// ============================================================
-// TutorialSetupRestrictPlayer::Dtor (vtable +0x00, 0x140028bb0)
-// ============================================================
-// Scalar deleting destructor.
-// 1. Set vtable to TutorialSetupRestrictPlayer
-// 2. Destroy inline String at +0x50 (cameraRef name)
-// 3. Destroy inline String at +0x38 (toolRef name)
-// 4. Set vtable to TutorialSetup (base)
-// 5. Call External::~External(self)
-// 6. If (flags & 1), free memory
-void* TutorialSetupRestrictPlayer_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Set vtable to TutorialSetupRestrictPlayer
-    uintptr_t restrictVtable = ResolveAddr(Module::Exe, TutorialSetupRestrictPlayerAddr::Vtable);
-    *(uintptr_t*)s = restrictVtable;
-
-    // Destroy inline Strings (B.3.1 bridge: the object is still untyped bytes)
-    reinterpret_cast<System::String*>(s + 0x50)->~String();  // camera ref name
-    reinterpret_cast<System::String*>(s + 0x38)->~String();  // tool ref name
-
-    // Set vtable to TutorialSetup base
-    uintptr_t setupVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = setupVtable;
-
-    // Call External::~External
-    if (fn_External_Dtor) fn_External_Dtor(self);
-
-    // Conditional free
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(self);
-    }
-
-    return self;
+// [0] 0x140028bb0: ~TutorialSetupRestrictPlayer, MemFree on &1.
+Object::Base* TutorialSetupRestrictPlayer::DeletingDtor(unsigned flags) {
+    this->~TutorialSetupRestrictPlayer();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
 // TutorialSetupRestrictPlayer::Serialize (vtable +0x28, 0x1400e3090)
 // ============================================================
-// Serializes 5 int32 restriction fields and 2 ExternalRef strings.
-// On load (serializer mode == 0), resolves each ExternalRef by name.
-void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
-    EnsureFuncsResolved();
-    uintptr_t s = (uintptr_t)self;
+// 5 int32 restriction fields and 2 ExternalRef strings; on load (serializer
+// mode == 0) each ExternalRef is resolved by name.
+bool TutorialSetupRestrictPlayer::Serialize(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Create serializer on stack
     alignas(8) uint8_t serializer[32];
@@ -194,59 +155,51 @@ void TutorialSetupRestrictPlayer_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
 
-    // Serialize ExternalRef1 (tool restriction) at +0x38
+    // Serialize ExternalRef1 (tool restriction) at +0x38, inside the Filename
+    // stack temporary retail's compiler emitted.
     {
-        uint8_t tempFilename[8];
-        if (s_fn_FilenameCtor) s_fn_FilenameCtor(tempFilename);
+        System::Filename tempFilename;
+        (void)tempFilename;
 
-        if (s_fn_StringSerialize) s_fn_StringSerialize((void*)(s + 0x38), serializer);
+        reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);   // B.3.1 bridge
 
         // On load: resolve external by name
         void* serializerBase = *(void**)serializer;
         if (serializerBase && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             TutRestrict_ResolveRefOrLoad((void*)(s + 0x38));
         }
-
-        if (s_fn_FilenameDtor) s_fn_FilenameDtor(tempFilename);
     }
 
     // Serialize ExternalRef2 (camera restriction) at +0x50
     {
-        uint8_t tempFilename[8];
-        if (s_fn_FilenameCtor) s_fn_FilenameCtor(tempFilename);
+        System::Filename tempFilename;
+        (void)tempFilename;
 
-        if (s_fn_StringSerialize) s_fn_StringSerialize((void*)(s + 0x50), serializer);
+        reinterpret_cast<System::String*>(s + 0x50)->Serialize(serializer);   // B.3.1 bridge
 
         // On load: resolve external by name
         void* serializerBase = *(void**)serializer;
         if (serializerBase && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
             TutRestrict_ResolveRefOrLoad((void*)(s + 0x50));
         }
-
-        if (s_fn_FilenameDtor) s_fn_FilenameDtor(tempFilename);
     }
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// TutorialSetupRestrictPlayer::Cleanup (vtable +0x30, 0x140028b90)
+// TutorialSetupRestrictPlayer::Reconstruct [6] 0x140028b90 / Destruct [7]
 // ============================================================
-// Destroys and reinitializes: calls Dtor(flags=0) via vtable, then Ctor.
-void TutorialSetupRestrictPlayer_Cleanup(void* self) {
-    // Call Dtor via vtable with flags=0 (no free)
-    uintptr_t vtable = *(uintptr_t*)self;
-    typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-    fn_Dtor_t dtorFn = *reinterpret_cast<fn_Dtor_t*>(vtable);
-    if (dtorFn) dtorFn(self, 0);
-
-    // Re-construct
-    TutorialSetupRestrictPlayer_Ctor(self);
+Object::External* TutorialSetupRestrictPlayer::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialSetupRestrictPlayer();
 }
+void TutorialSetupRestrictPlayer::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// TutorialSetupRestrictPlayer::Slot8 / Apply (vtable +0x40, 0x1400e2f20)
+// TutorialSetupRestrictPlayer::Begin (vtable +0x40, 0x1400e2f20)
 // ============================================================
 // Applies player restrictions to the PlayerController at GameWorld+0x120.
 //
@@ -257,8 +210,8 @@ void TutorialSetupRestrictPlayer_Cleanup(void* self) {
 // 4. Write restriction state to PlayerController (+0x80..+0xA0)
 // 5. Resolve original toolRef (+0x38) and if it has a cached ptr,
 //    also set camera restriction bounds (+0xA4..+0xAC)
-void TutorialSetupRestrictPlayer_Slot8(void* self) {
-    uintptr_t s = (uintptr_t)self;
+void TutorialSetupRestrictPlayer::Begin() {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
@@ -315,17 +268,15 @@ void TutorialSetupRestrictPlayer_Slot8(void* self) {
         *(int32_t*)(playerCtrl2 + 0xAC) = absMax;
         *(uint8_t*)(playerCtrl2 + 0xA4) = 1;
     }
-
 }
 
 // ============================================================
-// TutorialSetupRestrictPlayer::Slot10 / Undo (vtable +0x50, 0x1400e2e90)
+// TutorialSetupRestrictPlayer::End (vtable +0x50, 0x1400e2e90)
 // ============================================================
 // Clears all player restrictions from the PlayerController at GameWorld+0x120.
-// Resets restriction fields to defaults (0/-1).
 // If toolRef has a cached External, calls SetEditMode(playerController, 0).
-void TutorialSetupRestrictPlayer_Slot10(void* self) {
-    uintptr_t s = (uintptr_t)self;
+void TutorialSetupRestrictPlayer::End() {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
@@ -352,85 +303,23 @@ void TutorialSetupRestrictPlayer_Slot10(void* self) {
 }
 
 // ============================================================
-// TutorialSetupRestrictPlayer::Ctor (vtable +0x58, 0x140028b80 -> 0x1400e3220)
+// TutorialSetupRestrictPlayer::Construct (vtable +0x58, 0x140028b80)
 // ============================================================
-// Construct from raw memory. Null-check, call External::External,
-// set vtable chain, init all fields to defaults.
-void* TutorialSetupRestrictPlayer_Ctor(void* self) {
-    if (!self) return nullptr;
-
-    uintptr_t s = (uintptr_t)self;
-
-    // Init External base
-    if (fn_External_External) fn_External_External(self);
-
-    // Set vtable chain: TutorialSetup then TutorialSetupRestrictPlayer
-    uintptr_t setupVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = setupVtable;
-
-    uintptr_t restrictVtable = ResolveAddr(Module::Exe, TutorialSetupRestrictPlayerAddr::Vtable);
-    *(uintptr_t*)s = restrictVtable;
-
-    // Init restriction fields
-    *(int64_t*)(s + 0x20) = -1LL;     // restrictMinX + restrictMinChunkRow = -1, -1
-    *(int64_t*)(s + 0x28) = -1LL;     // restrictMaxX + restrictMaxChunkCol = -1, -1
-    *(int32_t*)(s + 0x30) = 0;        // restrictToolFlags
-
-    // Init ExternalRef1 (tool restriction) at +0x38
-    *(uint64_t*)(s + 0x38) = 0;       // String data ptr = null
-    *(int32_t*)(s + 0x40) = -1;       // generation stamp = -1 (force re-resolve)
-    *(uint64_t*)(s + 0x48) = 0;       // cached External ptr = null
-
-    // Init ExternalRef2 (camera restriction) at +0x50
-    *(uint64_t*)(s + 0x50) = 0;       // String data ptr = null
-    *(int32_t*)(s + 0x58) = -1;       // generation stamp = -1 (force re-resolve)
-    *(uint64_t*)(s + 0x60) = 0;       // cached External ptr = null
-
-    return self;
+Object::External* TutorialSetupRestrictPlayer::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialSetupRestrictPlayer();
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160e20 (9 slots, Object::External base), size 0x68, parent "TutorialSetup".
-// GetFileVersion (+0x18) = 4. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t TutorialSetupRestrictPlayer_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialSetupRestrictPlayer");
-    return c;
+// create 0x140028b40: MemAlloc(0x68, 8), then the ctor.
+void* TutorialSetupRestrictPlayer::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialSetupRestrictPlayer), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialSetupRestrictPlayer());
 }
-static int TutorialSetupRestrictPlayer_GetFileVersion(void*) { return 4; }
-
-// Retail slots 9/10 on the TutorialSetup family are empty `ret` bodies.
-static void TutorialSetup_SlotEmpty(void*) {}
-
-static void* g_TutorialSetupRestrictPlayer_Vtable[12] = {
-    (void*)&TutorialSetupRestrictPlayer_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialSetupRestrictPlayer_GetTypeId,       // +0x10 GetTypeId
-    (void*)&TutorialSetupRestrictPlayer_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialSetupRestrictPlayer_Serialize,       // +0x28 Serialize
-    (void*)&TutorialSetupRestrictPlayer_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialSetupRestrictPlayer_Slot8,   // +0x40 Apply (0x1400e2f20)
-    (void*)&TutorialSetup_SlotEmpty,   // +0x48 Update (0x1400e2f10 - empty in retail)
-    (void*)&TutorialSetupRestrictPlayer_Slot10,   // +0x50 Undo (0x1400e2e90)
-    (void*)&TutorialSetupRestrictPlayer_Ctor,   // +0x58 Ctor/CreateInPlace (0x140028b80)
-};
-
-extern "C" void RegisterTutorialSetupRestrictPlayerVtable() {
-    RegisterExeAddr(0x140160e20, (uintptr_t)g_TutorialSetupRestrictPlayer_Vtable);
+// createInPlace 0x140028b80.
+void* TutorialSetupRestrictPlayer::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialSetupRestrictPlayer());
 }
-extern "C" void* TutorialSetupRestrictPlayer_CreateInPlace(void* mem) {
-    return TutorialSetupRestrictPlayer_Ctor(mem);
-}
-extern "C" void* TutorialSetupRestrictPlayer_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
-    return p ? TutorialSetupRestrictPlayer_Ctor(p) : nullptr;
-}
-REGISTER_TYPE(TutorialSetupRestrictPlayer, "TutorialSetup", &TutorialSetupRestrictPlayer_Factory, &TutorialSetupRestrictPlayer_CreateInPlace);
+
+DEFINE_EXE_VTABLE(TutorialSetupRestrictPlayer, "_ZTV27TutorialSetupRestrictPlayer")
+DEFINE_EXE_TYPE(TutorialSetupRestrictPlayer, "TutorialSetup")
