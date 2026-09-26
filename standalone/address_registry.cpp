@@ -197,7 +197,6 @@ extern "C" {
     void RegisterConsumeProduceVtable();
     void RegisterFireWorkVtable();
     void RegisterFishingWorkVtable();
-    void RegisterGatherRawMaterialsVtable();
     void RegisterLocationWorkVtable();
     void RegisterMarketWorkVtable();
     void RegisterPickupVtable();
@@ -1958,7 +1957,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterConsumeProduceVtable();
     RegisterFireWorkVtable();
     RegisterFishingWorkVtable();
-    RegisterGatherRawMaterialsVtable();
     RegisterLocationWorkVtable();
     RegisterMarketWorkVtable();
     RegisterPickupVtable();

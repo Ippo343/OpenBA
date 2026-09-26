@@ -31,6 +31,7 @@
 #include "Work/FireWork.h"
 #include "Work/FishingWork.h"
 #include "Work/ForesterWork.h"
+#include "Work/GatherRawMaterials.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -200,6 +201,18 @@ UNIT_TEST(wrk_leaf_foresterwork) {
     CHECK_EQ(offsetof(ForesterWork, _field48), (size_t)0x48);
     CHECK_EQ(offsetof(ForesterWork, _field50), (size_t)0x50);
     CHECK_EQ(offsetof(ForesterWork, _field58), (size_t)0x58);
+}
+
+UNIT_TEST(wrk_leaf_gatherrawmaterials) {
+    WRK_LEAF_SHAPE(GatherRawMaterials, Work, 0x78);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_48), (size_t)0x48);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_54), (size_t)0x54);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_58), (size_t)0x58);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_64), (size_t)0x64);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_68), (size_t)0x68);
+    CHECK_EQ(offsetof(GatherRawMaterials, field_70), (size_t)0x70);
 }
 
 // ===========================================================================
