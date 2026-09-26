@@ -1667,6 +1667,9 @@ REGISTER_TYPE(BuildUI, "UI::DialogController",
 //      combo + animal-count slider now live; retires BANISHED_PASTURE_AUTOTYPE
 //      as the only way to type a pasture. ----
 
+// ENDGAME B.3.8 DLG: the real DialogInstance classes whose reflection record
+// stays at this TU position (B38_RULES D4).
+#include "Dialog/MapParamsDialog.h"
 // ---- DialogInstance family --------------------------------------------------
 UI_DIALOG_STUB(AchievementDialog,   "UI::DialogInstance",   0xD0);
 // AutoSaveDialog: its UI_DIALOG_STUB twin was a DUPLICATE registration of the name
@@ -1675,7 +1678,7 @@ UI_DIALOG_STUB(AchievementDialog,   "UI::DialogInstance",   0xD0);
 // in code/Game/Dialog/eventnotifydialog.cpp / eventpopupdialog.cpp (ribbon + modal popup).
 UI_DIALOG_STUB(FollowDialog,        "UI::DialogInstance",   0xD8);
 UI_DIALOG_STUB(GoalDialog,          "UI::DialogInstance",   0xC8);
-UI_DIALOG_STUB(MapParamsDialog,     "UI::DialogInstance",   0xF8);
+DEFINE_EXE_TYPE(MapParamsDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 UI_DIALOG_STUB(ModUploadDialog,     "UI::DialogInstance",   0xB8);
 UI_DIALOG_STUB(ScenarioDialog,      "UI::DialogInstance",   0xE8);
 UI_DIALOG_STUB(SaveLoadDialog,      "UI::DialogInstance",   0x160);

@@ -35,24 +35,6 @@ void TutorialHighlightDialog_Draw(TutorialHighlightDialog* self);
 void TutorialHighlightDialog_Load(TutorialHighlightDialog* self, void* param2);
 
 // ============================================================
-// MapParamsDialog
-// ============================================================
-
-// Slot5 (vtable +0x28): Shutdown — 3-byte no-op, returns 0.
-int MapParamsDialog_Slot5(MapParamsDialog* self);
-
-// Startup (vtable +0x20): Finds all UI elements (editName, numberSeed,
-// text labels, buttons), sets IDs, populates values from game state.
-void MapParamsDialog_Startup(MapParamsDialog* self);
-
-// Update (vtable +0x30): Enables/disables OK button based on name field state.
-void MapParamsDialog_Update(MapParamsDialog* self);
-
-// OnEvent (vtable +0x40, exe 0x14006b5f0): Handles button clicks.
-// eventType 0x12 (button): 0=newName(randomize), 1=ok(save+close), 2=cancel(close)
-void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType, int eventData);
-
-// ============================================================
 // MainMenuDialog
 // ============================================================
 

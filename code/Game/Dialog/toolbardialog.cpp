@@ -34,6 +34,7 @@
 #include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "Dialog/MainMenuDialog.h"
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -942,23 +943,15 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     uintptr_t gameWorldPtr = (uintptr_t)gameWorld;
 
     if (pauseDialog != nullptr) {
-        // Construct null parent InternalBasePtr
-        uint64_t parentRef;
-        new (&parentRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint64_t parentCopy = parentRef;
-
-        // Step 7: Construct DialogInstance base class
-        // DialogInstance::DialogInstance(self, userInterface, externalRes, parentPtr, 0, 0, 0)
-        fn_DialogInstance_Ctor(pauseDialog, userInterface, externalRes, &parentCopy, 0, 0, 0);
-
-        // Set PauseDialog vtable
-        *(uintptr_t*)pauseDialog = g_PauseDialog_Vtable;
-        // Set gameWorld pointer at +0xB8
-        *(uintptr_t*)((uintptr_t)pauseDialog + 0xB8) = gameWorldPtr;
-        // Zero out +0xC0
-        *(uint64_t*)((uintptr_t)pauseDialog + 0xC0) = 0;
-
-        finalDialog = pauseDialog;
+        // Step 7: the pause menu IS a MainMenuDialog (retail stamps its table,
+        // 0x14015f550): DialogInstance(userInterface, externalRes, nullParent,
+        // 0, 0, 0), then +0xB8 = gameWorld, +0xC0 = 0. ENDGAME B.3.8 DLG: the
+        // real class's ctor (Dialog/MainMenuDialog.h).
+        finalDialog = ::new (pauseDialog) MainMenuDialog(
+            static_cast<UI::UserInterface*>(userInterface),
+            static_cast<const UI::Dialog*>(externalRes),
+            Object::InternalPtr<UI::DialogInstance>(),
+            reinterpret_cast<void*>(gameWorldPtr), nullptr);
     }
 
     // Step 8: Wrap in InternalBasePtr and add to UI

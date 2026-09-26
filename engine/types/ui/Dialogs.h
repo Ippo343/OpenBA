@@ -188,30 +188,11 @@ static_assert(offsetof(GoalDialog, dataB8) == 0xB8, "");
 // --- LoaderDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/LoaderDialog.h"
 
-// --- MainMenuDialog (0xC8) ---
-// Factory: no subclass fields initialized
-struct MainMenuDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: uninitialized
-    uint64_t dataC0;           // +0xC0: uninitialized
-};
-static_assert(sizeof(MainMenuDialog) == 0xC8, "MainMenuDialog size mismatch");
+// --- MainMenuDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/MainMenuDialog.h"
 
-// --- MapParamsDialog (0xF8) ---
-// Ctor inits: +0xB8..+0xF0 = 0 (all zeroed, 8 qwords)
-struct MapParamsDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint64_t dataC8;           // +0xC8: zeroed
-    uint64_t dataD0;           // +0xD0: zeroed
-    uint64_t dataD8;           // +0xD8: zeroed
-    uint64_t dataE0;           // +0xE0: zeroed
-    uint64_t dataE8;           // +0xE8: zeroed
-    uint64_t dataF0;           // +0xF0: zeroed
-};
-static_assert(sizeof(MapParamsDialog) == 0xF8, "MapParamsDialog size mismatch");
-static_assert(offsetof(MapParamsDialog, dataB8) == 0xB8, "");
+// --- MapParamsDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/MapParamsDialog.h"
 
 // --- MessageDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/MessageDialog.h"

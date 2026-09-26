@@ -28,6 +28,8 @@
 #include "Dialog/EventPopupDialog.h"
 #include "Dialog/LoaderDialog.h"
 #include "Dialog/AutoSaveDialog.h"
+#include "Dialog/MainMenuDialog.h"
+#include "Dialog/MapParamsDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -130,4 +132,17 @@ UNIT_TEST(dlg_loader_autosave_dialogs) {
     CheckShape<AutoSaveDialog>();
     CheckDialogInstanceSlots<LoaderDialog>();
     CheckDialogInstanceSlots<AutoSaveDialog>();
+}
+
+UNIT_TEST(dlg_mainmenu_mapparams_dialogs) {
+    CHECK_EQ(sizeof(MainMenuDialog), (size_t)0xc8);
+    CHECK_EQ(offsetof(MainMenuDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(MainMenuDialog, dataC0), (size_t)0xc0);
+    CheckShape<MainMenuDialog>();
+    CheckDialogInstanceSlots<MainMenuDialog>();
+    CHECK_EQ(sizeof(MapParamsDialog), (size_t)0xf8);
+    CHECK_EQ(offsetof(MapParamsDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(MapParamsDialog, dataF0), (size_t)0xf0);
+    CheckShape<MapParamsDialog>();
+    CheckDialogInstanceSlots<MapParamsDialog>();
 }
