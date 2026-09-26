@@ -31,6 +31,10 @@
 #include "system/String.h"
 #include <cstdint>
 #include <cstdio>
+#include <new>
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 
 namespace {
 
@@ -93,11 +97,14 @@ void DescribeMaterial(uintptr_t matDesc, const char** outName, unsigned* outFlag
 // so this reproduces that path exactly.
 const char* RecipeLabel(uintptr_t stringTable, uintptr_t nameAddr, char* buf, int cap) {
     buf[0] = 0;
-    if (!stringTable || !fn_UIString_Ctor || !fn_UIString_ToSystemString) return buf;
+    if (!stringTable) return buf;
     uint8_t uiStr[16] = {};
-    fn_UIString_Ctor(uiStr, stringTable, reinterpret_cast<void*>(nameAddr));
+    ::new (uiStr) UI::String(
+        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)),  // B.3.6 bridge
+        *reinterpret_cast<const System::String*>(nameAddr));
     System::String sys;
-    fn_UIString_ToSystemString(uiStr, &sys);
+    ::new (&sys) System::String(
+        reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
     const char* d = sys._data;
     if (d) { int i = 0; for (; i < cap - 1 && d[i]; ++i) buf[i] = d[i]; buf[i] = 0; }
     return buf;

@@ -20,6 +20,10 @@
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
 #include "graphics/Camera.h"
 #include <new>
+#include "video/Context.h"        // ENDGAME B.3.6 UI callers (K4): Video::Viewport by value
+#include "ui/Element.h"          // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Sprite.h"           // ENDGAME B.3.6 UI callers (K4)
+#include "ui/SpriteContext.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -63,12 +67,7 @@ static void Frustum_ComputeSize(void* self) {
 
 // UI::Element::GetAlignedPosition (member overload, Runtime 0x180115ff0). Computes the
 // element's aligned screen rect from its size (+0x60/+0x64), margins (+0x18..+0x24) and
-// alignment (+0x30) within the parent-allocated (x,y,w,h). __thiscall: this in RCX.
-typedef void (*Frustum_fnGetAlignedPos_t)(void* self, int x, int y, int w, int h,
-                                          int p5, int p6, int* outX, int* outY,
-                                          int* outW, int* outH, bool b1, bool b2);
-static Frustum_fnGetAlignedPos_t s_getAlignedPos = nullptr;
-static bool s_getAlignedPosReady = false;
+// alignment (+0x30) within the parent-allocated (x,y,w,h).
 
 // Slot 5 (+0x28) — ComputeLayout (exe 0x14006c1c0). Faithful port: run the base
 // UI::Element::ComputeLayout, then compute the aligned screen rect via GetAlignedPosition
@@ -77,15 +76,11 @@ static bool s_getAlignedPosReady = false;
 // this write they stay 0 and the frustum draws relative to screen origin instead of the
 // inset minimap rect (renders too high/left).
 static void Frustum_ComputeLayout(void* self, int x, int y, int w, int h) {
-    if (fn_Element_ComputeLayout) fn_Element_ComputeLayout(self, x, y, w, h);
-    if (!s_getAlignedPosReady) {
-        s_getAlignedPosReady = true;
-        s_getAlignedPos = reinterpret_cast<Frustum_fnGetAlignedPos_t>(
-            ResolveExport("?GetAlignedPosition@Element@UI@@QEAAXHHHHHHAEAH000_N1@Z"));
-    }
-    if (!s_getAlignedPos) return;
+    // base — QUALIFIED: this body IS slot 5 of the hand-built FrustumOutlineElement table.
+    reinterpret_cast<UI::Element*>(self)->UI::Element::ComputeLayout(x, y, w, h);  // B.3.6 bridge
     int outX = 0, outY = 0, outW = 0, outH = 0;
-    s_getAlignedPos(self, x, y, w, h, 0, 0, &outX, &outY, &outW, &outH, false, false);
+    reinterpret_cast<UI::Element*>(self)->GetAlignedPosition(  // B.3.6 bridge
+        x, y, w, h, 0, 0, outX, outY, outW, outH, false, false);
     uint8_t* e = reinterpret_cast<uint8_t*>(self);
     *reinterpret_cast<int*>(e + 0x68) = outX;
     *reinterpret_cast<int*>(e + 0x70) = outX + outW;
@@ -164,32 +159,16 @@ extern "C" void FrustumOutline_ProjectCorners(float* out) {
     }
 }
 
-// SpriteContext scissor overloads used by the outline Draw. Both return a
-// Video::Viewport BY VALUE — a hidden retbuf is the first arg after `this`,
-// which the engine_funcs fn_SpriteContext_SetScissor* typedefs omit — so we
-// resolve the slots here with the correct member value-return ABI.
-typedef void* (*Frustum_fnSetScissor4_t)(void* ctx, void* retVP, int x, int y, int w, int h);
-typedef void* (*Frustum_fnSetScissorVP_t)(void* ctx, void* retVP, const void* vp);
-static Frustum_fnSetScissor4_t  s_setScissor4  = nullptr;
-static Frustum_fnSetScissorVP_t s_setScissorVP = nullptr;
-static bool s_frustumDrawReady = false;
-static void EnsureFrustumDrawFns() {
-    if (s_frustumDrawReady) return;
-    s_frustumDrawReady = true;
-    s_setScissor4 = reinterpret_cast<Frustum_fnSetScissor4_t>(
-        ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z"));
-    s_setScissorVP = reinterpret_cast<Frustum_fnSetScissorVP_t>(
-        ResolveExport("?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z"));
-}
-
 // Slot 6 (+0x30) — Draw. Port of FrustumOutlineElement_Draw (exe 0x14006be90):
 // draws the camera view-frustum footprint as a 4-line wire quad clipped to the
 // minimap rect. (AddLine no-ops on a spriteless sprite — CreateElement wires the
 // element's line sprite from the description; see frustumoutlinedescription.cpp.)
 static void Frustum_Draw(void* self, void* ctx, uint8_t alpha) {
     uint8_t* e = reinterpret_cast<uint8_t*>(self);
-    if (fn_Element_Draw) fn_Element_Draw(self, ctx, alpha);   // base element draw
-    if (!self || !ctx || !fn_SpriteContext_AddLine) return;
+    // base element draw — QUALIFIED: this body IS slot 6 of the hand-built table.
+    reinterpret_cast<const UI::Element*>(self)->UI::Element::Draw(  // B.3.6 bridge
+        *reinterpret_cast<UI::SpriteContext*>(ctx), alpha);
+    if (!self || !ctx) return;
 
     // Line color = element+0x38 modulated by alpha (halved if flag bit 18 set).
     uint32_t a32 = alpha;
@@ -227,17 +206,19 @@ static void Frustum_Draw(void* self, void* ctx, uint8_t alpha) {
     auto ix = [&](int i){ return (int)pts[i * 3 + 0] + ex; };
     auto iy = [&](int i){ return (int)pts[i * 3 + 1] + ey; };
 
-    EnsureFrustumDrawFns();
+    UI::SpriteContext* sc = reinterpret_cast<UI::SpriteContext*>(ctx);  // B.3.6 bridge
+    const UI::Sprite& lineSprite = *reinterpret_cast<const UI::Sprite*>(sprite);  // B.3.6 bridge
     uint8_t savedVP[24] = {0}, scratchVP[24] = {0};
-    if (s_setScissor4) s_setScissor4(ctx, savedVP, ex, ey, width, height);
+    ::new (savedVP) Video::Viewport(sc->SetScissor(ex, ey, width, height));
 
     // Wire quad, corner order pt0-pt1-pt3-pt2-pt0 (matches the exe's 4 AddLines).
-    fn_SpriteContext_AddLine(ctx, sprite, ix(0), iy(0), ix(1), iy(1), color);
-    fn_SpriteContext_AddLine(ctx, sprite, ix(1), iy(1), ix(3), iy(3), color);
-    fn_SpriteContext_AddLine(ctx, sprite, ix(2), iy(2), ix(3), iy(3), color);
-    fn_SpriteContext_AddLine(ctx, sprite, ix(2), iy(2), ix(0), iy(0), color);
+    sc->AddLine(lineSprite, ix(0), iy(0), ix(1), iy(1), color);
+    sc->AddLine(lineSprite, ix(1), iy(1), ix(3), iy(3), color);
+    sc->AddLine(lineSprite, ix(2), iy(2), ix(3), iy(3), color);
+    sc->AddLine(lineSprite, ix(2), iy(2), ix(0), iy(0), color);
 
-    if (s_setScissor4 && s_setScissorVP) s_setScissorVP(ctx, scratchVP, savedVP);
+    ::new (scratchVP) Video::Viewport(
+        sc->SetScissor(*reinterpret_cast<const Video::Viewport*>(savedVP)));
 }
 
 static void* FrustumOutlineElement_Build(void* p) {
@@ -259,7 +240,7 @@ static void* FrustumOutlineElement_Build(void* p) {
     if (g_FrustumVtableReady)
         *reinterpret_cast<uintptr_t*>(p) = reinterpret_cast<uintptr_t>(g_FrustumOutlineElement_Vtable);
     uint8_t* s = reinterpret_cast<uint8_t*>(p);
-    if (fn_Sprite_DefaultCtor2) fn_Sprite_DefaultCtor2(s + 0xc0);
+    ::new (s + 0xc0) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
     *(int64_t*)(s + 0xd0) = -1;
     return p;
 }

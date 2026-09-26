@@ -25,6 +25,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K4)
 
 static const uintptr_t kCaptureBoxDescriptionVtable = 0x14015d4a0;
 
@@ -40,10 +41,11 @@ static void CaptureBoxDescription_Init(void* self) {
 
 void CaptureBoxDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ElementDescription_Serialize || !fn_ExternalPtr_Serialize) {
+    if (!fn_ExternalPtr_Serialize) {
         return;
     }
-    fn_ElementDescription_Serialize(self, stream);           // base
+    // base — QUALIFIED: this body IS slot 5 of a hand-built ElementDescription table.
+    reinterpret_cast<UI::ElementDescription*>(self)->UI::ElementDescription::Serialize(stream);  // B.3.6 bridge
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     fn_ExternalPtr_Serialize(s + 0x68, serializer);          // ExternalPtr +0x68

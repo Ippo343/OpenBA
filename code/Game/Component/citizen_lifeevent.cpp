@@ -24,6 +24,10 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 
 // code/Game/Game/eventlog.cpp
 extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int severity,
@@ -59,11 +63,14 @@ extern "C" void CitizenComponent_PostLifeEvent(void* self, int eventType, int se
 
     // --- Build the title System::String from the source's UI::String name pair ---
     System::String titleStr;
-    if (titleSrc && fn_UIString_Ctor && fn_UIString_ToSystemString) {
+    if (titleSrc) {
         uint8_t uiStr[16];
-        fn_UIString_Ctor(uiStr, *reinterpret_cast<uint64_t*>(titleSrc + 0x20),
-                         reinterpret_cast<void*>(titleSrc + 0x30));
-        fn_UIString_ToSystemString(uiStr, &titleStr);
+        ::new (uiStr) UI::String(
+            Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
+                reinterpret_cast<UI::StringTable*>(*reinterpret_cast<uint64_t*>(titleSrc + 0x20))),
+            *reinterpret_cast<const System::String*>(titleSrc + 0x30));
+        ::new (&titleStr) System::String(
+            reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
     } else {
         titleStr.Set("");   // == String("") (ctor is default + Set)
     }

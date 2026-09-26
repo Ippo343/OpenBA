@@ -27,6 +27,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <new>
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // Resolved helpers
@@ -194,9 +195,9 @@ void StatusIconComponent_Serialize(StatusIconComponent* self) {
 
     // Get sprite count from the SpriteSheet at description +0x20
     void* spriteSheet = *(void**)(d + 0x20);
-    if (!spriteSheet || !s_fn_SpriteSheet_GetSpriteCount) return;
+    if (!spriteSheet) return;
 
-    int spriteCount = s_fn_SpriteSheet_GetSpriteCount(spriteSheet);
+    int spriteCount = reinterpret_cast<const UI::SpriteSheet*>(spriteSheet)->GetSpriteCount();  // B.3.6 bridge
 
     // Call geometry setup helper with:
     //   geometry (+0x28), float from desc +0x28, sprite count,

@@ -17,12 +17,14 @@
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include <new>
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K4)
 
 static void* CaptureBoxElement_Build(void* p) {
     if (!p) return nullptr;
     if (fn_Element_Ctor) fn_Element_Ctor(p);
     uint8_t* s = reinterpret_cast<uint8_t*>(p);
-    if (fn_Sprite_DefaultCtor2) fn_Sprite_DefaultCtor2(s + 0xc0);
+    ::new (s + 0xc0) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
     *(int64_t*)(s + 0xd0) = 0;
     *(int64_t*)(s + 0xd8) = 0;
     return p;

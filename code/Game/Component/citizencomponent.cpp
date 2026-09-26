@@ -24,6 +24,10 @@
 #include "resolve.h"
 #include "system/String.h"
 #include <cstdint>
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -391,10 +395,10 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
     if (profRef != 0) {
         // Build UI::String from profession name, convert to System::String
         uint8_t localStr[16] = {};
-        if (fn_UIString_Ctor) {
-            fn_UIString_Ctor(localStr, *reinterpret_cast<uint64_t*>(profRef + 0x20),
-                             reinterpret_cast<void*>(profRef + 0x40));
-        }
+        ::new (localStr) UI::String(
+            Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
+                reinterpret_cast<UI::StringTable*>(*reinterpret_cast<uint64_t*>(profRef + 0x20))),
+            *reinterpret_cast<const System::String*>(profRef + 0x40));
         // UI::String -> System::String, then HandleLifeEvent(7, str). The original
         // converts via dispatch slot [0x140151308] (UI::String::operator System::String,
         // CALL @1401130ab). [WRONG-SLOT FIX] the previous port read slot 0x140152878,
@@ -402,7 +406,8 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         // standalone, so the conversion silently no-opped and localRes8 stayed
         // empty. Use the resolved engine export directly (retval into localRes8).
         System::String localRes8;
-        if (fn_UIString_ToSystemString) fn_UIString_ToSystemString(localStr, &localRes8);
+        ::new (&localRes8) System::String(
+            reinterpret_cast<const UI::String*>(localStr)->operator System::String());  // B.3.6 bridge
 
         // Copy construct System::String from localStr result
         System::String localRes18(localRes8);
@@ -450,10 +455,11 @@ void CitizenComponent_Update(CitizenComponent* self, void* deltaTime) {
         int64_t profData = *reinterpret_cast<int64_t*>(p + 0x68);
         if (profData) {
             void* stringTable = *reinterpret_cast<void**>(profData + 0x20);
-            if (fn_StringTable_GetText) {
+            {
                 // GetText(self, retval, textIndex) — Ghidra drops R8 (textIndex)
                 // textIndex is likely 0 for single-entry profession name tables
-                fn_StringTable_GetText(stringTable, &localRes8, 0);
+                ::new (&localRes8) System::String(
+                    reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
                 char* deathStr = localRes8._data;
                 char r = s_fn_HandleLifeEvent ? s_fn_HandleLifeEvent(self, 3, deathStr) : 0;
                 if (r != 0) return;

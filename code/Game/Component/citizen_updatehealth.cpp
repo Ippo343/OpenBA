@@ -49,6 +49,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 
 namespace {
 
@@ -73,9 +75,7 @@ static fn_AddCitizenEvent_t s_addCitizenEvent = nullptr;
 // Dot 0x140151298 (both now direct Math::Vector3 calls), Box::Intersect 0x140151e80,
 // StringTable::GetText(String&) 0x140151718.
 typedef bool  (*fn_BoxIntersect_t)(const void* self, const void* other);
-typedef void* (*fn_GetTextByName_t)(void* table, void* retStr, const void* nameStr);
 static fn_BoxIntersect_t s_boxIntersect  = nullptr;
-static fn_GetTextByName_t s_getTextByName = nullptr;
 
 // ---- rdata float constants (registered by earlier waves) --------------------
 static const float* s_pMonthsPerYear = nullptr;  // 0x1401721b8 = 12.0f
@@ -107,9 +107,6 @@ static void EnsureInit() {
     s_boxIntersect = reinterpret_cast<fn_BoxIntersect_t>(RSlot(0x140151e80));
     if (!s_boxIntersect) s_boxIntersect = reinterpret_cast<fn_BoxIntersect_t>(
         ResolveExport("?Intersect@Box@Volume@@QEBA_NAEBV12@@Z"));
-    s_getTextByName = reinterpret_cast<fn_GetTextByName_t>(RSlot(0x140151718));
-    if (!s_getTextByName) s_getTextByName = reinterpret_cast<fn_GetTextByName_t>(
-        ResolveExport("?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z"));
 
     s_pMonthsPerYear = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401721b8));
     s_pSecsPerMonth  = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x140172234));
@@ -516,8 +513,10 @@ extern "C" void CitizenComp_Infect(void* self, void* disease) {
         void* nameTable = *(void**)((uintptr_t)disease + 0x20);
         System::String diseaseName;
         bool haveName = false;
-        if (nameTable && s_getTextByName) {
-            s_getTextByName(nameTable, &diseaseName, (u8*)disease + 0x28);
+        if (nameTable) {
+            ::new (&diseaseName) System::String(
+                reinterpret_cast<const UI::StringTable*>(nameTable)->GetText(  // B.3.6 bridge
+                    *reinterpret_cast<const System::String*>((u8*)disease + 0x28)));
             haveName = true;
         }
         if (s_addCitizenEvent && eventLog) {
