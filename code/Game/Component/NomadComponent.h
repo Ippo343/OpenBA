@@ -43,9 +43,6 @@ public:
 
     Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140009230
     void          Persist(void* stream) override;                 // [3]  0x14004fc40
-    // PORT GAP (retail 0x14004fd20, 42 B) — B38 D3.2: the tree's table left this
-    // slot inert (NomadComponent_OnCreate is a port that was never installed);
-    // the tree's body (nothing) is kept until the retail body is verified.
     void          OnRemove() override;                            // [7]  0x14004fd20
     int         GetDefaultState() const override { return 0; }  // [16] 0x140003730
     Controller* GetController() override { return &_controller; }  // [17] 0x140009060

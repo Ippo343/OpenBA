@@ -565,10 +565,22 @@ void* NomadComponent::CreateInPlaceObject(void* storage) {
 // [3] 0x14004fc40.
 void NomadComponent::Persist(void* stream) { NomadComponent_Shutdown(this, stream); }
 
-// [7] 0x14004fd20 — PORT GAP (NomadComponent.h): the tree's slot 7 was the inert
-// stub, kept. NomadComponent_OnCreate above is an unverified port that was never
-// installed; transcribing retail's 42-byte body is its own titled commit.
-void NomadComponent::OnRemove() {}
+// [7] 0x14004fd20 — the removed-from-world broadcast: hand the owner entity to the
+// player/selection manager's removal notify (0x140103480, "TradeWork_impl_3480" in
+// Ghidra: drop the selection if it is this entity, close its EntityUI dialogs).
+// Retail, whole body:
+//     MOV RAX,[RCX+0x10]; MOV RCX,[0x1401c3dd8]; LEA RDX,[RSP+0x30]
+//     MOV RCX,[RCX+0x120]; MOV [RSP+0x30],RAX; CALL 0x140103480
+// Unguarded, as retail. The notify is resolved per call (no first-use cache:
+// B38 D7). NomadComponent_OnCreate above is the same body under the old slot name,
+// never installed; it stays for its registration's sake.
+typedef void (*fn_NomadRemovalNotify_t)(int64_t manager, void* entityIBP);   // 0x140103480
+void NomadComponent::OnRemove() {
+    const auto notify = reinterpret_cast<fn_NomadRemovalNotify_t>(ResolveAddr(Module::Exe, 0x140103480));
+    int64_t entityIBP = reinterpret_cast<int64_t>(_entity);
+    notify(*reinterpret_cast<int64_t*>(reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x120),
+           &entityIBP);
+}
 
 DEFINE_EXE_VTABLE(NomadComponent, "_ZTV14NomadComponent")
 DEFINE_EXE_TYPE(NomadComponent, "ControllerComponent")
