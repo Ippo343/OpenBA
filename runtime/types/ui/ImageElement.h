@@ -23,20 +23,9 @@
 #include <cstdint>
 #include <cstddef>
 
-namespace UI {
-
-// UI::Sprite — 0x10 bytes, embedded in element subclasses
-// First 8 bytes = SpriteSheet* pointer
-// Next 4 bytes = sprite index (0xFFFFFFFF = none)
-// Last 4 bytes = padding/flags
-struct Sprite {
-    void*       sheet;          // +0x00  SpriteSheet* pointer
-    int32_t     index;          // +0x08  sprite index (-1 = none)
-    int32_t     pad0C;          // +0x0C  padding
-};
-static_assert(sizeof(Sprite) == 0x10, "Sprite must be 0x10 bytes");
-
-} // namespace UI
+// UI::Sprite — ONE definition, runtime/types/ui/Sprite.h (ENDGAME B.3.6 block D,
+// RULE B6-4.2; this header carried a second copy until then).
+#include "Sprite.h"
 
 // UI::ImageElement (0xE0 bytes)
 // Extends Element (0xC0) with a Sprite and additional image properties.

@@ -154,7 +154,7 @@ LifecycleReport g_lifecycleReport;
 // ============================================================================
 extern "C" void RtUiStringTable_Dtor(void* selfv) {
     ++g_dtorEntries;
-    UiStringTable* self = static_cast<UiStringTable*>(selfv);
+    UI::StringTable* self = reinterpret_cast<UI::StringTable*>(selfv);   // B.3.6 bridge
 
     // 18011d906 / 18011d90d -- re-stamp OUR vptr before the members go.
     *reinterpret_cast<void**>(self) = RT_DATA_SLOT(void*, "??_7StringTable@UI@@6B@");
@@ -169,13 +169,13 @@ extern "C" void RtUiStringTable_Dtor(void* selfv) {
     // (`kD_Str2_10`), a different type/dispatch from the `rtcoll::ArraySpec`
     // `Collection::Array<T>::~Array()` calls, and no `kSpec_*` row exists for
     // it — per the batch rule, a "DtorElem" helper may not be convertible at
-    // all, so `self->data` (a real `Collection::Array<StringTableTextEntry>`
+    // all, so `self->_data` (a real `Collection::Array<TextEntry>`
     // by layout) stays reached through the seam rather than `.~Array()`.
     static VoidPtrFn arrayDtor = nullptr;
     if (!arrayDtor)
         arrayDtor = reinterpret_cast<VoidPtrFn>(ResolveAddr(Module::Runtime, 0x180004a90));
     if (arrayDtor) {
-        arrayDtor(&self->data);
+        arrayDtor(&self->_data);
     } else {
         // Not a guard around a faithful deref -- this is a RESOLVE failing, a
         // condition retail cannot have. Reported rather than silently skipped,

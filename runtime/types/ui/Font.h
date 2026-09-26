@@ -63,6 +63,8 @@
 #include <cstddef>
 
 #include "../collection/Collection.h"
+#include "../object/External.h"     // Object::External, ExternalPtr<T>
+#include "../system/String.h"       // RtSystem::String — trivially destructible
 
 namespace RtUI {
 
@@ -87,7 +89,11 @@ static_assert(sizeof(FontGlyph) == 0x10, "UI::Font glyph stride 0x10 (SHL RBX,4)
 // 0x180076d10; the justify pass at the end of ComputeStringLayout re-reads
 // `_line` (0x1801174be) and adjusts `_x` (0x1801174d2 / 0x1801174de).
 struct FontLayoutEntry {
-    int32_t _codepoint;     // +0x00
+    int32_t _glyph;         // +0x00  the GLYPH (= sprite) index, NOT the
+                            //        codepoint: ComputeLineLayout stores the
+                            //        looked-up glyph (font.cpp: storing `cp`
+                            //        here drew "n" for "New"), and AddFont
+                            //        hands it to AddSprite as the sprite index
     int32_t _x;             // +0x04
     int32_t _y;             // +0x08
     int32_t _line;          // +0x0c  index into Layout::_lineWidths
@@ -114,49 +120,6 @@ static_assert(offsetof(FontLayout, _lineWidths._size) == 0x20,
               "Layout::_lineWidths._size @ +0x20 (MOV EDX,[RDI+0x20] at 0x180117190)");
 static_assert(sizeof(FontLayout) == 0x28, "sizeof(UI::Font::Layout) == 0x28");
 
-struct Font {
-    void*                          _vtbl;          // +0x00  Base -> External -> Font
-    void*                          _external08;    // +0x08  Object::External's three
-    void*                          _external10;    // +0x10
-    void*                          _external18;    // +0x18
-    void*                          _string20;      // +0x20  System::String
-    void*                          _field28;       // +0x28  serialized by 0x180076e90
-    Collection::Array<int32_t>     _charToGlyph;   // +0x30  codepoint -> glyph index
-    Collection::Array<FontGlyph>   _glyphs;        // +0x40
-    int32_t                        _lineHeight;    // +0x50
-    int32_t                        _field54;       // +0x54
-    int32_t                        _ellipsisWidth; // +0x58
-    int32_t                        _spaceWidth;    // +0x5c
-    void*                          _spriteSheet;   // +0x60  ExternalPtr<UI::SpriteSheet>
-    void*                          _material;      // +0x68  ExternalPtr<MaterialInstance>
-    int32_t                        _field70;       // +0x70
-    int32_t                        _field74;       // +0x74
-    void*                          _string78;      // +0x78  System::String
-    void*                          _string80;      // +0x80  System::String
-    void*                          _string88;      // +0x88  System::String
-};
-
-static_assert(offsetof(Font, _string20)      == 0x20, "Font::_string20 @ +0x20");
-static_assert(offsetof(Font, _field28)       == 0x28, "Font::_field28 @ +0x28");
-static_assert(offsetof(Font, _charToGlyph)   == 0x30, "Font::_charToGlyph @ +0x30");
-static_assert(offsetof(Font, _charToGlyph._size) == 0x38,
-              "Font::_charToGlyph._size @ +0x38 (CMP EAX,[RBP+0x38] at 0x180116d0a)");
-static_assert(offsetof(Font, _glyphs)        == 0x40, "Font::_glyphs @ +0x40");
-static_assert(offsetof(Font, _glyphs._size)  == 0x48,
-              "Font::_glyphs._size @ +0x48 (MOV EAX,[RSI+0x48] at 0x1801178f2)");
-static_assert(offsetof(Font, _lineHeight)    == 0x50, "Font::_lineHeight @ +0x50");
-static_assert(offsetof(Font, _field54)       == 0x54, "Font::_field54 @ +0x54");
-static_assert(offsetof(Font, _ellipsisWidth) == 0x58, "Font::_ellipsisWidth @ +0x58");
-static_assert(offsetof(Font, _spaceWidth)    == 0x5c, "Font::_spaceWidth @ +0x5c");
-static_assert(offsetof(Font, _spriteSheet)   == 0x60, "Font::_spriteSheet @ +0x60");
-static_assert(offsetof(Font, _material)      == 0x68, "Font::_material @ +0x68");
-static_assert(offsetof(Font, _field70)       == 0x70, "Font::_field70 @ +0x70");
-static_assert(offsetof(Font, _field74)       == 0x74, "Font::_field74 @ +0x74");
-static_assert(offsetof(Font, _string78)      == 0x78, "Font::_string78 @ +0x78");
-static_assert(offsetof(Font, _string80)      == 0x80, "Font::_string80 @ +0x80");
-static_assert(offsetof(Font, _string88)      == 0x88, "Font::_string88 @ +0x88");
-static_assert(sizeof(Font) == 0x90, "sizeof(UI::Font) == 0x90 (MOV EDX,0x90 at 0x18003214f)");
-
 // The three vtables UI::Font's constructor stamps, in the order it stamps them
 // (0x180031cf6, 0x180031d00, 0x180031d20). All three are exported, so the port
 // resolves them by name and the mint supplies them at cutover.
@@ -174,3 +137,150 @@ enum FontJustify : int32_t {
 };
 
 }  // namespace RtUI
+
+// ############################################################################
+// UI::Font — the real class (ENDGAME B.3.6 block D). 0x90 bytes, NINE slots,
+// `Object::External` (`?_ParentTypeName@Font@UI@@` 0x180031990 ->
+// "Object::External"). It replaces the `RtUI::Font` POD this header carried
+// (its one reader, spritecontext_add.cpp, is in the same block): ONE
+// definition of the layout, and every offset above is re-asserted below.
+//
+// `??_7Font@UI@@6B@` @ 0x180155b50 (B36_SLOTS.md section 1):
+//   [0] +0x00 0x180032130  (unexported) vector deleting dtor — RT_DELDTOR row
+//   [1] +0x08 0x1800319c0  ?TypeName@Font@UI@@UEBAPEBDXZ
+//   [2] +0x10 0x1800319a0  ?Type@Font@UI@@UEBAIXZ
+//   [3] +0x18 0x1801176b0  ?GetFileVersion@Font@UI@@UEBAHXZ  (MOV EAX,8)
+//   [4] +0x20 0x1801176c0  ?Compile@Font@UI@@…  — OVERRIDDEN (RULE B6-1.5)
+//   [5] +0x28 0x1801176d0  ?Serialize@Font@UI@@UEAA_NAEAVStream@IO@@@Z
+//   [6] +0x30 0x180031c40  ?Reconstruct@Font@UI@@UEAAPEAVExternal@Object@@XZ
+//   [7] +0x38 0x180031d80  ?Destruct@Font@UI@@UEAAXXZ
+//   [8] +0x40 0x180031ce0  ?Construct@Font@UI@@UEAAPEAVExternal@Object@@XZ — B6-1.1
+//
+// THREE FIELDS NAMED THIS PASS FROM THE EXPORTED GETTERS, read as retail
+// disassembly (they settle what this header left unnamed or named by use):
+//   ?GetHeight@Font@UI@@QEBAHXZ      0x180031de0  MOV EAX,[RCX+0x50] — the
+//                                    `_lineHeight` ComputeStringLayout adds per line
+//   ?GetBaseLine@Font@UI@@QEBAHXZ    0x180031df0  MOV EAX,[RCX+0x54] — was `_field54`
+//   ?GetSpaceWidth@Font@UI@@QEBAHXZ  0x180031e00  MOV EAX,[RCX+0x5c] — `_spaceWidth` confirmed
+//   ?GetKern@Font@UI@@QEBAAEBUKerning@12@H@Z  0x180031dd0  `&_glyphs._data[i]`
+//                                    (SHL 4 + [RCX+0x40]) — so the 16-byte glyph
+//                                    row IS retail's `UI::Font::Kerning`
+//   ?GetSpriteIndex@Font@UI@@QEBAHH@Z 0x180031da0  `cp` bounds-checked against
+//                                    +0x38, `_charToGlyph[cp]`, 0xffff -> -1
+//   ?GetSpriteSheet@Font@UI@@…       0x180031d90  MOV RAX,[RCX+0x60]; MOV [RDX],RAX
+//                                    — a hidden RETSLOT
+//
+// ABSTRACT, no real constructor, empty non-virtual destructor — the
+// CharacterSet.h shape and reasons.
+// ############################################################################
+
+namespace System { class Filename; class String; }
+
+namespace UI {
+
+class SpriteSheet;
+
+class Font : public Object::External {
+public:
+    // Retail's nested names (`Kerning@Font@UI`, `Layout@Font@UI`,
+    // `Justify@Font@UI` in the exported manglings).
+    using Kerning = RtUI::FontGlyph;
+    using Layout  = RtUI::FontLayout;
+    using Justify = int32_t;   // W4 enum: EAX-sized; see RtUI::FontJustify
+
+    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x180032130
+
+    const char* TypeName() const override;              // [1] 0x1800319c0
+    uint32_t    Type() const override;                  // [2] 0x1800319a0
+    int32_t     GetFileVersion() const override;        // [3] 0x1801176b0
+    CompileResult Compile(const System::Filename& path) override;  // [4] 0x1801176c0 — OVERRIDE
+    bool        Serialize(void* stream) override;       // [5] 0x1801176d0
+    Object::External* Reconstruct() override;           // [6] 0x180031c40
+    void        Destruct() override;                    // [7] 0x180031d80
+    virtual Object::External* Construct();              // [8] 0x180031ce0 — B6-1.1
+
+    // ---- ported non-virtual members (runtime/src/ui/font.cpp) --------------
+    // ?ComputeLineLayout@Font@UI@@QEBAHPEBDHHHHHPEAULayout@12@@Z  0x180116c70
+    int32_t ComputeLineLayout(const char* text, int32_t count, int32_t startX,
+                              int32_t baseY, int32_t maxWidth, int32_t line,
+                              Layout* layout) const;
+    // ?ComputeCharacterPosition@Font@UI@@QEBAHAEBVString@System@@H@Z  0x180116ee0
+    int32_t ComputeCharacterPosition(const System::String& text, int32_t count) const;
+    // ?ComputeStringLayout@Font@UI@@QEBAXAEBVString@System@@_NHHW4Justify@12@AEAH3PEAULayout@12@@Z
+    //   0x180116fd0 — `AEAH`/`AEAH` are by-REFERENCE outs, `X` returns void.
+    void ComputeStringLayout(const System::String& text, bool multiline,
+                             int32_t wrapWidth, int32_t maxWidth, Justify justify,
+                             int32_t& outWidth, int32_t& outHeight,
+                             Layout* layout) const;
+
+    // ---- the getters (read this pass; see the banner) ----------------------
+    int32_t GetHeight() const     { return _lineHeight; }  // 0x180031de0
+    int32_t GetBaseLine() const   { return _baseLine; }    // 0x180031df0
+    int32_t GetSpaceWidth() const { return _spaceWidth; }  // 0x180031e00
+    const Kerning& GetKern(int32_t glyph) const { return _glyphs._data[glyph]; }  // 0x180031dd0
+    int32_t GetSpriteIndex(int32_t codepoint) const {      // 0x180031da0
+        if (codepoint < 0 || codepoint >= _charToGlyph._size) return -1;
+        const int32_t g = _charToGlyph._data[codepoint];
+        return (g == 0xffff) ? -1 : g;
+    }
+    // 0x180031d90 — RETSLOT in retail; a plain by-value return here.
+    Object::ExternalPtr<SpriteSheet> GetSpriteSheet() const { return _spriteSheet; }
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    Font(const Font& src);                              // 0x180031e10
+    Font& operator=(const Font& src);                   // 0x180031f60
+    static uint32_t TypeId();                           // 0x1800319b0
+    static void* operator new(std::size_t bytes);              // 0x1800319d0
+    static void* operator new(std::size_t bytes, void* place); // 0x180031a40
+    static void  operator delete(void* p);                     // 0x180031a50
+    static Object::Base* CreateNewObject();                    // 0x180031ab0
+    static Object::Base* CreateInPlaceObject(void* place);     // 0x180031ba0
+
+protected:
+    Font() = default;   // NOT retail's 0x180117510 — see the banner
+    ~Font();            // 0x1801175a0, empty (the door keeps the body)
+
+public:
+    // ---- the 0x70 bytes Font adds (public: the doors and AddFont read them) --
+    RtSystem::String                   _string20;      // +0x20  System::String
+    void*                              _field28;       // +0x28  serialized by 0x180076e90
+    Collection::Array<int32_t>         _charToGlyph;   // +0x30  codepoint -> glyph index
+    Collection::Array<Kerning>         _glyphs;        // +0x40  GetKern
+    int32_t                            _lineHeight;    // +0x50  GetHeight
+    int32_t                            _baseLine;      // +0x54  GetBaseLine
+    int32_t                            _ellipsisWidth; // +0x58
+    int32_t                            _spaceWidth;    // +0x5c  GetSpaceWidth
+    Object::ExternalPtr<SpriteSheet>   _spriteSheet;   // +0x60  GetSpriteSheet
+    void*                              _material;      // +0x68  ExternalPtr<MaterialInstance>
+    int32_t                            _field70;       // +0x70
+    int32_t                            _field74;       // +0x74
+    RtSystem::String                   _string78;      // +0x78  System::String
+    RtSystem::String                   _string80;      // +0x80  System::String
+    RtSystem::String                   _string88;      // +0x88  System::String
+};
+
+static_assert(sizeof(Font) == 0x90, "sizeof(UI::Font) == 0x90 (MOV EDX,0x90 at 0x18003214f)");
+static_assert(alignof(Font) == 8, "UI::Font aligns to 8 (the vptr)");
+static_assert(offsetof(Font, _string20)      == 0x20, "Font::_string20 @ +0x20");
+static_assert(offsetof(Font, _field28)       == 0x28, "Font::_field28 @ +0x28");
+static_assert(offsetof(Font, _charToGlyph)   == 0x30, "Font::_charToGlyph @ +0x30");
+static_assert(offsetof(Font, _charToGlyph._size) == 0x38,
+              "Font::_charToGlyph._size @ +0x38 (CMP EAX,[RBP+0x38] at 0x180116d0a)");
+static_assert(offsetof(Font, _glyphs)        == 0x40, "Font::_glyphs @ +0x40");
+static_assert(offsetof(Font, _glyphs._size)  == 0x48,
+              "Font::_glyphs._size @ +0x48 (MOV EAX,[RSI+0x48] at 0x1801178f2)");
+static_assert(offsetof(Font, _lineHeight)    == 0x50, "GetHeight 0x180031de0 reads +0x50");
+static_assert(offsetof(Font, _baseLine)      == 0x54, "GetBaseLine 0x180031df0 reads +0x54");
+static_assert(offsetof(Font, _ellipsisWidth) == 0x58, "Font::_ellipsisWidth @ +0x58");
+static_assert(offsetof(Font, _spaceWidth)    == 0x5c, "GetSpaceWidth 0x180031e00 reads +0x5c");
+static_assert(offsetof(Font, _spriteSheet)   == 0x60, "GetSpriteSheet 0x180031d90 reads +0x60");
+static_assert(offsetof(Font, _material)      == 0x68, "Font::_material @ +0x68");
+static_assert(offsetof(Font, _field70)       == 0x70, "Font::_field70 @ +0x70");
+static_assert(offsetof(Font, _field74)       == 0x74, "Font::_field74 @ +0x74");
+static_assert(offsetof(Font, _string78)      == 0x78, "Font::_string78 @ +0x78");
+static_assert(offsetof(Font, _string80)      == 0x80, "Font::_string80 @ +0x80");
+static_assert(offsetof(Font, _string88)      == 0x88, "Font::_string88 @ +0x88");
+static_assert(offsetof(Font, _string20) == sizeof(Object::External),
+              "Font's own bytes begin right after Object::External");
+
+}  // namespace UI

@@ -148,82 +148,68 @@ void ConstructInPlace(uint8_t* self) {
 
 }  // namespace
 
+// ############################################################################
+// UI::SpriteSheet's slot bodies (ENDGAME B.3.6 block D), inside `namespace UI`
+// after the anonymous namespace (B34_BRIEFS A.2). Each door below keeps its
+// registered name and address and delegates with a QUALIFIED call: a live
+// SpriteSheet wears the MINTED table, whose slots resolve back to these doors.
+// ############################################################################
+namespace UI {
+
 // ---- slot 2  ?Type@SpriteSheet@UI@@UEBAIXZ  0x180002e30 --------------------
 //   MOV EAX,dword ptr [0x1801fadd0] / RET     — RCX is never read.
-extern "C" uint32_t RtUi_SpriteSheet_Type(const void* self) {
-    (void)self;
+uint32_t SpriteSheet::Type() const {
     uint32_t ours = 0;
     std::memcpy(&ours, SheetTypeInfo(), sizeof ours);
     return ours;
 }
 
 // The STATIC spelling of the same two instructions, at its own address
-// (0x180002e40). Registered separately because it is a separate export with a
-// separate call surface; sharing the body is what the DLL does too.
-extern "C" uint32_t RtUi_SpriteSheet_TypeId() {
+// (0x180002e40). A separate export with a separate call surface; sharing the
+// body is what the DLL does too.
+uint32_t SpriteSheet::TypeId() {
     uint32_t ours = 0;
     std::memcpy(&ours, SheetTypeInfo(), sizeof ours);
-    using Fn = uint32_t (*)();
     return ours;
 }
 
 // ---- slot 1  ?TypeName@SpriteSheet@UI@@UEBAPEBDXZ  0x180002e50 -------------
 //   MOV RAX,qword ptr [0x1801fadd8] / RET     — typeInfo + 8, RCX unread.
-//
-extern "C" const char* RtUi_SpriteSheet_TypeName(const void* self) {
-    (void)self;
+const char* SpriteSheet::TypeName() const {
     const char* ours = nullptr;
     std::memcpy(&ours, SheetTypeInfo() + 8, sizeof ours);
     return ours;
 }
 
 // ---- slot 3  ?GetFileVersion@SpriteSheet@UI@@UEBAHXZ  0x18011d710 ----------
-//   MOV EAX,6 / RET. The sheet resource's on-disk format version.
-extern "C" int RtUi_SpriteSheet_GetFileVersion(const void* self) {
-    (void)self;
-    const int ours = 6;
-    return ours;
-}
+//   MOV EAX,6 / RET. The sheet resource's on-disk format version. A LITERAL.
+int32_t SpriteSheet::GetFileVersion() const { return 6; }
 
-// ---- slot 4  ?Compile@SpriteSheet@UI@@UEAA…  0x18011d720 -------------------
+// ---- slot 4  ?Compile@SpriteSheet@UI@@UEAA…  0x18011d720 — OVERRIDE ----------
 //   MOV EAX,1 / RET. It IGNORES its Filename argument entirely — the return is
 //   an Object::External::CompileResult and 1 is the constant answer. Not a
-//   stub of ours: those two instructions are the whole shipped body.
-extern "C" int RtUi_SpriteSheet_Compile(void* self, const void* filename) {
-    (void)self; (void)filename;
-    const int ours = 1;
-    using Fn = int (*)(void*, const void*);
-    return ours;
-}
+//   stub of ours: those two instructions are the whole shipped body. It is a
+//   DIFFERENT body from Object::External's own slot 4 (0x1800066e0) even though
+//   both answer 1 (RULE B6-1.5).
+Object::External::CompileResult SpriteSheet::Compile(const System::Filename&) { return 1; }
 
 // ---- slot 7  ?Destruct@SpriteSheet@UI@@UEAAXXZ  0x180003180 ----------------
 //   MOV RAX,[RCX] / XOR EDX,EDX / JMP qword ptr [RAX]
 // A tail jump into SLOT 0 of the object's own vtable — the vector deleting
 // destructor — with flag 0, i.e. "destroy, do not free". Reading the vtable
 // from the OBJECT and not from a resolved constant is load-bearing: a derived
-// SpriteSheet would dispatch to its own slot 0, and hard-coding ours would
-// break that silently.
-//
-// NOT REPLAYED. Its effect is to run a destructor on the live object, and
-// calling the shipped body a second time would run it twice — a double free of
-// whatever the sheet owns. This is the one body in the file where the replay
-// argument fails, and it is stated rather than quietly skipped.
-extern "C" void RtUi_SpriteSheet_Destruct(void* self) {
-    void** const vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
+// SpriteSheet would dispatch to its own slot 0.
+void SpriteSheet::Destruct() {
+    void** const vt = *reinterpret_cast<void***>(this);
+    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(this, 0);
 }
 
 // ---- slot 8  ?Construct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ  0x180003100
 //   if (this) { <the constructor, inlined>; return this; } else return nullptr;
-// The null test is retail's own (0x180003114), not a guard added here.
-extern "C" void* RtUi_SpriteSheet_Construct(void* self) {
-    if (!self) {
-          // the null arm does no work, and says so
-        return nullptr;
-    }
-    ConstructInPlace(static_cast<uint8_t*>(self));
-
-    return self;
+// The null test is retail's own (0x180003114); it lives in the DOOR.
+Object::External* SpriteSheet::Construct() {
+    ConstructInPlace(reinterpret_cast<uint8_t*>(this));
+    return this;
 }
 
 // ---- slot 6  ?Reconstruct@SpriteSheet@UI@@UEAAPEAVExternal@Object@@XZ  0x180003080
@@ -231,16 +217,52 @@ extern "C" void* RtUi_SpriteSheet_Construct(void* self) {
 //   Construct: there is NO null test on this path (0x180003092 dereferences
 //   RCX immediately). Retail relies on the caller never passing null, and
 //   CLAUDE.md's rule says leave the deref faithful.
-//
-// NOT REPLAYED, for Destruct's reason: the destructor half runs on the live
-// object and cannot be run twice.
-extern "C" void* RtUi_SpriteSheet_Reconstruct(void* self) {
-    void** const vt = *reinterpret_cast<void***>(self);
-    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(self, 0);
-    ConstructInPlace(static_cast<uint8_t*>(self));
-    return self;
+Object::External* SpriteSheet::Reconstruct() {
+    void** const vt = *reinterpret_cast<void***>(this);
+    reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(this, 0);
+    ConstructInPlace(reinterpret_cast<uint8_t*>(this));
+    return this;
 }
 
+// ~SpriteSheet: NON-VIRTUAL and EMPTY; `RtUi_SpriteSheet_Dtor`
+// (spritesheet_new.cpp) is the registered door that does retail's release.
+SpriteSheet::~SpriteSheet() {}
+
+}  // namespace UI
+
+// ---- the doors --------------------------------------------------------------
+extern "C" uint32_t RtUi_SpriteSheet_Type(const void* self) {
+    return reinterpret_cast<const UI::SpriteSheet*>(self)->UI::SpriteSheet::Type();  // B.3.6 bridge
+}
+extern "C" uint32_t RtUi_SpriteSheet_TypeId() {
+    return UI::SpriteSheet::TypeId();
+}
+extern "C" const char* RtUi_SpriteSheet_TypeName(const void* self) {
+    return reinterpret_cast<const UI::SpriteSheet*>(self)                    // B.3.6 bridge
+               ->UI::SpriteSheet::TypeName();
+}
+extern "C" int RtUi_SpriteSheet_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::SpriteSheet*>(self)                    // B.3.6 bridge
+               ->UI::SpriteSheet::GetFileVersion();
+}
+// `?AW4CompileResult` is a four-byte enum: returned in EAX, no hidden slot.
+extern "C" int RtUi_SpriteSheet_Compile(void* self, const void* filename) {
+    return static_cast<int>(
+        reinterpret_cast<UI::SpriteSheet*>(self)                              // B.3.6 bridge
+            ->UI::SpriteSheet::Compile(*static_cast<const System::Filename*>(filename)));
+}
+extern "C" void RtUi_SpriteSheet_Destruct(void* self) {
+    reinterpret_cast<UI::SpriteSheet*>(self)->UI::SpriteSheet::Destruct();   // B.3.6 bridge
+}
+extern "C" void* RtUi_SpriteSheet_Construct(void* self) {
+    if (!self) return nullptr;                 // 0x180003114, retail's null test
+    return reinterpret_cast<UI::SpriteSheet*>(self)                          // B.3.6 bridge
+               ->UI::SpriteSheet::Construct();
+}
+extern "C" void* RtUi_SpriteSheet_Reconstruct(void* self) {
+    return reinterpret_cast<UI::SpriteSheet*>(self)                          // B.3.6 bridge
+               ->UI::SpriteSheet::Reconstruct();
+}
 // ============================================================================
 // slot 5  ?Serialize@SpriteSheet@UI@@UEAA_NAEAVStream@IO@@@Z   0x18011d730
 // ============================================================================
@@ -368,9 +390,13 @@ SerMemberFn ByAddr(uintptr_t addr) {
 
 // ?Serialize@String@System@@ — exported, ported, reached by address because the
 // shipped instruction is `CALL 0x1800c9930`.
+// ENDGAME B.3.6 block D (RULE B6-5): the three resolvers below no longer
+// keep a function-local static — UI is constructed and serialized on the
+// LOADER thread, and a first-call cache inside a member's call path is what
+// the class blocks remove. `ResolveAddr` is a registry lookup; Serialize is
+// once per sheet load, not per frame.
 SerMemberFn StringSerialize() {
-    static SerMemberFn f = ByAddr(0x1800c9930);
-    return f;
+    return ByAddr(0x1800c9930);
 }
 // ENDGAME B.3.2 step 2 — the 0x180078950 forwarder that used to sit here is
 // GONE. `m_sprites` + `m_spriteCount` + `m_spriteCapacity` (SpriteSheet.h,
@@ -382,13 +408,11 @@ SerMemberFn StringSerialize() {
 // (serializer, count, entries)
 using EntriesSerializeFn = void (*)(Serializer*, uint32_t, void*);
 EntriesSerializeFn EntriesSerialize() {
-    static EntriesSerializeFn f = reinterpret_cast<EntriesSerializeFn>(
+    return reinterpret_cast<EntriesSerializeFn>(
         ResolveAddr(Module::Runtime, 0x180078ad0));
-    return f;
 }
 SerMemberFn MaterialPtrSerialize() {
-    static SerMemberFn f = ByAddr(0x180014520);
-    return f;
+    return ByAddr(0x180014520);
 }
 
 // The inlined ctor at 0x18011d747..0x18011d772, and the inlined dtor at
@@ -554,31 +578,41 @@ extern "C" void RtUi_SpriteSheet_SerializeEntries(Serializer* ser,
     } while (--count != 0);                 // DEC RSI ; JNE
 }
 
-extern "C" bool RtUi_SpriteSheet_Serialize(SpriteSheet* self, Stream* stream) {
+namespace UI {
+
+bool SpriteSheet::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    StringSerialize()(&self->m_groupName,   &ser);   // +0x40 FIRST — see banner
-    StringSerialize()(&self->m_textureName, &ser);   // +0x38 second
+    StringSerialize()(&m_groupName,   &ser);   // +0x40 FIRST — see banner
+    StringSerialize()(&m_textureName, &ser);   // +0x38 second
 
-    RecInt (rw, &self->m_field48);   // +0x48
-    RecInt (rw, &self->m_field4C);   // +0x4c
-    RecBool(rw, &self->m_field50);   // +0x50
+    RecInt (rw, &m_field48);   // +0x48
+    RecInt (rw, &m_field4C);   // +0x4c
+    RecBool(rw, &m_field50);   // +0x50
 
-    int32_t count = self->m_spriteCount;   // +0x28, into the RSP+0x50 temporary
+    int32_t count = m_spriteCount;   // +0x28, into the RSP+0x50 temporary
     RecInt(rw, &count);
 
     if (ser.stream->direction == rt::io::kDirectionReading)
-        rtcoll::AsArray<&rtcoll::kSpec_Sprite38Z>(&self->m_sprites)
+        rtcoll::AsArray<&rtcoll::kSpec_Sprite38Z>(&m_sprites)
             ->SetSize(static_cast<int>(count));            // retail 0x180078950
 
     // Re-read AFTER SetSize: it reallocates.
-    EntriesSerialize()(&ser, static_cast<uint32_t>(count), self->m_sprites);
+    EntriesSerialize()(&ser, static_cast<uint32_t>(count), m_sprites);
 
-    MaterialPtrSerialize()(&self->m_field30, &ser);  // +0x30
+    MaterialPtrSerialize()(&m_field30, &ser);  // +0x30
 
     DestroyCodec(rw);
     return true;
+}
+
+}  // namespace UI
+
+extern "C" bool RtUi_SpriteSheet_Serialize(void* self, void* stream) {
+    return reinterpret_cast<UI::SpriteSheet*>(self)                          // B.3.6 bridge
+               ->UI::SpriteSheet::Serialize(stream);
 }
 
 // ============================================================================

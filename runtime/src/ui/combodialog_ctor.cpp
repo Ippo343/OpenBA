@@ -49,7 +49,7 @@
 // THIS overload (0x1801146b0) takes an ALREADY-BUILT root Element instead of a
 // Dialog, and consequently:
 //   * `_dialog` (+0x18) is left NULL,
-//   * `_flags` / `_flags2` (+0x20 / +0x24) are zeroed rather than seeded,
+//   * `_flags` / `_result` (+0x20 / +0x24) are zeroed rather than seeded,
 //   * `_spriteSheet` (+0x58) is NULL and `_spriteIndex` (+0x60) is -1 with no
 //     SpriteSheet lookup at all,
 //   * there is no controller loop.
@@ -503,7 +503,7 @@ extern "C" void* RtUi_ComboDialog_OperatorNew(uint64_t bytes) {
 // zero and +0x60 as -1 rather than deriving them from a Dialog.
 //
 // Note the qword-width zero stores: retail clears +0x20 as ONE qword
-// (0x1801146f6), covering `_flags` AND `_flags2`, and likewise +0x70, +0x80 and
+// (0x1801146f6), covering `_flags` AND `_result`, and likewise +0x70, +0x80 and
 // +0x88 each cover a pair of dwords. Spelled out field by field here; the bytes
 // are identical.
 // ============================================================================
@@ -528,7 +528,7 @@ extern "C" void* RtUi_DialogInstance_CtorFromElement(void* self, void* ui,
     d->_ui         = ui;                           // +0x10
     d->_dialog     = nullptr;                      // +0x18  no Dialog resource
     d->_flags      = 0;                            // +0x20  \ one qword store
-    d->_flags2     = 0;                            // +0x24  /
+    d->_result     = 0;                            // +0x24  /
     d->_parent     = nullptr;                      // +0x28  written 0 then...
     d->_parent     = *parentPtr;                   // +0x28  ...the real value
     d->_dataSource = dataSource;                   // +0x30

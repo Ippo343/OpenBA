@@ -82,7 +82,12 @@
 #include <cstdint>
 #include <cstddef>
 
+#include "../object/External.h"
+
 namespace UI {
+
+class Sprite;
+class SpriteContext;
 
 // The array header every Collection::Array<T> uses. Same shape as
 // runtime/src/collection/array.cpp's ArrayHdr, spelled again here so this
@@ -128,23 +133,96 @@ static_assert(offsetof(CaptureEntry, color)      == 0x24, "");
 inline constexpr size_t kCaptureEntryPadOff = 0x04;
 inline constexpr size_t kCaptureEntryPadLen = 0x04;
 
-// UI::SpriteCapture (0x58). Derives Object::External (0x20).
-struct SpriteCapture {
-    void*        vtable;      // +0x00
-    void*        ext08;       // +0x08  Object::External
-    void*        ext10;       // +0x10  Object::External
-    void*        ext18;       // +0x18  Object::External
+// ============================================================================
+// UI::SpriteCapture — 0x58 bytes, NINE slots, `Object::External`.
+// ============================================================================
+// ENDGAME B.3.6 block D: the POD that occupied the retail name here is now the
+// real class (B4b-1: the POD had no users outside this block's files, so it is
+// replaced rather than moved to RtUI::). Parent "Object::External"
+// (`?_ParentTypeName@SpriteCapture@UI@@` 0x18003c7e0); sizeof 0x58 from the
+// `MOV EDX,0x58` in its slot-0 deleting dtor (0x18003ccf0).
+//
+// `??_7SpriteCapture@UI@@6B@` @ 0x1801566a0 (B36_SLOTS.md section 1):
+//   [0] +0x00 0x18003ccf0  (unexported) vector deleting dtor — RT_DELDTOR row
+//   [1] +0x08 0x18003c810  ?TypeName@SpriteCapture@UI@@UEBAPEBDXZ
+//   [2] +0x10 0x18003c7f0  ?Type@SpriteCapture@UI@@UEBAIXZ
+//   [3] +0x18 0x1800d9520  ?GetFileVersion@SpriteCapture@UI@@UEBAHXZ  (MOV EAX,1)
+//   [4] +0x20 0x1800066e0  ?Compile@External@Object@@  INHERITED — NOT declared
+//   [5] +0x28 0x1800d9530  ?Serialize@SpriteCapture@UI@@UEAA_NAEAVStream@IO@@@Z
+//   [6] +0x30 0x18003ca40  ?Reconstruct@SpriteCapture@UI@@UEAAPEAVExternal@Object@@XZ
+//   [7] +0x38 0x18003cb40  ?Destruct@SpriteCapture@UI@@UEAAXXZ
+//   [8] +0x40 0x18003cac0  ?Construct@SpriteCapture@UI@@UEAAPEAVExternal@Object@@XZ — B6-1.1
+//
+// ABSTRACT, no real constructor, empty non-virtual destructor — the
+// CharacterSet.h shape and reasons (the factory rows in ui_factory_wave28.cpp
+// and the Construct/Reconstruct doors build live objects on the MINTED table).
+class SpriteCapture : public Object::External {
+public:
+    using CaptureEntry = ::UI::CaptureEntry;   // retail's nested spelling
+                                               // (`Array<UI::SpriteCapture::CaptureEntry>`)
+
+    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x18003ccf0
+
+    const char* TypeName() const override;              // [1] 0x18003c810
+    uint32_t    Type() const override;                  // [2] 0x18003c7f0
+    int32_t     GetFileVersion() const override;        // [3] 0x1800d9520
+    // [4] 0x1800066e0 is Object::External::Compile, inherited unchanged.
+    bool        Serialize(void* stream) override;       // [5] 0x1800d9530
+    Object::External* Reconstruct() override;           // [6] 0x18003ca40
+    void        Destruct() override;                    // [7] 0x18003cb40
+    virtual Object::External* Construct();              // [8] 0x18003cac0 — B6-1.1
+
+    // ---- ported non-virtual members ----------------------------------------
+    // ?AddScissor@SpriteCapture@UI@@QEAAXHHHH_N@Z            0x1800d8ef0
+    void AddScissor(int32_t x, int32_t y, int32_t right, int32_t bottom, bool fullScreen);
+    // ?AddSprite@SpriteCapture@UI@@QEAAXAEBVSprite@2@HHHHMI@Z  0x1800d8b20
+    void AddSprite(const Sprite& sprite, int32_t x1, int32_t y1, int32_t x2, int32_t y2,
+                   float rotation, uint32_t color);
+    // ?EndAddingSprites@SpriteCapture@UI@@QEAAXXZ           0x1800d8a60
+    void EndAddingSprites();
+    // ?BeginAddingSprites@SpriteCapture@UI@@QEAAXXZ         0x1800d9010 — read
+    //   this pass: `+0x50 = 0 (qword)`, `SetSize(+0x40, 0)` (0x1800370c0),
+    //   tail-jump `SetSize(+0x30, 0)` (0x18004ba90). SpriteContext::Begin
+    //   inlines exactly these three; it now calls this member.
+    void BeginAddingSprites();
+    // ?Draw@SpriteCapture@UI@@QEBAXAEAVSpriteContext@2@HH@Z  0x1800d9230
+    void Draw(SpriteContext& context, int32_t x, int32_t y) const;
+    // ?GetWidth / ?GetHeight — 0x1800d9220 / 0x1800d9210, `MOV EAX,[RCX+0x50]` /
+    // `[RCX+0x54]` (this header's banner).
+    int32_t GetWidth() const  { return _width; }
+    int32_t GetHeight() const { return _height; }
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    SpriteCapture(const SpriteCapture& src);            // 0x18003cb50
+    SpriteCapture& operator=(const SpriteCapture& src); // 0x18003cc20
+    static uint32_t TypeId();                           // 0x18003c800
+    static void* operator new(std::size_t bytes);              // 0x18003c820
+    static void* operator new(std::size_t bytes, void* place); // 0x18003c890
+    static void  operator delete(void* p);                     // 0x18003c8a0
+    static Object::Base* CreateNewObject();                    // 0x18003c900  (factory door)
+    static Object::Base* CreateInPlaceObject(void* place);     // 0x18003c9c0  (factory door)
+
+protected:
+    SpriteCapture() = default;   // NOT retail's 0x1800d9140 — see the banner
+    ~SpriteCapture();            // 0x1800d91b0, empty (the door keeps the body)
+
+public:
+    // ---- the 0x38 bytes SpriteCapture adds (public: the doors reach them) --
     CaptureArray _sheets;     // +0x20  Array<ExternalPtr<SpriteSheet>>, stride 8
     CaptureArray _entries;    // +0x30  Array<CaptureEntry>,             stride 0x28
     CaptureArray _sprites;    // +0x40  Array<UI::Sprite>,               stride 0x10
     int32_t      _width;      // +0x50  GetWidth
     int32_t      _height;     // +0x54  GetHeight
 };
-static_assert(sizeof(SpriteCapture) == 0x58, "SpriteCapture must be 0x58 bytes");
-static_assert(offsetof(SpriteCapture, _sheets)  == 0x20, "");
-static_assert(offsetof(SpriteCapture, _entries) == 0x30, "");
-static_assert(offsetof(SpriteCapture, _sprites) == 0x40, "");
-static_assert(offsetof(SpriteCapture, _width)   == 0x50, "");
-static_assert(offsetof(SpriteCapture, _height)  == 0x54, "");
+static_assert(sizeof(SpriteCapture) == 0x58,
+              "UI::SpriteCapture is 0x58 bytes (MOV EDX,0x58 in slot 0, 0x18003ccf0)");
+static_assert(alignof(SpriteCapture) == 8, "UI::SpriteCapture aligns to 8 (the vptr)");
+static_assert(offsetof(SpriteCapture, _sheets)  == 0x20, "_sheets at +0x20");
+static_assert(offsetof(SpriteCapture, _entries) == 0x30, "_entries at +0x30");
+static_assert(offsetof(SpriteCapture, _sprites) == 0x40, "_sprites at +0x40");
+static_assert(offsetof(SpriteCapture, _width)   == 0x50, "GetWidth 0x1800d9220 reads +0x50");
+static_assert(offsetof(SpriteCapture, _height)  == 0x54, "GetHeight 0x1800d9210 reads +0x54");
+static_assert(offsetof(SpriteCapture, _sheets) == sizeof(Object::External),
+              "SpriteCapture's own bytes begin right after Object::External");
 
 }  // namespace UI

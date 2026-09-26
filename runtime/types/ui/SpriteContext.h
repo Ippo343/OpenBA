@@ -1,43 +1,56 @@
 #pragma once
 // ============================================================================
-// runtime/types/ui/SpriteContext.h — binary layout for UI::SpriteContext and
-//                                     UI::SpriteDraw
+// runtime/types/ui/SpriteContext.h — UI::SpriteContext (a real, concrete,
+//                                     NON-polymorphic class) and UI::SpriteDraw
 // ============================================================================
 //
 // Started by Wave 7 lane F as an evidence note behind a hold-back. Rewritten by
 // WAVE 9 LANE UIF (2026-09-08), which ported three of the class's exports and
-// two of its internals, so the offsets below are now LOAD-BEARING and carry
-// static_asserts instead of prose. The per-function write-up, the door
-// arithmetic and everything this lane declined are in
-// docs/runtime_port/WAVE9_LANE_UIF2.md.
+// two of its internals. ENDGAME B.3.6 block D made it the real class under
+// retail's name: every one of retail's 23 exports is declared below, the ported
+// bodies are its members, and the registered doors delegate to them.
 //
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 //
-// Retail addresses (Runtime-x64.dll, image base 0x180000000):
-//   AddLine                0x18011cbe0  ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z
-//   SetScissor(Viewport)   0x18011d050  ?SetScissor@…@QEAA?AVViewport@Video@@AEBV34@@Z
-//   SetScissor(4 ints)     0x18011d010  ?SetScissor@…@QEAA?AVViewport@Video@@HHHH@Z
-//   AddSpriteDraw          0x18011c890  (internal, no export in either build)
-//   FlushDeferred          0x18011c6a0  (internal, no export in either build)
-//   Flush                  0x18011ba40  (internal — NOT PORTED, see below)
-//   Begin                  0x18011d2b0  (internal — NOT PORTED, see below)
+// Retail addresses (Runtime-x64.dll, image base 0x180000000). ALL of these are
+// in the export table — including the `AEAA` (private) ones this banner used
+// to call "internal, no export": `AddSpriteDraw`, `Flush`, `FlushDeferredFonts`
+// and `SetSpriteSheet` are exported private members (B36_SLOTS.md section 6;
+// reference_aeaa_is_private_not_unexported.md). Their doors are registered by
+// ADDRESS in this tree; the names resolve through rt_export_addrs.inc.
 //
 // ---------------------------------------------------------------------------
-// SIZE: at least 0x88. NOT PROVEN EXACTLY, and this header says so.
+// SIZE: EXACTLY 0x88 — PINNED BY ENDGAME B.3.6 block D (B36_RULES section 13
+// item 2), from the RETAIL COPY CONSTRUCTOR.
 // ---------------------------------------------------------------------------
-// Unlike UI::UserInterface, whose 0x128 is a literal in a MemoryAllocator
-// call, SpriteContext is never heap-allocated in any body this lane read: it
-// is a LOCAL of UI::UserInterface::Draw (0x180121890), built at `RBP-0x80` and
-// destroyed inline at the end of the same frame. A stack local's size is not
-// spelled out anywhere in the instruction stream.
+// `??0SpriteContext@UI@@QEAA@AEBV01@@Z` (0x1800321c0) is the compiler-generated
+// member-wise copy, and it copies EVERY member exactly once, in order:
+//   +0x00 dword · +0x08 qword · +0x10 Array (0x180033d20) · +0x20..+0x2c four
+//   dwords · +0x30 qword · +0x38 byte · +0x40 Array (0x180033d20) · +0x50 the
+//   Font::Layout (its own copy ctor 0x180032280) · +0x78 qword · +0x80 qword
+// and then `MOV RAX,RDI ; RET`. Its last store is `MOV [RDI+0x80],RAX`
+// (0x18003225f): nothing past +0x87 is a member, and with an 8-byte alignment
+// there is no tail padding to hide one in. So sizeof == 0x88. The two other
+// witnesses bound it the same way: `UserInterface::Draw` keeps the object at
+// [RBP-0x80] with the next local at RBP+0x14 (0x88 <= sizeof <= 0x94), and
+// `Begin`'s store at +0x80 is the highest offset any body writes.
 //
-// What IS proven is a lower bound of 0x88: Begin (0x18011d2b0) stores a qword
-// at `[RCX+0x80]` (0x18011d2eb), so the object extends at least to 0x88.
-// `_size` below is therefore declared as that lower bound, and the
-// static_assert asserts the bound rather than pretending to an exact sizeof.
-// NOTHING IN THE PORT ALLOCATES ONE, so the bound is sufficient: our three
-// ported bodies and two ported internals only ever receive a pointer to an
-// object retail itself built.
+// The retail ctor `??0SpriteContext@UI@@QEAA@AEAVContext@Video@@@Z`
+// (0x18011d1e0) stores through +0x70 and leaves +0x50, +0x78, +0x80 alone;
+// the retail dtor `??1SpriteContext@UI@@QEAA@XZ` (0x18011d250) runs
+// ~Array(+0x68), ~Array(+0x58) (the Layout's two arrays), ~Array(+0x40),
+// ~Array(+0x10) — exactly the implicit destructor of the members below, in
+// reverse declaration order.
+//
+// NOT TRIVIALLY COPYABLE, AND RETAIL SAYS SO. B36_RULES 4.5 asks for
+// `is_trivially_copyable`; retail's own class has a user-visible destructor
+// (0x18011d250) and a DEEP copy constructor (0x1800321c0 copies each Array
+// through 0x180033d20), so it is not trivially copyable in retail's terms
+// either, and the four `Collection::Array` members make that true here. What
+// B6-4.5 is for — `saveload_draw.cpp:734` builds one on the STACK field by
+// field — holds: the class is concrete with a PUBLIC defaulted default
+// constructor, the fields that TU writes are public, and the implicit
+// destructor frees exactly the four buffers retail's does.
 //
 // ---------------------------------------------------------------------------
 // THE CLASS IS NOT POLYMORPHIC.
@@ -136,18 +149,33 @@
 //     and the batch they build is ordinary memory this port owns end to end.
 //
 // So the class is no longer held back; `Flush` and `Begin` are. See the lane
-// doc for the door arithmetic that decision produces.
+// doc for the door arithmetic that decision produces. (Both have been ported
+// since: Flush in spritecontext_flush.cpp, Begin in spritecontext.cpp.)
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
 #include "../collection/Collection.h"
+#include "Font.h"   // RtUI::FontLayout — the Font::Layout at +0x50
+
+// Classes other blocks own, taken by reference / pointer only.
+namespace Object { template <class T> class ExternalPtr; }
+namespace System { class String; }
+namespace Video  { class Context; struct Viewport; }
 
 namespace UI {
 
+class Sprite;
+class SpriteCapture;
+class SpriteSheet;
+class Font;
+
 // ============================================================
-// UI::SpriteDraw — one queued sprite/line, stride 0x28.
+// UI::SpriteDraw — one queued sprite/line, stride 0x28. Retail's name is the
+// nested `UI::SpriteContext::SpriteDraw` (`AEBUSpriteDraw@12@` in AddSpriteDraw's
+// mangling); the class re-exports it under that spelling below.
 //
 // The stride is proven three times over: `ADD R15,0x28` in Flush's batch walk
 // (0x18011c5a1) and in Draw's element walk (0x180121faf), and the `LEA
@@ -193,32 +221,97 @@ static_assert(offsetof(SpriteDraw, rotation)    == 0x1c, "rotation at +0x1c");
 static_assert(offsetof(SpriteDraw, color)       == 0x20, "color at +0x20");
 static_assert(offsetof(SpriteDraw, isLine)      == 0x24, "isLine at +0x24");
 
-// ============================================================
-// The clip region AddSpriteDraw culls against, 4 ints at SpriteContext+0x78.
-//
-// It is a Video::Viewport, spelled out here rather than included because
-// UserInterface::Draw passes `&UserInterface::_captureViewport`, which
-// runtime/types/ui/UserInterface.h deliberately models as 0x10 opaque bytes.
-// The member ORDER is {x, y, w, h} and not {left, top, right, bottom}, proven
-// by AddSpriteDraw ADDING +0x08 to +0x00 and +0x0c to +0x04 to obtain the
-// far edges (0x18011c8bf, 0x18011c8de) — a left/top/right/bottom region would
-// not need the addition.
-// ============================================================
-struct ClipRect {
-    int32_t x;   // +0x00
-    int32_t y;   // +0x04
-    int32_t w;   // +0x08
-    int32_t h;   // +0x0c
-};
-static_assert(sizeof(ClipRect) == 0x10, "ClipRect is 4 ints");
+// ============================================================================
+// UI::SpriteContext — 0x88 bytes, no vtable, CONCRETE (RULE B6-4.5).
+// ============================================================================
+// The clip region at +0x78 is a `Video::Viewport` ({x, y, width, height}):
+// Begin's fourth parameter is `PEAVViewport@Video@@` in retail's own mangling,
+// and AddSpriteDraw ADDS +0x08 to +0x00 and +0x0c to +0x04 to reach the far
+// edges (0x18011c8bf, 0x18011c8de). The file-local `ClipRect` this header used
+// to spell for it was the same four ints under other names; it is gone (one
+// definition per layout).
+class SpriteContext {
+public:
+    using SpriteDraw = ::UI::SpriteDraw;   // retail's nested spelling
 
-// ============================================================
-// UI::SpriteContext — >= 0x88 bytes, no vtable.
-// ============================================================
-struct SpriteContext {
+    // B6-4.5: `saveload_draw.cpp:734` builds one on its stack and writes every
+    // field itself (retail inlined the ctor there). Defaulted and PUBLIC; the
+    // Array members zero themselves, +0x50's qword and +0x78/+0x80 are left as
+    // the storage held, which is what retail's ctor does too.
+    SpriteContext() = default;
+
+    // ??0SpriteContext@UI@@QEAA@AEAVContext@Video@@@Z  0x18011d1e0 — NOT PORTED
+    // (no caller in the tree: both builders inline it). Declared, left undefined.
+    explicit SpriteContext(Video::Context& context);
+    // ??0SpriteContext@UI@@QEAA@AEBV01@@Z  0x1800321c0 — the deep member-wise
+    // copy that pins sizeof (banner). NOT PORTED, no caller; declared only, so
+    // no C++ caller can reach Collection::Array's SHALLOW defaulted copy.
+    SpriteContext(const SpriteContext& other);
+    SpriteContext& operator=(const SpriteContext&) = delete;   // retail exports none
+    // ??1SpriteContext@UI@@QEAA@XZ  0x18011d250 — the implicit member-wise
+    // destructor IS retail's body (banner).
+    ~SpriteContext() = default;
+
+    // ---- ported ------------------------------------------------------------
+    // ?Begin@…@QEAAXMPEAVSpriteCapture@2@PEAVViewport@Video@@@Z  0x18011d2b0
+    void Begin(float scale, SpriteCapture* capture, Video::Viewport* clipRegion);
+    // ?AddLine@…@QEAAXAEBVSprite@2@HHHHI@Z  0x18011cbe0
+    void AddLine(const Sprite& sprite, int32_t x1, int32_t y1,
+                 int32_t x2, int32_t y2, uint32_t color);
+    // The four AddSprite overloads — non-virtual C++ overloads, THE DOOR
+    // DECIDES WHICH ONE A CALLER MEANT (the mangled parameter list).
+    // ?AddSprite@…@QEAAXAEBVSprite@2@HHI@Z       0x18011cf00  point, natural size
+    void AddSprite(const Sprite& sprite, int32_t x, int32_t y, uint32_t color);
+    // ?AddSprite@…@QEAAXAEBVSprite@2@HHHHI@Z     0x18011d3c0  rect
+    void AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
+                   int32_t x2, int32_t y2, uint32_t color);
+    // ?AddSprite@…@QEAAXAEBVSprite@2@HHHHIM@Z    0x18011cb10  rotated rect
+    void AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
+                   int32_t x2, int32_t y2, uint32_t color, float rotation);
+    // ?AddSprite@…@QEAAXAEBVSprite@2@HHIM@Z      0x18011c780  NOT PORTED, no caller
+    void AddSprite(const Sprite& sprite, int32_t x, int32_t y,
+                   uint32_t color, float rotation);
+    // ?AddFont@…@QEAAXV?$ExternalPtr@VFont@UI@@@Object@@AEBVString@System@@_NHW4Justify@Font@2@HHHI@Z
+    //   0x18011ccb0. `layoutA`/`layoutB` are NOT named beyond their position
+    //   (spritecontext_add.cpp); `justify` is the W4 enum, an int32.
+    void AddFont(Object::ExternalPtr<Font> font, const System::String& text,
+                 bool multiline, int32_t layoutA, int32_t justify, int32_t layoutB,
+                 int32_t x, int32_t y, uint32_t color);
+    // ?SetScissor@…@QEAA?AVViewport@Video@@AEBV34@@Z  0x18011d050 — RETSLOT in
+    // retail; a plain by-value return here (not a vtable slot). Returns the
+    // PREVIOUS scissor.
+    Video::Viewport SetScissor(const Video::Viewport& scissor);
+    // ?SetScissor@…@QEAA?AVViewport@Video@@HHHH@Z     0x18011d010 — RETSLOT.
+    Video::Viewport SetScissor(int32_t x, int32_t y, int32_t width, int32_t height);
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    void End();                                              // 0x18011d490
+    void BeginDeferredFonts();                               // 0x18011c9d0
+    void EndDeferredFonts();                                 // 0x18011c9e0
+    Video::Viewport GetScissor() const;                      // 0x18011ca30  RETSLOT
+    Video::Viewport GetScreenScissor() const;                // 0x18011ca00  RETSLOT
+    void SetScreenScissor(const Video::Viewport& scissor);   // 0x18011caa0
+    Video::Context& GetVideoContext();                       // 0x1800321b0
+
+    // ---- retail `AEAA` (private) members, PUBLIC here ----------------------
+    // Exported under private access; the doors and the not-yet-converted
+    // builders (UserInterface::Draw, Save::SaveLoad::Draw) reach them, so they
+    // stay public until those callers convert.
+    // ?AddSpriteDraw@…@AEAAXAEBUSpriteDraw@12@@Z  0x18011c890
+    void AddSpriteDraw(const SpriteDraw& draw);
+    // ?Flush@SpriteContext@UI@@AEAAXXZ  0x18011ba40 — runtime/src/ui/spritecontext_flush.cpp
+    void Flush();
+    // ?FlushDeferredFonts@SpriteContext@UI@@AEAAXXZ  0x18011c6a0
+    void FlushDeferredFonts();
+    // ?SetSpriteSheet@…@AEAAXV?$ExternalPtr@VSpriteSheet@UI@@@Object@@@Z
+    //   0x18011c740 — NOT PORTED as a body: retail's batch-key switch is inlined
+    //   into every caller the tree has ported (the `BindSheet` helper). Declared.
+    void SetSpriteSheet(Object::ExternalPtr<SpriteSheet> sheet);
+
+    // ---- the 0x88 bytes (PUBLIC: the two stack builders write them) --------
     float   _scale;                              // +0x00
     uint8_t _pad04[4];                           // +0x04
-    void*   _currentSheet;                       // +0x08
+    void*   _currentSheet;                       // +0x08  ExternalPtr<SpriteSheet>
 
     // The batch being accumulated for `_currentSheet`. Flush drains it.
     Collection::Array<SpriteDraw> _draws;        // +0x10, 0x10 bytes
@@ -238,12 +331,22 @@ struct SpriteContext {
     // Records queued while _deferring is set — retail's deferred font pass.
     Collection::Array<SpriteDraw> _deferred;     // +0x40, 0x10 bytes
 
-    uint8_t _opaque50[0x28];                     // +0x50 .. +0x77, see header
+    // UI::Font::Layout — AddFont hands `this + 0x50` to ComputeStringLayout as
+    // its layout out-parameter, and the copy ctor copies +0x50 as ONE object
+    // through the Layout's own copy ctor (0x180032280). Its qword at +0x50 is
+    // never initialised by either builder (only ComputeStringLayout zeroes it).
+    RtUI::FontLayout _layout;                    // +0x50 .. +0x77
 
-    const ClipRect* _clipRegion;                 // +0x78
-    void*           _spriteCapture;              // +0x80  UI::SpriteCapture*, may be null
+    const Video::Viewport* _clipRegion;          // +0x78  Begin's 4th argument
+    SpriteCapture*         _spriteCapture;       // +0x80  Begin's 3rd; may be null
 };
 
+static_assert(sizeof(SpriteContext) == 0x88,
+              "UI::SpriteContext is 0x88 bytes (the copy ctor 0x1800321c0's last "
+              "member store is the qword at +0x80; B36_RULES section 13 item 2)");
+static_assert(alignof(SpriteContext) == 8, "UI::SpriteContext aligns to 8");
+static_assert(!std::is_polymorphic<SpriteContext>::value,
+              "no vtable: Begin's first store to +0x00 is a MOVSS (0x18011d393)");
 static_assert(offsetof(SpriteContext, _scale)         == 0x00, "_scale at +0x00");
 static_assert(offsetof(SpriteContext, _currentSheet)  == 0x08, "_currentSheet at +0x08");
 static_assert(offsetof(SpriteContext, _draws)         == 0x10, "_draws at +0x10");
@@ -254,74 +357,26 @@ static_assert(offsetof(SpriteContext, _scissorH)      == 0x2c, "_scissorH at +0x
 static_assert(offsetof(SpriteContext, _context)       == 0x30, "_context at +0x30");
 static_assert(offsetof(SpriteContext, _deferring)     == 0x38, "_deferring at +0x38");
 static_assert(offsetof(SpriteContext, _deferred)      == 0x40, "_deferred at +0x40");
+static_assert(offsetof(SpriteContext, _layout)        == 0x50, "_layout at +0x50");
+static_assert(offsetof(SpriteContext, _layout) + offsetof(RtUI::FontLayout, _entries) == 0x58,
+              "the glyph array AddFont walks is at +0x58 (size at +0x60)");
+static_assert(offsetof(SpriteContext, _layout) + offsetof(RtUI::FontLayout, _lineWidths) == 0x68,
+              "the line array the dtor frees first is at +0x68");
 static_assert(offsetof(SpriteContext, _clipRegion)    == 0x78, "_clipRegion at +0x78");
 static_assert(offsetof(SpriteContext, _spriteCapture) == 0x80, "_spriteCapture at +0x80");
-
-// A LOWER BOUND, not a sizeof — see the header's SIZE section. Begin's store
-// at [this+0x80] is what pins it.
-static_assert(sizeof(SpriteContext) >= 0x88,
-              "SpriteContext extends at least to +0x88 (Begin's store at +0x80)");
-
 static_assert(sizeof(Collection::Array<SpriteDraw>) == 0x10,
               "Array<T> is data/size/capacity = 0x10");
 
-} // namespace UI
+}  // namespace UI
 
 // ============================================================================
-// APPENDED: what `_opaque50` is, read out of UI::SpriteContext::AddFont
-// (retail 0x18011ccb0) and the layout helper it calls.
+// ENDGAME B.3.6 block D: THE SECOND `FontGlyph` IS GONE (RULE B6-4.2).
+// This header used to declare a `UI::FontGlyph {spriteIndex, x, y, _unread0C}`
+// for the 16-byte elements AddFont walks at +0x58. Those elements are
+// `UI::Font::Layout`'s entries — the record ComputeLineLayout appends
+// (0x180116d99..0x180116dc0) — i.e. `RtUI::FontLayoutEntry` in Font.h
+// {_glyph, _x, _y, _line}, whose `_line` AddFont simply never reads. It was
+// NOT `Font.h`'s `FontGlyph` (the glyph-metric row), which is why the two
+// could not both keep the name. The `kSpriteContextLayout*` offsets that
+// pointed into the old opaque blob are gone with it: `_layout` is typed.
 // ============================================================================
-//
-// The section above declines to model +0x50..+0x77 because "no body this lane
-// ported reads them". AddFont does, so the region is named here — but ONLY as
-// offsets plus one element struct, because that is all two bodies prove.
-//
-// AddFont hands `this + 0x50` to `ComputeStringLayout` (0x180116fd0) as its
-// ninth argument, and that callee's prologue writes exactly the three members
-// this header already deduced from `Save::SaveLoad::Draw`'s inlined ctor:
-//
-//   0x180117005  LEA RCX,[RDI+0x18] ; CALL 0x18002fea0   -> clear array @ +0x68
-//   0x180117010  LEA RCX,[RDI+0x08] ; CALL 0x180076a40   -> clear array @ +0x58
-//   0x180117021  MOV [RDI],RBX                           -> zero  qword @ +0x50
-//
-// So `_opaque50` is one layout object: a qword, then two Collection::Array<T>.
-// AddFont then walks the FIRST of those arrays — data at SpriteContext+0x58,
-// `_size` at +0x60 — with a stride of 0x10 (`ADD RDI,0x10`, 0x18011ceba),
-// reading three ints per element (0x18011cdea..0x18011cdf3):
-//   +0x00 the sprite index, +0x04 an x, +0x08 a y.
-//
-// NOTHING ELSE IS MODELLED. The array at +0x68 holds one int per line break
-// (0x180117191 appends the dword at ComputeStringLayout's own `[RSP+0xc0]`), the
-// qword at +0x50 is only ever zeroed, and a glyph's fourth dword at +0x0c is
-// never read by either body. Naming them would be a claim neither body supports.
-// These are OFFSETS INTO `_opaque50`, not a replacement for it — the struct
-// keeps its proven size either way.
-
-namespace UI {
-
-enum : size_t {
-    kSpriteContextLayout     = 0x50,   // the layout object AddFont passes on
-    kSpriteContextGlyphs     = 0x58,   // Array<FontGlyph>::_data
-    kSpriteContextGlyphCount = 0x60,   // Array<FontGlyph>::_size
-    kSpriteContextLineStarts = 0x68,   // Array<int32_t>, not read by any port
-};
-
-// One laid-out glyph. Stride 0x10, three ints read.
-struct FontGlyph {
-    int32_t spriteIndex;   // +0x00  index into the font's sheet; may be < 0
-    int32_t x;             // +0x04  pen x, before the caller's x offset
-    int32_t y;             // +0x08  pen y, before the caller's y offset
-    int32_t _unread0C;     // +0x0c  never read by AddFont; see the note above
-};
-static_assert(sizeof(FontGlyph) == 0x10, "FontGlyph stride is 0x10");
-static_assert(offsetof(FontGlyph, spriteIndex) == 0x00, "spriteIndex at +0x00");
-static_assert(offsetof(FontGlyph, x)           == 0x04, "x at +0x04");
-static_assert(offsetof(FontGlyph, y)           == 0x08, "y at +0x08");
-
-// The offsets above must land inside the region the struct already reserves.
-static_assert(offsetof(SpriteContext, _opaque50) == kSpriteContextLayout,
-              "_opaque50 begins at the layout object");
-static_assert(kSpriteContextLineStarts + 0x10 == offsetof(SpriteContext, _clipRegion),
-              "the line-start array is the last member before _clipRegion");
-
-} // namespace UI
