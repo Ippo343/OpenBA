@@ -29,6 +29,7 @@
 #include "Work/ClearStorage.h"
 #include "Work/ConsumeProduce.h"
 #include "Work/FireWork.h"
+#include "Work/FishingWork.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -180,6 +181,17 @@ UNIT_TEST(wrk_leaf_firework) {
     CHECK_EQ(offsetof(FireWork, _field48), (size_t)0x48);
     CHECK_EQ(offsetof(FireWork, _field50), (size_t)0x50);
     CHECK_EQ(offsetof(FireWork, _field58), (size_t)0x58);
+}
+
+UNIT_TEST(wrk_leaf_fishingwork) {
+    WRK_LEAF_SHAPE(FishingWork, Work, 0x70);
+    CHECK_EQ(offsetof(FishingWork, citizenRefs), (size_t)0x48);
+    CHECK_EQ(offsetof(FishingWork, citizenCount), (size_t)0x50);
+    CHECK_EQ(offsetof(FishingWork, citizenCapacity), (size_t)0x54);
+    CHECK_EQ(offsetof(FishingWork, spotStates), (size_t)0x58);
+    CHECK_EQ(offsetof(FishingWork, spotCount), (size_t)0x60);
+    CHECK_EQ(offsetof(FishingWork, spotCapacity), (size_t)0x64);
+    CHECK_EQ(offsetof(FishingWork, retryCount), (size_t)0x68);
 }
 
 // ===========================================================================
