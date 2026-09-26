@@ -36,11 +36,10 @@
 //
 // ABSTRACT (RULE B6-3): 38 exe panel classes hand-build tables on this base
 // (code/Game/Dialog/dialog_controller_vtable.cpp fills slots 3..10 from the
-// seven bodies BY ADDRESS), none constructs it as a C++ object, and slot 0 is
-// the mint's `RT_DELDTOR` row, which step 6 does not retire. So slot 0 stays
-// `= 0` and there is NO real constructor: `AddController` builds a DERIVED
-// controller through the factory, and the base ctor
-// `??0DialogController@UI@@QEAA@XZ` (0x1800cd320) has no port and no caller.
+// seven bodies BY ADDRESS) and slot 0 is the mint's `RT_DELDTOR` row. The exe
+// never instantiates the base itself (no exe copy of its table, B38_SLOTS
+// section 4), so slot 0 stays `= 0`. ENDGAME B.3.8 block RB gave it retail's
+// REAL constructor (0x1800cd320) for PNL's converted panels.
 //
 // ONE ABI NOTE, carried by slot 9: `InternalPtr<Element>` is BY VALUE in the
 // mangled name, but MSVC passes an 8-byte class with a user-declared copy
@@ -104,14 +103,22 @@ public:
     static Object::Base* CreateInPlaceObject(void* storage);      // 0x18003b6f0  not ported
 
 protected:
-    // NOT retail's `??0DialogController@UI@@QEAA@XZ` (0x1800cd320) — B6-3.
-    // `= default` keeps the class trivially default-constructible so no layout
-    // pin moves; a probe subclass reaches it, nothing else can.
-    DialogController() = default;
+    // ??0DialogController@UI@@QEAA@XZ  0x1800cd320 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1). Retail, whole:
+    //     CALL 0x1800bfd10 (??0Internal) ; LEA RAX,[0x1801565f0] ; MOV [RBX],RAX
+    //     XOR EAX,EAX ; MOV [RBX+0x10],RAX ; MOV [RBX+0x18],RAX ; MOV [RBX+0x20],RAX
+    // The two stamps are the compiler's; the body is the three zero stores.
+    // +0x28 (`_dataSource`) is NOT written — AddController fills it.
+    // THERE IS NO CTOR DOOR for this class (B38_RULES D1 lists one; there is
+    // none — 0x1800cd320 was never ported or registered, and the 38 exe panel
+    // factories build their base as alloc + zero + table, EXE_SUBCLASSES.md
+    // 1B), so nothing is shared: this is the port.
+    DialogController() : _config(), _dialog(nullptr), _container(nullptr) {}
     // `??1DialogController@UI@@UEAA@XZ` 0x1800cd2f0. NON-VIRTUAL (decision 2)
-    // and DEFINED EMPTY: the registered door `RtUiDialogController_Dtor`
-    // (dialog.cpp) stamps the MINTED table and chains to ~Internal by hand,
-    // which is right for the minted objects that are the only ones alive.
+    // and EMPTY, which is retail's body: 0x1800cd2f0 is the restamp plus the
+    // inlined ~Internal, both emitted by the compiler chain. The registered
+    // door `RtUiDialogController_Dtor` (dialog.cpp) does the same two things
+    // by hand for the minted objects (body in dialog_controller_base.cpp).
     ~DialogController();
 
     // RULE B5-15 / B6-7, both COPIED from B36_SLOTS section 3:
