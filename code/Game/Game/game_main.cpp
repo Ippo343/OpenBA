@@ -42,12 +42,15 @@
 #include "UpdateLoop.h"
 #include "Game/game.h"
 #include "Game/inputbindings.h"
+#include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP
+#include "Game/GameLoaderLoop.h"    // ENDGAME B.3.8 LOOP
 #include "stall_debug.h"
 #include "boot_state_watchdog.h"
 #include <cstdio>
 #include <cstdint>
 #include <cstring>
 #include <cstdlib>
+#include <new>
 
 // Defined in standalone/address_registry.cpp. Publishes the live KeyMap*
 // into the fake exref chain at slot 0x140151738 so that triple-deref reads
@@ -782,33 +785,36 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         // Stage 5e: wrap the splash chain in two LoaderLoop layers.
                         // Inner LoaderLoop wraps shiningRockLoop, outer LoaderLoop
                         // wraps inner. Both use fn_LoaderLoop_Ctor with delay 0.0f
-                        // (matches FUN_140041ef0). Vtables come from our stubs in
-                        // standalone/loader_loop_stubs.cpp.
-                        auto buildLoaderLoop = [&](UpdateLoop* next, uintptr_t vtableAddr,
+                        // (matches FUN_140041ef0). ENDGAME B.3.8 LOOP: the two
+                        // real classes (code/Game/Game/{Inner,Game}LoaderLoop.h);
+                        // their ctors run `??0LoaderLoop@Engine@@`'s body and
+                        // the compiler stamps 0x140158870's / 0x1401588d0's table.
+                        auto buildLoaderLoop = [&](UpdateLoop* next, bool inner,
                                                    const char* tag) -> UpdateLoop* {
-                            if (!next || !fn_LoaderLoop_Ctor) return nullptr;
-                            UpdateLoop* ll = reinterpret_cast<UpdateLoop*>(
-                                fn_MemAlloc(memAllocSingleton, 0x48, 4));
-                            printf("[GameMain] %s alloc = %p\n", tag, (void*)ll);
-                            if (!ll) return nullptr;
+                            if (!next) return nullptr;
+                            void* mem = fn_MemAlloc(memAllocSingleton, 0x48, 4);
+                            printf("[GameMain] %s alloc = %p\n", tag, mem);
+                            if (!mem) return nullptr;
 
                             uint64_t zeroDelay = 0;
                             fn_Time_Ctor_Float(&zeroDelay, 0.0f);
-                            fn_LoaderLoop_Ctor(ll, next, &zeroDelay);
-
-                            void** vt = reinterpret_cast<void**>(
-                                ResolveAddr(Module::Exe, vtableAddr));
-                            *(void***)ll = vt;
+                            const System::Time& delay =
+                                *reinterpret_cast<const System::Time*>(&zeroDelay);
+                            Engine::UpdateLoop* nextLoop =
+                                reinterpret_cast<Engine::UpdateLoop*>(next);   // B.3.8 bridge
+                            Engine::LoaderLoop* ll = inner
+                                ? static_cast<Engine::LoaderLoop*>(::new (mem) InnerLoaderLoop(nextLoop, delay))
+                                : static_cast<Engine::LoaderLoop*>(::new (mem) GameLoaderLoop(nextLoop, delay));
                             printf("[GameMain] %s ctor done, vtable=%p, next=%p\n",
-                                   tag, (void*)ll->vtable, (void*)next);
-                            return ll;
+                                   tag, *reinterpret_cast<void**>(ll), (void*)next);
+                            return reinterpret_cast<UpdateLoop*>(ll);   // B.3.8 bridge
                         };
 
                         UpdateLoop* innerLoader = shiningRockLoop
-                            ? buildLoaderLoop(shiningRockLoop, 0x140158870, "InnerLL")
+                            ? buildLoaderLoop(shiningRockLoop, true, "InnerLL")
                             : nullptr;
                         UpdateLoop* outerLoader = innerLoader
-                            ? buildLoaderLoop(innerLoader, 0x1401588d0, "OuterLL")
+                            ? buildLoaderLoop(innerLoader, false, "OuterLL")
                             : nullptr;
 
                         UpdateLoop* topLoop = outerLoader ? outerLoader

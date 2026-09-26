@@ -23,8 +23,10 @@
 //   +0x00  Destroy(self, flags)            — exe 0x140001190 (identical to inner Destroy)
 //   +0x08-0x58                             — all thunks to Runtime LoaderLoop methods
 //
-// First-pass: every slot is a print-only stub. Update returns false on the first
-// tick so MainLoop::Run exits cleanly. Real reimpls will land slot-by-slot.
+// ENDGAME B.3.8 block LOOP: the two hand-built tables are gone. This file now
+// holds the MEMBER bodies of the two real classes, `InnerLoaderLoop`
+// (code/Game/Game/InnerLoaderLoop.h) and `GameLoaderLoop` (GameLoaderLoop.h),
+// whose compiler vtables the two retail addresses serve (B38_RULES D5).
 
 
 #include "address_registry.h"
@@ -37,6 +39,9 @@
 #include "system/Thread.h"   // ENDGAME B.3.4b System callers: System::Thread
 #include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes
 #include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
+#include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP: the two LoaderLoop classes
+#include "Game/GameLoaderLoop.h"
+#include "Object/exe_type.h"        // DEFINE_EXE_VTABLE
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -120,24 +125,28 @@ void LoaderLoopShutdownWait() {
     reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
 }
 
-// ============================================================
-// Inner LoaderLoop stubs (vtable @ 0x140158870)
-// ============================================================
+} // namespace
 
-void Inner_Destroy(UpdateLoop* self, unsigned flags) {
-    printf("[InnerLL::Destroy] self=%p flags=%u\n", (void*)self, flags);
+// ============================================================
+// InnerLoaderLoop (vtable @ 0x140158870) — code/Game/Game/InnerLoaderLoop.h
+// ============================================================
+// ENDGAME B.3.8 block LOOP: the old hand-built `g_innerLoaderLoopVtable[12]`'s
+// stub bodies, moved into the real class's members unchanged.
+
+Engine::UpdateLoop* InnerLoaderLoop::DeletingDtor(unsigned flags) {
+    printf("[InnerLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
     // Skip the LoaderLoop::~LoaderLoop chain (UpdateLoop dtor + ExternalList free).
     // Acceptable leak — process exits immediately after Run returns.
     if (flags & 1) {
-        fn_MemFreeStatic(self);
+        fn_MemFreeStatic(this);
     }
+    return this;
 }
 
-void Inner_Startup(UpdateLoop* self) {
+void InnerLoaderLoop::Startup() {
     StallDebug::Phase phase("InnerLL::Startup");
-    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     printf("[InnerLL::Startup] self=%p next=%p loader=%p\n",
-           (void*)self, (void*)ll->m_nextLoop, g_pLoader);
+           (void*)this, (void*)_nextLoop, g_pLoader);
     if (SkipEngineLoader()) {
         printf("[InnerLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
                "Engine::Loader::Load (background loader pegs a core, but boot "
@@ -145,8 +154,7 @@ void Inner_Startup(UpdateLoop* self) {
     } else if (g_pLoader) {
         // ENDGAME B.3.7: `Engine::Loader::Load` is a (non-virtual) member of
         // the real class; the `fn_Loader_Load` name door is no longer needed.
-        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(                  // B.3.7 bridge
-            reinterpret_cast<Engine::UpdateLoop*>(ll->m_nextLoop));
+        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(_nextLoop);        // B.3.7 bridge
         printf("[InnerLL::Startup] Loader::Load returned\n");
         WaitForEngineLoader();
     } else {
@@ -154,70 +162,66 @@ void Inner_Startup(UpdateLoop* self) {
     }
 }
 
-void Inner_Shutdown(UpdateLoop* self) {
-    printf("[InnerLL::Shutdown] self=%p\n", (void*)self);
+void InnerLoaderLoop::Shutdown() {
+    printf("[InnerLL::Shutdown] self=%p\n", (void*)this);
     LoaderLoopShutdownWait();
 }
 
-bool Inner_Update(UpdateLoop* self, void* time) {
+bool InnerLoaderLoop::Update(const System::Time& time) {
     StallDebug::Tick("InnerLL::Update");
     // Inner_Load is a noop in standalone (PlacementTool init is done lazily
     // from elsewhere), so there is no async work to wait for. Transition
     // immediately to next (ShiningRockSplash). The splash itself kicks the
     // single Runtime Engine::Loader thread for its own next-loop load.
-    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
-    UpdateLoop* next = ll->m_nextLoop;
+    Engine::UpdateLoop* next = _nextLoop;
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
     printf("[InnerLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
-           (void*)self, time, (void*)next, mainLoop);
+           (void*)this, (const void*)&time, (void*)next, mainLoop);
     if (next && mainLoop) {
-        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(          // B.3.7 bridge
-            reinterpret_cast<Engine::UpdateLoop*>(next));
+        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(next);    // B.3.7 bridge
     }
-    self->m_loadBit = -1;
+    _loadBit = -1;
     return false;
 }
 
-void Inner_Draw(UpdateLoop* self, float alpha) {
+void InnerLoaderLoop::Draw(float alpha) {
     static int draws = 0;
     if (draws++ < 3) {
-        printf("[InnerLL::Draw] self=%p alpha=%f\n", (void*)self, alpha);
+        printf("[InnerLL::Draw] self=%p alpha=%f\n", (void*)this, alpha);
     }
 }
 
-void Inner_DrawFailed(UpdateLoop* self) {
-    printf("[InnerLL::DrawFailed] self=%p\n", (void*)self);
+void InnerLoaderLoop::DrawFailed() {
+    printf("[InnerLL::DrawFailed] self=%p\n", (void*)this);
 }
 
-void Inner_Load(UpdateLoop* self) {
-    printf("[InnerLL::Load] self=%p (skipping PlacementTool init)\n", (void*)self);
-    // Real impl @ 0x140001120: PlacementTool_Ctor(KeyMap, self->m_resourceList);
-    // self->m_loadBit = -1;
-    // We skip both — PlacementTool isn't reimplemented standalone yet.
-    self->m_loadBit = -1;
+void InnerLoaderLoop::Load() {
+    printf("[InnerLL::Load] self=%p (skipping PlacementTool init)\n", (void*)this);
+    // Real impl @ 0x140001120: PlacementTool_Ctor(KeyMap, _resourceList);
+    // _loadBit = -1;
+    // We skip the first — PlacementTool isn't reimplemented standalone yet.
+    _loadBit = -1;
 }
 
-void Inner_SaveRestore(UpdateLoop* self, bool save, void* state) {
+void InnerLoaderLoop::SaveRestore(bool save, Save::SavedState* state) {
     printf("[InnerLL::SaveRestore] self=%p save=%d state=%p\n",
-           (void*)self, save, state);
+           (void*)this, save, (void*)state);
 }
 
-void Inner_OnVideoError(UpdateLoop* self) {
-    printf("[InnerLL::OnVideoError] self=%p\n", (void*)self);
+void InnerLoaderLoop::OnVideoError() {
+    printf("[InnerLL::OnVideoError] self=%p\n", (void*)this);
 }
 
-void Inner_OnVideoRestart(UpdateLoop* self) {
-    printf("[InnerLL::OnVideoRestart] self=%p\n", (void*)self);
+void InnerLoaderLoop::OnVideoRestart() {
+    printf("[InnerLL::OnVideoRestart] self=%p\n", (void*)this);
 }
 
-const char* Inner_GetResourceFilename(UpdateLoop* self) {
-    (void)self;
+const char* InnerLoaderLoop::GetResourceFilename() {
     // Original (FUN_140001110) returns LEA-loaded "Game/Global".
     return "Game/Global";
 }
 
-bool Inner_AllowsModChanges(UpdateLoop* self) {
-    (void)self;
+bool InnerLoaderLoop::AllowsModChanges() {
     // Exe slot 11 (vtable 0x140158870 +0x58) is the import thunk 0x14003a8f4 ->
     // the ONE Runtime export ?AllowsModChanges@UpdateLoop@Engine@@ (0x180031790,
     // `XOR AL,AL ; RET`): FALSE. There is no LoaderLoop override; only
@@ -226,47 +230,31 @@ bool Inner_AllowsModChanges(UpdateLoop* self) {
     return false;
 }
 
-void* g_innerLoaderLoopVtable[12] = {
-    reinterpret_cast<void*>(&Inner_Destroy),               // +0x00
-    reinterpret_cast<void*>(&Inner_Startup),               // +0x08
-    reinterpret_cast<void*>(&Inner_Shutdown),              // +0x10
-    reinterpret_cast<void*>(&Inner_Update),                // +0x18
-    reinterpret_cast<void*>(&Inner_Draw),                  // +0x20
-    reinterpret_cast<void*>(&Inner_DrawFailed),            // +0x28
-    reinterpret_cast<void*>(&Inner_Load),                  // +0x30
-    reinterpret_cast<void*>(&Inner_SaveRestore),           // +0x38
-    reinterpret_cast<void*>(&Inner_OnVideoError),          // +0x40
-    reinterpret_cast<void*>(&Inner_OnVideoRestart),        // +0x48
-    reinterpret_cast<void*>(&Inner_GetResourceFilename),   // +0x50
-    reinterpret_cast<void*>(&Inner_AllowsModChanges),      // +0x58
-};
-
 // ============================================================
-// Outer LoaderLoop stubs (vtable @ 0x1401588d0)
+// GameLoaderLoop (vtable @ 0x1401588d0) — code/Game/Game/GameLoaderLoop.h
 // ============================================================
 // All slots are pure thunks in the original — same shape as inner but with
 // no exe-internal Load/GetResourceFilename overrides.
 
-void Outer_Destroy(UpdateLoop* self, unsigned flags) {
-    printf("[OuterLL::Destroy] self=%p flags=%u\n", (void*)self, flags);
+Engine::UpdateLoop* GameLoaderLoop::DeletingDtor(unsigned flags) {
+    printf("[OuterLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
     if (flags & 1) {
-        fn_MemFreeStatic(self);
+        fn_MemFreeStatic(this);
     }
+    return this;
 }
 
-void Outer_Startup(UpdateLoop* self) {
+void GameLoaderLoop::Startup() {
     StallDebug::Phase phase("OuterLL::Startup");
-    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
     printf("[OuterLL::Startup] self=%p next=%p loader=%p\n",
-           (void*)self, (void*)ll->m_nextLoop, g_pLoader);
+           (void*)this, (void*)_nextLoop, g_pLoader);
     if (SkipEngineLoader()) {
         printf("[OuterLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
                "Engine::Loader::Load (see InnerLL note; expect a crash).\n");
     } else if (g_pLoader) {
         // ENDGAME B.3.7: `Engine::Loader::Load` is a (non-virtual) member of
         // the real class; the `fn_Loader_Load` name door is no longer needed.
-        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(                  // B.3.7 bridge
-            reinterpret_cast<Engine::UpdateLoop*>(ll->m_nextLoop));
+        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(_nextLoop);        // B.3.7 bridge
         printf("[OuterLL::Startup] Loader::Load returned\n");
         WaitForEngineLoader();
     } else {
@@ -274,90 +262,75 @@ void Outer_Startup(UpdateLoop* self) {
     }
 }
 
-void Outer_Shutdown(UpdateLoop* self) {
-    printf("[OuterLL::Shutdown] self=%p\n", (void*)self);
+void GameLoaderLoop::Shutdown() {
+    printf("[OuterLL::Shutdown] self=%p\n", (void*)this);
     LoaderLoopShutdownWait();
 }
 
-bool Outer_Update(UpdateLoop* self, void* time) {
+bool GameLoaderLoop::Update(const System::Time& time) {
     StallDebug::Tick("OuterLL::Update");
     // Outer_Load is a noop, transition immediately to InnerLL.
-    LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
-    UpdateLoop* next = ll->m_nextLoop;
+    Engine::UpdateLoop* next = _nextLoop;
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
     printf("[OuterLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
-           (void*)self, time, (void*)next, mainLoop);
+           (void*)this, (const void*)&time, (void*)next, mainLoop);
     if (next && mainLoop) {
-        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(          // B.3.7 bridge
-            reinterpret_cast<Engine::UpdateLoop*>(next));
+        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(next);    // B.3.7 bridge
     }
-    self->m_loadBit = -1;
+    _loadBit = -1;
     return false;
 }
 
-void Outer_Draw(UpdateLoop* self, float alpha) {
+void GameLoaderLoop::Draw(float alpha) {
     static int draws = 0;
     if (draws++ < 3) {
-        printf("[OuterLL::Draw] self=%p alpha=%f\n", (void*)self, alpha);
+        printf("[OuterLL::Draw] self=%p alpha=%f\n", (void*)this, alpha);
     }
 }
 
-void Outer_DrawFailed(UpdateLoop* self) {
-    printf("[OuterLL::DrawFailed] self=%p\n", (void*)self);
+void GameLoaderLoop::DrawFailed() {
+    printf("[OuterLL::DrawFailed] self=%p\n", (void*)this);
 }
 
-void Outer_Load(UpdateLoop* self) {
-    printf("[OuterLL::Load] self=%p\n", (void*)self);
-    self->m_loadBit = -1;
+void GameLoaderLoop::Load() {
+    printf("[OuterLL::Load] self=%p\n", (void*)this);
+    _loadBit = -1;
 }
 
-void Outer_SaveRestore(UpdateLoop* self, bool save, void* state) {
+void GameLoaderLoop::SaveRestore(bool save, Save::SavedState* state) {
     printf("[OuterLL::SaveRestore] self=%p save=%d state=%p\n",
-           (void*)self, save, state);
+           (void*)this, save, (void*)state);
 }
 
-void Outer_OnVideoError(UpdateLoop* self) {
-    printf("[OuterLL::OnVideoError] self=%p\n", (void*)self);
+void GameLoaderLoop::OnVideoError() {
+    printf("[OuterLL::OnVideoError] self=%p\n", (void*)this);
 }
 
-void Outer_OnVideoRestart(UpdateLoop* self) {
-    printf("[OuterLL::OnVideoRestart] self=%p\n", (void*)self);
+void GameLoaderLoop::OnVideoRestart() {
+    printf("[OuterLL::OnVideoRestart] self=%p\n", (void*)this);
 }
 
-const char* Outer_GetResourceFilename(UpdateLoop* self) {
-    (void)self;
+const char* GameLoaderLoop::GetResourceFilename() {
     // Original thunks straight to Runtime LoaderLoop::GetResourceFilename
     // (returns nullptr in the base — stub matches "no resource group").
     return nullptr;
 }
 
-bool Outer_AllowsModChanges(UpdateLoop* self) {
-    (void)self;
+bool GameLoaderLoop::AllowsModChanges() {
     // Vtable 0x1401588d0 +0x58 = the same thunk 0x14003a8f4 as the inner loop:
-    // the Runtime base, FALSE (see Inner_AllowsModChanges).
+    // the Runtime base, FALSE (see InnerLoaderLoop::AllowsModChanges).
     return false;
 }
 
-void* g_outerLoaderLoopVtable[12] = {
-    reinterpret_cast<void*>(&Outer_Destroy),               // +0x00
-    reinterpret_cast<void*>(&Outer_Startup),               // +0x08
-    reinterpret_cast<void*>(&Outer_Shutdown),              // +0x10
-    reinterpret_cast<void*>(&Outer_Update),                // +0x18
-    reinterpret_cast<void*>(&Outer_Draw),                  // +0x20
-    reinterpret_cast<void*>(&Outer_DrawFailed),            // +0x28
-    reinterpret_cast<void*>(&Outer_Load),                  // +0x30
-    reinterpret_cast<void*>(&Outer_SaveRestore),           // +0x38
-    reinterpret_cast<void*>(&Outer_OnVideoError),          // +0x40
-    reinterpret_cast<void*>(&Outer_OnVideoRestart),        // +0x48
-    reinterpret_cast<void*>(&Outer_GetResourceFilename),   // +0x50
-    reinterpret_cast<void*>(&Outer_AllowsModChanges),      // +0x58
-};
-
-} // namespace
+// B38_RULES D5: `X::Vtable()` is the COMPILER's table. The retail addresses
+// keep serving it while unconverted readers stamp them by address (the
+// door-then-stamp sites in code/Game/{Dialog,Tutorial} and engine_funcs.cpp's
+// g_GameLoaderLoop_Vtable).
+DEFINE_EXE_VTABLE(InnerLoaderLoop, "_ZTV15InnerLoaderLoop")
+DEFINE_EXE_VTABLE(GameLoaderLoop, "_ZTV14GameLoaderLoop")
 
 // Called from address_registry.cpp's RegisterVtablesAndTypeIds().
 void RegisterLoaderLoopVtables() {
-    RegisterExeAddr(0x140158870, reinterpret_cast<uintptr_t>(g_innerLoaderLoopVtable));
-    RegisterExeAddr(0x1401588d0, reinterpret_cast<uintptr_t>(g_outerLoaderLoopVtable));
+    RegisterExeAddr(0x140158870, reinterpret_cast<uintptr_t>(InnerLoaderLoop::Vtable()));
+    RegisterExeAddr(0x1401588d0, reinterpret_cast<uintptr_t>(GameLoaderLoop::Vtable()));
 }
-

@@ -43,8 +43,10 @@
 
 #include "engine_funcs.h"
 #include "system/String.h"
+#include "Game/GameLoaderLoop.h"   // ENDGAME B.3.8 LOOP
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
                                         void* scenarioIdx, void* retvalIbpPtr) {
@@ -131,9 +133,11 @@ extern "C" void WorldSetup_LoadFromSave(void* worldSetup, void* savedState,
     if (outerLoop) {
         uint64_t zeroTime[1];
         fn_Time_Ctor_Float((void*)zeroTime, 0.0f);
-        fn_LoaderLoop_Ctor(outerLoop, pDlLoop, (void*)zeroTime);
-        *reinterpret_cast<void**>(outerLoop) = (void*)g_GameLoaderLoop_Vtable;
-        pOuterLoop = outerLoop;
+        // ENDGAME B.3.8 LOOP: the real class (its ctor = the LoaderLoop door's
+        // body + the compiler's 0x1401588d0 stamp).
+        pOuterLoop = ::new (outerLoop) GameLoaderLoop(
+            static_cast<Engine::UpdateLoop*>(pDlLoop),                          // B.3.8 bridge
+            *reinterpret_cast<const System::Time*>(zeroTime));
     }
 
     // --- Step 4: publish the next loop ---------------------------------------
