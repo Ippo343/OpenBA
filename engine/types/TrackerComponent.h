@@ -20,24 +20,7 @@ namespace TrackerComponentAddr {
     constexpr uintptr_t Vtable  = 0x14015ab80;
 }
 
-struct TrackerComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    void*    field28;      // +0x28: zeroed
-    void*    field30;      // +0x30: zeroed
-    void*    field38;      // +0x38: zeroed
-    void*    field40;      // +0x40: zeroed
-    int32_t  trackerId;    // +0x48: initialized to -1
-    uint8_t  _pad4C[4];    // +0x4C: padding to 0x50
-};
-
-static_assert(sizeof(TrackerComponent) == 0x50, "TrackerComponent size mismatch");
-static_assert(offsetof(TrackerComponent, vtable) == 0x00, "");
-static_assert(offsetof(TrackerComponent, flags) == 0x20, "");
-static_assert(offsetof(TrackerComponent, field28) == 0x28, "");
-static_assert(offsetof(TrackerComponent, trackerId) == 0x48, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `TrackerComponent` is a real class now
+// (code/Game/Component/TrackerComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/TrackerComponent.h"

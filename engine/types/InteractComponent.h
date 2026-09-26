@@ -18,19 +18,7 @@ namespace InteractComponentAddr {
     constexpr uintptr_t Vtable = 0x1401638b0;
 }
 
-struct InteractComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    void*    field28;      // +0x28: zeroed
-    void*    field30;      // +0x30: zeroed
-};
-
-static_assert(sizeof(InteractComponent) == 0x38, "InteractComponent size mismatch");
-static_assert(offsetof(InteractComponent, vtable) == 0x00, "");
-static_assert(offsetof(InteractComponent, flags) == 0x20, "");
-static_assert(offsetof(InteractComponent, field28) == 0x28, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `InteractComponent` is a real class now
+// (code/Game/Component/InteractComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/InteractComponent.h"

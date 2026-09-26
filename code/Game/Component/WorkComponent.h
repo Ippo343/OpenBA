@@ -1,0 +1,54 @@
+#pragma once
+// ============================================================================
+// code/Game/Component/WorkComponent.h — ENDGAME B.3.8 block VIS
+//
+// `WorkComponent` as a real C++ class with a compiler-generated vtable
+// (B38_RULES.md D1-D4). The engine/types POD is a forwarder to this file.
+//
+// RETAIL (Application-x64.exe, B38_SLOTS.md §6):
+//   reflected "WorkComponent", parent "Component", ti 0x1401c8070
+//   create 0x140039e70: MemAlloc(0x38, 8) + ctor 0x14012e820
+//   ctor   0x14012e820: Component ctor, stamp 0x140164be0, +0x28 = -1,
+//                       +0x2c = 0x80000000, +0x30 = 0, flags |= 3 (0x83)
+//   dtor   0x14012e7e0 (slot 0 0x140039fb0, 83 B: the plain restamp + ~Internal shape)
+//   table  0x140164be0, 16 slots:
+//     [0]  0x140039fb0 scalar deleting dtor  [1]/[2] TypeName/Type
+//     [3]  0x14012e710 Persist               [6] 0x14012e6f0 OnAdded (Ghidra "Draw") PORT GAP
+//     [7]  0x14012e6c0 OnRemove (cancel my work)
+//     [13] 0x14012e6b0 own `XOR EAX,EAX; RET` [14] 0x14012e6a0 own `RET`
+//     every other slot = Component's
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Component/Component.h"
+#include "Object/exe_type.h"
+
+class WorkComponent final : public Component {
+    DECLARE_EXE_TYPE(WorkComponent)
+
+public:
+    WorkComponent();                                              // 0x14012e820
+
+    Object::Base* DeletingDtor(unsigned flags) override;          // [0]  0x140039fb0
+    void     Persist(void* stream) override;                      // [3]  0x14012e710
+    void     OnAdded() override;                                  // [6]  0x14012e6f0 PORT GAP
+    void     OnRemove() override;                                 // [7]  0x14012e6c0
+    uint32_t CommandMask(int command) override;                   // [13] 0x14012e6b0 own ret 0
+    void     Command(int command) override;                       // [14] 0x14012e6a0 own RET
+
+    // PUBLIC while the ported bodies read them (B38 decision 1).
+    int32_t  workId;       // +0x28 posted work id (ctor -1 = none posted)
+    uint32_t workFlags;    // +0x2c (ctor 0x80000000 = the same sentinel)
+    int32_t  workState;    // +0x30 work capacity (ctor 0)
+    uint8_t  _pad34[4];    // +0x34
+
+protected:
+    ~WorkComponent() = default;                                   // 0x14012e7e0
+};
+
+static_assert(sizeof(WorkComponent) == 0x38, "WorkComponent is 0x38 (create 0x140039e70)");
+static_assert(alignof(WorkComponent) == 8, "WorkComponent alignment");
+static_assert(offsetof(WorkComponent, workId) == 0x28, "");
+static_assert(offsetof(WorkComponent, workFlags) == 0x2c, "");
+static_assert(offsetof(WorkComponent, workState) == 0x30, "");
