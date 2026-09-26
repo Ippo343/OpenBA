@@ -6,33 +6,6 @@
 #include <cstdint>
 
 // ============================================================
-// MessageDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Finds buttonCancel/buttonOk/buttonYes/buttonNo
-// elements by name and assigns element IDs 0-3.
-void MessageDialog_Slot4(MessageDialog* self);
-
-// Slot5 (vtable +0x28): Shutdown — 3-byte no-op, returns 0.
-int MessageDialog_Slot5(MessageDialog* self);
-
-// Slot8 (vtable +0x40): OnCommand — dispatches button clicks through vtable.
-// msg 0x12: id 0=Cancel(+0x58), 1=Ok(+0x50), 2=Yes(+0x60), 3=No(+0x68).
-void MessageDialog_Slot8(MessageDialog* self, void* param2, int param3, int param4);
-
-// Slot10 (vtable +0x50): ButtonOk — sets result=1, closes dialog.
-void MessageDialog_Slot10(MessageDialog* self);
-
-// Slot11 (vtable +0x58): ButtonCancel — sets result=0, closes dialog.
-void MessageDialog_Slot11(MessageDialog* self);
-
-// Slot12 (vtable +0x60): ButtonYes — sets result=2, closes dialog.
-void MessageDialog_Slot12(MessageDialog* self);
-
-// Slot13 (vtable +0x68): ButtonNo — sets result=3, closes dialog.
-void MessageDialog_Slot13(MessageDialog* self);
-
-// ============================================================
 // EventPopupDialog
 // ============================================================
 
@@ -427,34 +400,3 @@ void ToolbarDialog_Update(void* self, uint64_t param2, uint64_t param3, uint64_t
 void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventData,
                            uint64_t p5, uint64_t p6, int p7);
 
-// ============================================================
-// OptionInputBindDialog
-// ============================================================
-
-// Startup (vtable +0x20): Finds buttonCancel/Ok/Yes/No, sets element IDs 0-3.
-void OptionInputBindDialog_Startup(OptionInputBindDialog* self);
-
-// Load (vtable +0x38): Polls keyboard (0-0x68) and mouse (4-0xB) for released
-// keys/buttons. On detection, stores key index at +0xC0 and input type at +0xC4,
-// then calls OnOk to close the dialog.
-void OptionInputBindDialog_Load(OptionInputBindDialog* self);
-
-// OnOk (vtable +0x50): Sets result value 1, closes dialog.
-void OptionInputBindDialog_OnOk(OptionInputBindDialog* self);
-
-// OnCancel (vtable +0x58): Sets result value 0, closes dialog.
-void OptionInputBindDialog_OnCancel(OptionInputBindDialog* self);
-
-// OnButton2 (vtable +0x60): Sets result value 2, closes dialog.
-void OptionInputBindDialog_OnButton2(OptionInputBindDialog* self);
-
-// OnButton3 (vtable +0x68): Sets result value 3, closes dialog.
-void OptionInputBindDialog_OnButton3(OptionInputBindDialog* self);
-
-// Shutdown (vtable +0x28, exe 0x14006d0c0): RET 0 no-op (3 bytes).
-int OptionInputBindDialog_Shutdown(OptionInputBindDialog* self);
-
-// OnEvent (vtable +0x40, exe 0x14006d070): Dispatches button clicks to OnOk/OnCancel/etc.
-// eventType 0x12 (button): 0=cancel, 1=ok, 2=button2, 3=button3
-// Implemented by dispatching through vtable slots +0x58/+0x50/+0x60/+0x68.
-void OptionInputBindDialog_OnEvent(OptionInputBindDialog* self, void* element, int eventType, int eventData);

@@ -248,13 +248,8 @@ struct MapParamsDialog {
 static_assert(sizeof(MapParamsDialog) == 0xF8, "MapParamsDialog size mismatch");
 static_assert(offsetof(MapParamsDialog, dataB8) == 0xB8, "");
 
-// --- MessageDialog (0xC0) ---
-// Factory: no subclass fields initialized
-struct MessageDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: uninitialized
-};
-static_assert(sizeof(MessageDialog) == 0xC0, "MessageDialog size mismatch");
+// --- MessageDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/MessageDialog.h"
 
 // --- ModDetailsDialog (0xC8) ---
 // Factory: no subclass fields initialized
@@ -359,17 +354,8 @@ static_assert(sizeof(OptionsDialog) == 0x1C0, "OptionsDialog size mismatch");
 static_assert(offsetof(OptionsDialog, comboRenderer) == 0xB8, "");
 static_assert(offsetof(OptionsDialog, checkMouseClip) == 0x1B0, "");
 
-// --- OptionInputBindDialog (0xC8) ---
-// Extends MessageDialog (0xC0). Factory sets MessageDialog vtable then overrides.
-// Adds: +0xC0(u32)=0, +0xC4(u32)=0xFFFFFFFF
-struct OptionInputBindDialog {
-    DialogInstance base;        // +0x00 (MessageDialog base)
-    uint64_t dataB8;           // +0xB8: from MessageDialog
-    uint32_t dataC0;           // +0xC0: zeroed
-    int32_t  dataC4;           // +0xC4: initialized to -1
-};
-static_assert(sizeof(OptionInputBindDialog) == 0xC8, "OptionInputBindDialog size mismatch");
-static_assert(offsetof(OptionInputBindDialog, dataC4) == 0xC4, "");
+// --- OptionInputBindDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/OptionInputBindDialog.h"
 
 // --- SaveLoadDialog (0x160) ---
 // Ctor: Sprite@+0xD0, zeroed +0xF0..+0x158

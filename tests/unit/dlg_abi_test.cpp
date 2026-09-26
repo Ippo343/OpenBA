@@ -1,0 +1,96 @@
+// ============================================================================
+// tests/unit/dlg_abi_test.cpp — ENDGAME B.3.8 block DLG (B38_RULES D1-D5, B8-14)
+//
+// The ABI claims block DLG makes for the exe `UI::DialogInstance` subclasses,
+// measured on the SHIPPED class headers under code/Game/Dialog/:
+//
+// PART A — LAYOUT. sizeof (= retail's create MemAlloc, B38_RULES section 1.3)
+//   and alignof of every class, and the offsets of the fields past +0xb8.
+// PART B — SLOT ORDER, read off pointers to VIRTUAL members (Itanium PMF =
+//   1 + vtable byte offset, adjustment 0: single inheritance). The retail
+//   table is DialogInstance's 10 slots ([0] dtor, [1] TypeName, [2] Type,
+//   [3] Persist, [4] OnOpened, [5] OnClosed, [6] OnUpdateLayout, [7] OnUpdate,
+//   [8] OnElementEvent, [9] OnSerializeSettings); MessageDialog adds 10-13.
+// PART C — SHAPE. polymorphic, NOT abstract (every class here is concrete in
+//   retail), no virtual destructor (ENDGAME decision 2), the proved parent.
+//
+// NOT PROVEN HERE: the member bodies (they stand on the address registry and
+// the UI runtime and cannot link into a host test) and `Vtable()` against a
+// constructed object (the pilot's exe_class_abi_test.cpp PART C proves the
+// DEFINE_EXE_VTABLE mechanism on this toolchain). The real run and the resave
+// gate verify those.
+// ============================================================================
+#include "unit.h"
+
+#include "Dialog/MessageDialog.h"
+#include "Dialog/OptionInputBindDialog.h"
+
+#include <cstdint>
+#include <cstddef>
+#include <cstring>
+#include <type_traits>
+
+namespace {
+
+template <typename PMF>
+uintptr_t SlotOffset(PMF pmf) {
+    static_assert(sizeof(PMF) == 2 * sizeof(uintptr_t), "Itanium PMF is two words");
+    uintptr_t words[2];
+    std::memcpy(words, &pmf, sizeof words);
+    if ((words[0] & 1u) == 0) return ~uintptr_t(0);   // not virtual
+    if (words[1] != 0) return ~uintptr_t(0);           // this-adjusting
+    return words[0] - 1;
+}
+
+template <typename T>
+void CheckShape() {
+    CHECK(std::is_polymorphic<T>::value);
+    CHECK(!std::is_abstract<T>::value);
+    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK((std::is_base_of<UI::DialogInstance, T>::value));
+    CHECK_EQ(alignof(T), (size_t)8);
+}
+
+// The DialogInstance slots every dialog carries, read through class T (an
+// override or the inherited base body answers at the same offset).
+template <typename T>
+void CheckDialogInstanceSlots() {
+    CHECK_EQ(SlotOffset(&T::DeletingDtor),        (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&T::TypeName),            (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&T::Type),                (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&T::Persist),             (uintptr_t)0x18);
+    CHECK_EQ(SlotOffset(&T::OnOpened),            (uintptr_t)0x20);
+    CHECK_EQ(SlotOffset(&T::OnClosed),            (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&T::OnUpdateLayout),      (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&T::OnUpdate),            (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&T::OnElementEvent),      (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&T::OnSerializeSettings), (uintptr_t)0x48);
+}
+
+}  // namespace
+
+// ===========================================================================
+// MessageDialog (0x14015c480, 14 slots, 0xc0) -> OptionInputBindDialog
+// (0x14015ce40, 14 slots, 0xc8)
+// ===========================================================================
+UNIT_TEST(dlg_message_dialog_layout) {
+    CHECK_EQ(sizeof(MessageDialog),         (size_t)0xc0);
+    CHECK_EQ(sizeof(OptionInputBindDialog), (size_t)0xc8);
+    CHECK_EQ(offsetof(MessageDialog, dataB8),             (size_t)0xb8);
+    CHECK_EQ(offsetof(OptionInputBindDialog, keyIndex),   (size_t)0xc0);
+    CHECK_EQ(offsetof(OptionInputBindDialog, inputType),  (size_t)0xc4);
+}
+
+UNIT_TEST(dlg_message_dialog_slots) {
+    CheckShape<MessageDialog>();
+    CheckShape<OptionInputBindDialog>();
+    CHECK((std::is_base_of<MessageDialog, OptionInputBindDialog>::value));
+    CheckDialogInstanceSlots<MessageDialog>();
+    CheckDialogInstanceSlots<OptionInputBindDialog>();
+    CHECK_EQ(SlotOffset(&MessageDialog::OnOk),             (uintptr_t)0x50);
+    CHECK_EQ(SlotOffset(&MessageDialog::OnCancel),         (uintptr_t)0x58);
+    CHECK_EQ(SlotOffset(&MessageDialog::OnYes),            (uintptr_t)0x60);
+    CHECK_EQ(SlotOffset(&MessageDialog::OnNo),             (uintptr_t)0x68);
+    CHECK_EQ(SlotOffset(&OptionInputBindDialog::OnOk),     (uintptr_t)0x50);
+    CHECK_EQ(SlotOffset(&OptionInputBindDialog::OnNo),     (uintptr_t)0x68);
+}
