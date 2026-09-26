@@ -92,12 +92,15 @@
 // setters are NO-ORACLE ports, widgets_input.cpp), so the out-of-bounds read
 // went with it; the size is recorded because it is the object's true size.
 // ============================================================================
-
 #include <cstdint>
 #include <cstddef>
 #include "Element.h"
+#include "NumberDescription.h"   // NumberDescription::NumberType
 
-namespace UI {
+// ENDGAME B.3 step 6, block C3: the POD below moved from `UI::` to `RtUI::`
+// (B4b-1) when the real class took the retail name; widgets_input.cpp's two
+// NumberElement setters still reach the object through it.
+namespace RtUI {
 
 // The STRUCT now says what the PROSE above already said. Until the elem_B
 // batch ported the class (runtime/src/ui/numberelement.cpp, 2026-09-12) it
@@ -108,7 +111,7 @@ namespace UI {
 // dtor (0x180118CE0), ComputeSize (0x180119000), Draw (0x1801191E0) and
 // CacheText (0x1801189F0) were all transcribed against them.
 struct NumberElement {
-    RtUI::Element  base;               // +0x00 .. +0xBF
+    RtUI::Element  base;         // +0x00 .. +0xBF
     void*    _font;              // +0xC0  ExternalPtr<UI::Font>
     int32_t  _mode;              // +0xC8
     uint32_t _padCC;             // +0xCC  never written by the ctor
@@ -128,4 +131,100 @@ static_assert(offsetof(NumberElement, _intValue)  == 0xD8, "NumberElement::_intV
 static_assert(offsetof(NumberElement, _floatValue)== 0xDC, "NumberElement::_floatValue @ +0xDC");
 static_assert(offsetof(NumberElement, _showSign)  == 0xE0, "NumberElement::_showSign @ +0xE0");
 
-} // namespace UI
+}  // namespace RtUI
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block C3) — `UI::NumberElement`, the REAL C++ class
+// ############################################################################
+//
+// PARENT `UI::Element` — READ (B36_SLOTS.md section 3), RECORDED, NOT USED:
+//     ?_TypeName@NumberElement@UI@@CAPEBDXZ       @0x18004a7e0 -> "NumberElement"
+//     ?_ParentTypeName@NumberElement@UI@@CAPEBDXZ @0x18004a7f0 -> "Element"
+// (NOT TextElement — the banner above's own first line said otherwise; the
+// literal and the ctor's `CALL ??0Element` agree.)
+//
+// `??_7NumberElement@UI@@6B@` @ 0x1801574d0, TWELVE slots: [0] 0x18004ab80 ·
+// [1] 0x18004a820 TypeName · [2] 0x18004a800 Type · [4] 0x180119000
+// ComputeSize · [5] 0x180119080 ComputeLayout · [6] 0x1801191e0 Draw · the
+// rest Element's.
+//
+// SIZE 0xE8: `MOV EDX,0xe8`-sized per B36_SLOTS.md section 1 and
+// CreateNewObject's `Allocate(0xE8, 8)`.
+//
+// ABSTRACT in C++; no real ctor: live ones are built by the `??0NumberElement`
+// door (numberelement.cpp) and wear the MINTED table.
+// ############################################################################
+namespace UI {
+
+class Font;
+
+class NumberElement : public Element {
+public:
+    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x18004ab80
+    const char* TypeName() const override;                       // [1] 0x18004a820
+    uint32_t    Type() const override;                           // [2] 0x18004a800
+    void ComputeSize() override;                                 // [4] 0x180119000
+    void ComputeLayout(int32_t x, int32_t y,
+                       int32_t w, int32_t h) override;           // [5] 0x180119080
+    void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x1801191e0
+
+    // ?CacheText@NumberElement@UI@@AEAAXXZ  0x1801189f0 — `AEAA` PRIVATE in
+    // retail; PUBLIC here because its door and the ctor door call it.
+    void CacheText();
+
+    // The three one-instruction getters, whole bodies (banner above).
+    int32_t GetIntValue() const   { return _intValue; }          // 0x18004a9a0
+    float   GetFloatValue() const { return _floatValue; }        // 0x18004a9b0
+    NumberDescription::NumberType GetNumberType() const {        // 0x18004a9c0
+        return static_cast<NumberDescription::NumberType>(_mode);
+    }
+    // ?SetValue@NumberElement@UI@@QEAAXH@Z / QEAAXM@Z — a non-virtual overload
+    // pair (THE DOOR DECIDES). Bodies are widgets_input.cpp's doors (fragment
+    // pass); declared, left undefined.
+    void SetValue(int32_t value);                                // 0x180118d50
+    void SetValue(float value);                                  // 0x180118db0
+
+    NumberElement(const NumberElement& src);                     // 0x18004a9d0  not ported
+    NumberElement& operator=(const NumberElement& src);          // 0x18004aa80  not ported
+    static uint32_t TypeId();                                    // 0x18004a810  not ported
+    static Object::Base* CreateNewObject();                      // 0x18004a910  ui_factory_wave28.cpp door
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x18004a990  ui_factory_wave28.cpp door
+    static void* operator new(std::size_t bytes);                // 0x18004a830  not ported
+    static void* operator new(std::size_t bytes, void* place);   // 0x18004a8a0  not ported
+    static void  operator delete(void* p);                       // 0x18004a8b0  not ported
+
+protected:
+    NumberElement() = default;   // NOT retail's 0x180118c70 (numberelement.cpp door)
+    ~NumberElement();            // 0x180118ce0 — empty; the door keeps the body
+
+private:
+    static const char* _TypeName();                              // 0x18004a7e0 -> "NumberElement"
+    static const char* _ParentTypeName();                        // 0x18004a7f0 -> "Element"
+    static Object::BaseTypeInfo _typeInfo;                       // 0x1801facb8 (minted)
+
+public:
+    Font*    _font;          // +0xc0  ExternalPtr<UI::Font>
+    int32_t  _mode;          // +0xc8  0 int, 1 float (GetNumberType)
+    uint32_t _padCC;         // +0xcc  never written by the ctor
+    char*    _cachedText;    // +0xd0  owning, refcounted System::String
+    int32_t  _intValue;      // +0xd8
+    float    _floatValue;    // +0xdc
+    uint8_t  _showSign;      // +0xe0
+    uint8_t  _padE1[7];      // +0xe1  tail padding
+};
+
+static_assert(sizeof(NumberElement) == 0xe8, "UI::NumberElement is 0xe8");
+static_assert(alignof(NumberElement) == 8, "UI::NumberElement aligns to 8");
+static_assert(offsetof(NumberElement, _font) == sizeof(Element),
+              "NumberElement's own fields begin at the end of Element");
+static_assert(offsetof(NumberElement, _font)       == 0xc0, "");
+static_assert(offsetof(NumberElement, _mode)       == 0xc8, "");
+static_assert(offsetof(NumberElement, _cachedText) == 0xd0, "");
+static_assert(offsetof(NumberElement, _intValue)   == 0xd8, "");
+static_assert(offsetof(NumberElement, _floatValue) == 0xdc, "");
+static_assert(offsetof(NumberElement, _showSign)   == 0xe0, "");
+static_assert(sizeof(NumberElement) == sizeof(RtUI::NumberElement), "");
+static_assert(offsetof(NumberElement, _cachedText) == offsetof(RtUI::NumberElement, _cachedText), "");
+static_assert(offsetof(NumberElement, _showSign)   == offsetof(RtUI::NumberElement, _showSign), "");
+
+}  // namespace UI

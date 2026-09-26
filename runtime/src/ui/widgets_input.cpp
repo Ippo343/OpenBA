@@ -128,9 +128,9 @@
 using UI::Element;
 using UI::SpinnerElement;
 using UI::ComboElement;
-using UI::NumberEditElement;
-using UI::NumberElement;
-using UI::EditElement;
+using RtUI::NumberEditElement;   // B.3.6 block C3: the POD moved (B4b-1)
+using RtUI::NumberElement;       // B.3.6 block C3: the POD moved (B4b-1)
+using RtUI::EditElement;         // B.3.6 block C3: the POD moved (B4b-1)
 using UI::RadioElement;
 using UI::ProgressElement;
 using UI::kElementFlagNeedsSizeCalc;
