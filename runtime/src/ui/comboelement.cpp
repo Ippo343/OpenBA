@@ -16,94 +16,73 @@
 //    7    Update                       0x1801125d0  here
 //    8    ButtonElement::Enable        0x180110cc0  buttonelement.cpp
 //
-// plus ??0ComboElement@UI@@QEAA@XZ         0x1801123f0
-//      ??0ComboElement@UI@@QEAA@AEBV01@@Z  0x1800751e0
+// plus ??0ComboElement@UI@@QEAA@AEBV01@@Z  0x1800751e0
 //      ??1ComboElement@UI@@UEAA@XZ         0x180112490
+// (`??0ComboElement@UI@@QEAA@XZ` 0x1801123f0 is factory_ui1.cpp's door.)
 //
-// `?AddItem@`, `?RemoveAllItems@`, `?SetCurrentItem@` and `?UpdateText@` are
-// ALREADY PORTED in runtime/src/ui/widgets_input.cpp (Waves 7/9); the array
-// layout is runtime/types/ui/ComboElement.h. This file adds the vtable rows.
-//
-// LAYOUT — 0x128 bytes (`MOV EDX,0x128` at 0x1800753af). ComboElement.h pins
-// the three parallel arrays and the two scalars; this file adds the two
-// description handles the constructor zeroes and Update dispatches on:
-//
-//   +0xd8  ExternalPtr<UI::ElementDescription>  the LIST description
-//   +0xe0  ExternalPtr<UI::ElementDescription>  the per-ITEM description
-//
-// Both are proven by Update: it calls slot 8 (`+0x40`, CreateInstance) on each
-// and type-tests the result against `UI::ListElement` and `UI::TextElement`
-// respectively.
-//
-// `??0ComboElement@UI@@QEAA@XZ` (0x1801123f0) is NOT here: it is already
-// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
-// (the factory roster). One address, one owner.
+// ENDGAME B.3.6 block C1: the three slot bodies are MEMBERS of
+// `UI::ComboElement` (runtime/types/ui/ComboElement.h, which now owns the
+// whole 0x128-byte layout, including the two description handles this file
+// used to carry as file-local constants). `?AddItem@`, `?RemoveAllItems@`,
+// `?SetCurrentItem@`, the three getters and `?UpdateText@` are declared on the
+// class and stay DOORS in runtime/src/ui/widgets_input.cpp (fragment pass).
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/ComboElement.h"
 
 using namespace rtuielem;
 
-static_assert(offsetof(UI::ComboElement, _strings)    == 0xE8, "");
-static_assert(offsetof(UI::ComboElement, _sprites)    == 0xF8, "");
-static_assert(offsetof(UI::ComboElement, _userData)   == 0x108, "");
-static_assert(offsetof(UI::ComboElement, _currentItem)== 0x118, "");
-static_assert(offsetof(UI::ComboElement, _openDialog) == 0x120, "");
-
 namespace {
 
-constexpr int kListDesc    = 0xd8;
-constexpr int kItemDesc    = 0xe0;
-constexpr int kStrings     = 0xe8;
-constexpr int kItemCount   = 0xf0;
-constexpr int kSprites     = 0xf8;
-constexpr int kUserData    = 0x108;
-constexpr int kCurrentItem = 0x118;
-constexpr int kOpenDialog  = 0x120;
-
-// UI::TextElement, the per-item element the list is filled with.
+// UI::TextElement (block C3's class), the per-item element the list is filled
+// with — reached at raw offsets.
 constexpr int kTextParams      = 0xc8;   // Array<System::String>::_data
 constexpr int kTextParamCount  = 0xd0;   // Array<System::String>::_size
 constexpr int kTextSprite      = 0x100;  // UI::Sprite {sheet +0x100, index +0x108}
 constexpr int kTextSpriteIndex = 0x108;
 
-// UI::ListElement
+// UI::ListElement (block C4's class)
 constexpr int kListSelected = 0xd8;
 constexpr int kListCount    = 0xe8;
 
-// UI::DialogInstance
+// UI::DialogInstance (block B's class)
 constexpr int kDlgInstFlags = 0x20;
 
-// UI::UserInterface: the open-dialog array at +0x28 {data, size, capacity}.
+// UI::UserInterface (block E's): the open-dialog array at +0x28 {data, size, capacity}.
 constexpr int kUiDialogs      = 0x28;
 constexpr int kUiDialogCount  = 0x30;
 
-// UI::Element::UpdateState
-constexpr int kStateMouseUp = 0x04;
-
 constexpr int kDialogSize = 0xd0;
 
-// UI::ElementDescription's vtable slot 8 (+0x40) is CreateInstance — the same
-// row runtime/src/ui/groupdescription.cpp implements for its own class.
-constexpr int kSlotDescCreateInstance = 8;
+// Element::_flags bits Element.h does not name (see buttonelement.cpp).
+constexpr uint32_t kFlagHover        = 0x00020000u;
+constexpr uint32_t kFlagPressStarted = 0x00200000u;
 
-RTELEM_TYPE_SLOTS(ComboElement)
-void* VtButtonElementBase() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
+// B6-5: namespace-scope atomic door caches for the member bodies.
+std::atomic<void*> g_comboTypeInfo{nullptr};
+std::atomic<void*> g_listTypeInfo{nullptr};
+std::atomic<void*> g_textTypeInfo{nullptr};
 
+const uint8_t* ComboElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_comboTypeInfo, "?_typeInfo@ComboElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
 uint32_t ListElementTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A");
+    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
+        g_listTypeInfo, "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A"));
     return p ? *p : 0u;
 }
 uint32_t TextElementTypeId() {
-    const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
-        "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A");
+    const uint32_t* p = static_cast<const uint32_t*>(AtomicExport(
+        g_textTypeInfo, "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A"));
     return p ? *p : 0u;
 }
 
+// The ctor/dtor doors only.
+void* VtComboElement()      { return RT_DATA_SLOT(void*, "??_7ComboElement@UI@@6B@"); }
+void* VtButtonElementBase() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
+
 using IsDerivedFromFn = bool  (*)(const void* self, uint32_t typeId);
-// UI::ElementDescription vtable slot 8 (+0x40): CreateInstance(desc, &ret, dialog)
-using CreateInstanceFn = void** (*)(const void* desc, void** ret, void* dialog);
 using DialogCtorFn     = void* (*)(void* self);
 using DialogDtorFn     = void  (*)(void* self);
 using StringAssignFn   = void* (*)(void* dst, const void* src);
@@ -115,17 +94,20 @@ using ComboDialogCtorFn = void* (*)(void* self, void* ui, void** list,
 using SetUpperLeftFn   = void  (*)(void* dlgInstance, int x, int y, bool centre);
 using DynArrayPushFn   = void  (*)(void* array, int newSize, const void* fill);
 using CloseDialogFn    = void  (*)(void* ui, void** dlgInstance);
-using ButtonUpdateFn   = void  (*)(void* self, const void* time, void* ui,
-                                   void** dlg, const void* state);
+// UI::DialogInstance vtable slot 4 (+0x20) is OnOpened (RULE B6-1.2) — block
+// B's class, reached through its table.
+using DialogOnOpenedFn = void  (*)(void* self);
 using ButtonCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementCtorFn    = void* (*)(void* self);
 using ElementDtorFn    = void  (*)(void* self);
 using ArrayDtorFn      = void* (*)(void* array);
 using ArrayCopyFn      = void* (*)(void* dst, const void* src);
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(ComboElement)
+namespace UI {
+
+uint32_t ComboElement::Type() const { return TypeIdOf(ComboElementTypeInfo()); }
+const char* ComboElement::TypeName() const { return TypeNameOf(ComboElementTypeInfo()); }
 
 // ============================================================================
 // ?Update@ComboElement@UI@@   0x1801125d0
@@ -133,7 +115,7 @@ RTELEM_TYPE_BODIES(ComboElement)
 // On a click, build the popup: instantiate the list description, instantiate
 // one item description per entry, fill each item's text and sprite, add it to
 // the list, then wrap the list in a `UI::ComboDialog` and push that dialog onto
-// the UserInterface. Then run ButtonElement::Update either way.
+// the UserInterface. Then run ButtonElement::Update (QUALIFIED) either way.
 //
 // ---------------------------------------------------------------------------
 // THE STACK `UI::Dialog` IS RETAIL'S, AND IT IS THE ARGUMENT EVERY
@@ -150,6 +132,10 @@ RTELEM_TYPE_BODIES(ComboElement)
 // runtime/src/object/deleting_dtor.cpp's banner records for its 22 inlined
 // destructors: identical computation, one extra call.
 //
+// The two descriptions' slot 8 is a VIRTUAL call on `UI::ElementDescription`
+// through the description's own (minted) table, with the hidden return slot in
+// retail order (RULE B6-2).
+//
 // ---------------------------------------------------------------------------
 // FOUR THINGS THE BYTES SAY
 // ---------------------------------------------------------------------------
@@ -165,52 +151,55 @@ RTELEM_TYPE_BODIES(ComboElement)
 //     (0x180112750), not after it.
 //  4. The sprite comparison is sheet + index, and the store is one 16-byte
 //     move — the same shape as AnimatedImageElement::Update.
-extern "C" void RtUi_ComboElement_Update(void* selfv, const void* time, void* ui,
-                                         void** dlg, const void* statev) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* st = static_cast<const uint8_t*>(statev);
-
-    const uint32_t flags = U32(self, kElemFlags);
+void ComboElement::Update(const System::Time& time, UserInterface* ui,
+                          Object::InternalPtr<DialogInstance>* dialog,
+                          const UpdateState& state) {
+    const uint32_t flags = _flags;
     const bool open = (flags & kFlagDisabledMask) == 0 &&
-                      I32(self, kItemCount) > 0 &&
-                      st[kStateMouseUp] != 0 &&
-                      ((flags >> 17) & 1u) != 0 &&
-                      ((flags >> 21) & 1u) != 0;
+                      _strings._size > 0 &&
+                      state.b04 != 0 &&
+                      (flags & kFlagHover) != 0 &&
+                      (flags & kFlagPressStarted) != 0;
 
     if (open) {
-        alignas(16) uint8_t dialog[kDialogSize];
-        RtAddr<DialogCtorFn>(0x180112db0ull)(dialog);
+        alignas(16) uint8_t dialogBuf[kDialogSize];
+        RtAddr<DialogCtorFn>(0x180112db0ull)(dialogBuf);
+        const Dialog* stackDialog = reinterpret_cast<const Dialog*>(dialogBuf);
 
         const auto isDerived = RtAddr<IsDerivedFromFn>(0x1800c0390ull);
 
-        void* listSlot = nullptr;
-        void** made = VSlot<CreateInstanceFn>(P(self, kListDesc), kSlotDescCreateInstance)(
-            P(self, kListDesc), &listSlot, dialog);
-        void* list = isDerived(*made, ListElementTypeId()) ? *made : nullptr;
+        Object::InternalPtr<Element> listSlot;
+        Object::InternalPtr<Element>* made =
+            reinterpret_cast<const ElementDescription*>(_listDesc)       // B.3.6 bridge
+                ->CreateInstance(&listSlot, stackDialog);
+        void* madeList = *reinterpret_cast<void**>(made);
+        void* list = isDerived(madeList, ListElementTypeId()) ? madeList : nullptr;
 
-        const int32_t count = I32(self, kItemCount);
+        const int32_t count = _strings._size;
         for (int32_t i = 0; i < count; ++i) {
-            void* itemSlot = nullptr;
-            void** madeItem = VSlot<CreateInstanceFn>(P(self, kItemDesc), kSlotDescCreateInstance)(
-                P(self, kItemDesc), &itemSlot, dialog);
-            void* item = isDerived(*madeItem, TextElementTypeId()) ? *madeItem : nullptr;
+            Object::InternalPtr<Element> itemSlot;
+            Object::InternalPtr<Element>* madeItem =
+                reinterpret_cast<const ElementDescription*>(_itemDesc)   // B.3.6 bridge
+                    ->CreateInstance(&itemSlot, stackDialog);
+            void* madeItemRaw = *reinterpret_cast<void**>(madeItem);
+            void* item = isDerived(madeItemRaw, TextElementTypeId()) ? madeItemRaw : nullptr;
 
-            const uint8_t* strings = static_cast<const uint8_t*>(P(self, kStrings));
+            const uint8_t* strings = reinterpret_cast<const uint8_t*>(_strings._data);
             if (I32(item, kTextParamCount) > 0) {
-                SetNeedsSizeCalc(item);
+                rtuielem::SetNeedsSizeCalc(item);
                 RtAddr<StringAssignFn>(0x1800c9810ull)(P(item, kTextParams),
                                                        strings + static_cast<int64_t>(i) * 8);
                 RtAddr<CacheTextFn>(0x18011ec10ull)(item);
             }
 
-            const uint8_t* sp = static_cast<const uint8_t*>(P(self, kSprites)) +
+            const uint8_t* sp = reinterpret_cast<const uint8_t*>(_sprites._data) +
                                 static_cast<int64_t>(i) * 0x10;
             uint64_t lo = 0, hi = 0;
             __builtin_memcpy(&lo, sp + 0, 8);
             __builtin_memcpy(&hi, sp + 8, 8);
             if (*reinterpret_cast<const uint64_t*>(static_cast<uint8_t*>(item) + kTextSprite) != lo ||
                 I32(item, kTextSpriteIndex) != static_cast<int32_t>(hi)) {
-                SetNeedsSizeCalc(item);
+                rtuielem::SetNeedsSizeCalc(item);
             }
             __builtin_memcpy(static_cast<uint8_t*>(item) + kTextSprite + 0, &lo, 8);
             __builtin_memcpy(static_cast<uint8_t*>(item) + kTextSprite + 8, &hi, 8);
@@ -219,7 +208,7 @@ extern "C" void RtUi_ComboElement_Update(void* selfv, const void* time, void* ui
             RtAddr<ListAddItemFn>(0x1800d44b0ull)(list, &tmp, 0);
         }
 
-        const int32_t cur = I32(self, kCurrentItem);
+        const int32_t cur = _currentItem;
         if (cur < 0 || cur >= I32(list, kListCount)) I32(list, kListSelected) = 0;
         else                                        I32(list, kListSelected) = cur;
         I32(list, kElemAlignment) = 0;
@@ -227,44 +216,61 @@ extern "C" void RtUi_ComboElement_Update(void* selfv, const void* time, void* ui
         void* combo = RtAddr<OperatorNewFn>(0x180074770ull)(kDialogSize);
         void* made2 = nullptr;
         if (combo != nullptr) {
-            void* owner = self;
-            void* dlgInst = *dlg;
+            void* owner = this;
+            void* dlgInst = *reinterpret_cast<void* const*>(dialog);
             void* listArg = list;
             made2 = RtAddr<ComboDialogCtorFn>(0x180111d00ull)(
                 combo, ui, &listArg, &dlgInst, &owner);
         }
-        P(self, kOpenDialog) = made2;
+        _openDialog = made2;
 
-        RtAddr<SetUpperLeftFn>(0x180114a60ull)(made2, I32(self, kElemLayoutLeft),
-                                               I32(self, kElemLayoutBottom), false);
-        U32(P(self, kOpenDialog), kDlgInstFlags) |= 2u;
+        RtAddr<SetUpperLeftFn>(0x180114a60ull)(made2, _layoutLeft, _layoutBottom, false);
+        U32(_openDialog, kDlgInstFlags) |= 2u;
 
-        void* pushed = P(self, kOpenDialog);
-        VSlot<ComputeSizeFn>(pushed, kSlotComputeSize)(pushed);
-        RtAddr<DynArrayPushFn>(0x18007a0d0ull)(
-            static_cast<uint8_t*>(ui) + kUiDialogs,
-            I32(ui, kUiDialogCount) + 1, &pushed);
+        void* pushed = _openDialog;
+        VSlot<DialogOnOpenedFn>(pushed, 4)(pushed);
+        uint8_t* u = reinterpret_cast<uint8_t*>(ui);
+        RtAddr<DynArrayPushFn>(0x18007a0d0ull)(u + kUiDialogs,
+                                               I32(u, kUiDialogCount) + 1, &pushed);
 
-        RtAddr<DialogDtorFn>(0x180112e40ull)(dialog);
+        RtAddr<DialogDtorFn>(0x180112e40ull)(dialogBuf);
     }
 
-    void* dlgCopy = *dlg;
-    RtAddr<ButtonUpdateFn>(0x1801110b0ull)(self, time, ui, &dlgCopy, st);
+    Object::InternalPtr<DialogInstance> dlgCopy = *dialog;
+    ButtonElement::Update(time, ui, &dlgCopy, state);
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS
+// ============================================================================
+extern "C" uint32_t RtUi_ComboElement_Type(const void* self) {
+    return reinterpret_cast<const UI::ComboElement*>(self)->UI::ComboElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_ComboElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::ComboElement*>(self)->UI::ComboElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_ComboElement_Update(void* selfv, const void* time, void* ui,
+                                         void** dlg, const void* statev) {
+    reinterpret_cast<UI::ComboElement*>(selfv)->UI::ComboElement::Update(   // B.3.6 bridge
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(statev));
 }
 
 // ============================================================================
-// Constructors / destructor
+// Constructors / destructor — DOORS (B4b-2), unchanged
 // ============================================================================
-// The default constructor INLINES ButtonElement's body (the base vtable stamp,
-// +0xc0 = -1, +0xc4 = 0) and then zeroes everything from +0xd8 to +0x120 except
-// +0x118, which starts at -1 ("no current item").
-
 // ??0ComboElement@UI@@QEAA@AEBV01@@Z  0x1800751e0 — chains to the out-of-line
 // ??0ButtonElement copy ctor, copies the two description handles, then
 // deep-copies the three parallel arrays onto zeroed targets.
 extern "C" void* RtUi_ComboElement_CopyCtor(void* selfv, const void* otherv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
     const uint8_t* other = static_cast<const uint8_t*>(otherv);
+    constexpr int kListDesc = 0xd8, kItemDesc = 0xe0, kStrings = 0xe8, kItemCount = 0xf0,
+                  kSprites = 0xf8, kUserData = 0x108, kCurrentItem = 0x118,
+                  kOpenDialog = 0x120;
     RtAddr<ButtonCopyCtorFn>(0x180048460ull)(self, other);
     P(self, 0x00) = VtComboElement();
     P(self, kListDesc) = Pc(other, kListDesc);
@@ -287,6 +293,9 @@ extern "C" void* RtUi_ComboElement_CopyCtor(void* selfv, const void* otherv) {
     P(self, kOpenDialog) = Pc(other, kOpenDialog);
     return self;
 }
+static_assert(offsetof(UI::ComboElement, _listDesc) == 0xd8 &&
+              offsetof(UI::ComboElement, _openDialog) == 0x120,
+              "the copy-ctor door's offsets are the class's");
 
 // ============================================================================
 // ??1ComboElement@UI@@UEAA@XZ   0x180112490
@@ -298,15 +307,15 @@ extern "C" void RtUi_ComboElement_Dtor(void* selfv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
     P(self, 0x00) = VtComboElement();
 
-    void* open = P(self, kOpenDialog);
+    void* open = P(self, 0x120);                            // _openDialog
     if (open != nullptr) {
         void* slot = open;
         RtAddr<CloseDialogFn>(0x180120f20ull)(Pc(open, 0x10), &slot);
     }
 
-    RtAddr<ArrayDtorFn>(0x180024aa0ull)(self + kUserData);
-    RtAddr<ArrayDtorFn>(0x180037310ull)(self + kSprites);
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(self + kStrings);
+    RtAddr<ArrayDtorFn>(0x180024aa0ull)(self + 0x108);      // _userData
+    RtAddr<ArrayDtorFn>(0x180037310ull)(self + 0xf8);       // _sprites
+    RtAddr<ArrayDtorFn>(0x180010ab0ull)(self + 0xe8);       // _strings
 
     P(self, 0x00) = VtButtonElementBase();
     RtAddr<ElementDtorFn>(0x1801161a0ull)(self);

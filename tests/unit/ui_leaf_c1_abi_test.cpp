@@ -6,7 +6,9 @@
 //   UI::CheckDescription       : ButtonDescription   0xa8  10 slots
 //   UI::ButtonElement          : Element             0xd8  12 slots
 //   UI::CheckElement           : ButtonElement       0xe0  12 slots
-//   (Combo / Border / ClipRegion appended below as each pair lands)
+//   UI::ComboDescription       : ButtonDescription   0xb8  10 slots
+//   UI::ComboElement           : ButtonElement       0x128 12 slots
+//   (Border / ClipRegion appended below as each pair lands)
 //
 // Built to the contract of ui_element_abi_test.cpp (block A); only what
 // differs is spelled out.
@@ -36,6 +38,8 @@
 #include "runtime/types/ui/ButtonElement.h"
 #include "runtime/types/ui/CheckDescription.h"
 #include "runtime/types/ui/CheckElement.h"
+#include "runtime/types/ui/ComboDescription.h"
+#include "runtime/types/ui/ComboElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -56,7 +60,7 @@ namespace {
 // ---------------------------------------------------------------------------
 // Observation channel: WHICH class's member ran, and which slot it stands for.
 // ---------------------------------------------------------------------------
-enum Who : int { kNone = 0, kButtonD, kCheckD, kButtonE, kCheckE };
+enum Who : int { kNone = 0, kButtonD, kCheckD, kButtonE, kCheckE, kComboD, kComboE };
 
 const void* g_self = nullptr;
 int         g_who  = kNone;
@@ -127,6 +131,12 @@ struct ButtonElementProbe final : UI::ButtonElement {
     Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct CheckElementProbe final : UI::CheckElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct ComboElementProbe final : UI::ComboElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct ComboDescriptionProbe final : UI::ComboDescription {
     Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct ButtonDescriptionProbe final : UI::ButtonDescription {
@@ -223,6 +233,37 @@ Object::InternalPtr<Element>* CheckDescription::CreateInstance(
 Object::External* CheckDescription::Construct() { Note(this, kCheckD, 9); return this; }
 CheckDescription::~CheckDescription() {}
 
+// ---- ComboElement: overrides slots 1, 2 and 7 only.
+const char* ComboElement::TypeName() const { Note(this, kComboE, 1); return "ComboElement"; }
+uint32_t ComboElement::Type() const { Note(this, kComboE, 2); return 0xCE0u; }
+void ComboElement::Update(const System::Time& time, UserInterface* ui,
+                          Object::InternalPtr<DialogInstance>* dialog, const UpdateState& state) {
+    Note(this, kComboE, 7);
+    Object::InternalPtr<DialogInstance> copy = *dialog;
+    ButtonElement::Update(time, ui, &copy, state);
+}
+ComboElement::~ComboElement() {}
+
+// ---- ComboDescription — Serialize calls ButtonDescription's QUALIFIED.
+const char* ComboDescription::TypeName() const { Note(this, kComboD, 1); return "ComboDescription"; }
+uint32_t ComboDescription::Type() const { Note(this, kComboD, 2); return 0xCD0u; }
+int32_t ComboDescription::GetFileVersion() const { Note(this, kComboD, 3); return 0x2104; }
+bool ComboDescription::Serialize(void* stream) {
+    Note(this, kComboD, 5);
+    return ButtonDescription::Serialize(stream);
+}
+Object::External* ComboDescription::Reconstruct() { Note(this, kComboD, 6); return this; }
+void ComboDescription::Destruct() { Note(this, kComboD, 7); }
+Object::InternalPtr<Element>* ComboDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    Note(this, kComboD, 8, reinterpret_cast<intptr_t>(dialog));
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
+        reinterpret_cast<Element*>(static_cast<uintptr_t>(0xC0C0C0C0)));
+    return ret;
+}
+Object::External* ComboDescription::Construct() { Note(this, kComboD, 9); return this; }
+ComboDescription::~ComboDescription() {}
+
 }  // namespace UI
 
 namespace {
@@ -266,10 +307,10 @@ void ExpectDescriptionSlot(void* raw, int off, int who) {
     case kD9_Construct:   SlotAt<void* (*)(void*)>(raw, off)(raw); break;
     default: CHECK(false); break;
     }
-    // Serialize on a CheckDescription runs its own marker, then the base's.
-    if (off == kD5_Serialize && who == kCheckD) {
+    // Serialize on a Check/ComboDescription runs its own marker, then the base's.
+    if (off == kD5_Serialize && (who == kCheckD || who == kComboD)) {
         CHECK_EQ(g_trailN, 2);
-        CHECK_EQ(g_trail[0], kCheckD * 100 + 5);
+        CHECK_EQ(g_trail[0], who * 100 + 5);
         CHECK_EQ(g_trail[1], kButtonD * 100 + 5);
     } else {
         CHECK_EQ(g_who, who);
@@ -487,4 +528,86 @@ UNIT_TEST(ui_c1_qualified_calls_do_not_reenter_the_door) {
     CHECK_EQ(g_arg, 0x9000 + 3);   // the base saw the handle through its own copy
 
     *reinterpret_cast<const void* const**>(raw) = real;
+}
+
+// ===========================================================================
+// COMBO — layout, slot order, retslot
+// ===========================================================================
+UNIT_TEST(ui_c1_combo_layout) {
+    CHECK_EQ(sizeof(UI::ComboElement),     (size_t)0x128);  // 0x180075390
+    CHECK_EQ(sizeof(UI::ComboDescription), (size_t)0xb8);   // 0x180074e70
+    CHECK_EQ(alignof(UI::ComboElement), (size_t)8);
+    CHECK_EQ(alignof(UI::ComboDescription), (size_t)8);
+    CHECK((std::is_base_of<UI::ButtonElement, UI::ComboElement>::value));
+    CHECK((std::is_base_of<UI::ButtonDescription, UI::ComboDescription>::value));
+    CHECK(std::is_abstract<UI::ComboElement>::value);
+    CHECK(std::is_abstract<UI::ComboDescription>::value);
+    CHECK(!std::has_virtual_destructor<UI::ComboElement>::value);
+    CHECK(!std::has_virtual_destructor<UI::ComboDescription>::value);
+
+    CHECK_EQ(offsetof(UI::ComboElement, _listDesc),    (size_t)0xd8);
+    CHECK_EQ(offsetof(UI::ComboElement, _itemDesc),    (size_t)0xe0);
+    CHECK_EQ(offsetof(UI::ComboElement, _strings),     (size_t)0xe8);
+    CHECK_EQ(offsetof(UI::ComboElement, _sprites),     (size_t)0xf8);
+    CHECK_EQ(offsetof(UI::ComboElement, _userData),    (size_t)0x108);
+    CHECK_EQ(offsetof(UI::ComboElement, _currentItem), (size_t)0x118);
+    CHECK_EQ(offsetof(UI::ComboElement, _openDialog),  (size_t)0x120);
+
+    CHECK_EQ(offsetof(UI::ComboDescription, _listDesc),    (size_t)0xa0);
+    CHECK_EQ(offsetof(UI::ComboDescription, _itemDesc),    (size_t)0xa8);
+    CHECK_EQ(offsetof(UI::ComboDescription, _stringTable), (size_t)0xb0);
+    CHECK_EQ(sizeof(UI::ComboDescription), sizeof(RtUI::ComboDescription));
+    CHECK_EQ(offsetof(UI::ComboDescription, _stringTable),
+             offsetof(RtUI::ComboDescription, _stringTable));
+    // The name-hiding the header documents: the base's table is at +0x58.
+    CHECK_EQ(offsetof(UI::ElementDescription, _stringTable), (size_t)0x58);
+}
+
+UNIT_TEST(ui_c1_comboelement_slot_order_is_retails) {
+    FactoryScope scope;
+    ComboElementProbe probe{};
+    ButtonElementProbe button{};
+    BareElementProbe element{};
+    void* raw = static_cast<void*>(&probe);
+    const void* const* vt = VTableOf(raw);
+    const void* const* bv = VTableOf(static_cast<void*>(&button));
+    const void* const* ev = VTableOf(static_cast<void*>(&element));
+
+    ExpectElementSlot(raw, kE1_TypeName, kComboE);
+    ExpectElementSlot(raw, kE2_Type, kComboE);
+    // 4/5/6/8 are ButtonElement's (B36_SLOTS.md: inherited-from UI::ButtonElement).
+    for (int off : { kE4_ComputeSize, kE5_ComputeLayout, kE6_Draw, kE8_Enable }) {
+        CHECK(vt[off / 8] == bv[off / 8]);
+        ExpectElementSlot(raw, off, kButtonE);
+    }
+    for (int off : { kE3_Persist, kE9_Contains, kE10_SetColor, kE11_GetBorder })
+        CHECK(vt[off / 8] == ev[off / 8]);
+    CHECK(vt[kE7_Update / 8] != bv[kE7_Update / 8]);
+
+    // Slot 7 is Combo's own and chains to ButtonElement's, qualified.
+    void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x5000));
+    UI::Element::UpdateState state;
+    state.mouseX = 2;
+    Reset();
+    SlotAt<void (*)(void*, const void*, void*, void**, const void*)>(raw, kE7_Update)(
+        raw, nullptr, nullptr, &handle, &state);
+    CHECK_EQ(g_trailN, 2);
+    CHECK_EQ(g_trail[0], kComboE * 100 + 7);
+    CHECK_EQ(g_trail[1], kButtonE * 100 + 7);
+    CHECK_EQ(g_arg, 0x5000 + 2);
+}
+
+UNIT_TEST(ui_c1_combodescription_slot_order_is_retails) {
+    ComboDescriptionProbe probe;
+    ButtonDescriptionProbe button;
+    void* raw = static_cast<void*>(&probe);
+    for (int off : { kD1_TypeName, kD2_Type, kD3_GetFileVersion, kD5_Serialize,
+                     kD6_Reconstruct, kD7_Destruct, kD9_Construct })
+        ExpectDescriptionSlot(raw, off, kComboD);
+    const void* const* vt = VTableOf(raw);
+    const void* const* bv = VTableOf(static_cast<void*>(&button));
+    CHECK(vt[kD4_Compile / 8] == bv[kD4_Compile / 8]);
+    for (int i = 1; i < 10; ++i)
+        if (i != kD4_Compile / 8) CHECK(vt[i] != bv[i]);
+    ExpectCreateInstanceRetslot(raw, kComboD, 0xC0C0C0C0u);
 }
