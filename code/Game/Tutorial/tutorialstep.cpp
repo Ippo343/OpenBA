@@ -18,171 +18,91 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialstep_funcs.h"
+#include "Tutorial/TutorialStep.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
 // ============================================================
-// Local function pointers (resolved lazily, not in engine_funcs.h)
+// Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5: the loader thread
+// serializes tutorial resources; no first-call cache). The External ctor and
+// String::Serialize dispatch slots this file used to cache are direct calls.
 // ============================================================
-
-// External::External() constructor -- dispatch slot 0x140151e98
-typedef void (*fn_External_Ctor_t)(void* self);
-static fn_External_Ctor_t s_fn_External_Ctor = nullptr;
 
 // ExternalPtr<StringTable>::Serialize (0x14000bf40)
 typedef void (*fn_ExternalPtrSerialize_StringTable_t)(void* fieldPtr, void* serializer);
-static fn_ExternalPtrSerialize_StringTable_t s_fn_ExternalPtrSerialize_StringTable = nullptr;
-
-// String::Serialize -- dispatch slot 0x140151238
-typedef void (*fn_StringSerialize_t)(void* stringPtr, void* serializer);
-static fn_StringSerialize_t s_fn_StringSerialize = nullptr;
+static fn_ExternalPtrSerialize_StringTable_t ExternalPtrSerializeStringTableFn() {
+    return reinterpret_cast<fn_ExternalPtrSerialize_StringTable_t>(ResolveAddr(Module::Exe, 0x14000bf40));
+}
 
 // DynArray resize helper (0x140001bb0)
 typedef void (*fn_DynArrayResize_t)(void* arrayField, int newCount);
-static fn_DynArrayResize_t s_fn_DynArrayResize = nullptr;
+static fn_DynArrayResize_t DynArrayResizeFn() {
+    return reinterpret_cast<fn_DynArrayResize_t>(ResolveAddr(Module::Exe, 0x140001bb0));
+}
 
-// ExternalPtrArray<TutorialImage>::Serialize (0x140028cf0)
-typedef void (*fn_SerializeImageArray_t)(void* serializer, int count, void* arrayData, void* p4);
-static fn_SerializeImageArray_t s_fn_SerializeImageArray = nullptr;
-
-// ExternalPtrArray<TutorialSetup>::Serialize (0x140028f40)
-typedef void (*fn_SerializeSetupArray_t)(void* serializer, int count, void* arrayData, void* p4);
-static fn_SerializeSetupArray_t s_fn_SerializeSetupArray = nullptr;
-
-// ExternalPtrArray<TutorialGoal>::Serialize (0x140029190)
-typedef void (*fn_SerializeGoalArray_t)(void* serializer, int count, void* arrayData, void* p4);
-static fn_SerializeGoalArray_t s_fn_SerializeGoalArray = nullptr;
-
-static bool s_resolved = false;
-
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-
-    // External::External() constructor
-    void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151e98));
-    if (slot && *slot) s_fn_External_Ctor = reinterpret_cast<fn_External_Ctor_t>(*slot);
-
-    // String::Serialize dispatch slot
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151238));
-    if (slot && *slot) s_fn_StringSerialize = reinterpret_cast<fn_StringSerialize_t>(*slot);
-
-    // Direct exe functions
-    s_fn_ExternalPtrSerialize_StringTable = reinterpret_cast<fn_ExternalPtrSerialize_StringTable_t>(
-        ResolveAddr(Module::Exe, 0x14000bf40));
-    s_fn_DynArrayResize = reinterpret_cast<fn_DynArrayResize_t>(
-        ResolveAddr(Module::Exe, 0x140001bb0));
-    s_fn_SerializeImageArray = reinterpret_cast<fn_SerializeImageArray_t>(
-        ResolveAddr(Module::Exe, 0x140028cf0));
-    s_fn_SerializeSetupArray = reinterpret_cast<fn_SerializeSetupArray_t>(
-        ResolveAddr(Module::Exe, 0x140028f40));
-    s_fn_SerializeGoalArray = reinterpret_cast<fn_SerializeGoalArray_t>(
-        ResolveAddr(Module::Exe, 0x140029190));
+// ExternalPtrArray<TutorialImage / TutorialSetup / TutorialGoal>::Serialize
+// (0x140028cf0 / 0x140028f40 / 0x140029190)
+typedef void (*fn_SerializePtrArray_t)(void* serializer, int count, void* arrayData, void* p4);
+static fn_SerializePtrArray_t SerializePtrArrayFn(uintptr_t exeAddr) {
+    return reinterpret_cast<fn_SerializePtrArray_t>(ResolveAddr(Module::Exe, exeAddr));
 }
 
 // ============================================================
-// TutorialStep_DtorBody (0x1400e33f0)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-// The actual destructor body -- frees arrays, destroys strings,
-// calls External::~External.
-static void TutorialStep_DtorBody(void* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    uintptr_t vtable = ResolveAddr(Module::Exe, TutorialStepAddr::Vtable);
+// ctor 0x1400e3480: External() (the base's real ctor), the stamp (the
+// compiler's), then every field zeroed (+0x20 .. +0x68).
+TutorialStep::TutorialStep()
+    : completed(0), _pad21{}, stringTable(nullptr), titleStr(nullptr), descStr(nullptr),
+      images(nullptr), imageCount(0), _pad4C{},
+      setups(nullptr), setupCount(0), _pad5C{},
+      goals(nullptr), goalCount(0), _pad6C{} {}
 
-    // Set vtable
-    *reinterpret_cast<uintptr_t*>(s) = vtable;
+// The dtor body 0x1400e33f0: free the goals (+0x60), setups (+0x50) and images
+// (+0x40) arrays in retail's order — each an inlined Collection::Array<T>::~Array
+// (MemFree the buffer, zero _data, zero the _size/_capacity qword; no element
+// destroy for the 8-byte ExternalPtr<T> entries) — then ~String on the
+// description (+0x38) and the title (+0x30). The compiler runs ~External.
+TutorialStep::~TutorialStep() {
+    reinterpret_cast<Collection::Array<void*>*>(&goals)->~Array();    // B.3.2 bridge
+    reinterpret_cast<Collection::Array<void*>*>(&setups)->~Array();   // B.3.2 bridge
+    reinterpret_cast<Collection::Array<void*>*>(&images)->~Array();   // B.3.2 bridge
+    reinterpret_cast<System::String*>(&descStr)->~String();           // B.3.1 bridge
+    reinterpret_cast<System::String*>(&titleStr)->~String();          // B.3.1 bridge
+}
 
-    // Free the goals (+0x60), setups (+0x50) and images (+0x40) arrays, in retail's
-    // order. ENDGAME B.3.2 step 2: each WAS an inlined Collection::Array<T>::~Array
-    // — MemFree the buffer (null-guarded on both sides), zero _data, zero the
-    // _size/_capacity qword. Retail destroys no element in any of the three (8-byte
-    // ExternalPtr<T> entries, no destroy arm), so the trait-derived Array<void*>
-    // row (destroy == nullptr) is that body exactly.
-    // B.3.2 bridge ×3: TutorialStep is still an untyped exe struct.
-    reinterpret_cast<Collection::Array<void*>*>(s + 0x60)->~Array();
-    reinterpret_cast<Collection::Array<void*>*>(s + 0x50)->~Array();
-    reinterpret_cast<Collection::Array<void*>*>(s + 0x40)->~Array();
-
-    // Destroy String at +0x38 (descStr)
-    reinterpret_cast<System::String*>(s + 0x38)->~String();
-
-    // Destroy String at +0x30 (titleStr)
-    reinterpret_cast<System::String*>(s + 0x30)->~String();
-
-    // Call External::~External
-    if (fn_External_Dtor) fn_External_Dtor(self);
+// [0] 0x140028cc0: the dtor 0x1400e33f0, MemFree on &1.
+Object::Base* TutorialStep::DeletingDtor(unsigned flags) {
+    this->~TutorialStep();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// TutorialStep_Dtor -- Slot0 (vtable +0x00, 0x140028cc0)
+// TutorialStep::Reconstruct [6] 0x140028ca0 / Destruct [7] / Construct [8]
 // ============================================================
-// Scalar destructor: calls DtorBody, optionally frees memory.
-void* TutorialStep_Dtor(void* self, uint32_t flags) {
-    TutorialStep_DtorBody(self);
-
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(self);
-    }
-
-    return self;
+// Reconstruct: DeletingDtor(0) (the tree called the dtor body directly — the
+// same effect), then the ctor 0x1400e3480 on `this`.
+Object::External* TutorialStep::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialStep();
+}
+void TutorialStep::Destruct() { DeletingDtor(0); }
+Object::External* TutorialStep::Construct() {                     // 0x140028c90
+    return ::new (static_cast<void*>(this)) TutorialStep();
 }
 
 // ============================================================
-// TutorialStep_Init -- Slot8 (vtable +0x40, 0x140028c90 -> 0x1400e3480)
+// TutorialStep::Serialize (vtable +0x28, 0x1400e32a0)
 // ============================================================
-// Constructor/initializer: calls External::External(), sets vtable, zeros all fields.
-void* TutorialStep_Init(void* self) {
-    EnsureResolved();
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    // Call External base constructor
-    if (s_fn_External_Ctor) s_fn_External_Ctor(self);
-
-    // Set vtable to TutorialStep
-    uintptr_t vtable = ResolveAddr(Module::Exe, TutorialStepAddr::Vtable);
-    *reinterpret_cast<uintptr_t*>(s) = vtable;
-
-    // Zero all TutorialStep fields (+0x20 through +0x68)
-    *reinterpret_cast<uint8_t*>(s + 0x20) = 0;   // completed
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;   // stringTable
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;   // titleStr
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;   // descStr
-    *reinterpret_cast<uint64_t*>(s + 0x40) = 0;   // images data
-    *reinterpret_cast<uint64_t*>(s + 0x48) = 0;   // imageCount
-    *reinterpret_cast<uint64_t*>(s + 0x50) = 0;   // setups data
-    *reinterpret_cast<uint64_t*>(s + 0x58) = 0;   // setupCount
-    *reinterpret_cast<uint64_t*>(s + 0x60) = 0;   // goals data
-    *reinterpret_cast<uint64_t*>(s + 0x68) = 0;   // goalCount
-
-    return self;
-}
-
-// ============================================================
-// TutorialStep_Cleanup -- Slot6 (vtable +0x30, 0x140028ca0)
-// ============================================================
-// Cleanup: calls scalar dtor with flags=0 (destroy, no free), then re-initializes.
-void TutorialStep_Cleanup(void* self) {
-    // Call scalar dtor with flags=0: destroys fields without freeing self
-    // In the original, this calls vtable[0](self, 0), which is the scalar dtor.
-    // We call TutorialStep_DtorBody directly (same effect as flags=0 scalar dtor).
-    TutorialStep_DtorBody(self);
-
-    // Re-initialize: the original tail-calls TutorialStep_Ctor (0x1400e3480)
-    TutorialStep_Init(self);
-}
-
-// ============================================================
-// TutorialStep_Serialize -- Slot5 (vtable +0x28, 0x1400e32a0)
-// ============================================================
-// Serializes all TutorialStep fields using a Serializer wrapper.
 // Fields serialized:
 //   1. bool at +0x20 (completed)
 //   2. ExternalPtr<StringTable> at +0x28
@@ -191,10 +111,8 @@ void TutorialStep_Cleanup(void* self) {
 //   5. int count at +0x48, then DynArray resize +0x40, then array serialize (images)
 //   6. int count at +0x58, then DynArray resize +0x50, then array serialize (setups)
 //   7. int count at +0x68, then DynArray resize +0x60, then array serialize (goals)
-void TutorialStep_Serialize(void* self, void* stream) {
-    EnsureResolved();
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+bool TutorialStep::Serialize(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
@@ -204,111 +122,52 @@ void TutorialStep_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge
 
     // 2. Serialize ExternalPtr<StringTable> at +0x28
-    if (s_fn_ExternalPtrSerialize_StringTable) {
-        s_fn_ExternalPtrSerialize_StringTable(reinterpret_cast<void*>(s + 0x28), serializer);
+    if (auto serializeTable = ExternalPtrSerializeStringTableFn()) {
+        serializeTable(reinterpret_cast<void*>(s + 0x28), serializer);
     }
 
-    // 3. Serialize String at +0x30 (title)
-    if (s_fn_StringSerialize) {
-        s_fn_StringSerialize(reinterpret_cast<void*>(s + 0x30), serializer);
-    }
+    // 3. / 4. Serialize the title (+0x30) and description (+0x38) Strings
+    reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);   // B.3.1 bridge
+    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);   // B.3.1 bridge
 
-    // 4. Serialize String at +0x38 (description)
-    if (s_fn_StringSerialize) {
-        s_fn_StringSerialize(reinterpret_cast<void*>(s + 0x38), serializer);
-    }
-
-    // 5. Images array (+0x40 data, +0x48 count)
-    {
-        int32_t count = *reinterpret_cast<int32_t*>(s + 0x48);
-        int32_t localCount = count;
+    // 5. / 6. / 7. The three ExternalPtr arrays: count, resize on load, elements.
+    struct ArrayLeg { uintptr_t dataOff; uintptr_t countOff; uintptr_t serializeAddr; };
+    const ArrayLeg legs[3] = {
+        { 0x40, 0x48, 0x140028cf0 },   // images
+        { 0x50, 0x58, 0x140028f40 },   // setups
+        { 0x60, 0x68, 0x140029190 },   // goals
+    };
+    for (const ArrayLeg& leg : legs) {
+        int32_t localCount = *reinterpret_cast<int32_t*>(s + leg.countOff);
         reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-        // On load: check if reading (serializer->encoding->mode == 0)
+        // On load (encoding mode 0): resize the array
         if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            // Reading: resize the array
-            if (s_fn_DynArrayResize) {
-                s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x40), localCount);
+            if (auto resize = DynArrayResizeFn()) {
+                resize(reinterpret_cast<void*>(s + leg.dataOff), localCount);
             }
         }
-        // Serialize each element
-        void* arrayData = *reinterpret_cast<void**>(s + 0x40);
-        if (s_fn_SerializeImageArray) {
-            s_fn_SerializeImageArray(serializer, localCount, arrayData, nullptr);
-        }
-    }
-
-    // 6. Setups array (+0x50 data, +0x58 count)
-    {
-        int32_t count = *reinterpret_cast<int32_t*>(s + 0x58);
-        int32_t localCount = count;
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            if (s_fn_DynArrayResize) {
-                s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x50), localCount);
-            }
-        }
-        void* arrayData = *reinterpret_cast<void**>(s + 0x50);
-        if (s_fn_SerializeSetupArray) {
-            s_fn_SerializeSetupArray(serializer, localCount, arrayData, nullptr);
-        }
-    }
-
-    // 7. Goals array (+0x60 data, +0x68 count)
-    {
-        int32_t count = *reinterpret_cast<int32_t*>(s + 0x68);
-        int32_t localCount = count;
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&localCount), nullptr);   // B.3.4 bridge
-        if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            if (s_fn_DynArrayResize) {
-                s_fn_DynArrayResize(reinterpret_cast<void*>(s + 0x60), localCount);
-            }
-        }
-        void* arrayData = *reinterpret_cast<void**>(s + 0x60);
-        if (s_fn_SerializeGoalArray) {
-            s_fn_SerializeGoalArray(serializer, localCount, arrayData, nullptr);
+        void* arrayData = *reinterpret_cast<void**>(s + leg.dataOff);
+        if (auto serializeArray = SerializePtrArrayFn(leg.serializeAddr)) {
+            serializeArray(serializer, localCount, arrayData, nullptr);
         }
     }
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160e90 (9 slots, Object::External base), size 0x70, parent "Object::External".
-// GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// create 0x140028c50: MemAlloc(0x70, 8), then the ctor.
+void* TutorialStep::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialStep), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialStep());
+}
+// createInPlace 0x140028c90.
+void* TutorialStep::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialStep());
+}
 
-static uint32_t TutorialStep_GetTypeId_SA(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialStep");
-    return c;
-}
-static int TutorialStep_GetFileVersion(void*) { return 1; }
-
-static void* g_TutorialStep_Vtable[9] = {
-    (void*)&TutorialStep_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialStep_GetTypeId_SA,       // +0x10 GetTypeId
-    (void*)&TutorialStep_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialStep_Serialize,       // +0x28 Serialize
-    (void*)&TutorialStep_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialStep_Init,              // +0x40 Ctor/CreateInPlace
-};
-
-extern "C" void RegisterTutorialStepVtable() {
-    RegisterExeAddr(0x140160e90, (uintptr_t)g_TutorialStep_Vtable);
-}
-extern "C" void* TutorialStep_CreateInPlace(void* mem) {
-    return TutorialStep_Init(mem);
-}
-extern "C" void* TutorialStep_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8);
-    return p ? TutorialStep_Init(p) : nullptr;
-}
-REGISTER_TYPE(TutorialStep, "Object::External", &TutorialStep_Factory, &TutorialStep_CreateInPlace);
+DEFINE_EXE_VTABLE(TutorialStep, "_ZTV12TutorialStep")
+DEFINE_EXE_TYPE(TutorialStep, "Object::External")

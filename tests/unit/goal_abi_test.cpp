@@ -285,3 +285,22 @@ UNIT_TEST(tutorialinstance_is_retail_4_slots_and_0x38) {
     CHECK_EQ(SlotOffset(&TutorialInstance::Persist),      (uintptr_t)0x18);
     CheckShape<TutorialInstance, Object::Internal>(false);
 }
+
+// ===========================================================================
+// Tutorial and TutorialStep : Object::External — 9 slots
+// ===========================================================================
+#include "Tutorial/Tutorial.h"
+#include "Tutorial/TutorialStep.h"
+
+UNIT_TEST(tutorial_and_step_are_retail_9_slots) {
+    CheckExternalSlots<Tutorial>();
+    CHECK_EQ(SlotOffset(&Tutorial::Construct), (uintptr_t)0x40);
+    CheckShape<Tutorial, Object::External>(false);
+    CHECK_EQ(sizeof(Tutorial), (size_t)0x40);
+    CHECK_EQ(offsetof(Tutorial, currentStep), (size_t)0x38);
+    CheckExternalSlots<TutorialStep>();
+    CHECK_EQ(SlotOffset(&TutorialStep::Construct), (uintptr_t)0x40);
+    CheckShape<TutorialStep, Object::External>(false);
+    CHECK_EQ(sizeof(TutorialStep), (size_t)0x70);
+    CHECK_EQ(offsetof(TutorialStep, goalCount), (size_t)0x68);
+}

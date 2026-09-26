@@ -123,8 +123,6 @@ extern "C" {
 
     // Factory cascade — External-resource family (Object::External, 9-slot
     // vtables w/ GetFileVersion @ +0x18; MusicList pattern). Tutorial types.
-    void RegisterTutorialVtable();
-    void RegisterTutorialStepVtable();
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
     // no tool vtable is registered at its exe address any more.
@@ -1781,8 +1779,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterPastureWorkVtable();
 
     // Factory cascade — External-resource family (MusicList pattern). Tutorial types.
-    RegisterTutorialVtable();
-    RegisterTutorialStepVtable();
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
     RegisterPathToolSetSelected();
