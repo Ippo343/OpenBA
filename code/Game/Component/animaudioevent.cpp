@@ -1,133 +1,95 @@
 // code/Game/Component/animaudioevent.cpp
-// Foundation C (extension) — AnimAudioEvent factory for standalone.
-//
-// AnimAudioEvent is a Graphics::AnimationEvent subclass (0x30 bytes) loaded as
+// AnimAudioEvent — a Graphics::AnimationEvent subclass (0x30 bytes) loaded as
 // part of the Character animation closure when an entity template with a
-// Character component is deserialized (Template\Citizen.rsc). Without a real
-// factory it was a NullFactory stub → Factory::CreateObject returns null →
-// crash during the citizen-template FindOrLoad ("[NullFactory] Hit for type:
-// AnimAudioEvent").
+// Character component is deserialized (Template\Citizen.rsc).
 //
 // Layout (from AnimAudioEvent_Factory 0x140016f00 + Serialize 0x140087ed0):
 //   +0x00 vtable (0x14015e0c0)
-//   +0x08 Graphics::AnimationEvent base (name/time, ctor-managed)
+//   +0x08 Graphics::AnimationEvent / Object::External base
 //   +0x20 External*  audio resource reference (default 0)
-//   +0x28 float      volume/scale (default 1.0)
+//   +0x28 float      play chance (default 1.0)
 //
-// Serialize (vtable +0x28) reads exactly two subclass fields: the External ref
-// at +0x20 (via the generic External-pointer serializer FUN_1400019a0, which is
+// Serialize (slot 5) reads exactly the two subclass fields: the External ref at
+// +0x20 (via the generic External-pointer serializer FUN_1400019a0, which is
 // stream-identical to fn_ExternalPtr_BuildSerialize / 0x140002340 — only the
 // type-validation global differs, not the bytes consumed) and the float at
-// +0x28. GetVersion (vtable +0x18) = 2 (verified: exe body `mov eax,2; ret`).
+// +0x28. GetFileVersion (slot 3) = 2 (exe body `mov eax,2; ret`).
 //
-// The Graphics::AnimationEvent base ctor/dtor are Runtime-x64.dll exports
-// (resolved by mangled name); the rest mirrors componentdescription.cpp.
+// ENDGAME B.3.8 VIS: a REAL class (AnimAudioEvent.h). Before: an 11-slot
+// hand-built g_AAE_Vtable registered at 0x14015e0c0, the object built through
+// the `??0AnimationEvent@Graphics@@` DOOR (lazily resolved by name) and then
+// re-stamped. After: the compiler's 10-slot vtable; AnimationEvent() is the
+// base's real protected ctor (block RB). Nothing reads 0x14015e0c0 back by
+// address, so its RegisterExeAddr row is gone (B38 D5).
 
+#include "Component/AnimAudioEvent.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "object/Internal.h"  // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include <cstdint>
-#include <cstdio>
 #include <new>
 
-static constexpr uintptr_t kVtableAddr = 0x14015e0c0;
-static constexpr int       kSize       = 0x30;
-static constexpr int       OFF_REF     = 0x20;   // External* audio ref
-static constexpr int       OFF_FLOAT   = 0x28;   // float volume/scale
+// 0x140016f00 (inlined): AnimationEvent() is `??0AnimationEvent@Graphics@@`
+// (External's three zero stores); the 0x14015e0c0 stamp is the compiler's;
+// +0x20 = 0, +0x28 = 1.0f.
+AnimAudioEvent::AnimAudioEvent() : _sound(nullptr), _chance(1.0f), _pad2c{} {}
 
-// Graphics::AnimationEvent base ctor (void) / virtual dtor — Runtime exports.
-typedef void* (*AnimEvent_Ctor_t)(void* self);
-typedef void  (*AnimEvent_Dtor_t)(void* self);
-static AnimEvent_Ctor_t ResolveAnimEventCtor() {
-    static AnimEvent_Ctor_t fn = nullptr;
-    static bool tried = false;
-    if (!tried) { tried = true;
-        fn = reinterpret_cast<AnimEvent_Ctor_t>(ResolveExport("??0AnimationEvent@Graphics@@QEAA@XZ"));
-    }
-    return fn;
-}
-static AnimEvent_Dtor_t ResolveAnimEventDtor() {
-    static AnimEvent_Dtor_t fn = nullptr;
-    static bool tried = false;
-    if (!tried) { tried = true;
-        fn = reinterpret_cast<AnimEvent_Dtor_t>(ResolveExport("??1AnimationEvent@Graphics@@UEAA@XZ"));
-    }
-    return fn;
+// [0] 0x140017000: restamp, ~AnimationEvent (-> ~External), MemFree on &1.
+Object::Base* AnimAudioEvent::DeletingDtor(unsigned flags) {
+    this->~AnimAudioEvent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* AnimAudioEvent_CtorImpl(void* mem) {
-    if (!mem) return nullptr;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    AnimEvent_Ctor_t baseCtor = ResolveAnimEventCtor();
-    if (baseCtor) baseCtor(mem);                              // Graphics::AnimationEvent base
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    *(void**)(s + OFF_REF)   = nullptr;                       // audio ref default 0
-    *(float*)(s + OFF_FLOAT) = 1.0f;                          // default 1.0
-    return mem;
-}
-
-extern "C" void AnimAudioEvent_Serialize(void* self, void* stream) {
-    if (!self) return;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+// [5] 0x140087ed0: Serializer(stream, 0); ExternalPtr +0x20; float +0x28;
+// ~Serializer; return 1. (The hand-built slot was a `void` function, so its AL
+// was whatever the Serializer dtor left there.)
+bool AnimAudioEvent::Serialize(void* stream) {
     alignas(8) uint8_t serBuf[24];
     ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     // +0x20 external audio reference (stream-identical generic external-ptr serialize)
     if (fn_ExternalPtr_BuildSerialize)
-        fn_ExternalPtr_BuildSerialize(s + OFF_REF, serBuf);
+        fn_ExternalPtr_BuildSerialize(&_sound, serBuf);
     // +0x28 float
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*(float*)(s + OFF_FLOAT), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();                                       // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(_chance, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();                 // B.3.4 bridge
+    return true;
 }
 
-extern "C" void* AnimAudioEvent_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtableAddr);
-    AnimEvent_Dtor_t baseDtor = ResolveAnimEventDtor();
-    if (baseDtor) baseDtor(self);                             // base destructor
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140016fb0: retail destroys and rebuilds in place: a virtual
+// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+Object::External* AnimAudioEvent::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) AnimAudioEvent();
+}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
+void AnimAudioEvent::Destruct() { DeletingDtor(0); }
+// [8] 0x140087e40. PORT GAP (retail: the audio trigger — roll a random float,
+// and when it is under +0x28 play +0x20 at the event transform's position).
+// The hand-built table had a `return null` stub; kept.
+Object::External* AnimAudioEvent::Construct() { return nullptr; }
+// [9] 0x140016f60 — placement construction on `this` (the createInPlace body).
+Object::External* AnimAudioEvent::ConstructInPlace() {
+    return new (static_cast<void*>(this)) AnimAudioEvent();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t AnimAudioEvent_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("AnimAudioEvent");
-    return cached;
+// create 0x140016f00: MemAlloc(0x30, 8), then the (inlined) ctor.
+void* AnimAudioEvent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AnimAudioEvent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AnimAudioEvent());
 }
-static int   AAE_Return2(void* /*self*/)    { return 2; }    // GetVersion = 2
-static int   AAE_Return0(void* /*self*/)    { return 0; }
-static void* AAE_ReturnNull(void*, ...)     { return nullptr; }
-extern "C" void* AnimAudioEvent_CreateInPlace(void* mem);
-
-// vtable @ 0x14015e0c0 (Object::External 11-slot layout).
-static void* g_AAE_Vtable[11] = {
-    reinterpret_cast<void*>(&AnimAudioEvent_Dtor),       // +0x00 dtor
-    reinterpret_cast<void*>(&AAE_ReturnNull),            // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&AnimAudioEvent_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&AAE_Return2),               // +0x18 GetVersion=2
-    reinterpret_cast<void*>(&AAE_Return0),               // +0x20 Compile thunk
-    reinterpret_cast<void*>(&AnimAudioEvent_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&AAE_Return0),               // +0x30 Cleanup
-    reinterpret_cast<void*>(&AAE_Return0),               // +0x38 GetDesc forwarder
-    reinterpret_cast<void*>(&AAE_ReturnNull),            // +0x40
-    reinterpret_cast<void*>(&AnimAudioEvent_CreateInPlace), // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&AAE_ReturnNull),            // +0x50 guard
-};
-
-extern "C" void RegisterAnimAudioEventVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_AAE_Vtable));
+// createInPlace 0x140016f60: placement construction.
+void* AnimAudioEvent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AnimAudioEvent());
 }
 
-extern "C" void* AnimAudioEvent_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, kSize, 8);
-    return p ? AnimAudioEvent_CtorImpl(p) : nullptr;
-}
-extern "C" void* AnimAudioEvent_CreateInPlace(void* mem) {
-    return mem ? AnimAudioEvent_CtorImpl(mem) : nullptr;
-}
+// The 0x14015e0c0 row had no by-address reader (B38 D5): it is gone with the
+// hand-built table. The registration function stays (address_registry.cpp,
+// coordinator-owned, calls it) with no row left to register.
+extern "C" void RegisterAnimAudioEventVtable() {}
 
-REGISTER_TYPE(AnimAudioEvent, "Graphics::AnimationEvent",
-              &AnimAudioEvent_Factory, &AnimAudioEvent_CreateInPlace);
+DEFINE_EXE_VTABLE(AnimAudioEvent, "_ZTV14AnimAudioEvent")
+DEFINE_EXE_TYPE(AnimAudioEvent, "Graphics::AnimationEvent")

@@ -42,7 +42,6 @@
 #include "runtime/types/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
 #include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
 
-
 // ============================================================
 // Helpers
 // ============================================================
@@ -576,7 +575,6 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     for (int i = 0; i < totalChildren; i++) {
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
-
         // Clone: cloneObj is the template cell's Element::_description (+0xB8), so
         // +0x40 is UI::ElementDescription slot 8, CreateInstance (retslot, B6-2).
         uint8_t cloneBuf[16];
@@ -795,7 +793,6 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     int totalChildren = reinterpret_cast<const UI::Element*>(tablePtr)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalChildren; i++) {
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
-
 
         // Clone: cloneObj is the template cell's Element::_description (+0xB8), so
         // +0x40 is UI::ElementDescription slot 8, CreateInstance (retslot, B6-2).
@@ -1581,7 +1578,6 @@ next_entity: ;
                 // Find SelectDescription component (DAT_1401c48a8) on entity
                 void* selectDesc = TownHall_FindComponentByTypeId(entityPtr, *g_TypeId_SelectDescription);
 
-
                 // Original always sets sprite/text when found in BST (even if selectDesc is NULL)
                 // Create sprite from SelectDescription+0x20/+0x28
                 uint8_t spriteBuf[16];
@@ -2141,20 +2137,8 @@ void TownHallUI_OnRemove(TownHallUI* self, void* param2, int msg, int id) {
 // standalone/reg_townhallui.cpp, so EngineFuncsInit resolves them in SA.
 #include "Object/factory_registration.h"
 #include <cstddef>
-#include "dialog_controller_vtable.h"
 
 namespace townhallui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TownHallUI");
-    return c;
-}
 
 // ---- exe-.rdata type-id globals the TownHallUI paths dereference ----
 // All lazily filled from the live runtime type registry (valid after
@@ -2395,84 +2379,6 @@ void FreeBST_18_20(void* node) {
     FreeBST_18_20(*(void**)((uintptr_t)node + 0x20));
     fn_MemFreeStatic(node);
 }
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *(void**)self = g_vt;
-    uintptr_t s = (uintptr_t)self;
-    if (fn_MemFreeStatic) {
-        FreeBST_10_18(*(void**)(s + 0x1D8));
-        *(uint64_t*)(s + 0x1D8) = 0; *(uint32_t*)(s + 0x1E0) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0x1C8));
-        *(uint64_t*)(s + 0x1C8) = 0; *(uint64_t*)(s + 0x1D0) = 0;
-        FreeBST_20_28(*(void**)(s + 0x138));
-        *(uint64_t*)(s + 0x138) = 0; *(uint32_t*)(s + 0x140) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0x118));
-        *(uint64_t*)(s + 0x118) = 0; *(uint64_t*)(s + 0x120) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xF0));
-        *(uint64_t*)(s + 0xF0) = 0; *(uint64_t*)(s + 0xF8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xE0));
-        *(uint64_t*)(s + 0xE0) = 0; *(uint64_t*)(s + 0xE8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xD0));
-        *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xC0));
-        *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
-        fn_MemFreeStatic(*(void**)(s + 0xB0));
-        *(uint64_t*)(s + 0xB0) = 0; *(uint64_t*)(s + 0xB8) = 0;
-        FreeBST_18_20(*(void**)(s + 0x50));
-        *(uint64_t*)(s + 0x50) = 0; *(uint32_t*)(s + 0x58) = 0;
-        int profRows = *(int*)(s + 0x48);
-        uintptr_t profArr = *(uintptr_t*)(s + 0x40);
-        for (int i = 0; i < profRows && profArr; i++) {
-            uintptr_t rowList = profArr + (uintptr_t)i * 0x40 + 0x30;
-            fn_MemFreeStatic(*(void**)rowList);
-            *(uint64_t*)rowList = 0; *(uint64_t*)(rowList + 8) = 0;
-        }
-        fn_MemFreeStatic(*(void**)(s + 0x40));
-        *(uint64_t*)(s + 0x40) = 0; *(uint64_t*)(s + 0x48) = 0;
-        if (flags & 1) fn_MemFreeStatic(self);
-    }
-    return self;
-}
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0]  = reinterpret_cast<void*>(&Dtor);
-        g_vt[2]  = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4]  = reinterpret_cast<void*>(&W_Serialize);
-        g_vt[7]  = reinterpret_cast<void*>(&W_Startup);
-        g_vt[8]  = reinterpret_cast<void*>(&W_OnUpdate);
-        g_vt[9]  = reinterpret_cast<void*>(&W_OnEvent);
-        g_vt[10] = reinterpret_cast<void*>(&W_Update);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's TownHallUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "TownHallUI", &StubNop);
-
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x1E8); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x1E8), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace townhallui_sa
 
 // World-build-time gate diagnostic (called once from GameUpdateLoop::Update at an
@@ -2501,6 +2407,93 @@ extern "C" void TownHallSA_Diag(int frameNum) {
     townhallui_sa::EnsureGlobals();   // load-bearing publish — deliberately ungated
 }
 
-REGISTER_TYPE(TownHallUI, "UI::DialogController",
-              &townhallui_sa::Factory, &townhallui_sa::InPlace);
+// ~TownHallUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
+// WITHOUT ~DialogController); moved here unchanged. The compiler now chains
+// ~DialogController -> ~Internal after it.
+TownHallUI::~TownHallUI() {
+    void* self = this;
+    uintptr_t s = (uintptr_t)self;
+    if (fn_MemFreeStatic) {
+        townhallui_sa::FreeBST_10_18(*(void**)(s + 0x1D8));
+        *(uint64_t*)(s + 0x1D8) = 0; *(uint32_t*)(s + 0x1E0) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0x1C8));
+        *(uint64_t*)(s + 0x1C8) = 0; *(uint64_t*)(s + 0x1D0) = 0;
+        townhallui_sa::FreeBST_20_28(*(void**)(s + 0x138));
+        *(uint64_t*)(s + 0x138) = 0; *(uint32_t*)(s + 0x140) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0x118));
+        *(uint64_t*)(s + 0x118) = 0; *(uint64_t*)(s + 0x120) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xF0));
+        *(uint64_t*)(s + 0xF0) = 0; *(uint64_t*)(s + 0xF8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xE0));
+        *(uint64_t*)(s + 0xE0) = 0; *(uint64_t*)(s + 0xE8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xD0));
+        *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xC0));
+        *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xB0));
+        *(uint64_t*)(s + 0xB0) = 0; *(uint64_t*)(s + 0xB8) = 0;
+        townhallui_sa::FreeBST_18_20(*(void**)(s + 0x50));
+        *(uint64_t*)(s + 0x50) = 0; *(uint32_t*)(s + 0x58) = 0;
+        int profRows = *(int*)(s + 0x48);
+        uintptr_t profArr = *(uintptr_t*)(s + 0x40);
+        for (int i = 0; i < profRows && profArr; i++) {
+            uintptr_t rowList = profArr + (uintptr_t)i * 0x40 + 0x30;
+            fn_MemFreeStatic(*(void**)rowList);
+            *(uint64_t*)rowList = 0; *(uint64_t*)(rowList + 8) = 0;
+        }
+        fn_MemFreeStatic(*(void**)(s + 0x40));
+        *(uint64_t*)(s + 0x40) = 0; *(uint64_t*)(s + 0x48) = 0;
+    }
+}
+
+// [4] 0x140081000
+void TownHallUI::OnCreated() {
+    townhallui_sa::W_Serialize(this);
+}
+
+// [7] 0x14007d550
+void TownHallUI::OnUpdateLayout() {
+    townhallui_sa::W_Startup(this);
+}
+
+// [8] 0x14007e550
+void TownHallUI::OnUpdate(const System::Time& time) {
+    townhallui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [9] 0x14007c180
+void TownHallUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    townhallui_sa::W_OnEvent(this, element, a, b);
+}
+
+// [10] 0x140080db0
+void TownHallUI::OnSerializeSettings(void* stream) {
+    townhallui_sa::W_Update(this, stream);
+}
+
+// [0] 0x1400146b0: ~TownHallUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* TownHallUI::DeletingDtor(unsigned flags) {
+    this->~TownHallUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140014660: MemAlloc(0x1e8, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* TownHallUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TownHallUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TownHallUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* TownHallUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TownHallUI());
+}
+
+DEFINE_EXE_VTABLE(TownHallUI, "_ZTV10TownHallUI")
+DEFINE_EXE_TYPE(TownHallUI, "UI::DialogController")
 

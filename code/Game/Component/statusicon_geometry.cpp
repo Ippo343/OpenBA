@@ -6,21 +6,20 @@
 // slots). The two draw slots live in the (unmapped-in-standalone) exe:
 //   slot 2 (+0x10) Draw(geometry, Context*, camera, ?, lerpT)   = 0x1400a9c10
 //   slot 3 (+0x18) AddDrawItems(geometry, scene, renderer)      = 0x1400a9b90
-// This file provides faithful C++ ports of both, plus a standalone vtable that COPIES
-// the real Runtime base-Geometry vtable (so dtor/bounds/type getters in slots 0,1,4-11
-// keep working for scene culling) and overrides only slots 2 and 3.
-//
-// Everything here is gated by the caller (statusiconcomponent.cpp, env
-// BANISHED_LIVE_STATUSICON_DRAW); default builds never construct this vtable.
+// This file provides faithful C++ ports of both, and — since ENDGAME B.3.8 VIS —
+// the billboard as a REAL `Graphics::Geometry` subclass (StatusIconGeometry,
+// StatusIconComponent.h): the compiler's 9-slot table inherits Geometry's slots
+// 4-8 and overrides 0-3. Before, this file COPIED the minted
+// `??_7Geometry@Graphics@@` table into a 16-entry array and patched slots 2/3
+// (one of the six B38 D5 slot-copy sites).
 //
 // Ported faithfully from Application-x64.exe (Ghidra), verified against the disassembly.
 
 // video/Context.h FIRST: it pulls runtime/types/volume/Volume.h, whose
 // global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
 // <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 caller batch I2.
-// NOTE: the Geometry SUBCLASS in this file is an EXE-PHASE class (it names
-// Geometry's retail vtable 0x180154e60 and hand-builds its own); it is NOT
-// converted. Only the calls it makes INTO Video::Context members are.
+// NOTE: the Geometry SUBCLASS in this file is an EXE-PHASE class, a real
+// subclass of the Runtime's Graphics::Geometry since ENDGAME B.3.8 VIS.
 #include "video/Context.h"
 #include "graphics/Geometry.h"   // ENDGAME B.3.5 batch K1 — same include-order reason
 #include "graphics/Material.h"
@@ -35,6 +34,8 @@
 #include <cstdlib>
 #include <cstring>
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "Component/StatusIconComponent.h"
+#include "object/Internal.h"   // Object::detail::InternalMemFree
 
 // ---- .rdata float constants (NULL via ResolveAddr in standalone → use literals) ----
 //   g_fUVScale       0x14017214c = 1.0f
@@ -238,89 +239,39 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
 }
 
 // ============================================================
-// Standalone billboard vtable
+// StatusIconGeometry — the billboard as a real Graphics::Geometry subclass
 // ============================================================
-// Built by copying the real Runtime base-Geometry vtable (set by ??0Geometry@Graphics
-// on the embedded sub-object) and overriding slots 2 (Draw) and 3 (AddDrawItems).
-// Base slots (dtor, bounds/type getters) stay valid so scene culling works.
-static void* s_siGeomVtable[16];
-static bool  s_siGeomVtableBuilt = false;
 
-static void* SIGeom_StubRet0() { return nullptr; }
+// Inlined in StatusIconComponent's ctor 0x14012c0c0: `??0Geometry@Graphics@@`
+// (Geometry() — the vptr stores are the compiler's), then +0xc0 (qword) =
+// +0xc8 = +0xcc (byte) = +0xd0 = 0.
+StatusIconGeometry::StatusIconGeometry()
+    : iconSize(0.0f), spriteCount(0), activeMask(0), constantSize(0), _padCD{},
+      spriteSheet(nullptr) {}
 
-void StatusIconGeometry_BuildVtable(void** baseVtbl) {
-    if (s_siGeomVtableBuilt) return;
-    for (int i = 0; i < 16; ++i) {
-        // FIXED by Wave 22 lane GEOM, discharging the addressee tag on
-        // ??_7Geometry@Graphics@@6B@ in standalone/reg_mint_promoted.cpp.
-        // The `12` here was wrong; the true extent is NINE on both sides,
-        // RE-MEASURED THIS LANE (not just re-quoted from Wave 21 lane GFXVT /
-        // WAVE21_LANE_GFXVT.md §5.2a) by reading the raw bytes of both shipped
-        // binaries directly with pefile:
-        //
-        //   SOURCE      ??_7Geometry@Graphics@@6B@, Runtime-x64.dll, image
-        //               VA 0x180154e60: qwords[0..8] are code pointers into
-        //               .text (0x18001____-0x1800a____ range); qword[9] =
-        //               0x6675426567616d49 = ASCII "ImageBuf" (of
-        //               "ImageBuffer\0Generated..."), confirming slots 9-11
-        //               are STRING BYTES, not function pointers, and all are
-        //               non-zero so the old `baseVtbl[i]` truthiness test
-        //               would have installed three fragments of a C string as
-        //               callable slots.
-        //   DESTINATION retail's own billboard vtable, Application-x64.exe,
-        //               image VA 0x14015f0c0: qwords[0..8] are code pointers
-        //               into .text; qword[9] == 0 (a genuine NULL, not a
-        //               string byte); qwords[10..18] are a DIFFERENT class's
-        //               9-slot table (confirmed by xrefs: 0x14015f0c0 is
-        //               stamped by StatusIconComponent_Ctor at 0x14012c0fe,
-        //               0x14015f110 by TradeWork_impl_ed50 and
-        //               FUN_1400b00e0), then qwords[19..20] are ASCII
-        //               ("Terrain..." reversed).
-        //
-        // So the destination's slot 9 is the TERMINATOR BETWEEN TWO TABLES,
-        // not a null slot of the Geometry class itself, and "12 real slots"
-        // has no basis in either binary — the fix is `i < 9`.
-        //
-        // Both classes present at the destination address (billboard and
-        // whatever owns the 0x14015f110 table) have exactly nine virtuals, so
-        // nothing in the shipped code can dispatch index 9, 10 or 11 through
-        // this object's vtable pointer. THIS IS A DERIVED conclusion (from the
-        // extents above, from xrefs on the stampers, and from ResolveAddr's
-        // registry-first order at runtime/src/graphics/scene.cpp:176), NOT an
-        // observed one: there is no attendance counter on
-        // StatusIconGeometry_Vtable()'s call sites, so a live run has not
-        // been used to confirm slots 9-11 are never invoked. A lane that
-        // wants an observation, not a derivation, needs to add one.
-        //
-        // RESIDUAL (recorded by Wave 21, resolved here): should the
-        // now-unreachable tail (i >= 9) hold retail's nullptr or the
-        // SIGeom_StubRet0 stub? Slot 9 specifically mirrors a genuine retail
-        // NULL (measured above), so this lane installs nullptr for i >= 9
-        // rather than a callable stub nobody asked for -- a null pointer in
-        // an unreachable slot fails LOUDLY if some future change ever did
-        // reach it, matching retail's own exposure there, instead of quietly
-        // absorbing the call the way the stub would. Slots 0-8 keep the stub
-        // fallback for when baseVtbl itself is null/not yet built, because
-        // those ARE real, potentially-dispatched Geometry virtuals (dtor,
-        // bounds/type getters) and a null there would crash on ordinary
-        // scene culling, not just on a hypothetical stray call.
-        if (i < 9)
-            s_siGeomVtable[i] = (baseVtbl && baseVtbl[i])
-                                     ? baseVtbl[i]
-                                     : reinterpret_cast<void*>(&SIGeom_StubRet0);
-        else
-            s_siGeomVtable[i] = nullptr;
-    }
-    s_siGeomVtable[2] = reinterpret_cast<void*>(&StatusIconGeom_Draw);
-    s_siGeomVtable[3] = reinterpret_cast<void*>(&StatusIconGeom_AddDrawItems);
-    s_siGeomVtableBuilt = true;
+// [0] 0x14001ebb0: ~Geometry (import 0x1401525a0), MemFree (0x140152b68) on &1.
+// Never reached for the embedded member (the component's dtor chains the
+// member dtor directly), kept for the slot.
+Graphics::Geometry* StatusIconGeometry::DeletingDtor(unsigned flags) {
+    this->~StatusIconGeometry();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void** StatusIconGeometry_Vtable() {
-    return s_siGeomVtable;
+// [1] 0x1400aa430 — `RET`.
+void StatusIconGeometry::Update(const System::Time&) {}
+
+// [2] 0x1400a9c10 — the parameter the port calls `t` is the float fifth argument.
+void StatusIconGeometry::Draw(Video::Context& context, const Graphics::Camera& camera,
+                              Graphics::ExternalPtrHandle material, float t,
+                              int, int, int) const {
+    StatusIconGeom_Draw(const_cast<StatusIconGeometry*>(this), &context,
+                        const_cast<Graphics::Camera*>(&camera), material.p, t);
 }
 
-bool StatusIconGeometry_VtableBuilt() {
-    return s_siGeomVtableBuilt;
+// [3] 0x1400a9b90
+void StatusIconGeometry::AddDrawItems(const Graphics::Scene& scene,
+                                      Graphics::Renderer& renderer) const {
+    StatusIconGeom_AddDrawItems(const_cast<StatusIconGeometry*>(this),
+                                const_cast<Graphics::Scene*>(&scene), &renderer);
 }
-

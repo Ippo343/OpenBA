@@ -114,7 +114,7 @@ void DestroyComponent_Shutdown(DestroyComponent* self, void* stream) {
 void DestroyComponent_Serialize(DestroyComponent* self) {
     EnsureHelpers();
 
-    void* baseObj = self->_unk18;
+    void* baseObj = self->_description;
     if (!s_fn_IsDerivedFrom_d || !s_pBuildingCompTypeId) return;
 
     bool isDerived = s_fn_IsDerivedFrom_d(baseObj, *s_pBuildingCompTypeId);
@@ -137,106 +137,74 @@ void DestroyComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D → upgrade-path live states) =====
-// BANISHED_LIVE_DESTROY is DEFAULT-ON via the default-on table (graduated 2026-07-25 once
-// the upgrade path was verified end-to-end); the env var is now a kill-switch (=0),
-// which reverts this component to inert. It graduates:
-//   * vtable index 4 (+0x20, 0x14011DB00 Serialize/Startup) — copies the
-//     DestroyDescription's default target (desc+0x20) into +0x60, dispatched at
-//     spawn by ComponentEntity_StartupComponents (flags 0x80 → bit 7 set).
-//   * vtable index 3 (+0x18, 0x14011DB50 Shutdown) — save serialization.
-//   * vtable index 16/17 (GetDefaultState / CreateState=&node@+0x28) + the REAL
-//     state table (destroycomponent_states.cpp) — the retail mechanism that
-//     lets the entity's StateMachineComponent link + tick the destroy node, and
-//     the 0x14011dfa0 pump (UpgradeUI click) drive states 3→4→5 (demolish →
-//     haul-away → refund + stone-house spawn).
-// GetDefaultState: Ghidra-verified — retail vtable slot 16 (0x1401631a0)
-// points at 0x140033c00 = `mov eax,4 ; ret`, and slot 17 (0x1401631a8) at
-// 0x140004080 = `lea rax,[rcx+0x28] ; ret`. We return 4 to match.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — DestroyComponent as a REAL class (DestroyComponent.h).
+//
+// Before: a 48-slot hand-built `DestroyComponent_LiveVtable` filled at every
+// create (FillTypedVtable + FinishLiveVtable), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<DestroyCtrlTag> table stamped into raw bytes at +0x28.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_state_table.h"
+#include "Component/DestroyComponent.h"
 
-extern "C" void** DestroyCtrl_NodeVtable();     // destroycomponent_states.cpp
-extern "C" void   DestroyCtrl_PopulateTable();
+// The upgrade/demolish controller: the entity's StateMachineComponent links the
+// member and the 0x14011dfa0 pump (UpgradeUI click) drives states 3->4->5
+// (demolish -> haul-away -> refund + stone-house spawn), destroycomponent_states.cpp.
+// Retail slot 16 returns 4 (0x140033c00 `MOV EAX,4`). That is only safe under
+// retail's first-controller consult order, where the build controller precedes
+// destroy in every building template; the standalone linker's destroyOutOfOrder
+// rule (statemachinecomponent.cpp) keeps it that way. The state table is built
+// ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
+extern "C" void DestroyCtrl_PopulateTable();
+static const bool s_destroyStateTableBuilt = (DestroyCtrl_PopulateTable(), true);
 
-static uint32_t DestroyComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("DestroyComponent");
-    return cached;
-}
-static void* DestroyComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+// 0x14011dc80. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48 = 0, +0x50 = 0 (word),
+// +0x54 = 0 (qword: +0x54 and the low half of +0x58), +0x60 = 0. No flag OR.
+DestroyComponent::DestroyComponent()
+    : _controller(this), field48(nullptr), destroyFlags(0), _pad52{}, field54(0),
+      field58(nullptr), field60(nullptr) {}
 
-static void DestroyComponent_ShutdownVSlot(void* s, void* stream) {   // idx 3 (+0x18)
-    DestroyComponent_Shutdown(reinterpret_cast<DestroyComponent*>(s), stream);
+// [0] 0x140033dd0: ~DestroyComponent (0x14011dc20), MemFree on &1.
+Object::Base* DestroyComponent::DeletingDtor(unsigned flags) {
+    this->~DestroyComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void DestroyComponent_SerializeVSlot(void* s) {                // idx 4 (+0x20)
-    DestroyComponent_Serialize(reinterpret_cast<DestroyComponent*>(s));
+// 0x14011dc20: restamp + ~Internal, no own work.
+DestroyComponent::~DestroyComponent() = default;
+
+// create 0x140033bc0: MemAlloc(0x68, 8), then the ctor.
+void* DestroyComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DestroyComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) DestroyComponent());
 }
-// Retail slot 16 returns 4 (Ghidra-verified). That is only safe under retail's
-// first-controller consult order, where the build controller precedes destroy
-// in every building template. Our SM startup adopts the default from the FIRST
-// controller with a non-null CreateState, and the build controller is live, so
-// the faithful 4 (haul-away) applies — this is also what gives the starting
-// supply cart its haul-away-then-vanish behaviour.
-static int DestroyComponent_GetDefaultState(void*) {
-    return 4;
-}
-static void* DestroyComponent_CreateState(void* self) {               // idx 17
-    return reinterpret_cast<uint8_t*>(self) + 0x28;
-}
-// Vtable slot 15 (+0x78 "OnMessage") — retail DestroyComponent_Slot15 0x14011daf0:
-//   if (msgCode == 0) ++*(int*)(self + 0x54);
-// The demolition-progress credit, destroy-side twin of BuildComponent_MsgReceive
-// (buildcomponent.cpp). The demolition action chain (BuildStructure_SetupBuildActions,
-// altAnim=1) pushes a SendComponentMessage carrying the DestroyComponent type-id
-// (DAT_1401c75f0); each completed PerformWork routes here and advances +0x54 toward
-// the +0x58 target that gates the state-5 tick.
-static void DestroyComponent_MsgReceive(void* self, int msgCode,
-                                        void* /*srcEntityRef*/,
-                                        uint32_t /*p1*/, uint32_t /*p2*/) {
-    if (msgCode == 0)
-        ++*reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0x54);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* DestroyComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DestroyComponent());
 }
 
-static void DestroyComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 is the STREAM SERIALIZER, wired ahead of the gameplay slots.
-    // See reference_vtable_slot3_serialize_never_installed.
-    DestroyComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&DestroyComponent_ShutdownVSlot);
-    DestroyComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&DestroyComponent_SerializeVSlot);
-    DestroyComponent_LiveVtable[15] =
-        reinterpret_cast<void*>(&DestroyComponent_MsgReceive);
-    DestroyComponent_LiveVtable[16] =
-        reinterpret_cast<void*>(&DestroyComponent_GetDefaultState);
-    DestroyComponent_LiveVtable[17] =
-        reinterpret_cast<void*>(&DestroyComponent_CreateState);
-    DestroyCtrl_PopulateTable();
-    if (mem) {
-        // Embedded node at +0x28: dispatcher vtable + node+0x18 back-pointer.
-        // node+0x18 == comp+0x40, exactly the selfPtr the retail ctor writes —
-        // the tail-call handlers receive it as their component argument.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
-            reinterpret_cast<void*>(DestroyCtrl_NodeVtable());
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
-    }
+// [3] 0x14011db50 — save serialization.
+void DestroyComponent::Persist(void* stream) { DestroyComponent_Shutdown(this, stream); }
+
+// [4] 0x14011db00 — copies the DestroyDescription's default target (desc+0x20)
+// into +0x60; dispatched at spawn by ComponentEntity_StartupComponents.
+void DestroyComponent::Startup() { DestroyComponent_Serialize(this); }
+
+// [15] 0x14011daf0: `if (msgCode == 0) ++*(int*)(self + 0x54);` — the demolition-
+// progress credit, destroy-side twin of BuildComponent::OnMessage. The demolition
+// action chain (BuildStructure_SetupBuildActions, altAnim=1) pushes a
+// SendComponentMessage carrying DestroyComponent's type id; each completed
+// PerformWork routes here and advances +0x54 toward the +0x58 target that gates the
+// state-5 tick.
+void DestroyComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
+    if (message == 0) ++field54;
 }
 
-extern "C" void* DestroyComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x68, 0x80,
-        DestroyComponent_LiveVtable,
-        reinterpret_cast<void*>(&DestroyComponent_LiveGetTypeId));
-    DestroyComponent_FinishLiveVtable(p);
-    return p;
-}
-static void* DestroyComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x68, 0x80,
-        DestroyComponent_LiveVtable,
-        reinterpret_cast<void*>(&DestroyComponent_LiveGetTypeId));
-    DestroyComponent_FinishLiveVtable(mem);
-    return mem;
-}
-
-REGISTER_TYPE(DestroyComponent, "ControllerComponent",
-              &DestroyComponent_Factory, &DestroyComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(DestroyComponent, "_ZTV16DestroyComponent")
+DEFINE_EXE_TYPE(DestroyComponent, "ControllerComponent")

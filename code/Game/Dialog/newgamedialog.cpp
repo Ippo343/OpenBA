@@ -22,6 +22,7 @@
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "Dialog/NewGameDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
@@ -397,8 +398,8 @@ static void SelectStartConditionOverride(NewGameDialog* self) {
 //
 // Original: 315 lines decompiled.
 
-void NewGameDialog_Slot4(NewGameDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void NewGameDialog::OnOpened() {
+    uintptr_t s = (uintptr_t)this;
 
     // Standalone: lazy-resolve the generator/NameDB type-IDs (the exe .rdata
     // slots are NULL until resolved via the Factory).
@@ -419,41 +420,41 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     if (s_loadGeneratorLists) EnsureGeneratorListsLoaded();
 
     // --- Find all UI elements ---
-    self->editName       = FindElement(self, "editName");
-    self->editSeed       = FindElement(self, "editSeed");
-    self->textDescription = FindElement(self, "textDescription");
-    self->comboCondition = FindElement(self, "comboCondition");
-    self->comboTerrain   = FindElement(self, "comboTerrain");
-    self->comboTerrainSize = FindElement(self, "comboTerrainSize");
-    self->comboClimate   = FindElement(self, "comboClimate");
-    self->comboDisaster  = FindElement(self, "comboDisaster");
+    this->editName       = ::FindElement(this, "editName");
+    this->editSeed       = ::FindElement(this, "editSeed");
+    this->textDescription = ::FindElement(this, "textDescription");
+    this->comboCondition = ::FindElement(this, "comboCondition");
+    this->comboTerrain   = ::FindElement(this, "comboTerrain");
+    this->comboTerrainSize = ::FindElement(this, "comboTerrainSize");
+    this->comboClimate   = ::FindElement(this, "comboClimate");
+    this->comboDisaster  = ::FindElement(this, "comboDisaster");
 
     // --- Cache ExternalList pointers from keymap singleton ---
     void* keyMapData = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
     if (keyMapData) {
-        self->mapGeneratorList     = *(void**)((uintptr_t)keyMapData + 0x18);
-        self->climateGeneratorList = *(void**)((uintptr_t)keyMapData + 0x10);
-        self->terrainGeneratorList = *(void**)((uintptr_t)keyMapData + 0x20);
+        this->mapGeneratorList     = *(void**)((uintptr_t)keyMapData + 0x18);
+        this->climateGeneratorList = *(void**)((uintptr_t)keyMapData + 0x10);
+        this->terrainGeneratorList = *(void**)((uintptr_t)keyMapData + 0x20);
     }
 
     // --- Populate generator combos. Guarded for standalone: the type-ID pointers
     //     may still be NULL (deref would crash) and the ExternalLists may be
     //     unpopulated (PopulateGeneratorCombo null-checks the list internally). ---
     if (g_TypeId_MapGenerator)
-        PopulateGeneratorCombo((void**)&self->comboCondition, self->mapGeneratorList,
+        PopulateGeneratorCombo((void**)&this->comboCondition, this->mapGeneratorList,
                                *g_TypeId_MapGenerator, 0x38);
     if (g_TypeId_ClimateGenerator)
-        PopulateGeneratorCombo((void**)&self->comboClimate, self->climateGeneratorList,
+        PopulateGeneratorCombo((void**)&this->comboClimate, this->climateGeneratorList,
                                *g_TypeId_ClimateGenerator, 0x30);
     if (g_TypeId_TerrainGenerator)
-        PopulateGeneratorCombo((void**)&self->comboTerrain, self->terrainGeneratorList,
+        PopulateGeneratorCombo((void**)&this->comboTerrain, this->terrainGeneratorList,
                                *g_TypeId_TerrainGenerator, 0x30);
 
     // --- Find button elements ---
-    void* buttonNewName = FindElement(self, "buttonNewName");
-    void* buttonNewSeed = FindElement(self, "buttonNewSeed");
-    void* buttonCancel  = FindElement(self, "buttonCancel");
-    void* buttonOk      = FindElement(self, "buttonOk");
+    void* buttonNewName = ::FindElement(this, "buttonNewName");
+    void* buttonNewSeed = ::FindElement(this, "buttonNewSeed");
+    void* buttonCancel  = ::FindElement(this, "buttonCancel");
+    void* buttonOk      = ::FindElement(this, "buttonOk");
 
     // --- Assign element IDs ---
     // buttonNewName = 0, buttonNewSeed = 1, buttonOk = 2, buttonCancel = 3, comboCondition = 4
@@ -462,20 +463,20 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     reinterpret_cast<UI::Element*>(buttonNewSeed)->SetElementId(1);  // B.3.6 bridge
 
     // Store buttonOk in struct at +0xF0
-    self->buttonOk = buttonOk;
-    reinterpret_cast<UI::Element*>(self->buttonOk)->SetElementId(2);  // B.3.6 bridge
+    this->buttonOk = buttonOk;
+    reinterpret_cast<UI::Element*>(this->buttonOk)->SetElementId(2);  // B.3.6 bridge
 
     reinterpret_cast<UI::Element*>(buttonCancel)->SetElementId(3);  // B.3.6 bridge
 
-    reinterpret_cast<UI::Element*>(self->comboCondition)->SetElementId(4);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(this->comboCondition)->SetElementId(4);  // B.3.6 bridge
 
     // --- Generate random name (guarded: editName must be present) ---
-    if (self->editName)
-        GenerateRandomName(&self->editName, (void*)(s + 0x118));
+    if (this->editName)
+        GenerateRandomName(&this->editName, (void*)(s + 0x118));
 
     // --- Generate random seed (guarded: editSeed must be present) ---
-    if (self->editSeed)
-        GenerateRandomSeed(&self->editSeed, (void*)(s + 0x118));
+    if (this->editSeed)
+        GenerateRandomSeed(&this->editSeed, (void*)(s + 0x118));
 
     // --- Restore saved combo selections from game settings ---
     // Standalone: g_pNewGameSettings (exe-data slot) may be NULL — skip the
@@ -487,81 +488,81 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     // Map condition/generator combo (+0x2c)
     {
         int idx = *(int*)(cfg + 0x2c);
-        void* combo = self->comboCondition;
+        void* combo = this->comboCondition;
         if (idx < 0) {
             int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
                 // Use the index as-is
-                reinterpret_cast<UI::ComboElement*>(self->comboCondition)->SetCurrentItem(*(int*)(cfg + 0x2c));  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboCondition)->SetCurrentItem(*(int*)(cfg + 0x2c));  // B.3.6 bridge
             } else {
-                reinterpret_cast<UI::ComboElement*>(self->comboCondition)->SetCurrentItem(0);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboCondition)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            reinterpret_cast<UI::ComboElement*>(self->comboCondition)->SetCurrentItem(*(int*)(cfg + 0x2c));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboCondition)->SetCurrentItem(*(int*)(cfg + 0x2c));  // B.3.6 bridge
         }
     }
 
     // Terrain combo (+0x20)
     {
         int idx = *(int*)(cfg + 0x20);
-        void* combo = self->comboTerrain;
+        void* combo = this->comboTerrain;
         if (idx < 0) {
             int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
-                reinterpret_cast<UI::ComboElement*>(self->comboTerrain)->SetCurrentItem(*(int*)(cfg + 0x20));  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboTerrain)->SetCurrentItem(*(int*)(cfg + 0x20));  // B.3.6 bridge
             } else {
-                reinterpret_cast<UI::ComboElement*>(self->comboTerrain)->SetCurrentItem(0);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboTerrain)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            reinterpret_cast<UI::ComboElement*>(self->comboTerrain)->SetCurrentItem(*(int*)(cfg + 0x20));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboTerrain)->SetCurrentItem(*(int*)(cfg + 0x20));  // B.3.6 bridge
         }
     }
 
     // Terrain size combo (+0x24)
     {
         int idx = *(int*)(cfg + 0x24);
-        void* combo = self->comboTerrainSize;
+        void* combo = this->comboTerrainSize;
         if (idx < 0) {
             int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
-                reinterpret_cast<UI::ComboElement*>(self->comboTerrainSize)->SetCurrentItem(*(int*)(cfg + 0x24));  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboTerrainSize)->SetCurrentItem(*(int*)(cfg + 0x24));  // B.3.6 bridge
             } else {
-                reinterpret_cast<UI::ComboElement*>(self->comboTerrainSize)->SetCurrentItem(0);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboTerrainSize)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            reinterpret_cast<UI::ComboElement*>(self->comboTerrainSize)->SetCurrentItem(*(int*)(cfg + 0x24));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboTerrainSize)->SetCurrentItem(*(int*)(cfg + 0x24));  // B.3.6 bridge
         }
     }
 
     // Climate combo (+0x28)
     {
         int idx = *(int*)(cfg + 0x28);
-        void* combo = self->comboClimate;
+        void* combo = this->comboClimate;
         if (idx < 0) {
             int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
-                reinterpret_cast<UI::ComboElement*>(self->comboClimate)->SetCurrentItem(*(int*)(cfg + 0x28));  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboClimate)->SetCurrentItem(*(int*)(cfg + 0x28));  // B.3.6 bridge
             } else {
-                reinterpret_cast<UI::ComboElement*>(self->comboClimate)->SetCurrentItem(0);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboClimate)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            reinterpret_cast<UI::ComboElement*>(self->comboClimate)->SetCurrentItem(*(int*)(cfg + 0x28));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboClimate)->SetCurrentItem(*(int*)(cfg + 0x28));  // B.3.6 bridge
         }
     }
 
     // Disaster combo (+0x30)
     {
         int idx = *(int*)(cfg + 0x30);
-        void* combo = self->comboDisaster;
+        void* combo = this->comboDisaster;
         if (idx < 0) {
             int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (count <= idx) {
-                reinterpret_cast<UI::ComboElement*>(self->comboDisaster)->SetCurrentItem(0);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboDisaster)->SetCurrentItem(0);  // B.3.6 bridge
             } else {
-                reinterpret_cast<UI::ComboElement*>(self->comboDisaster)->SetCurrentItem(*(int*)(cfg + 0x30));  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboDisaster)->SetCurrentItem(*(int*)(cfg + 0x30));  // B.3.6 bridge
             }
         } else {
-            reinterpret_cast<UI::ComboElement*>(self->comboDisaster)->SetCurrentItem(*(int*)(cfg + 0x30));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboDisaster)->SetCurrentItem(*(int*)(cfg + 0x30));  // B.3.6 bridge
         }
     }
 
@@ -569,7 +570,7 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 
     // --- Standalone: env/autostart start-condition override (wins over the
     //     saved-selection restore above; see SelectStartConditionOverride) ---
-    SelectStartConditionOverride(self);
+    SelectStartConditionOverride(this);
 
     // --- Combo inventory (standalone verification) ---
     // Retail contents, for comparison: condition 3 (Hard/Medium/Easy),
@@ -579,11 +580,11 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     // _initialData StringTable, so a 0 count tells you which half is missing.
     {
         struct { const char* name; void* combo; } combos[] = {
-            { "comboCondition",   self->comboCondition   },
-            { "comboTerrain",     self->comboTerrain     },
-            { "comboTerrainSize", self->comboTerrainSize },
-            { "comboClimate",     self->comboClimate     },
-            { "comboDisaster",    self->comboDisaster    },
+            { "comboCondition",   this->comboCondition   },
+            { "comboTerrain",     this->comboTerrain     },
+            { "comboTerrainSize", this->comboTerrainSize },
+            { "comboClimate",     this->comboClimate     },
+            { "comboDisaster",    this->comboDisaster    },
         };
         for (auto& c : combos) {
             if (!c.combo) { fprintf(stderr, "[NewGameDialog] %s MISSING\n", c.name); continue; }
@@ -595,7 +596,7 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
     }
 
     // --- Update description text from selected map generator ---
-    UpdateDescription(self);
+    UpdateDescription(this);
 }
 
 // ============================================================
@@ -928,40 +929,40 @@ extern "C" void StartNewGame_Reg(void* worldSetup, void* nameStr, void* seed,
                       mapGen, terrainGen, climateGen, scenarioResIdx, savedStateIBP);
 }
 
-void NewGameDialog_OnEvent(NewGameDialog* self, void* /*element*/, int eventType, int eventData) {
-    uintptr_t s = (uintptr_t)self;
-    fprintf(stderr, "[NewGameDialog::OnEvent] self=%p type=0x%x data=%d\n",
-            (void*)self, eventType, eventData);
+void NewGameDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    uintptr_t s = (uintptr_t)this;
+    fprintf(stderr, "[NewGameDialog::OnEvent] this=%p type=0x%x data=%d\n",
+            (void*)this, eventType, eventData);
     fflush(stderr);
 
     if (eventType == 0x12) {
         // Button click
         if (eventData == 2) {
             // buttonOk: start game
-            NewGameDialog_StartGame(self);
+            NewGameDialog_StartGame(this);
             return;
         }
         if (eventData == 3) {
             // buttonCancel: close dialog
             void* ui = *(void**)(s + 0x10);
             uint64_t basePtr[2];
-            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
             return;
         }
         if (eventData == 0) {
             // buttonNewName: generate random name
-            GenerateRandomName(&self->editName, (void*)(s + 0x118));
+            GenerateRandomName(&this->editName, (void*)(s + 0x118));
             return;
         }
         if (eventData == 1) {
             // buttonNewSeed: generate random seed
-            GenerateRandomSeed(&self->editSeed, (void*)(s + 0x118));
+            GenerateRandomSeed(&this->editSeed, (void*)(s + 0x118));
             return;
         }
     } else if (eventType == 0x14 && eventData == 4) {
         // comboCondition selection changed: update description text
-        UpdateDescription(self);
+        UpdateDescription(this);
     }
 }
 
@@ -969,15 +970,12 @@ void NewGameDialog_OnEvent(NewGameDialog* self, void* /*element*/, int eventType
 // Slot5 (vtable +0x28, exe 0x1400706c0): Shutdown — RET 0 (3 bytes)
 // ============================================================
 // No-op shutdown; nothing to clean up.
-int NewGameDialog_Shutdown(NewGameDialog* self) {
-    (void)self;
-    return 0;
-}
+void NewGameDialog::OnClosed() {}
 
-void NewGameDialog_Slot6(NewGameDialog* self) {
-    void* okBtn = self->buttonOk;
+void NewGameDialog::OnUpdateLayout() {
+    void* okBtn = this->buttonOk;
 
-    void* editElem = self->editName;
+    void* editElem = this->editName;
 
     // EditElement+0xC8 = text string pointer (System::String)
     int64_t strPtr = *(int64_t*)((uintptr_t)editElem + 200);  // 200 = 0xC8
@@ -1025,152 +1023,87 @@ void NewGameDialog_Slot6(NewGameDialog* self) {
 // find the dialog opened by MainMenuDialog::OpenNewGame.
 extern "C" void* g_StandaloneNewGameDialog;
 
-namespace {
+// ENDGAME B.3.8 block DLG: NewGameDialog is a real class (Dialog/NewGameDialog.h);
+// the hand-built table is gone. Slot 7 is INHERITED: the old table called
+// DialogInstance::OnUpdate there with a qualified call (retail's import thunk).
+// 0x14015c920 has no by-address reader, so its registration went with the table.
 
-void* GetNewGameDialogVtable();  // forward decl
-
-// Slot 0 — Dtor. Mirrors generic ~DialogInstance scalar-deleting dtor.
-void* NewGameStub_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *(void**)self = GetNewGameDialogVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-// Slot 1 — TypeName.
-const char* NewGameStub_Slot1_TypeName(void* /*self*/) { return "NewGameDialog"; }
-
-// Slot 2 — TypeId.
-uint32_t NewGameStub_Slot2_TypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("NewGameDialog");
-    return cached;
-}
-
-// Generic logging stub for the runtime-thunk slots (3, 9). Logs once per slot.
-template <int SlotIdx>
-void NewGameStub_RuntimeThunk(void* self, ...) {
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[NewGameDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
-               SlotIdx, self);
-    }
-}
-
-// Slot 7 (OnUpdate, +0x38) — original is a base thunk into
-// UI::DialogInstance::OnUpdate which recurses children each frame (this is where
-// child element Update fires — combos, edits, buttons + UI hover/click sounds).
-// Delegate straight to the Runtime function so the dialog's controls tick.
-void NewGameImpl_Slot7_OnUpdate(void* self, const void* time) {
-    if (!self) return;
-    // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch through this
-    // dialog's hand-built table straight back into this slot body.
-    reinterpret_cast<UI::DialogInstance*>(self)->UI::DialogInstance::OnUpdate(  // B.3.6 bridge
-        *static_cast<const System::Time*>(time));
-}
-
-void* g_NewGameDialog_Vtable_Standalone[10] = {
-    reinterpret_cast<void*>(&NewGameStub_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&NewGameStub_Slot1_TypeName),     // +0x08 TypeName
-    reinterpret_cast<void*>(&NewGameStub_Slot2_TypeId),       // +0x10 TypeId
-    reinterpret_cast<void*>(&NewGameStub_RuntimeThunk<3>),    // +0x18 Persist
-    reinterpret_cast<void*>(&NewGameDialog_Slot4),            // +0x20 Startup
-    reinterpret_cast<void*>(&NewGameDialog_Shutdown),         // +0x28 Shutdown
-    reinterpret_cast<void*>(&NewGameDialog_Slot6),            // +0x30 OnUpdateLayout (OK-btn sync)
-    reinterpret_cast<void*>(&NewGameImpl_Slot7_OnUpdate),     // +0x38 OnUpdate
-    reinterpret_cast<void*>(&NewGameDialog_OnEvent),          // +0x40 OnEvent
-    reinterpret_cast<void*>(&NewGameStub_RuntimeThunk<9>),    // +0x48 OnSerializeSettings
-};
-
-void* GetNewGameDialogVtable() {
-    return reinterpret_cast<void*>(g_NewGameDialog_Vtable_Standalone);
-}
-
-// In-place ctor — clean reimpl of exe 0x140071040 ("NewGameDialog_CopyCtor").
-// Signature matches fn_NewGameDialog_Ctor_t (self, ui, extRes, nullParent,
-// parentMenuIBP). Mirrors the decompile:
+// The real ctor — retail 0x140071040 ("NewGameDialog_CopyCtor" in Ghidra):
 //   DialogInstance::DialogInstance(self, ui, extRes, &nullParent, 0,0,0)
-//   *self = vtable_NewGameDialog
 //   zero +0xB8..+0x110 (the 12 element-pointer fields)
 //   System::Random::Random(self+0x118)
 //   worldSetup(+0xAE0) = *parentMenuIBP   (the MainMenuDialog, used by StartGame)
+NewGameDialog::NewGameDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                             Object::InternalPtr<UI::DialogInstance> parent,
+                             uint64_t parentMenu)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      comboTerrain(nullptr), comboTerrainSize(nullptr), comboClimate(nullptr),
+      comboCondition(nullptr), comboDisaster(nullptr), editName(nullptr),
+      editSeed(nullptr), buttonOk(nullptr), textDescription(nullptr),
+      mapGeneratorList(nullptr), climateGeneratorList(nullptr),
+      terrainGeneratorList(nullptr) {
+    // System::Random sub-object at +0x118.
+    if (fn_Random_Default_Ctor) {
+        fn_Random_Default_Ctor(random);
+    }
+    worldSetup = reinterpret_cast<void*>(parentMenu);
+}
+
+// The reflected create path (create 0x140012c70). The tree's factory handed out
+// a zero-filled object with no base ctor; this keeps the zero fields and runs
+// the default DialogInstance ctor.
+NewGameDialog::NewGameDialog()
+    : comboTerrain(nullptr), comboTerrainSize(nullptr), comboClimate(nullptr),
+      comboCondition(nullptr), comboDisaster(nullptr), editName(nullptr),
+      editSeed(nullptr), buttonOk(nullptr), textDescription(nullptr),
+      mapGeneratorList(nullptr), climateGeneratorList(nullptr),
+      terrainGeneratorList(nullptr), random{}, _pad_AD8(0), worldSetup(nullptr) {}
+
+// [0] 0x140012cc0: ~NewGameDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* NewGameDialog::DeletingDtor(unsigned flags) {
+    this->~NewGameDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140012c70: MemAlloc(0xae8, 8), then the ctor.
+void* NewGameDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NewGameDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) NewGameDialog());
+}
+// createInPlace 0x140012cb0 (the tree's in-place build is kept, B8-13).
+void* NewGameDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) NewGameDialog());
+}
+
+DEFINE_EXE_VTABLE(NewGameDialog, "_ZTV13NewGameDialog")
+
+// The ctor DOOR, reached by address: fn_NewGameDialog_Ctor (engine_funcs.cpp)
+// resolves 0x140071040. Signature matches fn_NewGameDialog_Ctor_t
+// (self, ui, extRes, nullParent, parentMenuIBP).
 void* NewGameDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                     void* nullParent, void* parentMenuIBP) {
     if (!self) return nullptr;
     printf("[NewGameDialog_Ctor] self=%p ui=%p extRes=%p nullParent=%p parentMenu=%p\n",
            self, ui, extRes, nullParent, parentMenuIBP);
-
-    uint64_t parentCopy = nullParent ? *reinterpret_cast<uint64_t*>(nullParent) : 0;
-
-    if (fn_DialogInstance_Ctor && extRes) {
-        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy, nullptr, nullptr, 0);
-    } else {
-        printf("[NewGameDialog_Ctor] skipping DialogInstance::DialogInstance "
-               "(fn=%p extRes=%p) — bare-bones init\n",
-               (void*)fn_DialogInstance_Ctor, extRes);
-    }
-
-    *reinterpret_cast<void**>(self) = GetNewGameDialogVtable();
-
-    // Zero +0xB8..+0x110 inclusive (comboTerrain .. terrainGeneratorList).
-    char* base = reinterpret_cast<char*>(self);
-    for (size_t off = 0xB8; off <= 0x110; off += 8) {
-        *reinterpret_cast<uint64_t*>(base + off) = 0;
-    }
-
-    // System::Random sub-object at +0x118.
-    if (fn_Random_Default_Ctor) {
-        fn_Random_Default_Ctor(base + 0x118);
-    }
-
-    // worldSetup (+0xAE0) = *parentMenuIBP (the MainMenuDialog ptr).
-    *reinterpret_cast<uint64_t*>(base + 0xAE0) =
-        parentMenuIBP ? *reinterpret_cast<uint64_t*>(parentMenuIBP) : 0;
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (nullParent)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(nullParent);
+    NewGameDialog* dlg = ::new (self) NewGameDialog(
+        static_cast<UI::UserInterface*>(ui), static_cast<const UI::Dialog*>(extRes), parent,
+        parentMenuIBP ? *static_cast<const uint64_t*>(parentMenuIBP) : 0);
 
     // Publish the just-constructed dialog so the auto-start driver
-    // (standalone/autostart.cpp) can locate it and fire Start once Slot4 has
+    // (standalone/autostart.cpp) can locate it and fire Start once OnOpened has
     // populated the combos + OK button. Harmless when autostart is disabled.
-    g_StandaloneNewGameDialog = self;
-
-    return self;
+    g_StandaloneNewGameDialog = dlg;
+    return dlg;
 }
-
-void* NewGameDialog_Factory_Bare(void* /*loop*/) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(NewGameDialog), 8);
-    if (!p) return nullptr;
-    for (size_t off = 0; off < sizeof(NewGameDialog); off += 8) {
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(p) + off) = 0;
-    }
-    *reinterpret_cast<void**>(p) = GetNewGameDialogVtable();
-    return p;
-}
-
-void* NewGameDialog_CreateInPlace_Bare(void* mem) {
-    if (!mem) return nullptr;
-    for (size_t off = 0; off < sizeof(NewGameDialog); off += 8) {
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(mem) + off) = 0;
-    }
-    *reinterpret_cast<void**>(mem) = GetNewGameDialogVtable();
-    return mem;
-}
-
-}  // namespace
 
 extern "C" void RegisterNewGameDialogVtable() {
-    RegisterExeAddr(0x14015c920, reinterpret_cast<uintptr_t>(g_NewGameDialog_Vtable_Standalone));
     RegisterExeAddr(0x140071040, reinterpret_cast<uintptr_t>(&NewGameDialog_Ctor_Standalone));
 }
 
-extern "C" void* NewGameDialog_StandaloneFactory(void) {
-    return NewGameDialog_Factory_Bare(nullptr);
-}
-extern "C" void* NewGameDialog_StandaloneCreateInPlace(void* memory) {
-    return NewGameDialog_CreateInPlace_Bare(memory);
-}
-
-REGISTER_TYPE(NewGameDialog, "UI::DialogInstance",
-              &NewGameDialog_StandaloneFactory, &NewGameDialog_StandaloneCreateInPlace);
-
+DEFINE_EXE_TYPE(NewGameDialog, "UI::DialogInstance")

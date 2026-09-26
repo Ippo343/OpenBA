@@ -11,6 +11,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/ForesterWork.h"
 #include "Work/foresterwork_funcs.h"
 #include "options.h"
 #include "engine_funcs.h"
@@ -31,8 +32,6 @@
 
 // All typedefs prefixed with FW_ to avoid conflicts with engine_funcs.h
 
-// Work::Serialize base
-typedef void  (*FW_Work_Serialize_t)(void* self, void* stream);
 // BST serialization
 typedef void  (*FW_BST_Serialize_t)(void* bstRoot, void* serializer);
 // FUN_1400f7100 -- validate work entity
@@ -107,7 +106,6 @@ static FW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
 static FW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
 static FW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static FW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
-static FW_Work_Serialize_t            s_fn_Work_Serialize = nullptr;
 static FW_BST_Serialize_t             s_fn_BST_Serialize = nullptr;
 static FW_ValidateEntity_t            s_fn_ValidateEntity = nullptr;
 static FW_MemAlloc_t                  s_fn_MemAlloc = nullptr;
@@ -127,9 +125,6 @@ static FW_TreeNodeCleanup_t           s_fn_TreeNodeCleanup = nullptr;
 // These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
 // both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
 // (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
-static void** s_vtable_ForesterWork = nullptr;     // 0x1401613a0
-static void** s_vtable_AutoPickupWork = nullptr;   // 0x140160fa0
-static void** s_vtable_Work = nullptr;              // 0x140161a80
 
 // fn_InternalBasePtr_Ctor, fn_InternalBasePtr_CheckPtr, fn_IsDerivedFrom
 // all from engine_funcs.h (no local copies needed)
@@ -212,8 +207,6 @@ bool ForesterWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x14012cf10));
 
     // New function pointers for deferred vtable slots
-    s_fn_Work_Serialize = reinterpret_cast<FW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<FW_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400296b0));  // verified from original disasm at 0x1400eb9c6
     s_fn_ValidateEntity = reinterpret_cast<FW_ValidateEntity_t>(
@@ -233,12 +226,6 @@ bool ForesterWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140014c30));
 
     // Vtable pointers for dtor chain
-    s_vtable_ForesterWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401613a0));
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140160fa0));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // MemAlloc / MemFree — resolve via the canonical Runtime exports. The exe IAT
     // dispatch slots these used (0x1401527e8/0x1401527f0) are UNREGISTERED in the
@@ -298,11 +285,10 @@ bool ForesterWork_ResolveFuncs() {
               s_fn_PlayAnimation_Ctor && s_fn_PerformWork_Ctor3 &&
               s_fn_CitizenAI_RegisterWork && s_fn_CitizenAI_LongTermPlan &&
               s_fn_FindComp_Storage && s_fn_StorageQueryCount &&
-              s_fn_Work_Serialize && s_fn_BST_Serialize &&
+              s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_MemAlloc && s_fn_MemFreeFunc &&
               s_fn_BSTRemove && s_fn_BSTFindRemove &&
               s_fn_CancelAllWork && s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
-              s_vtable_ForesterWork &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
               s_typeId_WorkplaceComponent && s_typeId_RadiusComponent &&
@@ -316,7 +302,7 @@ bool ForesterWork_ResolveFuncs() {
     // and all three are unregistered across the whole standalone build. Gate the force-driver
     // on execReady (Execute-critical only); keep `ok`/`s_forester_funcs_resolved` strict so
     // the complete set is still verified.
-    bool ok = execReady && s_vtable_AutoPickupWork && s_vtable_Work && s_typeId_NatResDesc2;
+    bool ok = execReady && s_typeId_NatResDesc2;
 
     s_forester_exec_ready = execReady;
     s_forester_funcs_resolved = ok;
@@ -348,7 +334,6 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: s_fn_CitizenAI_LongTermPlan\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: s_fn_FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: s_fn_StorageQueryCount\n");
-        if (!s_fn_Work_Serialize) printf("  MISSING: s_fn_Work_Serialize\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: s_fn_BST_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: s_fn_ValidateEntity\n");
         if (!s_fn_MemAlloc) printf("  MISSING: s_fn_MemAlloc\n");
@@ -358,9 +343,6 @@ bool ForesterWork_ResolveFuncs() {
         if (!s_fn_CancelAllWork) printf("  MISSING: s_fn_CancelAllWork\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: s_fn_FindSubEntity\n");
         if (!s_fn_TreeNodeCleanup) printf("  MISSING: s_fn_TreeNodeCleanup\n");
-        if (!s_vtable_ForesterWork) printf("  MISSING: s_vtable_ForesterWork (0x1401613a0)\n");
-        if (!s_vtable_AutoPickupWork) printf("  MISSING: s_vtable_AutoPickupWork (0x140160fa0)\n");
-        if (!s_vtable_Work) printf("  MISSING: s_vtable_Work (0x140161a80)\n");
         if (!s_typeId_WorkplaceComponent) printf("  MISSING: s_typeId_WorkplaceComponent (c7740)\n");
         if (!s_typeId_RadiusComponent) printf("  MISSING: s_typeId_RadiusComponent (c7778)\n");
         if (!s_typeId_MaterialComponent) printf("  MISSING: s_typeId_MaterialComponent (c4870)\n");
@@ -390,7 +372,7 @@ bool ForesterWork_ExecuteReady() {
 // extern "C" wrapper so the force harness can drive ForesterWork::Execute directly (the Work
 // driver ABI: self + the worker citizen's IBP) without needing the ForesterWork type/mangling.
 extern "C" int ForesterWork_ForceDrive(void* self, void* citizenIBP) {
-    return ForesterWork_Slot4_Impl(reinterpret_cast<ForesterWork*>(self), citizenIBP, 0, 0);
+    return reinterpret_cast<ForesterWork*>(self)->ForesterWork::Execute(citizenIBP, nullptr, 0);   // B.3.8 bridge
 }
 
 
@@ -494,16 +476,16 @@ static void AssignWorkToEntity(ForesterWork* self, void* citizenIBP, int priorit
 //    a. If enough failures, check storage and replan
 //    b. Otherwise play idle animation and increment fail counter
 //
-int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;  // for qword-aligned field access
+int ForesterWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;  // for qword-aligned field access
 
     // Bring-up trace (first few ticks): confirms ForesterWork::Execute is actually being
     // ticked by the executor and reports the work-area entity + workplace cell it operates on.
     { static int s_tc = 0;
       if (s_tc < 6) { ++s_tc;
-        fprintf(stderr, "[ForesterWork::Execute] tick#%d self=%p workArea+0x10=%p cell+0x28=%d\n",
-                s_tc, (void*)self, (void*)selfQ[2], (int)selfQ[5]);
+        fprintf(stderr, "[ForesterWork::Execute] tick#%d this=%p workArea+0x10=%p cell+0x28=%d\n",
+                s_tc, (void*)this, (void*)selfQ[2], (int)selfQ[5]);
         fflush(stderr); } }
 
     // Save citizen ref for later use
@@ -763,7 +745,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                                     0);                                // param11
 
                                 // Assign work and register with AI
-                                AssignWorkToEntity(self, citizenIBP, (int)selfQ[4]);
+                                AssignWorkToEntity(this, citizenIBP, (int)selfQ[4]);
                                 return 2;
                             }
                         }
@@ -888,7 +870,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
                                 1);                                // param6
 
                             // Assign work and register with AI
-                            AssignWorkToEntity(self, citizenIBP, (int)selfQ[4]);
+                            AssignWorkToEntity(this, citizenIBP, (int)selfQ[4]);
                             return 2;
                         }
                     }
@@ -931,11 +913,11 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
         uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
 
         // Call vtable slot +0x50 (GetWorkEntity)
-        uintptr_t vtable = *(uintptr_t*)self;
+        uintptr_t vtable = *(uintptr_t*)this;
         typedef uintptr_t* (*GetWorkEntity_t)(ForesterWork*, void*);
         auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
         uintptr_t workEntIBP[2] = {0};
-        uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+        uintptr_t* wResult = getWorkEntity(this, workEntIBP);
         uintptr_t workEnt = *wResult;
 
         *(uint32_t*)(citizenEnt2 + 0x54) |= 4;
@@ -946,7 +928,7 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
             *(uint32_t*)(citizenEnt2 + 0x88) |= 0x20000;
         }
 
-        uintptr_t citizenAISub = (uintptr_t)self + 0x48;
+        uintptr_t citizenAISub = (uintptr_t)this + 0x48;
         s_fn_CitizenAI_RegisterWork((void*)citizenAISub, workEntIBP, citizenIBP);
 
         // Increment fail counter
@@ -963,11 +945,9 @@ int ForesterWork_Slot4_Impl(ForesterWork* self, void* entityIBP, uint64_t /*para
 // frees BST nodes at +0x48, zeros count at +0x50, then calls
 // Object::Internal::~Internal via tail-call.
 // ============================================================
-void ForesterWork_DtorBody(ForesterWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set vtable to ForesterWork
-    *(void**)selfAddr = s_vtable_ForesterWork;
+// ForesterWork dtor (retail slot 0 0x14002A370 inlines it). The stamps and the `~Internal` call are the compiler's chain.
+ForesterWork::~ForesterWork() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free BST nodes at +0x48
     void* bstRoot = *(void**)(selfAddr + 0x48);
@@ -984,12 +964,6 @@ void ForesterWork_DtorBody(ForesterWork* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to AutoPickupWork, then Work
-    *(void**)selfAddr = s_vtable_AutoPickupWork;
-    *(void**)selfAddr = s_vtable_Work;
-
-    // Call Object::Internal::~Internal (base class cleanup)
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
@@ -997,12 +971,11 @@ void ForesterWork_DtorBody(ForesterWork* self) {
 // ForesterWork::ScalarDtor (0x14002A370)
 // Calls dtor body, then conditional free.
 // ============================================================
-void* ForesterWork_ScalarDtor_Impl(ForesterWork* self, uint32_t flags) {
-    ForesterWork_DtorBody(self);
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+// [0] 0x14002a370: ~ForesterWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* ForesterWork::DeletingDtor(unsigned flags) {
+    this->~ForesterWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
@@ -1010,11 +983,11 @@ void* ForesterWork_ScalarDtor_Impl(ForesterWork* self, uint32_t flags) {
 // ForesterWork::Serialize (0x1400EB970)
 // Work::Serialize + version block + BST serialization + int field
 // ============================================================
-void ForesterWork_Serialize_Impl(ForesterWork* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void ForesterWork::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create first serializer (version block, version=0)
     alignas(8) uint8_t serializer1[24] = {0};
@@ -1042,8 +1015,8 @@ void ForesterWork_Serialize_Impl(ForesterWork* self, void* stream) {
 // Removes entity from BST at self+0x48, returns false.
 // Standalone exe only.
 // ============================================================
-int ForesterWork_Slot6_Impl(ForesterWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int ForesterWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return 0;
 }
 
@@ -1054,8 +1027,8 @@ int ForesterWork_Slot6_Impl(ForesterWork* self, void* param2) {
 // Calls BSTFindRemove on the BST at self+0x48.
 // Standalone exe only.
 // ============================================================
-int ForesterWork_Slot7_Impl(ForesterWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int ForesterWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return 0;
 }
 
@@ -1065,8 +1038,8 @@ int ForesterWork_Slot7_Impl(ForesterWork* self, void* param2) {
 // Loops through tree at +0x48 while count (+0x50) > 0.
 // For each leftmost node, cancels the work item via engine call.
 // ============================================================
-int ForesterWork_Slot8_Impl(ForesterWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int ForesterWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -1096,9 +1069,9 @@ int ForesterWork_Slot8_Impl(ForesterWork* self) {
 // Collects invalid ones in a dynamic array, removes them from tree.
 // Returns true if all valid (removeCount == 0), false otherwise.
 // ============================================================
-int ForesterWork_Slot9_Impl(ForesterWork* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    void** bstRootPtr = (void**)((uintptr_t)self + 0x48);
+int ForesterWork::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
     void* root = *bstRootPtr;
     uintptr_t* removeArr = nullptr;
@@ -1211,8 +1184,8 @@ int ForesterWork_Slot9_Impl(ForesterWork* self, void* param2) {
 // FUN_140002e10, returns entity +0x48 through output pointer.
 // Hidden return ptr ABI: RCX=self, RDX=retbuf.
 // ============================================================
-void* ForesterWork_Slot10_Impl(ForesterWork* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* ForesterWork::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -1227,52 +1200,51 @@ void* ForesterWork_Slot10_Impl(ForesterWork* self, void* outPtr) {
 }
 
 
+
+// [11] 0x140029860 (shared by 13 tables): `XOR EAX,EAX; CMP [RCX+0x50],EAX; SETG AL`
+// — "is anyone assigned". The old table pointed at Work_Slot11_HasActiveTasks.
+int ForesterWork::GetPriority() {
+    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
+}
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The three stamps are the compiler's. ForesterWork_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+ForesterWork::ForesterWork() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(0) {
+    ForesterWork_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x1401613a0 (13 slots), size 0x60, parent "AutoPickupWork".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-// Slot map ground-truthed from the real exe vtable @ 0x1401613a0:
-//   slot4 (Execute)=ForesterWork_Slot4_Impl (0x1400eaec0).
-//   slot5 = shared Work_Slot5 (0x1400f7540).
-//   slot11 (GetPriority) = 0x140029860 — the SHARED HasWorkers thunk;
-//   ForesterWork has NO own GetPriority fn in foresterwork.cpp -> FLAG.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_ForesterWork_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over ForesterWork_Factory / _CreateInPlace (both
+// Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
+
+// create 0x14002a310: MemAlloc(sizeof, 8), then the ctor.
+void* ForesterWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ForesterWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ForesterWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* ForesterWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ForesterWork());
+}
+
+DEFINE_EXE_VTABLE(ForesterWork, "_ZTV12ForesterWork")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t ForesterWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("ForesterWork");
-    return c;
-}
-
-static void* g_ForesterWork_Vtable[13] = {
-    (void*)&ForesterWork_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002a370)
-    (void*)&Work_Slot1,                    // +0x08 slot1 (null)
-    (void*)&ForesterWork_GetTypeId,        // +0x10 GetTypeId
-    (void*)&ForesterWork_Serialize_Impl,   // +0x18 Serialize (0x1400eb970)
-    (void*)&ForesterWork_Slot4_Impl,       // +0x20 Execute (0x1400eaec0)
-    (void*)&Work_Slot5,                    // +0x28 slot5 (returns 0)
-    (void*)&ForesterWork_Slot6_Impl,       // +0x30 OnComplete (0x1400eaea0)
-    (void*)&ForesterWork_Slot7_Impl,       // +0x38 OnCancel (0x1400eae90)
-    (void*)&ForesterWork_Slot8_Impl,       // +0x40 Cleanup (0x1400eb8a0)
-    (void*)&ForesterWork_Slot9_Impl,       // +0x48 Validate (0x1400eac60)
-    (void*)&ForesterWork_Slot10_Impl,      // +0x50 GetTarget (0x1400eb910)
-    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
-    (void*)&Work_Slot12,                   // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x1401613a0 is still read back BY ADDRESS — ForesterComponent's CreateWork
+// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
+// so the exe address serves the COMPILER's table.
 extern "C" void RegisterForesterWorkVtable() {
-    RegisterExeAddr(0x1401613a0, (uintptr_t)g_ForesterWork_Vtable);
+    RegisterExeAddr(ForesterWorkAddr::Vtable, reinterpret_cast<uintptr_t>(ForesterWork::Vtable()));   // 0x1401613a0
 }
-extern "C" void* ForesterWork_CreateInPlace(void* mem) {
-    ForesterWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x60, g_ForesterWork_Vtable);
-}
-extern "C" void* ForesterWork_Factory(void) {
-    ForesterWork_ResolveFuncs();
-    void* p = Work_Alloc(0x60);
-    return p ? Work_GenericCtor(p, 0x60, g_ForesterWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(ForesterWork, "AutoPickupWork", &ForesterWork_Factory, &ForesterWork_CreateInPlace);
+// The factory the forester force harness (forester_force_harness.cpp) names.
+extern "C" void* ForesterWork_Factory(void) { return ForesterWork::CreateNewObject(); }
+DEFINE_EXE_TYPE(ForesterWork, "AutoPickupWork")

@@ -117,7 +117,7 @@ enum OptionsElementId {
         System::String _nameStr(name);                     \
         uint64_t _retval = 0;                              \
         ::new (&_retval) Object::InternalPtr<UI::Element>(  /* B.3.6 bridge */ \
-            reinterpret_cast<UI::DialogInstance*>(self)->FindElement(_nameStr));  \
+            FindElement(_nameStr));  /* a member: used in OnOpened */ \
         (outField) = (void*)_retval;                       \
     } while (0)
 
@@ -616,7 +616,7 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
 // (default ON, trivially flippable).
 // To localize the per-frame KeyMap::Pressed crash, flip flags to false one
 // at a time. See `notes/NOTES030126.md` and the project memory for context.
-void OptionsDialog_Startup(OptionsDialog* self) {
+void OptionsDialog::OnOpened() {
     // Bisect knobs — flip these to narrow down the standalone Slot4 crash.
     // Order mirrors the original Startup body.
     static const bool s_enableButtons         = true;
@@ -631,9 +631,9 @@ void OptionsDialog_Startup(OptionsDialog* self) {
     static const bool s_enableMouseClipCheck  = true;
     static const bool s_enableTabRestore      = true;
 
-    printf("[OptionsDialog::Startup] self=%p  flags: btn=%d aud=%d vid=%d "
+    printf("[OptionsDialog::Startup] this=%p  flags: btn=%d aud=%d vid=%d "
            "sh=%d vchk=%d ilist=%d auto=%d uisc=%d game=%d mclip=%d tab=%d\n",
-           self,
+           this,
            (int)s_enableButtons, (int)s_enableAudioSliders, (int)s_enableVideoCombos,
            (int)s_enableShadowReflCombos, (int)s_enableVidCheckboxes,
            (int)s_enableInputList, (int)s_enableAutosaveCombo,
@@ -659,16 +659,16 @@ void OptionsDialog_Startup(OptionsDialog* self) {
 
     // --- Audio sliders ---
     if (s_enableAudioSliders) {
-        FIND_ELEMENT(self->sliderUI,     "sliderUI");
-        FIND_ELEMENT(self->sliderMusic,  "sliderMusic");
-        FIND_ELEMENT(self->sliderAmbient,"sliderAmbient");
-        FIND_ELEMENT(self->sliderEffect, "sliderEffect");
-        reinterpret_cast<UI::Element*>(self->sliderUI)->SetElementId(kSlider_UI);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->sliderMusic)->SetElementId(kSlider_Music);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->sliderAmbient)->SetElementId(kSlider_Ambient);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->sliderEffect)->SetElementId(kSlider_Effect);  // B.3.6 bridge
-        void* audioSliders[4] = { self->sliderUI, self->sliderMusic,
-                                   self->sliderAmbient, self->sliderEffect };
+        FIND_ELEMENT(this->sliderUI,     "sliderUI");
+        FIND_ELEMENT(this->sliderMusic,  "sliderMusic");
+        FIND_ELEMENT(this->sliderAmbient,"sliderAmbient");
+        FIND_ELEMENT(this->sliderEffect, "sliderEffect");
+        reinterpret_cast<UI::Element*>(this->sliderUI)->SetElementId(kSlider_UI);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->sliderMusic)->SetElementId(kSlider_Music);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->sliderAmbient)->SetElementId(kSlider_Ambient);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->sliderEffect)->SetElementId(kSlider_Effect);  // B.3.6 bridge
+        void* audioSliders[4] = { this->sliderUI, this->sliderMusic,
+                                   this->sliderAmbient, this->sliderEffect };
         for (int i = 0; i < 4; i++) {
             SetSliderRange(audioSliders[i], 0.0f, 100.0f);
             if (audioVol) SetSliderValue(audioSliders[i], (float)audioVol[i]);
@@ -677,132 +677,132 @@ void OptionsDialog_Startup(OptionsDialog* self) {
 
     // --- Video combos: find + IDs + save config + populate ---
     if (s_enableVideoCombos) {
-        FIND_ELEMENT(self->comboRenderer,  "comboRenderer");
-        FIND_ELEMENT(self->comboAdapter,   "comboAdapter");
-        FIND_ELEMENT(self->comboResolution,"comboResolution");
-        FIND_ELEMENT(self->comboAntialias, "comboAntialias");
-        FIND_ELEMENT(self->comboFilter,    "comboFilter");
-        FIND_ELEMENT(self->comboRefresh,   "comboRefresh");
-        reinterpret_cast<UI::Element*>(self->comboRenderer)->SetElementId(kCombo_Renderer);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->comboAdapter)->SetElementId(kCombo_Adapter);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->comboResolution)->SetElementId(kCombo_Resolution);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->comboRefresh)->SetElementId(kCombo_Refresh);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->comboAntialias)->SetElementId(kCombo_Antialias);  // B.3.6 bridge
-        reinterpret_cast<UI::Element*>(self->comboFilter)->SetElementId(kCombo_Filter);  // B.3.6 bridge
+        FIND_ELEMENT(this->comboRenderer,  "comboRenderer");
+        FIND_ELEMENT(this->comboAdapter,   "comboAdapter");
+        FIND_ELEMENT(this->comboResolution,"comboResolution");
+        FIND_ELEMENT(this->comboAntialias, "comboAntialias");
+        FIND_ELEMENT(this->comboFilter,    "comboFilter");
+        FIND_ELEMENT(this->comboRefresh,   "comboRefresh");
+        reinterpret_cast<UI::Element*>(this->comboRenderer)->SetElementId(kCombo_Renderer);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->comboAdapter)->SetElementId(kCombo_Adapter);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->comboResolution)->SetElementId(kCombo_Resolution);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->comboRefresh)->SetElementId(kCombo_Refresh);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->comboAntialias)->SetElementId(kCombo_Antialias);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(this->comboFilter)->SetElementId(kCombo_Filter);  // B.3.6 bridge
         if (vidCfg) {
-            self->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
-            self->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
-            self->savedWidth      = *(uint32_t*)((uintptr_t)vidCfg + 0x0C);
-            self->savedHeight     = *(uint32_t*)((uintptr_t)vidCfg + 0x10);
-            self->savedRefreshNum = *(uint32_t*)((uintptr_t)vidCfg + 0x38);
-            self->savedRefreshDen = *(uint32_t*)((uintptr_t)vidCfg + 0x3C);
-            self->savedAntialias  = *(uint32_t*)((uintptr_t)vidCfg + 0x24);
-            self->savedFilter     = *(uint32_t*)((uintptr_t)vidCfg + 0x28);
+            this->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
+            this->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
+            this->savedWidth      = *(uint32_t*)((uintptr_t)vidCfg + 0x0C);
+            this->savedHeight     = *(uint32_t*)((uintptr_t)vidCfg + 0x10);
+            this->savedRefreshNum = *(uint32_t*)((uintptr_t)vidCfg + 0x38);
+            this->savedRefreshDen = *(uint32_t*)((uintptr_t)vidCfg + 0x3C);
+            this->savedAntialias  = *(uint32_t*)((uintptr_t)vidCfg + 0x24);
+            this->savedFilter     = *(uint32_t*)((uintptr_t)vidCfg + 0x28);
         }
-        OptionsDialog_PopulateVideoComboBoxes(self);
+        OptionsDialog_PopulateVideoComboBoxes(this);
     }
 
     // --- Shadow/reflection combos ---
     if (s_enableShadowReflCombos) {
-        FIND_ELEMENT(self->comboShadowRes,        "comboShadowResolution");
-        FIND_ELEMENT(self->comboShadowQuality,    "comboShadowQuality");
-        FIND_ELEMENT(self->comboReflectionQuality,"comboReflectionQuality");
+        FIND_ELEMENT(this->comboShadowRes,        "comboShadowResolution");
+        FIND_ELEMENT(this->comboShadowQuality,    "comboShadowQuality");
+        FIND_ELEMENT(this->comboReflectionQuality,"comboReflectionQuality");
         if (vidCfg) {
-            reinterpret_cast<UI::ComboElement*>(self->comboShadowRes)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x2C));  // B.3.6 bridge
-            reinterpret_cast<UI::ComboElement*>(self->comboShadowQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x30));  // B.3.6 bridge
-            reinterpret_cast<UI::ComboElement*>(self->comboReflectionQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x34));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboShadowRes)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x2C));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboShadowQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x30));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(this->comboReflectionQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x34));  // B.3.6 bridge
         }
     }
 
     // --- Video / input checkboxes (fullscreen, vsync, software mouse) ---
     if (s_enableVidCheckboxes) {
-        FIND_ELEMENT(self->checkFullscreen,"checkFullscreen");
-        FIND_ELEMENT(self->checkVSync,     "checkVSync");
+        FIND_ELEMENT(this->checkFullscreen,"checkFullscreen");
+        FIND_ELEMENT(this->checkVSync,     "checkVSync");
         if (vidCfg) {
-            SetCheckState(self->checkFullscreen, *(uint8_t*)((uintptr_t)vidCfg + 0x40));
-            SetCheckState(self->checkVSync,      *(uint8_t*)((uintptr_t)vidCfg + 0x41));
+            SetCheckState(this->checkFullscreen, *(uint8_t*)((uintptr_t)vidCfg + 0x40));
+            SetCheckState(this->checkVSync,      *(uint8_t*)((uintptr_t)vidCfg + 0x41));
         }
-        FIND_ELEMENT(self->checkSoftwareMouse,"checkSoftwareMouse");
-        if (inputCfg) SetCheckState(self->checkSoftwareMouse,
+        FIND_ELEMENT(this->checkSoftwareMouse,"checkSoftwareMouse");
+        if (inputCfg) SetCheckState(this->checkSoftwareMouse,
                                     *(uint8_t*)((uintptr_t)inputCfg + 0x0A));
     }
 
     // --- Input bind list (prime suspect for the per-frame KeyMap::Pressed crash) ---
     if (s_enableInputList) {
-        FIND_ELEMENT(self->inputList,"inputList");
-        OptionsDialog_PopulateInputBindList(self);
+        FIND_ELEMENT(this->inputList,"inputList");
+        OptionsDialog_PopulateInputBindList(this);
     }
 
     // --- Autosave combo ---
     if (s_enableAutosaveCombo) {
-        FIND_ELEMENT(self->comboAutosave,"comboAutosave");
+        FIND_ELEMENT(this->comboAutosave,"comboAutosave");
         void* stringTable = LoadStringTable("Dialog/StringTable.rsc:autoSave");
-        if (stringTable && self->comboAutosave) {
+        if (stringTable && this->comboAutosave) {
             for (int i = 0; i < 9; i++) {
                 System::String textStr;
                 ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(i));  // B.3.6 bridge
                 uint8_t spriteBuf[16] = {};
                 ::new (spriteBuf) UI::Sprite();
-                reinterpret_cast<UI::ComboElement*>(self->comboAutosave)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)i);  // B.3.6 bridge
+                reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)i);  // B.3.6 bridge
             }
         }
         int autoSaveIdx = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[1] : 0;
         if (autoSaveIdx < 0) autoSaveIdx = 0;
         if (autoSaveIdx > 8) autoSaveIdx = 8;
-        if (self->comboAutosave) reinterpret_cast<UI::ComboElement*>(self->comboAutosave)->SetCurrentItem(autoSaveIdx);  // B.3.6 bridge
+        if (this->comboAutosave) reinterpret_cast<UI::ComboElement*>(this->comboAutosave)->SetCurrentItem(autoSaveIdx);  // B.3.6 bridge
     }
 
     // --- UI scale slider ---
     if (s_enableUIScaleSlider) {
-        FIND_ELEMENT(self->sliderUIScale,"sliderUIScale");
-        SetSliderRange(self->sliderUIScale, 75.0f, 150.0f);
+        FIND_ELEMENT(this->sliderUIScale,"sliderUIScale");
+        SetSliderRange(this->sliderUIScale, 75.0f, 150.0f);
         if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
-            SetSliderValue(self->sliderUIScale, (float)(*g_pGameSettingsPtr)[0]);
+            SetSliderValue(this->sliderUIScale, (float)(*g_pGameSettingsPtr)[0]);
     }
 
     // --- Gameplay settings checkboxes and sliders ---
     if (s_enableGameplayChecks) {
-        FIND_ELEMENT(self->checkStatusIcon,      "checkStatusIcon");
-        FIND_ELEMENT(self->sliderStatusIcon,     "sliderStatusIcon");
-        FIND_ELEMENT(self->sliderStatusIconScale,"sliderStatusIconScale");
-        FIND_ELEMENT(self->checkShowCelsius,     "checkShowCelsius");
-        FIND_ELEMENT(self->checkEdgeScroll,      "checkEdgeScroll");
-        FIND_ELEMENT(self->checkShowWeather,     "checkShowWeather");
-        FIND_ELEMENT(self->checkAutoslow,        "checkAutoslow");
-        FIND_ELEMENT(self->checkAutopause,       "checkAutopause");
+        FIND_ELEMENT(this->checkStatusIcon,      "checkStatusIcon");
+        FIND_ELEMENT(this->sliderStatusIcon,     "sliderStatusIcon");
+        FIND_ELEMENT(this->sliderStatusIconScale,"sliderStatusIconScale");
+        FIND_ELEMENT(this->checkShowCelsius,     "checkShowCelsius");
+        FIND_ELEMENT(this->checkEdgeScroll,      "checkEdgeScroll");
+        FIND_ELEMENT(this->checkShowWeather,     "checkShowWeather");
+        FIND_ELEMENT(this->checkAutoslow,        "checkAutoslow");
+        FIND_ELEMENT(this->checkAutopause,       "checkAutopause");
 
         if (g_pGameSettingsPtr && *g_pGameSettingsPtr) {
             int32_t* gs = *g_pGameSettingsPtr;
-            SetCheckState(self->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
-            SetCheckState(self->checkAutopause,  (uint8_t)gs[6]);
-            SetCheckState(self->checkStatusIcon, (uint8_t)gs[3]);
-            SetCheckState(self->checkEdgeScroll, (uint8_t)gs[5]);
-            SetCheckState(self->checkShowCelsius,*(uint8_t*)((uintptr_t)gs + 0x15));
-            SetCheckState(self->checkShowWeather,*(uint8_t*)((uintptr_t)gs + 0x16));
+            SetCheckState(this->checkAutoslow,   *(uint8_t*)((uintptr_t)gs + 0x17));
+            SetCheckState(this->checkAutopause,  (uint8_t)gs[6]);
+            SetCheckState(this->checkStatusIcon, (uint8_t)gs[3]);
+            SetCheckState(this->checkEdgeScroll, (uint8_t)gs[5]);
+            SetCheckState(this->checkShowCelsius,*(uint8_t*)((uintptr_t)gs + 0x15));
+            SetCheckState(this->checkShowWeather,*(uint8_t*)((uintptr_t)gs + 0x16));
 
-            SetSliderRange(self->sliderStatusIcon, 0.0f, 100.0f);
-            SetSliderValue(self->sliderStatusIcon, (float)gs[2]);
+            SetSliderRange(this->sliderStatusIcon, 0.0f, 100.0f);
+            SetSliderValue(this->sliderStatusIcon, (float)gs[2]);
 
-            SetSliderRange(self->sliderStatusIconScale, 25.0f, 200.0f);
-            SetSliderValue(self->sliderStatusIconScale, (float)gs[4]);
+            SetSliderRange(this->sliderStatusIconScale, 25.0f, 200.0f);
+            SetSliderValue(this->sliderStatusIconScale, (float)gs[4]);
         }
     }
 
     // --- MouseClip checkbox (depends on inputCfg) ---
     if (s_enableMouseClipCheck) {
-        FIND_ELEMENT(self->checkMouseClip,       "checkMouseClip");
-        if (inputCfg) SetCheckState(self->checkMouseClip,
+        FIND_ELEMENT(this->checkMouseClip,       "checkMouseClip");
+        if (inputCfg) SetCheckState(this->checkMouseClip,
                                     *(uint8_t*)((uintptr_t)inputCfg + 0x08));
     }
 
     // --- Tab options: restore last active tab ---
     if (s_enableTabRestore) {
-        FIND_ELEMENT(self->tabOptions,"tabOptions");
-        if (self->tabOptions) {
+        FIND_ELEMENT(this->tabOptions,"tabOptions");
+        if (this->tabOptions) {
             int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
             // Clamp to valid range — options dialog has 4 tabs (0-3)
             if (lastTab < 0 || lastTab > 3) lastTab = 0;
-            reinterpret_cast<UI::TabElement*>(self->tabOptions)->SetActiveTab(lastTab);  // B.3.6 bridge
+            reinterpret_cast<UI::TabElement*>(this->tabOptions)->SetActiveTab(lastTab);  // B.3.6 bridge
         }
     }
 }
@@ -813,10 +813,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
 // Shutdown (vtable +0x28, exe 0x140073480): RET 0 (3 bytes)
 // ============================================================
 // No-op shutdown; nothing to clean up.
-int OptionsDialog_Shutdown(OptionsDialog* self) {
-    (void)self;
-    return 0;
-}
+void OptionsDialog::OnClosed() {}
 
 // ============================================================
 // ApplyInputSettings (0x140072360)
@@ -1235,20 +1232,20 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
 // OnEvent (0x140072f20): Handle options changes
 // ============================================================
 
-void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, int eventData) {
+void OptionsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
 
     if (eventType == 0x12) {
         // --- Button click ---
         if (eventData == kButton_Ok) {
-            OptionsDialog_OnOk(self);
+            OptionsDialog_OnOk(this);
             return;
         }
         if (eventData == kButton_Cancel) {
-            OptionsDialog_OnCancel(self);
+            OptionsDialog_OnCancel(this);
             return;
         }
         if (eventData == kButton_Apply) {
-            OptionsDialog_OnApply(self);
+            OptionsDialog_OnApply(this);
             return;
         }
         // Input bind button clicks: IDs >= 13
@@ -1268,7 +1265,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             }
             int bindIndex = (int)offset / 2;
 
-            OptionsDialog_OnInputBindClick(self, parentPtr, bindIndex, slot);
+            OptionsDialog_OnInputBindClick(this, parentPtr, bindIndex, slot);
         }
         return;
     }
@@ -1276,59 +1273,59 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
     if (eventType == 0x14) {
         // --- Combo selection change ---
         if (eventData == kCombo_Renderer) {
-            int curItem = *(int*)((uintptr_t)self->comboRenderer + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboRenderer)->GetItemData(curItem);  // B.3.6 bridge
-            self->savedRenderer = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(self);
-            OptionsDialog_PopulateAdapterCombo(self);
+            int curItem = *(int*)((uintptr_t)this->comboRenderer + 0x118);
+            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboRenderer)->GetItemData(curItem);  // B.3.6 bridge
+            this->savedRenderer = (uint32_t)(intptr_t)data;
+            OptionsDialog_ValidateVideoConfig(this);
+            OptionsDialog_PopulateAdapterCombo(this);
             return;
         }
         if (eventData == kCombo_Adapter) {
-            int curItem = *(int*)((uintptr_t)self->comboAdapter + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboAdapter)->GetItemData(curItem);  // B.3.6 bridge
-            self->savedAdapter = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(self);
-            OptionsDialog_PopulateAntialiasCombo(self);
-            OptionsDialog_PopulateFilterCombo(self);
-            OptionsDialog_PopulateResolutionCombo(self);
+            int curItem = *(int*)((uintptr_t)this->comboAdapter + 0x118);
+            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboAdapter)->GetItemData(curItem);  // B.3.6 bridge
+            this->savedAdapter = (uint32_t)(intptr_t)data;
+            OptionsDialog_ValidateVideoConfig(this);
+            OptionsDialog_PopulateAntialiasCombo(this);
+            OptionsDialog_PopulateFilterCombo(this);
+            OptionsDialog_PopulateResolutionCombo(this);
             return;
         }
         if (eventData == kCombo_Resolution) {
-            int curItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
-            void* resData = reinterpret_cast<const UI::ComboElement*>(self->comboResolution)->GetItemData(curItem);  // B.3.6 bridge
+            int curItem = *(int*)((uintptr_t)this->comboResolution + 0x118);
+            void* resData = reinterpret_cast<const UI::ComboElement*>(this->comboResolution)->GetItemData(curItem);  // B.3.6 bridge
 
-            int adapterIdx = self->savedAdapter;
+            int adapterIdx = this->savedAdapter;
             void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
-                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
-            int adapterIdx2 = self->savedAdapter;
+                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
+            int adapterIdx2 = this->savedAdapter;
 
             intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             intptr_t displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx * 0x38 + 8);
             intptr_t modeEntry = displayModes + (intptr_t)(int)(intptr_t)resData * 0x18;
 
-            self->savedWidth = *(uint32_t*)modeEntry;
+            this->savedWidth = *(uint32_t*)modeEntry;
 
             gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
-                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
+                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
             adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             displayModes = *(intptr_t*)(adapterArray + (intptr_t)adapterIdx2 * 0x38 + 8);
-            self->savedHeight = *(uint32_t*)(displayModes + (intptr_t)(int)(intptr_t)resData * 0x18 + 4);
+            this->savedHeight = *(uint32_t*)(displayModes + (intptr_t)(int)(intptr_t)resData * 0x18 + 4);
 
-            OptionsDialog_ValidateVideoConfig(self);
-            OptionsDialog_PopulateRefreshCombo(self);
+            OptionsDialog_ValidateVideoConfig(this);
+            OptionsDialog_PopulateRefreshCombo(this);
             return;
         }
         if (eventData == kCombo_Refresh) {
-            int resItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
-            void* resData = reinterpret_cast<const UI::ComboElement*>(self->comboResolution)->GetItemData(resItem);  // B.3.6 bridge
+            int resItem = *(int*)((uintptr_t)this->comboResolution + 0x118);
+            void* resData = reinterpret_cast<const UI::ComboElement*>(this->comboResolution)->GetItemData(resItem);  // B.3.6 bridge
 
-            int refItem = *(int*)((uintptr_t)self->comboRefresh + 0x118);
-            void* refData = reinterpret_cast<const UI::ComboElement*>(self->comboRefresh)->GetItemData(refItem);  // B.3.6 bridge
+            int refItem = *(int*)((uintptr_t)this->comboRefresh + 0x118);
+            void* refData = reinterpret_cast<const UI::ComboElement*>(this->comboRefresh)->GetItemData(refItem);  // B.3.6 bridge
 
-            int adapterIdx = self->savedAdapter;
+            int adapterIdx = this->savedAdapter;
             void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
-                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
-            int adapterIdx2 = self->savedAdapter;
+                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
+            int adapterIdx2 = this->savedAdapter;
 
             intptr_t adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             intptr_t displayMode = adapterArray + (intptr_t)adapterIdx * 0x38;
@@ -1336,31 +1333,31 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
             intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
             intptr_t refreshEntry = refreshArray + (intptr_t)(int)(intptr_t)refData * 8;
 
-            self->savedRefreshNum = *(uint32_t*)refreshEntry;
+            this->savedRefreshNum = *(uint32_t*)refreshEntry;
 
             gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
-                                 ->GetInterface(self->savedRenderer);   // B.3.5 bridge
+                                 ->GetInterface(this->savedRenderer);   // B.3.5 bridge
             adapterArray = *(intptr_t*)((uintptr_t)gfxIface + 8);
             displayMode = adapterArray + (intptr_t)adapterIdx2 * 0x38;
             modeEntry = *(intptr_t*)(displayMode + 8) + (intptr_t)(int)(intptr_t)resData * 0x18;
             refreshArray = *(intptr_t*)(modeEntry + 8);
-            self->savedRefreshDen = *(uint32_t*)(refreshArray + (intptr_t)(int)(intptr_t)refData * 8 + 4);
+            this->savedRefreshDen = *(uint32_t*)(refreshArray + (intptr_t)(int)(intptr_t)refData * 8 + 4);
 
-            OptionsDialog_ValidateVideoConfig(self);
+            OptionsDialog_ValidateVideoConfig(this);
             return;
         }
         if (eventData == kCombo_Antialias) {
-            int curItem = *(int*)((uintptr_t)self->comboAntialias + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboAntialias)->GetItemData(curItem);  // B.3.6 bridge
-            self->savedAntialias = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(self);
+            int curItem = *(int*)((uintptr_t)this->comboAntialias + 0x118);
+            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboAntialias)->GetItemData(curItem);  // B.3.6 bridge
+            this->savedAntialias = (uint32_t)(intptr_t)data;
+            OptionsDialog_ValidateVideoConfig(this);
             return;
         }
         if (eventData == kCombo_Filter) {
-            int curItem = *(int*)((uintptr_t)self->comboFilter + 0x118);
-            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboFilter)->GetItemData(curItem);  // B.3.6 bridge
-            self->savedFilter = (uint32_t)(intptr_t)data;
-            OptionsDialog_ValidateVideoConfig(self);
+            int curItem = *(int*)((uintptr_t)this->comboFilter + 0x118);
+            void* data = reinterpret_cast<const UI::ComboElement*>(this->comboFilter)->GetItemData(curItem);  // B.3.6 bridge
+            this->savedFilter = (uint32_t)(intptr_t)data;
+            OptionsDialog_ValidateVideoConfig(this);
             return;
         }
         return;
@@ -1374,10 +1371,10 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
 
         void** sliderField = nullptr;
         switch (eventData) {
-            case kSlider_UI:      sliderField = &self->sliderUI; break;
-            case kSlider_Music:   sliderField = &self->sliderMusic; break;
-            case kSlider_Ambient: sliderField = &self->sliderAmbient; break;
-            case kSlider_Effect:  sliderField = &self->sliderEffect; break;
+            case kSlider_UI:      sliderField = &this->sliderUI; break;
+            case kSlider_Music:   sliderField = &this->sliderMusic; break;
+            case kSlider_Ambient: sliderField = &this->sliderAmbient; break;
+            case kSlider_Effect:  sliderField = &this->sliderEffect; break;
             default: return;
         }
 
@@ -1521,7 +1518,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     }
 
     // Show dialog modally — get result
-    void* userInterface = *(void**)((uintptr_t)&self->base + 0x10);
+    void* userInterface = *(void**)((uintptr_t)self + 0x10);
     uint64_t showPtr = dialogPtr;
     int result = reinterpret_cast<UI::UserInterface*>(userInterface)->ShowDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&showPtr));  // B.3.6 bridge
 
@@ -1681,141 +1678,72 @@ cleanup:
 #include "address_registry.h"
 #include "resolve.h"
 
-namespace {
+// ENDGAME B.3.8 block DLG: OptionsDialog is a real class (Dialog/OptionsDialog.h);
+// the hand-built table is gone. 0x14015ceb0 has no by-address reader, so its
+// registration went with the table.
 
-void* GetOptionsDialogVtable();  // forward decl
-
-// Slot 0 — Dtor. Mirrors generic ~DialogInstance scalar-deleting dtor.
-void* OptionsStub_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *(void**)self = GetOptionsDialogVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-// Slot 1 — TypeName.
-const char* OptionsStub_Slot1_TypeName(void* /*self*/) { return "OptionsDialog"; }
-
-// Slot 2 — TypeId.
-uint32_t OptionsStub_Slot2_TypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("OptionsDialog");
-    return cached;
-}
-
-// Generic logging stub for the runtime-thunk slots (3, 6, 7, 9). Logs once
-// per slot so we can see when wiring matters.
-template <int SlotIdx>
-void OptionsStub_RuntimeThunk(void* self, ...) {
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[OptionsDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
-               SlotIdx, self);
-    }
-}
-
-// Stub Setup — prints once then no-ops. Used to localize crashes:
-// if commenting out Startup causes the crash to go away, the bug is inside
-// our reimpl; if it persists, it's downstream. Kept around for re-bisecting.
-[[maybe_unused]] void OptionsStub_Slot4_NoOp(void* self) {
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[OptionsDialog::Slot4_NoOp] self=%p (Setup stubbed off for "
-               "diagnostics)\n", self);
-    }
-}
-
-void* g_OptionsDialog_Vtable_Standalone[10] = {
-    reinterpret_cast<void*>(&OptionsStub_Dtor),                  // +0x00 Dtor
-    reinterpret_cast<void*>(&OptionsStub_Slot1_TypeName),        // +0x08 TypeName
-    reinterpret_cast<void*>(&OptionsStub_Slot2_TypeId),          // +0x10 TypeId
-    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<3>),       // +0x18 Persist
-    // Slot4 — real Startup, with bisect flags inside it (input list off first).
-    reinterpret_cast<void*>(&OptionsDialog_Startup),             // +0x20 Setup
-    reinterpret_cast<void*>(&OptionsDialog_Shutdown),            // +0x28 Shutdown
-    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<6>),       // +0x30 OnUpdateLayout
-    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<7>),       // +0x38 OnUpdate
-    reinterpret_cast<void*>(&OptionsDialog_OnEvent),             // +0x40 OnEvent
-    reinterpret_cast<void*>(&OptionsStub_RuntimeThunk<9>),       // +0x48 OnSerializeSettings
-};
-
-void* GetOptionsDialogVtable() {
-    return reinterpret_cast<void*>(g_OptionsDialog_Vtable_Standalone);
-}
-
-// In-place ctor — clean reimpl of FUN_140075150.
-// Original mirrors: copy parentIBP to a local stack slot, call
+// Retail 0x140075150: copy parentIBP to a local stack slot, call
 // DialogInstance::DialogInstance(self, ui, extRes, &localParent, 0, 0, 0),
-// patch *self with vtable_OptionsDialog, zero +0xB8..+0x1B8.
+// the vtable store, zero +0xB8..+0x1B8.
+OptionsDialog::OptionsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                             Object::InternalPtr<UI::DialogInstance> parent)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {
+    ZeroFields();
+}
+
+// The reflected create path (create 0x140012df0): the tree's factory handed out
+// a zero-filled object; this keeps the zero fields over the default base ctor.
+OptionsDialog::OptionsDialog() { ZeroFields(); }
+
+void OptionsDialog::ZeroFields() {
+    char* base = reinterpret_cast<char*>(this);
+    for (size_t off = 0xB8; off < sizeof(OptionsDialog); off += 8) {
+        *reinterpret_cast<uint64_t*>(base + off) = 0;
+    }
+}
+
+// [0] 0x140012f30: ~OptionsDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* OptionsDialog::DeletingDtor(unsigned flags) {
+    this->~OptionsDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140012df0: MemAlloc(0x1c0, 8), then the ctor.
+void* OptionsDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(OptionsDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) OptionsDialog());
+}
+// createInPlace 0x140012e30 (the tree's in-place build is kept, B8-13).
+void* OptionsDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) OptionsDialog());
+}
+
+DEFINE_EXE_VTABLE(OptionsDialog, "_ZTV13OptionsDialog")
+
+// The ctor DOOR, reached by address: fn_OptionsDialog_Ctor (engine_funcs.cpp)
+// resolves 0x140075150. Signature matches fn_OptionsDialog_Ctor_t.
 void* OptionsDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
                                     void* parentIBP) {
     if (!self) return nullptr;
     printf("[OptionsDialog_Ctor] self=%p ui=%p extRes=%p parentIBP=%p\n",
            self, ui, extRes, parentIBP);
-
-    // Stack copy of the parent IBP qword (matches original SEH frame layout).
-    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
-
-    if (fn_DialogInstance_Ctor && extRes) {
-        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy,
-                                nullptr, nullptr, 0);
-    } else {
-        printf("[OptionsDialog_Ctor] skipping DialogInstance::DialogInstance "
-               "(fn=%p extRes=%p) — bare-bones init\n",
-               (void*)fn_DialogInstance_Ctor, extRes);
-    }
-
-    *reinterpret_cast<void**>(self) = GetOptionsDialogVtable();
-
-    // Zero +0xB8..+0x1B8 (covers all OptionsDialog-specific fields).
-    OptionsDialog* od = reinterpret_cast<OptionsDialog*>(self);
-    char* base = reinterpret_cast<char*>(od);
-    for (size_t off = 0xB8; off < sizeof(OptionsDialog); off += 8) {
-        *reinterpret_cast<uint64_t*>(base + off) = 0;
-    }
-    return self;
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (parentIBP)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
+    return ::new (self) OptionsDialog(static_cast<UI::UserInterface*>(ui),
+                                      static_cast<const UI::Dialog*>(extRes), parent);
 }
-
-void* OptionsDialog_Factory_Bare(void* /*loop*/) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(OptionsDialog), 8);
-    if (!p) return nullptr;
-    // Bare-bones — no UI/extRes/parent. Caller is the .rsc factory loader,
-    // which currently doesn't instantiate OptionsDialog this way (always
-    // built via MainMenuDialog::OpenOptions). Just zero + vtable.
-    for (size_t off = 0; off < sizeof(OptionsDialog); off += 8) {
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(p) + off) = 0;
-    }
-    *reinterpret_cast<void**>(p) = GetOptionsDialogVtable();
-    return p;
-}
-
-void* OptionsDialog_CreateInPlace_Bare(void* mem) {
-    if (!mem) return nullptr;
-    for (size_t off = 0; off < sizeof(OptionsDialog); off += 8) {
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<char*>(mem) + off) = 0;
-    }
-    *reinterpret_cast<void**>(mem) = GetOptionsDialogVtable();
-    return mem;
-}
-
-}  // namespace
 
 extern "C" void RegisterOptionsDialogVtable() {
-    RegisterExeAddr(0x14015ceb0, reinterpret_cast<uintptr_t>(g_OptionsDialog_Vtable_Standalone));
     RegisterExeAddr(0x140075150, reinterpret_cast<uintptr_t>(&OptionsDialog_Ctor_Standalone));
 }
 
-extern "C" void* OptionsDialog_StandaloneFactory(void) {
-    return OptionsDialog_Factory_Bare(nullptr);
-}
-extern "C" void* OptionsDialog_StandaloneCreateInPlace(void* memory) {
-    return OptionsDialog_CreateInPlace_Bare(memory);
-}
-
-REGISTER_TYPE(OptionsDialog, "UI::DialogInstance",
-              &OptionsDialog_StandaloneFactory, &OptionsDialog_StandaloneCreateInPlace);
-
+// Parent literal EXACTLY retail's (RegisterType_OptionsDialog 0x14014c440 passes
+// "public UI::DialogInstance" — an MSVC-era slip in Shining Rock's own macro use).
+// BaseTypeInfo::StripNamespace (runtime/src/object/type_reflection.cpp) keeps
+// what follows the LAST ':', so both spellings resolve the parent to
+// "DialogInstance" (B38_RULES D4, section 6 item 3).
+DEFINE_EXE_TYPE(OptionsDialog, "public UI::DialogInstance")

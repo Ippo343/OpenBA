@@ -36,42 +36,40 @@
 // stops at variant 1. Do NOT "fix" the value here — see destroycomponent_state6.cpp.
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (DestroyDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401631b0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/DestroyDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-namespace {
-constexpr uintptr_t kVtable  = 0x1401631b0;
-constexpr int       kVersion = 5;
+// ctor (inlined into create 0x140033c30 / createInPlace 0x140033ca0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+DestroyDescription::DestroyDescription()
+    : Description(),
+      _replaceEntity(nullptr),
+      _damagedSkin(1),
+      _damagedDecal(1),
+      _minDamageLevel(0) {}
+
+// [0] 0x140033d70: ~DestroyDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* DestroyDescription::DeletingDtor(unsigned flags) {
+    this->~DestroyDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* DestroyDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t s = (uintptr_t)mem;
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(uint64_t*)(s + 0x20) = 0;   // _replaceEntity
-    *(uint32_t*)(s + 0x28) = 1;   // _damagedSkin
-    *(uint32_t*)(s + 0x2c) = 1;   // _damagedDecal
-    // NOTE: retail deliberately leaves +0x30 (_minDamageLevel) unset here — Serialize
-    // always writes it, because the compiler always emits the slot (with garbage when
-    // the .rsc omits the field). We zero it only so an un-serialized description is
-    // deterministic; the loaded value overwrites it either way.
-    *(uint32_t*)(s + 0x30) = 0;   // _minDamageLevel
-    return mem;
-}
-
-// Serialize (vtable +0x28, FUN_14011de70)
-void DestroyDescription_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-    alignas(8) uint8_t serializer[24];
-    if (!fn_ExternalPtr_BuildSerialize) {
-        return;
-    }
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
+// [5] 0x14011de70: stream order as retail.
+bool DestroyDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // 1. _replaceEntity (+0x20). Retail calls FUN_140002340, the
     //    ExternalPtr<ComponentDescription> variant, which gates the resolved object on
     //    IsDerivedFrom(_, DWORD_1401c7318) = ComponentDescription. This used to call
@@ -80,65 +78,45 @@ void DestroyDescription_Serialize(void* self, void* stream) {
     //    the cast and was stored as NULL. Only Template/IronMine.rsc and
     //    Template/Quarry.rsc author it (`ComponentDescription _replaceEntity =
     //    "destroyed"`), which is why the swap was invisible for so long.
-    fn_ExternalPtr_BuildSerialize((void*)(s + 0x20), serializer);
-    // 2..4. three ints
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    fn_ExternalPtr_BuildSerialize(&_replaceEntity, &ser);
+    ser.Serialize(_damagedSkin, nullptr);
+    ser.Serialize(_damagedDecal, nullptr);
+    ser.Serialize(_minDamageLevel, nullptr);
+    return true;
 }
 
-// Dtor (vtable +0x00, FUN_140033d70) — scalar fields only, no heap.
-void* DestroyDescription_Dtor(void* self, uint32_t flags) {
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable);
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140033d00: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* DestroyDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) DestroyDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void DestroyDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t DestroyDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("DestroyDescription");
-    return cached;
+// [8] 0x140033d60: DestroyComponent's type id through the hidden return slot.
+Object::Type* DestroyDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("DestroyComponent");
+    return ret;
 }
-static int   Vtbl_GetVersion(void*) { return kVersion; }
-static int   Vtbl_Return0(void*) { return 0; }
-static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* DestroyDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "DestroyComponent"); }
-
-static void* g_Vtable[11] = {
-    reinterpret_cast<void*>(&DestroyDescription_Dtor),      // +0x00
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),              // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&DestroyDescription_GetTypeId), // +0x10
-    reinterpret_cast<void*>(&Vtbl_GetVersion),              // +0x18 (=5)
-    reinterpret_cast<void*>(&Vtbl_Return0),                 // +0x20 Compile
-    reinterpret_cast<void*>(&DestroyDescription_Serialize), // +0x28
-    reinterpret_cast<void*>(&Vtbl_Return0),                 // +0x30 Cleanup
-    reinterpret_cast<void*>(&Vtbl_Return0),                 // +0x38 GetDesc
-    reinterpret_cast<void*>(&DestroyDescription_GetComponentTypeId),              // +0x40 Slot8
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),              // +0x48 guard
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),              // +0x50 guard
-};
-
-extern "C" void RegisterDestroyDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_Vtable));
+// [9] 0x140033ca0: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* DestroyDescription::Construct() {
+    return new (static_cast<void*>(this)) DestroyDescription();
 }
-extern "C" void* DestroyDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+
+// create 0x140033c30: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* DestroyDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DestroyDescription), 8);
     if (!p) return nullptr;
-    return DestroyDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) DestroyDescription());
 }
-extern "C" void* DestroyDescription_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    return DestroyDescription_Ctor_Impl(mem);
+// createInPlace 0x140033ca0.
+void* DestroyDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DestroyDescription());
 }
 
-REGISTER_TYPE(DestroyDescription, "Description",
-              &DestroyDescription_Factory, &DestroyDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(DestroyDescription, "_ZTV18DestroyDescription")
+DEFINE_EXE_TYPE(DestroyDescription, "Description")

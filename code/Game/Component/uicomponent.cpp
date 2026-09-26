@@ -118,16 +118,53 @@ void UIComponent_Slot15(UIComponent* self) {
     (void)self;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 VIS — UIComponent as a REAL class (UIComponent.h).
+//
+// Before: COMPONENT_INERT_FACTORY_SER — a 48-slot table filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/UIComponent.h"
 
-// Slot 3 (stream Serialize, retail 0x14012dd00) wired UNCONDITIONALLY via
-// COMPONENT_INERT_FACTORY_SER — serialize round-trip is not an opt-in
-// feature (save/load wave 2026-08-28). UIComponent's +0x28..+0x37 is a real
-// growable byte-array header (see uicomponent_serialize.cpp); leaving slot 3
-// at the base-only Component_Serialize would silently drop it on save/load.
 extern "C" void UIComponent_Serialize(void* self, void* stream);
-COMPONENT_INERT_FACTORY_SER(UIComponent, 0x38, 0x80, UIComponent_Serialize)
-REGISTER_TYPE(UIComponent, "Component",
-              &UIComponent_Factory, &UIComponent_CreateInPlace);
+
+// 0x14012de00: Component() is the CALL 0x1401188b0; the 0x1401649f0 stamp is
+// the compiler's; +0x28 = +0x30 = 0; flags |= 0x80.
+UIComponent::UIComponent() : uiData0(nullptr), uiData1(nullptr) {
+    OrFlagsInCtor(0x80);
+}
+
+// [3] 0x14012dd00 — UIComponent's +0x28..+0x37 is a real growable byte array;
+// the base-only Component::Persist would drop it on save/load.
+void UIComponent::Persist(void* stream) { UIComponent_Serialize(this, stream); }
+
+// [4] 0x14012dca0. PORT GAP (retail 0x14012dca0) — B38 D9: retail has its own
+// Startup body; the tree's table never installed one (inert stub). The inert
+// behaviour is kept here; porting it is its own titled commit.
+void UIComponent::Startup() {}
+
+// [0] 0x140039760: ~UIComponent (0x14012dda0; its array free is a PORT GAP, see the header), MemFree on &1.
+Object::Base* UIComponent::DeletingDtor(unsigned flags) {
+    this->~UIComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140039550: MemAlloc(0x38, 8), then the ctor.
+void* UIComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(UIComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) UIComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* UIComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) UIComponent());
+}
+
+DEFINE_EXE_VTABLE(UIComponent, "_ZTV11UIComponent")
+DEFINE_EXE_TYPE(UIComponent, "Component")

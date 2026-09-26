@@ -15,7 +15,7 @@
 #include "resolve.h"
 #include <cstdint>
 
-struct TradeComponent;
+class TradeComponent;
 extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream);
 
 void RegisterTradeSerialize() {

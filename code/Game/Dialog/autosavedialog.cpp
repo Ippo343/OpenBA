@@ -4,6 +4,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
+#include "Dialog/AutoSaveDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "Object/factory_registration.h"
@@ -17,7 +18,7 @@
 #include <cstdlib>
 
 // ============================================================
-// AutoSaveDialog::Slot4 (0x14005E110) — vtable +0x20
+// [4] AutoSaveDialog::OnOpened (0x14005E110) — vtable +0x20
 // ============================================================
 // 5-byte JMP thunk to 0x14005E120 (timer setup).
 // Stops the current timer, reads game speed setting, picks an
@@ -41,24 +42,22 @@
 // two by-name caches went with their last callers.
 typedef void* (*fn_TimeCtor_t)(void* retbuf, float seconds);
 
-static fn_TimeCtor_t   s_TimeCtor   = nullptr;
-static bool            s_timerInit  = false;
-
-static void EnsureTimerFns() {
-    if (s_timerInit) return;
-    s_timerInit = true;
-    // Time::Time(float) - dispatch slot 0x140152b00 IS registered; guard anyway.
+// Time::Time(float) - dispatch slot 0x140152b00 IS registered; guard anyway.
+// ENDGAME B.3.8 (B6-5): resolved per call, no first-call cache.
+static fn_TimeCtor_t ResolveTimeCtor() {
+    fn_TimeCtor_t ctor = nullptr;
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
-    if (slot) s_TimeCtor = reinterpret_cast<fn_TimeCtor_t>(*reinterpret_cast<void**>(slot));
-    if (!s_TimeCtor) s_TimeCtor = reinterpret_cast<fn_TimeCtor_t>(fn_Time_Ctor_Float);
+    if (slot) ctor = reinterpret_cast<fn_TimeCtor_t>(*reinterpret_cast<void**>(slot));
+    if (!ctor) ctor = reinterpret_cast<fn_TimeCtor_t>(fn_Time_Ctor_Float);
+    return ctor;
 }
 
-void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
-    EnsureTimerFns();
-    if (!s_TimeCtor)
+void AutoSaveDialog::OnOpened() {
+    fn_TimeCtor_t timeCtor = ResolveTimeCtor();
+    if (!timeCtor)
         return;
 
-    reinterpret_cast<UI::DialogInstance*>(self)->StopTimer(0);  // B.3.6 bridge
+    StopTimer(0);
 
     // Autosave-interval setting: gs[1] = the Options 'Autosave' combo index (0..7).
     if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr)
@@ -94,16 +93,15 @@ void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
     float interval = kIntervalMinutes[speedSetting] * kMinutesToSeconds;
 
     uint8_t timeBuf[8];
-    void* timeResult = s_TimeCtor(timeBuf, interval);
+    void* timeResult = timeCtor(timeBuf, interval);
     uint64_t timeVal = *(uint64_t*)timeResult;
 
-    reinterpret_cast<UI::DialogInstance*>(self)->StartTimer(  // B.3.6 bridge
-        0, static_cast<int64_t>(timeVal));
+    StartTimer(0, static_cast<int64_t>(timeVal));
 
 }
 
 // ============================================================
-// AutoSaveDialog::Slot8 (0x14005E0F0) — vtable +0x40, OnCommand
+// [8] AutoSaveDialog::OnElementEvent (0x14005E0F0) — vtable +0x40, OnCommand
 // ============================================================
 // 12 bytes: CMP R8D,0x13; JZ target; RET
 // If msg (param3) == 0x13 (timer event), triggers autosave via
@@ -114,7 +112,9 @@ void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
 //
 // Original: 0x14005E0F0.
 
-void AutoSaveDialog_Slot8(AutoSaveDialog* self, void* param2, int param3, int param4) {
+void AutoSaveDialog::OnElementEvent(Object::InternalPtr<UI::Element>* param2,
+                                    int32_t param3, int32_t param4, int32_t /*c*/,
+                                    int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 != 0x13)
         return;
 
@@ -123,15 +123,15 @@ void AutoSaveDialog_Slot8(AutoSaveDialog* self, void* param2, int param3, int pa
     // autosave was dead even where the dialog existed. The function has been ported
     // all along as Dialog_AutoSaveHandler (dialog_exe_helpers.cpp); it was simply
     // never wired to its only caller. Fixed 2026-08-30 (LANE1 rows 13/14).
-    Dialog_AutoSaveHandler(self, param2, param3, param4);
+    Dialog_AutoSaveHandler(this, param2, param3, param4);
 }
 
-// AutoSaveDialog::Slot6 (0x14005DFC0) — Draw
+// [6] AutoSaveDialog::OnUpdateLayout (0x14005DFC0) — Draw
 // Checks SaveLoad operation type. If operation==4 (load), shows load indicator
 // and hides save indicator; otherwise shows save and hides load.
 // Applies rotation to the visible indicator.
-void AutoSaveDialog_Slot6(AutoSaveDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void AutoSaveDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton)
         return;
@@ -160,12 +160,12 @@ void AutoSaveDialog_Slot6(AutoSaveDialog* self) {
     }
 }
 
-// AutoSaveDialog::Slot7 (0x14005E090) — Update
+// [7] AutoSaveDialog::OnUpdate (0x14005E090) — Update
 // Accumulates rotation angle from elapsed time at 90 degrees/sec.
 // Wraps angle to stay within [0, 360).
-void AutoSaveDialog_Slot7(AutoSaveDialog* self, void* time) {
-    uintptr_t s = (uintptr_t)self;
-    float elapsed = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
+void AutoSaveDialog::OnUpdate(const System::Time& time) {
+    uintptr_t s = (uintptr_t)this;
+    float elapsed = time.AsSeconds();
     float angle = *(float*)(s + 0xC8);
 
     angle += elapsed * 90.0f;
@@ -180,110 +180,65 @@ void AutoSaveDialog_Slot7(AutoSaveDialog* self, void* time) {
 }
 
 // ============================================================
-// Standalone AutoSaveDialog: vtable + ctor (autosave_sa)
+// Construction, destruction, reflection
 // ============================================================
-// Retail's ctor (0x14005e230) stamps &vtable_AutoSaveDialog (exe 0x14015b120), which
-// has no standalone counterpart - that is what made naive registration of the ctor
-// crash. Follow the eventnotify_sa pattern instead: hand-build a 10-entry vtable of
-// our own wrappers and install that.
-//
-// Retail vtable 0x14015b120, entry by entry:
-//   [0] 0x140010780 scalar deleting dtor   [5] 0x14003a94e stub
-//   [1] 0x1400106b0                        [6] 0x14005dfc0 Draw    -> Slot6
-//   [2] 0x1400106a0 GetTypeId              [7] 0x14005e090 Update  -> Slot7
-//   [3] 0x14003a948 stub                   [8] 0x14005e0f0 OnEvent -> Slot8
-//   [4] 0x14005e110 thunk -> e120          [9] 0x14003a954 stub
-//       (restart autosave timer) -> Slot4
-//
+// Retail AutoSaveDialog_CopyCtor (0x14005e230): DialogInstance base ctor, then
+// resolve the two spinner elements by name and zero the angle.
 // AutoSaveDialog owns no heap of its own: +0xB8/+0xC0 are borrowed element refs and
 // +0xC8 is the spinner angle, so the dtor is just the DialogInstance base dtor.
-namespace autosave_sa {
 
-static void* g_vt[10];
-void* GetVtable() { return reinterpret_cast<void*>(g_vt); }
+AutoSaveDialog::AutoSaveDialog() : dataB8(0), dataC0(0) {}
 
-static void  StubNop(void*, ...) {}
-static void* Slot1Getter(void*) { return nullptr; }
-static uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("AutoSaveDialog");
-    return c;
-}
-
-static void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = GetVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-static void W_Startup(void* self) { if (self) AutoSaveDialog_Slot4(reinterpret_cast<AutoSaveDialog*>(self)); }
-static void W_Draw(void* self)    { if (self) AutoSaveDialog_Slot6(reinterpret_cast<AutoSaveDialog*>(self)); }
-static void W_Update(void* self, void* t) { if (self) AutoSaveDialog_Slot7(reinterpret_cast<AutoSaveDialog*>(self), t); }
-static void W_OnEvent(void* self, void* e, int msg, int id) {
-    if (self) AutoSaveDialog_Slot8(reinterpret_cast<AutoSaveDialog*>(self), e, msg, id);
-}
-
-struct Init {
-    Init() {
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[1] = reinterpret_cast<void*>(&Slot1Getter);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[3] = reinterpret_cast<void*>(&StubNop);
-        g_vt[4] = reinterpret_cast<void*>(&W_Startup);
-        g_vt[5] = reinterpret_cast<void*>(&StubNop);
-        g_vt[6] = reinterpret_cast<void*>(&W_Draw);
-        g_vt[7] = reinterpret_cast<void*>(&W_Update);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnEvent);
-        g_vt[9] = reinterpret_cast<void*>(&StubNop);
-    }
-} g_init;
-
-// Mirrors AutoSaveDialog_CopyCtor (0x14005e230): DialogInstance base ctor, install the
-// vtable, then resolve the two spinner elements by name and zero the angle.
-void* Ctor(void* self, void* ui, void* extRes, void* parentIBP) {
-    if (!self) return nullptr;
-    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
-    if (fn_DialogInstance_Ctor && extRes)
-        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy, nullptr, nullptr, 0);
-    uintptr_t s = (uintptr_t)self;
-    *reinterpret_cast<void**>(self) = GetVtable();
-    *(uint64_t*)(s + 0xB8) = 0;
-    *(uint64_t*)(s + 0xC0) = 0;
-
+AutoSaveDialog::AutoSaveDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                               Object::InternalPtr<UI::DialogInstance> parent)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0) {
     {
-        uint64_t found = 0;
-        {
-            System::String nameStr("savingImage");
-            ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
-            *(uint64_t*)(s + 0xB8) = found;
-        }
-        found = 0;
-        {
-            System::String nameStr("animatedImage");
-            ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
-            *(uint64_t*)(s + 0xC0) = found;
-        }
+        System::String nameStr("savingImage");
+        dataB8 = reinterpret_cast<uint64_t>(FindElement(nameStr).Get());
     }
-    *(uint32_t*)(s + 0xC8) = 0;   // spinner angle
-    return self;
+    {
+        System::String nameStr("animatedImage");
+        dataC0 = reinterpret_cast<uint64_t>(FindElement(nameStr).Get());
+    }
+    angle = 0.0f;   // spinner angle
 }
 
-static void Zero(void* p) { for (size_t o = 0; o < (size_t)0xD0; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0xD0, 8);
+// [0] 0x140010780: ~AutoSaveDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* AutoSaveDialog::DeletingDtor(unsigned flags) {
+    this->~AutoSaveDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400106c0: MemAlloc(0xd0, 8), then the ctor.
+void* AutoSaveDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AutoSaveDialog), 8);
     if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+    return static_cast<Object::Base*>(::new (p) AutoSaveDialog());
 }
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
+// createInPlace 0x140010730 (the tree's in-place build is kept, B8-13).
+void* AutoSaveDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) AutoSaveDialog());
+}
 
-}  // namespace autosave_sa
+DEFINE_EXE_VTABLE(AutoSaveDialog, "_ZTV14AutoSaveDialog")
+DEFINE_EXE_TYPE(AutoSaveDialog, "UI::DialogInstance")
 
-REGISTER_TYPE(AutoSaveDialog, "UI::DialogInstance",
-              &autosave_sa::Factory, &autosave_sa::InPlace);
-
+// The ctor DOOR, reached by address: reg_code_lane2.cpp registers it at
+// 0x14005e230 and GameUpdateLoop::Startup calls it.
 extern "C" void* AutoSaveDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP) {
-    return autosave_sa::Ctor(self, ui, extRes, parentIBP);
+    if (!self) return nullptr;
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (parentIBP)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
+    return ::new (self) AutoSaveDialog(static_cast<UI::UserInterface*>(ui),
+                                       static_cast<const UI::Dialog*>(extRes), parent);
+}
+
+// The slot-4 DOOR, reached by address: reg_autosave.cpp registers it at
+// 0x14005e120 / 0x14005e110 and OptionsDialog's apply path calls it through
+// fn_UpdateAutoSaveTimer (engine_funcs.cpp). A QUALIFIED member call.
+void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
+    self->AutoSaveDialog::OnOpened();
 }

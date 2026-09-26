@@ -103,7 +103,7 @@ static void* GetStorageDescription(StorageComponent* self) {
     uint32_t tid = EffTid_StorageDescription();
     if (!fn_IsDerivedFrom || tid == 0) return nullptr;
 
-    void* obj = self->_unk18;
+    void* obj = self->_description;
     if (!obj) return nullptr;
 
     bool derived = fn_IsDerivedFrom(obj, tid);
@@ -445,76 +445,59 @@ void StorageComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid StorageComponent
-// (size 0x40, +0x20 capability flags 0x81, Object::Internal base + shared stub
-// vtable, zeroed body). Size from StorageComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================================
+// ENDGAME B.3.8 VIS — StorageComponent as a REAL class (StorageComponent.h).
+//
+// Before: a 48-slot StorageComponent_LiveVtable filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/StorageComponent.h"
 
-// Slot 6 (+0x30) = OnAdded, retail 0x14012c640 = StorageComponent::Draw — verified by
-// reading the real vtable at 0x140164720: [3]=0x14012c730 (Shutdown), [6]=0x14012c640.
-// ComponentEntity_OnAddedPass (the tail of EntityList::RegisterEntity) dispatches slot 6
-// on every component whose capability flags (+0x20) have bit 0 — StorageComponent's 0x81
-// qualifies — so in retail EVERY entity carrying a StorageComponent gets its capacity
-// (+0x38 = _volumeLimit x area) and its template slots at register time.
-//
-// Standalone left the slot a stub and compensated with four hand-calls in starttown.cpp
-// (CitizenCarryStorageInit), all on the FOUNDING colonists. No birth path calls it, so
-// every citizen born after world start kept capacity 0 forever. Capacity 0 makes
-// PickupStoredRawMaterial request (0 - 0)/unitVolume = 0 items, the only rejection is
-// `available < requested` which 0 passes, and AddItem (0x14012d000) then appends a
-// {resType, 0} stack. Pf_SpillAllStorage_7570's exit test is the stack COUNT at +0x30
-// while its work is gated on the entry's own count, so a zero-count stack spins it
-// forever — an in-world FREEZE, first reached by the pasture cull (2026-07-31). That
-// spill loop is byte-faithful to retail 0x1400c7570; retail relies on a zero-count stack
-// never existing, which is exactly what this slot guarantees.
-//
-// Buildings are unaffected: Draw's own `desc+0x21 (_available) == 0` gate short-circuits
-// for a barn, whose capacity instead comes from the build-complete init
-// (TownStorage_BuildCompleteInit_7ff0), which deliberately does NOT test that byte.
-// COMPONENT_LIVE_FACTORY_ONADDED(StorageComponent, 0x40, 0x81,
-//                                "BANISHED_LIVE_STORAGE_ONADDED", StorageComponent_Draw)
-// hand-expanded (save/load wave 2026-08-27) to ALSO wire slot 3 (Shutdown/Serialize,
-// 0x14012c730). The body has been ported in this file since the original storage wave
-// but nothing ever wrote it into the live vtable, so a loaded save's StorageComponent
-// kept the FillTypedVtable base-Component serialize (owner IBP + capability flags
-// only) and never restored the +0x28 slot array / +0x38 capacity / +0x3c default type
-// — the row array (+0x50 per readers, i.e. slot-array header) stayed null, and the
-// first post-load QueryCount/PickupStoredRawMaterial call on that workplace crashed.
-// Wired UNCONDITIONALLY (not behind the ONADDED env var): serialize round-trip is not
-// an opt-in feature the way the Draw rebuild is.
-static uint32_t StorageComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StorageComponent");
-    return cached;
+// 0x14012c8d0: Component() is the CALL 0x1401188b0; the 0x140164720 stamp is
+// the compiler's; +0x28 = +0x30 = 0; flags |= 0x81. (Retail leaves +0x38 to
+// OnAdded / the build-complete init; the tree's zero is kept.)
+StorageComponent::StorageComponent()
+    : storageSlots(nullptr), slotCount(0), _pad34{}, field38(nullptr) {
+    OrFlagsInCtor(0x81);
 }
-static void* StorageComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void StorageComponent_OnAddedVSlot(void* s) {
-    StorageComponent_Draw(reinterpret_cast<StorageComponent*>(s));
+
+// [3] 0x14012c730 — restores the +0x28 slot array / +0x38 capacity / +0x3c
+// default type on a load.
+void StorageComponent::Persist(void* stream) { StorageComponent_Shutdown(this, stream); }
+// [4] 0x14012c720 — the class's own `RET` body.
+void StorageComponent::Startup() {}
+
+// [6] 0x14012c640 = OnAdded (Ghidra "Draw"). ComponentEntity_OnAddedPass
+// dispatches it on every component whose flags have bit 0, so in retail EVERY
+// entity carrying a StorageComponent gets its capacity (+0x38 = _volumeLimit x
+// area) and its template slots at register time — including citizens born after
+// world start (a capacity-0 carry storage spins Pf_SpillAllStorage_7570 forever).
+// Buildings are unaffected: Draw's own `desc+0x21 (_available) == 0` gate
+// short-circuits for a barn (TownStorage_BuildCompleteInit_7ff0 sizes those).
+void StorageComponent::OnAdded() { StorageComponent_Draw(this); }
+
+// [0] 0x140038d60: ~StorageComponent (0x14012c870; its array free is a PORT GAP, see the header), MemFree on &1.
+Object::Base* StorageComponent::DeletingDtor(unsigned flags) {
+    this->~StorageComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void StorageComponent_ShutdownVSlot(void* self, void* stream) {
-    StorageComponent_Shutdown(reinterpret_cast<StorageComponent*>(self), stream);
+
+// create 0x140038b50: MemAlloc(0x40, 8), then the ctor.
+void* StorageComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StorageComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StorageComponent());
 }
-static void StorageComponent_FinishLiveVtable() {
-        StorageComponent_LiveVtable[6] = reinterpret_cast<void*>(&StorageComponent_OnAddedVSlot);
-    StorageComponent_LiveVtable[3] = reinterpret_cast<void*>(&StorageComponent_ShutdownVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* StorageComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StorageComponent());
 }
-extern "C" void* StorageComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x40, 0x81,
-        StorageComponent_LiveVtable,
-        reinterpret_cast<void*>(&StorageComponent_LiveGetTypeId));
-    StorageComponent_FinishLiveVtable();
-    return p;
-}
-static void* StorageComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x40, 0x81,
-        StorageComponent_LiveVtable,
-        reinterpret_cast<void*>(&StorageComponent_LiveGetTypeId));
-    StorageComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(StorageComponent, "Component",
-              &StorageComponent_Factory, &StorageComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(StorageComponent, "_ZTV16StorageComponent")
+DEFINE_EXE_TYPE(StorageComponent, "Component")

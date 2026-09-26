@@ -4,8 +4,12 @@
 
 #include "Component/Component.h"
 #include "Component/ControllerComponent.h"
+#include "Entity/ComponentEntity.h"
+#include "Game/serialize_externals.h"
 #include "Object/factory_registration.h"
+#include "engine_funcs.h"
 #include "io/Serializer.h"
+#include "resolve.h"
 
 // ============================================================================
 // Component
@@ -37,10 +41,47 @@ Object::Base* Component::DeletingDtor(unsigned flags) {
 const char* Component::TypeName() const { return "Component"; }
 uint32_t    Component::Type() const { return ::Object::GetTypeIdByName("Component"); }
 
-// [3] 0x1401189b0 — the ported body (absorbresourcecomponent.cpp) is still
-// registered at that address for its 52 by-address callers (B38 D5 (b) row);
-// the member delegates to it, one body.
-void Component::Persist(void* stream) { Component_SerializeReimpl(this, stream); }
+// [3] 0x1401189b0 — Component::Persist, the shared base serialize every
+// Component subclass chains to. ENDGAME B.3.8 K1 folded the ported body here
+// from absorbresourcecomponent.cpp. Retail: `Internal::Persist` (IAT
+// 0x1401515e0), Serializer(stream, 0); the owner InternalBasePtr (+0x10)
+// through InternalBasePtr::Serialize (IAT 0x140152aa0), nulled when it is not
+// a ComponentEntity (IsDerivedFrom IAT 0x140152a98 against the ti cell
+// 0x1401c5d70); the capability word (+0x20) through the uint door; the
+// description ExternalPtr (+0x18) through 0x140031d10.
+void Component::Persist(void* stream) {
+    Object::Internal::Persist(stream);
+
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+
+    reinterpret_cast<Object::InternalBasePtr*>(&_entity)->Serialize(ser);   // B.3.8 bridge (_entity is the retail InternalPtr)
+    if (_entity && fn_IsDerivedFrom && !fn_IsDerivedFrom(_entity, ComponentEntity::TypeId())) {
+        _entity = nullptr;
+    }
+
+    ser.Serialize(_flags, nullptr);
+    Component_Helper1d10_Reimpl(&_description, &ser);
+}
+
+// 0x1401189b0 door: reached by address from 52 sites (fn tables, the inert
+// component factories, the *_serialize.cpp bodies), registered in
+// standalone/reg_component_economy.cpp. A qualified (non-virtual) call, so a
+// hand-built receiver runs the same body.
+void Component_SerializeReimpl(void* self, void* stream) {
+    reinterpret_cast<Component*>(self)->Component::Persist(stream);   // B.3.8 bridge
+}
+
+// 0x140031d10 — Object::ExternalPtr<Description>::Serialize (the Component's
+// +0x18 description reference; registered in standalone/reg_component_gap_B.cpp).
+// Byte-identical to the other ExternalPtr<T> serialize bodies, so it delegates
+// to the shared ExternalPtrSerializeGeneric with Description's ti cell
+// 0x1401c72e0. B6-5: the cell is resolved per call (was a function-local lazy
+// cache); a null cell loads without validation, as before.
+void Component_Helper1d10_Reimpl(void* extRefField, void* serializer) {
+    const uint32_t* typeId = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c72e0));
+    ExternalPtrSerializeGeneric(reinterpret_cast<void**>(extRefField), serializer,
+                                typeId, "Description");
+}
 
 // [4]-[15]: retail's shared no-op bodies (`RET`; [13] `XOR EAX,EAX; RET`).
 void     Component::Startup() {}                                   // 0x140118a50

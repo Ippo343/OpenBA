@@ -8,118 +8,123 @@
 //   +0x70: String      (sprite name)
 //
 // Factory  : MemAlloc 0x78 + ElementDescription ctor + vtable + zero +0x68/+0x70.
-// Serialize (vtable +0x28, 0x1400791a0):
+// Serialize (slot 5, 0x1400791a0):
 //   ElementDescription::Serialize(self, stream)  [base]
 //   then: ExternalPtr @ +0x68  +  String @ +0x70
-// GetVersion (vtable +0x18, 0x140079210): ElementDescription::GetFileVersion(self) | 0x100.
-// CreateElement (vtable +0x40, 0x1400790a0) — builds a CaptureBoxElement.
-// CreateInPlace (vtable +0x48, 0x140013df0): ElementDescription ctor + zero fields.
-// Dtor (vtable +0x00, 0x140014010): ~String(+0x70) + ElementDescription::~ + free.
+// GetFileVersion (slot 3, 0x140079210): ElementDescription::GetFileVersion(self) | 0x100.
+// CreateInstance (slot 8, 0x1400790a0) — builds a CaptureBoxElement.
+// Construct (slot 9, 0x140013df0): the ctor on `this`.
+// Dtor (slot 0, 0x140014010): ~String(+0x70) + ElementDescription::~ + free.
 //
-// Field knowledge harvested from engine/reimpl/captureboxdescription.cpp.
-// Decompiled from Application-x64.exe (READ-ONLY recon).
+// ENDGAME B.3.8 VIS: a REAL class (CaptureBoxDescription.h). Before: an 11-slot
+// hand-built g_CaptureBoxDescription_Vtable registered at 0x14015d4a0, the
+// object built through the `??0ElementDescription@UI@@` DOOR and re-stamped.
+// After: the compiler's 10-slot vtable; ElementDescription() is the base's real
+// protected ctor (block RB). Nothing reads 0x14015d4a0 back by address, so its
+// RegisterExeAddr row is gone (B38 D5).
 
 #include "engine_funcs.h"
 #include "system/String.h"
-#include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "object/Internal.h"  // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
+#include "Component/CaptureBoxDescription.h"
+#include "Component/CaptureBoxElement.h"
+#include "ui/Sprite.h"
 #include <cstdint>
 #include <new>
-#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K4)
 
-static const uintptr_t kCaptureBoxDescriptionVtable = 0x14015d4a0;
+// 0x140079230: ElementDescription() is `??0ElementDescription@UI@@`; the
+// 0x14015d4a0 stamp is the compiler's; +0x68 = 0, +0x70 = String() (null).
+CaptureBoxDescription::CaptureBoxDescription() : _spriteSheet(nullptr), _spriteName() {}
 
-static void CaptureBoxDescription_Init(void* self) {
-    fn_ElementDescription_Ctor(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kCaptureBoxDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x68) = 0;   // ExternalPtr (sprite sheet)
-    *(uint64_t*)(s + 0x70) = 0;   // String (sprite name)
+// [0] 0x140014010: ~String(+0x70), ~ElementDescription (-> ~External), MemFree on &1.
+Object::Base* CaptureBoxDescription::DeletingDtor(unsigned flags) {
+    this->~CaptureBoxDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void CaptureBoxDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+// [3] 0x140079210: ElementDescription::GetFileVersion() | 0x100 — the 0x100 bit
+// flags a custom serialize format on top of the base ElementDescription version.
+int32_t CaptureBoxDescription::GetFileVersion() const {
+    return static_cast<int32_t>(
+        static_cast<uint32_t>(UI::ElementDescription::GetFileVersion()) | 0x100u);
+}
+
+// [5] 0x1400791a0: base, then ExternalPtr +0x68, String +0x70; returns 1. (The
+// hand-built slot was a `void` function, so its AL was whatever the Serializer
+// dtor left there.)
+bool CaptureBoxDescription::Serialize(void* stream) {
     if (!fn_ExternalPtr_Serialize) {
-        return;
+        return true;
     }
-    // base — QUALIFIED: this body IS slot 5 of a hand-built ElementDescription table.
-    reinterpret_cast<UI::ElementDescription*>(self)->UI::ElementDescription::Serialize(stream);  // B.3.6 bridge
+    UI::ElementDescription::Serialize(stream);   // base — QUALIFIED (slot 5)
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    fn_ExternalPtr_Serialize(s + 0x68, serializer);          // ExternalPtr +0x68
-    reinterpret_cast<System::String*>(s + 0x70)->Serialize(serializer);             // B.3.1 bridge: String      +0x70
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+    fn_ExternalPtr_Serialize(&_spriteSheet, serializer);   // ExternalPtr +0x68
+    _spriteName.Serialize(serializer);                     // String      +0x70
+    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
-void* CaptureBoxDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kCaptureBoxDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    reinterpret_cast<System::String*>(s + 0x70)->~String();            // B.3.1 bridge: String +0x70
-    if (fn_ElementDescription_Dtor) fn_ElementDescription_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140013e40: retail destroys and rebuilds in place: a virtual
+// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+Object::External* CaptureBoxDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) CaptureBoxDescription();
+}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
+void CaptureBoxDescription::Destruct() { DeletingDtor(0); }
+
+// [8] 0x1400790a0 — CreateInstance (RETSLOT: RCX this, RDX the caller's
+// InternalPtr<Element>). Transcribed:
+//   1. MemAlloc(0xe0, 8) + the CaptureBoxElement ctor (inlined in retail);
+//   2. wrap it in an InternalBasePtr and run the non-virtual
+//      ElementDescription::CreateInstance (0x1401518d0: the generic fields);
+//   3. element+0xc0 = Sprite(ExternalPtr +0x68, String +0x70) (0x1401514c8);
+//   4. *ret = the element; return ret.
+// (The frustum twin, 0x14006c340, has the same shape plus the size copy.)
+Object::InternalPtr<UI::Element>* CaptureBoxDescription::CreateInstance(
+        Object::InternalPtr<UI::Element>* ret, const UI::Dialog* /*dialog*/) const {
+    void* elem = CaptureBoxElement::CreateNewObject();
+
+    uint8_t ibp[16] = {};
+    if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
+        reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
+    // Non-virtual applier; QUALIFIED (the slot-8 override hides the base overload).
+    UI::ElementDescription::CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ibp));
+    CaptureBoxElement* e = *reinterpret_cast<CaptureBoxElement**>(ibp);
+
+    e->_lineSprite = UI::Sprite(
+        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(_spriteSheet)),  // B.3.6 bridge
+        _spriteName);
+    *reinterpret_cast<void**>(ret) = e;
+    return ret;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CaptureBoxDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CaptureBoxDescription");
-    return cached;
+// [9] 0x140013df0 — placement construction on `this` (the createInPlace body).
+Object::External* CaptureBoxDescription::Construct() {
+    return new (static_cast<void*>(this)) CaptureBoxDescription();
 }
 
-// GetVersion (vtable +0x18): ElementDescription::GetFileVersion() | 0x100 — the 0x100
-// bit flags a custom serialize format on top of the base ElementDescription version.
-static uint32_t CaptureBoxDescription_GetVersion(void* self) {
-    // base — QUALIFIED: this body IS slot 3 of a hand-built ElementDescription table.
-    uint32_t base = static_cast<uint32_t>(
-        reinterpret_cast<const UI::ElementDescription*>(self)->UI::ElementDescription::GetFileVersion());  // B.3.6 bridge
-    return base | 0x100u;
-}
+// The 0x14015d4a0 row had no by-address reader (B38 D5): it is gone with the
+// hand-built table. The registration function stays (address_registry.cpp,
+// coordinator-owned, calls it) with no row left to register.
+extern "C" void RegisterCaptureBoxDescriptionVtable() {}
 
-static int   CaptureBoxDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* CaptureBoxDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* CaptureBoxDescription_CreateInPlace(void* memory);
-
-static void* g_CaptureBoxDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CaptureBoxDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&CaptureBoxDescription_VtblStub_ReturnNull),// +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&CaptureBoxDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&CaptureBoxDescription_GetVersion),         // +0x18 GetVersion
-    reinterpret_cast<void*>(&CaptureBoxDescription_VtblStub_Return0),   // +0x20 thunk
-    reinterpret_cast<void*>(&CaptureBoxDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&CaptureBoxDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&CaptureBoxDescription_VtblStub_Return0),   // +0x38 thunk
-    reinterpret_cast<void*>(&CaptureBoxDescription_VtblStub_ReturnNull),// +0x40 CreateElement (not needed for load)
-    reinterpret_cast<void*>(&CaptureBoxDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CaptureBoxDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterCaptureBoxDescriptionVtable() {
-    RegisterExeAddr(kCaptureBoxDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_CaptureBoxDescription_Vtable));
-}
-
-extern "C" void* CaptureBoxDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
+// create 0x140013d90: MemAlloc(0x78, 8), then the ctor.
+void* CaptureBoxDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CaptureBoxDescription), 8);
     if (!p) return nullptr;
-    CaptureBoxDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) CaptureBoxDescription());
+}
+// createInPlace 0x140013df0: the ctor on `storage`.
+void* CaptureBoxDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CaptureBoxDescription());
 }
 
-static void* CaptureBoxDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    CaptureBoxDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(CaptureBoxDescription, "ElementDescription",
-              &CaptureBoxDescription_Factory, &CaptureBoxDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(CaptureBoxDescription, "_ZTV21CaptureBoxDescription")
+DEFINE_EXE_TYPE(CaptureBoxDescription, "ElementDescription")

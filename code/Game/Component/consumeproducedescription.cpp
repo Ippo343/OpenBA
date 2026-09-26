@@ -36,160 +36,156 @@
 // is filled from Runtime-x64.dll at startup (same mechanism as g_fn_String_Serialize
 // = slot 0x140151238). If it is unfilled in standalone the Type read is skipped,
 // which would desync the stream — register/wire slot 0x1401516b0 if needed.
+//
+// ENDGAME B.3.8 K1: a REAL class (ConsumeProduceDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162b30) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/ConsumeProduceDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "system/String.h"
 #include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "system/String.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kConsumeProduceDescriptionVtable = 0x140162b30;
-static const uintptr_t kSlot_TypeSerialize = 0x1401516b0; // Object::Type::Serialize dispatch slot
-
-static inline int CP_SerStreamErr(void* serBuf) {
+namespace {
+// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
+// (0 == ok on the read leg). The tree's check before it allocates an array.
+inline int SerStreamErr(IO::Serializer& ser) {
     return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serBuf)) + 8);
+        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
 }
+}  // namespace
 
-static void ConsumeProduceDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kConsumeProduceDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x20) = 0;           // ExternalPtr
-    *(uint64_t*)(s + 0x28) = 0;           // array ptr
-    *(uint64_t*)(s + 0x30) = 0;           // count + cap
-    *(uint64_t*)(s + 0x38) = 0;           // Type + int@+0x3c
-    *(int32_t*) (s + 0x40) = 1;
-    *(uint32_t*)(s + 0x44) = 0x40800000u; // float 4.0
-    *(int32_t*) (s + 0x48) = -1;
-    *(int32_t*) (s + 0x4c) = 0;
-    *(int32_t*) (s + 0x50) = 0xb;
-}
+// ctor (inlined into create 0x140032360 / createInPlace 0x1400323a0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+ConsumeProduceDescription::ConsumeProduceDescription()
+    : Description(),
+      _ref20(nullptr),
+      _recipes(nullptr),
+      _recipeCount(0),
+      _recipeCap(0),
+      _toolType(0),
+      _i3c(0),
+      _i40(1),
+      _f44(4.0f),
+      _i48(-1),
+      _i4c(0),
+      _u50(0xb) {}
 
-void ConsumeProduceDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
-
-    // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
-    int outerN = *(int32_t*)(s + 0x30);
-    if (CP_SerStreamErr(serializer) == 0 && outerN > 0) {
-        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)outerN * 0x28, 8);
-        *(void**)(s + 0x28) = buf;
-        *(int32_t*)(s + 0x34) = outerN;
-        if (buf) for (uint64_t b = 0; b < (uint64_t)outerN * 0x28; ++b) ((uint8_t*)buf)[b] = 0;
-    }
-    if (outerN > 0) {
-        uint8_t* e = *(uint8_t**)(s + 0x28);
-        for (int i = 0; i < outerN && e; ++i, e += 0x28) {
-            // inner array @ e+0x00 (count @ e+0x08, element stride 0x10)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(e + 0x08), nullptr);   // B.3.4 bridge
-            int innerN = *(int32_t*)(e + 0x08);
-            if (CP_SerStreamErr(serializer) == 0 && innerN > 0) {
-                void* ibuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)innerN * 0x10, 8);
-                *(void**)(e + 0x00) = ibuf;
-                if (ibuf) for (uint64_t b = 0; b < (uint64_t)innerN * 0x10; ++b) ((uint8_t*)ibuf)[b] = 0;
-            }
-            uint8_t* ie = *(uint8_t**)(e + 0x00);
-            for (int j = 0; j < innerN && ie; ++j, ie += 0x10) {
-                fn_ExternalPtr_BuildSerialize(ie + 0x00, serializer); // ExternalPtr
-                reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(ie + 0x08), nullptr);   // B.3.4 bridge
-            }
-            fn_ExternalPtr_BuildSerialize(e + 0x10, serializer);      // ExternalPtr +0x10
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(e + 0x18), nullptr);   // B.3.4 bridge (enum +0x18)
-            reinterpret_cast<System::String*>(e + 0x20)->Serialize(serializer);              // B.3.1 bridge: String +0x20
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x50), nullptr);   // B.3.4 bridge (enum +0x50)
-
-    // Type @ +0x38 via Object::Type::Serialize dispatch slot 0x1401516b0
-    {
-        uintptr_t slotAddr = ResolveAddr(Module::Exe, kSlot_TypeSerialize);
-        typedef void (*TypeSer_t)(void* typeField, void* serializer);
-        TypeSer_t fnTypeSer = slotAddr ? *reinterpret_cast<TypeSer_t*>(slotAddr) : nullptr;
-        if (fnTypeSer) fnTypeSer(s + 0x38, serializer);
-        // else: slot unwired in standalone — Type read skipped (would desync; see header note)
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x44), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x4c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
-void* ConsumeProduceDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kConsumeProduceDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    // free inner arrays then the outer recipe array
-    int outerN = *(int32_t*)(s + 0x34);
-    uint8_t* e = *(uint8_t**)(s + 0x28);
+// dtor (slot 0 0x1400323e0 minus the stamps): frees each recipe's inner array and String, then the recipe array.
+// The compiler then chains ~Description -> ~External.
+ConsumeProduceDescription::~ConsumeProduceDescription() {
+    // free inner arrays then the outer recipe array (the tree walks the CAPACITY)
+    int outerN = _recipeCap;
+    uint8_t* e = static_cast<uint8_t*>(_recipes);
     if (e && fn_MemFreeStatic) {
         for (int i = 0; i < outerN; ++i, e += 0x28) {
             void* inner = *(void**)(e + 0x00);
             if (inner) fn_MemFreeStatic(inner);
             reinterpret_cast<System::String*>(e + 0x20)->~String();  // B.3.1 bridge
         }
-        fn_MemFreeStatic(*(void**)(s + 0x28));
+        fn_MemFreeStatic(_recipes);
     }
-    *(void**)(s + 0x28) = nullptr;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    _recipes = nullptr;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ConsumeProduceDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ConsumeProduceDescription");
-    return cached;
+// [0] 0x1400323e0: ~ConsumeProduceDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ConsumeProduceDescription::DeletingDtor(unsigned flags) {
+    this->~ConsumeProduceDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static int   ConsumeProduceDescription_Stub_Return12(void* /*self*/) { return 12; } // GetVersion
-static int   ConsumeProduceDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* ConsumeProduceDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* ConsumeProduceDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* ConsumeProduceDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "ConsumeProduceComponent"); }
-
-static void* g_ConsumeProduceDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&ConsumeProduceDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Stub_Return12),   // +0x18 GetVersion=12
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&ConsumeProduceDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&ConsumeProduceDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&ConsumeProduceDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterConsumeProduceDescriptionVtable() {
-    RegisterExeAddr(kConsumeProduceDescriptionVtable, reinterpret_cast<uintptr_t>(g_ConsumeProduceDescription_Vtable));
+// [5] 0x1401190e0: stream order as retail.
+bool ConsumeProduceDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);
+    // outer recipe array @ +0x28 (count @ +0x30, element stride 0x28)
+    ser.Serialize(_recipeCount, nullptr);
+    int outerN = _recipeCount;
+    if (SerStreamErr(ser) == 0 && outerN > 0) {
+        void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)outerN * 0x28, 8);
+        _recipes = buf;
+        _recipeCap = outerN;
+        if (buf) for (uint64_t b = 0; b < (uint64_t)outerN * 0x28; ++b) ((uint8_t*)buf)[b] = 0;
+    }
+    if (outerN > 0) {
+        uint8_t* e = static_cast<uint8_t*>(_recipes);
+        for (int i = 0; i < outerN && e; ++i, e += 0x28) {
+            // inner array @ e+0x00 (count @ e+0x08, element stride 0x10)
+            ser.Serialize(*reinterpret_cast<int*>(e + 0x08), nullptr);
+            int innerN = *(int32_t*)(e + 0x08);
+            if (SerStreamErr(ser) == 0 && innerN > 0) {
+                void* ibuf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)innerN * 0x10, 8);
+                *(void**)(e + 0x00) = ibuf;
+                if (ibuf) for (uint64_t b = 0; b < (uint64_t)innerN * 0x10; ++b) ((uint8_t*)ibuf)[b] = 0;
+            }
+            uint8_t* ie = *(uint8_t**)(e + 0x00);
+            for (int j = 0; j < innerN && ie; ++j, ie += 0x10) {
+                fn_ExternalPtr_BuildSerialize(ie + 0x00, &ser); // ExternalPtr
+                ser.Serialize(*reinterpret_cast<int*>(ie + 0x08), nullptr);
+            }
+            fn_ExternalPtr_BuildSerialize(e + 0x10, &ser);      // ExternalPtr +0x10
+            ser.Serialize(*reinterpret_cast<unsigned int*>(e + 0x18), nullptr);   // enum +0x18
+            reinterpret_cast<System::String*>(e + 0x20)->Serialize(&ser);        // B.3.1 bridge: String +0x20
+        }
+    }
+    ser.Serialize(_i40, nullptr);
+    ser.Serialize(_u50, nullptr);
+    {
+        // Type @ +0x38 via Object::Type::Serialize dispatch slot 0x1401516b0
+        uintptr_t slotAddr = ResolveAddr(Module::Exe, 0x1401516b0);
+        typedef void (*TypeSer_t)(void* typeField, void* serializer);
+        TypeSer_t fnTypeSer = slotAddr ? *reinterpret_cast<TypeSer_t*>(slotAddr) : nullptr;
+        if (fnTypeSer) fnTypeSer(&_toolType, &ser);
+        // else: slot unwired in standalone — Type read skipped (would desync)
+    }
+    ser.Serialize(_i3c, nullptr);
+    ser.Serialize(_f44, nullptr);
+    ser.Serialize(_i48, nullptr);
+    ser.Serialize(_i4c, nullptr);
+    return true;
 }
-extern "C" void* ConsumeProduceDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+
+// [6] 0x1400323b0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* ConsumeProduceDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) ConsumeProduceDescription();
+}
+
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void ConsumeProduceDescription::Destruct() { DeletingDtor(0); }
+
+// [8] 0x1400323d0: ConsumeProduceComponent's type id through the hidden return slot.
+Object::Type* ConsumeProduceDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("ConsumeProduceComponent");
+    return ret;
+}
+
+// [9] 0x1400323a0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* ConsumeProduceDescription::Construct() {
+    return new (static_cast<void*>(this)) ConsumeProduceDescription();
+}
+
+// create 0x140032360: MemAlloc(0x58, 8), then the (inlined) ctor.
+void* ConsumeProduceDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduceDescription), 8);
     if (!p) return nullptr;
-    ConsumeProduceDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) ConsumeProduceDescription());
 }
-static void* ConsumeProduceDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    ConsumeProduceDescription_Init(memory);
-    return memory;
+// createInPlace 0x1400323a0.
+void* ConsumeProduceDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ConsumeProduceDescription());
 }
-REGISTER_TYPE(ConsumeProduceDescription, "Description",
-              &ConsumeProduceDescription_Factory, &ConsumeProduceDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(ConsumeProduceDescription, "_ZTV25ConsumeProduceDescription")
+DEFINE_EXE_TYPE(ConsumeProduceDescription, "Description")

@@ -34,17 +34,24 @@
 // See notes/FOOD_PRODUCTION_WAVE_BRIEF.md for the byte-level derivation.
 
 #include "Component/controller_state_table.h"
+#include "Component/ResourceProduceComponent.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "io/Serializer.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
 
-namespace { struct RPCtrlTag {}; }
+// RPCtrlTag lives in ResourceProduceComponent.h (the member type needs it).
 using RPDispatch = ::ControllerLive::Dispatcher<RPCtrlTag>;
 
-extern "C" void** RPCtrl_NodeVtable() { return RPDispatch::Vtable(); }
+// The state handlers receive the owning component as `void*` (the dispatcher's
+// `MOV RCX,[node+0x18]`); every handler in this table belongs to an RP leaf.
+static ResourceProduceComponent* RP_Self(void* self) {
+    return reinterpret_cast<ResourceProduceComponent*>(self);   // B.3.8 bridge
+}
 
 // ── Resolved engine helpers ───────────────────────────────────────────────────────
 // 0x140003050 FindComponent_Work(entity, outIBP)  — the work-ledger component that
@@ -80,15 +87,6 @@ static void RP_Resolve() {
     s_resolved = true;
 }
 
-
-// The component's own vtable slot, by index. The RPC vtable is 22 slots wide; the
-// production hooks are 18..21. Slot 18 is _purecall in the base, so a subclass that
-// forgot to override it would abort() — we null-check instead and report it.
-static void* RP_VSlot(void* self, int idx) {
-    if (!self) return nullptr;
-    void** vt = *reinterpret_cast<void***>(self);
-    return vt ? vt[idx] : nullptr;
-}
 
 // ── state 2 enter — 0x14012b1b0 ───────────────────────────────────────────────────
 // target = (self+0x48 == 0) ? 13 : 14, then request it. +0x48 is the produceFlag
@@ -133,11 +131,7 @@ static char RP_State13Enter(void* self, void* sm) {
     // InternalBasePtr. Abstract in the base, so a null here means the subclass did
     // not override it: report rather than crash on a _purecall.
     uintptr_t workIbp = 0;
-    typedef uintptr_t* (*fn_CreateWork_t)(void* self, uintptr_t* outIBP);
-    fn_CreateWork_t createWork = reinterpret_cast<fn_CreateWork_t>(RP_VSlot(self, 18));
-    if (createWork) {
-        createWork(self, &workIbp);
-    }
+    RP_Self(self)->CreateWork(&workIbp);
 
     // Post it to the reservation ledger so an idle citizen claims it.
     uintptr_t workCompIbp = 0;
@@ -160,9 +154,7 @@ static char RP_State13Enter(void* self, void* sm) {
     }
 
 
-    typedef char (*fn_Hook_t)(void* self);
-    fn_Hook_t onEnter = reinterpret_cast<fn_Hook_t>(RP_VSlot(self, 19));
-    return onEnter ? onEnter(self) : 0;
+    return RP_Self(self)->OnEnterProducing();
 }
 
 // ── state 14 enter — 0x14012ad20 ──────────────────────────────────────────────────
@@ -205,9 +197,7 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
     }
 
 
-    typedef char (*fn_Hook_t)(void* self);
-    fn_Hook_t onExit = reinterpret_cast<fn_Hook_t>(RP_VSlot(self, 20));
-    if (onExit) onExit(self);
+    RP_Self(self)->OnExitProducing();
     return 1;
 }
 
@@ -215,18 +205,14 @@ static char RP_State14Enter(void* self, void* /*sm*/) {
 // A one-line forward to the component's ProduceTick (slot 21). The base leaves it a
 // no-op; FishingComponent is the only subclass in this wave that installs a real one.
 static char RP_State13PerFrame(void* self, void* /*sm*/, void* time) {
-    typedef char (*fn_Tick_t)(void* self, void* time);
-    fn_Tick_t tick = reinterpret_cast<fn_Tick_t>(RP_VSlot(self, 21));
-    return tick ? tick(self, time) : 0;
+    return RP_Self(self)->ProduceTick(time);
 }
 
 // ── transition 13 -> 3 action — 0x14012af70 ───────────────────────────────────────
 // Teardown path: run OnExitProducing so the class drops whatever the produce tick
 // was holding. Dispatched through OnState, so the signature is void(data).
 static void RP_Trans13to3(void* self) {
-    typedef char (*fn_Hook_t)(void* self);
-    fn_Hook_t onExit = reinterpret_cast<fn_Hook_t>(RP_VSlot(self, 20));
-    if (onExit) onExit(self);
+    RP_Self(self)->OnExitProducing();
 }
 
 // ── event 3 on state 13 — 0x14012adf0 — panel PAUSE ───────────────────────────────
@@ -265,9 +251,9 @@ static char RP_Event3Resume(void* self, void* sm) {
 // So bit 1 is "pause" (offered unless already paused in state 14) and bit 0 is
 // "resume" (offered while in state 13 or 14 and not flagged). Any extra argument a
 // caller passes is ignored, exactly as retail ignores it.
-extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self) {
+uint32_t ResourceProduceComponent::CommandMask(int /*command*/) {
     RP_Resolve();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
     if (!s_findSM) return 0;
     uintptr_t smcIbp = 0;
     s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
@@ -307,9 +293,9 @@ extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self) {
 // the orchard's twin registrar 0x140009c70 has `890C24` (MOV [RSP],ECX) and stores its
 // real id — which is why the orchard/cropfield tables keyed 3/4/5 are correct as written.
 // See the TableAddEvent calls in RPCtrl_PopulateTable below.
-extern "C" void ResourceProduceComponent_Command(void* self) {
+void ResourceProduceComponent::Command(int /*command*/) {
     RP_Resolve();
-    const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(this);
     if (!s_findSM) return;
     uintptr_t smcIbp = 0;
     s_findSM(*reinterpret_cast<uintptr_t*>(comp + 0x10), &smcIbp);
@@ -339,10 +325,10 @@ extern "C" void ResourceProduceComponent_Command(void* self) {
 // ── table population — replica of ResourceProduceDescription_helper_b230 ──────────
 // Registration ORDER matters: it fixes the state INDEX that StateMachine::Tick carries
 // in its +0x09/+0x0a/+0x0b bytes, so it mirrors retail's call order exactly.
-extern "C" void RPCtrl_PopulateTable() {
+static void RPCtrl_PopulateTable() {
     using namespace ::ControllerLive;
     StateTable& t = RPDispatch::table;
-    if (t.count != 0) return;                       // idempotent — runs per instance
+    if (t.count != 0) return;                       // idempotent
 
     // ── state 2 — DEFAULT / idle ──────────────────────────────────────────────────
     TableRegisterState(t, 2, reinterpret_cast<void*>(&RP_State2Enter), nullptr,
@@ -376,4 +362,49 @@ extern "C" void RPCtrl_PopulateTable() {
     // Event id 0 for the same reason as the pause handler above. State 13 maps 0 -> Pause
     // and state 14 maps 0 -> Resume, so the single posted event toggles.
     TableAddEvent(t, 0, reinterpret_cast<void*>(&RP_Event3Resume));
+}
+
+// Built ONCE at static-init time, as retail's ResourceProduceDescription setup does
+// (B38 D6/D7). Before, every RP leaf factory re-ran this from both threads.
+static const bool s_rpStateTableBuilt = (RPCtrl_PopulateTable(), true);
+
+// ============================================================================
+// ENDGAME B.3.8 MI-B — ResourceProduceComponent as a REAL abstract class
+// (ResourceProduceComponent.h). Before: six leaves each stamped the shared
+// Dispatcher<RPCtrlTag> table into raw bytes at +0x28 and dispatched slots 18-21
+// by index through their hand-built 48-slot tables.
+// ============================================================================
+
+// 0x14012b3d0: Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer (+0x40); `MOV byte [RBX+0x48],0`.
+ResourceProduceComponent::ResourceProduceComponent()
+    : _controller(this), produceFlag(0), _pad49{} {}
+
+// [0] 0x140037d40: restamps + ~Internal (the compiler chain), MemFree on &1. Only a
+// half-built object reaches this slot (every leaf overrides it).
+Object::Base* ResourceProduceComponent::DeletingDtor(unsigned flags) {
+    this->~ResourceProduceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+const char* ResourceProduceComponent::TypeName() const { return "ResourceProduceComponent"; }  // 0x140037d30
+uint32_t    ResourceProduceComponent::Type() const {                                            // 0x140037d20
+    return ::Object::GetTypeIdByName("ResourceProduceComponent");
+}
+
+// [3] 0x14012b4a0: `CALL 0x1401189b0` (Component::Persist), an EMPTY Serializer(0)
+// scope (that pair is ControllerComponent::Persist, 0x1401195a0), then a v0 scope
+// holding the +0x48 bool (the serializer's bool slot, dispatch 0x140152a58).
+void ResourceProduceComponent::Persist(void* stream) {
+    ControllerComponent::Persist(stream);
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (stream is void* in Internal::Persist)
+    scope.Serialize(*reinterpret_cast<bool*>(&produceFlag), nullptr);
+}
+
+// The by-address door of slot 3 (standalone/reg_component_economy.cpp:97). No
+// reader of 0x14012b4a0 remains in the tree (the six leaf Persist bodies call
+// ResourceProduceComponent::Persist directly); the row can go at the closing pass.
+void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
+    reinterpret_cast<ResourceProduceComponent*>(self)->ResourceProduceComponent::Persist(stream);   // B.3.8 bridge
 }

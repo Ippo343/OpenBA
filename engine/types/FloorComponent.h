@@ -18,21 +18,7 @@ namespace FloorComponentAddr {
     constexpr uintptr_t Vtable = 0x140163360;
 }
 
-struct FloorComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    uint8_t  floorFlag;    // +0x28: zeroed (byte)
-    uint8_t  _pad29[3];    // +0x29: padding
-    int32_t  floorId;      // +0x2C: initialized to -1
-};
-
-static_assert(sizeof(FloorComponent) == 0x30, "FloorComponent size mismatch");
-static_assert(offsetof(FloorComponent, vtable) == 0x00, "");
-static_assert(offsetof(FloorComponent, flags) == 0x20, "");
-static_assert(offsetof(FloorComponent, floorFlag) == 0x28, "");
-static_assert(offsetof(FloorComponent, floorId) == 0x2C, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `FloorComponent` is a real class now
+// (code/Game/Component/FloorComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/FloorComponent.h"

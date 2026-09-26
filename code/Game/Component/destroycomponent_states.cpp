@@ -1084,10 +1084,10 @@ extern "C" char Destroy_State45Event0_Cancel_bcc0(void* data, void* sm) {
 // Faithful graph from DestroyDescription_helper_dd00 (0x14011dd00). All four event
 // handlers (0x14011bcc0/d390/d2a0/d1a0) are now ported and registered.
 // ============================================================
-namespace { struct DestroyCtrlTag {}; }
+// ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
+// ControllerLive::TableController<DestroyCtrlTag>, DestroyComponent.h).
+#include "Component/DestroyComponent.h"
 using DestroyDispatch = ::ControllerLive::Dispatcher<DestroyCtrlTag>;
-
-extern "C" void** DestroyCtrl_NodeVtable() { return DestroyDispatch::Vtable(); }
 
 extern "C" void DestroyCtrl_PopulateTable() {
     using namespace ::ControllerLive;

@@ -30,26 +30,7 @@ namespace StorageComponentAddr {
     constexpr uintptr_t QueryCount  = 0x14012cf10;  // O(n*m) perf hotspot, 44 xrefs
 }
 
-struct StorageComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    // StorageComponent own fields
-    void*    storageSlots; // +0x28: ptr to array of storage slot descriptors
-    int32_t  slotCount;    // +0x30: number of storage slots
-    uint8_t  _pad34[4];    // +0x34: padding
-    void*    field38;      // +0x38: implicit (struct pads to 0x40)
-};
-
-static_assert(sizeof(StorageComponent) == 0x40, "StorageComponent size mismatch");
-static_assert(offsetof(StorageComponent, vtable) == 0x00, "");
-static_assert(offsetof(StorageComponent, next) == 0x08, "");
-static_assert(offsetof(StorageComponent, owner) == 0x10, "");
-static_assert(offsetof(StorageComponent, flags) == 0x20, "");
-static_assert(offsetof(StorageComponent, storageSlots) == 0x28, "");
-static_assert(offsetof(StorageComponent, slotCount) == 0x30, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `StorageComponent` is a real class now
+// (code/Game/Component/StorageComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/StorageComponent.h"

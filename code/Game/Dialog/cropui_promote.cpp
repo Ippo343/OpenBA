@@ -31,7 +31,6 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
-#include "dialog_controller_vtable.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
@@ -93,7 +92,6 @@ uint32_t ProgressElementTypeId() {
 void CropUI_Slot11(CropUI* self, int64_t newType) {
     void* comp = FindComp(self);
 
-
     // SA guard (retail unguarded): in retail a combo event can only be routed to an
     // entity that has a CropFieldComponent.
     if (!comp) return;
@@ -125,24 +123,6 @@ int CropUI_Slot13(CropUI* self) {
 // STANDALONE promotion — real CropUI controller vtable
 // ============================================================
 namespace cropui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("CropUI");
-    return c;
-}
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 // idx4 (+0x20) — retail 0x1400b2b50: base idx4 (combo bind + element id 500 +
 // populate), then find "yield" and seat it at +0x38 with progress 1.0f.
@@ -219,55 +199,62 @@ void W_Slot8(void* self) {
     }
     SelectResourceUI_Slot8(self);
 }
-
-// idx9 (+0x48) — combo selection -> idx11. This is the slot that was StubNop, i.e. the
-// one that swallowed every pick on the "?" combo.
-void W_Slot9(void* self, void* p2, int p3, int p4) {
-    if (!self) return;
-    SelectResourceUI_Slot9(self, p2, p3, p4);
-}
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0]  = reinterpret_cast<void*>(&Dtor);
-        g_vt[2]  = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4]  = reinterpret_cast<void*>(&W_Slot4);
-        g_vt[7]  = reinterpret_cast<void*>(&W_Slot7);
-        g_vt[8]  = reinterpret_cast<void*>(&W_Slot8);
-        g_vt[9]  = reinterpret_cast<void*>(&W_Slot9);
-        g_vt[11] = reinterpret_cast<void*>(&CropUI_Slot11);
-        g_vt[12] = reinterpret_cast<void*>(&CropUI_Slot12);
-        g_vt[13] = reinterpret_cast<void*>(&CropUI_Slot13);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's CropUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "CropUI", &StubNop);
-
-// CropUI object size 0x60 (engine/types/ui/Panels.h).
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x60); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x60), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
+// idx9 (+0x48) — combo selection -> idx11 — is SelectResourceUI's slot, inherited
+// (retail's CropUI table holds the base's 0x140078d80); it was StubNop in the tree
+// once, the slot that swallowed every pick on the "?" combo.
 }  // namespace cropui_sa
 
-REGISTER_TYPE(CropUI, "SelectResourceUI", &cropui_sa::Factory, &cropui_sa::InPlace);
+// [4] 0x1400b2b50
+void CropUI::OnCreated() {
+    cropui_sa::W_Slot4(this);
+}
+
+// [7] 0x1400b2a50
+void CropUI::OnUpdateLayout() {
+    cropui_sa::W_Slot7(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void CropUI::OnUpdate(const System::Time& /*time*/) {
+    cropui_sa::W_Slot8(this);
+}
+
+// [11] 0x1400b2920
+void CropUI::SetResource(int64_t type) {
+    ::CropUI_Slot11(this, type);
+}
+
+// [12] 0x1400b29d0
+void* CropUI::GetResource(void* out) {
+    return ::CropUI_Slot12(this, out);
+}
+
+// [13] 0x1400b29c0
+int CropUI::GetCategory() {
+    return ::CropUI_Slot13(this);
+}
+
+// [0] 0x140020b60: ~CropUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* CropUI::DeletingDtor(unsigned flags) {
+    this->~CropUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140020b10: MemAlloc(0x60, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* CropUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CropUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CropUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* CropUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CropUI());
+}
+
+DEFINE_EXE_VTABLE(CropUI, "_ZTV6CropUI")
+DEFINE_EXE_TYPE(CropUI, "SelectResourceUI")

@@ -16,6 +16,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/PlantOrchard.h"
 #include "Work/plantorchard_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -89,7 +90,6 @@ typedef void* (*POW_FindSubEntity_t)(uintptr_t entity, void* outIBP);
 static POW_FindSubEntity_t s_fn_FindSubEntity = nullptr;
 
 typedef void (*POW_Work_Serialize_t)(void* self, void* stream);
-static POW_Work_Serialize_t s_fn_Work_Serialize = nullptr;
 
 typedef void (*POW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
 static POW_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;
@@ -116,8 +116,6 @@ static float* s_fHalfCellOffset = nullptr;
 static uint32_t* s_typeConst = nullptr;
 
 // Vtable pointers
-static void** s_vtable_PlantOrchard = nullptr;
-static void** s_vtable_Work = nullptr;
 
 static bool s_po_funcs_resolved = false;
 
@@ -156,8 +154,6 @@ bool PlantOrchard_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_FindSubEntity = reinterpret_cast<POW_FindSubEntity_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_Work_Serialize = reinterpret_cast<POW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_ExternalRef_Serialize = reinterpret_cast<POW_ExternalRef_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140002340));
     s_fn_OrchardRefresh = reinterpret_cast<POW_OrchardRefresh_t>(
@@ -174,8 +170,6 @@ bool PlantOrchard_ResolveFuncs() {
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
     s_typeConst = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c46b0));
 
-    s_vtable_PlantOrchard = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161910));
-    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a80));
 
     bool ok = s_fn_FindComp_MatDesc && s_fn_FindComp_OrchardDesc &&
               s_fn_CalcMaxWorkers && s_fn_Map_FindNearestPassable &&
@@ -184,11 +178,10 @@ bool PlantOrchard_ResolveFuncs() {
               s_fn_BST_Insert && s_fn_BST_Remove &&
               s_fn_BST_Serialize && s_fn_BST_RecursiveFree &&
               s_fn_ValidateTask && s_fn_TaskCancel &&
-              s_fn_FindSubEntity && s_fn_Work_Serialize &&
-              s_fn_ExternalRef_Serialize && s_fn_OrchardRefresh &&
+              s_fn_FindSubEntity && s_fn_ExternalRef_Serialize && s_fn_OrchardRefresh &&
               fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
-              s_typeConst && s_vtable_PlantOrchard && s_vtable_Work;
+              s_typeConst;
 
     s_po_funcs_resolved = ok;
 
@@ -209,7 +202,6 @@ bool PlantOrchard_ResolveFuncs() {
         if (!s_fn_ValidateTask) printf("  MISSING: ValidateTask\n");
         if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
         if (!s_fn_OrchardRefresh) printf("  MISSING: OrchardRefresh\n");
         // The seven conditions below were in the `ok` expression but not in this list, so a
@@ -219,8 +211,6 @@ bool PlantOrchard_ResolveFuncs() {
         if (!g_pGameWorldSingleton) printf("  MISSING: g_pGameWorldSingleton\n");
         if (!s_fHalfCellOffset) printf("  MISSING: fHalfCellOffset (0x140172114)\n");
         if (!s_typeConst) printf("  MISSING: typeConst (0x1401c46b0 OrchardComponent type id)\n");
-        if (!s_vtable_PlantOrchard) printf("  MISSING: vtable_PlantOrchard (0x140161910)\n");
-        if (!s_vtable_Work) printf("  MISSING: vtable_Work (0x140161a80)\n");
     }
 #endif
 
@@ -259,9 +249,9 @@ static int* BST_FindInt(void* root, int key) {
 // 6. Check pathfinding
 // 7. Create orchard planting action, assign work, insert into BST
 //
-int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int PlantOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Step 1: Find components
     uintptr_t matDescIBP = 0;
@@ -375,11 +365,11 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
             int priority = (int)selfQ[4];
             uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
 
-            uintptr_t vtable = *(uintptr_t*)self;
+            uintptr_t vtable = *(uintptr_t*)this;
             typedef uintptr_t* (*GetTarget_t)(PlantOrchard*, void*);
             auto getTarget = *(GetTarget_t*)(vtable + 0x50);
             uint32_t resultBuf[4] = {0};
-            uintptr_t* wResult = getTarget(self, resultBuf);
+            uintptr_t* wResult = getTarget(this, resultBuf);
             uintptr_t workEnt = *wResult;
 
             *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -416,12 +406,7 @@ int PlantOrchard_Slot4_Impl(PlantOrchard* self, void* entityIBP, uint64_t /*para
 }
 
 
-// ============================================================
-// PlantOrchard::Execute (Slot5) -- 3 bytes, returns false.
-// ============================================================
-bool PlantOrchard_Execute_Impl(PlantOrchard* /*self*/) {
-    return false;
-}
+
 
 
 // ============================================================
@@ -429,9 +414,9 @@ bool PlantOrchard_Execute_Impl(PlantOrchard* /*self*/) {
 // Removes BST entry, marks cell available (sets validity to 0).
 // param4 is plain int cell index (not packed like PlantArea).
 // ============================================================
-int PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int PlantOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Search BST for cell index and remove
     int* node = (int*)selfQ[9];
@@ -457,9 +442,9 @@ int PlantOrchard_OnComplete_Impl(PlantOrchard* self, void* /*param2*/, void* /*p
 // PlantOrchard::OnCancel (Slot7) -- 0x1400f4a20
 // Marks cell available. Does NOT remove BST entry (unlike OnComplete).
 // ============================================================
-int PlantOrchard_OnCancel_Impl(PlantOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int PlantOrchard::OnCancel(void* /*param2*/, void* /*param3*/, int param4) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Search BST for cell and remove
     int* node = (int*)selfQ[9];
@@ -485,8 +470,8 @@ int PlantOrchard_OnCancel_Impl(PlantOrchard* self, void* /*param2*/, void* /*par
 // PlantOrchard::Cleanup (Slot8) -- 0x1400f4e70
 // CancelAll: identical to PlantArea -- loops BST, cancels each work item.
 // ============================================================
-void PlantOrchard_Cleanup_Impl(PlantOrchard* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int PlantOrchard::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -502,6 +487,7 @@ void PlantOrchard_Cleanup_Impl(PlantOrchard* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 
@@ -509,9 +495,9 @@ void PlantOrchard_Cleanup_Impl(PlantOrchard* self) {
 // PlantOrchard::Validate (Slot9) -- 0x1400f47f0
 // RemoveInvalid: identical pattern to PlantArea, but marks cells with 0.
 // ============================================================
-bool PlantOrchard_Validate_Impl(PlantOrchard* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int PlantOrchard::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     int* collectArray = nullptr;
     int* currentArray = nullptr;
@@ -627,8 +613,8 @@ cleanup:
 // PlantOrchard::GetTarget (Slot10) -- 0x1400f4ef0
 // Identical to PlantArea::GetTarget.
 // ============================================================
-void* PlantOrchard_GetTarget_Impl(PlantOrchard* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* PlantOrchard::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -644,8 +630,8 @@ void* PlantOrchard_GetTarget_Impl(PlantOrchard* self, void* outPtr) {
 // ============================================================
 // PlantOrchard::GetPriority (Slot11) -- shared 0x140029860
 // ============================================================
-bool PlantOrchard_GetPriority_Impl(PlantOrchard* self) {
-    return self->field_50 > 0;
+int PlantOrchard::GetPriority() {
+    return field_50 > 0 ? 1 : 0;
 }
 
 
@@ -653,10 +639,10 @@ bool PlantOrchard_GetPriority_Impl(PlantOrchard* self) {
 // PlantOrchard::Serialize -- 0x1400f4f50
 // Identical to PlantArea::Serialize.
 // ============================================================
-void PlantOrchard_Serialize_Impl(PlantOrchard* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void PlantOrchard::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    s_fn_Work_Serialize(self, stream);
+    Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
     alignas(8) uint8_t serializerBuf[24] = {0};
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -697,10 +683,9 @@ void PlantOrchard_Serialize_Impl(PlantOrchard* self, void* stream) {
 // PlantOrchard::DtorBody -- 0x1400f5010
 // Identical structure to PlantArea dtor.
 // ============================================================
-void PlantOrchard_DtorBody(PlantOrchard* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    *(void**)selfAddr = s_vtable_PlantOrchard;
+// PlantOrchard dtor 0x1400f5010. The stamps and the `~Internal` call are the compiler's chain.
+PlantOrchard::~PlantOrchard() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
     *(uintptr_t*)(selfAddr + 0x58) = 0;
@@ -715,98 +700,59 @@ void PlantOrchard_DtorBody(PlantOrchard* self) {
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
 // ============================================================
 // PlantOrchard::ScalarDtor -- 0x14002c540
 // ============================================================
-void* PlantOrchard_ScalarDtor_Impl(PlantOrchard* self, uint32_t flags) {
-    PlantOrchard_DtorBody(self);
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+// [0] 0x14002c540: ~PlantOrchard, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* PlantOrchard::DeletingDtor(unsigned flags) {
+    this->~PlantOrchard();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
+
+// Ctor 0x1400f50b0 (deserialize/factory variant): `??0Internal`, the Work base fields,
+// the leaf fields zeroed (+0x60/+0x64 as the one qword the old port wrote; the two
+// stamps are the compiler's). PlantOrchard_ResolveFuncs wires the file's helper
+// pointers and the orchard diagnostic counts the construction (the old factory ctor
+// did both).
+PlantOrchard::PlantOrchard()
+    : Work(), field_48(nullptr), field_50(0), field_58(nullptr), field_60(0), field_64(0),
+      field_68(nullptr) {
+    PlantOrchard_ResolveFuncs();
+    OrchardDiag_NotePlantConstructed();
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161910 (13 slots), size 0x70, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// NOTE: slot4 (+0x20) Execute = PlantOrchard_Slot4_Impl (main planting logic).
-// PlantOrchard_Execute_Impl is the 3-byte returns-false stub for "Slot5 (+0x28)",
-// which is the shared Work_Slot5 — it is NOT used here.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_PlantOrchard_Vtable` (slot 1 null, slot 2 a lazily
+// cached id), PlantOrchard_Ctor_Impl (the ctor with both stamps written by hand) and
+// REGISTER_TYPE over PlantOrchard_Factory / _CreateInPlace, plus two vtable-pointer
+// statics for the dtor's stamps. Nothing outside this block reads 0x140161910 back
+// (the from-entity ctor that stamped it is the real ctor now), so its registration
+// goes with the table.
+
+// create 0x14002c500: MemAlloc(sizeof, 8), then the ctor.
+void* PlantOrchard::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PlantOrchard), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PlantOrchard());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* PlantOrchard::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PlantOrchard());
+}
+
+DEFINE_EXE_VTABLE(PlantOrchard, "_ZTV12PlantOrchard")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// Constructor — port of PlantOrchard_Ctor (0x1400f5010-region simple variant):
-// Object::Internal::Internal -> Work base fields -> PlantOrchard vtable + zero fields.
-static void* PlantOrchard_Ctor_Impl(PlantOrchard* self) {
-    fn_ObjectInternal_Ctor(self);
-
-    uintptr_t a = (uintptr_t)self;
-    // Work base vtable (intermediate, immediately overwritten)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161a80);
-    *(void**)(a + 0x10) = nullptr;
-    *(void**)(a + 0x18) = nullptr;
-    *(int32_t*)(a + 0x20) = -1;
-    *(int32_t*)(a + 0x24) = 0;
-    *(int32_t*)(a + 0x28) = -1;
-    *(int32_t*)(a + 0x2c) = 0;
-    *(void**)(a + 0x30) = nullptr;
-    *(void**)(a + 0x38) = nullptr;
-    *(int32_t*)(a + 0x40) = 0;
-
-    // PlantOrchard vtable (our registered standalone table)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161910);
-    *(void**)(a + 0x48) = nullptr;     // BST root
-    *(int32_t*)(a + 0x50) = 0;         // BST count
-    *(void**)(a + 0x58) = nullptr;     // validity array
-    *(void**)(a + 0x60) = nullptr;     // field_60 (slot count + pad)
-    *(void**)(a + 0x68) = nullptr;     // ExternalPtr (orchard desc)
-
-    OrchardDiag_NotePlantConstructed();
-    return self;
-}
-
-static uint32_t PlantOrchard_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PlantOrchard");
-    return c;
-}
-
-static void* g_PlantOrchard_Vtable[13] = {
-    (void*)&PlantOrchard_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                    // +0x08 slot1 (null)
-    (void*)&PlantOrchard_GetTypeId,        // +0x10 GetTypeId
-    (void*)&PlantOrchard_Serialize_Impl,   // +0x18 Serialize
-    (void*)&PlantOrchard_Slot4_Impl,       // +0x20 Execute (main planting logic)
-    (void*)&Work_Slot5,                    // +0x28 slot5 (returns 0)
-    (void*)&PlantOrchard_OnComplete_Impl,  // +0x30 OnComplete
-    (void*)&PlantOrchard_OnCancel_Impl,    // +0x38 OnCancel
-    (void*)&PlantOrchard_Cleanup_Impl,     // +0x40 Cleanup
-    (void*)&PlantOrchard_Validate_Impl,    // +0x48 Validate
-    (void*)&PlantOrchard_GetTarget_Impl,   // +0x50 GetTarget
-    (void*)&PlantOrchard_GetPriority_Impl, // +0x58 GetPriority
-    (void*)&Work_Slot12,                   // +0x60 slot12 (void nop)
-};
-
-extern "C" void RegisterPlantOrchardVtable() {
-    RegisterExeAddr(0x140161910, (uintptr_t)g_PlantOrchard_Vtable);
-}
-extern "C" void* PlantOrchard_CreateInPlace(void* mem) {
-    PlantOrchard_ResolveFuncs();
-    return PlantOrchard_Ctor_Impl((PlantOrchard*)mem);
-}
-extern "C" void* PlantOrchard_Factory(void) {
-    PlantOrchard_ResolveFuncs();
-    void* p = Work_Alloc(0x70);
-    return p ? PlantOrchard_Ctor_Impl((PlantOrchard*)p) : nullptr;
-}
-REGISTER_TYPE(PlantOrchard, "Work", &PlantOrchard_Factory, &PlantOrchard_CreateInPlace);
+DEFINE_EXE_TYPE(PlantOrchard, "Work")

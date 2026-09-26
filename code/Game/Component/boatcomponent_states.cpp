@@ -82,10 +82,10 @@
 #include <cstdlib>
 #include <cstring>
 
-namespace { struct BoatCtrlTag {}; }
+// ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
+// ControllerLive::TableController<BoatCtrlTag>, BoatComponent.h).
+#include "Component/BoatComponent.h"
 using BoatDispatch = ::ControllerLive::Dispatcher<BoatCtrlTag>;
-
-extern "C" void** BoatCtrl_NodeVtable() { return BoatDispatch::Vtable(); }
 
 namespace {
 

@@ -11,94 +11,78 @@
 //   float @ +0x2c
 //   enum  @ +0x20   (serializer-encoding vtable +0x98 dispatch, version-gated)
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (OrchardDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015a210) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/OrchardDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kOrchardDescriptionVtable = 0x14015a210;
+// ctor (inlined into create 0x1400098d0 / createInPlace 0x140009940):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+OrchardDescription::OrchardDescription()
+    : Description(),
+      _type(5),
+      _i24(2),
+      _i28(2),
+      _f2c(0.0f) {}
 
-static void OrchardDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kOrchardDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(int32_t*)(s + 0x20) = 5;
-    *(int32_t*)(s + 0x24) = 2;
-    *(int32_t*)(s + 0x28) = 2;
-    *(int32_t*)(s + 0x2c) = 0;
+// [0] 0x140009a10: ~OrchardDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* OrchardDescription::DeletingDtor(unsigned flags) {
+    this->~OrchardDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void OrchardDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    // enum +0x20 is VERSION-GATED in the original (0x140052300): only read when
-    // Serializer::GetVersion() > 0. The field was added in a later resource
-    // version; Orchard.rsc is version 0, so reading it unconditionally over-reads
-    // 4 bytes past the resource -> CompressedStream::Read zero-progress spin.
-    if (reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0) {   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge (enum +0x20)
-    }
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140052300: stream order as retail.
+bool OrchardDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_i24, nullptr);
+    ser.Serialize(_i28, nullptr);
+    ser.Serialize(_f2c, nullptr);
+    if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
+    return true;
 }
 
-void* OrchardDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kOrchardDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400099a0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* OrchardDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) OrchardDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void OrchardDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t OrchardDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("OrchardDescription");
-    return cached;
+// [8] 0x140009a00: OrchardComponent's type id through the hidden return slot.
+Object::Type* OrchardDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("OrchardComponent");
+    return ret;
 }
-static int   OrchardDescription_Stub_Return3(void* /*self*/) { return 3; } // GetVersion
-static int   OrchardDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* OrchardDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* OrchardDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* OrchardDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "OrchardComponent"); }
-
-static void* g_OrchardDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&OrchardDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&OrchardDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&OrchardDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&OrchardDescription_Stub_Return3),    // +0x18 GetVersion=3
-    reinterpret_cast<void*>(&OrchardDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&OrchardDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&OrchardDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&OrchardDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&OrchardDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&OrchardDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&OrchardDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterOrchardDescriptionVtable() {
-    RegisterExeAddr(kOrchardDescriptionVtable, reinterpret_cast<uintptr_t>(g_OrchardDescription_Vtable));
+// [9] 0x140009940: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* OrchardDescription::Construct() {
+    return new (static_cast<void*>(this)) OrchardDescription();
 }
-extern "C" void* OrchardDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+
+// create 0x1400098d0: MemAlloc(0x30, 8), then the (inlined) ctor.
+void* OrchardDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(OrchardDescription), 8);
     if (!p) return nullptr;
-    OrchardDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) OrchardDescription());
 }
-static void* OrchardDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    OrchardDescription_Init(memory);
-    return memory;
+// createInPlace 0x140009940.
+void* OrchardDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) OrchardDescription());
 }
-REGISTER_TYPE(OrchardDescription, "Description",
-              &OrchardDescription_Factory, &OrchardDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(OrchardDescription, "_ZTV18OrchardDescription")
+DEFINE_EXE_TYPE(OrchardDescription, "Description")

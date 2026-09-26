@@ -187,7 +187,6 @@ void StatusIconUI_Startup(StatusIconUI* self) {
         }
     }
 
-
     // Loop through icon elements, show/hide based on bitfield
     int iconCount = *(int*)((uintptr_t)self + 0x38);
     uint64_t* iconArray = *(uint64_t**)((uintptr_t)self + 0x30);
@@ -244,7 +243,6 @@ void StatusIconUI_Startup(StatusIconUI* self) {
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
-#include "dialog_controller_vtable.h"
 
 // By-name StatusIconComponent finder (forward-declared at the top of this file). The exe
 // finder Entity_FindComponent_MeshInstance (0x140002f90) compares each component's GetTypeId
@@ -273,23 +271,6 @@ static void* StatusIconUI_FindStatusIconComp(void* entity) {
 }
 
 namespace statusiconui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("StatusIconUI");
-    return c;
-}
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_dc = 0, s_pt = 0;
@@ -337,35 +318,45 @@ void W_Startup(void* self) {
 // +0x40 per-frame (the only slot DialogInstance::OnUpdate dispatches each frame) → drive the
 // visibility update so the icons continuously track the entity's live StatusIconComponent bits.
 void W_OnUpdate(void* self, void* /*time*/) { W_Startup(self); }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Serialize);
-        g_vt[7] = reinterpret_cast<void*>(&W_Startup);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's StatusIconUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "StatusIconUI", &StubNop);
-
-void Zero(void* p) { for (size_t o = 0; o < (size_t)0x40; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x40, 8);
-    if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
-}
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
-
 }  // namespace statusiconui_sa
 
-REGISTER_TYPE(StatusIconUI, "UI::DialogController",
-              &statusiconui_sa::Factory, &statusiconui_sa::InPlace);
+// [4] 0x14007b270
+void StatusIconUI::OnCreated() {
+    statusiconui_sa::W_Serialize(this);
+}
+
+// [7] 0x14007b0a0
+void StatusIconUI::OnUpdateLayout() {
+    statusiconui_sa::W_Startup(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void StatusIconUI::OnUpdate(const System::Time& time) {
+    statusiconui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [0] 0x140014370: ~StatusIconUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* StatusIconUI::DeletingDtor(unsigned flags) {
+    this->~StatusIconUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140014180: MemAlloc(0x40, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* StatusIconUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StatusIconUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* StatusIconUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StatusIconUI());
+}
+
+DEFINE_EXE_VTABLE(StatusIconUI, "_ZTV12StatusIconUI")
+DEFINE_EXE_TYPE(StatusIconUI, "UI::DialogController")
 

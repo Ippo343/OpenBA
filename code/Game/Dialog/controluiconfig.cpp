@@ -45,108 +45,72 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
-namespace {
+#include "object/Internal.h"
+#include "Dialog/ControlUIConfig.h"
 
-constexpr uintptr_t kControlUIConfigVtable = 0x14015b3e0;
-constexpr int       kSlots = 9;
+// ============================================================================
+// ENDGAME B.3.8 PNL — ControlUIConfig as a REAL class (ControlUIConfig.h).
+// The hand-built 9-slot table, its Init/Factory/CreateInPlace entry points and
+// the lazy GetTypeId cache are gone; the compiler emits the table.
+// ============================================================================
 
-void* g_vt[kSlots];
-
-typedef void (*fn_Type_Serialize_t)(void* type, void* serializer);
-fn_Type_Serialize_t s_fn_Type_Serialize = nullptr;
-bool s_resolved = false;
-
-void EnsureResolved() {
-    if (s_resolved) return;
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x1401516b0);
-    if (slot) s_fn_Type_Serialize = *reinterpret_cast<fn_Type_Serialize_t*>(slot);
-    s_resolved = true;
+// [0] 0x140010dd0: ~ControlUIConfig (restamp + ~DialogControllerConfig +
+// ~External, all the compiler's), MemFree on &1.
+Object::Base* ControlUIConfig::DeletingDtor(unsigned flags) {
+    this->~ControlUIConfig();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
+// [4] not declared: retail's slot is the imported External::Compile, which
+// the class inherits.
 
-void Init(void* self) {
-    if (fn_External_External) fn_External_External(self);
-    *reinterpret_cast<void**>(self) = g_vt;
-    // Retail stores ONE zero qword here, covering +0x20 (command) and +0x24 (type).
-    *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(self) + 0x20) = 0;
+// [5] 0x14005fb70 — read the command id and the target component type.
+// Object::Type::Serialize is the exe import slot 0x1401516b0 (resolved per
+// call: no first-use cache, B6-5).
+bool ControlUIConfig::Serialize(void* stream) {
+    typedef void (*fn_Type_Serialize_t)(void* type, void* serializer);
+    fn_Type_Serialize_t typeSerialize = nullptr;
+    if (uintptr_t slot = ResolveAddr(Module::Exe, 0x1401516b0))
+        typeSerialize = *reinterpret_cast<fn_Type_Serialize_t*>(slot);
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    serializer.Serialize(_command, nullptr);
+    if (typeSerialize) typeSerialize(&_componentType, &serializer);
+    return true;
 }
 
-uint32_t GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ControlUIConfig");
-    return cached;
+// [6] 0x140010d80 — destroy in place, construct again.
+Object::External* ControlUIConfig::Reconstruct() {
+    this->~ControlUIConfig();
+    return new (this) ControlUIConfig();
 }
 
-// vtable idx5 (0x14005fb70) — read the command id and the target component type.
-char Serialize(void* self, void* stream) {
-    EnsureResolved();
-    if (!self) return 1;
-    uint8_t* c = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(c + 0x20), nullptr);   // B.3.4 bridge
-    if (s_fn_Type_Serialize)
-        s_fn_Type_Serialize(c + 0x24, serializer);
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    return 1;
-}
+// [7] 0x140001640, the body shared by 119 exe tables:
+// `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
+void ControlUIConfig::Destruct() { DeletingDtor(0); }
 
-void* Dtor(void* self, uint32_t flags) {
-    *reinterpret_cast<void**>(self) = g_vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
+// [8] 0x140010d30 — placement construction (MSVC folded it with createInPlace).
+Object::External* ControlUIConfig::Construct() { return new (this) ControlUIConfig(); }
 
-int   GetVersion(void*) { return 1; }
-int   Return0(void*)    { return 0; }
-void* ReturnNull(void*, ...) { return nullptr; }
-
-}  // namespace
-
-extern "C" void* ControlUIConfig_CreateInPlace(void* mem);
-
-namespace {
-
-// idx6: destroy-then-reconstruct in place.
-void* Reconstruct(void* self) {
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    return ControlUIConfig_CreateInPlace(self);
-}
-
-struct VtblInit {
-    VtblInit() {
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[1] = reinterpret_cast<void*>(&ReturnNull);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[3] = reinterpret_cast<void*>(&GetVersion);
-        g_vt[4] = reinterpret_cast<void*>(&Return0);
-        g_vt[5] = reinterpret_cast<void*>(&Serialize);
-        g_vt[6] = reinterpret_cast<void*>(&Reconstruct);
-        g_vt[7] = reinterpret_cast<void*>(&Return0);
-        g_vt[8] = reinterpret_cast<void*>(&ControlUIConfig_CreateInPlace);
-    }
-} g_vtblInit;
-
-}  // namespace
-
-extern "C" void RegisterControlUIConfigVtable() {
-    RegisterExeAddr(kControlUIConfigVtable, reinterpret_cast<uintptr_t>(g_vt));
-}
-
-extern "C" void* ControlUIConfig_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+// create 0x140010cd0: MemAlloc(0x28, 8), then the ctor.
+void* ControlUIConfig::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ControlUIConfig), 8);
     if (!p) return nullptr;
-    Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) ControlUIConfig());
+}
+// createInPlace 0x140010d30.
+void* ControlUIConfig::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ControlUIConfig());
 }
 
-extern "C" void* ControlUIConfig_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    Init(mem);
-    return mem;
+DEFINE_EXE_VTABLE(ControlUIConfig, "_ZTV15ControlUIConfig")
+
+// D5: no by-address reader of 0x14015b3e0 remains in the tree; the row is kept
+// (serving the compiler table) only because reg_controlui.cpp calls this
+// function — the closing pass deletes both.
+extern "C" void RegisterControlUIConfigVtable() {
+    RegisterExeAddr(0x14015b3e0, reinterpret_cast<uintptr_t>(ControlUIConfig::Vtable()));
 }
 
-REGISTER_TYPE(ControlUIConfig, "UI::DialogControllerConfig",
-              &ControlUIConfig_Factory, &ControlUIConfig_CreateInPlace);
+DEFINE_EXE_TYPE(ControlUIConfig, "UI::DialogControllerConfig")

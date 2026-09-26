@@ -35,56 +35,57 @@
 // the +0x50 ExternalRef reuses the generic ExternalPtr serialize reimpl.
 //
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (CreatePlacedDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162cf0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/CreatePlacedDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "system/String.h"
-#include "resolve.h"
 #include "Component/coll_bridge.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
-#include <cstdio>
-#include <cstdlib>
 #include <new>
 
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
+extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);  // serialize_externals.cpp
 
-static const uintptr_t kCreatePlacedDescriptionVtable = 0x140162cf0;
+// ctor (inlined into create 0x140032a60 / createInPlace 0x140032aa0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+CreatePlacedDescription::CreatePlacedDescription()
+    : Description(),
+      _category(0),
+      _placeArray(nullptr),
+      _placeCount(0),
+      _placeCap(0),
+      _i40(0),
+      _i44(1),
+      _i48(1),
+      _created(nullptr) {}
 
-static void CreatePlacedDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kCreatePlacedDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(int32_t*) (s + 0x20) = 0;   // enum
-    *(uint64_t*)(s + 0x28) = 0;   // String (empty)
-    *(uint64_t*)(s + 0x30) = 0;   // int[] base
-    // ...and its count/capacity. The comment here used to claim +0x38 was "cleared" by
-    // the write above, but that write only covers 0x30..0x37. A recycled allocation
-    // therefore kept a STALE count (and cap) alongside a null data pointer — the state
-    // that made Serialize's resize copy `oldCount` elements from a null oldData and
-    // crash in GenericArrayResize.
-    *(uint64_t*)(s + 0x38) = 0;   // count @ +0x38, capacity @ +0x3c
-    *(int32_t*) (s + 0x40) = 0;   // int
-    *(int32_t*) (s + 0x44) = 1;   // int
-    *(int32_t*) (s + 0x48) = 1;   // int
-    *(uint64_t*)(s + 0x50) = 0;   // ExternalRef (weak)
+// dtor (slot 0 0x140032ad0 minus the stamps): frees the int[] array; the String member's dtor follows.
+// The compiler then chains ~Description -> ~External.
+CreatePlacedDescription::~CreatePlacedDescription() {
+    if (fn_MemFreeStatic && _placeArray) fn_MemFreeStatic(_placeArray);   // int[] array
+    _placeArray = nullptr;
+    _placeCount = 0;
+    _placeCap = 0;
 }
 
-// ============================================================
-// CreatePlacedDescription_Serialize (vtable +0x28, 0x1401198d0)
-// ============================================================
-void CreatePlacedDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
-        return;
-    }
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x140032ad0: ~CreatePlacedDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* CreatePlacedDescription::DeletingDtor(unsigned flags) {
+    this->~CreatePlacedDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    // enum @ +0x20
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge
-
+// [5] 0x1401198d0: stream order as retail.
+bool CreatePlacedDescription::Serialize(void* stream) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: the allocator is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_category, nullptr);
     // int[] count @ +0x38, base @ +0x30 (stride 4).
     //
     // Retail (0x1401198D0) serializes a LOCAL COPY of the count, resizes the array
@@ -109,9 +110,9 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
     // per-cell terrain-mask override in ToolTile_FootprintValidity_d580 (0x14009D580):
     // with them zero, `code` is 0 for every footprint cell, no terrain type is ever
     // allowed, and the building can never be placed anywhere.
-    int count = *(int32_t*)(s + 0x38);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
-
+    int count = _placeCount;
+    ser.Serialize(count, nullptr);
+    
     // Retail gates the resize on its load flag: `if (*(int*)(local_20 + 8) == 0)`, where
     // local_20 is the Serializer's first qword = the Stream, so the test is stream+8
     // ([[reference_serializer_plus8_is_encoding_not_loading_flag]]).
@@ -125,10 +126,7 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
     // the element loop was skipped, the stream desynced, and the process crashed.
     // Resizing only when the array cannot already hold `count` keeps an already-parsed
     // array — values intact — which is the whole point of the fix above.
-    // 0x1400021d0 was Collection::Array<int32>::SetSize monomorphised into the
-    // exe (ENDGAME B.3.2 step 2) — converted at its call site below.
-
-    uint8_t* arr = *(uint8_t**)(s + 0x30);
+    uint8_t* arr = static_cast<uint8_t*>(_placeArray);
     if (count > 0 && !arr) {
         // No buffer yet: allocate directly instead of going through the shared resize.
         // Reimpl_Array_Resize_Stride04 (our 0x1400021D0) reads the RECORDED count as
@@ -137,102 +135,67 @@ void CreatePlacedDescription_Serialize(void* self, void* stream) {
         // never sees that state; ours could, so keep the shared helper off this path.
         arr = reinterpret_cast<uint8_t*>(
             fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)count * 4, 4));
-        *(void**)(s + 0x30)   = arr;
-        *(int32_t*)(s + 0x38) = count;
-        *(int32_t*)(s + 0x3c) = count;
+        _placeArray = arr;
+        _placeCount = count;
+        _placeCap   = count;
         // Zeroing a FRESH buffer is right — its elements are about to be read from the
         // stream. Zeroing an ALREADY-PARSED one is the bug this fix removes.
-        if (arr) for (int i = 0; i < count; ++i) *(int32_t*)(arr + i * 4) = 0;
-    } else if (count > 0 && *(int32_t*)(s + 0x3c) < count) {
+        if (arr) for (int i = 0; i < count; ++i) *reinterpret_cast<int32_t*>(arr + i * 4) = 0;
+    } else if (count > 0 && _placeCap < count) {
         // B.3.2 bridge: exe 0x1400021d0 IS Collection::Array<int32>::SetSize(n), called
         // here at 14011993d. I32NoInit — the grown tail is left as the allocation found
         // it, like retail. Safe: this branch is only taken when the buffer cannot
         // already hold `count`, i.e. the array has not been parsed yet, and the element
         // loop right below reads all `count` slots from the stream into it.
-        GameColl::AsArray<GameColl::I32NoInit>((void*)(s + 0x30)).SetSize(count);
-        arr = *(uint8_t**)(s + 0x30);
+        GameColl::AsArray<GameColl::I32NoInit>(reinterpret_cast<void*>(&_placeArray)).SetSize(count);
+        arr = static_cast<uint8_t*>(_placeArray);
     }
     uint8_t* e = arr;
     for (int i = 0; i < count && arr; ++i, e += 4) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(e), nullptr);   // B.3.4 bridge (enum element)
+        ser.Serialize(*reinterpret_cast<unsigned int*>(e), nullptr);   // enum element
     }
-
-    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);                   // B.3.1 bridge: String +0x28
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    Reimpl_ExternalPtr_Serialize_StringTable(s + 0x50, serializer);// ref    +0x50
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    _name.Serialize(&ser);
+    ser.Serialize(_i44, nullptr);
+    ser.Serialize(_i48, nullptr);
+    ser.Serialize(_i40, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_created, &ser);
+    return true;
 }
 
-// ============================================================
-// CreatePlacedDescription_Dtor (vtable +0x00, 0x140032ad0)
-// ============================================================
-void* CreatePlacedDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kCreatePlacedDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_MemFreeStatic && *(void**)(s + 0x30)) {
-        fn_MemFreeStatic(*(void**)(s + 0x30));   // int[] array
-    }
-    *(uint64_t*)(s + 0x30) = 0;
-    *(uint64_t*)(s + 0x38) = 0;
-    reinterpret_cast<System::String*>(s + 0x28)->~String();  // B.3.1 bridge: String +0x28
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140032ab0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* CreatePlacedDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) CreatePlacedDescription();
 }
 
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void CreatePlacedDescription::Destruct() { DeletingDtor(0); }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CreatePlacedDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CreatePlacedDescription");
-    return cached;
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* CreatePlacedDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
 }
 
-static int   CreatePlacedDescription_VtblStub_Return4(void* /*self*/) { return 4; } // GetVersion
-static int   CreatePlacedDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* CreatePlacedDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* CreatePlacedDescription_CreateInPlace(void* memory);
-
-static void* g_CreatePlacedDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CreatePlacedDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&CreatePlacedDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&CreatePlacedDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&CreatePlacedDescription_VtblStub_Return4),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&CreatePlacedDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&CreatePlacedDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&CreatePlacedDescription_VtblStub_Return0),   // +0x30 Draw/Cleanup
-    reinterpret_cast<void*>(&CreatePlacedDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&CreatePlacedDescription_VtblStub_ReturnNull),// +0x40 Slot8
-    reinterpret_cast<void*>(&CreatePlacedDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CreatePlacedDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterCreatePlacedDescriptionVtable() {
-    RegisterExeAddr(kCreatePlacedDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_CreatePlacedDescription_Vtable));
+// [9] 0x140032aa0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* CreatePlacedDescription::Construct() {
+    return new (static_cast<void*>(this)) CreatePlacedDescription();
 }
 
-extern "C" void* CreatePlacedDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+// create 0x140032a60: MemAlloc(0x58, 8), then the (inlined) ctor.
+void* CreatePlacedDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CreatePlacedDescription), 8);
     if (!p) return nullptr;
-    CreatePlacedDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) CreatePlacedDescription());
+}
+// createInPlace 0x140032aa0.
+void* CreatePlacedDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CreatePlacedDescription());
 }
 
-static void* CreatePlacedDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    CreatePlacedDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(CreatePlacedDescription, "Description",
-              &CreatePlacedDescription_Factory, &CreatePlacedDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(CreatePlacedDescription, "_ZTV23CreatePlacedDescription")
+DEFINE_EXE_TYPE(CreatePlacedDescription, "Description")

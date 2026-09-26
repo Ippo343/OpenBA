@@ -7,7 +7,9 @@
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
-#include "Dialog/ui_dialogs.h"
+#include "Dialog/MapParamsDialog.h"
+#include "Object/factory_registration.h"
+#include <cstdio>
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -17,17 +19,15 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// MapParamsDialog::Slot5 (vtable +0x28) — Shutdown
+// [5] MapParamsDialog::OnClosed (vtable +0x28) — Shutdown
 // ============================================================
 // 3-byte no-op: XOR EAX,EAX; RET. Returns 0.
 // Original: 0x14006b800.
 
-int MapParamsDialog_Slot5(MapParamsDialog* /*self*/) {
-    return 0;
-}
+void MapParamsDialog::OnClosed() {}
 
 // ============================================================
-// MapParamsDialog::Startup (0x14006b810) — Slot4
+// [4] MapParamsDialog::OnOpened (0x14006b810) — Startup
 // ============================================================
 // Finds all UI elements by name, stores element pointers at fixed offsets.
 // Sets button IDs (NewName=0, OK=1, Cancel=2).
@@ -35,8 +35,9 @@ int MapParamsDialog_Slot5(MapParamsDialog* /*self*/) {
 // terrain, terrain size, climate, condition, disaster text.
 //
 // Original: 0x14006b810
-void MapParamsDialog_Startup(MapParamsDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void MapParamsDialog::OnOpened() {
+    printf("[MapParamsDialog::Startup] self=%p\n", (void*)this);
+    uintptr_t s = (uintptr_t)this;
 
     // --- Find and store all named elements ---
 
@@ -44,7 +45,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("editName");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xB8) = *(void**)retBuf;
     }
 
@@ -52,7 +53,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("numberSeed");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xC0) = *(void**)retBuf;
     }
 
@@ -60,7 +61,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textCondition");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xE0) = *(void**)retBuf;
     }
 
@@ -68,7 +69,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textTerrain");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xC8) = *(void**)retBuf;
     }
 
@@ -76,7 +77,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textTerrainSize");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xD0) = *(void**)retBuf;
     }
 
@@ -84,7 +85,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textClimate");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xD8) = *(void**)retBuf;
     }
 
@@ -92,16 +93,16 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textDisaster");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xE8) = *(void**)retBuf;
     }
 
-    // --- Find button elements (local vars, not stored on self) ---
+    // --- Find button elements (local vars, not stored on this) ---
     void* buttonNewName = nullptr;
     {
         System::String nameStr("buttonNewName");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         buttonNewName = *(void**)retBuf;
     }
 
@@ -109,7 +110,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("buttonCancel");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         buttonCancel = *(void**)retBuf;
     }
 
@@ -117,7 +118,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         buttonOk = *(void**)retBuf;
     }
 
@@ -228,11 +229,11 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     }
 }
 
-// MapParamsDialog::Update (0x14006b790) — Slot6
+// [6] MapParamsDialog::OnUpdateLayout (0x14006b790) — Update
 // Checks if editName field has text; enables/disables OK button accordingly.
 // Calls button vtable[8](button, hasText) which is likely Element::SetEnabled.
 // ============================================================
-// MapParamsDialog::OnEvent (0x14006b5f0) — Slot8
+// [8] MapParamsDialog::OnElementEvent (0x14006b5f0) — OnEvent
 // ============================================================
 // Handles button clicks in the Map Parameters dialog.
 // eventType 0x12 = button click:
@@ -242,8 +243,8 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
 //
 // Original: 0x14006b5f0.
 
-void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType, int eventData) {
-    uintptr_t s = (uintptr_t)self;
+void MapParamsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    uintptr_t s = (uintptr_t)this;
 
     if (eventType != 0x12) return;
 
@@ -264,7 +265,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
         // Close dialog
         void* ui = *(void**)(s + 0x10);
         uint64_t basePtr[2];
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
         return;
     }
@@ -273,7 +274,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
         // buttonCancel: close dialog
         void* ui = *(void**)(s + 0x10);
         uint64_t basePtr[2];
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
         return;
     }
@@ -331,13 +332,13 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
     }
 }
 
-void MapParamsDialog_Update(MapParamsDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void MapParamsDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
-    // OK button element at self+0xF0
+    // OK button element at this+0xF0
     void* okButton = *(void**)(s + 0xF0);
 
-    // editName element at self+0xB8
+    // editName element at this+0xB8
     void* editName = *(void**)(s + 0xB8);
 
     // Get text data pointer from editName element (+0xC8 = String internal data)
@@ -353,3 +354,43 @@ void MapParamsDialog_Update(MapParamsDialog* self) {
     // Virtual call: vtable[8](button, enabled)
     reinterpret_cast<UI::Element*>(okButton)->Enable(textLen > 0);  // B.3.6 bridge
 }
+
+// ============================================================
+// Construction, destruction, reflection (ENDGAME B.3.8 block DLG)
+// ============================================================
+// Retail 0x14006bd80: DialogInstance base ctor (the caller's InternalBasePtr
+// copied to a stack slot, its ADDRESS passed on), the vtable store, then
+// +0xB8..+0xF0 zeroed: editName, numberSeed, textTerrain, textTerrainSize,
+// textClimate, textCondition, textDisaster, buttonOk — borrowed element
+// pointers OnOpened fills in.
+
+MapParamsDialog::MapParamsDialog()
+    : dataB8(0), dataC0(0), dataC8(0), dataD0(0), dataD8(0), dataE0(0), dataE8(0), dataF0(0) {}
+
+MapParamsDialog::MapParamsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                                 Object::InternalPtr<UI::DialogInstance> parent)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      dataB8(0), dataC0(0), dataC8(0), dataD0(0), dataD8(0), dataE0(0), dataE8(0), dataF0(0) {}
+
+// [0] 0x140012150: ~MapParamsDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* MapParamsDialog::DeletingDtor(unsigned flags) {
+    this->~MapParamsDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140012100: MemAlloc(0xf8, 8), then the ctor.
+void* MapParamsDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MapParamsDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) MapParamsDialog());
+}
+// createInPlace 0x140012140 (the tree's in-place build is kept, B8-13).
+void* MapParamsDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) MapParamsDialog());
+}
+
+// The reflection record stays at the TU position of the UI_DIALOG_STUB row it
+// replaces (ui_dialog_stub_factories.cpp, B38 D4).
+DEFINE_EXE_VTABLE(MapParamsDialog, "_ZTV15MapParamsDialog")

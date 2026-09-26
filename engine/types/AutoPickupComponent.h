@@ -19,22 +19,7 @@ namespace AutoPickupComponentAddr {
     constexpr uintptr_t Vtable = 0x140158df0;
 }
 
-struct AutoPickupComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    uint8_t  isEnabled;    // +0x28: initialized to 1
-    uint8_t  _pad29[7];    // +0x29: padding
-    void*    field30;      // +0x30: zeroed
-    void*    field38;      // +0x38: zeroed
-};
-
-static_assert(sizeof(AutoPickupComponent) == 0x40, "AutoPickupComponent size mismatch");
-static_assert(offsetof(AutoPickupComponent, vtable) == 0x00, "");
-static_assert(offsetof(AutoPickupComponent, flags) == 0x20, "");
-static_assert(offsetof(AutoPickupComponent, isEnabled) == 0x28, "");
-static_assert(offsetof(AutoPickupComponent, field30) == 0x30, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `AutoPickupComponent` is a real class now
+// (code/Game/Component/AutoPickupComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/AutoPickupComponent.h"

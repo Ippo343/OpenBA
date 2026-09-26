@@ -137,10 +137,10 @@ extern "C" char ClearResource_State2Enter(void* data, void* /*sm*/) {
 // ============================================================
 // Dispatcher + state table for the ClearResourceComponent controller.
 // ============================================================
-namespace { struct ClearResourceCtrlTag {}; }
+// ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
+// ControllerLive::TableController<ClearResourceCtrlTag>, ClearResourceComponent.h).
+#include "Component/ClearResourceComponent.h"
 using ClearResourceDispatch = ::ControllerLive::Dispatcher<ClearResourceCtrlTag>;
-
-extern "C" void** ClearResourceCtrl_NodeVtable() { return ClearResourceDispatch::Vtable(); }
 
 extern "C" void ClearResourceCtrl_PopulateTable() {
     using namespace ::ControllerLive;

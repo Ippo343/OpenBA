@@ -25,7 +25,9 @@
 // Consistent with the GatherRawMaterials struct + field conventions used by
 // code/Game/Work/gatherrawmaterials.cpp (which we do NOT modify).
 
-#include "BuildActions.h"
+#include "Work/GatherRawMaterials.h"
+#include "Work/gatherrawmaterials_funcs.h"
+#include <new>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
@@ -33,8 +35,6 @@
 
 #include "Object/factory_registration.h"
 
-// Base Work ctor. RCX=self, RDX=InternalBasePtr* (reads *param2 as the entity ptr).
-typedef void* (*GRMC_WorkCtor25_t)(void* self, void* ibp);              // 0x1400f72e0
 // FindComponent that returns the BuildComponent (holds BuildDescription at +0x18).
 typedef void  (*GRMC_FindCompUnk_t)(uintptr_t entity, void* retIBP);    // 0x14000d6c0
 // FindComponent that returns the site StorageComponent (type 0x1401c7e78).
@@ -47,33 +47,16 @@ typedef void* (*GRMC_FindCompStorage_t)(uintptr_t entity, void* retIBP); // 0x14
 // "BuildDescription" type-id (DWORD_1401c7040). Name verified via the .rdata
 // writer BuildDescription_Register (0x14014e5f5). GetTypeIdByName in standalone
 // (the raw .rdata global is null).
+// ENDGAME B.3.8: read per call (the function-local lazy cache is gone, B38 D7).
 static uint32_t GRMC_BuildDescTypeId() {
-    static uint32_t id = 0;
-    if (id != 0 && id != 0xFFFFFFFFu) return id;
-    id = ::Object::GetTypeIdByName("BuildDescription");
-    return id;
+    return ::Object::GetTypeIdByName("BuildDescription");
 }
 
-extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
-    if (!mem) return mem;
-    uintptr_t self = reinterpret_cast<uintptr_t>(mem);
-
-    // --- Base Work ctor with a temp IBP holding the raw build-entity pointer ---
-    // FLAG: Work_Ctor25 (0x1400f72e0) is NOT registered for standalone, so
-    // ResolveAddr returns 0 and the Work base (+0x10..+0x40) is left
-    // uninitialised. The lead should register 0x1400f72e0 so the base fields
-    // (entity ptr, work-cell, sentinels) are set.
-    void* entityRaw = buildEntityIBP ? *reinterpret_cast<void**>(buildEntityIBP) : nullptr;
-    GRMC_WorkCtor25_t workCtor =
-        reinterpret_cast<GRMC_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    if (workCtor) {
-        void* tmpIbp = entityRaw;   // Work_Ctor25 reads *param2 as the entity ptr
-        workCtor(mem, &tmpIbp);
-    }
-
-    // --- Set derived vtable (Work_Ctor25 set it to vtable_Work; override) ---
-    uintptr_t vt = ResolveAddr(Module::Exe, 0x140161420);
-    if (vt) *reinterpret_cast<uintptr_t*>(self) = vt;
+// The base ctor is Work(buildEntityIBP) = Work_Ctor25 (0x1400f72e0) on a temp IBP
+// holding the raw build-entity pointer (it reads *param only); the two stamps are the
+// compiler's.
+GatherRawMaterials::GatherRawMaterials(void* buildEntityIBP) : Work(buildEntityIBP) {
+    uintptr_t self = reinterpret_cast<uintptr_t>(this);
 
     // --- Zero GatherRawMaterials fields (matches original, 8 bytes each) ---
     *reinterpret_cast<uint64_t*>(self + 0x48) = 0;   // int[] ptr
@@ -150,5 +133,11 @@ extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
         if (arr58) *reinterpret_cast<int*>(arr58 + static_cast<uintptr_t>(i) * 4) = 0;
     }
 
-    return mem;
+}
+
+// The by-address door (0x1400ec710, standalone/reg_gatherrawmaterials_ctor.cpp; also
+// named by buildcomponent_state1.cpp): the real ctor on caller memory (B8-5).
+extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP) {
+    if (!mem) return mem;
+    return static_cast<Object::Base*>(new (mem) GatherRawMaterials(buildEntityIBP));
 }

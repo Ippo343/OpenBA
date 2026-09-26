@@ -126,85 +126,72 @@ void HuntComponent_InitFuncs() {
 // HuntComponent::Shutdown — vtable slot 3, retail 0x140122820
 // ============================================================
 // Retail:
-//   ResourceProduceComponent::Shutdown(self, stream)    (0x14012b4a0)
+//   ResourceProduceComponent::Shutdown(self, stream)    (0x14012b4a0, a direct call)
 //   Serializer s(stream, 0)
 //   System::Time::Serialize(self+0x50, s)               — the hunt-progress accumulator
 //   ~Serializer()
 //
 // +0x50 is the 8-byte Time the slot-9 Update advances, so without this the lodge's
-// accumulated hunt progress is silently dropped across a save/load. It was the last
-// slot on HuntComponent still holding the inert stub.
-extern "C" void HuntComponent_ShutdownVSlot(void* selfP, void* stream) {
-    static void  (*s_parentShutdown)(void*, void*) = nullptr;
-    static bool s_res = false;
-    if (!s_res) {
-        s_parentShutdown = reinterpret_cast<void(*)(void*, void*)>(
-            ResolveAddr(Module::Exe, 0x14012b4a0));
-        s_res = true;
-    }
-    if (s_parentShutdown) s_parentShutdown(selfP, stream);
+// accumulated hunt progress is silently dropped across a save/load.
+void HuntComponent::Persist(void* stream) {
+    ResourceProduceComponent::Persist(stream);
 
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(reinterpret_cast<uint8_t*>(selfP) + 0x50)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
+    reinterpret_cast<System::Time*>(&huntData)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));   // B.3.4b bridge
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 }
 
-// NOTE on slot 9: HuntComponent::Update is already implemented above
-// (0x140122740). Hunt is the only ResourceProduceComponent subclass that overrides
-// slot 9, and its ctor (0x1401228e0) ORs capability bit 8 into +0x20 precisely to opt
-// into per-frame update ticking; Fishing and Herbalist do neither. The slot receives
-// the Time by VALUE (an 8-byte tick count in a register), which is why the existing
-// signature takes int64_t rather than a Time*.
-
-// ===== Standalone factory (Foundation D — component instantiation) =====
-//
-// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent, so the shared
-// ResourceProduce state machine (resourceproducecomponent_states.cpp) actually runs
-// and slot 18 mints + posts a HuntWork. HuntWork itself was already fully ported and
-// vtable-registered — it just had no producer while the component stayed inert.
-//
-// Flags 0x88, not 0x80: HuntComponent_Ctor (0x1401228e0) ORs bit 8 into +0x20 on top
-// of the Component_Ctor chain's 0x80, which is what opts this component into the
-// per-frame Update above. Size 0x58 and NodeOff 0x28 / DefState 2 come from the shared
-// ResourceProduceComponent ctor — see fishingcomponent.cpp for the byte derivation.
-//
-// DEFAULT-ON via the default-on table (graduated 2026-08-17); the env var is now a
-// kill-switch (=0). The positive run: seed 12345, demo lodge staffed 3/3 and accepting
-// in both arms — OFF held progress(+0x50) at exactly 0 for 7200 frames and town storage
-// at 7 resource types; ON ticked progress 0 -> 9.57e16 and storage reached 11 types,
-// four of which the OFF arm never had. Full A/B in component_factory_base.cpp.
-#include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
-
-extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
-extern "C" void   RPCtrl_PopulateTable();
-extern "C" uintptr_t* HuntComponent_CreateWork(void*, uintptr_t*);   // slot 18
-extern "C" uint8_t ResourceProduceComponent_CommandMask(void*);  // slot 13
-extern "C" void    ResourceProduceComponent_Command(void*);      // slot 14
-
-// Slots must be written from inside InstallLive — FillTypedVtable erases anything
-// written at static-init on the first factory call.
-static void HuntCtrl_PopulateAndWireHooks();
-
-CONTROLLER_LIVE_FACTORY_STATES(HuntComponent, 0x58, 0x88, 0x28, 2,
-                               RPCtrl_NodeVtable, HuntCtrl_PopulateAndWireHooks)
-
-static void HuntCtrl_PopulateAndWireHooks() {
-    HuntComponent_LiveVtable[3]  = reinterpret_cast<void*>(&HuntComponent_ShutdownVSlot);
-    HuntComponent_LiveVtable[9]  = reinterpret_cast<void*>(&HuntComponent_Update);
-    HuntComponent_LiveVtable[18] = reinterpret_cast<void*>(&HuntComponent_CreateWork);
-    // Slots 13/14 are the panel command path, shared by every
-    // ResourceProduceComponent subclass (retail 0x14012b520 / 0x14012b5a0).
-    // Without these the dialog harness measured every button on this panel dead:
-    // both slots still held the inert stub.
-    HuntComponent_LiveVtable[13] = reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
-    HuntComponent_LiveVtable[14] = reinterpret_cast<void*>(&ResourceProduceComponent_Command);
-    // 19/20/21 deliberately left as the base no-ops: retail's HuntComponent vtable
-    // keeps 0x140006b10 in all three.
-    RPCtrl_PopulateTable();
+// NOTE on slot 9: HuntComponent::Update is implemented above (0x140122740). Hunt is
+// the only ResourceProduceComponent subclass that overrides slot 9, and its ctor
+// (0x1401228e0) ORs capability bit 8 into +0x20 precisely to opt into per-frame
+// update ticking; Fishing and Herbalist do neither. The slot receives the Time by
+// VALUE (an 8-byte tick count in a register): the base declares that register as
+// `void*`, so its bits are the tick count.
+void HuntComponent::Update(void* time) {
+    HuntComponent_Update(this, static_cast<int64_t>(reinterpret_cast<intptr_t>(time)));
 }
-REGISTER_TYPE(HuntComponent, "ResourceProduceComponent",
-              &HuntComponent_Factory, &HuntComponent_CreateInPlace);
+
+// ============================================================================
+// ENDGAME B.3.8 MI-B — HuntComponent as a REAL class (HuntComponent.h).
+//
+// Before: CONTROLLER_LIVE_FACTORY_STATES (48-slot table filled per create, slots
+// 3/9/13/14/18 written from InstallLive, Inert_ScalarDtor in slot 0, the shared RP
+// dispatcher stamped at +0x28, flags 0x88 from the factory). After: the compiler's
+// 22-slot vtable (13/14/16/17 and 19-21 inherited from ResourceProduceComponent), a
+// real ctor/dtor chain, the controller the base's member (B38_RULES D1, D2, D6).
+// ============================================================================
+#include "Object/factory_registration.h"
+
+extern "C" uintptr_t* HuntComponent_CreateWork(void*, uintptr_t*);   // resourceproduce_creatework.cpp
+
+// 0x1401228e0: the RP ctor (CALL 0x14012b3d0), the compiler's stamp,
+// `MOV qword [RBX+0x50],0`, then `_flags |= 8` (0x80 | 8 = 0x88).
+HuntComponent::HuntComponent() : ResourceProduceComponent(), huntData(nullptr) {
+    OrFlagsInCtor(0x8);
+}
+
+// [0] 0x140035100: restamps + ~Internal (the compiler chain), MemFree on &1.
+Object::Base* HuntComponent::DeletingDtor(unsigned flags) {
+    this->~HuntComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140034f30: MemAlloc(0x58, 8), then the ctor.
+void* HuntComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HuntComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HuntComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* HuntComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HuntComponent());
+}
+
+uintptr_t* HuntComponent::CreateWork(uintptr_t* out) { return HuntComponent_CreateWork(this, out); }  // [18] 0x1401226a0
+
+DEFINE_EXE_VTABLE(HuntComponent, "_ZTV13HuntComponent")
+DEFINE_EXE_TYPE(HuntComponent, "ResourceProduceComponent")
