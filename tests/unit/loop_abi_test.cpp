@@ -39,6 +39,7 @@
 #include "Game/WorldGeometry.h"
 #include "Game/WeatherParticleGeometry.h"
 #include "Game/PathfinderThread.h"
+#include "Game/Tornado.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -283,6 +284,36 @@ UNIT_TEST(loop_pathfinder_thread) {
     CHECK(!std::has_virtual_destructor<PathfinderThread>::value);
     CHECK_EQ(SlotOffset(&PathfinderThread::Run),         S(0));
     CHECK_EQ(SlotOffset(&PathfinderThread::OnCompleted), S(1));   // inherited
+}
+
+// TORNADO (reflected Graphics::Particle, 10 slots) AND ITS INSTANCE (10 slots)
+UNIT_TEST(loop_tornado_classes) {
+    CHECK_EQ(sizeof(Tornado), (size_t)0x90);            // MemAlloc(0x90)
+    CHECK_EQ(sizeof(TornadoInstance), (size_t)0xe0);    // MemAlloc(0xe0)
+    CHECK((std::is_base_of<Graphics::Particle, Tornado>::value));
+    CHECK((std::is_base_of<Graphics::ParticleInstance, TornadoInstance>::value));
+    CHECK(!std::is_abstract<Tornado>::value);
+    CHECK(!std::is_abstract<TornadoInstance>::value);
+    CHECK(std::is_final<Tornado>::value);
+    CHECK(std::is_final<TornadoInstance>::value);
+    CHECK(!std::has_virtual_destructor<Tornado>::value);
+    CHECK(!std::has_virtual_destructor<TornadoInstance>::value);
+    CHECK_EQ(SlotOffset(&Tornado::DeletingDtor),   S(0));
+    CHECK_EQ(SlotOffset(&Tornado::TypeName),       S(1));
+    CHECK_EQ(SlotOffset(&Tornado::Type),           S(2));
+    CHECK_EQ(SlotOffset(&Tornado::GetFileVersion), S(3));
+    CHECK_EQ(SlotOffset(&Tornado::Compile),        S(4));
+    CHECK_EQ(SlotOffset(&Tornado::Serialize),      S(5));
+    CHECK_EQ(SlotOffset(&Tornado::Reconstruct),    S(6));
+    CHECK_EQ(SlotOffset(&Tornado::Destruct),       S(7));
+    CHECK_EQ(SlotOffset(&Tornado::CreateSystem),   S(8));
+    CHECK_EQ(SlotOffset(&Tornado::Construct),      S(9));
+    CHECK_EQ(SlotOffset(&TornadoInstance::DeletingDtor), S(0));
+    void (TornadoInstance::*upd)(const System::Time&) = &TornadoInstance::Update;
+    CHECK_EQ(SlotOffset(upd), S(1));
+    CHECK_EQ(SlotOffset(&Graphics::ParticleInstance::SetParticle), S(9));
+    CHECK_EQ(offsetof(Tornado, _particleFadeOut), (size_t)0x88);
+    CHECK_EQ(offsetof(TornadoInstance, _funnelSpinDegrees), (size_t)0xd8);
 }
 
 }  // namespace
