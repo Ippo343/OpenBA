@@ -157,6 +157,7 @@
 #include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformUpdate
 #include "../../types/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
+#include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "mainloop_internal.h"
 #include <atomic>
 
@@ -275,7 +276,6 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     //   1800dd416  MOV RCX,[RBX+0x6e0]
     //   1800dd422  MOV RCX,[RBX+0x6d0]
     //   1800dd432  MOV RCX,[RBX+0x690]
-    typedef void (*DeviceUpdateFn)(void* device, const void* time);
 
     _currentLoop = loop;                                                 // +0x20
     _startTicks  = CurrentTimeTicksViaGlobals();                         // +0x30
@@ -285,10 +285,10 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     ::Engine::Engine* engine = _engine;
     const void* deltaTime = &_deltaTime;                    // the `Time&` retail passes
 
-    // Input::Device::Update — NOT ported. By NAME, so the miss at cutover
-    // prints [RtUnresolved] and is counted, instead of being a silent null.
-    RT_EXPORT_ONCE(DeviceUpdateFn, "?Update@Device@Input@@QEAAXAEBVTime@System@@@Z")(
-        engine->_inputDevice, deltaTime);                                // +0x6e0
+    // Input::Device::Update — ENDGAME B.3.7 callers (K5): a member of the real
+    // class (was the name door).
+    reinterpret_cast< ::Input::Device*>(engine->_inputDevice)->Update(   // +0x6e0, B.3.7 bridge
+        *reinterpret_cast<const System::Time*>(deltaTime));
 
     // Audio::Device::Update (0x1800de520). ENDGAME B.3.7: a member call on the
     // real class (was BY ADDRESS through a namespace-scope atomic slot).

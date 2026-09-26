@@ -39,6 +39,7 @@
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/ButtonElement.h"
+#include "../../types/input/Input.h"   // ENDGAME B.3.7 callers (K5): Input::KeyMap
 
 using namespace rtuielem;
 
@@ -60,7 +61,6 @@ using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
 using ElementDtorFn     = void  (*)(void* self);
 using PlayFn            = void  (*)(void* ui, int soundId);
-using KeyPressedFn      = bool  (*)(void* keyMap, int a, int b);
 // Collection::Array<UI::UserInterface::Event>::SetSize(array, newSize, &fill)
 using EventPushFn       = void  (*)(void* array, int newSize, const void* fill);
 
@@ -281,7 +281,7 @@ void ButtonElement::Update(const System::Time& time, UserInterface* ui,
     if (!fire) {
         const int32_t key = _keyIndex;
         if (key < 0) return;                                   // 1801112d4 JS -> end
-        if (!RtAddr<KeyPressedFn>(0x1800a7a80ull)(state.config, 0, key)) return;
+        if (!reinterpret_cast<const ::Input::KeyMap*>(state.config)->Pressed(0, key)) return;  // B.3.7 bridge
     }
 
     StoreFlags(this, _flags & ~kFlagPressStarted);

@@ -86,6 +86,7 @@
 #include "../../types/engine/Engine.h"
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration
+#include "../../types/input/Input.h"       // ENDGAME B.3.7 callers (K5): Input::Configuration
 #include "../../types/system/String.h"
 #include "../../types/io/Modification.h"
 #include "../system/string.h"
@@ -239,7 +240,7 @@ void ResetConfigurations(EngineT* self) {
             if (void** s = InputConfigSingletonSlot()) *s = p;
         }
         self->_inputConfiguration = p;
-        RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Input@@QEAA_NXZ")(p);
+        reinterpret_cast< ::Input::Configuration*>(p)->Startup();  // B.3.7 bridge
     }
 
     // --- Video::Configuration (0x44 bytes) ---------------------------------

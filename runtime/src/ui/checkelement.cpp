@@ -30,6 +30,7 @@
 // ============================================================================
 #include "element_common.h"
 #include "../../types/ui/CheckElement.h"
+#include "../../types/input/Input.h"   // ENDGAME B.3.7 callers (K5): Input::KeyMap
 
 using namespace rtuielem;
 
@@ -50,7 +51,6 @@ void* VtButtonElementBase() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@
 using ElementCtorFn      = void* (*)(void* self);
 using ButtonCopyCtorFn   = void* (*)(void* self, const void* other);
 using ElementDtorFn      = void  (*)(void* self);
-using KeyPressedFn       = bool  (*)(void* keyMap, int a, int b);
 
 // Element::_flags bits Element.h does not name (see buttonelement.cpp).
 constexpr uint32_t kFlagHover        = 0x00020000u;
@@ -145,7 +145,7 @@ void CheckElement::Update(const System::Time& time, UserInterface* ui,
         } else {
             const int32_t key = _keyIndex;
             if (key >= 0 &&
-                RtAddr<KeyPressedFn>(0x1800a7a80ull)(state.config, 0, key)) {
+                reinterpret_cast<const ::Input::KeyMap*>(state.config)->Pressed(0, key)) {  // B.3.7 bridge
                 toggle = true;
             }
         }

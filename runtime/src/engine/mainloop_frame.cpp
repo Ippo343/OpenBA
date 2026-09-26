@@ -244,6 +244,7 @@
 #include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: _quitRequested
 #include "../../types/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
+#include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "mainloop_internal.h"
 #include <atomic>
 
@@ -341,7 +342,6 @@ constexpr uint32_t kContextDirtyBit    = 0x800;
 
 constexpr uint32_t kWmQuit = 0x12;
 
-typedef void (*InputDeviceUpdateFn)(void* device, const void* time);
 // ?Draw@MainLoop@Engine@@QEAAXM@Z — `M` is float, so the second parameter is
 // XMM1 under the MS x64 ABI. See §2d: dropping it was this file's first bug.
 typedef void (*ChannelCompleteFn)(void* chan, void* arg, uint32_t tag);
@@ -404,12 +404,12 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
     // updates at all and falls straight through to the tail.
     while (_accumulator >= _deltaTime) {
         ::Engine::Engine* engine = _engine;
-        const void* deltaTime = &_deltaTime;     // retail's `LEA RDX,[RDI+0x48]`
 
-        // Input::Device::Update — NOT ported, by NAME (already-open door).
-        RT_EXPORT_ONCE(InputDeviceUpdateFn,
-                       "?Update@Device@Input@@QEAAXAEBVTime@System@@@Z")(
-            engine->_inputDevice, deltaTime);
+        // Input::Device::Update — ENDGAME B.3.7 callers (K5): a member of the
+        // real class (was the name door). The argument is retail's
+        // `LEA RDX,[RDI+0x48]`, &_deltaTime.
+        reinterpret_cast< ::Input::Device*>(engine->_inputDevice)->Update(  // B.3.7 bridge
+            *reinterpret_cast<const System::Time*>(&_deltaTime));
 
         // --- the 64-channel audio sweep (§4) --------------------------------
         void* audioDevice = engine->_audioDevice;
