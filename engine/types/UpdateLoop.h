@@ -12,6 +12,13 @@
 //
 // Vtable verified against actual binary at 0x180155BA0.
 
+// ENDGAME B.3.7 (block B1): the REAL class is `Engine::UpdateLoop`
+// (runtime/types/engine/UpdateLoop.h). This exe-side mirror STAYS a POD with its `m_`
+// spellings until the caller round renames the users outside block B1's file
+// set (code/Game/{Dialog,Game,Goal,Tutorial}, standalone/autostart.cpp,
+// engine/funcs/engine_funcs.h); it then becomes `using UpdateLoop = RtEngine::UpdateLoop;` (B7-6: an abstract class cannot be the alias target). Every offset here is
+// pinned against the class by tests/unit/engine_loop_abi_test.cpp.
+
 #include <cstdint>
 #include <cstddef>
 
