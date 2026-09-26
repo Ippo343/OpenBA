@@ -837,52 +837,70 @@ static void CitizenAIComponent_UpdateAdapter(CitizenAIComponent* self, int64_t* 
     CitizenAIComponent_Update(self, time);
 }
 
-// COMPONENT_LIVE_FACTORY_S(CitizenAIComponent, 0xd0, 0x89, ...) hand-expanded
-// (save/load wave 2026-08-28) to wire slot 3 (+0x18, stream Serialize)
-// UNCONDITIONALLY at FACTORY time. The previous attempt used a namespace-scope
-// static initializer writing LiveVtable[3] — the exact trap in the memory
-// lesson "Live vtable slot must be wired in InstallLive": the first factory
-// call runs FillTypedVtable, which RESETS every slot (including [3] back to
-// the base-only serialize) and erased the static-init write. The runtime
-// slot-3 inventory dump (BANISHED_DUMP_SLOT3) caught it reporting BASE-ONLY.
+// ============================================================================
+// ENDGAME B.3.8 CIT — CitizenAIComponent as a REAL class (CitizenAIComponent.h).
+//
+// Before: a hand-expanded COMPONENT_LIVE_FACTORY_S — a 48-slot
+// CitizenAIComponent_LiveVtable filled at every create (slots 3 Serialize,
+// 4 Startup, 9 Update), Inert_ScalarDtor in slot 0. After: the compiler's
+// 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2). Slot 3 is wired
+// by construction: a class's table cannot lose its serializer.
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/CitizenAIComponent.h"
+
+// Retail 0x14010f960 (citizenaicomponent_serialize.cpp).
 extern "C" void CitizenAIComponent_Serialize(void* self, void* stream);
-static uint32_t CitizenAIComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CitizenAIComponent");
-    return cached;
+
+// 0x14010fb70. Component() is the CALL 0x1401188b0; the 0x140162470 stamp is
+// the compiler's; flags |= 0x89. The sixteen System::Time() at +0x40 are zero.
+// PORT GAP (retail 0x14010fba0/0x14010fba7): retail writes +0x28 = 0xc and
+// +0x2c = -1 here; the tree's factory zero-filled them and Startup
+// (CitizenAIComponent_BodyInit) writes them. Kept as the tree's; the retail
+// values are their own titled commit.
+CitizenAIComponent::CitizenAIComponent()
+    : aiState(0), targetId(0), data30(0), _pad32{}, data38(0), timers{},
+      dataC0(0), dataC8(0) {
+    OrFlagsInCtor(0x89);
 }
-static void* CitizenAIComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void CitizenAIComponent_UpdateVSlot(void* s, void* t) {
-    CitizenAIComponent_UpdateAdapter(reinterpret_cast<CitizenAIComponent*>(s),
-                                     reinterpret_cast<int64_t*>(t));
+
+// [0] 0x14002fcf0: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* CitizenAIComponent::DeletingDtor(unsigned flags) {
+    this->~CitizenAIComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void CitizenAIComponent_StartupVSlot(void* s) {
-    CitizenAIComponent_BodyInit(reinterpret_cast<CitizenAIComponent*>(s));
+
+void CitizenAIComponent::Persist(void* stream) { CitizenAIComponent_Serialize(this, stream); }   // [3] 0x14010f960
+void CitizenAIComponent::Startup() { CitizenAIComponent_BodyInit(this); }                        // [4] 0x14010f920
+
+// [6] 0x14010f880 (`JMP 0x14010f890` CheckAge). PORT GAP (retail 0x14010f880) —
+// B38 D9: the tree's table held the inert stub here (CheckAge is reached from
+// Update), kept.
+void CitizenAIComponent::OnAdded() {}
+
+// [9] 0x14010f3e0. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void CitizenAIComponent::Update(void* time) {
+    CitizenAIComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
 }
-static void CitizenAIComponent_SerializeVSlot(void* s, void* stream) {
-    CitizenAIComponent_Serialize(s, stream);
+
+// [15] 0x14010f340 (150 B). PORT GAP (retail 0x14010f340) — B38 D9: not ported;
+// the tree's table held the inert stub here, kept.
+void CitizenAIComponent::OnMessage(int, void*, uint32_t, uint32_t) {}
+
+// create 0x14002fb20: MemAlloc(0xd0, 8), then the ctor.
+void* CitizenAIComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CitizenAIComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CitizenAIComponent());
 }
-static void CitizenAIComponent_FinishLiveVtable() {
-    CitizenAIComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&CitizenAIComponent_SerializeVSlot);
-    CitizenAIComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&CitizenAIComponent_StartupVSlot);
-    CitizenAIComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&CitizenAIComponent_UpdateVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* CitizenAIComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CitizenAIComponent());
 }
-extern "C" void* CitizenAIComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0xd0, 0x89,
-        CitizenAIComponent_LiveVtable,
-        reinterpret_cast<void*>(&CitizenAIComponent_LiveGetTypeId));
-    CitizenAIComponent_FinishLiveVtable();
-    return p;
-}
-static void* CitizenAIComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0xd0, 0x89,
-        CitizenAIComponent_LiveVtable,
-        reinterpret_cast<void*>(&CitizenAIComponent_LiveGetTypeId));
-    CitizenAIComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(CitizenAIComponent, "Component",
-              &CitizenAIComponent_Factory, &CitizenAIComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(CitizenAIComponent, "_ZTV18CitizenAIComponent")
+DEFINE_EXE_TYPE(CitizenAIComponent, "Component")

@@ -264,7 +264,8 @@ static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* 
     CharacterComponent_MoveTick_1094c0(reinterpret_cast<uint8_t*>(self), time);
 }
 
-// Hand-rolled factory (macro variants only fill slots 4/6/9) — RETAIL SLOT WIRING.
+// RETAIL SLOT WIRING (ENDGAME B.3.8 CIT: the class's compiler vtable carries it —
+// CharacterComponent.h; the members are at the bottom of this file).
 // Retail vtable 0x140162370:
 //   slot 8 (+0x40) = 0x1401094c0 move-tick — dispatched EVERY FRAME by the
 //                    EntityList update-TREE walk (component flag bit 2);
@@ -280,28 +281,6 @@ static void CharacterComponent_UpdateAdapter(CharacterComponent* self, int64_t* 
 // +0x30 slot, so while it was opt-in every action's Enter was dead code — most
 // visibly HuntAnimal::Enter, which is the kill step: hunters chased deer forever and
 // the hunting cabin's production panel read 0. A/B evidence is in the default-on table.
-static uint32_t CharacterComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CharacterComponent");
-    return cached;
-}
-static void* CharacterComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void CharacterComponent_MoveTickVSlot(void* s, void* t) {
-    CharacterComponent_UpdateAdapter(reinterpret_cast<CharacterComponent*>(s),
-                                     reinterpret_cast<int64_t*>(t));
-}
-static void CharacterComponent_StartupVSlot(void* s) {
-    CharacterComponent_BodyInit(reinterpret_cast<CharacterComponent*>(s));
-}
-static void CharacterComponent_Update9VSlot(void* s, void* t) {
-    // Retail forwards the Time operand RAW: slot 9 (0x140109480) does MOV R8,RDX at
-    // 0x1401094a8, and the slot-8 move-tick likewise leaves RDX untouched across its
-    // CALL to the executor. Character_UpdateAnimation then hands that same value to the
-    // action's +0x30 as param_3. Dereferencing it here put a Time VALUE where every
-    // action's tick expects whatever retail's RDX holds.
-    CharacterComponent_Update(reinterpret_cast<CharacterComponent*>(s),
-                              reinterpret_cast<int64_t>(t));
-}
 // ------------------------------------------------------------------
 // Slot 7 (+0x38) — CharacterComponent::OnRemove (retail 0x140109980), the RELEASE half
 // of the char-index allocation BodyInit folds in above. Retail body is exactly:
@@ -319,7 +298,7 @@ static void CharacterComponent_Update9VSlot(void* s, void* t) {
 typedef void (*fn_ActStackClear_t)(void* stackAt48);
 extern "C" void CharMgr_impl_8560(int64_t mgr, int idx);
 
-static void CharacterComponent_OnRemoveVSlot(void* s) {
+static void CharacterComponent_OnRemoveImpl(void* s) {
     if (!s) return;
     uint8_t* p = reinterpret_cast<uint8_t*>(s);
 
@@ -347,36 +326,82 @@ static void CharacterComponent_OnRemoveVSlot(void* s) {
     *reinterpret_cast<int32_t*>(p + 0x40) = -1;
 }
 
+// ============================================================================
+// ENDGAME B.3.8 CIT — CharacterComponent as a REAL class (CharacterComponent.h).
+//
+// Before: a hand-rolled 48-slot CharacterComponent_LiveVtable filled at every
+// create (slots 3 Serialize, 4 Startup, 7 OnRemove, 8 move-tick, 9 Update),
+// Inert_ScalarDtor in slot 0. After: the compiler's 16-slot vtable and a real
+// ctor/dtor chain (B38_RULES D1, D2).
+// ============================================================================
+#include "Component/CharacterComponent.h"
+
+// Retail 0x140109ab0 (charactercomponent_serialize.cpp).
 extern "C" void CharacterComponent_Serialize(void* self, void* stream);
-static void CharacterComponent_SerializeVSlot(void* s, void* stream) {
-    CharacterComponent_Serialize(s, stream);
+
+// 0x140109d20. Component() is the CALL 0x1401188b0; the 0x140162370 stamp is
+// the compiler's; flags |= 0x8f.
+// PORT GAP (retail 0x140109d59 / 0x140109d74): retail writes +0x40 = -1 (char
+// index) and +0x60 = -1 (action-stack top) here; the tree's factory zero-filled
+// them and Startup (CharacterComponent_BodyInit) writes them. Kept as the tree's;
+// the retail values are their own titled commit.
+CharacterComponent::CharacterComponent()
+    : data28(0), _pad29{}, data2C(0), data30(0), data34(0), data38(0), _pad3C{},
+      data40(0), _pad44{}, data48(0), data50(0), data58(0), data60(0), _pad64{},
+      data68(0), data70(0), data78(0) {
+    OrFlagsInCtor(0x8f);
 }
-static void CharacterComponent_FinishLiveVtable() {
-    // Save/load wave (2026-08-27): slot 3 is the stream Serialize.
-    CharacterComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&CharacterComponent_SerializeVSlot);
-    CharacterComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&CharacterComponent_StartupVSlot);
-    CharacterComponent_LiveVtable[8] =
-        reinterpret_cast<void*>(&CharacterComponent_MoveTickVSlot);
-    CharacterComponent_LiveVtable[7] =
-        reinterpret_cast<void*>(&CharacterComponent_OnRemoveVSlot);
-    CharacterComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&CharacterComponent_Update9VSlot);
+
+// [0] 0x14002faa0. PORT GAP (retail releases the +0x48 action stack via
+// 0x1400c5150 first) — the tree's Inert_ScalarDtor never did; kept
+// (CharacterComponent.h).
+Object::Base* CharacterComponent::DeletingDtor(unsigned flags) {
+    this->~CharacterComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-extern "C" void* CharacterComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x80, 0x8f,
-        CharacterComponent_LiveVtable,
-        reinterpret_cast<void*>(&CharacterComponent_LiveGetTypeId));
-    CharacterComponent_FinishLiveVtable();
-    return p;
+
+// [3] 0x140109ab0.
+void CharacterComponent::Persist(void* stream) { CharacterComponent_Serialize(this, stream); }
+
+// [4] 0x140109a30 — sibling finds + description adoption; the tree also folds the
+// OnAdd char-index allocation in here (see CharacterComponent_BodyInit).
+void CharacterComponent::Startup() { CharacterComponent_BodyInit(this); }
+
+// [6] 0x1401099c0 (char-index allocation, 98 B). PORT GAP (retail 0x1401099c0) —
+// B38 D9: the tree folds this body into Startup (BodyInit) and its table held the
+// inert stub here, kept.
+void CharacterComponent::OnAdded() {}
+
+// [7] 0x140109980 — release the char index (the other half of the allocation).
+void CharacterComponent::OnRemove() { CharacterComponent_OnRemoveImpl(this); }
+
+// [8] 0x1401094c0 — the move-tick, EVERY FRAME from the EntityList tree walk
+// (flag bit 2; 0x1400c2e5d passes the update's time pointer through).
+void CharacterComponent::Tick(void* time) {
+    CharacterComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
 }
-static void* CharacterComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x80, 0x8f,
-        CharacterComponent_LiveVtable,
-        reinterpret_cast<void*>(&CharacterComponent_LiveGetTypeId));
-    CharacterComponent_FinishLiveVtable();
-    return mem;
+
+// [9] 0x140109480 — the bucket-rate Update. Retail forwards the Time operand RAW:
+// slot 9 does MOV R8,RDX at 0x1401094a8 and Character_UpdateAnimation hands that
+// same value to the action's +0x30 as param_3, so it is passed through, not
+// dereferenced.
+void CharacterComponent::Update(void* time) {
+    CharacterComponent_Update(this, reinterpret_cast<int64_t>(time));
 }
-REGISTER_TYPE(CharacterComponent, "Component",
-              &CharacterComponent_Factory, &CharacterComponent_CreateInPlace);
+
+// create 0x14002f960: MemAlloc(0x80, 8), then the ctor.
+void* CharacterComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CharacterComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CharacterComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* CharacterComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CharacterComponent());
+}
+
+DEFINE_EXE_VTABLE(CharacterComponent, "_ZTV18CharacterComponent")
+DEFINE_EXE_TYPE(CharacterComponent, "Component")

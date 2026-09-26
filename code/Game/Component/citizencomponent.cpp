@@ -3074,144 +3074,105 @@ static void CitizenComponent_UpdateAdapter(CitizenComponent* self, int64_t* time
 }
 
 // ------------------------------------------------------------------
-// Manual COMPONENT_LIVE_FACTORY_S expansion (+ slot 15 message handler).
-// Byte-identical to
-//   COMPONENT_LIVE_FACTORY_S(CitizenComponent, 0x290, 0xCB,
-//                            "BANISHED_LIVE_CITIZEN",
-//                            CitizenComponent_UpdateAdapter, CitizenComponent_BodyInit)
-// except FinishLiveVtable ALSO graduates vtable slot 15 (+0x78 — the component
-// message handler that SendComponentMessage::AbstractImpl (0x1400caef0)
-// dispatches; retail slot = CitizenComponent_NeedsUpdate 0x140112260) to the
-// citizen_needsupdate.cpp port when BANISHED_LIVE_STORAGE is set (Economy Brick
-// M-D, citizen/eat-message half). Default (env off) => slot 15 stays the inert
-// no-op stub => the eat SendComponentMessage remains a no-op exactly as before.
+// ENDGAME B.3.8 CIT — CitizenComponent as a REAL class (CitizenComponent.h).
+//
+// Before: a manual COMPONENT_LIVE_FACTORY_S expansion — a 48-slot
+// CitizenComponent_LiveVtable filled at every create (slots 3 Serialize,
+// 4 Startup, 6 OnAdd, 7 OnRemove, 9 Update, 11 post-load re-apply, 15 message
+// handler), Inert_ScalarDtor in slot 0, and CitizenComponent_CtorScalars patched
+// in after the zero-fill. After: the compiler's 16-slot vtable, a real ctor
+// (the scalars are the ctor's own) and a real dtor chain (B38_RULES D1, D2).
 // ------------------------------------------------------------------
+#include "Component/CitizenComponent.h"
+
 extern void CitizenComponent_NeedsUpdate(void*, int, uint64_t*, int, int); // citizen_needsupdate.cpp
 extern "C" void CitizenComponent_OnRemove(void*);                          // citizen_onremove.cpp
+extern "C" void CitizenComponent_OnAdd(void* citizenComp);                 // 0x140114000
+extern "C" void CitizenComponent_Serialize(void* self, void* stream);      // 0x140114160
+extern "C" void CitizenComponent_PostLoadApply(void* self);                // citizencomponent_lifecycle.cpp
 
-static uint32_t CitizenComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CitizenComponent");
-    return cached;
-}
-static void* CitizenComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void CitizenComponent_UpdateVSlot(void* s, void* t) {
-    CitizenComponent_UpdateAdapter(reinterpret_cast<CitizenComponent*>(s),
-                                   reinterpret_cast<int64_t*>(t));
-}
-static void CitizenComponent_StartupVSlot(void* s) {
-    CitizenComponent_BodyInit(reinterpret_cast<CitizenComponent*>(s));
-}
-// slot +0x78 / index 15 — called as (comp, msgId, &targetEntityIBP, extra, extra2)
-// by SendComponentMessage_AbstractImpl_Impl (code/Game/Action/sendcomponentmessage.cpp).
-static void CitizenComponent_NeedsUpdateVSlot(void* s, int msg, void* target,
-                                              int p4, int p5) {
-    CitizenComponent_NeedsUpdate(s, msg, reinterpret_cast<uint64_t*>(target), p4, p5);
-}
-// slot +0x38 / index 7 — the removed-from-world broadcast MarkForRemoval
-// (0x1400c2ea0) fires over every component whose +0x20 flags have bit 1 set.
-// CitizenComponent's flags are 0xCB, so the broadcast has always reached this slot;
-// it just landed on the inert no-op stub, which is why every citizen death left the
-// town's citizen list (townMgr+0xa0) holding a dangling pointer. Retail's slot is
-// CitizenComponent::OnRemove 0x140113ca0 — ported in citizen_onremove.cpp.
-// OPT-IN (BANISHED_LIVE_CITIZEN_ONREMOVE) until a death-heavy run verifies it: with
-// the flag unset the slot stays the stub, i.e. behaviour identical to before.
-static void CitizenComponent_OnRemoveVSlot(void* s) {
-    CitizenComponent_OnRemove(s);
-}
-// slot +0x30 / index 6 — the ADDED-to-world broadcast. ComponentEntity_OnAddedPass
-// (FUN_1400c2f60, run at the tail of EntityList::RegisterEntity 0x1400c48a0) calls this
-// slot on every component whose +0x20 bit 0 is set; CitizenComponent's flags are 0xCB, so
-// bit 0 is set and the broadcast has always reached this slot — it just landed on the
-// inert stub. Retail's slot is CitizenComponent::OnAdd 0x140114000, the append into the
-// town citizen list townMgr+0xa0, ported in citizen_employ_cascade.cpp.
-//
-// [2026-07-26] This is why the town could never grow. Childbirth works — the delivery
-// roll fires, helper_1b90 allocates the newborn, and RegisterEntity puts it in the world
-// entity list — but with slot 6 dead the baby never joined townMgr+0xa0, which is the
-// list the census, the town-hall stats and every population system read. Three live
-// births in one soak left the count at a flat 24. It is also why StartTown has to
-// hand-register the founding cohort (StartTown_RegisterTownCitizens); that pass now
-// dedups, so it is safe with this slot live.
-extern "C" void CitizenComponent_OnAdd(void* citizenComp);   // 0x140114000
-static void CitizenComponent_OnAddVSlot(void* s) {
-    CitizenComponent_OnAdd(s);
-}
-extern "C" void CitizenComponent_Serialize(void* self, void* stream);
-static void CitizenComponent_SerializeVSlot(void* s, void* stream) {
-    CitizenComponent_Serialize(s, stream);
-}
-extern "C" void CitizenComponent_PostLoadApply(void* self);  // citizencomponent_lifecycle.cpp
-static void CitizenComponent_PostLoadVSlot(void* s) { CitizenComponent_PostLoadApply(s); }
-
-static void CitizenComponent_FinishLiveVtable() {
-    // Save/load wave (2026-08-27): slot 3 is the stream Serialize — wired
-    // unconditionally so save/load round-trips this component's real state.
-    CitizenComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&CitizenComponent_SerializeVSlot);
-    // Slot 11 (+0x58) is the LOAD-TIME visual re-apply (retail 0x1401140f0),
-    // dispatched by the load-only EntityList pass. Unconditional for the same reason
-    // slot 3 is: without it a loaded citizen's clothing colour, age scale and carried
-    // tool are never restored, and the per-tick CheckAge path only reaches
-    // SetupAgeMesh for citizens whose action stack is EMPTY, so busy ones never heal.
-    CitizenComponent_LiveVtable[11] =
-        reinterpret_cast<void*>(&CitizenComponent_PostLoadVSlot);
-    CitizenComponent_LiveVtable[6] =
-        reinterpret_cast<void*>(&CitizenComponent_OnAddVSlot);
-    CitizenComponent_LiveVtable[7] =
-        reinterpret_cast<void*>(&CitizenComponent_OnRemoveVSlot);
-    CitizenComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&CitizenComponent_StartupVSlot);
-    CitizenComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&CitizenComponent_UpdateVSlot);
-    CitizenComponent_LiveVtable[15] =
-        reinterpret_cast<void*>(&CitizenComponent_NeedsUpdateVSlot);
-}
-// Faithful port of the scalar half of CitizenComponent::CitizenComponent
-// (0x140114770). MUST run at CONSTRUCTION, not at Startup.
-//
-// Retail's load path (ComponentEntity::Serialize 0x1400c3140) rebuilds a
-// stream-restored component through Object::Factory::CreateObject -> ctor, then
-// calls ONLY RefreshEntityFlags — vtable +0x20 (Startup) is NEVER dispatched for
-// it. Retail's serializer (0x140114160) re-supplies +0x30/+0xa8/+0x1e0 from the
-// stream but deliberately SKIPS +0x1dc, the live Graphics::Scene object handle,
-// because the ctor already put -1 there and a handle from a previous session is
-// meaningless. Our sentinels used to live in the Startup body, so on a LOAD they
-// never ran and the inert factory's zero-fill left +0x1dc = 0. HideTool
-// (0x1401176e0) then passed its `>= 0` guard and called
-// Scene::RemoveObject(scene, 0) on a handle the scene never issued: Runtime
-// 0x18005f140 walks quadtree parents via `parent = (i-1) >> 2` ARITHMETIC-shifted,
-// so a free slot's nodeIndex of -1 is a fixed point and the loop NEVER TERMINATES.
-// That was the post-load freeze (main thread spinning at 0x18005f14f).
-//
-// Fixing it here rather than guarding HideTool is the faithful direction: retail
-// legitimately passes that guard, and ActCt_HideTool_1176e0 stays byte-faithful.
-// This also removes a latent bug in the other direction — the Startup body would
-// clobber a freshly loaded toolId (+0x1d8) back to -1.
-static void CitizenComponent_CtorScalars(void* selfV) {
-    if (!selfV) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfV);
-    *reinterpret_cast<int32_t*>(p + 0x30)  = -1;
-    *reinterpret_cast<int32_t*>(p + 0xA8)  = -1;
-    *reinterpret_cast<int64_t*>(p + 0x1D8) = -1;   // toolId AND sceneObjectId
-    *reinterpret_cast<int64_t*>(p + 0x1E0) = 4;
+// 0x140114770. Component() is the CALL 0x1401188b0; the 0x140162580 stamp is
+// the compiler's; flags |= 0xcb. The scalars are retail's and MUST be set at
+// CONSTRUCTION, not at Startup: retail's load path (ComponentEntity::Serialize
+// 0x1400c3140) rebuilds a stream-restored component through
+// Object::Factory::CreateObject -> ctor and then calls ONLY RefreshEntityFlags —
+// Startup is never dispatched for it. Retail's serializer (0x140114160)
+// re-supplies +0x30/+0xa8/+0x1e0 from the stream but deliberately SKIPS +0x1dc,
+// the live Graphics::Scene object handle, because the ctor already put -1 there.
+// With +0x1dc = 0 on a load, HideTool (0x1401176e0) passed its `>= 0` guard and
+// called Scene::RemoveObject(scene, 0) on a handle the scene never issued, whose
+// parent walk never terminates (the post-load freeze).
+//   +0x30 = -1, +0xa8 = -1, +0x1d8 = -1 (qword: toolId AND sceneObjectId),
+//   +0x1e0 = 4, everything else 0.
+// PORT GAP (retail 0x140114808): retail runs Graphics::MeshInstance::MeshInstance()
+// on +0xb8; the tree keeps those 0x120 bytes zero-filled (CitizenComponent.h).
+CitizenComponent::CitizenComponent()
+    : data28(0), data30(-1), data34(0), data38(0), data3C(0), data40(0), data44(0),
+      data48(0), data4C(0), data50(0), data54(0), data58(0), data60(0), data68(0),
+      data70(0), data78(0), data80(0), _pad84{}, data88(0), _pad8C{}, data90(0),
+      data98(0), dataA0(0), dataA8(-1), dataAC(0), dataB0(0), _padB4{},
+      meshInstance{}, data1D8(~uint64_t(0)), data1E0(4), data1E8(0), data1F0(0),
+      data1F8(0), data200(0), data208(0), data210(0), _pad214{}, data218(0),
+      data220(0), _pad221{}, data228(0), data230(0), data238(0), _pad240{},
+      data248(0), data250(0), data258(0), data260(0), data268(0), data270(0),
+      data278(0), data280(0), data288(0) {
+    OrFlagsInCtor(0xcb);
 }
 
-extern "C" void* CitizenComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x290, 0xCB,
-        CitizenComponent_LiveVtable,
-        reinterpret_cast<void*>(&CitizenComponent_LiveGetTypeId));
-    CitizenComponent_CtorScalars(p);        // retail ctor 0x140114770
-    CitizenComponent_FinishLiveVtable();
-    return p;
+// [0] 0x140030270 = the dtor 0x1401146f0 + MemFree on &1. PORT GAP (retail's
+// dtor runs ~MeshInstance(+0xb8), frees the +0x98 array and releases the +0x28
+// InternalBasePtr) — the tree's Inert_ScalarDtor never did; kept.
+Object::Base* CitizenComponent::DeletingDtor(unsigned flags) {
+    this->~CitizenComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void* CitizenComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x290, 0xCB,
-        CitizenComponent_LiveVtable,
-        reinterpret_cast<void*>(&CitizenComponent_LiveGetTypeId));
-    CitizenComponent_CtorScalars(mem);      // retail ctor 0x140114770
-    CitizenComponent_FinishLiveVtable();
-    return mem;
+
+// [3] 0x140114160.
+void CitizenComponent::Persist(void* stream) { CitizenComponent_Serialize(this, stream); }
+
+// [4] 0x140114050.
+void CitizenComponent::Startup() { CitizenComponent_BodyInit(this); }
+
+// [6] 0x140114000 — the ADDED-to-world broadcast (ComponentEntity_OnAddedPass,
+// flags bit 0): append to the town citizen list townMgr+0xa0, the list the
+// census, the town-hall stats and every population system read.
+void CitizenComponent::OnAdded() { CitizenComponent_OnAdd(this); }
+
+// [7] 0x140113ca0 — the removed-from-world broadcast (MarkForRemoval 0x1400c2ea0,
+// flags bit 1): leave the town citizen list.
+void CitizenComponent::OnRemove() { CitizenComponent_OnRemove(this); }
+
+// [9] 0x140112e70. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void CitizenComponent::Update(void* time) {
+    CitizenComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
 }
-REGISTER_TYPE(CitizenComponent, "Component",
-              &CitizenComponent_Factory, &CitizenComponent_CreateInPlace);
+
+// [11] 0x1401140f0 — the LOAD-TIME visual re-apply (clothing colour, age scale,
+// carried tool), dispatched by the load-only EntityList pass.
+void CitizenComponent::Slot11() { CitizenComponent_PostLoadApply(this); }
+
+// [15] 0x140112260 — the component message handler SendComponentMessage
+// (0x1400caef0) dispatches: EDX = message id, R8 = &target entity IBP, R9D =
+// extra (read from the retail body's jump table).
+void CitizenComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t arg1) {
+    CitizenComponent_NeedsUpdate(this, message, static_cast<uint64_t*>(data),
+                                 static_cast<int>(arg0), static_cast<int>(arg1));
+}
+
+// create 0x140030110: MemAlloc(0x290, 8), then the ctor.
+void* CitizenComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CitizenComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CitizenComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* CitizenComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CitizenComponent());
+}
+
+DEFINE_EXE_VTABLE(CitizenComponent, "_ZTV16CitizenComponent")
+DEFINE_EXE_TYPE(CitizenComponent, "Component")
