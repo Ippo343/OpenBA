@@ -24,6 +24,7 @@
 #include "Game/GameLoaderLoop.h"
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/MenuDialogLoopT.h"
+#include "Game/GameUpdateLoop.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -56,6 +57,8 @@ UNIT_TEST(loop_sizes_match_retail) {
     CHECK_EQ(alignof(GameLoadDialogLoopT), (size_t)8);
     CHECK_EQ(sizeof(MenuDialogLoopT), (size_t)0xc00);        // MemAlloc(0xc00, 8)
     CHECK_EQ(alignof(MenuDialogLoopT), (size_t)8);
+    CHECK_EQ(sizeof(GameUpdateLoop), (size_t)0x160);         // MemAlloc(0x160, 8)
+    CHECK_EQ(alignof(GameUpdateLoop), (size_t)8);
 }
 
 UNIT_TEST(loop_member_offsets) {
@@ -74,6 +77,16 @@ UNIT_TEST(loop_member_offsets) {
     CHECK_EQ(offsetof(MenuDialogLoopT, _menuScene),          (size_t)0xb90);
     CHECK_EQ(offsetof(MenuDialogLoopT, _scene),              (size_t)0xba0);
     CHECK_EQ(offsetof(MenuDialogLoopT, _sceneIdArray),       (size_t)0xbf0);
+    CHECK_EQ(offsetof(GameUpdateLoop, _resourceList),        (size_t)0x08);    // base's
+    CHECK_EQ(offsetof(GameUpdateLoop, _loadProgress),        (size_t)0x24);    // base's (worldgen stages)
+    CHECK_EQ(offsetof(GameUpdateLoop, m_saveName),           (size_t)0x28);
+    CHECK_EQ(offsetof(GameUpdateLoop, m_savedState),         (size_t)0x58);
+    CHECK_EQ(offsetof(GameUpdateLoop, m_userInterface),      (size_t)0x98);
+    CHECK_EQ(offsetof(GameUpdateLoop, m_nextLoop),           (size_t)0xc8);
+    CHECK_EQ(offsetof(GameUpdateLoop, m_game),               (size_t)0xf8);
+    CHECK_EQ(offsetof(GameUpdateLoop, m_skyMesh),            (size_t)0x108);
+    CHECK_EQ(offsetof(GameUpdateLoop, m_scenarioInstance),   (size_t)0x150);
+    CHECK_EQ(offsetof(GameUpdateLoop, m_scenarioIndex),      (size_t)0x15c);
 }
 
 // ===========================================================================
@@ -96,6 +109,10 @@ UNIT_TEST(loop_classes_shape) {
     CHECK(!std::is_abstract<MenuDialogLoopT>::value);
     CHECK(std::is_final<MenuDialogLoopT>::value);
     CHECK(!std::has_virtual_destructor<MenuDialogLoopT>::value);
+    CHECK((std::is_base_of<Engine::UpdateLoop, GameUpdateLoop>::value));
+    CHECK(!std::is_abstract<GameUpdateLoop>::value);
+    CHECK(std::is_final<GameUpdateLoop>::value);
+    CHECK(!std::has_virtual_destructor<GameUpdateLoop>::value);
 }
 
 // ===========================================================================
@@ -134,6 +151,22 @@ UNIT_TEST(loop_menu_slots) {
     CHECK_EQ(SlotOffset(&MenuDialogLoopT::GetResourceFilename), S(10));
     CHECK_EQ(SlotOffset(&MenuDialogLoopT::AllowsModChanges),    S(11));
     CHECK_EQ(SlotOffset(&MenuDialogLoopT::CreateLoopDialog),    S(12));
+}
+
+UNIT_TEST(loop_gameupdateloop_slots) {
+    // 0x14015e2f0: own [0]-[10]; [11] AllowsModChanges is UpdateLoop's.
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::DeletingDtor),        S(0));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::Startup),             S(1));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::Shutdown),            S(2));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::Update),              S(3));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::Draw),                S(4));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::DrawFailed),          S(5));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::Load),                S(6));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::SaveRestore),         S(7));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::OnVideoError),        S(8));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::OnVideoRestart),      S(9));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::GetResourceFilename), S(10));
+    CHECK_EQ(SlotOffset(&GameUpdateLoop::AllowsModChanges),    S(11));   // inherited
 }
 
 // The retslot slot 12: RCX = this, RDX = the caller's InternalPtr slot, RAX =

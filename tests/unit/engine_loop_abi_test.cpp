@@ -228,10 +228,10 @@ UNIT_TEST(engine_exe_side_mirrors_match_the_classes) {
     CHECK_EQ((int)offsetof(::MainLoop, m_postDrawCallbacks), (int)offsetof(Engine::MainLoop, _postDraw));
     CHECK_EQ((int)offsetof(::MainLoop, m_postUpdateCallbacks), (int)offsetof(Engine::MainLoop, _postUpdate));
 
-    // GameUpdateLoop (exe subclass, step 8) starts with the UpdateLoop base.
-    CHECK_EQ((int)offsetof(::GameUpdateLoop, m_resourceList), (int)offsetof(Engine::UpdateLoop, _resourceList));
-    CHECK_EQ((int)offsetof(::GameUpdateLoop, m_loadBit), (int)offsetof(Engine::UpdateLoop, _loadBit));
-    CHECK_EQ((int)offsetof(::GameUpdateLoop, m_loadProgress), (int)offsetof(Engine::UpdateLoop, _loadProgress));
+    // GameUpdateLoop is a real Engine::UpdateLoop subclass since ENDGAME B.3.8
+    // block LOOP (engine/types/GameUpdateLoop.h forwards to the class;
+    // tests/unit/loop_abi_test.cpp pins its layout and slots).
+    CHECK((std::is_base_of<Engine::UpdateLoop, ::GameUpdateLoop>::value));
 }
 
 }  // namespace

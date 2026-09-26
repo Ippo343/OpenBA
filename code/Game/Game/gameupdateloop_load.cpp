@@ -899,7 +899,10 @@ extern "C" bool GameUpdateLoop_IsWorldBuilt(void* loop) {
            s_worldBuiltLoop.load(std::memory_order_acquire) == loop;
 }
 
-extern "C" void GameUpdateLoop_Load(void* loopVoid) {
+// ENDGAME B.3.8 LOOP: slot 6 of the real class (was the hand-built table's
+// GameUpdateLoop_Load). The body still addresses the loop through `loopVoid`.
+void GameUpdateLoop::Load() {
+    void* const loopVoid = this;
     // Single-owner build guard — NOW AN ASSERTION, NOT A RACE FIX.
     //
     // ENDGAME B.3.4a closing, comment only. This block used to describe the
