@@ -214,11 +214,12 @@ bool ImageDescription::Serialize(void* streamv) {
 //    Sprite's pad receives four bytes of whatever was on the stack. What is
 //    faithful is the WIDTH (description_common.h's SpriteIndexSlot note).
 //
-// `ElementDescription::CreateInstance` (0x180115ad0) is reached through its
-// registered door: its member is declared but its body is still dialog.cpp's.
+// `ElementDescription::CreateInstance` (0x180115ad0) is a QUALIFIED member
+// call since fragment pass F2 defined it (dialog.cpp).
 void ImageDescription::CreateInstance(Object::InternalPtr<ImageElement>* element) const {
     void* local = element->Get();                              // 18011857f / 18011858a
-    rtdesc::ElementDescriptionApply(this, &local);             // 180118592
+    UI::ElementDescription::CreateInstance(                   // 180118592
+        reinterpret_cast<Object::InternalPtr<Element>*>(&local));  // B.3.6 bridge
 
     void* const sheet = _spriteSheet;                          // 180118597
 

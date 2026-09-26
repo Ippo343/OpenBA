@@ -50,6 +50,9 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <new>
+#include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 
 namespace {
 
@@ -82,19 +85,17 @@ inline void Swap24(Elem a, Elem b) {
 // That is reproduced rather than "fixed": adding a dtor call retail does not make
 // would be a behaviour change smuggled in under the heading of correctness.
 bool BuildNameKey(const void* elem, System::String* outString) {
-    if (!fn_UIString_Ctor || !fn_UIString_ToSystemString) {
-        return false;
-    }
     const uint8_t* p = *reinterpret_cast<const uint8_t* const*>(
         reinterpret_cast<const uint8_t*>(elem) + 8);
     if (!p) { return false; }
 
     alignas(8) uint8_t uiBuf[64];
-    void* ui = fn_UIString_Ctor(uiBuf,
-                                *reinterpret_cast<const uint64_t*>(p + 0x28),
-                                p + 0x30);
+    void* ui = ::new (static_cast<void*>(uiBuf)) UI::String(
+        ::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(
+            *reinterpret_cast<const uint64_t*>(p + 0x28))),
+        *reinterpret_cast<const System::String*>(p + 0x30));  // B.3.6 bridge
     System::String tmp;
-    fn_UIString_ToSystemString(ui, &tmp);
+    ::new (static_cast<void*>(&tmp)) System::String(reinterpret_cast<const UI::String*>(ui)->operator System::String());  // B.3.6 bridge
     *outString = tmp;
     return true;
 }

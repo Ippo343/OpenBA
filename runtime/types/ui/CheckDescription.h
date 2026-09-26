@@ -39,7 +39,7 @@
 #include <type_traits>
 
 #include "ButtonDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::CheckDescription (the layout POD)
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::CheckDescription aliases this class
 
 namespace UI {
 
@@ -89,7 +89,6 @@ static_assert(sizeof(CheckDescription) == 0xa8,
 static_assert(alignof(CheckDescription) == 8, "UI::CheckDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<CheckDescription>::value, "ENDGAME decision 2");
 static_assert(offsetof(CheckDescription, _checkDesc) == sizeof(ButtonDescription), "");
-static_assert(sizeof(CheckDescription) == sizeof(RtUI::CheckDescription), "");
-static_assert(offsetof(CheckDescription, _checkDesc) == offsetof(RtUI::CheckDescription, _checkDesc), "");
+static_assert(offsetof(CheckDescription, _checkDesc) == 0xa0, "");
 
 }  // namespace UI

@@ -35,7 +35,7 @@
 #include <cstdint>
 
 #include "ElementDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::GraphDescription — cross-asserted below
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::GraphDescription aliases this class
 
 namespace UI {
 
@@ -91,13 +91,7 @@ static_assert(offsetof(GraphDescription, _tickSize)    == 0x70, "");
 static_assert(offsetof(GraphDescription, _unknown74)   == 0x74, "");
 static_assert(offsetof(GraphDescription, _spriteSheet) == 0x78, "");
 static_assert(offsetof(GraphDescription, _spriteName)  == 0x80, "");
-// The class and DescriptionsBatch1.h's POD describe the same bytes.
-static_assert(sizeof(GraphDescription) == sizeof(RtUI::GraphDescription), "");
-static_assert(offsetof(GraphDescription, _width)       == offsetof(RtUI::GraphDescription, _word68), "");
-static_assert(offsetof(GraphDescription, _height)      == offsetof(RtUI::GraphDescription, _word6c), "");
-static_assert(offsetof(GraphDescription, _tickSize)    == offsetof(RtUI::GraphDescription, _word70), "");
-static_assert(offsetof(GraphDescription, _unknown74)   == offsetof(RtUI::GraphDescription, _word74), "");
-static_assert(offsetof(GraphDescription, _spriteSheet) == offsetof(RtUI::GraphDescription, _spriteSheet), "");
-static_assert(offsetof(GraphDescription, _spriteName)  == offsetof(RtUI::GraphDescription, _spriteName), "");
+// RtUI::GraphDescription is an ALIAS of this class since fragment pass F2;
+// the POD's offsets are the absolute asserts above.
 
 }  // namespace UI

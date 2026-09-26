@@ -38,7 +38,7 @@
 #include <cstddef>
 
 #include "TextDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::LabelDescription — cross-asserted below
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::LabelDescription aliases this class
 
 namespace UI {
 
@@ -103,11 +103,7 @@ static_assert(offsetof(LabelDescription, _worda0)      == 0xa0, "");
 static_assert(offsetof(LabelDescription, _worda4)      == 0xa4, "");
 static_assert(offsetof(LabelDescription, _spriteSheet) == 0xa8, "");
 static_assert(offsetof(LabelDescription, _spriteName)  == 0xb0, "");
-// The class and the DescriptionsBatch1.h POD describe the same bytes.
-static_assert(sizeof(LabelDescription) == sizeof(RtUI::LabelDescription), "");
-static_assert(offsetof(LabelDescription, _word90)      == offsetof(RtUI::LabelDescription, _word90), "");
-static_assert(offsetof(LabelDescription, _worda4)      == offsetof(RtUI::LabelDescription, _worda4), "");
-static_assert(offsetof(LabelDescription, _spriteSheet) == offsetof(RtUI::LabelDescription, _spriteSheet), "");
-static_assert(offsetof(LabelDescription, _spriteName)  == offsetof(RtUI::LabelDescription, _spriteName), "");
+// RtUI::LabelDescription is an ALIAS of this class since fragment pass F2; the
+// POD's offsets are the absolute asserts above.
 
 }  // namespace UI

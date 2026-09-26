@@ -86,6 +86,7 @@
 
 #include <cstdint>
 #include <cstdio>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
@@ -268,20 +269,15 @@ extern "C" void* RtUi_ToolTipDialog_OperatorNew(uint64_t bytes) {
 // caller must release. `BeginToolTip` calls it TWICE and releases both
 // (userinterface_hover.cpp:424 / :436).
 // ============================================================================
+//
+// ENDGAME B.3.6 fragment pass F2: the body MOVED into UI::Element::
+// GetToolTipString (member section below). The door keeps retail's
+// `(this, ret)` RETSLOT shape and placement-news the member's prvalue into the
+// caller's uninitialised slot (B5-12 as amended).
 extern "C" System::String* RtUi_Element_GetToolTipString(const Element* self,
                                                          System::String* ret) {
     ++g_getTipEntries;
-    // The hidden return slot stays in the SIGNATURE while the two registry rows
-    // below bind this body; retail constructs into an uninitialised slot.
-    ret->_data = nullptr;                                      // 0x1800356b7
-    // B.3.1 bridge: Element::_toolTipString is a POD slot on UI::Element, which
-    // is not converted yet.
-    char* const s = static_cast<char*>(self->_toolTipString);  // 0x1800356ba, +0x58
-    if (s != nullptr) {                                        // 0x1800356be
-        ++g_getTipNonNull;
-        ret->_data = s;                                        // 0x1800356c3
-        ++RtSystem::StringRefCount(s);                         // 0x1800356c6
-    }
+    new (ret) System::String(self->UI::Element::GetToolTipString());
     return ret;                                                // 0x1800356d0
 }
 
@@ -401,6 +397,21 @@ const char* ToolTipDialog::TypeName() const {                  // [1] 0x18004cfc
 uint32_t ToolTipDialog::Type() const {                         // [2] 0x18004cfa0
     return *reinterpret_cast<const uint32_t*>(
         ToolTipDialogTypeInfo() + kBaseTypeInfoTypeId);
+}
+
+// ---- ?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ 0x1800356a0 ----
+// ENDGAME B.3.6 fragment pass F2: block A's class, its body in this file (the
+// disassembly is quoted at the door above). Returns a NEW reference the caller
+// releases; the result starts null (0x1800356b7).
+System::String Element::GetToolTipString() const {
+    System::String out;                                        // 0x1800356b7
+    char* const s = static_cast<char*>(_toolTipString);        // 0x1800356ba, +0x58
+    if (s != nullptr) {                                        // 0x1800356be
+        ++g_getTipNonNull;
+        out._data = s;                                         // 0x1800356c3
+        ++RtSystem::StringRefCount(s);                         // 0x1800356c6
+    }
+    return out;
 }
 
 // ??1ToolTipDialog@UI@@UEAA@XZ 0x1800dac70 — EMPTY; the deleting-dtor row in

@@ -27,6 +27,11 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Time
 #include <new>
+#include "runtime/types/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/Sprite.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 
 
 // ============================================================
@@ -38,7 +43,7 @@ static uint64_t TownHall_FindElemRaw(void* dialogElem, const char* name) {
     System::String strBuf(name);
 
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(dialogElem, foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(strBuf));  // B.3.6 bridge
 
     void* elem = *(void**)foundBuf;
 
@@ -53,7 +58,7 @@ static uint64_t TownHall_FindElem(void* dialogElem, const char* name, uint32_t t
     System::String strBuf(name);
 
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(dialogElem, foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(strBuf));  // B.3.6 bridge
 
     void* elem = *(void**)foundBuf;
 
@@ -105,15 +110,15 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     self->timeCombo = TownHall_FindElemRaw(dialogElem, "timeCombo");
     self->graphCombo = TownHall_FindElemRaw(dialogElem, "graphCombo");
 
-    fn_Element_SetElementId((void*)self->timeCombo, 0x1964);
+    reinterpret_cast<UI::Element*>(self->timeCombo)->SetElementId(0x1964);  // B.3.6 bridge
 
-    fn_Element_SetElementId((void*)self->graphCombo, 0x1965);
+    reinterpret_cast<UI::Element*>(self->graphCombo)->SetElementId(0x1965);  // B.3.6 bridge
 
     uint64_t* numberPtrs = &self->number0;
     for (int i = 0; i < 5; i++) {
         System::String fmtBuf = System::String::Format("number%i", (uint64_t)i);
         uint64_t fb[2] = {0, 0};
-        fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
+        ::new (static_cast<void*>(fb)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(fmtBuf));  // B.3.6 bridge
         uint64_t bp = 0;
         new (&bp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(*(void**)fb));   // B.3.3 bridge
         numberPtrs[i] = bp;
@@ -123,7 +128,7 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     for (int i = 0; i < 4; i++) {
         System::String fmtBuf = System::String::Format("label%i", (uint64_t)i);
         uint64_t fb[2] = {0, 0};
-        fn_FindElement(*(void**)(s + 0x20), fb, &fmtBuf);
+        ::new (static_cast<void*>(fb)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(fmtBuf));  // B.3.6 bridge
         uint64_t bp = 0;
         new (&bp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(*(void**)fb));   // B.3.3 bridge
         labelPtrs[i] = bp;
@@ -148,29 +153,29 @@ void TownHallUI_InitGraph(TownHallUI* self) {
     // Populate time combo
     for (int i = 0; i < 7; i++) {
         uint8_t uiStrBuf[16];
-        fn_UIString_Ctor_Index(uiStrBuf, self->graphYearsTable, i);
+        ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(self->graphYearsTable)), i);  // B.3.6 bridge
         System::String sysStrBuf;
-        fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
+        ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
         uint8_t emptySprite[16];
-        fn_Sprite_Default_Ctor(emptySprite);
+        ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
         fn_ComboElement_AddItem((void*)self->timeCombo, emptySprite, &sysStrBuf, nullptr);
     }
 
     // Populate graph combo (skip empty entries)
-    int typeCount = fn_StringTable_GetCount((void*)self->graphTypesTable);
+    int typeCount = reinterpret_cast<const UI::StringTable*>(self->graphTypesTable)->GetCount();  // B.3.6 bridge
     int maxEntries = (13 < typeCount) ? typeCount : 13;
     for (int i = 0; i < maxEntries; i++) {
         System::String textBuf;
-        fn_StringTable_GetText((void*)self->graphTypesTable, &textBuf, i);
+        ::new (static_cast<void*>(&textBuf)) System::String(reinterpret_cast<const UI::StringTable*>(self->graphTypesTable)->GetText(i));  // B.3.6 bridge
         bool isEmpty = textBuf.GetLength() == 0;
 
         if (!isEmpty) {
             uint8_t uiStrBuf[16];
-            fn_UIString_Ctor_Index(uiStrBuf, self->graphTypesTable, i);
+            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(self->graphTypesTable)), i);  // B.3.6 bridge
             System::String sysStrBuf;
-            fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
+            ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
             uint8_t emptySprite[16];
-            fn_Sprite_Default_Ctor(emptySprite);
+            ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
             fn_ComboElement_AddItem((void*)self->graphCombo, emptySprite, &sysStrBuf, nullptr);
         }
     }
@@ -205,7 +210,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
     System::String strBuf("tableProfessions");
 
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -217,7 +222,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
     // Get template row (Child(0)) and its vtable clone function
     uint64_t childBuf[2] = {0, 0};
-    fn_Element_Child((void*)tablePtr, childBuf, 0);
+    ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(0));  // B.3.6 bridge
     uintptr_t templateChild = *(uintptr_t*)childBuf;
     // Read the clonable object at field +0xB8 of the template element
     // (NOT vtable+0xB8 — that hits .rdata type name strings)
@@ -234,22 +239,23 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
         void* tbl = (void*)tablePtr;
 
-        // Call vtable clone: cloneObj->vtable[+0x40](cloneObj, retBuf, dialogInst)
-        typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
-        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
+        // Clone: cloneObj is the template row's Element::_description (+0xB8), so
+        // +0x40 is UI::ElementDescription slot 8, CreateInstance (retslot, B6-2).
         uint8_t cloneBuf[16];
-        void* clonedElem = cloneFunc((void*)cloneObj, cloneBuf, dialogInst);
+        void* clonedElem = reinterpret_cast<const UI::ElementDescription*>(cloneObj)->CreateInstance(
+            reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(dialogInst));  // B.3.6 bridge
 
         fn_TableElement_SetChild3(tbl, clonedElem, i, 0);
 
         // Get the cloned row element
         uint64_t rowBuf[2] = {0, 0};
-        fn_Element_Child((void*)tablePtr, rowBuf, i);
+        ::new (static_cast<void*>(rowBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(i));  // B.3.6 bridge
         void* rowElem = *(void**)rowBuf;
 
         // Get row's child(1) — the spinner/content container
         uint64_t contentBuf[2] = {0, 0};
-        fn_Element_Child(rowElem, contentBuf, 1);
+        ::new (static_cast<void*>(contentBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(1));  // B.3.6 bridge
         void* contentElem = *(void**)contentBuf;
 
         // Profession entry struct (0x40 bytes for ProfArrayPush):
@@ -266,7 +272,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
         // Row child 0: LabelElement (profession icon/name)
         uint64_t c0Buf[2] = {0, 0};
-        fn_Element_Child(rowElem, c0Buf, 0);
+        ::new (static_cast<void*>(c0Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(0));  // B.3.6 bridge
         void* c0Elem = CastElement(*(void**)c0Buf, g_TypeId_LabelElement);
         uint64_t labelIBP = 0;
         new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c0Elem));   // B.3.3 bridge
@@ -274,7 +280,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
         // Content child 0: NumberEditElement (desired worker count spinner)
         uint64_t c1Buf[2] = {0, 0};
-        fn_Element_Child(contentElem, c1Buf, 0);
+        ::new (static_cast<void*>(c1Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(contentElem)->Child(0));  // B.3.6 bridge
         void* c1Elem = CastElement(*(void**)c1Buf, g_TypeId_NumberEditElement);
         uint64_t numEditIBP = 0;
         new (&numEditIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c1Elem));   // B.3.3 bridge
@@ -282,7 +288,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
         // Row child 2: NumberElement (current count display)
         uint64_t c2Buf[2] = {0, 0};
-        fn_Element_Child(rowElem, c2Buf, 2);
+        ::new (static_cast<void*>(c2Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(2));  // B.3.6 bridge
         void* c2Elem = CastElement(*(void**)c2Buf, g_TypeId_SpinnerElement);
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c2Elem));   // B.3.3 bridge
@@ -290,7 +296,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
         // Row child 3: NumberElement (another counter)
         uint64_t c3Buf[2] = {0, 0};
-        fn_Element_Child(rowElem, c3Buf, 3);
+        ::new (static_cast<void*>(c3Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(3));  // B.3.6 bridge
         void* c3Elem = CastElement(*(void**)c3Buf, g_TypeId_SpinnerElement);
         uint64_t spinIBP = 0;
         new (&spinIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c3Elem));   // B.3.3 bridge
@@ -298,7 +304,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
         // Row child 4: ButtonElement (go-to button)
         uint64_t c4Buf[2] = {0, 0};
-        fn_Element_Child(rowElem, c4Buf, 4);
+        ::new (static_cast<void*>(c4Buf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->Child(4));  // B.3.6 bridge
         void* c4Elem = CastElement(*(void**)c4Buf, g_TypeId_HelpButtonElem);
         uint64_t btnIBP = 0;
         new (&btnIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(c4Elem));   // B.3.3 bridge
@@ -382,35 +388,35 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         //   +0x30 = name key (System::String within object)
         //   +0x38 = tooltip key (System::String within object)
         uint8_t uiStr[16];
-        fn_UIString_Ctor(uiStr, *(uint64_t*)(profTypeId + 0x20), (void*)(profTypeId + 0x30));
+        ::new (static_cast<void*>(uiStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profTypeId + 0x20))), *reinterpret_cast<const System::String*>(profTypeId + 0x30));  // B.3.6 bridge
         uint8_t uiStrCopy[16];
         memcpy(uiStrCopy, uiStr, 16);
         fn_TextElement_SetText((void*)labelIBP, uiStrCopy);
 
         // Set sprite on label
         uint8_t sprBuf[16];
-        fn_Sprite_Ctor(sprBuf, *(uint64_t*)(profTypeId + 0x28), (void*)(profTypeId + 0x30));
+        ::new (static_cast<void*>(sprBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(profTypeId + 0x28))), *reinterpret_cast<const System::String*>(profTypeId + 0x30));  // B.3.6 bridge
         uint8_t sprCopy[16];
         memcpy(sprCopy, sprBuf, 16);
         fn_LabelElement_SetSprite((void*)labelIBP, sprCopy);
 
         // Set tooltip
         uint8_t ttStr[16];
-        fn_UIString_Ctor(ttStr, *(uint64_t*)(profTypeId + 0x20), (void*)(profTypeId + 0x38));
+        ::new (static_cast<void*>(ttStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profTypeId + 0x20))), *reinterpret_cast<const System::String*>(profTypeId + 0x38));  // B.3.6 bridge
         uint8_t ttCopy[16];
         memcpy(ttCopy, ttStr, 16);
-        fn_Element_SetToolTip((void*)labelIBP, ttCopy);
+        reinterpret_cast<UI::Element*>(labelIBP)->SetToolTip(*reinterpret_cast<const UI::String*>(ttCopy));  // B.3.6 bridge
 
         // Set spinner element IDs on the content container (child 1 of row)
         fn_SpinnerElement_SetElementId(contentElem, i + 0x1966);
 
         // Set inner child(0) of content container with same ID
         uint64_t spinChildBuf[2] = {0, 0};
-        fn_Element_Child(contentElem, spinChildBuf, 0);
-        fn_Element_SetElementId(*(void**)spinChildBuf, i + 0x1966);
+        ::new (static_cast<void*>(spinChildBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(contentElem)->Child(0));  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(*(void**)spinChildBuf)->SetElementId(i + 0x1966);  // B.3.6 bridge
 
         // Set button element ID
-        fn_Element_SetElementId((void*)btnIBP, i + 0x1999);
+        reinterpret_cast<UI::Element*>(btnIBP)->SetElementId(i + 0x1999);  // B.3.6 bridge
 
         // Push profession entry into dynamic array at +0x40
         fn_ProfArrayPush((void*)(s + 0x40), *(int*)(s + 0x48) + 1, profEntry);
@@ -436,7 +442,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     // Find "limits" and cast to TableElement
     System::String strBuf("limits");
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -463,7 +469,7 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         int indices[5] = {childBase - 1, childBase, childBase + 1, childBase + 2, childBase + 3};
         for (int col = 0; col < 5; col++) {
             uint64_t cBuf[2] = {0, 0};
-            fn_Element_Child((void*)tablePtr, cBuf, indices[col]);
+            ::new (static_cast<void*>(cBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(indices[col]));  // B.3.6 bridge
             void* cElem = CastElement(*(void**)cBuf, g_TypeId_SpinnerElement);
             uint64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(cElem));   // B.3.3 bridge
@@ -501,11 +507,11 @@ void TownHallUI_InitProduction(TownHallUI* self) {
     // Add 7 combo items from graphYears string table
     for (int i = 0; i < 7; i++) {
         uint8_t uiStrBuf[16];
-        fn_UIString_Ctor_Index(uiStrBuf, yearsTable, i);
+        ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(yearsTable)), i);  // B.3.6 bridge
         System::String sysStrBuf;
-        fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
+        ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
         uint8_t emptySprite[16];
-        fn_Sprite_Default_Ctor(emptySprite);
+        ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
         fn_ComboElement_AddItem((void*)self->productionCombo, emptySprite, &sysStrBuf, nullptr);
     }
     fn_ComboElement_SetCurrentItem((void*)self->productionCombo, 0);
@@ -525,7 +531,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     // Find "inventoryTable" and cast to TableElement
     System::String strBuf("inventoryTable");
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -548,7 +554,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
 
     uint64_t childBuf[2] = {0, 0};
-    fn_Element_Child((void*)tablePtr, childBuf, 0);
+    ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(0));  // B.3.6 bridge
     uintptr_t templateChild = *(uintptr_t*)childBuf;
     uintptr_t cloneObj = *(uintptr_t*)(templateChild + 0xb8);
 
@@ -557,7 +563,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
 
     // Clone template rows into all cells
-    int totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    int totalChildren = reinterpret_cast<const UI::Element*>(tablePtr)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalChildren; i++) {
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
@@ -572,24 +578,24 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     }
 
     // Extract label + number elements from each cell
-    totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    totalChildren = reinterpret_cast<const UI::Element*>(tablePtr)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalChildren; i++) {
         // Get cell child
         uint64_t cellBuf[2] = {0, 0};
-        fn_Element_Child((void*)tablePtr, cellBuf, i);
+        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(i));  // B.3.6 bridge
 
         // Get cell->child(0)->child(0) = LabelElement
         uint64_t sub0[2] = {0, 0};
-        fn_Element_Child(*(void**)cellBuf, sub0, 0);
+        ::new (static_cast<void*>(sub0)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf)->Child(0));  // B.3.6 bridge
         void* labelElem = CastElement(*(void**)sub0, g_TypeId_LabelElement);
         uint64_t labelIBP = 0;
         new (&labelIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(labelElem));   // B.3.3 bridge
 
         // Get cell->child(0)->child(1) = NumberElement
         uint64_t cellBuf2[2] = {0, 0};
-        fn_Element_Child((void*)tablePtr, cellBuf2, i);
+        ::new (static_cast<void*>(cellBuf2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(i));  // B.3.6 bridge
         uint64_t sub1[2] = {0, 0};
-        fn_Element_Child(*(void**)cellBuf2, sub1, 1);
+        ::new (static_cast<void*>(sub1)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)cellBuf2)->Child(1));  // B.3.6 bridge
         void* numElem = CastElement(*(void**)sub1, g_TypeId_SpinnerElement);
         uint64_t numIBP = 0;
         new (&numIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(numElem));   // B.3.3 bridge
@@ -619,11 +625,11 @@ void TownHallUI_InitInventory(TownHallUI* self) {
     // Populate inventory combo with 3 items
     for (int i = 0; i < 3; i++) {
         uint8_t uiStrBuf[16];
-        fn_UIString_Ctor_Index(uiStrBuf, invTypeTable, i);
+        ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(invTypeTable)), i);  // B.3.6 bridge
         System::String sysStrBuf;
-        fn_UIString_ToSystemString(uiStrBuf, &sysStrBuf);
+        ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
         uint8_t emptySprite[16];
-        fn_Sprite_Default_Ctor(emptySprite);
+        ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
         fn_ComboElement_AddItem((void*)self->inventoryCombo, emptySprite, &sysStrBuf, nullptr);
     }
     fn_ComboElement_SetCurrentItem((void*)self->inventoryCombo, 0);
@@ -648,7 +654,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     // Find "agriTable" and cast to TableElement
     System::String strBuf("agriTable");
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* foundElem = *(void**)foundBuf;
     void* tableElem = CastElement(foundElem, g_TypeId_TableElement);
     uint64_t tablePtr = 0;
@@ -766,7 +772,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     int colCount = *(int*)((uintptr_t)tablePtr + 0xc4);
 
     uint64_t templateBuf[2] = {0, 0};
-    fn_Element_Child((void*)tablePtr, templateBuf, 0);
+    ::new (static_cast<void*>(templateBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(0));  // B.3.6 bridge
     uintptr_t templateChild = *(uintptr_t*)templateBuf;
     uintptr_t cloneObj = *(uintptr_t*)(templateChild + 0xb8);
 
@@ -775,7 +781,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
 
     // Clone template rows into all cells
-    int totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    int totalChildren = reinterpret_cast<const UI::Element*>(tablePtr)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalChildren; i++) {
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
@@ -790,10 +796,10 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
     }
 
     // Extract LabelElement from each cell into array at +0x1C8
-    totalChildren = fn_Element_ChildCount((void*)tablePtr);
+    totalChildren = reinterpret_cast<const UI::Element*>(tablePtr)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalChildren; i++) {
         uint64_t cellBuf[2] = {0, 0};
-        fn_Element_Child((void*)tablePtr, cellBuf, i);
+        ::new (static_cast<void*>(cellBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tablePtr)->Child(i));  // B.3.6 bridge
 
         // Cast child to LabelElement
         void* labelElem = CastElement(*(void**)cellBuf, g_TypeId_LabelElement);
@@ -875,7 +881,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
 
     // Set x-axis min label (UIString from graphYearsTable at timeIdx)
     uint8_t xMinStr[16];
-    uint64_t* pXMin = (uint64_t*)fn_UIString_Ctor_Index(xMinStr, self->graphYearsTable, timeIdx);
+    uint64_t* pXMin = reinterpret_cast<uint64_t*>(::new (static_cast<void*>(xMinStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(self->graphYearsTable)), timeIdx));  // B.3.6 bridge
     uint8_t xMinCopy[16];
     memcpy(xMinCopy, pXMin, 16);
     fn_TextElement_SetText(*(void**)(s + 0x178), xMinCopy);
@@ -893,7 +899,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
         uint64_t* labelPtr = &self->label0 + g;
 
         if (seriesIdx < 0) {
-            fn_Element_SetFlagsOnOff(*(void**)labelPtr, 1, 0);
+            reinterpret_cast<UI::Element*>(*(void**)labelPtr)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
         } else {
             fn_GraphElement_AddGraph(*(void**)(s + 0x160), colors[g]);
 
@@ -921,12 +927,12 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
             // Set label text from string table
             uint64_t lblST = *(uint64_t*)(*(uintptr_t*)labelPtr + 0xd8);
             uint8_t lblStr[16];
-            uint64_t* pLbl = (uint64_t*)fn_UIString_Ctor_Index(lblStr, lblST, seriesIdx);
+            uint64_t* pLbl = reinterpret_cast<uint64_t*>(::new (static_cast<void*>(lblStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(lblST)), seriesIdx));  // B.3.6 bridge
             uint8_t lblCopy[16];
             memcpy(lblCopy, pLbl, 16);
             fn_TextElement_SetText(*(void**)labelPtr, lblCopy);
 
-            fn_Element_SetFlagsOnOff(*(void**)labelPtr, 0, 1);
+            reinterpret_cast<UI::Element*>(*(void**)labelPtr)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
             pointCount = graphSeries[4];
             graphCount++;
@@ -1013,7 +1019,7 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
     uint64_t monthST = *(uint64_t*)(*(uintptr_t*)(s + 0x68) + 0xd8);
     uint8_t monthStr[16];
-    uint64_t* pMonth = (uint64_t*)fn_UIString_Ctor_Index(monthStr, monthST, monthIdx);
+    uint64_t* pMonth = reinterpret_cast<uint64_t*>(::new (static_cast<void*>(monthStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(monthST)), monthIdx));  // B.3.6 bridge
     uint8_t monthCopy[16];
     memcpy(monthCopy, pMonth, 16);
     fn_TextElement_SetText(*(void**)(s + 0x68), monthCopy);
@@ -1308,18 +1314,18 @@ static void* InvBST_Find(void* root, uint64_t key) {
     return nullptr;
 }
 
-// Element vtable call at +0x50 (SetValueLimit/SetDisplayMode)
+// Element vtable call at +0x50 — UI::Element slot 10, SetColor(uint32).
+// Every caller passes an element this file stored from a Child()/FindElement()
+// result: the inventory rows (+0x118, InitInventory) and the agriculture labels
+// (+0x1C8, InitAgriculture).
 static void Element_VCall50(void* elem, int val) {
-    uintptr_t vtable = *(uintptr_t*)elem;
-    auto fn = *(void (**)(void*, int))(vtable + 0x50);
-    fn(elem, val);
+    reinterpret_cast<UI::Element*>(elem)->SetColor(static_cast<uint32_t>(val));  // B.3.6 bridge
 }
 
-// Element vtable call at +0x40 (SetVisible/SetEnabled)
+// Element vtable call at +0x40 — UI::Element slot 8, Enable(bool). The one
+// caller passes the profession row's button, Child(4) of the row (InitProfessions).
 static void Element_VCall40(void* elem, int val) {
-    uintptr_t vtable = *(uintptr_t*)elem;
-    auto fn = *(void (**)(void*, int))(vtable + 0x40);
-    fn(elem, val);
+    reinterpret_cast<UI::Element*>(elem)->Enable(val != 0);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -1405,8 +1411,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Create sprite from ValueDescription+0x20 (spriteSheet) and +0x28 (spriteName)
             uint8_t spriteBuf[16];
-            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)valDesc + 0x20),
-                          (void*)((uintptr_t)valDesc + 0x28));
+            ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x28));  // B.3.6 bridge
 
             // Set sprite on label element
             void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
@@ -1414,8 +1419,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Create UIString from ValueDescription+0x30 (stringTable) and +0x38 (stringName)
             uint8_t uiStrBuf[16];
-            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)valDesc + 0x30),
-                            (void*)((uintptr_t)valDesc + 0x38));
+            ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x38));  // B.3.6 bridge
 
             // Set text on label element
             void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
@@ -1441,7 +1445,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
         for (int i = displayIdx; i < (int)self->invTableCount; i++) {
             // Empty sprite
             uint8_t emptySprite[16];
-            fn_Sprite_Default_Ctor(emptySprite);
+            ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
             void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
             fn_LabelElement_SetSprite(labelElem, emptySprite);
 
@@ -1566,16 +1570,14 @@ next_entity: ;
                 // Original always sets sprite/text when found in BST (even if selectDesc is NULL)
                 // Create sprite from SelectDescription+0x20/+0x28
                 uint8_t spriteBuf[16];
-                fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x20),
-                              (void*)((uintptr_t)selectDesc + 0x28));
+                ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)selectDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)selectDesc + 0x28));  // B.3.6 bridge
 
                 uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
                 fn_LabelElement_SetSprite(*(void**)labelPtr, spriteBuf);
 
                 // Create UIString from SelectDescription+0x30/+0x38
                 uint8_t uiStrBuf[16];
-                fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)selectDesc + 0x30),
-                                (void*)((uintptr_t)selectDesc + 0x38));
+                ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)selectDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)selectDesc + 0x38));  // B.3.6 bridge
 
                 labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
                 fn_TextElement_SetText(*(void**)labelPtr, uiStrBuf);
@@ -1588,7 +1590,7 @@ next_entity: ;
 
             // Show element (SetFlagsOnOff hide=0, show=1)
             uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-            fn_Element_SetFlagsOnOff(*(void**)labelPtr, 0, 1);
+            reinterpret_cast<UI::Element*>(*(void**)labelPtr)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
             displayIdx++;
 
@@ -1601,7 +1603,7 @@ next_entity: ;
     if (displayIdx < *(int*)(s + 0x1D0)) {
         for (int i = displayIdx; i < *(int*)(s + 0x1D0); i++) {
             uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)i * 8;
-            fn_Element_SetFlagsOnOff(*(void**)labelPtr, 1, 0);
+            reinterpret_cast<UI::Element*>(*(void**)labelPtr)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
         }
     }
 
@@ -1986,7 +1988,7 @@ void TownHallUI_Serialize(TownHallUI* self) {
 
     System::String strBuf("tabs");
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(*(void**)(s + 0x20), foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(strBuf));  // B.3.6 bridge
     void* element = *(void**)foundBuf;
 
     void* tabElement = nullptr;

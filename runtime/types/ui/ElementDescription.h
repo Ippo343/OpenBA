@@ -226,19 +226,19 @@ constexpr const char* kVtblElementDescription = "??_7ElementDescription@UI@@6B@"
 //
 // WHERE THE BODIES ARE. `Serialize` moved into the member
 // (elementdescription_serialize.cpp). `TypeName`, `Type`, `GetFileVersion`,
-// the ctor/dtor doors and the non-virtual `CreateInstance(InternalPtr<Element>)`
-// are registered doors in `runtime/src/ui/dialog.cpp` — block B's file — and
-// move in the fragment pass; until then they are declared here and the door
-// is the definition. With `TypeName` (the key function) undefined, GCC emits
-// no vtable for this class in the real build, which is correct: nothing
-// constructs one.
+// the empty dtor and the non-virtual `CreateInstance(InternalPtr<Element>*)`
+// are members defined in `runtime/src/ui/dialog.cpp` (fragment pass F2); the
+// registered doors there delegate QUALIFIED. The ctor/dtor doors stay doors
+// (B4b-2). Defining `TypeName` (the key function) emits this class's vtable
+// in dialog.cpp; nothing constructs one with it (every live description wears
+// the minted table).
 //
 // A NAME-HIDING TRAP FOR THE LEAF BLOCKS. Retail has TWO `CreateInstance`s on
 // this class: the pure slot-8 virtual and the non-virtual
 // `?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z`
 // (0x180115ad0, "stamp this description onto that element"). A leaf that
 // overrides slot 8 HIDES the non-virtual one; call it from a leaf as
-// `ElementDescription::CreateInstance(element)` (it has a different arity, so
+// `ElementDescription::CreateInstance(&element)` (it has a different arity, so
 // the mistake is a compile error, never a silent re-dispatch).
 // ############################################################################
 
@@ -260,9 +260,9 @@ public:
 
     // ---- the nine slots, in measured order ---------------------------------
     Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180035350
-    const char* TypeName() const override;                        // [1] 0x1800350f0  dialog.cpp door
-    uint32_t    Type() const override;                            // [2] 0x1800350d0  dialog.cpp door
-    int32_t     GetFileVersion() const override;                  // [3] 0x180116af0  dialog.cpp door
+    const char* TypeName() const override;                        // [1] 0x1800350f0  dialog.cpp
+    uint32_t    Type() const override;                            // [2] 0x1800350d0  dialog.cpp
+    int32_t     GetFileVersion() const override;                  // [3] 0x180116af0  dialog.cpp
     // [4] Compile — Object::External's own body, inherited unchanged.
     bool        Serialize(void* stream) override;                 // [5] 0x180116b00  (IO::Stream&)
     // [6] Reconstruct, [7] Destruct — pure in Object::External, still pure.
@@ -271,11 +271,12 @@ public:
         const Dialog* dialog) const = 0;                          // [8] _purecall — RETSLOT, B6-2
 
     // ---- non-virtual members ----------------------------------------------
-    // 0x180115ad0 — body is the registered door `RtUiElementDescription_
-    // CreateInstance` in dialog.cpp (fragment pass). Retail passes the handle
-    // by ADDRESS (MSVC: non-trivial copy ctor); both ends of a member call are
-    // this GCC, so the member takes it by value and the door converts.
-    void CreateInstance(Object::InternalPtr<Element> element) const;
+    // 0x180115ad0 — defined in dialog.cpp (fragment pass F2); the door
+    // `RtUiElementDescription_CreateInstance` delegates to it. Retail passes
+    // the handle by ADDRESS (MSVC: non-trivial copy ctor; RULE B6-11), so the
+    // member takes `InternalPtr<Element>*` in retail order and every leaf's
+    // applier calls it as `ElementDescription::CreateInstance(&slot)`.
+    void CreateInstance(Object::InternalPtr<Element>* element) const;
 
     ElementDescription(const ElementDescription& src);            // 0x180035120  not ported
     ElementDescription& operator=(const ElementDescription& src); // 0x180035210  not ported
@@ -289,9 +290,9 @@ protected:
     // NOT retail's `??0ElementDescription@UI@@QEAA@XZ` (0x180115a40, the door
     // `RtUiElementDescription_Ctor` in dialog.cpp).
     ElementDescription() = default;
-    // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). NON-VIRTUAL, and NOT
-    // defined in the real build (a body would need the vtable, which is emitted
-    // beside `TypeName` — still a dialog.cpp door). The retail body is the door
+    // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). NON-VIRTUAL, defined
+    // EMPTY in dialog.cpp beside `TypeName` (fragment pass F2), as every other
+    // converted base's is. The retail body is the door
     // `RtUiElementDescription_Dtor` in dialog.cpp.
     ~ElementDescription();
 
