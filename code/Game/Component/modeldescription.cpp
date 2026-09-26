@@ -24,16 +24,21 @@
 //   4. serialize each material External* — fn_Array_Serialize_External_GraphicsMesh
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (ModelDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140163c20) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/ModelDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
 namespace {
-constexpr uintptr_t kVtable = 0x140163c20;
-
+// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
 void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
@@ -44,81 +49,26 @@ void* AllocArray(void* header, int count, int stride) {
     *(void**)h = buf;
     return buf;
 }
-} // namespace
+}  // namespace
 
-extern "C" void* ModelDescription_Ctor_Impl(void* mem);
+// ctor (inlined into create 0x140035930 / createInPlace 0x1400359a0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+ModelDescription::ModelDescription()
+    : Description(),
+      _meshGroups(nullptr),
+      _meshGroupCount(0),
+      _meshGroupCap(0),
+      _lod0(0),
+      _lod1(0),
+      _castShadow(false) {}
 
-extern "C" void* ModelDescription_Ctor_Impl(void* mem) {
-    if (!mem) return nullptr;
-    if (fn_External_External) fn_External_External(mem);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)mem = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    *(uint64_t*)(s + 0x20) = 0;   // meshGroupArray
-    *(uint64_t*)(s + 0x28) = 0;   // meshGroupCount + cap
-    *(uint64_t*)(s + 0x30) = 0;   // lod0, lod1
-    *(uint8_t*)(s + 0x38)  = 0;   // castShadow
-    return mem;
-}
-
-// Serialize (vtable +0x28, exe 0x140124dc0)
-extern "C" void ModelDescription_Serialize(void* self, void* stream) {
-    if (!fn_ExternalPtr_Serialize_GraphicsMesh || !fn_Array_Serialize_External_GraphicsMesh) {
-        return;
-    }
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);            // B.3.4 bridge  (meshGroupCount)
-    int count = *(int32_t*)(s + 0x28);
-
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    uint8_t* e;
-    if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(s + 0x20, count, 0x18));
-        for (int i = 0; i < count; ++i) {
-            *(uint64_t*)(e + i * 0x18)        = 0;          // mesh
-            *(uint64_t*)(e + i * 0x18 + 8)    = 0;          // materialArray
-            *(uint64_t*)(e + i * 0x18 + 0x10) = 0;          // materialCount + cap
-        }
-    } else {
-        e = *(uint8_t**)(s + 0x20);
-    }
-
-    for (int i = 0; i < count; ++i, e += 0x18) {
-        fn_ExternalPtr_Serialize_GraphicsMesh(e, ser);      // mesh ref (elem+0)
-
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 0x10), nullptr);         // B.3.4 bridge  (materialCount, elem+0x10)
-        int matCount = *(int32_t*)(e + 0x10);
-
-        if (loading) {
-            uint8_t* m = reinterpret_cast<uint8_t*>(AllocArray(e + 8, matCount, 8));
-            for (int j = 0; j < matCount; ++j) *(uint64_t*)(m + j * 8) = 0;
-        }
-        // serialize materialArray of External* (elem+8 base)
-        fn_Array_Serialize_External_GraphicsMesh(ser, matCount, *(void**)(e + 8));
-    }
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);            // B.3.4 bridge  (lod0)
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);            // B.3.4 bridge  (lod1)
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);           // B.3.4 bridge  (castShadow)
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
-
-// Dtor (vtable +0x00, exe 0x140035a70)
-extern "C" void* ModelDescription_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)self = s_vtable;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+// dtor (slot 0 0x140035a70 minus the stamps): frees every MeshGroup's material array, then the group array.
+// The compiler then chains ~Description -> ~External.
+ModelDescription::~ModelDescription() {
     // Free each MeshGroup's material sub-array, then the MeshGroup array.
-    uint8_t* e = *(uint8_t**)(s + 0x20);
-    int count = *(int32_t*)(s + 0x28);
+    uint8_t* e = static_cast<uint8_t*>(_meshGroups);
+    int count = _meshGroupCount;
     if (e && fn_MemFreeStatic) {
         for (int i = 0; i < count; ++i) {
             void* mat = *(void**)(e + i * 0x18 + 8);
@@ -126,73 +76,89 @@ extern "C" void* ModelDescription_Dtor(void* self, uint32_t flags) {
         }
         fn_MemFreeStatic(e);
     }
-    *(uint64_t*)(s + 0x20) = 0;
-    *(uint64_t*)(s + 0x28) = 0;
-
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    _meshGroups = nullptr;
+    _meshGroupCount = 0;
+    _meshGroupCap = 0;
 }
 
-// Cleanup (vtable +0x30, exe 0x140035a00)
-extern "C" void ModelDescription_Cleanup(void* self) {
-    typedef void* (*fn_dtor_t)(void*, uint32_t);
-    fn_dtor_t dtor = *(fn_dtor_t*)(*(uintptr_t*)self);
-    if (dtor) dtor(self, 0);
-    ModelDescription_Ctor_Impl(self);
+// [0] 0x140035a70: ~ModelDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ModelDescription::DeletingDtor(unsigned flags) {
+    this->~ModelDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Slot8 (vtable +0x40, exe 0x140035a60)
-extern "C" void* ModelDescription_Slot8(void* self) {
-    if (!self) return nullptr;
-    ModelDescription_Ctor_Impl(self);
-    return self;
+// [5] 0x140124dc0: stream order as retail.
+bool ModelDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize_GraphicsMesh || !fn_Array_Serialize_External_GraphicsMesh) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_meshGroupCount, nullptr);   // meshGroupCount
+    int count = _meshGroupCount;
+    
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
+    uint8_t* e;
+    if (loading) {
+        e = reinterpret_cast<uint8_t*>(AllocArray(&_meshGroups, count, 0x18));
+        for (int i = 0; i < count; ++i) {
+            *(uint64_t*)(e + i * 0x18)        = 0;          // mesh
+            *(uint64_t*)(e + i * 0x18 + 8)    = 0;          // materialArray
+            *(uint64_t*)(e + i * 0x18 + 0x10) = 0;          // materialCount + cap
+        }
+    } else {
+        e = static_cast<uint8_t*>(_meshGroups);
+    }
+    
+    for (int i = 0; i < count; ++i, e += 0x18) {
+        fn_ExternalPtr_Serialize_GraphicsMesh(e, &ser);      // mesh ref (elem+0)
+    
+        ser.Serialize(*reinterpret_cast<int*>(e + 0x10), nullptr);   // materialCount, elem+0x10
+        int matCount = *(int32_t*)(e + 0x10);
+    
+        if (loading) {
+            uint8_t* m = reinterpret_cast<uint8_t*>(AllocArray(e + 8, matCount, 8));
+            for (int j = 0; j < matCount; ++j) *(uint64_t*)(m + j * 8) = 0;
+        }
+        // serialize materialArray of External* (elem+8 base)
+        fn_Array_Serialize_External_GraphicsMesh(&ser, matCount, *(void**)(e + 8));
+    }
+    ser.Serialize(_lod0, nullptr);
+    ser.Serialize(_lod1, nullptr);
+    ser.Serialize(_castShadow, nullptr);
+    return true;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ModelDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ModelDescription");
-    return cached;
-}
-static int  ModelDescription_Ver(void*)        { return 1; }
-static int  ModelDescription_Ret0(void*)       { return 0; }
-static void* ModelDescription_RetNull(void*, ...) { return nullptr; }
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* ModelDescription_GetComponentTypeId(void*, void* out) {
-    return ::Object::WriteComponentTypeId(out, "ModelComponent");
+// [6] 0x140035a00: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* ModelDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) ModelDescription();
 }
 
-static void* g_ModelDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&ModelDescription_Dtor),       // +0x00
-    reinterpret_cast<void*>(&ModelDescription_RetNull),    // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&ModelDescription_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&ModelDescription_Ver),        // +0x18 GetVersion (1)
-    reinterpret_cast<void*>(&ModelDescription_Ret0),       // +0x20 Compile
-    reinterpret_cast<void*>(&ModelDescription_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&ModelDescription_Cleanup),    // +0x30 Cleanup
-    reinterpret_cast<void*>(&ModelDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&ModelDescription_GetComponentTypeId), // +0x40 GetComponentTypeId
-    reinterpret_cast<void*>(&ModelDescription_RetNull),    // +0x48 guard
-    reinterpret_cast<void*>(&ModelDescription_RetNull),    // +0x50 guard
-};
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void ModelDescription::Destruct() {}
 
-extern "C" void RegisterModelDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_ModelDescription_Vtable));
+// [8] 0x140035a60: ModelComponent's type id through the hidden return slot.
+Object::Type* ModelDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("ModelComponent");
+    return ret;
 }
 
-extern "C" void* ModelDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8);
+// [9] 0x1400359a0 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* ModelDescription::Construct() { return nullptr; }
+
+// create 0x140035930: MemAlloc(0x40, 8), then the (inlined) ctor.
+void* ModelDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ModelDescription), 8);
     if (!p) return nullptr;
-    return ModelDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) ModelDescription());
 }
-extern "C" void* ModelDescription_CreateInPlace(void* mem) {
-    return ModelDescription_Ctor_Impl(mem);
+// createInPlace 0x1400359a0.
+void* ModelDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ModelDescription());
 }
 
-REGISTER_TYPE(ModelDescription, "Description",
-              &ModelDescription_Factory, &ModelDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(ModelDescription, "_ZTV16ModelDescription")
+DEFINE_EXE_TYPE(ModelDescription, "Description")

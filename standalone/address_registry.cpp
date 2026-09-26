@@ -81,11 +81,6 @@ extern "C" {
     void RegisterBuildDescriptionVtable();
     void RegisterUIDescriptionVtable();
     void RegisterToolbarDescriptionVtable();
-    void RegisterStorageDescriptionVtable();
-    void RegisterModelDescriptionVtable();
-    void RegisterPickingDescriptionVtable();
-    void RegisterHighlightDescriptionVtable();
-    void RegisterDecalDescriptionVtable();
     void RegisterParticleDescriptionVtable();
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
     // wave 2 (economy / farming / services / tools)
@@ -1757,11 +1752,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterBuildDescriptionVtable();
     RegisterUIDescriptionVtable();
     RegisterToolbarDescriptionVtable();
-    RegisterStorageDescriptionVtable();
-    RegisterModelDescriptionVtable();
-    RegisterPickingDescriptionVtable();
-    RegisterHighlightDescriptionVtable();
-    RegisterDecalDescriptionVtable();
     RegisterParticleDescriptionVtable();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
     // wave 2 (economy / farming / services / tools)

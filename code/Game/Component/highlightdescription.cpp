@@ -22,16 +22,21 @@
 // Tail: ref0 ExternalPtr (+0x30), ref1 ExternalPtr (+0x38) via fn_ExternalPtr_Serialize3.
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (HighlightDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140159a10) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/HighlightDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
 namespace {
-constexpr uintptr_t kVtable = 0x140159a10;
-
+// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
 void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
@@ -42,74 +47,24 @@ void* AllocArray(void* header, int count, int stride) {
     *(void**)h = buf;
     return buf;
 }
-} // namespace
+}  // namespace
 
-extern "C" void* HighlightDescription_Ctor_Impl(void* mem);
+// ctor (inlined into create 0x140006ea0 / createInPlace 0x140006f10):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+HighlightDescription::HighlightDescription()
+    : Description(),
+      _groups(nullptr),
+      _groupCount(0),
+      _groupCap(0),
+      _ref0(nullptr),
+      _ref1(nullptr) {}
 
-extern "C" void* HighlightDescription_Ctor_Impl(void* mem) {
-    if (!mem) return nullptr;
-    if (fn_External_External) fn_External_External(mem);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)mem = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    *(uint64_t*)(s + 0x20) = 0;   // groupArray
-    *(uint64_t*)(s + 0x28) = 0;   // groupCount + cap
-    *(uint64_t*)(s + 0x30) = 0;   // ref0
-    *(uint64_t*)(s + 0x38) = 0;   // ref1
-    return mem;
-}
-
-// Serialize (vtable +0x28, exe 0x14004c9d0)
-extern "C" void HighlightDescription_Serialize(void* self, void* stream) {
-    if (!fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) {
-        return;
-    }
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);            // groupCount   // B.3.4 bridge
-    int count = *(int32_t*)(s + 0x28);
-
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    uint8_t* e;
-    if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(s + 0x20, count, 0x10));
-        for (int i = 0; i < count; ++i) {
-            *(uint64_t*)(e + i * 0x10)     = 0;             // refArray
-            *(uint64_t*)(e + i * 0x10 + 8) = 0;             // refCount + cap
-        }
-    } else {
-        e = *(uint8_t**)(s + 0x20);
-    }
-
-    for (int i = 0; i < count; ++i, e += 0x10) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 8), nullptr);            // refCount (elem+8)   // B.3.4 bridge
-        int refCount = *(int32_t*)(e + 8);
-        if (loading) {
-            uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(e, refCount, 8));
-            for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
-        }
-        fn_Array_Serialize_External_GraphicsMesh(ser, refCount, *(void**)e);
-    }
-
-    fn_ExternalPtr_Serialize3(s + 0x30, ser);              // ref0 (+0x30)
-    fn_ExternalPtr_Serialize3(s + 0x38, ser);              // ref1 (+0x38)
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
-
-// Dtor (vtable +0x00, exe 0x140006fe0)
-extern "C" void* HighlightDescription_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)self = s_vtable;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t* e = *(uint8_t**)(s + 0x20);
-    int count = *(int32_t*)(s + 0x28);
+// dtor (slot 0 0x140006fe0 minus the stamps): frees every group's ref array, then the group array.
+// The compiler then chains ~Description -> ~External.
+HighlightDescription::~HighlightDescription() {
+    uint8_t* e = static_cast<uint8_t*>(_groups);
+    int count = _groupCount;
     if (e && fn_MemFreeStatic) {
         for (int i = 0; i < count; ++i) {
             void* ref = *(void**)(e + i * 0x10);
@@ -117,71 +72,83 @@ extern "C" void* HighlightDescription_Dtor(void* self, uint32_t flags) {
         }
         fn_MemFreeStatic(e);
     }
-    *(uint64_t*)(s + 0x20) = 0;
-    *(uint64_t*)(s + 0x28) = 0;
-
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    _groups = nullptr;
+    _groupCount = 0;
+    _groupCap = 0;
 }
 
-// Cleanup (vtable +0x30, exe 0x140006f70)
-extern "C" void HighlightDescription_Cleanup(void* self) {
-    typedef void* (*fn_dtor_t)(void*, uint32_t);
-    fn_dtor_t dtor = *(fn_dtor_t*)(*(uintptr_t*)self);
-    if (dtor) dtor(self, 0);
-    HighlightDescription_Ctor_Impl(self);
+// [0] 0x140006fe0: ~HighlightDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* HighlightDescription::DeletingDtor(unsigned flags) {
+    this->~HighlightDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Slot8 (vtable +0x40, exe 0x140006fd0)
-extern "C" void* HighlightDescription_Slot8(void* self) {
-    if (!self) return nullptr;
-    HighlightDescription_Ctor_Impl(self);
-    return self;
+// [5] 0x14004c9d0: stream order as retail.
+bool HighlightDescription::Serialize(void* stream) {
+    if (!fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_groupCount, nullptr);   // groupCount
+    int count = _groupCount;
+    
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
+    uint8_t* e;
+    if (loading) {
+        e = reinterpret_cast<uint8_t*>(AllocArray(&_groups, count, 0x10));
+        for (int i = 0; i < count; ++i) {
+            *(uint64_t*)(e + i * 0x10)     = 0;             // refArray
+            *(uint64_t*)(e + i * 0x10 + 8) = 0;             // refCount + cap
+        }
+    } else {
+        e = static_cast<uint8_t*>(_groups);
+    }
+    
+    for (int i = 0; i < count; ++i, e += 0x10) {
+        ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // refCount (elem+8)
+        int refCount = *(int32_t*)(e + 8);
+        if (loading) {
+            uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(e, refCount, 8));
+            for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
+        }
+        fn_Array_Serialize_External_GraphicsMesh(&ser, refCount, *(void**)e);
+    }
+    fn_ExternalPtr_Serialize3(&_ref0, &ser);
+    fn_ExternalPtr_Serialize3(&_ref1, &ser);
+    return true;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t HighlightDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("HighlightDescription");
-    return cached;
-}
-static int  HighlightDescription_Ver(void*)        { return 2; }
-static int  HighlightDescription_Ret0(void*)       { return 0; }
-static void* HighlightDescription_RetNull(void*, ...) { return nullptr; }
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* HighlightDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "HighlightComponent"); }
-
-static void* g_HighlightDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&HighlightDescription_Dtor),       // +0x00
-    reinterpret_cast<void*>(&HighlightDescription_RetNull),    // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&HighlightDescription_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&HighlightDescription_Ver),        // +0x18 GetVersion (2)
-    reinterpret_cast<void*>(&HighlightDescription_Ret0),       // +0x20 Compile
-    reinterpret_cast<void*>(&HighlightDescription_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&HighlightDescription_Cleanup),    // +0x30 Cleanup
-    reinterpret_cast<void*>(&HighlightDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&HighlightDescription_GetComponentTypeId),      // +0x40 Slot8
-    reinterpret_cast<void*>(&HighlightDescription_RetNull),    // +0x48 guard
-    reinterpret_cast<void*>(&HighlightDescription_RetNull),    // +0x50 guard
-};
-
-extern "C" void RegisterHighlightDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_HighlightDescription_Vtable));
+// [6] 0x140006f70: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* HighlightDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) HighlightDescription();
 }
 
-extern "C" void* HighlightDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8);
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void HighlightDescription::Destruct() {}
+
+// [8] 0x140006fd0: HighlightComponent's type id through the hidden return slot.
+Object::Type* HighlightDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("HighlightComponent");
+    return ret;
+}
+
+// [9] 0x140006f10 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* HighlightDescription::Construct() { return nullptr; }
+
+// create 0x140006ea0: MemAlloc(0x40, 8), then the (inlined) ctor.
+void* HighlightDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HighlightDescription), 8);
     if (!p) return nullptr;
-    return HighlightDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) HighlightDescription());
 }
-extern "C" void* HighlightDescription_CreateInPlace(void* mem) {
-    return HighlightDescription_Ctor_Impl(mem);
+// createInPlace 0x140006f10.
+void* HighlightDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HighlightDescription());
 }
 
-REGISTER_TYPE(HighlightDescription, "Description",
-              &HighlightDescription_Factory, &HighlightDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(HighlightDescription, "_ZTV20HighlightDescription")
+DEFINE_EXE_TYPE(HighlightDescription, "Description")

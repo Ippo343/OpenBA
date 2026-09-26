@@ -86,6 +86,11 @@
 #include "Component/ClearAreaDescription.h"
 #include "Component/DestroyDescription.h"
 #include "Component/InteractDescription.h"
+#include "Component/HighlightDescription.h"
+#include "Component/PickingDescription.h"
+#include "Component/DecalDescription.h"
+#include "Component/ModelDescription.h"
+#include "Component/StorageDescription.h"
 
 namespace {
 
@@ -203,6 +208,14 @@ UNIT_TEST(k1_ambient_and_building_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<DestroyDescription>(0x38), 0);
     CHECK_EQ(CheckDescriptionLeaf<InteractDescription>(0x58), 0);
     CHECK_EQ(sizeof(InteractDescription::NodeArray), (size_t)0x10);
+}
+
+UNIT_TEST(k1_render_description_leaves) {
+    CHECK_EQ(CheckDescriptionLeaf<HighlightDescription>(0x40), 0);
+    CHECK_EQ(CheckDescriptionLeaf<PickingDescription>(0x40), 0);
+    CHECK_EQ(CheckDescriptionLeaf<DecalDescription>(0x50), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ModelDescription>(0x40), 0);
+    CHECK_EQ(CheckDescriptionLeaf<StorageDescription>(0x40), 0);
 }
 
 }  // namespace

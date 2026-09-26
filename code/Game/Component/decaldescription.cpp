@@ -25,16 +25,21 @@
 //   5. bool flagA (+0x24), bool flagB (+0x25)
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (DecalDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140163050) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/DecalDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
 namespace {
-constexpr uintptr_t kVtable = 0x140163050;
-
+// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
 void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
@@ -45,155 +50,116 @@ void* AllocArray(void* header, int count, int stride) {
     *(void**)h = buf;
     return buf;
 }
-} // namespace
+}  // namespace
 
-extern "C" void* DecalDescription_Ctor_Impl(void* mem);
+// ctor (inlined into create 0x140033820 / createInPlace 0x140033860):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+DecalDescription::DecalDescription()
+    : Description(),
+      _sizeA(1.0f),
+      _flagA(false),
+      _flagB(false),
+      _refs(nullptr),
+      _refCount(0),
+      _refCap(0),
+      _quads(nullptr),
+      _quadCount(0),
+      _quadCap(0),
+      _sizeB(1.0f) {}
 
-extern "C" void* DecalDescription_Ctor_Impl(void* mem) {
-    if (!mem) return nullptr;
-    if (fn_External_External) fn_External_External(mem);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)mem = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    *(float*)(s + 0x20)   = 1.0f;  // sizeA
-    *(uint16_t*)(s + 0x24) = 0;    // flagA, flagB
-    *(uint64_t*)(s + 0x28) = 0;    // refArray
-    *(uint64_t*)(s + 0x30) = 0;    // refCount + cap
-    *(uint64_t*)(s + 0x38) = 0;    // quadArray
-    *(uint64_t*)(s + 0x40) = 0;    // quadCount + cap
-    *(float*)(s + 0x48)   = 1.0f;  // sizeB
-    return mem;
+// dtor (slot 0 0x1400338a0 minus the stamps): frees the quad and ref arrays.
+// The compiler then chains ~Description -> ~External.
+DecalDescription::~DecalDescription() {
+    if (fn_MemFreeStatic) {
+        if (_quads) fn_MemFreeStatic(_quads);   // quadArray
+        if (_refs)  fn_MemFreeStatic(_refs);    // refArray
+    }
+    _refs = nullptr;  _refCount = 0;  _refCap = 0;
+    _quads = nullptr; _quadCount = 0; _quadCap = 0;
 }
 
-// Serialize (vtable +0x28, exe 0x14011b980)
-extern "C" void DecalDescription_Serialize(void* self, void* stream) {
-    if (!fn_Array_Serialize_External_GraphicsMesh) {
-        return;
-    }
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x1400338a0: ~DecalDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* DecalDescription::DeletingDtor(unsigned flags) {
+    this->~DecalDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);   // sizeA   // B.3.4 bridge
-
+// [5] 0x14011b980: stream order as retail.
+bool DecalDescription::Serialize(void* stream) {
+    if (!fn_Array_Serialize_External_GraphicsMesh) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_sizeA, nullptr);   // sizeA
+    
     // --- refArray (External* pool) at +0x28 ---
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);            // refCount   // B.3.4 bridge
-    int refCount = *(int32_t*)(s + 0x30);
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    ser.Serialize(_refCount, nullptr);   // refCount
+    int refCount = _refCount;
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     if (loading) {
-        uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(s + 0x28, refCount, 8));
+        uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(&_refs, refCount, 8));
         for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
     }
-    fn_Array_Serialize_External_GraphicsMesh(ser, refCount, *(void**)(s + 0x28));
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(s + 0x48), nullptr);   // sizeB   // B.3.4 bridge
-
+    fn_Array_Serialize_External_GraphicsMesh(&ser, refCount, _refs);
+    
+    ser.Serialize(_sizeB, nullptr);   // sizeB
+    
     // --- quadArray (4-float entries) at +0x38 ---
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);            // quadCount   // B.3.4 bridge
-    int quadCount = *(int32_t*)(s + 0x40);
+    ser.Serialize(_quadCount, nullptr);   // quadCount
+    int quadCount = _quadCount;
     uint8_t* q;
     if (loading) {
-        q = reinterpret_cast<uint8_t*>(AllocArray(s + 0x38, quadCount, 0x10));
+        q = reinterpret_cast<uint8_t*>(AllocArray(&_quads, quadCount, 0x10));
         for (int i = 0; i < quadCount; ++i) {
             float* f = (float*)(q + i * 0x10);
             f[0] = 0.0f; f[1] = 0.0f; f[2] = 1.0f; f[3] = 1.0f;   // default quad
         }
     } else {
-        q = *(uint8_t**)(s + 0x38);
+        q = static_cast<uint8_t*>(_quads);
     }
     for (int i = 0; i < quadCount; ++i, q += 0x10) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0x0), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0x4), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0x8), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<float*>(q + 0xc), nullptr);   // B.3.4 bridge
+        ser.Serialize(*reinterpret_cast<float*>(q + 0x0), nullptr);
+        ser.Serialize(*reinterpret_cast<float*>(q + 0x4), nullptr);
+        ser.Serialize(*reinterpret_cast<float*>(q + 0x8), nullptr);
+        ser.Serialize(*reinterpret_cast<float*>(q + 0xc), nullptr);
     }
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);           // flagA   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x25), nullptr);           // flagB   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    ser.Serialize(_flagA, nullptr);
+    ser.Serialize(_flagB, nullptr);
+    return true;
 }
 
-// Dtor (vtable +0x00, exe 0x1400338a0)
-extern "C" void* DecalDescription_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)self = s_vtable;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_MemFreeStatic) {
-        if (*(void**)(s + 0x38)) fn_MemFreeStatic(*(void**)(s + 0x38));   // quadArray
-        if (*(void**)(s + 0x28)) fn_MemFreeStatic(*(void**)(s + 0x28));   // refArray
-    }
-    *(uint64_t*)(s + 0x28) = 0;
-    *(uint64_t*)(s + 0x30) = 0;
-    *(uint64_t*)(s + 0x38) = 0;
-    *(uint64_t*)(s + 0x40) = 0;
-
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140033870: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* DecalDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) DecalDescription();
 }
 
-// Cleanup (vtable +0x30, exe 0x140033870)
-extern "C" void DecalDescription_Cleanup(void* self) {
-    typedef void* (*fn_dtor_t)(void*, uint32_t);
-    fn_dtor_t dtor = *(fn_dtor_t*)(*(uintptr_t*)self);
-    if (dtor) dtor(self, 0);
-    DecalDescription_Ctor_Impl(self);
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void DecalDescription::Destruct() {}
+
+// [8] 0x140033890: DecalComponent's type id through the hidden return slot.
+Object::Type* DecalDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("DecalComponent");
+    return ret;
 }
 
-// Slot8 (vtable +0x40, exe 0x140033890)
-extern "C" void* DecalDescription_Slot8(void* self) {
-    if (!self) return nullptr;
-    DecalDescription_Ctor_Impl(self);
-    return self;
-}
+// [9] 0x140033860 — PORT GAP (retail: placement-new on `this`). The hand-built
+// table had a `return nullptr` guard here; kept until D9 #10's commit.
+Object::External* DecalDescription::Construct() { return nullptr; }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t DecalDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("DecalDescription");
-    return cached;
-}
-static int  DecalDescription_Ver(void*)        { return 4; }
-static int  DecalDescription_Ret0(void*)       { return 0; }
-static void* DecalDescription_RetNull(void*, ...) { return nullptr; }
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* DecalDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "DecalComponent"); }
-
-static void* g_DecalDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&DecalDescription_Dtor),       // +0x00
-    reinterpret_cast<void*>(&DecalDescription_RetNull),    // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&DecalDescription_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&DecalDescription_Ver),        // +0x18 GetVersion (4)
-    reinterpret_cast<void*>(&DecalDescription_Ret0),       // +0x20 Compile
-    reinterpret_cast<void*>(&DecalDescription_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&DecalDescription_Cleanup),    // +0x30 Cleanup
-    reinterpret_cast<void*>(&DecalDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&DecalDescription_GetComponentTypeId),      // +0x40 Slot8
-    reinterpret_cast<void*>(&DecalDescription_RetNull),    // +0x48 guard
-    reinterpret_cast<void*>(&DecalDescription_RetNull),    // +0x50 guard
-};
-
-extern "C" void RegisterDecalDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_DecalDescription_Vtable));
-}
-
-extern "C" void* DecalDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
+// create 0x140033820: MemAlloc(0x50, 8), then the (inlined) ctor.
+void* DecalDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DecalDescription), 8);
     if (!p) return nullptr;
-    return DecalDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) DecalDescription());
 }
-extern "C" void* DecalDescription_CreateInPlace(void* mem) {
-    return DecalDescription_Ctor_Impl(mem);
+// createInPlace 0x140033860.
+void* DecalDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DecalDescription());
 }
 
-REGISTER_TYPE(DecalDescription, "Description",
-              &DecalDescription_Factory, &DecalDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(DecalDescription, "_ZTV16DecalDescription")
+DEFINE_EXE_TYPE(DecalDescription, "Description")
