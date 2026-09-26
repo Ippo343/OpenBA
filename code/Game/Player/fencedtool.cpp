@@ -33,32 +33,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
-// ============================================================
-// Vtable addresses (for vtable chain reset in Dtor)
-// ============================================================
-static void* s_vtable_FencedTool = nullptr;
-static void* s_vtable_DragTool   = nullptr;
-static void* s_vtable_Tool       = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_FencedTool) {
-        s_vtable_FencedTool = (void*)ResolveAddr(Module::Exe, FencedToolAddr::Vtable);
-        s_vtable_DragTool   = (void*)ResolveAddr(Module::Exe, DragToolAddr::Vtable);
-        s_vtable_Tool       = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
-}
-
-// Object::Internal::~Internal — resolved via dispatch slot at 0x140152770
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
-
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
-
 // Graphics::Scene::RemoveObject — resolved locally via exe IAT dispatch slot
 
 static bool s_sceneResolved = false;
@@ -69,31 +43,17 @@ static void EnsureSceneFuncs() {
 }
 
 // ============================================================
-// FencedTool::Dtor (vtable +0x00, Slot0)
+// FencedTool::DeletingDtor (vtable +0x00) — 0x140026930
 // ============================================================
-// Resets vtable chain: FencedTool -> DragTool -> Tool,
-// calls Object::Internal::~Internal, conditionally frees memory.
-// Original: 0x140026930
-void* FencedTool_Dtor(FencedTool* self, uint32_t flags) {
-    EnsureVtables();
-    EnsureInternalDtor();
-
-    // Walk vtable chain down through inheritance
-    self->vtable = s_vtable_FencedTool;
-    self->vtable = s_vtable_DragTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+// ENDGAME B.3.8 TOOL: the hand-rolled FencedTool_Dtor restamped the Fenced,
+// DragTool and Tool tables read by address — the last two UNREGISTERED, so it
+// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
+// restamps the real tables, then runs Object::Internal::~Internal. Retail's
+// dtor frees nothing: the preview mesh is released by slot 5 (Shutdown).
+Object::Base* FencedTool::DeletingDtor(unsigned flags) {
+    this->~FencedTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -998,70 +958,63 @@ uint64_t FencedTool_CalcPath_Impl(FencedTool* self, uint64_t startCell, uint64_t
 }
 
 // ============================================================
-// Standalone factory + vtable (factory cascade).
-// FencedTool: size 0x70, parent DragTool, 15-slot vtable @ 0x1401605d0.
+// FencedTool members (FencedTool.h) — ENDGAME B.3.8 TOOL.
+// The hand-built g_FencedTool_Vtable[15], its slot stubs, the _SA factories
+// and RegisterFencedToolVtable are gone: the compiler builds the table, and
+// nothing reads 0x1401605d0 back by address (the old dtor was the only
+// reader). Inherited from the bases, as in retail: [10] false, [12] cursor 5.
 // ============================================================
-#include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
+#include "Player/RotationSetting.h"
+#include <new>
 
-static uint32_t FencedTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("FencedTool");
-    return c;
+void FencedTool::Startup() { FencedTool_Startup_Impl(this); }                  // [4]
+void FencedTool::Shutdown() { FencedTool_Shutdown2(this); }                    // [5]
+char FencedTool::OnKey(char active) {                                          // [6]
+    return static_cast<char>(FencedTool_OnKey(this, active));
 }
-// +0x58 (Slot11) GetToolSettingTypeId — retail 0x140026920 writes
-// TypeInfo_RotationSetting through the out param (FencedTool HAS a tool
-// setting: the rotation the shelter edge follows). SetEditMode DEREFERENCES
-// the returned pointer (the BridgeTool slot-11 lesson — a Tool_Ret0 stub here
-// faulted the instant the fenced node activated, EntityUI_SetEditMode+0x2e0).
-// The .rdata type-id global is null in standalone, so resolve by name; the
-// non-zero id also makes SetEditMode build the RotationSetting that
-// FencedTool_Startup wires to +0x50 — dbf90's rotation source.
-static uint32_t* FencedTool_GetSettingType(void*, uint32_t* ret) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("RotationSetting");
-    if (ret) *ret = c;
+void FencedTool::Update(void* time, char active) {                             // [7]
+    FencedTool_Serialize_Impl(this, time, active);
+}
+void FencedTool::Draw(void* context, char active) {                            // [8]
+    FencedTool_Draw_Impl(this, context, active);
+}
+char FencedTool::OnCancel() { return static_cast<char>(FencedTool_Shutdown(this)); }  // [9]
+
+// [11] 0x140026920 `MOV EAX,[TypeInfo_RotationSetting]; MOV [RDX],EAX; MOV
+// RAX,RDX; RET`: FencedTool HAS a tool setting — the rotation the shelter edge
+// follows; SetEditMode builds it from this id and Startup wires it to +0x50.
+// The old stub resolved the id through a function-local lazy cache; the class
+// static reads the registration record written once at boot (B6-5).
+Object::Type* FencedTool::GetSettingType(Object::Type* ret) const {
+    *ret = Object::Type(RotationSetting::TypeId());
     return ret;
 }
-// +0x60 (Slot12) cursor id — retail 0x1400fc9d0 `return 5` (shared with Road/Bridge).
-static int FencedTool_Slot12(void*) { return 5; }
-static void* g_FencedTool_Vtable[15] = {
-    (void*)&FencedTool_Dtor,          // +0x00 Dtor
-    (void*)&Tool_Slot1,               // +0x08
-    (void*)&FencedTool_GetTypeId,     // +0x10 GetTypeId
-    (void*)&Tool_Persist,             // +0x18 Serialize (base)
-    (void*)&FencedTool_Startup_Impl,  // +0x20 Startup
-    (void*)&FencedTool_Shutdown2,     // +0x28 Shutdown2
-    (void*)&FencedTool_OnKey,         // +0x30 OnKey
-    (void*)&FencedTool_Serialize_Impl,// +0x38 Serialize (preview mesh)
-    (void*)&FencedTool_Draw_Impl,     // +0x40 Draw
-    (void*)&FencedTool_Shutdown,      // +0x48 Shutdown
-    (void*)&Tool_Ret0,                // +0x50 retail 0x1400268a0 = shared `return 0`
-    (void*)&FencedTool_GetSettingType,// +0x58 Slot11 GetToolSettingTypeId (RotationSetting)
-    (void*)&FencedTool_Slot12,        // +0x60 cursor id (retail returns 5)
-    (void*)&FencedTool_CalcPath_Impl, // +0x68 CalcPath
-    (void*)&FencedTool_CalcCost_Impl, // +0x70 CalcCost
-};
-extern "C" void RegisterFencedToolVtable() {
-    RegisterExeAddr(0x1401605d0, (uintptr_t)g_FencedTool_Vtable);
+
+bool FencedTool::CalcPath(int startCell, int endCell) {                        // [13]
+    return static_cast<uint8_t>(FencedTool_CalcPath_Impl(this, static_cast<uint64_t>(startCell),
+                                                         static_cast<uint64_t>(endCell))) != 0;
 }
-// ⚠ sceneObjectId sentinel: the retail ctor (0x1400dd070) sets +0x58 = -1
-// ("preview mesh not in scene"). Tool_InitInPlace zero-fills, and 0 is a VALID
-// Graphics::Scene object id — the first registered object (the start-town
-// storage barn). With the 0, Serialize_Impl's remove path called
-// Scene::RemoveObject(scene, 0): the barn's mesh vanished and a later
-// RemoveObject spun forever (in-world freeze, gdb-sampled 2026-07-30). Same
-// family as the inert-component sentinel lesson: zero-fill turns -1 sentinels
-// into live-looking values.
-extern "C" void* FencedTool_CreateInPlace_SA(void* mem) {
-    void* p = Tool_InitInPlace(mem, 0x70, g_FencedTool_Vtable, 1);
-    if (p) reinterpret_cast<FencedTool*>(p)->sceneObjectId = -1;
-    return p;
+int FencedTool::CalcCost(int startCell, int endCell, uint32_t* outWidth,      // [14]
+                         int* outHeight, int* outDepth, int* outFenceSegments) {
+    return FencedTool_CalcCost_Impl(this, startCell, endCell, outWidth, outHeight,
+                                    outDepth, outFenceSegments);
 }
-extern "C" void* FencedTool_Factory_SA(void) {
-    void* p = Tool_Alloc(0x70, g_FencedTool_Vtable, 1);
-    if (p) reinterpret_cast<FencedTool*>(p)->sceneObjectId = -1;
-    return p;
+
+// create 0x1400268d0: MemAlloc(0x70, 8), then the ctor 0x1400dd070. The ctor
+// sets sceneObjectId = -1 ("preview not in the scene"): the tree's zero-fill
+// once turned that into a live id 0 (the start-town barn's mesh) and
+// Scene::RemoveObject(0) spun forever.
+void* FencedTool::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FencedTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) FencedTool());
 }
-REGISTER_TYPE(FencedTool, "DragTool", &FencedTool_Factory_SA, &FencedTool_CreateInPlace_SA);
+// createInPlace 0x140026910: `if (storage) ctor(storage)`.
+void* FencedTool::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) FencedTool());
+}
+
+DEFINE_EXE_VTABLE(FencedTool, "_ZTV10FencedTool")
+DEFINE_EXE_TYPE(FencedTool, "DragTool")
