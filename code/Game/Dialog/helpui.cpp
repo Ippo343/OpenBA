@@ -24,6 +24,11 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // File-local helpers
@@ -78,7 +83,7 @@ static void HelpUI_LoadPage(HelpUI* self) {
 
     // Construct UI::String with text index 2 (help content body)
     uint8_t uiString[16] = {0};
-    fn_UIString_Ctor_Index(uiString, (uint64_t)validTable, 2);
+    ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
 
     // Set document text
     void* docElem = *(void**)(s + 0x38);
@@ -141,7 +146,7 @@ static int HelpUI_FindLinkTarget(System::String searchStr) {
         if (isStringTable && entry != nullptr) {
             // GetText at index 0 = topic key/name for matching (non-trivial return)
             System::String nameStr;
-            fn_StringTable_GetText(entry, &nameStr, 0);
+            ::new (&nameStr) System::String(reinterpret_cast<const UI::StringTable*>(entry)->GetText(0));  // B.3.6 bridge
 
             bool match = (searchStr == nameStr);
 
@@ -188,7 +193,7 @@ void HelpUI_Slot4(HelpUI* self) {
     bool derived;
 
     // 1. Find first element (type 0x1401517e8) -> +0x30
-    fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpFirstElem);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(*g_TypeId_HelpFirstElem));  // B.3.6 bridge
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpFirstElem);
     new (bpBuf) ::Object::InternalBasePtr(
@@ -196,7 +201,7 @@ void HelpUI_Slot4(HelpUI* self) {
     *(uint64_t*)(s + 0x30) = *(uint64_t*)bpBuf;
 
     // 2. Find ComboElement (type 0x140151690) -> +0x40
-    fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpComboElem);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(*g_TypeId_HelpComboElem));  // B.3.6 bridge
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpComboElem);
     new (bpBuf) ::Object::InternalBasePtr(
@@ -204,7 +209,7 @@ void HelpUI_Slot4(HelpUI* self) {
     *(uint64_t*)(s + 0x40) = *(uint64_t*)bpBuf;
 
     // 3. Find DocumentTextElement (type 0x1401517f0) -> +0x38
-    fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpDocTextElem);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(*g_TypeId_HelpDocTextElem));  // B.3.6 bridge
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpDocTextElem);
     new (bpBuf) ::Object::InternalBasePtr(
@@ -212,7 +217,7 @@ void HelpUI_Slot4(HelpUI* self) {
     *(uint64_t*)(s + 0x38) = *(uint64_t*)bpBuf;
 
     // 4. Find ContainerElement (type 0x1401517f8) -> +0x58
-    fn_Element_FindElementType(dialogElem, retBuf, *g_TypeId_HelpContainerElem);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(*g_TypeId_HelpContainerElem));  // B.3.6 bridge
     elem = *(void**)retBuf;
     derived = fn_IsDerivedFrom(elem, *g_TypeId_HelpContainerElem);
     new (bpBuf) ::Object::InternalBasePtr(
@@ -221,14 +226,14 @@ void HelpUI_Slot4(HelpUI* self) {
 
     // Set element IDs on combo and document elements
     // (standalone guard: SetElementId derefs its `this`, so skip a failed lookup)
-    if (*(void**)(s + 0x40)) fn_Element_SetElementId(*(void**)(s + 0x40), 0xE74);
-    if (*(void**)(s + 0x38)) fn_Element_SetElementId(*(void**)(s + 0x38), 0xE75);
+    if (*(void**)(s + 0x40)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x40))->SetElementId(0xE74);  // B.3.6 bridge
+    if (*(void**)(s + 0x38)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x38))->SetElementId(0xE75);  // B.3.6 bridge
 
     // Find "buttonBack" by name -> +0x48, set ID 0xE76
     void* backBtn;
     {
         System::String nameStr("buttonBack");
-        fn_FindElement(dialogElem, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         backBtn = *(void**)retBuf;
     }
     derived = fn_IsDerivedFrom(backBtn, *g_TypeId_HelpButtonElem);
@@ -240,7 +245,7 @@ void HelpUI_Slot4(HelpUI* self) {
     void* fwdBtn;
     {
         System::String nameStr("buttonForward");
-        fn_FindElement(dialogElem, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         fwdBtn = *(void**)retBuf;
     }
     derived = fn_IsDerivedFrom(fwdBtn, *g_TypeId_HelpButtonElem);
@@ -248,8 +253,8 @@ void HelpUI_Slot4(HelpUI* self) {
         reinterpret_cast<RtObject::Internal*>(derived ? fwdBtn : nullptr));   // B.3.3 bridge
     *(uint64_t*)(s + 0x50) = *(uint64_t*)bpBuf;
 
-    if (*(void**)(s + 0x48)) fn_Element_SetElementId(*(void**)(s + 0x48), 0xE76);
-    if (*(void**)(s + 0x50)) fn_Element_SetElementId(*(void**)(s + 0x50), 0xE77);
+    if (*(void**)(s + 0x48)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x48))->SetElementId(0xE76);  // B.3.6 bridge
+    if (*(void**)(s + 0x50)) reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetElementId(0xE77);  // B.3.6 bridge
 
     // Populate combo with help topic names from ExternalList
     void* extList = GetHelpExternalList();
@@ -266,11 +271,11 @@ void HelpUI_Slot4(HelpUI* self) {
         if (isStringTable && entry != nullptr) {
             // Get topic name (text index 1) — non-trivial return
             System::String topicName;
-            fn_StringTable_GetText(entry, &topicName, 1);
+            ::new (&topicName) System::String(reinterpret_cast<const UI::StringTable*>(entry)->GetText(1));  // B.3.6 bridge
 
             // Create default sprite
             uint8_t sprite[32];
-            fn_Sprite_Default_Ctor(sprite);
+            ::new (sprite) UI::Sprite();  // B.3.6 bridge
 
             // Add item to combo: (sprite, name, userData=index)
             fn_ComboElement_AddItem(comboElem, sprite, &topicName, (void*)(intptr_t)i);
@@ -297,22 +302,18 @@ void HelpUI_Slot7(HelpUI* self) {
     int pageIndex = *(int*)((uintptr_t)self + 0x64);
     int pageCount = *(int*)((uintptr_t)self + 0x70);
 
-    typedef void (*fn_SetEnabled_t)(void*, bool);
-
     // Enable prev button if not on first page
     // (standalone guard: a failed "buttonBack"/"buttonForward" lookup leaves the
     // field null, and retail dereferences it unconditionally)
     void* prevBtn = (void*)self->data48;
     if (prevBtn) {
-        void** vtable1 = *(void***)prevBtn;
-        ((fn_SetEnabled_t)vtable1[8])(prevBtn, pageIndex > 0);
+        reinterpret_cast<UI::Element*>(prevBtn)->Enable(pageIndex > 0);  // B.3.6 bridge: Element slot 8 Enable
     }
 
     // Enable next button if not on last page
     void* nextBtn = (void*)self->data50;
     if (nextBtn) {
-        void** vtable2 = *(void***)nextBtn;
-        ((fn_SetEnabled_t)vtable2[8])(nextBtn, pageIndex < pageCount - 1);
+        reinterpret_cast<UI::Element*>(nextBtn)->Enable(pageIndex < pageCount - 1);  // B.3.6 bridge: Element slot 8 Enable
     }
 }
 
@@ -414,7 +415,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
 
         // Construct UI::String with text index 2 (content) and set on document
         uint8_t uiString[16] = {0};
-        fn_UIString_Ctor_Index(uiString, (uint64_t)validTable, 2);
+        ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
 
         void* docElem = *(void**)(s + 0x38);
         fn_DocumentTextElement_SetText_UIString(docElem, uiString);
@@ -460,7 +461,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
 
         // Construct UI::String with text index 2 (content) and set on document
         uint8_t uiString[16] = {0};
-        fn_UIString_Ctor_Index(uiString, (uint64_t)validTable, 2);
+        ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
 
         void* docElem = *(void**)(s + 0x38);
         fn_DocumentTextElement_SetText_UIString(docElem, uiString);
