@@ -745,14 +745,14 @@ UNIT_TEST(graphics_geometry_tree_is_abstract_and_polymorphic) {
     // slot 0 a delegating body and a protected `= default` constructor, and this
     // test is where that decision has to be recorded.
     CHECK(std::is_abstract<Graphics::Geometry>::value);
-    CHECK(std::is_abstract<Graphics::MeshInstance>::value);
+    CHECK(!std::is_abstract<Graphics::MeshInstance>::value);   // concrete since B.3.8 RB (exe table copy 0x14015e240)
     CHECK(std::is_abstract<Graphics::EdgeMeshInstance>::value);
     CHECK(std::is_abstract<Graphics::ParticleInstance>::value);
     CHECK(std::is_abstract<Graphics::ParticleSystemInstance>::value);
     CHECK(std::is_abstract<Graphics::Light>::value);
     CHECK(std::is_abstract<Graphics::AmbientLight>::value);
     CHECK(std::is_abstract<Graphics::SpotLight>::value);
-    CHECK(std::is_abstract<Graphics::SunLight>::value);
+    CHECK(!std::is_abstract<Graphics::SunLight>::value);       // concrete since B.3.8 RB (exe table copy 0x14015e290)
 
     CHECK(std::is_polymorphic<Graphics::Geometry>::value);
     CHECK(std::is_polymorphic<Graphics::SunLight>::value);

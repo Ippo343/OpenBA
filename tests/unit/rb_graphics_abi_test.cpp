@@ -25,6 +25,8 @@
 #include "runtime/types/graphics/ParticleInstance.h"
 #include "runtime/types/graphics/Particle.h"
 #include "runtime/types/graphics/Animation.h"
+#include "runtime/types/graphics/Mesh.h"
+#include "runtime/types/graphics/SunLight.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -35,6 +37,8 @@
 extern const void* const g_rbGeoVtGroup[] __asm__("_ZTVN8Graphics8GeometryE");
 extern const void* const g_rbPiVtGroup[]  __asm__("_ZTVN8Graphics16ParticleInstanceE");
 extern const void* const g_rbPaVtGroup[]  __asm__("_ZTVN8Graphics8ParticleE");
+extern const void* const g_rbMiVtGroup[]  __asm__("_ZTVN8Graphics12MeshInstanceE");
+extern const void* const g_rbSlVtGroup[]  __asm__("_ZTVN8Graphics8SunLightE");
 
 namespace {
 const void* GeoVt() { return &g_rbGeoVtGroup[2]; }
@@ -42,7 +46,7 @@ const void* PiVt()  { return &g_rbPiVtGroup[2]; }
 const void* PaVt()  { return &g_rbPaVtGroup[2]; }
 const void* VptrOf(const void* p) { return *static_cast<const void* const*>(p); }
 
-enum Ev { kGeoInit = 1, kGeoRel, kPiRemoveState, kPaRel };
+enum Ev { kGeoInit = 1, kGeoRel, kPiRemoveState, kPaRel, kMiInit, kMiRel, kSlInit, kSlRel };
 struct Entry { int ev; const void* vptr; };
 Entry g_log[16];
 int   g_n = 0;
@@ -75,6 +79,24 @@ uint32_t    Particle::Type() const { return 0; }
 int32_t     Particle::GetFileVersion() const { return 0x1000; }
 bool        Particle::Serialize(void*) { return true; }
 void        Particle::ReleaseFields() { Log(kPaRel, this); }
+
+void MeshInstance::InitFields()    { Log(kMiInit, this); _sortBias = 0; }
+void MeshInstance::ReleaseFields() { Log(kMiRel, this); }
+void MeshInstance::Update(const System::Time&) {}
+void MeshInstance::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
+void MeshInstance::AddDrawItems(const Scene&, Renderer&) const {}
+Math::Transform* MeshInstance::GetSubTransform(Math::Transform* ret, int) const { return ret; }
+Math::Matrix* MeshInstance::GetInstanceTransform(Math::Matrix* ret, int, float) const { return ret; }
+int MeshInstance::SetSharedInstanceData(Video::Context&, int, float) const { return 0; }
+
+Light::~Light() {}
+void SunLight::InitFields()    { Log(kSlInit, this); _dirZ = -1.0f; }
+void SunLight::ReleaseFields() { Log(kSlRel, this); }
+void SunLight::Update(const System::Time&) {}
+void SunLight::Draw(Video::Context&, const Camera&, ExternalPtrHandle, float, int, int, int) const {}
+void SunLight::AddDrawItems(const Scene&, Renderer&) const {}
+void SunLight::DrawShadowMap(Video::Context&, Renderer&, int, int) const {}
+void SunLight::DrawLight(Video::Context&, Renderer&, int, int, int, int) const {}
 }  // namespace Graphics
 
 namespace {
@@ -213,6 +235,51 @@ UNIT_TEST(rb_graphics_doors_reach_the_same_bodies) {
     CHECK(g_log[1].vptr == static_cast<const void*>(kFakeMinted));
 }
 
+// ===========================================================================
+// PART C — the two Geometry leaves the exe instantiates itself (B38_SLOTS
+// section 4: 0x14015e240 MeshInstance, 0x14015e290 SunLight): public real
+// ctors, and slot 0 is the exe's scalar deleting dtor (0x140019e80 /
+// 0x140019e40: ~X, then MemFree on flags & 1).
+// ===========================================================================
+UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
+    using Slot0 = void* (*)(void*, unsigned);
+    g_n = 0;
+    void* m = Object::detail::InternalMemAlloc(sizeof(Graphics::MeshInstance), 8);
+    Graphics::MeshInstance* mi = ::new (m) Graphics::MeshInstance();
+    CHECK(VptrOf(mi) == &g_rbMiVtGroup[2]);
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kGeoInit); CHECK(g_log[0].vptr == GeoVt());
+    CHECK_EQ(g_log[1].ev, (int)kMiInit);  CHECK(g_log[1].vptr == &g_rbMiVtGroup[2]);
+    Slot0 s0 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbMiVtGroup[2]));
+    CHECK(s0(mi, 1u) == m);
+    CHECK_EQ(g_n, 4);
+    CHECK_EQ(g_log[2].ev, (int)kMiRel);   CHECK(g_log[2].vptr == &g_rbMiVtGroup[2]);
+    CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
+
+    g_n = 0;
+    void* sm = Object::detail::InternalMemAlloc(sizeof(Graphics::SunLight), 8);
+    Graphics::SunLight* sl = ::new (sm) Graphics::SunLight();
+    CHECK(VptrOf(sl) == &g_rbSlVtGroup[2]);
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[1].ev, (int)kSlInit);  CHECK(g_log[1].vptr == &g_rbSlVtGroup[2]);
+    Slot0 s1 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbSlVtGroup[2]));
+    CHECK(s1(sl, 1u) == sm);
+    CHECK_EQ(g_n, 4);
+    CHECK_EQ(g_log[2].ev, (int)kSlRel);   CHECK(g_log[2].vptr == &g_rbSlVtGroup[2]);
+    CHECK_EQ(g_log[3].ev, (int)kGeoRel);  CHECK(g_log[3].vptr == GeoVt());
+
+    // The doors reach the same bodies under the minted table.
+    alignas(8) unsigned char raw[sizeof(Graphics::SunLight)] = {};
+    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+    g_n = 0;
+    Graphics::MeshInstance::DoorBody::Init(reinterpret_cast<Graphics::MeshInstance*>(raw));
+    Graphics::MeshInstance::DoorBody::Release(reinterpret_cast<Graphics::MeshInstance*>(raw));
+    Graphics::SunLight::DoorBody::Init(reinterpret_cast<Graphics::SunLight*>(raw));
+    Graphics::SunLight::DoorBody::Release(reinterpret_cast<Graphics::SunLight*>(raw));
+    CHECK_EQ(g_n, 4);
+    for (int i = 0; i < 4; ++i) CHECK(g_log[i].vptr == static_cast<const void*>(kFakeMinted));
+}
+
 UNIT_TEST(rb_graphics_bases_shape) {
     CHECK(std::is_abstract<Graphics::Geometry>::value);
     CHECK(std::is_abstract<Graphics::ParticleInstance>::value);
@@ -224,6 +291,10 @@ UNIT_TEST(rb_graphics_bases_shape) {
     CHECK_EQ(sizeof(RbTornadoInstance), (size_t)0xd8);
     CHECK_EQ(sizeof(RbTornado), (size_t)0x48);
     CHECK_EQ(sizeof(RbAnimAudioEvent), (size_t)0x20);
+    CHECK(!std::is_abstract<Graphics::MeshInstance>::value);
+    CHECK(!std::is_abstract<Graphics::SunLight>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::MeshInstance>::value);
+    CHECK(!std::has_virtual_destructor<Graphics::SunLight>::value);
 }
 
 }  // namespace

@@ -580,6 +580,12 @@ extern "C" void RtGraphics_AmbientLight_AddDrawItems(void* self, const void* sce
 
 namespace Graphics {
 
+// `Graphics::Light` has no destructor of its own in retail (no `??1Light`
+// export; the linker folded it onto ~Geometry). ENDGAME B.3.8 block RB defines
+// it EMPTY so the real `~SunLight()` chain links: the compiler emits Light's
+// restamp and then ~Geometry, which is retail's tail call.
+Light::~Light() {}
+
 void AmbientLight::Update(const System::Time& time) { (void)time; }
 
 void AmbientLight::Draw(Video::Context& context, const Camera& camera,

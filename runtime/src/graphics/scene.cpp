@@ -589,7 +589,7 @@ extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
 // order; +0x14 and +0xbc stay unwritten.
 // ============================================================================
 void Graphics::Geometry::InitFields() {
-    Geometry* const self = reinterpret_cast<Geometry*>(this);   // B.3.8 bridge (the POD view)
+    RtGraphics::Geometry* const self = reinterpret_cast<RtGraphics::Geometry*>(this);   // B.3.8 bridge (the POD view)
     self->_attachParent      = nullptr;
     self->_attachNode        = -1;
     self->_attached._data    = nullptr;

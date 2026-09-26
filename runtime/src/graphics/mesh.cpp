@@ -801,25 +801,9 @@ static void* RtGraphics_MeshInstance_Ctor(void* self) {
     RtGeometryCtor()(self);
     mi->_base._vtable = RtMeshInstanceVtable();
 
-    mi->_mesh.p = nullptr;
-    mi->_materials._data = nullptr;
-    mi->_materials._size = 0;
-    mi->_materials._capacity = 0;
-    mi->_animation._instanced = 0;
-    mi->_animation._layers._data = nullptr;
-    mi->_animation._layers._size = 0;
-    mi->_animation._layers._capacity = 0;
-    mi->_nodes._data = nullptr;
-    mi->_nodes._size = 0;
-    mi->_nodes._capacity = 0;
-    mi->_rootAnimationOffset.x = 0.0f;
-    mi->_rootAnimationOffset.y = 0.0f;
-    mi->_rootAnimationOffset.z = 0.0f;
-    mi->_color[0] = 1.0f;
-    mi->_color[1] = 1.0f;
-    mi->_color[2] = 1.0f;
-    mi->_color[3] = 1.0f;
-    mi->_sortBias = 0;
+    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores are ONE body with
+    // the real constructor `Graphics::MeshInstance()` — `InitFields`, below.
+    ::Graphics::MeshInstance::DoorBody::Init(reinterpret_cast<::Graphics::MeshInstance*>(self));   // B.3.8 bridge
 
     return self;
 }
@@ -916,11 +900,48 @@ static void* RtGraphics_MeshInstance_CopyCtor(void* self, const void* other) {
 // ============================================================================
 static void RtGraphics_MeshInstance_Dtor(void* self) {
 
-    MeshInstance* mi = reinterpret_cast<MeshInstance*>(self);
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real destructor
+    // `Graphics::MeshInstance::~MeshInstance()` — `ReleaseFields`, below.
+    ::Graphics::MeshInstance::DoorBody::Release(reinterpret_cast<::Graphics::MeshInstance*>(self));   // B.3.8 bridge
+    RtGeometryDtor()(self);
+}
+
+// ============================================================================
+// Graphics::MeshInstance::InitFields / ReleaseFields (ENDGAME B.3.8 block RB,
+// RULE B8-1): the bodies of ??0MeshInstance 0x1800fffc0 after Geometry() and
+// the stamp, and of ??1MeshInstance 0x180017060 before ~Geometry. Shared by
+// the real ctor/dtor (Mesh.h) and the two doors above; MOVED VERBATIM through
+// the field-identical `RtGraphics::MeshInstance` POD view (cross-asserted in
+// Mesh.h).
+// ============================================================================
+void Graphics::MeshInstance::InitFields() {
+    RtGraphics::MeshInstance* const mi = reinterpret_cast<RtGraphics::MeshInstance*>(this);   // B.3.8 bridge (the POD view)
+    mi->_mesh.p = nullptr;
+    mi->_materials._data = nullptr;
+    mi->_materials._size = 0;
+    mi->_materials._capacity = 0;
+    mi->_animation._instanced = 0;
+    mi->_animation._layers._data = nullptr;
+    mi->_animation._layers._size = 0;
+    mi->_animation._layers._capacity = 0;
+    mi->_nodes._data = nullptr;
+    mi->_nodes._size = 0;
+    mi->_nodes._capacity = 0;
+    mi->_rootAnimationOffset.x = 0.0f;
+    mi->_rootAnimationOffset.y = 0.0f;
+    mi->_rootAnimationOffset.z = 0.0f;
+    mi->_color[0] = 1.0f;
+    mi->_color[1] = 1.0f;
+    mi->_color[2] = 1.0f;
+    mi->_color[3] = 1.0f;
+    mi->_sortBias = 0;
+}
+
+void Graphics::MeshInstance::ReleaseFields() {
+    RtGraphics::MeshInstance* const mi = reinterpret_cast<RtGraphics::MeshInstance*>(this);   // B.3.8 bridge (the POD view)
     RtNodeArrayFree()(&mi->_nodes);
     RtLayerArrayFree()(&mi->_animation._layers);
     RtMatArrayFree()(&mi->_materials);
-    RtGeometryDtor()(self);
 
 }
 
