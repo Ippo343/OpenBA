@@ -22,7 +22,7 @@
 #include "graphics/Scene.h"
 #include "graphics/Mesh.h"
 #include "Player/fencedtool_funcs.h"
-#include "Tool.h"
+#include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"

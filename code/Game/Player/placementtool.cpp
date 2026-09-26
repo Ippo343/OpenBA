@@ -20,7 +20,7 @@
 #include <new>
 #include "Player/placementtool_funcs.h"
 #include "PlacementTool.h"
-#include "Tool.h"
+#include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "system/String.h"

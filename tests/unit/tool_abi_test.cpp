@@ -23,6 +23,8 @@
 
 #include "Player/ToolSetting.h"
 #include "Player/RotationSetting.h"
+#include "Player/Tool.h"
+#include "Player/dragtool.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -68,6 +70,78 @@ UNIT_TEST(tool_setting_shape) {
     CHECK(!std::is_abstract<RotationSetting>::value);
     CHECK((std::is_base_of<ToolSetting, RotationSetting>::value));
     CHECK((std::is_base_of<Object::Internal, ToolSetting>::value));
+}
+
+// ===========================================================================
+// Tool / DragTool (the abstract bases)
+// ===========================================================================
+UNIT_TEST(tool_base_layout) {
+    CHECK_EQ(sizeof(Tool),     (size_t)0x28);
+    CHECK_EQ(sizeof(DragTool), (size_t)0x38);
+    CHECK_EQ(offsetof(Tool, dialogPtr),      (size_t)0x10);
+    CHECK_EQ(offsetof(Tool, toolSetting),    (size_t)0x18);
+    CHECK_EQ(offsetof(Tool, descriptionPtr), (size_t)0x20);
+    CHECK_EQ(offsetof(DragTool, dragState),   (size_t)0x28);
+    CHECK_EQ(offsetof(DragTool, singleClick), (size_t)0x29);
+    CHECK_EQ(offsetof(DragTool, startCell),   (size_t)0x2c);
+    CHECK_EQ(offsetof(DragTool, endCell),     (size_t)0x30);
+    CHECK_EQ(offsetof(DragTool, lastEndCell), (size_t)0x34);
+}
+
+UNIT_TEST(tool_base_slot_order) {
+    // Tool 0x140161f10, 13 slots.
+    CHECK_EQ(SlotOffset(&Tool::DeletingDtor),   (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&Tool::TypeName),       (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&Tool::Type),           (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&Tool::Persist),        (uintptr_t)0x18);
+    CHECK_EQ(SlotOffset(&Tool::Startup),        (uintptr_t)0x20);
+    CHECK_EQ(SlotOffset(&Tool::Shutdown),       (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&Tool::OnKey),          (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&Tool::Update),         (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&Tool::Draw),           (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&Tool::OnCancel),       (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&Tool::IsSelected),     (uintptr_t)0x50);
+    CHECK_EQ(SlotOffset(&Tool::GetSettingType), (uintptr_t)0x58);
+    CHECK_EQ(SlotOffset(&Tool::GetCursor),      (uintptr_t)0x60);   // 13th and last
+    // DragTool 0x140161c10, 15 slots.
+    CHECK_EQ(SlotOffset(&DragTool::DeletingDtor), (uintptr_t)0x00);   // 0x14002da20
+    CHECK_EQ(SlotOffset(&DragTool::OnKey),        (uintptr_t)0x30);   // 0x1400fc6b0
+    CHECK_EQ(SlotOffset(&DragTool::OnCancel),     (uintptr_t)0x48);   // 0x1400fc640
+    CHECK_EQ(SlotOffset(&DragTool::GetCursor),    (uintptr_t)0x60);   // 0x1400fc9d0
+    CHECK_EQ(SlotOffset(&DragTool::CalcPath),     (uintptr_t)0x68);   // pure
+    CHECK_EQ(SlotOffset(&DragTool::CalcCost),     (uintptr_t)0x70);   // pure, 15th and last
+}
+
+UNIT_TEST(tool_base_shape) {
+    CHECK(std::is_abstract<Tool>::value);       // 4-9 pure
+    CHECK(std::is_abstract<DragTool>::value);   // 4, 5, 7, 8, 13, 14 pure
+    CHECK(!std::has_virtual_destructor<Tool>::value);
+    CHECK(!std::has_virtual_destructor<DragTool>::value);
+    CHECK((std::is_base_of<Object::Internal, Tool>::value));
+    CHECK((std::is_base_of<Tool, DragTool>::value));
+}
+
+// ===========================================================================
+// PART D — the hidden-return-slot shape, raw retail-order call (B8-11).
+// A local class with Tool's slot-11 declaration shape: retail passes `this`
+// in RCX and the return slot in RDX and reads the result from RAX.
+// ===========================================================================
+struct RetslotProbe {
+    uint32_t tag = 0x5a5a;
+    virtual Object::Type* GetSettingType(Object::Type* ret) const {
+        *ret = Object::Type(tag);
+        return ret;
+    }
+};
+
+UNIT_TEST(tool_retslot_raw_call_order) {
+    RetslotProbe probe;
+    void** vt = *reinterpret_cast<void***>(&probe);
+    using RawFn = Object::Type* (*)(const void* self, Object::Type* ret);
+    Object::Type out(0);
+    Object::Type* got = reinterpret_cast<RawFn>(vt[0])(&probe, &out);
+    CHECK(got == &out);
+    CHECK_EQ(static_cast<uint32_t>(out), 0x5a5au);
 }
 
 }  // namespace
