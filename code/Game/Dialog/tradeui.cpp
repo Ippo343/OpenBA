@@ -49,6 +49,13 @@
 #include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/Sprite.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/TextElement.h"       // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/LabelElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/NumberElement.h"     // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/ComboElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
 
 
 // Dispatch slot addresses for element type IDs used in Serialize inner loops
@@ -60,42 +67,11 @@
 
 // Retail's sell/buy tables call the min/max setter through exe .rdata dispatch slot
 // 0x140151cf8 (RefreshSellTable 0x1400841df, RefreshBuyTable 0x140083629,
-// RefreshDisplay 0x140084be8 — one shared slot for all three tables).
-//
-// That slot's name string (slot -> RVA 0x1bb5d0 -> C string) is literally
-//   "?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z"
-// and Runtime-x64.dll exports it as ordinal 3918. So the slot IS
-// fn_SpinnerElement_SetMinMax; the "SliderElement" naming here is the same mislabel
-// reg_element_typeids.cpp:36 documents (0x140151cf0 is UI::SpinnerElement, and the
-// real SliderElement slot is 0x1401516d0, which nothing in the trade panel touches).
-//
-// The slot is NOT in the address registry — nothing anywhere registers 0x140151cf8 —
-// so ResolveAddr returned 0 and this helper silently did nothing on every call. That
-// left every sell/buy spinner at its .rsc min/max, so a typed quantity was clamped
-// straight back to 0. Fall back to the export the slot names.
-#define SLOT_SLIDER_SETMINMAX 0x140151cf8
-static fn_SpinnerElement_SetMinMax_t fn_SliderElement_SetMinMax = nullptr;
-
-static void SliderElement_SetMinMax(void* self, int minVal, int maxVal) {
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_resolved = true;
-        uintptr_t slot = ResolveAddr(Module::Exe, SLOT_SLIDER_SETMINMAX);
-        if (slot) {
-            fn_SliderElement_SetMinMax = *(fn_SpinnerElement_SetMinMax_t*)slot;
-        }
-        if (!fn_SliderElement_SetMinMax)
-            fn_SliderElement_SetMinMax = fn_SpinnerElement_SetMinMax;
-        // Report the OUTCOME: which pointer we ended up with, or that we have none.
-        fprintf(stderr, "[TradeUI] spinner SetMinMax = %p (slot 0x%llx -> %p, export %p)\n",
-                (void*)fn_SliderElement_SetMinMax,
-                (unsigned long long)SLOT_SLIDER_SETMINMAX, (void*)slot,
-                (void*)fn_SpinnerElement_SetMinMax);
-        fflush(stderr);
-    }
-    if (fn_SliderElement_SetMinMax)
-        fn_SliderElement_SetMinMax(self, minVal, maxVal);
-}
+// RefreshDisplay 0x140084be8 — one shared slot for all three tables). That slot's
+// name string is literally "?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z" (ordinal 3918):
+// the element is a UI::SpinnerElement (0x140151cf0 is the SpinnerElement type slot;
+// reg_element_typeids.cpp:36 documents the old "SliderElement" mislabel), so those
+// sites call UI::SpinnerElement::SetMinMax directly (ENDGAME B.3.6).
 
 // ============================================================
 // Draw (vtable +0x28): Mark tables for layout recalc, set building dirty flag
@@ -208,7 +184,7 @@ static void TradeUI_CloneTableCells(uintptr_t s, void* tableElem, void* template
             reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf),
             reinterpret_cast<const UI::Dialog*>(dialogResource));  // B.3.6 bridge
 
-        fn_TableElement_SetChild2(tableElem, cloneBuf, i);
+        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf), i);  // B.3.6 bridge
     }
 }
 
@@ -248,13 +224,13 @@ static void* FindDescComponent(void* descEntity, uint32_t typeId)
 // ============================================================
 static void SetSpinnerIncrement(void* spinner)
 {
-    int maxVal = fn_SpinnerElement_GetMaxValue(spinner);
+    int maxVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetMaxValue();  // B.3.6 bridge
     if (maxVal < 0x15) {
-        fn_SpinnerElement_SetIncrement(spinner, 1);
+        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetIncrement(1);  // B.3.6 bridge
     } else if (maxVal < 0x33) {
-        fn_SpinnerElement_SetIncrement(spinner, 5);
+        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetIncrement(5);  // B.3.6 bridge
     } else if (maxVal < 0x65) {
-        fn_SpinnerElement_SetIncrement(spinner, 0x14);
+        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetIncrement(0x14);  // B.3.6 bridge
     }
     // >= 0x65: no increment set (uses default)
 }
@@ -459,15 +435,15 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             void* valueDesc = (void*)sellData[1];
             uint8_t spriteBuf[16] = {0};
             ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valueDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valueDesc + 0x28));  // B.3.6 bridge
-            fn_LabelElement_SetSprite(*(void**)sellUI, spriteBuf);
+            reinterpret_cast<UI::LabelElement*>(*(void**)sellUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
             // Set text from ValueDescription (+0x30=stringTable, +0x38=stringName)
             uint8_t uiStrBuf[16] = {0};
             ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valueDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valueDesc + 0x38));  // B.3.6 bridge
-            fn_TextElement_SetText(*(void**)sellUI, uiStrBuf);
+            reinterpret_cast<UI::TextElement*>(*(void**)sellUI)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
             // Set sellable count on number element (sellUI+0x10)
-            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)sellUI + 0x10), sellableCount);
+            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)sellUI + 0x10))->SetValue(static_cast<int32_t>(sellableCount));  // B.3.6 bridge
 
             // Search StateMachine's order list for matching resource to get order qty
             int orderQty = 0;
@@ -486,7 +462,7 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             }
 
             // Set order qty on number element (sellUI+0x08)
-            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)sellUI + 0x08), orderQty);
+            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)sellUI + 0x08))->SetValue(static_cast<int32_t>(orderQty));  // B.3.6 bridge
 
             // Set spinner enabled state
             bool spinnerEnabled = tradeActive && hasStock;
@@ -502,15 +478,15 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             if (tradeActive && hasStock) {
                 spinnerMax = sellableCount;
             }
-            // sellUI+0x18 is a SliderElement (NOT SpinnerElement) — use NumberEditElement::SetMinMax
-            SliderElement_SetMinMax(*(void**)((uintptr_t)sellUI + 0x18), 0, spinnerMax);
+            // sellUI+0x18 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
+            reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)sellUI + 0x18))->SetMinMax(0, spinnerMax);  // B.3.6 bridge
 
             // Set spinner increment based on max value
             void* spinnerElem = *(void**)((uintptr_t)sellUI + 0x18);
             SetSpinnerIncrement(spinnerElem);
 
             // Reset spinner value to 0
-            fn_SpinnerElement_SetValue(*(void**)((uintptr_t)sellUI + 0x18), 0);
+            reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)sellUI + 0x18))->SetValue(0);  // B.3.6 bridge
 
             // Set element name from resource path
             SetElementNameFromExternal(*(void**)((uintptr_t)sellUI + 0x18),
@@ -536,12 +512,12 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             // Set empty sprite
             uint8_t emptySprite[16] = {0};
             ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-            fn_LabelElement_SetSprite(*(void**)cellUI, emptySprite);
+            reinterpret_cast<UI::LabelElement*>(*(void**)cellUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
 
             // Set empty text
             uint8_t emptyStr[16] = {0};
             ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
-            fn_TextElement_SetText(*(void**)cellUI, emptyStr);
+            reinterpret_cast<UI::TextElement*>(*(void**)cellUI)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
 
             // Disable spinner, number, and label elements (null-guard each)
             if (*(void**)((uintptr_t)cellUI + 0x18))
@@ -551,9 +527,9 @@ void TradeUI_RefreshSellTable(TradeUI* self)
             if (*(void**)((uintptr_t)cellUI + 0x10))
                 VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
 
-            // cellUI+0x18 is a SliderElement — use NumberEditElement::SetMinMax
+            // cellUI+0x18 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
             if (*(void**)((uintptr_t)cellUI + 0x18))
-                SliderElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x18), 0, 0);
+                reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)cellUI + 0x18))->SetMinMax(0, 0);  // B.3.6 bridge
 
             clearOffset += 0x20;
         }
@@ -625,7 +601,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             // Set parameter 0: order name string
             System::String orderNameBuf;
             fn_Building_GetOrderName((void*)buildingPtr[0], &orderNameBuf);
-            fn_TextElement_SetParameter((void*)*textIbp, 0, &orderNameBuf);
+            reinterpret_cast<UI::TextElement*>(*textIbp)->SetParameter(0, orderNameBuf);  // B.3.6 bridge
 
             // Set parameter 1: UI string from order entry
             uint8_t uiStrBuf[16] = {0};
@@ -633,7 +609,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             // Convert to System::String
             System::String sysStrBuf;
             ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
-            fn_TextElement_SetParameter((void*)*textIbp, 1, &sysStrBuf);
+            reinterpret_cast<UI::TextElement*>(*textIbp)->SetParameter(1, sysStrBuf);  // B.3.6 bridge
         }
 
         // Show/hide text element based on order validity
@@ -687,24 +663,24 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             // Set sprite from ValueDescription
             uint8_t spriteBuf[16] = {0};
             ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x28));  // B.3.6 bridge
-            fn_LabelElement_SetSprite(*(void**)buyUI, spriteBuf);
+            reinterpret_cast<UI::LabelElement*>(*(void**)buyUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
             // Set text from ValueDescription
             uint8_t uiStrBuf[16] = {0};
             ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x38));  // B.3.6 bridge
-            fn_TextElement_SetText(*(void**)buyUI, uiStrBuf);
+            reinterpret_cast<UI::TextElement*>(*(void**)buyUI)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
             // Set price number (buyUI+0x18 = price element)
-            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)buyUI + 0x18),
-                                        *(int*)((uintptr_t)buyOrder + 0x0C));
+            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)buyUI + 0x18))->SetValue(  // B.3.6 bridge
+                static_cast<int32_t>(*(int*)((uintptr_t)buyOrder + 0x0C)));
 
             // Set quantity number (buyUI+0x08)
-            fn_NumberElement_SetValueInt(*(void**)((uintptr_t)buyUI + 0x08),
-                                        (int)buyOrder[1]);
+            reinterpret_cast<UI::NumberElement*>(*(void**)((uintptr_t)buyUI + 0x08))->SetValue(  // B.3.6 bridge
+                static_cast<int32_t>((int)buyOrder[1]));
 
-            // Set slider min/max (buyUI+0x10 is a SliderElement)
-            SliderElement_SetMinMax(*(void**)((uintptr_t)buyUI + 0x10),
-                                        0, *(int*)((uintptr_t)buyOrder + 0x0C));
+            // Set spinner min/max (buyUI+0x10 is a SpinnerElement, exe slot 0x140151cf8)
+            reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)buyUI + 0x10))->SetMinMax(  // B.3.6 bridge
+                0, *(int*)((uintptr_t)buyOrder + 0x0C));
 
             // Set spinner increment
             void* spinnerElem = *(void**)((uintptr_t)buyUI + 0x10);
@@ -734,16 +710,16 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
             // Set empty sprite
             uint8_t emptySprite[16] = {0};
             ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-            fn_LabelElement_SetSprite(*(void**)cellUI, emptySprite);
+            reinterpret_cast<UI::LabelElement*>(*(void**)cellUI)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
 
             // Set empty text
             uint8_t emptyStr[16] = {0};
             ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
-            fn_TextElement_SetText(*(void**)cellUI, emptyStr);
+            reinterpret_cast<UI::TextElement*>(*(void**)cellUI)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
 
-            // cellUI+0x10 is a SliderElement — use NumberEditElement::SetMinMax
+            // cellUI+0x10 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
             if (*(void**)((uintptr_t)cellUI + 0x10))
-                SliderElement_SetMinMax(*(void**)((uintptr_t)cellUI + 0x10), 0, 0);
+                reinterpret_cast<UI::SpinnerElement*>(*(void**)((uintptr_t)cellUI + 0x10))->SetMinMax(0, 0);  // B.3.6 bridge
 
             if (*(void**)((uintptr_t)cellUI + 0x10))
                 VCall_Element_SetEnabled(*(void**)((uintptr_t)cellUI + 0x10), false);
@@ -774,7 +750,7 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
         comboIdx = *(int*)(*(uintptr_t*)(buildingPtr[0] + 0x30)
                     + (uintptr_t)*(int*)(buildingPtr[0] + 0x2c) * 0x20 + 8);
     }
-    fn_ComboElement_SetCurrentItem(*(void**)(s + 0xC0), comboIdx);
+    reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0xC0))->SetCurrentItem(comboIdx);  // B.3.6 bridge
 
     void* comboElem = *(void**)(s + 0xC0);
     bool comboEnabled = (*(int*)(buildingPtr[0] + 0x2c) >= 0);
@@ -813,12 +789,12 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                     // Set sprite
                     uint8_t spriteBuf[16] = {0};
                     ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)valDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x28));  // B.3.6 bridge
-                    fn_LabelElement_SetSprite((void*)*childIbp, spriteBuf);
+                    reinterpret_cast<UI::LabelElement*>(*childIbp)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
                     // Set text
                     uint8_t uiStrBuf[16] = {0};
                     ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)valDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)valDesc + 0x38));  // B.3.6 bridge
-                    fn_TextElement_SetText((void*)*childIbp, uiStrBuf);
+                    reinterpret_cast<UI::TextElement*>(*childIbp)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
                 }
 
                 purchaseUIPtr = (void*)(*(uintptr_t*)(s + 0xa0) + offset);
@@ -874,11 +850,11 @@ void TradeUI_RefreshBuyTable(TradeUI* self)
                 if ((void*)*childIbp != nullptr) {
                     uint8_t emptySprite[16] = {0};
                     ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-                    fn_LabelElement_SetSprite((void*)*childIbp, emptySprite);
+                    reinterpret_cast<UI::LabelElement*>(*childIbp)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
 
                     uint8_t emptyStr[16] = {0};
                     ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
-                    fn_TextElement_SetText((void*)*childIbp, emptyStr);
+                    reinterpret_cast<UI::TextElement*>(*childIbp)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
                 }
 
                 ci++;
@@ -983,7 +959,7 @@ void TradeUI_Serialize(TradeUI* self) {
         dialogElemPtr, "comboPurchase", g_TypeId_HelpComboElem);
     // Set comboPurchase current item from building component field
     int purchaseIdx = *(int*)(buildingPtr[0] + 0x28);
-    fn_ComboElement_SetCurrentItem(*(void**)(s + 0x138), purchaseIdx);
+    reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x138))->SetCurrentItem(purchaseIdx);  // B.3.6 bridge
     reinterpret_cast<UI::Element*>(*(void**)(s + 0x138))->SetElementId(0x4e22);  // B.3.6 bridge
 
     *(uintptr_t*)(s + 0xC0) = (uintptr_t)TradeUI_FindTypedElement(
@@ -993,7 +969,7 @@ void TradeUI_Serialize(TradeUI* self) {
     *(uintptr_t*)(s + 0x140) = (uintptr_t)TradeUI_FindTypedElement(
         dialogElemPtr, "sortCombo", g_TypeId_HelpComboElem);
     reinterpret_cast<UI::Element*>(*(void**)(s + 0x140))->SetElementId(199);  // B.3.6 bridge — 0xC7
-    fn_ComboElement_SetCurrentItem(*(void**)(s + 0x140), 0);
+    reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x140))->SetCurrentItem(0);  // B.3.6 bridge
 
     // --- Phase 2: Build tablePurchase row array (stride 0x20, 4 elements per row) ---
     // tablePurchase uses FLAT indexing with stride 3 per logical row:
@@ -1047,7 +1023,7 @@ void TradeUI_Serialize(TradeUI* self) {
         // both halves of the widget answer to the same id. Faithful, verified at the four
         // retail call sites (EDX = base+0x3e8 / +0x7d0 / +0xbb8 / +0xfa0).
         new (r0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(spinner));   // B.3.3 bridge
-        if (*(void**)r0) fn_SpinnerElement_SetElementId(*(void**)r0, baseId + 1000);
+        if (*(void**)r0) reinterpret_cast<UI::SpinnerElement*>(*(void**)r0)->SetElementId(baseId + 1000);  // B.3.6 bridge
         TradeUI_ReportSpinnerTag("purchase", row, *(void**)r0, baseId + 1000);
 
         // Build 0x20-byte entry {label, number, button, spinner} and push to the
@@ -1114,7 +1090,7 @@ void TradeUI_Serialize(TradeUI* self) {
         int rowCount = ((resourceTypeCount - 1 + storageColCount) / storageColCount * storageColCount)
                        / storageColCount;
         void* storageTemplate = TradeUI_GetTableTemplate((void*)(s + 0xD8));
-        fn_TableElement_SetSize(*(void**)(s + 0xD8), rowCount, storageColCount);
+        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xD8))->SetSize(rowCount, storageColCount);  // B.3.6 bridge
 
         TradeUI_CloneTableCells(s, *(void**)(s + 0xD8), storageTemplate);
     }
@@ -1149,7 +1125,7 @@ void TradeUI_Serialize(TradeUI* self) {
         // and on its inner edit element at *(spinner+0xa0). Retail call site 0x140085d40,
         // EDX = i + 0x7d0. See the tablePurchase loop above.
         new (c0) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(e1));   // B.3.3 bridge
-        fn_SpinnerElement_SetElementId(*(void**)c0, i + 2000);
+        reinterpret_cast<UI::SpinnerElement*>(*(void**)c0)->SetElementId(i + 2000);  // B.3.6 bridge
         TradeUI_ReportSpinnerTag("storage", i, *(void**)c0, i + 2000);
 
 
@@ -1170,7 +1146,7 @@ void TradeUI_Serialize(TradeUI* self) {
         int rowCount = (((resourceTypeCount - 1 + sellColCount) / sellColCount) * sellColCount)
                        / sellColCount;
         void* sellTemplate = TradeUI_GetTableTemplate((void*)(s + 0xC8));
-        fn_TableElement_SetSize(*(void**)(s + 0xC8), rowCount, sellColCount);
+        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xC8))->SetSize(rowCount, sellColCount);  // B.3.6 bridge
 
         TradeUI_CloneTableCells(s, *(void**)(s + 0xC8), sellTemplate);
     }
@@ -1205,7 +1181,7 @@ void TradeUI_Serialize(TradeUI* self) {
         // child(3) is a SpinnerElement (the "SliderElement" naming is the same mislabel
         // reg_element_typeids.cpp:36 documents). Retail call site 0x14008614e, EDX = i+0xbb8.
         new (c) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sliderElem));   // B.3.3 bridge
-        fn_SpinnerElement_SetElementId(*(void**)c, i + 3000);
+        reinterpret_cast<UI::SpinnerElement*>(*(void**)c)->SetElementId(i + 3000);  // B.3.6 bridge
         TradeUI_ReportSpinnerTag("sell", i, *(void**)c, i + 3000);
 
         // Build 0x20-byte entry {child1, child0, child2, child3} and push to the
@@ -1229,7 +1205,7 @@ void TradeUI_Serialize(TradeUI* self) {
 
         int rowCount = (((totalItems + buyColCount) / buyColCount) * buyColCount) / buyColCount;
         void* buyTemplate = TradeUI_GetTableTemplate((void*)(s + 0xD0));
-        fn_TableElement_SetSize(*(void**)(s + 0xD0), rowCount, buyColCount);
+        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xD0))->SetSize(rowCount, buyColCount);  // B.3.6 bridge
 
         TradeUI_CloneTableCells(s, *(void**)(s + 0xD0), buyTemplate);
     }
@@ -1263,7 +1239,7 @@ void TradeUI_Serialize(TradeUI* self) {
         // child(3) is a SpinnerElement (same mislabel as the sell loop).
         // Retail call site 0x14008653e, EDX = i + 0xfa0.
         new (c) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(sliderElem));   // B.3.3 bridge
-        fn_SpinnerElement_SetElementId(*(void**)c, i + 4000);
+        reinterpret_cast<UI::SpinnerElement*>(*(void**)c)->SetElementId(i + 4000);  // B.3.6 bridge
         TradeUI_ReportSpinnerTag("buy", i, *(void**)c, i + 4000);
 
         // Build 0x20-byte entry {child1, child2, child3, child0} and push to the
@@ -1287,7 +1263,7 @@ void TradeUI_Serialize(TradeUI* self) {
         int rowCount = ((int)(totalOrderItems / (int)orderColCount * (int)orderColCount))
                        / (int)orderColCount;
         void* orderTemplate = TradeUI_GetTableTemplate((void*)(s + 0xE8));
-        fn_TableElement_SetSize(*(void**)(s + 0xE8), rowCount, (int)orderColCount);
+        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0xE8))->SetSize(rowCount, (int)orderColCount);  // B.3.6 bridge
 
         TradeUI_CloneTableCells(s, *(void**)(s + 0xE8), orderTemplate);
     }
@@ -1438,7 +1414,7 @@ void TradeUI_Startup(TradeUI* self) {
     if (bOverBought) {
         // Buy value exceeds sell value — show "not enough" text with difference
         System::String strBuf = System::String::Format("%d", (unsigned)(displayBuyTotal - displaySellTotal));
-        fn_TextElement_SetParameter(*(void**)(s + 0x120), 0, &strBuf);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x120))->SetParameter(0, strBuf);  // B.3.6 bridge
         reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
         reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textTooMuch
         reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textNotEnough
@@ -1455,7 +1431,7 @@ void TradeUI_Startup(TradeUI* self) {
     } else {
         // Sell value exceeds buy value — show "too much" text with difference
         System::String strBuf = System::String::Format("%d", (unsigned)(displaySellTotal - displayBuyTotal));
-        fn_TextElement_SetParameter(*(void**)(s + 0x118), 0, &strBuf);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x118))->SetParameter(0, strBuf);  // B.3.6 bridge
         reinterpret_cast<UI::Element*>(*(void**)(s + 0x110))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNoStorage
         reinterpret_cast<UI::Element*>(*(void**)(s + 0x118))->SetFlagsOnOff(0, 1);  // B.3.6 bridge — show textTooMuch
         reinterpret_cast<UI::Element*>(*(void**)(s + 0x120))->SetFlagsOnOff(1, 0);  // B.3.6 bridge — hide textNotEnough
@@ -1721,9 +1697,9 @@ void TradeUI_Update(TradeUI* self, void* stream, void* p3, int64_t p4) {
 
     // On load (mode == 0), restore tab and combo state
     if (*(int*)(serializer[0] + 8) == 0) {
-        fn_TabElement_SetActiveTab((void*)tabIBP, tabIndex);
+        reinterpret_cast<UI::TabElement*>(tabIBP)->SetActiveTab(tabIndex);  // B.3.6 bridge
 
-        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x140), sortIndex);
+        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x140))->SetCurrentItem(sortIndex);  // B.3.6 bridge
 
         // Refresh sorted display
         TradeUI_RefreshDisplay(self, (uint64_t)sortIndex, 0, p4);
@@ -1787,7 +1763,7 @@ void TradeUI_UpdateBuyTotals(TradeUI* self) {
         }
     }
 
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x108), total);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x108))->SetValue(static_cast<int32_t>(total));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -1826,7 +1802,7 @@ void TradeUI_UpdateSellTotals(TradeUI* self) {
         }
     }
 
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x100), total);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x100))->SetValue(static_cast<int32_t>(total));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -1843,7 +1819,7 @@ void TradeUI_OnBuySpinner(TradeUI* self, int idx) {
     uintptr_t entryBase = *(uintptr_t*)(s + 0x70);
     uintptr_t entry = entryBase + (uintptr_t)idx * 0x20;
 
-    int val = fn_SpinnerElement_GetValue(*(void**)(entry + 0x10));
+    int val = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entry + 0x10))->GetValue();  // B.3.6 bridge
 
     // Store to buy order qty at (buyOrdersBase + idx*0x18 + 0x10)
     uintptr_t buyOrders = *(uintptr_t*)(s + 0x40);
@@ -1866,7 +1842,7 @@ void TradeUI_OnSellSpinner(TradeUI* self, int idx) {
     uintptr_t entryBase = *(uintptr_t*)(s + 0x60);
     uintptr_t entry = entryBase + (uintptr_t)idx * 0x20;
 
-    int val = fn_SpinnerElement_GetValue(*(void**)(entry + 0x18));
+    int val = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entry + 0x18))->GetValue();  // B.3.6 bridge
 
     // Store to sell order qty at (sellOrdersBase + idx*0x20 + 0x18)
     uintptr_t sellOrders = *(uintptr_t*)(s + 0x30);
@@ -1954,7 +1930,7 @@ void TradeUI_OnOrderAmountSpinner(TradeUI* self, int idx) {
     uintptr_t orderEntryBase = *(uintptr_t*)(s + 0x90);
     uintptr_t entry = orderEntryBase + (uintptr_t)idx * 0x20;
 
-    int val = fn_SpinnerElement_GetValue(*(void**)(entry + 0x18));
+    int val = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entry + 0x18))->GetValue();  // B.3.6 bridge
 
     // Store to building's order amount table: building.ordersAmt (+0x40) + idx*0xc + 8
     uintptr_t ordersAmt = *(uintptr_t*)(buildingPtr[0] + 0x40);
@@ -2098,7 +2074,7 @@ void TradeUI_OnStorageSpinner(TradeUI* self, int idx, void* /*reserved*/) {
     // storageEntries at self+0x80, stride 0x18, spinner at +0x08
     uintptr_t storageEntries = *(uintptr_t*)(s + 0x80);
     uintptr_t entryOffset = (uintptr_t)idx * 0x18;
-    int newVal = fn_SpinnerElement_GetValue(*(void**)(storageEntries + 0x08 + entryOffset));
+    int newVal = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(storageEntries + 0x08 + entryOffset))->GetValue();  // B.3.6 bridge
 
     void* entity = *(void**)(s + 0x28);
     bool isDerived = fn_IsDerivedFrom(entity, *g_TypeId_ComponentEntity);
@@ -2191,7 +2167,7 @@ void TradeUI_RefreshOrderQuantityDisplay(TradeUI* self) {
             }
 
             // Set NumberElement value
-            fn_NumberElement_SetValueInt(*(void**)(storageEntries + orderOffset + 0x10), foundQty);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(storageEntries + orderOffset + 0x10))->SetValue(static_cast<int32_t>(foundQty));  // B.3.6 bridge
         }
     }
 }
@@ -2266,7 +2242,7 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
             }
 
             // Set NumberElement (+0x08) to storedQty
-            fn_NumberElement_SetValueInt(*(void**)(entryBase + 0x08), storedQty);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(entryBase + 0x08))->SetValue(static_cast<int32_t>(storedQty));  // B.3.6 bridge
 
             // Determine spinner max: storedQty if merchant arrived AND available > 0, else 0
             int spinnerMax = storedQty;
@@ -2274,19 +2250,19 @@ void TradeUI_RefreshSellSpinnerValues(TradeUI* self) {
                 spinnerMax = 0;
             }
 
-            // sellUI+0x18 is a SliderElement — use NumberEditElement::SetMinMax
-            SliderElement_SetMinMax(*(void**)(entryBase + 0x18), 0, spinnerMax);
+            // sellUI+0x18 is a SpinnerElement (exe slot 0x140151cf8 = SpinnerElement::SetMinMax)
+            reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetMinMax(0, spinnerMax);  // B.3.6 bridge
 
             // Re-read spinner ptr and CheckPtr for GetMaxValue (matches original pattern)
-            int actualMax = fn_SpinnerElement_GetMaxValue(*(void**)(entryBase + 0x18));
+            int actualMax = reinterpret_cast<const UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->GetMaxValue();  // B.3.6 bridge
 
             // Set increment based on max value; skip SetIncrement entirely if max > 0x64
             if (actualMax <= 0x14) {
-                fn_SpinnerElement_SetIncrement(*(void**)(entryBase + 0x18), 1);
+                reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetIncrement(1);  // B.3.6 bridge
             } else if (actualMax <= 0x32) {
-                fn_SpinnerElement_SetIncrement(*(void**)(entryBase + 0x18), 5);
+                reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetIncrement(5);  // B.3.6 bridge
             } else if (actualMax <= 0x64) {
-                fn_SpinnerElement_SetIncrement(*(void**)(entryBase + 0x18), 20);
+                reinterpret_cast<UI::SpinnerElement*>(*(void**)(entryBase + 0x18))->SetIncrement(20);  // B.3.6 bridge
             }
             // else: max > 0x64 (100), do NOT call SetIncrement (original skips it)
         }
@@ -2334,7 +2310,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         int amount = *(int*)(ordersBase + orderOff + 8);
 
         // Set spinner value (uiEntry[3] = offset +0x18)
-        fn_SpinnerElement_SetValue(*(void**)(uiEntry + 0x18), amount);
+        reinterpret_cast<UI::SpinnerElement*>(*(void**)(uiEntry + 0x18))->SetValue(amount);  // B.3.6 bridge
 
         // Get buildTypeDesc and typeIdx for sprite/string lookups
         void* rawDesc = *(void**)(buildingPtr[0] + 0x18);
@@ -2359,7 +2335,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         spriteLocal[0] = spriteTemp[0];
         spriteLocal[1] = spriteTemp[1];
 
-        fn_LabelElement_SetSprite(*(void**)(uiEntry + 0x10), spriteLocal);
+        reinterpret_cast<UI::LabelElement*>(*(void**)(uiEntry + 0x10))->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteLocal));  // B.3.6 bridge
 
         // Get buildTypeDesc and typeIdx AGAIN for string lookup (original re-reads)
         rawDesc = *(void**)(buildingPtr[0] + 0x18);
@@ -2383,7 +2359,7 @@ void TradeUI_RefreshOrderDisplay(TradeUI* self) {
         stringLocal[0] = stringTemp[0];
         stringLocal[1] = stringTemp[1];
 
-        fn_TextElement_SetText(*(void**)(uiEntry + 0x10), stringLocal);
+        reinterpret_cast<UI::TextElement*>(*(void**)(uiEntry + 0x10))->SetText(reinterpret_cast<const UI::String*>(stringLocal));  // B.3.6 bridge
 
         // Enable/disable logic:
         // i==0: disable uiEntry[0] (first up/down button)
@@ -2515,14 +2491,14 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         uint8_t spriteTmp[32] = {};
         ::new (static_cast<void*>(spriteTmp)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(valueDesc + 0x20))), *reinterpret_cast<const System::String*>(valueDesc + 0x28));  // B.3.6 bridge
         uint64_t spriteVal[2] = {((uint64_t*)spriteTmp)[0], ((uint64_t*)spriteTmp)[1]};
-        fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
+        reinterpret_cast<UI::LabelElement*>(*(void**)uiRow)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteVal));  // B.3.6 bridge
 
         // Set text name from ValueDescription (+0x30=stringTable, +0x38=stringName)
         // Original uses fn_UIString_Ctor — TextElement::SetText expects UI::String, not System::String
         uint64_t strBuf[2] = {0, 0};
         ::new (static_cast<void*>(strBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(valueDesc + 0x30))), *reinterpret_cast<const System::String*>(valueDesc + 0x38));  // B.3.6 bridge
         uint64_t strVal[2] = {strBuf[0], strBuf[1]};
-        fn_TextElement_SetText(*(void**)uiRow, strVal);
+        reinterpret_cast<UI::TextElement*>(*(void**)uiRow)->SetText(reinterpret_cast<const UI::String*>(strVal));  // B.3.6 bridge
 
         // Lookup inventory count from StorageComponent item array (+0x28/+0x30)
         // Each item is 0x10 bytes: {key(uint64), countA(int32), countB(int32)}
@@ -2543,7 +2519,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 
         // Set NumberElement value (at uiRow + 0x10)
         void* numSlot = (void*)((uintptr_t)uiRow + 0x10);
-        fn_NumberElement_SetValueInt(*(void**)numSlot, invCount);
+        reinterpret_cast<UI::NumberElement*>(*(void**)numSlot)->SetValue(static_cast<int32_t>(invCount));  // B.3.6 bridge
 
         // Lookup trade order amount from TradeComponent BST (red-black tree at +0x60)
         // Node: {key(+0), value(+8), color(+10), left(+18), right(+20)}
@@ -2562,14 +2538,14 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
 
         // Set SpinnerElement value (at uiRow + 0x08)
         void* spinSlot = (void*)((uintptr_t)uiRow + 8);
-        fn_SpinnerElement_SetValue(*(void**)spinSlot, orderAmt);
+        reinterpret_cast<UI::SpinnerElement*>(*(void**)spinSlot)->SetValue(orderAmt);  // B.3.6 bridge
 
         // Enable spinner and number elements via vtable[8] (+0x40) = SetEnabled
         Element_SetEnabled(*(void**)spinSlot, true);
         Element_SetEnabled(*(void**)numSlot, true);
 
         // spinSlot is storage entry[1] = SpinnerElement (confirmed via vtable at runtime)
-        fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 9999);
+        reinterpret_cast<UI::SpinnerElement*>(*(void**)spinSlot)->SetMinMax(0, 9999);  // B.3.6 bridge
 
         // Set spinner element name to resource path filename.
         // `GetPath` returns by value through a hidden return slot and the callee
@@ -2590,13 +2566,13 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         uint8_t blankSprite[16] = {};
         ::new (static_cast<void*>(blankSprite)) UI::Sprite();  // B.3.6 bridge
         uint64_t spriteVal[2] = {((uint64_t*)blankSprite)[0], ((uint64_t*)blankSprite)[1]};
-        fn_LabelElement_SetSprite(*(void**)uiRow, spriteVal);
+        reinterpret_cast<UI::LabelElement*>(*(void**)uiRow)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteVal));  // B.3.6 bridge
 
         // Set blank text — must use UI::String default ctor, not System::String
         uint64_t blankStr[2] = {0, 0};
         ::new (static_cast<void*>(blankStr)) UI::String();  // B.3.6 bridge
         uint64_t strVal[2] = {blankStr[0], blankStr[1]};
-        fn_TextElement_SetText(*(void**)uiRow, strVal);
+        reinterpret_cast<UI::TextElement*>(*(void**)uiRow)->SetText(reinterpret_cast<const UI::String*>(strVal));  // B.3.6 bridge
 
         // Disable spinner (at +8) via vtable SetEnabled
         void* spinSlot = (void*)((uintptr_t)uiRow + 8);
@@ -2607,7 +2583,7 @@ void TradeUI_RefreshDisplay(TradeUI* self, uint64_t p2, uint64_t p3, int64_t p4)
         Element_SetEnabled(*(void**)numSlot, false);
 
         // spinSlot is storage entry[1] = SpinnerElement (confirmed via vtable at runtime)
-        fn_SpinnerElement_SetMinMax(*(void**)spinSlot, 0, 0);
+        reinterpret_cast<UI::SpinnerElement*>(*(void**)spinSlot)->SetMinMax(0, 0);  // B.3.6 bridge
     }
 }
 
