@@ -21,6 +21,7 @@
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
+#include "engine/UpdateLoop.h"  // ENDGAME B.3.7 callers (K2): UpdateLoop::IsRunning
 #include <new>
 
 // Vtable pointer for PopulationGoal (resolved at runtime)
@@ -129,11 +130,10 @@ int PopulationGoal_Slot8(PopulationGoal* self) {
     void* gameWorld = *g_pGameWorldSingleton;
     if (gameWorld == nullptr) return 0;
 
-    // Check IsRunning
-    if (fn_IsRunning) {
-        bool running = fn_IsRunning(gameWorld);
-        if (!running) return 0;
-    }
+    // Check IsRunning — Engine::UpdateLoop::IsRunning (import slot 0x140152850),
+    // non-virtual. The door's null-`this` test is covered by the check above.
+    bool running = reinterpret_cast<const Engine::UpdateLoop*>(gameWorld)->IsRunning();   // B.3.7 bridge
+    if (!running) return 0;
 
     // Read world data pointer at game+0xF0
     uintptr_t worldData = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
