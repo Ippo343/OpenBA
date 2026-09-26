@@ -508,9 +508,14 @@ Object::Base* AttendanceComponent::DeletingDtor(unsigned flags) {
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
 }
-// 0x140044510: MemFree(+0x28), +0x28 = +0x30 = 0 — PORT GAP (B38 D2): the tree's
-// slot 0 never freed the waiting queue; the retail body is its own titled commit.
-AttendanceComponent::~AttendanceComponent() = default;
+// 0x140044510: the waiting queue (+0x28 data, +0x30 count/capacity) is freed and
+// zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
+// compiler's chain.
+AttendanceComponent::~AttendanceComponent() {
+    Object::detail::InternalMemFree(field28);
+    field28 = nullptr;
+    field30 = nullptr;
+}
 
 // create 0x140002670: MemAlloc(0x58, 8), then the ctor.
 void* AttendanceComponent::CreateNewObject() {

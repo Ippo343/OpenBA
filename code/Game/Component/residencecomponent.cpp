@@ -476,6 +476,7 @@ void ResidenceComponent_InitFuncs() {
 #include "Component/controller_state_table.h"
 #include "Component/ResidenceComponent.h"
 #include <atomic>
+#include <cstring>
 
 // residence_heattick.cpp — state-2 per-frame handler (0x140129970 port).
 extern "C" char ResidenceComponent_HeatTick(void* comp, void* sm, void* dt);
@@ -565,9 +566,23 @@ Object::Base* ResidenceComponent::DeletingDtor(unsigned flags) {
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
 }
-// 0x14012a230: 0x1400175d0 on +0x50 (free the resident arrays) — PORT GAP (B38 D2):
-// the tree's slot 0 never freed them; the retail body is its own titled commit.
-ResidenceComponent::~ResidenceComponent() = default;
+// 0x14012a230 (inlined in [0] 0x140037610): 0x1400175d0 on the resident array at
+// +0x50 — every 0x10-byte slot's inner array is freed and the slot zeroed, then the
+// slot array itself is freed and +0x50/+0x58 zeroed. The member's and the bases'
+// dtors (restamps only) and ~Internal are the compiler's chain.
+ResidenceComponent::~ResidenceComponent() {
+    const int count = residentSlotCount;
+    void** slot = static_cast<void**>(residentSlots);
+    for (int i = 0; i < count; ++i, slot += 2) {
+        Object::detail::InternalMemFree(slot[0]);
+        slot[0] = nullptr;
+        slot[1] = nullptr;
+    }
+    Object::detail::InternalMemFree(residentSlots);
+    residentSlots = nullptr;
+    residentSlotCount = 0;
+    std::memset(_pad5c, 0, sizeof _pad5c);        // +0x5c: 0x1400175d0 stores a qword at +0x58
+}
 
 // create 0x140037440: MemAlloc(0x60, 8), then the ctor.
 void* ResidenceComponent::CreateNewObject() {

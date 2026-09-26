@@ -266,9 +266,14 @@ Object::Base* BoatComponent::DeletingDtor(unsigned flags) {
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
 }
-// 0x140046770: MemFree(+0x60), +0x60 = +0x68 = 0 — PORT GAP (B38 D2): the tree's
-// slot 0 never freed the route array; the retail body is its own titled commit.
-BoatComponent::~BoatComponent() = default;
+// 0x140046770: the route waypoint array (+0x60 data, +0x68 count/capacity) is freed
+// and zeroed; the member's and the bases' dtors (restamps only) and ~Internal are
+// the compiler's chain.
+BoatComponent::~BoatComponent() {
+    Object::detail::InternalMemFree(reinterpret_cast<void*>(data60));
+    data60 = 0;
+    data68 = 0;
+}
 
 // create 0x1400036e0: MemAlloc(0x98, 8), then the ctor.
 void* BoatComponent::CreateNewObject() {

@@ -496,9 +496,15 @@ Object::Base* CemeteryComponent::DeletingDtor(unsigned flags) {
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
 }
-// 0x140047680: MemFree(+0x48), +0x48 = +0x50 = 0 — PORT GAP (B38 D2): the tree's
-// slot 0 never freed the plot list; the retail body is its own titled commit.
-CemeteryComponent::~CemeteryComponent() = default;
+// 0x140047680: the grave-plot list (+0x48 data, +0x50 count, +0x54 capacity) is
+// freed and zeroed; the member's and the bases' dtors (restamps only) and ~Internal
+// are the compiler's chain.
+CemeteryComponent::~CemeteryComponent() {
+    Object::detail::InternalMemFree(plots);
+    plots = nullptr;
+    plotCount = 0;
+    plotCapacity = 0;
+}
 
 // create 0x140004040: MemAlloc(0x58, 8), then the ctor.
 void* CemeteryComponent::CreateNewObject() {

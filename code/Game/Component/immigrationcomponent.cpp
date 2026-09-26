@@ -204,9 +204,14 @@ Object::Base* ImmigrationComponent::DeletingDtor(unsigned flags) {
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
 }
-// 0x14004e5d0: MemFree(+0x58), +0x58 = +0x60 = 0 — PORT GAP (B38 D2): the tree's
-// slot 0 never freed it; the retail body is its own titled commit.
-ImmigrationComponent::~ImmigrationComponent() = default;
+// 0x14004e5d0: the group array (+0x58 data, +0x60 count/capacity) is freed and
+// zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
+// compiler's chain.
+ImmigrationComponent::~ImmigrationComponent() {
+    Object::detail::InternalMemFree(field58);
+    field58 = nullptr;
+    field60 = nullptr;
+}
 
 // create 0x140007a20: MemAlloc(0x68, 8), then the ctor.
 void* ImmigrationComponent::CreateNewObject() {

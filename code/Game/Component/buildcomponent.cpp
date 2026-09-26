@@ -608,9 +608,17 @@ Object::Base* BuildComponent::DeletingDtor(unsigned flags) {
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
 }
-// 0x140108f30: MemFree(+0x68) and MemFree(+0x58), zeroing both lists — PORT GAP
-// (B38 D2): the tree's slot 0 never freed them; the retail body is its own titled commit.
-BuildComponent::~BuildComponent() = default;
+// 0x140108f30: the picking list (+0x68/+0x70) and then the mesh list (+0x58/+0x60)
+// are freed and zeroed, in retail's order; the member's and the bases' dtors
+// (restamps only) and ~Internal are the compiler's chain.
+BuildComponent::~BuildComponent() {
+    Object::detail::InternalMemFree(field68);
+    field68 = nullptr;
+    field70 = nullptr;
+    Object::detail::InternalMemFree(field58);
+    field58 = nullptr;
+    field60 = nullptr;
+}
 
 // create 0x14002f2b0: MemAlloc(0x78, 8), then the ctor.
 void* BuildComponent::CreateNewObject() {
