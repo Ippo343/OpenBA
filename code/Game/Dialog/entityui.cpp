@@ -493,7 +493,7 @@ void EntityUI_Slot7(EntityUI* self) {
 
     void* pagesElemFinal = *(void**)(s + 0x40);
     if (pagesElemFinal) {
-        fn_PageElement_SetActivePage(pagesElemFinal, pageIdx);
+        reinterpret_cast<UI::PageElement*>(pagesElemFinal)->SetActivePage(pageIdx);  // B.3.6 bridge
     }
 }
 

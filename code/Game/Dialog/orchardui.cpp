@@ -17,6 +17,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // Retail's Slot4 filters the "yield" FindElement result through
 // IsDerivedFrom(elem, *g_TypeId_ProgressElement) before storing it at +0x38.
@@ -131,11 +133,11 @@ void OrchardUI_Slot7(OrchardUI* self) {
     System::String textStr = System::String::Format("%i", (uint64_t)(uint32_t)percent);
 
     // Set progress text parameter
-    fn_ProgressElement_SetProgressTextParameter(yieldElem, 0, &textStr);
+    reinterpret_cast<UI::ProgressElement*>(yieldElem)->SetProgressTextParameter(0, textStr);  // B.3.6 bridge
 
     // Enable/disable combo based on item count (SelectResourceUI base logic)
     void* combo = (void*)*(uint64_t*)(s + 0x30);
-    int itemCount = fn_ComboElement_GetItemCount(combo);
+    int itemCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
     reinterpret_cast<UI::Element*>(combo)->Enable(itemCount > 0);  // B.3.6 bridge: Element slot 8 Enable
 }
 

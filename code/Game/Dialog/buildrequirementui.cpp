@@ -30,6 +30,9 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
@@ -245,7 +248,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 #ifdef _DEBUG
             Debug_ImageElement_SetSprite(imagePtr, sprite);
 #else
-            fn_ImageElement_SetSprite(imagePtr, sprite);
+            reinterpret_cast<UI::ImageElement*>(imagePtr)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
 #endif
         }
     }
@@ -268,7 +271,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             uint8_t uiStr[16];
             ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(brc + 0x30))), *reinterpret_cast<const System::String*>(brc + 0x38));  // B.3.6 bridge
 
-            fn_TextElement_SetText(textPtr, uiStr);
+            reinterpret_cast<UI::TextElement*>(textPtr)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -396,13 +399,13 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 #ifdef _DEBUG
                 Debug_LabelElement_SetSprite(label, sprite);
 #else
-                fn_LabelElement_SetSprite(label, sprite);
+                reinterpret_cast<UI::LabelElement*>(label)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
 #endif
             }
 
             // Format count as "%i" and set as text parameter 0
             System::String countStr = System::String::Format("%i", (uint64_t)*(uint32_t*)countPtr);
-            fn_TextElement_SetParameter(label, 0, &countStr);
+            reinterpret_cast<UI::TextElement*>(label)->SetParameter(0, countStr);  // B.3.6 bridge
 
             // Show the label
             reinterpret_cast<UI::Element*>(label)->SetFlagsOnOff(0, 1);  // B.3.6 bridge

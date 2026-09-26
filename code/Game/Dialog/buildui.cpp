@@ -27,6 +27,9 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -188,7 +191,7 @@ void BuildUI_Slot4(BuildUI* self) {
     // Set header textTotal: param 0 = "0", param 1 = storage capacity
     {
         System::String zeroStr("0");
-        fn_TextElement_SetParameter(*(void**)(s + 0x48), 0, &zeroStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x48))->SetParameter(0, zeroStr);  // B.3.6 bridge
 
         // smComp (the site's build-material storage, found via fn_FindComponent_SM =
         // ClearAreaComponent) can be null in standalone if that component isn't present
@@ -196,7 +199,7 @@ void BuildUI_Slot4(BuildUI* self) {
         // partial panel (no capacity number) beats a crash.
         int capacity = smComp ? *(int*)(smComp + 0x48) : 0;
         System::String capStr = System::String::Format("%d", (uint64_t)(uint32_t)capacity);
-        fn_TextElement_SetParameter(*(void**)(s + 0x48), 1, &capStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x48))->SetParameter(1, capStr);  // B.3.6 bridge
     }
 
     // Iterate storage table rows (skip first child = header)
@@ -247,13 +250,13 @@ void BuildUI_Slot4(BuildUI* self) {
             {
                 System::String reqStr =
                     System::String::Format("%d", (uint64_t)(uint32_t)(entryCount * multiplier));
-                fn_TextElement_SetParameter((void*)rowTextTotal, 1, &reqStr);
+                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(1, reqStr);  // B.3.6 bridge
             }
 
             // Set row textTotal param 0 = "0" initially
             {
                 System::String zeroStr("0");
-                fn_TextElement_SetParameter((void*)rowTextTotal, 0, &zeroStr);
+                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(0, zeroStr);  // B.3.6 bridge
             }
 
             if (resType) {
@@ -269,14 +272,14 @@ void BuildUI_Slot4(BuildUI* self) {
 #ifdef _DEBUG
                 Debug_LabelElement_SetSprite((void*)labelStorage, spriteBuf);
 #else
-                fn_LabelElement_SetSprite((void*)labelStorage, spriteBuf);
+                reinterpret_cast<UI::LabelElement*>(labelStorage)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 #endif
 
                 // Set text from resource type
                 uint8_t uiStrBuf[16];
                 ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)resType + 0x28))),
                                  *reinterpret_cast<const System::String*>((uintptr_t)resType + 0x30));  // B.3.6 bridge
-                fn_TextElement_SetText((void*)labelStorage, uiStrBuf);
+                reinterpret_cast<UI::TextElement*>(labelStorage)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
                 // Set tooltip: "ResourceTip" string from label's string table
                 System::String tipNameStr("ResourceTip");
@@ -291,7 +294,7 @@ void BuildUI_Slot4(BuildUI* self) {
             int multiplier = *(int*)(posComp + 0x4C);
             System::String totStr =
                 System::String::Format("%d", (uint64_t)(uint32_t)(totalCount * multiplier));
-            fn_TextElement_SetParameter((void*)rowTextTotal, 1, &totStr);
+            reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(1, totStr);  // B.3.6 bridge
         } else {
             // Empty row: clear text and sprite (blanks table rows beyond the material
             // count — a WoodHouse uses only 2 of the 7 storageItem cells). This mirrors the
@@ -303,24 +306,24 @@ void BuildUI_Slot4(BuildUI* self) {
             // /"Labor"). fn_UIString_DefaultCtor is the correct default ctor (dispatch
             // 0x140151ca8 + Runtime-export fallback) and resolves in standalone (same call
             // TradeUI/ProductionUI use to blank their surplus rows).
-            if (fn_TextElement_SetText) {
+            {
                 uint8_t emptyStr[16] = {};
                 ::new (emptyStr) UI::String();  // B.3.6 bridge
-                fn_TextElement_SetText((void*)rowTextTotal, emptyStr);
+                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
 
                 uint8_t emptyStr2[16] = {};
                 ::new (emptyStr2) UI::String();  // B.3.6 bridge
-                fn_TextElement_SetText((void*)labelStorage, emptyStr2);
+                reinterpret_cast<UI::TextElement*>(labelStorage)->SetText(reinterpret_cast<const UI::String*>(emptyStr2));  // B.3.6 bridge
             }
 
-            if (fn_LabelElement_SetSprite) {
+            {
                 uint8_t emptySprite[16];
 #ifdef _DEBUG
                 Debug_Sprite_DefaultCtor(emptySprite);
                 Debug_LabelElement_SetSprite((void*)labelStorage, emptySprite);
 #else
                 ::new (emptySprite) UI::Sprite();  // B.3.6 bridge
-                fn_LabelElement_SetSprite((void*)labelStorage, emptySprite);
+                reinterpret_cast<UI::LabelElement*>(labelStorage)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
 #endif
             }
         }
@@ -390,7 +393,7 @@ void BuildUI_Slot7(BuildUI* self) {
     // Update header textTotal param 0 with remaining count
     {
         System::String remStr = System::String::Format("%d", (uint64_t)remaining);
-        fn_TextElement_SetParameter(*(void**)(s + 0x48), 0, &remStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x48))->SetParameter(0, remStr);  // B.3.6 bridge
     }
 
     int totalRequired = 0;
@@ -442,7 +445,7 @@ void BuildUI_Slot7(BuildUI* self) {
             {
                 System::String delStr = System::String::Format("%d", delivered);
                 void* rowTextTotal = *(void**)(rowArrayBase + 8 + rowOffset);
-                fn_TextElement_SetParameter(rowTextTotal, 0, &delStr);
+                reinterpret_cast<UI::TextElement*>(rowTextTotal)->SetParameter(0, delStr);  // B.3.6 bridge
             }
 
             sumDelivered += (int)delivered;
@@ -458,7 +461,7 @@ void BuildUI_Slot7(BuildUI* self) {
             System::String rowStr =
                 System::String::Format("%d", (uint64_t)(uint32_t)*(int*)(posComp + 0x48));
             void* totalRowText = *(void**)(totalRowPtr + 8);
-            fn_TextElement_SetParameter(totalRowText, 0, &rowStr);
+            reinterpret_cast<UI::TextElement*>(totalRowText)->SetParameter(0, rowStr);  // B.3.6 bridge
         }
 
         // Calculate totals for progress
@@ -477,7 +480,7 @@ void BuildUI_Slot7(BuildUI* self) {
     // Update progress bar
     *(float*)(*(uintptr_t*)(s + 0x40) + 0x128) = ratio;
     System::String pctStr = System::String::Format("%d", (uint64_t)(uint32_t)percent);
-    fn_ProgressElement_SetProgressTextParameter(*(void**)(s + 0x40), 0, &pctStr);
+    reinterpret_cast<UI::ProgressElement*>(*(void**)(s + 0x40))->SetProgressTextParameter(0, pctStr);  // B.3.6 bridge
 }
 
 // Slot9: On button click (event 0x12, id 6000), toggle workplace enabled state.

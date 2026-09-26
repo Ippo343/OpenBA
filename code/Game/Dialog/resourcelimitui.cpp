@@ -18,6 +18,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpinnerElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
@@ -77,12 +78,12 @@ void ResourceLimitUI_Slot4(ResourceLimitUI* self) {
 
     // Configure spinner
     void* spinner = (void*)self->data30;
-    fn_SpinnerElement_SetElementId(spinner, 0x3039);
-    fn_SpinnerElement_SetMinMax(spinner, 0, 999999);
+    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetElementId(0x3039);  // B.3.6 bridge
+    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetMinMax(0, 999999);  // B.3.6 bridge
 
     // Set current value from global resource limit array
     int currentLimit = GetResourceLimit(typedSrc);
-    fn_SpinnerElement_SetValue(spinner, currentLimit);
+    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(currentLimit);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -101,12 +102,12 @@ void ResourceLimitUI_Slot7(ResourceLimitUI* self) {
     void* spinner = (void*)self->data30;
 
     int currentLimit = GetResourceLimit(typedSrc);
-    int spinnerVal = fn_SpinnerElement_GetValue(spinner);
+    int spinnerVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue();  // B.3.6 bridge
 
     if (currentLimit != spinnerVal) {
-        bool active = fn_SpinnerElement_IsActive(spinner);
+        bool active = reinterpret_cast<const UI::SpinnerElement*>(spinner)->IsActive();  // B.3.6 bridge
         if (!active) {
-            fn_SpinnerElement_SetValue(spinner, currentLimit);
+            reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(currentLimit);  // B.3.6 bridge
         }
     }
 }
@@ -140,7 +141,7 @@ void ResourceLimitUI_Slot9(ResourceLimitUI* self, void* param2,
     void* typedSrc = isType ? dataSrc : nullptr;
 
     // Write spinner value to global limit
-    int newVal = fn_SpinnerElement_GetValue(spinner);
+    int newVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue();  // B.3.6 bridge
     SetResourceLimit(typedSrc, newVal);
 }
 
@@ -195,9 +196,9 @@ void ResourceLimitUI_Setup_SA(ResourceLimitUI* self, int resourceIndex) {
     self->data30 = FindElemAsBasePtr(dialogElem, "editLimit");
     void* spinner = (void*)self->data30;
     if (!spinner) return;
-    fn_SpinnerElement_SetElementId(spinner, 0x3039);
-    fn_SpinnerElement_SetMinMax(spinner, 0, 999999);
-    fn_SpinnerElement_SetValue(spinner, GetResourceLimitByIdx(resourceIndex));
+    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetElementId(0x3039);  // B.3.6 bridge
+    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetMinMax(0, 999999);  // B.3.6 bridge
+    reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(GetResourceLimitByIdx(resourceIndex));  // B.3.6 bridge
 }
 
 // Update (vtable +0x38): keep the spinner synced with the live limit unless the
@@ -206,9 +207,9 @@ void ResourceLimitUI_Sync_SA(ResourceLimitUI* self, int resourceIndex) {
     void* spinner = (void*)self->data30;
     if (!spinner) return;
     int currentLimit = GetResourceLimitByIdx(resourceIndex);
-    int spinnerVal = fn_SpinnerElement_GetValue(spinner);
-    if (currentLimit != spinnerVal && !fn_SpinnerElement_IsActive(spinner))
-        fn_SpinnerElement_SetValue(spinner, currentLimit);
+    int spinnerVal = reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue();  // B.3.6 bridge
+    if (currentLimit != spinnerVal && !reinterpret_cast<const UI::SpinnerElement*>(spinner)->IsActive())  // B.3.6 bridge
+        reinterpret_cast<UI::SpinnerElement*>(spinner)->SetValue(currentLimit);  // B.3.6 bridge
 }
 
 // Event (vtable +0x48): on spinner change (msg 0x15, id 0x3039) write the new
@@ -224,5 +225,5 @@ void ResourceLimitUI_Write_SA(ResourceLimitUI* self, void* param2, int msg, int 
         ::new (&childResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinner)->Child(0));  // B.3.6 bridge
         if (sender != (void*)childResult) return;
     }
-    SetResourceLimitByIdx(resourceIndex, fn_SpinnerElement_GetValue(spinner));
+    SetResourceLimitByIdx(resourceIndex, reinterpret_cast<const UI::SpinnerElement*>(spinner)->GetValue());  // B.3.6 bridge
 }

@@ -23,6 +23,8 @@
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -314,19 +316,19 @@ showUpDown:
         uint8_t spriteBuf[16];
         ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(profPtr + 0x28))),
                         *reinterpret_cast<const System::String*>(profPtr + 0x30));  // B.3.6 bridge
-        fn_LabelElement_SetSprite(*(void**)(s + 0x30), spriteBuf);
+        reinterpret_cast<UI::LabelElement*>(*(void**)(s + 0x30))->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
     }
 
     // Set worker count text parameter 0 on workPlaceCount
     {
         System::String fmtStr = System::String::Format("%d", workerCount);
-        fn_TextElement_SetParameter(*(void**)(s + 0x30), 0, &fmtStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x30))->SetParameter(0, fmtStr);  // B.3.6 bridge
     }
 
     // Set max count text parameter 1 on workPlaceCount
     {
         System::String fmtStr = System::String::Format("%d", maxCount);
-        fn_TextElement_SetParameter(*(void**)(s + 0x30), 1, &fmtStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x30))->SetParameter(1, fmtStr);  // B.3.6 bridge
     }
 
     // Iterate citizens to count workers assigned to this workplace
@@ -366,7 +368,7 @@ showUpDown:
     // Set assigned worker count on buttonPrevious (+0x38) text
     {
         System::String fmtStr = System::String::Format("%d", workplaceWorkerCount);
-        fn_TextElement_SetParameter(*(void**)(s + 0x38), 0, &fmtStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x38))->SetParameter(0, fmtStr);  // B.3.6 bridge
     }
 
     // Enable/disable workerCountUp (+0x40) based on laborer count > 0
@@ -753,24 +755,24 @@ void PopulateCounts(void* self) {
     // workPlaceCount: profession sprite + "roster / capacity".
     if (elem30) {
         uint64_t sheet = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(profession) + 0x28);
-        if (sheet && fn_LabelElement_SetSprite) {
+        if (sheet) {
             uint8_t spriteBuf[16];
             ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(sheet)),
                            *reinterpret_cast<const System::String*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(profession) + 0x30)));  // B.3.6 bridge
-            fn_LabelElement_SetSprite(elem30, spriteBuf);
+            reinterpret_cast<UI::LabelElement*>(elem30)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
         }
-        if (fn_TextElement_SetParameter) {
+        {
             System::String fmt1 = System::String::Format("%d", static_cast<uint64_t>(roster));
-            fn_TextElement_SetParameter(elem30, 0, &fmt1);
+            reinterpret_cast<UI::TextElement*>(elem30)->SetParameter(0, fmt1);  // B.3.6 bridge
             System::String fmt2 = System::String::Format("%d", static_cast<uint64_t>(capacity));
-            fn_TextElement_SetParameter(elem30, 1, &fmt2);
+            reinterpret_cast<UI::TextElement*>(elem30)->SetParameter(1, fmt2);  // B.3.6 bridge
         }
     }
 
     // maxCount: town-wide count of adult, unassigned-task citizens whose profession
     // (citizen+0x1f0) matches this workplace's profession — the live "N builders in
     // the town" figure. Pure field reads over the citizen list (no exe helpers).
-    if (elem38 && fn_TextElement_SetParameter) {
+    if (elem38) {
         int assigned = 0;
         void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
         void* citizenList = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0xf0) : nullptr;
@@ -800,7 +802,7 @@ void PopulateCounts(void* self) {
             }
         }
         System::String fmt = System::String::Format("%d", static_cast<uint64_t>(static_cast<uint32_t>(assigned)));
-        fn_TextElement_SetParameter(elem38, 0, &fmt);
+        reinterpret_cast<UI::TextElement*>(elem38)->SetParameter(0, fmt);  // B.3.6 bridge
     }
 
 }

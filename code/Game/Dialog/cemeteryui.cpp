@@ -14,6 +14,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // File-local helper: CemeteryGetBurialCount (FUN_140046dd0)
@@ -156,13 +157,13 @@ void CemeteryUI_Slot7(CemeteryUI* self) {
     // Set text param 0: burial count
     {
         System::String str = System::String::Format("%i", (unsigned int)burialCount);
-        fn_ProgressElement_SetProgressTextParameter(progress, 0, &str);
+        reinterpret_cast<UI::ProgressElement*>(progress)->SetProgressTextParameter(0, str);  // B.3.6 bridge
     }
 
     // Set text param 1: max slots
     int maxSlots = *(int*)((uintptr_t)cemetComp + 0x50);
     {
         System::String str = System::String::Format("%i", (unsigned int)maxSlots);
-        fn_ProgressElement_SetProgressTextParameter(progress, 1, &str);
+        reinterpret_cast<UI::ProgressElement*>(progress)->SetProgressTextParameter(1, str);  // B.3.6 bridge
     }
 }

@@ -24,6 +24,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/EditElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // SpriteCaptureUI::Serialize (vtable +0x20, 0x140079640)
@@ -94,7 +95,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     // --- Set default capture path in edit element ---
     {
         System::String pathStr("Game/Help/Dialog/");
-        fn_EditElement_SetText(*(void**)(s + 0x30), &pathStr);
+        reinterpret_cast<UI::EditElement*>(*(void**)(s + 0x30))->SetText(pathStr);  // B.3.6 bridge
     }
 
     // --- Initialize capture state fields ---

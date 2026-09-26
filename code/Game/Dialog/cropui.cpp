@@ -20,6 +20,7 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -129,8 +130,7 @@ static int CropUI_IterateResources(CropUI* self, void* combo, int* selectedIndex
                                           *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x28));  // B.3.6 bridge
 
                             // Add item to combo with index as userData
-                            fn_ComboElement_AddItem(combo, spriteBuf, &sysStr,
-                                                    (void*)(intptr_t)comboIdx);
+                            reinterpret_cast<UI::ComboElement*>(combo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), sysStr, (void*)(intptr_t)comboIdx);  // B.3.6 bridge
 
                             // Check if this is the currently selected resource
                             if (resType == currentResource) {
@@ -168,7 +168,7 @@ void CropUI_PopulateCombo(CropUI* self) {
     void* combo = *(void**)comboIBP;
 
     // Clear existing items
-    fn_ComboElement_RemoveAllItems(combo);
+    reinterpret_cast<UI::ComboElement*>(combo)->RemoveAllItems();  // B.3.6 bridge
 
     // Populate combo and get selected index
     int selectedIdx = -1;
@@ -176,7 +176,7 @@ void CropUI_PopulateCombo(CropUI* self) {
 
     // Set current selection if we found a match
     if (selectedIdx >= 0) {
-        fn_ComboElement_SetCurrentItem(*(void**)comboIBP, selectedIdx);
+        reinterpret_cast<UI::ComboElement*>(*(void**)comboIBP)->SetCurrentItem(selectedIdx);  // B.3.6 bridge
     }
 }
 
@@ -249,7 +249,7 @@ void CropUI_Slot7(CropUI* self) {
     void* combo = (void*)self->internalBasePtr;
 
     // Enable combo if it has items, disable if empty
-    int itemCount = fn_ComboElement_GetItemCount(combo);
+    int itemCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
 
     // Virtual call: vtable[8] = SetEnabled(hasItems)
     reinterpret_cast<UI::Element*>(combo)->Enable(itemCount > 0);  // B.3.6 bridge: Element slot 8 Enable
@@ -266,7 +266,7 @@ void CropUI_Slot7(CropUI* self) {
 void CropUI_Slot8(CropUI* self) {
     void* combo = (void*)self->internalBasePtr;
 
-    int currentCount = fn_ComboElement_GetItemCount(combo);
+    int currentCount = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
     int expectedCount = CropUI_GetExpectedCount(self);
 
     if (currentCount != expectedCount) {

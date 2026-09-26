@@ -21,6 +21,7 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -146,8 +147,7 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
                                           *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x28));  // B.3.6 bridge
 
                             // Add item to combo with index as userData
-                            fn_ComboElement_AddItem(combo, spriteBuf, &sysStr,
-                                                    (void*)(intptr_t)comboIdx);
+                            reinterpret_cast<UI::ComboElement*>(combo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), sysStr, (void*)(intptr_t)comboIdx);  // B.3.6 bridge
 
                             // Check if this is the currently selected resource
                             if (resType == currentResource) {
@@ -184,7 +184,7 @@ void SelectResourceUI_PopulateCombo(void* self) {
     void* combo = *(void**)(s + 0x30);
 
     // Clear existing items
-    fn_ComboElement_RemoveAllItems(combo);
+    reinterpret_cast<UI::ComboElement*>(combo)->RemoveAllItems();  // B.3.6 bridge
 
     // Populate combo and get selected index
     int selectedIdx = -1;
@@ -192,7 +192,7 @@ void SelectResourceUI_PopulateCombo(void* self) {
 
     // Set current selection if we found a match
     if (selectedIdx >= 0) {
-        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x30), selectedIdx);
+        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x30))->SetCurrentItem(selectedIdx);  // B.3.6 bridge
     }
 }
 
@@ -252,7 +252,7 @@ void SelectResourceUI_Slot8(void* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* comboElem = *(void**)(s + 0x30);
-    int currentCount = fn_ComboElement_GetItemCount(comboElem);
+    int currentCount = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemCount();  // B.3.6 bridge
     int expectedCount = SelectResourceUI_GetResourceCount(self);
 
     if (currentCount != expectedCount) {
@@ -277,10 +277,10 @@ void SelectResourceUI_Slot9(void* self, void* param2, int param3, int param4) {
     void* comboElem = *(void**)(s + 0x30);
 
     // Get current selected item index from combo
-    int currentItem = fn_ComboElement_GetCurrentItem(comboElem);
+    int currentItem = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetCurrentItem();  // B.3.6 bridge
 
     // Get the item data (resource index) for the current selection
-    void* itemData = fn_ComboElement_GetItemData(comboElem, currentItem);
+    void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(currentItem);  // B.3.6 bridge
     int resourceIndex = (int)(intptr_t)itemData;
 
     // Look up resource type from game world's entity list

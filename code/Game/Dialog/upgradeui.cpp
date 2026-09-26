@@ -19,6 +19,7 @@
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // UpgradeUI::Serialize (vtable +0x20) — Slot4
@@ -106,7 +107,7 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
 
     // Set sprite on the image element
     void* imageElem = *(void**)imageIBP;
-    fn_ImageElement_SetSprite(imageElem, sprite);
+    reinterpret_cast<UI::ImageElement*>(imageElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
 
     // Set button's user data to the target template
     void* subDescBase = *(void**)((uintptr_t)upgradeDesc + 0x20);

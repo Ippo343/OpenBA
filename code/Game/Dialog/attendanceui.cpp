@@ -14,6 +14,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // AttendanceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -90,5 +91,5 @@ void AttendanceUI_Slot7(AttendanceUI* self) {
 
     // Format count as text and set on progress element
     System::String countStr = System::String::Format("%d", (unsigned int)currentCount);
-    fn_ProgressElement_SetProgressTextParameter(progress, 0, &countStr);
+    reinterpret_cast<UI::ProgressElement*>(progress)->SetProgressTextParameter(0, countStr);  // B.3.6 bridge
 }

@@ -37,6 +37,7 @@
 #include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // code/Game/Object/factory_registration.cpp
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
@@ -276,7 +277,7 @@ void ToolUI_Slot4(ToolUI* self) {
                     ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)entry + 0x30))),
                                      *reinterpret_cast<const System::String*>((uintptr_t)entry + 0x38));  // B.3.6 bridge
                     // Set text on labelTitle element
-                    fn_TextElement_SetText(*(void**)(s + 0x38), uiStrBuf);
+                    reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x38))->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
                 }
                 break;
             }

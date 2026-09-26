@@ -47,6 +47,12 @@
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/NumberEditElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TableElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // File-local helper: CalcWorkerSlots (FUN_14012e5c0)
@@ -290,7 +296,7 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
     // Set table size: ceil(profCount / colCount) rows
     int rowCount = ((colCount - 1 + profCount) / colCount * colCount) / colCount;
-    fn_TableElement_SetSize(tableElem, rowCount, colCount);
+    reinterpret_cast<UI::TableElement*>(tableElem)->SetSize(rowCount, colCount);  // B.3.6 bridge
 
 
     // Phase 1: Populate table cells from template factory
@@ -301,14 +307,15 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         // Template data from dataSource (self+0x18) -> +0x18
         uintptr_t templateData = *(uintptr_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
-        // Clone template via factory vtable slot 8: factory->vt[8](factory, retval, templateData)
-        typedef uint64_t (*fn_FactoryClone_t)(void* factoryThis, void* retval, uintptr_t tmplData);
+        // Clone the template: `factory` is the first child's Element+0xB8 `_description`
+        // (ExternalPtr<UI::ElementDescription>), so vt[8] is ElementDescription slot 8
+        // CreateInstance(ret, dialog) -- a RETSLOT virtual (RULE B6-2).
         uint64_t cloneBuf = 0;
-        uintptr_t factoryFnAddr = *(uintptr_t*)(*(uintptr_t*)factory + 0x40);
-        uint64_t cloned = ((fn_FactoryClone_t)factoryFnAddr)(
-            factory, &cloneBuf, templateData);
+        Object::InternalPtr<UI::Element>* cloned = reinterpret_cast<UI::ElementDescription*>(factory)->CreateInstance(
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(&cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(templateData));  // B.3.6 bridge: ElementDescription slot 8
 
-        fn_TableElement_SetChild3(tableElem, (void*)cloned, col, row);
+        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(cloned, col, row);  // B.3.6 bridge
 
         col++;
         if (col >= *(int*)((uintptr_t)tableElem + 0xC0)) {
@@ -441,12 +448,12 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         uint8_t uiStrBuf[16];
         ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)profDesc + 0x20))),
                          *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x30));  // B.3.6 bridge
-        fn_TextElement_SetText((void*)textLabelBuf, uiStrBuf);
+        reinterpret_cast<UI::TextElement*>(textLabelBuf)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
         uint8_t spriteBuf[16];
         ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)profDesc + 0x28))),
                         *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x30));  // B.3.6 bridge
-        fn_LabelElement_SetSprite((void*)textLabelBuf, spriteBuf);
+        reinterpret_cast<UI::LabelElement*>(textLabelBuf)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
         // Tooltip: UI::String from ExternalPtr + string name at +0x38
         uint8_t tooltipBuf[16];
@@ -597,18 +604,18 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
     // Update first spinner (index 0): set value and min/max to same value (locked)
     void** firstSpinnerPtr = (void**)(*(uintptr_t*)(s + 0x40));
-    fn_NumberEditElement_SetValue(*firstSpinnerPtr, counts[0]);
+    reinterpret_cast<UI::NumberEditElement*>(*firstSpinnerPtr)->SetValue(counts[0]);  // B.3.6 bridge
     firstSpinnerPtr = (void**)(*(uintptr_t*)(s + 0x40));
-    fn_NumberEditElement_SetMinMax(*firstSpinnerPtr, counts[0], counts[0]);
+    reinterpret_cast<UI::NumberEditElement*>(*firstSpinnerPtr)->SetMinMax(counts[0], counts[0]);  // B.3.6 bridge
 
     // Update remaining spinners
     int spinnerCount = *(int*)(s + 0x48);
     for (int i = 1; i < spinnerCount; i++) {
         void** spinnerPtr = (void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
-        fn_NumberEditElement_SetValue(*spinnerPtr, counts[i]);
+        reinterpret_cast<UI::NumberEditElement*>(*spinnerPtr)->SetValue(counts[i]);  // B.3.6 bridge
         spinnerPtr = (void**)(*(uintptr_t*)(s + 0x40) + (uintptr_t)i * 8);
         // Min=0, Max=counts[i]+counts[0] (can reassign from "None" profession)
-        fn_NumberEditElement_SetMinMax(*spinnerPtr, 0, counts[i] + counts[0]);
+        reinterpret_cast<UI::NumberEditElement*>(*spinnerPtr)->SetMinMax(0, counts[i] + counts[0]);  // B.3.6 bridge
     }
 
     // Update number elements with actual worker counts per profession
@@ -725,7 +732,7 @@ void ProfessionUI_Slot8(ProfessionUI* self) {
 
         // Set number element value (with CheckPtr, matching original)
         void** numElemPtr = (void**)(*(uintptr_t*)(s + 0x50) + (uintptr_t)p * 8);
-        fn_NumberElement_SetValueInt(*numElemPtr, totalWorkers);
+        reinterpret_cast<UI::NumberElement*>(*numElemPtr)->SetValue(static_cast<int32_t>(totalWorkers));  // B.3.6 bridge
     }
 }
 
@@ -758,7 +765,7 @@ static void ProfessionUI_HandleSpinner(ProfessionUI* self, int profIndex) {
     // Get spinner element at this index and read desired value
     uintptr_t spinnerArray = *(uintptr_t*)(s + 0x40);
     void* spinnerElem = *(void**)(spinnerArray + idx * 8);
-    int desired = fn_NumberEditElement_GetValue(spinnerElem);
+    int desired = reinterpret_cast<const UI::NumberEditElement*>(spinnerElem)->GetValue();  // B.3.6 bridge
 
     // Get current count from counts array
     int* counts = *(int**)(s + 0x30);
