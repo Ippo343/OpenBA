@@ -1,0 +1,44 @@
+#pragma once
+// ============================================================================
+// code/Game/Action/CreateNaturalResource.h — ENDGAME B.3.8 block ACT (B38_RULES.md D1-D5)
+//
+// `CreateNaturalResource`, an exe Action leaf, as a real C++ class with a compiler vtable.
+// RETAIL (Application-x64.exe, B38_SLOTS.md §6):
+//   reflected "CreateNaturalResource", parent "Action", ti 0x1401c5ec0
+//   create 0x1400221d0: MemAlloc(0x38, 8) + the inlined ctor
+//   createInPlace = the IMPORTED `Internal::CreateInPlaceObject` (returns null);
+//     the tree's in-place entry builds the object and that is KEPT (B8-13).
+//   table 0x14015fca0, 10 slots; every slot not declared below is Action's (= parent)
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Action/Action.h"
+#include "Object/exe_type.h"
+
+class CreateNaturalResource final : public Action {
+    DECLARE_EXE_TYPE(CreateNaturalResource)
+
+public:
+    CreateNaturalResource();                                                   // create 0x1400221d0
+    CreateNaturalResource(uint64_t desc, uint64_t* parent, uint32_t cellIndex);   // 0x1400c6a20
+    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022240
+    void Persist(void* stream) override;                       // [3] 0x1400c6890
+    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400c6650
+    bool GetTarget(void* param) override;                      // [9] 0x1400c6610
+
+    // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
+    void*     descEntity;        // +0x20 description (ExternalPtr)
+    void*     parentEntity;      // +0x28 InternalBasePtr (parent entity)
+    int32_t   cellIndex;         // +0x30 map cell index / resource slot
+    uint8_t   _pad34[4];         // +0x34 padding
+
+protected:
+    ~CreateNaturalResource() = default;
+};
+
+static_assert(sizeof(CreateNaturalResource) == 0x38, "CreateNaturalResource is 0x38 (create 0x1400221d0 MemAlloc)");
+static_assert(alignof(CreateNaturalResource) == 8, "CreateNaturalResource is 8-aligned");
+static_assert(offsetof(CreateNaturalResource, descEntity) == 0x20, "CreateNaturalResource +0x20");
+static_assert(offsetof(CreateNaturalResource, parentEntity) == 0x28, "CreateNaturalResource +0x28");
+static_assert(offsetof(CreateNaturalResource, cellIndex) == 0x30, "CreateNaturalResource +0x30");

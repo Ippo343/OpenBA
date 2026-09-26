@@ -9,26 +9,28 @@
 //   0x1400c64b0  Entity_impl_64b0 (ConsumeRawMaterial list append + storage reserve)
 //   0x1400c63b0  ConsumeRawMaterial_Action_CopyCtor    (field-copy ctor + 64b0)
 //
-// Closure (all registered): vtables 0x14015fb70/0x14015fde0/0x14015fd80/0x14015fc20
-// (action reimpls), Object::Internal::Internal (fn_ObjectInternal_Ctor),
+// ENDGAME B.3.8 ACT: the ctors are the classes' REAL constructors now (defined
+// below, next to their by-address doors); the compiler stamps the vtables.
+// Closure (all registered):
 // Entity_FindComponent_Storage 0x140006270 (reg_work_base), and the static
 // MemAlloc/MemFree engine helpers.
 //
 // Registration: RegisterActionChildCtors2Batch() in standalone/reg_action_child_ctors2.cpp.
 
+#include "Action/CompleteRoad.h"
+#include "Action/ConsumeRawMaterial.h"
+#include "Action/DropOffRawMaterial.h"
+#include "Action/HuntAnimal.h"
+#include "Action/PickupStoredRawMaterial.h"
 #include "engine_funcs.h"
 #include "resolve.h"
+#include <atomic>
 #include <cstdint>
+#include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 namespace {
-static uintptr_t s_vt_Action       = 0;  // 0x14015faa0
-static uintptr_t s_vt_CompleteRoad = 0;  // 0x14015fb70
-static uintptr_t s_vt_HuntAnimal   = 0;  // 0x14015fde0
-static uintptr_t s_vt_DropOffRaw   = 0;  // 0x14015fd80
-static uintptr_t s_vt_ConsumeRaw   = 0;  // 0x14015fc20
-static uintptr_t s_vt_PickupStored = 0;  // 0x14015ff80
 
 typedef void* (*fn_findStorage_t)(int64_t inner, void* retIBP);  // 0x140006270
 typedef int   (*fn_calc116540_t)(int64_t comp);                  // 0x140116540
@@ -40,20 +42,17 @@ static const uint32_t* s_pTid_RawMatDesc = nullptr;
 // StateMachineComponent type-id global (0x1401c7350) — for the bef70 component-find leaf.
 static const uint32_t* s_pTid_StateMachine = nullptr;
 
-static bool s_init = false;
+// ENDGAME B.3.8 ACT (B8-10): the class ctors below call EnsureInit and are
+// reached from the loader thread too, so the once-flag is an acquire/release
+// atomic (a racing second init stores the same resolved values).
+static std::atomic<bool> s_init{false};
 static void EnsureInit() {
-    if (s_init) return;
-    s_vt_Action       = ResolveAddr(Module::Exe, 0x14015faa0);
-    s_vt_CompleteRoad = ResolveAddr(Module::Exe, 0x14015fb70);
-    s_vt_HuntAnimal   = ResolveAddr(Module::Exe, 0x14015fde0);
-    s_vt_DropOffRaw   = ResolveAddr(Module::Exe, 0x14015fd80);
-    s_vt_ConsumeRaw   = ResolveAddr(Module::Exe, 0x14015fc20);
-    s_vt_PickupStored = ResolveAddr(Module::Exe, 0x14015ff80);
+    if (s_init.load(std::memory_order_acquire)) return;
     s_fn_findStorage  = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_fn_calc116540   = reinterpret_cast<fn_calc116540_t >(ResolveAddr(Module::Exe, 0x140116540));
     s_pTid_RawMatDesc = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_pTid_StateMachine = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7350));
-    s_init = true;
+    s_init.store(true, std::memory_order_release);
 }
 } // namespace
 
@@ -62,17 +61,8 @@ static void EnsureInit() {
 //   RCX=self, EDX=p2(u32 @ +0x24), R8D=p3(u32 @ +0x20), R9B=p4(byte @ +0x28).
 // ============================================================
 void* ActChild_CompleteRoadCopyCtor_c59d0(void* self, uint32_t p2, uint32_t p3, uint8_t p4) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18]                                = 0;
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_CompleteRoad;
-    *reinterpret_cast<uint32_t*>(s + 0x20) = p3;
-    *reinterpret_cast<uint32_t*>(s + 0x24) = p2;
-    s[0x28]                                = p4;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (CompleteRoad.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) CompleteRoad(p2, p3, p4));
 }
 
 // ============================================================
@@ -80,21 +70,16 @@ void* ActChild_CompleteRoadCopyCtor_c59d0(void* self, uint32_t p2, uint32_t p3, 
 //   RCX=self, RDX=p2, R8=p3.  +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0(byte).
 // ============================================================
 void* ActChild_HuntAnimalCopyCtor_c8400(void* self, uint64_t* p2, uint64_t* p3) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18]                                = 0;
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_HuntAnimal;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = *p3;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = *p2;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    s[0x38]                                = 0;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (HuntAnimal.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) HuntAnimal(p2, p3));
 }
+
+// 0x1400c8400: +0x20 = *p3 ; +0x28 = *p2 ; +0x30 = 0 ; +0x38 = 0 (byte).
+HuntAnimal::HuntAnimal(uint64_t* herd, uint64_t* animal)
+    : _field20(reinterpret_cast<void*>(*animal)),
+      _field28(reinterpret_cast<void*>(*herd)),
+      _field30(nullptr),
+      _field38(0) {}
 
 // ============================================================
 // FUN_1400c7cd0 — DropOffRawMaterial_Action_CopyCtor
@@ -103,22 +88,18 @@ void* ActChild_HuntAnimalCopyCtor_c8400(void* self, uint64_t* p2, uint64_t* p3) 
 // ============================================================
 void* ActChild_DropOffRawCopyCtor_c7cd0(void* self, uint64_t* p2, uint64_t* p3,
                                         uint64_t p4, uint32_t p5, uint8_t p6) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18]                                = 0;
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_DropOffRaw;
-    s[0x20]                                = p6;
-    *reinterpret_cast<uint32_t*>(s + 0x24) = p5;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = p4;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = *p2;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = *p3;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (DropOffRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) DropOffRawMaterial(p2, p3, p4, p5, p6));
 }
+
+// 0x1400c7cd0: +0x20 = p6 (byte) ; +0x24 = p5 ; +0x28 = p4 ; +0x30 = *p2 ; +0x38 = *p3.
+DropOffRawMaterial::DropOffRawMaterial(uint64_t* storage, uint64_t* source, uint64_t resType,
+                                       uint32_t count, uint8_t flag)
+    : _field20(flag),
+      _field24(static_cast<int32_t>(count)),
+      _field28(reinterpret_cast<void*>(resType)),
+      _field30(reinterpret_cast<void*>(*storage)),
+      _field38(reinterpret_cast<void*>(*source)) {}
 
 // ============================================================
 // FUN_1400c64b0 — Entity_impl_64b0 — ConsumeRawMaterial consume-list append.
@@ -205,20 +186,18 @@ void Entity_ConsumeListAppend_64b0(int64_t self, int64_t resType, int count) {
 // ============================================================
 void* ActChild_ConsumeRawCopyCtor_c63b0(void* self, uint64_t* p2, int64_t p3,
                                         uint64_t /*p4*/, uint8_t p5) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18]                                = 0;
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_ConsumeRaw;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = *p2;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    s[0x38]                                = p5;
-    Entity_ConsumeListAppend_64b0(reinterpret_cast<int64_t>(self), p3, 1);
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (ConsumeRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(p2, p3, p5));
+}
+
+// 0x1400c63b0: +0x20 = *p2 ; +0x28 = 0 ; +0x30 = 0 ; +0x38 = p5 (byte); then
+// the consume-list append 0x1400c64b0(this, resType, 1).
+ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage, int64_t resType, uint8_t reserve)
+    : _field20(reinterpret_cast<void*>(*storage)),
+      _field28(nullptr),
+      _field30(nullptr),
+      _field38(reserve) {
+    Entity_ConsumeListAppend_64b0(reinterpret_cast<int64_t>(this), resType, 1);
 }
 
 // ============================================================
@@ -318,25 +297,27 @@ void ActChild_TransferToCarrier_ca230(int64_t self, int64_t resType, int count) 
 // ============================================================
 void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_t* param_3,
                                           int64_t param_4, int param_5, uint8_t param_6) {
+    // ENDGAME B.3.8 ACT: the real ctor (PickupStoredRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (self) PickupStoredRawMaterial(param_2, param_3, param_4, param_5, param_6));
+}
+
+// 0x1400ca520 — the ctor body, moved from the door above: the field init is the
+// initialiser list; everything after it is the retail body verbatim.
+PickupStoredRawMaterial::PickupStoredRawMaterial(uint64_t* param_2, uint64_t* param_3,
+                                                 int64_t param_4, int param_5, uint8_t param_6)
+    : _field20(reinterpret_cast<void*>(*param_2)),
+      _field28(reinterpret_cast<void*>(*param_3)),
+      _field30(nullptr),
+      _field38(nullptr),
+      _field40(param_6) {
     EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18]                                = 0;
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_PickupStored;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = *param_2;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = *param_3;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    s[0x40]                                = param_6;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
 
     int64_t storageIbp = 0;
     if (s_fn_findStorage) s_fn_findStorage(*reinterpret_cast<int64_t*>(s + 0x28), &storageIbp);
 
-    if (param_4 == 0) return self;
+    if (param_4 == 0) return;
 
     uint32_t wantTid = s_pTid_RawMatDesc ? *s_pTid_RawMatDesc : 0;
 
@@ -409,8 +390,7 @@ void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_
         }
     }
 
-    ActChild_TransferToCarrier_ca230(reinterpret_cast<int64_t>(self), param_4, requested);
-    return self;
+    ActChild_TransferToCarrier_ca230(reinterpret_cast<int64_t>(this), param_4, requested);
 }
 
 // ============================================================
@@ -418,19 +398,15 @@ void* ActChild_PickupStoredCopyCtor_ca520(void* self, uint64_t* param_2, uint64_
 //   RCX=self, RDX=param_2.  vtable ConsumeRawMaterial; +0x20=*param_2, +0x28=0, +0x30=0.
 // ============================================================
 void* ActChild_ConsumeRawCtor3_c6440(void* self, uint64_t* param_2) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18]                                = 0;
-    *reinterpret_cast<uintptr_t*>(s)       = s_vt_ConsumeRaw;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = *param_2;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    return self;
+    // ENDGAME B.3.8 ACT: the real ctor (ConsumeRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (self) ConsumeRawMaterial(param_2));
 }
+
+// 0x1400c6440: +0x20 = *param_2 ; +0x28 = 0 ; +0x30 = 0 (+0x38 untouched).
+ConsumeRawMaterial::ConsumeRawMaterial(uint64_t* storage)
+    : _field20(reinterpret_cast<void*>(*storage)),
+      _field28(nullptr),
+      _field30(nullptr) {}
 
 // ============================================================
 // FUN_14000b6f0 — find the StateMachineComponent on an entity's component list.

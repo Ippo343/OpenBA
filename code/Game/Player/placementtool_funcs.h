@@ -5,12 +5,6 @@
 #include "PlacementTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00, Slot0): Scalar deleting destructor.
-// Resets vtable chain (PlacementTool -> Tool), calls Object::Internal::~Internal,
-// conditionally frees memory if flags & 1.
-// Original: 0x14002dc90
-void* PlacementTool_Dtor_Impl(PlacementTool* self, uint32_t flags);
-
 // Shutdown2 (vtable +0x28, Slot5): Cleanup scene objects, mesh, and dialog.
 // Removes scene object from Graphics::Scene, removes radius display highlight,
 // destroys MeshInstance, closes dialog via UI::UserInterface::CloseDialog.

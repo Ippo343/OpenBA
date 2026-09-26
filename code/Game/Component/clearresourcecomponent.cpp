@@ -67,42 +67,64 @@ void ClearResourceComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 MI-A — ClearResourceComponent as a REAL class (ClearResourceComponent.h).
+//
+// Before: CONTROLLER_LIVE_FACTORY_STATES + CONTROLLER_INSTALL_SERIALIZE (a 48-slot
+// table re-filled at every create), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<ClearResourceCtrlTag> table stamped into raw bytes at +0x28.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
+#include "Component/ClearResourceComponent.h"
 
 // The clear-job's self-destruct controller — this is what clears the clearing ICON
-// once the resource is harvested (the DecalComponent's terrain decal is released by
-// the +0x38 detach that entity removal dispatches). State table + the state-2 enter
-// handler (a port of 0x140118560) live in clearresourcecomponent_states.cpp.
-//
-// Shape recovered from the exe (ClearResourceComponent_Ctor 0x1401186a0 + the
-// primary vtable at 0x140162840):
-//   size 0x48 / flags 0x80 (plain ControllerComponent — the SM ticks the node, so
-//     no self-tick bit)
-//   node at +0x28 (slot 17 CreateState 0x140004080 = `LEA RAX,[RCX+0x28]; RET`),
-//     back-pointer node+0x18 == comp+0x40 (the ctor's `*(param_1+0x40) = param_1`)
-//   default state 2 (slot 16 GetDefaultState 0x1400026c0 = `MOV EAX,2; RET`)
+// once the resource is harvested. State table + the state-2 enter handler (a port of
+// 0x140118560) live in clearresourcecomponent_states.cpp.
 //
 // ⚠️ The default state of 2 is faithful but must never be the one the SM adopts —
 // state 2 is the destroy. It is safe only because StateMachineComponent_Startup
 // (0x14012b6a0) reads GetDefaultState from the FIRST ControllerComponent only, and
 // `cleararea` (default 0) precedes `clearresource` in every template that uses this
-// component (Template/Clear.rsc, Template/ClearR.rsc — both verified). That is also
-// why the env gate below is BANISHED_LIVE_CLEARCTRL and not a var of its own: with
-// `cleararea` inert, this component would be the first LIVE controller our
-// standalone linker sees and every clear-job would delete itself on creation.
-extern "C" void** ClearResourceCtrl_NodeVtable();
-extern "C" void   ClearResourceCtrl_PopulateTable();
+// component (Template/Clear.rsc, Template/ClearR.rsc — both verified).
+//
+// The state table is built ONCE at static-init time, as retail's static
+// initializer does (B38 D6/D7); it used to be filled, unsynchronised, on every
+// create from both the loader and the main thread.
+extern "C" void ClearResourceCtrl_PopulateTable();
+static const bool s_clearResourceStateTableBuilt = (ClearResourceCtrl_PopulateTable(), true);
 
-CONTROLLER_LIVE_FACTORY_STATES(ClearResourceComponent, 0x48, 0x80, 0x28, 2,
-                               ClearResourceCtrl_NodeVtable,
-                               ClearResourceCtrl_PopulateTable)
-// Retail 0x1401185E0 is Component::Serialize plus TWO empty Serializer scopes;
-// the controller factory macro never fills slot 3, so the base-only fill read 32
-// bytes too few and desynced everything after this component.
-CONTROLLER_INSTALL_SERIALIZE(ClearResourceComponent, ClearResourceComponent_Shutdown)
-REGISTER_TYPE(ClearResourceComponent, "ControllerComponent",
-              &ClearResourceComponent_Factory_Ser,
-              &ClearResourceComponent_CreateInPlace_Ser);
+// 0x1401186a0. Component() is the CALL 0x1401188b0; the table stamps and the
+// member's 0x14015f070 / 0x1401627f0 stamps are the compiler's; `_controller(this)`
+// is the +0x40 back-pointer store and the +0x30 / +0x38 zeroes. No flag OR.
+ClearResourceComponent::ClearResourceComponent() : _controller(this) {}
+
+// [0] 0x140031770: ~ClearResourceComponent (0x140118640), MemFree on &1.
+Object::Base* ClearResourceComponent::DeletingDtor(unsigned flags) {
+    this->~ClearResourceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x140118640: restamp + ~Internal, no own work.
+ClearResourceComponent::~ClearResourceComponent() = default;
+
+// create 0x1400315a0: MemAlloc(0x48, 8), then the ctor.
+void* ClearResourceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ClearResourceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ClearResourceComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ClearResourceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ClearResourceComponent());
+}
+
+// [3] 0x1401185e0: Component::Persist plus TWO empty Serializer scopes (the body
+// resolves its own helpers first: slot 3 is the first call on a load).
+void ClearResourceComponent::Persist(void* stream) { ClearResourceComponent_Shutdown(this, stream); }
+
+DEFINE_EXE_VTABLE(ClearResourceComponent, "_ZTV22ClearResourceComponent")
+DEFINE_EXE_TYPE(ClearResourceComponent, "ControllerComponent")

@@ -133,29 +133,8 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include "dialog_controller_vtable.h"
 
 namespace storagecapacityui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("StorageCapacityUI");
-    return c;
-}
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    // data30 (+0x30) is an InternalBasePtr value, not an owned heap block — nothing
-    // to free (mirrors the exe StorageCapacityUI_ScalarDtor, which only frees self).
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 // The exe-.rdata type-id globals Serialize/Startup dereference are null in standalone.
 // Lazy-fill from the live runtime type registry (valid after Object::Factory::Startup).
@@ -213,45 +192,45 @@ void W_OnUpdate(void* self, void* /*time*/) {
     }
     StorageCapacityUI_Startup(reinterpret_cast<StorageCapacityUI*>(self));
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Serialize);
-        g_vt[7] = reinterpret_cast<void*>(&W_Startup);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's StorageCapacityUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "StorageCapacityUI", &StubNop);
-
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x38); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x38), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace storagecapacityui_sa
 
-REGISTER_TYPE(StorageCapacityUI, "UI::DialogController",
-              &storagecapacityui_sa::Factory, &storagecapacityui_sa::InPlace);
+// [4] 0x14007b600
+void StorageCapacityUI::OnCreated() {
+    storagecapacityui_sa::W_Serialize(this);
+}
+
+// [7] 0x14007b4d0
+void StorageCapacityUI::OnUpdateLayout() {
+    storagecapacityui_sa::W_Startup(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void StorageCapacityUI::OnUpdate(const System::Time& time) {
+    storagecapacityui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [0] 0x140014450: ~StorageCapacityUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* StorageCapacityUI::DeletingDtor(unsigned flags) {
+    this->~StorageCapacityUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400143f0: MemAlloc(0x38, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* StorageCapacityUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StorageCapacityUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StorageCapacityUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* StorageCapacityUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StorageCapacityUI());
+}
+
+DEFINE_EXE_VTABLE(StorageCapacityUI, "_ZTV17StorageCapacityUI")
+DEFINE_EXE_TYPE(StorageCapacityUI, "UI::DialogController")
 

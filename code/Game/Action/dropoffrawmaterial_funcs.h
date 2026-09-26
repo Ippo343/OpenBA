@@ -4,10 +4,7 @@
 
 #include <cstdint>
 
-struct DropOffRawMaterial;
-
-// DropOffRawMaterial::ScalarDtor — set vtables, call ~Internal, optionally free
-void* DropOffRawMaterial_ScalarDtor_Impl(DropOffRawMaterial* self, uint32_t flags);
+class DropOffRawMaterial;
 
 // DropOffRawMaterial::BaseDtor — returns TypeInfo (slot 2)
 uint32_t DropOffRawMaterial_BaseDtor_Impl();

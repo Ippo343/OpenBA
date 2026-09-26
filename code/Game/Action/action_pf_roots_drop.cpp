@@ -37,11 +37,13 @@
 //   fn_InternalBasePtr_DeletePtr, fn_MemAlloc/fn_MemFreeStatic, fn_Time_Ctor_Float.
 // Runtime exports: System::Random::RandTol, System::MemoryAllocator::MemAlloc.
 //
-// Vtable global written by bbea0: vtable_RemoveAnimal = 0x14015ffe0 (+ vtable_Action 0x14015faa0).
+// bbea0 inlines the RemoveAnimal ctor; ENDGAME B.3.8 ACT: `new (p) RemoveAnimal(animal)`.
 
+#include "Action/RemoveAnimal.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
+#include <new>
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
@@ -58,8 +60,6 @@ static const float* s_pUVScale_17214c = nullptr;  // g_fUVScale — CreateRawMat
 // --- Type-id global (exe .rdata) for bbea0's SendComponentMessage message id. ---
 static const uint32_t* s_pDAT_1c70e8 = nullptr;  // DWORD_1401c70e8
 // --- Vtable addresses (exe .rdata). ---
-static uintptr_t s_vt_Action = 0;
-static uintptr_t s_vt_RemoveAnimal = 0;
 
 // --- Registered exe sub-callees, resolved lazily via ResolveAddr. ---
 typedef int  (*fn_bd40_t)(int* mapGrid, int cellIdx, char flag, void* outIBP, int z);  // 0x14009bd40
@@ -121,8 +121,6 @@ static void EnsureInit() {
     s_pDAT_1722a8 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401722a8));
     s_pUVScale_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
     s_pDAT_1c70e8 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70e8));
-    s_vt_Action = ResolveAddr(Module::Exe, 0x14015faa0);
-    s_vt_RemoveAnimal = ResolveAddr(Module::Exe, 0x14015ffe0);
 
     s_fn_bd40           = reinterpret_cast<fn_bd40_t>(ResolveAddr(Module::Exe, 0x14009bd40));
     s_fn_entityCopyCtor = reinterpret_cast<fn_entityCopyCtor_t>(ResolveAddr(Module::Exe, 0x1400c3720));
@@ -427,13 +425,8 @@ void Pf_RemoveAnimalCtor_bbea0(void* param_1, uint32_t param_2, uint32_t* param_
         void* pIVar9 = MemAlloc(0x28, 8);
         if (pIVar9 != nullptr) {
             uint64_t uVar4 = *reinterpret_cast<uint64_t*>(*reinterpret_cast<int64_t*>(param_5) + 0x10);
-            if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(pIVar9);
-            uint8_t* s = reinterpret_cast<uint8_t*>(pIVar9);
-            *reinterpret_cast<uintptr_t*>(s) = s_vt_Action;
-            *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-            s[0x18] = 0;
-            *reinterpret_cast<uintptr_t*>(s) = s_vt_RemoveAnimal;
-            *reinterpret_cast<uint64_t*>(s + 0x20) = uVar4;
+            // ENDGAME B.3.8 ACT: the real ctor (RemoveAnimal.h) — retail inlines it here.
+            new (pIVar9) RemoveAnimal(uVar4);
         }
         if (fn_InternalBasePtr_Ctor) new (&local_res8_v) ::Object::InternalBasePtr(
             reinterpret_cast<RtObject::Internal*>(pIVar9));   // B.3.3 bridge

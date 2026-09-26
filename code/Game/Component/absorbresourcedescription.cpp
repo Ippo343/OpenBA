@@ -9,113 +9,69 @@
 // Serializer (reads nothing). GetVersion (0x140105d90) = 1.
 //
 // Decompiled from Application-x64.exe (read-only Ghidra recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (AbsorbResourceDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162090) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/AbsorbResourceDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-namespace {
-constexpr uintptr_t kVtableAddr    = 0x140162090;
-constexpr uintptr_t kSerializeAddr = 0x140105d50;
-constexpr uint32_t  kFileVersion   = 1;
-} // namespace
+// ctor (inlined into create 0x14002ea80 / createInPlace 0x14002eae0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+AbsorbResourceDescription::AbsorbResourceDescription()
+    : Description() {}
 
-static void* AbsorbResourceDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(mem) = reinterpret_cast<void*>(vt);
-    return mem;
+// [0] 0x14002eb90: ~AbsorbResourceDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* AbsorbResourceDescription::DeletingDtor(unsigned flags) {
+    this->~AbsorbResourceDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void AbsorbResourceDescription_Serialize(void* self, void* stream) {
-    (void)self;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+// [5] 0x140105d50: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool AbsorbResourceDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* AbsorbResourceDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kVtableAddr);
-    if (vt) *reinterpret_cast<void**>(self) = reinterpret_cast<void*>(vt);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x14002eb30: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* AbsorbResourceDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) AbsorbResourceDescription();
 }
 
-// ============================================================
-// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
-// ============================================================
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void AbsorbResourceDescription::Destruct() { DeletingDtor(0); }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t AbsorbResourceDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("AbsorbResourceDescription");
-    return cached;
+// [8] 0x14002eb80: AbsorbResourceComponent's type id through the hidden return slot.
+Object::Type* AbsorbResourceDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("AbsorbResourceComponent");
+    return ret;
 }
 
-static void* AbsorbResourceDescription_Dtor_Tramp(void* self, uint32_t flags) {
-    return AbsorbResourceDescription_Dtor(self, flags);
-}
-static void  AbsorbResourceDescription_Serialize_Tramp(void* self, void* stream) {
-    AbsorbResourceDescription_Serialize(self, stream);
-}
-static int   AbsorbResourceDescription_VtblReturn1(void* /*self*/) { return (int)kFileVersion; }
-static int   AbsorbResourceDescription_VtblReturn0(void* /*self*/) { return 0; }
-static void* AbsorbResourceDescription_VtblReturnNull(void* /*self*/, ...) { return nullptr; }
-
-extern "C" void* AbsorbResourceDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return AbsorbResourceDescription_Ctor_Impl(memory);
+// [9] 0x14002eae0: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* AbsorbResourceDescription::Construct() {
+    return new (static_cast<void*>(this)) AbsorbResourceDescription();
 }
 
-static void  AbsorbResourceDescription_Cleanup_Tramp(void* self) {
-    typedef void* (*dtor_t)(void*, uint32_t);
-    dtor_t d = *reinterpret_cast<dtor_t*>(*reinterpret_cast<uintptr_t*>(self));
-    if (d) d(self, 0);
-    AbsorbResourceDescription_Ctor_Impl(self);
-}
-static void* AbsorbResourceDescription_Slot8_Tramp(void* self) {
-    if (!self) return nullptr;
-    AbsorbResourceDescription_Ctor_Impl(self);
-    return self;
-}
-
-// Vtable @ 0x140162090 (Object::External, verified via read_memory):
-//   +0x00 Dtor 0x14002eb90 | +0x08 0x14002ea70 | +0x10 GetTypeId 0x14002ea60
-//   +0x18 GetVersion 0x140105d90 (mov eax,1) | +0x20 Compile 0x14003a912
-//   +0x28 Serialize 0x140105d50 (empty) | +0x30 Cleanup 0x14002eb30
-//   +0x38 GetDesc 0x140001640 | +0x40 Slot8 0x14002eb80 | +0x48 0x14002eae0
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* AbsorbResourceDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "AbsorbResourceComponent"); }
-
-static void* g_AbsorbResourceDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&AbsorbResourceDescription_Dtor_Tramp),      // +0x00
-    reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturnNull),  // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&AbsorbResourceDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturn1),     // +0x18 GetVersion
-    reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturn0),     // +0x20 Compile
-    reinterpret_cast<void*>(&AbsorbResourceDescription_Serialize_Tramp), // +0x28
-    reinterpret_cast<void*>(&AbsorbResourceDescription_Cleanup_Tramp),   // +0x30
-    reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturn0),     // +0x38 GetDesc
-    reinterpret_cast<void*>(&AbsorbResourceDescription_GetComponentTypeId),     // +0x40
-    reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturnNull),  // +0x48 guard
-    reinterpret_cast<void*>(&AbsorbResourceDescription_VtblReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterAbsorbResourceDescriptionVtable() {
-    RegisterExeAddr(kVtableAddr, reinterpret_cast<uintptr_t>(g_AbsorbResourceDescription_Vtable));
-}
-
-extern "C" void* AbsorbResourceDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+// create 0x14002ea80: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* AbsorbResourceDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AbsorbResourceDescription), 8);
     if (!p) return nullptr;
-    return AbsorbResourceDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) AbsorbResourceDescription());
+}
+// createInPlace 0x14002eae0.
+void* AbsorbResourceDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AbsorbResourceDescription());
 }
 
-REGISTER_TYPE(AbsorbResourceDescription, "Description",
-              &AbsorbResourceDescription_Factory, &AbsorbResourceDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(AbsorbResourceDescription, "_ZTV25AbsorbResourceDescription")
+DEFINE_EXE_TYPE(AbsorbResourceDescription, "Description")

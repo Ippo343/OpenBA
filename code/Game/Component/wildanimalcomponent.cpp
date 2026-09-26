@@ -203,59 +203,43 @@ void WildAnimalComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid WildAnimalComponent: size 0x30 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0x82 (from WildAnimalComponent_Ctor) + zeroed body.
-//
-// LIVE slot 7 (OnRemove, retail 0x14012e2b0): erases this animal from its herd's
-// member list (herd+0x30/+0x38). MANDATORY once deer can die — a dead deer that
-// stays in the list leaves a dangling entry that HerdComponent_Update's migration
-// pass then walks (StartMigration faulted on exactly that: WRITE null+0x38).
-// Hand-rolled (no macro variant exposes slot 7); pattern copied from
-// pasturecomponent.cpp's controller factory. Gated on any of the animal-wave
-// flags that can put deer in the world.
+// ===== ENDGAME B.3.8 CIT — WildAnimalComponent as a REAL class (WildAnimalComponent.h) =====
+// Before: a 48-slot hand-built WildAnimalComponent_LiveVtable filled at every
+// create (slots 3 Serialize, 7 OnRemove), Inert_ScalarDtor in slot 0. After: the
+// compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2).
+// Slot 7 erases the animal from its herd's member list — mandatory once deer can
+// die (a dangling entry faults HerdComponent_Update's migration pass).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/WildAnimalComponent.h"
 
-static uint32_t WildAnimalComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("WildAnimalComponent");
-    return cached;
-}
-static void* WildAnimalComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-static void WildAnimalComponent_OnRemoveVSlot(void* self) {
-    WildAnimalComponent_OnRemove(reinterpret_cast<WildAnimalComponent*>(self));
-}
-static void WildAnimalComponent_SerializeVSlot(void* self, void* stream) {
-    WildAnimalComponent_Serialize(reinterpret_cast<WildAnimalComponent*>(self), stream);
+// 0x14012e3c0. Component() is the CALL 0x1401188b0; the 0x140164af0 stamp is
+// the compiler's; +0x28 = 0; flags |= 0x02 (0x82).
+WildAnimalComponent::WildAnimalComponent() : data28(0) {
+    OrFlagsInCtor(0x02);
 }
 
-// Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
-static void WildAnimalComponent_InstallLive() {
-    // Slot 3 (Serialize, retail 0x14012e300, body above in this file) wired
-    // UNCONDITIONALLY (save/load wave 2026-08-28): a loaded save's
-    // WildAnimalComponent otherwise kept the base-Component serialize, so the
-    // herd back-ref at +0x28 reset to null on load.
-    WildAnimalComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&WildAnimalComponent_SerializeVSlot);
-    WildAnimalComponent_LiveVtable[7] =
-        reinterpret_cast<void*>(&WildAnimalComponent_OnRemoveVSlot);
+// [0] 0x140039df0: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* WildAnimalComponent::DeletingDtor(unsigned flags) {
+    this->~WildAnimalComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-extern "C" void* WildAnimalComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x30, 0x82,
-        WildAnimalComponent_LiveVtable,
-        reinterpret_cast<void*>(&WildAnimalComponent_LiveGetTypeId));
-    WildAnimalComponent_InstallLive();
-    return p;
+void WildAnimalComponent::Persist(void* stream) { WildAnimalComponent_Serialize(this, stream); }   // [3] 0x14012e300
+void WildAnimalComponent::OnRemove() { WildAnimalComponent_OnRemove(this); }                        // [7] 0x14012e2b0
+
+// create 0x140039c20: MemAlloc(0x30, 8), then the ctor.
+void* WildAnimalComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(WildAnimalComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) WildAnimalComponent());
 }
-static void* WildAnimalComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x30, 0x82,
-        WildAnimalComponent_LiveVtable,
-        reinterpret_cast<void*>(&WildAnimalComponent_LiveGetTypeId));
-    WildAnimalComponent_InstallLive();
-    return mem;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* WildAnimalComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) WildAnimalComponent());
 }
-REGISTER_TYPE(WildAnimalComponent, "Component",
-              &WildAnimalComponent_Factory, &WildAnimalComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(WildAnimalComponent, "_ZTV19WildAnimalComponent")
+DEFINE_EXE_TYPE(WildAnimalComponent, "Component")

@@ -88,10 +88,6 @@ static float* s_fYawMax = nullptr;
 static uint32_t  s_tid_CitizenComponent_storage = 0;
 static uint32_t* s_tid_CitizenComponent = nullptr;
 
-// Vtable addresses for dtor chain
-static uintptr_t s_vtable_PerformWork = 0;
-static uintptr_t s_vtable_Action = 0;
-
 // TypeInfo for BaseDtor (slot 2) -- DAT at TypeInfo_PerformWork
 static uint32_t* s_typeInfo_PerformWork = nullptr;
 
@@ -145,10 +141,6 @@ bool PerformWork_ResolveFuncs() {
     s_fYawMax = (float*)ResolveAddr(Module::Exe, 0x140172220);
     if (!s_fYawMax) s_fYawMax = &s_fbYawMax;
 
-    // Vtable addresses
-    s_vtable_PerformWork = ResolveAddr(Module::Exe, 0x14015fea0);
-    s_vtable_Action = ResolveAddr(Module::Exe, 0x14015faa0);
-
     // TypeInfo for BaseDtor -- read from PerformWork slot 2 return value address
     // Slot 2 at 0x140022B70 returns TypeInfo_PerformWork which is DAT at that location
     // Actually the decompilation shows it returns TypeInfo_PerformWork directly
@@ -174,7 +166,6 @@ bool PerformWork_ResolveFuncs() {
               s_fn_SetAnimation && s_fn_SetFacingDirection &&
               s_fn_FromYawPitch && s_fn_CitizenBreakCheck &&
               s_fConst1 && s_fYawMin && s_fYawMax &&
-              s_vtable_PerformWork && s_vtable_Action &&
               s_tid_CitizenComponent &&
               fn_IsDerivedFrom && fn_MemFreeStatic;
 
@@ -199,8 +190,6 @@ bool PerformWork_ResolveFuncs() {
                 { "fConst1",               (const void*)s_fConst1 },
                 { "fYawMin",               (const void*)s_fYawMin },
                 { "fYawMax",               (const void*)s_fYawMax },
-                { "vtable_PerformWork",    (const void*)s_vtable_PerformWork },
-                { "vtable_Action",         (const void*)s_vtable_Action },
                 { "TypeId_CitizenComponent (0x1401c7158 / by-name)",
                                            (const void*)s_tid_CitizenComponent },
                 { "IsDerivedFrom",         (const void*)fn_IsDerivedFrom },
@@ -215,33 +204,6 @@ bool PerformWork_ResolveFuncs() {
 
     s_funcs_resolved = ok;
     return ok;
-}
-
-// ============================================================
-// PerformWork::ScalarDtor (0x140022BD0)
-// Set vtables, cleanup entity ref, call ~Internal, optionally free.
-// ============================================================
-void* PerformWork_ScalarDtor_Impl(PerformWork* self, uint32_t flags) {
-    PerformWork_ResolveFuncs();   // self-init: action built via exe ctor path, not our factory
-    uint8_t* s = (uint8_t*)self;
-
-    // Set PerformWork vtable (for correct virtual dispatch during destruction)
-    *(uintptr_t*)s = s_vtable_PerformWork;
-    // Set Action vtable (base class destructor phase)
-    *(uintptr_t*)s = s_vtable_Action;
-
-    // If entity ref at +0x10 is non-null, delete it
-    if (*(void**)(s + 0x10) != nullptr) {
-        s_fn_IBP_DeletePtr(s + 0x10);
-    }
-
-    // Call Object::Internal::~Internal
-    s_fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
 }
 
 // ============================================================
@@ -434,42 +396,67 @@ bool PerformWork_GetTarget_Impl(PerformWork* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fea0 (10 slots), size 0x48, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class PerformWork (PerformWork.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_PerformWork_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t PerformWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PerformWork");
-    return c;
+// create 0x140022b90. Retail's default ctor (0x1400c96b0) stores +0x44 = -1;
+// the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the
+// fields retail leaves unwritten stay zero-filled (MemAlloc gives no guarantee).
+PerformWork::PerformWork()
+    : workTarget(nullptr),
+      facingYaw(0.0f),
+      animationId(0),
+      requiredTime(0),
+      elapsedTime(0),
+      useTool(0),
+      _pad41{},
+      field44(-1) {}
+
+// [0] 0x140022bd0
+Object::Base* PerformWork::DeletingDtor(unsigned flags) {
+    this->~PerformWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_PerformWork_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&PerformWork_GetTypeId,           // +0x10 GetTypeId
-    (void*)&PerformWork_Serialize_Impl,      // +0x18 Serialize
-    (void*)&PerformWork_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&PerformWork_Execute_Impl,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&PerformWork_Exit_Impl,   // +0x38 Exit
-    (void*)&PerformWork_CheckEntity_Impl,  // +0x40 CheckEntity
-    (void*)&PerformWork_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c9550
+void PerformWork::Persist(void* stream) { PerformWork_Serialize_Impl(this, stream); }
+// [4] 0x1400c9420
+int  PerformWork::AbstractImpl(void* actionStack) { return PerformWork_AbstractImpl_Impl(this, actionStack); }
+// [5] 0x1400c93c0
+int  PerformWork::Execute(void* actionStack, void* time) { return PerformWork_Execute_Impl(this, actionStack, time); }
+// [7] 0x1400c9370
+void PerformWork::Exit(void* actionStack) { PerformWork_Exit_Impl(this, actionStack); }
+// [8] 0x1400c9320
+void PerformWork::CheckEntity() { PerformWork_CheckEntity_Impl(this); }
+// [9] 0x1400c92d0
+bool PerformWork::GetTarget(void* param) { return PerformWork_GetTarget_Impl(this, param); }
 
+void* PerformWork::CreateNewObject() {
+    PerformWork_ResolveFuncs();
+    void* p = Object::detail::InternalMemAlloc(sizeof(PerformWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PerformWork());
+}
+void* PerformWork::CreateInPlaceObject(void* storage) {
+    PerformWork_ResolveFuncs();
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PerformWork());
+}
+
+DEFINE_EXE_VTABLE(PerformWork, "_ZTV11PerformWork")
+
+// B38 D5: 0x14015fea0 is still read back BY ADDRESS outside this block
+// (work_act_path.cpp:155, work_act_perform.cpp:163, work_base_actionctor.cpp:162, citizenai_actionctors.cpp:145),
+// so the row stays, serving the compiler table (every such reader builds the
+// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterPerformWorkVtable() {
-    RegisterExeAddr(0x14015fea0, (uintptr_t)g_PerformWork_Vtable);
+    RegisterExeAddr(0x14015fea0, reinterpret_cast<uintptr_t>(PerformWork::Vtable()));
 }
-extern "C" void* PerformWork_CreateInPlace(void* mem) {
-    PerformWork_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x48, g_PerformWork_Vtable);
-}
-extern "C" void* PerformWork_Factory(void) {
-    PerformWork_ResolveFuncs();
-    return Action_Alloc(0x48, g_PerformWork_Vtable);
-}
-REGISTER_TYPE(PerformWork, "Action", &PerformWork_Factory, &PerformWork_CreateInPlace);
+
+DEFINE_EXE_TYPE(PerformWork, "Action")

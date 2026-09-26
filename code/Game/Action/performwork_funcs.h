@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-struct PerformWork;
+class PerformWork;
 
 // PerformWork::Serialize -- serialize all PerformWork fields
 void PerformWork_Serialize_Impl(PerformWork* self, void* stream);
@@ -28,9 +28,6 @@ void PerformWork_CheckEntity_Impl(PerformWork* self);
 // PerformWork::GetTarget -- returns true if param matches work target's parent entity
 // NOT HOOKED -- too small prologue for some configurations, standalone exe only.
 bool PerformWork_GetTarget_Impl(PerformWork* self, void* param);
-
-// PerformWork::ScalarDtor -- set vtables, cleanup, call ~Internal, optionally free
-void* PerformWork_ScalarDtor_Impl(PerformWork* self, uint32_t flags);
 
 // PerformWork::BaseDtor (slot 2) -- returns TypeInfo
 uint32_t PerformWork_BaseDtor_Impl();

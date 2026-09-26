@@ -26,7 +26,7 @@
 //   +0x2a road type (0xff = none) · +0x2b road state (0x80 = queued)
 
 #include "Player/roadtool_funcs.h"
-#include "Tool.h"
+#include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"

@@ -1,8 +1,8 @@
 // Tornado wave — address registry for the TornadoComponent lane.
 //
 // Registers the exe addresses of everything ported in
-// code/Game/Component/tornadocomponent.cpp, plus the component vtable itself, so
-// ResolveAddr(Module::Exe, ...) finds our code. The integrator wires
+// code/Game/Component/tornadocomponent.cpp, so ResolveAddr(Module::Exe, ...) finds
+// our code. The integrator wires
 // RegisterTornadoLane() into address_registry.cpp.
 //
 // The vtable at 0x14015aa80 is 16 slots; only 3, 4 and 8 are overridden in retail
@@ -31,37 +31,14 @@ extern void TornadoComponent_Shutdown(TornadoComponent* self, void* stream);
 extern void TornadoComponent_Serialize(TornadoComponent* self);
 extern void TornadoComponent_OnRemove(TornadoComponent* self, void* time);
 
-namespace {
-
-// Base-Component no-op used for every slot retail does not override. Matches
-// 0x140118a60, which disassembles to a bare `ret`.
-void TornadoComponent_BaseNoOp() {}
-
-// A 16-slot copy of the retail vtable. The live per-type vtable the factory hands
-// to instances is built separately in tornadocomponent.cpp (it needs the inert
-// infrastructure's dtor and GetTypeId); THIS array exists so that anything
-// resolving the raw exe vtable address — a save-file load, a foreign dispatch —
-// lands on real bodies instead of a null page.
-void* g_TornadoComponent_Vtable[16];
-
-struct InitVtable {
-    InitVtable() {
-        for (int i = 0; i < 16; ++i)
-            g_TornadoComponent_Vtable[i] = reinterpret_cast<void*>(&TornadoComponent_BaseNoOp);
-        g_TornadoComponent_Vtable[3] = reinterpret_cast<void*>(&TornadoComponent_Shutdown);
-        g_TornadoComponent_Vtable[4] = reinterpret_cast<void*>(&TornadoComponent_Serialize);
-        g_TornadoComponent_Vtable[8] = reinterpret_cast<void*>(&TornadoComponent_OnRemove);
-    }
-} g_initVtable;
-
-}  // namespace
+// ENDGAME B.3.8 CIT: the 16-slot copy of the retail vtable that used to live here
+// (g_TornadoComponent_Vtable, registered at 0x14015aa80) is gone. TornadoComponent
+// is a real class with a compiler vtable (code/Game/Component/TornadoComponent.h),
+// and nothing in the tree reads the retail table address back (B38 D5).
 
 extern uint32_t g_tid_ParticleComponent;
 
 extern "C" void RegisterTornadoLane() {
-    // --- the vtable ---
-    RegisterExeAddr(0x14015aa80, reinterpret_cast<uintptr_t>(g_TornadoComponent_Vtable));
-
     // --- the three overridden slots, by their own addresses ---
     RegisterExeAddr(0x140058b80, reinterpret_cast<uintptr_t>(&TornadoComponent_Shutdown));
     RegisterExeAddr(0x1400585a0, reinterpret_cast<uintptr_t>(&TornadoComponent_Serialize));

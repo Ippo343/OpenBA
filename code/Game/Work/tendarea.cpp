@@ -14,6 +14,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/TendArea.h"
 #include "Work/tendarea_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -76,7 +77,6 @@ typedef void* (*TAW_FindComp_Storage_t)(uintptr_t entity, void* outIBP);
 // StorageComponent_QueryCount
 typedef int   (*TAW_StorageQueryCount_t)(void* storageComp);
 
-static TAW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
 static TAW_BST_Serialize_t           s_fn_BST_Serialize = nullptr;
 static TAW_BSTFindRemove_t           s_fn_BSTFindRemove = nullptr;
 static TAW_BSTRemove_t               s_fn_BSTRemove = nullptr;
@@ -114,8 +114,6 @@ static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 // This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-static void** s_vtable_TendArea = nullptr;  // 0x140161990
-static void** s_vtable_Work = nullptr;       // 0x140161a80
 
 static bool s_tend_funcs_resolved = false;
 
@@ -126,8 +124,6 @@ bool TendArea_ResolveFuncs() {
     if (s_tend_funcs_resolved) return true;
 
     // Direct exe function addresses
-    s_fn_Work_Serialize = reinterpret_cast<TAW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<TAW_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400296b0));
     s_fn_BSTFindRemove = reinterpret_cast<TAW_BSTFindRemove_t>(
@@ -189,13 +185,9 @@ bool TendArea_ResolveFuncs() {
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
     // Vtable pointers for dtor
-    s_vtable_TendArea = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161990));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize && s_fn_BST_Serialize &&
+    bool ok = s_fn_BST_Serialize &&
               s_fn_BSTFindRemove && s_fn_BSTRemove && s_fn_CancelAllWork &&
               s_fn_ValidateEntity && s_fn_MemAlloc &&
               // s_fn_MemFree is deliberately NOT required. It comes from the IAT dispatch
@@ -225,7 +217,6 @@ bool TendArea_ResolveFuncs() {
 #ifdef _DEBUG
     printf("[TendArea] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
@@ -267,9 +258,9 @@ bool TendArea_ResolveFuncs() {
 // 6. Create PerformWork action
 // 7. Register with CitizenAI
 //
-int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int TendArea::Execute(void* citizenIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Step 1: Check max workers
     uintptr_t matDescIBP = 0;
@@ -315,7 +306,7 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
     int workFlag;
     uint32_t randIdx;
 
-    if (self->tendMode == 0) {
+    if (tendMode == 0) {
         // Crop mode: find CropAreaComponent
         s_fn_FindComp_AreaCrop(*(uintptr_t*)(selfAddr + 0x10), &areaCompIBP);
 
@@ -384,11 +375,11 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
     uintptr_t citEnt = *(uintptr_t*)citizenIBP;
 
     // Call vtable Slot10 (GetWorkEntity) to get work entity
-    uintptr_t vtable = *(uintptr_t*)self;
+    uintptr_t vtable = *(uintptr_t*)this;
     typedef uintptr_t* (*GetWorkEntity_t)(TendArea*, void*);
     auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntIBP[2] = {0};
-    uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+    uintptr_t* wResult = getWorkEntity(this, workEntIBP);
     uintptr_t workEnt = *wResult;
 
     *(uint32_t*)(citEnt + 0x54) |= 4;
@@ -407,8 +398,8 @@ int TendArea_Slot4_Impl(TendArea* self, void* citizenIBP, uint64_t /*param3*/, u
 // ============================================================
 // TendArea::Slot6 -- BSTFindRemove + return false (0x1400f5470)
 // ============================================================
-bool TendArea_Slot6_Impl(TendArea* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int TendArea::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return false;
 }
 
@@ -416,8 +407,8 @@ bool TendArea_Slot6_Impl(TendArea* self, void* param2) {
 // ============================================================
 // TendArea::Slot7 -- BSTFindRemove thunk (0x1400f5460)
 // ============================================================
-int TendArea_Slot7_Impl(TendArea* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int TendArea::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return 0;
 }
 
@@ -427,8 +418,8 @@ int TendArea_Slot7_Impl(TendArea* self, void* param2) {
 // Loops through BST at +0x48 while count > 0.
 // For each leftmost node, cancels the work item.
 // ============================================================
-int TendArea_Slot8_Impl(TendArea* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int TendArea::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     while (*(int*)(selfAddr + 0x50) > 0) {
         // Find leftmost node in BST (following +0x10 = left child)
@@ -454,8 +445,8 @@ int TendArea_Slot8_Impl(TendArea* self) {
 // Returns true if all valid, false otherwise.
 // Simple BST: node +0x08=parent, +0x10=left, +0x18=right
 // ============================================================
-bool TendArea_Slot9_Impl(TendArea* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int TendArea::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
     void** bstRootPtr = (void**)(selfAddr + 0x48);
 
     void* root = *bstRootPtr;
@@ -564,8 +555,8 @@ bool TendArea_Slot9_Impl(TendArea* self, void* param2) {
 // TendArea::Slot10 / GetWorkEntity (0x1400f58a0)
 // Returns entity from this->_field10's sub-object at +0x48.
 // ============================================================
-void* TendArea_Slot10_Impl(TendArea* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* TendArea::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -581,31 +572,27 @@ void* TendArea_Slot10_Impl(TendArea* self, void* outPtr) {
 
 
 // ============================================================
-// TendArea::Slot11 / HasWorkers (0x140029860)
+// TendArea::GetPriority [11] / HasWorkers (0x140029860)
 // 9-byte thunk, returns (workerCount > 0).
 // ============================================================
-bool TendArea_Slot11_Impl(TendArea* self) {
-    return self->workerCount > 0;
+int TendArea::GetPriority() {
+    // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
+    return static_cast<int32_t>(workerCount) > 0 ? 1 : 0;
 }
 
 
-// ============================================================
-// TendArea::Execute (Slot5) -- 3 bytes, returns false.
-// ============================================================
-bool TendArea_Execute_Impl(TendArea* /*self*/) {
-    return false;
-}
+
 
 
 // ============================================================
 // TendArea::Serialize (0x1400f5900)
 // Work::Serialize + Serializer(v0) + BST serialize + int field.
 // ============================================================
-void TendArea_Serialize_Impl(TendArea* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void TendArea::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create serializer (version block, version=0)
     alignas(8) uint8_t serializerBuf[24] = {0};
@@ -615,7 +602,7 @@ void TendArea_Serialize_Impl(TendArea* self, void* stream) {
     s_fn_BST_Serialize((void*)(selfAddr + 0x48), serializerBuf);
 
     // Serialize int at +0x58 (tendMode)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->tendMode), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&tendMode), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
@@ -625,11 +612,9 @@ void TendArea_Serialize_Impl(TendArea* self, void* stream) {
 // TendArea::DtorBody
 // Sets vtable, frees BST nodes, calls base dtor.
 // ============================================================
-void TendArea_DtorBody(TendArea* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set vtable to TendArea
-    *(void**)selfAddr = s_vtable_TendArea;
+// TendArea dtor (called by slot 0 0x14002c5d0). The stamps and the `~Internal` call are the compiler's chain.
+TendArea::~TendArea() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free BST nodes at +0x48
     void* bstRoot = *(void**)(selfAddr + 0x48);
@@ -646,71 +631,57 @@ void TendArea_DtorBody(TendArea* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to Work base
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
 // ============================================================
 // TendArea::ScalarDtor (0x14002c5d0)
 // ============================================================
-void* TendArea_ScalarDtor_Impl(TendArea* self, uint32_t flags) {
-    TendArea_DtorBody(self);
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-    return self;
+// [0] 0x14002c5d0: ~TendArea, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* TendArea::DeletingDtor(unsigned flags) {
+    this->~TendArea();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The stamps are the compiler's. TendArea_ResolveFuncs wires
+// the file's helper pointers (the old factory did the same).
+TendArea::TendArea() : Work(), bstRoot(nullptr), workerCount(0), _pad54{}, tendMode(0) {
+    TendArea_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161990 (13 slots), size 0x60, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-// Slot map ground-truthed from the real exe vtable @ 0x140161990:
-//   slot4 (Execute)=TendArea_Slot4_Impl (0x1400f5490). The orphaned
-//   TendArea_Execute_Impl ("returns false") is NOT in the vtable — slot5
-//   is the shared Work_Slot5 (0x1400f7540). Do NOT use TendArea_Execute_Impl.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_TendArea_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over TendArea_Factory / _CreateInPlace (both
+// Work_GenericCtor), plus two vtable-pointer statics for the dtor's stamps.
+
+// create 0x14002c590: MemAlloc(sizeof, 8), then the ctor.
+void* TendArea::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TendArea), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TendArea());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* TendArea::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TendArea());
+}
+
+DEFINE_EXE_VTABLE(TendArea, "_ZTV8TendArea")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t TendArea_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TendArea");
-    return c;
-}
-
-static void* g_TendArea_Vtable[13] = {
-    (void*)&TendArea_ScalarDtor_Impl,  // +0x00 ScalarDtor (0x14002c5d0)
-    (void*)&Work_Slot1,                // +0x08 slot1 (null)
-    (void*)&TendArea_GetTypeId,        // +0x10 GetTypeId
-    (void*)&TendArea_Serialize_Impl,   // +0x18 Serialize (0x1400f5900)
-    (void*)&TendArea_Slot4_Impl,       // +0x20 Execute (0x1400f5490)
-    (void*)&Work_Slot5,                // +0x28 slot5 (returns 0)
-    (void*)&TendArea_Slot6_Impl,       // +0x30 OnComplete (0x1400f5470)
-    (void*)&TendArea_Slot7_Impl,       // +0x38 OnCancel (0x1400f5460)
-    (void*)&TendArea_Slot8_Impl,       // +0x40 Cleanup (0x1400f5830)
-    (void*)&TendArea_Slot9_Impl,       // +0x48 Validate (0x1400f5230)
-    (void*)&TendArea_Slot10_Impl,      // +0x50 GetTarget (0x1400f58a0)
-    (void*)&TendArea_Slot11_Impl,      // +0x58 GetPriority (0x140029860)
-    (void*)&Work_Slot12,               // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x140161990 is still read back BY ADDRESS — CropFieldComponent's state
+// machine (cropfieldcomponent_states.cpp, block MI-B) builds the work by hand and
+// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterTendAreaVtable() {
-    RegisterExeAddr(0x140161990, (uintptr_t)g_TendArea_Vtable);
+    RegisterExeAddr(TendAreaAddr::Vtable, reinterpret_cast<uintptr_t>(TendArea::Vtable()));   // 0x140161990
 }
-extern "C" void* TendArea_CreateInPlace(void* mem) {
-    TendArea_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x60, g_TendArea_Vtable);
-}
-extern "C" void* TendArea_Factory(void) {
-    TendArea_ResolveFuncs();
-    void* p = Work_Alloc(0x60);
-    return p ? Work_GenericCtor(p, 0x60, g_TendArea_Vtable) : nullptr;
-}
-REGISTER_TYPE(TendArea, "Work", &TendArea_Factory, &TendArea_CreateInPlace);
+DEFINE_EXE_TYPE(TendArea, "Work")

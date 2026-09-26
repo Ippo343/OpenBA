@@ -61,6 +61,7 @@
 #include "CompanionData.h"
 // `Object::CompiledExternal`, the proved parent of the real class below.
 #include "../object/External.h"
+#include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
 
 // `runtime/src/video/`'s door helper over `Video::ImageBuffer`'s protected
 // surface. Four of its members are PRIVATE in retail (`AEAA` — the three
@@ -264,7 +265,18 @@ public:
     // address. The class is therefore ABSTRACT in C++ while being "concrete" in
     // B35_RULES 2.2's sense (retail instantiates it); the two statements are
     // about different things.
-    virtual Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x18001ed20
+    //
+    // ENDGAME B.3.8 block RB (B38_RULES D1/D2): the exe instantiates the class
+    // ITSELF (its table copy 0x14015c8c0; ModDialog, NoiseUI, TradeWork), so
+    // slot 0 is now CONCRETE — the exe copy's own slot 0 0x1400129d0, the
+    // scalar deleting dtor (`~ImageBuffer`; MemFree on flags & 1). Inline, so
+    // the key function (TypeName) and the vtable's TU do not move. The mint's
+    // RT_DELDTOR row still serves the minted objects the door builds.
+    Object::Base* DeletingDtor(unsigned flags) override {             // [0]
+        this->~ImageBuffer();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*       TypeName() const override;              // [1] 0x18001e900
     uint32_t          Type() const override;                  // [2] 0x18001e8e0
     int32_t           GetFileVersion() const override;        // [3] 0x1800f26e0 — `MOV EAX,7`
@@ -425,15 +437,27 @@ public:
     void PlatformConstruct();                  // 0x1800f2f40 (was 0x1800f2ba0) — buffers.cpp
     void PlatformDestruct();                   // 0x1800f3020 (was 0x1800f2c40) — buffers.cpp
 
+    // ??0ImageBuffer@Video@@QEAA@XZ 0x1800f2580 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete now
+    // (slot 0 above). CompiledExternal() and the stamp are the compiler's; the
+    // field stores and `PlatformConstruct` are ONE body with the door
+    // `Video_ImageBuffer_Ctor` (buffers.cpp), which keeps the minted stamp.
+    ImageBuffer() { InitFields(); }
+
+    // The doors' way onto the shared bodies.
+    struct DoorBody {
+        static void Init(ImageBuffer* b)    { b->InitFields(); }
+        static void Release(ImageBuffer* b) { b->ReleaseFields(); }
+    };
+
+private:
+    void InitFields();      // 0x1800f2580 minus the External stores + stamp (buffers.cpp)
+    void ReleaseFields();   // 0x1800f2610 minus the stamps + ~External (buffers.cpp)
+
 protected:
     // The registered doors over the protected surface. See the banner on the
     // forward declaration above `namespace RtVideo`.
     friend struct ::ImageBufferDoorAccess;
-
-    // See the "NOT CONSTRUCTIBLE" banner. THE CONSTRUCTOR STAYS PROTECTED — that
-    // is the property that matters, and it is what keeps a stray
-    // `Video::ImageBuffer ib;` from stamping GCC's table.
-    ImageBuffer() = default;
 
     // ?PlatformCreate@ (private in retail, `AEAA`) and ?PlatformSerialize@ stay
     // behind the friend holder: `PlatformSerialize` has a registered door and one

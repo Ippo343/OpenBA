@@ -21,8 +21,9 @@
 // Work_Ctor25 takes an InternalBasePtr* rather than a raw pointer. Reproduced exactly:
 // passing &entityIBP straight through would hand it the caller's storage.
 
-#include "BuildActions.h"
+#include "Work/PlantOrchard.h"
 #include "plantorchard_funcs.h"
+#include <new>
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
@@ -30,42 +31,15 @@
 #include <cstdio>
 
 namespace {
-
-typedef void* (*fn_Work_Ctor25_t)(void* self, void* entityIBP);       // 0x1400f72e0
 typedef void* (*fn_FindOrchard_t)(int64_t entity, void* outIBP);      // 0x140005440
 typedef void  (*fn_ValidateRefs_t)(int64_t orchardComp);              // 0x140051830
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
 // is gone.
-
-fn_Work_Ctor25_t  s_WorkCtor25   = nullptr;
-fn_FindOrchard_t  s_FindOrchard  = nullptr;
-fn_ValidateRefs_t s_ValidateRefs = nullptr;
-uintptr_t         s_vtable       = 0;
-bool              s_resolved     = false;
-
-void Resolve() {
-    if (s_resolved) return;
-    s_WorkCtor25   = reinterpret_cast<fn_Work_Ctor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    s_FindOrchard  = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
-    s_ValidateRefs = reinterpret_cast<fn_ValidateRefs_t>(ResolveAddr(Module::Exe, 0x140051830));
-    s_vtable       = ResolveAddr(Module::Exe, PlantOrchardAddr::Vtable);
-    s_resolved = s_WorkCtor25 && s_FindOrchard && s_ValidateRefs && s_vtable;
-    if (!s_resolved) {
-        static bool reported = false;
-        if (!reported) {
-            reported = true;
-            std::fprintf(stderr, "[PlantOrchardCtor] UNRESOLVED:%s%s%s%s\n",
-                s_WorkCtor25   ? "" : " Work_Ctor25",
-                s_FindOrchard  ? "" : " FindComponent_Orchard",
-                s_ValidateRefs ? "" : " OrchardComponent_ValidateRefs",
-                s_vtable       ? "" : " vtable_PlantOrchard");
-            std::fflush(stderr);
-        }
-    }
-}
-
+// ENDGAME B.3.8: the file-level lazy Resolve() is gone (B38 D7) — Work_Ctor25 is the
+// base ctor Work(void*), the stamp is the compiler's, and the two helpers are resolved
+// where they are used.
 }  // namespace
 
 // The diag counter is bumped in the FACTORY ctor only, so this path — the state machine's,
@@ -74,29 +48,10 @@ void Resolve() {
 // thing it is meant to be measuring.
 extern "C" void OrchardDiag_NotePlantConstructed();
 
-extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType) {
-    Resolve();
-    // [STANDALONE] plantorchard.cpp's own function-pointer table is filled by
-    // PlantOrchard_ResolveFuncs(), which until now was only called from the two FACTORY
-    // entry points (the deserialize path). This constructor is the state machine's path —
-    // it allocates and builds the object directly — so every s_fn_* over there stayed null.
-    // The first slot the framework dispatches on the fresh object is GetTarget (+0x50),
-    // called by the work scheduler's insert; it calls s_fn_FindSubEntity(entity, out) with
-    // no guard, so a null there is a call-of-0 with the ORCHARD ENTITY in RCX — which is
-    // exactly the crash this path produced. Resolve here so both creation paths arrive at a
-    // fully-wired object. See reference_vcall_of_0_may_be_a_null_fnptr.
-    PlantOrchard_ResolveFuncs();
-    if (!mem) return mem;
-    OrchardDiag_NotePlantConstructed();
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(mem);
-
-    // Retail's two locals, in retail's order.
-    void* entityLocal   = entityIBP ? *entityIBP : nullptr;
-    void* treeTypeLocal = treeType;
-
-    if (s_WorkCtor25) s_WorkCtor25(mem, &entityLocal);
-    if (s_vtable) *reinterpret_cast<uintptr_t*>(s) = s_vtable;
+// Retail copies the incoming IBP to a local and hands Work_Ctor25 its address; Work(void*)
+// reads the pointer once, so passing the caller's IBP is the same read.
+PlantOrchard::PlantOrchard(void** entityIBP, void* treeType) : Work(entityIBP) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // PlantOrchard's own fields. +0x60 is written as one 8-byte store, which clears BOTH
     // the count (+0x60) and the capacity (+0x64) of the byte-array triple at +0x58.
@@ -104,19 +59,21 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* 
     *reinterpret_cast<uint32_t*>(s + 0x50) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x58) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x60) = 0;
-    *reinterpret_cast<void**>(s + 0x68)    = treeTypeLocal;   // tree type, stored verbatim:
-                                                              // no null test, no validation,
-                                                              // no refcount — as retail does.
+    *reinterpret_cast<void**>(s + 0x68)    = treeType;   // tree type, stored verbatim:
+                                                         // no null test, no validation,
+                                                         // no refcount — as retail does.
 
+    auto findOrchard  = reinterpret_cast<fn_FindOrchard_t>(ResolveAddr(Module::Exe, 0x140005440));
+    auto validateRefs = reinterpret_cast<fn_ValidateRefs_t>(ResolveAddr(Module::Exe, 0x140051830));
     int64_t orchardIBP = 0;
-    if (s_FindOrchard) s_FindOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
-    if (!orchardIBP) return mem;      // SA: retail derefs unguarded below; a PlantOrchard is
+    if (findOrchard) findOrchard(*reinterpret_cast<int64_t*>(s + 0x10), &orchardIBP);
+    if (!orchardIBP) return;          // SA: retail derefs unguarded below; a PlantOrchard is
                                       // only ever built for an entity that has an orchard, so
                                       // this can only fire if our caller is wrong. Returning
                                       // early keeps the work item well-formed but empty
                                       // rather than faulting on a null component.
 
-    if (s_ValidateRefs) s_ValidateRefs(orchardIBP);
+    if (validateRefs) validateRefs(orchardIBP);
 
     // Size the per-slot validity array from the orchard's CURRENT slot count.
     // B.3.2 bridge: FUN_14000a590 == Collection::Array<uint8>::SetSize.
@@ -131,5 +88,18 @@ extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* 
         if (!base) break;
         base[i] = 0;
     }
-    return mem;
+}
+
+// The door OrchardComponent's states 9 and 12 call (orchardcomponent_states.cpp, block
+// MI-B): the real ctor on caller memory (B8-5).
+extern "C" void* PlantOrchard_CtorFromEntity(void* mem, void** entityIBP, void* treeType) {
+    // [STANDALONE] plantorchard.cpp's own function-pointer table is filled by
+    // PlantOrchard_ResolveFuncs(). This is the state machine's path — it allocates and
+    // builds the object directly — so wire it here, as before: the first slot the
+    // framework dispatches on the fresh object is GetTarget (+0x50), which calls
+    // s_fn_FindSubEntity with no guard. See reference_vcall_of_0_may_be_a_null_fnptr.
+    PlantOrchard_ResolveFuncs();
+    if (!mem) return mem;
+    OrchardDiag_NotePlantConstructed();
+    return static_cast<Object::Base*>(new (mem) PlantOrchard(entityIBP, treeType));
 }

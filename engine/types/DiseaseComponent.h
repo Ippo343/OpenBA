@@ -54,75 +54,14 @@ namespace DiseaseComponentAddr {
 // ------------------------------------------------------------------
 // DiseaseComponent — 0x58 bytes
 // ------------------------------------------------------------------
-struct DiseaseComponent {
-    void*    vtable;        // +0x00
-    void*    next;          // +0x08  (Component base link)
-    void*    entity;        // +0x10  owning entity (InternalBasePtr storage)
-    void*    description;   // +0x18  DiseaseDescription*
-    uint32_t flags;         // +0x20  Component capability flags (ctor ORs 0x8B)
-    uint8_t  _pad24[4];     // +0x24
-
-    // All four are System::Time (int64 ticks). A Time ctor writes 8 BYTES — never
-    // narrow any of these to int32.
-    int64_t  rollAccum;     // +0x28  time accumulated toward the next infection roll
-    int64_t  duration;      // +0x30  infestation time REMAINING (>0 == infested)
-    int64_t  killAccum;     // +0x38  time accumulated toward the next kill tick
-    int64_t  spreadAccum;   // +0x40  time accumulated toward the next spread attempt
-
-    int32_t  isPasture;     // +0x48  1 when the entity has a PastureComponent
-    uint8_t  _pad4C[4];     // +0x4C
-    uint64_t curedIdentity; // +0x50  ExternalPtr: what was growing at the last Cure.
-                            //        The same-crop probe compares tile cells to this.
-};
-
-static_assert(sizeof(DiseaseComponent) == 0x58, "DiseaseComponent size mismatch");
-static_assert(offsetof(DiseaseComponent, vtable)        == 0x00, "");
-static_assert(offsetof(DiseaseComponent, next)          == 0x08, "");
-static_assert(offsetof(DiseaseComponent, entity)        == 0x10, "");
-static_assert(offsetof(DiseaseComponent, description)   == 0x18, "");
-static_assert(offsetof(DiseaseComponent, flags)         == 0x20, "");
-static_assert(offsetof(DiseaseComponent, rollAccum)     == 0x28, "");
-static_assert(offsetof(DiseaseComponent, duration)      == 0x30, "");
-static_assert(offsetof(DiseaseComponent, killAccum)     == 0x38, "");
-static_assert(offsetof(DiseaseComponent, spreadAccum)   == 0x40, "");
-static_assert(offsetof(DiseaseComponent, isPasture)     == 0x48, "");
-static_assert(offsetof(DiseaseComponent, curedIdentity) == 0x50, "");
+// ENDGAME B.3.8 CIT: the POD is gone — `DiseaseComponent` is a real class now
+// (code/Game/Component/DiseaseComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/DiseaseComponent.h"
 
 // ------------------------------------------------------------------
-// DiseaseDescription — 0x48 bytes (Object::External 0x20 base + params)
+// DiseaseDescription — ENDGAME B.3.8 K1: a real class now (B8-4, one
+// definition per name). The field names and the +0x28/+0x2c rotation-name
+// warning moved with it to code/Game/Component/DiseaseDescription.h.
 // ------------------------------------------------------------------
-// Stream order from Serialize 0x140048e40: two ints, six floats, one int.
-struct DiseaseDescription {
-    uint8_t  _base[0x20];   // +0x00  Object::External
-
-    int32_t  firstMonth;    // +0x20  earliest month index (0..11) an outbreak may start
-    int32_t  lastMonth;     // +0x24  latest month index
-    // ⚠ The two rotation fields are named BACKWARDS in the authored .rsc, and the
-    // authored values make the mistake convincing rather than obvious — swap them and
-    // the mechanic still "works" in a trace, just inverted. The probe at 0x14009fb60
-    // returns TRUE when the cured crop is STILL planted, and retail 0x140048610 reads
-    // +0x2c on TRUE, +0x28 on FALSE. So:
-    //     +0x28 = _lowSpawnChance  = 200 years  <- crop CHANGED  (rotating is SAFER)
-    //     +0x2c = _highSpawnChance = 150 years  <- crop UNCHANGED (repeating is RISKIER)
-    // "low/high chance" refers to the chance, so the LOW-chance field carries the
-    // LONGER interval. Both are mean YEARS, not probabilities.
-    float    yearsIfChanged;// +0x28  _lowSpawnChance  — mean YEARS, crop CHANGED since cure
-    float    yearsIfSame;   // +0x2c  _highSpawnChance — mean YEARS, crop UNCHANGED
-    float    rollMonths;    // +0x30  months per infection roll (also scales the odds)
-    float    killMonths;    // +0x34  months per kill tick (one plant / one animal)
-    float    spreadMonths;  // +0x38  months per spread attempt
-    float    durationMonths;// +0x3c  how long an outbreak lasts
-    int32_t  spreadRadius;  // +0x40  spread offset, tiles (RandTol bound)
-    uint8_t  _pad44[4];     // +0x44
-};
-
-static_assert(sizeof(DiseaseDescription) == 0x48, "DiseaseDescription size mismatch");
-static_assert(offsetof(DiseaseDescription, firstMonth)     == 0x20, "");
-static_assert(offsetof(DiseaseDescription, lastMonth)      == 0x24, "");
-static_assert(offsetof(DiseaseDescription, yearsIfChanged) == 0x28, "");
-static_assert(offsetof(DiseaseDescription, yearsIfSame)    == 0x2c, "");
-static_assert(offsetof(DiseaseDescription, rollMonths)     == 0x30, "");
-static_assert(offsetof(DiseaseDescription, killMonths)     == 0x34, "");
-static_assert(offsetof(DiseaseDescription, spreadMonths)   == 0x38, "");
-static_assert(offsetof(DiseaseDescription, durationMonths) == 0x3c, "");
-static_assert(offsetof(DiseaseDescription, spreadRadius)   == 0x40, "");
+#include "Component/DiseaseDescription.h"

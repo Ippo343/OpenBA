@@ -8,6 +8,8 @@
 // Decompiled from Application-x64.exe.
 
 #include "Dialog/ui_panels.h"
+#include "Dialog/SelectResourceUI.h"
+#include "Dialog/CropUI.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "Object/factory_registration.h"
@@ -81,21 +83,14 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
 
     // Get current resource type via virtual call (vtable +0x60)
     // Returns the currently selected resource type pointer
+    SelectResourceUI* const ui = reinterpret_cast<SelectResourceUI*>(self);   // B.3.8 bridge
     uint64_t currentResource = 0;
     if (combo) {
-        typedef void (*fn_GetCurrentResource_t)(void* self, void* outPtr);
-        void** vtable = *(void***)self;
-        fn_GetCurrentResource_t fnGetCurrent =
-            reinterpret_cast<fn_GetCurrentResource_t>(vtable[0x60 / 8]);
-        fnGetCurrent(self, &currentResource);
+        ui->GetResource(&currentResource);                        // slot 12 (+0x60)
     }
 
     // Get category filter via virtual call (vtable +0x68)
-    typedef int (*fn_GetCategoryFilter_t)(void* self);
-    void** vtable = *(void***)self;
-    fn_GetCategoryFilter_t fnGetCategory =
-        reinterpret_cast<fn_GetCategoryFilter_t>(vtable[0x68 / 8]);
-    int categoryFilter = fnGetCategory(self);
+    int categoryFilter = ui->GetCategory();                       // slot 13 (+0x68)
 
     // Wrap entity at +0x28 in InternalBasePtr (base class requirement)
     void* entity = *(void**)(s + 0x28);
@@ -289,8 +284,45 @@ void SelectResourceUI_Slot9(void* self, void* param2, int param3, int param4) {
     uintptr_t resourceArray = *(uintptr_t*)(entityList + 0x120);
     int64_t resourceType = *(int64_t*)(resourceArray + (int64_t)resourceIndex * 8);
 
-    // Call Slot11 via vtable (polymorphic -- sets resource type on component)
-    typedef void (*fn_Slot11_t)(void* self, int64_t resourceType);
-    void** vtable = *(void***)self;
-    ((fn_Slot11_t)vtable[11])(self, resourceType);
+    // Slot 11 (polymorphic -- sets resource type on component)
+    reinterpret_cast<SelectResourceUI*>(self)->SetResource(resourceType);   // B.3.8 bridge
+}
+
+// ============================================================================
+// ENDGAME B.3.8 PNL — SelectResourceUI as a REAL abstract class
+// (SelectResourceUI.h). Retail never builds one (create 0x140003730 returns
+// 0); its table 0x14015d330 is what every leaf ctor stamps first and every
+// leaf dtor restamps last. Every leaf overrides 4 and 7; slot 9 runs for
+// CropUI (inherited, as in retail); 8 is overridden by all three in the tree.
+// ============================================================================
+
+// [0] 0x140013ca0: ~SelectResourceUI (restamp, ~DialogController), MemFree on &1.
+Object::Base* SelectResourceUI::DeletingDtor(unsigned flags) {
+    this->~SelectResourceUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+const char* SelectResourceUI::TypeName() const { return "SelectResourceUI"; }   // 0x140013c90
+uint32_t    SelectResourceUI::Type() const {                                    // 0x140013c80
+    return ::Object::GetTypeIdByName("SelectResourceUI");
+}
+
+// [4] 0x140078be0.
+void SelectResourceUI::OnCreated() { SelectResourceUI_Slot4(this); }
+
+// [7] 0x140078cb0. The tree ported this base body under CropUI's name; it reads
+// only the base's +0x28/+0x30.
+void SelectResourceUI::OnUpdateLayout() {
+    CropUI_Slot7(reinterpret_cast<CropUI*>(this));   // B.3.8 bridge
+}
+
+// [8] 0x140078d30.
+void SelectResourceUI::OnUpdate(const System::Time& /*time*/) { SelectResourceUI_Slot8(this); }
+
+// [9] 0x140078d80 — the element pointer's address and (event, id) as the body reads them.
+void SelectResourceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a,
+                                      int32_t b, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
+                                      void* /*userData*/) {
+    SelectResourceUI_Slot9(this, element, a, b);
 }

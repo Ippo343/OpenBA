@@ -21,20 +21,7 @@ namespace ClearResourceComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x1401627f0;
 }
 
-struct ClearResourceComponent {
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-    void*    controllerVtable;  // +0x28
-    void*    controllerData0;   // +0x30
-    void*    controllerData1;   // +0x38
-    void*    selfPtr;           // +0x40
-};
-
-static_assert(sizeof(ClearResourceComponent) == 0x48, "ClearResourceComponent size mismatch");
-static_assert(offsetof(ClearResourceComponent, vtable) == 0x00, "");
-static_assert(offsetof(ClearResourceComponent, controllerVtable) == 0x28, "");
-static_assert(offsetof(ClearResourceComponent, selfPtr) == 0x40, "");
+// ENDGAME B.3.8 MI-A: the POD is gone — `ClearResourceComponent` is a real class now
+// (code/Game/Component/ClearResourceComponent.h, compiler vtable, controller member). This forwarder
+// keeps the old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/ClearResourceComponent.h"

@@ -17,8 +17,8 @@
 //
 
 #include "options.h"
+#include "Work/GatherRawMaterials.h"
 #include "Work/gatherrawmaterials_funcs.h"
-#include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -35,9 +35,6 @@ namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_reg
 // All typedefs prefixed with GRM_ to avoid conflicts.
 // ============================================================
 
-// Work::Serialize(this, stream) -- base class serialize at 0x1400f7400
-typedef void (*GRM_WorkSerialize_t)(void* self, void* stream);
-static GRM_WorkSerialize_t s_fn_Work_Serialize = nullptr;
 
 // 0x1400021d0 (int-array SetSize) is the exe-side Collection::Array<int32>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its two call sites below to
@@ -147,8 +144,6 @@ static uint32_t* s_typeId_PosDesc = nullptr;        // DAT_1401c7938
 // This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-static void** s_vtable_GatherRawMaterials = nullptr;  // 0x140161420
-static void** s_vtable_Work = nullptr;                 // 0x140161a80
 
 static bool s_resolved = false;
 
@@ -165,8 +160,6 @@ bool GatherRawMaterials_ResolveFuncs() {
     if (s_resolved) return true;
 
     // Direct exe function addresses
-    s_fn_Work_Serialize = reinterpret_cast<GRM_WorkSerialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_TreeSerialize = reinterpret_cast<GRM_TreeSerialize_t>(
         // Level-1 caller-bug fix: 0x140025630 is MID-FUNCTION (inside TradeUI_impl_55a0
         // 0x1400255a0). The real simple-BST serialize is 0x1400296b0 — confirmed by
@@ -214,10 +207,6 @@ bool GatherRawMaterials_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140014c30));
 
     // Vtable pointers for dtor chain
-    s_vtable_GatherRawMaterials = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161420));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // MemAlloc/MemFree — resolve via the canonical Runtime exports (static size/align &
     // ptr forms). The exe IAT dispatch slots (0x1401527e8/0x1401527f0) are UNREGISTERED in
@@ -263,8 +252,7 @@ bool GatherRawMaterials_ResolveFuncs() {
         s_typeId_PosDesc = &s_tidPosDescVal;
     }
 
-    bool ok = s_fn_Work_Serialize &&
-              s_fn_TreeSerialize &&
+    bool ok = s_fn_TreeSerialize &&
               s_fn_TreeRemoveByKey && s_fn_TreeRemoveNode &&
               s_fn_StateMachineRelease && s_fn_CanStartWork &&
               s_fn_FindComp_Position && s_fn_FindComp_Unk &&
@@ -275,7 +263,6 @@ bool GatherRawMaterials_ResolveFuncs() {
               s_fn_ValidateWorkAssign && s_fn_PathfindingFindPath &&
               s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
               s_fn_TreeNodeCleanup &&
-              s_vtable_GatherRawMaterials && s_vtable_Work &&
               fn_IsDerivedFrom &&
               g_pGameWorldSingleton &&
               s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
@@ -283,7 +270,6 @@ bool GatherRawMaterials_ResolveFuncs() {
 #ifdef _DEBUG
     printf("[GatherRawMaterials] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
-        if (!s_fn_Work_Serialize) printf("  MISSING: s_fn_Work_Serialize\n");
         if (!s_fn_TreeSerialize) printf("  MISSING: s_fn_TreeSerialize\n");
         if (!s_fn_TreeRemoveByKey) printf("  MISSING: s_fn_TreeRemoveByKey\n");
         if (!s_fn_TreeRemoveNode) printf("  MISSING: s_fn_TreeRemoveNode\n");
@@ -371,11 +357,11 @@ static uintptr_t TreeNext(uintptr_t node) {
 // Serialize (0x1400ec560)
 // Work::Serialize + 2 int arrays + tree serialization
 // ============================================================
-void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void GatherRawMaterials::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Call base Work::Serialize
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create IO::Serializer with version 0
     alignas(8) uint8_t serializerBuf[24];
@@ -385,7 +371,7 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
     bool isLoading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 
     // --- Serialize first int array count (+0x50) ---
-    int count50 = self->field_50;
+    int count50 = field_50;
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&count50), nullptr);   // B.3.4 bridge
 
     if (isLoading) {
@@ -394,14 +380,14 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
         // is left as the allocation found it, like retail. Safe: load-only, and the bulk
         // int read below writes all count50 elements from the stream.
         GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x48)).SetSize(count50);
-        self->field_50 = count50;
+        field_50 = count50;
     }
 
     // Bulk-serialize the first int array
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->field_50, reinterpret_cast<int*>(self->field_48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(field_50, reinterpret_cast<int*>(field_48), nullptr);   // B.3.4 bridge
 
     // --- Serialize second int array count (+0x60) ---
-    int count60 = self->field_60;
+    int count60 = field_60;
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&count60), nullptr);   // B.3.4 bridge
 
     if (isLoading) {
@@ -410,11 +396,11 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
         // is left as the allocation found it, like retail. Safe: load-only, and the bulk
         // int read below writes all count60 elements from the stream.
         GameColl::AsArray<GameColl::I32NoInit>((void*)(selfAddr + 0x58)).SetSize(count60);
-        self->field_60 = count60;
+        field_60 = count60;
     }
 
     // Bulk-serialize the second int array
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->field_60, reinterpret_cast<int*>(self->field_58), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(field_60, reinterpret_cast<int*>(field_58), nullptr);   // B.3.4 bridge
 
     // --- Serialize tree at +0x68 ---
     s_fn_TreeSerialize((void*)(selfAddr + 0x68), serializerBuf);
@@ -432,10 +418,11 @@ void GatherRawMaterials_Serialize_Impl(GatherRawMaterials* self, void* stream) {
 //
 // Returns: 0=fail, 1=retry/done, 2=action pushed.
 // ============================================================
-int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
-                                     uint64_t param3, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int GatherRawMaterials::Execute(void* entityIBP, void* context, uint64_t /*arg3*/) {
+    // retail's param3 (R8) is a by-value scratch slot whose address the body takes
+    uint64_t param3 = reinterpret_cast<uint64_t>(context);
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Ensure the exe-helper function pointers are resolved. The factory path calls
     // ResolveFuncs at construction, but the construction gather work is built via
@@ -668,11 +655,11 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
                 uintptr_t citizenFinal = *(uintptr_t*)entityIBP;
 
                 // Call vtable slot +0x50 (GetWorkEntity)
-                uintptr_t vtable = *(uintptr_t*)self;
+                uintptr_t vtable = *(uintptr_t*)this;
                 typedef uintptr_t* (*VtSlot50_t)(GatherRawMaterials*, void*);
                 VtSlot50_t getWorkEntity = *(VtSlot50_t*)(vtable + 0x50);
                 uintptr_t workEntIBP[2] = {0};
-                uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+                uintptr_t* wResult = getWorkEntity(this, workEntIBP);
                 uintptr_t workEntity = *wResult;
 
                 *(uint32_t*)(citizenFinal + 0x54) |= 4;
@@ -709,9 +696,9 @@ int GatherRawMaterials_Execute_Impl(GatherRawMaterials* self, void* entityIBP,
 // updates build counts (decrement field_58, increment field_48).
 // Returns: value from field_48 masking.
 // ============================================================
-int GatherRawMaterials_OnComplete_Impl(GatherRawMaterials* self, void* param2,
-                                        void* /*param3*/, uint32_t param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int GatherRawMaterials::OnComplete(void* param2, void* /*param3*/, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Remove entity from tree at +0x68
     s_fn_TreeRemoveByKey((void*)(selfAddr + 0x68), param2);
@@ -721,7 +708,7 @@ int GatherRawMaterials_OnComplete_Impl(GatherRawMaterials* self, void* param2,
     int amount = (int)param4 >> 8;
 
     // Decrement field_58[slotIdx] (build counts) by amount
-    uintptr_t* selfQ = (uintptr_t*)self;
+    uintptr_t* selfQ = (uintptr_t*)this;
     int* buildCountPtr = (int*)(selfQ[0xb] + (uintptr_t)slotIdx * 4);
     *buildCountPtr -= amount;
 
@@ -739,16 +726,16 @@ int GatherRawMaterials_OnComplete_Impl(GatherRawMaterials* self, void* param2,
 // Cancel handler. Removes from tree, decrements build count only
 // (does NOT increment assigned count).
 // ============================================================
-int GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
-                                       void* /*param3*/, uint32_t param4) {
-    (void)self; // selfAddr used below via cast
-    uintptr_t selfAddr = (uintptr_t)self;
+int GatherRawMaterials::OnCancel(void* param2, void* /*param3*/, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
+    (void)this; // selfAddr used below via cast
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Remove entity from tree at +0x68
     s_fn_TreeRemoveByKey((void*)(selfAddr + 0x68), param2);
 
     // Extract slot index and amount
-    uintptr_t* selfQ = (uintptr_t*)self;
+    uintptr_t* selfQ = (uintptr_t*)this;
     uint32_t slotIdx = param4 & 0xFF;
     int amount = (int)param4 >> 8;
 
@@ -765,8 +752,8 @@ int GatherRawMaterials_OnCancel_Impl(GatherRawMaterials* self, void* param2,
 // Walks tree from leftmost node, for each citizen calls
 // CitizenAI::StateMachineRelease.
 // ============================================================
-int GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int GatherRawMaterials::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     while (true) {
         uintptr_t root = *(uintptr_t*)(selfAddr + 0x68);
@@ -807,9 +794,9 @@ int GatherRawMaterials_Cleanup_Impl(GatherRawMaterials* self) {
 //
 // Returns: true (nonzero) if nothing was removed, false if any removed.
 // ============================================================
-int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int GatherRawMaterials::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Walk tree at +0x68 (field_68), collect invalid entries
     uintptr_t root = selfQ[0xd]; // +0x68
@@ -829,7 +816,7 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
             uintptr_t taskIBP[1];
             taskIBP[0] = *(uintptr_t*)node;
 
-            char valid = s_fn_CanStartWork((void*)self, param2, taskIBP, nullptr);
+            char valid = s_fn_CanStartWork((void*)this, param2, taskIBP, nullptr);
 
             if (valid == '\0') {
                 // Invalid -- add to removal list
@@ -919,10 +906,10 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
         // If any were removed, call vtable slot +0x40 (Cleanup) and reset build counts
         if ((int)invalidCount > 0) {
             // Call vtable slot +0x40
-            uintptr_t vtable = *(uintptr_t*)self;
+            uintptr_t vtable = *(uintptr_t*)this;
             typedef void (*VtSlot40_t)(GatherRawMaterials*);
             VtSlot40_t cleanupSlot = *(VtSlot40_t*)(vtable + 0x40);
-            cleanupSlot(self);
+            cleanupSlot(this);
 
             // Reset all build counts to 0
             int numSlots = (int)selfQ[0xc]; // field_60 count
@@ -942,7 +929,7 @@ int GatherRawMaterials_Validate_Impl(GatherRawMaterials* self, void* param2) {
 // Returns target position from game world singleton.
 // Hidden return ptr: RCX=self, RDX=retbuf.
 // ============================================================
-void* GatherRawMaterials_GetTarget_Impl(GatherRawMaterials* /*self*/, void* retbuf) {
+void* GatherRawMaterials::GetTarget(void* retbuf) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t something = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(something + 0x30);
@@ -956,11 +943,9 @@ void* GatherRawMaterials_GetTarget_Impl(GatherRawMaterials* /*self*/, void* retb
 // frees int arrays at +0x58 and +0x48, sets vtable to Work,
 // then calls Object::Internal::~Internal.
 // ============================================================
-void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set vtable to GatherRawMaterials
-    *(void**)selfAddr = s_vtable_GatherRawMaterials;
+// GatherRawMaterials dtor 0x1400ec650. The stamps and the `~Internal` call are the compiler's chain.
+GatherRawMaterials::~GatherRawMaterials() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free BST nodes at +0x68
     void* bstRoot = *(void**)(selfAddr + 0x68);
@@ -987,11 +972,6 @@ void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint64_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to Work (no AutoPickupWork in GatherRawMaterials' chain)
-    *(void**)selfAddr = s_vtable_Work;
-
-    // Call Object::Internal::~Internal (base class cleanup)
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
@@ -999,101 +979,76 @@ void GatherRawMaterials_DtorBody(GatherRawMaterials* self) {
 // GatherRawMaterials::ScalarDtor (0x14002a410)
 // Calls dtor body, then conditional free.
 // ============================================================
-void* GatherRawMaterials_ScalarDtor_Impl(GatherRawMaterials* self, uint32_t flags) {
-    GatherRawMaterials_DtorBody(self);
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+// [0] 0x14002a410: ~GatherRawMaterials, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* GatherRawMaterials::DeletingDtor(unsigned flags) {
+    this->~GatherRawMaterials();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161420 (13 slots), size 0x78, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// FLAGS:
-//   - slot0  ScalarDtor : GatherRawMaterials_ScalarDtor_Impl  (present)
-//   - slot3  Serialize  : GatherRawMaterials_Serialize_Impl
-//   - slot4  Execute    : GatherRawMaterials_Execute_Impl (4-arg: self, entityIBP, p3, p4)
-//   - slot6  OnComplete : GatherRawMaterials_OnComplete_Impl
-//   - slot7  OnCancel   : GatherRawMaterials_OnCancel_Impl
-//   - slot8  Cleanup    : GatherRawMaterials_Cleanup_Impl
-//   - slot9  Validate   : GatherRawMaterials_Validate_Impl
-//   - slot10 GetTarget  : GatherRawMaterials_GetTarget_Impl
-//   - slot11 GetPriority: NO GatherRawMaterials_GetPriority_Impl defined -> /*FLAG*/ nullptr
-//   - Ctor              : NO GatherRawMaterials_Ctor_Impl defined (only exe addr
-//                         Ctor 0x1400ec8a0) -> factory cannot construct ->
-//                         /*FLAG*/ returns null until a Ctor_Impl is written.
-//   - ResolveFuncs      : GatherRawMaterials_ResolveFuncs() (does NOT resolve a vtable).
-// ============================================================
-#include "work_base_standalone.h"
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t GatherRawMaterials_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("GatherRawMaterials");
-    return c;
-}
 
 // Slot11 (+0x58) — retail 0x14002a400 is `return 0 < *(int*)(self + 0x70)` (this class
 // keeps its tree count at +0x70). Was pinned to 0 by Work_SlotRet0 (2026-09-05).
-static int GatherRawMaterials_Slot11_HasActiveTasks(void* self) {
-    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x70) > 0 ? 1 : 0;
+int GatherRawMaterials::GetPriority() {
+    return field_70 > 0 ? 1 : 0;
 }
 
-static void* g_GatherRawMaterials_Vtable[13] = {
-    (void*)&GatherRawMaterials_ScalarDtor_Impl, // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                         // +0x08 slot1 (null)
-    (void*)&GatherRawMaterials_GetTypeId,       // +0x10 GetTypeId
-    (void*)&GatherRawMaterials_Serialize_Impl,  // +0x18 Serialize
-    (void*)&GatherRawMaterials_Execute_Impl,    // +0x20 Execute
-    (void*)&Work_Slot5,                         // +0x28 slot5 (returns 0)
-    (void*)&GatherRawMaterials_OnComplete_Impl, // +0x30 OnComplete
-    (void*)&GatherRawMaterials_OnCancel_Impl,   // +0x38 OnCancel
-    (void*)&GatherRawMaterials_Cleanup_Impl,    // +0x40 Cleanup
-    (void*)&GatherRawMaterials_Validate_Impl,   // +0x48 Validate
-    (void*)&GatherRawMaterials_GetTarget_Impl,  // +0x50 GetTarget
-    (void*)&GatherRawMaterials_Slot11_HasActiveTasks, // +0x58 HasActiveTasks (0x14002a400: +0x70 > 0)
-    (void*)&Work_Slot12,                        // +0x60 slot12 (void nop)
-};
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The stamps are the compiler's. GatherRawMaterials_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+GatherRawMaterials::GatherRawMaterials()
+    : Work(), field_48(nullptr), field_50(0), field_54(0), field_58(nullptr),
+      field_60(0), field_64(0), field_68(nullptr), field_70(0) {
+    GatherRawMaterials_ResolveFuncs();
+}
 
-extern "C" void RegisterGatherRawMaterialsVtable() {
-    RegisterExeAddr(0x140161420, (uintptr_t)g_GatherRawMaterials_Vtable);
+// ============================================================
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
+// ============================================================
+// Before: a hand-built 13-slot `g_GatherRawMaterials_Vtable` (slot 1 null, slot 2 a
+// lazily cached id) and REGISTER_TYPE over GatherRawMaterials_Factory / _CreateInPlace
+// (both Work_GenericCtor). Nothing outside this block reads 0x140161420 back (sweep by
+// hex and by GatherRawMaterialsAddr::Vtable; the site ctor that stamped it is the real
+// ctor now), so its registration goes with the table.
+
+// create 0x14002a3c0: MemAlloc(sizeof, 8), then the ctor.
+void* GatherRawMaterials::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GatherRawMaterials), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) GatherRawMaterials());
 }
-extern "C" void* GatherRawMaterials_CreateInPlace(void* mem) {
-    GatherRawMaterials_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x78, g_GatherRawMaterials_Vtable);
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* GatherRawMaterials::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) GatherRawMaterials());
 }
-extern "C" void* GatherRawMaterials_Factory(void) {
-    GatherRawMaterials_ResolveFuncs();
-    void* p = Work_Alloc(0x78);
-    return p ? Work_GenericCtor(p, 0x78, g_GatherRawMaterials_Vtable) : nullptr;
-}
-REGISTER_TYPE(GatherRawMaterials, "Work", &GatherRawMaterials_Factory, &GatherRawMaterials_CreateInPlace);
+
+DEFINE_EXE_VTABLE(GatherRawMaterials, "_ZTV18GatherRawMaterials")
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+DEFINE_EXE_TYPE(GatherRawMaterials, "Work")
 
 // ---- Construction force-harness wrappers (construction_force_harness.cpp) ----
 // Mirror the ForesterWork_Factory/ForceDrive/ExecuteReady trio so the generic
 // ForceWork harness can drive construction gathering.
-extern "C" void* GatherRawMaterials_Ctor_Impl(void* mem, void* buildEntityIBP);  // gatherrawmaterials_ctor.cpp
 
 // Build a GatherRawMaterials bound to a construction SITE entity using the FAITHFUL
 // site ctor (seeds per-material slots from the site's BuildDescription + the amount
 // already in the site StorageComponent) rather than the generic factory. buildEntityIBP
 // is an InternalBasePtr* whose *value is the site entity pointer.
 extern "C" void* GatherRawMaterials_ConstructForSite(void* buildEntityIBP) {
-    GatherRawMaterials_ResolveFuncs();
-    void* mem = Work_Alloc(0x78);
+    void* mem = Object::detail::InternalMemAlloc(sizeof(GatherRawMaterials), 8);
     if (!mem) return nullptr;
-    return GatherRawMaterials_Ctor_Impl(mem, buildEntityIBP);
+    return static_cast<Object::Base*>(new (mem) GatherRawMaterials(buildEntityIBP));
 }
 
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute's param3 is a
 // scratch WpExt out-IBP (written internally) and param4 is unused, so 0/0 is safe.
 extern "C" int GatherRawMaterials_ForceDrive(void* self, void* citizenIBP) {
-    return GatherRawMaterials_Execute_Impl(reinterpret_cast<GatherRawMaterials*>(self),
-                                           citizenIBP, 0, 0);
+    return reinterpret_cast<GatherRawMaterials*>(self)->GatherRawMaterials::Execute(citizenIBP, nullptr, 0);   // B.3.8 bridge
 }
 
 // Execute-readiness gate for the force harness. GatherRawMaterials_ResolveFuncs() also
@@ -1112,7 +1067,6 @@ extern "C" bool GatherRawMaterials_DepsReady() {
            s_fn_StorageQueryCount && s_fn_GetRemainingCapacity && s_fn_LongTermPlan &&
            s_fn_CalcBestTargetPos && s_fn_CalcChildTargetPos && s_fn_ValidateWorkAssign &&
            s_fn_PathfindingFindPath && s_fn_RegisterWork && s_fn_MemAlloc && s_fn_MemFree &&
-           s_fn_TreeNodeCleanup && s_vtable_GatherRawMaterials &&
-           fn_IsDerivedFrom && g_pGameWorldSingleton &&
+           s_fn_TreeNodeCleanup && fn_IsDerivedFrom && g_pGameWorldSingleton &&
            s_typeId_GatherDesc && s_typeId_RawMatComp && s_typeId_PosDesc;
 }

@@ -28,110 +28,87 @@
 //   (the +0x38 ExternalRef is a weak pointer, not owned — no per-field dtor).
 //
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (CreateDragDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162ca0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/CreateDragDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
+extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);  // serialize_externals.cpp
 
-static const uintptr_t kCreateDragDescriptionVtable = 0x140162ca0;
+// ctor (inlined into create 0x140032970 / createInPlace 0x1400329b0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+CreateDragDescription::CreateDragDescription()
+    : Description(),
+      _shape(0),
+      _b24(false),
+      _i28(1),
+      _i2c(1),
+      _i30(1),
+      _i34(1),
+      _created(nullptr) {}
 
-static void CreateDragDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kCreateDragDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(int32_t*)(s + 0x20) = 0;   // enum
-    *(uint8_t*)(s + 0x24) = 0;   // bool
-    *(int32_t*)(s + 0x28) = 1;   // int
-    *(int32_t*)(s + 0x2c) = 1;   // int
-    *(int32_t*)(s + 0x30) = 1;   // int
-    *(int32_t*)(s + 0x34) = 1;   // int
-    *(uint64_t*)(s + 0x38) = 0;  // ExternalRef (weak)
+// [0] 0x1400329e0: ~CreateDragDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* CreateDragDescription::DeletingDtor(unsigned flags) {
+    this->~CreateDragDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// ============================================================
-// CreateDragDescription_Serialize (vtable +0x28, 0x140119750)
-// ============================================================
-void CreateDragDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)
-        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge   // enum +0x20
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge   // int  +0x28
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge   // int  +0x2c
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge   // int  +0x30
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);   // B.3.4 bridge   // int  +0x34
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);  // B.3.4 bridge   // bool +0x24
-    Reimpl_ExternalPtr_Serialize_StringTable(s + 0x38, serializer);// ref  +0x38
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140119750: stream order as retail.
+bool CreateDragDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_shape, nullptr);
+    ser.Serialize(_i28, nullptr);
+    ser.Serialize(_i2c, nullptr);
+    ser.Serialize(_i30, nullptr);
+    ser.Serialize(_i34, nullptr);
+    ser.Serialize(_b24, nullptr);
+    Reimpl_ExternalPtr_Serialize_StringTable(&_created, &ser);
+    return true;
 }
 
-// ============================================================
-// CreateDragDescription_Dtor (vtable +0x00, 0x1400329e0)
-// ============================================================
-void* CreateDragDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kCreateDragDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400329c0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* CreateDragDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) CreateDragDescription();
 }
 
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void CreateDragDescription::Destruct() { DeletingDtor(0); }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CreateDragDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CreateDragDescription");
-    return cached;
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* CreateDragDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
 }
 
-static int   CreateDragDescription_VtblStub_Return2(void* /*self*/) { return 2; } // GetVersion
-static int   CreateDragDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* CreateDragDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* CreateDragDescription_CreateInPlace(void* memory);
-
-static void* g_CreateDragDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CreateDragDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&CreateDragDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&CreateDragDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&CreateDragDescription_VtblStub_Return2),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&CreateDragDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&CreateDragDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&CreateDragDescription_VtblStub_Return0),   // +0x30 Draw/Cleanup
-    reinterpret_cast<void*>(&CreateDragDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&CreateDragDescription_VtblStub_ReturnNull),// +0x40 Slot8
-    reinterpret_cast<void*>(&CreateDragDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CreateDragDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterCreateDragDescriptionVtable() {
-    RegisterExeAddr(kCreateDragDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_CreateDragDescription_Vtable));
+// [9] 0x1400329b0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* CreateDragDescription::Construct() {
+    return new (static_cast<void*>(this)) CreateDragDescription();
 }
 
-extern "C" void* CreateDragDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8);
+// create 0x140032970: MemAlloc(0x40, 8), then the (inlined) ctor.
+void* CreateDragDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CreateDragDescription), 8);
     if (!p) return nullptr;
-    CreateDragDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) CreateDragDescription());
+}
+// createInPlace 0x1400329b0.
+void* CreateDragDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CreateDragDescription());
 }
 
-static void* CreateDragDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    CreateDragDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(CreateDragDescription, "Description",
-              &CreateDragDescription_Factory, &CreateDragDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(CreateDragDescription, "_ZTV21CreateDragDescription")
+DEFINE_EXE_TYPE(CreateDragDescription, "Description")

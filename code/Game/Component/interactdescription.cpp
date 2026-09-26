@@ -27,24 +27,26 @@
 //   corresponding node array (+0x28 / +0x38 / +0x48).
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (InteractDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140163930) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/InteractDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "math/Math.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
-#include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
-#include "pathfinding/PointList.h"   // ENDGAME B.3.7 callers (K2)
-#include <cstdint>
+#include "io/Stream.h"
+#include "pathfinding/PointList.h"
 #include <cstring>
-#include <cstdio>
-#include <cstdlib>
+#include <initializer_list>
+#include <cstdint>
 #include <new>
 
 namespace {
-constexpr uintptr_t kVtable  = 0x140163930;
-constexpr int       kVersion = 1;
-
 // Append one 0x18-byte node {6 dwords from src} to array header {ptr,count,cap}.
 // Mirrors FUN_140035360 for the incremental (count+1) growth case.
 void AppendNode(void* header, const uint32_t src[6]) {
@@ -69,30 +71,42 @@ void AppendNode(void* header, const uint32_t src[6]) {
     uint8_t* buf = *(uint8_t**)h;
     if (buf) memcpy(buf + (size_t)count * 0x18, src, 0x18);
 }
+}  // namespace
+
+// ctor (inlined into create 0x140035200 / createInPlace 0x140035240):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+InteractDescription::InteractDescription()
+    : Description(),
+      _descRef(nullptr) {
+    _useNodes = _buildNodes = _createNodes = NodeArray{nullptr, 0, 0};
 }
 
-static void* InteractDescription_Ctor_Impl(void* mem) {
-    if (fn_External_External) fn_External_External(mem);
-    uintptr_t s = (uintptr_t)mem;
-    *(void**)mem = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(uint64_t*)(s + 0x20) = 0;   // _descRef
-    // three array headers at +0x28/+0x38/+0x48 (each 0x10 bytes, zeroed)
-    memset((void*)(s + 0x28), 0, 0x30);
-    return mem;
-}
-
-// Serialize (vtable +0x28, FUN_140123500)
-void InteractDescription_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-    alignas(8) uint8_t serializer[24];
-    if (!fn_ExternalPtr_Serialize2) {
-        return;
+// dtor (slot 0 0x140035280 minus the stamps): frees the three node arrays (FUN_140035280).
+// The compiler then chains ~Description -> ~External.
+InteractDescription::~InteractDescription() {
+    if (fn_MemFreeStatic) {
+        for (NodeArray* a : {&_useNodes, &_buildNodes, &_createNodes}) {
+            fn_MemFreeStatic(a->data);
+            a->data = nullptr;
+        }
     }
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+}
 
+// [0] 0x140035280: ~InteractDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* InteractDescription::DeletingDtor(unsigned flags) {
+    this->~InteractDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [5] 0x140123500: stream order as retail.
+bool InteractDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
     // ---- stream-accurate: single ExternalPtr (+0x20) ----
-    fn_ExternalPtr_Serialize2((void*)(s + 0x20), serializer);
-
+    fn_ExternalPtr_Serialize2(&_descRef, &ser);
+    
     // ---- post-load build (load only; reads from the resolved external) ----
     // Direction flag: retail tests *(int*)(stream + 8) == 0 (FUN_140123500 reads
     // param_2+8 DIRECTLY). The old read `*(serializer+8)` grabbed the serializer's
@@ -101,7 +115,7 @@ void InteractDescription_Serialize(void* self, void* stream) {
     // -> d5d0 found no access point -> the eat/food search rejected every barn
     // (Economy Brick M-D root cause #3).
     bool loading = (static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-    void* ext = *(void**)(s + 0x20);
+    void* ext = _descRef;
     if (loading && ext) {
         // Pathfinding::PointList::_points (+0x30; Points() is LEA RAX,[RCX+0x30]).
         const Pathfinding::PointList* pointList = reinterpret_cast<const Pathfinding::PointList*>(ext);   // B.3.7 bridge
@@ -120,77 +134,51 @@ void InteractDescription_Serialize(void* self, void* stream) {
             node[3] = *(uint32_t*)&dir.x;
             node[4] = *(uint32_t*)&dir.y;
             node[5] = *(uint32_t*)&dir.z;
-
+    
             if (*reinterpret_cast<System::String*>(child) == "use") {  // B.3.1 bridge
-                AppendNode((void*)(s + 0x28), node);
+                AppendNode(&_useNodes, node);
             } else if (*reinterpret_cast<System::String*>(child) == "build") {  // B.3.1 bridge
-                AppendNode((void*)(s + 0x38), node);
+                AppendNode(&_buildNodes, node);
             } else if (*reinterpret_cast<System::String*>(child) == "create") {  // B.3.1 bridge
-                AppendNode((void*)(s + 0x48), node);
+                AppendNode(&_createNodes, node);
             }
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
-// Dtor (vtable +0x00, FUN_140035280) — frees the three node-array buffers.
-void* InteractDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kVtable);
-    if (fn_MemFreeStatic) {
-        for (int off = 0x28; off <= 0x48; off += 0x10) {
-            fn_MemFreeStatic(*(void**)(s + off));
-            *(uint64_t*)(s + off) = 0;
-        }
-    }
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140035250: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* InteractDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) InteractDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void InteractDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t InteractDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("InteractDescription");
-    return cached;
+// [8] 0x140035270: InteractComponent's type id through the hidden return slot.
+Object::Type* InteractDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("InteractComponent");
+    return ret;
 }
-static int   Vtbl_GetVersion(void*) { return kVersion; }
-static int   Vtbl_Return0(void*) { return 0; }
-static void* Vtbl_ReturnNull(void*, ...) { return nullptr; }
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* InteractDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "InteractComponent"); }
-
-static void* g_Vtable[11] = {
-    reinterpret_cast<void*>(&InteractDescription_Dtor),      // +0x00
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),               // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&InteractDescription_GetTypeId), // +0x10
-    reinterpret_cast<void*>(&Vtbl_GetVersion),               // +0x18 (=1)
-    reinterpret_cast<void*>(&Vtbl_Return0),                  // +0x20 Compile
-    reinterpret_cast<void*>(&InteractDescription_Serialize), // +0x28
-    reinterpret_cast<void*>(&Vtbl_Return0),                  // +0x30 Cleanup
-    reinterpret_cast<void*>(&Vtbl_Return0),                  // +0x38 GetDesc
-    reinterpret_cast<void*>(&InteractDescription_GetComponentTypeId),               // +0x40 Slot8
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),               // +0x48 guard
-    reinterpret_cast<void*>(&Vtbl_ReturnNull),               // +0x50 guard
-};
-
-extern "C" void RegisterInteractDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_Vtable));
+// [9] 0x140035240: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* InteractDescription::Construct() {
+    return new (static_cast<void*>(this)) InteractDescription();
 }
-extern "C" void* InteractDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+
+// create 0x140035200: MemAlloc(0x58, 8), then the (inlined) ctor.
+void* InteractDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(InteractDescription), 8);
     if (!p) return nullptr;
-    return InteractDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) InteractDescription());
 }
-extern "C" void* InteractDescription_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    return InteractDescription_Ctor_Impl(mem);
+// createInPlace 0x140035240.
+void* InteractDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) InteractDescription());
 }
 
-REGISTER_TYPE(InteractDescription, "Description",
-              &InteractDescription_Factory, &InteractDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(InteractDescription, "_ZTV19InteractDescription")
+DEFINE_EXE_TYPE(InteractDescription, "Description")

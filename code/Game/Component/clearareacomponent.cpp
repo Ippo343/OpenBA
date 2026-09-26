@@ -161,97 +161,60 @@ int ClearAreaComponent_FootprintSweep(ClearAreaComponent* self) {
     return marked;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid ClearAreaComponent
-// (size 0x50, +0x20 capability flags 0x80, Object::Internal base + shared stub
-// vtable, zeroed body). Size from ClearAreaComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — ClearAreaComponent as a REAL class (ClearAreaComponent.h).
+//
+// Before: a 48-slot hand-built `ClearAreaComponent_LiveVtable` filled at every
+// create (FillTypedVtable + FinishLiveVtable), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<ClearAreaCtrlTag> table stamped into raw bytes at +0x28.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/ClearAreaComponent.h"
 #include <cstring>
 #include <cstdio>
 
-// ============================================================
-// LIVE factory (Track A step 2): de-inert the ClearAreaComponent so it clears its
-// building's footprint AUTOMATICALLY, without any harness.
-// ============================================================
-// Opt-in via BANISHED_CLEAR_FOOTPRINT (or the global the global live-components switch); default
-// OFF → byte-for-byte unchanged inert run. When ON:
-//   * component capability flags get bit 0x8 (needs-Update-tick) added to 0x80, so the
-//     EntityList bucket round-robin (entitylist.cpp: component+0x20 bit 3) ticks it.
-//   * vtable slot 9 (+0x48 Update) routes to a driver that runs the footprint sweep.
-// The building entity already carries the entity-level tick bit (+0x40 bit 0x8) from its
-// BuildComponent, so our component's Update is reached. The sweep is idempotent (the
-// +0x400 already-marked guard) so running it every tick is safe: once the footprint is
-// clear there is nothing left to mark.  (Full retail also HARVESTS the resources over
-// time via helper_7960 phase-2 → ClearArea work-action; that yield-over-time path is the
-// remaining Track A step-2 refinement. This instant-clear matches the desc _flag5 path.)
-static uint32_t ClearAreaComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ClearAreaComponent");
-    return cached;
-}
-static void* ClearAreaComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
 // Harvest-over-time path (faithful): the entity's StateMachineComponent links this
-// component's embedded state node (at +0x28) and ticks its clearing state machine,
-// which posts a ClearArea work-action to a citizen so the footprint resources are
-// chopped over time (logs/stone/iron).
+// component's embedded controller (at +0x28) and ticks its clearing state machine
+// (clearareacomponent_states.cpp), which posts a ClearArea work-action to a citizen
+// so the footprint resources are chopped over time. The state table is built ONCE
+// at static-init time, as retail's static initializer does (B38 D6/D7).
+extern "C" void ClearAreaCtrl_PopulateTable();
+static const bool s_clearAreaStateTableBuilt = (ClearAreaCtrl_PopulateTable(), true);
 
-// State-machine hooks defined in clearareacomponent_states.cpp.
-extern "C" void** ClearAreaCtrl_NodeVtable();
-extern "C" void   ClearAreaCtrl_PopulateTable();
-static int   ClearAreaComponent_GetDefaultState(void*) { return 0; }        // slot 16
-static void* ClearAreaComponent_CreateState(void* self) {                   // slot 17
-    return reinterpret_cast<uint8_t*>(self) + 0x28;                         // node @ +0x28
+// 0x140117fa0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48 = 0. No flag OR: the SM
+// ticks the node, so the component needs no self-tick bit (0x80).
+ClearAreaComponent::ClearAreaComponent() : _controller(this), clearState(0), _pad4C{} {}
+
+// [0] 0x1400310c0: ~ClearAreaComponent (0x140117f40), MemFree on &1.
+Object::Base* ClearAreaComponent::DeletingDtor(unsigned flags) {
+    this->~ClearAreaComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
+// 0x140117f40: restamp + ~Internal, no own work.
+ClearAreaComponent::~ClearAreaComponent() = default;
 
-static void ClearAreaComponent_ShutdownVSlot(void* self, void* stream) {
-    ClearAreaComponent_Shutdown(reinterpret_cast<ClearAreaComponent*>(self), stream);
+// create 0x140030ea0: MemAlloc(0x50, 8), then the ctor.
+void* ClearAreaComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ClearAreaComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ClearAreaComponent());
 }
-
-// Install the live vtable slots (re-run every instance: InitInertTyped re-stubs the
-// shared vtable).
-static void ClearAreaComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 (stream Shutdown/Serialize, retail 0x140117ec0) wired UNCONDITIONALLY,
-    // save/load wave 2026-08-28 — previously the class fell through to base-only
-    // Component_SerializeReimpl and clearState silently reset on load.
-    ClearAreaComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&ClearAreaComponent_ShutdownVSlot);
-    ClearAreaComponent_LiveVtable[16] = reinterpret_cast<void*>(&ClearAreaComponent_GetDefaultState);
-    ClearAreaComponent_LiveVtable[17] = reinterpret_cast<void*>(&ClearAreaComponent_CreateState);
-    ClearAreaCtrl_PopulateTable();
-    if (mem) {
-        // Embedded node: vtable at +0x28, back-pointer (node+0x18) = the component.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
-            reinterpret_cast<void*>(ClearAreaCtrl_NodeVtable());
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
-    }
-}
-
-// Capability flags: the SM path uses the plain ControllerComponent flags (0x80) — the
-// SM ticks the node, so the component needs no self-tick bit.
-static uint32_t ClearAreaComponent_Flags() {
-    return 0x80u;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ClearAreaComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ClearAreaComponent());
 }
 
-extern "C" void* ClearAreaComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x50, ClearAreaComponent_Flags(),
-              ClearAreaComponent_LiveVtable,
-              reinterpret_cast<void*>(&ClearAreaComponent_LiveGetTypeId));
-    ClearAreaComponent_FinishLiveVtable(p);
-    return p;
-}
-extern "C" void* ClearAreaComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x50, ClearAreaComponent_Flags(),
-             ClearAreaComponent_LiveVtable,
-             reinterpret_cast<void*>(&ClearAreaComponent_LiveGetTypeId));
-    ClearAreaComponent_FinishLiveVtable(mem);
-    return mem;
-}
-REGISTER_TYPE(ClearAreaComponent, "ControllerComponent",
-              &ClearAreaComponent_Factory, &ClearAreaComponent_CreateInPlace);
+// [3] 0x140117ec0 — clearState round-trips (save/load wave 2026-08-28).
+void ClearAreaComponent::Persist(void* stream) { ClearAreaComponent_Shutdown(this, stream); }
+
+DEFINE_EXE_VTABLE(ClearAreaComponent, "_ZTV18ClearAreaComponent")
+DEFINE_EXE_TYPE(ClearAreaComponent, "ControllerComponent")
 
 // Harness probe: does this building entity carry a live ClearAreaComponent? Scans the
 // entity's component list for the ClearAreaComponent type-id and returns the component

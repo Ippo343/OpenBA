@@ -24,113 +24,106 @@
 //   bool@+0x38, float@+0x3c, float@+0x40, bool@+0x44, int@+0x4c, int@+0x50,
 //   int@+0x48, float@+0x54, int@+0x58, int@+0x5c, float@+0x60, bool@+0x64
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (GrowthDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140163610) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/GrowthDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kGrowthDescriptionVtable = 0x140163610;
+// ctor (inlined into create 0x140034b70 / createInPlace 0x140034bb0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+GrowthDescription::GrowthDescription()
+    : Description(),
+      _f20(-1.0f),
+      _f24(0.0f),
+      _f28(1.0f),
+      _b2c(false),
+      _f30(0.0f),
+      _f34(0.0f),
+      _b38(false),
+      _f3c(1.0f),
+      _f40(1.0f),
+      _b44(false),
+      _i48(0),
+      _i4c(0),
+      _i50(0),
+      _f54(0.0f),
+      _i58(3),
+      _i5c(3),
+      _f60(0.0f),
+      _b64(false) {}
 
-static void GrowthDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kGrowthDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(float*)  (s + 0x20) = -1.0f;
-    *(int32_t*)(s + 0x24) = 0;
-    *(float*)  (s + 0x28) = 1.0f;
-    *(uint8_t*)(s + 0x2c) = 0;
-    *(uint64_t*)(s + 0x30) = 0;
-    *(uint8_t*)(s + 0x38) = 0;
-    *(float*)  (s + 0x3c) = 1.0f;
-    *(float*)  (s + 0x40) = 1.0f;
-    *(uint8_t*)(s + 0x44) = 0;
-    *(uint64_t*)(s + 0x48) = 0;
-    *(uint64_t*)(s + 0x50) = 0;
-    *(int32_t*)(s + 0x58) = 3;
-    *(int32_t*)(s + 0x5c) = 3;
-    *(int32_t*)(s + 0x60) = 0;
-    *(uint8_t*)(s + 0x64) = 0;
+// [0] 0x140034bf0: ~GrowthDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* GrowthDescription::DeletingDtor(unsigned flags) {
+    this->~GrowthDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void GrowthDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x24), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x44), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x4c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x54), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x58), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x5c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x60), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x64), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140120980: stream order as retail.
+bool GrowthDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_f20, nullptr);
+    ser.Serialize(_f24, nullptr);
+    ser.Serialize(_f28, nullptr);
+    ser.Serialize(_b2c, nullptr);
+    ser.Serialize(_f30, nullptr);
+    ser.Serialize(_f34, nullptr);
+    ser.Serialize(_b38, nullptr);
+    ser.Serialize(_f3c, nullptr);
+    ser.Serialize(_f40, nullptr);
+    ser.Serialize(_b44, nullptr);
+    ser.Serialize(_i4c, nullptr);
+    ser.Serialize(_i50, nullptr);
+    ser.Serialize(_i48, nullptr);
+    ser.Serialize(_f54, nullptr);
+    ser.Serialize(_i58, nullptr);
+    ser.Serialize(_i5c, nullptr);
+    ser.Serialize(_f60, nullptr);
+    ser.Serialize(_b64, nullptr);
+    return true;
 }
 
-void* GrowthDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kGrowthDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140034bc0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* GrowthDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) GrowthDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void GrowthDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t GrowthDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("GrowthDescription");
-    return cached;
+// [8] 0x140034be0: GrowthComponent's type id through the hidden return slot.
+Object::Type* GrowthDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("GrowthComponent");
+    return ret;
 }
-static int   GrowthDescription_Stub_Return3(void* /*self*/) { return 3; } // GetVersion
-static int   GrowthDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* GrowthDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* GrowthDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* GrowthDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "GrowthComponent"); }
-
-static void* g_GrowthDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&GrowthDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&GrowthDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&GrowthDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&GrowthDescription_Stub_Return3),    // +0x18 GetVersion=3
-    reinterpret_cast<void*>(&GrowthDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&GrowthDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&GrowthDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&GrowthDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&GrowthDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&GrowthDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&GrowthDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterGrowthDescriptionVtable() {
-    RegisterExeAddr(kGrowthDescriptionVtable, reinterpret_cast<uintptr_t>(g_GrowthDescription_Vtable));
+// [9] 0x140034bb0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* GrowthDescription::Construct() {
+    return new (static_cast<void*>(this)) GrowthDescription();
 }
-extern "C" void* GrowthDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x68, 8);
+
+// create 0x140034b70: MemAlloc(0x68, 8), then the (inlined) ctor.
+void* GrowthDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GrowthDescription), 8);
     if (!p) return nullptr;
-    GrowthDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) GrowthDescription());
 }
-static void* GrowthDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    GrowthDescription_Init(memory);
-    return memory;
+// createInPlace 0x140034bb0.
+void* GrowthDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) GrowthDescription());
 }
-REGISTER_TYPE(GrowthDescription, "Description",
-              &GrowthDescription_Factory, &GrowthDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(GrowthDescription, "_ZTV17GrowthDescription")
+DEFINE_EXE_TYPE(GrowthDescription, "Description")

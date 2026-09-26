@@ -4,10 +4,7 @@
 
 #include <cstdint>
 
-struct SendComponentMessage;
-
-// SendComponentMessage::ScalarDtor — set vtables, call ~Internal, optionally free
-void* SendComponentMessage_ScalarDtor_Impl(SendComponentMessage* self, uint32_t flags);
+class SendComponentMessage;
 
 // SendComponentMessage::Serialize — serialize status, two entity refs, type, msgId, params
 void SendComponentMessage_Serialize_Impl(SendComponentMessage* self, void* stream);

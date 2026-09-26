@@ -13,7 +13,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Player/pathtool_funcs.h"
-#include "Tool.h"
+#include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -22,32 +22,6 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
-
-// ============================================================
-// Resolved vtable pointers (set once on first call)
-// ============================================================
-static void* s_vtable_PathTool = nullptr;
-static void* s_vtable_Tool     = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_PathTool) {
-        s_vtable_PathTool = (void*)ResolveAddr(Module::Exe, PathToolAddr::Vtable);
-        s_vtable_Tool     = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
-}
-
-// ============================================================
-// Object::Internal::~Internal — called from base dtor
-// ============================================================
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
-
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
 
 // ============================================================
 // Local function pointers for PathTool-specific operations
@@ -105,32 +79,37 @@ static inline uint64_t GetKeyMap() {
 }
 
 // ============================================================
-// PathTool::Dtor (vtable +0x00, Slot0) — Scalar deleting destructor
+// PathTool::DeletingDtor (vtable +0x00) — 0x140026b70
 // ============================================================
-// Resets vtable chain: PathTool -> Tool, calls Object::Internal::~Internal,
-// conditionally frees memory if flags & 1.
-//
-// Original: 0x140026b70
-void* PathTool_Dtor(PathTool* self, uint32_t flags) {
-    EnsureVtables();
-    EnsureInternalDtor();
+// ENDGAME B.3.8 TOOL: the hand-rolled PathTool_Dtor restamped the Path and
+// Tool tables read by address — Tool's UNREGISTERED, so it stored a NULL vptr
+// before ~Internal (B38 D9 #3). The compiler's dtor chain restamps the real
+// tables, then runs Object::Internal::~Internal. ~PathTool (0x1400de950) is
+// NOT empty in retail — see below.
+Object::Base* PathTool::DeletingDtor(unsigned flags) {
+    this->~PathTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
-    // PathTool has NO intermediate class (Tool is direct base, no DragTool)
-    self->vtable = s_vtable_PathTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+// 0x1400de950 — ~PathTool. After the leaf restamp (the compiler's), three
+// inlined Collection::Array<T>::~Array bodies, in this order:
+//   MemFree([+0x50]); +0x50 = +0x58 = 0     (segment list, 8-byte pairs)
+//   MemFree([+0x40]); +0x40 = +0x48 = 0     (point list, int32)
+//   MemFree([+0x30]); +0x30 = +0x38 = 0     (route list, 0x200c records)
+// through `[0x140152b68]` = System::MemoryAllocator::MemFree (the same static
+// InternalMemFree reaches; MemFree(null) is a no-op in retail, which calls it
+// unconditionally). Then Tool's restamp and `~Internal` (the compiler chain).
+PathTool::~PathTool() {
+    Object::detail::InternalMemFree(_field50);
+    _field50 = nullptr;
+    *reinterpret_cast<uint64_t*>(&_field58) = 0;   // size + capacity dwords
+    Object::detail::InternalMemFree(_field40);
+    _field40 = nullptr;
+    *reinterpret_cast<uint64_t*>(&_field48) = 0;
+    Object::detail::InternalMemFree(_field30);
+    _field30 = nullptr;
+    _field38 = nullptr;
 }
 
 // ============================================================
@@ -439,56 +418,40 @@ bool PathTool_Serialize(PathTool* self, uint64_t* param2) {
 }
 
 // ============================================================
-// Standalone factory + vtable (factory cascade).
-// PathTool: size 0x60, parent Tool, 13-slot vtable @ 0x140160680.
-// slot12 returns 4 (tool type id); other base slots stubbed.
+// PathTool members (PathTool.h) — ENDGAME B.3.8 TOOL.
+// The hand-built g_PathTool_Vtable[13], its slot stubs, the _SA factories and
+// RegisterPathToolVtable are gone: the compiler builds the table, and nothing
+// reads 0x140160680 back by address (the old dtor was the only reader).
+// Inherited from Tool, as in retail: [11] no setting (0x140004950 `*ret = 0`;
+// SetEditMode dereferences the returned slot).
 // ============================================================
-#include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
+#include <new>
 
-static uint32_t PathTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PathTool");
-    return c;
-}
-static int PathTool_Slot12(void*) { return 4; }  // exe 0x1400de910 returns 4
-// +0x58 (Slot11) GetToolSettingTypeId — exe PathTool slot 11 (0x140004950, shared with
-// EditTool) is `*ret = 0; return ret;` (PathTool has NO tool-setting). SetEditMode /
-// Toolbar_ShowGroup_Impl DEREFERENCES the returned pointer to decide whether to build a
-// ToolSetting, so a Tool_Ret0 stub (returns 0 -> *0 read) crashes the instant the tool
-// is created. Return a valid pointer to a 0 (mirrors RemovalTool_GetSettingType).
-static uint32_t* PathTool_GetSettingType(void*, uint32_t* ret) {
-    if (ret) *ret = 0;
-    return ret;
-}
 // Defined in pathtool_setselected.cpp (exe 0x1400dd250).
 extern "C" void PathTool_ClearHighlight_d250(int64_t self);
 
-static void* g_PathTool_Vtable[13] = {
-    (void*)&PathTool_Dtor,       // +0x00 Dtor
-    (void*)&Tool_Slot1,          // +0x08
-    (void*)&PathTool_GetTypeId,  // +0x10 GetTypeId
-    (void*)&Tool_Persist,        // +0x18 Serialize (base)
-    (void*)&Tool_Ret0,           // +0x20 (exe RET nop)
-    // +0x28 Shutdown — retail 0x1400de930 is a bare JMP to thunk_helper_d250 (clear the
-    // selection highlight). ShowGroup calls this slot on the OUTGOING tool before it is
-    // deleted, so stubbing it as Tool_Ret0 left the last selected building lit forever
-    // once the Paths tool was switched away or disabled.
-    (void*)&PathTool_ClearHighlight_d250,  // +0x28 Shutdown = clear highlight
-    (void*)&PathTool_OnKey,      // +0x30 OnKey
-    (void*)&Tool_Ret0,           // +0x38 (exe RET nop)
-    (void*)&PathTool_Draw,       // +0x40 Draw
-    (void*)&Tool_Ret0,           // +0x48 (returns false)
-    (void*)&PathTool_Serialize,  // +0x50 Serialize
-    (void*)&PathTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
-    (void*)&PathTool_Slot12,     // +0x60 (returns 4)
-};
-extern "C" void RegisterPathToolVtable() {
-    RegisterExeAddr(0x140160680, (uintptr_t)g_PathTool_Vtable);
+// [5] 0x1400de930 is a bare JMP to 0x1400dd250 (clear the selection
+// highlight). SetEditMode calls this slot on the OUTGOING tool before it is
+// deleted; without it the last selected building stayed lit forever.
+void PathTool::Shutdown() { PathTool_ClearHighlight_d250(reinterpret_cast<int64_t>(this)); }
+char PathTool::OnKey(char active) {                                            // [6] 0x1400de6b0
+    return static_cast<char>(PathTool_OnKey(this, active));
 }
-extern "C" void* PathTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x60, g_PathTool_Vtable, 0);}
-extern "C" void* PathTool_Factory_SA(void) {
-    return Tool_Alloc(0x60, g_PathTool_Vtable, 0);
+void PathTool::Draw(void* context, char) { PathTool_Draw(this, context); }    // [8] 0x1400dd3b0
+bool PathTool::IsSelected(uint64_t* ref) { return PathTool_Serialize(this, ref); }  // [10] 0x1400de8d0
+
+// create 0x140026b10: MemAlloc(0x60, 8), then the ctor 0x1400de9e0.
+void* PathTool::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PathTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PathTool());
 }
-REGISTER_TYPE(PathTool, "Tool", &PathTool_Factory_SA, &PathTool_CreateInPlace_SA);
+// createInPlace 0x140026b50: `if (storage) ctor(storage)`.
+void* PathTool::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PathTool());
+}
+
+DEFINE_EXE_VTABLE(PathTool, "_ZTV8PathTool")
+DEFINE_EXE_TYPE(PathTool, "Tool")

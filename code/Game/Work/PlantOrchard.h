@@ -1,0 +1,98 @@
+#pragma once
+// ============================================================================
+// code/Game/Work/PlantOrchard.h — ENDGAME B.3.8 block WRK
+//
+// PlantOrchard — the orchard planting work: a BST of the slots being planted
+// (+0x48, count +0x50), a per-orchard-slot byte array (+0x58 / +0x60 / +0x64) and
+// the tree type chosen in the orchard UI (ExternalPtr +0x68). A REAL class with a
+// compiler-generated vtable.
+//
+// RETAIL (B38_SLOTS.md §6): reflected "PlantOrchard", parent "Work", ti 0x1401c6c50,
+//   create 0x14002c500 (MemAlloc(0x70) + ctor 0x1400f50b0); createInPlace = the
+//   imported Internal::CreateInPlaceObject (B8-13: the tree's in-place build kept)
+//   table 0x140161910, 13 slots:
+//   [0] 0x14002c540 scalar deleting dtor (the dtor 0x1400f5010 + MemFree on &1)
+//   [1] TypeName  [2] Type  [3] 0x1400f4f50 Persist  [4] 0x1400f4af0 Execute
+//   [5] = Work (0x1400f7540)  [6] 0x1400f4a90 OnComplete  [7] 0x1400f4a20 OnCancel
+//   [8] 0x1400f4e70 Cleanup  [9] 0x1400f47f0 Validate  [10] 0x1400f4ef0 GetTarget
+//   [11] 0x140029860 GetPriority (`+0x50 > 0`, shared by 13 tables)
+//   [12] = Work (0x140006b10)
+//   ctors: the default one 0x1400f50b0 (deserialize/factory, +0x68 null) and the
+//   from-entity one 0x1400f5140 (plantorchard_ctor.cpp) that OrchardComponent's
+//   states 9 and 12 (orchardcomponent_states.cpp, block MI-B) reach through the door
+//   PlantOrchard_CtorFromEntity. Nothing outside this block reads 0x140161910 back.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Work/Work.h"
+#include "Object/exe_type.h"
+
+namespace PlantOrchardAddr {
+    // ⚠ TWO constructors exist and they are not interchangeable:
+    //   Ctor           0x1400f50b0 — the DEFAULT/zero-arg ctor (Object::Internal::Internal,
+    //                                vtable_Work, manual field init, +0x68 = 0). This is the
+    //                                deserialize/factory path.
+    //   CtorFromEntity 0x1400f5140 — (mem, InternalBasePtr* entityIBP, ExternalPtr treeType).
+    //                                This is the one the OrchardComponent state machine calls
+    //                                from state 9 and state 12 enter; it sizes the per-slot
+    //                                byte array from the orchard's slot count and stores the
+    //                                tree type at +0x68. Anything wiring `Ctor` for the
+    //                                orchard planting path is wiring the wrong constructor.
+    constexpr uintptr_t Ctor           = 0x1400f50b0;
+    constexpr uintptr_t CtorFromEntity = 0x1400f5140;
+    constexpr uintptr_t Vtable       = 0x140161910;
+    constexpr uintptr_t ScalarDtor   = 0x14002c540;
+    constexpr uintptr_t BaseDtor     = 0x1400f5010;
+    constexpr uintptr_t Serialize    = 0x1400f4f50;
+    constexpr uintptr_t Slot4        = 0x1400f4af0;
+    constexpr uintptr_t OnComplete   = 0x1400f4a90;
+    constexpr uintptr_t OnCancel     = 0x1400f4a20;
+    constexpr uintptr_t Cleanup      = 0x1400f4e70;
+    constexpr uintptr_t Validate     = 0x1400f47f0;
+    constexpr uintptr_t GetTarget    = 0x1400f4ef0;
+}
+
+class PlantOrchard final : public Work {
+    DECLARE_EXE_TYPE(PlantOrchard)
+
+public:
+    PlantOrchard();                                                 // 0x1400f50b0
+    PlantOrchard(void** entityIBP, void* treeType);                 // 0x1400f5140
+
+    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x14002c540
+    void  Persist(void* stream) override;                           // [3]  0x1400f4f50
+    int   Execute(void* entityIBP, void* context, uint64_t arg3) override;  // [4]  0x1400f4af0
+    int   OnComplete(void* param2, void* param3, int param4) override;  // [6]  0x1400f4a90
+    int   OnCancel(void* param2, void* param3, int param4) override;    // [7]  0x1400f4a20
+    int   Cleanup() override;                                       // [8]  0x1400f4e70
+    int   Validate(void* param2) override;                          // [9]  0x1400f47f0
+    void* GetTarget(void* outPtr) override;                         // [10] 0x1400f4ef0
+    int   GetPriority() override;                                   // [11] 0x140029860
+
+    // --- PlantOrchard fields (+0x48) ---
+    void*    field_48;           // +0x48: BST root (assigned work items, int-keyed)
+    int32_t  field_50;           // +0x50: BST count (assigned workers)
+    uint8_t  _pad54[4];          // +0x54: padding
+    // +0x58/+0x60/+0x64 are ONE dynamic-array triple {base, count, capacity} — the same
+    // shape as OrchardComponent's +0x50/+0x58/+0x5c. 0x14000a590 (the resizer the ctor
+    // calls) reads capacity at +0x0c of the triple, so +0x64 is NOT padding.
+    void*    field_58;           // +0x58: validity byte array base (one byte per orchard slot)
+    int32_t  field_60;           // +0x60: element count (= OrchardComponent+0x58 slot count)
+    int32_t  field_64;           // +0x64: capacity (was mislabelled padding)
+    void*    field_68;           // +0x68: ExternalPtr to the TREE TYPE template chosen in
+                                 //        OrchardUI's combo (copied from OrchardComponent+0x60).
+                                 //        NOT the OrchardDescription — the old comment misled.
+
+protected:
+    ~PlantOrchard();                                               // 0x1400f5010: frees the slot array and the BST
+};
+
+static_assert(sizeof(PlantOrchard) == 0x70, "PlantOrchard is 0x70 (retail create MemAlloc)");
+static_assert(alignof(PlantOrchard) == 8, "PlantOrchard is 8-aligned");
+static_assert(offsetof(PlantOrchard, field_48) == 0x48, "PlantOrchard +0x48");
+static_assert(offsetof(PlantOrchard, field_50) == 0x50, "PlantOrchard +0x50");
+static_assert(offsetof(PlantOrchard, field_58) == 0x58, "PlantOrchard +0x58");
+static_assert(offsetof(PlantOrchard, field_60) == 0x60, "PlantOrchard +0x60");
+static_assert(offsetof(PlantOrchard, field_64) == 0x64, "PlantOrchard +0x64");
+static_assert(offsetof(PlantOrchard, field_68) == 0x68, "PlantOrchard +0x68");
