@@ -72,22 +72,21 @@ extern "C" void  StartTown_SpawnEntities(void* startConfig, void* world);       
 // ============================================================
 
 // --- Step 32 (AchievementInstance) -----------------------------------------
-// ??0AchievementInstance@Achievement@@QEAA@XZ            (Runtime 0x18009e3b0)
 // ?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A      (BaseTypeInfo; +0 is the type id)
-// (SetAchievement is called as a member — ENDGAME B.3.7.)
-typedef void* (*fn_AchievementInstance_Ctor_t)(void* self);
-static fn_AchievementInstance_Ctor_t           s_fn_AchievementInstance_Ctor = nullptr;
-static const uint32_t*                         s_AchievementTypeId = nullptr;
+// (The instance is the real class and SetAchievement a member — ENDGAME B.3.8 /
+// B.3.7.) GameUpdateLoop::Load runs on the LOADER thread, so the resolve is a
+// namespace-scope atomic slot (B6-5; ENDGAME B.3.8 LOOP), not a lazy
+// function-local flag: a racing first use resolves the same pointer twice.
+static std::atomic<const uint32_t*> s_AchievementTypeId{nullptr};
 
-static void EnsureAchievementFuncs() {
-    static bool done = false;
-    if (done) return;
-    done = true;
-    s_fn_AchievementInstance_Ctor = (fn_AchievementInstance_Ctor_t)
-        ResolveExport("??0AchievementInstance@Achievement@@QEAA@XZ");
-
-    s_AchievementTypeId = (const uint32_t*)
-        ResolveExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A");
+static const uint32_t* AchievementTypeId() {
+    const uint32_t* id = s_AchievementTypeId.load(std::memory_order_acquire);
+    if (!id) {
+        id = static_cast<const uint32_t*>(
+            ResolveExport("?_typeInfo@Achievement@1@0VBaseTypeInfo@Object@@A"));
+        s_AchievementTypeId.store(id, std::memory_order_release);
+    }
+    return id;
 }
 
 typedef void* (*fn_Random_Seeded_Ctor_t)(void* self, uint32_t seed);
@@ -805,11 +804,13 @@ static inline void* AllocSub(uint64_t size, int align) {
 // ============================================================
 //
 // Faithful port of the exe Load's sky-build (0x140097356..0x140097420):
-// MemAlloc a Graphics::MeshInstance (0x120 bytes), run its Runtime ctor (which
-// installs the Runtime default vtable — the exe vtable 0x14015e240 is only 9
-// slots: slot0 = exe scalar-deleting dtor, slots 1-8 are FF25 IAT thunks
-// straight to the Runtime MeshInstance methods, so the Runtime default the ctor
-// installs is render-identical), FindOrLoad "Models/Sky/SkyMesh.rsc", SetMesh
+// MemAlloc a Graphics::MeshInstance (0x120 bytes) and construct the REAL
+// Runtime class on it (ENDGAME B.3.8 LOOP, B38_RULES D8: retail runs the
+// imported ctor, then stamps the exe's 9-slot COPY of the table, 0x14015e240 —
+// slot 0 the exe scalar deleting dtor 0x140019e80, slots 1-8 IAT thunks into
+// the Runtime bodies — an artefact of the inlined ctor, not an exe class; the
+// class's own DeletingDtor is that exe body since block RB), FindOrLoad
+// "Models/Sky/SkyMesh.rsc", SetMesh
 // it, run Startup via vtable[+8](skyMesh, Time(0)), zero +0x28. The resource
 // loads in standalone with no factory cascade (SkyMesh GraphicsMesh is
 // Runtime-self-registered). GameUpdateLoop::Shutdown already tears m_skyMesh
@@ -821,27 +822,18 @@ static inline void* AllocSub(uint64_t size, int align) {
 // sky-reflection-dominated on the tilted camera — renders dark navy. Adding the
 // sky as a Scene global object (step-33 tail) feeds the reflection pass for
 // free, exactly like retail. Opt out for A/B with BANISHED_NO_SKYMESH=1.
-typedef void (*fn_MeshInstance_Ctor_t)(void* self);
-typedef void (*fn_Time_Ctor_t)(void* self, float seconds);
-
+// LOADER THREAD: no function-local resolve cache (B6-5) — the ctor is the
+// class's, and Time(float) is engine_funcs' boot-resolved fn_Time_Ctor_Float
+// (the same export, `??0Time@System@@QEAA@M@Z`).
 static void BuildSkyMesh_Step28(uint8_t* p) {
-    static bool s_res = false;
-    static fn_MeshInstance_Ctor_t    s_Ctor     = nullptr;
-    static fn_Time_Ctor_t            s_TimeCtor = nullptr;
-    if (!s_res) {
-        s_res = true;
-        s_Ctor    = (fn_MeshInstance_Ctor_t)ResolveExport("??0MeshInstance@Graphics@@QEAA@XZ");
-        s_TimeCtor = (fn_Time_Ctor_t)ResolveExport("??0Time@System@@QEAA@M@Z");
-    }
-
     void* mem = AllocSub(0x120, 8);
     *(void**)(p + 0x108) = mem;
-    if (!mem || !s_Ctor) {
-        fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p ctor=%p\n", mem, (void*)s_Ctor);
+    if (!mem) {
+        fprintf(stderr, "[GUL::SkyMesh] SKIP — mem=%p\n", mem);
         fflush(stderr);
         return;
     }
-    s_Ctor(mem);
+    ::new (mem) Graphics::MeshInstance();
 
     // Load the sky dome resource (the `_clear_`-material mesh) via the global factory.
     void* meshRes = nullptr;
@@ -864,9 +856,9 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
 
     // Startup: vtable[+8](skyMesh, Time(0)) — matches the original Load's
     // `(*(code**)(*skyMesh + 8))(skyMesh, &Time0)`.
-    if (s_TimeCtor) {
+    if (fn_Time_Ctor_Float) {
         uint64_t timeObj = 0;
-        s_TimeCtor(&timeObj, 0.0f);
+        fn_Time_Ctor_Float(&timeObj, 0.0f);
         // B.3.5 bridge — vtable+0x08 is slot 1 of `Graphics::Geometry`, i.e.
         // `Update(const System::Time&)`. The receiver is a PROVED MeshInstance:
         // 0x120 bytes from AllocSub, run through `??0MeshInstance@Graphics@@` above.
@@ -876,7 +868,7 @@ static void BuildSkyMesh_Step28(uint8_t* p) {
     *(uint32_t*)((uint8_t*)mem + 0x28) = 0;
 
     fprintf(stderr, "[GUL::SkyMesh] built skyMesh=%p meshRes=%p (TimeCtor=%p)\n",
-            mem, meshRes, (void*)s_TimeCtor);
+            mem, meshRes, (void*)fn_Time_Ctor_Float);
     fflush(stderr);
 }
 
@@ -1146,8 +1138,12 @@ void GameUpdateLoop::Load() {
     // (matches the proven menu path, which uses the Runtime default SunLight vtable).
     {
         void* mem = AllocSub(0x108, 8);
-        if (mem && fn_Graphics_SunLight_Ctor) {
-            fn_Graphics_SunLight_Ctor(mem);
+        if (mem) {
+            // ENDGAME B.3.8 LOOP (B38_RULES D8): the REAL Runtime class. Retail
+            // runs the imported ctor and stamps the exe's 11-slot copy of its
+            // table (0x14015e290, slot 0 the exe scalar deleting dtor
+            // 0x140019e40); SunLight's own DeletingDtor is that body since RB.
+            ::new (mem) Graphics::SunLight();
             // Initial sun dir = normalize(0.5, 0.33, 1.33) then negate (faithful to
             // the original Load, exe .rdata DAT_140172114/_10c/_15c). This is just a
             // bootstrap: in standalone Weather_SunUpdate (gameupdateloop.cpp Draw
@@ -1600,13 +1596,11 @@ void GameUpdateLoop::Load() {
     // BANISHED_LIVE_SCENARIO_GOALS=0 is the kill switch for an A/B run.
     *(void**)(p + 0x150) = nullptr;
     if (achievementId >= 0) {
-        EnsureAchievementFuncs();
-        if (!s_fn_AchievementInstance_Ctor ||
-            !fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
+        const uint32_t* const achTypeId = AchievementTypeId();
+        if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor ||
             !g_pKeyMapSingleton) {
-            fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved (ctor=%p "
+            fprintf(stderr, "[GUL::Load] step32 SKIPPED - unresolved ("
                             "alloc=%p ibp=%p reslist=%p)\n",
-                    (void*)s_fn_AchievementInstance_Ctor,
                     (void*)fn_MemAlloc, (void*)fn_InternalBasePtr_Ctor,
                     (void*)g_pKeyMapSingleton);
             fflush(stderr);
@@ -1614,16 +1608,19 @@ void GameUpdateLoop::Load() {
             void* instance = nullptr;
             void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
             if (mem) {
-                s_fn_AchievementInstance_Ctor(mem);
-                // Retail installs the EXE's AchievementInstance vtable (0x14015e350)
-                // over the one the Runtime ctor just wrote. Slot 0 is the exe's scalar
-                // dtor (0x140019d90); slots 1-3 are JMP thunks straight back into the
-                // Runtime base. If that address is unregistered we keep the Runtime
-                // vtable, which differs only in the dtor — deliberately better than
-                // installing a null.
-                uintptr_t exeVt = ResolveAddr(Module::Exe, 0x14015e350);
-                if (exeVt) *(void**)mem = (void*)exeVt;
-                instance = mem;
+                // ENDGAME B.3.8 LOOP (B38_RULES D8): retail runs the imported
+                // `??0AchievementInstance@Achievement@@` and then stamps the EXE's
+                // copy of the class's table (0x14015e350: slot 0 the exe scalar
+                // deleting dtor 0x140019d90 — ~AchievementInstance + MemFree on &1 —
+                // slots 1-3 import thunks into the Runtime bodies). That copy is
+                // an MSVC artefact of the inlined ctor, not an exe class: the real
+                // Runtime class (concrete since block RB, its DeletingDtor = that
+                // exe body) is built here and wears its compiler table. The old
+                // path ran the ctor door and read 0x14015e350 by address, which
+                // was never registered, so the object kept the minted table.
+                // `::new`: the class declares (and does not define) its own
+                // placement operator new.
+                instance = ::new (mem) Achievement::AchievementInstance();
             }
             uint64_t ibp = 0;
             new (&ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(instance));   // B.3.3 bridge
@@ -1641,14 +1638,14 @@ void GameUpdateLoop::Load() {
             // through the .rdata slot at 0x140151f68, which points at the Runtime's
             // exported BaseTypeInfo for Achievement; its first dword IS the type id.
             void* checked = scenario;
-            if (scenario && fn_IsDerivedFrom && s_AchievementTypeId)
-                checked = fn_IsDerivedFrom(scenario, *s_AchievementTypeId) ? scenario : nullptr;
+            if (scenario && fn_IsDerivedFrom && achTypeId)
+                checked = fn_IsDerivedFrom(scenario, *achTypeId) ? scenario : nullptr;
 
             void* inst = *(void**)(p + 0x150);
             fprintf(stderr, "[GUL::Load] step32 achievementId=%d instance=%p scenario=%p "
                             "derived=%p achTid=%u\n",
                     achievementId, inst, scenario, checked,
-                    s_AchievementTypeId ? *s_AchievementTypeId : 0u);
+                    achTypeId ? *achTypeId : 0u);
             fflush(stderr);
             // ExternalPtr<Achievement> arrives as a bare register value (B7-5).
             if (inst) reinterpret_cast<Achievement::AchievementInstance*>(inst)->SetAchievement(   // B.3.7 bridge
