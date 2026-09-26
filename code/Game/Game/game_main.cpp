@@ -45,6 +45,7 @@
 #include "Game/InnerLoaderLoop.h"   // ENDGAME B.3.8 LOOP
 #include "Game/GameLoaderLoop.h"    // ENDGAME B.3.8 LOOP
 #include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
+#include "Game/MenuDialogLoopT.h"       // ENDGAME B.3.8 LOOP
 #include "stall_debug.h"
 #include "boot_state_watchdog.h"
 #include <cstdio>
@@ -682,7 +683,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         System::String menuStr("Dialog\\MainMenu.rsc");
 
                         StallDebug::Mark("settings alloc + MenuDLT alloc");
-                        MenuDialogLoopT_Ctor(menuLoop, &menuStr);
+                        // ENDGAME B.3.8 LOOP: the real class (ctor 0x14009bb00).
+                        ::new (static_cast<void*>(menuLoop)) MenuDialogLoopT(menuStr);
                         StallDebug::Mark("MenuDialogLoopT_Ctor");
                         printf("[GameMain] MenuDLT ctor done, vtable=%p\n",
                                (void*)menuLoop->vtable);

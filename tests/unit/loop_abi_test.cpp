@@ -23,6 +23,7 @@
 #include "Game/InnerLoaderLoop.h"
 #include "Game/GameLoaderLoop.h"
 #include "Game/GameLoadDialogLoopT.h"
+#include "Game/MenuDialogLoopT.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -53,6 +54,8 @@ UNIT_TEST(loop_sizes_match_retail) {
     CHECK_EQ(alignof(GameLoaderLoop),  (size_t)8);
     CHECK_EQ(sizeof(GameLoadDialogLoopT), (size_t)0xb60);   // MemAlloc(0xb60, 4) at all 7 sites
     CHECK_EQ(alignof(GameLoadDialogLoopT), (size_t)8);
+    CHECK_EQ(sizeof(MenuDialogLoopT), (size_t)0xc00);        // MemAlloc(0xc00, 8)
+    CHECK_EQ(alignof(MenuDialogLoopT), (size_t)8);
 }
 
 UNIT_TEST(loop_member_offsets) {
@@ -63,6 +66,14 @@ UNIT_TEST(loop_member_offsets) {
     CHECK_EQ(offsetof(GameLoadDialogLoopT, _fadeDone),       (size_t)0x190);
     CHECK_EQ(offsetof(GameLoadDialogLoopT, _random),         (size_t)0x194);
     CHECK_EQ(offsetof(GameLoadDialogLoopT, _tipTimer),       (size_t)0xb58);
+    CHECK_EQ(offsetof(MenuDialogLoopT, _ui),                 (size_t)0x40);    // base's
+    CHECK_EQ(offsetof(MenuDialogLoopT, _random),             (size_t)0x168);
+    CHECK_EQ(offsetof(MenuDialogLoopT, _audioScene),         (size_t)0xb30);
+    CHECK_EQ(offsetof(MenuDialogLoopT, _pendingLoop),        (size_t)0xb68);
+    CHECK_EQ(offsetof(MenuDialogLoopT, _saveLoad),           (size_t)0xb70);
+    CHECK_EQ(offsetof(MenuDialogLoopT, _menuScene),          (size_t)0xb90);
+    CHECK_EQ(offsetof(MenuDialogLoopT, _scene),              (size_t)0xba0);
+    CHECK_EQ(offsetof(MenuDialogLoopT, _sceneIdArray),       (size_t)0xbf0);
 }
 
 // ===========================================================================
@@ -81,6 +92,10 @@ UNIT_TEST(loop_classes_shape) {
     CHECK(!std::is_abstract<GameLoadDialogLoopT>::value);
     CHECK(std::is_final<GameLoadDialogLoopT>::value);
     CHECK(!std::has_virtual_destructor<GameLoadDialogLoopT>::value);
+    CHECK((std::is_base_of<Engine::DialogLoopT, MenuDialogLoopT>::value));
+    CHECK(!std::is_abstract<MenuDialogLoopT>::value);
+    CHECK(std::is_final<MenuDialogLoopT>::value);
+    CHECK(!std::has_virtual_destructor<MenuDialogLoopT>::value);
 }
 
 // ===========================================================================
@@ -106,12 +121,29 @@ UNIT_TEST(loop_splash_slots) {
     CHECK_EQ(SlotOffset(&GameLoadDialogLoopT::CreateLoopDialog), S(12));
 }
 
+UNIT_TEST(loop_menu_slots) {
+    // 0x14015ed00: own [0]-[4], [6], [8]-[12]; [5] and [7] are UpdateLoop's.
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::DeletingDtor),        S(0));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Startup),             S(1));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Shutdown),            S(2));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Update),              S(3));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Draw),                S(4));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::Load),                S(6));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::OnVideoError),        S(8));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::OnVideoRestart),      S(9));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::GetResourceFilename), S(10));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::AllowsModChanges),    S(11));
+    CHECK_EQ(SlotOffset(&MenuDialogLoopT::CreateLoopDialog),    S(12));
+}
+
 // The retslot slot 12: RCX = this, RDX = the caller's InternalPtr slot, RAX =
 // the slot back (B6-2). Declared type checked; the body is not linked here.
 UNIT_TEST(loop_splash_slot12_is_retslot_first) {
     using Ret = Object::InternalPtr<UI::DialogInstance>;
     CHECK((std::is_same<decltype(&GameLoadDialogLoopT::CreateLoopDialog),
                         Ret* (GameLoadDialogLoopT::*)(Ret*)>::value));
+    CHECK((std::is_same<decltype(&MenuDialogLoopT::CreateLoopDialog),
+                        Ret* (MenuDialogLoopT::*)(Ret*)>::value));
 }
 
 }  // namespace
