@@ -14,6 +14,8 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/SliderElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // File-local helper: PastureCalcMaxCount_Impl (FUN_140128570)
@@ -194,7 +196,7 @@ void PastureUI_Slot7(PastureUI* self) {
 
     // Enable combo only if it has items AND pasture has no animals yet
     void* comboElem = *(void**)(s + 0x30);
-    int itemCount = fn_ComboElement_GetItemCount(comboElem);
+    int itemCount = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemCount();  // B.3.6 bridge
     bool enableCombo = (itemCount > 0) && (*(int32_t*)(comp + 0x38) == 0);
 
     // Set combo enabled/disabled via vtable[8]
@@ -204,13 +206,13 @@ void PastureUI_Slot7(PastureUI* self) {
     void* sliderElem = *(void**)(s + 0x38);
     {
         System::String fmtStr = System::String::Format("%i", *(uint32_t*)(comp + 0x38));
-        fn_SliderElement_SetParameter(sliderElem, 0, &fmtStr);
+        reinterpret_cast<UI::SliderElement*>(sliderElem)->SetParameter(0, fmtStr);  // B.3.6 bridge
     }
 
     // Format max animal count → slider param 1
     {
         System::String fmtStr = System::String::Format("%i", *(uint32_t*)(comp + 0x40));
-        fn_SliderElement_SetParameter(sliderElem, 1, &fmtStr);
+        reinterpret_cast<UI::SliderElement*>(sliderElem)->SetParameter(1, fmtStr);  // B.3.6 bridge
     }
 }
 
@@ -313,8 +315,8 @@ void PastureUI_Slot9(PastureUI* self, void* param2, int param3, int param4) {
     if (param3 == 0x14 && param4 == 500) {
         // Combo selection: get selected resource, call Slot11 via vtable
         void* comboElem = *(void**)(s + 0x30);
-        int currentItem = fn_ComboElement_GetCurrentItem(comboElem);
-        void* itemData = fn_ComboElement_GetItemData(comboElem, currentItem);
+        int currentItem = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetCurrentItem();  // B.3.6 bridge
+        void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(currentItem);  // B.3.6 bridge
         int resourceIndex = (int)(intptr_t)itemData;
 
         void* world = *g_pGameWorldSingleton;

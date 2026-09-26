@@ -15,6 +15,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
@@ -141,13 +142,13 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
 
     // Format immigration count as "%i" and set on textNomad parameter 0
     System::String countStr = System::String::Format("%i", (uint64_t)immigCount);
-    fn_TextElement_SetParameter((void*)*(uint64_t*)(s + 0x38), 0, &countStr);
+    reinterpret_cast<UI::TextElement*>(*(uint64_t*)(s + 0x38))->SetParameter(0, countStr);  // B.3.6 bridge
 
     // Copy world name from worldSingleton+0x28, set as parameter 1
     void* worldSingleton = *g_pGameWorldSingleton;
     System::String worldNameStr(
         *reinterpret_cast<const System::String*>((uintptr_t)worldSingleton + 0x28));  // B.3.1 bridge
-    fn_TextElement_SetParameter((void*)*(uint64_t*)(s + 0x38), 1, &worldNameStr);
+    reinterpret_cast<UI::TextElement*>(*(uint64_t*)(s + 0x38))->SetParameter(1, worldNameStr);  // B.3.6 bridge
 }
 
 // ============================================================

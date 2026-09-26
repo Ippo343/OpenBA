@@ -36,6 +36,7 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 namespace Game {
 
@@ -112,14 +113,13 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
     System::String sysStr;
     ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
 
-    fn_TextElement_SetParameter(textElem, paramIndex, &sysStr);
+    reinterpret_cast<UI::TextElement*>(textElem)->SetParameter(paramIndex, sysStr);  // B.3.6 bridge
 }
 
 // HotKeyToolTipUI::Serialize — Slot4 (+0x20). self = the controller.
 void HotKeyToolTipUI_Slot4(void* self) {
     if (!self) return;
     if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom
-        || !fn_TextElement_SetParameter
         || !fn_KeyMap_GetInputForId || !fn_KeyMap_GetDeviceForId
         || !g_TypeId_ObjectInternal) {
         return;

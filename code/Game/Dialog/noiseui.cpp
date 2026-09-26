@@ -34,6 +34,7 @@
 #include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ImageElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -174,7 +175,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];
     ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)), 0);  // B.3.6 bridge
-    fn_ImageElement_SetSprite((void*)imageElemPtr, spriteBuf);
+    reinterpret_cast<UI::ImageElement*>(imageElemPtr)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 }
 
 // ============================================================

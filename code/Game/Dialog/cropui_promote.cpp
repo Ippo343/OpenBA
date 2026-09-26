@@ -35,6 +35,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 namespace {
 
@@ -200,7 +201,7 @@ void W_Slot7(void* self) {
     {
         System::String textStr = System::String::Format("%i",
                          static_cast<uint64_t>(static_cast<uint32_t>(percent)));
-        fn_ProgressElement_SetProgressTextParameter(yieldElem, 0, &textStr);
+        reinterpret_cast<UI::ProgressElement*>(yieldElem)->SetProgressTextParameter(0, textStr);  // B.3.6 bridge
     }
 
     if (*reinterpret_cast<uint64_t*>(s + 0x30))

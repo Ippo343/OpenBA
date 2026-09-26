@@ -83,7 +83,7 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
             return;
         }
     }
-    fn_PageElement_SetActivePage((void*)*(uint64_t*)(s + 0x38), *(int*)(s + 0x40));
+    reinterpret_cast<UI::PageElement*>(*(uint64_t*)(s + 0x38))->SetActivePage(*(int*)(s + 0x40));  // B.3.6 bridge
 }
 
 // Slot7: Enable/disable checkbox based on whether active page is 0 or 4.
@@ -120,7 +120,7 @@ void PageToggleUI_Slot9(PageToggleUI* self, void* param2, int param3, int param4
             *(uint32_t*)(s + 0x40) = 4;
         }
 
-        fn_PageElement_SetActivePage((void*)*(uint64_t*)(s + 0x38), *(int*)(s + 0x40));
+        reinterpret_cast<UI::PageElement*>(*(uint64_t*)(s + 0x38))->SetActivePage(*(int*)(s + 0x40));  // B.3.6 bridge
     }
 }
 

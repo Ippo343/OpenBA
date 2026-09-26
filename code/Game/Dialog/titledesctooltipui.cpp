@@ -12,6 +12,7 @@
 #include <cstdint>
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // TitleDescToolTipUI::Serialize (vtable +0x20)
@@ -62,10 +63,10 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self) {
         //   +0x00: title string
         //   +0x08: description string
         if (titleElement) {
-            fn_TextElement_SetParameter(titleElement, 0, userData);
+            reinterpret_cast<UI::TextElement*>(titleElement)->SetParameter(0, *reinterpret_cast<const System::String*>(userData));  // B.3.6 bridge
         }
         if (descElement) {
-            fn_TextElement_SetParameter(descElement, 0, (void*)((uintptr_t)userData + 8));
+            reinterpret_cast<UI::TextElement*>(descElement)->SetParameter(0, *reinterpret_cast<const System::String*>(((uintptr_t)userData + 8)));  // B.3.6 bridge
         }
     }
 }
