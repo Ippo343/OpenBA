@@ -35,6 +35,7 @@
 #include "Work/HarvestArea.h"
 #include "Work/HarvestOrchard.h"
 #include "Work/HerbalistWork.h"
+#include "Work/HuntWork.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -239,6 +240,12 @@ UNIT_TEST(wrk_leaf_herbalistwork) {
     CHECK_EQ(offsetof(HerbalistWork, _field48), (size_t)0x48);
     CHECK_EQ(offsetof(HerbalistWork, _field50), (size_t)0x50);
     CHECK_EQ(offsetof(HerbalistWork, _field58), (size_t)0x58);
+}
+
+UNIT_TEST(wrk_leaf_huntwork) {
+    WRK_LEAF_SHAPE(HuntWork, AutoPickupWork, 0x58);
+    CHECK_EQ(offsetof(HuntWork, _field48), (size_t)0x48);
+    CHECK_EQ(offsetof(HuntWork, _field50), (size_t)0x50);
 }
 
 // ===========================================================================
