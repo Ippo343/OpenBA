@@ -429,7 +429,17 @@ PickupStoredRawMaterial::PickupStoredRawMaterial()
       _field40(0),
       _pad41{} {}
 
-// [0] 0x140022dd0 (the +0x30 list free: PORT GAP, PickupStoredRawMaterial.h)
+// The dtor body of 0x140022dd0, between its own stamp and the Action stamp:
+//   MOV RCX,[this+0x30]; CALL MemFree (IAT 0x140152b68, unconditional);
+//   [this+0x30] = 0; [this+0x38] = 0 (the qword: count +0x38 and capacity +0x3c).
+// The tree's shared Action_ScalarDtor skipped it and leaked the carrier list.
+PickupStoredRawMaterial::~PickupStoredRawMaterial() {
+    Object::detail::InternalMemFree(_field30);
+    _field30 = nullptr;
+    _field38 = nullptr;
+}
+
+// [0] 0x140022dd0
 Object::Base* PickupStoredRawMaterial::DeletingDtor(unsigned flags) {
     this->~PickupStoredRawMaterial();
     if (flags & 1) Object::detail::InternalMemFree(this);

@@ -341,7 +341,17 @@ ConsumeRawMaterial::ConsumeRawMaterial()
       _field38(0),
       _pad39{} {}
 
-// [0] 0x140022130 (the +0x28 list free: PORT GAP, ConsumeRawMaterial.h)
+// The dtor body of 0x140022130, between its own stamp and the Action stamp:
+//   MOV RCX,[this+0x28]; CALL MemFree (IAT 0x140152b68, unconditional);
+//   [this+0x28] = 0; [this+0x30] = 0 (the qword: count +0x30 and capacity +0x34).
+// The tree's shared Action_ScalarDtor skipped it and leaked the consume list.
+ConsumeRawMaterial::~ConsumeRawMaterial() {
+    Object::detail::InternalMemFree(_field28);
+    _field28 = nullptr;
+    _field30 = nullptr;
+}
+
+// [0] 0x140022130
 Object::Base* ConsumeRawMaterial::DeletingDtor(unsigned flags) {
     this->~ConsumeRawMaterial();
     if (flags & 1) Object::detail::InternalMemFree(this);
