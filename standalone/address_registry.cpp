@@ -266,12 +266,8 @@ struct ComponentEntity;
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
 
-// Economy brick M-B — standalone ComponentEntity vtable (primary 0x14015fa78 +
-// embedded base vtable 0x14015faa0 = &array[5]). Body/rationale in
-// code/Game/Entity/componententity.cpp. Without it every entity has vtable NULL
-// and the first virtual dispatch (DeletePtr's dtor call on the produce/removal
-// path, EntityList Serialize) faults.
-extern "C" void* g_ComponentEntity_StandaloneVtable[12];
+// B.3.8 D9 #2: the Action base table 0x14015faa0 (code/Game/Action/action.cpp).
+extern "C" void RegisterActionVtable();
 // M-B (cont.) — removal-side grid occupancy un-mark (impl_4750 standalone body,
 // code/Game/Component/mapcomponent.cpp).
 extern "C" void MapComponent_DetachOccupancy_4750(void* self);
@@ -811,14 +807,12 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
     RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
 
-    // Economy brick M-B — ComponentEntity vtable materialization. Entities are
-    // constructed with *(void**)self = ResolveAddr(0x14015fa78); registering the
-    // static vtable array gives every standalone entity a REAL vtable (scalar
-    // dtor / Serialize / base dtor), which the entity-removal + item-spawn
-    // lifecycle (DeletePtr, dirty-list Serialize) virtual-calls. 0x14015faa0 is
-    // the embedded base-class vtable at slot 5 of the same .rdata block.
-    RegisterExeAddr(0x14015fa78, reinterpret_cast<uintptr_t>(&g_ComponentEntity_StandaloneVtable[0]));
-    RegisterExeAddr(0x14015faa0, reinterpret_cast<uintptr_t>(&g_ComponentEntity_StandaloneVtable[5]));
+    // B.3.8 D9 #2: ComponentEntity is a real class (its compiler table, stamped
+    // by its own ctors; nothing reads 0x14015fa78 back, so that row is gone).
+    // 0x14015faa0 is Action's base table, served by Action::Vtable(); it used
+    // to be `&g_ComponentEntity_StandaloneVtable[5]`, which answered
+    // ComponentEntity's type id.
+    RegisterActionVtable();
 
     // M-B (cont.) — CreateNaturalResource_impl_4750 = the removal-side occupancy
     // UN-mark (dee0 clear), tail-called from the ported MapComponent_OnCreate

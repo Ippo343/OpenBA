@@ -100,6 +100,7 @@
 #include "Component/ToolbarDescription.h"
 #include "Component/ComponentDescription.h"
 #include "Component/EnvironmentDescription.h"
+#include "Entity/ComponentEntity.h"
 #include "RawMaterialDescription.h"          // engine/types forwarder (B8-4)
 #include "DiseaseComponent.h"                // engine/types: its DiseaseDescription forwards
 
@@ -275,6 +276,24 @@ UNIT_TEST(k1_direct_external_descriptions) {
     CHECK_EQ(CheckExternalLeaf<ComponentDescription>(0x38), 0);
     CHECK_EQ(CheckExternalLeaf<EnvironmentDescription>(0x1b8), 0);
     CHECK_EQ(offsetof(EnvironmentDescription, _months), (size_t)0x38);
+}
+
+// ComponentEntity: its OWN 4-slot table (D9 #2); the old 12-qword array also
+// carried Action's 7 slots.
+UNIT_TEST(k1_component_entity) {
+    using E = ComponentEntity;
+    CHECK_EQ(sizeof(E), (size_t)0x48);
+    CHECK_EQ(alignof(E), (size_t)8);
+    CHECK(std::is_polymorphic<E>::value);
+    CHECK(!std::is_abstract<E>::value);
+    CHECK(!std::has_virtual_destructor<E>::value);
+    CHECK((std::is_base_of<Object::Internal, E>::value));
+    CHECK_EQ(SlotOffset(&E::DeletingDtor), (size_t)0x00);
+    CHECK_EQ(SlotOffset(&E::TypeName),     (size_t)0x08);
+    CHECK_EQ(SlotOffset(&E::Type),         (size_t)0x10);
+    CHECK_EQ(SlotOffset(&E::Persist),      (size_t)0x18);
+    CHECK_EQ(offsetof(E, _description), (size_t)0x28);
+    CHECK_EQ(offsetof(E, _entityFlags), (size_t)0x40);
 }
 
 }  // namespace
