@@ -156,6 +156,7 @@
 #include "../../types/engine/UpdateLoop.h"         // ENDGAME B.3.7: the loop classes
 #include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformUpdate
+#include "../../types/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
 #include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "mainloop_internal.h"
 #include <atomic>
@@ -182,11 +183,6 @@ namespace {
 // ordinary virtual calls on `Engine::UpdateLoop` now; its slot order is
 // retail's (runtime/types/engine/UpdateLoop.h), so each compiles to the same
 // `CALL [vptr+N*8]`.
-
-// Audio::Device::Update (0x1800de520) -- block B4's class, still reached BY
-// ADDRESS (B4 converts it), now through a namespace-scope atomic slot rather
-// than a function-local static (B6-5).
-std::atomic<void*> g_audioDeviceUpdate{nullptr};
 
 // Retail's inlined CurrentTimeTicks now has ONE definition, in
 // mainloop_frame.cpp, reached through mainloop_internal.h. It used to live here
@@ -280,15 +276,6 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     //   1800dd416  MOV RCX,[RBX+0x6e0]
     //   1800dd422  MOV RCX,[RBX+0x6d0]
     //   1800dd432  MOV RCX,[RBX+0x690]
-    typedef void (*DeviceUpdateFn)(void* device, const void* time);
-
-    // Audio::Device::Update: ported already -> BY ADDRESS, so the port registry
-    // is consulted first and our implementation is used rather than the DLL's
-    // (§3). Block B4's class; B4 converts this call.
-    DeviceUpdateFn audioUpdate = reinterpret_cast<DeviceUpdateFn>(
-        rtengine::AtomicResolve(g_audioDeviceUpdate, [] {
-            return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800de520));
-        }));
 
     _currentLoop = loop;                                                 // +0x20
     _startTicks  = CurrentTimeTicksViaGlobals();                         // +0x30
@@ -303,7 +290,10 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     reinterpret_cast< ::Input::Device*>(engine->_inputDevice)->Update(   // +0x6e0, B.3.7 bridge
         *reinterpret_cast<const System::Time*>(deltaTime));
 
-    audioUpdate(engine->_audioDevice, deltaTime);                        // +0x6d0
+    // Audio::Device::Update (0x1800de520). ENDGAME B.3.7: a member call on the
+    // real class (was BY ADDRESS through a namespace-scope atomic slot).
+    engine->GetAudioDevice()->Update(
+        *static_cast<const System::Time*>(deltaTime));                   // +0x6d0
     // Application::PlatformUpdate (0x18009fdf0, AEAA): was reached BY ADDRESS
     // (`ResolveAddr(Module::Runtime, 0x18009fdf0)` in a function-local static);
     // ENDGAME B.3.7: a member call on the real class. Result discarded, as retail's.

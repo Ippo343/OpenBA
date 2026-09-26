@@ -52,6 +52,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/Value.h"
 #include "../../types/ui/UserInterface.h"
+#include "../../types/audio/Audio.h"   // ENDGAME B.3.7 callers (K4): Audio::Scene
 // ENDGAME B.3.6 block E: the RULE B6-5 atomic door caches.
 #include "element_common.h"
 
@@ -64,14 +65,12 @@ namespace {
 //
 // `System::Time` is 8 bytes and is passed BY VALUE IN A REGISTER, not by hidden
 // reference: 0x180120394 loads `MOV RDX,[RDI]` -- the VALUE behind the incoming
-// `const Time&` -- and hands that straight to Audio::Scene::Update. So the two
-// `VTime@System@@` by-value parameters are spelled int64_t here.
+// `const Time&` -- and hands that straight to Audio::Scene::Update, whose two
+// `VTime@System@@` parameters are by-value `System::Time` (B7-5).
 // ---------------------------------------------------------------------------
 using UiUpdateFn   = int   (*)(void* ui, const void* time);
 using UiDrawFn     = void  (*)(void* ui, void* videoContext);
 using RandomCtorFn = void* (*)(void* self);
-using SceneUpdateFn = bool (*)(void* scene, int64_t time, int64_t elapsed,
-                               void* random, const float* listenerPos, float volume);
 
 // --- entry counters, printed unconditionally (see userinterface_hover.cpp) ---
 uint64_t g_updEntries   = 0;
@@ -94,7 +93,6 @@ constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
 // RULE B6-5: namespace-scope atomic slots for the doors other namespaces own.
 std::atomic<void*> g_randomCtorSlot{nullptr};
 std::atomic<void*> g_sptSlot{nullptr};
-std::atomic<void*> g_sceneUpdateSlot{nullptr};
 
 }  // namespace
 
@@ -149,10 +147,11 @@ void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui
         const double* const spt = static_cast<const double*>(
             rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
         const int64_t elapsed = static_cast<int64_t>(0.0 / *spt);      // 0x1801203b0
-        reinterpret_cast<SceneUpdateFn>(rtuielem::AtomicExport(g_sceneUpdateSlot,
-            "?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"))
-            (scene, *reinterpret_cast<const int64_t*>(time), elapsed,
-             &rng, listener, 0.0f);                                    // 0x1801203d0
+        System::Time now;     now._ticks     = *reinterpret_cast<const int64_t*>(time);
+        System::Time elapsedT; elapsedT._ticks = elapsed;
+        reinterpret_cast<Audio::Scene*>(scene)->Update(
+            now, elapsedT, *reinterpret_cast<System::Random*>(&rng),
+            *reinterpret_cast<const Vector3*>(listener), 0.0f);           // 0x1801203d0  B.3.7 bridge
     }
 }
 

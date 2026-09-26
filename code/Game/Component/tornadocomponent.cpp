@@ -62,6 +62,7 @@
 #include "Component/component_factory_base.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 
 // EventLog::AddEvent (0x140095580) — already ported in code/Game/Game/eventlog.cpp.
 // Reused rather than re-inlined: retail's Startup builds the same 0x28-byte record
@@ -953,10 +954,8 @@ void TornadoComponent_OnRemove(TornadoComponent* self, void* time) {
                     emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
                 } else if (*reinterpret_cast<float*>(&emitter[1]) != volume) {
                     emitter[1] = *reinterpret_cast<const uint32_t*>(&volume);
-                    if (fn_Audio_Scene_SetEmitterVolume)
-                        fn_Audio_Scene_SetEmitterVolume(*reinterpret_cast<void**>(g + 0x78),
-                                                        *emitter,
-                                                        reinterpret_cast<void*>(a + 0x28), volume);
+                    reinterpret_cast<Audio::Scene*>(*reinterpret_cast<void**>(g + 0x78))->SetEmitterVolume(
+                        *emitter, *reinterpret_cast<const Vector3*>(a + 0x28), volume);   // B.3.7 bridge
                 }
             }
         }
@@ -1049,9 +1048,10 @@ extern "C" void Tornado_AudioMoveEmitters_42960(void* audioComp, void* newPos) {
     uintptr_t arr = *reinterpret_cast<uintptr_t*>(a + 0x38);
     for (int i = 0; i < count; i++) {
         const uint32_t id = *reinterpret_cast<uint32_t*>(arr + static_cast<uintptr_t>(i) * 0x10);
-        if (id != 0 && gw && fn_Audio_Scene_MoveEmitter)
-            fn_Audio_Scene_MoveEmitter(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x78),
-                                       id, cached, np);
+        if (id != 0 && gw)
+            reinterpret_cast<Audio::Scene*>(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x78))
+                ->MoveEmitter(id, *reinterpret_cast<const Vector3*>(cached),
+                              *reinterpret_cast<const Vector3*>(np));   // B.3.7 bridge
     }
     cached[0] = np[0]; cached[1] = np[1]; cached[2] = np[2];
 }

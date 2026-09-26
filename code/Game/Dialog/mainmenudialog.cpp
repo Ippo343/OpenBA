@@ -19,6 +19,7 @@
 #include "ui/Cursor.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "application/Application.h"   // ENDGAME B.3.7 callers (K1)
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -647,9 +648,9 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
         void* world = *g_pGameWorldSingleton;
         void* audioScene = *(void**)((uintptr_t)world + 0x78);
 
-        fn_Audio_Scene_Pause(audioScene, 4, true);
-        fn_Audio_Scene_Pause(audioScene, 3, true);
-        fn_Audio_Scene_Pause(audioScene, 2, true);
+        reinterpret_cast<Audio::Scene*>(audioScene)->Pause(4, true);   // B.3.7 bridge
+        reinterpret_cast<Audio::Scene*>(audioScene)->Pause(3, true);   // B.3.7 bridge
+        reinterpret_cast<Audio::Scene*>(audioScene)->Pause(2, true);   // B.3.7 bridge
 
         // Check scenario index at world+0x15C. If < 0, hide buttonGoal; else hide buttonMap
         int32_t scenarioIdx = *(int32_t*)((uintptr_t)world + 0x15C);
@@ -695,9 +696,9 @@ void MainMenuDialog_Slot5(MainMenuDialog* self) {
     void* world = *g_pGameWorldSingleton;
     void* audioScene = *(void**)((uintptr_t)world + 0x78);
 
-    fn_Audio_Scene_Pause(audioScene, 4, false);
-    fn_Audio_Scene_Pause(audioScene, 3, false);
-    fn_Audio_Scene_Pause(audioScene, 2, false);
+    reinterpret_cast<Audio::Scene*>(audioScene)->Pause(4, false);   // B.3.7 bridge
+    reinterpret_cast<Audio::Scene*>(audioScene)->Pause(3, false);   // B.3.7 bridge
+    reinterpret_cast<Audio::Scene*>(audioScene)->Pause(2, false);   // B.3.7 bridge
 }
 
 // ============================================================

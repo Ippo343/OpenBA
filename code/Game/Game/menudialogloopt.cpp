@@ -45,6 +45,7 @@
 #include <cmath>
 #include <cstdlib>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 
 // Wave 9 lane S probe (runtime/src/audio/audio.cpp).
 
@@ -1087,16 +1088,6 @@ void MenuDialogLoopT_UpdateCamera_PhaseA(void* self, float deltaSeconds) {
 // but Ghidra disassembly + engine/reimpl/mainloop.cpp's GetAudioDevice
 // helper both confirm +0x6d0. (+0x6e0 is the Input::Device offset.)
 void MenuDialogLoopT_TickAudio(void* time) {
-    if (!fn_AudioDevice_Update) {
-        // First-call diagnostic so we notice if the resolve ever silently
-        // returns NULL on a future build. Logged once.
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            printf("[MenuDLT::TickAudio] WARN: fn_AudioDevice_Update is NULL\n");
-        }
-        return;
-    }
     if (!time) return;
     if (!g_pMainLoopSingleton || !*g_pMainLoopSingleton) {
         static bool warned = false;
@@ -1136,7 +1127,8 @@ void MenuDialogLoopT_TickAudio(void* time) {
         ++tickCount;
     }
 
-    fn_AudioDevice_Update(audioDevice, time);
+    reinterpret_cast<Audio::Device*>(audioDevice)->Update(
+        *reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
 }
 
 // ============================================================
@@ -1197,14 +1189,10 @@ void MenuDialogLoopT_StartMusic(void* self) {
         printf("[MenuDLT::StartMusic] no music External at +0xb88 — silent menu\n");
         return;
     }
-    if (!fn_Audio_Scene_PlayEffect) {
-        printf("[MenuDLT::StartMusic] fn_Audio_Scene_PlayEffect unresolved — skipping\n");
-        return;
-    }
-
     int64_t timeZero = 0;  // System::Time(0) — 8-byte zero ticks, passed by const ref.
-    uint32_t handle = fn_Audio_Scene_PlayEffect(
-        audioScene, reinterpret_cast<uint64_t>(music), 2, &timeZero);
+    uint32_t handle = reinterpret_cast<Audio::Scene*>(audioScene)->PlayEffect(
+        reinterpret_cast<Audio::SoundEffect*>(music), static_cast<Audio::Scene::SoundType>(2),
+        *reinterpret_cast<const System::Time*>(&timeZero));   // B.3.7 bridge
     printf("[MenuDLT::StartMusic] PlayEffect(scene=%p music=%p chan=2) -> handle=%u\n",
            audioScene, music, handle);
     fflush(stdout);
@@ -1236,12 +1224,9 @@ void MenuDialogLoopT_StartMusic(void* self) {
 // freed/null array (STATUS open defect (c), ~1 in 60 resave runs).
 void MenuDialogLoopT_StopMusic(void* self) {
     if (!self) return;
-    using StopAllFn = void (*)(void* scene);
-    static StopAllFn stopAll = reinterpret_cast<StopAllFn>(
-        ResolveExport("?StopAll@Scene@Audio@@QEAAXXZ"));
     void* audioScene = reinterpret_cast<void*>(
         reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
-    stopAll(audioScene);
+    reinterpret_cast<Audio::Scene*>(audioScene)->StopAll();   // B.3.7 bridge
 }
 
 // ============================================================
@@ -1313,25 +1298,18 @@ void MenuDialogLoopT_BindUISounds(void* self) {
 // the music but it never progresses.
 void MenuDialogLoopT_TickAudioScene(void* self, void* time) {
     if (!self || !time) return;
-    if (!fn_Audio_Scene_Update) {
-        static bool warned = false;
-        if (!warned) {
-            warned = true;
-            printf("[MenuDLT::TickAudioScene] WARN: fn_Audio_Scene_Update is NULL — "
-                   "menu music will not advance\n");
-        }
-        return;
-    }
 
     void* audioScene = reinterpret_cast<void*>(
         reinterpret_cast<uintptr_t>(self) + MenuDLTOff::audioScene_b30);
     void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x168);
 
-    int64_t elapsed  = *reinterpret_cast<int64_t*>(time);  // *(u64*)time — System::Time ticks
-    int64_t timeZero = 0;                                  // Time(0), passed by value
+    System::Time elapsed;  elapsed._ticks  = *reinterpret_cast<int64_t*>(time);  // *(u64*)time — System::Time ticks
+    System::Time timeZero; timeZero._ticks = 0;                                  // Time(0), passed by value
     float listenerVec3[3] = { 0.0f, 0.0f, 0.0f };          // origin listener (2D menu music)
 
-    fn_Audio_Scene_Update(audioScene, elapsed, timeZero, rng, listenerVec3, 0.0f);
+    reinterpret_cast<Audio::Scene*>(audioScene)->Update(
+        elapsed, timeZero, *reinterpret_cast<System::Random*>(rng),
+        *reinterpret_cast<const Vector3*>(listenerVec3), 0.0f);   // B.3.7 bridge
 
     static int n = 0;
     if (n < 3) {

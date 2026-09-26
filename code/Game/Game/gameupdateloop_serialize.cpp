@@ -64,6 +64,7 @@
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 #include "save/SaveLoad.h"                    // ENDGAME B.3.7 callers (K2)
+#include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -868,7 +869,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // a diagnostic that prints the address of a door nobody calls reports nothing.
     reinterpret_cast<Graphics::AnimationManager*>(*(void**)(self + 0x68))->Serialize(
         *reinterpret_cast<IO::Serializer*>(ser));   // B.3.5 bridge
-    s_fn_AudioScene_Serialize(*(void**)(self + 0x78), ser);
+    reinterpret_cast<Audio::Scene*>(*(void**)(self + 0x78))->Serialize(ser);   // B.3.7 bridge
 
     fprintf(stderr, "[GUL::Serialize] core done — subsystems...\n"); fflush(stderr);
 

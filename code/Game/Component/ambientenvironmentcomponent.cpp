@@ -47,6 +47,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 
 // Emitter-array resize helper, shared with the sibling component reimpl
 // (exe FUN_140001770 / AmbientEmitterComponent_sub_1770).
@@ -104,18 +105,21 @@ void PlayNewSlot(void* comp, int slot) {
         if (sounds) *soundRef = reinterpret_cast<const uint64_t*>(sounds)[slot];
     }
 
-    uint32_t handle = fn_Audio_Scene_FindEffect3D ? fn_Audio_Scene_FindEffect3D(scene, *soundRef) : 0;
+    uint32_t handle = reinterpret_cast<Audio::Scene*>(scene)->FindEffect3D(
+        reinterpret_cast<Audio::SoundEffect*>(*soundRef));   // B.3.7 bridge
     *reinterpret_cast<uint32_t*>(entry + 0) = handle;
-    if (handle == 0 && fn_Audio_Scene_PlayEffect3D) {
+    if (handle == 0) {
         int64_t timeZero = 0;
         float   posZero[3] = { 0.0f, 0.0f, 0.0f };
-        handle = fn_Audio_Scene_PlayEffect3D(scene, *soundRef, 3, &timeZero, posZero);
+        handle = reinterpret_cast<Audio::Scene*>(scene)->PlayEffect3D(
+            reinterpret_cast<Audio::SoundEffect*>(*soundRef), static_cast<Audio::Scene::SoundType>(3),
+            *reinterpret_cast<const System::Time*>(&timeZero),
+            *reinterpret_cast<const Vector3*>(posZero));   // B.3.7 bridge
         *reinterpret_cast<uint32_t*>(entry + 0) = handle;
     }
-    if (fn_Audio_Scene_AddEmitter) {
-        const void* pos = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
-        fn_Audio_Scene_AddEmitter(scene, handle, pos, *reinterpret_cast<float*>(entry + 4));
-    }
+    const void* pos = reinterpret_cast<const void*>(reinterpret_cast<uintptr_t>(comp) + 0x28);
+    reinterpret_cast<Audio::Scene*>(scene)->AddEmitter(
+        handle, *reinterpret_cast<const Vector3*>(pos), *reinterpret_cast<float*>(entry + 4));   // B.3.7 bridge
 }
 
 // ---- sub_2a10: set slot `slot` of the emitter component to `soundRef` @ `vol`. ----
@@ -157,9 +161,10 @@ void SetSlot(void* comp, int slot, uint64_t soundRef, float vol) {
         // Sound changed — tear down the old emitter, then play the new one.
         void* scene = WorldScene();
         if (scene) {
-            if (fn_Audio_Scene_RemoveEmitter) fn_Audio_Scene_RemoveEmitter(scene, handle, pos);
-            int cnt = fn_Audio_Scene_GetEmitterCount ? fn_Audio_Scene_GetEmitterCount(scene, handle) : 0;
-            if (cnt == 0 && fn_Audio_Scene_StopEffect3D) fn_Audio_Scene_StopEffect3D(scene, handle);
+            reinterpret_cast<Audio::Scene*>(scene)->RemoveEmitter(
+                handle, *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
+            int cnt = reinterpret_cast<Audio::Scene*>(scene)->GetEmitterCount(handle);   // B.3.7 bridge
+            if (cnt == 0) reinterpret_cast<Audio::Scene*>(scene)->StopEffect3D(handle);   // B.3.7 bridge
         }
         *reinterpret_cast<uint32_t*>(entry + 0) = 0;
         *reinterpret_cast<float*>(entry + 4) = vol;
@@ -172,8 +177,9 @@ void SetSlot(void* comp, int slot, uint64_t soundRef, float vol) {
     if (*reinterpret_cast<float*>(entry + 4) == vol) return;
     *reinterpret_cast<float*>(entry + 4) = vol;
     void* scene = WorldScene();
-    if (scene && fn_Audio_Scene_SetEmitterVolume)
-        fn_Audio_Scene_SetEmitterVolume(scene, handle, const_cast<void*>(pos), vol);
+    if (scene)
+        reinterpret_cast<Audio::Scene*>(scene)->SetEmitterVolume(
+            handle, *reinterpret_cast<const Vector3*>(pos), vol);   // B.3.7 bridge
 }
 
 inline float saturate(float x, float hi) { return x < 0.0f ? 0.0f : (x > hi ? hi : x); }

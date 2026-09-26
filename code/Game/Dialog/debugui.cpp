@@ -35,6 +35,7 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Time / System::Random
+#include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 
 // ============================================================
 // Static inline implementations (replaces fn_* exe pointer calls)
@@ -315,10 +316,10 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
                             uint32_t emitterId = *(uint32_t*)(emitterArray + (uintptr_t)e * 0x10);
                             if (emitterId != 0) {
                                 void* audioScene = *(void**)(world + 0x78);
-                                fn_Audio_Scene_MoveEmitter(
-                                    audioScene, emitterId,
-                                    (void*)(audioComp + 0x28),  // old position
-                                    &zeroPos);                   // new position (zero)
+                                reinterpret_cast<Audio::Scene*>(audioScene)->MoveEmitter(
+                                    emitterId,
+                                    *reinterpret_cast<const Vector3*>(audioComp + 0x28),  // old position
+                                    zeroPos);                   // new position (zero)   // B.3.7 bridge
                             }
                         }
 
@@ -340,10 +341,10 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
                         if (currentVolume != 0.0f) {
                             firstEmitter[1] = 0;
                             void* audioScene = *(void**)(world + 0x78);
-                            fn_Audio_Scene_SetEmitterVolume(
-                                audioScene, firstEmitter[0],
-                                (void*)(audioComp + 0x28),
-                                0.0f);
+                            reinterpret_cast<Audio::Scene*>(audioScene)->SetEmitterVolume(
+                                firstEmitter[0],
+                                *reinterpret_cast<const Vector3*>(audioComp + 0x28),
+                                0.0f);   // B.3.7 bridge
                         }
                     }
                 }

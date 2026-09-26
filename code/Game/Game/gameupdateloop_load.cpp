@@ -52,6 +52,7 @@
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -1698,10 +1699,10 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                 gs->AddGlobalObject(reinterpret_cast<Graphics::Geometry*>(*(void**)(p + 0x108))); // SkyMesh  B.3.5 bridge
         }
         void* aScene = *(void**)(p + 0x78);   // g_pGameWorld+0x78
-        if (aScene && fn_Audio_Scene_Pause) {
-            fn_Audio_Scene_Pause(aScene, 4, false);
-            fn_Audio_Scene_Pause(aScene, 3, false);
-            fn_Audio_Scene_Pause(aScene, 2, false);
+        if (aScene) {
+            reinterpret_cast<Audio::Scene*>(aScene)->Pause(4, false);   // B.3.7 bridge
+            reinterpret_cast<Audio::Scene*>(aScene)->Pause(3, false);   // B.3.7 bridge
+            reinterpret_cast<Audio::Scene*>(aScene)->Pause(2, false);   // B.3.7 bridge
         }
     }
 

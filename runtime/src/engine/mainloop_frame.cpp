@@ -243,6 +243,7 @@
 #include "../../types/engine/MainLoop.h"
 #include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: _quitRequested
+#include "../../types/audio/Device.h"              // ENDGAME B.3.7 callers (K4): Audio::Device
 #include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "mainloop_internal.h"
 #include <atomic>
@@ -341,7 +342,6 @@ constexpr uint32_t kContextDirtyBit    = 0x800;
 
 constexpr uint32_t kWmQuit = 0x12;
 
-typedef void (*FreeChannelPlatformFn)(void* device, int channel);
 // ?Draw@MainLoop@Engine@@QEAAXM@Z — `M` is float, so the second parameter is
 // XMM1 under the MS x64 ABI. See §2d: dropping it was this file's first bug.
 typedef void (*ChannelCompleteFn)(void* chan, void* arg, uint32_t tag);
@@ -418,10 +418,9 @@ bool Engine::MainLoop::Frame(bool skipUpdate) {
             if ((Field<uint32_t>(chan, kChanFlags) & 2u) == 0)
                 continue;
 
-            // PRIVATE (`AEAA`) but EXPORTED, ordinal 2380 — so this is a NAME
-            // door, not an address door. See §5.
-            RT_EXPORT_ONCE(FreeChannelPlatformFn,
-                           "?FreeChannelPlatform@Device@Audio@@AEAAXH@Z")(audioDevice, i);
+            // PRIVATE (`AEAA`) in retail but EXPORTED, ordinal 2380; Device.h
+            // declares the member public. See §5.
+            reinterpret_cast<Audio::Device*>(audioDevice)->FreeChannelPlatform(i);   // B.3.7 bridge
 
             // The callback pointer is sampled BEFORE the flags are cleared
             // (0x1800dd1d4 precedes 0x1800dd1d7). Retail's order; a port that

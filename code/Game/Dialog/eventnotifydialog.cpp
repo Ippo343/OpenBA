@@ -34,6 +34,7 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 
 // ============================================================
 // EventNotifyDialog_CreatePopup — modal popup creation (Slot7 popup branch)
@@ -552,7 +553,9 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
             fn_Time_Ctor_Float(zeroTime, 0.0f);
             void* audioScene = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x78);
             uint64_t soundEffect = *(uint64_t*)(*(uintptr_t*)g_pKeyMapSingleton + 0x98);
-            fn_Audio_Scene_PlayEffect(audioScene, soundEffect, 1, zeroTime);
+            reinterpret_cast<Audio::Scene*>(audioScene)->PlayEffect(
+                reinterpret_cast<Audio::SoundEffect*>(soundEffect), static_cast<Audio::Scene::SoundType>(1),
+                *reinterpret_cast<const System::Time*>(zeroTime));   // B.3.7 bridge
         }
 
         totalEvents = *(int*)(eventLogPtr + 0x20) - 1;
