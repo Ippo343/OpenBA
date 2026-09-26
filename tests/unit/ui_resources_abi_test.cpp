@@ -34,6 +34,7 @@
 #include "runtime/types/ui/Cursor.h"
 #include "runtime/types/ui/StringTable.h"
 #include "runtime/types/ui/SpriteSheet.h"
+#include "runtime/types/ui/SpriteCapture.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -282,6 +283,40 @@ UNIT_TEST(ui_spritesheet_slot_order_is_retails) {
     CheckCompileOverridden(raw);
 }
 
+// ---------------------------------------------------------------------------
+// UI::SpriteCapture
+// ---------------------------------------------------------------------------
+struct SpriteCaptureProbe final : UI::SpriteCapture {
+    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+};
+
+UNIT_TEST(ui_spritecapture_layout) {
+    CHECK_EQ((int)sizeof(UI::SpriteCapture), 0x58);
+    CHECK_EQ((int)alignof(UI::SpriteCapture), 8);
+    CHECK_EQ((int)offsetof(UI::SpriteCapture, _sheets),  0x20);
+    CHECK_EQ((int)offsetof(UI::SpriteCapture, _entries), 0x30);
+    CHECK_EQ((int)offsetof(UI::SpriteCapture, _sprites), 0x40);
+    CHECK_EQ((int)offsetof(UI::SpriteCapture, _width),   0x50);
+    CHECK_EQ((int)offsetof(UI::SpriteCapture, _height),  0x54);
+    CHECK_EQ((int)offsetof(UI::SpriteCapture, _sheets), (int)sizeof(Object::External));
+    CHECK_EQ((int)sizeof(UI::SpriteCapture::CaptureEntry), 0x28);
+    CHECK((std::is_base_of<Object::External, UI::SpriteCapture>::value));
+    CHECK(std::is_abstract<UI::SpriteCapture>::value);
+
+    SpriteCaptureProbe probe;
+    probe._width = 12;
+    probe._height = 34;
+    CHECK_EQ(probe.GetWidth(), 12);      // 0x1800d9220 MOV EAX,[RCX+0x50]
+    CHECK_EQ(probe.GetHeight(), 34);     // 0x1800d9210 MOV EAX,[RCX+0x54]
+}
+
+UNIT_TEST(ui_spritecapture_slot_order_is_retails) {
+    SpriteCaptureProbe probe;
+    void* raw = static_cast<void*>(&probe);
+    CheckNineSlots(raw);
+    CheckCompileInherited(raw);
+}
+
 }  // namespace
 
 // ############################################################################
@@ -328,5 +363,14 @@ Object::External* SpriteSheet::Reconstruct() { Note(this, kReconstruct / 8); ret
 void        SpriteSheet::Destruct() { Note(this, kDestruct / 8); }
 Object::External* SpriteSheet::Construct() { Note(this, kConstruct / 8); return this; }
 SpriteSheet::~SpriteSheet() {}
+
+const char* SpriteCapture::TypeName() const { Note(this, kTypeName / 8); return "SpriteCapture"; }
+uint32_t    SpriteCapture::Type() const { Note(this, kType / 8); return 0u; }
+int32_t     SpriteCapture::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
+bool        SpriteCapture::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+Object::External* SpriteCapture::Reconstruct() { Note(this, kReconstruct / 8); return this; }
+void        SpriteCapture::Destruct() { Note(this, kDestruct / 8); }
+Object::External* SpriteCapture::Construct() { Note(this, kConstruct / 8); return this; }
+SpriteCapture::~SpriteCapture() {}
 
 }  // namespace UI

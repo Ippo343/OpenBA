@@ -114,6 +114,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteContext.h"
+#include "../../types/ui/SpriteCapture.h"
 #include "../../types/math/Math.h"
 #include "../../types/video/Context.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteIndexZ etc.
@@ -146,20 +147,14 @@ inline int ScaleUp(int v, float scale) {
 
 }  // namespace
 
-// UI::SpriteCapture's two recorders, reached only when `_spriteCapture` is
+// UI::SpriteCapture's recorders are reached only when `_spriteCapture` is
 // non-null — which it is not unless a screenshot/capture UI is active. Argument
 // orders read off the two call sites, NOT guessed from the callee names:
 //   AddScissor  0x1800d8ef0  <- 0x18011d126..0x18011d146
 //   AddSprite   0x1800d8b20  <- 0x18011c8e4..0x18011c916
 // ENDGAME B.3.6 block D: these were two `ResolveAddr` static caches
 // (`TheCaptureAddScissor` / `TheCaptureAddSprite`, RULE B6-5 removes them);
-// they are the registered bodies in runtime/src/ui/spritecapture.cpp, called
-// directly until `UI::SpriteCapture` converts.
-extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
-                                              int right, int bottom, bool fullScreen);
-extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRaw,
-                                             int x1, int y1, int x2, int y2,
-                                             float rotation, uint32_t color);
+// they are UI::SpriteCapture member calls now.
 
 // ============================================================================
 // The ports — UI::SpriteContext's members (ENDGAME B.3.6 block D)
@@ -191,14 +186,12 @@ void SpriteContext::Begin(float scale, SpriteCapture* capture, Video::Viewport* 
     _clipRegion = clipRegion;
 
     if (capture) {
-        uint8_t* cap = reinterpret_cast<uint8_t*>(capture);  // B.3.6 bridge
-        *reinterpret_cast<uint64_t*>(cap + 0x50) = 0;
-
-        // Both rows are NON-TRIVIAL (kSpec_SpriteIndexZ's tail-init sets each
-        // new Sprite's index to -1; kSpec_CaptureEntryZ's destroy releases a
-        // String), so the bridge stays byte-offset rather than retyping.
-        rtcoll::AsArray<&rtcoll::kSpec_SpriteIndexZ>(cap + 0x40)->SetSize(0);   // 0x1800370c0
-        rtcoll::AsArray<&rtcoll::kSpec_CaptureEntryZ>(cap + 0x30)->SetSize(0); // 0x18004ba90
+        // Retail INLINES SpriteCapture::BeginAddingSprites (0x1800d9010) here:
+        // zero +0x50 (width and height), SetSize(_sprites, 0) through
+        // kSpec_SpriteIndexZ (0x1800370c0), SetSize(_entries, 0) through
+        // kSpec_CaptureEntryZ (0x18004ba90) — the member does exactly those
+        // three, in that order.
+        capture->BeginAddingSprites();
     }
 
     _currentSheet = nullptr;
@@ -243,8 +236,7 @@ void SpriteContext::AddSpriteDraw(const SpriteDraw& draw) {
             Sprite s;
             s.spriteSheet = d->sheet;
             s.spriteIndex = d->spriteIndex;
-            RtUi_SpriteCapture_AddSprite(capture, &s, d->x1, d->y1,
-                                         d->x2, d->y2, d->rotation, d->color);
+            capture->AddSprite(s, d->x1, d->y1, d->x2, d->y2, d->rotation, d->color);
         }
     }
 
@@ -385,8 +377,7 @@ Video::Viewport SpriteContext::SetScissor(const Video::Viewport& v) {
         const int tw = *reinterpret_cast<const int32_t*>(target + 0x10);
         const int th = *reinterpret_cast<const int32_t*>(target + 0x14);
         const bool fullScreen = (nw == tw && nh == th);
-        RtUi_SpriteCapture_AddScissor(capture, v.x, v.y,
-                                      v.width + v.x, v.height + v.y, fullScreen);
+        capture->AddScissor(v.x, v.y, v.width + v.x, v.height + v.y, fullScreen);
     }
 
     // 0x18011d14b..0x18011d1b4. The OLD values are read before the new ones

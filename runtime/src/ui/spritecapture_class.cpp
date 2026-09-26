@@ -46,6 +46,11 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/SpriteCapture.h"
+#include "../../types/ui/SpriteContext.h"
+#include "../../types/ui/SpriteSheet.h"
+#include "../../types/ui/Sprite.h"
+#include "../../types/system/String.h"
+#include "../../types/video/Context.h"   // Video::Viewport
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -110,31 +115,68 @@ using ScalarFn = void (*)(void* rw, void* value, const char* name);
 }  // namespace
 
 // 0x18003c7f0 / 0x18003c810: the class's own BaseTypeInfo node at +0 and +8.
-extern "C" uint32_t RtUi_SpriteCapture_Type(const void*) {
+// ############################################################################
+// UI::SpriteCapture's slot bodies (ENDGAME B.3.6 block D). The doors below
+// delegate with a QUALIFIED call (a live SpriteCapture wears the MINTED table).
+// ############################################################################
+namespace UI {
+
+uint32_t SpriteCapture::Type() const {
     const uint8_t* ti = SpriteCaptureTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_SpriteCapture_TypeName(const void*) {
+const char* SpriteCapture::TypeName() const {
     const uint8_t* ti = SpriteCaptureTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 // 0x1800d9520: `MOV EAX,0x1 ; RET`.
-extern "C" int32_t RtUi_SpriteCapture_GetFileVersion(const void*) { return 1; }
+int32_t SpriteCapture::GetFileVersion() const { return 1; }
 
 // 0x18003cac0
-extern "C" void* RtUi_SpriteCapture_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                    // 18003cad1 TEST/JZ
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                            // 18003cb26
+// Retail's null test (18003cad1 TEST/JZ) is in the DOOR.
+Object::External* SpriteCapture::Construct() {
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                             // 18003cb26
 }
 // 0x18003ca40: slot0(this, 0), then the same inlined constructor, open-coded.
-extern "C" void* RtUi_SpriteCapture_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                     // 18003ca57
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                            // 18003caae
+Object::External* SpriteCapture::Reconstruct() {
+    CallSlot0(this, 0);                                      // 18003ca57
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                             // 18003caae
 }
 // 0x18003cb40: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-extern "C" void RtUi_SpriteCapture_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+void SpriteCapture::Destruct() { CallSlot0(this, 0); }
+
+// ~SpriteCapture: NON-VIRTUAL and EMPTY; the registered dtor door below does
+// retail's three ~Array calls and the chain to ~External.
+SpriteCapture::~SpriteCapture() {}
+
+}  // namespace UI
+
+extern "C" uint32_t RtUi_SpriteCapture_Type(const void* selfv) {
+    return reinterpret_cast<const UI::SpriteCapture*>(selfv)                // B.3.6 bridge
+               ->UI::SpriteCapture::Type();
+}
+extern "C" const char* RtUi_SpriteCapture_TypeName(const void* selfv) {
+    return reinterpret_cast<const UI::SpriteCapture*>(selfv)                // B.3.6 bridge
+               ->UI::SpriteCapture::TypeName();
+}
+extern "C" int32_t RtUi_SpriteCapture_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const UI::SpriteCapture*>(selfv)                // B.3.6 bridge
+               ->UI::SpriteCapture::GetFileVersion();
+}
+extern "C" void* RtUi_SpriteCapture_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                    // 18003cad1 TEST/JZ
+    return reinterpret_cast<UI::SpriteCapture*>(selfv)                      // B.3.6 bridge
+               ->UI::SpriteCapture::Construct();
+}
+extern "C" void* RtUi_SpriteCapture_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::SpriteCapture*>(selfv)                      // B.3.6 bridge
+               ->UI::SpriteCapture::Reconstruct();
+}
+extern "C" void RtUi_SpriteCapture_Destruct(void* selfv) {
+    reinterpret_cast<UI::SpriteCapture*>(selfv)->UI::SpriteCapture::Destruct();  // B.3.6 bridge
+}
 
 // ============================================================================
 // ??1SpriteCapture@UI@@UEAA@XZ   0x1800d91b0
@@ -188,8 +230,9 @@ extern "C" void RtUi_SpriteCapture_Dtor(void* selfv) {
 // 0x1800d96c0 stores all eight into `sprite.index`. The WIDTH is the faithful
 // part and is reproduced; the upper four bytes are whatever the frame held,
 // exactly as in AnimatedImageDescription::CreateInstance.
-extern "C" bool RtUi_SpriteCapture_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
+namespace UI {
+
+bool SpriteCapture::Serialize(void* streamv) {
     Stream*  stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };                    // [RBP-0x38], [RBP-0x30]
@@ -204,35 +247,34 @@ extern "C" bool RtUi_SpriteCapture_Serialize(void* selfv, void* streamv) {
     void** rvt = VTableOf(rw);
     ScalarFn scalar = reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8]);
 
-    int32_t n = *reinterpret_cast<int32_t*>(p + 0x28);       // 1800d9586  _sheets._size
+    int32_t n = _sheets.size;       // 1800d9586  _sheets._size
     scalar(rw, &n, nullptr);                                 // 1800d959b
 
     using SetSizeFn = void (*)(void* array, int n);
     using WalkFn    = void (*)(Serializer* ser, int count, void* data);
 
     if (ser.stream->mode == 0) {                             // 1800d95a5 (re-read)
-        RtAddr<SetSizeFn>(0x18003ea50ull)(p + 0x20, n);      // 1800d95b2
+        RtAddr<SetSizeFn>(0x18003ea50ull)(&_sheets, n);      // 1800d95b2
     }
-    RtAddr<WalkFn>(0x18003eb60ull)(&ser, n, *reinterpret_cast<void**>(p + 0x20));
+    RtAddr<WalkFn>(0x18003eb60ull)(&ser, n, _sheets.data);
 
-    scalar(rw, p + 0x50, nullptr);                           // 1800d95d5  _width
-    scalar(rw, p + 0x54, nullptr);                           // 1800d95e9  _height
+    scalar(rw, &_width, nullptr);                           // 1800d95d5  _width
+    scalar(rw, &_height, nullptr);                           // 1800d95e9  _height
 
-    n = *reinterpret_cast<int32_t*>(p + 0x38);               // 1800d95ef  _entries._size
+    n = _entries.size;               // 1800d95ef  _entries._size
     scalar(rw, &n, nullptr);                                 // 1800d9604
 
     if (ser.stream->mode == 0) {                             // 1800d960e (re-read)
-        RtAddr<SetSizeFn>(0x18004ba90ull)(p + 0x30, n);      // 1800d961b
+        RtAddr<SetSizeFn>(0x18004ba90ull)(&_entries, n);      // 1800d961b
     }
-    RtAddr<WalkFn>(0x18004c0d0ull)(&ser, n, *reinterpret_cast<void**>(p + 0x30));
+    RtAddr<WalkFn>(0x18004c0d0ull)(&ser, n, _entries.data);
 
     if (stream->mode == 0) {                                 // 1800d9630  the ORIGINAL stream
         RtAddr<SetSizeFn>(0x1800370c0ull)(
-            p + 0x40, *reinterpret_cast<int32_t*>(p + 0x38));         // 1800d9642
+            &_sprites, _entries.size);         // 1800d9642
 
-        using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
-        for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(p + 0x48); ++i) {
-            uint8_t* entries = *reinterpret_cast<uint8_t**>(p + 0x30);   // 1800d9660
+        for (int32_t i = 0; i < _sprites.size; ++i) {
+            uint8_t* entries = static_cast<uint8_t*>(_entries.data);   // 1800d9660
             const int32_t sheetIndex =
                 *reinterpret_cast<int32_t*>(entries + static_cast<size_t>(i) * 0x28);
 
@@ -242,23 +284,23 @@ extern "C" bool RtUi_SpriteCapture_Serialize(void* selfv, void* streamv) {
             if (sheetIndex < 0) {                            // 1800d9664 CMP/JGE
                 const int32_t minusOne = -1;
                 __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);  // 1800d966b
-                sprites = *reinterpret_cast<uint8_t**>(p + 0x40);        // 1800d9672
+                sprites = static_cast<uint8_t*>(_sprites.data);        // 1800d9672
                 sheet   = nullptr;                                       // 1800d9676 (RDI==0)
             } else {
                 sheet = reinterpret_cast<void* const*>(
-                    *reinterpret_cast<uint8_t**>(p + 0x20))[sheetIndex]; // 1800d968f
+                    static_cast<uint8_t*>(_sheets.data))[sheetIndex]; // 1800d968f
                 if (sheet != nullptr) {                                  // 1800d9693
-                    const int32_t idx = RT_EXPORT_ONCE(
-                        GetIdxFn,
-                        "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z")(
-                            sheet,
-                            entries + static_cast<size_t>(i) * 0x28 + 8); // 1800d96a3
+                    // ENDGAME B.3.6 block D: was an RT_EXPORT_ONCE door;
+                    // now the member. The entry's +0x08 IS a System::String.
+                    const int32_t idx = static_cast<const SpriteSheet*>(sheet)
+                        ->GetSpriteIndexFromName(*reinterpret_cast<const System::String*>(  // B.3.6 bridge
+                            entries + static_cast<size_t>(i) * 0x28 + 8));  // 1800d96a3
                     __builtin_memcpy(&idxSlot, &idx, sizeof idx);         // 1800d96a8
                 } else {
                     const int32_t minusOne = -1;
                     __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne); // 1800d96ad
                 }
-                sprites = *reinterpret_cast<uint8_t**>(p + 0x40);         // 1800d96b4
+                sprites = static_cast<uint8_t*>(_sprites.data);         // 1800d96b4
             }
             uint8_t* slot = sprites + static_cast<size_t>(i) * 0x10;
             *reinterpret_cast<void**>(slot)        = sheet;   // 1800d9676 / 1800d96b8
@@ -271,6 +313,13 @@ extern "C" bool RtUi_SpriteCapture_Serialize(void* selfv, void* streamv) {
         reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
     }
     return true;                                             // 1800d96e9 MOV AL,1
+}
+
+}  // namespace UI
+
+extern "C" bool RtUi_SpriteCapture_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<UI::SpriteCapture*>(selfv)                      // B.3.6 bridge
+               ->UI::SpriteCapture::Serialize(streamv);
 }
 
 // ============================================================================
@@ -302,40 +351,29 @@ extern "C" bool RtUi_SpriteCapture_Serialize(void* selfv, void* streamv) {
 // slot and the argument rectangle is in R8 (0x1800d936e / 0x1800d937a). The
 // returned viewport is DISCARDED. Reading that pair the other way round is the
 // wild-write family this project keeps paying for.
-extern "C" void RtUi_SpriteCapture_Draw(const void* selfv, void* ctxv, int ox, int oy) {
-    const uint8_t* p   = reinterpret_cast<const uint8_t*>(selfv);
-    uint8_t*       ctx = reinterpret_cast<uint8_t*>(ctxv);
+namespace UI {
 
-    const int32_t savedX = *reinterpret_cast<int32_t*>(ctx + 0x20);   // 1800d923c
-    const int32_t savedY = *reinterpret_cast<int32_t*>(ctx + 0x24);   // 1800d9265
-    const int32_t savedW = *reinterpret_cast<int32_t*>(ctx + 0x28);   // 1800d9268
-    const int32_t savedH = *reinterpret_cast<int32_t*>(ctx + 0x2c);   // 1800d9295
+void SpriteCapture::Draw(SpriteContext& ctx, int32_t ox, int32_t oy) const {
+    const int32_t savedX = ctx._scissorX;                             // 1800d923c
+    const int32_t savedY = ctx._scissorY;                             // 1800d9265
+    const int32_t savedW = ctx._scissorW;                             // 1800d9268
+    const int32_t savedH = ctx._scissorH;                             // 1800d9295
 
-    const float scale = *reinterpret_cast<const float*>(ctx);         // 1800d9251
+    const float scale = ctx._scale;                                   // 1800d9251
     const int32_t sx = static_cast<int32_t>(static_cast<float>(savedX) * scale);
     const int32_t sy = static_cast<int32_t>(static_cast<float>(savedY) * scale);
     const int32_t sw = static_cast<int32_t>(static_cast<float>(savedW) * scale);
     const int32_t sh = static_cast<int32_t>(static_cast<float>(savedH) * scale);
 
-    using SetScissorFn = void* (*)(void* ctx, int32_t* ret, const int32_t* rect);
-    using AddSpriteRotFn = void (*)(void* ctx, const void* sprite,
-                                    int x1, int y1, int x2, int y2,
-                                    uint32_t color, float rotation);
-    using AddLineFn = void (*)(void* ctx, const void* sprite,
-                               int x1, int y1, int x2, int y2, uint32_t color);
-    using FlushFn = void (*)(void* ctx);
+    // `_entries.size` and `.data` are re-read every iteration, as retail does.
+    for (int32_t i = 0; i < _entries.size; ++i) {
+        const CaptureEntry& e = static_cast<const CaptureEntry*>(_entries.data)[i];  // 1800d92e3
 
-    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(p + 0x38); ++i) {
-        const uint8_t* entries = *reinterpret_cast<const uint8_t* const*>(p + 0x30);
-        const uint8_t* e = entries + static_cast<size_t>(i) * 0x28;   // 1800d92e3
-
-        const int32_t sheetIndex = *reinterpret_cast<const int32_t*>(e);
-
-        if (sheetIndex == -1) {                                       // 1800d92eb
-            int32_t x1 = *reinterpret_cast<const int32_t*>(e + 0x10) + ox;
-            int32_t x2 = *reinterpret_cast<const int32_t*>(e + 0x18) + ox;
-            int32_t y1 = *reinterpret_cast<const int32_t*>(e + 0x14) + oy;
-            int32_t y2 = *reinterpret_cast<const int32_t*>(e + 0x1c) + oy;
+        if (e.sheetIndex == -1) {                                     // 1800d92eb
+            int32_t x1 = e.x1 + ox;
+            int32_t x2 = e.x2 + ox;
+            int32_t y1 = e.y1 + oy;
+            int32_t y2 = e.y2 + oy;
 
             const int32_t right  = sw + sx;                           // 1800d931f
             if (x1 < sx)    x1 = sx;                                  // 1800d9318 CMOVL
@@ -349,40 +387,37 @@ extern "C" void RtUi_SpriteCapture_Draw(const void* selfv, void* ctxv, int ox, i
             if (y2 < sy)     y2 = sy;
             if (y2 > bottom) y2 = bottom;
 
-            int32_t rect[4] = { x1, y1, x2 - x1 + 1, y2 - y1 + 1 };   // [RSP+0x58..0x64]
-            int32_t discarded[4];                                     // [RSP+0x68] hidden slot
-            RT_EXPORT_ONCE(SetScissorFn,
-                           "?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z")(
-                               ctx, discarded, rect);                 // 1800d9384
+            // [RSP+0x58..0x64]; the RETURNED viewport (RDX, [RSP+0x68]) is
+            // discarded (1800d9384).
+            Video::Viewport rect;
+            rect.x = x1; rect.y = y1;
+            rect.width = x2 - x1 + 1; rect.height = y2 - y1 + 1;
+            (void)ctx.SetScissor(rect);
             continue;
         }
 
-        if (sheetIndex == -2) {                                       // 1800d938e
-            if (savedX != *reinterpret_cast<int32_t*>(ctx + 0x20) ||  // 1800d9393
-                savedY != *reinterpret_cast<int32_t*>(ctx + 0x24) ||
-                savedW != *reinterpret_cast<int32_t*>(ctx + 0x28) ||
-                savedH != *reinterpret_cast<int32_t*>(ctx + 0x2c)) {
-                RT_EXPORT_ONCE(FlushFn, "?Flush@SpriteContext@UI@@AEAAXXZ")(ctx);
-                RT_EXPORT_ONCE(FlushFn,
-                               "?FlushDeferredFonts@SpriteContext@UI@@AEAAXXZ")(ctx);
-                *reinterpret_cast<int32_t*>(ctx + 0x20) = savedX;     // 1800d93cf
-                *reinterpret_cast<int32_t*>(ctx + 0x24) = savedY;
-                *reinterpret_cast<int32_t*>(ctx + 0x28) = savedW;
-                *reinterpret_cast<int32_t*>(ctx + 0x2c) = savedH;
+        if (e.sheetIndex == -2) {                                     // 1800d938e
+            if (savedX != ctx._scissorX || savedY != ctx._scissorY || // 1800d9393
+                savedW != ctx._scissorW || savedH != ctx._scissorH) {
+                ctx.Flush();
+                ctx.FlushDeferredFonts();
+                ctx._scissorX = savedX;                               // 1800d93cf
+                ctx._scissorY = savedY;
+                ctx._scissorW = savedW;
+                ctx._scissorH = savedH;
             }
             continue;
         }
 
         // A recorded sprite. The Sprite the scissor entries do NOT have.
-        const uint8_t* sprites = *reinterpret_cast<const uint8_t* const*>(p + 0x40);
-        const void*  sprite    = sprites + static_cast<size_t>(i) * 0x10;
-        void* const  sheet     = *reinterpret_cast<void* const*>(sprite);
+        const Sprite& sprite = static_cast<const Sprite*>(_sprites.data)[i];
+        void* const   sheet  = sprite.spriteSheet;
 
-        const int32_t x1 = *reinterpret_cast<const int32_t*>(e + 0x10) + ox;
-        const int32_t y1 = *reinterpret_cast<const int32_t*>(e + 0x14) + oy;
-        const int32_t x2 = *reinterpret_cast<const int32_t*>(e + 0x18) + ox;
-        const int32_t y2 = *reinterpret_cast<const int32_t*>(e + 0x1c) + oy;
-        const uint32_t color = *reinterpret_cast<const uint32_t*>(e + 0x24);
+        const int32_t x1 = e.x1 + ox;
+        const int32_t y1 = e.y1 + oy;
+        const int32_t x2 = e.x2 + ox;
+        const int32_t y2 = e.y2 + oy;
+        const uint32_t color = e.color;
 
         // The chain retail walks from the sheet to the thing whose +0x6c
         // selects sprite-vs-line. It is five unguarded loads, transcribed as
@@ -396,29 +431,32 @@ extern "C" void RtUi_SpriteCapture_Draw(const void* selfv, void* ctxv, int ox, i
         q = *reinterpret_cast<const uint8_t* const*>(q + 0x38);                  // 1800d941a
 
         if (*reinterpret_cast<const int32_t*>(q + 0x6c) != 1) {                  // 1800d9423
-            const float rotation = *reinterpret_cast<const float*>(e + 0x20);
-            RT_EXPORT_ONCE(AddSpriteRotFn,
-                           "?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHIM@Z")(
-                               ctx, sprite, x1, y1, x2, y2, color, rotation);    // 1800d9468
+            ctx.AddSprite(sprite, x1, y1, x2, y2, color, e.rotation);            // 1800d9468
         } else {
-            RT_EXPORT_ONCE(AddLineFn,
-                           "?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z")(
-                               ctx, sprite, x1, y1, x2, y2, color);              // 1800d9441
+            ctx.AddLine(sprite, x1, y1, x2, y2, color);                          // 1800d9441
         }
     }
 
     // The same restore as the -2 arm, once more at the end (0x1800d94cd).
-    if (savedX != *reinterpret_cast<int32_t*>(ctx + 0x20) ||
-        savedY != *reinterpret_cast<int32_t*>(ctx + 0x24) ||
-        savedW != *reinterpret_cast<int32_t*>(ctx + 0x28) ||
-        savedH != *reinterpret_cast<int32_t*>(ctx + 0x2c)) {
-        RT_EXPORT_ONCE(FlushFn, "?Flush@SpriteContext@UI@@AEAAXXZ")(ctx);
-        RT_EXPORT_ONCE(FlushFn, "?FlushDeferredFonts@SpriteContext@UI@@AEAAXXZ")(ctx);
-        *reinterpret_cast<int32_t*>(ctx + 0x20) = savedX;             // 1800d94f9
-        *reinterpret_cast<int32_t*>(ctx + 0x24) = savedY;
-        *reinterpret_cast<int32_t*>(ctx + 0x28) = savedW;
-        *reinterpret_cast<int32_t*>(ctx + 0x2c) = savedH;
+    if (savedX != ctx._scissorX || savedY != ctx._scissorY ||
+        savedW != ctx._scissorW || savedH != ctx._scissorH) {
+        ctx.Flush();
+        ctx.FlushDeferredFonts();
+        ctx._scissorX = savedX;                                       // 1800d94f9
+        ctx._scissorY = savedY;
+        ctx._scissorW = savedW;
+        ctx._scissorH = savedH;
     }
+}
+
+}  // namespace UI
+
+// The door. ENDGAME B.3.6 block D: the five RT_EXPORT_ONCE doors this body
+// used to call on the context (SetScissor, Flush, FlushDeferredFonts,
+// AddSprite, AddLine) are SpriteContext member calls now.
+extern "C" void RtUi_SpriteCapture_Draw(const void* selfv, void* ctxv, int ox, int oy) {
+    reinterpret_cast<const UI::SpriteCapture*>(selfv)                       // B.3.6 bridge
+        ->UI::SpriteCapture::Draw(*static_cast<UI::SpriteContext*>(ctxv), ox, oy);
 }
 
 // ============================================================================
