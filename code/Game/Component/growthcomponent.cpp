@@ -783,86 +783,69 @@ void GrowthComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory =====
-// WORKED EXAMPLE of the inert->live component bring-up (Track C / Phase 1). By
-// DEFAULT GrowthComponent is inert exactly like every other standalone component
-// (all 48 vtable slots no-op stubs except +0x00 dtor / +0x10 GetTypeId).
-//
-// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_GROWTH is now in the default-on table, so the default
-// run is NO LONGER byte-for-byte unchanged — this component is LIVE by default and the env
-// var is only a kill-switch (=0). It went live together with BANISHED_LIVE_FRUIT and
-// BANISHED_LIVE_ORCHARD, on a measured orchard loop that ends with fruit in town storage.
-// This one is the broadest of the three: it drives EVERY runtime-spawned natural resource,
-// not just orchard trees.
-//
-// Set BANISHED_LIVE_GROWTH=1 (or the global the global live-components switch=1) to graduate
-// it to a REAL per-type vtable. The COMPONENT_LIVE_FACTORY_S macro (the generalized
-// form of this very pattern — see component_factory_base.h) routes:
-//   * slot 4 (+0x20 Startup) -> GrowthComponent_Startup — body-init at spawn
-//     (config@+0x38, resource sub-component@+0x28, growthScale@+0x4c). Called by
-//     ComponentEntity_StartupComponents.
-//   * slot 9 (+0x48 Update)  -> GrowthComponent_Update — the per-tick growth sim,
-//     the slot the EntityList bucket round-robin actually calls. (NOT +0x40/slot 8
-//     = the empty *_OnRemove — verified vs Ghidra vtable 0x140163590.)
-//
-// All four recipe steps are DONE and verified in-game (BANISHED_GROWTH_TRACE): the
-// growth value at resource+0x28 accumulates monotonically per tick.
+// ===== ENDGAME B.3.8 CIT — GrowthComponent as a REAL class (GrowthComponent.h) =====
+// Before: a 48-slot hand-built GrowthComponent_LiveVtable filled at every create
+// (slots 3 Serialize, 4 Startup, 9 Update, 10 PostUpdate), Inert_ScalarDtor in
+// slot 0. After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include <cstdlib>
-#include <cstring>
+#include "Component/GrowthComponent.h"
 
-// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_SP to
-// ALSO wire slot 3 (Shutdown/Serialize, 0x1401207c0 — Ghidra mislabel, see
-// growthcomponent_serialize.cpp). Wired UNCONDITIONALLY, same rationale as
-// ResidenceComponent/StorageComponent: serialize round-trip is not an
-// opt-in feature the way the live growth simulation is. Without this, a
-// loaded save's GrowthComponent kept the base-Component serialize, its
-// resource/model sibling IBPs (+0x28/+0x30) and growthScale (+0x4c) came
-// back zeroed, and the next live tick re-derived the model's visual scale
-// from that zeroed state — trees visibly vanish and regrow from zero.
+// Retail 0x1401207c0 (growthcomponent_serialize.cpp).
 extern "C" void GrowthComponent_Serialize2(void* self, void* stream);
-static uint32_t GrowthComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("GrowthComponent");
-    return cached;
+
+// 0x1401208f0. Component() is the CALL 0x1401188b0; the 0x140163590 stamp is
+// the compiler's; +0x28..+0x40 = 0; flags |= 0xcb.
+// PORT GAP (retail 0x1401208f0): retail also writes +0x48 = +0x4c = 1.0f; the
+// tree's factory zero-filled them (Startup seeds growthScale). Kept as the tree's
+// here; the retail values are their own titled commit.
+GrowthComponent::GrowthComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr),
+      growthRate(0.0f), growthScale(0.0f) {
+    OrFlagsInCtor(0xcb);
 }
-static void* GrowthComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void GrowthComponent_UpdateVSlot(void* s, void* t) {
-    GrowthComponent_Update(reinterpret_cast<GrowthComponent*>(s), reinterpret_cast<int64_t*>(t));
+
+// [0] 0x140034c50: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* GrowthComponent::DeletingDtor(unsigned flags) {
+    this->~GrowthComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void GrowthComponent_StartupVSlot(void* s) {
-    GrowthComponent_Startup(reinterpret_cast<GrowthComponent*>(s));
+
+void GrowthComponent::Persist(void* stream) { GrowthComponent_Serialize2(this, stream); }   // [3] 0x1401207c0
+void GrowthComponent::Startup() { GrowthComponent_Startup(this); }                           // [4] 0x1401206f0
+void GrowthComponent::OnAdded() {}                                  // [6] 0x140120690: retail's own `RET`
+
+// [7] 0x140120560 (283 B). PORT GAP (retail 0x140120560) — B38 D9: not ported;
+// the tree's table held the inert stub here, kept.
+void GrowthComponent::OnRemove() {}
+
+// [9] 0x140120050. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void GrowthComponent::Update(void* time) {
+    GrowthComponent_Update(this, static_cast<int64_t*>(time));
 }
-static void GrowthComponent_PostUpdateVSlot(void* s) {
-    GrowthComponent_ApplyVisualScale(reinterpret_cast<GrowthComponent*>(s));
+
+// [10] 0x14011fea0 — dispatched by EntityList::PostUpdateNodeHandler (flags bit
+// 4): ease the model's visual scale toward the accumulated growth.
+void GrowthComponent::PostUpdate() { GrowthComponent_ApplyVisualScale(this); }
+
+// [11] 0x1401206a0 (64 B). PORT GAP (retail 0x1401206a0) — B38 D9: not ported;
+// the tree's table held the inert stub here, kept.
+void GrowthComponent::Slot11() {}
+
+// create 0x140034b10: MemAlloc(0x50, 8), then the ctor.
+void* GrowthComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GrowthComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) GrowthComponent());
 }
-static void GrowthComponent_SerializeVSlot(void* self, void* stream) {
-    GrowthComponent_Serialize2(self, stream);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* GrowthComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) GrowthComponent());
 }
-static void GrowthComponent_FinishLiveVtable() {
-    GrowthComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&GrowthComponent_SerializeVSlot);
-    GrowthComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&GrowthComponent_StartupVSlot);
-    GrowthComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&GrowthComponent_UpdateVSlot);
-    GrowthComponent_LiveVtable[10] =
-        reinterpret_cast<void*>(&GrowthComponent_PostUpdateVSlot);
-}
-extern "C" void* GrowthComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x50, 0xcb,
-        GrowthComponent_LiveVtable,
-        reinterpret_cast<void*>(&GrowthComponent_LiveGetTypeId));
-    GrowthComponent_FinishLiveVtable();
-    return p;
-}
-static void* GrowthComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x50, 0xcb,
-        GrowthComponent_LiveVtable,
-        reinterpret_cast<void*>(&GrowthComponent_LiveGetTypeId));
-    GrowthComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(GrowthComponent, "Component",
-              &GrowthComponent_Factory, &GrowthComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(GrowthComponent, "_ZTV15GrowthComponent")
+DEFINE_EXE_TYPE(GrowthComponent, "Component")
