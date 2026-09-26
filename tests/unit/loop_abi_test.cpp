@@ -38,6 +38,7 @@
 #include "Game/Weather.h"
 #include "Game/WorldGeometry.h"
 #include "Game/WeatherParticleGeometry.h"
+#include "Game/PathfinderThread.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -271,6 +272,17 @@ UNIT_TEST(loop_geometry_subclasses) {
     CHECK_EQ(offsetof(WeatherParticleGeometry, _particles), (size_t)0xe0);
     CheckGeometryShape<WorldGeometry>();
     CheckGeometryShape<WeatherParticleGeometry>();
+}
+
+// THE PATHFINDER System::Thread SUBCLASS (0x14015ef18, 2 slots)
+UNIT_TEST(loop_pathfinder_thread) {
+    CHECK_EQ(sizeof(PathfinderThread), (size_t)0x1f8);   // MemAlloc(0x1f8)
+    CHECK((std::is_base_of<System::Thread, PathfinderThread>::value));
+    CHECK(!std::is_abstract<PathfinderThread>::value);
+    CHECK(std::is_final<PathfinderThread>::value);
+    CHECK(!std::has_virtual_destructor<PathfinderThread>::value);
+    CHECK_EQ(SlotOffset(&PathfinderThread::Run),         S(0));
+    CHECK_EQ(SlotOffset(&PathfinderThread::OnCompleted), S(1));   // inherited
 }
 
 }  // namespace
