@@ -7,80 +7,63 @@
 // Serialize (vtable +0x28, 0x14004b090): Serializer ctor/dtor only — no fields.
 // GetVersion (vtable +0x18, 0x14004b0d0): mov eax,1; ret.
 // Decompiled READ-ONLY from Application-x64.exe (Foundation C wave 2).
+//
+// ENDGAME B.3.8 K1: a REAL class (HealerDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401597c0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/HealerDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kHealerDescriptionVtable = 0x1401597c0;
-
-static void HealerDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kHealerDescriptionVtable);
-    // no own fields (size 0x20)
+// [0] 0x140006600: ~HealerDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* HealerDescription::DeletingDtor(unsigned flags) {
+    this->~HealerDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void HealerDescription_Serialize(void* self, void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    // no fields serialized
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x14004b090: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool HealerDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* HealerDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kHealerDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400065a0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* HealerDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void HealerDescription::Destruct() {}
+
+// [8] 0x1400065f0: HealerComponent's type id through the hidden return slot.
+Object::Type* HealerDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("HealerComponent");
+    return ret;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t HealerDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("HealerDescription");
-    return cached;
+// [9] 0x140006550: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* HealerDescription::Construct() {
+    return new (static_cast<void*>(this)) HealerDescription();
 }
-static int   HealerDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion=1
-static int   HealerDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* HealerDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* HealerDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* HealerDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "HealerComponent"); }
-
-static void* g_HealerDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&HealerDescription_Dtor),             // +0x00
-    reinterpret_cast<void*>(&HealerDescription_Stub_ReturnNull),  // +0x08
-    reinterpret_cast<void*>(&HealerDescription_GetTypeId),        // +0x10
-    reinterpret_cast<void*>(&HealerDescription_Stub_Return1),     // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&HealerDescription_Stub_Return0),     // +0x20 Compile
-    reinterpret_cast<void*>(&HealerDescription_Serialize),        // +0x28 Serialize
-    reinterpret_cast<void*>(&HealerDescription_Stub_Return0),     // +0x30
-    reinterpret_cast<void*>(&HealerDescription_Stub_Return0),     // +0x38
-    reinterpret_cast<void*>(&HealerDescription_GetComponentTypeId),  // +0x40
-    reinterpret_cast<void*>(&HealerDescription_CreateInPlace),    // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&HealerDescription_Stub_ReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterHealerDescriptionVtable() {
-    RegisterExeAddr(kHealerDescriptionVtable, reinterpret_cast<uintptr_t>(g_HealerDescription_Vtable));
-}
-extern "C" void* HealerDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+// create 0x1400064f0: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* HealerDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HealerDescription), 8);
     if (!p) return nullptr;
-    HealerDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) HealerDescription());
 }
-static void* HealerDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    HealerDescription_Init(memory);
-    return memory;
+// createInPlace 0x140006550.
+void* HealerDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HealerDescription());
 }
-REGISTER_TYPE(HealerDescription, "Description",
-              &HealerDescription_Factory, &HealerDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(HealerDescription, "_ZTV17HealerDescription")
+DEFINE_EXE_TYPE(HealerDescription, "Description")

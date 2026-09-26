@@ -11,86 +11,64 @@
 //
 // Field knowledge harvested from engine/reimpl/createpathdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (CreatePathDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140159210) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/CreatePathDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kCreatePathDescriptionVtable = 0x140159210;
-
-static void CreatePathDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kCreatePathDescriptionVtable);
-    *(void**)self = s_vtable;
+// [0] 0x140004d30: ~CreatePathDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* CreatePathDescription::DeletingDtor(unsigned flags) {
+    this->~CreatePathDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void CreatePathDescription_Serialize(void* self, void* stream) {
-    (void)self;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+// [5] 0x140047a70: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool CreatePathDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* CreatePathDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kCreatePathDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140004ce0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* CreatePathDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void CreatePathDescription::Destruct() {}
+
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* CreatePathDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CreatePathDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CreatePathDescription");
-    return cached;
+// [9] 0x140004c90: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* CreatePathDescription::Construct() {
+    return new (static_cast<void*>(this)) CreatePathDescription();
 }
 
-static int   CreatePathDescription_VtblStub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   CreatePathDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* CreatePathDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* CreatePathDescription_CreateInPlace(void* memory);
-
-static void* g_CreatePathDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CreatePathDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&CreatePathDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&CreatePathDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&CreatePathDescription_VtblStub_Return1),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&CreatePathDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&CreatePathDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&CreatePathDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&CreatePathDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&CreatePathDescription_VtblStub_ReturnNull),// +0x40 Slot8
-    reinterpret_cast<void*>(&CreatePathDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CreatePathDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterCreatePathDescriptionVtable() {
-    RegisterExeAddr(kCreatePathDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_CreatePathDescription_Vtable));
-}
-
-extern "C" void* CreatePathDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+// create 0x140004c30: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* CreatePathDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CreatePathDescription), 8);
     if (!p) return nullptr;
-    CreatePathDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) CreatePathDescription());
+}
+// createInPlace 0x140004c90.
+void* CreatePathDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CreatePathDescription());
 }
 
-static void* CreatePathDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    CreatePathDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(CreatePathDescription, "Description",
-              &CreatePathDescription_Factory, &CreatePathDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(CreatePathDescription, "_ZTV21CreatePathDescription")
+DEFINE_EXE_TYPE(CreatePathDescription, "Description")

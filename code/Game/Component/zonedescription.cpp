@@ -14,112 +14,63 @@
 // Dtor (vtable +0x00, 0x14003a810): vtable reset + External::~External + free.
 //
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (ZoneDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140164eb0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/ZoneDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kZoneDescriptionVtable = 0x140164eb0;
-
-// ============================================================
-// ZoneDescription_Init — base External init + vtable (no extra fields)
-// ============================================================
-static void ZoneDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kZoneDescriptionVtable);
-    *(void**)self = s_vtable;
+// [0] 0x14003a810: ~ZoneDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ZoneDescription::DeletingDtor(unsigned flags) {
+    this->~ZoneDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// ============================================================
-// ZoneDescription_Serialize (vtable +0x28, 0x140130430)
-// ============================================================
-// The original constructs a stack Serializer and immediately destroys it —
-// no fields are read. We mirror that (a true no-op on the stream).
-void ZoneDescription_Serialize(void* self, void* stream) {
-    (void)self;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140130430: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool ZoneDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-// ============================================================
-// ZoneDescription_Dtor (vtable +0x00, 0x14003a810)
-// ============================================================
-void* ZoneDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kZoneDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    // No owned String/array fields — go straight to base External dtor.
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x14003a7b0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* ZoneDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void ZoneDescription::Destruct() {}
+
+// [8] 0x14003a800: ZoneComponent's type id through the hidden return slot.
+Object::Type* ZoneDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("ZoneComponent");
+    return ret;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ZoneDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ZoneDescription");
-    return cached;
+// [9] 0x14003a760: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* ZoneDescription::Construct() {
+    return new (static_cast<void*>(this)) ZoneDescription();
 }
 
-static int   ZoneDescription_VtblStub_Return1(void* /*self*/)    { return 1; }  // GetVersion
-static int   ZoneDescription_VtblStub_Return0(void* /*self*/)    { return 0; }
-static void* ZoneDescription_VtblStub_ReturnNull(void*, ...)     { return nullptr; }
-
-static void* ZoneDescription_CreateInPlace(void* memory);
-
-// Vtable @ 0x140164eb0 (Object::External 9-slot shape):
-//   +0x00 Dtor        -> ZoneDescription_Dtor
-//   +0x08 GetTypeInfo -> ReturnNull stub
-//   +0x10 GetTypeId   -> ZoneDescription_GetTypeId
-//   +0x18 GetVersion  -> Return1 (mov eax,1)
-//   +0x20 Compile     -> Return0 (shared External::Compile thunk; unused on load)
-//   +0x28 Serialize   -> ZoneDescription_Serialize
-//   +0x30 Cleanup     -> Return0 (unused on load)
-//   +0x38 GetDesc     -> Return0 (shared base forwarder; unused on load)
-//   +0x40 Slot8       -> ReturnNull (unused on load)
-//   +0x48 CreateInPlace-> ZoneDescription_CreateInPlace
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* ZoneDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "ZoneComponent"); }
-
-static void* g_ZoneDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&ZoneDescription_Dtor),               // +0x00
-    reinterpret_cast<void*>(&ZoneDescription_VtblStub_ReturnNull),// +0x08
-    reinterpret_cast<void*>(&ZoneDescription_GetTypeId),          // +0x10
-    reinterpret_cast<void*>(&ZoneDescription_VtblStub_Return1),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&ZoneDescription_VtblStub_Return0),   // +0x20
-    reinterpret_cast<void*>(&ZoneDescription_Serialize),          // +0x28
-    reinterpret_cast<void*>(&ZoneDescription_VtblStub_Return0),   // +0x30
-    reinterpret_cast<void*>(&ZoneDescription_VtblStub_Return0),   // +0x38
-    reinterpret_cast<void*>(&ZoneDescription_GetComponentTypeId),// +0x40
-    reinterpret_cast<void*>(&ZoneDescription_CreateInPlace),      // +0x48
-    reinterpret_cast<void*>(&ZoneDescription_VtblStub_ReturnNull),// +0x50 (over-read guard)
-};
-
-extern "C" void RegisterZoneDescriptionVtable() {
-    RegisterExeAddr(kZoneDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_ZoneDescription_Vtable));
-}
-
-extern "C" void* ZoneDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+// create 0x14003a700: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* ZoneDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ZoneDescription), 8);
     if (!p) return nullptr;
-    ZoneDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) ZoneDescription());
+}
+// createInPlace 0x14003a760.
+void* ZoneDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ZoneDescription());
 }
 
-static void* ZoneDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    ZoneDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(ZoneDescription, "Description",
-              &ZoneDescription_Factory, &ZoneDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(ZoneDescription, "_ZTV15ZoneDescription")
+DEFINE_EXE_TYPE(ZoneDescription, "Description")

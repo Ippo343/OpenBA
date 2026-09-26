@@ -82,7 +82,6 @@ extern "C" {
     void RegisterWorkDescriptionVtable();
     void RegisterWorkPlaceDescriptionVtable();
     void RegisterResidenceDescriptionVtable();
-    void RegisterZoneDescriptionVtable();
     void RegisterMapDescriptionVtable();
     void RegisterCreatePlacedDescriptionVtable();
     void RegisterCreateDragDescriptionVtable();
@@ -101,7 +100,6 @@ extern "C" {
     void RegisterDestroyDescriptionVtable();
     void RegisterStorageDescriptionVtable();
     void RegisterStorageLocationDescriptionVtable();
-    void RegisterStorageDisplayDescriptionVtable();
     void RegisterModelDescriptionVtable();
     void RegisterPickingDescriptionVtable();
     void RegisterHighlightDescriptionVtable();
@@ -115,14 +113,11 @@ extern "C" {
     void RegisterAmbientEnvironmentDescriptionVtable();
     void RegisterAttendanceDescriptionVtable();
     void RegisterAutoPickupDescriptionVtable();
-    void RegisterBoatDescriptionVtable();
     void RegisterCaptureBoxDescriptionVtable();
     void RegisterCemeteryDescriptionVtable();
-    void RegisterClearResourceDescriptionVtable();
     void RegisterConsumeProduceDescriptionVtable();
     void RegisterCreateBridgeDescriptionVtable();
     void RegisterCreateFencedDescriptionVtable();
-    void RegisterCreatePathDescriptionVtable();
     void RegisterCreateRemovalDescriptionVtable();
     void RegisterCreateRoadDescriptionVtable();
     void RegisterCropFieldDescriptionVtable();
@@ -139,15 +134,11 @@ extern "C" {
     void RegisterFrustumOutlineDescriptionVtable();
     void RegisterGrowthDescriptionVtable();
     void RegisterHappinessDescriptionVtable();
-    void RegisterHealerDescriptionVtable();
     void RegisterHerbalistDescriptionVtable();
     void RegisterHuntDescriptionVtable();
     void RegisterImmigrationDescriptionVtable();
     void RegisterLivestockDescriptionVtable();
     void RegisterMarketDescriptionVtable();
-    void RegisterMarketLocationDescriptionVtable();
-    void RegisterMineDescriptionVtable();
-    void RegisterMultiObjectDescriptionVtable();
     void RegisterNomadDescriptionVtable();
     void RegisterOrchardDescriptionVtable();
     void RegisterPastureDescriptionVtable();
@@ -159,11 +150,9 @@ extern "C" {
     void RegisterTerraformDescriptionVtable();
     void RegisterTombstoneDescriptionVtable();
     void RegisterTornadoDescriptionVtable();
-    void RegisterTrackerDescriptionVtable();
     void RegisterTradeDescriptionVtable();
     void RegisterValueDescriptionVtable();
     void RegisterWellDescriptionVtable();
-    void RegisterWildAnimalDescriptionVtable();
     void RegisterAnimAudioEventVtable();
     void RegisterAmbientExternalPtrSerialize();
     void RegisterProfessionVtable();
@@ -1822,7 +1811,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterWorkDescriptionVtable();
     RegisterWorkPlaceDescriptionVtable();
     RegisterResidenceDescriptionVtable();
-    RegisterZoneDescriptionVtable();
     RegisterMapDescriptionVtable();
     RegisterCreatePlacedDescriptionVtable();
     RegisterCreateDragDescriptionVtable();
@@ -1841,7 +1829,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterDestroyDescriptionVtable();
     RegisterStorageDescriptionVtable();
     RegisterStorageLocationDescriptionVtable();
-    RegisterStorageDisplayDescriptionVtable();
     RegisterModelDescriptionVtable();
     RegisterPickingDescriptionVtable();
     RegisterHighlightDescriptionVtable();
@@ -1855,14 +1842,11 @@ static void RegisterVtablesAndTypeIds() {
     RegisterAmbientEnvironmentDescriptionVtable();
     RegisterAttendanceDescriptionVtable();
     RegisterAutoPickupDescriptionVtable();
-    RegisterBoatDescriptionVtable();
     RegisterCaptureBoxDescriptionVtable();
     RegisterCemeteryDescriptionVtable();
-    RegisterClearResourceDescriptionVtable();
     RegisterConsumeProduceDescriptionVtable();
     RegisterCreateBridgeDescriptionVtable();
     RegisterCreateFencedDescriptionVtable();
-    RegisterCreatePathDescriptionVtable();
     RegisterCreateRemovalDescriptionVtable();
     RegisterCreateRoadDescriptionVtable();
     RegisterCropFieldDescriptionVtable();
@@ -1878,15 +1862,11 @@ static void RegisterVtablesAndTypeIds() {
     RegisterFrustumOutlineDescriptionVtable();
     RegisterGrowthDescriptionVtable();
     RegisterHappinessDescriptionVtable();
-    RegisterHealerDescriptionVtable();
     RegisterHerbalistDescriptionVtable();
     RegisterHuntDescriptionVtable();
     RegisterImmigrationDescriptionVtable();
     RegisterLivestockDescriptionVtable();
     RegisterMarketDescriptionVtable();
-    RegisterMarketLocationDescriptionVtable();
-    RegisterMineDescriptionVtable();
-    RegisterMultiObjectDescriptionVtable();
     RegisterNomadDescriptionVtable();
     RegisterOrchardDescriptionVtable();
     RegisterPastureDescriptionVtable();
@@ -1898,11 +1878,9 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTerraformDescriptionVtable();
     RegisterTombstoneDescriptionVtable();
     RegisterTornadoDescriptionVtable();
-    RegisterTrackerDescriptionVtable();
     RegisterTradeDescriptionVtable();
     RegisterValueDescriptionVtable();
     RegisterWellDescriptionVtable();
-    RegisterWildAnimalDescriptionVtable();
 
     // M5 5c citizens — AnimAudioEvent (Graphics::AnimationEvent subclass) is part of
     // the Character animation closure; without a real factory the citizen template

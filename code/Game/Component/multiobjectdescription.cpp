@@ -10,89 +10,63 @@
 // Dtor (vtable +0x00, 0x140036060): External::~External + free.
 //
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (MultiObjectDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140163d80) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/MultiObjectDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kMultiObjectDescriptionVtable = 0x140163d80;
-
-static void MultiObjectDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kMultiObjectDescriptionVtable);
-    *(void**)self = s_vtable;
+// [0] 0x140036060: ~MultiObjectDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* MultiObjectDescription::DeletingDtor(unsigned flags) {
+    this->~MultiObjectDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void MultiObjectDescription_Serialize(void* self, void* stream) {
-    (void)self;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140125b50: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool MultiObjectDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* MultiObjectDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kMultiObjectDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140036000 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* MultiObjectDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void MultiObjectDescription::Destruct() {}
+
+// [8] 0x140036050: MultiObjectComponent's type id through the hidden return slot.
+Object::Type* MultiObjectDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("MultiObjectComponent");
+    return ret;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t MultiObjectDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MultiObjectDescription");
-    return cached;
+// [9] 0x140035fb0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* MultiObjectDescription::Construct() {
+    return new (static_cast<void*>(this)) MultiObjectDescription();
 }
 
-static int   MultiObjectDescription_VtblStub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   MultiObjectDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* MultiObjectDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* MultiObjectDescription_CreateInPlace(void* memory);
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* MultiObjectDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "MultiObjectComponent"); }
-
-static void* g_MultiObjectDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&MultiObjectDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&MultiObjectDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_Return1),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&MultiObjectDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&MultiObjectDescription_GetComponentTypeId),// +0x40 Slot8
-    reinterpret_cast<void*>(&MultiObjectDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&MultiObjectDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterMultiObjectDescriptionVtable() {
-    RegisterExeAddr(kMultiObjectDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_MultiObjectDescription_Vtable));
-}
-
-extern "C" void* MultiObjectDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+// create 0x140035f50: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* MultiObjectDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MultiObjectDescription), 8);
     if (!p) return nullptr;
-    MultiObjectDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) MultiObjectDescription());
+}
+// createInPlace 0x140035fb0.
+void* MultiObjectDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) MultiObjectDescription());
 }
 
-static void* MultiObjectDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    MultiObjectDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(MultiObjectDescription, "Description",
-              &MultiObjectDescription_Factory, &MultiObjectDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(MultiObjectDescription, "_ZTV22MultiObjectDescription")
+DEFINE_EXE_TYPE(MultiObjectDescription, "Description")

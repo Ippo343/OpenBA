@@ -10,89 +10,63 @@
 // Dtor (vtable +0x00, 0x14000d940): External::~External + free.
 //
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (TrackerDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015ac00) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/TrackerDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kTrackerDescriptionVtable = 0x14015ac00;
-
-static void TrackerDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kTrackerDescriptionVtable);
-    *(void**)self = s_vtable;
+// [0] 0x14000d940: ~TrackerDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* TrackerDescription::DeletingDtor(unsigned flags) {
+    this->~TrackerDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void TrackerDescription_Serialize(void* self, void* stream) {
-    (void)self;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x1400593c0: one EMPTY Serializer(stream, 0) scope, then `MOV AL,1`.
+bool TrackerDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-void* TrackerDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kTrackerDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x14000d8e0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* TrackerDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void TrackerDescription::Destruct() {}
+
+// [8] 0x14000d930: TrackerComponent's type id through the hidden return slot.
+Object::Type* TrackerDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("TrackerComponent");
+    return ret;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t TrackerDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TrackerDescription");
-    return cached;
+// [9] 0x14000d890: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* TrackerDescription::Construct() {
+    return new (static_cast<void*>(this)) TrackerDescription();
 }
 
-static int   TrackerDescription_VtblStub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   TrackerDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* TrackerDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* TrackerDescription_CreateInPlace(void* memory);
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* TrackerDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "TrackerComponent"); }
-
-static void* g_TrackerDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&TrackerDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&TrackerDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&TrackerDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&TrackerDescription_VtblStub_Return1),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&TrackerDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&TrackerDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&TrackerDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&TrackerDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&TrackerDescription_GetComponentTypeId),// +0x40 Slot8
-    reinterpret_cast<void*>(&TrackerDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&TrackerDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterTrackerDescriptionVtable() {
-    RegisterExeAddr(kTrackerDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_TrackerDescription_Vtable));
-}
-
-extern "C" void* TrackerDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+// create 0x14000d830: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* TrackerDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TrackerDescription), 8);
     if (!p) return nullptr;
-    TrackerDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) TrackerDescription());
+}
+// createInPlace 0x14000d890.
+void* TrackerDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TrackerDescription());
 }
 
-static void* TrackerDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    TrackerDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(TrackerDescription, "Description",
-              &TrackerDescription_Factory, &TrackerDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(TrackerDescription, "_ZTV18TrackerDescription")
+DEFINE_EXE_TYPE(TrackerDescription, "Description")
