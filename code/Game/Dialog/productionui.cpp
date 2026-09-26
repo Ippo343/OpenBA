@@ -18,6 +18,13 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // ProductionUI struct layout:
@@ -108,18 +115,18 @@ void ProductionUI_Slot4(ProductionUI* self) {
     uint64_t result = 0;
 
     { System::String nameStr("production");
-      fn_FindElement(dialogElem, &result, &nameStr); }
+      ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr)); }  // B.3.6 bridge
 
     if (result == 0) {
         System::String nameStr("production3");
         uint64_t retBuf = 0;
-        fn_FindElement(dialogElem, &retBuf, &nameStr);
+        ::new (&retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         result = retBuf;
 
         if (result == 0) {
             System::String nameStr2("production4");
             uint64_t retBuf2 = 0;
-            fn_FindElement(dialogElem, &retBuf2, &nameStr2);
+            ::new (&retBuf2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr2));  // B.3.6 bridge
             result = retBuf2;
         }
     }
@@ -128,23 +135,23 @@ void ProductionUI_Slot4(ProductionUI* self) {
 
     // Get two child containers: Child(0) = consumed, Child(1) = produced
     uint64_t consumedContainer = 0;
-    fn_Element_Child(productionElem, &consumedContainer, 0);
+    ::new (&consumedContainer) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(productionElem)->Child(0));  // B.3.6 bridge
 
     uint64_t producedContainer = 0;
-    fn_Element_Child(productionElem, &producedContainer, 1);
+    ::new (&producedContainer) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(productionElem)->Child(1));  // B.3.6 bridge
 
     // Iterate consumed container children (start at index 1)
-    int childCount = fn_Element_ChildCount((void*)consumedContainer);
+    int childCount = reinterpret_cast<const UI::Element*>(consumedContainer)->ChildCount();  // B.3.6 bridge
     int idx = 1;
     while (idx < childCount) {
         // Get child element at index
         uint64_t childElem = 0;
-        fn_Element_Child((void*)consumedContainer, &childElem, idx);
+        ::new (&childElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(consumedContainer)->Child(idx));  // B.3.6 bridge
 
         // Find "labelStorage" sub-element
         uint64_t labelResult = 0;
         { System::String nameStr("labelStorage");
-          fn_FindElement((void*)childElem, &labelResult, &nameStr); }
+          ::new (&labelResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
 
         // Retail casts the hit through IsDerivedFrom(LabelElement) and stores NULL
         // when it isn't one (0x140075da0 uses g_TypeId_LabelElement_exref @0x140151668).
@@ -155,7 +162,7 @@ void ProductionUI_Slot4(ProductionUI* self) {
         // Find "numberCount" sub-element
         uint64_t numberResult = 0;
         { System::String nameStr("numberCount");
-          fn_FindElement((void*)childElem, &numberResult, &nameStr); }
+          ::new (&numberResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
 
         // Retail casts through IsDerivedFrom(NumberElement) (exref 0x1401516c8,
         // engine_funcs label "SpinnerElement" — the id is UI::NumberElement's).
@@ -167,19 +174,19 @@ void ProductionUI_Slot4(ProductionUI* self) {
         PushElementPair(s, 0x30, labelBP, numberBP);
 
         idx++;
-        childCount = fn_Element_ChildCount((void*)consumedContainer);
+        childCount = reinterpret_cast<const UI::Element*>(consumedContainer)->ChildCount();  // B.3.6 bridge
     }
 
     // Iterate produced container children (start at index 1)
-    childCount = fn_Element_ChildCount((void*)producedContainer);
+    childCount = reinterpret_cast<const UI::Element*>(producedContainer)->ChildCount();  // B.3.6 bridge
     idx = 1;
     while (idx < childCount) {
         uint64_t childElem = 0;
-        fn_Element_Child((void*)producedContainer, &childElem, idx);
+        ::new (&childElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(producedContainer)->Child(idx));  // B.3.6 bridge
 
         uint64_t labelResult = 0;
         { System::String nameStr("labelStorage");
-          fn_FindElement((void*)childElem, &labelResult, &nameStr); }
+          ::new (&labelResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
 
         uint64_t labelBP = 0;
         new (&labelBP) ::Object::InternalBasePtr(
@@ -187,7 +194,7 @@ void ProductionUI_Slot4(ProductionUI* self) {
 
         uint64_t numberResult = 0;
         { System::String nameStr("numberCount");
-          fn_FindElement((void*)childElem, &numberResult, &nameStr); }
+          ::new (&numberResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr)); }  // B.3.6 bridge
 
         uint64_t numberBP = 0;
         new (&numberBP) ::Object::InternalBasePtr(
@@ -197,7 +204,7 @@ void ProductionUI_Slot4(ProductionUI* self) {
         PushElementPair(s, 0x40, labelBP, numberBP);
 
         idx++;
-        childCount = fn_Element_ChildCount((void*)producedContainer);
+        childCount = reinterpret_cast<const UI::Element*>(producedContainer)->ChildCount();  // B.3.6 bridge
     }
 }
 
@@ -309,7 +316,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         // Create sprite from ResourceDescription
         uintptr_t rd = (uintptr_t)resourceDesc;
         uint8_t spriteBuf[16];
-        fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(rd + 0x20), (void*)(rd + 0x30));
+        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(rd + 0x20))), *reinterpret_cast<const System::String*>(rd + 0x30));  // B.3.6 bridge
 
         // Set sprite on label element
         void* labelElem = (void*)*(uint64_t*)elemPair;
@@ -317,7 +324,7 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
 
         // Create UI::String from ResourceDescription
         uint8_t uiStrBuf[16];
-        fn_UIString_Ctor(uiStrBuf, *(uint64_t*)(rd + 0x28), (void*)(rd + 0x30));
+        ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(rd + 0x28))), *reinterpret_cast<const System::String*>(rd + 0x30));  // B.3.6 bridge
 
         // Set text on label element
         fn_TextElement_SetText(labelElem, uiStrBuf);
@@ -327,8 +334,8 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         fn_NumberElement_SetValueInt(numberElem, count);
 
         // Show both elements
-        fn_Element_SetFlagsOnOff(labelElem, 0, 1);
-        fn_Element_SetFlagsOnOff(numberElem, 0, 1);
+        reinterpret_cast<UI::Element*>(labelElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(numberElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
         i++;
     }
@@ -339,18 +346,18 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
 
         // Set empty sprite on label element
         uint8_t emptySprite[16];
-        fn_Sprite_Default_Ctor(emptySprite);
+        ::new (emptySprite) UI::Sprite();  // B.3.6 bridge
         void* labelElem = (void*)*(uint64_t*)elemPair;
         fn_LabelElement_SetSprite(labelElem, emptySprite);
 
         // Set empty text on label element
         uint8_t emptyStr[16];
-        fn_UIString_DefaultCtor(emptyStr);
+        ::new (emptyStr) UI::String();  // B.3.6 bridge
         fn_TextElement_SetText(labelElem, emptyStr);
 
         // Hide number element
         void* numberElem = (void*)*(uint64_t*)(elemPair + 8);
-        fn_Element_SetFlagsOnOff(numberElem, 1, 0);
+        reinterpret_cast<UI::Element*>(numberElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
         i++;
     }

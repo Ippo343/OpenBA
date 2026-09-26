@@ -13,6 +13,14 @@
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // SelectDescription layout (from Ghidra analysis):
@@ -124,18 +132,18 @@ static int SelectResourceUI_IterateResources(void* self, void* combo, int* selec
                         if (combo) {
                             // Create UI::String from SelectDescription name
                             uint8_t uiStrBuf[16];
-                            fn_UIString_Ctor(uiStrBuf,
-                                            *(uint64_t*)((uintptr_t)subObj + 0x30),
-                                            (void*)((uintptr_t)subObj + 0x38));
+                            ::new (uiStrBuf) UI::String(
+                                            Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)subObj + 0x30))),
+                                            *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x38));  // B.3.6 bridge
                             // Convert to System::String
                             System::String sysStr;
-                            fn_UIString_ToSystemString(uiStrBuf, &sysStr);
+                            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
 
                             // Create Sprite from SelectDescription icon
                             uint8_t spriteBuf[16];
-                            fn_Sprite_Ctor(spriteBuf,
-                                          *(uint64_t*)((uintptr_t)subObj + 0x20),
-                                          (void*)((uintptr_t)subObj + 0x28));
+                            ::new (spriteBuf) UI::Sprite(
+                                          Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)subObj + 0x20))),
+                                          *reinterpret_cast<const System::String*>((uintptr_t)subObj + 0x28));  // B.3.6 bridge
 
                             // Add item to combo with index as userData
                             fn_ComboElement_AddItem(combo, spriteBuf, &sysStr,
@@ -216,7 +224,7 @@ void SelectResourceUI_Slot4(void* self) {
 
     void* dialogInstance = *(void**)(s + 0x18);
     uint64_t findResult = 0;
-    fn_DialogInstance_FindElement(dialogInstance, &findResult, &nameBuf);
+    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInstance)->FindElement(nameBuf));  // B.3.6 bridge
 
     // Store combo element at +0x30 (IsDerivedFrom check skipped -- null check only)
     void* rawElem = (void*)findResult;
@@ -226,7 +234,7 @@ void SelectResourceUI_Slot4(void* self) {
     *(uint64_t*)(s + 0x30) = basePtrVal;
 
     // Set element ID to 500 (combo selection event ID)
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x30), 500);
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(500);  // B.3.6 bridge
 
     // Populate combo with available resources
     SelectResourceUI_PopulateCombo(self);

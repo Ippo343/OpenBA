@@ -11,6 +11,10 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ---- UI::CheckElement type id -----------------------------------------------
 // Retail reads this through exe .rdata exref 0x1401516a8 (import string
@@ -48,7 +52,7 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
     // Find checkbox element by type ID in the dialog element tree
     uint32_t checkboxTypeId = PageToggleUI_CheckElementTypeId();
     uint64_t foundElem = 0;
-    fn_Element_FindElementType((void*)*(uint64_t*)(s + 0x20), &foundElem, checkboxTypeId);
+    ::new (&foundElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x20))->FindElementType(checkboxTypeId));  // B.3.6 bridge
 
     // IsDerivedFrom check + store at +0x30
     void* elemPtr = (void*)foundElem;
@@ -62,18 +66,18 @@ void PageToggleUI_Slot4(PageToggleUI* self) {
     *(uint64_t*)(s + 0x30) = basePtr;
 
     // SetElementId on checkbox = 700
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x30), 700);
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(700);  // B.3.6 bridge
 
     // Find "pages" element in dialog instance
     System::String nameStr("pages");
     uint64_t pagesElem = 0;
-    fn_DialogInstance_FindElement((void*)*(uint64_t*)(s + 0x18), &pagesElem, &nameStr);
+    ::new (&pagesElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(*(uint64_t*)(s + 0x18))->FindElement(nameStr));  // B.3.6 bridge
     *(uint64_t*)(s + 0x38) = pagesElem;
 
     // If active page is 0 or 4, restore saved page; otherwise reset saved page to 0
-    int activePage = fn_PageElement_GetActivePage((void*)*(uint64_t*)(s + 0x38));
+    int activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
     if (activePage != 0) {
-        activePage = fn_PageElement_GetActivePage((void*)*(uint64_t*)(s + 0x38));
+        activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
         if (activePage != 4) {
             *(uint32_t*)(s + 0x40) = 0;
             return;
@@ -87,20 +91,18 @@ void PageToggleUI_Slot7(PageToggleUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     void* checkbox = (void*)*(uint64_t*)(s + 0x30);
-    void** vtable = *(void***)checkbox;
 
-    int activePage = fn_PageElement_GetActivePage((void*)*(uint64_t*)(s + 0x38));
+    int activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
     bool enabled;
     if (activePage != 0) {
-        activePage = fn_PageElement_GetActivePage((void*)*(uint64_t*)(s + 0x38));
+        activePage = reinterpret_cast<const UI::PageElement*>(*(uint64_t*)(s + 0x38))->GetActivePage();  // B.3.6 bridge
         enabled = (activePage == 4);
     } else {
         enabled = true;
     }
 
     // vtable[8] = SetEnabled(this, bool)
-    typedef void (*fn_SetEnabled_t)(void*, bool);
-    ((fn_SetEnabled_t)vtable[8])(checkbox, enabled);
+    reinterpret_cast<UI::Element*>(checkbox)->Enable(enabled);  // B.3.6 bridge: Element slot 8 Enable
 }
 
 // Slot9: On checkbox toggle event, switch between page 0 and page 4.

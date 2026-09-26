@@ -12,6 +12,14 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/StatusBarUI.h
 //                  Dialog\StatusBarUI.cpp
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_panels.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
@@ -45,7 +53,7 @@ static void* FindElement(void* dialogController, const char* name) {
     void* dialog = *(void**)(s + 0x18);
 
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elem = *(void**)retBuf;
     return elem;
 }
@@ -83,7 +91,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
 
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &fmtStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(fmtStr));  // B.3.6 bridge
         self->numberCustom[i] = *(void**)retBuf;
     }
 
@@ -98,8 +106,8 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     // Set element IDs 100-105 and hide initially (flag 0x10000 off)
     void** statusIcons = &self->imageStatusHome;
     for (int i = 0; i < 6; i++) {
-        fn_Element_SetElementId(statusIcons[i], 100 + i);
-        fn_Element_SetFlagsOnOff(statusIcons[i], 0x10000, 0);
+        reinterpret_cast<UI::Element*>(statusIcons[i])->SetElementId(100 + i);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(statusIcons[i])->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
     }
 
     // --- Status numbers (numberStatus*) ---
@@ -122,7 +130,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         System::String nameStr("groupHearts");
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
 
         // NOTE: retail type-checks the group against a UI type-info whose decompiled
         // label ("g_TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
@@ -138,7 +146,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         System::String nameStr("groupStars");
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
 
         void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
@@ -151,7 +159,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         System::String nameStr("labelTitleParam");
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
 
         // Same wrong-label situation as the hearts/stars groups above: retail checks
         // against the LabelElement type-info, not ButtonElement — accept directly.
@@ -165,7 +173,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     void* gameWorld = *g_pGameWorldSingleton;
     System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
     if (self->labelTitleParam)
-        fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
+        reinterpret_cast<UI::TextElement*>(self->labelTitleParam)->SetParameter(0, mapName);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -310,13 +318,13 @@ found_happiness:
         uint32_t showFlag = hasStatus ? 1 : 0;
 
         // imageStatus is at pNum - 0x30 (6 pointers before numberStatus)
-        fn_Element_SetFlagsOnOff(*(void**)(pNum - 0x30), hideFlag, showFlag);
+        reinterpret_cast<UI::Element*>(*(void**)(pNum - 0x30))->SetFlagsOnOff(hideFlag, showFlag);  // B.3.6 bridge
 
-        fn_Element_SetFlagsOnOff(*(void**)pNum, hideFlag, showFlag);
+        reinterpret_cast<UI::Element*>(*(void**)pNum)->SetFlagsOnOff(hideFlag, showFlag);  // B.3.6 bridge
 
         // Set count text as parameter 0
         System::String countStr = System::String::Format("%i", (uint64_t)*pCounts);
-        fn_TextElement_SetParameter(*(void**)pNum, 0, &countStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)pNum)->SetParameter(0, countStr);  // B.3.6 bridge
 
         mask = (mask << 1) | (uint32_t)((int32_t)mask < 0);  // rotate left
         pNum += 8;
@@ -327,21 +335,21 @@ found_happiness:
     // --- Update population text (3 params: adults, dying, building) ---
     {
         System::String str = System::String::Format("%i", (uint64_t)adultCount);
-        fn_TextElement_SetParameter(self->textPopulation, 0, &str);
+        reinterpret_cast<UI::TextElement*>(self->textPopulation)->SetParameter(0, str);  // B.3.6 bridge
     }
     {
         System::String str = System::String::Format("%i", (uint64_t)dyingCount);
-        fn_TextElement_SetParameter(self->textPopulation, 1, &str);
+        reinterpret_cast<UI::TextElement*>(self->textPopulation)->SetParameter(1, str);  // B.3.6 bridge
     }
     {
         System::String str = System::String::Format("%i", (uint64_t)buildingCount);
-        fn_TextElement_SetParameter(self->textPopulation, 2, &str);
+        reinterpret_cast<UI::TextElement*>(self->textPopulation)->SetParameter(2, str);  // B.3.6 bridge
     }
 
     // --- Update year ---
     int* timeData = *(int**)((uintptr_t)gameWorld + 0x128);
     int year = *timeData;
-    fn_NumberElement_SetValueInt(self->numberYear, year);
+    reinterpret_cast<UI::NumberElement*>(self->numberYear)->SetValue(static_cast<int32_t>(year));  // B.3.6 bridge
 
     // --- Update month/season ---
     float seconds = reinterpret_cast<const System::Time*>((void*)(timeData + 2))->AsSeconds();   // B.3.4 bridge
@@ -358,15 +366,16 @@ found_happiness:
         // StringTable::GetIndexFromName in standalone).
         if (seasonElem && *(uint64_t*)((uintptr_t)seasonElem + 0xD8) != 0) {
             uint8_t uiStr[16];
-            uint64_t* pResult = (uint64_t*)fn_UIString_Ctor(uiStr,
-                                  *(uint64_t*)((uintptr_t)seasonElem + 0xD8),
-                                  &monthKey);
+            uint64_t* pResult = reinterpret_cast<uint64_t*>(::new (uiStr) UI::String(  // B.3.6 bridge
+                                  Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(
+                                      *(uint64_t*)((uintptr_t)seasonElem + 0xD8))),
+                                  monthKey));
             // Copy UIString result to local for SetText (16 bytes: text + string table ref)
             uint64_t localUIStr[2];
             localUIStr[0] = pResult[0];
             localUIStr[1] = pResult[1];
 
-            fn_TextElement_SetText(self->textSeason, localUIStr);
+            reinterpret_cast<UI::TextElement*>(self->textSeason)->SetText(reinterpret_cast<const UI::String*>(localUIStr));  // B.3.6 bridge
         }
     }
 
@@ -382,7 +391,7 @@ found_happiness:
     if (settings && *(uint8_t*)((uintptr_t)settings + 0x15) != 0) {
         displayTemp = ((rawTemp - kFreezingF) * kFtoC_Num) / kFtoC_Den;
     }
-    fn_NumberElement_SetValueInt(self->numberTemperature, (int)displayTemp);
+    reinterpret_cast<UI::NumberElement*>(self->numberTemperature)->SetValue(static_cast<int32_t>((int)displayTemp));  // B.3.6 bridge
 
     // --- Update weather icons ---
     // Weather check uses displayTemp (after conversion), compared to freezing F
@@ -396,9 +405,7 @@ found_happiness:
     int weatherCount = 5;
     int weatherIdx = 0;
     do {
-        fn_Element_SetFlagsOnOff(*(void**)pWeather,
-                                  (uint32_t)(weatherIdx != weatherType),
-                                  (uint32_t)(weatherIdx == weatherType));
+        reinterpret_cast<UI::Element*>(*(void**)pWeather)->SetFlagsOnOff((uint32_t)(weatherIdx != weatherType), (uint32_t)(weatherIdx == weatherType));  // B.3.6 bridge
         weatherIdx++;
         pWeather += 8;
         weatherCount--;
@@ -423,20 +430,20 @@ found_happiness:
     int valTextile  = piVar5[0x50];
 
     // Assignments match decompilation: SetValue(*(param_1 + offset), value)
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x58), iVar7_wood);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x60), iVar2_stone);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x68), iVar3_iron);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x78), iVar1_tool);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x70), iVar21_fw);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x80), iVar23_food);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x88), valHerbs);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x90), valClothes);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x98), valAlcohol);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0xA0), valCoal);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x58))->SetValue(static_cast<int32_t>(iVar7_wood));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x60))->SetValue(static_cast<int32_t>(iVar2_stone));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x68))->SetValue(static_cast<int32_t>(iVar3_iron));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x78))->SetValue(static_cast<int32_t>(iVar1_tool));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x70))->SetValue(static_cast<int32_t>(iVar21_fw));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x80))->SetValue(static_cast<int32_t>(iVar23_food));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x88))->SetValue(static_cast<int32_t>(valHerbs));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x90))->SetValue(static_cast<int32_t>(valClothes));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x98))->SetValue(static_cast<int32_t>(valAlcohol));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0xA0))->SetValue(static_cast<int32_t>(valCoal));  // B.3.6 bridge
 
     // Textile (numberTextile at +0xA8) — may be null
     if (*(void**)(s + 0xA8) != nullptr) {
-        fn_NumberElement_SetValueInt(*(void**)(s + 0xA8), valTextile);
+        reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0xA8))->SetValue(static_cast<int32_t>(valTextile));  // B.3.6 bridge
     }
 
     // Custom resources (numberCustom0..9 at +0xB0..+0xF8)
@@ -446,7 +453,7 @@ found_happiness:
     do {
         if (*(void**)pCustom != nullptr) {
             int value = *(int*)(resOffset + *(uintptr_t*)(popList + 0x170));
-            fn_NumberElement_SetValueInt(*(void**)pCustom, value);
+            reinterpret_cast<UI::NumberElement*>(*(void**)pCustom)->SetValue(static_cast<int32_t>(value));  // B.3.6 bridge
         }
         resOffset += 0x20;
         pCustom += 8;
@@ -455,7 +462,7 @@ found_happiness:
     // --- Update title text (map name) ---
     System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
     if (self->labelTitleParam)
-        fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
+        reinterpret_cast<UI::TextElement*>(self->labelTitleParam)->SetParameter(0, mapName);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -695,11 +702,7 @@ void EnsureGlobals() {
 // Every function/global the Draw+Startup+event paths dereference unguarded must
 // be live, or a null-deref faults (no SEH under MinGW).
 bool Ready() {
-    if (!(fn_DialogInstance_FindElement && fn_FindElement &&
-          fn_Element_Child && fn_Element_ChildCount && fn_Element_SetElementId &&
-          fn_Element_SetFlagsOnOff && fn_TextElement_SetParameter &&
-          fn_TextElement_SetText && fn_NumberElement_SetValueInt &&
-          fn_UIString_Ctor && fn_IsDerivedFrom &&
+    if (!(fn_IsDerivedFrom &&
           fn_InternalBasePtr_Ctor &&
           fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
         return false;

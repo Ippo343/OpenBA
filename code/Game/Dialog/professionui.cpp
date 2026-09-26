@@ -41,6 +41,12 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // File-local helper: CalcWorkerSlots (FUN_14012e5c0)
@@ -262,7 +268,7 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
     void* dialogElem = *(void**)(s + 0x20);
     System::String nameStr("professionTable");
     uint64_t tableResult = 0;
-    fn_FindElement(dialogElem, &tableResult, &nameStr);
+    ::new (&tableResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
 
     void* tableElem = (void*)tableResult;
 
@@ -277,7 +283,7 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
     // Get template factory: first child of table -> element+0xB8
     uint64_t firstChildBuf = 0;
-    fn_Element_Child(tableElem, &firstChildBuf, 0);
+    ::new (&firstChildBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(0));  // B.3.6 bridge
     void* firstChild = (void*)firstChildBuf;
     // Factory is at element+0xB8 (NOT vtable+0xB8)
     void** factory = *(void***)((uintptr_t)firstChild + 0xB8);
@@ -330,7 +336,7 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
         int flatIdx = stride * tableCol + tableRow;
         uint64_t cellElem = 0;
-        fn_Element_Child((void*)tableResult, &cellElem, flatIdx);
+        ::new (&cellElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableResult)->Child(flatIdx));  // B.3.6 bridge
 
         // Get 4 children of cell (indices from disassembly: 0, 1, 3, 4):
         //   child[0] = text/label element (name + sprite)
@@ -338,19 +344,19 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         //   child[3] = number element (actual count)
         //   child[4] = button element (goto)
         uint64_t textLabelBuf = 0;
-        fn_Element_Child((void*)cellElem, &textLabelBuf, 0);
+        ::new (&textLabelBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(0));  // B.3.6 bridge
 
         uint64_t spinnerBuf = 0;
-        fn_Element_Child((void*)cellElem, &spinnerBuf, 1);
+        ::new (&spinnerBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(1));  // B.3.6 bridge
 
         uint64_t numberBuf = 0;
-        fn_Element_Child((void*)cellElem, &numberBuf, 3);
+        ::new (&numberBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(3));  // B.3.6 bridge
 
         uint64_t buttonBuf = 0;
-        fn_Element_Child((void*)cellElem, &buttonBuf, 4);
+        ::new (&buttonBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(4));  // B.3.6 bridge
 
         // Set button element ID: idBase + 200
-        fn_Element_SetElementId((void*)buttonBuf, idBase + 200);
+        reinterpret_cast<UI::Element*>(buttonBuf)->SetElementId(idBase + 200);  // B.3.6 bridge
 
         // Get profession ExternalPtr from array
         void* profDesc = *(void**)((uintptr_t)profArray + (uintptr_t)i * 8);
@@ -362,7 +368,7 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
             System::Filename pathObj =
                 reinterpret_cast<const ::Object::External*>(profDesc)->GetPath();  // B.3.3 bridge
             System::Filename identObj = pathObj.GetPathIdentifer();
-            fn_Element_SetName((void*)spinnerBuf, &identObj);
+            reinterpret_cast<UI::Element*>(spinnerBuf)->SetName(*reinterpret_cast<const System::String*>(&identObj));  // B.3.6 bridge
         }
 
         // BST insert: key=profDesc, value=idBase-300 (=i)
@@ -433,37 +439,37 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
 
         // Set text, sprite, tooltip on text/label element from profession description
         uint8_t uiStrBuf[16];
-        fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)profDesc + 0x20),
-                         (void*)((uintptr_t)profDesc + 0x30));
+        ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)profDesc + 0x20))),
+                         *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x30));  // B.3.6 bridge
         fn_TextElement_SetText((void*)textLabelBuf, uiStrBuf);
 
         uint8_t spriteBuf[16];
-        fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)profDesc + 0x28),
-                        (void*)((uintptr_t)profDesc + 0x30));
+        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)profDesc + 0x28))),
+                        *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x30));  // B.3.6 bridge
         fn_LabelElement_SetSprite((void*)textLabelBuf, spriteBuf);
 
         // Tooltip: UI::String from ExternalPtr + string name at +0x38
         uint8_t tooltipBuf[16];
-        fn_UIString_Ctor(tooltipBuf, *(uint64_t*)((uintptr_t)profDesc + 0x20),
-                         (void*)((uintptr_t)profDesc + 0x38));
-        fn_Element_SetToolTip((void*)textLabelBuf, tooltipBuf);
+        ::new (tooltipBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)profDesc + 0x20))),
+                         *reinterpret_cast<const System::String*>((uintptr_t)profDesc + 0x38));  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(textLabelBuf)->SetToolTip(*reinterpret_cast<const UI::String*>(tooltipBuf));  // B.3.6 bridge
 
         // Set user data and element ID on spinner
         // Original only sets user data + child element ID, but the event system
         // sends the spinner's own element ID as param4 in msg 0x15 notifications.
         // Without SetElementId on the spinner itself, param4 is -1 and Slot9 never
         // dispatches to HandleSpinner.
-        fn_Element_SetUserData((void*)spinnerBuf, (void*)(uintptr_t)idBase);
-        fn_Element_SetElementId((void*)spinnerBuf, idBase);
+        reinterpret_cast<UI::Element*>(spinnerBuf)->SetUserData(reinterpret_cast<Object::Base*>((uintptr_t)idBase));  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(spinnerBuf)->SetElementId(idBase);  // B.3.6 bridge
 
         // Get child[0] of spinner: set its element ID (original does this too)
         uint64_t spinnerChild0 = 0;
-        fn_Element_Child((void*)spinnerBuf, &spinnerChild0, 0);
-        fn_Element_SetElementId((void*)spinnerChild0, idBase);
+        ::new (&spinnerChild0) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinnerBuf)->Child(0));  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(spinnerChild0)->SetElementId(idBase);  // B.3.6 bridge
 
         // Get child[0] again, verify NumberEditElement, wrap in IBP for array push
         uint64_t numEditBuf = 0;
-        fn_Element_Child((void*)spinnerBuf, &numEditBuf, 0);
+        ::new (&numEditBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(spinnerBuf)->Child(0));  // B.3.6 bridge
         void* numEditRaw = (void*)numEditBuf;
         void* numEditChecked = nullptr;
         if (fn_IsDerivedFrom && g_TypeId_NumberEditElement) {
@@ -492,11 +498,11 @@ void ProfessionUI_Slot5(ProfessionUI* self) {
         // laborer's goto button.
         void* noneProfession = *(void**)((uintptr_t)profListPtr + 0x30);
         if (profDesc == noneProfession) {
-            fn_Element_SetFlagsOnOff((void*)numberBuf, 1, 0);   // child[3] numberAvailable
+            reinterpret_cast<UI::Element*>(numberBuf)->SetFlagsOnOff(1, 0);   // B.3.6 bridge; child[3] numberAvailable
 
             uint64_t ofTextChild = 0;
-            fn_Element_Child((void*)cellElem, &ofTextChild, 2); // child[2] ofText
-            fn_Element_SetFlagsOnOff((void*)ofTextChild, 1, 0);
+            ::new (&ofTextChild) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(cellElem)->Child(2)); // B.3.6 bridge; child[2] ofText
+            reinterpret_cast<UI::Element*>(ofTextChild)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
         }
 
         // Advance table position

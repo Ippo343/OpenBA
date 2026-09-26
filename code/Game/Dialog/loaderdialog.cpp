@@ -1,3 +1,7 @@
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -18,7 +22,7 @@ void LoaderDialog_Slot4(LoaderDialog* self) {
 
     System::String nameStr("loadingImage");
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
     *(void**)(s + 0xB8) = *(void**)retBuf;
 }
 
@@ -30,7 +34,7 @@ void LoaderDialog_Slot6(LoaderDialog* self) {
     void* imageElem = *(void**)(s + 0xB8);
     if (imageElem) {
         float angle = *(float*)(s + 0xC0);
-        fn_ImageElement_SetRotation(imageElem, angle);
+        reinterpret_cast<UI::ImageElement*>(imageElem)->SetRotation(angle);  // B.3.6 bridge
     }
 }
 

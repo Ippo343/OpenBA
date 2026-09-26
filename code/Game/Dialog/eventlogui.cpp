@@ -19,6 +19,9 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // EventLogUI::Slot5 (vtable +0x28) — Setup event log display
@@ -38,7 +41,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
     {
         System::String nameStr("buttonPrevious");
         uint8_t retBuf[16];
-        fn_FindElement(dialogElem, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
         new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
@@ -49,7 +52,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
     {
         System::String nameStr("buttonNext");
         uint8_t retBuf[16];
-        fn_FindElement(dialogElem, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
         new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
@@ -60,7 +63,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
     {
         System::String nameStr("buttonBottom");
         uint8_t retBuf[16];
-        fn_FindElement(dialogElem, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
         new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
@@ -68,16 +71,16 @@ void EventLogUI_Slot5(EventLogUI* self) {
     }
 
     // Set element IDs on buttons
-    fn_Element_SetElementId(*(void**)(s + 0x38), 100);   // buttonPrevious = 100
-    fn_Element_SetElementId(*(void**)(s + 0x40), 0x65);  // buttonNext = 0x65
-    fn_Element_SetElementId(*(void**)(s + 0x30), 0x66);  // buttonBottom = 0x66
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x38))->SetElementId(100);   // B.3.6 bridge; buttonPrevious = 100
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x40))->SetElementId(0x65);  // B.3.6 bridge; buttonNext = 0x65
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x30))->SetElementId(0x66);  // B.3.6 bridge; buttonBottom = 0x66
 
     // --- Find "display" container element ---
     void* displayElem;
     {
         System::String nameStr("display");
         uint8_t retBuf[16];
-        fn_FindElement(dialogElem, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
         uint8_t bpBuf[8];
         new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
@@ -85,7 +88,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
     }
 
     // Resize display text array (+0x50) and display button array (+0x60) to row count
-    int displayRowCount = fn_Element_ChildCount(displayElem);
+    int displayRowCount = reinterpret_cast<const UI::Element*>(displayElem)->ChildCount();  // B.3.6 bridge
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
     // new tail zeroed. Both elements are 8-byte InternalBasePtr handles (byte-copy).
     GameColl::ArrayAt<GameColl::Ptr8>(s, 0x50).SetSize(displayRowCount);
@@ -97,11 +100,11 @@ void EventLogUI_Slot5(EventLogUI* self) {
     for (int i = 0; i < rowCount; i++) {
         // Get child text element (direct child at index i)
         uint8_t childBuf[8];
-        fn_Element_Child(displayElem, childBuf, i);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(displayElem)->Child(i));  // B.3.6 bridge
         *(uint64_t*)(*(uintptr_t*)(s + 0x50) + i * 8) = *(uint64_t*)childBuf;
 
         // Get button child: Child(display, i) -> find typed element in that child
-        fn_Element_Child(displayElem, childBuf, i);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(displayElem)->Child(i));  // B.3.6 bridge
         void* rowChild = *(void**)childBuf;
         // The button child is obtained by IsDerivedFrom check (generic element type)
         uint8_t bpBuf[8];
@@ -109,7 +112,7 @@ void EventLogUI_Slot5(EventLogUI* self) {
         *(uint64_t*)(*(uintptr_t*)(s + 0x60) + i * 8) = *(uint64_t*)bpBuf;
 
         // Set element ID on the button: 0x6C + index
-        fn_Element_SetElementId(*(void**)(*(uintptr_t*)(s + 0x60) + i * 8), 0x6C + i);
+        reinterpret_cast<UI::Element*>(*(void**)(*(uintptr_t*)(s + 0x60) + i * 8))->SetElementId(0x6C + i);  // B.3.6 bridge
     }
 
     // Reset scroll offset to 0
@@ -120,25 +123,25 @@ void EventLogUI_Slot5(EventLogUI* self) {
     {
         System::String nameStr("notifybuttons");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         notifyContainer = *(void**)retBuf;
     }
 
     // Iterate notification button children, store in dynamic array at +0x70, set IDs
-    int notifyCount = fn_Element_ChildCount(notifyContainer);
+    int notifyCount = reinterpret_cast<const UI::Element*>(notifyContainer)->ChildCount();  // B.3.6 bridge
     void* eventLogSingleton = *(void**)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
 
     for (int i = 0; i < notifyCount; i++) {
         // Get child button element
         uint8_t childBuf[8];
-        fn_Element_Child(notifyContainer, childBuf, i);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(notifyContainer)->Child(i));  // B.3.6 bridge
         void* childElem = *(void**)childBuf;
         uint8_t bpBuf[8];
         new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(childElem));   // B.3.3 bridge
         void* btnElem = *(void**)bpBuf;
 
         // Set element ID: 0x67 + index
-        fn_Element_SetElementId(btnElem, 0x67 + i);
+        reinterpret_cast<UI::Element*>(btnElem)->SetElementId(0x67 + i);  // B.3.6 bridge
 
         // Copy notification flag from event log singleton: singleton[i] + 0x10 -> button element +0xD8
         *(uint64_t*)((uintptr_t)btnElem + 0xd8) =
@@ -199,34 +202,26 @@ void EventLogUI_Slot7(EventLogUI* self) {
                 // Text = event entry +0x08.
                 fn_TextElement_SetParameter(textElem, 0, (void*)(eventEntry + 0x08));
                 // Colour = entry +0x00 via text element vtable[+0x50] (SetColor).
-                void** tvtbl = *(void***)textElem;
-                typedef void (*VCall_SetColor_t)(void*, uint32_t);
-                ((VCall_SetColor_t)tvtbl[10])(textElem, *(uint32_t*)eventEntry);
+                reinterpret_cast<UI::Element*>(textElem)->SetColor(*(uint32_t*)eventEntry);  // B.3.6 bridge: Element slot 10 SetColor
                 // The nav button is enabled only if the event has a map location
                 // (tileIdx at entry+0x18 >= 0).
                 enabled = (*(int*)(eventEntry + 0x18) >= 0) ? 1 : 0;
             }
             // btnElem vtable[+0x40] (SetEnabled) — DL = enabled. Common to both branches.
-            void** bvtbl = *(void***)btnElem;
-            typedef void (*VCall_Enable_t)(void*, int);
-            ((VCall_Enable_t)bvtbl[8])(btnElem, enabled);
+            reinterpret_cast<UI::Element*>(btnElem)->Enable(enabled != 0);  // B.3.6 bridge: Element slot 8 Enable
         }
     }
 
     // Enable/disable buttonBottom (+0x30) based on scroll offset > 0
     {
         void* btnBottom = *(void**)(s + 0x30);
-        void** vtbl = *(void***)btnBottom;
-        typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnBottom, scrollOffset > 0);
+        reinterpret_cast<UI::Element*>(btnBottom)->Enable(scrollOffset > 0);  // B.3.6 bridge: Element slot 8 Enable
     }
 
     // Enable/disable buttonNext (+0x40) based on scroll offset > 0
     {
         void* btnNext = *(void**)(s + 0x40);
-        void** vtbl = *(void***)btnNext;
-        typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnNext, scrollOffset > 0);
+        reinterpret_cast<UI::Element*>(btnNext)->Enable(scrollOffset > 0);  // B.3.6 bridge: Element slot 8 Enable
     }
 }
 

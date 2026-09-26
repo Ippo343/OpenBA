@@ -7,6 +7,21 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ProgressElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -31,10 +46,10 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     uint64_t btnResult = 0;
     {
         System::String nameStr("buttonOk");
-        fn_DialogInstance_FindElement((void*)s, &btnResult, &nameStr);
+        ::new (&btnResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)s)->FindElement(nameStr));  // B.3.6 bridge
     }
     void* buttonOk = (void*)btnResult;
-    fn_Element_SetElementId(buttonOk, 100);
+    reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(100);  // B.3.6 bridge
     *(uint32_t*)((uintptr_t)buttonOk + 0xC0) = 8;
 
     // Get AchievementManager singleton
@@ -44,7 +59,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     uint64_t tableResult = 0;
     {
         System::String nameStr("tableAchievement");
-        fn_DialogInstance_FindElement((void*)s, &tableResult, &nameStr);
+        ::new (&tableResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)s)->FindElement(nameStr));  // B.3.6 bridge
     }
     void* tableElem = (void*)tableResult;
 
@@ -58,26 +73,26 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     for (int i = 0; i < achievementCount; i++) {
         // Clone template element from dialog
         uint8_t templateBuf[16] = {0};
-        fn_Dialog_GetTemplate(dialog, templateBuf, 0);
+        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(0));  // B.3.6 bridge
         void* elemDesc = *(void**)templateBuf;
 
         uint8_t newElemBuf[16] = {0};
         if (elemDesc) {
-            void** vtbl = *(void***)elemDesc;
-            typedef void (*CreateFn)(void*, void*, void*);
-            ((CreateFn)vtbl[8])(elemDesc, newElemBuf, dialog);
+            reinterpret_cast<const UI::ElementDescription*>(elemDesc)->CreateInstance(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf),
+                reinterpret_cast<const UI::Dialog*>(dialog));
         }
         void* rowElem = *(void**)newElemBuf;
 
         // Set as table child at index i
-        fn_TableElement_SetChild2(tableElem, newElemBuf, i);
+        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf), i);  // B.3.6 bridge
 
         // Find child elements in the cloned row
         // imageIcon
         uint64_t iconResult = 0;
         {
             System::String nameStr("imageIcon");
-            fn_FindElement(rowElem, &iconResult, &nameStr);
+            ::new (&iconResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
         }
         void* imageIcon = (void*)iconResult;
 
@@ -85,7 +100,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         uint64_t starResult = 0;
         {
             System::String nameStr("imageStar");
-            fn_FindElement(rowElem, &starResult, &nameStr);
+            ::new (&starResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
         }
         void* imageStar = (void*)starResult;
 
@@ -93,7 +108,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         uint64_t titleResult = 0;
         {
             System::String nameStr("textTitle");
-            fn_FindElement(rowElem, &titleResult, &nameStr);
+            ::new (&titleResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
         }
         void* textTitle = (void*)titleResult;
 
@@ -101,7 +116,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         uint64_t descResult = 0;
         {
             System::String nameStr("textDescription");
-            fn_FindElement(rowElem, &descResult, &nameStr);
+            ::new (&descResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(rowElem)->FindElement(nameStr));  // B.3.6 bridge
         }
         void* textDesc = (void*)descResult;
 
@@ -115,27 +130,25 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         fn_Achievement_GetSpriteName(achievement, &spriteName);
         uint64_t spriteSheet = *(uint64_t*)((uintptr_t)achievement + 0x38);
         uint8_t spriteBuf[16];
-        fn_Sprite_Ctor(spriteBuf, spriteSheet, &spriteName);
-        fn_ImageElement_SetSprite(imageIcon, spriteBuf);
+        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), spriteName);  // B.3.6 bridge
+        reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
         // Hide imageStar initially (Slot6 will show it if awarded)
-        fn_Element_SetFlagsOnOff(imageStar, 1, 0);
+        reinterpret_cast<UI::Element*>(imageStar)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
         // Set title text
         System::String titleText;
         fn_Achievement_GetTitle(achievement, &titleText);
         uint8_t titleStrBuf[16];
-        fn_UIString_Ctor(titleStrBuf, *(uint64_t*)((uintptr_t)achievement + 0x20),
-                         &titleText);
-        fn_TextElement_SetText(textTitle, titleStrBuf);
+        ::new (titleStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), titleText);  // B.3.6 bridge
+        reinterpret_cast<UI::TextElement*>(textTitle)->SetText(reinterpret_cast<const UI::String*>(titleStrBuf));  // B.3.6 bridge
 
         // Set description text
         uint8_t descStrBuf[16];
         System::String descText;
         fn_Achievement_GetDescription(achievement, &descText);
-        fn_UIString_Ctor(descStrBuf, *(uint64_t*)((uintptr_t)achievement + 0x20),
-                         &descText);
-        fn_TextElement_SetText(textDesc, descStrBuf);
+        ::new (descStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), descText);  // B.3.6 bridge
+        reinterpret_cast<UI::TextElement*>(textDesc)->SetText(reinterpret_cast<const UI::String*>(descStrBuf));  // B.3.6 bridge
 
         // Push 4-pointer entry (stride 0x20) to dynamic array at +0xC0.
         // B.3.2 bridge: <AchievementDialog>+0xC0 is Collection::Array<{imageIcon,
@@ -154,7 +167,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     uint64_t completeResult = 0;
     {
         System::String nameStr("textComplete");
-        fn_DialogInstance_FindElement((void*)s, &completeResult, &nameStr);
+        ::new (&completeResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)s)->FindElement(nameStr));  // B.3.6 bridge
     }
     *(uint64_t*)(s + 0xB8) = completeResult;
 }
@@ -205,23 +218,19 @@ void AchievementDialog_Slot6(AchievementDialog* self) {
 
         // Check element at entry+0x08: show if awarded, hide if not
         void* checkElem = *(void**)(entryArray + entryOff + 0x08);
-        fn_Element_SetFlagsOnOff(checkElem, 0, awarded ? 1 : 0);
+        reinterpret_cast<UI::Element*>(checkElem)->SetFlagsOnOff(0, awarded ? 1 : 0);  // B.3.6 bridge
 
         // Title element at entry+0x00: set primary color via vtable[10]
         void* titleElem = *(void**)(entryArray + entryOff);
-        typedef void (*fn_SetColor_t)(void*, uint32_t);
-        void** titleVt = *(void***)titleElem;
-        ((fn_SetColor_t)titleVt[10])(titleElem, primaryColor);
+        reinterpret_cast<UI::Element*>(titleElem)->SetColor(primaryColor);  // B.3.6 bridge
 
         // Desc element at entry+0x10: set secondary color via vtable[10]
         void* descElem = *(void**)(entryArray + entryOff + 0x10);
-        void** descVt = *(void***)descElem;
-        ((fn_SetColor_t)descVt[10])(descElem, secondaryColor);
+        reinterpret_cast<UI::Element*>(descElem)->SetColor(secondaryColor);  // B.3.6 bridge
 
         // Extra element at entry+0x18: set secondary color via vtable[10]
         void* extraElem = *(void**)(entryArray + entryOff + 0x18);
-        void** extraVt = *(void***)extraElem;
-        ((fn_SetColor_t)extraVt[10])(extraElem, secondaryColor);
+        reinterpret_cast<UI::Element*>(extraElem)->SetColor(secondaryColor);  // B.3.6 bridge
     }
 
     // Format percentage: (awarded / total) * 100 + 0.5 (rounding)
@@ -229,7 +238,7 @@ void AchievementDialog_Slot6(AchievementDialog* self) {
     System::String pctStr = System::String::Format("%i", (uint64_t)(uint32_t)(int)pct);
 
     void* pctText = (void*)*(uint64_t*)(s + 0xB8);
-    fn_TextElement_SetParameter(pctText, 0, &pctStr);
+    reinterpret_cast<UI::TextElement*>(pctText)->SetParameter(0, pctStr);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -247,7 +256,7 @@ void AchievementDialog_Slot14(AchievementDialog* self) {
     // Find ProgressElement by type in parent element at +0x20
     void* parentElem = (void*)*(uint64_t*)(s + 0x20);
     uint64_t findResult = 0;
-    fn_Element_FindElementType(parentElem, &findResult, *g_TypeId_ProgressElement);
+    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElementType(*g_TypeId_ProgressElement));  // B.3.6 bridge
 
     // Store at +0x30 (skip IsDerivedFrom, null check only)
     void* rawElem = (void*)findResult;
@@ -314,7 +323,7 @@ void AchievementDialog_Slot17(AchievementDialog* self) {
 
     // Format count text and set as progress parameter
     System::String countStr = System::String::Format("%i", (uint64_t)(uint32_t)count);
-    fn_ProgressElement_SetProgressTextParameter(progressElem, 0, &countStr);
+    reinterpret_cast<UI::ProgressElement*>(progressElem)->SetProgressTextParameter(0, countStr);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -329,7 +338,7 @@ void AchievementDialog_Slot8(AchievementDialog* self, void* /*param2*/,
     if (param3 == 0x12 && param4 == 100) {
         uint8_t selfIBP[16];
         new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
 }
 

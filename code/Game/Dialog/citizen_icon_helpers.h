@@ -11,6 +11,8 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // CitizenUI_UpdateIconDisplay (0x14006aed0)
@@ -46,18 +48,18 @@ inline void CitizenUI_UpdateIconDisplay_Impl(uintptr_t iconArrayBase, float curr
         {
             uintptr_t ibpAddr = (uintptr_t)wholeArr + offset;
             void* elem = *(void**)ibpAddr;
-            fn_Element_SetFlagsOnOff(elem,
+            reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(
                 (iVar2 >= fillLevel) ? 1 : 0,
-                (iVar2 < fillLevel) ? 1 : 0);
+                (iVar2 < fillLevel) ? 1 : 0);  // B.3.6 bridge
         }
 
         // Half icon: show only if iVar2 == fillLevel
         {
             uintptr_t ibpAddr = (uintptr_t)halfArr + offset;
             void* elem = *(void**)ibpAddr;
-            fn_Element_SetFlagsOnOff(elem,
+            reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(
                 (iVar2 != fillLevel) ? 1 : 0,
-                (iVar2 == fillLevel) ? 1 : 0);
+                (iVar2 == fillLevel) ? 1 : 0);  // B.3.6 bridge
         }
 
         iVar2 += 2;
@@ -77,7 +79,7 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
 {
     void* groupElem = *(void**)groupElemIBP;
     if (!groupElem) return;
-    int childCount = fn_Element_ChildCount(groupElem);
+    int childCount = reinterpret_cast<const UI::Element*>(groupElem)->ChildCount();  // B.3.6 bridge
     if (childCount <= 0) return;
 
     for (int childIdx = 0; childIdx < childCount; childIdx++) {
@@ -86,11 +88,11 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
             System::String nameStr("whole");
 
             uint8_t childBuf[16];
-            fn_Element_Child(groupElem, childBuf, childIdx);
+            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(groupElem)->Child(childIdx));  // B.3.6 bridge
             void* childElem = *(void**)childBuf;
 
             uint8_t foundBuf[16] = {};
-            fn_FindElement(childElem, foundBuf, &nameStr);
+            ::new (foundBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr));  // B.3.6 bridge
 
             void* wholeElem = *(void**)foundBuf;
 
@@ -115,11 +117,11 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
 
             void* groupElem2 = *(void**)groupElemIBP;
             uint8_t childBuf[16];
-            fn_Element_Child(groupElem2, childBuf, childIdx);
+            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(groupElem2)->Child(childIdx));  // B.3.6 bridge
             void* childElem = *(void**)childBuf;
 
             uint8_t foundBuf[16] = {};
-            fn_FindElement(childElem, foundBuf, &nameStr);
+            ::new (foundBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(childElem)->FindElement(nameStr));  // B.3.6 bridge
 
             void* halfElem = *(void**)foundBuf;
 
@@ -138,6 +140,6 @@ inline void CitizenUI_BuildIconArray_Impl(uintptr_t param1, uintptr_t groupElemI
 
         // Re-check group element (may have been reallocated)
         groupElem = *(void**)groupElemIBP;
-        childCount = fn_Element_ChildCount(groupElem);
+        childCount = reinterpret_cast<const UI::Element*>(groupElem)->ChildCount();  // B.3.6 bridge
     }
 }

@@ -1,3 +1,12 @@
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/EditElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -35,7 +44,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("editName");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xB8) = *(void**)retBuf;
     }
 
@@ -43,7 +52,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("numberSeed");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xC0) = *(void**)retBuf;
     }
 
@@ -51,7 +60,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textCondition");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xE0) = *(void**)retBuf;
     }
 
@@ -59,7 +68,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textTerrain");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xC8) = *(void**)retBuf;
     }
 
@@ -67,7 +76,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textTerrainSize");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xD0) = *(void**)retBuf;
     }
 
@@ -75,7 +84,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textClimate");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xD8) = *(void**)retBuf;
     }
 
@@ -83,7 +92,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("textDisaster");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0xE8) = *(void**)retBuf;
     }
 
@@ -92,7 +101,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("buttonNewName");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         buttonNewName = *(void**)retBuf;
     }
 
@@ -100,7 +109,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("buttonCancel");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         buttonCancel = *(void**)retBuf;
     }
 
@@ -108,7 +117,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     {
         System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         buttonOk = *(void**)retBuf;
     }
 
@@ -116,9 +125,9 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
     *(void**)(s + 0xF0) = buttonOk;
 
     // --- Set element IDs: NewName=0, OK=1, Cancel=2 ---
-    if (buttonNewName) fn_Element_SetElementId(buttonNewName, 0);
-    if (buttonOk) fn_Element_SetElementId(buttonOk, 1);
-    if (buttonCancel) fn_Element_SetElementId(buttonCancel, 2);
+    if (buttonNewName) reinterpret_cast<UI::Element*>(buttonNewName)->SetElementId(0);  // B.3.6 bridge
+    if (buttonOk) reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(1);  // B.3.6 bridge
+    if (buttonCancel) reinterpret_cast<UI::Element*>(buttonCancel)->SetElementId(2);  // B.3.6 bridge
 
     // Set cancel button close behavior flag (+0xC0 on the element = 8)
     if (buttonCancel) {
@@ -134,14 +143,14 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
         System::String nameBuf(*reinterpret_cast<System::String*>((uintptr_t)gameWorld + 0x28));
         void* editName = *(void**)(s + 0xB8);
-        if (editName) fn_EditElement_SetText_SysStr(editName, &nameBuf);
+        if (editName) reinterpret_cast<UI::EditElement*>(editName)->SetText(nameBuf);  // B.3.6 bridge
     }
 
     // Set seed on numberSeed
     {
         int seed = *(int*)(gw + 0x30);
         void* numberSeed = *(void**)(s + 0xC0);
-        if (numberSeed) fn_NumberElement_SetValueInt(numberSeed, seed);
+        if (numberSeed) reinterpret_cast<UI::NumberElement*>(numberSeed)->SetValue(static_cast<int32_t>(seed));  // B.3.6 bridge
     }
 
     // Set the text fields. Retail uses TWO different UI::String constructors here
@@ -163,8 +172,8 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         void* textElem = *(void**)(s + 0xE0);
         if (desc && textElem) {
             uint8_t uiStr[16] = {0};
-            fn_UIString_Ctor(uiStr, *(uint64_t*)(desc + 0x20), (void*)(desc + 0x28));
-            fn_TextElement_SetText(textElem, uiStr);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -174,8 +183,8 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         void* textElem = *(void**)(s + 0xC8);
         if (desc && textElem) {
             uint8_t uiStr[16] = {0};
-            fn_UIString_Ctor(uiStr, *(uint64_t*)(desc + 0x20), (void*)(desc + 0x28));
-            fn_TextElement_SetText(textElem, uiStr);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -189,7 +198,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
             uint8_t uiStr[16] = {0};
             memcpy(uiStr, (void*)(elem + 0xd8), 8);       // ExternalPtr<StringTable>
             *(uint32_t*)(uiStr + 8) = terrainSize;         // int index
-            fn_TextElement_SetText(textElem, uiStr);
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -199,8 +208,8 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         void* textElem = *(void**)(s + 0xD8);
         if (desc && textElem) {
             uint8_t uiStr[16] = {0};
-            fn_UIString_Ctor(uiStr, *(uint64_t*)(desc + 0x20), (void*)(desc + 0x28));
-            fn_TextElement_SetText(textElem, uiStr);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -214,7 +223,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
             uint8_t uiStr[16] = {0};
             memcpy(uiStr, (void*)(elem + 0xd8), 8);
             *(uint32_t*)(uiStr + 8) = disasterEnabled;
-            fn_TextElement_SetText(textElem, uiStr);
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 }
@@ -256,7 +265,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
         void* ui = *(void**)(s + 0x10);
         uint64_t basePtr[2];
         new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        fn_UI_CloseDialog(ui, basePtr);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
         return;
     }
 
@@ -265,7 +274,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
         void* ui = *(void**)(s + 0x10);
         uint64_t basePtr[2];
         new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        fn_UI_CloseDialog(ui, basePtr);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
         return;
     }
 
@@ -317,7 +326,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
                     nameBuf += "e";
                 }
             }
-            fn_EditElement_SetText_SysStr(editName, &nameBuf);
+            reinterpret_cast<UI::EditElement*>(editName)->SetText(nameBuf);  // B.3.6 bridge
         }
     }
 }
@@ -342,7 +351,5 @@ void MapParamsDialog_Update(MapParamsDialog* self) {
 
     // Enable/disable OK button based on text length
     // Virtual call: vtable[8](button, enabled)
-    typedef void (*fn_VSlot8_t)(void* self, bool enabled);
-    void** vtable = *(void***)okButton;
-    ((fn_VSlot8_t)vtable[8])(okButton, textLen > 0);
+    reinterpret_cast<UI::Element*>(okButton)->Enable(textLen > 0);  // B.3.6 bridge
 }

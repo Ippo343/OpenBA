@@ -12,6 +12,8 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // File-local helper: PastureCalcMaxCount_Impl (FUN_140128570)
@@ -144,7 +146,7 @@ void PastureUI_Slot4(PastureUI* self) {
 
     void* parentElem = *(void**)(s + 0x20);
     uint64_t findResult = 0;
-    fn_FindElement(parentElem, &findResult, &nameBuf);
+    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameBuf));  // B.3.6 bridge
 
     // Store slider element at +0x38 (skip IsDerivedFrom, null check only)
     void* rawElem = (void*)findResult;
@@ -154,7 +156,7 @@ void PastureUI_Slot4(PastureUI* self) {
     *(uint64_t*)(s + 0x38) = basePtrVal;
 
     // Set slider element ID to 501 (0x1f5)
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x38), 0x1f5);
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x38))->SetElementId(0x1f5);  // B.3.6 bridge
 
     // Update slider display with current/max animal counts
     PastureUI_UpdateSlider_Impl(self);
@@ -196,9 +198,7 @@ void PastureUI_Slot7(PastureUI* self) {
     bool enableCombo = (itemCount > 0) && (*(int32_t*)(comp + 0x38) == 0);
 
     // Set combo enabled/disabled via vtable[8]
-    typedef void (*fn_SetEnabled_t)(void* self, bool enabled);
-    void** vtable = *(void***)comboElem;
-    ((fn_SetEnabled_t)vtable[8])(comboElem, enableCombo);
+    reinterpret_cast<UI::Element*>(comboElem)->Enable(enableCombo);  // B.3.6 bridge: Element slot 8 Enable
 
     // Format current animal count → slider param 0
     void* sliderElem = *(void**)(s + 0x38);

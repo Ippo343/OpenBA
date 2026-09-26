@@ -27,6 +27,20 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/RadioElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
 #include "graphics/Camera.h"   // ENDGAME B.3.5 closing pass -- Graphics::Camera
@@ -62,7 +76,7 @@ static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
     uint64_t subDialogPtr = *(uint64_t*)(s + 0xE8);
     if (subDialogPtr != 0) {
         void* ui = *(void**)(s + 0x10);
-        fn_UI_CloseDialog(ui, (void*)(s + 0xE8));
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>((void*)(s + 0xE8)));  // B.3.6 bridge
         // Null out the sub-dialog ptr
         uint8_t nullBuf[8];
         new (nullBuf) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -71,7 +85,7 @@ static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
         *(int32_t*)(s + 0xF0) = -1;
         // Reset radio selection
         void* radioElem = *(void**)(s + 0xB8);
-        fn_RadioElement_SetActiveRadio(radioElem, -1);
+        reinterpret_cast<UI::RadioElement*>(radioElem)->SetActiveRadio(-1);  // B.3.6 bridge
     }
 }
 
@@ -566,7 +580,7 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     if (existingDialog != nullptr) {
         // Dialog is already open — close it
         uint64_t closeRef = (uint64_t)existingDialog;
-        fn_UI_CloseDialog(userInterface, &closeRef);
+        reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
 
         // Search BST at self+0x50 and clear the isOpen flag
         uintptr_t* node = *(uintptr_t**)(self + 0x50);
@@ -683,11 +697,11 @@ static void Toolbar_Utility_Impl(void* gameSubsys, void* retBuf, uint64_t param)
     // Position dialog at saved coordinates from the BST node
     int32_t savedX = *(int32_t*)((uintptr_t)bstNode + 0x08);
     int32_t savedY = *(int32_t*)((uintptr_t)bstNode + 0x0C);
-    fn_DialogInstance_SetUpperLeft((void*)(uintptr_t)dialogRef, savedX, savedY, false);
+    reinterpret_cast<UI::DialogInstance*>((void*)(uintptr_t)dialogRef)->SetUpperLeft(savedX, savedY, false);  // B.3.6 bridge
 
     // Add dialog to the UI
     uint64_t addRef = (uint64_t)dialogRef;
-    fn_UI_AddDialog(userInterface, &addRef);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addRef));  // B.3.6 bridge
 
     // Return the dialog reference
     *(void**)retBuf = (void*)(uintptr_t)dialogRef;
@@ -755,9 +769,6 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
     // (This harness never walks the dialog LIST — it enumerates the _addDialogs
     // array at UI+0x28 below — so the old `!fn_UI_GetFirstDialog` half of this
     // guard tested a pointer the body does not use, and is gone.)
-    if (!fn_DialogInstance_GetController) {
-        printf("[HarnessDrive] GetController null\n"); return;
-    }
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) { printf("[HarnessDrive] gameWorld null\n"); return; }
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gameWorld) + 0x98);
@@ -803,16 +814,16 @@ extern "C" void ToolbarUtility_HarnessDriveController(const char* controllerName
         // Probe the dialog's element tree for the minimap content elements — if
         // they exist here, the content is embedded (no MapUI controller needed to
         // locate them; we can bind textures directly).
-        if (fn_DialogInstance_FindElement) {
+        {
             const char* names[] = { "imageMap", "imageOverlay", "buttonOk", "map", "image" };
             for (const char* nm : names) {
                 System::String nb(nm);
-                uint64_t r = 0; fn_DialogInstance_FindElement(dialog, &r, &nb);
+                uint64_t r = 0; ::new (&r) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nb));  // B.3.6 bridge
                 printf("[HarnessDrive]   FindElement('%s')=%p\n", nm, reinterpret_cast<void*>(r));
             }
         }
         uintptr_t ctrlBuf[2] = {0, 0};
-        fn_DialogInstance_GetController(dialog, ctrlBuf, tid);
+        ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialog)->GetController(tid));  // B.3.6 bridge
         if (ctrlBuf[0]) {
             void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
             printf("[HarnessDrive] FOUND '%s' ctrl=%p in dialog[%d] — driving Slot%d\n",
@@ -954,7 +965,7 @@ extern "C" void* EntityUI_OpenPauseMenu(void* gameSubsys) {
     uint64_t dialogRef;
     new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(finalDialog));   // B.3.3 bridge
     uint64_t addRef = dialogRef;
-    fn_UI_AddDialog(userInterface, &addRef);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addRef));  // B.3.6 bridge
     return finalDialog;
 }
 
@@ -1095,19 +1106,21 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     void* tableElement;
     {
         System::String strStr("toolbarContent");
-        void* retPtr = fn_DialogInstance_FindElement(self, elemBuf, &strStr);
+        void* retPtr = ::new (elemBuf) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::DialogInstance*>(self)->FindElement(strStr));  // B.3.6 bridge
         tableElement = *(void**)retPtr;
     }
 
     // Find "toolBar" radio element
     {
         System::String strStr("toolBar");
-        void* retPtr = fn_DialogInstance_FindElement(self, elemBuf, &strStr);
+        void* retPtr = ::new (elemBuf) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::DialogInstance*>(self)->FindElement(strStr));  // B.3.6 bridge
         *(uint64_t*)(s + 0xB8) = *(uint64_t*)retPtr;
     }
 
     // Set radio element ID to 1000
-    fn_Element_SetElementId(*(void**)(s + 0xB8), 1000);
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0xB8))->SetElementId(1000);  // B.3.6 bridge
 
     // --- Step 5: Collect all Toolbar items matching our group ID ---
     // Use ExternalFactory::FindNext to iterate all Toolbar externals
@@ -1220,7 +1233,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
         // Get template element from Dialog and clone it
         uint8_t templateBuf[16];
-        fn_Dialog_GetTemplate(dialog, templateBuf, templateIndex);
+        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(dialog)->GetTemplate(templateIndex));  // B.3.6 bridge
         void* templateElem = *(void**)templateBuf;
 
         // Clone the template: virtual call at vtable[8] (offset 0x40)
@@ -1248,7 +1261,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
         // Add element as child of table at current buttonIndex
         void* elemPtr = newElement;
-        fn_TableElement_SetChild2(tableElement, &elemPtr, buttonIndex);
+        reinterpret_cast<UI::TableElement*>(tableElement)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemPtr), buttonIndex);  // B.3.6 bridge
 
         // Set element name from toolbar item's resource path.
         // `GetPath` returns by value through a hidden return slot and the callee
@@ -1256,16 +1269,16 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
         System::Filename pathObj =
             reinterpret_cast<const ::Object::External*>(item)->GetPath();  // B.3.3 bridge
         System::Filename pathIdObj = pathObj.GetPathIdentifer();
-        fn_Element_SetName(newElement, &pathIdObj);
+        reinterpret_cast<UI::Element*>(newElement)->SetName(*reinterpret_cast<const System::String*>(&pathIdObj));  // B.3.6 bridge
 
         // Get toolbar item's display string and sprite
         uint8_t uiString[16];
         uint8_t uiSprite[16];
-        fn_UIString_Ctor(uiString, *(uint64_t*)(item + 0x20), (void*)(item + 0x30));
+        ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(item + 0x20))), *reinterpret_cast<const System::String*>((void*)(item + 0x30)));  // B.3.6 bridge
 #ifdef _DEBUG
         Debug_Sprite_Ctor(uiSprite, *(uint64_t*)(item + 0x28), (void*)(item + 0x38));
 #else
-        fn_Sprite_Ctor(uiSprite, *(uint64_t*)(item + 0x28), (void*)(item + 0x38));
+        ::new (uiSprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(item + 0x28))), *reinterpret_cast<const System::String*>((void*)(item + 0x38)));  // B.3.6 bridge
 #endif
 
         // --- Configure button element (skip for SpeedDisplay) ---
@@ -1304,8 +1317,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                 // Override UI::String from buildReqComp+0x30/+0x48
                 if (buildReqComp != nullptr) {
                     uint8_t overrideStr[16];
-                    fn_UIString_Ctor(overrideStr, *(uint64_t*)((uintptr_t)buildReqComp + 0x30),
-                                     (void*)((uintptr_t)buildReqComp + 0x48));
+                    ::new (overrideStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)buildReqComp + 0x30))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)buildReqComp + 0x48)));  // B.3.6 bridge
                     *(uint64_t*)&uiString[0] = *(uint64_t*)overrideStr;
                     *(uint64_t*)&uiString[8] = *(uint64_t*)(overrideStr + 8);
 
@@ -1315,8 +1327,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
                     Debug_Sprite_Ctor(overrideSpr, *(uint64_t*)((uintptr_t)buildReqComp + 0x20),
                                    (void*)((uintptr_t)buildReqComp + 0x28));
 #else
-                    fn_Sprite_Ctor(overrideSpr, *(uint64_t*)((uintptr_t)buildReqComp + 0x20),
-                                   (void*)((uintptr_t)buildReqComp + 0x28));
+                    ::new (overrideSpr) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)buildReqComp + 0x20))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)buildReqComp + 0x28)));  // B.3.6 bridge
 #endif
                     *(uint64_t*)&uiSprite[0] = *(uint64_t*)overrideSpr;
                     *(uint64_t*)&uiSprite[8] = *(uint64_t*)(overrideSpr + 8);
@@ -1353,7 +1364,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
             // Set element ID (button index within this toolbar)
             // Set element ID (button index within this toolbar)
-            fn_Element_SetElementId((void*)buttonRef, buttonIndex);
+            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetElementId(buttonIndex);  // B.3.6 bridge
 
             void* userData = *(void**)(item + 0x58);
             fn_Element_SetUserData((void*)buttonRef, userData);
@@ -1361,16 +1372,16 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
             uint8_t tooltipData[16];
             *(uint64_t*)tooltipData = *(uint64_t*)uiString;
             *(uint64_t*)(tooltipData + 8) = *(uint64_t*)(uiString + 8);
-            fn_Element_SetToolTip((void*)buttonRef, tooltipData);
+            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetToolTip(*reinterpret_cast<UI::String*>(tooltipData));  // B.3.6 bridge
 
-            fn_Element_SetFlagsOnOff((void*)buttonRef, 0x10000, 0);
+            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
 
             // Set sprite on all ImageElement children
             int childIdx = 0;
-            int childCount = fn_Element_ChildCount((void*)buttonRef);
+            int childCount = reinterpret_cast<const UI::Element*>((void*)buttonRef)->ChildCount();  // B.3.6 bridge
             while (childIdx < childCount) {
                 uint8_t childBuf[16];
-                fn_Element_Child((void*)buttonRef, childBuf, childIdx);
+                ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>((void*)buttonRef)->Child(childIdx));  // B.3.6 bridge
                 void* childElem = *(void**)childBuf;
 
                 // Cast to ImageElement
@@ -1385,7 +1396,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 #ifdef _DEBUG
                 bool spriteValid = Debug_Sprite_IsValid(uiSprite);
 #else
-                bool spriteValid = fn_Sprite_IsValid(uiSprite);
+                bool spriteValid = reinterpret_cast<const UI::Sprite*>(uiSprite)->IsValid();  // B.3.6 bridge
 #endif
                 if (spriteValid && imageRef != 0) {
                     uint8_t sprCopy[16];
@@ -1394,12 +1405,12 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 #ifdef _DEBUG
                     Debug_ImageElement_SetSprite((void*)imageRef, sprCopy);
 #else
-                    fn_ImageElement_SetSprite((void*)imageRef, sprCopy);
+                    reinterpret_cast<UI::ImageElement*>((void*)imageRef)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprCopy));  // B.3.6 bridge
 #endif
                 }
 
                 childIdx++;
-                childCount = fn_Element_ChildCount((void*)buttonRef);
+                childCount = reinterpret_cast<const UI::Element*>((void*)buttonRef)->ChildCount();  // B.3.6 bridge
             }
         }
 
@@ -1407,7 +1418,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     }
 
     // --- Step 8: Wire up radio button behavior ---
-    fn_RadioElement_FindCheckBoxes(*(void**)(s + 0xB8));
+    reinterpret_cast<UI::RadioElement*>(*(void**)(s + 0xB8))->FindCheckBoxes();  // B.3.6 bridge
 
     // --- Step 9: Populate speed values array {1, 2, 5, 10, 20, 50} ---
     *(int32_t*)(s + 0xF4) = 0; // currentSpeedIndex = 0
@@ -1565,7 +1576,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 
             // Element::Child(elem, retBuf, 1) — child[1] is the text element
             uint8_t childBuf[16];
-            fn_Element_Child(elem, childBuf, 1);
+            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(elem)->Child(1));  // B.3.6 bridge
 
             void* childElem = *(void**)childBuf;
 
@@ -1583,7 +1594,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 
             // TextElement::SetParameter(textRef, 0, &fmtStr)
             if (textRef != 0) {
-                fn_TextElement_SetParameter((void*)textRef, 0, &fmtStr);
+                reinterpret_cast<UI::TextElement*>((void*)textRef)->SetParameter(0, fmtStr);  // B.3.6 bridge
             }
         }
     }
@@ -1644,7 +1655,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             // If there's already a sub-dialog open, close it
             if (*subDialogPtr != 0) {
                 uint64_t closeRef = (uint64_t)*subDialogPtr;
-                fn_UI_CloseDialog(*(void**)(s + 0x10), &closeRef);
+                reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
             }
 
             if (buttonIndex == *(int32_t*)(s + 0xF0)) {
@@ -1687,7 +1698,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
 
                 // Get padded size of sub-dialog
                 int subWidth, subHeight;
-                fn_Element_GetPaddedSize(subRoot, &subWidth, &subHeight);
+                reinterpret_cast<UI::Element*>(subRoot)->GetPaddedSize(subWidth, subHeight);  // B.3.6 bridge
 
                 // Get parent toolbar element position
                 void* parentRadio = *(void**)(s + 0xB8);
@@ -1710,14 +1721,14 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
 
                 // Set padding on sub-dialog root to position it
                 void* subRoot2 = *(void**)((uintptr_t)*(void**)subDialogPtr + 0x50);
-                fn_Element_SetPadding(subRoot2, 0, xPos, 0, parentBottom + selfTop);
+                reinterpret_cast<UI::Element*>(subRoot2)->SetPadding(0, xPos, 0, parentBottom + selfTop);  // B.3.6 bridge
 
                 // Record which button index is open
                 *(int32_t*)(s + 0xF0) = buttonIndex;
 
                 // Add the sub-dialog to the UI
                 uint64_t addRef = (uint64_t)*subDialogPtr;
-                fn_UI_AddDialog(*(void**)(s + 0x10), &addRef);
+                reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&addRef));  // B.3.6 bridge
             }
             break;
         }
@@ -1850,7 +1861,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         // If not a Tool (case 0) and we have an open sub-dialog, close it
         if (actionType != 0 && *(int64_t*)(s + 0xE8) != 0) {
             uint64_t closeRef = *(uint64_t*)(s + 0xE8);
-            fn_UI_CloseDialog(*(void**)(s + 0x10), &closeRef);
+            reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&closeRef));  // B.3.6 bridge
 
             int64_t nullRef;
             new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge

@@ -22,6 +22,14 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
@@ -79,7 +87,7 @@ static void* FindCompInDesc(uintptr_t desc, uint32_t typeId) {
 static void* FindDialogElem(void* dialogInst, const char* name) {
     System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
     void* result = *(void**)retBuf;
     return result;
 }
@@ -154,7 +162,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             void* elemPtr = *(void**)bpBuf;
 
             if (elemPtr) {
-                void* userData = fn_Element_GetUserData(elemPtr);
+                void* userData = reinterpret_cast<UI::Element*>(elemPtr)->GetUserData();  // B.3.6 bridge
                 // Element_GetUserData can return NULL (element carries no user data);
                 // Runtime IsDerivedFrom has no null-this check (crash READ 0x0 at +0xC039A),
                 // so guard exactly as the +0x28 datasource probes above do.
@@ -231,7 +239,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 #ifdef _DEBUG
             Debug_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
 #else
-            fn_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
+            ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(brc + 0x20))), *reinterpret_cast<const System::String*>(brc + 0x28));  // B.3.6 bridge
 #endif
 
 #ifdef _DEBUG
@@ -258,7 +266,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 #if defined(_DEBUG)
 #endif
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, *(uint64_t*)(brc + 0x30), (void*)(brc + 0x38));
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(brc + 0x30))), *reinterpret_cast<const System::String*>(brc + 0x38));  // B.3.6 bridge
 
             fn_TextElement_SetText(textPtr, uiStr);
         }
@@ -267,7 +275,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     // --- Find "labelBuildMulti" element, hide initially ---
     void* labelMulti = FindDialogElem(dialogInst, "labelBuildMulti");
     if (labelMulti) {
-        fn_Element_SetFlagsOnOff(labelMulti, 1, 0);  // hide
+        reinterpret_cast<UI::Element*>(labelMulti)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; hide
     }
 
     // --- Build dynamic label array: find "labelBuild0", "labelBuild1", etc. ---
@@ -285,7 +293,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
     {
         System::String fmtBuf = System::String::Format("labelBuild%i", (uint64_t)*(uint32_t*)(s + 0x48));
         void* retBuf[2] = {0, 0};
-        fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, &fmtBuf);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(*(void**)(s + 0x18))->FindElement(fmtBuf));  // B.3.6 bridge
         void* labelElem = retBuf[0];
 
         while (labelElem) {
@@ -299,7 +307,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             if (!wrappedElem) break;
 
             // Hide the label initially
-            fn_Element_SetFlagsOnOff(wrappedElem, 1, 0);
+            reinterpret_cast<UI::Element*>(wrappedElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
             // Push into dynamic array at +0x40 (8-byte InternalBasePtr elements).
             // The stride-4 push helper cannot be used here — the element is an
@@ -313,7 +321,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
 
             // Find next label
             fmtBuf = System::String::Format("labelBuild%i", (uint64_t)newCount);
-            fn_DialogInstance_FindElement(*(void**)(s + 0x18), retBuf, &fmtBuf);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(*(void**)(s + 0x18))->FindElement(fmtBuf));  // B.3.6 bridge
             labelElem = retBuf[0];
         }
     }
@@ -382,8 +390,8 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
                 Debug_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
                                (void*)((uintptr_t)resType + 0x38));
 #else
-                fn_Sprite_Ctor(sprite, *(uint64_t*)((uintptr_t)resType + 0x20),
-                               (void*)((uintptr_t)resType + 0x38));
+                ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)resType + 0x20))),
+                               *reinterpret_cast<const System::String*>((uintptr_t)resType + 0x38));  // B.3.6 bridge
 #endif
 #ifdef _DEBUG
                 Debug_LabelElement_SetSprite(label, sprite);
@@ -397,7 +405,7 @@ void BuildRequirementUI_Slot4(BuildRequirementUI* self) {
             fn_TextElement_SetParameter(label, 0, &countStr);
 
             // Show the label
-            fn_Element_SetFlagsOnOff(label, 0, 1);
+            reinterpret_cast<UI::Element*>(label)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
         }
     }
 
@@ -405,7 +413,7 @@ check_multi:
     // If resource component has multi-build flag at +0x34, show "labelBuildMulti"
     if (*(char*)(rc + 0x34) != 0) {
         if (labelMulti) {
-            fn_Element_SetFlagsOnOff(labelMulti, 0, 1);  // show
+            reinterpret_cast<UI::Element*>(labelMulti)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; show
         }
     }
 }

@@ -13,13 +13,15 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // Helper: Find element by name in dialog, return InternalPtr value (8 bytes)
 static uint64_t FindElemByName(void* dialogElem, const char* name) {
     System::String nameBuf(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, &nameBuf);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameBuf));  // B.3.6 bridge
 
     return result;
 }
@@ -54,8 +56,8 @@ void ImmigrationUI_Slot4(ImmigrationUI* self) {
     self->data48 = FindElemAsBasePtr(dialogElem, "buttonDeny");
 
     // Set element IDs on buttons
-    fn_Element_SetElementId((void*)self->data40, 39000);
-    fn_Element_SetElementId((void*)self->data48, 0x9859);
+    reinterpret_cast<UI::Element*>(self->data40)->SetElementId(39000);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(self->data48)->SetElementId(0x9859);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -94,12 +96,11 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
     if (immigComp == 0) {
         void* bAllow = (void*)*(uint64_t*)(s + 0x40);
         void* bDeny  = (void*)*(uint64_t*)(s + 0x48);
-        typedef void (*fn_SetEnabled_t)(void*, bool);
-        if (bAllow) ((fn_SetEnabled_t)(*(void***)bAllow)[8])(bAllow, false);
-        if (bDeny)  ((fn_SetEnabled_t)(*(void***)bDeny)[8])(bDeny, false);
+        if (bAllow) reinterpret_cast<UI::Element*>(bAllow)->Enable(false);  // B.3.6 bridge: Element slot 8 Enable
+        if (bDeny)  reinterpret_cast<UI::Element*>(bDeny)->Enable(false);  // B.3.6 bridge: Element slot 8 Enable
         // Show textNone (+0x30), hide textNomad (+0x38).
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x38), 1, 0);
-        fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x30), 0, 1);
+        reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x38))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
         return;
     }
 
@@ -126,20 +127,17 @@ void ImmigrationUI_Slot7(ImmigrationUI* self) {
 
     // Enable/disable buttons at +0x40 and +0x48 via vtable[8] (SetEnabled)
     void* buttonAllow = (void*)*(uint64_t*)(s + 0x40);
-    void** vtAllow = *(void***)buttonAllow;
-    typedef void (*fn_SetEnabled_t)(void*, bool);
-    ((fn_SetEnabled_t)vtAllow[8])(buttonAllow, buildComplete);
+    reinterpret_cast<UI::Element*>(buttonAllow)->Enable(buildComplete);  // B.3.6 bridge: Element slot 8 Enable
 
     void* buttonDeny = (void*)*(uint64_t*)(s + 0x48);
-    void** vtDeny = *(void***)buttonDeny;
-    ((fn_SetEnabled_t)vtDeny[8])(buttonDeny, buildComplete);
+    reinterpret_cast<UI::Element*>(buttonDeny)->Enable(buildComplete);  // B.3.6 bridge: Element slot 8 Enable
 
     // Show/hide text elements based on build state
     // If build complete: show textNomad (+0x38), hide textNone (+0x30)
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x38),
-        (uint32_t)!buildComplete, (uint32_t)buildComplete);
-    fn_Element_SetFlagsOnOff((void*)*(uint64_t*)(s + 0x30),
-        (uint32_t)buildComplete, (uint32_t)!buildComplete);
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x38))->SetFlagsOnOff(
+        (uint32_t)!buildComplete, (uint32_t)buildComplete);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetFlagsOnOff(
+        (uint32_t)buildComplete, (uint32_t)!buildComplete);  // B.3.6 bridge
 
     // Format immigration count as "%i" and set on textNomad parameter 0
     System::String countStr = System::String::Format("%i", (uint64_t)immigCount);
