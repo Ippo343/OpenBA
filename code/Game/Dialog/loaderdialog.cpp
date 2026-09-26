@@ -36,13 +36,6 @@ void LoaderDialog::OnUpdate(const System::Time& time) {
     rotation += time.AsSeconds() * 180.0f;
 }
 
-// [5] / [8] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed /
-// OnElementEvent; the hand-built table had a no-op. Kept for this commit.
-void LoaderDialog::OnClosed() {}
-void LoaderDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
-                                  int32_t /*a*/, int32_t /*b*/, int32_t /*c*/,
-                                  int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {}
-
 // ============================================================
 // Construction, destruction, reflection
 // ============================================================

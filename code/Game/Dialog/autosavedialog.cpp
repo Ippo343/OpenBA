@@ -179,10 +179,6 @@ void AutoSaveDialog::OnUpdate(const System::Time& time) {
     *(float*)(s + 0xC8) = angle;
 }
 
-// [5] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed; the
-// hand-built table had a no-op. Kept for this commit.
-void AutoSaveDialog::OnClosed() {}
-
 // ============================================================
 // Construction, destruction, reflection
 // ============================================================

@@ -32,14 +32,9 @@ public:
 
     Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140020c70
     void OnOpened() override;                                      // [4] 0x1400b2d90
-    // [5] / [8]: retail INHERITS DialogInstance's bodies; the hand-built table
-    // had a print-once no-op in both. Kept (PORT GAP, B38 D3.1).
-    void OnClosed() override;                                      // [5] PORT GAP
+    // [5] OnClosed / [8] OnElementEvent: DialogInstance's, inherited (B38 D3.1).
     void OnUpdateLayout() override;                                // [6] 0x1400b2d00
     void OnUpdate(const System::Time& time) override;              // [7] 0x1400b2d50
-    void OnElementEvent(Object::InternalPtr<UI::Element>* element,
-                        int32_t a, int32_t b, int32_t c,
-                        int32_t d, int32_t e, void* userData) override;  // [8] PORT GAP
 
 protected:
     ~LoaderDialog() = default;

@@ -254,3 +254,41 @@ UNIT_TEST(dlg_toolbar_dialog) {
     CheckShape<ToolbarDialog>();
     CheckDialogInstanceSlots<ToolbarDialog>();
 }
+
+// B38 D3.1: the slots retail fills with DialogInstance's body are INHERITED,
+// not overridden. For an inherited member, &T::M names DialogInstance's member,
+// so its pointer type is `R (UI::DialogInstance::*)(...)`.
+namespace {
+template <typename T> constexpr bool InheritsOnClosed =
+    std::is_same<decltype(&T::OnClosed), void (UI::DialogInstance::*)()>::value;
+template <typename T> constexpr bool InheritsOnUpdateLayout =
+    std::is_same<decltype(&T::OnUpdateLayout), void (UI::DialogInstance::*)()>::value;
+template <typename T> constexpr bool InheritsOnUpdate =
+    std::is_same<decltype(&T::OnUpdate), void (UI::DialogInstance::*)(const System::Time&)>::value;
+template <typename T> constexpr bool InheritsOnElementEvent =
+    std::is_same<decltype(&T::OnElementEvent),
+                 void (UI::DialogInstance::*)(Object::InternalPtr<UI::Element>*, int32_t, int32_t,
+                                              int32_t, int32_t, int32_t, void*)>::value;
+}  // namespace
+
+UNIT_TEST(dlg_d31_inherited_slots) {
+    CHECK(InheritsOnUpdateLayout<MessageDialog>);
+    CHECK(InheritsOnUpdate<MessageDialog>);
+    CHECK(InheritsOnClosed<EventPopupDialog>);
+    CHECK(InheritsOnUpdateLayout<EventPopupDialog>);
+    CHECK(InheritsOnUpdate<EventPopupDialog>);
+    CHECK(InheritsOnClosed<LoaderDialog>);
+    CHECK(InheritsOnElementEvent<LoaderDialog>);
+    CHECK(InheritsOnClosed<AutoSaveDialog>);
+    CHECK(InheritsOnClosed<AchievementDialog>);
+    CHECK(InheritsOnClosed<GoalDialog>);
+    CHECK(InheritsOnClosed<ScenarioDialog>);
+    CHECK(InheritsOnUpdateLayout<OptionsDialog>);
+    CHECK(InheritsOnUpdate<OptionsDialog>);
+    CHECK(InheritsOnClosed<SaveLoadDialog>);
+    CHECK(InheritsOnClosed<ModUploadDialog>);
+    CHECK(InheritsOnUpdate<ToolbarDialog>);
+    // and an own slot is NOT inherited
+    CHECK(!InheritsOnClosed<ToolbarDialog>);
+    CHECK(!InheritsOnClosed<MessageDialog>);
+}

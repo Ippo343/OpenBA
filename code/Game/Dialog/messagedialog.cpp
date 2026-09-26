@@ -48,11 +48,6 @@ void MessageDialog::OnOpened() {
 // [5] OnClosed (0x14006D0C0) — `RET 0`: an empty override of the base body.
 void MessageDialog::OnClosed() {}
 
-// [6] / [7] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnUpdateLayout
-// / OnUpdate; the hand-built table had a no-op in both. Kept for this commit.
-void MessageDialog::OnUpdateLayout() {}
-void MessageDialog::OnUpdate(const System::Time& /*time*/) {}
-
 // [8] OnElementEvent (0x14006D070) — dispatches a button click (msg 0x12)
 // through the vtable, so a subclass override runs:
 //   id 0 -> [11] OnCancel, 1 -> [10] OnOk, 2 -> [12] OnYes, 3 -> [13] OnNo.

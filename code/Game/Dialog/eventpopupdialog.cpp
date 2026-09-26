@@ -97,15 +97,6 @@ void EventPopupDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*elemen
 }
 
 // ============================================================
-// [5] / [6] / [7] PORT GAP (B38 D3.1): retail inherits DialogInstance's
-// OnClosed / OnUpdateLayout / OnUpdate. The hand-built table had a no-op in all
-// three; kept for this commit.
-// ============================================================
-void EventPopupDialog::OnClosed() {}
-void EventPopupDialog::OnUpdateLayout() {}
-void EventPopupDialog::OnUpdate(const System::Time& /*time*/) {}
-
-// ============================================================
 // Construction, destruction, reflection
 // ============================================================
 // EventPopupDialog (DialogInstance, 0xC0 bytes, exe vtable 0x14015bd80): the

@@ -285,10 +285,6 @@ void GoalDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, i
 // Construction, destruction, reflection (ENDGAME B.3.8 block DLG)
 // ============================================================
 
-// [5] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed; the
-// hand-built table had a no-op. Kept for this commit.
-void GoalDialog::OnClosed() {}
-
 GoalDialog::GoalDialog() : dataB8(0), dataC0(0) {}
 
 // MainMenuDialog's opener inlines this ctor: DialogInstance(ui, dialog,

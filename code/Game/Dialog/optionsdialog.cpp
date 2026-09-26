@@ -1682,11 +1682,6 @@ cleanup:
 // the hand-built table is gone. 0x14015ceb0 has no by-address reader, so its
 // registration went with the table.
 
-// [6] / [7] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnUpdateLayout /
-// OnUpdate; the hand-built table had a print-once no-op in both. Kept.
-void OptionsDialog::OnUpdateLayout() {}
-void OptionsDialog::OnUpdate(const System::Time& /*time*/) {}
-
 // Retail 0x140075150: copy parentIBP to a local stack slot, call
 // DialogInstance::DialogInstance(self, ui, extRes, &localParent, 0, 0, 0),
 // the vtable store, zero +0xB8..+0x1B8.

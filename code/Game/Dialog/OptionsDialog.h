@@ -35,10 +35,7 @@ public:
     Object::Base* DeletingDtor(unsigned flags) override;           // [0] 0x140012f30
     void OnOpened() override;                                      // [4] 0x1400742d0
     void OnClosed() override;                                      // [5] 0x140073480 RET
-    // [6] / [7]: retail INHERITS DialogInstance's bodies; the hand-built table
-    // had a print-once no-op in both. Kept (PORT GAP, B38 D3.1).
-    void OnUpdateLayout() override;                                // [6] PORT GAP
-    void OnUpdate(const System::Time& time) override;              // [7] PORT GAP
+    // [6] / [7]: DialogInstance's bodies, inherited (B38 D3.1).
     void OnElementEvent(Object::InternalPtr<UI::Element>* element,
                         int32_t a, int32_t b, int32_t c,
                         int32_t d, int32_t e, void* userData) override;  // [8] 0x140072f20

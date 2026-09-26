@@ -1251,10 +1251,6 @@ void SaveLoadDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, i
 // the hand-built table is gone. engine_funcs.cpp does not read 0x14015f900 back,
 // so its registration went with the table; the ctor door stays.
 
-// [5] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed; the
-// hand-built table had a print-once no-op. Kept for this commit.
-void SaveLoadDialog::OnClosed() {}
-
 // The ctor body of exe 0x1400b8270 after the DialogInstance base ctor: mode
 // byte at +0xB8, flags/selection/rotation zeroed, Sprite default-ctor at +0xD0,
 // loader/engine ptrs at +0xE0/+0xE8, +0xF0..+0x158 zero.

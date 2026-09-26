@@ -555,10 +555,6 @@ void ScenarioDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*
 //   [8] 0x140077f80 OnCommand     -> ScenarioDialog_Slot8 (ported)
 //   [9] 0x14003a954 OnSerialize   (base thunk)
 
-// [5] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed; the
-// hand-built table had a no-op. Kept for this commit.
-void ScenarioDialog::OnClosed() {}
-
 ScenarioDialog::ScenarioDialog()
     : difficulty(0), dataC0(0), dataC8(-1), dataD0(0), dataD8(0), dataE0(0) {}
 

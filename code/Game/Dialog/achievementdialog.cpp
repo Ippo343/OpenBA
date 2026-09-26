@@ -360,10 +360,6 @@ void AchievementDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*eleme
 // Construction, destruction, reflection (ENDGAME B.3.8 block DLG)
 // ============================================================
 
-// [5] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed; the
-// hand-built table had a no-op. Kept for this commit.
-void AchievementDialog::OnClosed() {}
-
 AchievementDialog::AchievementDialog() : dataB8(0), dataC0(0), dataC8(0) {}
 
 // MainMenuDialog's opener inlines this ctor: DialogInstance(ui, dialog,
