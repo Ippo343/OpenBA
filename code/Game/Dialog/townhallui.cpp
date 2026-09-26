@@ -32,6 +32,15 @@
 #include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/Sprite.h"       // ENDGAME B.3.6 UI callers (K1)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/TextElement.h"       // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/LabelElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/NumberElement.h"     // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/NumberEditElement.h" // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/ComboElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/GraphElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/TableElement.h"      // ENDGAME B.3.6 UI callers round 2 (K1)
+#include "runtime/types/ui/TabElement.h"        // ENDGAME B.3.6 UI callers round 2 (K1)
 
 
 // ============================================================
@@ -158,7 +167,7 @@ void TownHallUI_InitGraph(TownHallUI* self) {
         ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
         uint8_t emptySprite[16];
         ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-        fn_ComboElement_AddItem((void*)self->timeCombo, emptySprite, &sysStrBuf, nullptr);
+        reinterpret_cast<UI::ComboElement*>(self->timeCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(emptySprite), sysStrBuf, nullptr);  // B.3.6 bridge
     }
 
     // Populate graph combo (skip empty entries)
@@ -176,12 +185,12 @@ void TownHallUI_InitGraph(TownHallUI* self) {
             ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
             uint8_t emptySprite[16];
             ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-            fn_ComboElement_AddItem((void*)self->graphCombo, emptySprite, &sysStrBuf, nullptr);
+            reinterpret_cast<UI::ComboElement*>(self->graphCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(emptySprite), sysStrBuf, nullptr);  // B.3.6 bridge
         }
     }
 
-    fn_ComboElement_SetCurrentItem((void*)self->timeCombo, 0);
-    fn_ComboElement_SetCurrentItem((void*)self->graphCombo, 0);
+    reinterpret_cast<UI::ComboElement*>(self->timeCombo)->SetCurrentItem(0);  // B.3.6 bridge
+    reinterpret_cast<UI::ComboElement*>(self->graphCombo)->SetCurrentItem(0);  // B.3.6 bridge
 
     TownHallUI_UpdateGraph(self);
 }
@@ -230,7 +239,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
 
     // Set table size to profession count x 1
     int profCount = *(int*)(profList + 0x28);
-    fn_TableElement_SetSize((void*)tablePtr, profCount, 1);
+    reinterpret_cast<UI::TableElement*>(tablePtr)->SetSize(profCount, 1);  // B.3.6 bridge
 
     // Iterate rows
     for (int i = 0; i < profCount; i++) {
@@ -246,7 +255,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
             reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf),
             reinterpret_cast<const UI::Dialog*>(dialogInst));  // B.3.6 bridge
 
-        fn_TableElement_SetChild3(tbl, clonedElem, i, 0);
+        reinterpret_cast<UI::TableElement*>(tbl)->SetChild(reinterpret_cast<::Object::InternalPtr<UI::Element>*>(clonedElem), i, 0);  // B.3.6 bridge
 
         // Get the cloned row element
         uint64_t rowBuf[2] = {0, 0};
@@ -391,14 +400,14 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         ::new (static_cast<void*>(uiStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profTypeId + 0x20))), *reinterpret_cast<const System::String*>(profTypeId + 0x30));  // B.3.6 bridge
         uint8_t uiStrCopy[16];
         memcpy(uiStrCopy, uiStr, 16);
-        fn_TextElement_SetText((void*)labelIBP, uiStrCopy);
+        reinterpret_cast<UI::TextElement*>(labelIBP)->SetText(reinterpret_cast<const UI::String*>(uiStrCopy));  // B.3.6 bridge
 
         // Set sprite on label
         uint8_t sprBuf[16];
         ::new (static_cast<void*>(sprBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(profTypeId + 0x28))), *reinterpret_cast<const System::String*>(profTypeId + 0x30));  // B.3.6 bridge
         uint8_t sprCopy[16];
         memcpy(sprCopy, sprBuf, 16);
-        fn_LabelElement_SetSprite((void*)labelIBP, sprCopy);
+        reinterpret_cast<UI::LabelElement*>(labelIBP)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprCopy));  // B.3.6 bridge
 
         // Set tooltip
         uint8_t ttStr[16];
@@ -408,7 +417,7 @@ void TownHallUI_InitProfessions(TownHallUI* self) {
         reinterpret_cast<UI::Element*>(labelIBP)->SetToolTip(*reinterpret_cast<const UI::String*>(ttCopy));  // B.3.6 bridge
 
         // Set spinner element IDs on the content container (child 1 of row)
-        fn_SpinnerElement_SetElementId(contentElem, i + 0x1966);
+        reinterpret_cast<UI::SpinnerElement*>(contentElem)->SetElementId(i + 0x1966);  // B.3.6 bridge
 
         // Set inner child(0) of content container with same ID
         uint64_t spinChildBuf[2] = {0, 0};
@@ -512,9 +521,9 @@ void TownHallUI_InitProduction(TownHallUI* self) {
         ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
         uint8_t emptySprite[16];
         ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-        fn_ComboElement_AddItem((void*)self->productionCombo, emptySprite, &sysStrBuf, nullptr);
+        reinterpret_cast<UI::ComboElement*>(self->productionCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(emptySprite), sysStrBuf, nullptr);  // B.3.6 bridge
     }
-    fn_ComboElement_SetCurrentItem((void*)self->productionCombo, 0);
+    reinterpret_cast<UI::ComboElement*>(self->productionCombo)->SetCurrentItem(0);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -560,7 +569,7 @@ void TownHallUI_InitInventory(TownHallUI* self) {
 
     // Size table: ceil(resourceCount / colCount) rows
     int rowCount = ((colCount - 1 + resourceCount) / colCount * colCount) / colCount;
-    fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
+    reinterpret_cast<UI::TableElement*>(tablePtr)->SetSize(rowCount, colCount);  // B.3.6 bridge
 
     // Clone template rows into all cells
     int totalChildren = reinterpret_cast<const UI::Element*>(tablePtr)->ChildCount();  // B.3.6 bridge
@@ -568,12 +577,14 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
 
-        typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
-        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
+        // Clone: cloneObj is the template cell's Element::_description (+0xB8), so
+        // +0x40 is UI::ElementDescription slot 8, CreateInstance (retslot, B6-2).
         uint8_t cloneBuf[16];
-        void* clonedElem = cloneFunc((void*)cloneObj, cloneBuf, dialogInst);
+        void* clonedElem = reinterpret_cast<const UI::ElementDescription*>(cloneObj)->CreateInstance(
+            reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(dialogInst));  // B.3.6 bridge
 
-        fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
+        reinterpret_cast<UI::TableElement*>(tablePtr)->SetChild(reinterpret_cast<::Object::InternalPtr<UI::Element>*>(clonedElem), i);  // B.3.6 bridge
 
     }
 
@@ -630,14 +641,14 @@ void TownHallUI_InitInventory(TownHallUI* self) {
         ::new (static_cast<void*>(&sysStrBuf)) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
         uint8_t emptySprite[16];
         ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
-        fn_ComboElement_AddItem((void*)self->inventoryCombo, emptySprite, &sysStrBuf, nullptr);
+        reinterpret_cast<UI::ComboElement*>(self->inventoryCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(emptySprite), sysStrBuf, nullptr);  // B.3.6 bridge
     }
-    fn_ComboElement_SetCurrentItem((void*)self->inventoryCombo, 0);
+    reinterpret_cast<UI::ComboElement*>(self->inventoryCombo)->SetCurrentItem(0);  // B.3.6 bridge
 
     // Find "sortCombo" ComboElement
     self->sortCombo = TownHall_FindElem(
         *(void**)(s + 0x20), "sortCombo", *g_TypeId_ComboElement);
-    fn_ComboElement_SetCurrentItem((void*)self->sortCombo, 0);
+    reinterpret_cast<UI::ComboElement*>(self->sortCombo)->SetCurrentItem(0);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -778,7 +789,7 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
 
     // Size table: ceil(agriCount / colCount) rows
     int rowCount = ((colCount - 1 + agriCount) / colCount * colCount) / colCount;
-    fn_TableElement_SetSize((void*)tablePtr, rowCount, colCount);
+    reinterpret_cast<UI::TableElement*>(tablePtr)->SetSize(rowCount, colCount);  // B.3.6 bridge
 
     // Clone template rows into all cells
     int totalChildren = reinterpret_cast<const UI::Element*>(tablePtr)->ChildCount();  // B.3.6 bridge
@@ -786,12 +797,14 @@ void TownHallUI_InitAgriculture(TownHallUI* self) {
         uint64_t dialogInst = *(uint64_t*)(*(uintptr_t*)(s + 0x18) + 0x18);
 
 
-        typedef void* (*CloneFunc_t)(void* self, void* retBuf, uint64_t dialogInst);
-        CloneFunc_t cloneFunc = *(CloneFunc_t*)(*(uintptr_t*)cloneObj + 0x40);
+        // Clone: cloneObj is the template cell's Element::_description (+0xB8), so
+        // +0x40 is UI::ElementDescription slot 8, CreateInstance (retslot, B6-2).
         uint8_t cloneBuf[16];
-        void* clonedElem = cloneFunc((void*)cloneObj, cloneBuf, dialogInst);
+        void* clonedElem = reinterpret_cast<const UI::ElementDescription*>(cloneObj)->CreateInstance(
+            reinterpret_cast<::Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(dialogInst));  // B.3.6 bridge
 
-        fn_TableElement_SetChild2((void*)tablePtr, clonedElem, i);
+        reinterpret_cast<UI::TableElement*>(tablePtr)->SetChild(reinterpret_cast<::Object::InternalPtr<UI::Element>*>(clonedElem), i);  // B.3.6 bridge
 
     }
 
@@ -884,10 +897,10 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
     uint64_t* pXMin = reinterpret_cast<uint64_t*>(::new (static_cast<void*>(xMinStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(self->graphYearsTable)), timeIdx));  // B.3.6 bridge
     uint8_t xMinCopy[16];
     memcpy(xMinCopy, pXMin, 16);
-    fn_TextElement_SetText(*(void**)(s + 0x178), xMinCopy);
+    reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x178))->SetText(reinterpret_cast<const UI::String*>(xMinCopy));  // B.3.6 bridge
 
     // Remove existing graphs
-    fn_GraphElement_RemoveGraphs(*(void**)(s + 0x160));
+    reinterpret_cast<UI::GraphElement*>(*(void**)(s + 0x160))->RemoveGraphs();  // B.3.6 bridge
 
     uintptr_t gameData = *(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0xf0);
     int currentTick = *(int*)(*(uintptr_t*)(gameData + 0x150) + 8);
@@ -901,13 +914,13 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
         if (seriesIdx < 0) {
             reinterpret_cast<UI::Element*>(*(void**)labelPtr)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
         } else {
-            fn_GraphElement_AddGraph(*(void**)(s + 0x160), colors[g]);
+            reinterpret_cast<UI::GraphElement*>(*(void**)(s + 0x160))->AddGraph(colors[g]);  // B.3.6 bridge
 
             int startIdx;
             if (currentTick / stepSize < pointCount) {
                 int padCount = pointCount - currentTick / stepSize;
                 for (int p = 0; p < padCount; p++) {
-                    fn_GraphElement_AddGraphPoint(*(void**)(s + 0x160), graphCount, 0);
+                    reinterpret_cast<UI::GraphElement*>(*(void**)(s + 0x160))->AddGraphPoint(graphCount, 0);  // B.3.6 bridge
                 }
                 startIdx = 0;
             } else {
@@ -918,7 +931,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
                 uintptr_t histBase = *(uintptr_t*)(*(uintptr_t*)(gameData + 0x150) + (uintptr_t)seriesIdx * 0x10);
                 int val = *(int*)(histBase + idx * 4);
                 if (val > maxVal) maxVal = val;
-                fn_GraphElement_AddGraphPoint(*(void**)(s + 0x160), graphCount, val);
+                reinterpret_cast<UI::GraphElement*>(*(void**)(s + 0x160))->AddGraphPoint(graphCount, val);  // B.3.6 bridge
             }
 
             // Set label color
@@ -930,7 +943,7 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
             uint64_t* pLbl = reinterpret_cast<uint64_t*>(::new (static_cast<void*>(lblStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(lblST)), seriesIdx));  // B.3.6 bridge
             uint8_t lblCopy[16];
             memcpy(lblCopy, pLbl, 16);
-            fn_TextElement_SetText(*(void**)labelPtr, lblCopy);
+            reinterpret_cast<UI::TextElement*>(*(void**)labelPtr)->SetText(reinterpret_cast<const UI::String*>(lblCopy));  // B.3.6 bridge
 
             reinterpret_cast<UI::Element*>(*(void**)labelPtr)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
@@ -952,10 +965,10 @@ void TownHallUI_UpdateGraph(TownHallUI* self) {
 
     // Y-axis labels: max, 3/4, 1/2, 1/4
     float quarter = (float)yMax * 0.25f;
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x180), yMax);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x188), (int)(quarter * 3.0f));
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x190), (int)(quarter * 2.0f));
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x198), (int)quarter);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x180))->SetValue(static_cast<int32_t>(yMax));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x188))->SetValue(static_cast<int32_t>((int)(quarter * 3.0f)));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x190))->SetValue(static_cast<int32_t>((int)(quarter * 2.0f)));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x198))->SetValue(static_cast<int32_t>((int)quarter));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -1010,7 +1023,7 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
 
     // Year
     int year = **(int**)(*(uintptr_t*)g_pGameSingleton + 0x128);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x60), year);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x60))->SetValue(static_cast<int32_t>(year));  // B.3.6 bridge
 
     // Month
     float seconds = reinterpret_cast<const System::Time*>((void*)(*(uintptr_t*)(*(uintptr_t*)g_pGameSingleton + 0x128) + 8))->AsSeconds();   // B.3.4 bridge
@@ -1022,32 +1035,32 @@ void TownHallUI_UpdateGeneral(TownHallUI* self) {
     uint64_t* pMonth = reinterpret_cast<uint64_t*>(::new (static_cast<void*>(monthStr)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(monthST)), monthIdx));  // B.3.6 bridge
     uint8_t monthCopy[16];
     memcpy(monthCopy, pMonth, 16);
-    fn_TextElement_SetText(*(void**)(s + 0x68), monthCopy);
+    reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x68))->SetText(reinterpret_cast<const UI::String*>(monthCopy));  // B.3.6 bridge
 
     // Home count
     int homeCount = *(int*)(gameData + 0x28);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x70), homeCount);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x70))->SetValue(static_cast<int32_t>(homeCount));  // B.3.6 bridge
 
     // Citizen counts
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x80), totalCitizens);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x88), adults);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x90), students);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x98), children);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x80))->SetValue(static_cast<int32_t>(totalCitizens));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x88))->SetValue(static_cast<int32_t>(adults));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x90))->SetValue(static_cast<int32_t>(students));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x98))->SetValue(static_cast<int32_t>(children));  // B.3.6 bridge
 
     // Educated % (at +0xa0)
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)(uint32_t)(int)(educatedPct + 0.5f));
-        fn_TextElement_SetParameter(*(void**)(s + 0xa0), 0, &fmtBuf);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0xa0))->SetParameter(0, fmtBuf);  // B.3.6 bridge
     }
 
     // Clothed % (at +0xa8)
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)(uint32_t)(int)(clothedPct + 0.5f));
-        fn_TextElement_SetParameter(*(void**)(s + 0xa8), 0, &fmtBuf);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0xa8))->SetParameter(0, fmtBuf);  // B.3.6 bridge
     }
 
     // Family count
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x78), familyCount);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x78))->SetValue(static_cast<int32_t>(familyCount));  // B.3.6 bridge
 
     // Hearts (happiness) and Stars (health) ratings
     if (totalCitizens < 1) {
@@ -1093,11 +1106,11 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
     // Set header text parameters
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)yearSpan);
-        fn_TextElement_SetParameter(*(void**)(s + 0x108), 0, &fmtBuf);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x108))->SetParameter(0, fmtBuf);  // B.3.6 bridge
     }
     {
         System::String fmtBuf = System::String::Format("%i", (uint64_t)yearSpan);
-        fn_TextElement_SetParameter(*(void**)(s + 0x110), 0, &fmtBuf);
+        reinterpret_cast<UI::TextElement*>(*(void**)(s + 0x110))->SetParameter(0, fmtBuf);  // B.3.6 bridge
     }
 
     int* timePtr = *(int**)(*(uintptr_t*)g_pGameSingleton + 0x128);
@@ -1119,7 +1132,7 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
             int stock = *(int*)(*(uintptr_t*)(gameData + 0x170) + dataOff);
 
             uintptr_t entry = *(uintptr_t*)(s + 0xf0) + entryOff;
-            fn_NumberElement_SetValueInt(*(void**)entry, stock);
+            reinterpret_cast<UI::NumberElement*>(*(void**)entry)->SetValue(static_cast<int32_t>(stock));  // B.3.6 bridge
 
             uintptr_t prodData = *(uintptr_t*)(gameData + 0x170);
             int usedCur = fn_QueryProductionStat((void*)gameData, resIdx - 1, currentYearTick, endTick);
@@ -1130,16 +1143,16 @@ void TownHallUI_UpdateProfessions(TownHallUI* self) {
             int prodPrev = fn_QueryProductionStat((void*)gameData, resIdx, prevStart, prevEnd);
 
             uintptr_t arr = *(uintptr_t*)(s + 0xf0);
-            fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 8), usedCur + usedStock);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(arr + entryOff + 8))->SetValue(static_cast<int32_t>(usedCur + usedStock));  // B.3.6 bridge
 
             arr = *(uintptr_t*)(s + 0xf0);
-            fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 0x10), prodCur + prodStock);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(arr + entryOff + 0x10))->SetValue(static_cast<int32_t>(prodCur + prodStock));  // B.3.6 bridge
 
             arr = *(uintptr_t*)(s + 0xf0);
-            fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 0x18), usedPrev);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(arr + entryOff + 0x18))->SetValue(static_cast<int32_t>(usedPrev));  // B.3.6 bridge
 
             arr = *(uintptr_t*)(s + 0xf0);
-            fn_NumberElement_SetValueInt(*(void**)(arr + entryOff + 0x20), prodPrev);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(arr + entryOff + 0x20))->SetValue(static_cast<int32_t>(prodPrev));  // B.3.6 bridge
 
             resIdx += 3;
             dataOff += 0x20;
@@ -1415,7 +1428,7 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Set sprite on label element
             void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_LabelElement_SetSprite(labelElem, spriteBuf);
+            reinterpret_cast<UI::LabelElement*>(labelElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
             // Create UIString from ValueDescription+0x30 (stringTable) and +0x38 (stringName)
             uint8_t uiStrBuf[16];
@@ -1423,11 +1436,11 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Set text on label element
             void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_TextElement_SetText(labelElem2, uiStrBuf);
+            reinterpret_cast<UI::TextElement*>(labelElem2)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
             // Set number value on the number element (+8 from label)
             uintptr_t tableBase = *(uintptr_t*)(s + 0x118);
-            fn_NumberElement_SetValueInt(*(void**)(tableBase + elemOff + 8), entries[i].value);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(tableBase + elemOff + 8))->SetValue(static_cast<int32_t>(entries[i].value));  // B.3.6 bridge
 
             // Set active flag (vtable +0x50 with -1)
             tableBase = *(uintptr_t*)(s + 0x118);
@@ -1447,17 +1460,17 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
             uint8_t emptySprite[16];
             ::new (static_cast<void*>(emptySprite)) UI::Sprite();  // B.3.6 bridge
             void* labelElem = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_LabelElement_SetSprite(labelElem, emptySprite);
+            reinterpret_cast<UI::LabelElement*>(labelElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
 
             // Empty string
             uint8_t emptyStr[16];
             fn_UIString_Ctor(emptyStr, 0, nullptr);
             void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
-            fn_TextElement_SetText(labelElem2, emptyStr);
+            reinterpret_cast<UI::TextElement*>(labelElem2)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
 
             // Set value to 0
             uintptr_t tableBase = *(uintptr_t*)(s + 0x118);
-            fn_NumberElement_SetValueInt(*(void**)(tableBase + elemOff + 8), 0);
+            reinterpret_cast<UI::NumberElement*>(*(void**)(tableBase + elemOff + 8))->SetValue(static_cast<int32_t>(0));  // B.3.6 bridge
 
             // Set inactive flag (vtable +0x50 with 0)
             tableBase = *(uintptr_t*)(s + 0x118);
@@ -1573,14 +1586,14 @@ next_entity: ;
                 ::new (static_cast<void*>(spriteBuf)) UI::Sprite(::Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)selectDesc + 0x20))), *reinterpret_cast<const System::String*>((uintptr_t)selectDesc + 0x28));  // B.3.6 bridge
 
                 uintptr_t labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                fn_LabelElement_SetSprite(*(void**)labelPtr, spriteBuf);
+                reinterpret_cast<UI::LabelElement*>(*(void**)labelPtr)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
                 // Create UIString from SelectDescription+0x30/+0x38
                 uint8_t uiStrBuf[16];
                 ::new (static_cast<void*>(uiStrBuf)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)selectDesc + 0x30))), *reinterpret_cast<const System::String*>((uintptr_t)selectDesc + 0x38));  // B.3.6 bridge
 
                 labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
-                fn_TextElement_SetText(*(void**)labelPtr, uiStrBuf);
+                reinterpret_cast<UI::TextElement*>(*(void**)labelPtr)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
                 // Vtable +0x50 call (SetColor) — 0xFFC0C0C0 = opaque silver/gray
                 labelPtr = *(uintptr_t*)(s + 0x1C8) + (uintptr_t)displayIdx * 8;
@@ -1719,10 +1732,10 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
 
         // Update number+count display
         uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + profEntryOff;
-        fn_NumberElement_SetValueInt(*(void**)(profEntry + 0x18), *(int*)(profEntry + 0x04));
+        reinterpret_cast<UI::NumberElement*>(*(void**)(profEntry + 0x18))->SetValue(static_cast<int32_t>(*(int*)(profEntry + 0x04)));  // B.3.6 bridge
 
         int entityArrayCount = *(int*)(profEntry + 0x38);
-        fn_NumberElement_SetValueInt(*(void**)(profEntry + 0x20), entityArrayCount);
+        reinterpret_cast<UI::NumberElement*>(*(void**)(profEntry + 0x20))->SetValue(static_cast<int32_t>(entityArrayCount));  // B.3.6 bridge
 
         // Set visibility via vtable+0x40
         void* visElem = *(void**)(profEntry + 0x28);
@@ -1762,19 +1775,19 @@ void TownHallUI_UpdateInventory(TownHallUI* self) {
     // Phase 4: Update spinner elements with final counts
     // First profession entry
     int* firstEntry = *(int**)(s + 0x40);
-    fn_NumberEditElement_SetValue(*(void**)(firstEntry + 4), *firstEntry);
+    reinterpret_cast<UI::NumberEditElement*>(*(void**)(firstEntry + 4))->SetValue(*firstEntry);  // B.3.6 bridge
     firstEntry = *(int**)(s + 0x40);
-    fn_NumberEditElement_SetMinMax(*(void**)(firstEntry + 4), *firstEntry, *firstEntry);
+    reinterpret_cast<UI::NumberEditElement*>(*(void**)(firstEntry + 4))->SetMinMax(*firstEntry, *firstEntry);  // B.3.6 bridge
 
     // Remaining profession entries
     int totalProfs = *(int*)(s + 0x48);
     for (int p = 1; p < totalProfs; p++) {
         uintptr_t profEntry = *(uintptr_t*)(s + 0x40) + (uintptr_t)p * 0x40;
-        fn_NumberEditElement_SetValue(*(void**)(profEntry + 0x10), *(int*)(profEntry));
+        reinterpret_cast<UI::NumberEditElement*>(*(void**)(profEntry + 0x10))->SetValue(*(int*)(profEntry));  // B.3.6 bridge
 
         int* firstEntryPtr = *(int**)(s + 0x40);
-        fn_NumberEditElement_SetMinMax(
-            *(void**)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40 + 0x10),
+        reinterpret_cast<UI::NumberEditElement*>(  // B.3.6 bridge
+            *(void**)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40 + 0x10))->SetMinMax(
             0, *firstEntryPtr + *(int*)((uintptr_t)firstEntryPtr + (uintptr_t)p * 0x40));
     }
 }
@@ -1926,7 +1939,7 @@ void TownHallUI_OnProfessionSpinner(TownHallUI* self, int index) {
     int64_t entryOff = (int64_t)index * 0x40;
 
     // Get desired vs current count
-    int desired = fn_NumberEditElement_GetValue(*(void**)(entryBase + entryOff + 0x10));
+    int desired = reinterpret_cast<const UI::NumberEditElement*>(*(void**)(entryBase + entryOff + 0x10))->GetValue();  // B.3.6 bridge
     int current = *(int*)(entryBase + entryOff);
 
     if (current < desired) {
@@ -2037,12 +2050,12 @@ void TownHallUI_Update(TownHallUI* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&combo5), nullptr);   // B.3.4 bridge
 
     if (*(int*)(serializer[0] + 8) == 0) {
-        fn_TabElement_SetActiveTab(*(void**)(s + 0x30), tabIndex);
-        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x100), combo1);
-        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x128), combo2);
-        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x130), combo3);
-        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x168), combo4);
-        fn_ComboElement_SetCurrentItem(*(void**)(s + 0x170), combo5);
+        reinterpret_cast<UI::TabElement*>(*(void**)(s + 0x30))->SetActiveTab(tabIndex);  // B.3.6 bridge
+        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x100))->SetCurrentItem(combo1);  // B.3.6 bridge
+        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x128))->SetCurrentItem(combo2);  // B.3.6 bridge
+        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x130))->SetCurrentItem(combo3);  // B.3.6 bridge
+        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x168))->SetCurrentItem(combo4);  // B.3.6 bridge
+        reinterpret_cast<UI::ComboElement*>(*(void**)(s + 0x170))->SetCurrentItem(combo5);  // B.3.6 bridge
         TownHallUI_UpdateGraph(self);
     }
 
@@ -2198,10 +2211,7 @@ bool Ready() {
           fn_ProdArrayPush && fn_BST_Rebalance_0x30 && fn_BST_Rebalance_0x28 &&
           fn_BST_Insert_0x14 && fn_BST_FreeNodes && fn_QueryProductionStat &&
           fn_InventorySort_Asc && fn_InventorySort_Desc && fn_DynArray_Resize &&
-          fn_TableElement_SetSize && fn_TableElement_SetChild2 && fn_TableElement_SetChild3 &&
-          fn_GraphElement_RemoveGraphs && fn_GraphElement_AddGraph &&
-          fn_GraphElement_AddGraphPoint && fn_StringTable_GetCount &&
-          fn_NumberEditElement_SetValue && fn_NumberEditElement_SetMinMax))
+          fn_StringTable_GetCount))
         return false;
     if (!(g_pExternalFactorySingleton && *g_pExternalFactorySingleton)) return false;
     return true;
@@ -2260,15 +2270,7 @@ void DiagPrint(const char* where, void* self) {
         {"fn_InventorySort_Asc",  (void*)fn_InventorySort_Asc},
         {"fn_InventorySort_Desc", (void*)fn_InventorySort_Desc},
         {"fn_DynArray_Resize",    (void*)fn_DynArray_Resize},
-        {"fn_TableElement_SetSize",   (void*)fn_TableElement_SetSize},
-        {"fn_TableElement_SetChild2", (void*)fn_TableElement_SetChild2},
-        {"fn_TableElement_SetChild3", (void*)fn_TableElement_SetChild3},
-        {"fn_GraphElement_RemoveGraphs", (void*)fn_GraphElement_RemoveGraphs},
-        {"fn_GraphElement_AddGraph",     (void*)fn_GraphElement_AddGraph},
-        {"fn_GraphElement_AddGraphPoint",(void*)fn_GraphElement_AddGraphPoint},
         {"fn_StringTable_GetCount", (void*)fn_StringTable_GetCount},
-        {"fn_NumberEditElement_SetValue",  (void*)fn_NumberEditElement_SetValue},
-        {"fn_NumberEditElement_SetMinMax", (void*)fn_NumberEditElement_SetMinMax},
     };
     const N tids[] = {
         {"TabElement", g_TypeId_TabElement}, {"TableElement", g_TypeId_TableElement},
