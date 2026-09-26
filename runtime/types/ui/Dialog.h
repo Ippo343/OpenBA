@@ -73,6 +73,9 @@
 #include <cstdint>
 #include <cstddef>
 
+#include "../object/Internal.h"
+#include "../object/External.h"
+
 namespace RtUI {
 
 // One entry of Dialog::_controllerConfigs. Stride 0x20, pinned by the
@@ -240,3 +243,160 @@ static_assert(sizeof(Dialog) == 0x88,
 // would be writing over caller stack retail leaves alone.
 
 }  // namespace RtUI
+
+// ############################################################################
+// UI::Dialog — THE REAL CLASS (ENDGAME B.3 step 6, block B)
+// ############################################################################
+//
+// The `RtUI::Dialog` POD above stays, field-identical and cross-asserted: the
+// ctor/dtor/factory DOORS (dialog_ctor_dtor.cpp, dialog_factory.cpp) and the
+// stack temporaries in dialog.cpp / dialog_create.cpp build through it.
+//
+// PARENT: `Object::External` — the "base, 0x20 bytes, NOT PROVEN" note above
+// is now proved by
+//   0x180038410  ?_ParentTypeName@Dialog@UI@@CAPEBDXZ -> "Object::External"
+//
+// `??_7Dialog@UI@@6B@` @ 0x1801562a0, NINE slots (B36_SLOTS.md sec. 1):
+//
+//   [0] +0x00  0x180038b20  (unexported) vector deleting dtor
+//   [1] +0x08  0x180038440  ?TypeName@Dialog@UI@@UEBAPEBDXZ
+//   [2] +0x10  0x180038420  ?Type@Dialog@UI@@UEBAIXZ
+//   [3] +0x18  0x1801130b0  ?GetFileVersion@Dialog@UI@@UEBAHXZ   (MOV EAX,6)
+//   [4] +0x20  0x1800066e0  ?Compile@External@Object@@  INHERITED — not declared
+//   [5] +0x28  0x1801130c0  ?Serialize@Dialog@UI@@UEAA_NAEAVStream@IO@@@Z
+//   [6] +0x30  0x1800386b0  ?Reconstruct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ
+//   [7] +0x38  0x1800387f0  ?Destruct@Dialog@UI@@UEAAXXZ
+//   [8] +0x40  0x180038750  ?Construct@Dialog@UI@@UEAAPEAVExternal@Object@@XZ
+//                           — INTRODUCED HERE (RULE B6-1.1: slot 8 on the
+//                           External resources)
+//
+// THE MINT ROW STAYS WITHHELD. `tools/cutover_manifest.py` tags
+// `??_7Dialog@UI@@6B@` WITHHELD; nothing here changes that row.
+//
+// ABSTRACT, NO REAL CONSTRUCTOR: `Construct`/`Reconstruct` re-stamp the
+// three vtables by hand out of the mint on objects that ALREADY exist, the
+// factory doors build through `RtUiDialog_Ctor`, and slot 0 is the mint's.
+// ############################################################################
+
+namespace System { class String; }
+
+namespace UI {
+
+class Element;              // block A
+class ElementDescription;   // block A
+class Sprite;               // block D
+
+class Dialog : public Object::External {
+public:
+    // Retail's `Dialog::ElementController` (the `AEBUElementController@12@`
+    // that `?GetController@Dialog@` returns, indexed below
+    // `?GetControllerCount@`) is the 0x20-byte `_controllerConfigs` entry.
+    // INFERRED from those two exports' shapes, not from a body read.
+    using ElementController = RtUI::DialogControllerConfigEntry;
+
+    // [0] 0x180038b20 — pure on purpose; the RT_DELDTOR row is not retired.
+    Object::Base* DeletingDtor(unsigned flags) override = 0;
+
+    const char* TypeName() const override;                        // [1] 0x180038440
+    uint32_t    Type() const override;                            // [2] 0x180038420
+    int32_t     GetFileVersion() const override;                  // [3] 0x1801130b0
+    bool        Serialize(void* stream) override;                 // [5] 0x1801130c0
+    Object::External* Reconstruct() override;                    // [6] 0x1800386b0
+    void        Destruct() override;                              // [7] 0x1800387f0
+    virtual Object::External* Construct();                        // [8] 0x180038750
+
+    // ---- PORTED non-virtual members ---------------------------------------
+    static uint32_t TypeId();                                     // 0x180038430
+    // RETSLOT in retail; plain by-value returns here, the doors placement-new.
+    Object::ExternalPtr<ElementDescription> GetTemplate(int32_t index) const;  // 0x1800388b0
+    Object::InternalPtr<Element> CreateElement(
+        Object::ExternalPtr<ElementDescription> description) const;           // 0x180112ed0
+
+    // ---- exported, NOT PORTED: declared, deliberately undefined -----------
+    Object::InternalPtr<Element> CreateElements() const;                       // 0x180112c80
+    Object::ExternalPtr<Object::External> GetReference(int32_t index) const;   // 0x1800388d0
+    Sprite   GetBackgroundSprite() const;                                      // 0x180038860
+    uint32_t GetBackgroundColor() const;                                       // 0x1800388a0
+    const ElementController& GetController(int32_t index) const;               // 0x180038900
+    int32_t  GetControllerCount() const;                                       // 0x1800388f0
+    int32_t  GetDrawLevel() const;                                             // 0x180038910
+    uint32_t GetFlags() const;                                                 // 0x180038850
+    bool     IsFirstDraw() const;                                              // 0x180038840
+    bool     IsModal() const;                                                  // 0x180038800
+    bool     NoMouseCapture() const;                                           // 0x180038820
+    bool     PausesGame() const;                                               // 0x180038810
+    bool     PerElementCapture() const;                                        // 0x180038830
+    Dialog(const Dialog& other);                                               // 0x180038920
+    Dialog& operator=(const Dialog& other);                                    // 0x180038a30
+    // MemoryAllocator statics (B36_RULES 7). CreateNewObject /
+    // CreateInPlaceObject ARE ported — as the doors in dialog_factory.cpp.
+    static void* operator new(std::size_t bytes);                 // 0x180038450
+    static void* operator new(std::size_t bytes, void* place);    // 0x1800384c0
+    static void  operator delete(void* p);                        // 0x1800384d0
+    static Object::Base* CreateNewObject();                       // 0x180038530
+    static Object::Base* CreateInPlaceObject(void* storage);      // 0x180038610
+
+protected:
+    // NOT retail's `??0Dialog@UI@@QEAA@XZ` (0x180112db0, the door
+    // `RtUiDialog_Ctor`) — see the banner.
+    Dialog() = default;
+    // `??1Dialog@UI@@UEAA@XZ` 0x180112e40. Defined EMPTY; the door
+    // `RtUiDialog_Dtor` releases the arrays and the String by hand.
+    ~Dialog();
+
+    // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
+    //   0x180038400  ?_TypeName@       -> "Dialog"
+    //   0x180038410  ?_ParentTypeName@ -> "Object::External"
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    // ---- the 0x68 bytes Dialog adds (evidence: the POD's banner) ---------
+    void*    _spriteSheet;             // +0x20  UI::SpriteSheet* (block D)
+    char*    _spriteName;              // +0x28  System::String's one pointer
+    uint32_t _backgroundColor;         // +0x30  ctor = 0xFFFFFFFF
+    int32_t  _drawLevel;               // +0x34
+    void*    _rootDescription;         // +0x38  ExternalPtr<ElementDescription>
+    uint32_t _defaultFlags;            // +0x40
+    uint32_t _unknown44;               // +0x44  never written by the ctor
+    ElementController* _controllerConfigs;               // +0x48
+    int32_t  _controllerCount;         // +0x50
+    int32_t  _controllerCapacity;      // +0x54
+    RtUI::DialogNamedTemplate* _namedTemplates;          // +0x58
+    int32_t  _namedTemplateCount;      // +0x60
+    int32_t  _namedTemplateCapacity;   // +0x64
+    void**   _templates;               // +0x68  ExternalPtr<ElementDescription>[]
+    int32_t  _templateCount;           // +0x70
+    int32_t  _templateCapacity;        // +0x74
+    void**   _references;              // +0x78  ExternalPtr<Object::External>[]
+    int32_t  _referenceCount;          // +0x80
+    int32_t  _referenceCapacity;       // +0x84
+};
+
+static_assert(sizeof(Dialog) == 0x88,
+              "UI::Dialog is 0x88 bytes (MOV EDX,0x88 at 0x180038b3f)");
+static_assert(alignof(Dialog) == 8, "qword-aligned (the vptr)");
+static_assert(sizeof(Dialog) == sizeof(RtUI::Dialog),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(Dialog, _spriteSheet) == sizeof(Object::External),
+              "Dialog's own fields begin at the end of the Object::External base");
+#define B36_DLG_PIN(f, off) \
+    static_assert(offsetof(Dialog, f) == off, "Dialog::" #f " @ " #off); \
+    static_assert(offsetof(Dialog, f) == offsetof(RtUI::Dialog, f), "alias " #f);
+B36_DLG_PIN(_spriteSheet,        0x20)
+B36_DLG_PIN(_spriteName,         0x28)
+B36_DLG_PIN(_backgroundColor,    0x30)
+B36_DLG_PIN(_drawLevel,          0x34)
+B36_DLG_PIN(_rootDescription,    0x38)
+B36_DLG_PIN(_defaultFlags,       0x40)
+B36_DLG_PIN(_controllerConfigs,  0x48)
+B36_DLG_PIN(_controllerCount,    0x50)
+B36_DLG_PIN(_namedTemplates,     0x58)
+B36_DLG_PIN(_namedTemplateCount, 0x60)
+B36_DLG_PIN(_templates,          0x68)
+B36_DLG_PIN(_templateCount,      0x70)
+B36_DLG_PIN(_references,         0x78)
+B36_DLG_PIN(_referenceCount,     0x80)
+#undef B36_DLG_PIN
+
+}  // namespace UI

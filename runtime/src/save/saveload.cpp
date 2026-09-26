@@ -208,8 +208,8 @@ static void SaveLoad_CtorLogic(SaveLoad* self) {
     self->_savesData        = nullptr;
     self->_savesSize        = 0;
     self->_savesCapacity    = 0;
-    self->_saveSprite.sheet = nullptr;
-    self->_saveSprite.index = -1;
+    self->_saveSprite.spriteSheet = nullptr;
+    self->_saveSprite.spriteIndex = -1;
     self->_saveName         = nullptr;
     // Retail writes a BYTE here (MOV byte ptr [RCX+0x7c],DL), not a dword.
     *reinterpret_cast<uint8_t*>(&self->_captureFlags) = 0;

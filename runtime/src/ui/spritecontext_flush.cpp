@@ -215,7 +215,7 @@ static_assert(offsetof(FlushVertex, cu)    == 0x18, "corner u at +0x18");
 // convention. Retail builds three of these on the stack at RBP+0x50 (T1),
 // RBP+0x30 (R) and RBP+0x70 (T2) and multiplies them pairwise.
 // ---------------------------------------------------------------------------
-struct Transform2 {
+struct FlushTransform2 {
     float m00, m01;
     float m10, m11;
     float tx,  ty;
@@ -232,8 +232,8 @@ struct Transform2 {
 // term FIRST, and the translation adds `b.t` last. The second multiply
 // (0x18011c100 onwards) has the identical shape, which is why one helper
 // serves both.
-inline Transform2 Transform2Mul(const Transform2& a, const Transform2& b) {
-    Transform2 r;
+inline FlushTransform2 Transform2Mul(const FlushTransform2& a, const FlushTransform2& b) {
+    FlushTransform2 r;
     r.m00 = (a.m01 * b.m10) + (a.m00 * b.m00);
     r.m01 = (a.m01 * b.m11) + (a.m00 * b.m01);
     r.m10 = (a.m11 * b.m10) + (a.m10 * b.m00);
@@ -245,10 +245,10 @@ inline Transform2 Transform2Mul(const Transform2& a, const Transform2& b) {
 
 // One point through the transform, same ADDSS order (0x18011c216..0x18011c2ae):
 // the y term first, then the x term, then the translation.
-inline float TransformX(const Transform2& m, float x, float y) {
+inline float TransformX(const FlushTransform2& m, float x, float y) {
     return ((m.m10 * y) + (m.m00 * x)) + m.tx;
 }
-inline float TransformY(const Transform2& m, float x, float y) {
+inline float TransformY(const FlushTransform2& m, float x, float y) {
     return ((m.m11 * y) + (m.m01 * x)) + m.ty;
 }
 
@@ -341,40 +341,57 @@ inline void Emit(SpriteContext* self, const FlushVertex& v) {
     Field<uint8_t*>(ctx, kCtxVertexCursor) = cursor + stride;
 }
 
-// ---------------------------------------------------------------------------
-// The body, factored out.
-// ---------------------------------------------------------------------------
-void FlushBody(SpriteContext* self, float halfPixel,
-               int* outRecords, int* outLines, int* outRotated, int* outMapFail) {
-    if (self->_currentSheet == nullptr) {
-        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_draws)->SetSize(0);  // 0x1800783d0
-        self->_currentSheet = nullptr;
+// ---- effectiveness counters, printed by the report hook --------------------
+uint64_t g_calls = 0;
+uint64_t g_records = 0, g_lines = 0, g_rotated = 0, g_mapFail = 0;
+
+}  // namespace
+
+// ============================================================================
+// 0x18011ba40  ?Flush@SpriteContext@UI@@AEAAXXZ — UI::SpriteContext::Flush
+// ============================================================================
+// ENDGAME B.3.6 block D: the body the door and its `FlushBody` helper carried
+// is the member now; the door below delegates.
+namespace UI {
+
+void SpriteContext::Flush() {
+    // 0x18011ba53..0x18011ba70, BEFORE the `_currentSheet` test. Retail derefs
+    // the device global UNGUARDED and so does this port: the call below faults
+    // exactly where retail's does if the singleton is not up yet.
+    void* const deviceData = VideoDeviceData();
+    const float halfPixel  = DeviceHalfPixel(deviceData);
+
+    ++g_calls;
+
+    if (_currentSheet == nullptr) {
+        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&_draws)->SetSize(0);  // 0x1800783d0
+        _currentSheet = nullptr;
         return;
     }
 
-    void* ctx = self->_context;
+    void* ctx = _context;
 
     // --- the scissor push, 0x18011bab3..0x18011bb08 -------------------------
     // Four independent compares that all fall through to the SAME store block:
     // one difference rewrites all four fields and sets the bit.
     int32_t* ctxScissor = &Field<int32_t>(ctx, kCtxScissor);
-    if (ctxScissor[0] != self->_scissorX || ctxScissor[1] != self->_scissorY ||
-        ctxScissor[2] != self->_scissorW || ctxScissor[3] != self->_scissorH) {
+    if (ctxScissor[0] != _scissorX || ctxScissor[1] != _scissorY ||
+        ctxScissor[2] != _scissorW || ctxScissor[3] != _scissorH) {
         Field<uint32_t>(ctx, kCtxDirtyMask) |= kDirtyScissor;
-        ctxScissor[0] = self->_scissorX;
-        ctxScissor[1] = self->_scissorY;
-        ctxScissor[2] = self->_scissorW;
-        ctxScissor[3] = self->_scissorH;
+        ctxScissor[0] = _scissorX;
+        ctxScissor[1] = _scissorY;
+        ctxScissor[2] = _scissorW;
+        ctxScissor[3] = _scissorH;
     }
 
     // --- the batch type, 0x18011bb0e..0x18011bb20 ---------------------------
     // The FIRST record types the whole batch. An empty batch is `isLine = 0`.
-    int32_t count = self->_draws._size;
-    const uint8_t isLine = (count > 0) ? self->_draws._data[0].isLine : 0;
+    int32_t count = _draws._size;
+    const uint8_t isLine = (count > 0) ? _draws._data[0].isLine : 0;
 
     // --- 0x18011bb37 -------------------------------------------------------
     reinterpret_cast<const Graphics::MaterialInstance*>(
-        Field<void*>(self->_currentSheet, kSheetMaterial))
+        Field<void*>(_currentSheet, kSheetMaterial))
         ->Setup(*reinterpret_cast<Video::Context*>(ctx), 0);   // B.3.5 bridge
 
     // --- the chunked walk, 0x18011bb3c..0x18011c5ef ------------------------
@@ -387,21 +404,21 @@ void FlushBody(SpriteContext* self, float halfPixel,
         count -= n;
 
         Video::ContextData* cd = reinterpret_cast<Video::ContextData*>(
-            Field<void*>(self->_context, kCtxContextData));
+            Field<void*>(_context, kCtxContextData));
         const bool ok = cd->BeginVertices(n * vertsPer, 0x20);   // B.3.5 bridge
 
         if (!ok) {
             // 0x18011bc0d/0x18011bc0f: the chunk's records are SKIPPED and
             // EndVertices is NOT called. Faithful, including the skip.
             base += n;
-            if (outMapFail) ++*outMapFail;
+            ++g_mapFail;
             continue;
         }
 
         for (int32_t i = 0; i < n; ++i) {
             // Both are re-read every iteration (0x18011bc40 / 0x18011bc44).
-            const SpriteDraw* d = &self->_draws._data[base + i];
-            void* sheet = self->_currentSheet;
+            const SpriteDraw* d = &_draws._data[base + i];
+            void* sheet = _currentSheet;
 
             // --- the sheet UV, 0x18011bc4b..0x18011bc89 --------------------
             // `MOVSXD RAX,[rec+8]` then `TEST EAX,EAX / JNS`: a SIGNED test on
@@ -416,14 +433,14 @@ void FlushBody(SpriteContext* self, float halfPixel,
             }
 
             const uint32_t color = d->color;
-            if (outRecords) ++*outRecords;
+            ++g_records;
 
             if (d->isLine != 0) {
                 // --- the LINE path, 0x18011bcb3..0x18011bd9c ---------------
                 // NOTE: no half-pixel subtraction here. The line path converts
                 // the four ints and uses them raw (0x18011bceb/0x18011bcee is
                 // CVTDQ2PS with no SUBSS). That asymmetry is retail's.
-                if (outLines) ++*outLines;
+                ++g_lines;
                 FlushVertex a, b;
                 a.x = static_cast<float>(d->x1); a.y = static_cast<float>(d->y1);
                 a.z = kZero; a.color = color;
@@ -431,8 +448,8 @@ void FlushBody(SpriteContext* self, float halfPixel,
                 b.x = static_cast<float>(d->x2); b.y = static_cast<float>(d->y2);
                 b.z = kZero; b.color = color;
                 b.u = u1; b.v = v1; b.cu = kOne;  b.cv = kOne;
-                Emit(self, a);
-                Emit(self, b);
+                Emit(this, a);
+                Emit(this, b);
                 continue;
             }
 
@@ -450,7 +467,7 @@ void FlushBody(SpriteContext* self, float halfPixel,
             } else {
                 // 0x18011bea8..0x18011c46e. T(-centre) * R(angle) * T(+centre),
                 // built as three real Transform2s. Not folded — see the header.
-                if (outRotated) ++*outRotated;
+                ++g_rotated;
                 const float ang = d->rotation * kDegToRad;
 
                 // `LEA EAX,[R14+RDI]` — a 32-bit INT sum, then CVTDQ2PS.
@@ -464,14 +481,14 @@ void FlushBody(SpriteContext* self, float halfPixel,
                 // becomes -0.0f, which unary minus reproduces exactly.
                 const float ns = -s;
 
-                const Transform2 t1 = { kOne, kZero, kZero, kOne,
+                const FlushTransform2 t1 = { kOne, kZero, kZero, kOne,
                                         sumX * kNegHalf, sumY * kNegHalf };
-                Transform2       rot = { c, s, ns, c, kZero, kZero };
-                const Transform2 t2 = { kOne, kZero, kZero, kOne,
+                FlushTransform2       rot = { c, s, ns, c, kZero, kZero };
+                const FlushTransform2 t2 = { kOne, kZero, kZero, kOne,
                                         sumX * kHalf, sumY * kHalf };
 
-                const Transform2 m1 = Transform2Mul(t1, rot);
-                const Transform2 m  = Transform2Mul(m1, t2);
+                const FlushTransform2 m1 = Transform2Mul(t1, rot);
+                const FlushTransform2 m  = Transform2Mul(m1, t2);
 
                 // Each coordinate is converted ONCE (0x18011c18e / 0x18011c1bc
                 // / 0x18011c245 / 0x18011c2a6) and reused across the corners.
@@ -504,51 +521,28 @@ void FlushBody(SpriteContext* self, float halfPixel,
 
             // 0x18011c4ae..0x18011c58d: A, D, C, A, C, B — two triangles,
             // (TL,TR,BR) and (TL,BR,BL).
-            Emit(self, A); Emit(self, D); Emit(self, C);
-            Emit(self, A); Emit(self, C); Emit(self, B);
+            Emit(this, A); Emit(this, D); Emit(this, C);
+            Emit(this, A); Emit(this, C); Emit(this, B);
         }
         base += n;
 
         // 0x18011c5c5..0x18011c5e3. `_context` and `+0x2160` are re-read.
         Video::ContextData* cd2 = reinterpret_cast<Video::ContextData*>(
-            Field<void*>(self->_context, kCtxContextData));
+            Field<void*>(_context, kCtxContextData));
         const int32_t prim = isLine ? 2 : 0;
         cd2->EndVertices(prim);                                  // B.3.5 bridge
     }
 
     // --- 0x18011c674..0x18011c685 ------------------------------------------
-    rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_draws)->SetSize(0);  // 0x1800783d0
-    self->_currentSheet = nullptr;
+    rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&_draws)->SetSize(0);  // 0x1800783d0
+    _currentSheet = nullptr;
 }
 
-// ---- effectiveness counters, printed by the report hook --------------------
-uint64_t g_calls = 0;
-uint64_t g_records = 0, g_lines = 0, g_rotated = 0, g_mapFail = 0;
+}  // namespace UI
 
-}  // namespace
-
-
-// ============================================================================
-// 0x18011ba40  private: void UI::SpriteContext::Flush()
-// ============================================================================
+// The door: keeps its registered address and delegates.
 void RtUi_SpriteContext_Flush(void* selfRaw) {
-    SpriteContext* self = static_cast<SpriteContext*>(selfRaw);
-
-    // 0x18011ba53..0x18011ba70, BEFORE the `_currentSheet` test. Retail derefs
-    // the device global UNGUARDED and so does this port: the call below faults
-    // exactly where retail's does if the singleton is not up yet.
-    void* const deviceData = VideoDeviceData();
-    const float halfPixel  = DeviceHalfPixel(deviceData);
-
-    ++g_calls;
-
-    int records = 0, lines = 0, rotated = 0, mapFail = 0;
-    FlushBody(self, halfPixel, &records, &lines, &rotated, &mapFail);
-
-    g_records += static_cast<uint64_t>(records);
-    g_lines   += static_cast<uint64_t>(lines);
-    g_rotated += static_cast<uint64_t>(rotated);
-    g_mapFail += static_cast<uint64_t>(mapFail);
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)->UI::SpriteContext::Flush();  // B.3.6 bridge
 }
 
 // ============================================================================

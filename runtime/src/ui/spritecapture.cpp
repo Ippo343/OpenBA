@@ -49,6 +49,8 @@
 #include "../../types/collection/Collection.h" // ENDGAME B.3.2 step 2 — Array<T> bridge
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteCapture.h"
+#include "../../types/ui/SpriteSheet.h"
+#include "../../types/system/String.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_CaptureEntry
 
 // ----------------------------------------------------------------------------
@@ -62,7 +64,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-using ::Sprite;                 // Sprite.h declares it at GLOBAL scope, not in UI
+using UI::Sprite;
 using UI::CaptureArray;
 using UI::CaptureEntry;
 using UI::SpriteCapture;
@@ -104,10 +106,11 @@ using UI::SpriteCapture;
 // reaches our body (ResolveAddr consults the port registry first —
 // reference_resolveaddr_consults_port_registry_first.md).
 typedef void (*StringSetFn)(void* self, const char* src);
+// ENDGAME B.3.6 block D (RULE B6-5): these three resolvers no longer keep a
+// first-call static — they run inside UI::SpriteCapture's members, on
+// whichever thread draws. `ResolveAddr` is a registry lookup.
 inline StringSetFn TheStringSet() {
-    static StringSetFn f = nullptr;
-    if (!f) f = reinterpret_cast<StringSetFn>(ResolveAddr(Module::Runtime, 0x1800c95d0));
-    return f;
+    return reinterpret_cast<StringSetFn>(ResolveAddr(Module::Runtime, 0x1800c95d0));
 }
 
 // System::MemoryAllocator::MemAlloc / MemFree, the same two doors
@@ -116,15 +119,11 @@ inline StringSetFn TheStringSet() {
 // 0x1800c7a50 and 0x1800c7ad0 ARE that sequence.
 inline void* MemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
-    return f(bytes, align);
+    return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50))(bytes, align);
 }
 inline void MemFree(void* p) {
     using Fn = void (*)(void*);
-    static Fn f = nullptr;
-    if (!f) f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0));
-    f(p);
+    reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0))(p);
 }
 
 // ---- the System::String refcount idiom -------------------------------------
@@ -163,12 +162,11 @@ inline void ReleaseString(char* data) {
 // entry and zeroed AGAIN at 0x1800d8f7e. Same value, so the byte compare
 // cannot see the difference — but a "cleanup" that dropped one would be a
 // change to the instruction stream made for no reason.
-extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
-                                              int right, int bottom, bool fullScreen) {
-    // Every call does work -- this body has no early-out. The COMPARISON lives
-    // in spritecapture_probe.cpp, so `calls=` here counts live invocations
-    // (zero until a capture is armed) plus the probe's own.
-    auto* self = static_cast<SpriteCapture*>(selfRaw);
+namespace UI {
+
+void SpriteCapture::AddScissor(int32_t x, int32_t y, int32_t right, int32_t bottom,
+                               bool fullScreen) {
+    // Every call does work -- this body has no early-out.
 
     CaptureEntry e;
     // 0x1800d8f22..0x1800d8f2e — four qword stores covering name..color.
@@ -201,10 +199,10 @@ extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
     // [RBP-0x38] plus a dword -1 at [RBP-0x30], twelve bytes, exactly
     // kSpriteWrittenBytes.
 
-    reinterpret_cast<Collection::Array<Sprite>&>(self->_sprites)
-        .SetSizeFill(self->_sprites.size + 1, &fill);            // 0x18004bfc0
-    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&self->_entries)
-        ->SetSizeFill(self->_entries.size + 1, &e);               // 0x18004bde0
+    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)
+        .SetSizeFill(_sprites.size + 1, &fill);            // 0x18004bfc0
+    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&_entries)
+        ->SetSizeFill(_entries.size + 1, &e);               // 0x18004bde0
 
     // Releases the LOCAL's reference. The stored element has its own: the
     // entry array's element copier COPY-CONSTRUCTS the String
@@ -234,27 +232,24 @@ extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
 // each `_sheets` element with CMP on the whole qword. Two Sprites sharing a
 // sheet dedup; two ExternalPtrs to the same sheet with different tag bits
 // would not. Faithful means comparing the qword.
-extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRaw,
-                                             int x1, int y1, int x2, int y2,
-                                             float rotation, uint32_t color) {
-          // no early-out; see AddScissor
-    auto* self   = static_cast<SpriteCapture*>(selfRaw);
-    const auto* sprite = static_cast<const Sprite*>(spriteRaw);
+void SpriteCapture::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
+                              int32_t x2, int32_t y2, float rotation, uint32_t color) {
+    // no early-out; see AddScissor
 
     // ---- (a) locate or append the sheet -------------------------------------
-    const int oldSize = self->_sheets.size;
+    const int oldSize = _sheets.size;
     int index = 0;
     bool found = false;
     if (oldSize > 0) {
-        void* const key = sprite->spriteSheet;
-        void* const* p  = static_cast<void* const*>(self->_sheets.data);
+        void* const key = sprite.spriteSheet;
+        void* const* p  = static_cast<void* const*>(_sheets.data);
         for (index = 0; index < oldSize; ++index, ++p) {
             if (*p == key) { found = true; break; }
         }
     }
     if (!found) {
         index = oldSize;
-        void* fill = sprite->spriteSheet;
+        void* fill = sprite.spriteSheet;
 
         // Array<void*>::SetSize(oldSize + 1, fill), inlined by retail at
         // 0x1800d8b92..0x1800d8c9f. `newSize != oldSize` is retail's guard and
@@ -263,28 +258,28 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
         // SetSize bodies in array.cpp should see the same shape.
         const int newSize = oldSize + 1;
         if (newSize != oldSize) {
-            void** oldData = static_cast<void**>(self->_sheets.data);
-            self->_sheets.size = newSize;
-            if (newSize > self->_sheets.capacity) {
-                self->_sheets.capacity = newSize;
+            void** oldData = static_cast<void**>(_sheets.data);
+            _sheets.size = newSize;
+            if (newSize > _sheets.capacity) {
+                _sheets.capacity = newSize;
                 // The 3x growth heuristic, and note the condition: it fires
                 // only on a one-element append to a NON-EMPTY array, so the
                 // first append allocates exactly one slot.
                 if (newSize == oldSize + 1 && oldSize != 0)
-                    self->_sheets.capacity = newSize * 3;
-                const int64_t bytes = static_cast<int64_t>(self->_sheets.capacity) * 8;
-                self->_sheets.data = MemAlloc(static_cast<uint64_t>(bytes), 8);
+                    _sheets.capacity = newSize * 3;
+                const int64_t bytes = static_cast<int64_t>(_sheets.capacity) * 8;
+                _sheets.data = MemAlloc(static_cast<uint64_t>(bytes), 8);
             }
             // Retail runs TWO cursors (EDX and RCX) that hold the same value
             // throughout; both are kept so the copy source reads as it does in
             // the disassembly.
-            int32_t src = (oldData == self->_sheets.data) ? oldSize : 0;
+            int32_t src = (oldData == _sheets.data) ? oldSize : 0;
             for (int64_t i = src; i < newSize; ++i, ++src) {
-                void** dst = static_cast<void**>(self->_sheets.data) + i;
+                void** dst = static_cast<void**>(_sheets.data) + i;
                 void* const* from = (i < oldSize) ? (oldData + src) : &fill;
                 *dst = *from;
             }
-            if (oldData != self->_sheets.data && oldData != nullptr)
+            if (oldData != _sheets.data && oldData != nullptr)
                 MemFree(oldData);
         }
     }
@@ -300,7 +295,7 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
     // `pad04` is not written — same window as AddScissor.
 
     char* name = nullptr;
-    if (sprite->spriteIndex >= 0) {
+    if (sprite.spriteIndex >= 0) {
         // SpriteSheet::GetSpriteNameFromIndex returns a System::String BY
         // VALUE, so the ABI is (this, hidden-return-slot, index) and the
         // hidden slot comes back in RAX. Getting the arity wrong here writes
@@ -310,14 +305,14 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
         // A NAME door, not an address door: this symbol is exported
         // (0x1800032d0). `AEAA` would mean private, not unexported, and this
         // one is QEBA anyway — reference_aeaa_is_private_not_unexported.md.
-        using GetNameFn = void* (*)(const void*, void*, int);
-        char* slot = nullptr;
-        RT_EXPORT_ONCE(GetNameFn,
-            "?GetSpriteNameFromIndex@SpriteSheet@UI@@QEBA?AVString@System@@H@Z")
-            (sprite->spriteSheet, &slot, sprite->spriteIndex);
-        name = slot;
+        // ENDGAME B.3.6 block D: was an RT_EXPORT_ONCE door on the mangled
+        // name; now the member. The returned temporary's own reference is
+        // released by its destructor at the end of this block, exactly where
+        // retail releases the slot.
+        System::String slot = static_cast<const SpriteSheet*>(sprite.spriteSheet)
+                                  ->GetSpriteNameFromIndex(sprite.spriteIndex);
+        name = slot._data;
         if (name) { e.name = name; ++StringRc(name); }
-        ReleaseString(slot);              // the returned temporary
     } else {
         // Retail does NOT call String::Set here — it open-codes an empty
         // string: MemAlloc(9, 4), length 0, refcount 1, one NUL copied from
@@ -339,10 +334,10 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
     e.x2 = x2; e.y2 = y2;                 // 0x1800d8e4b
 
     // ---- (c) append ---------------------------------------------------------
-    reinterpret_cast<Collection::Array<Sprite>&>(self->_sprites)
-        .SetSizeFill(self->_sprites.size + 1, sprite);             // 0x18004bfc0
-    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&self->_entries)
-        ->SetSizeFill(self->_entries.size + 1, &e);                 // 0x18004bde0
+    reinterpret_cast<Collection::Array<Sprite>&>(_sprites)
+        .SetSizeFill(_sprites.size + 1, &sprite);             // 0x18004bfc0
+    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntry>(&_entries)
+        ->SetSizeFill(_entries.size + 1, &e);                 // 0x18004bde0
 
     ReleaseString(e.name);                // same net-zero release as AddScissor
 }
@@ -405,10 +400,8 @@ extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRa
 // matters only if something could reallocate the array mid-loop, and nothing
 // in either pass calls anything at all. Written as one indexed loop each.
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
-
-    auto* self = static_cast<SpriteCapture*>(selfRaw);
-    auto& entriesArr = reinterpret_cast<Collection::Array<CaptureEntry>&>(self->_entries);
+void SpriteCapture::EndAddingSprites() {
+    auto& entriesArr = reinterpret_cast<Collection::Array<CaptureEntry>&>(_entries);
     const int32_t count = entriesArr.GetSize();
     auto* entries = entriesArr.GetData();
 
@@ -431,8 +424,8 @@ extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
         if (e.y2 > maxY) maxY = e.y2;
     }
 
-    self->_width  = maxX - minX + 1;
-    self->_height = maxY - minY + 1;
+    _width  = maxX - minX + 1;
+    _height = maxY - minY + 1;
 
     // Pass 2 rebases EVERY entry, scissors included - see the banner.
     for (int32_t i = 0; i < count; ++i) {
@@ -442,7 +435,43 @@ extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
         e.y1 -= minY;
         e.y2 -= minY;
     }
+}
 
+// 0x1800d9010 ?BeginAddingSprites@SpriteCapture@UI@@QEAAXXZ — read this pass:
+// the qword at +0x50 (width AND height) zeroed, then _sprites and _entries cut
+// to size 0 through their NON-TRIVIAL rows (kSpec_SpriteIndexZ 0x1800370c0,
+// then a tail-jump to kSpec_CaptureEntryZ 0x18004ba90). Not registered: no
+// caller in the tree reaches it by name; SpriteContext::Begin, which inlines
+// the same three steps, now calls it.
+void SpriteCapture::BeginAddingSprites() {
+    _width  = 0;                                                       // 0x1800d901d
+    _height = 0;                                                       //   (one qword)
+    rtcoll::AsArray<&rtcoll::kSpec_SpriteIndexZ>(&_sprites)->SetSize(0);   // 0x1800370c0
+    rtcoll::AsArray<&rtcoll::kSpec_CaptureEntryZ>(&_entries)->SetSize(0);  // 0x18004ba90
+}
+
+}  // namespace UI
+
+// ============================================================================
+// THE DOORS — keep name and address, delegate with a qualified call.
+// ============================================================================
+extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
+                                              int right, int bottom, bool fullScreen) {
+    reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
+        ->UI::SpriteCapture::AddScissor(x, y, right, bottom, fullScreen);
+}
+
+extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRaw,
+                                             int x1, int y1, int x2, int y2,
+                                             float rotation, uint32_t color) {
+    reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
+        ->UI::SpriteCapture::AddSprite(*static_cast<const UI::Sprite*>(spriteRaw),
+                                       x1, y1, x2, y2, rotation, color);
+}
+
+extern "C" void RtUi_SpriteCapture_EndAddingSprites(void* selfRaw) {
+    reinterpret_cast<UI::SpriteCapture*>(selfRaw)                         // B.3.6 bridge
+        ->UI::SpriteCapture::EndAddingSprites();
 }
 
 int RtUiSpriteCaptureRegister() {
