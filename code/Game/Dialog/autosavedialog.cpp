@@ -1,3 +1,7 @@
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "object/Internal.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "Object/factory_registration.h"
@@ -31,22 +35,16 @@
 // and this function crashed the moment it ran. Resolve them from the Runtime DLL
 // instead, preferring the export name and falling back to the verified entry
 // address. Fixed 2026-08-30 (LANE1 rows 13/14).
-typedef void (*fn_StopTimer_t)(void* self, int id);
-typedef void (*fn_StartTimer_t)(void* self, int id, uint64_t timeVal);
+// ENDGAME B.3.6 (K2): both are now direct UI::DialogInstance member calls; the
+// two by-name caches went with their last callers.
 typedef void* (*fn_TimeCtor_t)(void* retbuf, float seconds);
 
-static fn_StopTimer_t  s_StopTimer  = nullptr;
-static fn_StartTimer_t s_StartTimer = nullptr;
 static fn_TimeCtor_t   s_TimeCtor   = nullptr;
 static bool            s_timerInit  = false;
 
 static void EnsureTimerFns() {
     if (s_timerInit) return;
     s_timerInit = true;
-    s_StopTimer = reinterpret_cast<fn_StopTimer_t>(
-        ResolveExport("?StopTimer@DialogInstance@UI@@QEAAXH@Z"));
-    s_StartTimer = reinterpret_cast<fn_StartTimer_t>(
-        ResolveExport("?StartTimer@DialogInstance@UI@@QEAAXHVTime@System@@@Z"));
     // Time::Time(float) - dispatch slot 0x140152b00 IS registered; guard anyway.
     uintptr_t slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_TimeCtor = reinterpret_cast<fn_TimeCtor_t>(*reinterpret_cast<void**>(slot));
@@ -55,10 +53,10 @@ static void EnsureTimerFns() {
 
 void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
     EnsureTimerFns();
-    if (!s_StopTimer || !s_StartTimer || !s_TimeCtor)
+    if (!s_TimeCtor)
         return;
 
-    s_StopTimer(self, 0);
+    reinterpret_cast<UI::DialogInstance*>(self)->StopTimer(0);  // B.3.6 bridge
 
     // Autosave-interval setting: gs[1] = the Options 'Autosave' combo index (0..7).
     if (!g_pGameSettingsPtr || !*g_pGameSettingsPtr)
@@ -97,7 +95,8 @@ void AutoSaveDialog_Slot4(AutoSaveDialog* self) {
     void* timeResult = s_TimeCtor(timeBuf, interval);
     uint64_t timeVal = *(uint64_t*)timeResult;
 
-    s_StartTimer(self, 0, timeVal);
+    reinterpret_cast<UI::DialogInstance*>(self)->StartTimer(  // B.3.6 bridge
+        0, static_cast<int64_t>(timeVal));
 
 }
 
@@ -144,12 +143,12 @@ void AutoSaveDialog_Slot6(AutoSaveDialog* self) {
 
     void* elem1 = *(void**)(s + 0xB8);
     if (elem1) {
-        fn_Element_SetFlagsOnOff(elem1, hideFlags, showFlags);
+        reinterpret_cast<UI::Element*>(elem1)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
     }
 
     void* elem2 = *(void**)(s + 0xC0);
     if (elem2) {
-        fn_Element_SetFlagsOnOff(elem2, hideFlags, showFlags);
+        reinterpret_cast<UI::Element*>(elem2)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
     }
 
     // Apply rotation to first indicator element
@@ -251,17 +250,17 @@ void* Ctor(void* self, void* ui, void* extRes, void* parentIBP) {
     *(uint64_t*)(s + 0xB8) = 0;
     *(uint64_t*)(s + 0xC0) = 0;
 
-    if (fn_DialogInstance_FindElement) {
+    {
         uint64_t found = 0;
         {
             System::String nameStr("savingImage");
-            fn_DialogInstance_FindElement(self, &found, &nameStr);
+            ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
             *(uint64_t*)(s + 0xB8) = found;
         }
         found = 0;
         {
             System::String nameStr("animatedImage");
-            fn_DialogInstance_FindElement(self, &found, &nameStr);
+            ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
             *(uint64_t*)(s + 0xC0) = found;
         }
     }

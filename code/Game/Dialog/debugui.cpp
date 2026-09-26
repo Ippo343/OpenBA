@@ -14,6 +14,11 @@
 // The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "graphics/Scene.h"
 #include "Dialog/ui_panels.h"
 #include "engine_funcs.h"
@@ -891,7 +896,6 @@ void DebugUI_Slot8(DebugUI* self) {
 // Original: 0x140061280
 void DebugUI_Slot7(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
-    typedef void (*fn_SetColor_t)(void*, uint32_t);
 
     // --- Day slider text update ---
     // Original: CheckPtr(+0x78), get child, CheckPtr child, IsDerivedFrom, IBP ctor,
@@ -899,7 +903,7 @@ void DebugUI_Slot7(DebugUI* self) {
     void* sliderDay = *(void**)(s + 0x78);
     if (sliderDay) {
         uint8_t childBuf[16];
-        fn_Element_Child(sliderDay, childBuf, 0);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(sliderDay)->Child(0));  // B.3.6 bridge
         void* childRaw = *(void**)childBuf;
         // IsDerivedFrom check + IBP wrap (matches original)
         bool isText = childRaw && fn_IsDerivedFrom(childRaw, *g_TypeId_ObjectInternal);
@@ -914,7 +918,7 @@ void DebugUI_Slot7(DebugUI* self) {
             uint8_t uiStrBuf[16];
             uint64_t fmtRef = *(uint64_t*)((uintptr_t)textElem + 0xD8);
             *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textElem + 0xE0);
-            fn_UIString_Ctor_Index(uiStrBuf, fmtRef, (int)dayValue / 30);
+            ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(fmtRef)), (int)dayValue / 30);  // B.3.6 bridge
             fn_TextElement_SetText(*(void**)textIBP, uiStrBuf);
         }
     }
@@ -931,8 +935,7 @@ void DebugUI_Slot7(DebugUI* self) {
         float sunG = readSlider(s, 0x88);
         uint32_t sunColor = ((int)*(float*)(*(uintptr_t*)(s + 0x80) + 0x128) << 8
             | (int)sunG) << 8 | (int)sunB | 0xFF000000;
-        void** sunVt = *(void***)imageColorSun;
-        ((fn_SetColor_t)sunVt[10])(imageColorSun, sunColor);
+        reinterpret_cast<UI::Element*>(imageColorSun)->SetColor(sunColor);  // B.3.6 bridge
     }
 
     // --- Ambient color swatch ---
@@ -942,8 +945,7 @@ void DebugUI_Slot7(DebugUI* self) {
         float ambG = readSlider(s, 0xA0);
         uint32_t ambColor = ((int)*(float*)(*(uintptr_t*)(s + 0x98) + 0x128) << 8
             | (int)ambG) << 8 | (int)ambB | 0xFF000000;
-        void** ambVt = *(void***)imageColorAmb;
-        ((fn_SetColor_t)ambVt[10])(imageColorAmb, ambColor);
+        reinterpret_cast<UI::Element*>(imageColorAmb)->SetColor(ambColor);  // B.3.6 bridge
     }
 
     // --- Fog color swatch ---
@@ -953,8 +955,7 @@ void DebugUI_Slot7(DebugUI* self) {
         float fogG = readSlider(s, 0xB8);
         uint32_t fogColor = ((int)*(float*)(*(uintptr_t*)(s + 0xB0) + 0x128) << 8
             | (int)fogG) << 8 | (int)fogB | 0xFF000000;
-        void** fogVt = *(void***)imageColorFog;
-        ((fn_SetColor_t)fogVt[10])(imageColorFog, fogColor);
+        reinterpret_cast<UI::Element*>(imageColorFog)->SetColor(fogColor);  // B.3.6 bridge
     }
 }
 
@@ -1114,26 +1115,18 @@ void DebugUI_ToggleDebugFlag(void* ibpPtr, uint32_t flag) {
 // 0x140151718 retail's diseaseCombo populate calls (export fallback for the case
 // where the slot is unregistered in standalone). Non-trivial return: RDX is the
 // hidden System::String out-param, R8 the name to look up.
-typedef void* (*fn_StringTableGetText_t)(void* table, void* retStr, const void* nameStr);
+// ENDGAME B.3.6 (K2): the slot/export cache went with this, its last caller; the
+// body is the door's, moved here -- one construction into the caller's storage.
 static void DebugUI_StringTableGetText(void* table, void* retStr, const void* nameStr) {
-    static fn_StringTableGetText_t s_fn = nullptr;
-    static bool s_tried = false;
-    if (!s_tried) {
-        s_tried = true;
-        if (uintptr_t slot = ResolveAddr(Module::Exe, 0x140151718))
-            s_fn = *reinterpret_cast<fn_StringTableGetText_t*>(slot);
-        if (!s_fn)
-            s_fn = reinterpret_cast<fn_StringTableGetText_t>(ResolveExport(
-                "?GetText@StringTable@UI@@QEBA?AVString@System@@AEBV34@@Z"));
-    }
-    if (s_fn) s_fn(table, retStr, nameStr);
+    ::new (retStr) System::String(reinterpret_cast<const UI::StringTable*>(table)  // B.3.6 bridge
+        ->GetText(*static_cast<const System::String*>(nameStr)));
 }
 
 // Helper: Find element by name, return raw pointer.
 static void* DebugUI_FindElem(void* parentElem, const char* name) {
     System::String nameBuf(name);
     uint8_t retBuf[16] = {};  // InternalPtr is 16 bytes (hidden return)
-    fn_FindElement(parentElem, retBuf, &nameBuf);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameBuf));  // B.3.6 bridge
     return *(void**)retBuf;
 }
 
@@ -1158,7 +1151,7 @@ static void* DebugUI_FindElemBase(void* parentElem, const char* name) {
 // Returns nullptr if element not found (e.g., Debug Menu mod missing elements).
 static void* DebugUI_FindAndSetId(void* parentElem, const char* name, int id) {
     void* elem = DebugUI_FindElemBase(parentElem, name);
-    if (elem) fn_Element_SetElementId(elem, id);
+    if (elem) reinterpret_cast<UI::Element*>(elem)->SetElementId(id);  // B.3.6 bridge
     return elem;
 }
 
@@ -1241,7 +1234,7 @@ void DebugUI_Slot4(DebugUI* self) {
                                            &textBuf,
                                            (void*)((uintptr_t)disease + 0x28));
                 uint8_t spriteBuf[16];
-                fn_Sprite_Default_Ctor(spriteBuf);
+                ::new (spriteBuf) UI::Sprite();
                 fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, &textBuf, nullptr);
             }
             fn_ComboElement_SetCurrentItem(self->diseaseCombo, 0);
@@ -1299,7 +1292,7 @@ void DebugUI_Slot4(DebugUI* self) {
         self->drawCombo = combo;
 
         if (combo) {
-            fn_Element_SetElementId(self->drawCombo, 0x166);
+            reinterpret_cast<UI::Element*>(self->drawCombo)->SetElementId(0x166);  // B.3.6 bridge
 
             // Populate from drawable type list at gameWorld+0xF0.
             // STANDALONE: guard a null list (empty combo instead of a fault).
@@ -1314,7 +1307,7 @@ void DebugUI_Slot4(DebugUI* self) {
                 void* drawableDesc = isDrawable ? inner : nullptr;
 
                 uint8_t spriteBuf[16];
-                fn_Sprite_Default_Ctor(spriteBuf);
+                ::new (spriteBuf) UI::Sprite();
                 fn_ComboElement_AddItem(self->drawCombo, spriteBuf,
                     (void*)((uintptr_t)drawableDesc + 0x20), entry);
 
@@ -1337,7 +1330,7 @@ void DebugUI_Slot4(DebugUI* self) {
 
     #define FIND_SLIDER(field, name, id) do { \
         self->field = DebugUI_FindElemBase(parentElem, name); \
-        fn_Element_SetElementId(*(void**)(s + offsetof(DebugUI, field)), id); \
+        reinterpret_cast<UI::Element*>(*(void**)(s + offsetof(DebugUI, field)))->SetElementId(id);  /* B.3.6 bridge */ \
     } while(0)
 
     FIND_SLIDER(sliderDay, "sliderDay", 0x154);
@@ -1403,7 +1396,7 @@ void DebugUI_Slot4(DebugUI* self) {
             // Add "None" entry with userData = -1
             System::String noneBuf("None");
             uint8_t spriteBuf[16];
-            fn_Sprite_Default_Ctor(spriteBuf);
+            ::new (spriteBuf) UI::Sprite();
             fn_ComboElement_AddItem(self->comboWeather, spriteBuf, &noneBuf, (void*)(intptr_t)-1);
 
             // Populate from weather list at gameWorld+0x130.
@@ -1422,7 +1415,7 @@ void DebugUI_Slot4(DebugUI* self) {
                 System::Filename filenameBuf = pathBuf.GetPathFilename(false);
 
                 uint8_t spr[16];
-                fn_Sprite_Default_Ctor(spr);
+                ::new (spr) UI::Sprite();
                 fn_ComboElement_AddItem(self->comboWeather, spr, &filenameBuf,
                     (void*)(intptr_t)i);
 
@@ -1434,7 +1427,7 @@ void DebugUI_Slot4(DebugUI* self) {
                 }
             }
             fn_ComboElement_SetCurrentItem(self->comboWeather, selectedIndex);
-            fn_Element_SetElementId(self->comboWeather, 0x163);
+            reinterpret_cast<UI::Element*>(self->comboWeather)->SetElementId(0x163);  // B.3.6 bridge
         }
     }
 
@@ -1442,10 +1435,10 @@ void DebugUI_Slot4(DebugUI* self) {
     // 10. Action buttons (IDs 0x164, 0x165)
     // ==========================================================
     self->buttonSave = DebugUI_FindElemBase(parentElem, "buttonSave");
-    if (self->buttonSave) fn_Element_SetElementId(self->buttonSave, 0x164);
+    if (self->buttonSave) reinterpret_cast<UI::Element*>(self->buttonSave)->SetElementId(0x164);  // B.3.6 bridge
 
     self->buttonMenuScene = DebugUI_FindElemBase(parentElem, "buttonMenuScene");
-    if (self->buttonMenuScene) fn_Element_SetElementId(self->buttonMenuScene, 0x165);
+    if (self->buttonMenuScene) reinterpret_cast<UI::Element*>(self->buttonMenuScene)->SetElementId(0x165);  // B.3.6 bridge
 
     // ==========================================================
     // Initialize day slider from current game time

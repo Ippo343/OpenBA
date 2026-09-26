@@ -9,6 +9,10 @@
 // Depends only on engine_funcs.h + resolve.h.
 // Decompiled from Application-x64.exe via Ghidra.
 
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "dialog_exe_helpers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -73,10 +77,7 @@ void* Dialog_FindComponent_d6c0(void* entity, void* retIBP) {
 //   String local("Autosave"); UIString::Ctor(retbuf, *(keymap+0xd8), local); ~local;
 static void* Dialog_AutoSaveBuildName(void* keymap, void* retUIString) {
     System::String nameStr("Autosave");
-    if (fn_UIString_Ctor)
-        fn_UIString_Ctor(retUIString,
-                         *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(keymap) + 0xd8),
-                         &nameStr);
+    ::new (retUIString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(keymap) + 0xd8))), nameStr);  // B.3.6 bridge
     return retUIString;
 }
 
@@ -90,11 +91,9 @@ static void* Dialog_AutoSaveBuildName(void* keymap, void* retUIString) {
 //
 // param_1 = AutoSaveDialog* (self; UserInterface at +0x10). p2/p3/p4 forwarded.
 //
-// UI::UserInterface::PausesGame is resolved locally (no engine_func); the rest
-// (incl. fn_SaveLoad_SetSaveName) are existing engine_funcs (ResolveExport).
-typedef bool (*fn_UI_PausesGame_t)(void* ui);
-static fn_UI_PausesGame_t s_fn_PausesGame = nullptr;
-static bool s_asInit = false;
+// UI::UserInterface::PausesGame is a direct member call (ENDGAME B.3.6, K2: the
+// file-local by-name cache went with its last caller); the rest (incl.
+// fn_SaveLoad_SetSaveName) are existing engine_funcs (ResolveExport).
 
 static void AsBail(const char* why, long v) {
     fprintf(stderr, "[AutoSave] timer FIRED but bailed: %s (%ld)\n", why, v);
@@ -102,15 +101,9 @@ static void AsBail(const char* why, long v) {
 }
 
 void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
-    if (!s_asInit) {
-        s_fn_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
-            ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
-        s_asInit = true;
-    }
-
     // Not while the UI pauses the game.
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10);
-    if (s_fn_PausesGame && s_fn_PausesGame(ui)) { AsBail("UI PausesGame", 1); return; }
+    if (reinterpret_cast<const UI::UserInterface*>(ui)->PausesGame()) { AsBail("UI PausesGame", 1); return; }  // B.3.6 bridge
 
     // Not while GameWorld flag bit 10 is set.
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) { AsBail("no gameWorld", 0); return; }
@@ -141,7 +134,7 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     uint8_t uiStrBuf[16];
     Dialog_AutoSaveBuildName(reinterpret_cast<void*>(keymap), uiStrBuf);
     System::String sysStr;
-    if (fn_UIString_ToSystemString) fn_UIString_ToSystemString(uiStrBuf, &sysStr);
+    ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
     if (fn_SaveLoad_SetSaveName) fn_SaveLoad_SetSaveName(saveLoad, &sysStr, 2);
 
 
