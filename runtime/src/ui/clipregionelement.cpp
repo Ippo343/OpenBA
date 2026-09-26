@@ -22,21 +22,13 @@
 //      ??0ClipRegionElement@UI@@QEAA@AEBV01@@Z  0x180038220
 //      ??1ClipRegionElement@UI@@UEAA@XZ         0x1800cbe30
 //
-// LAYOUT — 0xd8 bytes (`MOV EDX,0xd8` at 0x1800383a2), six dwords:
-//
-//   +0xc0 int32  requested width   (constructor default 100)
-//   +0xc4 int32  requested height  (constructor default 100)
-//   +0xc8 int32  the CHILD's padded width   — an OUTPUT of ComputeSize
-//   +0xcc int32  the CHILD's padded height  — an OUTPUT of ComputeSize
-//   +0xd0 int32  scroll offset X  (subtracted from the child's left)
-//   +0xd4 int32  scroll offset Y
-//
-// +0xc8/+0xcc are what `UI::ContainerElement` reads back to size its scroll
-// bars (runtime/src/ui/containerelement.cpp), which is the proof of what they
-// hold; +0xd0/+0xd4 are what `?SetOffsets@ContainerElement@UI@@` (0x1800cc1e0,
-// already ported in element.cpp) writes.
+// ENDGAME B.3.6 block C1: the seven slot bodies are MEMBERS of
+// `UI::ClipRegionElement` (runtime/types/ui/ClipRegionElement.h, which now
+// owns the six-dword layout and its evidence). The base calls in Update and
+// Contains are QUALIFIED member calls (they were `ResolveAddr` by address).
 // ============================================================================
 #include "element_common.h"
+#include "../../types/ui/ClipRegionElement.h"
 // ENDGAME B.3.5 block VC: `Video::Viewport`, which replaces this file's local
 // duplicate of its four fields (RULE B5-2's duplicate-view collapse).
 #include "../../types/video/Context.h"
@@ -45,46 +37,42 @@ using namespace rtuielem;
 
 namespace {
 
-constexpr int kReqWidth   = 0xc0;
-constexpr int kReqHeight  = 0xc4;
-constexpr int kInnerWidth = 0xc8;
-constexpr int kInnerHeight = 0xcc;
-constexpr int kOffsetX    = 0xd0;
-constexpr int kOffsetY    = 0xd4;
-
-// UI::UserInterface's current clip rectangle, four dwords at +0xfc..+0x108.
-// Proven by this class: Update and Contains save it, overwrite it with their
-// own layout rect, run the base body, and put the old one back.
+// UI::UserInterface's current clip rectangle, four dwords at +0xfc..+0x108
+// (block E's class, reached at raw offsets). Proven by this class: Update and
+// Contains save it, overwrite it with their own layout rect, run the base body,
+// and put the old one back.
 constexpr int kUiClipLeft   = 0xfc;
 constexpr int kUiClipTop    = 0x100;
 constexpr int kUiClipRight  = 0x104;
 constexpr int kUiClipBottom = 0x108;
 
-RTELEM_TYPE_SLOTS(ClipRegionElement)
+// B6-5: namespace-scope atomic door cache for the member bodies.
+std::atomic<void*> g_clipTypeInfo{nullptr};
+const uint8_t* ClipRegionElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_clipTypeInfo, "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+// The ctor/dtor doors only.
+void* VtClipRegionElement() { return RT_DATA_SLOT(void*, "??_7ClipRegionElement@UI@@6B@"); }
 
 using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
 using ElementDtorFn     = void  (*)(void* self);
-using ElemUpdateFn      = void  (*)(void* self, const void* time, void* ui,
-                                    void** dlg, const void* state);
-using ElemContainsFn    = bool  (*)(const void* self, int x, int y, void* ui);
-using PaddedSizeFn      = void  (*)(void* self, int* w, int* h);
 // UI::SpriteContext::SetScissor(ctx, Viewport& out, const Viewport& in) —
 // returns the PREVIOUS scissor by value through the hidden slot in RDX.
+// Block D's class, reached by address.
 using SetScissorFn      = void* (*)(void* ctx, void* outOld, const void* in);
 
-// ENDGAME B.3.5 block VC: the local `struct Viewport { int32_t x, y, w, h; }`
-// duplicate view is GONE and this is the REAL `Video::Viewport`
-// (runtime/types/video/Context.h), which b35-D1 made a real class and whose own
-// banner names this line as one of the two remaining duplicates owed to the
-// closing pass. Field-identical, so the collapse is a rename of two fields
-// (`w`/`h` -> `width`/`height`) and nothing else; the header's four `offsetof`
-// asserts and its `sizeof == 0x10` replace the one assert that was here.
+// ENDGAME B.3.5 block VC: the REAL `Video::Viewport` (runtime/types/video/
+// Context.h), field-identical to the local duplicate this file once had.
 using Viewport = ::Video::Viewport;
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(ClipRegionElement)
+namespace UI {
+
+uint32_t ClipRegionElement::Type() const { return TypeIdOf(ClipRegionElementTypeInfo()); }
+const char* ClipRegionElement::TypeName() const { return TypeNameOf(ClipRegionElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@ClipRegionElement@UI@@UEAAXXZ   0x1800cbc60
@@ -95,19 +83,15 @@ RTELEM_TYPE_BODIES(ClipRegionElement)
 // `_children[0]` is dereferenced with NO null test (0x1800cbc7a loads it and
 // passes it straight to GetPaddedSize). A ClipRegionElement always has its one
 // child, built by ContainerDescription::CreateInstance.
-extern "C" void RtUi_ClipRegionElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
+void ClipRegionElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
 
-    I32(self, kElemLayoutWidth)  = I32(self, kReqWidth);
-    I32(self, kElemLayoutHeight) = I32(self, kReqHeight);
+    _layoutWidth  = _reqWidth;
+    _layoutHeight = _reqHeight;
 
-    RtAddr<PaddedSizeFn>(0x180115f10ull)(
-        Child(self, 0),
-        reinterpret_cast<int*>(self + kInnerWidth),
-        reinterpret_cast<int*>(self + kInnerHeight));
+    _children._data[0]->GetPaddedSize(_innerWidth, _innerHeight);   // 0x180115f10
 
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
+    _flags &= ~kFlagNeedsSizeCalc;
 }
 
 // ============================================================================
@@ -120,21 +104,20 @@ extern "C" void RtUi_ClipRegionElement_ComputeSize(void* selfv) {
 // The child pointer is loaded TWICE: once for the visibility test and the size
 // measurement, and again for the ComputeLayout call (0x1800cc7a8 re-reads
 // `_children[0]`). Both are transcribed.
-extern "C" void RtUi_ClipRegionElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    ElementComputeAlignedRect(self, x, y, w, h);
+void ClipRegionElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    ElementComputeAlignedRect(this, x, y, w, h);
 
-    void* child = Child(self, 0);
+    Element* child = _children._data[0];
     if (child == nullptr) return;
-    if ((U32(child, kElemFlags) & kFlagHidden) != 0) return;
+    if ((child->_flags & kFlagHidden) != 0) return;
 
     int cw = 0, ch = 0;
     PaddedSizeInline(child, &cw, &ch);
 
-    void* again = Child(self, 0);
-    const int cx = I32(self, kElemLayoutLeft) - I32(self, kOffsetX);
-    const int cy = I32(self, kElemLayoutTop)  - I32(self, kOffsetY);
-    VSlot<ComputeLayoutFn>(again, kSlotComputeLayout)(again, cx, cy, cx + cw, cy + ch);
+    Element* again = _children._data[0];
+    const int cx = _layoutLeft - _offsetX;
+    const int cy = _layoutTop  - _offsetY;
+    again->ComputeLayout(cx, cy, cx + cw, cy + ch);
 }
 
 // ============================================================================
@@ -151,31 +134,29 @@ extern "C" void RtUi_ClipRegionElement_ComputeLayout(void* selfv, int x, int y, 
 // viewport into scratch and takes the new one from `rect`; the second writes
 // into `rect` (now dead) and takes the saved one back. Reproduced with the same
 // two buffers rather than one, because SetScissor writes through its out slot.
-extern "C" void RtUi_ClipRegionElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+void ClipRegionElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    const Element* border = static_cast<const Element*>(_border);
+    if (border != nullptr) border->Draw(context, alpha);
 
-    void* border = Pc(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<DrawFn>(border, kSlotDraw)(border, ctx, alpha);
-
-    alpha = DimAlpha(self, alpha);
+    alpha = DimAlpha(this, alpha);
 
     Viewport rect;
-    rect.x = I32c(self, kElemLayoutLeft);
-    rect.y = I32c(self, kElemLayoutTop);
-    rect.width  = (I32c(self, kElemLayoutRight)  - rect.x) + 1;
-    rect.height = (I32c(self, kElemLayoutBottom) - rect.y) + 1;
+    rect.x = _layoutLeft;
+    rect.y = _layoutTop;
+    rect.width  = (_layoutRight  - rect.x) + 1;
+    rect.height = (_layoutBottom - rect.y) + 1;
 
+    void* ctx = &context;
     Viewport saved;
     const auto setScissor = RtAddr<SetScissorFn>(0x18011d050ull);
     setScissor(ctx, &saved, &rect);
 
-    const int32_t count = I32c(self, kElemChildCount);
+    const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {
-        void* child = Child(self, i);
+        const Element* child = _children._data[i];
         if (child == nullptr) continue;
-        if ((U32(child, kElemFlags) & kFlagHidden) != 0) continue;
-        VSlot<DrawFn>(child, kSlotDraw)(child, ctx, alpha);
+        if ((child->_flags & kFlagHidden) != 0) continue;
+        child->Draw(context, alpha);
     }
 
     setScissor(ctx, &rect, &saved);
@@ -186,69 +167,103 @@ extern "C" void RtUi_ClipRegionElement_Draw(const void* selfv, void* ctx, uint8_
 // ?Contains@ClipRegionElement@UI@@UEBA_NHHPEAVUserInterface@2@@Z  0x1800cbcc0
 // ============================================================================
 // The same idiom twice: install THIS element's layout rect as the
-// UserInterface's clip rectangle, run the base body (whose hit testing consults
-// it), then put the caller's rectangle back. Without this, an element scrolled
-// out of a panel would still take the mouse.
+// UserInterface's clip rectangle, run the base body (QUALIFIED — whose hit
+// testing consults it), then put the caller's rectangle back. Without this,
+// an element scrolled out of a panel would still take the mouse.
 //
 // The save reads the four dwords BEFORE any of them is overwritten; a
 // field-by-field save/overwrite would corrupt the second and later reads.
-extern "C" void RtUi_ClipRegionElement_Update(void* selfv, const void* time, void* ui,
-                                              void** dlg, const void* state) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
+void ClipRegionElement::Update(const System::Time& time, UserInterface* ui,
+                               Object::InternalPtr<DialogInstance>* dialog,
+                               const UpdateState& state) {
+    uint8_t* u = reinterpret_cast<uint8_t*>(ui);
 
-    const int32_t l = I32(self, kElemLayoutLeft);
-    const int32_t t = I32(self, kElemLayoutTop);
-    const int32_t r = I32(self, kElemLayoutRight);
-    const int32_t b = I32(self, kElemLayoutBottom);
+    const int32_t l = _layoutLeft;
+    const int32_t t = _layoutTop;
+    const int32_t r = _layoutRight;
+    const int32_t b = _layoutBottom;
 
-    const int32_t sl = I32(ui, kUiClipLeft);
-    const int32_t st_ = I32(ui, kUiClipTop);
-    const int32_t sr = I32(ui, kUiClipRight);
-    const int32_t sb = I32(ui, kUiClipBottom);
+    const int32_t sl  = I32(u, kUiClipLeft);
+    const int32_t st_ = I32(u, kUiClipTop);
+    const int32_t sr  = I32(u, kUiClipRight);
+    const int32_t sb  = I32(u, kUiClipBottom);
 
-    I32(ui, kUiClipLeft)   = l;
-    I32(ui, kUiClipTop)    = t;
-    I32(ui, kUiClipRight)  = r;
-    I32(ui, kUiClipBottom) = b;
+    I32(u, kUiClipLeft)   = l;
+    I32(u, kUiClipTop)    = t;
+    I32(u, kUiClipRight)  = r;
+    I32(u, kUiClipBottom) = b;
 
-    void* dlgCopy = *dlg;
-    RtAddr<ElemUpdateFn>(0x180116270ull)(self, time, ui, &dlgCopy, state);
+    Object::InternalPtr<DialogInstance> dlgCopy = *dialog;
+    Element::Update(time, ui, &dlgCopy, state);
 
-    I32(ui, kUiClipLeft)   = sl;
-    I32(ui, kUiClipTop)    = st_;
-    I32(ui, kUiClipRight)  = sr;
-    I32(ui, kUiClipBottom) = sb;
+    I32(u, kUiClipLeft)   = sl;
+    I32(u, kUiClipTop)    = st_;
+    I32(u, kUiClipRight)  = sr;
+    I32(u, kUiClipBottom) = sb;
 }
 
-extern "C" bool RtUi_ClipRegionElement_Contains(const void* selfv, int x, int y, void* ui) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+bool ClipRegionElement::Contains(int32_t x, int32_t y, UserInterface* ui) const {
+    uint8_t* u = reinterpret_cast<uint8_t*>(ui);
 
-    const int32_t l = I32c(self, kElemLayoutLeft);
-    const int32_t t = I32c(self, kElemLayoutTop);
-    const int32_t r = I32c(self, kElemLayoutRight);
-    const int32_t b = I32c(self, kElemLayoutBottom);
+    const int32_t l = _layoutLeft;
+    const int32_t t = _layoutTop;
+    const int32_t r = _layoutRight;
+    const int32_t b = _layoutBottom;
 
-    const int32_t sl = I32(ui, kUiClipLeft);
-    const int32_t st_ = I32(ui, kUiClipTop);
-    const int32_t sr = I32(ui, kUiClipRight);
-    const int32_t sb = I32(ui, kUiClipBottom);
+    const int32_t sl  = I32(u, kUiClipLeft);
+    const int32_t st_ = I32(u, kUiClipTop);
+    const int32_t sr  = I32(u, kUiClipRight);
+    const int32_t sb  = I32(u, kUiClipBottom);
 
-    I32(ui, kUiClipLeft)   = l;
-    I32(ui, kUiClipTop)    = t;
-    I32(ui, kUiClipRight)  = r;
-    I32(ui, kUiClipBottom) = b;
+    I32(u, kUiClipLeft)   = l;
+    I32(u, kUiClipTop)    = t;
+    I32(u, kUiClipRight)  = r;
+    I32(u, kUiClipBottom) = b;
 
-    const bool inside = RtAddr<ElemContainsFn>(0x1801169e0ull)(self, x, y, ui);
+    const bool inside = Element::Contains(x, y, ui);
 
-    I32(ui, kUiClipLeft)   = sl;
-    I32(ui, kUiClipTop)    = st_;
-    I32(ui, kUiClipRight)  = sr;
-    I32(ui, kUiClipBottom) = sb;
+    I32(u, kUiClipLeft)   = sl;
+    I32(u, kUiClipTop)    = st_;
+    I32(u, kUiClipRight)  = sr;
+    I32(u, kUiClipBottom) = sb;
     return inside;
 }
 
+}  // namespace UI
+
 // ============================================================================
-// Constructors / destructor
+// The DOORS
+// ============================================================================
+extern "C" uint32_t RtUi_ClipRegionElement_Type(const void* self) {
+    return reinterpret_cast<const UI::ClipRegionElement*>(self)->UI::ClipRegionElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_ClipRegionElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::ClipRegionElement*>(self)->UI::ClipRegionElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_ClipRegionElement_ComputeSize(void* selfv) {
+    reinterpret_cast<UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::ComputeSize();   // B.3.6 bridge
+}
+extern "C" void RtUi_ClipRegionElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
+    reinterpret_cast<UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
+}
+extern "C" void RtUi_ClipRegionElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::Draw(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_ClipRegionElement_Update(void* selfv, const void* time, void* ui,
+                                              void** dlg, const void* statev) {
+    reinterpret_cast<UI::ClipRegionElement*>(selfv)->UI::ClipRegionElement::Update(   // B.3.6 bridge
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(statev));
+}
+extern "C" bool RtUi_ClipRegionElement_Contains(const void* selfv, int x, int y, void* ui) {
+    return reinterpret_cast<const UI::ClipRegionElement*>(selfv)          // B.3.6 bridge
+        ->UI::ClipRegionElement::Contains(x, y, static_cast<UI::UserInterface*>(ui));
+}
+
+// ============================================================================
+// Constructors / destructor — DOORS (B4b-2), unchanged
 // ============================================================================
 // The default constructor writes +0xc4 and +0xc8 as ONE QWORD of 100
 // (`MOV qword [RCX+0xc4],0x64`), so +0xc8 is set to 0 by the upper half — the
@@ -258,12 +273,13 @@ extern "C" void* RtUi_ClipRegionElement_Ctor(void* selfv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
     RtAddr<ElementCtorFn>(0x180115e50ull)(self);
     P(self, 0x00) = VtClipRegionElement();
-    I32(self, kReqWidth)   = 100;
-    I32(self, kReqHeight)  = 100;
-    I32(self, kInnerWidth) = 0;
-    I32(self, kInnerHeight) = 0;
-    I32(self, kOffsetX)    = 0;
-    I32(self, kOffsetY)    = 0;
+    UI::ClipRegionElement* e = reinterpret_cast<UI::ClipRegionElement*>(self);   // B.3.6 bridge
+    e->_reqWidth    = 100;
+    e->_reqHeight   = 100;
+    e->_innerWidth  = 0;
+    e->_innerHeight = 0;
+    e->_offsetX     = 0;
+    e->_offsetY     = 0;
     return self;
 }
 
@@ -272,7 +288,7 @@ extern "C" void* RtUi_ClipRegionElement_CopyCtor(void* selfv, const void* otherv
     const uint8_t* other = static_cast<const uint8_t*>(otherv);
     RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
     P(self, 0x00) = VtClipRegionElement();
-    for (int off = kReqWidth; off <= kOffsetY; off += 4)
+    for (int off = 0xc0; off <= 0xd4; off += 4)             // _reqWidth .. _offsetY
         I32(self, off) = I32c(other, off);
     return self;
 }

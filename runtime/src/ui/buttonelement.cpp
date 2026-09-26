@@ -23,22 +23,11 @@
 // two subclasses repeat these addresses in their own tables. They are
 // registered once, here.
 //
-// ---------------------------------------------------------------------------
-// LAYOUT — 0xd8 bytes (`MOV EDX,0xd8` at 0x1800485e2). Six dwords past
-// UI::Element, and all six are NAMED BY USE, not guessed:
-//
-//   +0xc0 int32  keyboard shortcut index; -1 in the constructor, and the
-//                argument `Input::KeyMap::Pressed` receives in Update.
-//   +0xc4 int32  the CURRENT STATE, 0..3, and simultaneously the INDEX of the
-//                child element drawn for it (Draw/ComputeLayout index
-//                `_children[_state]`). 0 normal, 1 disabled, 2 hovered,
-//                3 pressed — read off the four assignments at
-//                0x1801111ce / 0x18011117e / 0x1801111bc / 0x1801111a6.
-//   +0xc8 uint32 colour for state 0    (0x1801111c8)
-//   +0xcc uint32 colour for state 1    (0x180111178, and the value
-//                `?Enable@ButtonElement@` pushes into the label)
-//   +0xd0 uint32 colour for state 2    (0x1801111b6)
-//   +0xd4 uint32 colour for state 3    (0x1801111a0)
+// ENDGAME B.3.6 block C1: the seven slot bodies are MEMBERS of
+// `UI::ButtonElement` (runtime/types/ui/ButtonElement.h, which now owns the
+// layout this file used to carry as file-local constants — the per-field
+// evidence is there). The registered doors below are one-line QUALIFIED
+// delegations; the three ctor/dtor doors are kept as they were (B4b-2).
 //
 // The four colours are handed to `_children[4]`'s virtual `SetColor` (slot 10),
 // which is what makes `_children[4]` the button's LABEL and `_children[0..3]`
@@ -49,47 +38,35 @@
 // byte-compare a freshly constructed ButtonElement past +0xc8.
 // ============================================================================
 #include "element_common.h"
+#include "../../types/ui/ButtonElement.h"
 
 using namespace rtuielem;
 
 namespace {
 
-constexpr int kKeyIndex = 0xc0;
-constexpr int kState    = 0xc4;
-constexpr int kColor0   = 0xc8;
-constexpr int kColor1   = 0xcc;
-constexpr int kColor2   = 0xd0;
-constexpr int kColor3   = 0xd4;
-
 // `_children` indices this class dispatches on.
 constexpr int kChildLabel = 4;
 
-RTELEM_TYPE_SLOTS(ButtonElement)
+// B6-5: the member bodies' door caches are namespace-scope atomics.
+std::atomic<void*> g_buttonTypeInfo{nullptr};
+const uint8_t* ButtonElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_buttonTypeInfo, "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+// The ctor doors only.
+void* VtButtonElement() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
 
 using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
 using ElementDtorFn     = void  (*)(void* self);
-using ElemUpdateFn      = void  (*)(void* self, const void* time, void* ui,
-                                    void** dlg, const void* state);
-using ElemEnableFn      = void  (*)(void* self, bool enable);
-using SetColorFn        = void  (*)(void* self, uint32_t color);
-using PaddedSizeFn      = void  (*)(void* self, int* w, int* h);
 using PlayFn            = void  (*)(void* ui, int soundId);
 using KeyPressedFn      = bool  (*)(void* keyMap, int a, int b);
 // Collection::Array<UI::UserInterface::Event>::SetSize(array, newSize, &fill)
 using EventPushFn       = void  (*)(void* array, int newSize, const void* fill);
 
-// UI::Element::UpdateState, the fifth Update parameter. Only the fields these
-// bodies read are named; the struct is the DLL's and nothing here owns it.
-constexpr int kStateMouseDown   = 0x01;   // byte
-constexpr int kStateMouseUp     = 0x04;   // byte
-constexpr int kStateMouseHeld   = 0x07;   // byte
-constexpr int kStateMouseX      = 0x18;   // int32
-constexpr int kStateMouseY      = 0x1c;   // int32
-constexpr int kStateKeyMap      = 0x28;   // Input::KeyMap*
-
-// UI::UserInterface: the pending-event array at +0x48 {data, size, capacity}
-// (runtime/types/ui/UserInterface.h, `Collection::Array<Event> _events`).
+// UI::UserInterface (block E's class, still a struct): the pending-event array
+// at +0x48 {data, size, capacity} (runtime/types/ui/UserInterface.h,
+// `Collection::Array<Event> _events`).
 constexpr int kUiEvents     = 0x48;
 constexpr int kUiEventCount = 0x50;
 
@@ -110,9 +87,21 @@ static_assert(sizeof(Event) == 0x30, "UI event record stride");
 
 constexpr int32_t kEventActivated = 0x12;
 
+// Element::_flags bits this class reads that Element.h does not name: bit 17
+// is "the mouse is over" (Element::Update's BTS 0x11), bit 21 "a press started
+// here", bit 22 is kElementFlagWasActivated.
+constexpr uint32_t kFlagHover        = 0x00020000u;
+constexpr uint32_t kFlagPressStarted = 0x00200000u;
+
 }  // namespace
 
-RTELEM_TYPE_BODIES(ButtonElement)
+// ============================================================================
+// The member bodies
+// ============================================================================
+namespace UI {
+
+uint32_t ButtonElement::Type() const { return TypeIdOf(ButtonElementTypeInfo()); }
+const char* ButtonElement::TypeName() const { return TypeNameOf(ButtonElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@ButtonElement@UI@@UEAAXXZ   0x180110d10
@@ -121,42 +110,36 @@ RTELEM_TYPE_BODIES(ButtonElement)
 // floored by the element's own minimum.
 //
 // TWO CALLS, TWO SHAPES, AND THAT IS RETAIL: the LABEL goes through the
-// out-of-line `?GetPaddedSize@Element@UI@@` (0x180115f10, already ported in
-// element.cpp) writing straight into +0x60/+0x64; the STATE BACKGROUND has the
-// same function INLINED and compared field by field. Collapsing the two into
-// one helper would hide that the first writes `this` and the second does not.
+// out-of-line `?GetPaddedSize@Element@UI@@` (0x180115f10, a member of
+// UI::Element since block A) writing straight into +0x60/+0x64; the STATE
+// BACKGROUND has the same function INLINED and compared field by field.
+// Collapsing the two into one helper would hide that the first writes `this`
+// and the second does not.
 //
 // `_children[4]` and `_children[_state]` are both dereferenced WITHOUT a bounds
 // check — a ButtonElement always has five children because ButtonDescription
 // builds them.
-extern "C" void RtUi_ButtonElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
+void ButtonElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
 
-    *reinterpret_cast<uint64_t*>(self + kElemLayoutWidth) = 0;   // +0x60 and +0x64
+    _layoutWidth  = 0;                                     // one qword store over
+    _layoutHeight = 0;                                     // +0x60 and +0x64
 
-    void* label = Child(self, kChildLabel);
-    if (label != nullptr) {
-        RtAddr<PaddedSizeFn>(0x180115f10ull)(
-            label,
-            reinterpret_cast<int*>(self + kElemLayoutWidth),
-            reinterpret_cast<int*>(self + kElemLayoutHeight));
-    }
+    Element* label = _children._data[kChildLabel];
+    if (label != nullptr) label->GetPaddedSize(_layoutWidth, _layoutHeight);
 
-    void* bg = Child(self, I32(self, kState));
+    Element* bg = _children._data[_state];
     if (bg != nullptr) {
         int w = 0, h = 0;
         PaddedSizeInline(bg, &w, &h);
-        if (I32(self, kElemLayoutWidth)  < w) I32(self, kElemLayoutWidth)  = w;
-        if (I32(self, kElemLayoutHeight) < h) I32(self, kElemLayoutHeight) = h;
+        if (_layoutWidth  < w) _layoutWidth  = w;
+        if (_layoutHeight < h) _layoutHeight = h;
     }
 
-    if (I32(self, kElemLayoutWidth)  < I32(self, kElemMinWidth))
-        I32(self, kElemLayoutWidth)  = I32(self, kElemMinWidth);
-    if (I32(self, kElemLayoutHeight) < I32(self, kElemMinHeight))
-        I32(self, kElemLayoutHeight) = I32(self, kElemMinHeight);
+    if (_layoutWidth  < _minWidth)  _layoutWidth  = _minWidth;
+    if (_layoutHeight < _minHeight) _layoutHeight = _minHeight;
 
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
+    _flags &= ~kFlagNeedsSizeCalc;
 }
 
 // ============================================================================
@@ -166,23 +149,16 @@ extern "C" void RtUi_ButtonElement_ComputeSize(void* selfv) {
 // (from the registers still holding it) and the STATE BACKGROUND laid out over
 // the rect RE-READ FROM THE FIELDS. The two are the same numbers; the second
 // re-read is retail's and is kept.
-extern "C" void RtUi_ButtonElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    ElementComputeAlignedRect(self, x, y, w, h);
+void ButtonElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    ElementComputeAlignedRect(this, x, y, w, h);
 
-    void* label = Child(self, kChildLabel);
-    if (label != nullptr) {
-        VSlot<ComputeLayoutFn>(label, kSlotComputeLayout)(
-            label, I32(self, kElemLayoutLeft), I32(self, kElemLayoutTop),
-            I32(self, kElemLayoutRight), I32(self, kElemLayoutBottom));
-    }
+    Element* label = _children._data[kChildLabel];
+    if (label != nullptr)
+        label->ComputeLayout(_layoutLeft, _layoutTop, _layoutRight, _layoutBottom);
 
-    void* bg = Child(self, I32(self, kState));
-    if (bg != nullptr) {
-        VSlot<ComputeLayoutFn>(bg, kSlotComputeLayout)(
-            bg, I32(self, kElemLayoutLeft), I32(self, kElemLayoutTop),
-            I32(self, kElemLayoutRight), I32(self, kElemLayoutBottom));
-    }
+    Element* bg = _children._data[_state];
+    if (bg != nullptr)
+        bg->ComputeLayout(_layoutLeft, _layoutTop, _layoutRight, _layoutBottom);
 }
 
 // ============================================================================
@@ -190,20 +166,17 @@ extern "C" void RtUi_ButtonElement_ComputeLayout(void* selfv, int x, int y, int 
 // ============================================================================
 // Border, dim, then the STATE BACKGROUND and the LABEL — in that order, so the
 // label paints on top.
-extern "C" void RtUi_ButtonElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+void ButtonElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    const Element* border = static_cast<const Element*>(_border);
+    if (border != nullptr) border->Draw(context, alpha);
 
-    void* border = Pc(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<DrawFn>(border, kSlotDraw)(border, ctx, alpha);
+    alpha = DimAlpha(this, alpha);
 
-    alpha = DimAlpha(self, alpha);
+    const Element* bg = _children._data[_state];
+    if (bg != nullptr) bg->Draw(context, alpha);
 
-    void* bg = Child(self, I32c(self, kState));
-    if (bg != nullptr) VSlot<DrawFn>(bg, kSlotDraw)(bg, ctx, alpha);
-
-    void* label = Child(self, kChildLabel);
-    if (label != nullptr) VSlot<DrawFn>(label, kSlotDraw)(label, ctx, alpha);
+    const Element* label = _children._data[kChildLabel];
+    if (label != nullptr) label->Draw(context, alpha);
 }
 
 // ============================================================================
@@ -235,121 +208,156 @@ extern "C" void RtUi_ButtonElement_Draw(const void* selfv, void* ctx, uint8_t al
 //        }
 //   }
 //
+// UpdateState bytes read here (Element.h names them): +0x01 `buttonPressed`
+// (the mouse-down edge), +0x04 `b04` (the mouse-up edge), +0x07 `leftDown`
+// (held), +0x18/+0x1c the mouse, +0x28 `config` (the Input::KeyMap*).
+//
+// The base call is QUALIFIED (`Element::Update`): an unqualified one would
+// dispatch through this object's table straight back here.
+//
 // *** THE `_children[_state]` DEREF AFTER A STATE CHANGE IS UNGUARDED IN
 // RETAIL *** (0x180111223 loads the vtable with no null test, unlike the
 // `_children[4]` test two instructions later). A ButtonElement always has its
 // four state children; the asymmetry is retail's own and no guard is added.
-extern "C" void RtUi_ButtonElement_Update(void* selfv, const void* time, void* ui,
-                                          void** dlg, const void* statev) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* st = static_cast<const uint8_t*>(statev);
+void ButtonElement::Update(const System::Time& time, UserInterface* ui,
+                           Object::InternalPtr<DialogInstance>* dialog,
+                           const UpdateState& state) {
+    Object::InternalPtr<DialogInstance> dlgCopy = *dialog;
+    Element::Update(time, ui, &dlgCopy, state);
 
-    void* dlgCopy = *dlg;
-    RtAddr<ElemUpdateFn>(0x180116270ull)(self, time, ui, &dlgCopy, st);
-
-    uint32_t flags = U32(self, kElemFlags);
+    uint32_t flags = _flags;
     if ((flags & kFlagHidden) != 0) return;
 
-    const int prevState = I32(self, kState);
-    StoreFlags(self, flags & ~0x00400000u);
+    const int prevState = _state;
+    StoreFlags(this, flags & ~kElementFlagWasActivated);
 
-    if (st[kStateMouseDown] != 0) {
-        const uint32_t f = U32(self, kElemFlags);
-        if (((f >> 17) & 1u) != 0) StoreFlags(self, f | 0x00200000u);
+    if (state.buttonPressed != 0) {
+        const uint32_t f = _flags;
+        if ((f & kFlagHover) != 0) StoreFlags(this, f | kFlagPressStarted);
     }
 
     uint32_t colour;
-    flags = U32(self, kElemFlags);
+    flags = _flags;
     if ((flags & kFlagDisabledMask) != 0) {
-        colour = U32(self, kColor1);
-        I32(self, kState) = 1;
-    } else if ((flags & 0x20000u) != 0 && ((flags >> 21) & 1u) != 0 &&
-               st[kStateMouseHeld] != 0) {
-        colour = U32(self, kColor3);
-        I32(self, kState) = 3;
-    } else if ((flags & 0x20000u) != 0) {
-        colour = U32(self, kColor2);
-        I32(self, kState) = 2;
+        colour = _stateColor[1];
+        _state = 1;
+    } else if ((flags & kFlagHover) != 0 && (flags & kFlagPressStarted) != 0 &&
+               state.leftDown != 0) {
+        colour = _stateColor[3];
+        _state = 3;
+    } else if ((flags & kFlagHover) != 0) {
+        colour = _stateColor[2];
+        _state = 2;
     } else {
-        colour = U32(self, kColor0);
-        I32(self, kState) = 0;
+        colour = _stateColor[0];
+        _state = 0;
     }
 
-    if (I32(self, kState) != prevState) {
-        SetNeedsSizeCalc(self);
-        void* bg = Child(self, I32(self, kState));
-        VSlot<ComputeLayoutFn>(bg, kSlotComputeLayout)(
-            bg, I32(self, kElemLayoutLeft), I32(self, kElemLayoutTop),
-            I32(self, kElemLayoutRight), I32(self, kElemLayoutBottom));
+    if (_state != prevState) {
+        rtuielem::SetNeedsSizeCalc(this);
+        Element* bg = _children._data[_state];
+        bg->ComputeLayout(_layoutLeft, _layoutTop, _layoutRight, _layoutBottom);
     }
 
-    void* label = Child(self, kChildLabel);
-    if (label != nullptr) VSlot<SetColorFn>(label, kSlotSetColor)(label, colour);
+    Element* label = _children._data[kChildLabel];
+    if (label != nullptr) label->SetColor(colour);
 
-    flags = U32(self, kElemFlags);
-    if (((flags >> 17) & 1u) == 0) StoreFlags(self, flags & ~0x00200000u);
+    flags = _flags;
+    if ((flags & kFlagHover) == 0) StoreFlags(this, flags & ~kFlagPressStarted);
 
-    if (I32(self, kState) == 1) return;
+    if (_state == 1) return;
 
-    if (st[kStateMouseDown] != 0) {
-        const uint32_t f = U32(self, kElemFlags);
-        if (((f >> 17) & 1u) != 0 && ((f >> 21) & 1u) != 0)
+    if (state.buttonPressed != 0) {
+        const uint32_t f = _flags;
+        if ((f & kFlagHover) != 0 && (f & kFlagPressStarted) != 0)
             RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
     }
 
     bool fire = false;
-    if (st[kStateMouseUp] != 0) {
-        const uint32_t f = U32(self, kElemFlags);
-        if (((f >> 17) & 1u) != 0 && ((f >> 21) & 1u) != 0) fire = true;
+    if (state.b04 != 0) {
+        const uint32_t f = _flags;
+        if ((f & kFlagHover) != 0 && (f & kFlagPressStarted) != 0) fire = true;
     }
     if (!fire) {
-        const int32_t key = I32(self, kKeyIndex);
+        const int32_t key = _keyIndex;
         if (key < 0) return;                                   // 1801112d4 JS -> end
-        if (!RtAddr<KeyPressedFn>(0x1800a7a80ull)(Pc(st, kStateKeyMap), 0, key)) return;
+        if (!RtAddr<KeyPressedFn>(0x1800a7a80ull)(state.config, 0, key)) return;
     }
 
-    StoreFlags(self, U32(self, kElemFlags) & ~0x00200000u);
-    StoreFlags(self, U32(self, kElemFlags) |  0x00400000u);
+    StoreFlags(this, _flags & ~kFlagPressStarted);
+    StoreFlags(this, _flags |  kElementFlagWasActivated);
 
     Event ev;
-    ev.dialog    = *dlg;
-    ev.element   = self;
+    ev.dialog    = *reinterpret_cast<void* const*>(dialog);
+    ev.element   = this;
     ev.kind      = kEventActivated;
-    ev.elementId = I32(self, kElemElementId);
-    ev.x         = I32c(st, kStateMouseX);
-    ev.y         = I32c(st, kStateMouseY);
+    ev.elementId = _elementId;
+    ev.x         = state.mouseX;
+    ev.y         = state.mouseY;
     ev.index     = 0;
     ev.tail      = 0;
-    RtAddr<EventPushFn>(0x180033690ull)(static_cast<uint8_t*>(ui) + kUiEvents,
-                                        I32(ui, kUiEventCount) + 1, &ev);
+    uint8_t* u = reinterpret_cast<uint8_t*>(ui);
+    RtAddr<EventPushFn>(0x180033690ull)(u + kUiEvents, I32(u, kUiEventCount) + 1, &ev);
     RtAddr<PlayFn>(0x1801223d0ull)(ui, 5);
 }
 
 // ============================================================================
 // ?Enable@ButtonElement@UI@@UEAAX_N@Z   0x180110cc0
 // ============================================================================
-// Element::Enable first, then — only when the element ended up disabled — push
-// the DISABLED colour (+0xcc) into the label. Retail's tail is an indirect
-// JUMP through slot 10, which is why Ghidra prints "could not recover
-// jumptable"; behaviourally a call plus return.
-extern "C" void RtUi_ButtonElement_Enable(void* selfv, bool enable) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ElemEnableFn>(0x180116910ull)(self, enable);
+// Element::Enable first (QUALIFIED), then — only when the element ended up
+// disabled — push the DISABLED colour (+0xcc) into the label. Retail's tail is
+// an indirect JUMP through slot 10, which is why Ghidra prints "could not
+// recover jumptable"; behaviourally a call plus return.
+void ButtonElement::Enable(bool enable) {
+    Element::Enable(enable);
 
-    void* label = Child(self, kChildLabel);
-    if (label != nullptr && (U32(self, kElemFlags) & kFlagDisabledMask) != 0)
-        VSlot<SetColorFn>(label, kSlotSetColor)(label, U32(self, kColor1));
+    Element* label = _children._data[kChildLabel];
+    if (label != nullptr && (_flags & kFlagDisabledMask) != 0)
+        label->SetColor(_stateColor[1]);
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+extern "C" uint32_t RtUi_ButtonElement_Type(const void* self) {
+    return reinterpret_cast<const UI::ButtonElement*>(self)->UI::ButtonElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_ButtonElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::ButtonElement*>(self)->UI::ButtonElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_ButtonElement_ComputeSize(void* selfv) {
+    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::ComputeSize();   // B.3.6 bridge
+}
+extern "C" void RtUi_ButtonElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
+    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
+}
+extern "C" void RtUi_ButtonElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::ButtonElement*>(selfv)->UI::ButtonElement::Draw(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_ButtonElement_Update(void* selfv, const void* time, void* ui,
+                                          void** dlg, const void* statev) {
+    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::Update(   // B.3.6 bridge
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(statev));
+}
+extern "C" void RtUi_ButtonElement_Enable(void* selfv, bool enable) {
+    reinterpret_cast<UI::ButtonElement*>(selfv)->UI::ButtonElement::Enable(enable);   // B.3.6 bridge
 }
 
 // ============================================================================
-// Constructors / destructor
+// Constructors / destructor — DOORS (B4b-2), unchanged
 // ============================================================================
 extern "C" void* RtUi_ButtonElement_Ctor(void* selfv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
     RtAddr<ElementCtorFn>(0x180115e50ull)(self);
     P(self, 0x00) = VtButtonElement();
-    I32(self, kKeyIndex) = -1;
-    I32(self, kState)    = 0;
+    I32(self, offsetof(UI::ButtonElement, _keyIndex)) = -1;
+    I32(self, offsetof(UI::ButtonElement, _state))    = 0;
     return self;
 }
 
@@ -358,7 +366,7 @@ extern "C" void* RtUi_ButtonElement_CopyCtor(void* selfv, const void* otherv) {
     const uint8_t* other = static_cast<const uint8_t*>(otherv);
     RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
     P(self, 0x00) = VtButtonElement();
-    for (int off = kKeyIndex; off <= kColor3; off += 4)
+    for (int off = 0xc0; off <= 0xd4; off += 4)            // _keyIndex .. _stateColor[3]
         I32(self, off) = I32c(other, off);
     return self;
 }

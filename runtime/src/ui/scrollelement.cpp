@@ -41,124 +41,102 @@
 // The float 1.0f that Update divides by is the rodata constant at
 // 0x18016169c, read out of the shipped image (`00 00 80 3f`) rather than
 // assumed from the shape of the expression.
+//
+// ENDGAME B.3.6 block C4: the layout above moved to runtime/types/ui/
+// ScrollElement.h (the real class). Every slot body below is a MEMBER; each
+// registered door is a one-line QUALIFIED delegation; ctor/dtor stay DOORS.
+// RULE B6-5: the vtable and type-info record are cached in namespace-scope
+// std::atomic slots.
 // ============================================================================
+#include <atomic>
 
 #include "widget_common.h"
+#include "../../types/ui/ScrollElement.h"
 
 using namespace rtui;
 
 namespace {
 
-constexpr int kTrackStart  = 0xC0;
-constexpr int kTrackMiddle = 0xD0;
-constexpr int kTrackEnd    = 0xE0;
-constexpr int kThumbStart  = 0xF0;
-constexpr int kThumbMiddle = 0x100;
-constexpr int kThumbEnd    = 0x110;
-constexpr int kHotStart    = 0x120;
-constexpr int kHotMiddle   = 0x130;
-constexpr int kHotEnd      = 0x140;
-constexpr int kVertical    = 0x150;
-constexpr int kBarColor    = 0x154;
-constexpr int kCurrent     = 0x160;
-constexpr int kPercent     = 0x164;
-constexpr int kMaxValue    = 0x168;
-constexpr int kDragAnchor  = 0x16C;
-constexpr int kDragValue   = 0x170;
-
-// UpdateState
-constexpr int kUsPressed  = 0x01;
-constexpr int kUsReleased = 0x04;
-constexpr int kUsDeltaX   = 0x0c;
-constexpr int kUsDeltaY   = 0x10;
-constexpr int kUsMouseX   = 0x18;
-constexpr int kUsMouseY   = 0x1c;
+// UpdateState fields these bodies read (UI::Element::UpdateState names):
+//   buttonPressed +0x01, b04 (released) +0x04, dragDx +0x0c, dragDy +0x10,
+//   mouseX +0x18, mouseY +0x1c.
 
 // 0x18016169c — `00 00 80 3f`, read from the shipped .rdata.
 constexpr float kOne = 1.0f;
 
 // A 0x10-byte UI::Sprite copied to the stack, exactly as Draw does: two qword
-// loads from the chosen 0x10-byte field.
+// loads from the chosen field.
 struct SpriteCopy { void* sheet; int64_t index; };
 static_assert(sizeof(SpriteCopy) == 0x10, "");
 
-SpriteCopy LoadSprite(const void* self, int off) {
+SpriteCopy LoadSprite(const ::Sprite& src) {
     SpriteCopy s;
-    s.sheet = PTRc(self, off);
-    s.index = *reinterpret_cast<const int64_t*>(B(self, off + 8));
+    s.sheet = src.spriteSheet;
+    __builtin_memcpy(&s.index, &src.spriteIndex, sizeof s.index);
     return s;
 }
 
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A");
-}
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7ScrollElement@UI@@6B@"); }
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
 
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+const uint8_t* TypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@ScrollElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* Vtable() { return AtomicExport(g_vtable, "??_7ScrollElement@UI@@6B@"); }
+
+// `?GetBarLayout@ScrollElement@UI@@AEBAXAEAH000@Z` (0x18011a2d0) — declared on
+// the class, body still element_bodies_b5.cpp's door (fragment pass).
 using GetBarLayoutFn = void (*)(const void* self, int32_t* x0, int32_t* y0,
                                 int32_t* x1, int32_t* y1);
 
 }  // namespace
 
-extern "C" uint32_t RtUi_ScrollElement_Type(const void*) {
+// ============================================================================
+// The member bodies (ENDGAME B.3.6 block C4)
+// ============================================================================
+namespace UI {
+
+uint32_t ScrollElement::Type() const {
     const uint8_t* ti = TypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_ScrollElement_TypeName(const void*) {
+const char* ScrollElement::TypeName() const {
     const uint8_t* ti = TypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
-
-// ??0ScrollElement@UI@@QEAA@XZ   0x18011a7f0
-extern "C" void* RtUi_ScrollElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = Vtable();
-    const int sprites[9] = { kTrackStart, kTrackMiddle, kTrackEnd,
-                             kThumbStart, kThumbMiddle, kThumbEnd,
-                             kHotStart,   kHotMiddle,   kHotEnd };
-    for (int off : sprites) {
-        PTR(self, off + kSpriteSheet) = nullptr;
-        I32(self, off + kSpriteIndex) = -1;
-    }
-    U8(self, kVertical)    = 1;
-    U32(self, kBarColor)   = 0xffffffffu;
-    U32(self, kBarColor + 4) = 0xffffffffu;   // the other half of the qword
-    F32(self, kCurrent)    = 0.0f;
-    F32(self, kPercent)    = 0.33333334f;     // 0x3eaaaaab
-    F32(self, kMaxValue)   = 4.0f;            // 0x40800000
-    F32(self, kDragAnchor) = 0.0f;            // the high half of that qword
-    F32(self, kDragValue)  = 0.0f;
-    return self;
-}
-
-// ??1ScrollElement@UI@@UEAA@XZ   0x18011a900
-extern "C" void RtUi_ScrollElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    ElementDtor(self);
 }
 
 // ---------------------------------------------------------------------------
 // slot 4 — ?ComputeSize@ScrollElement@UI@@UEAAXXZ   0x18011ad80
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_ScrollElement_ComputeSize(void* self) {
-    const uint32_t flags = U32(self, kElFlags);
+void ScrollElement::ComputeSize() {
+    const uint32_t flags = _flags;
     if ((flags & kFlagNeedsSizeCalc) == 0) return;
 
-    if (U8(self, kVertical) != 0) {
-        I32(self, kElLayoutWidth) = SpriteWidth(self, kTrackStart);
-        const int32_t h = SpriteHeight(self, kTrackStart)
-                        + SpriteHeight(self, kTrackMiddle)
-                        + SpriteHeight(self, kTrackEnd);
-        U32(self, kElFlags) = flags & ~kFlagNeedsSizeCalc;
-        I32(self, kElLayoutHeight) = h;
+    if (_vertical != 0) {
+        _layoutWidth = SpriteWidth(&_trackStart, 0);
+        const int32_t h = SpriteHeight(&_trackStart, 0)
+                        + SpriteHeight(&_trackMiddle, 0)
+                        + SpriteHeight(&_trackEnd, 0);
+        _flags = flags & ~kFlagNeedsSizeCalc;
+        _layoutHeight = h;
         return;
     }
 
-    I32(self, kElLayoutWidth) = SpriteWidth(self, kTrackStart)
-                              + SpriteWidth(self, kTrackMiddle)
-                              + SpriteWidth(self, kTrackEnd);
-    I32(self, kElLayoutHeight) = SpriteHeight(self, kTrackStart);
-    U32(self, kElFlags) = flags & ~kFlagNeedsSizeCalc;
+    _layoutWidth = SpriteWidth(&_trackStart, 0)
+                 + SpriteWidth(&_trackMiddle, 0)
+                 + SpriteWidth(&_trackEnd, 0);
+    _layoutHeight = SpriteHeight(&_trackStart, 0);
+    _flags = flags & ~kFlagNeedsSizeCalc;
 }
 
 // ---------------------------------------------------------------------------
@@ -167,47 +145,45 @@ extern "C" void RtUi_ScrollElement_ComputeSize(void* self) {
 // `_vertical` is read BEFORE ComputeSize runs (0x18011af3c), which matters: a
 // ComputeSize that flipped it would not be seen here. Reproduced.
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_ScrollElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                 int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
+void ScrollElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (Element* border = static_cast<Element*>(_border))
+        border->ComputeLayout(x, y, right, bottom);
 
-    const uint8_t vertical = U8(self, kVertical);
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
+    const uint8_t vertical = _vertical;
+    ComputeSize();                                            // slot 4, virtual
 
-    int32_t w = I32(self, kElLayoutWidth);
-    int32_t h = I32(self, kElLayoutHeight);
+    int32_t w = _layoutWidth;
+    int32_t h = _layoutHeight;
 
-    const bool stretchY = !(vertical == 0 && (U32(self, kElFlags) & kFlagStretchY) == 0);
-    const bool stretchX =  (vertical == 0 || (U32(self, kElFlags) & kFlagStretchX) != 0);
+    const bool stretchY = !(vertical == 0 && (_flags & kFlagStretchY) == 0);
+    const bool stretchX =  (vertical == 0 || (_flags & kFlagStretchX) != 0);
 
-    const int32_t align = I32(self, kElAlignment);
+    const int32_t align = _alignment;
     if (right  < w + x) x = right  - w;
     if (bottom < h + y) y = bottom - h;
 
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t aw = (right  - _rightPad)  - px;
+    const int32_t ah = (bottom - _bottomPad) - py;
 
     if (stretchX) w = aw;
     if (stretchY) h = ah;
 
     switch (align) {
         case 1: case 4: case 7: px = ((aw >> 1) - (w >> 1)) + px; break;
-        case 2: case 5: case 8: px = (right - I32(self, kElRightPad)) - w; break;
+        case 2: case 5: case 8: px = (right - _rightPad) - w; break;
         default: break;
     }
     if (align > 2) {
         if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
-        else if (align < 9) py = (bottom - I32(self, kElBottomPad)) - h;
+        else if (align < 9) py = (bottom - _bottomPad) - h;
     }
 
-    I32(self, kElLayoutRight)  = px + w;
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutBottom) = py + h;
+    _layoutRight  = px + w;
+    _layoutTop    = py;
+    _layoutLeft   = px;
+    _layoutBottom = py + h;
 }
 
 // ---------------------------------------------------------------------------
@@ -216,65 +192,63 @@ extern "C" void RtUi_ScrollElement_ComputeLayout(void* self, int32_t x, int32_t 
 // The alpha is halved TWICE when the dim flag is set: once before the track
 // colour and again before the bar colour, on the same register. Retail's.
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_ScrollElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
+void ScrollElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    void* const ctx = &context;
+    if (Element* border = static_cast<Element*>(_border))
+        border->Draw(context, alpha);
 
-    uint32_t raw = U32(me, kElColor);
-    if ((U32(me, kElFlags) & kFlagDimColor) != 0) alpha >>= 1;
+    uint32_t raw = _color;
+    if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
     const uint32_t trackColor = ModulateColor(raw, alpha);
 
-    const int32_t left   = I32(me, kElLayoutLeft);
-    const int32_t top    = I32(me, kElLayoutTop);
-    const int32_t rightX = I32(me, kElLayoutRight);
-    const int32_t botY   = I32(me, kElLayoutBottom);
+    const int32_t left   = _layoutLeft;
+    const int32_t top    = _layoutTop;
+    const int32_t rightX = _layoutRight;
+    const int32_t botY   = _layoutBottom;
 
     int32_t ex0, ey0, ex1, ey1;    // the END slice's rectangle, common tail
-    if (U8(me, kVertical) == 0) {
-        const int32_t w0 = SpriteWidth(me, kTrackStart);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kTrackStart),
+    if (_vertical == 0) {
+        const int32_t w0 = SpriteWidth(&_trackStart, 0);
+        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackStart,
                                              left, top, left + w0, botY, trackColor);
-        const int32_t w2 = SpriteWidth(me, kTrackEnd);
-        const int32_t w0b = SpriteWidth(me, kTrackStart);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kTrackMiddle),
+        const int32_t w2 = SpriteWidth(&_trackEnd, 0);
+        const int32_t w0b = SpriteWidth(&_trackStart, 0);
+        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
                                              left + w0b, top, rightX - w2, botY, trackColor);
-        ex0 = rightX - SpriteWidth(me, kTrackEnd);
+        ex0 = rightX - SpriteWidth(&_trackEnd, 0);
         ey0 = top;
         ex1 = rightX;
         ey1 = botY;
     } else {
-        const int32_t h0 = SpriteHeight(me, kTrackStart);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kTrackStart),
+        const int32_t h0 = SpriteHeight(&_trackStart, 0);
+        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackStart,
                                              left, top, rightX, top + h0, trackColor);
-        const int32_t h2 = SpriteHeight(me, kTrackEnd);
-        const int32_t h0b = SpriteHeight(me, kTrackStart);
-        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kTrackMiddle),
+        const int32_t h2 = SpriteHeight(&_trackEnd, 0);
+        const int32_t h0b = SpriteHeight(&_trackStart, 0);
+        RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
                                              left, top + h0b, rightX, botY - h2, trackColor);
         ex0 = left;
-        ey0 = botY - SpriteHeight(me, kTrackEnd);
+        ey0 = botY - SpriteHeight(&_trackEnd, 0);
         ex1 = rightX;
         ey1 = botY;
     }
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kTrackEnd),
-                                         ex0, ey0, ex1, ey1, trackColor);
+    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackEnd, ex0, ey0, ex1, ey1, trackColor);
 
-    raw = U32(me, kBarColor);
-    if ((U32(me, kElFlags) & kFlagDimColor) != 0) alpha >>= 1;
+    raw = _barColor;
+    if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
     const uint32_t barColor = ModulateColor(raw, alpha);
 
     int32_t bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
-    RtAddr<GetBarLayoutFn>(0x18011a2d0ull)(me, &bx0, &by0, &bx1, &by1);
+    RtAddr<GetBarLayoutFn>(0x18011a2d0ull)(this, &bx0, &by0, &bx1, &by1);
 
     // The thumb uses the HOT set while the element is interactive and the
     // scroll actually has range.
-    const bool hot = (U32(me, kElFlags) & kFlagInteractive) != 0
-                     && F32(me, kMaxValue) > 0.0f;
-    const SpriteCopy s0 = LoadSprite(me, hot ? kHotStart  : kThumbStart);
-    const SpriteCopy s1 = LoadSprite(me, hot ? kHotMiddle : kThumbMiddle);
-    const SpriteCopy s2 = LoadSprite(me, hot ? kHotEnd    : kThumbEnd);
+    const bool hot = (_flags & kFlagInteractive) != 0 && _maxValue > 0.0f;
+    const SpriteCopy s0 = LoadSprite(hot ? _hotStart  : _thumbStart);
+    const SpriteCopy s1 = LoadSprite(hot ? _hotMiddle : _thumbMiddle);
+    const SpriteCopy s2 = LoadSprite(hot ? _hotEnd    : _thumbEnd);
 
-    if (U8(me, kVertical) == 0) {
+    if (_vertical == 0) {
         const int32_t w0 = SpriteWidth(&s0, 0);
         RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &s0, bx0, by0, bx0 + w0, by1, barColor);
         const int32_t w2  = SpriteWidth(&s2, 0);
@@ -297,84 +271,144 @@ extern "C" void RtUi_ScrollElement_Draw(const void* self, void* ctx, uint8_t alp
 // ---------------------------------------------------------------------------
 // slot 7 — ?Update@ScrollElement@UI@@ ...   0x18011b620
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_ScrollElement_Update(void* self, const void* time, void* ui,
-                                          void** dlgPtr, const void* state) {
-    void* slot = *dlgPtr;
-    ElementUpdate(self, time, ui, &slot, state);
+void ScrollElement::Update(const System::Time& time, UserInterface* ui,
+                           Object::InternalPtr<DialogInstance>* dialog,
+                           const UpdateState& state) {
+    Object::InternalPtr<DialogInstance> dialogCopy = *dialog;
+    UI::Element::Update(time, ui, &dialogCopy, state);         // qualified: 0x180116270
 
     // Nothing to scroll and the default display fraction: park at zero.
-    if (F32(self, kMaxValue) == 0.0f && F32(self, kPercent) == kOne) {
-        F32(self, kCurrent) = 0.0f;
+    if (_maxValue == 0.0f && _displayPercent == kOne) {
+        _currentValue = 0.0f;
         return;
     }
 
-    if (U8c(state, kUsPressed) != 0 && (U32(self, kElFlags) & kFlagInteractive) != 0) {
+    if (state.buttonPressed != 0 && (_flags & kFlagInteractive) != 0) {
         int32_t bx0 = 0, by0 = 0, bx1 = 0, by1 = 0;
-        RtAddr<GetBarLayoutFn>(0x18011a2d0ull)(self, &bx0, &by0, &bx1, &by1);
+        RtAddr<GetBarLayoutFn>(0x18011a2d0ull)(this, &bx0, &by0, &bx1, &by1);
 
-        const int32_t mx = I32c(state, kUsMouseX);
-        const int32_t my = I32c(state, kUsMouseY);
-        const bool vertical = U8(self, kVertical) != 0;
+        const int32_t mx = state.mouseX;
+        const int32_t my = state.mouseY;
+        const bool vertical = _vertical != 0;
         bool played = false;
 
         if (mx < bx0 || bx1 < mx || my < by0 || by1 < my) {
             // Outside the thumb: page toward the click by one visible page.
-            const float page = F32(self, kMaxValue)
-                             / (kOne / F32(self, kPercent) - kOne);
+            const float page = _maxValue / (kOne / _displayPercent - kOne);
             if ((vertical && by1 < my) || bx1 < mx) {
-                F32(self, kCurrent) = F32(self, kCurrent) + page;
+                _currentValue = _currentValue + page;
                 played = true;
             } else if ((vertical && my < by0) || mx < bx0) {
-                F32(self, kCurrent) = F32(self, kCurrent) - page;
+                _currentValue = _currentValue - page;
                 played = true;
             }
         } else {
-            F32(self, kDragAnchor) = F32(self, kCurrent);
-            SetFlags(self, U32(self, kElFlags) | kFlagDragging);
+            _dragAnchor = _currentValue;
+            SetFlags(this, _flags | kFlagDragging);
             played = true;
         }
 
         if (played) RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
 
-        if (F32(self, kCurrent) < 0.0f) F32(self, kCurrent) = 0.0f;
-        if (F32(self, kMaxValue) < F32(self, kCurrent))
-            F32(self, kCurrent) = F32(self, kMaxValue);
+        if (_currentValue < 0.0f) _currentValue = 0.0f;
+        if (_maxValue < _currentValue) _currentValue = _maxValue;
     }
 
-    const int32_t mx = I32c(state, kUsMouseX);
-    const int32_t my = I32c(state, kUsMouseY);
-    const bool isNear = !(mx < I32(self, kElLayoutLeft)   - 0x20 ||
-                        I32(self, kElLayoutRight) + 0x20 < mx  ||
-                        my < I32(self, kElLayoutTop)    - 0x20 ||
-                        I32(self, kElLayoutBottom) + 0x20 < my);
+    const int32_t mx = state.mouseX;
+    const int32_t my = state.mouseY;
+    const bool isNear = !(mx < _layoutLeft   - 0x20 ||
+                          _layoutRight + 0x20 < mx  ||
+                          my < _layoutTop    - 0x20 ||
+                          _layoutBottom + 0x20 < my);
 
-    const uint32_t flags = U32(self, kElFlags);
+    const uint32_t flags = _flags;
     if ((flags & kFlagDragging) == 0 || isNear) {
-        if ((flags & kFlagDragging) != 0 && U8c(state, kUsReleased) != 0) {
-            SetFlags(self, flags & ~kFlagDragging);
+        if ((flags & kFlagDragging) != 0 && state.b04 != 0) {
+            SetFlags(this, flags & ~kFlagDragging);
             if (!isNear) return;
             RtAddr<PlayFn>(0x1801223d0ull)(ui, 5);
         }
-        if (isNear && (U32(self, kElFlags) & kFlagDragging) != 0) {
-            F32(self, kCurrent) = F32(self, kDragValue);
-            const bool vertical = U8(self, kVertical) != 0;
-            const int32_t span = vertical
-                ? (I32(self, kElLayoutBottom) - I32(self, kElLayoutTop))
-                : (I32(self, kElLayoutRight)  - I32(self, kElLayoutLeft));
-            const float maxV = F32(self, kMaxValue);
-            const int32_t delta = vertical ? I32c(state, kUsDeltaY) : I32c(state, kUsDeltaX);
-            const float v = F32(self, kDragAnchor)
+        if (isNear && (_flags & kFlagDragging) != 0) {
+            _currentValue = _dragValue;
+            const bool vertical = _vertical != 0;
+            const int32_t span = vertical ? (_layoutBottom - _layoutTop)
+                                          : (_layoutRight  - _layoutLeft);
+            const float maxV = _maxValue;
+            const int32_t delta = vertical ? state.dragDy : state.dragDx;
+            const float v = _dragAnchor
                 - (static_cast<float>(delta)
                    / (static_cast<float>(span)
-                      - static_cast<float>(span) * F32(self, kPercent))) * maxV;
-            F32(self, kCurrent) = v;
-            if (v < 0.0f) F32(self, kCurrent) = 0.0f;
-            if (maxV < F32(self, kCurrent)) F32(self, kCurrent) = maxV;
-            F32(self, kDragValue) = F32(self, kCurrent);
+                      - static_cast<float>(span) * _displayPercent)) * maxV;
+            _currentValue = v;
+            if (v < 0.0f) _currentValue = 0.0f;
+            if (maxV < _currentValue) _currentValue = maxV;
+            _dragValue = _currentValue;
         }
     } else {
-        F32(self, kCurrent) = F32(self, kDragAnchor);
+        _currentValue = _dragAnchor;
     }
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+using UI::ScrollElement;
+
+extern "C" uint32_t RtUi_ScrollElement_Type(const ScrollElement* self) {
+    return self->UI::ScrollElement::Type();
+}
+extern "C" const char* RtUi_ScrollElement_TypeName(const ScrollElement* self) {
+    return self->UI::ScrollElement::TypeName();
+}
+extern "C" void RtUi_ScrollElement_ComputeSize(ScrollElement* self) {
+    self->UI::ScrollElement::ComputeSize();
+}
+extern "C" void RtUi_ScrollElement_ComputeLayout(ScrollElement* self, int32_t x, int32_t y,
+                                                 int32_t right, int32_t bottom) {
+    self->UI::ScrollElement::ComputeLayout(x, y, right, bottom);
+}
+extern "C" void RtUi_ScrollElement_Draw(const ScrollElement* self, void* ctx, uint8_t alpha) {
+    self->UI::ScrollElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_ScrollElement_Update(ScrollElement* self, const void* time, void* ui,
+                                          void** dlgPtr, const UI::Element::UpdateState* state) {
+    self->UI::ScrollElement::Update(
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
+        *state);
+}
+
+// ??0ScrollElement@UI@@QEAA@XZ   0x18011a7f0 — a DOOR (B4b-2)
+extern "C" void* RtUi_ScrollElement_Ctor(void* selfv) {   // returns this in RAX, as every MSVC ctor does
+    ElementCtor(selfv);
+    PTR(selfv, 0x00) = Vtable();
+    ScrollElement* self = reinterpret_cast<ScrollElement*>(selfv);   // B.3.6 bridge
+    ::Sprite* const sprites[9] = {
+        &self->_trackStart, &self->_trackMiddle, &self->_trackEnd,
+        &self->_thumbStart, &self->_thumbMiddle, &self->_thumbEnd,
+        &self->_hotStart,   &self->_hotMiddle,   &self->_hotEnd };
+    for (::Sprite* s : sprites) {
+        s->spriteSheet = nullptr;
+        s->spriteIndex = -1;
+    }
+    self->_vertical       = 1;
+    self->_barColor       = 0xffffffffu;   // one unaligned qword of -1 ...
+    self->_unknown158     = 0xffffffffu;   // ... covering both
+    self->_currentValue   = 0.0f;
+    self->_displayPercent = 0.33333334f;   // 0x3eaaaaab
+    self->_maxValue       = 4.0f;          // 0x40800000
+    self->_dragAnchor     = 0.0f;          // the high half of that qword
+    self->_dragValue      = 0.0f;
+    return selfv;
+}
+
+// ??1ScrollElement@UI@@UEAA@XZ   0x18011a900 — a DOOR (B4b-2)
+extern "C" void RtUi_ScrollElement_Dtor(void* self) {
+    PTR(self, 0x00) = Vtable();
+    ElementDtor(self);
 }
 
 // ============================================================================

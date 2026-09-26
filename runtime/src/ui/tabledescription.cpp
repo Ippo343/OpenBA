@@ -42,25 +42,51 @@
 //   0x180079870  ~Array<Cell>, the canonical free-and-zero body
 // ??0TableElement@UI@@ (0x18011e2f0) is already ported (ui_factory_wave28.cpp).
 // ============================================================================
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/ui/ElementDescription.h"
+#include "../../types/ui/TableDescription.h"
+#include "../../types/ui/TableElement.h"
 #include "../../types/io/Serializer.h"
+
+// ENDGAME B.3.6 block C4: the layout moved to runtime/types/ui/
+// TableDescription.h (the real class). Every slot body below is a MEMBER; each
+// registered door is a one-line QUALIFIED delegation. The ctor and dtor stay
+// DOORS (B4b-2). RULE B6-5: every export the members reach is cached in a
+// namespace-scope std::atomic slot, never in a function-local static.
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtTableDescription()   { return RT_DATA_SLOT(void*, "??_7TableDescription@UI@@6B@"); }
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+std::atomic<void*> g_vtBase{nullptr};
+std::atomic<void*> g_vtExternal{nullptr};
+std::atomic<void*> g_vtElementDescription{nullptr};
+std::atomic<void*> g_vtTableDescription{nullptr};
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_memFree{nullptr};
+std::atomic<void*> g_externalDtor{nullptr};
+
+void* VtBase()               { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
+void* VtExternal()           { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
+void* VtElementDescription() { return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
+void* VtTableDescription()   { return AtomicExport(g_vtTableDescription, "??_7TableDescription@UI@@6B@"); }
 const uint8_t* TableDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@TableDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
 template <typename Fn>
@@ -82,11 +108,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
-
 using MemFreeFn = void (*)(void*);
 
 void ReleaseStringField(char** field) {
@@ -94,7 +115,8 @@ void ReleaseStringField(char** field) {
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*field);
+        reinterpret_cast<MemFreeFn>(AtomicExport(
+            g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(*field);
     } else {
         *field = nullptr;
     }
@@ -103,7 +125,7 @@ void ReleaseStringField(char** field) {
 }  // namespace
 
 // ============================================================================
-// ??0TableDescription@UI@@QEAA@XZ   retail 0x18011e7a0
+// ??0TableDescription@UI@@QEAA@XZ   retail 0x18011e7a0 — a DOOR (B4b-2)
 // ============================================================================
 extern "C" void* RtUi_TableDescription_Ctor(void* selfv) {
     uint8_t* p = static_cast<uint8_t*>(selfv);
@@ -126,56 +148,47 @@ extern "C" void* RtUi_TableDescription_Ctor(void* selfv) {
     *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 18011e80b
     *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 18011e80f
     *v = VtTableDescription();                                  // 18011e813
-    *reinterpret_cast<int32_t*>(p + 0x68) = 1;                  // 18011e81d  DWORD
-    // ONE UNALIGNED QWORD covering +0x6c..+0x73: _gridB = 1 and +0x70 = 0.
-    // +0x74 is left as it was — see the banner.
-    __builtin_memcpy(p + 0x6c, "\x01\x00\x00\x00\x00\x00\x00\x00", 8);  // 18011e824
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;                 // 18011e82c
-    *reinterpret_cast<uint64_t*>(p + 0x80) = 0;                 // 18011e830  _size + _cap
-    *reinterpret_cast<uint64_t*>(p + 0x88) = 0;                 // 18011e837
-    *reinterpret_cast<uint64_t*>(p + 0x90) = 0;                 // 18011e83e
+
+    UI::TableDescription* self = reinterpret_cast<UI::TableDescription*>(p);   // B.3.6 bridge
+    self->_columnCount = 1;                                     // 18011e81d  DWORD
+    // ONE UNALIGNED QWORD covering +0x6c..+0x73: _rowCount = 1 and _spacing = 0.
+    // _pad74 is left as it was — see the header.
+    self->_rowCount = 1;                                        // 18011e824
+    self->_spacing  = 0;
+    self->_cells._data     = nullptr;                           // 18011e82c
+    self->_cells._size     = 0;                                 // 18011e830  _size + _cap
+    self->_cells._capacity = 0;
+    self->_unknown88 = 0;                                       // 18011e837
+    self->_unknown90 = nullptr;                                 // 18011e83e
     return p;                                                   // 18011e845
 }
 
-extern "C" uint32_t RtUi_TableDescription_Type(const void*) {
+// ============================================================================
+// The member bodies (ENDGAME B.3.6 block C4)
+// ============================================================================
+namespace UI {
+
+uint32_t TableDescription::Type() const {
     const uint8_t* ti = TableDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_TableDescription_TypeName(const void*) {
+const char* TableDescription::TypeName() const {
     const uint8_t* ti = TableDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
-extern "C" int32_t RtUi_TableDescription_GetFileVersion(const void*) { return 0x204; }
+int32_t TableDescription::GetFileVersion() const { return 0x204; }
 
-extern "C" void* RtUi_TableDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180079070
-    return RtUi_TableDescription_Ctor(selfv);
+// 0x180079070 — the null test stays in the door.
+Object::External* TableDescription::Construct() {
+    return static_cast<Object::External*>(RtUi_TableDescription_Ctor(this));
 }
-extern "C" void* RtUi_TableDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    return RtUi_TableDescription_Ctor(selfv);
+// 0x180079050 — slot 0 (VIRTUAL, the minted row) with flag 0, then the ctor.
+Object::External* TableDescription::Reconstruct() {
+    DeletingDtor(0);
+    return static_cast<Object::External*>(RtUi_TableDescription_Ctor(this));
 }
-extern "C" void RtUi_TableDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
-// ??1TableDescription@UI@@UEAA@XZ  0x18011e6f0 — release the String at +0x90
-// FIRST, then destroy the cell Array, then the base's _textName at +0x60 under
-// the base vtable, then tail JMP.
-extern "C" void RtUi_TableDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtTableDescription();                                 // 18011e706
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x90));    // 18011e710
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180079870ull)(p + 0x78);             // 18011e74a
-
-    *v = VtElementDescription();                               // 18011e750
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x60));    // 18011e75a
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 18011e78c JMP
-}
+// 0x180079080
+void TableDescription::Destruct() { DeletingDtor(0); }
 
 // ============================================================================
 // ?Serialize@TableDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x18011e590
@@ -183,12 +196,10 @@ extern "C" void RtUi_TableDescription_Dtor(void* selfv) {
 // Three ints, then the cell count into a LOCAL, the read-path SetSize, and a
 // per-cell loop that emits {int, int, ExternalPtr}. The String at +0x90 is NOT
 // serialized — the destructor is the only body in the class that touches it.
-extern "C" bool RtUi_TableDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+bool TableDescription::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(p, stream);              // 18011e5aa
+    UI::ElementDescription::Serialize(stream);                 // 18011e5aa (qualified)
 
     Serializer ser = { stream, nullptr };
 
@@ -201,24 +212,24 @@ extern "C" bool RtUi_TableDescription_Serialize(void* selfv, void* streamv) {
 
     using ScalarFn = void (*)(void* rw, void* value, const char* name);
     void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x68, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x6c, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x70, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_columnCount, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_rowCount, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_spacing, nullptr);
 
-    int32_t n = *reinterpret_cast<int32_t*>(p + 0x80);         // 18011e61e
+    int32_t n = _cells._size;                                  // 18011e61e
     reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 18011e643 (re-read)
         using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x1800799a0ull)(p + 0x78, n);        // 18011e651
+        RtAddr<SetSizeFn>(0x1800799a0ull)(&_cells, n);         // 18011e651
     }
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
-    uint8_t* cell = *reinterpret_cast<uint8_t**>(p + 0x78);    // 18011e656 (once)
-    for (int32_t i = 0; i < n; ++i, cell += 0x10) {            // 18011e65e / 18011e6ae
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, cell,     nullptr);
-        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, cell + 4, nullptr);
-        RtAddr<FieldSerFn>(0x180038f90ull)(cell + 8, &ser);    // 18011e6a2
+    Cell* cell = _cells._data;                                 // 18011e656 (once)
+    for (int32_t i = 0; i < n; ++i, ++cell) {                  // 18011e65e / 18011e6ae
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &cell->column, nullptr);
+        reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &cell->row,    nullptr);
+        RtAddr<FieldSerFn>(0x180038f90ull)(&cell->desc, &ser); // 18011e6a2
     }
 
     if (rw != nullptr) {                                       // 18011e6b8
@@ -232,19 +243,19 @@ extern "C" bool RtUi_TableDescription_Serialize(void* selfv, void* streamv) {
 // ?CreateInstance@TableDescription@UI@@...   retail 0x18011e350
 // ============================================================================
 // TableElement is 0xf0 bytes (`MOV EDX,0xf0` at 0x18011e398); its ctor is CALLED
-// out of line (0x18011e2f0, ported by ui_factory_wave28.cpp).
+// out of line (0x18011e2f0, the tableelement.cpp door).
 //
-// This is a GRID BUILDER. For every (a, b) with a in [0, _gridA) and b in
-// [0, _gridB) it picks ONE cell description out of the flat cell list and
-// instantiates it at the flat index `_gridA * b + a`.
+// This is a GRID BUILDER. For every (a, b) with a in [0, _columnCount) and b in
+// [0, _rowCount) it picks ONE cell description out of the flat cell list and
+// instantiates it at the flat index `_columnCount * b + a`.
 //
 // *** THE PICK IS A FOUR-TIER SEARCH AND THE TIERS ARE NOT INTERCHANGEABLE. ***
 // One pass over the cells, tracking three candidates:
-//   exact     cell.col == a && cell.row == b        -> taken IMMEDIATELY,
+//   exact     cell.column == a && cell.row == b     -> taken IMMEDIATELY,
 //                                                      the pass stops
-//   wildcardA cell.col <  0 && cell.row == b        -> FIRST such cell only
-//   wildcardB cell.row <  0 && cell.col == a        -> FIRST such cell only
-//   wildcardAB cell.col < 0 && cell.row < 0         -> the LAST such cell
+//   wildcardA cell.column <  0 && cell.row == b     -> FIRST such cell only
+//   wildcardB cell.row <  0 && cell.column == a     -> FIRST such cell only
+//   wildcardAB cell.column < 0 && cell.row < 0      -> the LAST such cell
 // and the fallback order is exact, wildcardA, wildcardB, wildcardAB; if none
 // matched, THE CELL IS LEFT EMPTY (no element is created for it).
 //
@@ -254,58 +265,55 @@ extern "C" bool RtUi_TableDescription_Serialize(void* selfv, void* streamv) {
 // branch is a bare `CMOVL R8D,EAX` with NO such guard (keep the last). Three
 // lines apart in the shipped code, and deliberate.
 //
-// THE FLAT INDEX IS `_gridA * b + a`, computed with the DESCRIPTION's _gridA
-// (0x18011e4f2), and then recomputed a second time from 64-bit copies of the
-// same counters (0x18011e524) for the parent write. Retail computes it twice;
-// so does this.
-extern "C" void** RtUi_TableDescription_CreateInstance(const void* selfv, void** ret,
-                                                       const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
+// THE FLAT INDEX IS `_columnCount * b + a`, computed with the DESCRIPTION's
+// count (0x18011e4f2), and then recomputed a second time from 64-bit copies of
+// the same counters (0x18011e524) for the parent write. Retail computes it
+// twice; so does this.
+Object::InternalPtr<Element>* TableDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     using MemAllocFn = void* (*)(uint64_t size, int align);
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xf0, 8);   // 18011e398 (inlined)
 
-    uint8_t* elem = nullptr;
+    TableElement* elem = nullptr;
     if (raw != nullptr) {                                      // 18011e3c3
         using TableElementCtorFn = void* (*)(void*);
-        elem = static_cast<uint8_t*>(
+        elem = reinterpret_cast<TableElement*>(                // B.3.6 bridge
             RtAddr<TableElementCtorFn>(0x18011e2f0ull)(raw));  // 18011e3c8
     }
 
     void* slot = elem;                                         // 18011e3d5
     using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 18011e3e2
+    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 18011e3e2
 
-    const int32_t gridA = *reinterpret_cast<const int32_t*>(self + 0x68);
-    const int32_t gridB = *reinterpret_cast<const int32_t*>(self + 0x6c);
+    const int32_t columns = _columnCount;
+    const int32_t rows    = _rowCount;
 
-    *reinterpret_cast<int32_t*>(elem + 0xc4) = gridA;          // 18011e3ea  CROSSED:
-    *reinterpret_cast<int32_t*>(elem + 0xc0) = gridB;          // 18011e3f4  A->0xc4, B->0xc0
+    elem->_columnCount = columns;                              // 18011e3ea  CROSSED:
+    elem->_rowCount    = rows;                                 // 18011e3f4  +0x68->0xc4, +0x6c->0xc0
 
     using SetSizeFn = void (*)(void* array, int n);
-    RtAddr<SetSizeFn>(0x18002fea0ull)(elem + 0xd0, gridB);     // 18011e405  Array<int32>
-    RtAddr<SetSizeFn>(0x18002fea0ull)(elem + 0xe0, gridA);     // 18011e414  Array<int32>
+    RtAddr<SetSizeFn>(0x18002fea0ull)(&elem->_rowSizes, rows);        // 18011e405  Array<int32>
+    RtAddr<SetSizeFn>(0x18002fea0ull)(&elem->_columnSizes, columns);  // 18011e414  Array<int32>
 
-    *reinterpret_cast<int32_t*>(elem + 0xc8) =
-        *reinterpret_cast<const int32_t*>(self + 0x70);        // 18011e41c
+    elem->_spacing = _spacing;                                 // 18011e41c
 
     using PtrSetSizeFn = void (*)(void* array, int n);
-    RtAddr<PtrSetSizeFn>(0x1800764c0ull)(elem + 0xa0, gridA * gridB);  // 18011e431
+    RtAddr<PtrSetSizeFn>(0x1800764c0ull)(&elem->_children, columns * rows);  // 18011e431
 
-    for (int32_t a = 0; a < *reinterpret_cast<const int32_t*>(self + 0x68); ++a) {
-        for (int32_t b = 0; b < *reinterpret_cast<const int32_t*>(self + 0x6c); ++b) {
+    for (int32_t a = 0; a < _columnCount; ++a) {
+        for (int32_t b = 0; b < _rowCount; ++b) {
             int32_t wildA  = -1;                               // 18011e460  R9
             int32_t wildB  = -1;                               // 18011e464  R10
             int32_t wildAB = -1;                               // 18011e467  R8
             int32_t pick   = -1;
 
-            const int32_t cells = *reinterpret_cast<const int32_t*>(self + 0x80);
+            const int32_t cells = _cells._size;
             bool exact = false;
             if (cells > 0) {                                   // 18011e473
-                const uint8_t* c = *reinterpret_cast<const uint8_t* const*>(self + 0x78);
-                for (int32_t i = 0; i < cells; ++i, c += 0x10) {
-                    const int32_t col = *reinterpret_cast<const int32_t*>(c);
-                    const int32_t row = *reinterpret_cast<const int32_t*>(c + 4);
+                const Cell* c = _cells._data;
+                for (int32_t i = 0; i < cells; ++i, ++c) {
+                    const int32_t col = c->column;
+                    const int32_t row = c->row;
 
                     if (a == col && b == row) {                // 18011e482 / 18011e486
                         pick = i; exact = true; break;         // 18011e4cb
@@ -327,35 +335,90 @@ extern "C" void** RtUi_TableDescription_CreateInstance(const void* selfv, void**
                 if (pick < 0) continue;                        // 18011e4e5 JS -> skip
             }
 
-            const uint8_t* cell =
-                *reinterpret_cast<const uint8_t* const*>(self + 0x78) + pick * 0x10;
+            const Cell* cell = _cells._data + pick;
 
-            const int32_t flat =
-                *reinterpret_cast<const int32_t*>(self + 0x68) * b + a;   // 18011e4f2
+            const int32_t flat = _columnCount * b + a;         // 18011e4f2
 
-            void** kids = *reinterpret_cast<void** const*>(elem + 0xa0);  // 18011e4fd
-            void** dst  = kids + flat;                          // 18011e504
+            Element** kids = elem->_children._data;            // 18011e4fd
+            Element** dst  = kids + flat;                      // 18011e504
 
             using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
             void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(
-                dialog, &slot, *reinterpret_cast<void* const*>(cell + 8));  // 18011e519
+                dialog, &slot, cell->desc);                    // 18011e519
 
-            *dst = *made;                                       // 18011e521
+            *dst = static_cast<Element*>(*made);               // 18011e521
 
             // The flat index RECOMPUTED, and the array data pointer RE-READ,
             // before the parent write (0x18011e524..0x18011e53a). Retail does
             // not reuse `dst`; neither does this.
-            const int64_t flat2 =
-                static_cast<int64_t>(*reinterpret_cast<const int32_t*>(self + 0x68)) *
-                    static_cast<int64_t>(b) + static_cast<int64_t>(a);
-            void** kids2 = *reinterpret_cast<void** const*>(elem + 0xa0);
-            uint8_t* child = static_cast<uint8_t*>(kids2[flat2]);
-            *reinterpret_cast<void**>(child + 0x98) = elem;     // 18011e53a
+            const int64_t flat2 = static_cast<int64_t>(_columnCount) *
+                                  static_cast<int64_t>(b) + static_cast<int64_t>(a);
+            Element* child = elem->_children._data[flat2];
+            child->_parent = elem;                             // 18011e53a
         }
     }
 
-    *ret = elem;                                               // 18011e562 / 18011e567
+    *reinterpret_cast<void**>(ret) = elem;                     // 18011e562 / 18011e567
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+using UI::TableDescription;
+
+extern "C" uint32_t RtUi_TableDescription_Type(const TableDescription* self) {
+    return self->UI::TableDescription::Type();
+}
+extern "C" const char* RtUi_TableDescription_TypeName(const TableDescription* self) {
+    return self->UI::TableDescription::TypeName();
+}
+extern "C" int32_t RtUi_TableDescription_GetFileVersion(const TableDescription* self) {
+    return self->UI::TableDescription::GetFileVersion();
+}
+extern "C" void* RtUi_TableDescription_Construct(TableDescription* self) {
+    if (self == nullptr) return nullptr;                       // 180079070
+    return self->UI::TableDescription::Construct();
+}
+extern "C" void* RtUi_TableDescription_Reconstruct(TableDescription* self) {
+    return self->UI::TableDescription::Reconstruct();
+}
+extern "C" void RtUi_TableDescription_Destruct(TableDescription* self) {
+    self->UI::TableDescription::Destruct();
+}
+extern "C" bool RtUi_TableDescription_Serialize(TableDescription* self, void* stream) {
+    return self->UI::TableDescription::Serialize(stream);
+}
+// RDX is the caller's slot; the member writes it and hands it back (B6-2).
+extern "C" void** RtUi_TableDescription_CreateInstance(const TableDescription* self, void** ret,
+                                                       const void* dialog) {
+    return reinterpret_cast<void**>(self->UI::TableDescription::CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
+        static_cast<const UI::Dialog*>(dialog)));
+}
+
+// ??1TableDescription@UI@@UEAA@XZ  0x18011e6f0 — a DOOR (B4b-2). Release the
+// String at +0x90 FIRST, then destroy the cell Array, then the base's _textName
+// at +0x60 under the base vtable, then tail JMP.
+extern "C" void RtUi_TableDescription_Dtor(void* selfv) {
+    TableDescription* self = reinterpret_cast<TableDescription*>(selfv);   // B.3.6 bridge
+    void** v = reinterpret_cast<void**>(selfv);
+
+    *v = VtTableDescription();                                 // 18011e706
+    ReleaseStringField(&self->_unknown90);                     // 18011e710
+
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x180079870ull)(&self->_cells);        // 18011e74a
+
+    *v = VtElementDescription();                               // 18011e750
+    ReleaseStringField(&self->_textName);                      // 18011e75a
+
+    using ExtDtorFn = void (*)(void*);
+    reinterpret_cast<ExtDtorFn>(AtomicExport(
+        g_externalDtor, "??1External@Object@@UEAA@XZ"))(selfv);   // 18011e78c JMP
 }
 
 int RtUiTableDescriptionRegister() {

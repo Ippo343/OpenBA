@@ -12,66 +12,47 @@
 //    4    ComputeSize           0x1801101d0  here
 //    5    ComputeLayout         0x180110360  here
 //    6    Draw                  0x1801103e0  here
-//   (3, 7..11 are UI::Element's own bodies, already ported in element.cpp)
+//   (3, 7..11 are UI::Element's own bodies, already ported in element*.cpp)
 //
-// plus ??0BorderElement@UI@@QEAA@XZ         0x18010fd40
-//      ??0BorderElement@UI@@QEAA@AEBV01@@Z  0x180041250
+// plus ??0BorderElement@UI@@QEAA@AEBV01@@Z  0x180041250 (copy)
 //      ??1BorderElement@UI@@UEAA@XZ         0x180041230
+// (`??0BorderElement@UI@@QEAA@XZ` 0x18010fd40 is factory_ui1.cpp's door.)
 //
-// LAYOUT — 0x150 bytes (`MOV EDX,0x150` at 0x180041522), which is exactly
-// UI::Element's 0xC0 plus NINE UI::Sprite values of 0x10 each. The constructor
-// at 0x18010fd40 writes all nine as {sheet = 0, index = -1}, so the count is
-// not inferred from the size, it is enumerated.
-//
-// THE NINE ARE A 3x3 NINE-SLICE, ROW MAJOR:
-//
-//     +0x0c0 topLeft     +0x0d0 top        +0x0e0 topRight
-//     +0x0f0 left        +0x100 centre     +0x110 right
-//     +0x120 bottomLeft  +0x130 bottom     +0x140 bottomRight
-//
-// That assignment is READ OUT OF Draw (0x1801103e0), not guessed: the corner
-// sprites are the ones drawn with the point-form AddSprite at the four extreme
-// coordinates, and the edges are the ones stretched between them.
-//
-// `??0BorderElement@UI@@QEAA@XZ` (0x18010fd40) is NOT here: it is already
-// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
-// (the factory roster). One address, one owner.
+// ENDGAME B.3.6 block C1: the five slot bodies are MEMBERS of
+// `UI::BorderElement` (runtime/types/ui/BorderElement.h, which now owns the
+// nine-slice layout — nine UI::Sprite at +0xc0..+0x14f, row major — and its
+// evidence). The doors are one-line QUALIFIED delegations.
 // ============================================================================
 #include "element_common.h"
+#include "../../types/ui/BorderElement.h"
 
 using namespace rtuielem;
 
 namespace {
 
-// The nine slots, in table order.
-constexpr int kTopLeft     = 0x0c0;
-constexpr int kTop         = 0x0d0;
-constexpr int kTopRight    = 0x0e0;
-constexpr int kLeft        = 0x0f0;
-constexpr int kCentre      = 0x100;
-constexpr int kRight       = 0x110;
-constexpr int kBottomLeft  = 0x120;
-constexpr int kBottom      = 0x130;
-constexpr int kBottomRight = 0x140;
-constexpr int kSizeOf      = 0x150;
+// B6-5: namespace-scope atomic door cache for the member bodies.
+std::atomic<void*> g_borderTypeInfo{nullptr};
+const uint8_t* BorderElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_borderTypeInfo, "?_typeInfo@BorderElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+// The copy-ctor door only.
+void* VtBorderElement() { return RT_DATA_SLOT(void*, "??_7BorderElement@UI@@6B@"); }
 
-static_assert(kBottomRight + 0x10 == kSizeOf,
-              "nine 0x10-byte UI::Sprite values fill BorderElement to 0x150");
-
-RTELEM_TYPE_SLOTS(BorderElement)
-
-// UI::SpriteContext, reached by address — it is the sprite lane's class.
+// UI::SpriteContext (block D's class), reached by address.
 using AddSpritePtFn   = void (*)(void* ctx, const void* sprite, int x, int y, uint32_t color);
 using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
                                  int l, int t, int r, int b, uint32_t color);
 
-using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
 using ElementDtorFn     = void  (*)(void* self);
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(BorderElement)
+namespace UI {
+
+uint32_t BorderElement::Type() const { return TypeIdOf(BorderElementTypeInfo()); }
+const char* BorderElement::TypeName() const { return TypeNameOf(BorderElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@BorderElement@UI@@UEAAXXZ   0x1801101d0
@@ -88,19 +69,18 @@ RTELEM_TYPE_BODIES(BorderElement)
 // RIGHT-column pair against a LEFT-column pair while the width compares a
 // BOTTOM-row pair against a mixed pair. That is what 0x180110276..0x1801102e2
 // computes and it is transcribed rather than normalised.
-extern "C" void RtUi_BorderElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
+void BorderElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
 
-    const int tlW = SpriteW(self + kTopLeft);
-    const int trW = SpriteW(self + kTopRight);
-    const int blW = SpriteW(self + kBottomLeft);
-    const int brW = SpriteW(self + kBottomRight);
+    const int tlW = SpriteW(&_topLeft);
+    const int trW = SpriteW(&_topRight);
+    const int blW = SpriteW(&_bottomLeft);
+    const int brW = SpriteW(&_bottomRight);
 
-    const int tlH = SpriteH(self + kTopLeft);
-    const int blH = SpriteH(self + kBottomLeft);
-    const int trH = SpriteH(self + kTopRight);
-    const int brH = SpriteH(self + kBottomRight);
+    const int tlH = SpriteH(&_topLeft);
+    const int blH = SpriteH(&_bottomLeft);
+    const int trH = SpriteH(&_topRight);
+    const int brH = SpriteH(&_bottomRight);
 
     int w = blW + brW;
     if (w < trW + tlW) w = trW + tlW;
@@ -108,9 +88,9 @@ extern "C" void RtUi_BorderElement_ComputeSize(void* selfv) {
     int h = brH + trH;
     if (h < blH + tlH) h = blH + tlH;
 
-    I32(self, kElemLayoutWidth) = w;
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
-    I32(self, kElemLayoutHeight) = h;
+    _layoutWidth = w;
+    _flags &= ~kFlagNeedsSizeCalc;
+    _layoutHeight = h;
 }
 
 // ============================================================================
@@ -118,17 +98,14 @@ extern "C" void RtUi_BorderElement_ComputeSize(void* selfv) {
 // ============================================================================
 // NOT the standard aligned body: a border always fills the box it is given,
 // inset by its own padding. No ComputeSize call, no alignment, no clamping.
-extern "C" void RtUi_BorderElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
+void BorderElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    Element* border = static_cast<Element*>(_border);
+    if (border != nullptr) border->ComputeLayout(x, y, w, h);
 
-    void* border = P(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<ComputeLayoutFn>(border, kSlotComputeLayout)(border, x, y, w, h);
-
-    I32(self, kElemLayoutRight)  = w - I32(self, kElemRightPad);
-    I32(self, kElemLayoutLeft)   = I32(self, kElemLeftPad) + x;
-    I32(self, kElemLayoutBottom) = h - I32(self, kElemBottomPad);
-    I32(self, kElemLayoutTop)    = I32(self, kElemTopPad) + y;
+    _layoutRight  = w - _rightPad;
+    _layoutLeft   = _leftPad + x;
+    _layoutBottom = h - _bottomPad;
+    _layoutTop    = _topPad + y;
 }
 
 // ============================================================================
@@ -144,59 +121,78 @@ extern "C" void RtUi_BorderElement_ComputeLayout(void* selfv, int x, int y, int 
 // re-reads e.g. `SpriteH(bottomLeft)` in three separate places rather than
 // caching it, and the reads are interleaved with the calls. The calls can
 // change a sprite sheet (they do not today), so the re-reads are kept.
-extern "C" void RtUi_BorderElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+void BorderElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    const Element* border = static_cast<const Element*>(_border);
+    if (border != nullptr) border->Draw(context, alpha);
 
-    void* border = Pc(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<DrawFn>(border, kSlotDraw)(border, ctx, alpha);
+    const uint32_t base = _color;
+    alpha = DimAlpha(this, alpha);
+    const uint32_t c = rtuielem::ComputeColor(base, alpha);
 
-    const uint32_t base = U32c(self, kElemColor);
-    alpha = DimAlpha(self, alpha);
-    const uint32_t c = ComputeColor(base, alpha);
+    auto L = [&] { return _layoutLeft; };
+    auto T = [&] { return _layoutTop; };
+    auto R = [&] { return _layoutRight; };
+    auto B = [&] { return _layoutBottom; };
 
-    auto L = [&] { return I32c(self, kElemLayoutLeft); };
-    auto T = [&] { return I32c(self, kElemLayoutTop); };
-    auto R = [&] { return I32c(self, kElemLayoutRight); };
-    auto B = [&] { return I32c(self, kElemLayoutBottom); };
-
+    void* ctx = &context;
     const auto pt   = RtAddr<AddSpritePtFn>(0x18011cf00ull);
     const auto rect = RtAddr<AddSpriteRectFn>(0x18011d3c0ull);
 
-    pt(ctx, self + kTopLeft, L(), T(), c);                                   // 180110469
+    pt(ctx, &_topLeft, L(), T(), c);                                         // 180110469
 
-    rect(ctx, self + kTop,                                                   // 18011050d
-         L() + SpriteW(self + kTopLeft), T(),
-         R() - SpriteW(self + kTopRight), T() + SpriteH(self + kTop), c);
+    rect(ctx, &_top,                                                         // 18011050d
+         L() + SpriteW(&_topLeft), T(),
+         R() - SpriteW(&_topRight), T() + SpriteH(&_top), c);
 
-    pt(ctx, self + kTopRight, R() - SpriteW(self + kTopRight), T(), c);      // 180110545
+    pt(ctx, &_topRight, R() - SpriteW(&_topRight), T(), c);                  // 180110545
 
-    rect(ctx, self + kLeft,                                                  // 1801106b8
-         L(), T() + SpriteH(self + kTopLeft),
-         L() + SpriteW(self + kLeft), B() - SpriteH(self + kBottomLeft), c);
+    rect(ctx, &_left,                                                        // 1801106b8
+         L(), T() + SpriteH(&_topLeft),
+         L() + SpriteW(&_left), B() - SpriteH(&_bottomLeft), c);
 
-    rect(ctx, self + kCentre,                                                // 1801106b8 (2nd)
-         L() + SpriteW(self + kLeft), T() + SpriteH(self + kTop),
-         R() - SpriteW(self + kRight), B() - SpriteH(self + kBottom), c);
+    rect(ctx, &_centre,                                                      // 1801106b8 (2nd)
+         L() + SpriteW(&_left), T() + SpriteH(&_top),
+         R() - SpriteW(&_right), B() - SpriteH(&_bottom), c);
 
-    rect(ctx, self + kRight,                                                 // 18011074e
-         R() - SpriteW(self + kRight), T() + SpriteH(self + kTopRight),
-         R(), B() - SpriteH(self + kBottomLeft), c);
+    rect(ctx, &_right,                                                       // 18011074e
+         R() - SpriteW(&_right), T() + SpriteH(&_topRight),
+         R(), B() - SpriteH(&_bottomLeft), c);
 
-    pt(ctx, self + kBottomLeft, L(), B() - SpriteH(self + kBottomLeft), c);  // 180110786
+    pt(ctx, &_bottomLeft, L(), B() - SpriteH(&_bottomLeft), c);              // 180110786
 
-    rect(ctx, self + kBottom,                                                // 180110826
-         L() + SpriteW(self + kBottomLeft), B() - SpriteH(self + kBottom),
-         R() - SpriteW(self + kBottomRight), B(), c);
+    rect(ctx, &_bottom,                                                      // 180110826
+         L() + SpriteW(&_bottomLeft), B() - SpriteH(&_bottom),
+         R() - SpriteW(&_bottomRight), B(), c);
 
-    pt(ctx, self + kBottomRight,                                             // 180110877
-       R() - SpriteW(self + kBottomRight), B() - SpriteH(self + kBottomRight), c);
+    pt(ctx, &_bottomRight,                                                   // 180110877
+       R() - SpriteW(&_bottomRight), B() - SpriteH(&_bottomRight), c);
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS
+// ============================================================================
+extern "C" uint32_t RtUi_BorderElement_Type(const void* self) {
+    return reinterpret_cast<const UI::BorderElement*>(self)->UI::BorderElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_BorderElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::BorderElement*>(self)->UI::BorderElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_BorderElement_ComputeSize(void* selfv) {
+    reinterpret_cast<UI::BorderElement*>(selfv)->UI::BorderElement::ComputeSize();   // B.3.6 bridge
+}
+extern "C" void RtUi_BorderElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
+    reinterpret_cast<UI::BorderElement*>(selfv)->UI::BorderElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
+}
+extern "C" void RtUi_BorderElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::BorderElement*>(selfv)->UI::BorderElement::Draw(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
 }
 
 // ============================================================================
-// ??0BorderElement@UI@@QEAA@XZ   0x18010fd40
+// Copy constructor / destructor — DOORS (B4b-2), unchanged
 // ============================================================================
-
 // ??0BorderElement@UI@@QEAA@AEBV01@@Z   0x180041250
 // Eighteen qword copies, i.e. the nine sprites verbatim INCLUDING each one's
 // pad dword — a memcpy of 0x90 bytes would be equivalent, but the loop keeps
@@ -206,7 +202,7 @@ extern "C" void* RtUi_BorderElement_CopyCtor(void* selfv, const void* otherv) {
     const uint8_t* other = static_cast<const uint8_t*>(otherv);
     RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
     P(self, 0x00) = VtBorderElement();
-    for (int off = kTopLeft; off < kSizeOf; off += 8)
+    for (size_t off = offsetof(UI::BorderElement, _topLeft); off < sizeof(UI::BorderElement); off += 8)
         *reinterpret_cast<uint64_t*>(self + off) =
             *reinterpret_cast<const uint64_t*>(other + off);
     return self;

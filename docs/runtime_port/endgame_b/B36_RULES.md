@@ -481,6 +481,22 @@ Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry
 > `combodialog` +0x10 is `_ui`, +0xb8 is `_list` (old comments said otherwise). `DialogTimer`'s
 > `_remaining`/`_period` names are swapped per dialog.cpp's own notes; unrenamed.
 
+> **CORRECTION to B6-4.5 and §2.4 (block D, 2026-09-25) — `SpriteContext` is NOT trivially
+> copyable.** Retail exports a deep copy constructor (`??0SpriteContext@UI@@QEAA@AEBV01@@Z`
+> 0x1800321c0, last store at +0x80) and a destructor (0x18011d250) that frees +0x10, +0x40, +0x58
+> and +0x68 — four `Collection::Array` members. So the class is concrete (a stack object in
+> `saveload_draw.cpp:734`) with a public trivial default ctor but no `is_trivially_copyable`
+> assert; `sizeof == 0x88` (ctor stores through +0x70, `Begin` writes +0x80, copy ctor ends at
+> +0x80). +0x50 is `RtUI::FontLayout _layout`; `_clipRegion` (+0x78) is `const Video::Viewport*`.
+> `SpriteContext.h`'s old `FontGlyph` was the entry type of `Font::Layout` (removed;
+> `FontLayoutEntry::_codepoint` is `_glyph`); `Font` +0x54 is `_baseLine`; `Font`'s 16-byte glyph
+> row is retail's `UI::Font::Kerning` (`GetKern` 0x180031dd0 returns a pointer to it). The old
+> banner's "AddSpriteDraw/Flush/Begin are not exported" was wrong — all three are exports.
+> Block D's aliases: `::Sprite`, `::UIString`, `::SpriteSheet`, `::SpriteInfo`, `::StringTable`,
+> `::StringTableTextEntry`, `::UiStringTable`, `RtSave::Sprite` → the `UI::` classes;
+> `runtime/src/save/saveload.cpp` and `saveload_update.cpp` needed an 11-line member rename
+> (`.sheet/.index` → `.spriteSheet/.spriteIndex`).
+
 ## 11–12. (reserved for the fragment passes and caller rounds)
 
 ## 13. NOT VERIFIED — read this before citing anything above
