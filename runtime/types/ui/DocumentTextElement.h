@@ -205,7 +205,10 @@ public:
     // Bodies in runtime/src/ui/widgets_layout.cpp (doors; fragment pass).
     System::String GetLink(int32_t index) const;                  // 0x18003c0c0 RETSLOT
     void SetText(const System::String& text);                     // 0x18003c010
-    void SetText(::UIString text);                                // 0x18003bfd0
+    // `?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z` — the 0x10-byte
+    // UI::String BY VALUE arrives by HIDDEN POINTER (RULE B6-11), so the member
+    // takes the pointer (fragment pass F1; was declared by value).
+    void SetText(const ::UIString* text);                         // 0x18003bfd0
 
     DocumentTextElement(const DocumentTextElement& src);          // 0x18003c140  door (copy ctor)
     DocumentTextElement& operator=(const DocumentTextElement& src); // 0x18003c3d0 not ported
