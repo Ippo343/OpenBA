@@ -43,6 +43,15 @@
 #include <cstdio>
 #include <cstdlib>
 #include "dialog_controller_vtable.h"
+#include "object/Internal.h"
+#include <new>
+// ENDGAME B.3.8 PNL: the DialogController classes this file registers.
+#include "Dialog/AttendanceUI.h"
+#include "Dialog/BuildRequirementUI.h"
+#include "Dialog/CemeteryUI.h"
+#include "Dialog/ConsumeProduceUI.h"
+#include "Dialog/HotKeyToolTipUI.h"
+#include "Dialog/TitleDescToolTipUI.h"
 
 namespace {
 
@@ -115,15 +124,9 @@ struct StubVtableInit {
 // composes the title (ToolbarDescription+0x38 name key), the icon, and the
 // cost labels. Construction stays the stub alloc+zero+vtable; the engine fills the
 // base fields afterward.
-struct BuildRequirementUI;  // opaque; the reimpl casts internally
+
 extern void BuildRequirementUI_Slot4(BuildRequirementUI* self);
 namespace uistub_BuildRequirementUI {
-    static void* g_vt[kStubVtableSlots];
-    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("BuildRequirementUI"); return c; }
-    void* Dtor(void* self, uint32_t flags) {
-        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
-        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
-    }
     // Lazy-fill the exe-.rdata type-id globals BuildRequirementUI_Slot4 dereferences.
     // In standalone these resolve from raw exe .rdata addresses → null, so the real
     // reimpl's first `*g_TypeId_ComponentDescription_FC` would fault. Fill them from the live
@@ -139,29 +142,42 @@ namespace uistub_BuildRequirementUI {
         if (!g_TypeId_RawMaterialDescription){ s_rawMat=::Object::ResolveTypeIdByNameLazy("RawMaterialDescription"); if(s_rawMat) g_TypeId_RawMaterialDescription=&s_rawMat; }
         if (!g_TypeId_Element)        { s_internal=::Object::ResolveTypeIdByNameLazy("Internal");           if(s_internal) g_TypeId_Element=&s_internal; }
     }
-    void Slot4(void* self) {
-        EnsureTypeIds();
-        // The real reimpl unconditionally dereferences these globals; if any failed
-        // to resolve, skip rather than fault.
-        if (!self || !g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
-            || !g_TypeId_Element || !g_TypeId_ToolbarDescription_FC
-            || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
-        BuildRequirementUI_Slot4(reinterpret_cast<BuildRequirementUI*>(self));
-    }
-    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+}  // namespace uistub_BuildRequirementUI
 
-// Wave 10D lane VTFID: retail's BuildRequirementUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "BuildRequirementUI", &StubNop);
-    struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
-    void Zero(void* p){ for(size_t o=0;o<(size_t)0x60;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
-    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x60,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
-    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+// [4] 0x14005e7c0. The real reimpl unconditionally dereferences these globals;
+// if any failed to resolve, skip rather than fault (standalone-only).
+void BuildRequirementUI::OnCreated() {
+    uistub_BuildRequirementUI::EnsureTypeIds();
+    if (!g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity
+        || !g_TypeId_Element || !g_TypeId_ToolbarDescription_FC
+        || !g_TypeId_ResourceComponent || !g_TypeId_RawMaterialDescription) return;
+    BuildRequirementUI_Slot4(this);
 }
-REGISTER_TYPE(BuildRequirementUI, "UI::DialogController",
-              &uistub_BuildRequirementUI::Factory, &uistub_BuildRequirementUI::InPlace);
+
+// [0] 0x140010860: ~BuildRequirementUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* BuildRequirementUI::DeletingDtor(unsigned flags) {
+    this->~BuildRequirementUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400107f0: MemAlloc(0x60, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* BuildRequirementUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BuildRequirementUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) BuildRequirementUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* BuildRequirementUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) BuildRequirementUI());
+}
+
+DEFINE_EXE_VTABLE(BuildRequirementUI, "_ZTV18BuildRequirementUI")
+DEFINE_EXE_TYPE(BuildRequirementUI, "UI::DialogController")
 
 // ---- HotKeyToolTipUI: PROMOTED to the real reimpl (2026-06-28) ---------------
 // This controller is bound to the "textHotKey"/"textToolTip" TextElements of
@@ -175,12 +191,6 @@ REGISTER_TYPE(BuildRequirementUI, "UI::DialogController",
 // BuildRequirementUI promotion above.
 namespace Game { void HotKeyToolTipUI_Slot4(void* self); }
 namespace uistub_HotKeyToolTipUI {
-    static void* g_vt[kStubVtableSlots];
-    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("HotKeyToolTipUI"); return c; }
-    void* Dtor(void* self, uint32_t flags) {
-        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
-        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
-    }
     // The reimpl unconditionally dereferences g_TypeId_Element; in
     // standalone it resolves from a raw exe .rdata addr -> null. Lazy-fill it
     // from the live Factory tree (post-Engine::Startup). NB: Object::Internal is
@@ -192,25 +202,39 @@ namespace uistub_HotKeyToolTipUI {
             if (s_internal) g_TypeId_Element=&s_internal;
         }
     }
-    void Slot4(void* self) {
-        EnsureTypeIds();
-        if (!self || !g_TypeId_Element) return;
-        Game::HotKeyToolTipUI_Slot4(self);
-    }
-    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+}  // namespace uistub_HotKeyToolTipUI
 
-// Wave 10D lane VTFID: retail's HotKeyToolTipUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "HotKeyToolTipUI", &StubNop);
-    struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
-    void Zero(void* p){ for(size_t o=0;o<(size_t)0x30;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
-    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x30,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
-    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+// [4] 0x14006a980.
+void HotKeyToolTipUI::OnCreated() {
+    uistub_HotKeyToolTipUI::EnsureTypeIds();
+    if (!g_TypeId_Element) return;
+    Game::HotKeyToolTipUI_Slot4(this);
 }
-REGISTER_TYPE(HotKeyToolTipUI, "UI::DialogController",
-              &uistub_HotKeyToolTipUI::Factory, &uistub_HotKeyToolTipUI::InPlace);
+
+// [0] 0x140011e70: ~HotKeyToolTipUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* HotKeyToolTipUI::DeletingDtor(unsigned flags) {
+    this->~HotKeyToolTipUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140011e20: MemAlloc(0x30, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* HotKeyToolTipUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HotKeyToolTipUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HotKeyToolTipUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* HotKeyToolTipUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HotKeyToolTipUI());
+}
+
+DEFINE_EXE_VTABLE(HotKeyToolTipUI, "_ZTV15HotKeyToolTipUI")
+DEFINE_EXE_TYPE(HotKeyToolTipUI, "UI::DialogController")
 
 // ---- AttendanceUI: PROMOTED to the real reimpl (2026-08-15) ------------------
 // Symptom: the school panel read "students" with no number in front of it.
@@ -233,24 +257,18 @@ REGISTER_TYPE(HotKeyToolTipUI, "UI::DialogController",
 //   idx7 (+0x38) 0x14005dc50 Slot7 — per-frame: set current value + text param 0
 // Every other slot is one of the shared 0x14003a9xx no-op thunks, so wiring
 // these two is full behavioural coverage for this class.
-struct AttendanceUI;   // opaque; the reimpl casts internally
-struct ConsumeProduceUI;   // opaque; the reimpl casts internally
+
+
 extern void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
 extern void ConsumeProduceUI_Slot7(ConsumeProduceUI* self);
 extern void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t p2, int p3, int p4);
 
-struct CemeteryUI;     // opaque; the reimpl casts internally
+
 extern void CemeteryUI_Slot4(CemeteryUI* self);
 extern void CemeteryUI_Slot7(CemeteryUI* self);
 extern void AttendanceUI_Slot4(AttendanceUI* self);
 extern void AttendanceUI_Slot7(AttendanceUI* self);
 namespace uistub_AttendanceUI {
-    static void* g_vt[kStubVtableSlots];
-    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("AttendanceUI"); return c; }
-    void* Dtor(void* self, uint32_t flags) {
-        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
-        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
-    }
     // ProgressElement's type-id .rdata slot is null unless BANISHED_LIVE_ELEMENT_TIDS
     // is on, and IsDerivedFrom(elem, 0) is always false — which would leave +0x30 null
     // and turn Slot4's +0x124 write into a null-deref. Same private by-name resolve
@@ -293,33 +311,45 @@ namespace uistub_AttendanceUI {
             && g_TypeId_AttendanceDescription && *g_TypeId_AttendanceDescription
             && g_TypeId_AttendanceComponent && *g_TypeId_AttendanceComponent;
     }
-    void Slot4(void* self) {
-        EnsureTypeIds();
-        if (!self || !Ready()) return;
-        AttendanceUI_Slot4(reinterpret_cast<AttendanceUI*>(self));
-    }
-    void Slot7(void* self) {
-        EnsureTypeIds();
-        if (!self || !Ready()) return;
-        AttendanceUI_Slot7(reinterpret_cast<AttendanceUI*>(self));
-    }
-    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+}  // namespace uistub_AttendanceUI
 
-// Wave 10D lane VTFID: retail's AttendanceUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "AttendanceUI", &StubNop);
-    // ⚠ Declared AFTER g_init: StubVtableInit re-fills every slot with StubNop, so a
-    // slot written before it runs is erased (project_next_stub_controller_sweep).
-    struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
-                                  g_vt[7]=reinterpret_cast<void*>(&Slot7); } } g_sw;
-    void Zero(void* p){ for(size_t o=0;o<(size_t)0x38;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
-    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x38,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
-    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+// [4] 0x14005dd40 — find the ProgressElement, set its maximum (capacity).
+void AttendanceUI::OnCreated() {
+    uistub_AttendanceUI::EnsureTypeIds();
+    if (!uistub_AttendanceUI::Ready()) return;
+    AttendanceUI_Slot4(this);
 }
-REGISTER_TYPE(AttendanceUI, "UI::DialogController",
-              &uistub_AttendanceUI::Factory, &uistub_AttendanceUI::InPlace);
+// [7] 0x14005dc50 — per-frame: current value + text parameter 0.
+void AttendanceUI::OnUpdateLayout() {
+    uistub_AttendanceUI::EnsureTypeIds();
+    if (!uistub_AttendanceUI::Ready()) return;
+    AttendanceUI_Slot7(this);
+}
+
+// [0] 0x140010560: ~AttendanceUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* AttendanceUI::DeletingDtor(unsigned flags) {
+    this->~AttendanceUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400104b0: MemAlloc(0x38, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* AttendanceUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AttendanceUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AttendanceUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* AttendanceUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AttendanceUI());
+}
+
+DEFINE_EXE_VTABLE(AttendanceUI, "_ZTV12AttendanceUI")
+DEFINE_EXE_TYPE(AttendanceUI, "UI::DialogController")
 
 // ---- DialogController family ------------------------------------------------
 // CemeteryUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-23. The panel bodies in
@@ -328,18 +358,6 @@ REGISTER_TYPE(AttendanceUI, "UI::DialogController",
 // ever set and the panel rendered a literal "  of   graves" with both numbers blank.
 // Same shape as AttendanceUI directly above.
 namespace uistub_CemeteryUI {
-    static void* g_vt[kStubVtableSlots];
-    uint32_t GetTypeId(void*) {
-        static uint32_t c = 0;
-        if (!c) c = ::Object::GetTypeIdByName("CemeteryUI");
-        return c;
-    }
-    void* Dtor(void* self, uint32_t flags) {
-        if (!self) return self;
-        *reinterpret_cast<void**>(self) = g_vt;
-        if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-        return self;
-    }
     static uint32_t s_cemComp = 0, s_tomb = 0;
     void EnsureTypeIds() {
         // Both are .rdata globals the faithful bodies dereference unconditionally.
@@ -361,33 +379,45 @@ namespace uistub_CemeteryUI {
             && g_TypeId_CemeteryComponent && *g_TypeId_CemeteryComponent
             && g_TypeId_TombstoneComponent && *g_TypeId_TombstoneComponent;
     }
-    void Slot4(void* self) {
-        EnsureTypeIds();
-        if (!self || !Ready()) return;
-        CemeteryUI_Slot4(reinterpret_cast<CemeteryUI*>(self));
-    }
-    void Slot7(void* self) {
-        EnsureTypeIds();
-        if (!self || !Ready()) return;
-        CemeteryUI_Slot7(reinterpret_cast<CemeteryUI*>(self));
-    }
-    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+}  // namespace uistub_CemeteryUI
 
-// Wave 10D lane VTFID: retail's CemeteryUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "CemeteryUI", &StubNop);
-    // Declared AFTER g_init on purpose: StubVtableInit re-fills every slot with StubNop,
-    // so a slot written before it runs is erased (project_next_stub_controller_sweep).
-    struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
-                                  g_vt[7]=reinterpret_cast<void*>(&Slot7); } } g_sw;
-    void Zero(void* p){ for(size_t o=0;o<(size_t)0x38;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
-    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x38,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
-    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+// [4] 0x14005f090.
+void CemeteryUI::OnCreated() {
+    uistub_CemeteryUI::EnsureTypeIds();
+    if (!uistub_CemeteryUI::Ready()) return;
+    CemeteryUI_Slot4(this);
 }
-REGISTER_TYPE(CemeteryUI, "UI::DialogController",
-              &uistub_CemeteryUI::Factory, &uistub_CemeteryUI::InPlace);
+// [7] 0x14005ef50.
+void CemeteryUI::OnUpdateLayout() {
+    uistub_CemeteryUI::EnsureTypeIds();
+    if (!uistub_CemeteryUI::Ready()) return;
+    CemeteryUI_Slot7(this);
+}
+
+// [0] 0x1400109b0: ~CemeteryUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* CemeteryUI::DeletingDtor(unsigned flags) {
+    this->~CemeteryUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140010900: MemAlloc(0x38, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* CemeteryUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CemeteryUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CemeteryUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* CemeteryUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CemeteryUI());
+}
+
+DEFINE_EXE_VTABLE(CemeteryUI, "_ZTV10CemeteryUI")
+DEFINE_EXE_TYPE(CemeteryUI, "UI::DialogController")
 // ConsumeProduceUI: PROMOTED from a bare UI_DIALOG_STUB 2026-08-24. The Tavern panel
 // rendered its authored layout -- worker spinner, Inventory, "Alcohol Limit 500",
 // "Potato 300" and a Product combo -- but the combo was ALWAYS EMPTY, so no product
@@ -401,18 +431,6 @@ REGISTER_TYPE(CemeteryUI, "UI::DialogController",
 // product makes no ale, IsActive's desc+0x25 arm never finds a matching good, and the
 // source can never register. Wiring the panel is the prerequisite for that A/B.
 namespace uistub_ConsumeProduceUI {
-    static void* g_vt[kStubVtableSlots];
-    uint32_t GetTypeId(void*) {
-        static uint32_t c = 0;
-        if (!c) c = ::Object::GetTypeIdByName("ConsumeProduceUI");
-        return c;
-    }
-    void* Dtor(void* self, uint32_t flags) {
-        if (!self) return self;
-        *reinterpret_cast<void**>(self) = g_vt;
-        if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-        return self;
-    }
     static uint32_t s_cpDesc = 0, s_combo = 0, s_rawMat = 0;
     void EnsureTypeIds() {
         // .rdata globals the faithful bodies dereference unconditionally. Note
@@ -440,39 +458,54 @@ namespace uistub_ConsumeProduceUI {
             && g_TypeId_ConsumeProduceComponent && *g_TypeId_ConsumeProduceComponent
             && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription;
     }
-    void Slot4(void* self) {
-        EnsureTypeIds();
-        if (!self || !Ready()) return;
-        ConsumeProduceUI_Slot4(reinterpret_cast<ConsumeProduceUI*>(self));
-    }
-    void Slot7(void* self) {
-        EnsureTypeIds();
-        if (!self || !Ready()) return;
-        ConsumeProduceUI_Slot7(reinterpret_cast<ConsumeProduceUI*>(self));
-    }
-    void Slot9(void* self, uint64_t p2, int p3, int p4) {
-        EnsureTypeIds();
-        if (!self || !Ready()) return;
-        ConsumeProduceUI_Slot9(reinterpret_cast<ConsumeProduceUI*>(self), p2, p3, p4);
-    }
-    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+}  // namespace uistub_ConsumeProduceUI
 
-// Wave 10D lane VTFID: retail's ConsumeProduceUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "ConsumeProduceUI", &StubNop);
-    // Declared AFTER g_init on purpose: StubVtableInit re-fills every slot with StubNop,
-    // so a slot written before it runs is erased (project_next_stub_controller_sweep).
-    struct SlotWire { SlotWire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4);
-                                  g_vt[7]=reinterpret_cast<void*>(&Slot7);
-                                  g_vt[9]=reinterpret_cast<void*>(&Slot9); } } g_sw;
-    void Zero(void* p){ for(size_t o=0;o<(size_t)0x40;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
-    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x40,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
-    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+// [4] 0x14005f3d0 — also reached BY ADDRESS (engine_funcs.cpp:1306 through the
+// reg_code_lane2.cpp door), which calls ConsumeProduceUI_Slot4 directly.
+void ConsumeProduceUI::OnCreated() {
+    uistub_ConsumeProduceUI::EnsureTypeIds();
+    if (!uistub_ConsumeProduceUI::Ready()) return;
+    ConsumeProduceUI_Slot4(this);
 }
-REGISTER_TYPE(ConsumeProduceUI, "UI::DialogController",
-              &uistub_ConsumeProduceUI::Factory, &uistub_ConsumeProduceUI::InPlace);
+// [7] 0x14005f1f0.
+void ConsumeProduceUI::OnUpdateLayout() {
+    uistub_ConsumeProduceUI::EnsureTypeIds();
+    if (!uistub_ConsumeProduceUI::Ready()) return;
+    ConsumeProduceUI_Slot7(this);
+}
+// [9] 0x14005f330. The body takes the element pointer's ADDRESS as a qword.
+void ConsumeProduceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a,
+                                      int32_t b, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/,
+                                      void* /*userData*/) {
+    uistub_ConsumeProduceUI::EnsureTypeIds();
+    if (!uistub_ConsumeProduceUI::Ready()) return;
+    ConsumeProduceUI_Slot9(this, reinterpret_cast<uint64_t>(element), a, b);
+}
+
+// [0] 0x140010b90: ~ConsumeProduceUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* ConsumeProduceUI::DeletingDtor(unsigned flags) {
+    this->~ConsumeProduceUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140010ae0: MemAlloc(0x40, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* ConsumeProduceUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduceUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ConsumeProduceUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* ConsumeProduceUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ConsumeProduceUI());
+}
+
+DEFINE_EXE_VTABLE(ConsumeProduceUI, "_ZTV16ConsumeProduceUI")
+DEFINE_EXE_TYPE(ConsumeProduceUI, "UI::DialogController")
 // ControlUI: PROMOTED to a real per-class standalone vtable in
 // code/Game/Dialog/controlui.cpp (wires Slot4/7/8/9 so the generic
 // component-command buttons — pasture work/split/empty, element id 50000,
@@ -1233,38 +1266,36 @@ struct SpriteCaptureDlgCtrlReg {
 // Forward-declared rather than including ui_panels.h: this file deliberately does
 // not pull in the panel headers (the other promotions forward-declare too), and a
 // pointer to an incomplete type is all the call needs.
-struct TitleDescToolTipUI;
+
 void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self);
 
-namespace uistub_TitleDescToolTipUI {
-    static void* g_vt[kStubVtableSlots];
-    uint32_t GetTypeId(void*) { static uint32_t c=0; if(!c) c=::Object::GetTypeIdByName("TitleDescToolTipUI"); return c; }
-    void* Dtor(void* self, uint32_t flags) {
-        if (!self) return self; *reinterpret_cast<void**>(self)=g_vt;
-        if ((flags&1)&&fn_MemFreeStatic) fn_MemFreeStatic(self); return self;
-    }
-    void Slot4(void* self) {
-        if (!self) return;
-        ::TitleDescToolTipUI_Serialize(reinterpret_cast<TitleDescToolTipUI*>(self));
-    }
-    StubVtableInit g_init(g_vt, reinterpret_cast<void*>(&Dtor), reinterpret_cast<void*>(&GetTypeId));
+// [4] 0x14007b730.
+void TitleDescToolTipUI::OnCreated() { ::TitleDescToolTipUI_Serialize(this); }
 
-// Wave 10D lane VTFID: retail's TitleDescToolTipUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kStubVtableSlots, "TitleDescToolTipUI", &StubNop);
-    // MUST be declared AFTER g_init: same TU, same namespace, both dynamic
-    // initializers, so declaration order is guaranteed. Reversed, g_init's blanket
-    // StubNop fill would run second and silently un-wire idx4 — the promotion would
-    // look complete and be dead.
-    struct Slot4Wire { Slot4Wire(){ g_vt[4]=reinterpret_cast<void*>(&Slot4); } } g_s4;
-    void Zero(void* p){ for(size_t o=0;o<(size_t)0x30;o+=8) *reinterpret_cast<uint64_t*>((char*)p+o)=0; }
-    void* Factory(){ if(!fn_MemAlloc||!g_pMemAllocSingleton) return nullptr; void* p=fn_MemAlloc(g_pMemAllocSingleton,(uint64_t)0x30,8); if(!p) return nullptr; Zero(p); *reinterpret_cast<void**>(p)=g_vt; return p; }
-    void* InPlace(void* m){ if(!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m)=g_vt; return m; }
+// [0] 0x140014510: ~TitleDescToolTipUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* TitleDescToolTipUI::DeletingDtor(unsigned flags) {
+    this->~TitleDescToolTipUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-REGISTER_TYPE(TitleDescToolTipUI, "UI::DialogController",
-              &uistub_TitleDescToolTipUI::Factory, &uistub_TitleDescToolTipUI::InPlace);
+
+// create 0x1400144c0: MemAlloc(0x30, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* TitleDescToolTipUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TitleDescToolTipUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TitleDescToolTipUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* TitleDescToolTipUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TitleDescToolTipUI());
+}
+
+DEFINE_EXE_VTABLE(TitleDescToolTipUI, "_ZTV18TitleDescToolTipUI")
+DEFINE_EXE_TYPE(TitleDescToolTipUI, "UI::DialogController")
 // ---- ToolUI: PROMOTED to the real Slot4 reimpl (map-render bring-up) ----------
 // ToolUI is StandardDialog.rsc's controller — created for EVERY StandardDialog-
 // based utility dialog (Map/Help/Goal/…). Its Slot4 (+0x20, Setup) reads the

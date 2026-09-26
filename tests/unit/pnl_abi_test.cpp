@@ -20,6 +20,14 @@
 #include "Dialog/ResourceLimitUIConfig.h"
 #include "Dialog/StatusIconUIConfig.h"
 #include "Dialog/UpgradeUIConfig.h"
+// @@PANEL-INCLUDES-BEGIN
+#include "Dialog/AttendanceUI.h"
+#include "Dialog/BuildRequirementUI.h"
+#include "Dialog/CemeteryUI.h"
+#include "Dialog/ConsumeProduceUI.h"
+#include "Dialog/HotKeyToolTipUI.h"
+#include "Dialog/TitleDescToolTipUI.h"
+// @@PANEL-INCLUDES-END
 
 #include <cstdint>
 #include <cstddef>
@@ -71,5 +79,77 @@ UNIT_TEST(pnl_config_layout_and_slots) {
     CHECK_EQ(offsetof(StatusIconUIConfig, _showOnMainPage),   (size_t)0x20);
     CHECK_EQ(offsetof(UpgradeUIConfig, _target),              (size_t)0x20);
 }
+
+// ===========================================================================
+// The UI::DialogController leaves (11 slots; the base's slot list is
+// runtime/types/ui/DialogController.h's). Each class's declared overrides land
+// on retail's index; the base slots are pinned once here.
+// ===========================================================================
+UNIT_TEST(pnl_dialogcontroller_base_slots) {
+    using DC = UI::DialogController;
+    CHECK_EQ(SlotOffset(&DC::DeletingDtor),        (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&DC::TypeName),            (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&DC::Type),                (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&DC::Persist),             (uintptr_t)0x18);
+    CHECK_EQ(SlotOffset(&DC::OnCreated),           (uintptr_t)0x20);
+    CHECK_EQ(SlotOffset(&DC::OnOpened),            (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&DC::OnClosed),            (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&DC::OnUpdateLayout),      (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&DC::OnUpdate),            (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&DC::OnElementEvent),      (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&DC::OnSerializeSettings), (uintptr_t)0x50);
+}
+
+template <typename C>
+void CheckPanelShape(size_t size) {
+    CHECK_EQ(sizeof(C), size);
+    CHECK_EQ(alignof(C), (size_t)8);
+    CHECK(std::is_polymorphic<C>::value);
+    CHECK(!std::is_abstract<C>::value);
+    CHECK(!std::has_virtual_destructor<C>::value);
+    CHECK((std::is_base_of<UI::DialogController, C>::value));
+    CHECK_EQ(SlotOffset(&C::DeletingDtor), (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&C::TypeName),     (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&C::Type),         (uintptr_t)0x10);
+}
+
+// @@PANEL-TESTS-BEGIN (generated from the per-class slot lists)
+UNIT_TEST(pnl_AttendanceUI_layout_and_slots) {
+    CheckPanelShape<AttendanceUI>((size_t)0x38);
+    CHECK_EQ(SlotOffset(&AttendanceUI::OnCreated), (uintptr_t)0x20);   // 0x14005dd40
+    CHECK_EQ(SlotOffset(&AttendanceUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14005dc50
+}
+
+UNIT_TEST(pnl_BuildRequirementUI_layout_and_slots) {
+    CheckPanelShape<BuildRequirementUI>((size_t)0x60);
+    CHECK_EQ(SlotOffset(&BuildRequirementUI::Persist), (uintptr_t)0x18);   // 0x14005ee80
+    CHECK_EQ(SlotOffset(&BuildRequirementUI::OnCreated), (uintptr_t)0x20);   // 0x14005e7c0
+}
+
+UNIT_TEST(pnl_CemeteryUI_layout_and_slots) {
+    CheckPanelShape<CemeteryUI>((size_t)0x38);
+    CHECK_EQ(SlotOffset(&CemeteryUI::OnCreated), (uintptr_t)0x20);   // 0x14005f090
+    CHECK_EQ(SlotOffset(&CemeteryUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14005ef50
+}
+
+UNIT_TEST(pnl_ConsumeProduceUI_layout_and_slots) {
+    CheckPanelShape<ConsumeProduceUI>((size_t)0x40);
+    CHECK_EQ(SlotOffset(&ConsumeProduceUI::OnCreated), (uintptr_t)0x20);   // 0x14005f3d0
+    CHECK_EQ(SlotOffset(&ConsumeProduceUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14005f1f0
+    CHECK_EQ(SlotOffset(&ConsumeProduceUI::OnElementEvent), (uintptr_t)0x48);   // 0x14005f330
+}
+
+UNIT_TEST(pnl_HotKeyToolTipUI_layout_and_slots) {
+    CheckPanelShape<HotKeyToolTipUI>((size_t)0x30);
+    CHECK_EQ(SlotOffset(&HotKeyToolTipUI::Persist), (uintptr_t)0x18);   // 0x14006ab80
+    CHECK_EQ(SlotOffset(&HotKeyToolTipUI::OnCreated), (uintptr_t)0x20);   // 0x14006a980
+}
+
+UNIT_TEST(pnl_TitleDescToolTipUI_layout_and_slots) {
+    CheckPanelShape<TitleDescToolTipUI>((size_t)0x30);
+    CHECK_EQ(SlotOffset(&TitleDescToolTipUI::Persist), (uintptr_t)0x18);   // 0x14007b8a0
+    CHECK_EQ(SlotOffset(&TitleDescToolTipUI::OnCreated), (uintptr_t)0x20);   // 0x14007b730
+}
+// @@PANEL-TESTS-END
 
 }  // namespace

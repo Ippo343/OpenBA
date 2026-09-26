@@ -182,28 +182,11 @@ namespace WorkPlaceUIAddr {
 // Struct definitions
 // ============================================================
 
-// --- AttendanceUI (0x38) ---
-struct AttendanceUI {
-    DialogController base;     // +0x00 (0x30)
-    uint64_t data30;           // +0x30: zeroed
-};
-static_assert(sizeof(AttendanceUI) == 0x38, "AttendanceUI size mismatch");
-static_assert(offsetof(AttendanceUI, data30) == 0x30, "");
+// --- AttendanceUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/AttendanceUI.h"
 
-// --- BuildRequirementUI (0x60) ---
-// Factory inits: +0x30=0, +0x38(u32)=1, +0x40..+0x58=0
-struct BuildRequirementUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint32_t data38;           // +0x38: initialized to 1
-    uint8_t  _pad3C[4];        // +0x3C: gap
-    uint64_t data40;           // +0x40: zeroed
-    uint64_t data48;           // +0x48: zeroed
-    uint64_t data50;           // +0x50: zeroed
-    uint64_t data58;           // +0x58: zeroed
-};
-static_assert(sizeof(BuildRequirementUI) == 0x60, "BuildRequirementUI size mismatch");
-static_assert(offsetof(BuildRequirementUI, data38) == 0x38, "");
+// --- BuildRequirementUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/BuildRequirementUI.h"
 
 // --- BuildUI (0x50) ---
 struct BuildUI {
@@ -215,12 +198,8 @@ struct BuildUI {
 };
 static_assert(sizeof(BuildUI) == 0x50, "BuildUI size mismatch");
 
-// --- CemeteryUI (0x38) ---
-struct CemeteryUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-};
-static_assert(sizeof(CemeteryUI) == 0x38, "CemeteryUI size mismatch");
+// --- CemeteryUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/CemeteryUI.h"
 
 // --- CitizenUI (0xE8) ---
 // Has separate Ctor (0x140065a40). Inits +0x30..+0xD8=0, InternalBasePtr@+0xE0.
@@ -254,13 +233,8 @@ static_assert(sizeof(CitizenUI) == 0xE8, "CitizenUI size mismatch");
 static_assert(offsetof(CitizenUI, data30) == 0x30, "");
 static_assert(offsetof(CitizenUI, internalBasePtr) == 0xE0, "");
 
-// --- ConsumeProduceUI (0x40) ---
-struct ConsumeProduceUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-};
-static_assert(sizeof(ConsumeProduceUI) == 0x40, "ConsumeProduceUI size mismatch");
+// --- ConsumeProduceUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/ConsumeProduceUI.h"
 
 // --- ControlUI (0x40) ---
 struct ControlUI {
@@ -395,12 +369,8 @@ struct HelpUI {
 static_assert(sizeof(HelpUI) == 0x78, "HelpUI size mismatch");
 static_assert(offsetof(HelpUI, data60) == 0x60, "");
 
-// --- HotKeyToolTipUI (0x30) ---
-// No subclass fields (size == base).
-struct HotKeyToolTipUI {
-    DialogController base;     // +0x00
-};
-static_assert(sizeof(HotKeyToolTipUI) == 0x30, "HotKeyToolTipUI size mismatch");
+// --- HotKeyToolTipUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/HotKeyToolTipUI.h"
 
 // --- ImmigrationUI (0x50) ---
 struct ImmigrationUI {
@@ -636,12 +606,8 @@ struct StorageUI {
 };
 static_assert(sizeof(StorageUI) == 0x40, "StorageUI size mismatch");
 
-// --- TitleDescToolTipUI (0x30) ---
-// No subclass fields.
-struct TitleDescToolTipUI {
-    DialogController base;     // +0x00
-};
-static_assert(sizeof(TitleDescToolTipUI) == 0x30, "TitleDescToolTipUI size mismatch");
+// --- TitleDescToolTipUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
+#include "Dialog/TitleDescToolTipUI.h"
 
 // --- ToolUI (0x58) ---
 // Factory inits: +0x30=0, +0x38=0, +0x40(u16)=0, +0x44(u64)=0, +0x4C(u16)=0, +0x50=0
