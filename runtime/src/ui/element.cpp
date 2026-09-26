@@ -105,30 +105,36 @@
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
-#include "../../types/system/String.h"
+// `enum class Module` + `ResolveAddr` (declared once there, byte-identical to
+// standalone/resolve.h) and `rtuielem::AtomicExport`, the B6-5 door cache.
+#include "element_common.h"
 
 // ----------------------------------------------------------------------------
-// ResolveAddr / ResolveExport, forward-declared rather than pulled in from
+// ResolveExport, forward-declared rather than pulled in from
 // standalone/resolve.h — same reasoning rt_port.h gives for declaring
 // RegisterRuntimeExport locally: resolve.h drags in <windows.h>, and PLAN §4.1
-// requires runtime/src/ to stay platform-neutral. These declarations must stay
-// byte-identical to resolve.h's; the linker checks them against it. (Precedent:
-// runtime/src/achievement/achievement_manager.cpp:69-71.)
+// requires runtime/src/ to stay platform-neutral. This declaration must stay
+// byte-identical to resolve.h's; the linker checks it against it.
 // ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 void*     ResolveExport(const char* mangled_name);
 
+// ENDGAME B.3.6 block A: `UI::Element` is the REAL class now (Element.h), so
+// every door below receives a typed `Element*` and delegates with a QUALIFIED
+// non-virtual call (`self->UI::Element::M(…)`): a live Element wears the MINTED
+// table, whose slots resolve back to these doors, so an unqualified call from a
+// door into a virtual would re-enter the door (B34_BRIEFS A.1).
 using UI::Element;
-using ::UIString;   // runtime/types/ui/String.h, owned by lane F
+using ::UIString;   // runtime/types/ui/String.h
 
 namespace {
 
@@ -209,13 +215,24 @@ InternalCtorFn ObjectInternalCtor() {
 }
 
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z (0x1800c7ad0) — the static,
-// null-safe free the String release path calls. Resolved by name, so an armed
-// Wave 2 allocator port would be used here too.
+// null-safe free the String release path calls. Resolved by name, so the
+// allocator port is what runs.
+//
+// B.3.6 (RULE B6-5): the MEMBER bodies below reach it through a namespace-
+// scope std::atomic slot (`rtuielem::AtomicExport`) rather than a function-
+// local static, because UI is constructed on the loader thread while the main
+// thread draws. `MemFree()` itself keeps its old static for the two DOORS
+// (ctor/dtor) that are not moved in step 6.
 using MemFreeFn = void (*)(void*);
 MemFreeFn MemFree() {
     static MemFreeFn fn =
         reinterpret_cast<MemFreeFn>(ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
     return fn;
+}
+std::atomic<void*> g_memFreeSlot{nullptr};
+MemFreeFn MemFreeAtomic() {
+    return reinterpret_cast<MemFreeFn>(rtuielem::AtomicExport(
+        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
 }
 
 // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z (0x1800c0390) — ContainerElement::
@@ -229,25 +246,13 @@ IsDerivedFromFn IsDerivedFrom() {
     return fn;
 }
 
-// The static 17-argument overload the member GetAlignedPosition forwards to.
-// It is exported, and it is NOT in this lane's 23 — it stays the DLL's.
+// The static 17-argument overload the member GetAlignedPosition forwards to:
 //   ?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z
-// WAVE 10: THIS IS NOW OURS. The note above used to end "it stays the DLL's",
-// which was true of Wave 7 lane A's scope and had quietly become the reason a
-// pure integer leaf sat unported while the member that calls it was verified.
-// The body is below; this door still goes through ResolveExport, which consults
-// the port registry FIRST, so the member automatically reaches our static.
+// Ours since Wave 10. B.3.6: the member now calls the static MEMBER directly;
+// the ResolveExport door that used to sit here (and its first-call cache) is
+// gone. The registered door below still carries the name for other callers.
 const char* const kGetAlignedStatic =
     "?GetAlignedPosition@Element@UI@@SAXW4Alignment@ElementDescription@2@HHHHHHHHHHAEAH111_N2@Z";
-
-using GetAlignedStaticFn = void (*)(int alignment, int, int, int, int, int, int,
-                                    int leftPad, int rightPad, int topPad, int bottomPad,
-                                    int*, int*, int*, int*, bool, bool);
-GetAlignedStaticFn GetAlignedStatic() {
-    static GetAlignedStaticFn fn =
-        reinterpret_cast<GetAlignedStaticFn>(ResolveExport(kGetAlignedStatic));
-    return fn;
-}
 
 // ENDGAME B.3.2 step 2 — the 0x180076900 forwarder that used to sit here is
 // GONE. `Element::_children` is a real `Collection::Array<Element*>` member
@@ -276,40 +281,40 @@ uint32_t ScrollTypeId() {
 }
 
 // Video::Device::_singleton (exported, 0x1801fe7a8). GetPaddedSize reads the
-// screen size out of the pointed-to Device at +0x04 / +0x08.
+// screen size out of the pointed-to Device at +0x04 / +0x08. B6-5: an atomic
+// slot, not a first-call static — GetPaddedSize is a member.
+std::atomic<void*> g_deviceSingletonSlot{nullptr};
 void* VideoDeviceSingleton() {
-    void** p = RT_DATA_SLOT(void**,
-        "?_singleton@Device@Video@@0PEAV12@EA");
+    void** p = static_cast<void**>(rtuielem::AtomicExport(
+        g_deviceSingletonSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
     return p ? *p : nullptr;
 }
 
-// ---- vtable helpers --------------------------------------------------------
-// Slot indices are proven in runtime/types/ui/Element.h: the table is twelve
-// slots because ??_7ElementDescription@UI@@6B@ (0x1801561c0) sits exactly 0x60
-// bytes past ??_7Element@UI@@6B@ (0x180156160).
-constexpr int kSlotScalarDtor   = 0;   // +0x00, called as fn(this, 1)
-constexpr int kSlotType         = 2;   // +0x10
-constexpr int kSlotComputeSize  = 4;   // +0x20, _purecall in Element itself
-constexpr int kSlotComputeLayout = 5;  // +0x28
-constexpr int kSlotDraw         = 6;   // +0x30
+} // namespace
 
-template <typename Fn>
-inline Fn VSlot(const void* obj, int index) {
-    return reinterpret_cast<Fn>((*reinterpret_cast<void* const* const*>(obj))[index]);
-}
+// ============================================================================
+// The member bodies (ENDGAME B.3.6 block A)
+// ============================================================================
+// Each body below MOVED here from its registered door (`self->x` became `x`),
+// and the door, further down, is now a one-line QUALIFIED delegation. Virtual
+// calls onto OTHER elements (the border's slot 5/6, a child's slot 2/4) are
+// plain virtual calls: they dispatch through the RECEIVER's table — minted or
+// GCC's, slot for slot the same — exactly where the old `VSlot<Fn>(p, N)` read.
+namespace UI {
 
-// ---- the parent dirty walk -------------------------------------------------
-// `?SetNeedsSizeCalc@` (0x180035470) verbatim, and the tail every mutator in
-// this class shares. Note the shape: the OR happens BEFORE the null test, so it
-// always runs at least once on `self` — a do/while, not a while.
-inline void NeedsSizeCalcWalk(Element* e) {
+// ---- ?SetNeedsSizeCalc@  0x180035470 ---------------------------------------
+// The tail every mutator in this class shares. Note the shape: the OR happens
+// BEFORE the null test, so it always runs at least once on `this` — a
+// do/while, not a while.
+void Element::SetNeedsSizeCalc() {
+    Element* e = this;
     do {
-        e->_flags |= UI::kElementFlagNeedsSizeCalc;
+        e->_flags |= kElementFlagNeedsSizeCalc;
         e = e->_parent;
     } while (e != nullptr);
 }
 
-} // namespace
+}  // namespace UI
 
 // ============================================================================
 // The ports
@@ -341,7 +346,10 @@ void* RtUi_Element_Ctor(Element* self) {
     InternalCtorFn base = ObjectInternalCtor();
     if (base) base(self);
 
-    self->_vtable           = ElementVTable();
+    // The vptr store. `UI::Element` is a real polymorphic class now, so the
+    // pointer has no field name; the door stamps the MINTED table exactly as
+    // before (B4b-2: this stays a door, it is not a C++ constructor).
+    *reinterpret_cast<void**>(self) = ElementVTable();
     self->_name             = nullptr;
     self->_leftPad          = 0;
     self->_rightPad         = 0;
@@ -410,71 +418,63 @@ void* RtUi_Element_Ctor(Element* self) {
     return self;
 }
 
+// ============================================================================
+// Member bodies, moved from their doors by ENDGAME B.3.6 block A
+// ============================================================================
+namespace UI {
+
 // ---- ?AddChild@  0x180115df0 -----------------------------------------------
 // `child` is an `Object::InternalPtr<Element>` passed BY VALUE, which MSVC
 // hands over as a pointer to the caller's 8-byte temporary (the disassembly's
-// first act is `MOV RAX,[RDX]`).
+// first act is `MOV RAX,[RDX]`); the door below keeps that shape and this
+// member takes the handle itself.
 //
-// SHADOW ORACLE, not replay: the array grow at 0x180076900 allocates, and
-// replaying it would push the same child a second time and reallocate the
-// buffer. The predicate below names EVERY term it checks, so a failure message
-// says which one broke (reference_shadow_predicate_must_name_its_failing_term.md).
-void RtUi_Element_AddChild(Element* self, void** child) {
-
-    const int  oldSize = self->_children.GetSize();
-    Element* const c   = reinterpret_cast<Element*>(*child);
-
-    if (c) c->_parent = self;
-    // retail 0x180076900 — kSpec_Fill8Z, trait-equivalent for `Element*` (see
-    // dialog_create.cpp's banner): `self->_children` is the trait-derived
-    // `Array<Element*>` instantiation already.
-    self->_children.SetSizeFill(self->_children.GetSize() + 1, child);
-    NeedsSizeCalcWalk(self);
-
+// retail 0x180076900 — kSpec_Fill8Z, trait-equivalent for `Element*` (see
+// dialog_create.cpp's banner): `_children` is the trait-derived
+// `Array<Element*>` instantiation already. The fill argument is the address of
+// an 8-byte handle holding the child pointer — the same bytes retail hands it.
+void Element::AddChild(Object::InternalPtr<Element> child) {
+    Element* const c = child.Get();
+    if (c) c->_parent = this;
+    Element* fill = c;
+    _children.SetSizeFill(_children.GetSize() + 1, &fill);
+    SetNeedsSizeCalc();
 }
 
 // ---- ?Child@  0x180035540 --------------------------------------------------
-// Hidden return slot in RDX (the InternalPtr the caller wants filled), index in
-// R8D. NO BOUNDS CHECK, and the index is SIGN-extended (MOVSXD RCX,R8D) — a
+// NO BOUNDS CHECK, and the index is SIGN-extended (MOVSXD RCX,R8D) — a
 // negative index reads before the buffer, exactly as retail does.
-void* RtUi_Element_Child(Element* self, void** ret, int index) {
-
-    *ret = self->_children.GetData()[static_cast<intptr_t>(index)];
-
-    return ret;
+Object::InternalPtr<Element> Element::Child(int32_t index) {
+    return Object::InternalPtr<Element>(_children.GetData()[static_cast<intptr_t>(index)]);
 }
 
-// ---- ?ChildCount@  0x180035530 ---------------------------------------------
-int RtUi_Element_ChildCount(const Element* self) {
-    const int ours = self->_children.GetSize();
-    return ours;
+// ---- ?ChildCount@  0x180035530  (`MOV EAX,[RCX+0xa8]`) ---------------------
+int32_t Element::ChildCount() const {
+    return _children.GetSize();
 }
 
 // ---- ?ComputeLayout@  0x1801168d0  (vtable slot 5) -------------------------
 // A tail-jump into the BORDER element's slot 5. `Element` itself lays nothing
-// out; every widget that has geometry overrides this. Oracle: the registration
-// -time thunk decode (see VerifyBorderThunk). There is no per-call comparison,
-// because running the original as well would lay the border out twice.
-void RtUi_Element_ComputeLayout(Element* self, int x, int y, int w, int h) {
-    Element* border = reinterpret_cast<Element*>(self->_border);
+// out; every widget that has geometry overrides this. The border call is a
+// VIRTUAL call on the border — its own table's slot 5, which is what retail's
+// `JMP [RAX+0x28]` reads.
+void Element::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    Element* border = static_cast<Element*>(_border);
     if (!border) return;
-    using Fn = void (*)(Element*, int, int, int, int);
-    VSlot<Fn>(border, kSlotComputeLayout)(border, x, y, w, h);
+    border->ComputeLayout(x, y, w, h);
 }
 
 // ---- ?Draw@  0x1801168f0  (vtable slot 6, const) ---------------------------
-void RtUi_Element_Draw(const Element* self, void* spriteContext, unsigned char alpha) {
-    Element* border = reinterpret_cast<Element*>(self->_border);
+void Element::Draw(SpriteContext& context, uint8_t alpha) const {
+    Element* border = static_cast<Element*>(_border);
     if (!border) return;
-    using Fn = void (*)(const Element*, void*, unsigned char);
-    VSlot<Fn>(border, kSlotDraw)(border, spriteContext, alpha);
+    border->Draw(context, alpha);
 }
 
 // ---- ?FindElement@  0x180115650 --------------------------------------------
-// Depth-first search by name, self first. `name` is a `const System::String&`,
-// i.e. a POINTER to the 8-byte String, whose one field is the character body;
-// the length lives at body[-8] and the refcount at body[-4]
-// (runtime/types/system/String.h).
+// Depth-first search by name, self first. `name` is a `const System::String&`
+// whose one field is the character body; the length lives at body[-8] and the
+// refcount at body[-4] (runtime/types/system/String.h).
 //
 // Two faithfulness details that a tidied version would drop:
 //   * An EMPTY search string never matches anything, not even an unnamed
@@ -483,13 +483,11 @@ void RtUi_Element_Draw(const Element* self, void* spriteContext, unsigned char a
 //     when THIS element's name is non-null and non-empty; a null name of
 //     length 0 against a length-0 query would have matched, but the query
 //     length test above has already excluded that case.
-//
-// The recursion goes through this private helper.
-namespace {
-void* FindElementImpl(Element* self, void** ret, const char* const* name) {
-    const char* q = *name;
+// The recursion is a direct call of this member on each non-null child.
+Object::InternalPtr<Element> Element::FindElement(const System::String& name) {
+    const char* q = name._data;
     if (q && RtSystem::StringLength(q) != 0) {
-        const char* mine = reinterpret_cast<const char*>(self->_name);
+        const char* mine = static_cast<const char*>(_name);
         const int32_t lm = mine ? RtSystem::StringLength(mine) : 0;
         if (lm == RtSystem::StringLength(q)) {
             bool equal;
@@ -498,108 +496,79 @@ void* FindElementImpl(Element* self, void** ret, const char* const* name) {
             } else {
                 equal = System::String::StrCompare(mine, q) == 0;
             }
-            if (equal) { *ret = self; return ret; }
+            if (equal) return Object::InternalPtr<Element>(this);
         }
     }
-    for (int i = 0; i < self->_children.GetSize(); ++i) {
-        Element* c = self->_children.GetData()[i];
+    for (int i = 0; i < _children.GetSize(); ++i) {
+        Element* c = _children.GetData()[i];
         if (!c) continue;
-        void* found = nullptr;
-        FindElementImpl(c, &found, name);
-        if (found) { *ret = found; return ret; }
+        Object::InternalPtr<Element> found = c->FindElement(name);
+        if (found) return found;
     }
-    *ret = nullptr;
-    return ret;
-}
-} // namespace
-
-void* RtUi_Element_FindElement(Element* self, void** ret, const char* const* name) {
-    FindElementImpl(self, ret, name);
-    return ret;
+    return Object::InternalPtr<Element>();
 }
 
 // ---- ?FindElementType@  0x180115760 ----------------------------------------
 // Same shape, keyed on the virtual `Type()` (slot 2) rather than the name.
 // EXACT equality, not IsDerivedFrom — a subclass of the requested type is NOT
-// a hit.
-namespace {
-void* FindElementTypeImpl(Element* self, void** ret, uint32_t typeId) {
-    using TypeFn = uint32_t (*)(const Element*);
-    if (VSlot<TypeFn>(self, kSlotType)(self) == typeId) { *ret = self; return ret; }
-    for (int i = 0; i < self->_children.GetSize(); ++i) {
-        Element* c = self->_children.GetData()[i];
+// a hit. `Type()` is a VIRTUAL call: the dynamic type is the point.
+Object::InternalPtr<Element> Element::FindElementType(uint32_t typeId) {
+    if (Type() == typeId) return Object::InternalPtr<Element>(this);
+    for (int i = 0; i < _children.GetSize(); ++i) {
+        Element* c = _children.GetData()[i];
         if (!c) continue;
-        void* found = nullptr;
-        FindElementTypeImpl(c, &found, typeId);
-        if (found) { *ret = found; return ret; }
+        Object::InternalPtr<Element> found = c->FindElementType(typeId);
+        if (found) return found;
     }
-    *ret = nullptr;
-    return ret;
-}
-} // namespace
-
-void* RtUi_Element_FindElementType(Element* self, void** ret, uint32_t typeId) {
-    FindElementTypeImpl(self, ret, typeId);
-    return ret;
+    return Object::InternalPtr<Element>();
 }
 
 // ---- ?GetAlignedPosition@ (STATIC, 17 args)  0x1801158e0 -------------------
 //
-// WAVE 10. Wave 7 lane A ported the MEMBER overload and left this one to the
-// DLL ("It is exported, and it is NOT in this lane's 23 -- it stays the DLL's"),
-// which made it a real dependency of our own port rather than an absent one.
-// It is a pure integer leaf: no calls, no allocation, no globals, four out
-// parameters. Nothing about it was ever hard; it was simply out of scope.
-//
-// It places a box of size (*outW x *outH) inside a container of size
+// A pure integer leaf: no calls, no allocation, no globals, four out
+// parameters. It places a box of size (outW x outH) inside a container of size
 // (containerW x containerH), honouring four pads and a 3x3 alignment, and
 // optionally STRETCHES the box to the available space first.
 //
-// THE ALIGNMENT ENUM IS A ROW-MAJOR 3x3, and this is read off the jump table at
+// THE ALIGNMENT ENUM IS A ROW-MAJOR 3x3, read off the jump table at
 // 0x180115a14 rather than guessed. The X axis switches on `alignment - 1` with
 // `JA -> default` for anything above 7, and the eight table entries cycle
 // center / right / left; the Y axis is a compare chain (<3 top, 3..5 middle,
-// 6..8 bottom, >8 top). Cross-multiplying the two gives exactly:
+// 6..8 bottom, >8 top):
 //
 //        0 TopLeft      1 TopCenter      2 TopRight
 //        3 MiddleLeft   4 MiddleCenter   5 MiddleRight
 //        6 BottomLeft   7 BottomCenter   8 BottomRight
 //
-// and ANY value outside 0..8 lands on left/top, because it misses both the
-// jump table's range check and the Y chain's. That agreement between two
-// independently-encoded dispatches is what makes the mapping trustworthy.
+// and ANY value outside 0..8 lands on left/top.
 //
 // TWO FAITHFULNESS TRAPS, both of which a tidied port gets wrong:
-//
 //  * The centring halves are `SAR reg,1` -- an ARITHMETIC SHIFT, which rounds
-//    toward negative infinity. `/ 2` rounds toward zero, so for a negative
-//    available size the two differ by one pixel. `>>` on a signed int is the
-//    faithful spelling (GCC guarantees arithmetic shift; C++20 mandates it).
+//    toward negative infinity. `/ 2` rounds toward zero. `>>` on a signed int is
+//    the faithful spelling (GCC guarantees arithmetic shift).
+//  * `outW` / `outH` are IN/OUT: read as the box's size, possibly OVERWRITTEN
+//    by the stretch, then read AGAIN by the placement. The order is load-bearing.
 //
-//  * `*outW` / `*outH` are IN/OUT. They are read as the box's size, may be
-//    OVERWRITTEN by the stretch, and are then read AGAIN by the placement --
-//    which therefore sees the stretched value. The order is load-bearing.
-// `useDivide` exists ONLY for element_aligned_probe.cpp's negative control: it
-// swaps the arithmetic shift for a division, which is identical for
-// non-negative values and off by one for odd negatives. It is the mistake a
-// tidied port makes, and the probe uses it to prove it can SEE that mistake.
-// Every real caller passes false.
-void RtUi_Element_GetAlignedPositionStatic_Body(
-        int alignment, int x, int y, int containerW, int containerH,
-        int offsetX, int offsetY,
-        int leftPad, int rightPad, int topPad, int bottomPad,
-        int* outX, int* outY, int* outW, int* outH,
-        bool stretchX, bool stretchY, bool useDivide = false) {
-    // SAR, not divide -- see the banner. `half()` keeps the two spellings in
-    // one place so the control cannot drift from the real arithmetic.
-    auto half = [useDivide](int v) { return useDivide ? (v / 2) : (v >> 1); };
+// (B.3.6: the `useDivide` negative-control parameter the old free function
+// carried is gone with it; its only user, element_aligned_probe.cpp, no longer
+// exists in the tree.)
+void Element::GetAlignedPosition(ElementDescription::Alignment alignment,
+                                 int32_t x, int32_t y,
+                                 int32_t containerW, int32_t containerH,
+                                 int32_t offsetX, int32_t offsetY,
+                                 int32_t leftPad, int32_t rightPad,
+                                 int32_t topPad, int32_t bottomPad,
+                                 int32_t& outX, int32_t& outY,
+                                 int32_t& outW, int32_t& outH,
+                                 bool stretchX, bool stretchY) {
+    const int32_t align = static_cast<int32_t>(alignment);
     // Cursor = origin + offset, then pulled back inside the container if the
-    // box would overhang. Retail compares against the CURRENT *outW/*outH.
+    // box would overhang. Retail compares against the CURRENT outW/outH.
     int curX = x + offsetX;
     int curY = y + offsetY;
 
-    if (containerW < *outW + curX) curX = containerW - *outW;
-    if (containerH < *outH + curY) curY = containerH - *outH;
+    if (containerW < outW + curX) curX = containerW - outW;
+    if (containerH < outH + curY) curY = containerH - outH;
 
     curX += leftPad;
     curY += topPad;
@@ -609,102 +578,59 @@ void RtUi_Element_GetAlignedPositionStatic_Body(
     const int availH = (containerH - bottomPad) - curY;
 
     // The stretch, BEFORE the placement reads the size back.
-    if (stretchX) *outW = availW;
-    if (stretchY) *outH = availH;
+    if (stretchX) outW = availW;
+    if (stretchY) outH = availH;
 
     // ---- X: center for 1/4/7, right for 2/5/8, left otherwise -------------
-    switch (alignment) {
+    switch (align) {
     case 1: case 4: case 7:
-        *outX = (half(availW) - half(*outW)) + curX;
+        outX = ((availW >> 1) - (outW >> 1)) + curX;
         break;
     case 2: case 5: case 8:
-        *outX = (containerW - rightPad) - *outW;
+        outX = (containerW - rightPad) - outW;
         break;
     default:
-        *outX = curX;
+        outX = curX;
         break;
     }
 
     // ---- Y: middle for 3..5, bottom for 6..8, top otherwise ---------------
-    if (alignment >= 3 && alignment <= 5) {
-        *outY = (half(availH) - half(*outH)) + curY;
-    } else if (alignment >= 6 && alignment <= 8) {
-        *outY = (containerH - bottomPad) - *outH;
+    if (align >= 3 && align <= 5) {
+        outY = ((availH >> 1) - (outH >> 1)) + curY;
+    } else if (align >= 6 && align <= 8) {
+        outY = (containerH - bottomPad) - outH;
     } else {
-        *outY = curY;
+        outY = curY;
     }
-}
-
-// ORACLE -- outputs only, and the inputs must be SNAPSHOT first.
-//
-// This is a pure function, so a straight A/B is available: run ours into the
-// real outputs, run retail into scratch ints, compare all four. The one thing
-// that would quietly break it is that `outW`/`outH` are IN/OUT -- by the time
-// ours returns it has already overwritten the size retail needs as its INPUT.
-// Handing retail the post-state would make a CORRECT port read as a divergence
-// on every stretched call, which is exactly
-// reference_oracle_must_snapshot_aliased_inputs.md. So the in-values are
-// captured before ours runs and replayed into retail's scratch.
-void RtUi_Element_GetAlignedPositionStatic(
-        int alignment, int x, int y, int containerW, int containerH,
-        int offsetX, int offsetY,
-        int leftPad, int rightPad, int topPad, int bottomPad,
-        int* outX, int* outY, int* outW, int* outH,
-        bool stretchX, bool stretchY) {
-
-    // Snapshot BEFORE ours runs -- see the oracle note above.
-    const int inW = outW ? *outW : 0;
-    const int inH = outH ? *outH : 0;
-
-    RtUi_Element_GetAlignedPositionStatic_Body(
-        alignment, x, y, containerW, containerH, offsetX, offsetY,
-        leftPad, rightPad, topPad, bottomPad,
-        outX, outY, outW, outH, stretchX, stretchY);
-
 }
 
 // ---- ?GetAlignedPosition@ (member)  0x180115ff0 ----------------------------
 // Twelve parameters after `this`: six ints, four int& outputs, two bools. The
 // body recomputes the element's size through virtual slot 4, publishes it into
 // the third and fourth outputs, then forwards everything to the STATIC
-// 17-argument overload (0x1801158e0), which stays the DLL's.
+// 17-argument overload (0x1801158e0) — now a direct call of the static member.
 //
 // The two bools are each OR'd with a sticky flag bit before being forwarded:
-// `stretchX` with bit 2 and `stretchY` with bit 3. Getting that pairing
-// backwards is the obvious way to break this function, so it is worth naming
-// exactly where it comes from: the LAST parameter (+0x100 in the frame) pairs
-// with flag 0x8 and lands in the LAST outgoing slot; the eleventh (+0xf8) pairs
-// with flag 0x4 and lands one slot earlier.
-//
-// ORACLE — OUTPUTS ONLY, and this is the weakest oracle in the lane. The
-// function writes nothing to `this` itself; everything it changes, it changes
-// through virtual slot 4 (ComputeSize), which we cannot replay onto a scratch
-// copy because a derived ComputeSize walks the REAL children. So the original
-// is run against the REAL object into a second set of output ints and only the
-// outputs are compared. That is sound only because ComputeSize is idempotent:
-// its implementations early-out on flag bit 27, which our call has already
-// cleared, and even an unconditional one is a pure function of the unchanged
-// child tree. See WAVE7_LANE_A.md §7.
-void RtUi_Element_GetAlignedPosition(Element* self, int a, int b, int c, int d,
-                                     int e, int f, int* outX, int* outY,
-                                     int* outW, int* outH, bool stretchX, bool stretchY) {
+// `stretchX` with bit 2 and `stretchY` with bit 3. The LAST parameter (+0x100
+// in the frame) pairs with flag 0x8 and lands in the LAST outgoing slot; the
+// eleventh (+0xf8) pairs with flag 0x4 and lands one slot earlier.
+void Element::GetAlignedPosition(int32_t a, int32_t b, int32_t c, int32_t d,
+                                 int32_t e, int32_t f,
+                                 int32_t& outX, int32_t& outY,
+                                 int32_t& outW, int32_t& outH,
+                                 bool stretchX, bool stretchY) {
+    ComputeSize();                                  // slot 4, virtual
 
-    using ComputeSizeFn = void (*)(Element*);
-    VSlot<ComputeSizeFn>(self, kSlotComputeSize)(self);
+    outW = _layoutWidth;
+    outH = _layoutHeight;
 
-    *outW = self->_layoutWidth;
-    *outH = self->_layoutHeight;
+    const bool bx = stretchX || (_flags & kElementFlagAlignArg1) != 0;
+    const bool by = stretchY || (_flags & kElementFlagAlignArg2) != 0;
 
-    const bool bx = stretchX || (self->_flags & UI::kElementFlagAlignArg1) != 0;
-    const bool by = stretchY || (self->_flags & UI::kElementFlagAlignArg2) != 0;
-
-    GetAlignedStaticFn st = GetAlignedStatic();
-    if (st) {
-        st(self->_alignment, a, b, c, d, e, f,
-           self->_leftPad, self->_rightPad, self->_topPad, self->_bottomPad,
-           outX, outY, outW, outH, bx, by);
-    }
-
+    GetAlignedPosition(static_cast<ElementDescription::Alignment>(_alignment),
+                       a, b, c, d, e, f,
+                       _leftPad, _rightPad, _topPad, _bottomPad,
+                       outX, outY, outW, outH, bx, by);
 }
 
 // ---- ?GetPaddedSize@  0x180115f10 ------------------------------------------
@@ -714,56 +640,48 @@ void RtUi_Element_GetAlignedPosition(Element* self, int a, int b, int c, int d,
 // Faithfulness details, all of them observable:
 //   * The additions are `layout + right + left` and `layout + bottom + top`,
 //     in that order, in 32-bit — an overflowing pad wraps the same way.
-//   * The minimum-size floor is `if (out < min) out = min`, applied to the
-//     PADDED value, not to the layout value.
+//   * The minimum-size floor is applied to the PADDED value.
 //   * The screen-size override walks to the ROOT element and reads the root's
 //     `_dialogParent`, not this element's.
-//   * The second flag test RE-READS `self->_flags` from memory (retail keeps
+//   * The second flag test RE-READS `_flags` from memory (retail keeps
 //     `LEA RDX,[RBX+0x34]` alive across the root walk, which clobbers RBX).
-//     Reproduced as a second load rather than reusing the cached value.
 //   * Both conversions are `CVTTSS2SI` — truncation toward zero, not rounding.
-//
-// ORACLE — OUTPUTS ONLY, same argument as GetAlignedPosition above.
-void RtUi_Element_GetPaddedSize(Element* self, int* outW, int* outH) {
+void Element::GetPaddedSize(int32_t& outW, int32_t& outH) {
+    ComputeSize();                                  // slot 4, virtual
 
-    using ComputeSizeFn = void (*)(Element*);
-    VSlot<ComputeSizeFn>(self, kSlotComputeSize)(self);
+    outW = _layoutWidth  + _rightPad  + _leftPad;
+    outH = _layoutHeight + _bottomPad + _topPad;
+    if (outW < _minWidth)  outW = _minWidth;
+    if (outH < _minHeight) outH = _minHeight;
 
-    *outW = self->_layoutWidth  + self->_rightPad  + self->_leftPad;
-    *outH = self->_layoutHeight + self->_bottomPad + self->_topPad;
-    if (*outW < self->_minWidth)  *outW = self->_minWidth;
-    if (*outH < self->_minHeight) *outH = self->_minHeight;
-
-    const uint32_t flags = self->_flags;
-    if (flags & (UI::kElementFlagSizeToScreenH | UI::kElementFlagSizeToScreenW)) {
-        Element* root = self;
+    const uint32_t flags = _flags;
+    if (flags & (kElementFlagSizeToScreenH | kElementFlagSizeToScreenW)) {
+        Element* root = this;
         while (root->_parent != nullptr) root = root->_parent;
         void* dialogParent = root->_dialogParent;
-        const uint8_t* device = reinterpret_cast<const uint8_t*>(VideoDeviceSingleton());
+        const uint8_t* device = static_cast<const uint8_t*>(VideoDeviceSingleton());
 
-        if (flags & UI::kElementFlagSizeToScreenW) {
+        if (flags & kElementFlagSizeToScreenW) {
             const int32_t screenW = *reinterpret_cast<const int32_t*>(device + 0x04);
             const uint8_t* scaleOwner = *reinterpret_cast<const uint8_t* const*>(
-                reinterpret_cast<const uint8_t*>(dialogParent) + 0x10);
+                static_cast<const uint8_t*>(dialogParent) + 0x10);
             const float scale = *reinterpret_cast<const float*>(scaleOwner + 0xdc);
-            *outW = static_cast<int>(static_cast<float>(screenW) * scale);
+            outW = static_cast<int>(static_cast<float>(screenW) * scale);
         }
         // RE-READ, not the cached `flags` — see the note above.
-        if (self->_flags & UI::kElementFlagSizeToScreenH) {
+        if (_flags & kElementFlagSizeToScreenH) {
             const int32_t screenH = *reinterpret_cast<const int32_t*>(device + 0x08);
             const uint8_t* scaleOwner = *reinterpret_cast<const uint8_t* const*>(
-                reinterpret_cast<const uint8_t*>(dialogParent) + 0x10);
+                static_cast<const uint8_t*>(dialogParent) + 0x10);
             const float scale = *reinterpret_cast<const float*>(scaleOwner + 0xdc);
-            *outH = static_cast<int>(static_cast<float>(screenH) * scale);
+            outH = static_cast<int>(static_cast<float>(screenH) * scale);
         }
     }
-
 }
 
 // ---- ?GetUserData@  0x180115550 --------------------------------------------
-void* RtUi_Element_GetUserData(Element* self) {
-    void* ours = self->_userData;
-    return ours;
+Object::Base* Element::GetUserData() {
+    return static_cast<Object::Base*>(_userData);
 }
 
 // ---- ?Hide@  0x180035830 ---------------------------------------------------
@@ -771,188 +689,228 @@ void* RtUi_Element_GetUserData(Element* self) {
 // negation) and runs the dirty walk only if the bit actually changed. Retail
 // builds this branchlessly out of SETZ/SETNZ/NOT; the mask is
 // `hide ? 0xFFFFFFFF : ~1`, so the AND is a no-op on the hide path.
-void RtUi_Element_Hide(Element* self, bool hide) {
-
-    const uint32_t old = self->_flags;
+void Element::Hide(bool hide) {
+    const uint32_t old = _flags;
     const uint32_t setMask   = hide ? 1u : 0u;
     const uint32_t clearMask = hide ? 0xFFFFFFFFu : ~1u;
     const uint32_t next = (old | setMask) & clearMask;
-    self->_flags = next;
-    if ((next ^ old) & 1u) NeedsSizeCalcWalk(self);
-
+    _flags = next;
+    if ((next ^ old) & 1u) SetNeedsSizeCalc();
 }
 
 // ---- ?SetElementId@  0x180115820 -------------------------------------------
-void RtUi_Element_SetElementId(Element* self, int id) {
-    self->_elementId = id;
+void Element::SetElementId(int32_t id) {
+    _elementId = id;
 }
 
 // ---- ?SetFlagsOnOff@  0x180116160 ------------------------------------------
 // `flags = (flags | on) & ~off`, then the dirty walk if BIT 0 changed — only
-// bit 0, not any other bit. The parameter names in
-// engine/funcs/engine_funcs.h WERE "hideFlags, showFlags", which happens to
-// read right for the common case of bit 0 (bit 0 means HIDDEN) but inverts for
-// every other bit; this lane renamed them to (setFlags, clearFlags).
-// See WAVE7_LANE_A.md §6.
-void RtUi_Element_SetFlagsOnOff(Element* self, uint32_t on, uint32_t off) {
-
-    const uint32_t old = self->_flags;
+// bit 0, not any other bit. (setFlags, clearFlags), not "hide, show".
+void Element::SetFlagsOnOff(uint32_t on, uint32_t off) {
+    const uint32_t old = _flags;
     const uint32_t next = (old | on) & ~off;
-    self->_flags = next;
-    if ((next ^ old) & 1u) NeedsSizeCalcWalk(self);
-
+    _flags = next;
+    if ((next ^ old) & 1u) SetNeedsSizeCalc();
 }
 
-// ---- ?SetName@  0x1801154f0 ------------------------------------------------
-// System::String release/acquire. `str` is a `const System::String&` — a
-// pointer to the 8-byte String, whose one field is the character body.
-//
-// The release path is retail's, including the detail that the FIELD is used as
-// the scratch for the pointer arithmetic: `this->_name -= 8` and then
-// `MemFree(this->_name)`, which leaves a freed pointer in the field for the two
-// instructions before it is overwritten. Reproduced, because the object is
-// observable from a signal handler and because "tidying" it would hide the fact
-// that the field is briefly dangling.
-//
-// NO REPLAY ORACLE IS POSSIBLE. The scratch copy would hold the OLD string
-// pointer, so the replayed original would decrement that string's refcount a
-// SECOND time — and if our body already dropped it to zero and freed it, the
-// replay writes into freed memory. Refcounts are global state; PLAN §4.3 risk 2
-// calls this the shadow case. So the check below is a postcondition predicate
-// that names each term it tests.
-void RtUi_Element_SetName(Element* self, void* const* str) {
+}  // namespace UI
 
-    char* const incoming = reinterpret_cast<char*>(*str);
-    char* const previous = reinterpret_cast<char*>(self->_name);
-    int32_t prevRefAfter = 0;
-    bool    freedPrev    = false;
-
+namespace {
+// The System::String release/acquire SetName and SetToolTipString share, on
+// the field each passes. The release path is retail's, including the detail
+// that the FIELD is used as the scratch for the pointer arithmetic:
+// `field -= 8` and then `MemFree(field)`, which leaves a freed pointer in the
+// field for the two instructions before it is overwritten. Reproduced.
+void AssignStringField(void*& field, char* incoming) {
+    char* const previous = static_cast<char*>(field);
     if (previous != incoming) {
         if (previous) {
             if (--RtSystem::StringRefCount(previous) == 0) {
-                self->_name = previous - 8;
-                MemFreeFn free = MemFree();
-                if (free) free(self->_name);
-                freedPrev = true;
+                field = previous - 8;
+                MemFreeFn freeFn = MemFreeAtomic();
+                if (freeFn) freeFn(field);
             } else {
-                prevRefAfter = RtSystem::StringRefCount(previous);
-                self->_name = nullptr;
+                field = nullptr;
             }
         }
-        self->_name = incoming;
+        field = incoming;
         if (incoming) ++RtSystem::StringRefCount(incoming);
     }
-
 }
+}  // namespace
 
-// ---- ?SetNeedsSizeCalc@  0x180035470 ---------------------------------------
-void RtUi_Element_SetNeedsSizeCalc(Element* self) {
-    NeedsSizeCalcWalk(self);
+namespace UI {
+
+// ---- ?SetName@  0x1801154f0 ------------------------------------------------
+// System::String release/acquire on +0x10.
+void Element::SetName(const System::String& name) {
+    AssignStringField(_name, name._data);
 }
 
 // ---- ?SetPadding@  0x180115480 ---------------------------------------------
 // *** THE PARAMETER ORDER IS (left, RIGHT, TOP, bottom). ***
 // Retail stores EDX->+0x18, R8D->+0x1c, R9D->+0x20, [RSP+0x28]->+0x24, and the
-// one-line accessors pin which offset is which: GetLeftPad (0x1800355e0) reads
-// +0x18, GetRightPad (0x180035600) +0x1c, GetTopPad (0x1800355f0) +0x20,
-// GetBottomPad (0x180035610) +0x24. `fn_Element_SetPadding_t`
-// (engine/funcs/engine_funcs.h) DECLARED (left, top, right, bottom); this lane
-// corrected it in place. See WAVE7_LANE_A.md §6.
-//
-// Note also that SetPadding does NOT run the dirty walk, although the closely
-// related SetMinSize (0x1801154a0) does. Not an omission — the walk is simply
-// not in the shipped body.
-void RtUi_Element_SetPadding(Element* self, int left, int right, int top, int bottom) {
-
-    self->_leftPad   = left;
-    self->_rightPad  = right;
-    self->_bottomPad = bottom;   // retail writes +0x24 BEFORE +0x20; same bytes
-    self->_topPad    = top;
-
+// one-line accessors pin which offset is which. SetPadding does NOT run the
+// dirty walk (SetMinSize does); the walk is simply not in the shipped body.
+void Element::SetPadding(int32_t left, int32_t right, int32_t top, int32_t bottom) {
+    _leftPad   = left;
+    _rightPad  = right;
+    _bottomPad = bottom;   // retail writes +0x24 BEFORE +0x20; same bytes
+    _topPad    = top;
 }
 
 // ---- ?SetToolTip@  0x180035740 ---------------------------------------------
-// `tip` is a `UI::String` BY VALUE — 16 bytes, so MSVC passes a pointer to the
-// caller's temporary. UI::String is NOT refcounted (contrast SetToolTipString
-// below), so this is a plain 16-byte copy and the replay oracle applies.
-//
-// Three faithfulness details:
-//   * The `_toolTipDialog != 0` test is evaluated FIRST, before the copy — so
-//     the branch below uses the dialog pointer as it was on entry, and the
-//     copy happens either way.
+// `tip` is a `UI::String` BY VALUE — 16 bytes, NOT refcounted, so this is a
+// plain 16-byte copy.
+//   * The `_toolTipDialog != 0` test is evaluated FIRST, before the copy.
 //   * The second store is a full QWORD at +0x50, so it also writes the 4 bytes
-//     at +0x54 that the ctor leaves alone. Reproduced with a 16-byte copy.
-//
-//     *** DO NOT "FIX" THIS COPY TO kUIStringWrittenBytes (0x0C). *** That
-//     constant is the written extent of a UI::String built by its own three
-//     CONSTRUCTORS, which never touch pad0C — it is the right bound for
-//     COMPARING two constructed UI::Strings (lane F's Sprite.h has the same
-//     trap, and lane E hit it). It is the WRONG bound here, because this is a
-//     COPY, not a comparison, and the shipped body copies sixteen bytes:
-//         180035745  MOV RAX,[RDX]      ; 180035748  MOV [RCX+0x48],RAX
-//         18003574c  MOV RAX,[RDX+0x8]  ; 180035750  MOV [RCX+0x50],RAX
-//     Copying only 0x0C would drop +0x54, which retail writes, and the replay
-//     oracle would report it — correctly — as a divergence at +0x54.
-//
-//     The same distinction runs through this lane's two oracles and both are
-//     already on the right side of it: the ctor's BUILD oracle EXCLUDES +0x54
-//     (neither ctor writes it), and this function's replay INCLUDES it (both
-//     implementations write it). "Never written" is a property of the writer,
-//     not of the type.
+//     at +0x54 that the ctor leaves alone. *** DO NOT "FIX" THIS COPY TO 0x0C
+//     BYTES ***: `MOV RAX,[RDX+0x8] ; MOV [RCX+0x50],RAX` (0x180035748..50).
 //   * Both branches end with `if ((flags ^ old) & 1) walk`, but neither
 //     `|= 0x90000` nor `&= ~0x80000` can change bit 0, so that walk is
-//     UNREACHABLE in the shipped code. Kept, because it is in the shipped code
-//     and because the replay would report its absence as a divergence the day
-//     someone changes the masks.
-void RtUi_Element_SetToolTip(Element* self, const UIString* tip) {
+//     UNREACHABLE in the shipped code. Kept, because it is in the shipped code.
+void Element::SetToolTip(::UIString tip) {
+    const bool hadDialog = (_toolTipDialog != nullptr);
+    std::memcpy(&_toolTip, &tip, sizeof(::UIString));
 
-    const bool hadDialog = (self->_toolTipDialog != nullptr);
-    std::memcpy(&self->_toolTip, tip, sizeof(UIString));
-
-    const uint32_t old = self->_flags;
+    const uint32_t old = _flags;
     uint32_t next;
-    if (hadDialog && self->_toolTip.table != nullptr && self->_toolTip.index >= 0 &&
-        (old & UI::kElementFlagDisabled) == 0) {
-        next = old | (UI::kElementFlagToolTip16 | UI::kElementFlagToolTipValid);
+    if (hadDialog && _toolTip.table != nullptr && _toolTip.index >= 0 &&
+        (old & kElementFlagDisabled) == 0) {
+        next = old | (kElementFlagToolTip16 | kElementFlagToolTipValid);
     } else {
-        next = old & ~static_cast<uint32_t>(UI::kElementFlagToolTipValid);
+        next = old & ~static_cast<uint32_t>(kElementFlagToolTipValid);
     }
-    self->_flags = next;
-    if ((next ^ old) & 1u) NeedsSizeCalcWalk(self);
-
+    _flags = next;
+    if ((next ^ old) & 1u) SetNeedsSizeCalc();
 }
 
 // ---- ?SetToolTipString@  0x1800356e0 ---------------------------------------
 // Byte-for-byte the same release/acquire as SetName, on +0x58 instead of +0x10.
-// Same shadow oracle, for the same reason.
-void RtUi_Element_SetToolTipString(Element* self, void* const* str) {
-
-    char* const incoming = reinterpret_cast<char*>(*str);
-    char* const previous = reinterpret_cast<char*>(self->_toolTipString);
-    int32_t prevRefAfter = 0;
-    bool    freedPrev    = false;
-
-    if (previous != incoming) {
-        if (previous) {
-            if (--RtSystem::StringRefCount(previous) == 0) {
-                self->_toolTipString = previous - 8;
-                MemFreeFn free = MemFree();
-                if (free) free(self->_toolTipString);
-                freedPrev = true;
-            } else {
-                prevRefAfter = RtSystem::StringRefCount(previous);
-                self->_toolTipString = nullptr;
-            }
-        }
-        self->_toolTipString = incoming;
-        if (incoming) ++RtSystem::StringRefCount(incoming);
-    }
-
+void Element::SetToolTipString(const System::String& text) {
+    AssignStringField(_toolTipString, text._data);
 }
 
 // ---- ?SetUserData@  0x180115560 --------------------------------------------
+void Element::SetUserData(Object::Base* userData) {
+    _userData = userData;
+}
+
+// ---- ??1Element@UI@@UEAA@XZ — the C++ destructor, EMPTY on purpose ---------
+// The retail body (0x1801161a0) is the registered door `RtUi_Element_Dtor`
+// below, reached through the minted slot 0. No live Element is destroyed as a
+// C++ object; this exists so a probe subclass can derive (Material precedent).
+Element::~Element() {}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS. Registered names and addresses unchanged; each is now a one-line
+// QUALIFIED delegation. The retslot ones keep retail's `(this, ret, …)` shape
+// and placement-new the member's prvalue into the caller's slot (B5-12).
+// ============================================================================
+
+void RtUi_Element_AddChild(Element* self, void** child) {
+    self->UI::Element::AddChild(
+        Object::InternalPtr<Element>(static_cast<Element*>(*child)));
+}
+
+void* RtUi_Element_Child(Element* self, void** ret, int index) {
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
+        self->UI::Element::Child(index));
+    return ret;
+}
+
+int RtUi_Element_ChildCount(const Element* self) {
+    return self->UI::Element::ChildCount();
+}
+
+void RtUi_Element_ComputeLayout(Element* self, int x, int y, int w, int h) {
+    self->UI::Element::ComputeLayout(x, y, w, h);
+}
+
+void RtUi_Element_Draw(const Element* self, void* spriteContext, unsigned char alpha) {
+    self->UI::Element::Draw(*static_cast<UI::SpriteContext*>(spriteContext), alpha);
+}
+
+void* RtUi_Element_FindElement(Element* self, void** ret, const char* const* name) {
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
+        self->UI::Element::FindElement(
+            *reinterpret_cast<const System::String*>(name)));   // B.3.6 bridge
+    return ret;
+}
+
+void* RtUi_Element_FindElementType(Element* self, void** ret, uint32_t typeId) {
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
+        self->UI::Element::FindElementType(typeId));
+    return ret;
+}
+
+void RtUi_Element_GetAlignedPositionStatic(
+        int alignment, int x, int y, int containerW, int containerH,
+        int offsetX, int offsetY,
+        int leftPad, int rightPad, int topPad, int bottomPad,
+        int* outX, int* outY, int* outW, int* outH,
+        bool stretchX, bool stretchY) {
+    UI::Element::GetAlignedPosition(
+        static_cast<UI::ElementDescription::Alignment>(alignment),
+        x, y, containerW, containerH, offsetX, offsetY,
+        leftPad, rightPad, topPad, bottomPad,
+        *outX, *outY, *outW, *outH, stretchX, stretchY);
+}
+
+void RtUi_Element_GetAlignedPosition(Element* self, int a, int b, int c, int d,
+                                     int e, int f, int* outX, int* outY,
+                                     int* outW, int* outH, bool stretchX, bool stretchY) {
+    self->UI::Element::GetAlignedPosition(a, b, c, d, e, f,
+                                          *outX, *outY, *outW, *outH,
+                                          stretchX, stretchY);
+}
+
+void RtUi_Element_GetPaddedSize(Element* self, int* outW, int* outH) {
+    self->UI::Element::GetPaddedSize(*outW, *outH);
+}
+
+void* RtUi_Element_GetUserData(Element* self) {
+    return self->UI::Element::GetUserData();
+}
+
+void RtUi_Element_Hide(Element* self, bool hide) {
+    self->UI::Element::Hide(hide);
+}
+
+void RtUi_Element_SetElementId(Element* self, int id) {
+    self->UI::Element::SetElementId(id);
+}
+
+void RtUi_Element_SetFlagsOnOff(Element* self, uint32_t on, uint32_t off) {
+    self->UI::Element::SetFlagsOnOff(on, off);
+}
+
+void RtUi_Element_SetName(Element* self, void* const* str) {
+    self->UI::Element::SetName(*reinterpret_cast<const System::String*>(str));   // B.3.6 bridge
+}
+
+void RtUi_Element_SetNeedsSizeCalc(Element* self) {
+    self->UI::Element::SetNeedsSizeCalc();
+}
+
+void RtUi_Element_SetPadding(Element* self, int left, int right, int top, int bottom) {
+    self->UI::Element::SetPadding(left, right, top, bottom);
+}
+
+// `tip` arrives as a pointer to the caller's 16-byte temporary (MSVC passes a
+// 16-byte class by address); the member takes the value.
+void RtUi_Element_SetToolTip(Element* self, const UIString* tip) {
+    self->UI::Element::SetToolTip(*tip);
+}
+
+void RtUi_Element_SetToolTipString(Element* self, void* const* str) {
+    self->UI::Element::SetToolTipString(*reinterpret_cast<const System::String*>(str));   // B.3.6 bridge
+}
+
 void RtUi_Element_SetUserData(Element* self, void* userData) {
-    self->_userData = userData;
+    self->UI::Element::SetUserData(static_cast<Object::Base*>(userData));
 }
 
 // ---- ?SetOffsets@ContainerElement@UI@@QEAAXHH@Z  0x1800cc1e0 ---------------
@@ -1127,11 +1085,9 @@ void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
 // Nothing in this file is evidence that the body is right; the evidence is the
 // disassembly transcribed above.
 void RtUi_Element_Dtor(Element* self) {
-    bool didWork = false;
-
     // Retail's vtable restamp. Resolved by name so our objects and the DLL's
     // carry the identical pointer (the argument at the top of this file).
-    if (void* vt = ElementVTable()) self->_vtable = vt;
+    if (void* vt = ElementVTable()) *reinterpret_cast<void**>(self) = vt;
 
     // 0x180115570 RemoveChildren, reached BY ADDRESS. ResolveAddr consults the
     // port registry first (reference_resolveaddr_consults_port_registry_first
@@ -1152,7 +1108,6 @@ void RtUi_Element_Dtor(Element* self) {
             using DeletingDtorFn = void* (*)(void*, unsigned);
             void** vtbl = *reinterpret_cast<void***>(border);
             reinterpret_cast<DeletingDtorFn>(vtbl[0])(border, 1u);
-            didWork = true;
         }
         self->_border = nullptr;
     }
@@ -1173,7 +1128,6 @@ void RtUi_Element_Dtor(Element* self) {
             self->_toolTipString = p - 8;
             MemFreeFn freeFn = MemFree();
             if (freeFn) freeFn(self->_toolTipString);
-            didWork = true;
         } else {
             self->_toolTipString = nullptr;
         }
@@ -1183,7 +1137,6 @@ void RtUi_Element_Dtor(Element* self) {
             self->_name = p - 8;
             MemFreeFn freeFn = MemFree();
             if (freeFn) freeFn(self->_name);
-            didWork = true;
         } else {
             self->_name = nullptr;
         }
@@ -1236,30 +1189,25 @@ void RtUi_Element_Dtor(Element* self) {
 // No null test on `self`: retail has none, and the two callers
 // (`?SetUpperLeft@DialogInstance@` 0x180114a60 and this body itself) both test
 // before calling. CLAUDE.md's rule — the deref is load-bearing.
-namespace {
-// The recursive core.
-void AdjustUpperLeftCore(Element* self, int32_t dx, int32_t dy) {
-    while (self) {
-        self->_layoutLeft   += dx;
-        self->_layoutRight  += dx;
-        self->_layoutTop    += dy;
-        self->_layoutBottom += dy;
-        for (int32_t i = 0; i < self->_children.GetSize(); ++i) {
-            Element* child = self->_children.GetData()[i];
-            if (child) AdjustUpperLeftCore(child, dx, dy);
+namespace UI {
+void Element::AdjustUpperLeft(int32_t dx, int32_t dy) {
+    Element* e = this;
+    while (e) {
+        e->_layoutLeft   += dx;
+        e->_layoutRight  += dx;
+        e->_layoutTop    += dy;
+        e->_layoutBottom += dy;
+        for (int32_t i = 0; i < e->_children.GetSize(); ++i) {
+            Element* child = e->_children.GetData()[i];
+            if (child) child->AdjustUpperLeft(dx, dy);
         }
-        self = static_cast<Element*>(self->_border);
+        e = static_cast<Element*>(e->_border);
     }
 }
-
-void AdjustUpperLeftImpl(Element* self, int32_t dx, int32_t dy) {
-    AdjustUpperLeftCore(self, dx, dy);
-}
-
-}  // namespace
+}  // namespace UI
 
 void RtUi_Element_AdjustUpperLeft(Element* self, int32_t dx, int32_t dy) {
-    AdjustUpperLeftImpl(self, dx, dy);
+    self->UI::Element::AdjustUpperLeft(dx, dy);
 }
 
 int RtUiElementRegister() {

@@ -86,93 +86,64 @@
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/UserInterface.h"
-
-// ResolveAddr / ResolveExport, forward-declared rather than pulled in from
-// standalone/resolve.h — resolve.h drags in <windows.h> and PLAN §4.1 requires
-// runtime/src/ to stay platform-neutral. Byte-identical to resolve.h's; the
-// linker checks them against it. (Same declaration block as element.cpp:126.)
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-void*     ResolveExport(const char* mangled_name);
+// `enum class Module` + `ResolveAddr` (declared once there, byte-identical to
+// standalone/resolve.h) and `rtuielem::AtomicExport`/`AtomicAddr`, the B6-5
+// door caches.
+#include "element_common.h"
 
 using UI::Element;
 
+// ENDGAME B.3.6 block A: the eight slot bodies below MOVED into the members of
+// the real `UI::Element` (runtime/types/ui/Element.h); each registered door is
+// now a one-line QUALIFIED delegation. A live Element wears the MINTED
+// `??_7Element@UI@@6B@`, whose slots resolve back to these very doors, so an
+// unqualified virtual call from a door would re-enter it (B34_BRIEFS A.1).
+//
+// RULE B6-5: UI is constructed on the loader thread while the main thread
+// draws. The doors of OTHER classes the member bodies call (UserInterface,
+// DialogInstance, the event-array grow helper, the type-info record) are
+// resolved through namespace-scope std::atomic slots, never through a
+// function-local static first-call cache inside a member.
+
 namespace {
-
-constexpr size_t kElementSize = sizeof(Element);   // 0xC0, static_assert'd in the header
-
-// ---------------------------------------------------------------------------
-// Mangled names. Repeated as literals at the registrations at the bottom for
-// the reason element.cpp:139 gives — tools/runtime_census.py cannot see through
-// a named constant and would under-count the lane
-// (reference_census_cannot_see_nonliteral_registrations.md).
-// ---------------------------------------------------------------------------
-const char* const kTypeName  = "?TypeName@Element@UI@@UEBAPEBDXZ";
-const char* const kType      = "?Type@Element@UI@@UEBAIXZ";
-const char* const kPersist   = "?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z";
-// NOTE THE BACKREFERENCE. Element's own Update mangles `UpdateState@12@`,
-// while every DERIVED override mangles `UpdateState@Element@2@`. They are
-// different strings and only this one resolves to 0x180116270; the derived
-// spelling resolves to a different function entirely
-// (reference_resolveexport_phantom_names.md is the general form of this trap).
-const char* const kUpdate =
-    "?Update@Element@UI@@UEAAXAEBVTime@System@@PEAVUserInterface@2@"
-    "V?$InternalPtr@VDialogInstance@UI@@@Object@@AEBUUpdateState@12@@Z";
-const char* const kEnable    = "?Enable@Element@UI@@UEAAX_N@Z";
-const char* const kContains  = "?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z";
-const char* const kSetColor  = "?SetColor@Element@UI@@UEAAXI@Z";
-const char* const kGetBorder = "?GetBorder@Element@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@XZ";
 
 // ---------------------------------------------------------------------------
 // The exported DATA slot 0x180035420 and 0x180035440 read.
 //
 // `?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A` is at 0x1801fab30 and IS in
-// the export table (ordinal 4856, confirmed with pefile). `0V…A` is the PRIVATE
-// static spelling and this DLL exports its private members, so a NAME door is
-// the correct door here — `reference_aeaa_is_private_not_unexported.md`.
+// the export table (ordinal 4856). `0V…A` is the PRIVATE static spelling and
+// this DLL exports its private members, so a NAME door is the correct door
+// here — `reference_aeaa_is_private_not_unexported.md`.
 //
 //   0x180035420  MOV EAX,dword ptr [0x1801fab30]   -> typeInfo + 0x00 = typeId
 //   0x180035440  MOV RAX,qword ptr [0x1801fab38]   -> typeInfo + 0x08 = name
-//
-// Two adjacent vtable slots reading +0x00 and +0x08 of one address is what
-// makes this a BaseTypeInfo rather than a guess (dialog.cpp:836 makes the same
-// argument for DialogInstance's pair).
 // ---------------------------------------------------------------------------
+std::atomic<void*> g_typeInfoSlot{nullptr};
 const uint8_t* ElementTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(rtuielem::AtomicExport(
+        g_typeInfoSlot, "?_typeInfo@Element@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
 // ---------------------------------------------------------------------------
-// Dependencies these bodies CALL rather than reimplement.
-//
-// Resolution rule, restated from element.cpp:172 because this file has both
-// kinds: ResolveExport/RT_EXPORT_ONCE for anything with an exported name (so a
-// sibling lane's port is used when there is one), ResolveAddr(Module::Runtime,
-// …) only for the ONE unexported internal.
-// ---------------------------------------------------------------------------
-
 // THE ONE ADDRESS DOOR, declared rather than hidden.
 //
 // 0x180033690 is `Collection::Array<UI::Event>::SetSize(int, const Event*)` —
 // the grow-and-fill helper every UI event push goes through. It is NOT in the
-// export table (checked with pefile), so there is no name door for it. A
-// by-address call is a CUTOVER OBLIGATION, not a free choice
-// (reference_by_address_door_dies_at_cutover.md). It is NOT NEW DEBT: lane UI1
-// (userinterface_frame.cpp:216) and lane CLOSEDLG (userinterface_close.cpp:201)
-// already own this exact address for the same reason, and this is the third
-// call site of the same helper, not a third obligation.
-//
-// It is reached through ResolveAddr(Module::Runtime, …), which consults the
-// port registry FIRST — so the day anyone ports the helper we get theirs
-// (reference_resolveaddr_consults_port_registry_first.md).
+// export table, so there is no name door for it; runtime/src/collection/
+// array.cpp registers our port at that address, and ResolveAddr consults the
+// port registry FIRST (reference_resolveaddr_consults_port_registry_first.md).
+// Lane UI1 (userinterface_frame.cpp) and lane CLOSEDLG (userinterface_close.cpp)
+// reach the same address for the same reason.
+// ---------------------------------------------------------------------------
 constexpr uintptr_t kEventsSetSizeAddr = 0x180033690;
 
 using SetSizeFn     = void  (*)(void* array, int32_t newSize, const void* fill);
@@ -184,75 +155,33 @@ using CloseDialogFn = void  (*)(void* ui, void* dlgPtr);
 using PlayFn        = void  (*)(void* ui, int32_t id);
 using EndDragDropFn = void  (*)(void* ui);
 
+std::atomic<void*> g_eventsSetSize{nullptr};
+std::atomic<void*> g_isInsideClipRegion{nullptr};
+std::atomic<void*> g_beginToolTip{nullptr};
+std::atomic<void*> g_setUpperLeft{nullptr};
+std::atomic<void*> g_endHover{nullptr};
+std::atomic<void*> g_closeDialog{nullptr};
+std::atomic<void*> g_play{nullptr};
+std::atomic<void*> g_endDragDrop{nullptr};
+
 SetSizeFn EventsSetSize() {
-    static SetSizeFn fn = reinterpret_cast<SetSizeFn>(
-        ResolveAddr(Module::Runtime, kEventsSetSizeAddr));
-    return fn;
+    return reinterpret_cast<SetSizeFn>(
+        rtuielem::AtomicAddr(g_eventsSetSize, kEventsSetSizeAddr));
+}
+template <typename Fn>
+Fn Door(std::atomic<void*>& slot, const char* mangled) {
+    return reinterpret_cast<Fn>(rtuielem::AtomicExport(slot, mangled));
 }
 
 // ---------------------------------------------------------------------------
-// UI::Element::UpdateState — 0x30 bytes.
-//
-// NOT re-derived here: this is lane UI1's recovery, transcribed field-for-field
-// from runtime/src/ui/userinterface_frame.cpp:242, which pinned it from the
-// frame of `UserInterface::Update` (the function that BUILDS the object this
-// one receives). Only the fields Element::Update actually reads are named
-// below; the others keep UI1's names so a reader can diff the two blocks.
-//
-// It is duplicated rather than hoisted into a shared header on purpose: UI1's
-// copy is a stack local it owns end to end, and hoisting it would make one
-// lane's correction silently change the other's meaning. The static_assert on
-// the size is the guard that keeps the two honest.
-// ---------------------------------------------------------------------------
-struct UpdateState {
-    uint8_t  dragActive;      // +0x00  = (_dragDropDialog != 0)
-    uint8_t  buttonPressed;   // +0x01
-    uint8_t  b02;             // +0x02
-    uint8_t  b03;             // +0x03
-    uint8_t  b04;             // +0x04
-    uint8_t  b05;             // +0x05
-    uint8_t  b06;             // +0x06
-    uint8_t  leftDown;        // +0x07
-    uint8_t  b08;             // +0x08
-    uint8_t  b09;             // +0x09
-    uint8_t  pad0a[2];        // +0x0a
-    int32_t  dragDx;          // +0x0c
-    int32_t  dragDy;          // +0x10
-    int32_t  wheel;           // +0x14
-    int32_t  mouseX;          // +0x18
-    int32_t  mouseY;          // +0x1c
-    uint8_t  mouseCaptured;   // +0x20
-    uint8_t  pad21[7];        // +0x21
-    void*    config;          // +0x28
-};
-static_assert(sizeof(UpdateState) == 0x30, "UpdateState frame span is 0x30");
-static_assert(offsetof(UpdateState, dragActive) == 0x00, "");
-static_assert(offsetof(UpdateState, leftDown)   == 0x07, "");
-static_assert(offsetof(UpdateState, dragDx)     == 0x0c, "");
-static_assert(offsetof(UpdateState, dragDy)     == 0x10, "");
-static_assert(offsetof(UpdateState, mouseX)     == 0x18, "");
-static_assert(offsetof(UpdateState, mouseY)     == 0x1c, "");
-
-// ---------------------------------------------------------------------------
-// One queued UI event, 0x30 bytes — and this lane can NAME THE INTERIOR that
-// runtime/types/ui/UserInterface.h:176 deliberately left opaque.
-//
-// UserInterface.h's `Event` says "the INTERIOR is not modelled, because nothing
-// this lane ports reads a field of one", and records what its two push sites
-// showed: "+0x00 is the target dialog pointer, +0x10 is an event id, +0x14 is
-// -1, +0x20 copies _dragDropId and +0x28 copies _dragDropData". Element::Update
-// is the site that fills the rest in: it writes ELEVEN records at nine distinct
-// offsets and the frame slots line up exactly with UI1's, so
+// One queued UI event, 0x30 bytes — the interior runtime/types/ui/
+// UserInterface.h:176 leaves opaque, named from Element::Update's own eleven
+// record writes (nine distinct offsets) and lane UI1's:
 //
 //      +0x00 dialog      +0x08 element     +0x10 eventId
 //      +0x14 elementId   +0x18 mouseX      +0x1c mouseY
 //      +0x20 dragId      +0x24 (never written by either site)
 //      +0x28 dragData
-//
-// UI1's records are the SAME struct with element=0 and elementId=-1 (a UI-level
-// event has no element). The header's opaque `Event` is left alone — this is
-// the layout a future editor of it should merge, evidenced here rather than
-// asserted there.
 //
 // +0x24 is deliberately left uninitialised: retail never writes it and the grow
 // helper never copies it (userinterface_frame.cpp:277 records the same).
@@ -274,288 +203,11 @@ static_assert(offsetof(EventRecord, dragId)   == 0x20, "");
 static_assert(offsetof(EventRecord, dragData) == 0x28, "");
 
 // ---------------------------------------------------------------------------
-// The parent dirty walk, verbatim from `?SetNeedsSizeCalc@` (0x180035470) —
-// a do/while, not a while: the OR happens BEFORE the null test.
-//
-// EVERY CALL TO THIS IN THIS FILE IS UNREACHABLE IN THE SHIPPED BUILD; see the
-// banner. It is kept so the condition is evaluated rather than deleted.
-// ---------------------------------------------------------------------------
-inline void NeedsSizeCalcWalk(Element* e) {
-    do {
-        e->_flags |= UI::kElementFlagNeedsSizeCalc;
-        e = e->_parent;
-    } while (e != nullptr);
-}
-
-template <typename Fn>
-inline Fn VSlot(const void* obj, int index) {
-    return reinterpret_cast<Fn>((*reinterpret_cast<void* const* const*>(obj))[index]);
-}
-
-constexpr int kSlotUpdate   = 7;   // +0x38
-constexpr int kSlotEnable   = 8;   // +0x40
-constexpr int kSlotContains = 9;   // +0x48
-
-// ---------------------------------------------------------------------------
-// The SHIPPED-BYTE PIN (the `pin` oracle disposition)
-// ---------------------------------------------------------------------------
-// For the two bodies that cannot be replayed, this is what is actually
-// measured: FNV-1a-64 over the shipped body as it sits in the LOADED image,
-}  // namespace
-
-// ============================================================================
-// The ports
-// ============================================================================
-// Every body is byte-faithful to the retail DISASSEMBLY, not to Ghidra's C:
-// that C drops dereferences and prints MOVSXD as a zero extension, and three
-// Wave 6 defects came from trusting it
-// (reference_ghidra_c_output_vs_disassembly.md). Where retail derefs without a
-// null check, so do we.
-
-// ---- slot 2  ?Type@Element@UI@@UEBAIXZ  0x180035420 ------------------------
-//   MOV EAX,dword ptr [0x1801fab30] / RET     — RCX is never read.
-extern "C" uint32_t RtUi_Element_Type(const void* self) {
-    (void)self;
-    uint32_t ours = 0;
-    std::memcpy(&ours, ElementTypeInfo(), sizeof ours);
-    return ours;
-}
-
-// ---- slot 1  ?TypeName@Element@UI@@UEBAPEBDXZ  0x180035440 -----------------
-//   MOV RAX,qword ptr [0x1801fab38] / RET     — typeInfo + 8, RCX unread.
-//
-// Returning the literal "Element" was rejected for dialog.cpp:849's reason: it
-// would compare equal under every strcmp and be a DIFFERENT POINTER from the
-// one Factory::Startup CRC'd and from the one every other reader sees. A port
-// whose only failure mode is pointer identity fails silently and late.
-//
-// WAVE 10C lane TIDENT — TWO CORRECTIONS TO THAT PARAGRAPH, both measured.
-//
-//  1. Reading the field does NOT avoid the pointer difference it warns about.
-//     `?_typeInfo@Element@UI@@` is a PROMOTED minted row, so `ElementTypeInfo()`
-//     resolves to OUR node and `ours` is a literal in OUR image just the same.
-//  2. "Fails silently and late" is not what the pointer difference does, and
-//     the reason is now a census rather than a worry: NOTHING in either shipped
-//     binary consumes a BaseTypeInfo::name by pointer. All 525 exe references
-//     to the imported `?_typeInfo@` slots read the dword at +0x00; the DLL's
-//     only static readers of +0x08 are the 103 `?TypeName@` accessors, and not
-//     one of them is called anywhere in the DLL. Addresses:
-//     docs/runtime_port/WAVE10C_LANE_TIDENT.md.
-//
-// Reading the field is still the right body — it is what the two instructions
-// do — but it is right because it is FAITHFUL, not because it dodges identity.
-extern "C" const char* RtUi_Element_TypeName(const void* self) {
-    (void)self;
-    const char* ours = nullptr;
-    std::memcpy(&ours, ElementTypeInfo() + 8, sizeof ours);
-    return ours;
-}
-
-// ---- slot 10  ?SetColor@Element@UI@@UEAAXI@Z  0x180035620 ------------------
-//   MOV dword ptr [RCX + 0x38],EDX / RET
-//
-// One store. NO dirty walk, NO clamp, NO notification: it is the whole body,
-// which is worth saying because every OTHER mutator in this class ends with the
-// ancestor walk and a reader who assumes symmetry would add one.
-//
-// Oracle `scratch`: the shipped export is given a private copy of the
-// PRE-state and all 0xC0 bytes are compared, so a wrong offset or a stray
-// write into padding is caught, not just the field we meant to write.
-extern "C" void RtUi_Element_SetColor(Element* self, uint32_t color) {
-
-    alignas(16) uint8_t before[kElementSize];
-
-    self->_color = color;
-
-}
-
-// ---- slot 11  ?GetBorder@Element@UI@@UEBA…  0x180035630 --------------------
-//   MOV RAX,qword ptr [RCX + 0xb0] / MOV qword ptr [RDX],RAX
-//   MOV RAX,RDX / RET
-//
-// The hidden return slot is in RDX (an `InternalPtr<Element>` the caller owns),
-// and the function returns that same pointer — the MSVC convention for a
-// class return. Getting the RETURN wrong here is the classic hidden-ret-slot
-// defect (reference_hidden_retslot_wild_write.md), so the oracle compares both
-// the value written into the slot AND the returned pointer.
-extern "C" void** RtUi_Element_GetBorder(const Element* self, void** ret) {
-
-    *ret = self->_border;
-
-    return ret;
-}
-
-// ---- slot 8  ?Enable@Element@UI@@UEAAX_N@Z  0x180116910 --------------------
-//
-//   old = _flags
-//   _flags = enable ? (old & ~0x800000) : (old | 0x800000)   [bit 23, kDisabled]
-//   if (((_flags ^ old) & 1) != 0) NeedsSizeCalcWalk(this);  [DEAD — see banner]
-//   for (i = 0; i < _children._size; ++i)
-//       children[i]->vt[8](children[i], enable)
-//
-// THE ARGUMENT MEANS WHAT ITS NAME SAYS. `Enable(true)` CLEARS bit 23
-// (0x180116928: `TEST DL,DL / JZ`, true arm 0x18011692f: `BTR R8D,0x17`), and bit 23 is
-// `kElementFlagDisabled` (`?IsEnabled@` 0x180035500 is `TEST 0x1800000; SETZ`).
-// An earlier revision of this port had the sense INVERTED, with a banner
-// insisting the inversion was retail's. It was not, and the defect was
-// invisible with the DLL present: the exe's dialogs reach slot 8 through the
-// DLL's own vtables, so this body only ran under the diff oracle. The first
-// DLL-absent Load dialog (2026-09-12) called SetEnabled(button, 1) on
-// Load/Cancel/Delete through the minted vtable and all three came up greyed.
-//
-// The child recursion goes through the CHILD's own slot 8, not through this
-// body, so a ButtonElement child reaches `?Enable@ButtonElement@` (0x180110cc0)
-// — hard-coding this function would break that silently.
-//
-// NO NULL CHECK ON THE CHILD (0x1801169ab derefs it immediately), unlike
-// `Contains` two functions below, which does test. Retail is asymmetric here
-// and the asymmetry is preserved: CLAUDE.md's rule is that an unguarded deref
-// is load-bearing.
-//
-// ORACLE `scratch`, WITH ONE STATED EXCLUSION. The shipped body is run on a
-// private copy of the pre-state whose CHILD ARRAY IS EMPTIED
-// (`_children = {null,0,0}`), and ours is run a second time on an identically
-// emptied copy; the two 0xC0-byte results are compared. Emptying is not
-// cosmetic and it is not free:
-//   * it is NECESSARY — the shipped body would otherwise recurse into the REAL
-//     children through their real vtables, running a second Enable on live
-//     objects whose derived overrides (ButtonElement's, for one) are not known
-//     to be idempotent. That is the Wave-7 replay argument failing, and it
-//     fails here rather than being waved through.
-//   * it means the oracle covers the FLAG ARITHMETIC and nothing else. The
-//     six-instruction child loop is covered by the shipped-byte pin and by the
-//     live A/B, and this comment is the only place that says so.
-extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
-
-    alignas(16) uint8_t oursCopy[kElementSize];
-    alignas(16) uint8_t theirsCopy[kElementSize];
-
-    const uint32_t old = self->_flags;
-    if (enable) self->_flags = old & ~UI::kElementFlagDisabled;
-    else        self->_flags = old |  UI::kElementFlagDisabled;
-    // DEAD IN THE SHIPPED BUILD (`TEST R8B,0x1` on a diff that can only hold
-    // bit 23). Written literally so it is evaluated, not deleted.
-    if (((self->_flags ^ old) & UI::kElementFlagHidden) != 0) NeedsSizeCalcWalk(self);
-
-    for (int32_t i = 0; i < self->_children._size; ++i) {
-        Element* child = self->_children._data[i];
-        using Fn = void (*)(Element*, bool);
-        VSlot<Fn>(child, kSlotEnable)(child, enable);
-    }
-
-}
-
-// ---- slot 9  ?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z  0x1801169e0
-//
-//   if (_flags & 3) return false;                  [hidden | no-hit-test]
-//   for (i = 0; i < _children._size; ++i) {
-//       child = children[i];
-//       if (child && ui->IsInsideClipRegion(x, y) && child->vt[9](child,x,y,ui))
-//           return true;
-//   }
-//   if (_children._size != 0) return false;        [a container never hits itself]
-//   return x >= clip.left && x <= clip.right && y >= clip.top && y <= clip.bottom
-//       && x >= _layoutLeft && x < _layoutRight
-//       && y >= _layoutTop  && y < _layoutBottom;
-//
-// TWO ASYMMETRIES THAT LOOK LIKE TYPOS AND ARE NOT, both read off the
-// disassembly rather than off Ghidra's C:
-//   * the CLIP test is INCLUSIVE on all four sides (JL / JG at 0x180116a87,
-//     0x180116a91, 0x180116a9b, 0x180116aa5) while the ELEMENT RECT test is
-//     half-open — `>= left`, `< right` (JL / JGE at 0x180116aab, 0x180116ab1).
-//     Element::Update's own hover test, forty lines below, is EXCLUSIVE on all
-//     four element sides. Three different conventions in one class.
-//   * `IsInsideClipRegion` is re-evaluated INSIDE the child loop, on the same
-//     x/y, once per child. Hoisting it would be a strict improvement and a
-//     divergence; it stays where retail put it.
-//
-// The child null test IS present here (0x180116a3b) — the opposite of Enable.
-//
-// ORACLE `replay`: the whole call chain is `UEBA` (const) — this body, the
-// child dispatch and IsInsideClipRegion all only read — so re-running the
-// shipped export on the SAME live object is free of side effects and the bool
-// is compared directly. That argument depends on every override of slot 9
-// being const too, which the export table confirms for the one override that
-// exists (`?Contains@ClipRegionElement@UI@@UEBA…`, 0x1800cbcc0).
-extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
-                                      void* ui) {
-
-    bool ours;
-    if ((self->_flags & (UI::kElementFlagHidden | UI::kElementFlagNoHitTest)) != 0) {
-        ours = false;
-    } else {
-        ours = false;
-        bool hit = false;
-        ClipTestFn inClip = RT_EXPORT_ONCE(ClipTestFn,
-            "?IsInsideClipRegion@UserInterface@UI@@QEBA_NHH@Z");
-        for (int32_t i = 0; i < self->_children._size; ++i) {
-            Element* child = self->_children._data[i];
-            if (!child) continue;
-            if (!inClip(ui, x, y)) continue;
-            using Fn = bool (*)(const Element*, int32_t, int32_t, void*);
-            if (VSlot<Fn>(child, kSlotContains)(child, x, y, ui)) { hit = true; break; }
-        }
-        if (hit) {
-            ours = true;
-        } else if (self->_children._size != 0) {
-            ours = false;
-        } else {
-            const UI::UserInterface* u = static_cast<const UI::UserInterface*>(ui);
-            ours = x >= u->_clipRegion.left && x <= u->_clipRegion.right &&
-                   y >= u->_clipRegion.top  && y <= u->_clipRegion.bottom &&
-                   x >= self->_layoutLeft   && x <  self->_layoutRight &&
-                   y >= self->_layoutTop    && y <  self->_layoutBottom;
-        }
-    }
-
-    return ours;
-}
-
-// ---- slot 3  ?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z  0x180116870 ------
-//
-//   scope.stream = &stream;                        [rsp+0x20]
-//   scope.node   = nullptr;                        [rsp+0x28]
-//   Encoding* enc = stream[+0x10];
-//   node = (stream[+0x08] == 0) ? enc->vt[+0x18](enc, &scope, 0)
-//                               : enc->vt[+0x20](enc, &scope, 0);
-//     ^ THREE arguments. The 0 is retail's `XOR R8D,R8D` at 0x180116889, and
-//       it is the codec VERSION. This transcription originally showed two and
-//       the port matched it; see the body for what that cost and how it was
-//       caught.
-//   scope.node = node;
-//   if (node) node->vt[0](node, 1);                [deleting destructor]
-//
-// Element itself persists NOTHING. The body opens an encoding SCOPE and closes
-// it immediately; every derived element that has state overrides this slot.
-// The base still has to exist, and dialog.cpp:806 already argues why an empty
-// or near-empty override is a real port: what the cutover needs is a non-null
-// address to stamp into slot 3, and a null there is indistinguishable from a
-// correct override right up until it is called.
-//
-// THE TWO ENCODING SLOTS ARE READ FROM THE OBJECT, NOT NAMED. +0x18 and +0x20
-// are byte displacements into whatever vtable `stream[+0x10]` carries, taken at
-// run time. That sidesteps the blocker that held `?Serialize@SpriteSheet@` back
-// for a whole lane — retail's IO::Encoding vtable has DIFFERENT offsets from
-// the profile build's, so a profile-build symbol cannot name a retail slot
-// (reference_encoding_vtable_offsets_differ_between_builds.md). Here nothing
-// needs naming: the displacement is the datum.
-//
-// ORACLE: `pin`, and NOT replay. Running the shipped body a second time on the
-// same stream would open and close a SECOND scope — on the write path that is
-// an extra record in the file. There is no post-state to compare that is not
-// itself the side effect. What is measured is the shipped-byte pin below; the
-// per-slot table and WAVE10B_LANE_ELEM.md both say `ported, not differentially
-// verified` for this row rather than letting a green pin read as more.
-// ---------------------------------------------------------------------------
 // ATTENDANCE COUNTERS for Persist and Update -- Wave 10C lane ROUTES
 // ---------------------------------------------------------------------------
-// These count ENTRIES, unconditionally, on every build -- the
-// runtime/src/io/encoding.cpp / dialog_controller_base.cpp idiom.
-//
-// NEITHER COUNTER IS A VERIFICATION. Both bodies remain PORTED, NOT
-// DIFFERENTIALLY VERIFIED for the reasons their own headers give (neither is
-// replayable). A non-zero count here says only that the port is on a live path.
-namespace {
+// These count ENTRIES, unconditionally, on every build. NEITHER COUNTER IS A
+// VERIFICATION: both bodies remain PORTED, NOT DIFFERENTIALLY VERIFIED (neither
+// is replayable). A non-zero count says only that the port is on a live path.
 struct ElemCounts {
     unsigned long long update = 0, persist = 0;
     ~ElemCounts() {
@@ -569,11 +221,153 @@ struct ElemCounts {
     }
 };
 ElemCounts g_elemCounts;
+
 }  // namespace
 
-extern "C" void RtUi_Element_Persist(void* self, void* stream) {
+// ============================================================================
+// The member bodies
+// ============================================================================
+// Every body is byte-faithful to the retail DISASSEMBLY, not to Ghidra's C
+// (reference_ghidra_c_output_vs_disassembly.md). Where retail derefs without a
+// null check, so do we.
+namespace UI {
+
+// ---- slot 2  ?Type@Element@UI@@UEBAIXZ  0x180035420 ------------------------
+//   MOV EAX,dword ptr [0x1801fab30] / RET     — RCX is never read.
+uint32_t Element::Type() const {
+    uint32_t id = 0;
+    std::memcpy(&id, ElementTypeInfo(), sizeof id);
+    return id;
+}
+
+// ---- slot 1  ?TypeName@Element@UI@@UEBAPEBDXZ  0x180035440 -----------------
+//   MOV RAX,qword ptr [0x1801fab38] / RET     — typeInfo + 8, RCX unread.
+// Reading the field is right because it is FAITHFUL; nothing in either shipped
+// binary consumes a BaseTypeInfo::name by pointer (WAVE10C_LANE_TIDENT.md).
+//
+// This is the class's KEY FUNCTION (the first non-pure, non-inline virtual), so
+// GCC emits `vtable for UI::Element` in this translation unit. Nothing stamps
+// it: every live Element wears the minted table (the ctor door).
+const char* Element::TypeName() const {
+    const char* name = nullptr;
+    std::memcpy(&name, ElementTypeInfo() + 8, sizeof name);
+    return name;
+}
+
+// ---- slot 10  ?SetColor@Element@UI@@UEAAXI@Z  0x180035620 ------------------
+//   MOV dword ptr [RCX + 0x38],EDX / RET
+// One store. NO dirty walk, NO clamp, NO notification: every OTHER mutator in
+// this class ends with the ancestor walk and a reader who assumes symmetry
+// would add one.
+void Element::SetColor(uint32_t color) {
+    _color = color;
+}
+
+// ---- slot 11  ?GetBorder@Element@UI@@UEBA…  0x180035630 --------------------
+//   MOV RAX,qword ptr [RCX + 0xb0] / MOV qword ptr [RDX],RAX
+//   MOV RAX,RDX / RET
+// RULE B6-2: the hidden return slot is spelled as the first parameter in
+// RETAIL order (`this` in RCX, the slot in RDX) and handed back in RAX.
+Object::InternalPtr<Element>* Element::GetBorder(Object::InternalPtr<Element>* ret) const {
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(static_cast<Element*>(_border));
+    return ret;
+}
+
+// ---- slot 8  ?Enable@Element@UI@@UEAAX_N@Z  0x180116910 --------------------
+//
+//   old = _flags
+//   _flags = enable ? (old & ~0x800000) : (old | 0x800000)   [bit 23, kDisabled]
+//   if (((_flags ^ old) & 1) != 0) SetNeedsSizeCalc();       [DEAD — see banner]
+//   for (i = 0; i < _children._size; ++i)
+//       children[i]->Enable(enable)                          [the CHILD's slot 8]
+//
+// THE ARGUMENT MEANS WHAT ITS NAME SAYS. `Enable(true)` CLEARS bit 23
+// (0x180116928: `TEST DL,DL / JZ`, true arm 0x18011692f: `BTR R8D,0x17`).
+//
+// The child recursion is a VIRTUAL call — through the CHILD's own slot 8, so a
+// ButtonElement child reaches `?Enable@ButtonElement@` (0x180110cc0).
+//
+// NO NULL CHECK ON THE CHILD (0x1801169ab derefs it immediately), unlike
+// `Contains`, which does test. Retail is asymmetric and the asymmetry is kept.
+void Element::Enable(bool enable) {
+    const uint32_t old = _flags;
+    if (enable) _flags = old & ~kElementFlagDisabled;
+    else        _flags = old |  kElementFlagDisabled;
+    // DEAD IN THE SHIPPED BUILD (`TEST R8B,0x1` on a diff that can only hold
+    // bit 23). Written literally so it is evaluated, not deleted.
+    if (((_flags ^ old) & kElementFlagHidden) != 0) SetNeedsSizeCalc();
+
+    for (int32_t i = 0; i < _children._size; ++i) {
+        Element* child = _children._data[i];
+        child->Enable(enable);
+    }
+}
+
+// ---- slot 9  ?Contains@Element@UI@@UEBA_NHHPEAVUserInterface@2@@Z  0x1801169e0
+//
+//   if (_flags & 3) return false;                  [hidden | no-hit-test]
+//   for (i = 0; i < _children._size; ++i) {
+//       child = children[i];
+//       if (child && ui->IsInsideClipRegion(x, y) && child->Contains(x,y,ui))
+//           return true;
+//   }
+//   if (_children._size != 0) return false;        [a container never hits itself]
+//   return x >= clip.left && x <= clip.right && y >= clip.top && y <= clip.bottom
+//       && x >= _layoutLeft && x < _layoutRight
+//       && y >= _layoutTop  && y < _layoutBottom;
+//
+// TWO ASYMMETRIES THAT LOOK LIKE TYPOS AND ARE NOT:
+//   * the CLIP test is INCLUSIVE on all four sides (JL / JG at 0x180116a87,
+//     0x180116a91, 0x180116a9b, 0x180116aa5) while the ELEMENT RECT test is
+//     half-open — `>= left`, `< right` (JL / JGE at 0x180116aab, 0x180116ab1).
+//   * `IsInsideClipRegion` is re-evaluated INSIDE the child loop, once per
+//     child. Hoisting it would be a divergence; it stays where retail put it.
+// The child null test IS present here (0x180116a3b) — the opposite of Enable.
+bool Element::Contains(int32_t x, int32_t y, UserInterface* ui) const {
+    if ((_flags & (kElementFlagHidden | kElementFlagNoHitTest)) != 0) return false;
+
+    ClipTestFn inClip = Door<ClipTestFn>(g_isInsideClipRegion,
+        "?IsInsideClipRegion@UserInterface@UI@@QEBA_NHH@Z");
+    for (int32_t i = 0; i < _children._size; ++i) {
+        const Element* child = _children._data[i];
+        if (!child) continue;
+        if (!inClip(ui, x, y)) continue;
+        if (child->Contains(x, y, ui)) return true;
+    }
+    if (_children._size != 0) return false;
+
+    return x >= ui->_clipRegion.left && x <= ui->_clipRegion.right &&
+           y >= ui->_clipRegion.top  && y <= ui->_clipRegion.bottom &&
+           x >= _layoutLeft          && x <  _layoutRight &&
+           y >= _layoutTop           && y <  _layoutBottom;
+}
+
+// ---- slot 3  ?Persist@Element@UI@@UEAAXAEAVStream@IO@@@Z  0x180116870 ------
+//
+//   scope.stream = &stream;                        [rsp+0x20]
+//   scope.node   = nullptr;                        [rsp+0x28]
+//   Encoding* enc = stream[+0x10];
+//   node = (stream[+0x08] == 0) ? enc->vt[+0x18](enc, &scope, 0)
+//                               : enc->vt[+0x20](enc, &scope, 0);
+//   scope.node = node;
+//   if (node) node->vt[0](node, 1);                [deleting destructor]
+//
+// Element itself persists NOTHING: the body opens an encoding SCOPE and closes
+// it immediately; every derived element that has state overrides this slot.
+//
+// THE THIRD ARGUMENT IS NOT OPTIONAL. The two slots are
+// `IO::Encoding::CreateReader` (0x1800a8120, +0x18) and `CreateWriter`
+// (0x1800a8080, +0x20), both `(Encoding*, Serializer*, int32_t version)`, and
+// retail passes the 0 (`XOR R8D,R8D` at 0x180116889, live across the call). A
+// two-argument typedef wrote whatever R8 held into the record as the version —
+// measured by element_persist_probe.cpp (Wave 10E): ours `80 80 07 ab`,
+// retail's `00 00 00 00`.
+//
+// The two encoding slots are read from the OBJECT by byte displacement; retail's
+// IO::Encoding vtable has DIFFERENT offsets from the profile build's
+// (reference_encoding_vtable_offsets_differ_between_builds.md).
+void Element::Persist(void* stream) {
     ++g_elemCounts.persist;
-    (void)self;
     struct Scope { void* stream; void* node; };
     Scope scope;
     scope.stream = stream;
@@ -584,24 +378,6 @@ extern "C" void RtUi_Element_Persist(void* self, void* stream) {
     void* const* const encVt = *reinterpret_cast<void* const* const*>(enc);
     const int32_t mode = *reinterpret_cast<const int32_t*>(s + 0x08);
 
-    // THE THIRD ARGUMENT IS NOT OPTIONAL, and leaving it off was a real defect
-    // that survived from Wave 10B until the differential in
-    // runtime/src/ui/element_persist_probe.cpp (Wave 10E lane VERIFY) ran.
-    //
-    // The two slots are `IO::Encoding::CreateReader` (0x1800a8120, +0x18) and
-    // `IO::Encoding::CreateWriter` (0x1800a8080, +0x20), and both are
-    // `(Encoding*, Serializer*, int32_t version)` — runtime/src/io/encoding.cpp
-    // :285 ports them with that signature, and goal_serialize.cpp:156 already
-    // spelled the call `enc->vtable[+0x18](enc, &ser, 0)`.
-    //
-    // The shipped body passes the 0: `XOR R8D,R8D` at 0x180116889 sets up the
-    // `CMP dword ptr [RDX+0x8],R8D` on the line after AND leaves R8D = 0 across
-    // the call at 0x180116897 / 0x18011689c. A two-argument typedef leaves R8
-    // holding whatever the caller left, the codec writes it into the record as
-    // the version, and the emitted bytes diverge from retail's in exactly that
-    // dword — measured, not argued: ours `aa aa aa aa 04 00 00 00 80 80 07 ab
-    // bb bb bb bb`, retail's `aa aa aa aa 04 00 00 00 00 00 00 00 bb bb bb bb`,
-    // reproducibly, on both the read and the write slot.
     using ScopeFn = void* (*)(void*, void*, int32_t);
     ScopeFn open = reinterpret_cast<ScopeFn>(
         encVt[(mode == 0 ? 0x18 : 0x20) / sizeof(void*)]);
@@ -610,31 +386,30 @@ extern "C" void RtUi_Element_Persist(void* self, void* stream) {
     scope.node = node;
     if (node) {
         // vt[0](node, 1) — the scalar deleting destructor with the delete flag,
-        // exactly as 0x1801168b4 spells it.
+        // exactly as 0x1801168b4 spells it. The node is an IO::ReaderWriter,
+        // not a UI class: this stays a raw slot call.
         using DeleteFn = void (*)(void*, int32_t);
-        VSlot<DeleteFn>(node, 0)(node, 1);
+        (*reinterpret_cast<DeleteFn const* const*>(node))[0](node, 1);
     }
 }
 
 // ---- slot 7  ?Update@Element@UI@@UEAA…  0x180116270 ------------------------
 //
-// THE HOT ONE. The DLL's own `UI::UserInterface::Update` reaches this slot for
-// every element of every open dialog, every frame, so a regression here is a
-// whole-UI regression rather than a widget one. It is A/B'd explicitly in
-// docs/runtime_port/WAVE10B_LANE_ELEM.md.
+// THE HOT ONE: the UI frame reaches this slot for every element of every open
+// dialog, every frame.
+//
+// `dialog` IS A POINTER TO THE CALLER'S InternalPtr TEMPORARY — retail's R9
+// (see Element.h's banner: `LEA R9,[RBP+0x50]` at 0x1801162ca). It is re-read
+// on EVERY child iteration (0x1801162c6 is inside the loop) and copied into a
+// local the child is given the address of.
 //
 // Structure, in the order retail runs it:
-//
 //   1. recurse into every non-null, non-HIDDEN child through the child's own
-//      slot 7. The InternalPtr argument is re-read from the caller's slot on
-//      EVERY iteration (0x1801162c6 is inside the loop) and copied into a
-//      local the child is given the address of.
+//      slot 7 (a VIRTUAL call).
 //   2. `inClip` = the mouse position lies within ui->_clipRegion, INCLUSIVE.
 //   3. `hovering` = inClip AND the mouse lies STRICTLY inside the layout rect
-//      — of the BORDER element if there is one, else of this element. All four
-//      comparisons are strict (`left < x < right`), which is a third convention
-//      again after Contains' two.
-//   4. write hover bit 17, plus the dead ancestor walk (see banner).
+//      — of the BORDER element if there is one, else of this element.
+//   4. write hover bit 17, plus the dead ancestor walk.
 //   5. tooltip, gated on bit 16 (enabled) and bit 19 (valid): begin or move it
 //      while hovering, end it when not. Bit 20 is "tooltip currently shown".
 //   6. raise the hover-enter (id 0) / hover-leave (id 1) event from the OLD
@@ -644,80 +419,73 @@ extern "C" void RtUi_Element_Persist(void* self, void* stream) {
 //
 // THE EVENT IDS ARE NOT SEQUENTIAL AND THE ORDER IS NOT THE STATE ORDER:
 // state+0x01 -> 2, +0x02 -> 4, +0x03 -> 3, +0x04 -> 5, +0x05 -> 7, +0x06 -> 6.
-// Transcribed one at a time from 0x18011663a..0x1801167e5; the temptation to
-// write `id = 2 + i` would silently swap two of them.
-//
-// ORACLE: `pin`, and there is no honest alternative. The body pushes events
-// into a live array, opens and closes tooltip dialogs and can call CloseDialog;
-// running the shipped export a second time would double every one of those.
-// Recorded as PORTED, NOT DIFFERENTIALLY VERIFIED.
-extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
-                                    void** dlgPtr, const UpdateState* state) {
+// Transcribed one at a time from 0x18011663a..0x1801167e5.
+void Element::Update(const System::Time& time, UserInterface* ui,
+                     Object::InternalPtr<DialogInstance>* dialog,
+                     const UpdateState& state) {
     ++g_elemCounts.update;
     // ---- 1. children ------------------------------------------------------
-    for (int32_t i = 0; i < self->_children._size; ++i) {
-        Element* child = self->_children._data[i];
+    for (int32_t i = 0; i < _children._size; ++i) {
+        Element* child = _children._data[i];
         if (!child) continue;
-        if ((child->_flags & UI::kElementFlagHidden) != 0) continue;
-        void* local = *dlgPtr;                       // re-read every iteration
-        using Fn = void (*)(Element*, const void*, void*, void**, const UpdateState*);
-        VSlot<Fn>(child, kSlotUpdate)(child, time, ui, &local, state);
+        if ((child->_flags & kElementFlagHidden) != 0) continue;
+        Object::InternalPtr<DialogInstance> local = *dialog;   // re-read every iteration
+        child->Update(time, ui, &local, state);
     }
 
-    UI::UserInterface* const u = static_cast<UI::UserInterface*>(ui);
-    const int32_t mx = state->mouseX;
-    const int32_t my = state->mouseY;
+    UserInterface* const u = ui;
+    const int32_t mx = state.mouseX;
+    const int32_t my = state.mouseY;
 
     // ---- 2. clip test (INCLUSIVE) -----------------------------------------
     const bool inClip = !(mx < u->_clipRegion.left || mx > u->_clipRegion.right ||
                           my < u->_clipRegion.top  || my > u->_clipRegion.bottom);
 
     // ---- 3/4. hover bit ---------------------------------------------------
-    const uint32_t oldFlags = self->_flags;
-    const Element* rect = self->_border ? reinterpret_cast<const Element*>(self->_border)
-                                        : self;
+    const uint32_t oldFlags = _flags;
+    const Element* rect = _border ? static_cast<const Element*>(_border) : this;
     const int32_t l = rect->_layoutLeft, r = rect->_layoutRight;
     const int32_t t = rect->_layoutTop,  b = rect->_layoutBottom;
 
     bool hovering;
     if (l < mx && mx < r && t < my && my < b && inClip) {
         hovering = true;
-        self->_flags = oldFlags | 0x00020000u;                 // BTS 0x11
+        _flags = oldFlags | 0x00020000u;                        // BTS 0x11
         // DEAD (see banner); Ghidra itself folds this arm away.
-        if ((((oldFlags | 0x00020000u) ^ oldFlags) & UI::kElementFlagHidden) != 0)
-            NeedsSizeCalcWalk(self);
+        if ((((oldFlags | 0x00020000u) ^ oldFlags) & kElementFlagHidden) != 0)
+            SetNeedsSizeCalc();
     } else {
         hovering = false;
-        self->_flags = oldFlags & ~0x00020000u;                // BTR 0x11
-        if ((((oldFlags & ~0x00020000u) ^ oldFlags) & UI::kElementFlagHidden) != 0)
-            NeedsSizeCalcWalk(self);
+        _flags = oldFlags & ~0x00020000u;                       // BTR 0x11
+        if ((((oldFlags & ~0x00020000u) ^ oldFlags) & kElementFlagHidden) != 0)
+            SetNeedsSizeCalc();
     }
 
     // ---- 5. tooltip -------------------------------------------------------
-    const uint32_t f = self->_flags;
-    if ((f & UI::kElementFlagToolTip16) == 0) return;          // BT 0x10 / JNC exit
+    const uint32_t f = _flags;
+    if ((f & kElementFlagToolTip16) == 0) return;               // BT 0x10 / JNC exit
 
-    if ((f & UI::kElementFlagToolTipValid) != 0) {             // BT 0x13
-        void* const dlg = *dlgPtr;
+    if ((f & kElementFlagToolTipValid) != 0) {                  // BT 0x13
+        void* const dlg = dialog->Get();
         if (hovering && dlg && *(reinterpret_cast<const uint8_t*>(dlg) + 0x98) != 0) {
             EventRecord rec;
             rec.dialog    = dlg;
-            rec.element   = self;
-            rec.elementId = self->_elementId;
+            rec.element   = this;
+            rec.elementId = _elementId;
             rec.mouseX    = mx;
             rec.mouseY    = my;
             rec.dragId    = 0;
             rec.dragData  = nullptr;
-            if ((f & 0x00100000u) == 0) {                      // BT 0x14 clear
-                rec.eventId = 0xf;                            // tooltip BEGIN
+            if ((f & 0x00100000u) == 0) {                       // BT 0x14 clear
+                rec.eventId = 0xf;                              // tooltip BEGIN
                 EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
-                void* dlgLocal  = *dlgPtr;
-                void* elemLocal = self;
-                RT_EXPORT_ONCE(BeginToolTipFn,
+                void* dlgLocal  = dialog->Get();
+                void* elemLocal = this;
+                Door<BeginToolTipFn>(g_beginToolTip,
                     "?BeginToolTip@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@"
                     "V?$InternalPtr@VElement@UI@@@4@HH@Z")(u, &dlgLocal, &elemLocal, mx, my);
             } else {
-                rec.eventId = 0x10;                           // tooltip MOVE
+                rec.eventId = 0x10;                             // tooltip MOVE
                 EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
                 void* const tip = u->_toolTipDialog;
                 if (tip) {
@@ -728,29 +496,29 @@ extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
                         reinterpret_cast<const uint8_t*>(tip) + 0x50);
                     const int32_t h = *reinterpret_cast<const int32_t*>(
                         reinterpret_cast<const uint8_t*>(root) + 0x64);
-                    RT_EXPORT_ONCE(SetUpperLeftFn,
+                    Door<SetUpperLeftFn>(g_setUpperLeft,
                         "?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z")(tip, mx, my - h, false);
                 }
             }
-            const uint32_t o = self->_flags;
-            self->_flags = o | 0x00100000u;                    // BTS 0x14
-            if ((((o | 0x00100000u) ^ o) & UI::kElementFlagHidden) != 0)
-                NeedsSizeCalcWalk(self);                       // DEAD
+            const uint32_t o = _flags;
+            _flags = o | 0x00100000u;                           // BTS 0x14
+            if ((((o | 0x00100000u) ^ o) & kElementFlagHidden) != 0)
+                SetNeedsSizeCalc();                             // DEAD
 
         } else if ((f & 0x00100000u) != 0) {
-            RT_EXPORT_ONCE(EndHoverFn,
-                "?EndHover@DialogInstance@UI@@QEAAXPEAVUserInterface@2@@Z")(*dlgPtr, u);
+            Door<EndHoverFn>(g_endHover,
+                "?EndHover@DialogInstance@UI@@QEAAXPEAVUserInterface@2@@Z")(dialog->Get(), u);
             void* const tip = u->_toolTipDialog;
             bool clear = false;
             if (!tip) {
                 clear = true;
-            } else if (self == *reinterpret_cast<Element* const*>(
+            } else if (this == *reinterpret_cast<Element* const*>(
                                    reinterpret_cast<const uint8_t*>(tip) + 0x30)) {
                 // Retail re-tests `tip` here after already branching on it
                 // (0x1801164fc). Kept: it is the body.
                 if (tip) {
                     void* local = tip;
-                    RT_EXPORT_ONCE(CloseDialogFn,
+                    Door<CloseDialogFn>(g_closeDialog,
                         "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z")
                         (u, &local);
                 }
@@ -760,18 +528,18 @@ extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
                 u->_toolTipDialog = nullptr;
                 u->_toolTipOwner  = nullptr;
             }
-            const uint32_t o = self->_flags;
-            self->_flags = o & ~0x00100000u;                   // BTR 0x14
-            if ((((o & ~0x00100000u) ^ o) & UI::kElementFlagHidden) != 0)
-                NeedsSizeCalcWalk(self);                       // DEAD
+            const uint32_t o = _flags;
+            _flags = o & ~0x00100000u;                          // BTR 0x14
+            if ((((o & ~0x00100000u) ^ o) & kElementFlagHidden) != 0)
+                SetNeedsSizeCalc();                             // DEAD
         }
     }
 
     // ---- 6. hover enter / leave, from the OLD bit 17 ----------------------
     EventRecord rec;
-    rec.dialog    = *dlgPtr;
-    rec.element   = self;
-    rec.elementId = self->_elementId;
+    rec.dialog    = dialog->Get();
+    rec.element   = this;
+    rec.elementId = _elementId;
     rec.mouseX    = mx;
     rec.mouseY    = my;
     rec.dragId    = 0;
@@ -780,20 +548,20 @@ extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
     const bool wasHovering = (oldFlags & 0x00020000u) != 0;
     if (!wasHovering) {
         if (!hovering) return;
-        rec.eventId = 0;                                       // hover ENTER
+        rec.eventId = 0;                                        // hover ENTER
         EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
     } else if (!hovering) {
-        rec.eventId = 1;                                       // hover LEAVE
+        rec.eventId = 1;                                        // hover LEAVE
         EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
         return;
     }
 
     // ---- 7. the input events ---------------------------------------------
     auto push = [&](int32_t id) {
-        rec.dialog    = *dlgPtr;
-        rec.element   = self;
+        rec.dialog    = dialog->Get();
+        rec.element   = this;
         rec.eventId   = id;
-        rec.elementId = self->_elementId;
+        rec.elementId = _elementId;
         rec.mouseX    = mx;
         rec.mouseY    = my;
         rec.dragId    = 0;
@@ -801,44 +569,87 @@ extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
         EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
     };
 
-    if (state->dragActive) {
+    if (state.dragActive) {
         // A drop only happens on the button the drag was started with; retail
         // returns without raising ANY other event when +0x04 is clear.
-        if (!state->b04) return;
-        rec.dialog    = *dlgPtr;
-        rec.element   = self;
-        rec.eventId   = 0xc;                                   // DROP
-        rec.elementId = self->_elementId;
+        if (!state.b04) return;
+        rec.dialog    = dialog->Get();
+        rec.element   = this;
+        rec.eventId   = 0xc;                                    // DROP
+        rec.elementId = _elementId;
         rec.mouseX    = mx;
         rec.mouseY    = my;
         rec.dragId    = u->_dragDropId;
         rec.dragData  = u->_dragDropData;
         EventsSetSize()(&u->_events, u->_events._size + 1, &rec);
-        RT_EXPORT_ONCE(PlayFn, "?Play@UserInterface@UI@@QEAAXH@Z")(u, 3);
-        RT_EXPORT_ONCE(EndDragDropFn, "?EndDragDrop@UserInterface@UI@@QEAAXXZ")(u);
+        Door<PlayFn>(g_play, "?Play@UserInterface@UI@@QEAAXH@Z")(u, 3);
+        Door<EndDragDropFn>(g_endDragDrop, "?EndDragDrop@UserInterface@UI@@QEAAXXZ")(u);
         return;
     }
 
-    if (state->buttonPressed) push(2);
-    if (state->b02)           push(4);
-    if (state->b03)           push(3);
-    if (state->b04)           push(5);
-    if (state->b05)           push(7);
-    if (state->b06)           push(6);
-    if (state->leftDown && (state->dragDx != 0 || state->dragDy != 0)) push(0xb);
+    if (state.buttonPressed) push(2);
+    if (state.b02)           push(4);
+    if (state.b03)           push(3);
+    if (state.b04)           push(5);
+    if (state.b05)           push(7);
+    if (state.b06)           push(6);
+    if (state.leftDown && (state.dragDx != 0 || state.dragDy != 0)) push(0xb);
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+extern "C" uint32_t RtUi_Element_Type(const void* self) {
+    return reinterpret_cast<const Element*>(self)->UI::Element::Type();   // B.3.6 bridge
+}
+
+extern "C" const char* RtUi_Element_TypeName(const void* self) {
+    return reinterpret_cast<const Element*>(self)->UI::Element::TypeName();   // B.3.6 bridge
+}
+
+extern "C" void RtUi_Element_SetColor(Element* self, uint32_t color) {
+    self->UI::Element::SetColor(color);
+}
+
+// RDX is the caller's slot; the member writes it and hands it back (B6-2).
+extern "C" void** RtUi_Element_GetBorder(const Element* self, void** ret) {
+    return reinterpret_cast<void**>(self->UI::Element::GetBorder(
+        reinterpret_cast<Object::InternalPtr<Element>*>(ret)));   // B.3.6 bridge
+}
+
+extern "C" void RtUi_Element_Enable(Element* self, bool enable) {
+    self->UI::Element::Enable(enable);
+}
+
+extern "C" bool RtUi_Element_Contains(const Element* self, int32_t x, int32_t y,
+                                      void* ui) {
+    return self->UI::Element::Contains(x, y, static_cast<UI::UserInterface*>(ui));
+}
+
+extern "C" void RtUi_Element_Persist(void* self, void* stream) {
+    reinterpret_cast<Element*>(self)->UI::Element::Persist(stream);   // B.3.6 bridge
+}
+
+extern "C" void RtUi_Element_Update(Element* self, const void* time, void* ui,
+                                    void** dlgPtr, const Element::UpdateState* state) {
+    self->UI::Element::Update(
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
+        *state);
 }
 
 // ============================================================================
 // Registration
 // ============================================================================
-// BOTH DOORS ON EVERY ROW, for the reason spritesheet_vtable.cpp:262 gives: a
-// minted vtable slot is filled by NAME, but sites in this tree reach exported
-// code by ADDRESS, and a name-only registration leaves those walking past the
-// port into the DLL.
+// BOTH DOORS ON EVERY ROW: a minted vtable slot is filled by NAME, but sites in
+// this tree reach exported code by ADDRESS, and a name-only registration leaves
+// those walking past the port.
 //
-// Each mangled name is spelled as a LITERAL here even where a constant exists
-// above, so tools/runtime_census.py can see it
-// (reference_census_cannot_see_nonliteral_registrations.md).
+// Each mangled name is spelled as a LITERAL (tools/runtime_census.py cannot see
+// through a named constant).
 int RtUiElementVtableRegister() {
     int n = 0;
 

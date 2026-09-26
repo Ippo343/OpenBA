@@ -191,76 +191,17 @@ constexpr int kRwScalarInt    = 0xA0;
 // ?SaveSettings@DialogInstance@UI@@QEAAXXZ   0x180114240
 // ---------------------------------------------------------------------------
 extern "C" void RtUi_DialogInstance_SaveSettings(DialogInstance* self) {
-    if (self->_userData == nullptr) return;
-
-    RtIo::MemoryStream ms;
-    RT_EXPORT_ONCE(MsCtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&ms);
-
-    const int32_t size = self->_userFlags;      // a BYTE LENGTH — see the header
-    void* const   buf  = self->_userData;
-    ms.data           = buf;
-    ms.size           = static_cast<uint32_t>(size);
-    ms.cursor         = 0;
-    ms.base.direction = 1;                      // WRITING
-
-    if (size >= 4) {
-        // Stored DIRECTLY into the buffer, not through the stream, then the
-        // cursor is stepped past it. LoadSettings reads this dword back.
-        *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
-        ms.cursor += 4;
-    }
-
-    // Retail inlines the Serializer ctor; this is the same code, ported.
-    rt::io::Serializer ser;
-    RT_EXPORT_ONCE(SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(&ser, &ms, 0);
-    void* rw = ser.readerWriter;
-
-    // The dialog's own OnSerializeSettings gets the STREAM, not the serializer.
-    reinterpret_cast<StreamVFn>(VSlot(self, kDlgVtblOnSerializeSettings))(self, &ms);
-
-    // SNAPSHOT: the loop bound is taken once (see the header).
-    int32_t count = self->_controllers._size;
-    reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarInt))(rw, &count, nullptr);
-
-    for (int32_t i = 0; i < count; ++i) {
-        // RE-READ of _data, twice per iteration, exactly as retail does.
-        void* c = self->_controllers._data[i];
-        uint32_t id = reinterpret_cast<U32VFn>(VSlot(c, kCtrlVtblType))(c);
-        reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarUInt))(rw, &id, nullptr);
-
-        // A second, per-controller record: this Serializer exists only for the
-        // header its ReaderWriter writes now and the trailer it writes below.
-        rt::io::Serializer ser2;
-        RT_EXPORT_ONCE(SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(&ser2, &ms, 0);
-        void* rw2 = ser2.readerWriter;
-
-        void* c2 = self->_controllers._data[i];
-        reinterpret_cast<StreamVFn>(VSlot(c2, kCtrlVtblOnSerializeSettings))(c2, &ms);
-
-        if (rw2 != nullptr)
-            reinterpret_cast<DelDtorVFn>(VSlot(rw2, kRwDeletingDtor))(rw2, 1u);
-    }
-
-    if (rw != nullptr)
-        reinterpret_cast<DelDtorVFn>(VSlot(rw, kRwDeletingDtor))(rw, 1u);
-
-    // Retail inlines ~MemoryStream; the ported body is the same code, and it
-    // does NOT free _data because _ownsData is 0 — the buffer is the caller's.
-    RT_EXPORT_ONCE(MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&ms);
+    // B.3.6: the body is UI::DialogInstance::SaveSettings (bottom of file).
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::SaveSettings();
 }
 
 // ---------------------------------------------------------------------------
 // ?OnClosed@DialogInstance@UI@@UEAAXXZ   0x180115330
 // ---------------------------------------------------------------------------
 extern "C" void RtUi_DialogInstance_OnClosed(DialogInstance* self) {
-    RtUi_DialogInstance_SaveSettings(self);
-
-    // NOT a snapshot: retail re-reads the count from the object every iteration
-    // here, unlike SaveSettings three instructions earlier. See the header.
-    for (int32_t i = 0; i < self->_controllers._size; ++i) {
-        void* c = self->_controllers._data[i];
-        reinterpret_cast<VoidVFn>(VSlot(c, kCtrlVtblOnClosed))(c);
-    }
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::OnClosed();
 }
 
 // ---------------------------------------------------------------------------
@@ -364,28 +305,116 @@ OpenCounts g_openCounts;
 
 extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
     ++g_openCounts.entries;
-    // 1. Every controller is told the dialog opened, BEFORE any settings are
-    //    read. Bound re-read each iteration — see the header.
-    for (int32_t i = 0; i < self->_controllers._size; ++i) {
-        void* c = self->_controllers._data[i];
-        reinterpret_cast<VoidVFn>(VSlot(c, kCtrlVtblOnOpened))(c);
-    }
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::OnOpened();
+}
 
-    // 2. No settings buffer, nothing to restore.
-    if (self->_userData == nullptr) { ++g_openCounts.noBuffer; return; }
+}  // namespace RtUi
+
+// ############################################################################
+// ENDGAME B.3.6 block B — the three bodies are UI::DialogInstance members now.
+// Unchanged except `self->x` became `x` and the hand-inlined vtable calls onto
+// THIS block's classes became member calls:
+//   own slot +0x48                  -> OnSerializeSettings(&ms)   (VIRTUAL)
+//   controller +0x10/+0x28/+0x30/+0x50 -> c->Type() / OnOpened() / OnClosed() /
+//                                      OnSerializeSettings(&ms)  (VIRTUAL)
+//   RtUi_DialogInstance_SaveSettings -> SaveSettings()
+// The ReaderWriter / MemoryStream / Serializer calls are IO's (other classes'
+// doors) and stay as they were, reached through the file-scope helpers below
+// so that no member keeps a static of its own (RULE B6-5).
+// ############################################################################
+namespace {
+
+inline void MsCtor(void* ms) {
+    RT_EXPORT_ONCE(RtUi::MsCtorFn, "??0MemoryStream@IO@@QEAA@XZ")(ms);
+}
+inline void MsDtor(void* ms) {
+    RT_EXPORT_ONCE(RtUi::MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(ms);
+}
+inline void SerCtor(void* ser, void* ms) {
+    RT_EXPORT_ONCE(RtUi::SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(ser, ms, 0);
+}
+
+}  // namespace
+
+namespace UI {
+
+// ?SaveSettings@DialogInstance@UI@@QEAAXXZ   0x180114240 — see the door.
+void DialogInstance::SaveSettings() {
+    using namespace RtUi;
+    if (_userData == nullptr) return;
 
     RtIo::MemoryStream ms;
-    RT_EXPORT_ONCE(MsCtorFn, "??0MemoryStream@IO@@QEAA@XZ")(&ms);
+    MsCtor(&ms);
 
-    const int32_t size = self->_userFlags;      // a BYTE LENGTH — see the header
-    void* const   buf  = self->_userData;
+    const int32_t size = _userFlags;            // a BYTE LENGTH — see the header
+    void* const   buf  = _userData;
+    ms.data           = buf;
+    ms.size           = static_cast<uint32_t>(size);
+    ms.cursor         = 0;
+    ms.base.direction = 1;                      // WRITING
+
+    if (size >= 4) {
+        // Stored DIRECTLY into the buffer, then the cursor is stepped past it.
+        *reinterpret_cast<uint32_t*>(buf) = 0xdeadbeefu;
+        ms.cursor += 4;
+    }
+
+    rt::io::Serializer ser;
+    SerCtor(&ser, &ms);
+    void* rw = ser.readerWriter;
+
+    OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
+
+    int32_t count = _controllers._size;
+    reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarInt))(rw, &count, nullptr);
+
+    for (int32_t i = 0; i < count; ++i) {
+        DialogController* c = _controllers._data[i];
+        uint32_t id = c->Type();                // controller slot 2
+        reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarUInt))(rw, &id, nullptr);
+
+        rt::io::Serializer ser2;
+        SerCtor(&ser2, &ms);
+        void* rw2 = ser2.readerWriter;
+
+        _controllers._data[i]->OnSerializeSettings(&ms);   // controller slot 10 (re-read)
+
+        if (rw2 != nullptr)
+            reinterpret_cast<DelDtorVFn>(VSlot(rw2, kRwDeletingDtor))(rw2, 1u);
+    }
+
+    if (rw != nullptr)
+        reinterpret_cast<DelDtorVFn>(VSlot(rw, kRwDeletingDtor))(rw, 1u);
+
+    MsDtor(&ms);
+}
+
+// ?OnClosed@DialogInstance@UI@@UEAAXXZ   0x180115330 — see the door.
+void DialogInstance::OnClosed() {                              // [5]
+    SaveSettings();
+    for (int32_t i = 0; i < _controllers._size; ++i)
+        _controllers._data[i]->OnClosed();                     // controller slot 6
+}
+
+// ?OnOpened@DialogInstance@UI@@UEAAXXZ   0x180114fb0 — see the door.
+void DialogInstance::OnOpened() {                              // [4]
+    using namespace RtUi;
+    for (int32_t i = 0; i < _controllers._size; ++i)
+        _controllers._data[i]->OnOpened();                     // controller slot 5
+
+    if (_userData == nullptr) { ++g_openCounts.noBuffer; return; }
+
+    RtIo::MemoryStream ms;
+    MsCtor(&ms);
+
+    const int32_t size = _userFlags;            // a BYTE LENGTH — see the header
+    void* const   buf  = _userData;
     ms.data           = buf;
     ms.size           = static_cast<uint32_t>(size);
     ms.cursor         = 0;
     ms.base.direction = 0;                      // READING
 
-    // The head magic SaveSettings stored directly into the buffer, read back
-    // the same way. See the header for what retail does when size < 4.
     uint32_t magic = 0;
     if (size >= 4) {
         magic = *reinterpret_cast<const uint32_t*>(buf);
@@ -393,17 +422,15 @@ extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
     }
     if (magic != 0xdeadbeefu) {
         ++g_openCounts.badMagic;
-        RT_EXPORT_ONCE(MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&ms);
+        MsDtor(&ms);
         return;
     }
 
     rt::io::Serializer ser;
-    RT_EXPORT_ONCE(SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(&ser, &ms, 0);
+    SerCtor(&ser, &ms);
     void* rw = ser.readerWriter;
 
-    // The dialog's own OnSerializeSettings gets the STREAM, not the serializer —
-    // the same asymmetry as the write half.
-    reinterpret_cast<StreamVFn>(VSlot(self, kDlgVtblOnSerializeSettings))(self, &ms);
+    OnSerializeSettings(&ms);                   // own slot 9 — VIRTUAL
 
     int32_t count = 0;
     reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarInt))(rw, &count, nullptr);
@@ -413,28 +440,22 @@ extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
         uint32_t id = 0;
         reinterpret_cast<SerVFn>(VSlot(rw, kRwScalarUInt))(rw, &id, nullptr);
 
-        // Find the controller this record belongs to, by type id. Bound re-read.
         int64_t found = -1;
-        for (int32_t j = 0; j < self->_controllers._size; ++j) {
-            void* c = self->_controllers._data[j];
-            if (reinterpret_cast<U32VFn>(VSlot(c, kCtrlVtblType))(c) == id) {
+        for (int32_t j = 0; j < _controllers._size; ++j) {
+            if (_controllers._data[j]->Type() == id) {     // controller slot 2
                 found = j;
                 break;
             }
         }
 
-        // The record's own framed Serializer, exactly as the writer emitted it.
         rt::io::Serializer ser2;
-        RT_EXPORT_ONCE(SerCtorFn, "??0Serializer@IO@@QEAA@AEAVStream@1@H@Z")(&ser2, &ms, 0);
+        SerCtor(&ser2, &ms);
         void* rw2 = ser2.readerWriter;
 
         if (found < 0) {
-            // No such controller any more: Skip() past the record rather than
-            // feeding it to the wrong one.
             reinterpret_cast<VoidVFn>(VSlot(rw2, rt::io::rw_vtbl::kSkip))(rw2);
         } else {
-            void* c = self->_controllers._data[found];
-            reinterpret_cast<StreamVFn>(VSlot(c, kCtrlVtblOnSerializeSettings))(c, &ms);
+            _controllers._data[found]->OnSerializeSettings(&ms);   // controller slot 10
         }
 
         if (rw2 != nullptr)
@@ -444,10 +465,10 @@ extern "C" void RtUi_DialogInstance_OnOpened(DialogInstance* self) {
     if (rw != nullptr)
         reinterpret_cast<DelDtorVFn>(VSlot(rw, kRwDeletingDtor))(rw, 1u);
 
-    RT_EXPORT_ONCE(MsDtorFn, "??1MemoryStream@IO@@UEAA@XZ")(&ms);
+    MsDtor(&ms);
 }
 
-}  // namespace RtUi
+}  // namespace UI
 
 // ============================================================================
 // Registration

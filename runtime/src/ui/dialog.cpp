@@ -199,6 +199,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/Filename.h"
@@ -476,11 +477,14 @@ inline void InternalDtor(void* self) {
 // and no oracle site is manufactured for the sake of a green count over work
 // that never happened
 // (reference_probe_needs_an_effectiveness_control.md).
-extern "C" void RtUiDialogInstance_Persist(void* /*self*/, void* /*stream*/) {
+extern "C" void RtUiDialogInstance_Persist(void* self, void* stream) {
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::Persist(stream);
 }
 
-extern "C" void RtUiDialogInstance_OnSerializeSettings(void* /*self*/,
-                                                       void* /*stream*/) {
+extern "C" void RtUiDialogInstance_OnSerializeSettings(void* self, void* stream) {
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::OnSerializeSettings(stream);
 }
 
 // ---- ?TypeName@DialogInstance@UI@@UEBAPEBDXZ  0x180045400  ord 4379 -------
@@ -518,9 +522,9 @@ extern "C" void RtUiDialogInstance_OnSerializeSettings(void* /*self*/,
 // the alternative it replaces (a null stamped into a derived vtable, faulting
 // later with no name attached) and is exactly the "do not fix a faithful crash
 // with a null check" case: the fix is upstream, in the mint, not a guard here.
-extern "C" const char* RtUiDialogInstance_TypeName(const void* /*self*/) {
-    return *reinterpret_cast<const char* const*>(
-        DialogInstanceTypeInfo() + kBaseTypeInfoName);
+extern "C" const char* RtUiDialogInstance_TypeName(const void* self) {
+    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
+        ->UI::DialogInstance::TypeName();
 }
 
 // ---- ?Type@DialogInstance@UI@@UEBAIXZ  0x1800453e0 ------------------------
@@ -548,9 +552,9 @@ extern "C" const char* RtUiDialogInstance_TypeName(const void* /*self*/) {
 // hidden: the id is verified by the shadow's field comparison, not by an oracle
 // on this body.
 constexpr int kBaseTypeInfoTypeId = 0x00;
-extern "C" uint32_t RtUiDialogInstance_Type(const void* /*self*/) {
-    return *reinterpret_cast<const uint32_t*>(
-        DialogInstanceTypeInfo() + kBaseTypeInfoTypeId);
+extern "C" uint32_t RtUiDialogInstance_Type(const void* self) {
+    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
+        ->UI::DialogInstance::Type();
 }
 
 // ---- ?OnClosed@DialogInstance@UI@@UEAAXXZ  0x180115330  ord 3269
@@ -584,7 +588,9 @@ extern "C" uint32_t RtUiDialogInstance_Type(const void* /*self*/) {
 // Retail 0x180045580, ordinal 2875. Profile build: same one-liner.
 //   MOV RAX,[RCX+0x50] / MOV [RDX],RAX / MOV RAX,RDX / RET
 void** RtUiDialogInstance_GetRoot(DialogInstance* self, void** out) {
-    *out = self->_root;
+    new (out) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(self)         // B.3.6 bridge
+            ->UI::DialogInstance::GetRoot());
     return out;
 }
 
@@ -601,18 +607,9 @@ void** RtUiDialogInstance_GetRoot(DialogInstance* self, void** out) {
 // final re-index, RDI is the same thing pre-multiplied by 8. Reproduced with
 // one index because the two can never disagree.
 void** RtUiDialogInstance_GetController(DialogInstance* self, void** out, uint32_t typeId) {
-    void* found = nullptr;
-    for (int32_t i = 0; i < self->_controllers._size; ++i) {
-        DialogController* c = self->_controllers._data[i];
-        // No null check: retail loads [RCX] off the controller unguarded.
-        void** vt = *reinterpret_cast<void***>(c);
-        const uint32_t id = reinterpret_cast<TypeIdFn>(vt[RtUI::kControllerVtblGetTypeId / 8])(c);
-        if (id == typeId) {
-            found = self->_controllers._data[i];
-            break;
-        }
-    }
-    *out = found;
+    new (out) Object::InternalPtr<UI::DialogController>(
+        reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
+            ->UI::DialogInstance::GetController(typeId));
     return out;
 }
 
@@ -623,7 +620,9 @@ void** RtUiDialogInstance_GetController(DialogInstance* self, void** out, uint32
 // guard here would not restore the behaviour, it would skip it. If this faults
 // the dialog has no root element and THAT is the bug.
 void** RtUiDialogInstance_FindElement(DialogInstance* self, void** out, const void* name) {
-    reinterpret_cast<PtrOutStrFn>(ResolveExport(kElementFindElement))(self->_root, out, name);
+    new (out) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(self)         // B.3.6 bridge
+            ->UI::DialogInstance::FindElement(*static_cast<const System::String*>(name)));
     return out;
 }
 
@@ -631,7 +630,9 @@ void** RtUiDialogInstance_FindElement(DialogInstance* self, void** out, const vo
 // Retail 0x1801140c0, ordinal 2348. The same forwarder against
 // Element::FindElementType. Same absent null check, same reason.
 void** RtUiDialogInstance_FindElementType(DialogInstance* self, void** out, uint32_t typeId) {
-    reinterpret_cast<PtrOutU32Fn>(ResolveExport(kElementFindElementType))(self->_root, out, typeId);
+    new (out) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(self)         // B.3.6 bridge
+            ->UI::DialogInstance::FindElementType(typeId));
     return out;
 }
 
@@ -644,7 +645,8 @@ void** RtUiDialogInstance_FindElementType(DialogInstance* self, void** out, uint
 //   OR EDX,[RCX+0x20] / NOT R8D / AND EDX,R8D / MOV [RCX+0x20],EDX / RET
 // so the ON mask is applied FIRST and the OFF mask wins any overlap.
 void RtUiDialogInstance_SetFlagsOnOff(DialogInstance* self, uint32_t on, uint32_t off) {
-    self->_flags = (on | self->_flags) & ~off;
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::SetFlagsOnOff(on, off);
 }
 
 // ?StopTimer@DialogInstance@UI@@QEAAXH@Z
@@ -663,35 +665,8 @@ void RtUiDialogInstance_SetFlagsOnOff(DialogInstance* self, uint32_t on, uint32_
 // The shift is a copy-down of three qwords (0x18 bytes) per entry, and the
 // count is decremented ONCE at the end — not per entry.
 void RtUiDialogInstance_StopTimer(DialogInstance* self, int32_t id) {
-
-    const int64_t count64 = static_cast<int64_t>(self->_timers._size);
-    if (count64 > 0) {
-        uint8_t* base = reinterpret_cast<uint8_t*>(self->_timers._data);
-        int32_t  i = 0;
-        int64_t  walked = 0;
-        // Search: compare the id at entry+0x10.
-        for (;;) {
-            if (*reinterpret_cast<const int32_t*>(base + walked * 0x18 + 0x10) == id) break;
-            ++walked;
-            ++i;
-            if (walked >= self->_timers._size) return;   // retail: plain RET
-        }
-        if (i < self->_timers._size) {
-            int64_t off = static_cast<int64_t>(i) * 0x18;
-            do {
-                ++i;
-                uint8_t* p = base + off;
-                if (i < self->_timers._size && p != nullptr) {
-                    std::memcpy(p + 0x00, p + 0x18, 8);
-                    std::memcpy(p + 0x08, p + 0x20, 8);
-                    std::memcpy(p + 0x10, p + 0x28, 8);
-                }
-                off += 0x18;
-            } while (i < self->_timers._size);
-        }
-        self->_timers._size -= 1;
-    }
-
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::StopTimer(id);
 }
 
 // ============================================================================
@@ -707,21 +682,14 @@ void RtUiDialogInstance_StopTimer(DialogInstance* self, int32_t id) {
 
 // ?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ — retail 0x1801153a0, ord 3289.
 void RtUiDialogInstance_OnUpdateLayout(DialogInstance* self) {
-    for (int32_t i = 0; i < self->_controllers._size; ++i) {
-        DialogController* c = self->_controllers._data[i];
-        void** vt = *reinterpret_cast<void***>(c);
-        reinterpret_cast<void (*)(void*)>(vt[RtUI::kControllerVtblOnUpdateLayout / 8])(c);
-    }
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::OnUpdateLayout();
 }
 
 // ?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z — retail 0x180115400, ord 3286.
 void RtUiDialogInstance_OnUpdate(DialogInstance* self, const void* time) {
-    for (int32_t i = 0; i < self->_controllers._size; ++i) {
-        DialogController* c = self->_controllers._data[i];
-        void** vt = *reinterpret_cast<void***>(c);
-        reinterpret_cast<void (*)(void*, const void*)>(
-            vt[RtUI::kControllerVtblOnUpdate / 8])(c, time);
-    }
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::OnUpdate(*static_cast<const System::Time*>(time));
 }
 
 // ?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
@@ -730,21 +698,15 @@ void RtUiDialogInstance_OnUpdate(DialogInstance* self, const void* time) {
 // The first parameter is an `InternalPtr<Element>` BY VALUE, which at this size
 // MSVC passes by address — retail receives a pointer in RDX, and re-reads
 // `*RDX` into a fresh stack slot on EVERY iteration before handing the ADDRESS
-// of that slot to the controller. Reproduced exactly: the controller is handed
-// a pointer to our own copy, never the caller's, so a controller that
-// overwrites its argument cannot corrupt the caller's InternalPtr. Collapsing
-// that into "pass elementPtr through" would be a real behavioural change.
+// of that slot to the controller. Reproduced exactly in the member: the
+// controller is handed a pointer to our own copy, never the caller's.
 void RtUiDialogInstance_OnElementEvent(DialogInstance* self, void** elementPtr,
                                        int32_t a, int32_t b, int32_t c4,
                                        int32_t d, int32_t e, void* userData) {
-    for (int32_t i = 0; i < self->_controllers._size; ++i) {
-        DialogController* c = self->_controllers._data[i];
-        void* local = *elementPtr;
-        void** vt = *reinterpret_cast<void***>(c);
-        reinterpret_cast<void (*)(void*, void**, int32_t, int32_t, int32_t,
-                                  int32_t, int32_t, void*)>(
-            vt[RtUI::kControllerVtblOnElementEvent / 8])(c, &local, a, b, c4, d, e, userData);
-    }
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::OnElementEvent(
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(elementPtr),   // B.3.6 bridge
+            a, b, c4, d, e, userData);
 }
 
 // ============================================================================
@@ -767,18 +729,8 @@ void RtUiDialogInstance_OnElementEvent(DialogInstance* self, void** elementPtr,
 // root Element's own Contains (vtable slot 9/+0x48) with (x, y, this->_ui);
 // otherwise a plain inclusive bounds test against the root's layout rect.
 bool RtUiDialogInstance_Contains(const DialogInstance* self, int32_t x, int32_t y) {
-    const uint8_t* root = static_cast<const uint8_t*>(self->_root);
-    if ((self->_flags >> 2) & 1) return false;
-    if ((self->_flags >> 3) & 1) {
-        void* const* const vtable = *reinterpret_cast<void* const* const*>(root);
-        using Fn = bool (*)(const void*, int32_t, int32_t, void*);
-        return vtable && reinterpret_cast<Fn>(vtable[9])(root, x, y, self->_ui);
-    }
-    const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
-    const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
-    const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
-    const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
-    return left <= x && x <= right && top <= y && y <= bottom;
+    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
+        ->UI::DialogInstance::Contains(x, y);
 }
 
 // ?GetMouseCursorIndex@DialogInstance@UI@@QEBAHV?$InternalPtr@VElement@UI@@@Object@@HH@Z
@@ -791,25 +743,11 @@ bool RtUiDialogInstance_Contains(const DialogInstance* self, int32_t x, int32_t 
 extern "C" int32_t RtUiDialogInstance_GetMouseCursorIndex(const DialogInstance* self,
                                                void** elementPtr,
                                                int32_t x, int32_t y) {
-    const uint8_t* elem = static_cast<const uint8_t*>(*elementPtr);
-    int32_t result = *reinterpret_cast<const int32_t*>(elem + 0x3c);
-    const int32_t count = *reinterpret_cast<const int32_t*>(elem + 0xa8);
-    void* const* const children = *reinterpret_cast<void* const* const*>(elem + 0xa0);
-    for (int32_t i = 0; i < count; ++i) {
-        void* child = children ? children[i] : nullptr;
-        if (!child) continue;
-        const uint8_t* c = static_cast<const uint8_t*>(child);
-        if ((*reinterpret_cast<const uint8_t*>(c + 0x34) & 3) != 0) continue;
-        const int32_t left = *reinterpret_cast<const int32_t*>(c + 0x68);
-        const int32_t top  = *reinterpret_cast<const int32_t*>(c + 0x6c);
-        const int32_t right  = *reinterpret_cast<const int32_t*>(c + 0x70);
-        const int32_t bottom = *reinterpret_cast<const int32_t*>(c + 0x74);
-        if (left <= x && x < right && top <= y && y < bottom) {
-            void* childPtr = child;
-            result = RtUiDialogInstance_GetMouseCursorIndex(self, &childPtr, x, y);
-        }
-    }
-    return result;
+    // The InternalPtr arrives BY ADDRESS (MSVC's by-value class ABI); the
+    // member takes it by value (a non-virtual member: GCC at both ends).
+    return reinterpret_cast<const UI::DialogInstance*>(self)   // B.3.6 bridge
+        ->UI::DialogInstance::GetMouseCursorIndex(
+            Object::InternalPtr<UI::Element>(static_cast<UI::Element*>(*elementPtr)), x, y);
 }
 
 // ?ComputeLayout@DialogInstance@UI@@QEAAXHHHH@Z — retail 0x180113d90, ord 1760.
@@ -832,84 +770,9 @@ extern "C" int32_t RtUiDialogInstance_GetMouseCursorIndex(const DialogInstance* 
 //   4. TAIL-CALL root->ComputeLayout(x, y, x+w, y+h) (vtable slot 5/+0x28).
 void RtUiDialogInstance_ComputeLayout(DialogInstance* self, int32_t x, int32_t y,
                                       int32_t w, int32_t h) {
-    {
-        void** vt = *reinterpret_cast<void***>(self);
-        reinterpret_cast<void (*)(DialogInstance*)>(vt[6])(self);
-    }
-
-    uint8_t* root = static_cast<uint8_t*>(self->_root);
-    auto ComputeSize = [&]() {
-        void** vt = *reinterpret_cast<void***>(root);
-        reinterpret_cast<void (*)(uint8_t*)>(vt[4])(root);
-    };
-    ComputeSize();
-
-    int32_t layoutW = *reinterpret_cast<int32_t*>(root + 0x60);
-    int32_t layoutH = *reinterpret_cast<int32_t*>(root + 0x64);
-    const int32_t alignment = *reinterpret_cast<int32_t*>(root + 0x30);
-    const uint8_t elemFlags = *reinterpret_cast<uint8_t*>(root + 0x34);
-    const int32_t leftPad   = *reinterpret_cast<int32_t*>(root + 0x18);
-    const int32_t rightPad  = *reinterpret_cast<int32_t*>(root + 0x1c);
-    const int32_t topPad    = *reinterpret_cast<int32_t*>(root + 0x20);
-    const int32_t bottomPad = *reinterpret_cast<int32_t*>(root + 0x24);
-
-    int32_t posX = self->_upperLeftX + x;
-    int32_t posY = self->_upperLeftY + y;
-    if (w < posX + layoutW) posX = w - layoutW;
-    if (h < posY + layoutH) posY = h - layoutH;
-
-    const int32_t availRight  = w - rightPad;
-    const int32_t availBottom = h - bottomPad;
-    posX += leftPad;
-    posY += topPad;
-    int32_t availW = availRight - posX;
-    int32_t availH = availBottom - posY;
-    if ((elemFlags >> 2) & 1) layoutW = availW;
-    if ((elemFlags >> 3) & 1) layoutH = availH;
-
-    switch (alignment) {
-        case 1: case 4: case 7: posX = posX + (availW >> 1) - (layoutW >> 1); break;
-        case 2: case 5: case 8: posX = availRight - layoutW; break;
-        default: break;   // left-aligned: posX unchanged
-    }
-    if (alignment > 2) {
-        if (alignment < 6)      posY = posY + (availH >> 1) - (layoutH >> 1);
-        else if (alignment < 9) posY = availBottom - layoutH;
-    }
-
-    ComputeSize();   // retail calls it a second time; reproduced as-is.
-    int32_t totalW = *reinterpret_cast<int32_t*>(root + 0x60) + rightPad + leftPad;
-    int32_t totalH = *reinterpret_cast<int32_t*>(root + 0x64) + bottomPad + topPad;
-    const int32_t minW = *reinterpret_cast<int32_t*>(root + 0x28);
-    const int32_t minH = *reinterpret_cast<int32_t*>(root + 0x2c);
-    if (totalW < minW) totalW = minW;
-    if (totalH < minH) totalH = minH;
-
-    const uint32_t rootFlags = *reinterpret_cast<uint32_t*>(root + 0x34);
-    if (rootFlags & 0x30) {
-        uint8_t* ancestor = root;
-        while (*reinterpret_cast<uint8_t**>(ancestor + 0x98) != nullptr)
-            ancestor = *reinterpret_cast<uint8_t**>(ancestor + 0x98);
-        // ancestor+0x90 is Element::_dialogParent (InternalPtr<DialogInstance>);
-        // its own +0x10 is DialogInstance::_ui (UserInterface*), whose +0xdc
-        // is UserInterface::_uiScale (runtime/types/ui/UserInterface.h).
-        uint8_t* dlgParent = *reinterpret_cast<uint8_t**>(ancestor + 0x90);
-        const float uiScale = dlgParent
-            ? *reinterpret_cast<float*>(*reinterpret_cast<uint8_t**>(dlgParent + 0x10) + 0xdc)
-            : 1.0f;
-        void** deviceSlot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
-        const uint8_t* device = deviceSlot ? static_cast<uint8_t*>(*deviceSlot) : nullptr;
-        if (device) {
-            if (rootFlags & 0x20)
-                totalW = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * uiScale);
-            if (rootFlags & 0x10)
-                totalH = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * uiScale);
-        }
-    }
-
-    void** vt = *reinterpret_cast<void***>(root);
-    reinterpret_cast<void (*)(uint8_t*, int32_t, int32_t, int32_t, int32_t)>(vt[5])(
-        root, posX, posY, posX + totalW, posY + totalH);
+    // B.3.6: the body is UI::DialogInstance::ComputeLayout (bottom of file).
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::ComputeLayout(x, y, w, h);
 }
 
 // ?Update@DialogInstance@UI@@QEAAXAEBVTime@System@@PEAVUserInterface@2@AEAUUpdateState@Element@2@@Z
@@ -953,165 +816,10 @@ void RtUiDialogInstance_ComputeLayout(DialogInstance* self, int32_t x, int32_t y
 //   5. Recurse: call this same function on every child dialog in `_children`.
 void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
                                void* ui, uint8_t* updateState) {
-    // The 0x30-byte record 0x180033690 (array.cpp's AssignCaptureEntry sibling
-    // AssignEvent30) copies field by field: +0x00 dialog ptr, +0x08 unused
-    // (always 0 from this caller), +0x10 event type, +0x14 event data,
-    // +0x18 an 8-byte payload (the mouse position pair, or 0), +0x20/+0x24
-    // unused, +0x28 unused. Built on the stack exactly as retail's five push
-    // sites do, then handed to the SAME by-address SetSize call retail makes.
-    struct EventRecord {
-        void*    dialog;
-        uint64_t _unused08;
-        int32_t  type;
-        int32_t  data;
-        uint64_t payload;
-        uint64_t _unused20_28[2];
-    };
-    static_assert(sizeof(EventRecord) == 0x30, "UI::UserInterface::Event stride");
-    // ENDGAME B.3.2 step 2 — `UserInterface::_events` (+0x48) is a real
-    // `Collection::Array<Event>` member, but that field is declared with the
-    // DEFAULT (trait-derived) spec, which is NOT this row: 0x180033690's own
-    // assign (array.cpp's `kSpec_Event30`) leaves bytes [0x24,0x28) of every
-    // element UNWRITTEN, which a trait-derived byte-copy would instead
-    // overwrite with `rec`'s (zeroed) bytes there. Bridging at the use site
-    // with the hand-derived row, rather than through `_events`'s own
-    // trait-derived member functions, is what keeps that difference faithful.
-    auto PushEvent = [&](int32_t type, int32_t data, uint64_t payload) {
-        EventRecord rec{};
-        rec.dialog = self;
-        rec.type = type;
-        rec.data = data;
-        rec.payload = payload;
-        uint8_t* eventsHdr = static_cast<uint8_t*>(ui) + 0x48;  // UserInterface::_events
-        auto* events = rtcoll::AsArray<&rtcoll::kSpec_Event30>(eventsHdr);
-        events->SetSizeFill(events->GetSize() + 1, &rec);       // retail 0x180033690
-    };
-
-    bool anyChildBit1 = false;
-    // ENDGAME B.3.2 step 2 — `self->_children` is a real
-    // `Collection::LinkedList<InternalBasePtr>` member; walk it with the
-    // class's own Iterator instead of a raw `_head`/`+0x10` pointer chase.
-    for (auto it = self->_children.GetFirst(); it; ++it) {
-        DialogInstance* child = reinterpret_cast<DialogInstance*>(it->ptr);
-        anyChildBit1 = anyChildBit1 || ((child->_flags >> 1) & 1) != 0;
-    }
-
-    if (!anyChildBit1) {
-        {
-            void** vt = *reinterpret_cast<void***>(self);
-            reinterpret_cast<void (*)(DialogInstance*, const void*)>(vt[7])(self, time);
-        }
-
-        const uint8_t* us = updateState;
-        const int64_t timeTicks = *reinterpret_cast<const int64_t*>(time);
-        const double secondsPerTick = *RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
-        // DAT_1801616b8: a double, read directly out of the shipped DLL
-        // (0.25 seconds) — no export names it, so it is a literal here.
-        constexpr double kTooltipDelaySeconds = 0.25;
-
-        if (us[8] == 0 && us[9] == 0 && us[7] == 0) {
-            const int32_t mx = *reinterpret_cast<const int32_t*>(us + 0x18);
-            const int32_t my = *reinterpret_cast<const int32_t*>(us + 0x1c);
-            if (us[0x20] == 0 && RtUiDialogInstance_Contains(self, mx, my)) {
-                // +0x90/+0x94 (`CMP [RDI+0x90],EAX` at 0x180113a1a), NOT the
-                // upper-left pair at +0x88. Writing +0x88 here moved every
-                // hovered dialog by the mouse delta (the in-game pause menu
-                // followed the cursor, 2026-09-12).
-                if (self->_hoverMouseX == mx && self->_hoverMouseY == my) {
-                    self->_hoverTime += timeTicks;
-                    if (self->_hoverTime > static_cast<int64_t>(kTooltipDelaySeconds / secondsPerTick))
-                        self->_hovering = 1;
-                }
-                self->_hoverMouseX = mx;
-                self->_hoverMouseY = my;
-            }
-        } else if (self->_hovering != 0) {
-            self->_hovering = 0;
-            PushEvent(0x11, 0, 0);
-            self->_hoverTime = 0;
-        }
-
-        // ---- timers ---------------------------------------------------------
-        if (self->_timers._size > 0) {
-            uint8_t* data = reinterpret_cast<uint8_t*>(self->_timers._data);
-            int32_t i = 0;
-            while (i < self->_timers._size) {
-                uint8_t* t = data + static_cast<size_t>(i) * 0x18;
-                // *** CORRECTION to DialogInstance.h: this proves +0x08 is the
-                // LIVE countdown and +0x00 the untouched reload copy, the
-                // opposite of that header's "_remaining"/"_period" naming.
-                // Both start equal (StartTimer seeds both), which is why the
-                // swap went unnoticed until this port read the decrement. ***
-                int64_t* remaining = reinterpret_cast<int64_t*>(t + 0x08);
-                *remaining -= timeTicks;
-                if (*remaining <= 0) {
-                    const int32_t timerId = *reinterpret_cast<int32_t*>(t + 0x10);
-                    PushEvent(0x13, timerId, 0);
-                    // swap the remaining timers down one slot (0x18 stride)
-                    for (int32_t k = i; k + 1 < self->_timers._size; ++k)
-                        std::memcpy(data + static_cast<size_t>(k) * 0x18,
-                                    data + static_cast<size_t>(k + 1) * 0x18, 0x18);
-                    --self->_timers._size;
-                    continue;   // retail does NOT re-visit the slot just filled
-                }
-                ++i;
-            }
-        }
-
-        // ---- root Element::Update -------------------------------------------
-        uint8_t* root = static_cast<uint8_t*>(self->_root);
-        DialogInstance* topDialog = self;
-        {
-            void** vt = *reinterpret_cast<void***>(root);
-            reinterpret_cast<void (*)(uint8_t*, const void*, void*, DialogInstance**, uint8_t*)>(
-                vt[7])(root, time, ui, &topDialog, updateState);
-        }
-
-        const int32_t mx2 = *reinterpret_cast<const int32_t*>(updateState + 0x18);
-        const int32_t my2 = *reinterpret_cast<const int32_t*>(updateState + 0x1c);
-        // 0x180113b9a: `SHR EAX,2; TEST AL,1; JNZ 0x180113cca` -- a set bit2 jumps
-        // PAST the event pushes and the UpdateState+0x20 store, straight to the
-        // child recursion. Bit2 is the mouse-passthrough flag (Contains() above
-        // returns false on it too); it is NOT "always inside". The port had this
-        // inverted: a passthrough dialog that follows the cursor (the DragTool's
-        // CreateBar cost panel) captured the mouse every frame, UserInterface+0xd9
-        // went to 1, EntityUI's tool tick handed OnKey a zero key, OnKey closed the
-        // panel, and the next frame reopened it -- the drag-tool flashing seen
-        // 2026-09-12.
-        bool hit;
-        if ((self->_flags >> 2) & 1) {
-            hit = false;
-        } else if ((self->_flags >> 3) & 1) {
-            void** vt = *reinterpret_cast<void***>(root);
-            using Fn = bool (*)(uint8_t*, int32_t, int32_t, void*);
-            hit = reinterpret_cast<Fn>(vt[9])(root, mx2, my2, self->_dialog);
-        } else {
-            const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
-            const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
-            const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
-            const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
-            hit = left <= mx2 && mx2 <= right && top <= my2 && my2 <= bottom;
-        }
-        if (hit) {
-            const uint64_t mousePos = *reinterpret_cast<const uint64_t*>(updateState + 0x18);
-            if (updateState[1] != 0) PushEvent(8,  0, mousePos);
-            if (updateState[3] != 0) PushEvent(9,  0, mousePos);
-            if (updateState[2] != 0) PushEvent(0xa, 0, mousePos);
-            *reinterpret_cast<uint16_t*>(updateState + 7) = 0;
-            *reinterpret_cast<uint16_t*>(updateState + 1) = 0;
-            *reinterpret_cast<uint16_t*>(updateState + 4) = 0;
-            updateState[9] = 0;
-            updateState[3] = 0;
-            updateState[6] = 0;
-            updateState[0x20] = 1;
-        }
-    }
-
-    // ENDGAME B.3.2 step 2 — same conversion as the walk above.
-    for (auto it = self->_children.GetFirst(); it; ++it) {
-        DialogInstance* child = reinterpret_cast<DialogInstance*>(it->ptr);
-        RtUiDialogInstance_Update(child, time, ui, updateState);
-    }
+    // B.3.6: the body is UI::DialogInstance::Update (bottom of file).
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::Update(*static_cast<const System::Time*>(time),
+                                     static_cast<UI::UserInterface*>(ui), updateState);
 }
 
 // ============================================================================
@@ -1126,7 +834,9 @@ void RtUiDialogInstance_Update(DialogInstance* self, const void* time,
 // (reference_ghidra_c_output_vs_disassembly.md: Ghidra prints a MOVSXD as a
 // zero extension). A negative index reads BEFORE the array, faithfully.
 void** RtUiDialog_GetTemplate(Dialog* self, void** out, int32_t index) {
-    *out = self->_templates[static_cast<int64_t>(index)];
+    new (out) Object::ExternalPtr<UI::ElementDescription>(
+        reinterpret_cast<const UI::Dialog*>(self)           // B.3.6 bridge
+            ->UI::Dialog::GetTemplate(index));
     return out;
 }
 
@@ -1137,7 +847,9 @@ void** RtUiDialog_GetTemplate(Dialog* self, void** out, int32_t index) {
 // ?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
 // Retail 0x18003b700, ordinal 2508. The same one-liner as GetRoot, at +0x20.
 void** RtUiDialogController_GetContainer(DialogController* self, void** out) {
-    *out = self->_container;
+    new (out) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogController*>(self)       // B.3.6 bridge
+            ->UI::DialogController::GetContainer());
     return out;
 }
 
@@ -1561,112 +1273,12 @@ void RtUiElementDescription_Dtor(ElementDescription* self) {
 // rather than hidden, and it is the same disposition every replayed Wave 7
 // dialog getter carries.
 void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
-
-    if (!desc) { *ret = nullptr;  return ret; }
-
-    // `String name = desc->GetPath().GetPathIdentifer();`
-    // Both temporaries are released before the scan, with a STRONG REFERENCE
-    // taken on the identifier's buffer first (0x180112f3e `INC [RCX-4]`) —
-    // which is why the scan can still read it afterwards.
-    // Object::External::GetPath is another batch's class and is still a name
-    // lookup; GetPathIdentifer is System::Filename's own member (B.3.1 step 2).
-    using GetPathFn  = void* (*)(const void* self, void* out);
-    static GetPathFn  getPath  = reinterpret_cast<GetPathFn>(
-        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-
-    char* name = nullptr;
-
-    if (getPath) {
-        // Declared in this order so that the destructors run identTmp first and
-        // pathTmp second — retail's release order (0x180112f6e..0x180112f9b),
-        // and at retail's point, which is why they live in this inner scope.
-        System::Filename pathTmp;
-        getPath(desc, &pathTmp);
-        const System::Filename identTmp = pathTmp.GetPathIdentifer();
-        name = identTmp._data;
-        if (name) { ++RtSystem::StringRefCount(name); }   // 0x180112f3e INC [RCX-4]
-    }
-
-    // Linear scan of Dialog::_namedTemplates for an entry whose name equals
-    // `name`. `_data` and the cursor are both re-read per iteration exactly as
-    // retail does (0x180112fb2 re-tests RBX, 0x180112fbe re-loads [R11]).
-    void* target  = desc;          // the no-match answer: the argument itself
-    bool  matched = false;
-    const int32_t count = self->_namedTemplateCount;
-
-    // ---- POPULATION INSTRUMENT, not decoration ----------------------------
-    // The inline strcmp below is the construct
-    // reference_uniform_population_is_not_a_verification.md is about, and a
-    // clean replay proves nothing about it unless the strcmp ACTUALLY RAN on
-    // DISTINCT values. It usually does not: the length gate short-circuits
-    // every entry whose name is a different length, so a table of twenty names
-    // can exercise the byte loop zero times.
-    //
-    // So the diff message below reports what the population WAS, not just
-    // whether the answer matched: how many entries were scanned, how many
-    // reached the byte loop at all (a length tie), and how many distinct FIRST
-    // BYTES those tied entries had — the first byte being exactly what the
-    // known defect keyed on. A reader who sees `tied=0` has learned that this
-    // call could not have falsified anything.
-    int32_t nScanned = 0, nTied = 0, nTiedEq = 0;
-    uint32_t firstByteSeen[8] = {0,0,0,0,0,0,0,0};   // 256-bit set
-    auto noteFirstByte = [&](unsigned char c) {
-        firstByteSeen[c >> 5] |= (1u << (c & 31));
-    };
-    for (int32_t i = 0; i < count; ++i) {
-        const DialogNamedTemplate& e = self->_namedTemplates[i];
-
-        // Length gate first: String's length dword lives at [p-8], and a null
-        // buffer counts as length 0 (0x180112fbc / 0x180112fcc both fall
-        // through to EDI, which is 0 here).
-        const int32_t lenOurs   = name    ? *reinterpret_cast<const int32_t*>(name    - 8) : 0;
-        const int32_t lenTheirs = e._name ? *reinterpret_cast<const int32_t*>(e._name - 8) : 0;
-        ++nScanned;
-        if (e._name) noteFirstByte(static_cast<unsigned char>(e._name[0]));
-        if (lenOurs != lenTheirs) continue;
-
-        if (!name)      { matched = true; }                 // 0x180112fd5
-        else if (lenOurs == 0) { matched = true; }          // 0x180112fdb
-        else if (!e._name) { matched = false; }             // LEA ECX,[R8+1] -> 1
-        else {
-            // The inlined strcmp at 0x180112fe8..0x180113021, transcribed.
-            const char* a = name;      // "ours"
-            const char* b = e._name;   // the table entry
-            size_t k = 0;
-            unsigned char c = static_cast<unsigned char>(a[0]);
-            if (c == static_cast<unsigned char>(b[0])) {
-                while (c != 0 && b[k] != 0) {
-                    ++k;
-                    c = static_cast<unsigned char>(a[k]);
-                    if (c != static_cast<unsigned char>(b[k])) break;
-                }
-            }
-            const int diff = static_cast<int>(static_cast<signed char>(a[k])) -
-                             static_cast<int>(static_cast<signed char>(b[k]));
-            matched = (diff == 0);
-            ++nTied;                     // the byte loop actually ran
-            if (matched) ++nTiedEq;
-        }
-
-        if (matched) { target = e._description; break; }
-    }
-
-    if (matched && !target) {
-        // 0x180113045: the table entry matched but holds a null description.
-        // Retail writes 0 into the return slot and does NOT dispatch.
-        *ret = nullptr;
-    } else {
-        void** vtbl = *reinterpret_cast<void***>(target);
-        reinterpret_cast<void* (*)(void*, void**, const Dialog*)>(vtbl[8])(
-            target, ret, self);
-    }
-
-    // Release the strong reference taken above (0x180113061..0x180113087).
-    if (name) ReleaseStringLocal(name);
-
-
-    // `worked` is NOT `count > 0`: a scan that never reached the byte loop has
-    // not exercised the thing this port can get wrong.
+    // B.3.6: the body is UI::Dialog::CreateElement (bottom of file); RETSLOT
+    // door — placement-new the member's prvalue into the caller's slot.
+    new (ret) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<const UI::Dialog*>(self)           // B.3.6 bridge
+            ->UI::Dialog::CreateElement(Object::ExternalPtr<UI::ElementDescription>(
+                static_cast<UI::ElementDescription*>(desc))));
     return ret;
 }
 
@@ -1727,97 +1339,9 @@ void** RtUiDialog_CreateElement(const Dialog* self, void** ret, void* desc) {
 // every call means the population never moved a dialog.
 void RtUiDialogInstance_SetUpperLeft(DialogInstance* self, int32_t x, int32_t y,
                                      bool scaled) {
-
-    const float scale =
-        *reinterpret_cast<const float*>(
-            static_cast<const uint8_t*>(self->_ui) + 0xdc);
-
-    const uint8_t* device = static_cast<const uint8_t*>(*VideoDeviceSingleton());
-    const int32_t screenW = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * scale);
-    const int32_t screenH = static_cast<int32_t>(
-        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * scale);
-
-    if (scaled) {
-        x = static_cast<int32_t>(static_cast<float>(x) * scale);
-        y = static_cast<int32_t>(static_cast<float>(y) * scale);
-    }
-
-    uint8_t* root = static_cast<uint8_t*>(self->_root);
-
-    // Element vtable slot 4 — ComputeSize. Pure virtual on the base; see above.
-    {
-        void** vtbl = *reinterpret_cast<void***>(root);
-        reinterpret_cast<void (*)(void*)>(vtbl[4])(root);
-    }
-
-    // The padded size, open-coded: _layout{Width,Height} + the two pads, each
-    // floored at _min{Width,Height}.
-    int32_t w = *reinterpret_cast<const int32_t*>(root + 0x60) +
-                *reinterpret_cast<const int32_t*>(root + 0x1c) +
-                *reinterpret_cast<const int32_t*>(root + 0x18);
-    int32_t h = *reinterpret_cast<const int32_t*>(root + 0x64) +
-                *reinterpret_cast<const int32_t*>(root + 0x24) +
-                *reinterpret_cast<const int32_t*>(root + 0x20);
-    const uint32_t flags = *reinterpret_cast<const uint32_t*>(root + 0x34);
-    if (w < *reinterpret_cast<const int32_t*>(root + 0x28))
-        w = *reinterpret_cast<const int32_t*>(root + 0x28);
-    if (h < *reinterpret_cast<const int32_t*>(root + 0x2c))
-        h = *reinterpret_cast<const int32_t*>(root + 0x2c);
-
-    // Retail tests the LOW BYTE of _flags (`TEST R10B,0x30`), so only bits
-    // 4 and 5 of the low byte take part.
-    if ((flags & 0x30u) != 0) {
-        const uint8_t* e = root;
-        while (*reinterpret_cast<void* const*>(e + 0x98) != nullptr)
-            e = *reinterpret_cast<const uint8_t* const*>(e + 0x98);   // _parent
-        const uint8_t* dlg = *reinterpret_cast<const uint8_t* const*>(e + 0x90);
-        if ((flags & 0x20u) != 0) {
-            const float s = *reinterpret_cast<const float*>(
-                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
-            w = static_cast<int32_t>(
-                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * s);
-        }
-        if ((flags & 0x10u) != 0) {
-            const float s = *reinterpret_cast<const float*>(
-                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
-            h = static_cast<int32_t>(
-                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * s);
-        }
-    }
-
-    if (x < 0) x = 0;
-    if (w + x > screenW) x = screenW - w;
-    if (y < 0) y = 0;
-    if (h + y > screenH) y = screenH - h;
-
-    const int32_t dx = x - self->_upperLeftX;
-    const int32_t dy = y - self->_upperLeftY;
-
-    if (dx != 0 || dy != 0) {
-        uint8_t* r = static_cast<uint8_t*>(self->_root);
-        *reinterpret_cast<int32_t*>(r + 0x68) += dx;
-        *reinterpret_cast<int32_t*>(r + 0x70) += dx;
-        *reinterpret_cast<int32_t*>(r + 0x6c) += dy;
-        *reinterpret_cast<int32_t*>(r + 0x74) += dy;
-
-        using AdjustFn = void (*)(void*, int32_t, int32_t);
-        static AdjustFn adjust = nullptr;
-        if (!adjust) adjust = reinterpret_cast<AdjustFn>(
-            ResolveAddr(Module::Runtime, 0x180115840));
-
-        const int32_t n = *reinterpret_cast<const int32_t*>(r + 0xa8);
-        for (int32_t i = 0; i < n; ++i) {
-            void* child = (*reinterpret_cast<void** const*>(r + 0xa0))[i];
-            if (child && adjust) adjust(child, dx, dy);
-        }
-        if (void* border = *reinterpret_cast<void* const*>(r + 0xb0))
-            if (adjust) adjust(border, dx, dy);
-
-        self->_upperLeftX = x;
-        self->_upperLeftY = y;
-    }
-
+    // B.3.6: the body is UI::DialogInstance::SetUpperLeft (bottom of file).
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::SetUpperLeft(x, y, scaled);
 }
 
 // ============================================================================
@@ -2141,6 +1665,586 @@ extern "C" void RtUiElementDescription_CreateInstance(const ElementDescription* 
     EdCreateInstanceBody(self, elemPtr);
 
 }
+
+// ############################################################################
+// ENDGAME B.3.6 block B — THE MEMBER BODIES.
+//
+// Every body that stood in a door above MOVED here onto UI::DialogInstance /
+// UI::Dialog / UI::DialogController (runtime/types/ui/{DialogInstance,Dialog,
+// DialogController}.h), unchanged except `self->x` became `x` and the
+// hand-inlined vtable calls onto THIS block's classes became member calls:
+//   * `(*(void***)self)[6/7]`       -> OnUpdateLayout() / OnUpdate(time) (virtual)
+//   * controller slot +0x10/+0x38/+0x40/+0x48 -> c->Type() / OnUpdateLayout() /
+//     OnUpdate(time) / OnElementEvent(...)  (virtual, on UI::DialogController)
+//   * RtUiDialogInstance_Contains/_Update/_GetMouseCursorIndex -> member calls.
+// The doors above keep their registrations and delegate QUALIFIED. Calls onto
+// OTHER blocks' classes (Element's slots 4/5/7/9, Element::FindElement /
+// FindElementType / AdjustUpperLeft, UserInterface::_events) are left as they
+// were: those classes are not converted yet.
+//
+// Per-body evidence and the retail disassembly are in the comment blocks at
+// each door above; they are not repeated.
+// ############################################################################
+
+namespace {
+
+// Retry-a-miss name doors the member bodies need (RULE B6-5: no member keeps
+// a static of its own; the caches live here, in the file-scope helpers).
+// NULL when unresolved; the caller keeps the door's `if (getPath)` guard.
+using GetPathFn = void* (*)(const void* self, void* out);
+inline GetPathFn ExternalGetPathFn() {
+    return RT_EXPORT_ONCE(GetPathFn,
+        "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ");
+}
+
+// ?AdjustUpperLeft@Element@UI@@ 0x180115840, reached through the seam
+// (ResolveAddr consults the port registry first). Retry-a-miss.
+using AdjustFn = void (*)(void*, int32_t, int32_t);
+inline AdjustFn ElementAdjustUpperLeft() {
+    static AdjustFn adjust = nullptr;
+    if (!adjust) adjust = reinterpret_cast<AdjustFn>(
+        ResolveAddr(Module::Runtime, 0x180115840));
+    return adjust;
+}
+
+inline const uint8_t* Bytes(const void* p) { return static_cast<const uint8_t*>(p); }
+inline uint8_t*       Bytes(void* p)       { return static_cast<uint8_t*>(p); }
+
+}  // namespace
+
+namespace UI {
+
+// ---- Object::Internal slots ------------------------------------------------
+void DialogInstance::Persist(void* /*stream*/) {}              // [3] 0x180114fa0  RET
+void DialogInstance::OnSerializeSettings(void* /*stream*/) {}  // [9] 0x180115470  RET
+
+const char* DialogInstance::TypeName() const {                 // [1] 0x180045400
+    return *reinterpret_cast<const char* const*>(
+        DialogInstanceTypeInfo() + kBaseTypeInfoName);
+}
+
+uint32_t DialogInstance::Type() const {                        // [2] 0x1800453e0
+    return *reinterpret_cast<const uint32_t*>(
+        DialogInstanceTypeInfo() + kBaseTypeInfoTypeId);
+}
+
+// ??1DialogInstance@UI@@UEAA@XZ 0x180114d40 — EMPTY on purpose; the teardown
+// is the door `RtUiDialogInstance_Dtor` above.
+DialogInstance::~DialogInstance() {}
+
+// ---- accessors -------------------------------------------------------------
+Object::InternalPtr<Element> DialogInstance::GetRoot() {       // 0x180045580
+    return Object::InternalPtr<Element>(static_cast<Element*>(_root));
+}
+
+// THE PARAMETER IS A TYPE ID, NOT AN INDEX (see the door). No null check on
+// the controller: retail loads [RCX] off it unguarded.
+Object::InternalPtr<DialogController>
+DialogInstance::GetController(uint32_t typeId) const {         // 0x180113320
+    DialogController* found = nullptr;
+    for (int32_t i = 0; i < _controllers._size; ++i) {
+        DialogController* c = _controllers._data[i];
+        if (c->Type() == typeId) {                             // controller slot 2
+            found = _controllers._data[i];
+            break;
+        }
+    }
+    return Object::InternalPtr<DialogController>(found);
+}
+
+// Forwarders into Element (block A's class, still a name door). NO NULL
+// CHECK on _root — retail has none.
+Object::InternalPtr<Element>
+DialogInstance::FindElement(const System::String& name) {      // 0x180114c70
+    Object::InternalPtr<Element> out;
+    reinterpret_cast<PtrOutStrFn>(ResolveExport(kElementFindElement))(
+        _root, reinterpret_cast<void**>(&out), &name);
+    return out;
+}
+
+Object::InternalPtr<Element>
+DialogInstance::FindElementType(uint32_t typeId) {             // 0x1801140c0
+    Object::InternalPtr<Element> out;
+    reinterpret_cast<PtrOutU32Fn>(ResolveExport(kElementFindElementType))(
+        _root, reinterpret_cast<void**>(&out), typeId);
+    return out;
+}
+
+// ---- self-contained mutators ------------------------------------------------
+void DialogInstance::SetFlagsOnOff(uint32_t on, uint32_t off) { // 0x180114690
+    _flags = (on | _flags) & ~off;
+}
+
+// Transcribed from the DISASSEMBLY (see the door): 64-bit search bound,
+// `data + index*0x18` null test on the SUM, one decrement at the end.
+void DialogInstance::StopTimer(int32_t id) {                   // 0x180113730
+    const int64_t count64 = static_cast<int64_t>(_timers._size);
+    if (count64 > 0) {
+        uint8_t* base = reinterpret_cast<uint8_t*>(_timers._data);
+        int32_t  i = 0;
+        int64_t  walked = 0;
+        for (;;) {
+            if (*reinterpret_cast<const int32_t*>(base + walked * 0x18 + 0x10) == id) break;
+            ++walked;
+            ++i;
+            if (walked >= _timers._size) return;   // retail: plain RET
+        }
+        if (i < _timers._size) {
+            int64_t off = static_cast<int64_t>(i) * 0x18;
+            do {
+                ++i;
+                uint8_t* p = base + off;
+                if (i < _timers._size && p != nullptr) {
+                    std::memcpy(p + 0x00, p + 0x18, 8);
+                    std::memcpy(p + 0x08, p + 0x20, 8);
+                    std::memcpy(p + 0x10, p + 0x28, 8);
+                }
+                off += 0x18;
+            } while (i < _timers._size);
+        }
+        _timers._size -= 1;
+    }
+}
+
+// ---- the three controller-dispatch virtuals ---------------------------------
+// No null check on the controller pointer: retail dereferences it unguarded.
+void DialogInstance::OnUpdateLayout() {                        // [6] 0x1801153a0
+    for (int32_t i = 0; i < _controllers._size; ++i)
+        _controllers._data[i]->OnUpdateLayout();               // controller slot 7
+}
+
+void DialogInstance::OnUpdate(const System::Time& time) {      // [7] 0x180115400
+    for (int32_t i = 0; i < _controllers._size; ++i)
+        _controllers._data[i]->OnUpdate(time);                 // controller slot 8
+}
+
+// Retail re-reads `*element` into a fresh stack slot on EVERY iteration and
+// hands the ADDRESS of that copy on, so a controller that overwrites its
+// argument cannot corrupt the caller's InternalPtr. Kept.
+void DialogInstance::OnElementEvent(Object::InternalPtr<Element>* element,
+                                    int32_t a, int32_t b, int32_t c4,
+                                    int32_t d, int32_t e, void* userData) {  // [8] 0x180114ed0
+    for (int32_t i = 0; i < _controllers._size; ++i) {
+        DialogController* c = _controllers._data[i];
+        Object::InternalPtr<Element> local = *element;
+        c->OnElementEvent(&local, a, b, c4, d, e, userData);   // controller slot 9
+    }
+}
+
+// ---- frame leftovers --------------------------------------------------------
+// Element offsets are block A's; spelled raw at the use site (Element.h pins
+// them). Element vtable slots: 4 ComputeSize, 5 ComputeLayout, 7 Update,
+// 9 Contains.
+bool DialogInstance::Contains(int32_t x, int32_t y) const {    // 0x180114820
+    const uint8_t* root = Bytes(_root);
+    if ((_flags >> 2) & 1) return false;
+    if ((_flags >> 3) & 1) {
+        void* const* const vtable = *reinterpret_cast<void* const* const*>(root);
+        using Fn = bool (*)(const void*, int32_t, int32_t, void*);
+        return vtable && reinterpret_cast<Fn>(vtable[9])(root, x, y, _ui);
+    }
+    const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
+    const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
+    const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
+    const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
+    return left <= x && x <= right && top <= y && y <= bottom;
+}
+
+int32_t DialogInstance::GetMouseCursorIndex(Object::InternalPtr<Element> element,
+                                            int32_t x, int32_t y) const {  // 0x180114010
+    const uint8_t* elem = Bytes(static_cast<const void*>(element.Get()));
+    int32_t result = *reinterpret_cast<const int32_t*>(elem + 0x3c);
+    const int32_t count = *reinterpret_cast<const int32_t*>(elem + 0xa8);
+    void* const* const children = *reinterpret_cast<void* const* const*>(elem + 0xa0);
+    for (int32_t i = 0; i < count; ++i) {
+        void* child = children ? children[i] : nullptr;
+        if (!child) continue;
+        const uint8_t* c = Bytes(child);
+        if ((*reinterpret_cast<const uint8_t*>(c + 0x34) & 3) != 0) continue;
+        const int32_t left   = *reinterpret_cast<const int32_t*>(c + 0x68);
+        const int32_t top    = *reinterpret_cast<const int32_t*>(c + 0x6c);
+        const int32_t right  = *reinterpret_cast<const int32_t*>(c + 0x70);
+        const int32_t bottom = *reinterpret_cast<const int32_t*>(c + 0x74);
+        if (left <= x && x < right && top <= y && y < bottom)
+            result = GetMouseCursorIndex(
+                Object::InternalPtr<Element>(static_cast<Element*>(child)), x, y);
+    }
+    return result;
+}
+
+void DialogInstance::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {  // 0x180113d90
+    OnUpdateLayout();                                          // own slot 6 — VIRTUAL
+
+    uint8_t* root = Bytes(_root);
+    auto ComputeSize = [&]() {
+        void** vt = *reinterpret_cast<void***>(root);
+        reinterpret_cast<void (*)(uint8_t*)>(vt[4])(root);
+    };
+    ComputeSize();
+
+    int32_t layoutW = *reinterpret_cast<int32_t*>(root + 0x60);
+    int32_t layoutH = *reinterpret_cast<int32_t*>(root + 0x64);
+    const int32_t alignment = *reinterpret_cast<int32_t*>(root + 0x30);
+    const uint8_t elemFlags = *reinterpret_cast<uint8_t*>(root + 0x34);
+    const int32_t leftPad   = *reinterpret_cast<int32_t*>(root + 0x18);
+    const int32_t rightPad  = *reinterpret_cast<int32_t*>(root + 0x1c);
+    const int32_t topPad    = *reinterpret_cast<int32_t*>(root + 0x20);
+    const int32_t bottomPad = *reinterpret_cast<int32_t*>(root + 0x24);
+
+    int32_t posX = _upperLeftX + x;
+    int32_t posY = _upperLeftY + y;
+    if (w < posX + layoutW) posX = w - layoutW;
+    if (h < posY + layoutH) posY = h - layoutH;
+
+    const int32_t availRight  = w - rightPad;
+    const int32_t availBottom = h - bottomPad;
+    posX += leftPad;
+    posY += topPad;
+    int32_t availW = availRight - posX;
+    int32_t availH = availBottom - posY;
+    if ((elemFlags >> 2) & 1) layoutW = availW;
+    if ((elemFlags >> 3) & 1) layoutH = availH;
+
+    switch (alignment) {
+        case 1: case 4: case 7: posX = posX + (availW >> 1) - (layoutW >> 1); break;
+        case 2: case 5: case 8: posX = availRight - layoutW; break;
+        default: break;   // left-aligned: posX unchanged
+    }
+    if (alignment > 2) {
+        if (alignment < 6)      posY = posY + (availH >> 1) - (layoutH >> 1);
+        else if (alignment < 9) posY = availBottom - layoutH;
+    }
+
+    ComputeSize();   // retail calls it a second time; reproduced as-is.
+    int32_t totalW = *reinterpret_cast<int32_t*>(root + 0x60) + rightPad + leftPad;
+    int32_t totalH = *reinterpret_cast<int32_t*>(root + 0x64) + bottomPad + topPad;
+    const int32_t minW = *reinterpret_cast<int32_t*>(root + 0x28);
+    const int32_t minH = *reinterpret_cast<int32_t*>(root + 0x2c);
+    if (totalW < minW) totalW = minW;
+    if (totalH < minH) totalH = minH;
+
+    const uint32_t rootFlags = *reinterpret_cast<uint32_t*>(root + 0x34);
+    if (rootFlags & 0x30) {
+        uint8_t* ancestor = root;
+        while (*reinterpret_cast<uint8_t**>(ancestor + 0x98) != nullptr)
+            ancestor = *reinterpret_cast<uint8_t**>(ancestor + 0x98);
+        // ancestor+0x90 is Element::_dialogParent; its +0x10 is
+        // DialogInstance::_ui, whose +0xdc is UserInterface::_uiScale.
+        uint8_t* dlgParent = *reinterpret_cast<uint8_t**>(ancestor + 0x90);
+        const float uiScale = dlgParent
+            ? *reinterpret_cast<float*>(*reinterpret_cast<uint8_t**>(dlgParent + 0x10) + 0xdc)
+            : 1.0f;
+        void** deviceSlot = VideoDeviceSingleton();
+        const uint8_t* device = deviceSlot ? static_cast<uint8_t*>(*deviceSlot) : nullptr;
+        if (device) {
+            if (rootFlags & 0x20)
+                totalW = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * uiScale);
+            if (rootFlags & 0x10)
+                totalH = static_cast<int32_t>(static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * uiScale);
+        }
+    }
+
+    void** vt = *reinterpret_cast<void***>(root);
+    reinterpret_cast<void (*)(uint8_t*, int32_t, int32_t, int32_t, int32_t)>(vt[5])(
+        root, posX, posY, posX + totalW, posY + totalH);
+}
+
+void DialogInstance::Update(const System::Time& time, UserInterface* ui,
+                            uint8_t* updateState) {            // 0x180113980
+    // The 0x30-byte UI event record (see the door's banner).
+    struct EventRecord {
+        void*    dialog;
+        uint64_t _unused08;
+        int32_t  type;
+        int32_t  data;
+        uint64_t payload;
+        uint64_t _unused20_28[2];
+    };
+    static_assert(sizeof(EventRecord) == 0x30, "UI::UserInterface::Event stride");
+    // UserInterface::_events (+0x48) through the hand-derived kSpec_Event30
+    // row, which leaves bytes [0x24,0x28) of every element UNWRITTEN — see
+    // the door's banner for why the trait-derived member is not used.
+    auto PushEvent = [&](int32_t type, int32_t data, uint64_t payload) {
+        EventRecord rec{};
+        rec.dialog = this;
+        rec.type = type;
+        rec.data = data;
+        rec.payload = payload;
+        uint8_t* eventsHdr = reinterpret_cast<uint8_t*>(ui) + 0x48;  // UserInterface::_events
+        auto* events = rtcoll::AsArray<&rtcoll::kSpec_Event30>(eventsHdr);
+        events->SetSizeFill(events->GetSize() + 1, &rec);          // retail 0x180033690
+    };
+
+    bool anyChildBit1 = false;
+    for (auto it = _children.GetFirst(); it; ++it) {
+        DialogInstance* child = it->Get();
+        anyChildBit1 = anyChildBit1 || ((child->_flags >> 1) & 1) != 0;
+    }
+
+    if (!anyChildBit1) {
+        OnUpdate(time);                                        // own slot 7 — VIRTUAL
+
+        const uint8_t* us = updateState;
+        const int64_t timeTicks = *reinterpret_cast<const int64_t*>(&time);  // System::Time: one int64
+        const double secondsPerTick = *RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
+        // DAT_1801616b8: a double, read directly out of the shipped DLL
+        // (0.25 seconds) — no export names it, so it is a literal here.
+        constexpr double kTooltipDelaySeconds = 0.25;
+
+        if (us[8] == 0 && us[9] == 0 && us[7] == 0) {
+            const int32_t mx = *reinterpret_cast<const int32_t*>(us + 0x18);
+            const int32_t my = *reinterpret_cast<const int32_t*>(us + 0x1c);
+            if (us[0x20] == 0 && Contains(mx, my)) {
+                // +0x90/+0x94, NOT the upper-left pair at +0x88 (see the door).
+                if (_hoverMouseX == mx && _hoverMouseY == my) {
+                    _hoverTime += timeTicks;
+                    if (_hoverTime > static_cast<int64_t>(kTooltipDelaySeconds / secondsPerTick))
+                        _hovering = 1;
+                }
+                _hoverMouseX = mx;
+                _hoverMouseY = my;
+            }
+        } else if (_hovering != 0) {
+            _hovering = 0;
+            PushEvent(0x11, 0, 0);
+            _hoverTime = 0;
+        }
+
+        // ---- timers: +0x08 is the LIVE countdown (see the door) -----------
+        if (_timers._size > 0) {
+            uint8_t* data = reinterpret_cast<uint8_t*>(_timers._data);
+            int32_t i = 0;
+            while (i < _timers._size) {
+                uint8_t* t = data + static_cast<size_t>(i) * 0x18;
+                int64_t* remaining = reinterpret_cast<int64_t*>(t + 0x08);
+                *remaining -= timeTicks;
+                if (*remaining <= 0) {
+                    const int32_t timerId = *reinterpret_cast<int32_t*>(t + 0x10);
+                    PushEvent(0x13, timerId, 0);
+                    for (int32_t k = i; k + 1 < _timers._size; ++k)
+                        std::memcpy(data + static_cast<size_t>(k) * 0x18,
+                                    data + static_cast<size_t>(k + 1) * 0x18, 0x18);
+                    --_timers._size;
+                    continue;   // retail does NOT re-visit the slot just filled
+                }
+                ++i;
+            }
+        }
+
+        // ---- root Element::Update (block A's slot 7, five arguments) -------
+        uint8_t* root = Bytes(_root);
+        DialogInstance* topDialog = this;
+        {
+            void** vt = *reinterpret_cast<void***>(root);
+            reinterpret_cast<void (*)(uint8_t*, const void*, void*, DialogInstance**, uint8_t*)>(
+                vt[7])(root, &time, ui, &topDialog, updateState);
+        }
+
+        const int32_t mx2 = *reinterpret_cast<const int32_t*>(updateState + 0x18);
+        const int32_t my2 = *reinterpret_cast<const int32_t*>(updateState + 0x1c);
+        // bit2 is mouse-passthrough: it SKIPS the hit block (see the door).
+        bool hit;
+        if ((_flags >> 2) & 1) {
+            hit = false;
+        } else if ((_flags >> 3) & 1) {
+            void** vt = *reinterpret_cast<void***>(root);
+            using Fn = bool (*)(uint8_t*, int32_t, int32_t, const void*);
+            hit = reinterpret_cast<Fn>(vt[9])(root, mx2, my2, _dialog);
+        } else {
+            const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
+            const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
+            const int32_t top    = *reinterpret_cast<const int32_t*>(root + 0x6c);
+            const int32_t bottom = *reinterpret_cast<const int32_t*>(root + 0x74);
+            hit = left <= mx2 && mx2 <= right && top <= my2 && my2 <= bottom;
+        }
+        if (hit) {
+            const uint64_t mousePos = *reinterpret_cast<const uint64_t*>(updateState + 0x18);
+            if (updateState[1] != 0) PushEvent(8,  0, mousePos);
+            if (updateState[3] != 0) PushEvent(9,  0, mousePos);
+            if (updateState[2] != 0) PushEvent(0xa, 0, mousePos);
+            *reinterpret_cast<uint16_t*>(updateState + 7) = 0;
+            *reinterpret_cast<uint16_t*>(updateState + 1) = 0;
+            *reinterpret_cast<uint16_t*>(updateState + 4) = 0;
+            updateState[9] = 0;
+            updateState[3] = 0;
+            updateState[6] = 0;
+            updateState[0x20] = 1;
+        }
+    }
+
+    for (auto it = _children.GetFirst(); it; ++it)
+        it->Get()->Update(time, ui, updateState);
+}
+
+void DialogInstance::SetUpperLeft(int32_t x, int32_t y, bool scaled) {  // 0x180114a60
+    const float scale = *reinterpret_cast<const float*>(Bytes(_ui) + 0xdc);
+
+    const uint8_t* device = static_cast<const uint8_t*>(*VideoDeviceSingleton());
+    const int32_t screenW = static_cast<int32_t>(
+        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * scale);
+    const int32_t screenH = static_cast<int32_t>(
+        static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * scale);
+
+    if (scaled) {
+        x = static_cast<int32_t>(static_cast<float>(x) * scale);
+        y = static_cast<int32_t>(static_cast<float>(y) * scale);
+    }
+
+    uint8_t* root = Bytes(_root);
+
+    // Element vtable slot 4 — ComputeSize. Pure virtual on the base.
+    {
+        void** vtbl = *reinterpret_cast<void***>(root);
+        reinterpret_cast<void (*)(void*)>(vtbl[4])(root);
+    }
+
+    int32_t w = *reinterpret_cast<const int32_t*>(root + 0x60) +
+                *reinterpret_cast<const int32_t*>(root + 0x1c) +
+                *reinterpret_cast<const int32_t*>(root + 0x18);
+    int32_t h = *reinterpret_cast<const int32_t*>(root + 0x64) +
+                *reinterpret_cast<const int32_t*>(root + 0x24) +
+                *reinterpret_cast<const int32_t*>(root + 0x20);
+    const uint32_t flags = *reinterpret_cast<const uint32_t*>(root + 0x34);
+    if (w < *reinterpret_cast<const int32_t*>(root + 0x28))
+        w = *reinterpret_cast<const int32_t*>(root + 0x28);
+    if (h < *reinterpret_cast<const int32_t*>(root + 0x2c))
+        h = *reinterpret_cast<const int32_t*>(root + 0x2c);
+
+    if ((flags & 0x30u) != 0) {
+        const uint8_t* e = root;
+        while (*reinterpret_cast<void* const*>(e + 0x98) != nullptr)
+            e = *reinterpret_cast<const uint8_t* const*>(e + 0x98);   // _parent
+        const uint8_t* dlg = *reinterpret_cast<const uint8_t* const*>(e + 0x90);
+        if ((flags & 0x20u) != 0) {
+            const float s = *reinterpret_cast<const float*>(
+                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
+            w = static_cast<int32_t>(
+                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 4)) * s);
+        }
+        if ((flags & 0x10u) != 0) {
+            const float s = *reinterpret_cast<const float*>(
+                *reinterpret_cast<const uint8_t* const*>(dlg + 0x10) + 0xdc);
+            h = static_cast<int32_t>(
+                static_cast<float>(*reinterpret_cast<const int32_t*>(device + 8)) * s);
+        }
+    }
+
+    // THE CLAMP ORDER IS LOAD-BEARING (see the door).
+    if (x < 0) x = 0;
+    if (w + x > screenW) x = screenW - w;
+    if (y < 0) y = 0;
+    if (h + y > screenH) y = screenH - h;
+
+    const int32_t dx = x - _upperLeftX;
+    const int32_t dy = y - _upperLeftY;
+
+    if (dx != 0 || dy != 0) {
+        uint8_t* r = Bytes(_root);
+        *reinterpret_cast<int32_t*>(r + 0x68) += dx;
+        *reinterpret_cast<int32_t*>(r + 0x70) += dx;
+        *reinterpret_cast<int32_t*>(r + 0x6c) += dy;
+        *reinterpret_cast<int32_t*>(r + 0x74) += dy;
+
+        const AdjustFn adjust = ElementAdjustUpperLeft();
+        const int32_t n = *reinterpret_cast<const int32_t*>(r + 0xa8);
+        for (int32_t i = 0; i < n; ++i) {
+            void* child = (*reinterpret_cast<void** const*>(r + 0xa0))[i];
+            if (child && adjust) adjust(child, dx, dy);
+        }
+        if (void* border = *reinterpret_cast<void* const*>(r + 0xb0))
+            if (adjust) adjust(border, dx, dy);
+
+        _upperLeftX = x;
+        _upperLeftY = y;
+    }
+}
+
+// ============================================================================
+// UI::Dialog
+// ============================================================================
+
+// Six instructions, no bounds check; MOVSXD, so a negative index reads BEFORE
+// the array, faithfully.
+Object::ExternalPtr<ElementDescription>
+Dialog::GetTemplate(int32_t index) const {                     // 0x1800388b0
+    return Object::ExternalPtr<ElementDescription>(
+        static_cast<ElementDescription*>(_templates[static_cast<int64_t>(index)]));
+}
+
+// "Make an element from this description, unless a NAMED TEMPLATE overrides
+// it." Full evidence (the inline strcmp, the slot-8 dispatch, the release
+// order) at the door above.
+Object::InternalPtr<Element>
+Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const {  // 0x180112ed0
+    void* const desc = description.Get();
+    Object::InternalPtr<Element> result;
+    if (!desc) return result;
+
+    char* name = nullptr;
+    if (const GetPathFn getPath = ExternalGetPathFn()) {
+        // identTmp's destructor runs before pathTmp's — retail's order.
+        System::Filename pathTmp;
+        getPath(desc, &pathTmp);
+        const System::Filename identTmp = pathTmp.GetPathIdentifer();
+        name = identTmp._data;
+        if (name) { ++RtSystem::StringRefCount(name); }   // 0x180112f3e INC [RCX-4]
+    }
+
+    void* target  = desc;          // the no-match answer: the argument itself
+    bool  matched = false;
+    const int32_t count = _namedTemplateCount;
+    for (int32_t i = 0; i < count; ++i) {
+        const RtUI::DialogNamedTemplate& e = _namedTemplates[i];
+        const int32_t lenOurs   = name    ? *reinterpret_cast<const int32_t*>(name    - 8) : 0;
+        const int32_t lenTheirs = e._name ? *reinterpret_cast<const int32_t*>(e._name - 8) : 0;
+        if (lenOurs != lenTheirs) continue;
+
+        if (!name)             { matched = true; }            // 0x180112fd5
+        else if (lenOurs == 0) { matched = true; }            // 0x180112fdb
+        else if (!e._name)     { matched = false; }           // LEA ECX,[R8+1] -> 1
+        else {
+            // The inlined strcmp at 0x180112fe8..0x180113021, transcribed.
+            const char* a = name;
+            const char* b = e._name;
+            size_t k = 0;
+            unsigned char c = static_cast<unsigned char>(a[0]);
+            if (c == static_cast<unsigned char>(b[0])) {
+                while (c != 0 && b[k] != 0) {
+                    ++k;
+                    c = static_cast<unsigned char>(a[k]);
+                    if (c != static_cast<unsigned char>(b[k])) break;
+                }
+            }
+            const int diff = static_cast<int>(static_cast<signed char>(a[k])) -
+                             static_cast<int>(static_cast<signed char>(b[k]));
+            matched = (diff == 0);
+        }
+        if (matched) { target = e._description; break; }
+    }
+
+    if (matched && !target) {
+        // 0x180113045: matched but a null description — 0, no dispatch.
+        result = Object::InternalPtr<Element>();
+    } else {
+        // The description's slot 8 (CreateInstance, RETSLOT) — block A's
+        // class, still reached through its table.
+        void** vtbl = *reinterpret_cast<void***>(target);
+        reinterpret_cast<void* (*)(void*, void**, const Dialog*)>(vtbl[8])(
+            target, reinterpret_cast<void**>(&result), this);
+    }
+
+    if (name) ReleaseStringLocal(name);   // 0x180113061..0x180113087
+    return result;
+}
+
+// ============================================================================
+// UI::DialogController
+// ============================================================================
+Object::InternalPtr<Element> DialogController::GetContainer() {  // 0x18003b700
+    return Object::InternalPtr<Element>(static_cast<Element*>(_container));
+}
+
+}  // namespace UI
 
 int RtUiDialogRegister() {
     int n = 0;

@@ -91,6 +91,7 @@
 #include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
 #include "../../types/ui/TextElement.h"
+#include "../../types/ui/ToolTipDialog.h"
 #include "../system/string.h"   // RtSystem_String_Set / _Assign, RtString_*
 
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
@@ -204,12 +205,6 @@ inline const uint8_t* ToolTipDialogTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
                         "?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A");
 }
-
-// UI::DialogInstance::_root, +0x50. Confirmed by `?GetRoot@` (0x180045580),
-// which is the single line `*out = this[0x50]`
-// (runtime/types/ui/DialogInstance.h:233). Spelled as a constant rather than
-// including DialogInstance.h, which this TU needs nothing else from.
-constexpr int kDialogInstanceRoot = 0x50;
 
 template <typename T> inline T& Field(void* p, size_t off) {
     return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
@@ -351,14 +346,77 @@ extern "C" System::String* RtUi_Element_GetToolTipString(const Element* self,
 // ============================================================================
 extern "C" void RtUi_ToolTipDialog_SetText(void* self, const System::String* text) {
     ++g_setTextEntries;
+    // B.3.6: the body is UI::ToolTipDialog::SetText (below).
+    reinterpret_cast<UI::ToolTipDialog*>(self)->UI::ToolTipDialog::SetText(*text);   // B.3.6 bridge
+}
 
+// ============================================================================
+// ?TypeName@ToolTipDialog@UI@@UEBAPEBDXZ    retail 0x18004cfc0   vtable slot 1
+//     MOV RAX,qword ptr [0x1801fa4a8] / RET
+// ============================================================================
+// 0x1801fa4a8 is `?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A`
+// (0x1801fa4a0) plus 0x08, i.e. the node's `name` field. Two instructions, and
+// the address is a LOAD OF THE FIELD, not of the node — spelled that way here.
+// ============================================================================
+extern "C" const char* RtUi_ToolTipDialog_TypeName(const void* self) {
+    ++g_typeNameEntries;
+    return reinterpret_cast<const UI::ToolTipDialog*>(self)   // B.3.6 bridge
+        ->UI::ToolTipDialog::TypeName();
+}
+
+// ============================================================================
+// ?Type@ToolTipDialog@UI@@UEBAIXZ           retail 0x18004cfa0   vtable slot 2
+//     MOV EAX,dword ptr [0x1801fa4a0] / RET
+// ============================================================================
+// A DWORD load — `MOV EAX`, not `MOV RAX` — of the node's `typeId` at +0x00.
+// ============================================================================
+extern "C" uint32_t RtUi_ToolTipDialog_Type(const void* self) {
+    ++g_typeEntries;
+    return reinterpret_cast<const UI::ToolTipDialog*>(self)   // B.3.6 bridge
+        ->UI::ToolTipDialog::Type();
+}
+
+namespace {
+// Element::FindElement (block A's class), a RETSLOT name door. File scope so
+// no member keeps a static of its own (RULE B6-5). Spelled as ONE literal on
+// ONE line on purpose: a SPLIT string literal is invisible to a naive grep
+// for the mangled name (userinterface_hover.cpp:23 records the miss).
+inline void ElementFindElement(void* child, void** hit, char* const* name) {
+    RT_EXPORT_ONCE(FindElementFn, "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z")(child, hit, name);  // 0x1800daba2
+}
+}  // namespace
+
+// ############################################################################
+// ENDGAME B.3.6 block B — UI::ToolTipDialog's members
+// (runtime/types/ui/ToolTipDialog.h). Bodies unchanged except `self` became
+// `this` and +0x50 became the inherited `_root`.
+// ############################################################################
+namespace UI {
+
+const char* ToolTipDialog::TypeName() const {                  // [1] 0x18004cfc0
+    return *reinterpret_cast<const char* const*>(
+        ToolTipDialogTypeInfo() + kBaseTypeInfoName);
+}
+
+uint32_t ToolTipDialog::Type() const {                         // [2] 0x18004cfa0
+    return *reinterpret_cast<const uint32_t*>(
+        ToolTipDialogTypeInfo() + kBaseTypeInfoTypeId);
+}
+
+// ??1ToolTipDialog@UI@@UEAA@XZ 0x1800dac70 — EMPTY; the deleting-dtor row in
+// runtime/src/object/deleting_dtor_leaves.cpp owns the teardown.
+ToolTipDialog::~ToolTipDialog() {}
+
+// ?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z   0x1800dab00 — the
+// six steps are the banner above the door.
+void ToolTipDialog::SetText(const System::String& text) {
     // ---- STEP 1 -------------------------------------------------------------
     System::String name;                                       // 0x1800dab22
     name.Set("textToolTip");                                   // 0x1800dab37
 
     // ---- STEP 2: unguarded, deliberately ------------------------------------
-    void* found = Field<void*>(self, kDialogInstanceRoot);     // 0x1800dab3d
-    Element* const root = reinterpret_cast<Element*>(found);
+    void* found = _root;                                       // 0x1800dab3d, +0x50
+    Element* const root = static_cast<Element*>(found);
 
     // ---- STEP 3: the inlined self-match on the root --------------------------
     bool matched = false;
@@ -386,62 +444,30 @@ extern "C" void RtUi_ToolTipDialog_SetText(void* self, const System::String* tex
             Element* const child = root->_children._data[i];   // 0x1800dab90, +0xa0
             if (child == nullptr) continue;                    // 0x1800dab93
             void* hit = nullptr;
-            // Spelled as ONE literal on ONE line on purpose: a SPLIT string
-            // literal is invisible to a naive grep for the mangled name, which
-            // is precisely how `?BeginToolTip@` hid from one search last wave
-            // (userinterface_hover.cpp:23 records it).
-            RT_EXPORT_ONCE(FindElementFn, "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z")(child, &hit, &name._data);  // 0x1800daba2
+            ElementFindElement(child, &hit, &name._data);      // 0x1800daba2
             if (hit != nullptr) { found = hit; break; }        // 0x1800dabaf
         }
     }
     if (found != nullptr) ++g_setTextFound;
 
-    // ---- STEP 5 --------------------------------------------------------------
-    // 0x1800dabc7 released the local here. `name` is a real System::String now
-    // and its destructor runs at the end of the body instead; nothing between
-    // the two points reads it, and the release is not otherwise observable.
+    // ---- STEP 5: `name`'s release is its destructor at the end of the body --
 
     // ---- STEP 6: the SetParameter(0, text) tail ------------------------------
     if (found != nullptr &&                                    // 0x1800dabee
         *reinterpret_cast<const int32_t*>(
             static_cast<const uint8_t*>(found) + TE::kParamCount) > 0) {  // 0x1800dabf3
         ++g_setTextWrote;
-        // The dirty walk: the found element and every ancestor.
         for (void* node = found; node != nullptr;              // 0x1800dac00
              node = Field<void*>(node, TE::kParent))           // +0x98
             Field<uint32_t>(node, TE::kDirtyFlags) |= TE::kDirtyBit;   // +0x34, 0x8000000
         void* const params = Field<void*>(found, TE::kParamArrayData); // 0x1800dac19, +0xc8
         // B.3.1 bridge: the TextElement parameter array is untyped storage.
-        *reinterpret_cast<System::String*>(params) = *text;    // 0x1800dac20
+        *reinterpret_cast<System::String*>(params) = text;     // 0x1800dac20
         CacheText(found);                                      // 0x1800dac28
     }
 }
 
-// ============================================================================
-// ?TypeName@ToolTipDialog@UI@@UEBAPEBDXZ    retail 0x18004cfc0   vtable slot 1
-//     MOV RAX,qword ptr [0x1801fa4a8] / RET
-// ============================================================================
-// 0x1801fa4a8 is `?_typeInfo@ToolTipDialog@UI@@0VBaseTypeInfo@Object@@A`
-// (0x1801fa4a0) plus 0x08, i.e. the node's `name` field. Two instructions, and
-// the address is a LOAD OF THE FIELD, not of the node — spelled that way here.
-// ============================================================================
-extern "C" const char* RtUi_ToolTipDialog_TypeName(const void* /*self*/) {
-    ++g_typeNameEntries;
-    return *reinterpret_cast<const char* const*>(
-        ToolTipDialogTypeInfo() + kBaseTypeInfoName);
-}
-
-// ============================================================================
-// ?Type@ToolTipDialog@UI@@UEBAIXZ           retail 0x18004cfa0   vtable slot 2
-//     MOV EAX,dword ptr [0x1801fa4a0] / RET
-// ============================================================================
-// A DWORD load — `MOV EAX`, not `MOV RAX` — of the node's `typeId` at +0x00.
-// ============================================================================
-extern "C" uint32_t RtUi_ToolTipDialog_Type(const void* /*self*/) {
-    ++g_typeEntries;
-    return *reinterpret_cast<const uint32_t*>(
-        ToolTipDialogTypeInfo() + kBaseTypeInfoTypeId);
-}
+}  // namespace UI
 
 // ============================================================================
 // Registration. Both doors for every row — BY NAME and BY ADDRESS.

@@ -117,6 +117,7 @@
 // ([[reference_uncalled_port_is_not_verified]]).
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
@@ -124,7 +125,6 @@
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/ElementDescription.h"
 
-using RtUI::ElementDescription;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
@@ -150,10 +150,16 @@ PtrSerializeFn PtrSerialize(uintptr_t addr) {
 }
 
 using StringSerializeFn = void (*)(void*, Serializer*);
+// RULE B6-5: the member runs on the LOADER thread (every `.rsc` parse), so the
+// door is cached in a namespace-scope atomic, not a function-local static.
+std::atomic<void*> g_stringSerialize{nullptr};
 StringSerializeFn StringSerialize() {
-    static StringSerializeFn f = reinterpret_cast<StringSerializeFn>(
-        ResolveAddr(Module::Runtime, 0x1800c9930));
-    return f;
+    void* p = g_stringSerialize.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800c9930));
+        if (p != nullptr) g_stringSerialize.store(p, std::memory_order_release);
+    }
+    return reinterpret_cast<StringSerializeFn>(p);
 }
 
 // The prologue and epilogue, transcribed from 0x180116b20 and 0x180116c4d.
@@ -194,32 +200,56 @@ const char* const kMangled =
 }  // namespace
 
 // ============================================================================
-// bool UI::ElementDescription::Serialize(IO::Stream&)
+// bool UI::ElementDescription::Serialize(IO::Stream&) — the MEMBER
 // ============================================================================
-bool RtUi_ElementDescription_Serialize(ElementDescription* self, Stream* stream) {
+// ENDGAME B.3.6 block A: the body MOVED here from the door (`self->x` became
+// `x`). The slot's parameter is `void*` because `Object::External` declares
+// slot 5 that way (IO::Stream is still spelled as the rt::io POD in this tree).
+namespace UI {
+
+bool ElementDescription::Serialize(void* streamArg) {
+    Stream* const stream = static_cast<Stream*>(streamArg);
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    RecInt(rw, &self->_x);           // +0x20
-    RecInt(rw, &self->_y);           // +0x24
-    RecInt(rw, &self->_width);       // +0x28
-    RecInt(rw, &self->_height);      // +0x2c
-    RecInt(rw, &self->_minWidth);    // +0x30
-    RecInt(rw, &self->_minHeight);   // +0x34
+    RecInt(rw, &_x);            // +0x20
+    RecInt(rw, &_y);            // +0x24
+    RecInt(rw, &_width);        // +0x28
+    RecInt(rw, &_height);       // +0x2c
+    RecInt(rw, &_minWidth);     // +0x30
+    RecInt(rw, &_minHeight);    // +0x34
 
-    RecUInt(rw, &self->_elementType);  // +0x40
-    RecUInt(rw, &self->_flags);        // +0x44
-    RecUInt(rw, &self->_id);           // +0x3c — unsigned slot, see the banner
+    RecUInt(rw, &_elementType); // +0x40
+    RecUInt(rw, &_flags);       // +0x44
+    RecUInt(rw, &_id);          // +0x3c — unsigned slot, see the banner
 
-    RecInt(rw, &self->_tabOrder);      // +0x38
+    RecInt(rw, &_tabOrder);     // +0x38
 
-    PtrSerialize(0x180038f90)(&self->_childDesc,   &ser);   // +0x48
-    PtrSerialize(0x180076610)(&self->_userData,    &ser);   // +0x50
-    PtrSerialize(0x1800042a0)(&self->_stringTable, &ser);   // +0x58
-    StringSerialize()(&self->_textName, &ser);              // +0x60
+    PtrSerialize(0x180038f90)(&_childDesc,   &ser);   // +0x48
+    PtrSerialize(0x180076610)(&_userData,    &ser);   // +0x50
+    PtrSerialize(0x1800042a0)(&_stringTable, &ser);   // +0x58
+    StringSerialize()(&_textName, &ser);              // +0x60
 
     DestroyCodec(rw);
     return true;
+}
+
+// `??1ElementDescription@UI@@UEAA@XZ` (the C++ destructor) is DECLARED and
+// deliberately NOT defined in the real build: a definition would reference
+// `vtable for UI::ElementDescription`, which GCC emits only beside the key
+// function `TypeName` — still the dialog.cpp door until the fragment pass.
+// Nothing destroys an ElementDescription as a C++ object; the retail body
+// (0x180116100) is the registered door `RtUiElementDescription_Dtor`.
+
+}  // namespace UI
+
+// ---- the DOOR: registered name and address unchanged, a QUALIFIED delegation.
+// Every leaf Description's Serialize reaches this one too (description_common.h's
+// `ElementDescriptionSerialize`), so the qualification is load-bearing: the
+// receiver wears the LEAF's minted table, whose slot 5 is the LEAF's body.
+bool RtUi_ElementDescription_Serialize(RtUI::ElementDescription* self, Stream* stream) {
+    return reinterpret_cast<UI::ElementDescription*>(self)                   // B.3.6 bridge
+        ->UI::ElementDescription::Serialize(stream);
 }
 
 // ---- Registration ----------------------------------------------------------

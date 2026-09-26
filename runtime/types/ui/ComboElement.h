@@ -36,7 +36,7 @@
 namespace UI {
 
 struct ComboElement {
-    Element base;                              // +0x00 .. +0xBF
+    RtUI::Element base;                              // +0x00 .. +0xBF
     uint8_t _pad_c0_e8[0x28];                  // +0xC0 .. +0xE7 — not reversed by this lane.
     Collection::Array<void*> _strings;          // +0xE8  element = System::String (see note above)
     Collection::Array<void*> _sprites;          // +0xF8  element = UI::Sprite (see note above)

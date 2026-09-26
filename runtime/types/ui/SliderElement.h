@@ -37,7 +37,7 @@
 namespace UI {
 
 struct SliderElement {
-    Element  base;              // +0x00 .. +0xBF
+    RtUI::Element  base;              // +0x00 .. +0xBF
     ::Sprite _trackStart;       // +0xC0
     ::Sprite _trackMiddle;      // +0xD0
     ::Sprite _trackEnd;         // +0xE0

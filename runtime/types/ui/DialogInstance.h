@@ -21,22 +21,18 @@
 // `DialogInstance` method.
 //
 // ---------------------------------------------------------------------------
-// SIZE — WHAT IS PROVEN AND WHAT IS NOT
+// SIZE — SETTLED AT 0xb8 (ENDGAME B.3.6 block B)
 // ---------------------------------------------------------------------------
-// `UI::UserInterface::BeginToolTip` (0x180120860, ord 1650) is the one place in
-// the DLL that allocates a DialogInstance-derived object and then runs the base
-// ctor on it:
+// The "0xc0 upper bound" hedge that stood here is closed by two independent
+// witnesses: the `MOV EDX,0xb8` in the class's own slot-0 vector deleting
+// destructor (0x1800458c0, B36_SLOTS.md section 1), and the 20 exe
+// DialogInstance subclasses in engine/types/ui/Dialogs.h that all start their
+// own members at +0xb8. `UI::ToolTipDialog` is 0xc0 because it ADDS two dwords
+// at +0xb8/+0xbc (its copy ctor 0x18004d180 copies exactly those) — it is not
+// the base's size. `UI::UserInterface::BeginToolTip` (0x180120860) allocates
+// that 0xc0 and runs the BASE ctor on it, then stamps ToolTipDialog's table.
 //
-//     pDlg = UI::ToolTipDialog::operator new(0xc0);
-//     UI::DialogInstance::DialogInstance(pDlg, this, dlg->_root, parent, ..., 0, 0);
-//     *(void**)pDlg = &UI::ToolTipDialog::_vftable;
-//
-// so sizeof(UI::ToolTipDialog) == 0xc0 and therefore sizeof(DialogInstance)
-// <= 0xc0. `ToolTipDialog`'s ctor adds nothing but the vtable store, but that
-// is not proof it adds no members, so **0xc0 is an upper bound, not the size.**
-// The last field the base ctor writes is the int32 at +0xb0.
-//
-// What the replay oracle in dialog.cpp actually compares is
+// What the replay oracle in dialog.cpp compares is
 // `kDialogInstanceCtorExtent` = 0xb4 — the ctor-initialised prefix — and the
 // reason that is safe is spelled out there: the scratch copy is a memcpy of the
 // LIVE object, so the padding holes below hold identical bytes on both sides
@@ -65,7 +61,8 @@
 //   0x18  _dialog            ctor param 2 (Dialog const*)               0x180114870
 //   0x20  _flags             ctor seeds it from _dialog->+0x40;
 //                            ?SetFlagsOnOff@ is `(_flags|on) & ~off`    0x180114690
-//   0x24  _flags2            *** MISNAMED. This is the modal RESULT code. ***
+//   0x24  _result            THE MODAL RESULT CODE (was misnamed `_flags2`
+//                            until B.3.6 block B renamed it).
 //                            Wave 10B lane SHOW: `?GetResult@DialogInstance@UI@@QEBAHXZ`
 //                            (0x1800455c0) is `MOV EAX,[RCX+0x24]; RET` and
 //                            `?SetDialogResult@DialogInstance@UI@@QEAAXH@Z`
@@ -73,9 +70,7 @@
 //                            also the value `?ShowDialog@UserInterface@UI@@`
 //                            RETURNS (0x1801202e5), and every MessageDialog
 //                            button writes it (code/Game/Dialog/messagedialog.cpp
-//                            Slot10..13 -> 1/0/2/3). The identifier is left
-//                            alone only to avoid churning another lane's
-//                            dialog_create.cpp mid-wave; rename to `_result`.
+//                            Slot10..13 -> 1/0/2/3).
 //                            ctor zeroes it                             0x180114870
 //   0x28  _parent            ctor param 3, an InternalPtr<DialogInstance>
 //                            passed BY VALUE, so the ctor takes *param  0x180114870
@@ -147,6 +142,8 @@
 
 #include "../collection/Collection.h"
 #include "../object/Internal.h"
+#include "../object/External.h"
+#include "DialogController.h"
 
 namespace RtUI {
 
@@ -168,9 +165,8 @@ namespace RtUI {
 //                                                                 0x18003b700
 //   0x28  _dataSource   AddController stores its Object::Base* argument
 //
-// SIZE IS DELIBERATELY NOT ASSERTED. Every real controller is a derived class
-// allocated by the factory, and nothing in this lane allocates one, so an
-// invented sizeof would be a claim we cannot back.
+// SIZE 0x30 — asserted below from the deleting dtor 0x18003b800's
+// `MOV EDX,0x30` and the 38 exe panel structs that start at +0x30.
 //
 // Vtable slots this lane dispatches through, all read off the retail
 // disassembly of the five DialogInstance iteration loops:
@@ -192,6 +188,7 @@ static_assert(offsetof(DialogController, _config)     == 0x10, "DialogController
 static_assert(offsetof(DialogController, _dialog)     == 0x18, "DialogController::_dialog @ +0x18");
 static_assert(offsetof(DialogController, _container)  == 0x20, "DialogController::_container @ +0x20");
 static_assert(offsetof(DialogController, _dataSource) == 0x28, "DialogController::_dataSource @ +0x28");
+static_assert(sizeof(DialogController) == 0x30, "UI::DialogController is 0x30 bytes (deleting dtor 0x18003b800)");
 
 enum : int {
     kControllerVtblGetTypeId       = 0x10,
@@ -229,7 +226,7 @@ struct DialogInstance {
     void*    _ui;                        // +0x10  UI::UserInterface*
     void*    _dialog;                    // +0x18  const UI::Dialog*
     uint32_t _flags;                     // +0x20
-    uint32_t _flags2;                    // +0x24  the modal RESULT -- see above
+    int32_t  _result;                    // +0x24  the modal RESULT (GetResult 0x1800455c0)
     void*    _parent;                    // +0x28  DialogInstance*
     void*    _dataSource;                // +0x30  Object::Base*
     Collection::LinkedList<RtObject::InternalBasePtr> _children;  // +0x38..0x4f
@@ -256,7 +253,7 @@ struct DialogInstance {
 static_assert(offsetof(DialogInstance, _ui)          == 0x10, "DialogInstance::_ui @ +0x10");
 static_assert(offsetof(DialogInstance, _dialog)      == 0x18, "DialogInstance::_dialog @ +0x18");
 static_assert(offsetof(DialogInstance, _flags)       == 0x20, "DialogInstance::_flags @ +0x20 (SetFlagsOnOff)");
-static_assert(offsetof(DialogInstance, _flags2)      == 0x24, "DialogInstance::_flags2 @ +0x24");
+static_assert(offsetof(DialogInstance, _result)      == 0x24, "DialogInstance::_result @ +0x24 (GetResult 0x1800455c0)");
 static_assert(offsetof(DialogInstance, _parent)      == 0x28, "DialogInstance::_parent @ +0x28");
 static_assert(offsetof(DialogInstance, _dataSource)  == 0x30, "DialogInstance::_dataSource @ +0x30");
 static_assert(offsetof(DialogInstance, _children)    == 0x38, "DialogInstance::_children @ +0x38");
@@ -274,15 +271,14 @@ static_assert(offsetof(DialogInstance, _hoverTime)   == 0xa0, "DialogInstance::_
 static_assert(offsetof(DialogInstance, _userData)    == 0xa8, "DialogInstance::_userData @ +0xa8");
 static_assert(offsetof(DialogInstance, _userFlags)   == 0xb0, "DialogInstance::_userFlags @ +0xb0");
 static_assert(sizeof(DialogInstance) == 0xb8,
-              "the ctor-initialised extent rounds to 0xb8; the ALLOCATED size of a "
-              "DialogInstance-derived object is 0xc0 (ToolTipDialog, 0x180120860) and "
-              "this struct deliberately does not claim to be that");
+              "UI::DialogInstance is 0xb8 bytes: MOV EDX,0xb8 in its deleting dtor "
+              "0x1800458c0, and 20 exe subclasses start their fields at +0xb8");
 
 // The prefix the replay oracle compares: everything the base ctor initialises.
 constexpr size_t kDialogInstanceCtorExtent = 0xb4;
 
-// Upper bound on the base's size, from ToolTipDialog's `operator new(0xc0)`.
-// Not sizeof(DialogInstance) — see the size note at the top of this file.
+// sizeof(UI::ToolTipDialog), the one DialogInstance-derived object the DLL
+// allocates itself (BeginToolTip 0x180120860). NOT the base's size.
 constexpr size_t kDialogInstanceAllocSize = 0xc0;
 
 
@@ -330,3 +326,231 @@ static_assert(sizeof(ComboDialog) == 0xd0,
               "call site of ??2ComboDialog@UI@@SAPEAX_K@Z");
 
 }  // namespace RtUI
+
+// ############################################################################
+// UI::DialogInstance — THE REAL CLASS (ENDGAME B.3 step 6, block B)
+// ############################################################################
+//
+// The `RtUI::DialogInstance` POD above STAYS, field-identical and
+// cross-asserted below: the ctor DOORS (dialog_create.cpp,
+// combodialog_ctor.cpp) build minted-table objects through it, files outside
+// this block (userinterface_hover.cpp, standalone/mouse_inject.cpp) read it,
+// and engine/types/ui/DialogInstance.h aliases it so that the 20 exe dialog
+// structs in engine/types/ui/Dialogs.h can keep embedding `DialogInstance
+// base;` BY VALUE — a member of this class's ABSTRACT type would be
+// ill-formed (B34_BRIEFS A.4 as amended).
+//
+// PARENT: `Object::Internal`, proved by
+//   0x1800453d0  ?_ParentTypeName@DialogInstance@UI@@CAPEBDXZ -> "Object::Internal"
+//
+// `??_7DialogInstance@UI@@6B@` @ 0x180156d70, TEN slots (B36_SLOTS.md sec. 1):
+//
+//   [0] +0x00  0x1800458c0  (unexported) vector deleting dtor
+//   [1] +0x08  0x180045400  ?TypeName@DialogInstance@UI@@UEBAPEBDXZ
+//   [2] +0x10  0x1800453e0  ?Type@DialogInstance@UI@@UEBAIXZ
+//   [3] +0x18  0x180114fa0  ?Persist@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z   (RET)
+//   [4] +0x20  0x180114fb0  ?OnOpened@DialogInstance@UI@@UEAAXXZ
+//   [5] +0x28  0x180115330  ?OnClosed@DialogInstance@UI@@UEAAXXZ
+//   [6] +0x30  0x1801153a0  ?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ
+//   [7] +0x38  0x180115400  ?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z
+//   [8] +0x40  0x180114ed0  ?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z
+//   [9] +0x48  0x180115470  ?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z (RET)
+//
+// RULE B6-1.2: DialogController numbers the same names ONE SLOT LATER
+// (DialogController.h). Slot 8 takes the ADDRESS of the caller's InternalPtr
+// copy, for the reason DialogController.h's banner gives.
+//
+// ABSTRACT, NO REAL CONSTRUCTOR (RULE B6-3): 20 exe dialog classes and the
+// ToolUI child dialog construct this base through the ctor doors
+// (`fn_DialogInstance_Ctor`, 21 sites) and then stamp hand-built tables; the
+// two DLL ctors (0x180114870, 0x1801146b0) are those DOORS
+// (`RtUiDialogInstance_Ctor`, `RtUi_DialogInstance_CtorFromElement`), not C++
+// constructors, and slot 0 is the mint's `RT_DELDTOR` row.
+//
+// UI IS CONSTRUCTED ON THE LOADER THREAD (RULE B6-5): no member below keeps a
+// static initialiser, a lazy singleton or a first-call cache.
+// ############################################################################
+
+namespace System { class Time; class String; }
+
+namespace UI {
+
+class Dialog;                   // Dialog.h (this block)
+class DialogControllerConfig;   // DialogControllerConfig.h (this block)
+class ElementDescription;       // block A
+class Element;                  // block A
+class UserInterface;            // block E
+class SpriteContext;            // block D
+
+class DialogInstance : public Object::Internal {
+public:
+    // [0] 0x1800458c0 — pure on purpose; the RT_DELDTOR row is not retired.
+    Object::Base* DeletingDtor(unsigned flags) override = 0;
+
+    const char* TypeName() const override;                        // [1] 0x180045400
+    uint32_t    Type() const override;                            // [2] 0x1800453e0
+    void Persist(void* stream) override;                          // [3] 0x180114fa0  RET
+    virtual void OnOpened();                                      // [4] 0x180114fb0
+    virtual void OnClosed();                                      // [5] 0x180115330
+    virtual void OnUpdateLayout();                                // [6] 0x1801153a0
+    virtual void OnUpdate(const System::Time& time);              // [7] 0x180115400
+    virtual void OnElementEvent(Object::InternalPtr<Element>* element,
+                                int32_t a, int32_t b, int32_t c,
+                                int32_t d, int32_t e, void* userData);  // [8] 0x180114ed0
+    virtual void OnSerializeSettings(void* stream);               // [9] 0x180115470  RET
+
+    // ---- PORTED non-virtual members ---------------------------------------
+    // Each registered door delegates with a QUALIFIED call. The RETSLOT
+    // exports return by value here and the door placement-news (B5-12).
+    Object::InternalPtr<Element> GetRoot();                                    // 0x180045580
+    Object::InternalPtr<DialogController> GetController(uint32_t typeId) const; // 0x180113320
+    Object::InternalPtr<Element> FindElement(const System::String& name);      // 0x180114c70
+    Object::InternalPtr<Element> FindElementType(uint32_t typeId);             // 0x1801140c0
+    void SetFlagsOnOff(uint32_t on, uint32_t off);                             // 0x180114690
+    // `System::Time` BY VALUE in retail: one int64 tick count, in R8.
+    void StartTimer(int32_t id, int64_t timeTicks);                            // 0x1801137c0
+    void StopTimer(int32_t id);                                                // 0x180113730
+    bool Contains(int32_t x, int32_t y) const;                                 // 0x180114820
+    int32_t GetMouseCursorIndex(Object::InternalPtr<Element> element,
+                                int32_t x, int32_t y) const;                   // 0x180114010
+    void ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h);            // 0x180113d90
+    // `Element::UpdateState&` in retail — block A's nested value type, spelled
+    // as the address it is until that type exists.
+    void Update(const System::Time& time, UserInterface* ui,
+                uint8_t* updateState);                                         // 0x180113980
+    void SetUpperLeft(int32_t x, int32_t y, bool scaled);                      // 0x180114a60
+    void AddController(uint32_t typeId, Object::Base* dataSource,
+                       Object::ExternalPtr<DialogControllerConfig> config,
+                       Object::InternalPtr<Element> container);                // 0x1801133b0
+    void AddController(uint32_t typeId, Object::Base* dataSource,
+                       Object::ExternalPtr<DialogControllerConfig> config,
+                       Object::ExternalPtr<ElementDescription> description,
+                       const System::String& name);                            // 0x180113470
+    void SaveSettings();                                                       // 0x180114240
+
+    // ---- exported, NOT PORTED here: declared, deliberately undefined -------
+    // Nothing calls these as members. `EndHover` IS ported — as a door in
+    // runtime/src/ui/userinterface_hover.cpp, which is the fragment pass's
+    // file, not this block's.
+    void EndHover(UserInterface* ui);                                          // 0x180113d10
+    Object::InternalPtr<Element> GetRoot() const;                              // 0x180045590
+    Object::InternalPtr<DialogInstance> GetParent();                           // 0x180045570
+    const Dialog* GetDialog() const;                                           // 0x180045620
+    UserInterface* GetUserInterface();                                         // 0x1800455e0
+    void SetUserInterface(UserInterface* ui);                                  // 0x1800455b0
+    void* GetUserObject() const;                                               // 0x180045610
+    int32_t GetResult() const;                                                 // 0x1800455c0  reads +0x24
+    void SetDialogResult(int32_t result);                                      // 0x1800455d0  writes +0x24
+    bool IsHovering() const;                                                   // 0x1800455a0  reads +0x98
+    int32_t GetLeftCorner() const;                                             // 0x1800455f0
+    int32_t GetTopCorner() const;                                              // 0x180045600
+    int32_t GetDrawLevel() const;                                              // 0x1801140f0
+    int32_t GetMouseCursorIndex(int32_t x, int32_t y) const;                   // 0x180113fe0
+    bool IsFirstDraw() const;                                                  // 0x180114130
+    bool IsModal() const;                                                      // 0x180114170
+    bool NoMouseCapture() const;                                               // 0x180114150
+    bool PausesGame() const;                                                   // 0x180114160
+    bool PerElementCapture() const;                                            // 0x180114140
+    bool DeleteOnClose() const;                                                // 0x180114110
+    void CloseChildren();                                                      // 0x180114180
+    void Detach();                                                             // 0x1801141c0
+    void LoadSettings();                                                       // 0x180114450
+    void Draw(SpriteContext& context) const;                                   // 0x180113840
+    void DrawBackground(SpriteContext& context, int32_t x, int32_t y,
+                        int32_t w, int32_t h) const;                           // 0x180113880
+    DialogInstance(const DialogInstance& other);                               // 0x180045630
+    DialogInstance& operator=(const DialogInstance& other);                    // 0x180045790
+
+    static uint32_t      TypeId();                                // 0x1800453f0  not ported
+    // System::MemoryAllocator statics — B36_RULES 7 keeps them doors
+    // (`??3DialogInstance@UI@@SAXPEAX@Z` is one, in spritesheet_new.cpp).
+    static void* operator new(std::size_t bytes);                 // 0x180045410
+    static void* operator new(std::size_t bytes, void* place);    // 0x180045480
+    static void  operator delete(void* p);                        // 0x180045490
+    static Object::Base* CreateNewObject();                       // 0x1800454f0
+
+protected:
+    // NOT retail's ctors (0x180114870, 0x1801146b0, 0x180114ca0) — B6-3.
+    DialogInstance() = default;
+    // `??1DialogInstance@UI@@UEAA@XZ` 0x180114d40. NON-VIRTUAL and DEFINED
+    // EMPTY: the registered door `RtUiDialogInstance_Dtor` (dialog.cpp) does
+    // the teardown on the minted-table objects that are the only live ones.
+    ~DialogInstance();
+
+    // RULE B5-15 / B6-7, COPIED from B36_SLOTS section 3:
+    //   0x1800453c0  ?_TypeName@       -> "DialogInstance"
+    //   0x1800453d0  ?_ParentTypeName@ -> "Object::Internal"
+    static const char* _TypeName();
+    static const char* _ParentTypeName();
+
+public:
+    // ---- the 0xa8 bytes DialogInstance adds, in retail order ---------------
+    // Evidence per field: the RtUI POD's banner at the top of this file.
+    void*          _ui;            // +0x10  UI::UserInterface* (block E's class)
+    const Dialog*  _dialog;        // +0x18
+    uint32_t       _flags;         // +0x20  SetFlagsOnOff 0x180114690
+    int32_t        _result;        // +0x24  GetResult / SetDialogResult
+    Object::InternalPtr<DialogInstance> _parent;                  // +0x28
+    Object::Base*  _dataSource;    // +0x30  ctor param 4
+    Collection::LinkedList<Object::InternalPtr<DialogInstance> > _children;  // +0x38..+0x4f
+    void*          _root;          // +0x50  InternalPtr<UI::Element> (block A's class)
+    void*          _spriteSheet;   // +0x58  UI::SpriteSheet* (block D's class)
+    int32_t        _spriteIndex;   // +0x60
+    int32_t        _hole64;        // +0x64  NOT written by the ctor
+    Collection::Array<RtUI::DialogTimer> _timers;                 // +0x68..+0x77
+    Collection::Array<DialogController*> _controllers;            // +0x78..+0x87
+    int32_t        _upperLeftX;    // +0x88
+    int32_t        _upperLeftY;    // +0x8c
+    int32_t        _hoverMouseX;   // +0x90  ctor -1
+    int32_t        _hoverMouseY;   // +0x94  ctor -1
+    uint8_t        _hovering;      // +0x98  IsHovering 0x1800455a0
+    uint8_t        _hole99[7];     // +0x99  NOT written by the ctor
+    int64_t        _hoverTime;     // +0xa0  System::Time ticks
+    void*          _userData;      // +0xa8  ctor param 5
+    int32_t        _userFlags;     // +0xb0  ctor param 6 — NOT padding, as the
+                                   //        old engine POD claimed
+    int32_t        _holeB4;        // +0xb4  NOT written by the ctor
+};
+
+static_assert(sizeof(DialogInstance) == 0xb8,
+              "UI::DialogInstance is 0xb8 bytes (MOV EDX,0xb8 in 0x1800458c0; "
+              "20 exe subclasses start at +0xb8)");
+static_assert(alignof(DialogInstance) == 8, "qword-aligned (the vptr)");
+static_assert(sizeof(DialogInstance) == sizeof(RtUI::DialogInstance),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(DialogInstance, _ui) == sizeof(Object::Internal),
+              "DialogInstance's own fields begin at the end of the Internal base");
+#define B36_DI_PIN(f, off) \
+    static_assert(offsetof(DialogInstance, f) == off, "DialogInstance::" #f " @ " #off); \
+    static_assert(offsetof(DialogInstance, f) == offsetof(RtUI::DialogInstance, f), "alias " #f);
+B36_DI_PIN(_ui,          0x10)
+B36_DI_PIN(_dialog,      0x18)
+B36_DI_PIN(_flags,       0x20)
+B36_DI_PIN(_result,      0x24)
+B36_DI_PIN(_parent,      0x28)
+B36_DI_PIN(_dataSource,  0x30)
+B36_DI_PIN(_children,    0x38)
+B36_DI_PIN(_root,        0x50)
+B36_DI_PIN(_spriteSheet, 0x58)
+B36_DI_PIN(_spriteIndex, 0x60)
+B36_DI_PIN(_timers,      0x68)
+B36_DI_PIN(_controllers, 0x78)
+B36_DI_PIN(_upperLeftX,  0x88)
+B36_DI_PIN(_upperLeftY,  0x8c)
+B36_DI_PIN(_hoverMouseX, 0x90)
+B36_DI_PIN(_hoverMouseY, 0x94)
+B36_DI_PIN(_hovering,    0x98)
+B36_DI_PIN(_hoverTime,   0xa0)
+B36_DI_PIN(_userData,    0xa8)
+B36_DI_PIN(_userFlags,   0xb0)
+#undef B36_DI_PIN
+
+// DialogController's POD twin, cross-asserted here where both are in scope.
+static_assert(sizeof(DialogController) == sizeof(RtUI::DialogController),
+              "the real class and the POD describe the same bytes");
+static_assert(offsetof(DialogController, _config) == offsetof(RtUI::DialogController, _config), "alias _config");
+static_assert(offsetof(DialogController, _dialog) == offsetof(RtUI::DialogController, _dialog), "alias _dialog");
+static_assert(offsetof(DialogController, _container) == offsetof(RtUI::DialogController, _container), "alias _container");
+static_assert(offsetof(DialogController, _dataSource) == offsetof(RtUI::DialogController, _dataSource), "alias _dataSource");
+
+}  // namespace UI

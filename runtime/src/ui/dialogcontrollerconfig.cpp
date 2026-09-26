@@ -30,6 +30,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/DialogControllerConfig.h"
 
 namespace RtUI {
 
@@ -45,20 +46,10 @@ const uint8_t* DialogControllerConfigTypeInfo() {
 
 }  // namespace
 
-// ---- ?TypeName@DialogControllerConfig@UI@@UEBAPEBDXZ   0x18003b470 -------
-extern "C" const char* RtUi_DialogControllerConfig_TypeName(const void*) {
-    const char* v = nullptr;
-    __builtin_memcpy(&v, DialogControllerConfigTypeInfo() + 8, sizeof v);
-    return v;
-}
-// ---- ?Type@DialogControllerConfig@UI@@UEBAIXZ          0x18003b450 -------
-extern "C" uint32_t RtUi_DialogControllerConfig_Type(const void*) {
-    uint32_t v = 0;
-    __builtin_memcpy(&v, DialogControllerConfigTypeInfo(), sizeof v);
-    return v;
-}
-
 // ---- ??1DialogControllerConfig@UI@@UEAA@XZ   0x18003b4f0 ------------------
+// A DTOR DOOR (RULE B6-3): it stamps the MINTED table and chains to ~External
+// by name for the minted objects that are the only live ones. The C++
+// `~DialogControllerConfig` below is empty for that reason.
 extern "C" void RtUi_DialogControllerConfig_Dtor(void* selfv) {
     void** v = reinterpret_cast<void**>(selfv);
     *v = VtDialogControllerConfig();                               // 18003b4f7 (dead store)
@@ -67,6 +58,42 @@ extern "C" void RtUi_DialogControllerConfig_Dtor(void* selfv) {
 }
 
 }  // namespace RtUI
+
+// ============================================================================
+// ENDGAME B.3.6 block B — UI::DialogControllerConfig's two own slots are
+// members now (runtime/types/ui/DialogControllerConfig.h). Neither reads
+// `this`: both read one exported BaseTypeInfo (+0x08 name, +0x00 type id).
+// ============================================================================
+namespace UI {
+
+// ?TypeName@DialogControllerConfig@UI@@UEBAPEBDXZ   0x18003b470
+const char* DialogControllerConfig::TypeName() const {
+    const char* v = nullptr;
+    __builtin_memcpy(&v, RtUI::DialogControllerConfigTypeInfo() + 8, sizeof v);
+    return v;
+}
+
+// ?Type@DialogControllerConfig@UI@@UEBAIXZ          0x18003b450
+uint32_t DialogControllerConfig::Type() const {
+    uint32_t v = 0;
+    __builtin_memcpy(&v, RtUI::DialogControllerConfigTypeInfo(), sizeof v);
+    return v;
+}
+
+DialogControllerConfig::~DialogControllerConfig() {}   // see the dtor door above
+
+}  // namespace UI
+
+// The registered doors: QUALIFIED delegation (the minted table's slots 1/2
+// resolve back to these doors).
+extern "C" const char* RtUi_DialogControllerConfig_TypeName(const void* self) {
+    return reinterpret_cast<const UI::DialogControllerConfig*>(self)   // B.3.6 bridge
+        ->UI::DialogControllerConfig::TypeName();
+}
+extern "C" uint32_t RtUi_DialogControllerConfig_Type(const void* self) {
+    return reinterpret_cast<const UI::DialogControllerConfig*>(self)   // B.3.6 bridge
+        ->UI::DialogControllerConfig::Type();
+}
 
 // ============================================================================
 // Registration

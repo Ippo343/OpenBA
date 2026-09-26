@@ -108,7 +108,7 @@ namespace UI {
 // dtor (0x180118CE0), ComputeSize (0x180119000), Draw (0x1801191E0) and
 // CacheText (0x1801189F0) were all transcribed against them.
 struct NumberElement {
-    Element  base;               // +0x00 .. +0xBF
+    RtUI::Element  base;               // +0x00 .. +0xBF
     void*    _font;              // +0xC0  ExternalPtr<UI::Font>
     int32_t  _mode;              // +0xC8
     uint32_t _padCC;             // +0xCC  never written by the ctor

@@ -111,6 +111,7 @@
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"   // Object::InternalPtr<T> (CreateInstance's retslot)
 
 namespace RtUI {
 
@@ -183,3 +184,174 @@ constexpr const char* kVtblExternal           = "??_7External@Object@@6B@";     
 constexpr const char* kVtblElementDescription = "??_7ElementDescription@UI@@6B@";     // 0x1801561c0
 
 }  // namespace RtUI
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block A) — `UI::ElementDescription`, the REAL C++ class
+// ############################################################################
+//
+// PARENT `Object::External` — READ, not inferred:
+//     ?_ParentTypeName@ElementDescription@UI@@CAPEBDXZ @0x1800350c0 -> "Object::External"
+// and the ctor's three stamps (Base, External, ElementDescription) above agree.
+//
+// RULE B5-15 / B6-7 — THE TWO NAME LITERALS, RECORDED, NOT USED (no
+// `DEFINE_TYPE` in step 6; slots 1/2 keep reading the minted
+// `?_typeInfo@ElementDescription@UI@@0VBaseTypeInfo@Object@@A`, 0x1801faaf8):
+//     ?_TypeName@ElementDescription@UI@@CAPEBDXZ       @0x1800350b0 -> "ElementDescription"
+//     ?_ParentTypeName@ElementDescription@UI@@CAPEBDXZ @0x1800350c0 -> "Object::External"
+//
+// `??_7ElementDescription@UI@@6B@` @ 0x1801561c0, NINE slots (B36_SLOTS.md
+// section 1, `.rdata` qwords; sizeof from `MOV EDX,0x68` in slot 0):
+//
+//   [0] +0x00  0x180035350  (unexported) vector deleting dtor
+//   [1] +0x08  0x1800350f0  ?TypeName@ElementDescription@UI@@UEBAPEBDXZ
+//   [2] +0x10  0x1800350d0  ?Type@ElementDescription@UI@@UEBAIXZ
+//   [3] +0x18  0x180116af0  ?GetFileVersion@…  (`MOV EAX,4 ; RET`)
+//   [4] +0x20  0x1800066e0  ?Compile@External@Object@@  INHERITED — NOT declared (B6-1.5)
+//   [5] +0x28  0x180116b00  ?Serialize@…  — REAL; every leaf's Serialize calls it
+//   [6] +0x30  _purecall    Reconstruct — pure, inherited from External, NOT declared
+//   [7] +0x38  _purecall    Destruct    — pure, inherited from External, NOT declared
+//   [8] +0x40  _purecall    CreateInstance(const Dialog*) -> InternalPtr<Element>
+//                           BY VALUE — INTRODUCED HERE, pure, RETSLOT (RULE B6-2)
+//
+// There is NO `Construct` on this class: the 27 leaves introduce it at slot 9,
+// BEHIND `CreateInstance` (RULE B6-1.1).
+//
+// ABSTRACT (slots 0, 6, 7, 8 pure). Nothing holds one by value as a C++
+// member — `DescriptionsBatch1.h` / `GroupDescription.h` embed the
+// `RtUI::ElementDescription` POD above, which is why the POD stays (B4b-1) —
+// and every live one is built by the `??0ElementDescription` DOOR
+// (dialog.cpp) and wears the MINTED table. Hence the protected `= default`
+// ctor, the protected empty non-virtual dtor, and qualified delegation in
+// every door.
+//
+// WHERE THE BODIES ARE. `Serialize` moved into the member
+// (elementdescription_serialize.cpp). `TypeName`, `Type`, `GetFileVersion`,
+// the ctor/dtor doors and the non-virtual `CreateInstance(InternalPtr<Element>)`
+// are registered doors in `runtime/src/ui/dialog.cpp` — block B's file — and
+// move in the fragment pass; until then they are declared here and the door
+// is the definition. With `TypeName` (the key function) undefined, GCC emits
+// no vtable for this class in the real build, which is correct: nothing
+// constructs one.
+//
+// A NAME-HIDING TRAP FOR THE LEAF BLOCKS. Retail has TWO `CreateInstance`s on
+// this class: the pure slot-8 virtual and the non-virtual
+// `?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z`
+// (0x180115ad0, "stamp this description onto that element"). A leaf that
+// overrides slot 8 HIDES the non-virtual one; call it from a leaf as
+// `ElementDescription::CreateInstance(element)` (it has a different arity, so
+// the mistake is a compile error, never a silent re-dispatch).
+// ############################################################################
+
+namespace UI {
+
+class Dialog;    // block B
+class Element;   // Element.h (this block)
+
+class ElementDescription : public Object::External {
+public:
+    // The alignment enum `?GetAlignedPosition@Element@UI@@SAXW4Alignment@
+    // ElementDescription@2@…` and `?SetAlignment@Element@UI@@QEAAXW4Alignment@
+    // ElementDescription@2@@Z` name. A `W4` enum: four bytes, passed in a
+    // register. Its ENUMERATOR NAMES ARE NOT RECOVERABLE from the binary; its
+    // VALUES are the row-major 3x3 runtime/src/ui/element.cpp reads off the
+    // jump table at 0x180115a14 (0 top-left .. 8 bottom-right, anything else
+    // behaves as top-left). No names are invented here.
+    enum Alignment : int32_t {};
+
+    // ---- the nine slots, in measured order ---------------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x180035350
+    const char* TypeName() const override;                        // [1] 0x1800350f0  dialog.cpp door
+    uint32_t    Type() const override;                            // [2] 0x1800350d0  dialog.cpp door
+    int32_t     GetFileVersion() const override;                  // [3] 0x180116af0  dialog.cpp door
+    // [4] Compile — Object::External's own body, inherited unchanged.
+    bool        Serialize(void* stream) override;                 // [5] 0x180116b00  (IO::Stream&)
+    // [6] Reconstruct, [7] Destruct — pure in Object::External, still pure.
+    virtual Object::InternalPtr<Element>* CreateInstance(
+        Object::InternalPtr<Element>* ret,
+        const Dialog* dialog) const = 0;                          // [8] _purecall — RETSLOT, B6-2
+
+    // ---- non-virtual members ----------------------------------------------
+    // 0x180115ad0 — body is the registered door `RtUiElementDescription_
+    // CreateInstance` in dialog.cpp (fragment pass). Retail passes the handle
+    // by ADDRESS (MSVC: non-trivial copy ctor); both ends of a member call are
+    // this GCC, so the member takes it by value and the door converts.
+    void CreateInstance(Object::InternalPtr<Element> element) const;
+
+    ElementDescription(const ElementDescription& src);            // 0x180035120  not ported
+    ElementDescription& operator=(const ElementDescription& src); // 0x180035210  not ported
+
+    // Reflection statics. `_typeInfo` is the MINTED record; none is defined here.
+    static uint32_t TypeId();                                     // 0x1800350e0  not ported
+    static Object::Base* CreateNewObject();                       // 0x180035100  not ported
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180035110  not ported
+
+protected:
+    // NOT retail's `??0ElementDescription@UI@@QEAA@XZ` (0x180115a40, the door
+    // `RtUiElementDescription_Ctor` in dialog.cpp).
+    ElementDescription() = default;
+    // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). NON-VIRTUAL, and NOT
+    // defined in the real build (a body would need the vtable, which is emitted
+    // beside `TypeName` — still a dialog.cpp door). The retail body is the door
+    // `RtUiElementDescription_Dtor` in dialog.cpp.
+    ~ElementDescription();
+
+private:
+    static const char* _TypeName();                               // 0x1800350b0 -> "ElementDescription"
+    static const char* _ParentTypeName();                         // 0x1800350c0 -> "Object::External"
+    static Object::BaseTypeInfo _typeInfo;                        // 0x1801faaf8 (minted)
+
+public:
+    // ---- the 0x48 bytes after Object::External — RtUI::ElementDescription's
+    // names and types, unchanged (the per-field evidence is the banner at the
+    // top of this file). PUBLIC for the reason External's are.
+    //
+    // ONE MEANING CORRECTION, recorded and NOT applied as a rename (call sites
+    // use the name): `_elementType` (+0x40) is the element's ALIGNMENT. The
+    // ctor seeds it with 3, `CreateInstance` (0x180115ad0) copies it to
+    // `Element::_alignment` (+0x30), and `Element::Element` seeds that field
+    // with the same 3.
+    int32_t  _x;                       // +0x20
+    int32_t  _y;                       // +0x24
+    int32_t  _width;                   // +0x28
+    int32_t  _height;                  // +0x2c
+    int32_t  _minWidth;                // +0x30
+    int32_t  _minHeight;               // +0x34
+    int32_t  _tabOrder;                // +0x38
+    int32_t  _id;                      // +0x3c  ctor: -1
+    uint32_t _elementType;             // +0x40  ctor: 3 — the Alignment, see above
+    uint32_t _flags;                   // +0x44
+    void*    _childDesc;               // +0x48  ExternalPtr<UI::ElementDescription>
+    uint64_t _userData;                // +0x50  ExternalPtr<UI::Dialog>  (misnamed)
+    void*    _stringTable;             // +0x58  ExternalPtr<UI::StringTable>
+    char*    _textName;                // +0x60  System::String (refcounted char*)
+};
+
+static_assert(sizeof(ElementDescription) == 0x68,
+              "UI::ElementDescription is 0x68 bytes (MOV EDX,0x68 in its slot-0 "
+              "vector deleting destructor 0x180035350)");
+static_assert(alignof(ElementDescription) == 8, "UI::ElementDescription aligns to 8");
+static_assert(sizeof(ElementDescription::Alignment) == 4, "a W4 enum is four bytes");
+static_assert(offsetof(ElementDescription, _x) == sizeof(Object::External),
+              "ElementDescription's own fields begin at the end of the External base");
+static_assert(offsetof(ElementDescription, _x)           == 0x20, "");
+static_assert(offsetof(ElementDescription, _y)           == 0x24, "");
+static_assert(offsetof(ElementDescription, _width)       == 0x28, "");
+static_assert(offsetof(ElementDescription, _height)      == 0x2c, "");
+static_assert(offsetof(ElementDescription, _minWidth)    == 0x30, "");
+static_assert(offsetof(ElementDescription, _minHeight)   == 0x34, "");
+static_assert(offsetof(ElementDescription, _tabOrder)    == 0x38, "");
+static_assert(offsetof(ElementDescription, _id)          == 0x3c, "");
+static_assert(offsetof(ElementDescription, _elementType) == 0x40, "");
+static_assert(offsetof(ElementDescription, _flags)       == 0x44, "");
+static_assert(offsetof(ElementDescription, _childDesc)   == 0x48, "");
+static_assert(offsetof(ElementDescription, _userData)    == 0x50, "");
+static_assert(offsetof(ElementDescription, _stringTable) == 0x58, "");
+static_assert(offsetof(ElementDescription, _textName)    == 0x60, "");
+// The class and the POD describe the same bytes.
+static_assert(sizeof(ElementDescription) == sizeof(RtUI::ElementDescription), "");
+static_assert(offsetof(ElementDescription, _x)        == offsetof(RtUI::ElementDescription, _x), "");
+static_assert(offsetof(ElementDescription, _id)       == offsetof(RtUI::ElementDescription, _id), "");
+static_assert(offsetof(ElementDescription, _flags)    == offsetof(RtUI::ElementDescription, _flags), "");
+static_assert(offsetof(ElementDescription, _textName) == offsetof(RtUI::ElementDescription, _textName), "");
+
+}  // namespace UI
