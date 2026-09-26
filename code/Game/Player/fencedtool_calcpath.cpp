@@ -42,7 +42,7 @@
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
-#include "Tool.h"
+#include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "FencedTool.h"
 #include <cstdint>
 #include <cstdio>

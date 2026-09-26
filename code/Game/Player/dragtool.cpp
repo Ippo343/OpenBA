@@ -14,6 +14,7 @@
 // Decompiled from Application-x64.exe.
 
 #include "Player/dragtool.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
@@ -24,58 +25,26 @@
 #include "input/Input.h"        // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
-// DragTool vtable addresses (for vtable chain in Dtor)
+// DragTool members (dragtool.h). ENDGAME B.3.8 TOOL: the hand-rolled
+// `DragTool_Dtor` (it restamped two UNREGISTERED tables, i.e. stored a null
+// vptr, B38 D9 #3) is gone; the compiler's dtor chain restamps the real ones.
 // ============================================================
-static void* s_vtable_DragTool = nullptr;
-static void* s_vtable_Tool     = nullptr;
 
-static void EnsureDragToolVtables() {
-    if (!s_vtable_DragTool) {
-        s_vtable_DragTool = (void*)ResolveAddr(Module::Exe, DragToolAddr::Vtable);
-        s_vtable_Tool     = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
+// [0] 0x14002da20: stamp 0x140161c10, stamp 0x140161f10, `~Internal`, MemFree on &1.
+Object::Base* DragTool::DeletingDtor(unsigned flags) {
+    this->~DragTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Object::Internal::~Internal — called from base dtor
-// Resolved via the function pointer slot at 0x140152770
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
+// [1]/[2] 0x14002da10 / 0x14002da00. The abstract registration stays in
+// factory_registrations_bulk.cpp (B38 D4); only a half-built object asks.
+const char* DragTool::TypeName() const { return "DragTool"; }
+uint32_t    DragTool::Type() const { return ::Object::GetTypeIdByName("DragTool"); }
 
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
-
-// ============================================================
-// DragTool::Dtor (vtable +0x00) — Scalar deleting destructor
-// ============================================================
-// Resets vtable chain: DragTool -> Tool, then calls
-// Object::Internal::~Internal for base cleanup. If flags & 1,
-// frees the memory allocation.
-//
-// Original: 0x14002da20
-void* DragTool_Dtor(DragTool* self, uint32_t flags) {
-    EnsureDragToolVtables();
-    EnsureInternalDtor();
-
-    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
-    self->vtable = s_vtable_DragTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
-}
+// [6] 0x1400fc6b0 / [9] 0x1400fc640: the by-address doors hold the bodies.
+char DragTool::OnKey(char active) { return static_cast<char>(DragTool_OnKey(this, active)); }
+char DragTool::OnCancel() { return static_cast<char>(DragTool_CancelDrag_Impl(this)); }
 
 // ============================================================
 // Resolved exe-internal function pointers (set once on first call)
@@ -453,7 +422,8 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
 // dialog) and returns 1 so the tool STAYS; idle it returns 0 and teardown proceeds.
 // The Tool_Ret0 stub in that slot meant a right-click mid-drag tore the tool down
 // with the cost dialog still open — the "icon left on screen" dismiss bug.
-extern "C" int DragTool_CancelDrag_Impl(DragTool* self) {
+extern "C" int DragTool_CancelDrag_Impl(void* selfRaw) {
+    DragTool* self = static_cast<DragTool*>(selfRaw);
     ResolveDragToolFuncs();
     if (self->dragState == 0) return 0;
     self->dragState = 0;

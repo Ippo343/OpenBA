@@ -5,9 +5,6 @@
 #include "FencedTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00, Slot0): Scalar deleting destructor.
-void* FencedTool_Dtor(FencedTool* self, uint32_t flags);
-
 // Shutdown2 (vtable +0x28, Slot5): Removes fence preview from scene, destroys mesh.
 void FencedTool_Shutdown2(FencedTool* self);
 
