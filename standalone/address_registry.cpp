@@ -192,7 +192,6 @@ extern "C" {
 
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables).
     void RegisterBuildRoadVtable();
-    void RegisterBuildStructureVtable();
     void RegisterClearAreaVtable();
     void RegisterClearStorageVtable();
     void RegisterConsumeProduceVtable();
@@ -1954,7 +1953,6 @@ static void RegisterVtablesAndTypeIds() {
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables;
     // shared base helpers in code/Game/Work/work_base_standalone.cpp).
     RegisterBuildRoadVtable();
-    RegisterBuildStructureVtable();
     RegisterClearAreaVtable();
     RegisterClearStorageVtable();
     RegisterConsumeProduceVtable();

@@ -24,6 +24,7 @@
 #include "Work/Work.h"
 #include "Work/AutoPickupWork.h"
 #include "Work/BuildRoad.h"
+#include "Work/BuildStructure.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -128,6 +129,15 @@ UNIT_TEST(wrk_leaf_buildroad) {
     CHECK_EQ(offsetof(BuildRoad, field_48), (size_t)0x48);
     CHECK_EQ(offsetof(BuildRoad, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(BuildRoad, field_68), (size_t)0x68);
+}
+
+UNIT_TEST(wrk_leaf_buildstructure) {
+    WRK_LEAF_SHAPE(BuildStructure, Work, 0x70);   // create 0x140029630, table 0x1401610a0
+    CHECK_EQ(offsetof(BuildStructure, field_48), (size_t)0x48);
+    CHECK_EQ(offsetof(BuildStructure, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(BuildStructure, field_5c), (size_t)0x5c);
+    CHECK_EQ(offsetof(BuildStructure, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(BuildStructure, field_68), (size_t)0x68);
 }
 
 // ===========================================================================

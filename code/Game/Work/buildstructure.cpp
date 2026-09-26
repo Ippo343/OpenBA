@@ -19,6 +19,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/BuildStructure.h"
 #include "Work/buildstructure_funcs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -31,64 +32,14 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// Helper: Object::Internal ctor/dtor (via dispatch slots)
-// ============================================================
-typedef void* (*fn_ObjectInternal_Ctor_fn)(void* self);
-static fn_ObjectInternal_Ctor_fn s_fn_ObjectInternal_Ctor = nullptr;
-
-static void EnsureHelpers() {
-    if (!s_fn_ObjectInternal_Ctor) {
-        s_fn_ObjectInternal_Ctor = reinterpret_cast<fn_ObjectInternal_Ctor_fn>(
-            *reinterpret_cast<uintptr_t*>(ResolveAddr(Module::Exe, 0x140152768)));
-    }
-}
-
-// ============================================================
-// Vtable pointer cache
-// ============================================================
-static void* s_vtable_Work = nullptr;
-static void* s_vtable_BuildStructure = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_Work) {
-        s_vtable_Work = (void*)ResolveAddr(Module::Exe, 0x140161a80);
-    }
-    if (!s_vtable_BuildStructure) {
-        s_vtable_BuildStructure = (void*)ResolveAddr(Module::Exe, 0x1401610a0);
-    }
-}
-
-// ============================================================
 // Ctor (0x1400e5a90)
 // ============================================================
-void* BuildStructure_Ctor(BuildStructure* self) {
-    EnsureHelpers();
-    EnsureVtables();
-
-    s_fn_ObjectInternal_Ctor(self);
-
-    self->vtable = s_vtable_Work;
-    self->field_10 = nullptr;
-    self->field_18 = nullptr;
-    self->field_20 = -1;
-    self->field_24 = 0;
-    self->field_28 = -1;
-    self->field_2c = 0;
-    self->field_30 = nullptr;
-    self->field_38 = nullptr;
-    self->field_40 = 0;
-
-    self->vtable = s_vtable_BuildStructure;
-
-    self->field_50 = nullptr;
-    self->field_58 = 0;
-    // Retail zeroes +0x58 as a qword — also clears the array capacity at +0x5c.
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x5c) = 0;
-    self->field_60 = nullptr;
-    self->field_68 = 0;
-
-    return self;
-}
+// Retail 0x1400e5a90: `??0Internal`, the Work base init, the two stamps (the
+// compiler's), then +0x50/+0x58 (a qword: count AND capacity), +0x60, +0x68.
+// +0x48/+0x4c are left to Persist / the caller, as in retail.
+BuildStructure::BuildStructure()
+    : Work(),
+      field_50(nullptr), field_58(0), field_5c(0), field_60(nullptr), field_68(0) {}
 
 // ============================================================
 // Full Ctor (0x1400e59c0) — 3-arg: (self, &entityIBP, altAnim)
@@ -101,32 +52,14 @@ void* BuildStructure_Ctor(BuildStructure* self) {
 // zeroing every position byte. Without this array Execute's unbuilt-position scan finds
 // nothing (field_58 == 0 -> unbuiltCount 0) and returns 1 (never assigns labor) — the
 // 2c-B blocker. Faithful offset-for-offset port of the Ghidra decompilation.
-typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
-
-void* BuildStructure_CtorFull(BuildStructure* self, void* entityIBP, uint8_t altAnim) {
-    EnsureVtables();
-
-    // local_res10 = *entityIBP; Work_Ctor25(self, &local_res10) — base init + field_10.
-    void* entity = entityIBP ? *reinterpret_cast<void**>(entityIBP) : nullptr;
-    fn_WorkCtor25_t workCtor25 =
-        reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
-    if (workCtor25) {
-        void* tmp = entity;
-        workCtor25(self, &tmp);
-    }
-
-    self->vtable = s_vtable_BuildStructure;
-    self->field_48 = altAnim;
-    self->field_4c = 0;
-    self->field_50 = nullptr;
-    self->field_58 = 0;
-    // +0x5c is the array's capacity (read by FUN_14000a590). Retail zeroes +0x58 as a
-    // full qword; field_58 is int, so zero the capacity slot explicitly or the resize
-    // reads garbage capacity out of the fresh MemAlloc block and takes a bad realloc path.
-    *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(self) + 0x5c) = 0;
-    self->field_60 = nullptr;
-    self->field_68 = 0;
-
+BuildStructure::BuildStructure(void* entityIBP, uint8_t altAnim)
+    : Work(entityIBP),   // local_res10 = *entityIBP; Work_Ctor25(this, &local_res10)
+      field_48(altAnim), field_4c(0),
+      field_50(nullptr), field_58(0),
+      // +0x5c is the array's capacity (read by FUN_14000a590). Retail zeroes +0x58 as a
+      // full qword, so the resize below never reads a garbage capacity.
+      field_5c(0),
+      field_60(nullptr), field_68(0) {
     // Allocate the build-position byte array from the site's PositionComponent count.
     if (entityIBP) {
         uintptr_t posCompIBP = 0;
@@ -134,58 +67,48 @@ void* BuildStructure_CtorFull(BuildStructure* self, void* entityIBP, uint8_t alt
         int count = fn_PositionComponent_Count ? fn_PositionComponent_Count(posCompIBP, 1) : 0;
         // FUN_14000a590(&field_50, count): resizes the {data,count,cap} array in place,
         // writing field_58 = count. New bytes are uninitialised, so zero-fill below.
-        if (fn_DynArray_Resize) fn_DynArray_Resize(&self->field_50, count);
-        int n = self->field_58;
-        uint8_t* arr = reinterpret_cast<uint8_t*>(self->field_50);
+        if (fn_DynArray_Resize) fn_DynArray_Resize(&field_50, count);
+        int n = field_58;
+        uint8_t* arr = reinterpret_cast<uint8_t*>(field_50);
         for (int i = 0; i < n && arr; i++) arr[i] = 0;
     }
-
-    return self;
 }
 
 // ============================================================
-// ScalarDtor (0x140029680)
+// ScalarDtor (0x140029680) — slot 0
 // ============================================================
-void* BuildStructure_ScalarDtor(BuildStructure* self, uint32_t flags) {
-    BuildStructure_BaseDtor(self);
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+// [0] 0x140029680: ~BuildStructure, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* BuildStructure::DeletingDtor(unsigned flags) {
+    this->~BuildStructure();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
 // BaseDtor (0x1400e5920)
 // ============================================================
-void BuildStructure_BaseDtor(BuildStructure* self) {
-    EnsureVtables();
-
-    self->vtable = s_vtable_BuildStructure;
-
-    void* treeRoot = self->field_60;
+// The stamps (BuildStructure, then Work) and `~Internal` are the compiler's.
+BuildStructure::~BuildStructure() {
+    void* treeRoot = field_60;
     if (treeRoot != nullptr) {
-        fn_TreeRecursiveFree(&self->field_60, *(void**)((uintptr_t)treeRoot + 0x10));
-        fn_TreeRecursiveFree(&self->field_60, *(void**)((uintptr_t)treeRoot + 0x18));
+        fn_TreeRecursiveFree(&field_60, *(void**)((uintptr_t)treeRoot + 0x10));
+        fn_TreeRecursiveFree(&field_60, *(void**)((uintptr_t)treeRoot + 0x18));
         fn_MemFreeStatic(treeRoot);
     }
-    self->field_60 = nullptr;
-    self->field_68 = 0;
+    field_60 = nullptr;
+    field_68 = 0;
 
-    fn_MemFreeStatic(self->field_50);
-    self->field_50 = nullptr;
-    self->field_58 = 0;
-
-    self->vtable = s_vtable_Work;
-    fn_ObjectInternal_Dtor(self);
+    fn_MemFreeStatic(field_50);
+    field_50 = nullptr;
+    field_58 = 0;
 }
 
 // ============================================================
 // OnComplete (0x1400e4f80)
 // ============================================================
-int BuildStructure_OnComplete(BuildStructure* self, void* citizenIBP,
-                                void* unused, int slotIndex) {
-    fn_TreeRemoveByKey((void*)&self->field_60, citizenIBP);
-    uint8_t* slots = (uint8_t*)self->field_50;
+int BuildStructure::OnComplete(void* citizenIBP, void* /*unused*/, int slotIndex) {
+    fn_TreeRemoveByKey((void*)&field_60, citizenIBP);
+    uint8_t* slots = (uint8_t*)field_50;
     slots[slotIndex] = 0;
     return 0;
 }
@@ -193,10 +116,9 @@ int BuildStructure_OnComplete(BuildStructure* self, void* citizenIBP,
 // ============================================================
 // OnCancel (0x1400e4f40)
 // ============================================================
-int BuildStructure_OnCancel(BuildStructure* self, void* citizenIBP,
-                              void* unused, int slotIndex) {
-    fn_TreeRemoveByKey((void*)&self->field_60, citizenIBP);
-    uint8_t* slots = (uint8_t*)self->field_50;
+int BuildStructure::OnCancel(void* citizenIBP, void* /*unused*/, int slotIndex) {
+    fn_TreeRemoveByKey((void*)&field_60, citizenIBP);
+    uint8_t* slots = (uint8_t*)field_50;
     slots[slotIndex] = 0;
     return 0;
 }
@@ -204,9 +126,9 @@ int BuildStructure_OnCancel(BuildStructure* self, void* citizenIBP,
 // ============================================================
 // Cleanup (0x1400e57a0)
 // ============================================================
-int BuildStructure_Cleanup(BuildStructure* self) {
+int BuildStructure::Cleanup() {
     while (true) {
-        void* root = self->field_60;
+        void* root = field_60;
         if (root == nullptr) return 0;
 
         void* node = root;
@@ -238,41 +160,41 @@ int BuildStructure_Cleanup(BuildStructure* self) {
 // ============================================================
 // GetPriority (0x140029670) — not hookable, available as clean code
 // ============================================================
-bool BuildStructure_GetPriority(BuildStructure* self) {
-    return self->field_68 > 0;
+int BuildStructure::GetPriority() {
+    return field_68 > 0;
 }
 
 // ============================================================
 // BuildStructure::Serialize (0x1400E5850)
 // ============================================================
-void BuildStructure_Serialize(BuildStructure* self, void* stream) {
-    // Base class Work::Serialize
-    fn_Work_SerializeBase(self, stream);
+void BuildStructure::Persist(void* stream) {
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // IO::Serializer block (version 0)
     alignas(8) uint8_t serBuf[24];
     ::new (static_cast<void*>(serBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize bool at +0x48
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<bool*>(&self->field_48), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // B.3.4 bridge
 
     // Serialize BST at +0x60 (InternalBasePtr tree)
-    fn_BST_SerializeHelper(&self->field_60, serBuf);
+    fn_BST_SerializeHelper(&field_60, serBuf);
 
     // Serialize count (+0x58), resize array on load
-    int count = self->field_58;
+    int count = field_58;
     reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge
 
     // Check if loading: first qword of serializer -> *(int*)(ptr + 8) == 0 means loading
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        fn_DynArray_Resize(&self->field_50, count);
+        fn_DynArray_Resize(&field_50, count);
     }
 
     // Bulk serialize the byte array (one byte per build position)
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(count, reinterpret_cast<unsigned char*>(self->field_50), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(count, reinterpret_cast<unsigned char*>(field_50), nullptr);   // B.3.4 bridge
 
     // Serialize rotating scan index at +0x4C
-    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&self->field_4c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serBuf)->Serialize(*reinterpret_cast<int*>(&field_4c), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(serBuf)->~Serializer();   // B.3.4 bridge
 }
@@ -318,8 +240,8 @@ static int WorldToCell(int gridSize, float x, float z) {
 }
 
 
-int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
-    uintptr_t s = (uintptr_t)self;
+int BuildStructure::Execute(void* citizenPtr, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t s = (uintptr_t)this;
 
     // --- Phase 1: Validate building is enabled ---
     uintptr_t entity = *(uintptr_t*)(s + 0x10);
@@ -347,7 +269,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
 
     // --- Phase 2: Check if we have positions left to build ---
     int totalPositions = fn_PositionComponent_Count(posCompIBP, 1);
-    if (self->field_68 >= totalPositions) {
+    if (field_68 >= totalPositions) {
         return 1;
     }
 
@@ -394,9 +316,9 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
 
     // --- Phase 4: Count unbuilt positions ---
     int unbuiltCount = 0;
-    int posCount = self->field_58;
+    int posCount = field_58;
     if (posCount > 0) {
-        uint8_t* arr = (uint8_t*)self->field_50;
+        uint8_t* arr = (uint8_t*)field_50;
         for (int i = 0; i < posCount; i++) {
             if (arr[i] == 0) unbuiltCount++;
         }
@@ -425,16 +347,16 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
     // --- Phase 6: Search for accessible unbuilt position ---
     while (attemptCount < unbuiltCount) {
         // Scan for next unbuilt position using rotating index
-        int scanTotal = self->field_58;
+        int scanTotal = field_58;
         if (scanTotal > 0) {
             for (int scan = 0; scan < scanTotal; scan++) {
-                int idx = self->field_4c;
-                if (((uint8_t*)self->field_50)[idx] == 0) {
+                int idx = field_4c;
+                if (((uint8_t*)field_50)[idx] == 0) {
                     chosenIndex = idx;
                 }
                 int next = idx + 1;
                 if (next >= scanTotal) next = 0;
-                self->field_4c = next;
+                field_4c = next;
                 if (chosenIndex >= 0) break;
             }
         }
@@ -465,7 +387,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                     mapGrid, (uint32_t)buildingCell, exactCell, 1);
 
                 // Iterate ALL positions to find a shorter path
-                int total = self->field_58;
+                int total = field_58;
                 int64_t centerCellOff = (int64_t)buildingCell * 0x30;
                 if (total < 1) goto doSetupActions;
 
@@ -578,22 +500,22 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                     // Args: citizenEntityIBP, priority, buildingEntityIBPptr, position, index, altAnim
                     fn_SetupBuildActions(
                         &citizenEntityVal,
-                        self->field_20,
+                        field_20,
                         (void*)(s + 0x10),
                         bestPos,
                         chosenIndex,
-                        (uint8_t)self->field_48
+                        (uint8_t)field_48
                     );
 
                     // Update building entity state
-                    int priority = self->field_20;
+                    int priority = field_20;
                     uintptr_t bldgEntity = *(uintptr_t*)citizenPtr;
 
                     // Get target via vtable slot 10 (GetTarget, +0x50)
                     typedef void* (*fn_GetTarget_t)(void*, void*);
-                    void** vtbl = *(void***)self;
+                    void** vtbl = *(void***)this;
                     uintptr_t targetIBP = 0;
-                    void* targetResult = ((fn_GetTarget_t)vtbl[10])(self, &targetIBP);
+                    void* targetResult = ((fn_GetTarget_t)vtbl[10])(this, &targetIBP);
                     uintptr_t targetVal = *(uintptr_t*)targetResult;
 
                     *(uint32_t*)(bldgEntity + 0x54) |= 4;
@@ -608,7 +530,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
                     fn_BST_Insert((void*)(s + 0x60), &targetIBP, citizenPtr);
 
                     // Mark build position as claimed
-                    ((uint8_t*)self->field_50)[chosenIndex] = 1;
+                    ((uint8_t*)field_50)[chosenIndex] = 1;
 
                     return 2;
                 }
@@ -627,7 +549,7 @@ int BuildStructure_Execute(BuildStructure* self, void* citizenPtr) {
 // Returns the world's current build target entity via InternalBasePtr.
 // Reads: gameWorld+0xB0 -> +0x38 (build target entity IBP)
 // Uses hidden return pointer ABI: RCX=self, RDX=retBuf
-void* BuildStructure_GetTarget(BuildStructure* /*self*/, void* retBuf) {
+void* BuildStructure::GetTarget(void* retBuf) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t buildMgr = *(uintptr_t*)(gameWorld + 0xB0);
     *(uint64_t*)retBuf = *(uint64_t*)(buildMgr + 0x38);
@@ -642,15 +564,11 @@ void* BuildStructure_GetTarget(BuildStructure* /*self*/, void* retBuf) {
 // actions, and checks if any match the Work's priority at +0x20.
 // Returns 1 if found (and stores task IBP in *outTask), 0 otherwise.
 
-// TypeInfo_CompleteTask = DWORD_1401c7158
-static uint32_t* s_TypeId_CompleteTask = nullptr;
-
+// TypeInfo_CompleteTask = DWORD_1401c7158 — read through the registry cell per call
+// (ENDGAME B.3.8: the lazy first-use pointer cache is gone, B38 D7).
 static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_t* outTask) {
-    if (!s_TypeId_CompleteTask) {
-        s_TypeId_CompleteTask = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
-    }
-
-    uint32_t taskTypeId = s_TypeId_CompleteTask ? *s_TypeId_CompleteTask : 0;
+    const uint32_t* typeIdCell = (const uint32_t*)ResolveAddr(Module::Exe, 0x1401c7158);
+    uint32_t taskTypeId = typeIdCell ? *typeIdCell : 0;
 
     // [CITID A/B] Report BOTH arms. With 0x1401c7158 unregistered this returns false for
     // every citizen, so Validate evicts the whole build BST; with the slot filled the
@@ -726,8 +644,8 @@ static bool CheckCitizenHasTask(BuildStructure* self, void* citizenIBP, uintptr_
 // Returns: 0 = some work remains (citizens validated/removed)
 //          1 = BST is empty (no assigned citizens)
 
-int BuildStructure_Validate(BuildStructure* self, void* /*citizenIBP*/) {
-    uintptr_t s = (uintptr_t)self;
+int BuildStructure::Validate(void* /*citizenIBP*/) {
+    uintptr_t s = (uintptr_t)this;
 
     // Dynamic arrays for citizens to remove and their slot indices
     void* removeList = nullptr;     // array of IBP keys (8 bytes each)
@@ -756,7 +674,7 @@ int BuildStructure_Validate(BuildStructure* self, void* /*citizenIBP*/) {
             uintptr_t citizenKey = *(uintptr_t*)node;
             uintptr_t taskResult = 0;
 
-            bool hasTask = CheckCitizenHasTask(self, &citizenKey, &taskResult);
+            bool hasTask = CheckCitizenHasTask(this, &citizenKey, &taskResult);
 
             if (!hasTask) {
                 // Citizen has no matching task — add to remove list
@@ -858,7 +776,7 @@ int BuildStructure_Validate(BuildStructure* self, void* /*citizenIBP*/) {
             }
 
             // Update slot array: mark only validated slots as claimed
-            int totalSlots = self->field_58;
+            int totalSlots = field_58;
             for (int si = 0; si < totalSlots; si++) {
                 // Check if this slot index appears in the slotList
                 bool found = false;
@@ -868,7 +786,7 @@ int BuildStructure_Validate(BuildStructure* self, void* /*citizenIBP*/) {
                         break;
                     }
                 }
-                ((uint8_t*)self->field_50)[si] = found ? 1 : 0;
+                ((uint8_t*)field_50)[si] = found ? 1 : 0;
             }
 
             fn_MemFreeStatic(slotList);
@@ -888,56 +806,45 @@ done_empty:
 }
 
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x1401610a0 (13 slots), size 0x70, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// NOTE: this file's ctor is named BuildStructure_Ctor (not _Ctor_Impl) and
-// self-resolves via internal EnsureHelpers()/EnsureVtables(); there is no
-// separate BuildStructure_ResolveFuncs(), so the factory does not pre-resolve.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_BuildStructure_Vtable` (slot 1 answered null, slot 2
+// a lazily cached id) registered at 0x1401610a0, REGISTER_TYPE over
+// BuildStructure_Factory / BuildStructure_CreateInPlace, and a lazy vtable-pointer
+// cache (EnsureHelpers / EnsureVtables). Nothing outside this file reads 0x1401610a0
+// back (sweep by hex and by BuildStructureAddr::Vtable), so the table's
+// registration goes with it.
+
+// create 0x140029630: MemAlloc(sizeof, 8), then the ctor.
+void* BuildStructure::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BuildStructure), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) BuildStructure());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* BuildStructure::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) BuildStructure());
+}
+
+DEFINE_EXE_VTABLE(BuildStructure, "_ZTV14BuildStructure")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t BuildStructure_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("BuildStructure");
-    return c;
-}
-
-static void* g_BuildStructure_Vtable[13] = {
-    (void*)&BuildStructure_ScalarDtor,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
-    (void*)&BuildStructure_GetTypeId,   // +0x10 GetTypeId
-    (void*)&BuildStructure_Serialize,   // +0x18 Serialize
-    (void*)&BuildStructure_Execute,     // +0x20 Execute
-    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
-    (void*)&BuildStructure_OnComplete,  // +0x30 OnComplete
-    (void*)&BuildStructure_OnCancel,    // +0x38 OnCancel
-    (void*)&BuildStructure_Cleanup,     // +0x40 Cleanup
-    (void*)&BuildStructure_Validate,    // +0x48 Validate
-    (void*)&BuildStructure_GetTarget,   // +0x50 GetTarget
-    (void*)&BuildStructure_GetPriority, // +0x58 GetPriority
-    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
-};
-
-extern "C" void RegisterBuildStructureVtable() {
-    RegisterExeAddr(0x1401610a0, (uintptr_t)g_BuildStructure_Vtable);
-}
-extern "C" void* BuildStructure_CreateInPlace(void* mem) {
-    return BuildStructure_Ctor((BuildStructure*)mem);
-}
-// Full 3-arg ctor (0x1400e59c0) — sets field_10 + build-position array. Used by the
-// State8Enter staged work-spawn so BuildStructure::Execute can assign build positions.
+// The one entry point other blocks name: the full ctor on caller memory
+// (buildcomponent_state8.cpp / destroycomponent_states.cpp, BuildComponent's state-8
+// enter). B8-5: the real ctor, the same bytes.
 extern "C" void* BuildStructure_CreateInPlaceFull(void* mem, void* entityIBP, uint8_t altAnim) {
-    return BuildStructure_CtorFull((BuildStructure*)mem, entityIBP, altAnim);
+    return static_cast<Object::Base*>(new (mem) BuildStructure(entityIBP, altAnim));
 }
-extern "C" void* BuildStructure_Factory(void) {
-    void* p = Work_Alloc(0x70);
-    return p ? BuildStructure_Ctor((BuildStructure*)p) : nullptr;
+// The default ctor on caller memory (buildcomponent_state8.cpp names it).
+extern "C" void* BuildStructure_CreateInPlace(void* mem) {
+    return BuildStructure::CreateInPlaceObject(mem);
 }
-REGISTER_TYPE(BuildStructure, "Work", &BuildStructure_Factory, &BuildStructure_CreateInPlace);
+
+DEFINE_EXE_TYPE(BuildStructure, "Work")
 
 // ---- Construction force-harness wrappers (construction_force_harness.cpp) ----
 // Mirror the GatherRawMaterials ConstructForSite/ForceDrive/DepsReady trio so the generic
@@ -954,17 +861,15 @@ REGISTER_TYPE(BuildStructure, "Work", &BuildStructure_Factory, &BuildStructure_C
 // position scan finds nothing (field_58==0) and returns 1 (never assigns labor). buildEntityIBP
 // is an InternalBasePtr* whose *value is the site entity pointer.
 extern "C" void* BuildStructure_ConstructForSite(void* buildEntityIBP) {
-    EnsureHelpers();
-    EnsureVtables();
-    void* mem = Work_Alloc(0x70);
+    void* mem = Object::detail::InternalMemAlloc(sizeof(BuildStructure), 8);
     if (!mem) return nullptr;
-    return BuildStructure_CtorFull((BuildStructure*)mem, buildEntityIBP, 0);
+    return static_cast<Object::Base*>(new (mem) BuildStructure(buildEntityIBP, 0));
 }
 
 // Drive Execute with the WORK-DRIVER ABI (self, citizenIBP). Execute reads *citizenIBP as the
 // citizen entity, so a plain InternalBasePtr* is correct (same shape as the gather driver).
 extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
-    return BuildStructure_Execute((BuildStructure*)self, citizenIBP);
+    return reinterpret_cast<BuildStructure*>(self)->BuildStructure::Execute(citizenIBP, nullptr, 0);   // B.3.8 bridge
 }
 
 // Execute-readiness gate for the force harness. BuildStructure's Execute/ctor helpers are the
@@ -972,8 +877,6 @@ extern "C" int BuildStructure_ForceDrive(void* self, void* citizenIBP) {
 // s_fn_* — gate on the Execute+ctor-critical subset (mirrors GatherRawMaterials_DepsReady).
 // Serialize helpers + the dtor-only parent vtable are excluded (Execute never touches them).
 extern "C" bool BuildStructure_DepsReady() {
-    EnsureHelpers();
-    EnsureVtables();
     return fn_InternalBasePtr_Ctor &&
            fn_Entity_FindComponent_Position && fn_Entity_FindComponent_Build &&
            fn_Entity_FindComponent_WorkPlace && fn_Entity_FindComponent_MatDesc &&
@@ -981,5 +884,5 @@ extern "C" bool BuildStructure_DepsReady() {
            fn_Entity_GetPositionForIndex && fn_Map_Invalidate && fn_Map_CalcPathCost &&
            fn_Map_NeighborLookup && fn_Map_CalcPathDist && fn_Map_CachePathDist &&
            fn_SetupBuildActions && fn_BST_Insert && fn_IsA && fn_IsDerivedFrom &&
-           s_vtable_BuildStructure && g_pGameWorldSingleton && *g_pGameWorldSingleton;
+           g_pGameWorldSingleton && *g_pGameWorldSingleton;
 }

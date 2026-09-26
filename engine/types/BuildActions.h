@@ -15,71 +15,10 @@
 #include <cstdint>
 #include <cstddef>
 #include "Work/BuildRoad.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
+#include "Work/BuildStructure.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 
 // BuildRoad — the real class code/Game/Work/BuildRoad.h (ENDGAME B.3.8).
-
-// ============================================================
-// BuildStructure — structure construction work. Size = 0x70.
-// Ctor: 0x1400e5a90, Vtable: 0x1401610a0, Factory: 0x140029630
-// Inherits: Object::Internal -> Work (0x48) -> BuildStructure
-// BaseDtor: 0x1400e5920
-//
-// Manages citizen work assignments for building structures.
-// Maintains a slot array (per-build-point availability) and a
-// binary tree of assigned citizens (InternalBasePtr keys).
-// ============================================================
-namespace BuildStructureAddr {
-    constexpr uintptr_t Ctor         = 0x1400e5a90;
-    constexpr uintptr_t Factory      = 0x140029630;
-    constexpr uintptr_t Vtable       = 0x1401610a0;
-    constexpr uintptr_t ScalarDtor   = 0x140029680;
-    constexpr uintptr_t BaseDtor     = 0x1400e5920;
-    constexpr uintptr_t Serialize    = 0x1400e5850;
-    constexpr uintptr_t Execute      = 0x1400e4fc0;
-    constexpr uintptr_t OnComplete   = 0x1400e4f80;
-    constexpr uintptr_t OnCancel     = 0x1400e4f40;
-    constexpr uintptr_t Cleanup      = 0x1400e57a0;
-    constexpr uintptr_t Validate     = 0x1400e4be0;
-    constexpr uintptr_t GetTarget    = 0x1400e5830;
-    constexpr uintptr_t GetPriority  = 0x140029670;
-}
-
-struct BuildStructure {
-    // --- Work base (0x48 bytes) ---
-    void*    vtable;             // +0x00: -> 0x1401610a0
-    uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr (building being constructed)
-    void*    field_18;           // +0x18: entity ptr (storage location)
-    int32_t  field_20;           // +0x20: task ID (-1 sentinel)
-    int32_t  field_24;           // +0x24: task sub-ID
-    int32_t  field_28;           // +0x28: secondary ID (-1 sentinel)
-    int32_t  field_2c;           // +0x2C: secondary sub-ID
-    void*    field_30;           // +0x30: time start (zeroed)
-    void*    field_38;           // +0x38: time end (zeroed)
-    int32_t  field_40;           // +0x40: flags/state (0)
-    uint8_t  _pad44[4];          // +0x44: padding
-
-    // --- BuildStructure fields ---
-    // Note: ctor doesn't init +0x48/+0x4C (set by Serialize or caller)
-    uint8_t  field_48;           // +0x48: bool — serialized flag (has initial setup?)
-    uint8_t  _pad49[3];          // +0x49: padding
-    int32_t  field_4c;           // +0x4C: current slot index (round-robin for assignment)
-    void*    field_50;           // +0x50: slot availability array (byte per build point, 0=free 1=busy)
-    int32_t  field_58;           // +0x58: slot count (number of build points)
-    uint8_t  _pad5c[4];          // +0x5C: padding
-    void*    field_60;           // +0x60: binary tree root (citizen assignment tree, nodes 0x20 bytes)
-    int32_t  field_68;           // +0x68: priority counter (GetPriority returns field_68 > 0)
-    uint8_t  _pad6c[4];          // +0x6C: padding
-};
-
-static_assert(sizeof(BuildStructure) == 0x70, "BuildStructure size mismatch");
-static_assert(offsetof(BuildStructure, vtable) == 0x00, "");
-static_assert(offsetof(BuildStructure, field_48) == 0x48, "");
-static_assert(offsetof(BuildStructure, field_4c) == 0x4C, "");
-static_assert(offsetof(BuildStructure, field_50) == 0x50, "");
-static_assert(offsetof(BuildStructure, field_58) == 0x58, "");
-static_assert(offsetof(BuildStructure, field_60) == 0x60, "");
-static_assert(offsetof(BuildStructure, field_68) == 0x68, "");
+// BuildStructure — the real class code/Game/Work/BuildStructure.h (ENDGAME B.3.8).
 
 // ============================================================
 // ClearArea — area clearing work. Size = 0x78.
