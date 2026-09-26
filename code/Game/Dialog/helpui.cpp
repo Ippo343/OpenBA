@@ -29,6 +29,7 @@
 #include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ContainerElement.h"  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // File-local helpers
@@ -91,7 +92,7 @@ static void HelpUI_LoadPage(HelpUI* self) {
 
     // Reset scroll offsets to (0, 0)
     void* containerElem = *(void**)(s + 0x58);
-    fn_ContainerElement_SetOffsets(containerElem, 0, 0);
+    reinterpret_cast<UI::ContainerElement*>(containerElem)->SetOffsets(0, 0);  // B.3.6 bridge
 
     // Store current page resource index
     *(int*)(s + 0x60) = pageResIndex;
@@ -425,7 +426,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
         histIdx = *(int*)(s + 0x64);
         float savedScroll = *(float*)((uintptr_t)histArray + (int64_t)histIdx * 8 + 4);
         void* containerElem = *(void**)(s + 0x58);
-        fn_ContainerElement_SetOffsets(containerElem, 0, (int)savedScroll);
+        reinterpret_cast<UI::ContainerElement*>(containerElem)->SetOffsets(0, (int)savedScroll);  // B.3.6 bridge
 
         // Update combo to show current page
         int comboIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
@@ -471,7 +472,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
         histIdx = *(int*)(s + 0x64);
         float savedScroll = *(float*)((uintptr_t)histArray + (int64_t)histIdx * 8 + 4);
         void* containerElem = *(void**)(s + 0x58);
-        fn_ContainerElement_SetOffsets(containerElem, 0, (int)savedScroll);
+        reinterpret_cast<UI::ContainerElement*>(containerElem)->SetOffsets(0, (int)savedScroll);  // B.3.6 bridge
 
         // Update combo to show current page
         int comboIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
