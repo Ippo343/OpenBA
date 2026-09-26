@@ -1,0 +1,29 @@
+== gate baseline @ dc647869 21:02:06 mode=full
+build standalone-debug: exit 0
+build standalone: exit 0
+build standalone-perf: exit 0
+build unit: exit 0
+  note: release target compiled 0 files (shared obj dir; perf is the real NDEBUG build)
+  new warnings (debug, vs clean-rebuild baseline set): 0
+  new warnings (perf, vs clean-rebuild baseline set): 0
+unit: 358 tests, 0 failures
+dispatch: checked 109 ResolveExport registrations, 0 name mismatch(es); 0 address(es) registered more than once (a non-ResolveExport winner means the checked line is dead code)
+manifest: cutover manifest gate: OK (59 rows; row set and every disposition match a fresh derivation)
+mintgen: --check: C:\code\GIT\untitled_rev_eng_project\standalone\rt_data_mint_tables.inc is UP TO DATE (152 vtables, 104 BaseTypeInfo, 48 storage)
+route newgame: exit 0 crashlog=0 hang=no (35s)
+  RtMint TRAP=0  GATE WARN=0  [RtResolve] 0 misses — every cached resolve in this run found its symbol.
+  loader: calls=5686 openFileFail=3 openCompFail=0 retNull=3
+  [GameMain] Post-Startup _firstTypeInfo: 417 entries, 417 have non-FF typeId
+  [RtPort]   Object::factory dtors: 4 exports + 5 helper addresses regis
+  typetable: 49 lines md5 58bbe179
+route tutorial: exit 0 crashlog=0 hang=no (21s)
+  RtMint TRAP=0  GATE WARN=0  [RtResolve] 0 misses — every cached resolve in this run found its symbol.
+  loader: calls=5776 openFileFail=15 openCompFail=0 retNull=15
+route loadgame: exit 0 crashlog=0 hang=no (9s)
+  RtMint TRAP=0  GATE WARN=0  [RtResolve] 0 misses — every cached resolve in this run found its symbol.
+  loader: calls=4789 openFileFail=2 openCompFail=0 retNull=2
+resave 1: PASS (21075114 bytes)
+resave 2: PASS (21075114 bytes)
+resave 3: PASS (21075114 bytes)
+resave: 3/3 PASS, trailing consecutive PASS streak = 3 (B34_RULES 3.4 wants 3 consecutive)
+GATE RESULT: 0 problem(s)   21:05:42
