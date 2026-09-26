@@ -23,7 +23,8 @@
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
-#include "Dialog/ui_dialogs.h"
+#include "Dialog/EventNotifyDialog.h"
+#include "Dialog/EventPopupDialog.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -50,8 +51,7 @@
 // Dialog-typed External the exe reaches via self+0x18 -> Dialog::GetReference)
 // and drive the promoted EventPopupDialog standalone ctor. Returns the new
 // dialog, or null if the resource/allocation is unavailable.
-extern "C" void* EventPopupDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
-                                                  void* parentIBP, int eventIndex);
+namespace eventnotify_sa { void EnsureGlobals(); }
 
 static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventIndex) {
     uintptr_t s = (uintptr_t)self;
@@ -87,10 +87,10 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
 
     void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
     if (!mem) return nullptr;
-    int64_t nullParent[1];
-    new (nullParent) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    void* popup = EventPopupDialog_Ctor_Standalone(mem, ui, s_popupRes, nullParent, eventIndex);
-    if (!popup) { fn_MemFreeStatic(mem); return nullptr; }
+    void* popup = ::new (mem) EventPopupDialog(static_cast<UI::UserInterface*>(ui),
+                                               static_cast<const UI::Dialog*>(s_popupRes),
+                                               Object::InternalPtr<UI::DialogInstance>(),
+                                               eventIndex);
 
     int64_t dialogPtr[1];
     new (dialogPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(popup));   // B.3.3 bridge
@@ -262,18 +262,17 @@ static void EventNotifyDialog_ArrayRemove_Impl(void* arrayBasePtr, int removeInd
 // 3-byte no-op: XOR EAX,EAX; RET. Returns 0.
 // Original: 0x1400686c0.
 
-int EventNotifyDialog_Slot5(EventNotifyDialog* /*self*/) {
-    return 0;
-}
+void EventNotifyDialog::OnClosed() {}
 
-void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void EventNotifyDialog::OnOpened() {
+    eventnotify_sa::EnsureGlobals();
+    uintptr_t s = (uintptr_t)this;
 
     // Find "ribbonNotify" -> store raw InternalPtr value at +0xE8
     {
         System::String nameStr("ribbonNotify");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
         *(uint64_t*)(s + 0xE8) = *(uint64_t*)retBuf;
     }
 
@@ -282,7 +281,7 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
     {
         System::String nameStr("notifyContent");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
         notifyContent = *(void**)retBuf;
     }
 
@@ -349,7 +348,7 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
         }
     }
 
-    // Copy event log counter: self+0xC4 = *(*(world+0x138) + 0x20)
+    // Copy event log counter: this+0xC4 = *(*(world+0x138) + 0x20)
     void* world = *g_pGameWorldSingleton;
     uintptr_t eventLog = *(uintptr_t*)((uintptr_t)world + 0x138);
     *(uint32_t*)(s + 0xC4) = *(uint32_t*)(eventLog + 0x20);
@@ -375,11 +374,12 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
 //
 // Original: 0x140067C30.
 
-void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
-    uintptr_t s = (uintptr_t)self;
+void EventNotifyDialog::OnUpdate(const System::Time& time) {
+    eventnotify_sa::EnsureGlobals();
+    uintptr_t s = (uintptr_t)this;
 
     uintptr_t eventLogPtr = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x138);
-    int64_t* tickParam = (int64_t*)param2;
+    int64_t* tickParam = (int64_t*)&time;   // System::Time is one int64 tick count
 
     // Phase 1: Decrement timers on active notifications, remove expired ones
     int activeCount = *(int*)(s + 0xE0);
@@ -449,7 +449,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         // Check if popup needed (+0x20 field >= 0 means show popup).
                         // Raise the modal EventPopupDialog for this event-log index.
                         if (*(int*)(entryOffset + 0x20 + eventArray) >= 0) {
-                            EventNotifyDialog_CreatePopup(self, scanIdx);
+                            EventNotifyDialog_CreatePopup(this, scanIdx);
                         }
 
                         // Build notification entry (0x30 bytes)
@@ -610,14 +610,15 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
 //   +0x18: int32 popup_ref (-1 if no popup, >=0 if popup dialog active)
 //
 // Original: 0x1400680c0
-void EventNotifyDialog_Update(EventNotifyDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void EventNotifyDialog::OnUpdateLayout() {
+    eventnotify_sa::EnsureGlobals();
+    uintptr_t s = (uintptr_t)this;
 
     // -------------------------------------------------------
     // Step 1-3: Compute target Y and lerp smoothed position
     // -------------------------------------------------------
 
-    // Parent dialog is stored as InternalBasePtr at self+0xB8.
+    // Parent dialog is stored as InternalBasePtr at this+0xB8.
     // CheckPtr validates the InternalBasePtr, then dereference to get the DialogInstance*.
     // DialogInstance::GetRoot() is equivalent to reading *(void**)(dlg + 0x50).
     void* parentDlg  = *(void**)(s + 0xB8);
@@ -626,7 +627,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     if (!parentRoot) return;
     int   parentY    = *(int*)((uintptr_t)parentRoot + 0x60);
 
-    // GetRoot on self:
+    // GetRoot on this:
     void* selfRoot = *(void**)(s + 0x50);
     if (!selfRoot) return;
     int   selfY    = *(int*)((uintptr_t)selfRoot + 0x60);
@@ -649,7 +650,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     smoothedY = smoothedY * 0.8f + fVar16 * 0.2f;
     *(float*)(s + 0xC0) = smoothedY;
 
-    // Apply as top padding on self root: floor(smoothedY + 0.5f)
+    // Apply as top padding on this root: floor(smoothedY + 0.5f)
     // DAT_140172114 = 0.5f (rounding)
     reinterpret_cast<UI::Element*>(selfRoot)->SetPadding(0, (int)(smoothedY + 0.5f), 0, 2);  // B.3.6 bridge
 
@@ -884,11 +885,11 @@ static void EventNotifyDialog_NavigateToEvent(EventNotifyDialog* self, int index
     *(float*)(camTarget + 0x24) = outPos[2];
 }
 
-void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int eventType, int eventData) {
+void EventNotifyDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (eventType == 0x12) {
-        int activeCount = *(int*)((uintptr_t)self + 0xE0);
+        int activeCount = *(int*)((uintptr_t)this + 0xE0);
         if (eventData > 0x5DB && eventData < activeCount + 0x5DC) {
-            EventNotifyDialog_NavigateToEvent(self, eventData - 0x5DC);
+            EventNotifyDialog_NavigateToEvent(this, eventData - 0x5DC);
         }
     }
 }
@@ -921,8 +922,6 @@ void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int event
 
 namespace eventnotify_sa {
 
-void* GetVtable();  // fwd
-
 // Slot7 dereferences g_pNotifyTimerDuration (raw exe .rdata -> NULL in standalone)
 // and, on the popup path, g_TypeId_Dialog. Lazy-fill both so the ribbon tick
 // can't null-deref. The timer duration is a byte-faithful 30.0s (exe DAT_1401721cc).
@@ -941,21 +940,28 @@ void EnsureGlobals() {
     }
 }
 
-void StubNop(void*, ...) {}
-void* Slot1Getter(void*) { return nullptr; }
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("EventNotifyDialog");
-    return c;
+}  // namespace eventnotify_sa
+
+// Retail EventNotifyDialog_CopyCtor (0x140068ab0): DialogInstance base ctor,
+// then the ribbon fields. The parent is the toolbar dialog (the ribbon sits just
+// below it — see OnUpdateLayout).
+//   +0xB8 parent · +0xC0 smoothedY=0 · +0xC4 lastEventIdx=-1 · +0xC8..+0xE8 = 0
+EventNotifyDialog::EventNotifyDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                                     Object::InternalPtr<UI::DialogInstance> parent)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {
+    dataB8 = *reinterpret_cast<const uint64_t*>(&parent);
+    dataC0 = 0;
+    dataC4 = -1;
+    dataC8 = 0; dataD0 = 0;
+    dataD8 = 0; dataE0 = 0;
+    dataE8 = 0;
 }
 
-// idx0 — scalar deleting destructor. Mirrors Reimpl_ScalarDtor (0x140011550):
-// free the +0xD8 active-event array (String at each entry +0x20), free the +0xC8
-// slot array, run the DialogInstance base dtor, free the object on flag bit 0.
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = GetVtable();
-    uintptr_t s = (uintptr_t)self;
+// The body of the scalar deleting dtor 0x140011550 before ~DialogInstance: free
+// the +0xD8 active-event array (String at each entry +0x20), free the +0xC8
+// slot array, clear both headers.
+EventNotifyDialog::~EventNotifyDialog() {
+    uintptr_t s = (uintptr_t)this;
     void* activeArr = *(void**)(s + 0xD8);
     int activeCnt = *(int*)(s + 0xE0);
     if (activeArr && activeCnt > 0) {
@@ -966,82 +972,37 @@ void* Dtor(void* self, uint32_t flags) {
     if (fn_MemFreeStatic) { fn_MemFreeStatic(activeArr); fn_MemFreeStatic(*(void**)(s + 0xC8)); }
     *(uint64_t*)(s + 0xC8) = 0; *(uint64_t*)(s + 0xD0) = 0;
     *(uint64_t*)(s + 0xD8) = 0; *(uint64_t*)(s + 0xE0) = 0;
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
 }
 
-void W_Startup(void* self) { EnsureGlobals(); if (self) EventNotifyDialog_Slot4(reinterpret_cast<EventNotifyDialog*>(self)); }
-int  W_Shutdown(void* self) { return self ? EventNotifyDialog_Slot5(reinterpret_cast<EventNotifyDialog*>(self)) : 0; }
-void W_Update(void* self) { EnsureGlobals(); if (self) EventNotifyDialog_Update(reinterpret_cast<EventNotifyDialog*>(self)); }
-void W_Load(void* self, void* p2) {
-    EnsureGlobals();
-    if (!self) return;
-    EventNotifyDialog_Slot7(reinterpret_cast<EventNotifyDialog*>(self), p2);
-    // Report when the ribbon's active-notification count changes.
-    static int s_lastActive = 0;
-    int active = *(int*)((uintptr_t)self + 0xE0);
-    if (active != s_lastActive) {
-        s_lastActive = active;
-    }
-}
-void W_OnEvent(void* self, void* e, int msg, int id) { if (self) EventNotifyDialog_OnEvent(reinterpret_cast<EventNotifyDialog*>(self), e, msg, id); }
-
-static void* g_vt[10];
-struct Init {
-    Init() {
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[1] = reinterpret_cast<void*>(&Slot1Getter);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[3] = reinterpret_cast<void*>(&StubNop);
-        g_vt[4] = reinterpret_cast<void*>(&W_Startup);
-        g_vt[5] = reinterpret_cast<void*>(&W_Shutdown);
-        g_vt[6] = reinterpret_cast<void*>(&W_Update);
-        g_vt[7] = reinterpret_cast<void*>(&W_Load);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnEvent);
-        g_vt[9] = reinterpret_cast<void*>(&StubNop);
-    }
-} g_init;
-
-void* GetVtable() { return reinterpret_cast<void*>(g_vt); }
-
-// Standalone ctor. Mirrors EventNotifyDialog_CopyCtor (0x140068ab0): DialogInstance
-// base ctor, install our vtable, then init the ribbon fields. The exe ctor's parent
-// is the toolbar dialog (positions the ribbon just below it — see Update).
-//   +0xB8 parentIBP · +0xC0 smoothedY=0 · +0xC4 lastEventIdx=-1 · +0xC8..+0xE8 = 0
-void* Ctor(void* self, void* ui, void* extRes, void* parentIBP) {
-    if (!self) return nullptr;
-    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
-    if (fn_DialogInstance_Ctor && extRes)
-        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy, nullptr, nullptr, 0);
-    uintptr_t s = (uintptr_t)self;
-    *reinterpret_cast<void**>(self) = GetVtable();
-    *(uint64_t*)(s + 0xB8) = parentCopy;
-    *(uint32_t*)(s + 0xC0) = 0;
-    *(uint32_t*)(s + 0xC4) = 0xFFFFFFFF;
-    *(uint64_t*)(s + 0xC8) = 0; *(uint64_t*)(s + 0xD0) = 0;
-    *(uint64_t*)(s + 0xD8) = 0; *(uint64_t*)(s + 0xE0) = 0;
-    *(uint64_t*)(s + 0xE8) = 0;
-    return self;
+// [0] 0x140011550: the body above, ~DialogInstance, MemFree on &1.
+Object::Base* EventNotifyDialog::DeletingDtor(unsigned flags) {
+    this->~EventNotifyDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void Zero(void* p) { for (size_t o = 0; o < (size_t)0xF0; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0xF0, 8);
+// create 0x140011500: MemAlloc(0xf0, 8), then the ctor.
+void* EventNotifyDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EventNotifyDialog), 8);
     if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+    return static_cast<Object::Base*>(::new (p) EventNotifyDialog());
 }
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
+// createInPlace 0x140011540 (the tree's in-place build is kept, B8-13).
+void* EventNotifyDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) EventNotifyDialog());
+}
 
-}  // namespace eventnotify_sa
+DEFINE_EXE_VTABLE(EventNotifyDialog, "_ZTV17EventNotifyDialog")
+DEFINE_EXE_TYPE(EventNotifyDialog, "UI::DialogInstance")
 
-REGISTER_TYPE(EventNotifyDialog, "UI::DialogInstance",
-              &eventnotify_sa::Factory, &eventnotify_sa::InPlace);
-
-// Called by GameUpdateLoop::Startup to build the ribbon in standalone.
+// The ctor DOOR, reached by address: reg_code_lane2.cpp registers it at
+// 0x140068ab0 and GameUpdateLoop::Startup calls it to build the ribbon.
 extern "C" void* EventNotifyDialog_Ctor_Standalone(void* self, void* ui, void* extRes, void* parentIBP) {
-    return eventnotify_sa::Ctor(self, ui, extRes, parentIBP);
+    if (!self) return nullptr;
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (parentIBP)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
+    return ::new (self) EventNotifyDialog(static_cast<UI::UserInterface*>(ui),
+                                          static_cast<const UI::Dialog*>(extRes), parent);
 }
-extern "C" void* EventNotifyDialog_GetStandaloneVtable() { return eventnotify_sa::GetVtable(); }
-

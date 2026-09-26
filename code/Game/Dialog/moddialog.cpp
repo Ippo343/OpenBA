@@ -49,6 +49,9 @@
 #include "graphics/Material.h"
 #include "ui/Dialogs.h"
 #include "options.h"
+#include "Dialog/ModDialog.h"
+#include "Dialog/ModDetailsDialog.h"
+#include "Dialog/MessageDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -241,14 +244,15 @@ conflict_done:
 //   5. Pushes 0x58-byte entry struct into self->m_entries array
 // After loop: calls RefreshDisplay, loads browser controller, hides browse UI.
 
-void ModDialog_Slot4(ModDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void ModDialog::OnOpened() {
+    printf("[ModDialog::OnOpened] self=%p building mod list\n", (void*)this);
+    uintptr_t s = (uintptr_t)this;
 
     // --- buttonCancel (id=100, set +0xC0=8) ---
     {
         System::String retbuf("buttonCancel");
         uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(retbuf));  // B.3.6 bridge
+        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(retbuf));  // B.3.6 bridge
         void* elem = *(void**)elemBuf;
         reinterpret_cast<UI::Element*>(elem)->SetElementId(100);  // B.3.6 bridge
         *(uint32_t*)(*(uintptr_t*)elemBuf + 0xC0) = 8;
@@ -259,18 +263,18 @@ void ModDialog_Slot4(ModDialog* self) {
     {
         System::String retbuf("buttonOk");
         uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(retbuf));  // B.3.6 bridge
+        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(retbuf));  // B.3.6 bridge
         void* elem = *(void**)elemBuf;
         reinterpret_cast<UI::Element*>(elem)->SetElementId(0x65);  // B.3.6 bridge
         *(uint64_t*)buttonOkBuf = *(uint64_t*)elemBuf;
     }
     (void)buttonOkBuf;
 
-    // --- tableMods: find and store at self+0xC8 ---
+    // --- tableMods: find and store at this+0xC8 ---
     {
         System::String retbuf("tableMods");
         uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(retbuf));  // B.3.6 bridge
+        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(retbuf));  // B.3.6 bridge
         void* elem = *(void**)elemBuf;
         // Store InternalPtr at +0xC8
         new ((void*)(s + 0xC8)) ::Object::InternalBasePtr(
@@ -492,13 +496,13 @@ void ModDialog_Slot4(ModDialog* self) {
             reinterpret_cast<UI::ImageElement*>(imageIconElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
         }
 
-        // Push entry into self->m_entries (array at +0xB8, count at +0xC0)
+        // Push entry into this->m_entries (array at +0xB8, count at +0xC0)
         int newCount = *(int*)(s + 0xC0) + 1;
         fn_ModDialog_ArrayPush((void*)(s + 0xB8), newCount, &entry);
     }
 
     // --- Post-loop: refresh display, add browser controller, hide browse UI ---
-    ModDialog_RefreshDisplay_Impl(self);
+    ModDialog_RefreshDisplay_Impl(this);
 
     // Load "Dialog/Mod.rsc:browser", add as controller with type g_TypeId_BrowserController
     {
@@ -513,10 +517,10 @@ void ModDialog_Slot4(ModDialog* self) {
         // controller IS the right type — passing null would silently break the UI.
         void* browserExt = ext;
 
-        // AddController(self, typeId, 0, 0, browserExt, "groupBrowse")
+        // AddController(this, typeId, 0, 0, browserExt, "groupBrowse")
         System::String groupStr("groupBrowse");
         uint32_t typeId = g_TypeId_BrowserController ? *g_TypeId_BrowserController : 0;
-        reinterpret_cast<UI::DialogInstance*>(self)->AddController(  // B.3.6 bridge
+        AddController(  // B.3.6 bridge
             typeId, static_cast<Object::Base*>(nullptr),
             Object::ExternalPtr<UI::DialogControllerConfig>(nullptr),
             Object::ExternalPtr<UI::ElementDescription>(
@@ -528,7 +532,7 @@ void ModDialog_Slot4(ModDialog* self) {
     {
         System::String strBuf("buttonBrowse");
         uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(strBuf));  // B.3.6 bridge
+        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(strBuf));  // B.3.6 bridge
         void* elem = *(void**)elemBuf;
         reinterpret_cast<UI::Element*>(elem)->Hide(true);  // B.3.6 bridge
     }
@@ -537,7 +541,7 @@ void ModDialog_Slot4(ModDialog* self) {
     {
         System::String strBuf("groupProgress");
         uint8_t elemBuf[8];
-        ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(strBuf));  // B.3.6 bridge
+        ::new (elemBuf) Object::InternalPtr<UI::Element>(FindElement(strBuf));  // B.3.6 bridge
         void* elem = *(void**)elemBuf;
         reinterpret_cast<UI::Element*>(elem)->Hide(true);  // B.3.6 bridge
     }
@@ -616,21 +620,12 @@ static void ModDialog_ShowDetails_Impl(ModDialog* self, int index) {
         uintptr_t entry = *(uintptr_t*)(s + 0xB8) + (uintptr_t)index * 0x58;
         uint64_t spriteHandle = *(uint64_t*)(entry + 0x50);
 
-        // Construct DialogInstance base (0xB8)
-        uint64_t nullRef;
-        new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
-
-        // Set vtable to ModDetailsDialog
-        if (g_ModDetailsDialog_Vtable) {
-            *(uintptr_t*)newDialog = g_ModDetailsDialog_Vtable;
-        }
-
-        // ModDetailsDialog fields: +0xB8 = sprite handle, +0xC0 = mod index
-        *(uint64_t*)((uintptr_t)newDialog + 0xB8) = spriteHandle;
-        *(int32_t*)((uintptr_t)newDialog + 0xC0) = index;
-
-        dialogInst = newDialog;
+        // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here):
+        // DialogInstance(ui, dialog, nullParent, 0, 0, 0), +0xB8 = sprite
+        // handle, +0xC0 = mod index.
+        dialogInst = ::new (newDialog) ModDetailsDialog(
+            static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(dialog),
+            Object::InternalPtr<UI::DialogInstance>(), spriteHandle, index);
     }
 
     // Add to UI
@@ -681,13 +676,11 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
         void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xC0, 8);
         void* dialogInst = nullptr;
         if (newDialog) {
-            uint64_t nullRef;
-            new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
-            if (g_ReloadDialog_Vtable) {
-                *(uintptr_t*)newDialog = g_ReloadDialog_Vtable;
-            }
-            dialogInst = newDialog;
+            // ENDGAME B.3.8 DLG: a real MessageDialog (retail stamps its
+            // table 0x14015c480 after the DialogInstance ctor).
+            dialogInst = ::new (newDialog) MessageDialog(
+                static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(dialog),
+                Object::InternalPtr<UI::DialogInstance>());
         }
 
         // ShowDialog (modal) — blocks until user responds
@@ -769,9 +762,10 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 //
 // Always calls base DialogInstance::OnElementEvent at the end.
 
-void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
-                     uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8) {
-    uintptr_t s = (uintptr_t)self;
+void ModDialog::OnElementEvent(Object::InternalPtr<UI::Element>* param2, int32_t msg, int32_t id, int32_t p5, int32_t p6, int32_t p7, void* p8) {
+    if (msg == 0x12)
+        printf("[ModDialog::OnEvent] click id=%d\n", id);
+    uintptr_t s = (uintptr_t)this;
 
     if (msg == 0x12) {  // Button click event
         void* modSingleton = *(void**)g_ppModificationSingleton;
@@ -783,7 +777,7 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
             // Build InternalBasePtr for CloseDialog
             void* dialogPtr = nullptr;
             new (&dialogPtr) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
+                reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
 
             void* ui = *(void**)(s + 0x10);
             reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogPtr));  // B.3.6 bridge
@@ -792,39 +786,39 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
 
         if (id == 0x65) {
             // OK/Apply
-            ModDialog_Apply_Impl(self);
+            ModDialog_Apply_Impl(this);
             goto done;
         }
 
         if (id >= 1000 && id < 2000) {
             // Toggle mod checkbox
-            ModDialog_ToggleMod_Impl(self, id - 1000);
+            ModDialog_ToggleMod_Impl(this, id - 1000);
             goto done;
         }
 
         if (id >= 2000 && id < 3000) {
             // Move up: swap(id-2000, id-2001)
             reinterpret_cast<IO::Modification*>(modSingleton)->Swap(id - 2000, id - 2001);   // B.3.4 bridge
-            ModDialog_RefreshDisplay_Impl(self);
+            ModDialog_RefreshDisplay_Impl(this);
             goto done;
         }
 
         if (id >= 3000 && id < 4000) {
             // Move down: swap(id-3000, id-2999)
             reinterpret_cast<IO::Modification*>(modSingleton)->Swap(id - 3000, id - 2999);   // B.3.4 bridge
-            ModDialog_RefreshDisplay_Impl(self);
+            ModDialog_RefreshDisplay_Impl(this);
             goto done;
         }
 
         if (id >= 4000 && id < 5000) {
             // Move to top
-            ModDialog_MoveToTop_Impl(self, id - 4000);
+            ModDialog_MoveToTop_Impl(this, id - 4000);
             goto done;
         }
 
         if (id >= 5000 && id < 6000) {
             // Show details
-            ModDialog_ShowDetails_Impl(self, id - 5000);
+            ModDialog_ShowDetails_Impl(this, id - 5000);
         }
     }
 
@@ -834,7 +828,7 @@ done:
     void* elementPtr = *(void**)param2;
     // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch through
     // ModDialog's hand-built table straight back into this slot body.
-    reinterpret_cast<UI::DialogInstance*>((void*)self)->UI::DialogInstance::OnElementEvent(  // B.3.6 bridge
+    UI::DialogInstance::OnElementEvent(  // B.3.6 bridge
         reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elementPtr),
         msg, id, p5, p6, p7, reinterpret_cast<void*>(p8));
 }
