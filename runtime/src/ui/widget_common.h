@@ -31,6 +31,7 @@
 // address literal is written at each use so the census can see it.
 // ============================================================================
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -284,8 +285,20 @@ inline int32_t SpriteHeight(const void* self, int spriteOff) {
 // `?_singleton@Device@Video@@0PEAV12@EA` — the symbol holds a Device*, so the
 // screen size is two loads: [singleton] then +4 / +8.
 // ---------------------------------------------------------------------------
+//
+// RULE B6-5 (closing pass): InlineGetPaddedSize below reaches this from member
+// bodies that run on the loader thread, so the slot is a namespace-scope atomic
+// (was RT_DATA_SLOT's function-local static). Filled only when RtResolveCached
+// would itself have cached the hit (rt_resolve_cache.cpp section 6).
+inline std::atomic<void*> g_widgetVideoDeviceSlot{nullptr};
 inline void* VideoDevice() {
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void* s = g_widgetVideoDeviceSlot.load(std::memory_order_acquire);
+    if (s == nullptr) {
+        void* scratch = nullptr;
+        s = RtResolveCached("?_singleton@Device@Video@@0PEAV12@EA", &scratch);
+        if (scratch != nullptr) g_widgetVideoDeviceSlot.store(scratch, std::memory_order_release);
+    }
+    void** slot = static_cast<void**>(s);
     return slot ? *slot : nullptr;
 }
 inline int32_t ScreenWidth()  { return I32(VideoDevice(), 4); }

@@ -125,6 +125,9 @@
 #include "../../types/collection/Collection.h"
 #include "../../types/ui/Dialog.h"
 #include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/Element.h"       // ENDGAME B.3.6 closing pass: FindElement
+#include "../../types/ui/SpriteSheet.h"   // ENDGAME B.3.6 closing pass: GetSpriteIndexFromName
+#include <new>
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_Fill8Z
 
 // ---- ResolveExport / ResolveAddr -------------------------------------------
@@ -233,12 +236,11 @@ void* InternalCtor(void* self) {
 }
 
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z  0x1800031f0
+// ENDGAME B.3.6 closing pass: the real member (was a function-local lazy
+// ResolveExport cache, a RULE B6-5 shape on a loader-thread path).
 int32_t GetSpriteIndexFromName(const void* sheet, const void* nameString) {
-    using Fn = int32_t (*)(const void*, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport(
-        "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"));
-    return fn(sheet, nameString);
+    return reinterpret_cast<const UI::SpriteSheet*>(sheet)->GetSpriteIndexFromName(  // B.3.6 bridge
+        *static_cast<const System::String*>(nameString));
 }
 
 // ?IsDerivedFrom@Base@Object@@QEBA_NI@Z  0x1800c0390  (PORTED, Wave 3 lane A —
@@ -255,13 +257,13 @@ bool IsDerivedFrom(const void* obj, uint32_t typeId) {
 // 0x180115650. HIDDEN RETURN SLOT in RDX, returns that same pointer in RAX
 // (reference_hidden_retslot_wild_write.md — an fn_* typedef that omits the slot
 // is a wild write that still returns the right answer).
+// ENDGAME B.3.6 closing pass: the real member, its prvalue placement-new'd into
+// the caller's slot exactly as the door does (was a lazy ResolveExport cache).
 void** ElementFindElement(void* self, void** out, const void* nameString) {
-    using Fn = void** (*)(void*, void**, const void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport(
-        "?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@"
-        "AEBVString@System@@@Z"));
-    return fn(self, out, nameString);
+    ::new (static_cast<void*>(out)) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::Element*>(self)->FindElement(  // B.3.6 bridge
+            *static_cast<const System::String*>(nameString)));
+    return out;
 }
 
 // ??0Dialog@UI@@QEAA@XZ  0x180112db0 / ??1Dialog@UI@@UEAA@XZ  0x180112e40.

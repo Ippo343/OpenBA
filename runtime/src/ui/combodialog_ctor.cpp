@@ -142,6 +142,8 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/Element.h"   // ENDGAME B.3.6 closing pass: FindElementType
+#include <new>
 
 // ResolveAddr / ResolveExport live in standalone/resolve.h, which drags in
 // <windows.h> (whose <wingdi.h> declares a function called `Rectangle` and
@@ -292,12 +294,13 @@ bool IsDerivedFrom(const void* obj, uint32_t typeId) {
 // (reference_hidden_retslot_wild_write.md — an fn_* typedef that omits the slot
 // is a wild write that still returns the right answer). The type id is a DWORD
 // in R8D.
+//
+// ENDGAME B.3.6 closing pass: the real member, placement-new'd into the slot
+// as the door does (was a function-local lazy ResolveExport cache, RULE B6-5).
 void** FindElementType(void* self, void** out, uint32_t typeId) {
-    using Fn = void** (*)(void*, void**, uint32_t);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveExport(
-        "?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z"));
-    return fn(self, out, typeId);
+    ::new (static_cast<void*>(out)) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::Element*>(self)->FindElementType(typeId));  // B.3.6 bridge
+    return out;
 }
 
 // The three `?_typeInfo@…@0VBaseTypeInfo@Object@@A` statics the ComboDialog

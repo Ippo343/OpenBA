@@ -33,9 +33,6 @@
 // Resolved helpers
 // ============================================================
 
-// UI::SpriteSheet::GetSpriteCount — dispatch slot at 0x1401529b0
-typedef int (*fn_SpriteSheet_GetSpriteCount_t)(void* spriteSheet);
-static fn_SpriteSheet_GetSpriteCount_t s_fn_SpriteSheet_GetSpriteCount = nullptr;
 
 // StatusIconComponent_helper_a440 (0x1400aa440) — geometry setup helper
 typedef void (*fn_StatusIconHelper_a440_t)(void* geometry, float param2, int spriteCount,
@@ -65,15 +62,6 @@ static void EnsureHelpers() {
     uintptr_t slot;
 
     // Dispatch slots
-
-    slot = ResolveAddr(Module::Exe, 0x1401529b0);
-    if (slot) s_fn_SpriteSheet_GetSpriteCount = *reinterpret_cast<fn_SpriteSheet_GetSpriteCount_t*>(slot);
-    // Standalone: the dispatch slot is unregistered → resolve the Runtime export
-    // directly. UI::SpriteSheet::GetSpriteCount (const) — without it, Serialize
-    // early-returns and the icon geometry is never set up.
-    if (!s_fn_SpriteSheet_GetSpriteCount)
-        s_fn_SpriteSheet_GetSpriteCount = reinterpret_cast<fn_SpriteSheet_GetSpriteCount_t>(
-            ResolveExport("?GetSpriteCount@SpriteSheet@UI@@QEBAHXZ"));
 
     slot = ResolveAddr(Module::Exe, 0x140152b00);
     if (slot) s_fn_Time_Ctor = *reinterpret_cast<fn_Time_Ctor_t*>(slot);
@@ -355,9 +343,8 @@ void StatusIconComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
     // Scene::AddObject/RemoveObject are members now (B.3.5 caller batch I2).
-    printf("[StatusIconComponent] Funcs resolved: SpriteCount=%p "
+    printf("[StatusIconComponent] Funcs resolved: "
            "Helper_a440=%p OnRemoveOrig=%p\n",
-           (void*)s_fn_SpriteSheet_GetSpriteCount,
            (void*)s_fn_StatusIconHelper_a440,
            (void*)s_fn_OnRemove_Original);
 #endif

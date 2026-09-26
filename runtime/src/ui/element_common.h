@@ -66,12 +66,17 @@ inline Fn RtAddr(uintptr_t ghidra) {
 // slot instead and resolves through one of these. Same never-cache-a-null
 // contract as RT_EXPORT_ONCE: a miss is retried on the next call.
 // ---------------------------------------------------------------------------
+//
+// The slot is filled only when RtResolveCached itself would have cached the
+// answer (it leaves `scratch` null for a pre-RuntimePortInit hit, which must
+// NOT be frozen - rt_resolve_cache.cpp section 6; ENDGAME B.3.6 closing pass: this
+// helper used to store every hit).
 inline void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
     void* p = slot.load(std::memory_order_acquire);
     if (p == nullptr) {
         void* scratch = nullptr;
         p = RtResolveCached(mangled, &scratch);
-        if (p != nullptr) slot.store(p, std::memory_order_release);
+        if (scratch != nullptr) slot.store(scratch, std::memory_order_release);
     }
     return p;
 }
@@ -184,8 +189,13 @@ inline void StoreFlags(void* self, uint32_t newFlags) {
 // `Video::Device::_singleton` (exported data, retail 0x1801fe7a8). The screen
 // size lives at +0x04 / +0x08 of the pointed-to Device.
 // ---------------------------------------------------------------------------
+// RULE B6-5 (closing pass): InlineGetPaddedSize reaches this from member bodies
+// that run on the loader thread, so the slot lives in a namespace-scope atomic
+// (was RT_DATA_SLOT's function-local static).
+inline std::atomic<void*> g_videoDeviceSingletonSlot{nullptr};
 inline void* VideoDeviceSingleton() {
-    void** p = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void** p = static_cast<void**>(
+        AtomicExport(g_videoDeviceSingletonSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
     return p ? *p : nullptr;
 }
 
