@@ -223,14 +223,18 @@ UNIT_TEST(exe_controller_member_raw_dispatch) {
     // slot 1 (+0x08) FindTransition(node, stateIndex, int* desired)
     int desired = 3;
     CHECK_EQ(reinterpret_cast<int (*)(void*, int, int*)>(vt[1])(&node, 0, &desired), 0);
+    CHECK_EQ(desired, 3);                                   // a hit leaves *desired alone
+    desired = 42;                                           // a miss writes -1 (retail 0x140010103)
+    CHECK_EQ(reinterpret_cast<int (*)(void*, int, int*)>(vt[1])(&node, 0, &desired), -1);
+    CHECK_EQ(desired, -1);
     // slot 3 (+0x18) Enter(node, sm, idx) -> handler(node+0x18, sm)
     int smToken = 0;
     char r = reinterpret_cast<char (*)(void*, void*, int)>(vt[3])(&node, &smToken, 0);
     CHECK_EQ((int)r, 7);
     CHECK(g_seenData == static_cast<void*>(owner));
     CHECK(g_seenSm == static_cast<void*>(&smToken));
-    // slot 8 (+0x40): the tree's value (0) kept by the pilot; PORT GAP, D9 list.
-    CHECK_EQ((int)reinterpret_cast<char (*)(void*)>(vt[8])(&node), 0);
+    // slot 8 (+0x40): retail `count != 0` (Well 0x140010260), B38_RULES D9 #9.
+    CHECK_EQ((int)reinterpret_cast<char (*)(void*)>(vt[8])(&node), 1);
     t = {};
 }
 

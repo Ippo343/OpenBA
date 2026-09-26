@@ -74,20 +74,158 @@ void AbsorbResourceComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid AbsorbResourceComponent
-// (size 0x48, +0x20 capability flags 0x80, Object::Internal base + shared stub
-// vtable, zeroed body). Size from AbsorbResourceComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — AbsorbResourceComponent as a REAL class with its
+// controller member (AbsorbResourceComponent.h, B38_RULES D9 #8).
+//
+// Before: COMPONENT_INERT_FACTORY_SER — a 48-slot inert table re-filled at every
+// create, `Inert_ScalarDtor` in slot 0, and NO controller: slots 16/17 were inert
+// stubs, so the entity's StateMachineComponent never linked this component. After:
+// the compiler's 18-slot vtable, a real constructor and destructor chain, and the
+// retail controller member at +0x28 over its one-state table.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/AbsorbResourceComponent.h"
 
-// Slot 3 must be wired: retail 0x140105c00 is Component::Serialize plus TWO
-// empty Serializer scopes, and an empty scope still occupies 16 bytes in the
-// save encoding — the base-only fill read 32 bytes too few and desynced the
-// stream for every object after it.
-COMPONENT_INERT_FACTORY_SER(AbsorbResourceComponent, 0x48, 0x80,
-                            AbsorbResourceComponent_Shutdown)
-REGISTER_TYPE(AbsorbResourceComponent, "ControllerComponent",
-              &AbsorbResourceComponent_Factory, &AbsorbResourceComponent_CreateInPlace);
+#include "Component/coll_bridge.h"
+
+using AbsorbResourceCtrlDispatch = ::ControllerLive::Dispatcher<AbsorbResourceCtrlTag>;
+
+// ============================================================
+// State 0 per-frame handler — retail 0x140105950 (member column +0x18, TickAlt).
+// ============================================================
+// Every frame while the entity is in state 0, sweep the tiles of its footprint
+// and pull every loose raw material lying there into the entity's own storage:
+//
+//   map  = FindComponent<MapComponent>(entity)            0x140004680 (tile rect)
+//   stor = FindComponent<StorageComponent>(entity)        0x140006270
+//   for y in [map.y, map.y + map.h), x in [map.x, map.x + map.w):
+//       e = world grid cell (x, y)'s entity               (*(gw+0xf8): width @+0,
+//                                                          cells @+0x80, stride 0x30,
+//                                                          entity @ cell+8)
+//       rm = first component of e whose Type() == tid(0x1401c7c80), then
+//            IsDerivedFrom-confirmed, as every retail finder does
+//       if (rm && StorageCanAdd(stor, e+0x28, rm+0x28))    0x14012cd80
+//           StorageAdd(stor, e+0x28, rm+0x28)             0x14012d000
+//           if (!(e+0x40 bit 10)) { MarkForRemoval(e)     0x1400c2ea0
+//               append e to (gw+0xe8)+0xd0 }              0x140003110 SetSize(n+1, &e)
+//   return 1
+//
+// Read from the disassembly (the decompile names this AbsorbResourceDescription_
+// helper_ec70_sub_5950). The map/storage finds and the grid, storage and removal
+// derefs are UNGUARDED in retail and stay so: retail relies on every entity
+// carrying this component also carrying a MapComponent and a StorageComponent.
+// The helpers are resolved per call (no first-use cache: this runs from the main
+// thread's SM tick, the controller is built on the loader thread, B38 D7).
+typedef void*    (*fn_AbsorbFindComp_t)(int64_t entity, void* outIBP);          // 0x140004680 / 0x140006270
+typedef uint32_t (*fn_AbsorbStorageCanAdd_t)(void* storage, void* item, int qty); // 0x14012cd80
+typedef void     (*fn_AbsorbStorageAdd_t)(void* storage, void* item, int qty);    // 0x14012d000
+typedef void     (*fn_AbsorbMarkRemoval_t)(int64_t entity);                     // 0x1400c2ea0
+
+extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*time*/) {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
+    const auto findMap = reinterpret_cast<fn_AbsorbFindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
+    const auto findStorage = reinterpret_cast<fn_AbsorbFindComp_t>(ResolveAddr(Module::Exe, 0x140006270));
+    const auto canAdd = reinterpret_cast<fn_AbsorbStorageCanAdd_t>(ResolveAddr(Module::Exe, 0x14012cd80));
+    const auto add = reinterpret_cast<fn_AbsorbStorageAdd_t>(ResolveAddr(Module::Exe, 0x14012d000));
+    const auto markRemoval = reinterpret_cast<fn_AbsorbMarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
+    const uint32_t* tidRawMaterial = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7c80));
+
+    const int64_t entity = *reinterpret_cast<int64_t*>(comp + 0x10);
+    uintptr_t map = 0;
+    findMap(entity, &map);
+    void* storage = nullptr;
+    findStorage(entity, &storage);
+
+    const int64_t y0 = *reinterpret_cast<int16_t*>(map + 0x2a);
+    const int64_t x0 = *reinterpret_cast<int16_t*>(map + 0x28);
+    const int64_t yEnd = static_cast<int>(y0) + *reinterpret_cast<int16_t*>(map + 0x2e);
+    const int64_t xEnd = static_cast<int>(x0) + *reinterpret_cast<int16_t*>(map + 0x2c);
+    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const int* grid = *reinterpret_cast<int* const*>(gameWorld + 0xf8);
+
+    for (int64_t y = y0; y < yEnd; ++y) {
+        for (int64_t x = x0; x < xEnd; ++x) {
+            const int64_t cellIndex = static_cast<int64_t>(grid[0]) * y + x;
+            const int64_t cell = *reinterpret_cast<const int64_t*>(grid + 0x20) + cellIndex * 0x30;
+            int64_t cellEntity = *reinterpret_cast<int64_t*>(cell + 8);
+            if (cellEntity == 0) continue;
+
+            void* rawMaterial = nullptr;
+            const int compCount = *reinterpret_cast<int*>(cellEntity + 0x38);
+            const int64_t comps = *reinterpret_cast<int64_t*>(cellEntity + 0x30);
+            for (int i = 0; i < compCount; ++i) {
+                ::Component* c = *reinterpret_cast<::Component**>(comps + static_cast<int64_t>(i) * 8);
+                if (c->Type() != *tidRawMaterial) continue;
+                if (fn_IsDerivedFrom(c, *tidRawMaterial)) rawMaterial = c;
+                break;
+            }
+            int64_t rmIBP = 0;
+            new (&rmIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawMaterial));   // B.3.3 bridge
+            if (rmIBP == 0) continue;
+
+            void* item = *reinterpret_cast<void**>(cellEntity + 0x28);
+            const int quantity = *reinterpret_cast<int*>(rmIBP + 0x28);
+            if (!(canAdd(storage, item, quantity) & 0xff)) continue;
+            add(storage, item, *reinterpret_cast<int*>(rmIBP + 0x28));
+
+            const int64_t entityList = *reinterpret_cast<int64_t*>(
+                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xe8);
+            if (((*reinterpret_cast<uint32_t*>(cellEntity + 0x40) >> 10) & 1) != 0) continue;
+            markRemoval(cellEntity);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
+                .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &cellEntity);
+        }
+    }
+    return 1;
+}
+
+// The retail table, transcribed from the static initializer 0x14014e4f0 ->
+// 0x14002ec70: ONE state, id 0, with only the per-frame TickAlt column (+0x18)
+// set (0x140105950 above); no enter, no update, no transition, no event. Built
+// ONCE at static-init time, as retail's initializer does (B38 D6/D7).
+static void AbsorbResourceComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = AbsorbResourceCtrlDispatch::table;
+    if (t.count != 0) return;                      // idempotent
+    TableRegisterState(t, 0, nullptr, nullptr,
+                       reinterpret_cast<void*>(&AbsorbResource_State0Tick), nullptr);
+}
+static const bool s_absorbResourceStateTableBuilt = (AbsorbResourceComponent_PopulateStateTable(), true);
+
+// 0x140105cc0. Component() is the CALL 0x1401188b0; the 0x140162b80 and
+// 0x140162000 stamps and the member's 0x14015f070 / 0x140161fb0 stamps are the
+// compiler's; `_controller(this)` is the +0x40 back-pointer store and the +0x30 /
+// +0x38 zeroes. No flag OR (0x80).
+AbsorbResourceComponent::AbsorbResourceComponent() : _controller(this) {}
+
+// [0] 0x14002ebf0: the dtor 0x140105c60 inlined (restamps + ~Internal), MemFree on &1.
+Object::Base* AbsorbResourceComponent::DeletingDtor(unsigned flags) {
+    this->~AbsorbResourceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x140105c60: restamp + ~Internal, no own work.
+AbsorbResourceComponent::~AbsorbResourceComponent() = default;
+
+// [3] 0x140105c00: Component::Persist plus TWO empty Serializer scopes — an
+// empty scope still occupies 16 bytes in the save encoding (the body resolves its
+// own helpers first: slot 3 is the first call on a load).
+void AbsorbResourceComponent::Persist(void* stream) { AbsorbResourceComponent_Shutdown(this, stream); }
+
+// create 0x14002ea20: MemAlloc(0x48, 8), then the ctor.
+void* AbsorbResourceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AbsorbResourceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AbsorbResourceComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* AbsorbResourceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AbsorbResourceComponent());
+}
+
+DEFINE_EXE_VTABLE(AbsorbResourceComponent, "_ZTV23AbsorbResourceComponent")
+DEFINE_EXE_TYPE(AbsorbResourceComponent, "ControllerComponent")

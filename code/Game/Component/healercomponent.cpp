@@ -174,20 +174,25 @@ extern "C" char HealerComponent_EnterDemolish(void* comp, void* /*sm*/) {
     return 0;
 }
 
-// ===== Standalone factory =====
-// The WellComponent pattern one for one: same size class (0x48), same flags (0x82),
-// the same slot 16 (GetDefaultState -> 2, shared fn 0x1400026c0) and slot 17
-// (CreateState -> self+0x28, shared fn 0x140004080), and a two-state retail table.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — HealerComponent as a REAL class (HealerComponent.h).
+//
+// Before: a 48-slot hand-built `HealerComponent_LiveVtable` filled at every
+// create (FillTypedVtable + FinishLiveVtable), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<HealerCtrlTag> table stamped into raw bytes at +0x28.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/HealerComponent.h"
 #include "Component/controller_state_table.h"
 
-namespace { struct HealerCtrlTag {}; }
 using HealerCtrlDispatch = ::ControllerLive::Dispatcher<HealerCtrlTag>;
 
 // The retail table, transcribed from 0x14004b020 call for call. Its RegisterState
 // instantiation (0x1400066e0) zero-fills the trans30/trans38/update columns, so every
 // handler but Enter is null -- verified in the callee, not assumed from the call site.
+// Built ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
 static void HealerComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = HealerCtrlDispatch::table;
@@ -202,60 +207,42 @@ static void HealerComponent_PopulateStateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);
 }
+static const bool s_healerStateTableBuilt = (HealerComponent_PopulateStateTable(), true);
 
-static uint32_t HealerComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("HealerComponent");
-    return cached;
-}
-static void* HealerComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-static void HealerComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
-    HealerComponent_Shutdown(reinterpret_cast<HealerComponent*>(s), stream);
-}
-static void HealerComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
-    HealerComponent_OnRemove(reinterpret_cast<HealerComponent*>(s));
-}
-static int   HealerComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
-static void* HealerComponent_CreateState(void* self) {               // 0x140004080
-    return reinterpret_cast<uint8_t*>(self) + 0x28;
+// 0x14004af70. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; then `_flags |= 2` (0x82).
+HealerComponent::HealerComponent() : _controller(this) {
+    OrFlagsInCtor(0x2);
 }
 
-static void HealerComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
-    // does not care whether this component's live feature is enabled. Wired
-    // UNCONDITIONALLY -- behind a gate, a disabled flag left the class falling
-    // through to base-only Component_Serialize, which skips this body's bytes
-    // and desyncs the stream for EVERY object after it.
-    // See reference_vtable_slot3_serialize_never_installed.
-    HealerComponent_LiveVtable[3]  = reinterpret_cast<void*>(&HealerComponent_ShutdownVSlot);
-    HealerComponent_LiveVtable[7]  = reinterpret_cast<void*>(&HealerComponent_OnRemoveVSlot);
-    HealerComponent_LiveVtable[16] = reinterpret_cast<void*>(&HealerComponent_GetDefaultState);
-    HealerComponent_LiveVtable[17] = reinterpret_cast<void*>(&HealerComponent_CreateState);
-    HealerComponent_PopulateStateTable();
-    if (mem) {
-        // Embedded state node at +0x28: dispatcher vtable + the node+0x18
-        // back-pointer the tail-called handlers read as their `this`.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
-            reinterpret_cast<void*>(HealerCtrlDispatch::Vtable());
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
-    }
+// [0] 0x140006660: ~HealerComponent (0x14004af10), MemFree on &1.
+Object::Base* HealerComponent::DeletingDtor(unsigned flags) {
+    this->~HealerComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x14004af10: restamp + ~Internal, no own work.
+HealerComponent::~HealerComponent() = default;
+
+// create 0x140006490: MemAlloc(0x48, 8), then the ctor.
+void* HealerComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HealerComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HealerComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* HealerComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HealerComponent());
 }
 
-extern "C" void* HealerComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x82,
-        HealerComponent_LiveVtable,
-        reinterpret_cast<void*>(&HealerComponent_LiveGetTypeId));
-    HealerComponent_FinishLiveVtable(p);
-    return p;
-}
-static void* HealerComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x82,
-        HealerComponent_LiveVtable,
-        reinterpret_cast<void*>(&HealerComponent_LiveGetTypeId));
-    HealerComponent_FinishLiveVtable(mem);
-    return mem;
-}
+// [3] 0x14004aeb0. Slot 3 is the first call into the class on a load; the body
+// resolves its own helpers.
+void HealerComponent::Persist(void* stream) { HealerComponent_Shutdown(this, stream); }
 
-REGISTER_TYPE(HealerComponent, "ControllerComponent",
-              &HealerComponent_Factory, &HealerComponent_CreateInPlace);
+// [7] 0x14004ae70 — leave the town healer registry.
+void HealerComponent::OnRemove() { HealerComponent_OnRemove(this); }
+
+DEFINE_EXE_VTABLE(HealerComponent, "_ZTV15HealerComponent")
+DEFINE_EXE_TYPE(HealerComponent, "ControllerComponent")

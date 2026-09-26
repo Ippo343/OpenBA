@@ -22,29 +22,7 @@ namespace HappinessComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x140159580;
 }
 
-struct HappinessComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    // HappinessComponent own data
-    uint8_t  happinessFlag;     // +0x28: zeroed (byte)
-    uint8_t  _pad29[7];         // +0x29: padding to +0x30
-
-    // Controller sub-object at +0x30 (shifted from normal +0x28)
-    void*    controllerVtable;  // +0x30
-    void*    controllerData0;   // +0x38
-    void*    controllerData1;   // +0x40
-    void*    selfPtr;           // +0x48
-};
-
-static_assert(sizeof(HappinessComponent) == 0x50, "HappinessComponent size mismatch");
-static_assert(offsetof(HappinessComponent, vtable) == 0x00, "");
-static_assert(offsetof(HappinessComponent, flags) == 0x20, "");
-static_assert(offsetof(HappinessComponent, happinessFlag) == 0x28, "");
-static_assert(offsetof(HappinessComponent, controllerVtable) == 0x30, "");
-static_assert(offsetof(HappinessComponent, selfPtr) == 0x48, "");
+// ENDGAME B.3.8 MI-A: the POD is gone — `HappinessComponent` is a real class now
+// (code/Game/Component/HappinessComponent.h, compiler vtable, controller member). This forwarder
+// keeps the old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/HappinessComponent.h"

@@ -24,33 +24,7 @@ namespace NomadComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x140159fd0;
 }
 
-struct NomadComponent {
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    // Own data fields
-    void*    field28;           // +0x28: zeroed
-    void*    field30;           // +0x30: zeroed
-    void*    field38;           // +0x38: zeroed
-    void*    field40;           // +0x40: zeroed
-    void*    field48;           // +0x48: zeroed
-    uint32_t field50;           // +0x50: zeroed (dword)
-    uint8_t  _pad54[4];         // +0x54: padding
-
-    // Controller sub-object at +0x58
-    void*    controllerVtable;  // +0x58
-    void*    controllerData0;   // +0x60
-    void*    controllerData1;   // +0x68
-    void*    selfPtr;           // +0x70
-};
-
-static_assert(sizeof(NomadComponent) == 0x78, "NomadComponent size mismatch");
-static_assert(offsetof(NomadComponent, vtable) == 0x00, "");
-static_assert(offsetof(NomadComponent, flags) == 0x20, "");
-static_assert(offsetof(NomadComponent, field28) == 0x28, "");
-static_assert(offsetof(NomadComponent, controllerVtable) == 0x58, "");
-static_assert(offsetof(NomadComponent, selfPtr) == 0x70, "");
+// ENDGAME B.3.8 MI-A: the POD is gone — `NomadComponent` is a real class now
+// (code/Game/Component/NomadComponent.h, compiler vtable, controller member). This forwarder
+// keeps the old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/NomadComponent.h"

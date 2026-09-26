@@ -470,77 +470,83 @@ extern "C" void AttendanceComponent_SerializeSlot(void* selfP, void* stream) {
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();                                       // B.3.4 bridge
 }
 
-// ============================================================
-// Vtable slots 19/20/21 — the description accessors
-// ============================================================
-// All three are one-instruction bodies in retail:
-//   19 (0x1400026e0) MOV RAX,[0x1401c3f80]; RET   — the AttendanceDescription TypeInfo
-//   20 (0x1400026d0) MOV EAX,[0x1401c3f78]; RET   — the AttendanceDescription type id
-//   21 (0x140044700) MOV EAX,1;             RET
-// 19/20 read the .rdata pair that ComponentEntity uses to match a component to the
-// Description class it is built from. In standalone that .rdata is not mapped, so the
-// faithful answers come from the live type registry / the registered type-id storage
-// (0x1401c3f78 is filled by reg_economy_typeids.cpp) rather than from the globals.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — AttendanceComponent as a REAL class (AttendanceComponent.h).
 //
-// ⚠ Slot 21's retail body is at 0x140044700, NOT 0x140047000 — the coverage harness
-// carried a transposed digit and pointed at CemeteryDescription_sub_6fc0.
+// Before: CONTROLLER_LIVE_FACTORY_STATES (a 48-slot table re-filled at every
+// create, slots 3/7/9/13/14/18-21 re-installed from PopulateAndWireSlots), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<AttendanceCtrlTag> table stamped into raw bytes at +0x38.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
+#include "Component/AttendanceComponent.h"
 
-static void* AttendanceComponent_GetDescTypeInfo(void*) {
-    static void* cached = nullptr;
-    if (!cached) cached = ::Object::GetTypeInfoByName("AttendanceDescription");
-    return cached;
-}
-static uint32_t AttendanceComponent_GetDescTypeId(void*) {
-    static uint32_t* storage = nullptr;
-    if (!storage) storage = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c3f78));
-    return storage ? *storage : 0;
-}
-static int AttendanceComponent_Slot21Const(void*) { return 1; }
-
-// ===== Standalone factory (Foundation D — component instantiation) =====
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
-
-// Promoted 2026-08-15 from the hand-expanded inert factory (which reached only slots
-// 13/14) to a full live ControllerComponent.
+// The controller drives the OPEN (2) / CLOSED (3) states (attendancecomponent_states.cpp);
+// slots 16/17 are what let the StateMachineComponent link the member. Default state 2
+// (0x1400026c0), member at +0x38 (0x1400026b0) — NOT the ResourceProduce family's
+// +0x28. The state table is built ONCE at static-init time, as retail's static
+// initializer does (B38 D6/D7).
 //
-// The previous wave made the school's work checkbox clickable, but clicking it drove a
-// state machine that did not exist: slots 16/17 (GetDefaultState / CreateState) still
-// held the inert stub, so the StateMachineComponent never linked the embedded node and
-// neither state 2 (open) nor state 3 (closed) ever ran. That is the "live command pair,
-// inert controller" shape the coverage harness reported as 12/22.
-//
-// Size 0x58 / Flags 0x8a / NodeOff 0x38 / DefState 2 all read off
-// AttendanceComponent_Ctor (0x140044580): Component_Ctor's 0x80 OR'd with the leaf's
-// 0xa; the node vtable written to +0x38 and the owning-component back-pointer to +0x50
-// (= node + 0x18); and slot 16's `MOV EAX,2; RET`.
-//
-// ⚠ NodeOff is 0x38, not the ResourceProduce family's 0x28. AttendanceComponent is not
-// an RPC subclass and shares none of that table.
-extern "C" void** AttendanceCtrl_NodeVtable();      // attendancecomponent_states.cpp
-extern "C" void   AttendanceCtrl_PopulateTable();
-extern "C" void*  ControllerLive_ScalarDeletingDtor(void*, unsigned int);
+// The tree's slots 18-21 (ControllerLive_ScalarDeletingDtor, the description type
+// info / type id, `return 1`) were AttendanceDescription's table 0x140158d70 read past
+// retail's 18-slot end (B38 D3.5); no dispatch past slot 17 exists in the tree. Gone.
+extern "C" void AttendanceCtrl_PopulateTable();
+static const bool s_attendanceStateTableBuilt = (AttendanceCtrl_PopulateTable(), true);
 
-static void AttendanceCtrl_PopulateAndWireSlots();
-
-CONTROLLER_LIVE_FACTORY_STATES(AttendanceComponent, 0x58, 0x8a, 0x38, 2,
-                               AttendanceCtrl_NodeVtable, AttendanceCtrl_PopulateAndWireSlots)
-
-static void AttendanceCtrl_PopulateAndWireSlots() {
-    // From inside InstallLive only — FillTypedVtable re-stubs the shared vtable on every
-    // instance creation, so every real slot must be (re)installed from here.
-    AttendanceComponent_LiveVtable[3]  = reinterpret_cast<void*>(&AttendanceComponent_SerializeSlot);
-    AttendanceComponent_LiveVtable[7]  = reinterpret_cast<void*>(&AttendanceComponent_Unregister);
-    AttendanceComponent_LiveVtable[9]  = reinterpret_cast<void*>(&AttendanceComponent_Update);
-    AttendanceComponent_LiveVtable[13] = reinterpret_cast<void*>(&AttendanceComponent_CommandMask);
-    AttendanceComponent_LiveVtable[14] = reinterpret_cast<void*>(&AttendanceComponent_Command);
-    AttendanceComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
-    AttendanceComponent_LiveVtable[19] = reinterpret_cast<void*>(&AttendanceComponent_GetDescTypeInfo);
-    AttendanceComponent_LiveVtable[20] = reinterpret_cast<void*>(&AttendanceComponent_GetDescTypeId);
-    AttendanceComponent_LiveVtable[21] = reinterpret_cast<void*>(&AttendanceComponent_Slot21Const);
-    AttendanceCtrl_PopulateTable();
+// 0x140044580. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// +0x28 = +0x30 = 0; `_controller(this)` is the member's back-pointer at +0x50; then
+// `_flags |= 0xa` (0x8a).
+AttendanceComponent::AttendanceComponent()
+    : field28(nullptr), field30(nullptr), _controller(this) {
+    OrFlagsInCtor(0xa);
 }
-REGISTER_TYPE(AttendanceComponent, "ControllerComponent",
-              &AttendanceComponent_Factory, &AttendanceComponent_CreateInPlace);
+
+// [0] 0x140002860: ~AttendanceComponent (0x140044510), MemFree on &1.
+Object::Base* AttendanceComponent::DeletingDtor(unsigned flags) {
+    this->~AttendanceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x140044510: the waiting queue (+0x28 data, +0x30 count/capacity) is freed and
+// zeroed; the member's and the bases' dtors (restamps only) and ~Internal are the
+// compiler's chain.
+AttendanceComponent::~AttendanceComponent() {
+    Object::detail::InternalMemFree(field28);
+    field28 = nullptr;
+    field30 = nullptr;
+}
+
+// create 0x140002670: MemAlloc(0x58, 8), then the ctor.
+void* AttendanceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AttendanceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AttendanceComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* AttendanceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AttendanceComponent());
+}
+
+// [3] 0x140044410.
+void AttendanceComponent::Persist(void* stream) { AttendanceComponent_SerializeSlot(this, stream); }
+
+// [7] 0x1400443d0 — leave the town attendance registry (state 3's enter also calls
+// it through the vtable).
+void AttendanceComponent::OnRemove() { AttendanceComponent_Unregister(this); }
+
+// [9] 0x140044370 — the elapsed-time argument is not read by retail's body.
+void AttendanceComponent::Update(void* /*time*/) { AttendanceComponent_Update(this); }
+
+// [13] 0x140043f10 — `accepting ? 3 : 1`; the command id is ignored, as in retail.
+uint32_t AttendanceComponent::CommandMask(int command) {
+    return AttendanceComponent_CommandMask(this, command);
+}
+
+// [14] 0x140043e80 — flip the workplace's accepting flag; drain on the OFF edge.
+void AttendanceComponent::Command(int command) { AttendanceComponent_Command(this, command); }
+
+DEFINE_EXE_VTABLE(AttendanceComponent, "_ZTV19AttendanceComponent")
+DEFINE_EXE_TYPE(AttendanceComponent, "ControllerComponent")
