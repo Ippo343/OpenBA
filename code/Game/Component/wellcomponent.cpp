@@ -410,20 +410,27 @@ extern "C" char WellComponent_EnterDemolish(void* comp, void* /*sm*/) {
     return 0;
 }
 
-// ===== Standalone factory =====
-// Bring-up is the ResidenceComponent pattern, one for one: WellComponent has the
-// same slot 16 (GetDefaultState -> 2) and slot 17 (CreateState -> self+0x28), and
-// its retail state table has the same two-state shape. Without the live path the
-// component is inert, nothing ever enters state 2, and the town has wells that no
-// bucket can be filled from.
+// ============================================================================
+// ENDGAME B.3.8 pilot — WellComponent as a REAL class (WellComponent.h).
+//
+// Before: a 48-slot hand-built `WellComponent_LiveVtable` filled at every
+// create (FillTypedVtable + FinishLiveVtable), `Inert_ScalarDtor` in slot 0
+// (only `~Internal`), `Dispatcher<WellCtrlTag>::Vtable()` stamped into raw
+// bytes at +0x28. After: the compiler's 18-slot vtable, a real constructor and
+// destructor chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include "Component/controller_state_table.h"
+#include "Component/WellComponent.h"
 
-namespace { struct WellCtrlTag {}; }
 using WellCtrlDispatch = ::ControllerLive::Dispatcher<WellCtrlTag>;
 
-// The retail table, transcribed from 0x14014bc20 call for call.
+// The retail table, transcribed from 0x14014bc20 call for call. Retail runs it
+// ONCE from a static initializer; the tree ran it (idempotently, unsynchronised)
+// on every create, from both the loader and the main thread. It now runs at
+// static-init time like retail's (B6-5: no first-use race). The table is
+// zero-initialised storage (constant init), so the order against other static
+// initialisers does not matter.
 static void WellComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = WellCtrlDispatch::table;
@@ -437,70 +444,47 @@ static void WellComponent_PopulateStateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);
 }
+static const bool s_wellStateTableBuilt = (WellComponent_PopulateStateTable(), true);
 
-static uint32_t WellComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("WellComponent");
-    return cached;
+// 0x14005d060. Component() is the CALL 0x1401188b0; the 0x140162b80 and
+// 0x14015ae90 stamps and the member's 0x14015f070 / 0x14015ae40 stamps are the
+// compiler's; `_controller(this)` is the +0x40 back-pointer store and the +0x30
+// / +0x38 zeroes; then `_flags |= 2` (0x82 with Component's 0x80).
+WellComponent::WellComponent() : _controller(this) {
+    OrFlagsInCtor(0x2);
 }
-static void* WellComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-static void WellComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
-    // Slot 3 is the FIRST call into this class on a load-from-save:
-    // PersistObject creates the object and dispatches vt[0x18] before Startup
-    // or any tick. Until the resolver runs every s_fn_* is null and the fully
-    // null-guarded body consumes ZERO bytes, so the record is short by however
-    // much this component would have written, and the stream desyncs several
-    // records LATER with no crash at the defect itself.
-    // Same defect as ParticleComponent (2026-09-04) and StateMachineComponent
-    // (2026-08-28). Rule, from uicomponent_serialize.cpp: resolve
-    // unconditionally at the top of every call.
+// [0] 0x14000fe50: ~WellComponent (0x14005d000), MemFree on &1.
+Object::Base* WellComponent::DeletingDtor(unsigned flags) {
+    this->~WellComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [3] 0x14005cfa0. Slot 3 is the FIRST call into this class on a load-from-save
+// (PersistObject creates the object and dispatches slot 3 before Startup), so
+// the lazy resolver runs first, as the old VSlot did — the body's own helpers
+// are null until it has.
+void WellComponent::Persist(void* stream) {
     WellComponent_InitFuncs();
-    WellComponent_Shutdown(reinterpret_cast<WellComponent*>(s), stream);
-}
-static void WellComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
-    WellComponent_OnRemove(reinterpret_cast<WellComponent*>(s));
-}
-static int   WellComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
-static void* WellComponent_CreateState(void* self) {               // 0x140004080
-    return reinterpret_cast<uint8_t*>(self) + 0x28;
+    WellComponent_Shutdown(this, stream);
 }
 
-static void WellComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
-    // does not care whether this component's live feature is enabled. Wired
-    // UNCONDITIONALLY, ahead of the gate -- behind it, a disabled flag left the
-    // class falling through to base-only Component_Serialize, which skips this
-    // body's bytes and desyncs the stream for EVERY object after it.
-    // See reference_vtable_slot3_serialize_never_installed.
-    WellComponent_LiveVtable[3]  = reinterpret_cast<void*>(&WellComponent_ShutdownVSlot);
-    WellComponent_LiveVtable[7]  = reinterpret_cast<void*>(&WellComponent_OnRemoveVSlot);
-    WellComponent_LiveVtable[16] = reinterpret_cast<void*>(&WellComponent_GetDefaultState);
-    WellComponent_LiveVtable[17] = reinterpret_cast<void*>(&WellComponent_CreateState);
-    WellComponent_PopulateStateTable();
-    if (mem) {
-        // Embedded state node at +0x28: dispatcher vtable + the node+0x18
-        // back-pointer the tail-called handlers read as their `this`.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
-            reinterpret_cast<void*>(WellCtrlDispatch::Vtable());
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
-    }
+// [7] 0x14005cf60.
+void WellComponent::OnRemove() { WellComponent_OnRemove(this); }
+
+// create 0x14000fc80: MemAlloc(0x48, 8), then the ctor.
+void* WellComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(WellComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) WellComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (WellComponent.h).
+void* WellComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) WellComponent());
 }
 
-extern "C" void* WellComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x82,
-        WellComponent_LiveVtable,
-        reinterpret_cast<void*>(&WellComponent_LiveGetTypeId));
-    WellComponent_FinishLiveVtable(p);
-    return p;
-}
-static void* WellComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x82,
-        WellComponent_LiveVtable,
-        reinterpret_cast<void*>(&WellComponent_LiveGetTypeId));
-    WellComponent_FinishLiveVtable(mem);
-    return mem;
-}
-
-REGISTER_TYPE(WellComponent, "ControllerComponent",
-              &WellComponent_Factory, &WellComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(WellComponent, "_ZTV13WellComponent")
+DEFINE_EXE_TYPE(WellComponent, "ControllerComponent")

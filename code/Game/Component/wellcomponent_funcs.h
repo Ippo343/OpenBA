@@ -1,7 +1,8 @@
 #pragma once
 // Function declarations for deeply reimplemented WellComponent methods.
+// ENDGAME B.3.8 pilot: `WellComponent` is a real class (Component/WellComponent.h).
 
-#include "WellComponent.h"
+#include "Component/WellComponent.h"
 #include <cstdint>
 
 // Shutdown (vtable slot [3], 0x14005cfa0): Component_Serialize + two empty serializer blocks.

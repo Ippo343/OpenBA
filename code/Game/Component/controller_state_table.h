@@ -321,3 +321,49 @@ inline void RequestStateTransition(void* sm, int desiredStateId) {
 }
 
 }  // namespace ControllerLive
+
+// ============================================================================
+// ENDGAME B.3.8 (B38_RULES.md D6) — the table-driven controller as a REAL
+// member class. A converted ControllerComponent leaf embeds one of these BY
+// VALUE at its retail offset instead of stamping `Dispatcher<Tag>::Vtable()`
+// into raw bytes; its compiler vtable has retail's 9 slots (the hand-built
+// `Dispatcher<Tag>::vtbl` has 16, slots 9-15 `Stub`, which retail does not
+// have). Every override forwards to the SAME Dispatcher<Tag> static the old
+// table held, so the behaviour is byte-for-byte the old table's.
+// ============================================================================
+#include "Component/ControllerComponent.h"
+
+namespace ControllerLive {
+
+template <class Tag>
+class TableController final : public ::ControllerComponent::Controller {
+public:
+    explicit TableController(::Component* owner) { _owner = owner; }
+    ~TableController() = default;
+
+    int  FindState(int stateId) override { return Dispatcher<Tag>::Step(this, stateId); }
+    int  FindTransition(int stateIndex, int* desired) override {
+        return Dispatcher<Tag>::RequestTransition(this, stateIndex, desired);
+    }
+    char PostEvent(void* sm, int stateIndex, int eventId) override {
+        return Dispatcher<Tag>::PostEvent(this, sm, stateIndex, eventId);
+    }
+    char Enter(void* sm, int stateIndex) override { return Dispatcher<Tag>::Enter(this, sm, stateIndex); }
+    char Update(void* sm, int stateIndex) override { return Dispatcher<Tag>::Update(this, sm, stateIndex); }
+    void OnTransition(void* sm, int stateIndex, int transitionIndex) override {
+        Dispatcher<Tag>::OnState(this, sm, stateIndex, transitionIndex);
+    }
+    char Tick(void* sm, void* time, int stateIndex) override {
+        return Dispatcher<Tag>::Trans30(this, sm, time, stateIndex);
+    }
+    char TickAlt(void* sm, void* time, int stateIndex) override {
+        return Dispatcher<Tag>::Trans38(this, sm, time, stateIndex);
+    }
+    // PORT GAP (B38_RULES D9 list): retail slot 8 (Well 0x140010260) answers
+    // `table count != 0`; the hand-built Dispatcher table had `Stub` (0) here,
+    // and this keeps the tree's 0 so the pilot changes no behaviour. The MI
+    // blocks make it retail's in a titled behaviour-change commit.
+    char HasStates() override { return 0; }
+};
+
+}  // namespace ControllerLive

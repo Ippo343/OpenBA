@@ -1,84 +1,101 @@
 // code/Game/Component/welldescription.cpp
 // WellDescription (entity description block) — well marker.
-// Extends Object::External (0x20 base). Vtable 0x14015af20. Parent "Description".
-// Size 0x20 (NO fields beyond the External base). GetVersion=1.
-//
-// Factory 0x14014bb80-area (MemAlloc 0x20 + vtable only, no defaults).
-// Serialize (vtable +0x28, 0x14005d170): Serializer ctor/dtor only, no payload.
-// Decompiled READ-ONLY from Application-x64.exe.
+// ENDGAME B.3.8 pilot: a REAL class (Component/WellDescription.h) with a
+// compiler-generated vtable. The retail evidence for every slot is in the
+// header. Before: an 11-slot hand-built `g_WellDescription_Vtable` (slot 10 a
+// "guard" past retail's end), registered at 0x14015af20 although nothing in the
+// tree reads that address back (B38_RULES D5: a table with no by-address reader
+// loses its registration with the table).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/WellDescription.h"
+#include "Component/Description.h"
+#include "Component/WellComponent.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kWellDescriptionVtable = 0x14015af20;
+// ============================================================================
+// Description (the abstract base; its members live with the pilot leaf until
+// block K1 gives it its own file — B38_FILEMAP.md)
+// ============================================================================
 
-static void WellDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kWellDescriptionVtable);
+// [0] 0x140031c70: stamp 0x1401629a0, `~External`, MemFree on &1.
+Object::Base* Description::DeletingDtor(unsigned flags) {
+    this->~Description();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// [1]/[2] over Description's BaseTypeInfo; the abstract registration stays in
+// factory_registrations_bulk.cpp (B38 D4). Every leaf overrides both.
+const char* Description::TypeName() const { return "Description"; }          // 0x140031c60
+uint32_t    Description::Type() const {                                      // 0x140031c50
+    return ::Object::GetTypeIdByName("Description");
 }
 
-void WellDescription_Serialize(void* self, void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    // No payload fields.
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// ============================================================================
+// WellDescription
+// ============================================================================
+
+// [0] 0x14000fdf0: ~WellDescription (0x14005d1c0) -> ~Description -> ~External,
+// then MemFree on &1. Retail's chain; the old table's slot 0 did the same by hand.
+Object::Base* WellDescription::DeletingDtor(unsigned flags) {
+    this->~WellDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void* WellDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kWellDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [5] 0x14005d170: one EMPTY Serializer(stream, 0) scope (no payload), then
+// `MOV AL,1`. The old slot was declared `void` and returned whatever RAX held.
+bool WellDescription::Serialize(void* stream) {
+    IO::Serializer scope(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    return true;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [6] 0x14000fd90 / [7] 0x140001640 — PORT GAP (B38_RULES D3, D9 list). Retail:
+// Reconstruct = DeletingDtor(0) then the ctor again on `this`; Destruct =
+// DeletingDtor(0). The hand-built table had `return 0` stubs in both slots; the
+// pilot keeps them so it changes no behaviour. Block K1 transcribes retail's
+// bodies for all 78 descriptions in ONE titled behaviour-change commit.
+Object::External* WellDescription::Reconstruct() { return nullptr; }
+void              WellDescription::Destruct() {}
 
-static uint32_t WellDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("WellDescription");
-    return cached;
+// [8] 0x14000fde0: WellComponent's type id through the hidden return slot.
+Object::Type* WellDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = WellComponent::TypeId();
+    return ret;
 }
-static int   WellDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   WellDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* WellDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* WellDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* WellDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "WellComponent"); }
-
-static void* g_WellDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&WellDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&WellDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&WellDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&WellDescription_Stub_Return1),    // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&WellDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&WellDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&WellDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&WellDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&WellDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&WellDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&WellDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterWellDescriptionVtable() {
-    RegisterExeAddr(kWellDescriptionVtable, reinterpret_cast<uintptr_t>(g_WellDescription_Vtable));
+// [9] 0x14000fd40: placement-new on `this` (null-checked by MSVC's placement new).
+// The old table put the static CreateInPlace in this slot, i.e. the same
+// behaviour; retail folded the two identical bodies.
+Object::External* WellDescription::Construct() {
+    return new (static_cast<void*>(this)) WellDescription();
 }
-extern "C" void* WellDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x20, 8);
+
+// create 0x14000fce0: MemAlloc(0x20, 8), then the (inlined) ctor.
+void* WellDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(WellDescription), 8);
     if (!p) return nullptr;
-    WellDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) WellDescription());
 }
-static void* WellDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    WellDescription_Init(memory);
-    return memory;
+// createInPlace 0x14000fd40.
+void* WellDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) WellDescription());
 }
-REGISTER_TYPE(WellDescription, "Description",
-              &WellDescription_Factory, &WellDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(WellDescription, "_ZTV15WellDescription")
+DEFINE_EXE_TYPE(WellDescription, "Description")
+
+// B38_RULES D5 — the registration shape a converted class uses while an
+// unconverted reader may still stamp its retail table by address: the exe
+// address serves the COMPILER's vtable. Nothing in the tree reads 0x14015af20
+// back today (SEAM_AND_FILEMAP §1.3), so this row is reader-less; it is kept as
+// the pilot's exemplar of the seam and goes with the other reader-less rows in
+// the closing pass.
+#include "resolve.h"
+extern "C" void RegisterWellDescriptionVtable() {
+    RegisterExeAddr(0x14015af20, reinterpret_cast<uintptr_t>(WellDescription::Vtable()));
+}
