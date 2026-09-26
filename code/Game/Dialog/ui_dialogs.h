@@ -6,25 +6,6 @@
 #include <cstdint>
 
 // ============================================================
-// TutorialHighlightDialog
-// ============================================================
-
-// Startup (vtable +0x20): Finds "glowGroup", "glow", "arrow" elements
-// and stores them at +0xC0, +0xC8, +0xD0.
-void TutorialHighlightDialog_Startup(TutorialHighlightDialog* self);
-
-// Update (vtable +0x30): Positions glow+arrow overlay each frame.
-//   If dataE8 != 0: positions arrow based on world-space rect stored in dataE8.
-//   If dataE8 == 0: positions glow+arrow based on the target UI element in dataE0.
-// Unhookable via trampoline (rel branch at byte 8); installed via vtable patch.
-void TutorialHighlightDialog_Draw(TutorialHighlightDialog* self);
-
-// Load (vtable +0x38): Accumulates delta-time ticks into dataB8 (System::Time).
-// param2 is a pointer to the tick count to add. Original is only 11 bytes —
-// unhookable via trampoline; installed via vtable patch.
-void TutorialHighlightDialog_Load(TutorialHighlightDialog* self, void* param2);
-
-// ============================================================
 // MainMenuDialog
 // ============================================================
 

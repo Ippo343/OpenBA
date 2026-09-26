@@ -54,8 +54,6 @@ extern "C" void  TutWave_StepExecute(void*, void*, void*, uint64_t);            
 
 // --- (b) vtables + ctors (code/Game/Tutorial/tutorial_dialog_vtables.cpp) ---
 extern "C" void* GetTutorialUIVtable();
-extern "C" void* GetTutorialHighlightDialogVtable();
-extern "C" void* TutWave_HighlightDialogCtor(void*, void*, void*, void*, void*, int32_t, void*);
 
 void RegisterTutorialWaveBatch() {
     // (a) helpers
@@ -79,8 +77,4 @@ void RegisterTutorialWaveBatch() {
     //     the concrete subclass table keeps slot 0/1/2 valid for that window —
     //     the alternative today is a null store.
     RegisterExeAddr(0x140160f30, reinterpret_cast<uintptr_t>(GetTutorialUIVtable()));
-    RegisterExeAddr(0x1401609e0, reinterpret_cast<uintptr_t>(GetTutorialHighlightDialogVtable()));
-
-    // (b) ctors
-    RegisterExeAddr(0x1400e01d0, reinterpret_cast<uintptr_t>(&TutWave_HighlightDialogCtor));
 }

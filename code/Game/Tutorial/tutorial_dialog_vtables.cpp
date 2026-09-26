@@ -59,6 +59,7 @@
 #include "Dialog/ui_panels.h"
 #include "Tutorial/TutorialGoalDialog.h"
 #include "Tutorial/TutorialSetupDialog.h"
+#include "Tutorial/TutorialHighlightDialog.h"
 #include "Object/factory_registration.h"
 #include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (see TutDlg_UnregisterInternal)
 #include "engine_funcs.h"
@@ -219,84 +220,6 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 
 }  // namespace tut_ui
 
-// ===========================================================================
-// TutorialHighlightDialog  (UI::DialogInstance, 0xF0)
-//
-// This one is NOT built by the External factory. TutorialSetupDialog's
-// open-dialog helper (retail 0x1400E2700, ported as TutWave_OpenHighlightDialog)
-// builds it BY HAND: MemAlloc(0xF0) -> DialogInstance::DialogInstance -> a
-// single store of the .rdata vtable at 0x1401609E0. That is the
-// [[project-menu-dialog-vtables-unregistered]] shape — promoting a factory
-// changes nothing; what it needs is a real table registered at 0x1401609E0.
-//
-// Slot 6 (Draw, retail 0x1400DFFE0) and both of its positioning helpers
-// (0x1400DFDA0 world-entity / 0x1400DFAC0 UI-element) are now ported in
-// tutorialhighlightdialog.cpp, so the glow ring and the arrow track their
-// target and bob with sinf(t*pi)*8 the way retail does.
-// ===========================================================================
-namespace tut_highlight {
-
-void* g_vt[kSlots];
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialHighlightDialog");
-    return c;
-}
-const char* TypeName(void*) { return "TutorialHighlightDialog"; }
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    TutDlg_UnregisterInternal(self);   // see the note above � MUST run before the free
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-void Slot4_Startup(void* self) {
-    if (!self) return;
-    TutorialHighlightDialog_Startup(reinterpret_cast<TutorialHighlightDialog*>(self));
-}
-
-void Slot6_Draw(void* self) {
-    if (!self) return;
-    TutorialHighlightDialog_Draw(reinterpret_cast<TutorialHighlightDialog*>(self));
-}
-
-void Slot7_Load(void* self, void* param2) {
-    if (!self || !param2) return;
-    TutorialHighlightDialog_Load(reinterpret_cast<TutorialHighlightDialog*>(self), param2);
-}
-
-// Retail slot 8 is one of the shared 0x14003Axxx micro-thunks into the Runtime
-// DialogInstance base. fn_DialogInstance_OnElementEvent takes 8 arguments and
-// this slot's real ABI was never confirmed, so forwarding would be a guess —
-// leave it a nop (the fill below already does that) rather than mis-call it.
-
-struct Init {
-    Init() {
-        FillNops(g_vt);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[1] = reinterpret_cast<void*>(&TypeName);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&Slot4_Startup);
-        g_vt[6] = reinterpret_cast<void*>(&Slot6_Draw);
-        g_vt[7] = reinterpret_cast<void*>(&Slot7_Load);
-    }
-} g_init;
-
-void Zero(void* p) { for (size_t o = 0; o < 0xF0; o += 8) *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0xF0, 8);
-    if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
-
-}  // namespace tut_highlight
-
 }  // anonymous namespace
 
 // ---------------------------------------------------------------------------
@@ -304,49 +227,9 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 // tutorial_wave.cpp and registered in standalone/reg_tutorial_wave.cpp.
 // ---------------------------------------------------------------------------
 extern "C" void* GetTutorialUIVtable()              { return tut_ui::g_vt; }
-extern "C" void* GetTutorialHighlightDialogVtable() { return tut_highlight::g_vt; }
-
-// 0x1400E01D0 — TutorialHighlightDialog::TutorialHighlightDialog.
-//
-// Ghidra shows the trailing arguments as `in_stack_*` because the frame is
-// shared with the base ctor; the real layout, from the disassembly at
-// 0x1400E01D0-0x1400E027D:
-//   RCX      self
-//   RDX      UI::UserInterface*
-//   R8       UI::Dialog External*          (TutorialSetupDialog+0x50)
-//   R9       InternalPtr* parent — *R9 is copied into the arg-4 home slot and a
-//            pointer to THAT copy is what reaches DialogInstance::DialogInstance
-//   [rsp+28] InternalPtr*  -> self+0xE0 = *arg
-//   [rsp+30] int32         -> self+0xD8
-//   [rsp+38] InternalPtr*  -> self+0xE8 = *arg
-// The base call passes dataSource=0, extraPtr=0, flags=0 (all three stack slots
-// are zeroed at 0x1400E01F4/F8/FC before the CALL).
-extern "C" void* TutWave_HighlightDialogCtor(void* self, void* ui, void* dialogExternal,
-                                             void* parentIBP, void* ibpE0,
-                                             int32_t valD8, void* ibpE8) {
-    if (!self) return nullptr;
-
-    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
-    if (fn_DialogInstance_Ctor && dialogExternal) {
-        fn_DialogInstance_Ctor(self, ui, dialogExternal, &parentCopy, nullptr, nullptr, 0);
-    }
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    *reinterpret_cast<void**>(self) = tut_highlight::g_vt;
-    *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xC0) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xC8) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xD0) = 0;
-    *reinterpret_cast<int32_t*>(s  + 0xD8) = valD8;
-    *reinterpret_cast<uint64_t*>(s + 0xE0) = ibpE0 ? *reinterpret_cast<uint64_t*>(ibpE0) : 0;
-    *reinterpret_cast<uint64_t*>(s + 0xE8) = ibpE8 ? *reinterpret_cast<uint64_t*>(ibpE8) : 0;
-    return self;
-}
 
 extern "C" void* TutorialUI_SAFactory(void)                    { return tut_ui::Factory(); }
 extern "C" void* TutorialUI_SAInPlace(void* m)                 { return tut_ui::InPlace(m); }
-extern "C" void* TutorialHighlightDialog_SAFactory(void)       { return tut_highlight::Factory(); }
-extern "C" void* TutorialHighlightDialog_SAInPlace(void* m)    { return tut_highlight::InPlace(m); }
 
 // These four REPLACE the UI_DIALOG_STUB(...) entries listed at the top of this
 // file. Delete those four lines in the same integration commit.
@@ -358,5 +241,6 @@ DEFINE_EXE_TYPE(TutorialGoalDialog, "TutorialGoal")
 // ENDGAME B.3.8 block GOAL: a real class (Tutorial/TutorialSetupDialog.h); its
 // registration stays HERE, where the REGISTER_TYPE was (B8-7).
 DEFINE_EXE_TYPE(TutorialSetupDialog, "TutorialSetup")
-REGISTER_TYPE(TutorialHighlightDialog, "UI::DialogInstance",
-              &TutorialHighlightDialog_SAFactory, &TutorialHighlightDialog_SAInPlace);
+// ENDGAME B.3.8 block GOAL: a real class (Tutorial/TutorialHighlightDialog.h);
+// its registration stays HERE, where the REGISTER_TYPE was (B8-7).
+DEFINE_EXE_TYPE(TutorialHighlightDialog, "UI::DialogInstance")

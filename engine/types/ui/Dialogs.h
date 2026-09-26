@@ -206,21 +206,8 @@ namespace TutorialSetupDialogAddr {
 // --- TutorialGoalDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
 #include "Tutorial/TutorialGoalDialog.h"
 
-// --- TutorialHighlightDialog (0xF0) ---
-// Ctor inits: +0xB8=0, +0xC0=0, +0xC8=0, +0xD0=0, +0xD8(u32)=0, +0xE0=0, +0xE8=0
-struct TutorialHighlightDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint64_t dataC8;           // +0xC8: zeroed
-    uint64_t dataD0;           // +0xD0: zeroed
-    uint32_t dataD8;           // +0xD8: zeroed (u32 write)
-    uint8_t  _padDC[4];        // +0xDC: gap
-    uint64_t dataE0;           // +0xE0: zeroed
-    uint64_t dataE8;           // +0xE8: zeroed
-};
-static_assert(sizeof(TutorialHighlightDialog) == 0xF0, "TutorialHighlightDialog size mismatch");
-static_assert(offsetof(TutorialHighlightDialog, dataB8) == 0xB8, "");
+// --- TutorialHighlightDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
+#include "Tutorial/TutorialHighlightDialog.h"
 
 // --- TutorialSetupDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
 #include "Tutorial/TutorialSetupDialog.h"

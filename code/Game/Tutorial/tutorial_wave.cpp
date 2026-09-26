@@ -44,6 +44,7 @@
 #include "resolve.h"
 #include "Object/factory_registration.h"
 #include "Tutorial/TutorialSetupRestrictPlayer.h"
+#include "Tutorial/TutorialHighlightDialog.h"
 #include "Game/serialize_externals.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
@@ -59,13 +60,9 @@
 #include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
-extern "C" void* GetTutorialHighlightDialogVtable();
 // Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
 // Defined in tutorial_next_scenario.cpp.
 extern "C" void TutWave_LoadNextScenario(void* self);
-extern "C" void* TutWave_HighlightDialogCtor(void* self, void* ui, void* dialogExternal,
-                                             void* parentIBP, void* ibpE0,
-                                             int32_t valD8, void* ibpE8);
 
 namespace {
 
@@ -90,13 +87,9 @@ inline UI::UserInterface* UserInterface() {
     return gw ? *reinterpret_cast<UI::UserInterface**>(gw + 0x98) : nullptr;
 }
 
-// TutorialHighlightDialog type id (retail DAT_1401C6550 — written by
-// RegisterType_TutorialHighlightDialog, unregistered in standalone).
-uint32_t HighlightTypeId() {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::ResolveTypeIdByNameLazy("TutorialHighlightDialog");
-    return c;
-}
+// TutorialHighlightDialog type id (retail DAT_1401C6550) — the class's own
+// registration (ENDGAME B.3.8: no lazy cache).
+uint32_t HighlightTypeId() { return TutorialHighlightDialog::TypeId(); }
 // TutorialUI type id (retail DAT_1401C67F0).
 uint32_t TutorialUITypeId() {
     static uint32_t c = 0;
@@ -438,19 +431,25 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
         if (elemIBP == 0) return;
     }
 
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xF0, 8);
+    // MemAlloc(0xF0) + TutorialHighlightDialog::TutorialHighlightDialog
+    // (0x1400E01D0) — the real class now (ENDGAME B.3.8).
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(TutorialHighlightDialog), 8);
     void* dlg = nullptr;
     if (mem) {
         int32_t valD8 = *reinterpret_cast<int32_t*>(s + 0x48);
-        void* dialogExternal = *reinterpret_cast<void**>(s + 0x50);
+        const UI::Dialog* dialog = *reinterpret_cast<const UI::Dialog* const*>(s + 0x50);
+        UI::UserInterface* uiObj = reinterpret_cast<UI::UserInterface*>(ui);
         if (branchA) {
-            uint64_t zeroParent = 0, zeroE0 = 0;
-            dlg = TutWave_HighlightDialogCtor(mem, ui, dialogExternal,
-                                              &zeroParent, &zeroE0, valD8, &targetElem);
+            dlg = ::new (mem) TutorialHighlightDialog(uiObj, dialog,
+                                                      Object::InternalPtr<UI::DialogInstance>(),
+                                                      nullptr, valD8,
+                                                      reinterpret_cast<void*>(targetElem));
         } else {
-            uint64_t zeroE8 = 0;
-            dlg = TutWave_HighlightDialogCtor(mem, ui, dialogExternal,
-                                              &parentIBP, &elemIBP, valD8, &zeroE8);
+            dlg = ::new (mem) TutorialHighlightDialog(uiObj, dialog,
+                                                      Object::InternalPtr<UI::DialogInstance>(
+                                                          reinterpret_cast<UI::DialogInstance*>(parentIBP)),
+                                                      reinterpret_cast<void*>(elemIBP), valD8,
+                                                      nullptr);
         }
     }
 
