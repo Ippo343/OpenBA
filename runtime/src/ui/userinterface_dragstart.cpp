@@ -197,25 +197,27 @@ DragStartSummary g_dragStartSummary;
 // ============================================================================
 // ?BeginDragDrop@UserInterface@UI@@QEAAX...@Z               retail 0x18011f5f0
 // ============================================================================
-extern "C" void RtUi_UserInterface_BeginDragDrop(UserInterface* self,
-                                                 void**   dlgPtr,   // InternalPtr<DialogInstance>&
-                                                 void**   elemPtr,  // InternalPtr<Element>&
-                                                 int32_t  x,
-                                                 int32_t  y,
-                                                 uint32_t id,
-                                                 void*    data) {
+// ENDGAME B.3.6 block E: the body is the member; both InternalPtr arguments are
+// the ADDRESSES of the caller's temporaries (RULE B6-11: `MOV RAX,[RDX]` at
+// 0x18011f5f0 and `MOV RAX,[R8]` at 0x18011f60b), spelled `dlgPtr`/`elemPtr`
+// below as the port always spelled them.
+void UI::UserInterface::BeginDragDrop(Object::InternalPtr<DialogInstance>* dialog,
+                                      Object::InternalPtr<Element>* element,
+                                      int32_t x, int32_t y, uint32_t id, void* data) {
     ++g_beginDragEntries;
+    void** const dlgPtr  = reinterpret_cast<void**>(dialog);
+    void** const elemPtr = reinterpret_cast<void**>(element);
 
     // Retail's order: the three plain fields commit BEFORE the element is
     // touched. See note 1 above -- this order is what a null element observes.
-    self->_dragDropDialog = *dlgPtr;                                   // 0x18011f5f0 / 0x18011f5f7
-    self->_dragDropId     = id;                                        // 0x18011f5fb / 0x18011f5ff
-    self->_dragDropData   = data;                                      // 0x18011f602 / 0x18011f607
+    _dragDropDialog = *dlgPtr;                                         // 0x18011f5f0 / 0x18011f5f7
+    _dragDropId     = id;                                              // 0x18011f5fb / 0x18011f5ff
+    _dragDropData   = data;                                            // 0x18011f602 / 0x18011f607
 
     // +0x80 / +0x84 as a pair of int32 grab offsets -- note 4 above. The field
     // keeps its `void*` declaration for the two sites that CLEAR it; this is
     // the writer, and it writes the two halves retail writes.
-    int32_t* const grab = reinterpret_cast<int32_t*>(&self->_dragDropUserData);
+    int32_t* const grab = reinterpret_cast<int32_t*>(&_dragDropUserData);
 
     // Unguarded on purpose. Retail faults here on a null element and the crash
     // is load-bearing (CLAUDE.md; lane MOUSE recovered the whole field map from
@@ -231,10 +233,21 @@ extern "C" void RtUi_UserInterface_BeginDragDrop(UserInterface* self,
     if (gx != x || gy != y) ++g_beginDragGrabOffset;   // effectiveness control only
 
     // 0x18011f625 / 0x18011f62a -- MOV EDX,2 then tail-JMP to Play. Sound id 2
-    // is the drag-start sound. Reached through the named door, not by a direct
-    // call to our own port: see "THE TAIL CALL IS NOT NEW DEBT" above.
-    PlayFn play = RT_EXPORT_ONCE(PlayFn, kPlay);
-    play(self, 2);
+    // is the drag-start sound. ENDGAME B.3.6: `Play` is a member of this class
+    // now, so the named door the note above describes became a direct call.
+    Play(2);
+}
+
+extern "C" void RtUi_UserInterface_BeginDragDrop(UserInterface* self,
+                                                 void**   dlgPtr,   // InternalPtr<DialogInstance>&
+                                                 void**   elemPtr,  // InternalPtr<Element>&
+                                                 int32_t  x,
+                                                 int32_t  y,
+                                                 uint32_t id,
+                                                 void*    data) {
+    self->UI::UserInterface::BeginDragDrop(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr), x, y, id, data);
 }
 
 // ---------------------------------------------------------------------------

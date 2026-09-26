@@ -90,14 +90,29 @@
 #include <cstdint>
 #include <cstdio>
 
+#include <atomic>
+
 #include "resolve.h"
 #include "rt_port.h"
+#include "ui/UserInterface.h"
+#include "ui/DialogInstance.h"
+
+// ENDGAME B.3.6 block E: the three UserInterface doors this body used to reach
+// by name are members or doors of the same class now. The ctor and the dtor
+// STAY doors (B4b-2) and are called as the doors; the two static callbacks go
+// into MainLoop's arrays as the registered DOOR functions (the (context,
+// userData) shape MainLoop calls — and what ResolveExport returned for them,
+// since both are always registered).
+extern "C" void* RtUi_UserInterface_Ctor(UI::UserInterface* self);
+extern "C" void  RtUi_UserInterface_Dtor(UI::UserInterface* self);
+extern "C" void  RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui);
+extern "C" void  RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui);
 
 namespace {
 
 // --- Shipped addresses of the callees, for the reader ------------------------
 // Only kAddDialogsSetSize is used to RESOLVE; the rest are reached by mangled
-// name (see Resolved/R() below) and are listed here because a Ghidra address is
+// name (see the atomic accessors below) and are listed here because a Ghidra address is
 // what a future reader will have in hand.
 //   0x180120de0  ??0UserInterface@UI@@QEAA@XZ
 //   0x180120b90  ??1UserInterface@UI@@QEAA@XZ
@@ -135,20 +150,45 @@ struct Entry { void* fn; void* ctx; };
 typedef void* (*fn_MemAllocS_t)(uint64_t size, int align);
 typedef void  (*fn_MemFreeS_t)(void* p);
 
+// ENDGAME B.3.6 (RULE B6-5): every door this body still needs is cached in a
+// namespace-scope atomic, never in a function-local static — ShowDialog runs
+// on UI objects the loader thread constructs. Same never-cache-a-null
+// contract as the RT_EXPORT_ONCE shape it replaces.
+std::atomic<void*> g_memAllocSlot{nullptr};
+std::atomic<void*> g_memFreeSlot{nullptr};
+std::atomic<void*> g_setSizeSlot{nullptr};
+std::atomic<void*> g_frameSlot{nullptr};
+std::atomic<void*> g_mlSingletonSlot{nullptr};
+std::atomic<void*> g_sptSlot{nullptr};
+
+void* AtomicByName(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = ResolveExport(mangled);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+void* AtomicByAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
 void* MemAllocS(uint64_t size, int align) {
-    static fn_MemAllocS_t f = (fn_MemAllocS_t)ResolveExport(
+    fn_MemAllocS_t f = (fn_MemAllocS_t)AtomicByName(g_memAllocSlot,
         "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z");
     return f ? f(size, align) : nullptr;
 }
 void MemFreeS(void* p) {
-    static fn_MemFreeS_t f = (fn_MemFreeS_t)ResolveExport(
+    fn_MemFreeS_t f = (fn_MemFreeS_t)AtomicByName(g_memFreeSlot,
         "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
     if (f) f(p);
 }
 
-typedef void* (*fn_UICtor_t)(void*);
-typedef void  (*fn_UIDtor_t)(void*);
-typedef int   (*fn_UIUpdate_t)(void*, const void* time);
 typedef void  (*fn_SetSize_t)(void* arr, int newCount, const void* fill);
 typedef bool  (*fn_Frame_t)(void*, bool);
 
@@ -167,32 +207,12 @@ typedef bool  (*fn_Frame_t)(void*, bool);
 //                kSpec_Fill8Z)) and reached through ResolveAddr(Module::Runtime,
 //                ...), which consults the port registry first -- so this door is
 //                already satisfied today, unlike a fresh one.
-struct Resolved {
-    fn_UICtor_t   ctor;
-    fn_UIDtor_t   dtor;
-    fn_UIUpdate_t update;
-    fn_SetSize_t  setSize;
-    fn_Frame_t    frame;
-    void*         drawFn;
-    void*         updFn;
-    void**        mlSlot;    // &Engine::MainLoop::_singleton
-    const double* secondsPerTick;
-};
-
-const Resolved& R() {
-    static Resolved r = {
-        (fn_UICtor_t)  ResolveExport("??0UserInterface@UI@@QEAA@XZ"),
-        (fn_UIDtor_t)  ResolveExport("??1UserInterface@UI@@QEAA@XZ"),
-        (fn_UIUpdate_t)ResolveExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z"),
-        (fn_SetSize_t) ResolveAddr(Module::Runtime, kAddDialogsSetSize),
-        (fn_Frame_t)   ResolveExport("?Frame@MainLoop@Engine@@QEAA_N_N@Z"),
-        ResolveExport("?DrawStandAloneUI@UserInterface@UI@@CAXAEAVContext@Video@@PEAX@Z"),
-        ResolveExport("?UpdateStandAloneUI@UserInterface@UI@@CAXAEBVTime@System@@PEAX@Z"),
-        (void**)ResolveExport("?_singleton@MainLoop@Engine@@1PEAV12@EA"),
-        (const double*)ResolveExport("?_secondsPerTick@Timer@System@@0NA"),
-    };
-    return r;
-}
+// (The old `Resolved R()` function-local static — a lazily initialised cache of
+// nine doors — is gone: RULE B6-5. The survivors are the four accessors below.)
+fn_SetSize_t  SetSizeDoor()   { return (fn_SetSize_t)AtomicByAddr(g_setSizeSlot, kAddDialogsSetSize); }
+fn_Frame_t    FrameDoor()     { return (fn_Frame_t)AtomicByName(g_frameSlot, "?Frame@MainLoop@Engine@@QEAA_N_N@Z"); }
+void**        MainLoopSlot()  { return (void**)AtomicByName(g_mlSingletonSlot, "?_singleton@MainLoop@Engine@@1PEAV12@EA"); }
+const double* SecondsPerTick(){ return (const double*)AtomicByName(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"); }
 
 // Retail's inlined callback-array append, transcribed.
 // 0x18011fe7d..0x18011ffd6 (draw) and 0x18011ffe7..0x18012013e (update) are the
@@ -299,13 +319,23 @@ extern "C" { int g_RtShowDialogDefect = 0; }
 // non-trivial copy ctor means MSVC x64 passes its ADDRESS (WAVE7.md). So the
 // second parameter is `DialogInstance**`.
 extern "C" int RtUi_UserInterface_ShowDialog(void* self, void** dialogPtr) {
-    uintptr_t outer = reinterpret_cast<uintptr_t>(self);
+    return static_cast<UI::UserInterface*>(self)->UI::UserInterface::ShowDialog(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
+}
+
+// ENDGAME B.3.6 block E: the body is the member. `dialog` is the ADDRESS of the
+// caller's InternalPtr (RULE B6-11: 0x18011fd32 `MOV R14,RDX`, then
+// `MOV RAX,[R14]`), spelled `dialogPtr` below as the port always spelled it.
+int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialogArg) {
+    void** const dialogPtr = reinterpret_cast<void**>(dialogArg);
+    uintptr_t outer = reinterpret_cast<uintptr_t>(this);
 
     // 1. Allocate + construct the nested UserInterface. Alignment 4 (MOV R8D,4).
+    //    The ctor is a DOOR (B4b-2), called as one.
     void* nested = MemAllocS(kUI_Size, 4);
     if (nested) {
-        auto ctor = R().ctor;
-        nested = ctor(nested);        // retail takes the RETURN, not the argument
+        // retail takes the RETURN, not the argument
+        nested = RtUi_UserInterface_Ctor(static_cast<UserInterface*>(nested));
     }
     uintptr_t n = reinterpret_cast<uintptr_t>(nested);
 
@@ -327,17 +357,16 @@ extern "C" int RtUi_UserInterface_ShowDialog(void* self, void** dialogPtr) {
 
     // 4. Dialog vtable slot 4 (+0x20). Retail re-reads the InternalPtr, stores
     //    the dialog into a stack slot, and calls through it with RCX = dialog.
+    //    ENDGAME B.3.6: slot 4 is `DialogInstance::OnOpened` — a VIRTUAL call,
+    //    dispatched through the dialog's own (exe hand-built) table.
     void* dialog = *dialogPtr;
-    {
-        void** vt = *reinterpret_cast<void***>(dialog);
-        ((void (*)(void*))vt[4])(dialog);
-    }
+    reinterpret_cast<DialogInstance*>(dialog)->OnOpened();          // B.3.6 bridge
 
     // 5. Push the dialog into nested->_addDialogs. `&dialog` is the by-value
     //    InternalPtr the stack slot from step 4 holds -- retail passes that same
     //    slot (LEA R8,[RSP+0x80]).
     {
-        auto setSize = R().setSize;
+        auto setSize = SetSizeDoor();
         void* arr = reinterpret_cast<void*>(n + kUI_AddDialogs);
         int   cnt = *reinterpret_cast<int*>(n + kUI_AddDialogs + 8);
         setSize(arr, cnt + 1, &dialog);
@@ -349,21 +378,22 @@ extern "C" int RtUi_UserInterface_ShowDialog(void* self, void** dialogPtr) {
     //    integer indefinite 0x8000000000000000) if _secondsPerTick is 0.
     //    Transcribed as the division so that degenerate case behaves alike.
     {
-        double spt = *R().secondsPerTick;
+        double spt = *SecondsPerTick();
         int64_t t = (int64_t)(0.0 / spt);
-        auto upd = R().update;
-        upd(nested, &t);
+        // `System::Time` is one int64 tick count; Update is a member now.
+        static_cast<UserInterface*>(nested)->Update(*reinterpret_cast<const System::Time*>(&t));
     }
 
-    // 7 + 8. Register the draw and update callbacks, in that order.
-    void* drawFn = R().drawFn;
-    void* updFn  = R().updFn;
-    void* ml     = *R().mlSlot;
+    // 7 + 8. Register the draw and update callbacks, in that order. The entries
+    //    are the registered DOORS (see the includes).
+    void* drawFn = (void*)&RtUi_UserInterface_DrawStandAloneUI;
+    void* updFn  = (void*)&RtUi_UserInterface_UpdateStandAloneUI;
+    void* ml     = *MainLoopSlot();
     uintptr_t m  = reinterpret_cast<uintptr_t>(ml);
 
     AppendCallback(m, kML_DrawArr, kML_DrawCnt, kML_DrawCap, Entry{ drawFn, nested });
     // Retail re-reads MainLoop::_singleton before the second append. Kept.
-    ml = *R().mlSlot;
+    ml = *MainLoopSlot();
     m  = reinterpret_cast<uintptr_t>(ml);
     AppendCallback(m, kML_UpdArr, kML_UpdCnt, kML_UpdCap, Entry{ updFn, nested });
 
@@ -371,7 +401,7 @@ extern "C" int RtUi_UserInterface_ShowDialog(void* self, void** dialogPtr) {
     //    Frame() returning true (quit). The dialog pointer is reloaded from the
     //    caller's InternalPtr on every iteration.
     {
-        auto frame = R().frame;
+        auto frame = FrameDoor();
         for (;;) {
             void* want = *dialogPtr;
             void* node = *reinterpret_cast<void**>(n + kUI_Dialogs);
@@ -381,28 +411,25 @@ extern "C" int RtUi_UserInterface_ShowDialog(void* self, void** dialogPtr) {
                 node = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(node) + 0x10);
             }
             if (!present) break;
-            void* cur = *R().mlSlot;
+            void* cur = *MainLoopSlot();
             if (frame(cur, true)) break;
         }
     }
 
     // 10. Un-register both callbacks (draw first, then update -- retail's order).
-    ml = *R().mlSlot;
+    ml = *MainLoopSlot();
     m  = reinterpret_cast<uintptr_t>(ml);
     RemoveCallback(m, kML_DrawArr, kML_DrawCnt, drawFn, nested);
-    ml = *R().mlSlot;
+    ml = *MainLoopSlot();
     m  = reinterpret_cast<uintptr_t>(ml);
     RemoveCallback(m, kML_UpdArr, kML_UpdCnt, updFn, nested);
 
     // 11. Destroy and free the nested UI.
-    {
-        auto dtor = R().dtor;
-        dtor(nested);
-    }
+    RtUi_UserInterface_Dtor(static_cast<UserInterface*>(nested));   // the dtor DOOR (B4b-2)
     MemFreeS(nested);
 
     if (g_RtShowDialogDefect == 1) {                                     // control
-        ml = *R().mlSlot;
+        ml = *MainLoopSlot();
         m  = reinterpret_cast<uintptr_t>(ml);
         // A no-op, NOT drawFn/updFn: a leaked real entry would have retail's
         // Frame calling UpdateStandAloneUI on a freed nested UI every tick, and

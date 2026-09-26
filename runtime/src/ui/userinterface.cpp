@@ -229,9 +229,19 @@
 #include <cstdlib>
 #include <cstring>
 
+#include <atomic>
+#include <new>
+
 #include "../../funcs/rt_port.h"
 #include "io/Stream.h"          // WAVE 10 LANE UIF — SaveAllSettings' MemoryStream
 #include "ui/UserInterface.h"
+// ENDGAME B.3.6 block E: the real classes the member bodies call, and
+// element_common.h's RULE B6-5 atomic door caches. element_common.h also
+// carries the file-scope `Module` / `ResolveAddr` declaration described below.
+#include "ui/DialogInstance.h"
+#include "ui/DialogController.h"
+#include "ui/Element.h"
+#include "element_common.h"
 
 // ----------------------------------------------------------------------------
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
@@ -247,8 +257,7 @@
 // .md), which is exactly what is wanted for a dependency and is also what makes
 // the call survive cutover.
 // ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// (The declaration now comes from element_common.h, included above.)
 
 namespace {
 
@@ -266,17 +275,32 @@ static_assert(kUiSize == 0x128, "layout header and this file must agree");
 // Every one of the four is already a minted row today — see the DEPENDENCY
 // AUDIT in the lane-Z block below for the row numbers — so none of these is a
 // new cutover obligation.
+//
+// ENDGAME B.3.6 (RULE B6-5): the member bodies below run on objects the LOADER
+// thread constructs, so each slot is a namespace-scope atomic resolved through
+// `rtuielem::AtomicExport` (the same never-cache-a-null contract) instead of
+// RT_DATA_SLOT's function-local static.
+std::atomic<void*> g_sptSlot{nullptr};
+std::atomic<void*> g_videoDeviceSlot{nullptr};
+std::atomic<void*> g_applicationSlot{nullptr};
+std::atomic<void*> g_inputConfigSlot{nullptr};
+std::atomic<void*> g_memFreeSlot{nullptr};
+std::atomic<void*> g_memAllocSlot{nullptr};
 inline const double* TimerSecondsPerTick() {
-    return RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
+    return static_cast<const double*>(
+        rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
 }
 inline void** VideoDeviceSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_videoDeviceSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
 }
 inline void** ApplicationSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_applicationSlot, "?_singleton@Application@1@0PEAV11@EA"));
 }
 inline void** InputConfigSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_inputConfigSlot, "?_singleton@Configuration@Input@@0PEAV12@EA"));
 }
 
 // ---- the mangled names, once ------------------------------------------------
@@ -355,11 +379,12 @@ extern "C" void* RtUi_UserInterface_Ctor(UserInterface* self) {
 
 // ---- ?GetAddDialogCount@…@QEBAHXZ  0x180031160 ord 2441 --------------------
 //   MOV EAX,[RCX+0x30] / RET
+int32_t UI::UserInterface::GetAddDialogCount() const {
+    return _addDialogs._size;
+}
+
 extern "C" int RtUi_UserInterface_GetAddDialogCount(const UserInterface* self) {
-
-    int ours = self->_addDialogs._size;
-
-    return ours;
+    return self->UI::UserInterface::GetAddDialogCount();
 }
 
 // ---- ?GetFirstDialog@…  0x180031150 ord 2670 -------------------------------
@@ -369,10 +394,13 @@ extern "C" int RtUi_UserInterface_GetAddDialogCount(const UserInterface* self) {
 // RDX gets one qword and the function hands the slot back in RAX —
 // reference_hidden_retval_and_int_pointer_args.md: forget the retval slot and
 // this becomes a wild write that still "works".
+UI::UserInterface::Iterator UI::UserInterface::GetFirstDialog() {
+    return _dialogs.GetFirst();          // the head node, one qword
+}
+
+// RETSLOT door (B5-12): `(this, ret)`, the member's prvalue placed in the slot.
 extern "C" void* RtUi_UserInterface_GetFirstDialog(UserInterface* self, void* retval) {
-
-    *reinterpret_cast<void**>(retval) = self->_dialogs._head;
-
+    new (retval) UserInterface::Iterator(self->UI::UserInterface::GetFirstDialog());
     return retval;
 }
 
@@ -387,15 +415,16 @@ extern "C" void* RtUi_UserInterface_GetFirstDialog(UserInterface* self, void* re
 // The +0x20 flag word belongs to lane B's DialogInstance; it is read here as a
 // raw offset with the disassembly above as its evidence, rather than by
 // including a header another lane owns.
-extern "C" bool RtUi_UserInterface_PausesGame(const UserInterface* self) {
-
-    bool ours = false;
-    for (auto* node = self->_dialogs._head; node; node = node->next) {
-        const uint8_t* dlg = reinterpret_cast<const uint8_t*>(node->element);
-        if (*reinterpret_cast<const uint32_t*>(dlg + 0x20) & 1u) { ours = true; break; }
+bool UI::UserInterface::PausesGame() const {
+    for (auto* node = _dialogs._head; node; node = node->next) {
+        const auto* dlg = static_cast<const UI::DialogInstance*>(node->element);
+        if (dlg->_flags & 1u) return true;          // DialogInstance +0x20 bit 0
     }
+    return false;
+}
 
-    return ours;
+extern "C" bool RtUi_UserInterface_PausesGame(const UserInterface* self) {
+    return self->UI::UserInterface::PausesGame();
 }
 
 // ---- ?GetFirstContainedDialog@…@QEBA…HH@Z  0x18011fb00 ord 2669 ------------
@@ -426,34 +455,34 @@ extern "C" bool RtUi_UserInterface_PausesGame(const UserInterface* self) {
 // that overrides it (it answers "do you contain this point"), so the second
 // call is a pure re-evaluation — but it is a virtual into another lane's code,
 // and if some widget ever makes it stateful this site is where that surfaces.
-extern "C" void* RtUi_UserInterface_GetFirstContainedDialog(
-        const UserInterface* self, void* retval, int x, int y) {
-
-    void* ours = nullptr;
-    for (auto* node = self->_dialogs._tail; node; node = node->prev) {
-        const uint8_t* dlg = reinterpret_cast<const uint8_t*>(node->element);
-        const uint32_t flags = *reinterpret_cast<const uint32_t*>(dlg + 0x20);
+Object::InternalPtr<UI::DialogInstance>
+UI::UserInterface::GetFirstContainedDialog(int32_t x, int32_t y) const {
+    for (auto* node = _dialogs._tail; node; node = node->prev) {
+        auto* dlg = static_cast<UI::DialogInstance*>(node->element);
+        const uint32_t flags = dlg->_flags;                            // +0x20
         if (flags & 0x4u) continue;
 
         bool hit;
         if (flags & 0x8u) {
-            void* element = *reinterpret_cast<void* const*>(dlg + 0x50);
-            void* ui      = *reinterpret_cast<void* const*>(dlg + 0x10);
-            using ContainsFn = bool (*)(void*, int, int, void*);
-            void** vtable = *reinterpret_cast<void***>(element);
-            hit = reinterpret_cast<ContainsFn>(vtable[0x48 / 8])(element, x, y, ui);
+            // Element vtable slot 9 (+0x48), `Contains(x, y, ui)` — a VIRTUAL
+            // call dispatches through the element's own (minted) table.
+            const auto* element = static_cast<const UI::Element*>(dlg->_root);   // +0x50
+            hit = element->Contains(x, y, static_cast<UserInterface*>(dlg->_ui)); // +0x10
         } else {
-            const uint8_t* e = *reinterpret_cast<const uint8_t* const*>(dlg + 0x50);
-            const int32_t left   = *reinterpret_cast<const int32_t*>(e + 0x68);
-            const int32_t top    = *reinterpret_cast<const int32_t*>(e + 0x6c);
-            const int32_t right  = *reinterpret_cast<const int32_t*>(e + 0x70);
-            const int32_t bottom = *reinterpret_cast<const int32_t*>(e + 0x74);
-            hit = (x >= left) && (x <= right) && (y >= top) && (y <= bottom);
+            const auto* e = static_cast<const UI::Element*>(dlg->_root);
+            hit = (x >= e->_layoutLeft) && (x <= e->_layoutRight) &&
+                  (y >= e->_layoutTop)  && (y <= e->_layoutBottom);
         }
-        if (hit) { ours = node->element; break; }
+        if (hit) return Object::InternalPtr<UI::DialogInstance>(dlg);
     }
-    *reinterpret_cast<void**>(retval) = ours;
+    return Object::InternalPtr<UI::DialogInstance>();
+}
 
+// RETSLOT door (B5-12): `(this, ret, x, y)`.
+extern "C" void* RtUi_UserInterface_GetFirstContainedDialog(
+        const UserInterface* self, void* retval, int x, int y) {
+    new (retval) Object::InternalPtr<UI::DialogInstance>(
+        self->UI::UserInterface::GetFirstContainedDialog(x, y));
     return retval;
 }
 
@@ -462,10 +491,12 @@ extern "C" void* RtUi_UserInterface_GetFirstContainedDialog(
 // It does NOT touch the capture viewport at +0x118, and it does NOT tell the
 // SpriteCapture object anything — Draw's `if (capture) EndAddingSprites` is
 // what closes the capture out. Faithful: one store, nothing else.
+void UI::UserInterface::EndSpriteCapture() {
+    _spriteCapture = nullptr;
+}
+
 extern "C" void RtUi_UserInterface_EndSpriteCapture(UserInterface* self) {
-
-    self->_spriteCapture = nullptr;
-
+    self->UI::UserInterface::EndSpriteCapture();
 }
 
 // ---- ?SetFullscreenFade@…@QEAAX_NI0@Z  0x18011f500 ord 3887 ----------------
@@ -483,17 +514,19 @@ extern "C" void RtUi_UserInterface_EndSpriteCapture(UserInterface* self) {
 // animated branch writes it TWICE in the disassembly, once per sub-branch
 // (0x18011f534 and 0x18011f546). Same value either way; reproduced as one
 // store per path, which is what the byte compare sees.
+void UI::UserInterface::SetFullscreenFade(bool fadeIn, uint32_t color, bool immediate) {
+    if (immediate) {
+        _fadeColor  = color;
+        _fadeAmount = fadeIn ? 1.0f : 0.0f;
+    } else {
+        _fadeVelocity = fadeIn ? 1.0f : -1.0f;
+        _fadeColor    = color;
+    }
+}
+
 extern "C" void RtUi_UserInterface_SetFullscreenFade(
         UserInterface* self, bool fadeIn, uint32_t color, bool immediate) {
-
-    if (immediate) {
-        self->_fadeColor  = color;
-        self->_fadeAmount = fadeIn ? 1.0f : 0.0f;
-    } else {
-        self->_fadeVelocity = fadeIn ? 1.0f : -1.0f;
-        self->_fadeColor    = color;
-    }
-
+    self->UI::UserInterface::SetFullscreenFade(fadeIn, color, immediate);
 }
 
 // ---- ?SetFullscreenFadeSprite@…@QEAAXVSprite@2@@Z  0x18011f560 ord 3888 ----
@@ -507,11 +540,13 @@ extern "C" void RtUi_UserInterface_SetFullscreenFade(
 // constructor means BY ADDRESS: RDX is a pointer to the caller's copy. That is
 // exactly how our tree already calls it — see the 16-byte `uint8_t sprite[16]`
 // that code/Game/Dialog/optionsdialog.cpp's ApplyKeyMapToUI_Impl builds.
+void UI::UserInterface::SetFullscreenFadeSprite(const Sprite* sprite) {
+    std::memcpy(&_fadeSpriteSheet, sprite, 0x10);
+}
+
 extern "C" void RtUi_UserInterface_SetFullscreenFadeSprite(
         UserInterface* self, const void* sprite) {
-
-    std::memcpy(&self->_fadeSpriteSheet, sprite, 0x10);
-
+    self->UI::UserInterface::SetFullscreenFadeSprite(static_cast<const UI::Sprite*>(sprite));
 }
 
 // ============================================================================
@@ -612,18 +647,23 @@ extern "C" void RtUi_UserInterface_SetFullscreenFadeSprite(
 // NOTE what retail does NOT do: no null check on `*dlgPtr`. It relies on the
 // caller never passing an empty pointer, and CLAUDE.md is explicit that a guard
 // here would not restore the behaviour, it would skip it.
-extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr) {
-
-    void*  dlg  = *dlgPtr;
-    void** vtbl = *reinterpret_cast<void***>(dlg);
-    reinterpret_cast<void (*)(void*)>(vtbl[4])(dlg);          // OnOpened
+void UI::UserInterface::AddDialog(Object::InternalPtr<DialogInstance>* dialog) {
+    // DialogInstance vtable slot 4 (+0x20) `OnOpened` — a VIRTUAL call, so it
+    // dispatches through the dialog's own (minted or exe hand-built) table.
+    dialog->Get()->OnOpened();
 
     // retail 0x18007a0d0 — kSpec_Fill8Z, trait-equivalent for
     // `DialogInstancePtr` (a pointer): `_addDialogs` is that trait-derived
-    // `Array<DialogInstancePtr>` instantiation already.
-    self->_addDialogs.SetSizeFill(self->_addDialogs._size + 1, dlgPtr);
+    // `Array<DialogInstancePtr>` instantiation already. The fill source is the
+    // caller's InternalPtr itself (retail hands the same RDX to the push).
+    _addDialogs.SetSizeFill(_addDialogs._size + 1,
+                            reinterpret_cast<const DialogInstancePtr*>(dialog));
+    // no early-out: every call does the whole body
+}
 
-   // no early-out: every call does the whole body
+extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr) {
+    self->UI::UserInterface::AddDialog(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
 }
 
 // ---- ?Play@UserInterface@UI@@QEAAXH@Z  0x1801223d0  ord 3418 ---------------
@@ -654,11 +694,15 @@ extern "C" void RtUi_UserInterface_AddDialog(UserInterface* self, void** dlgPtr)
 //
 // The stamped handle is `(index * 2) | (++scene->counter << 9)`.
 extern "C" void RtUi_UserInterface_Play(UserInterface* self, int id) {
+    self->UI::UserInterface::Play(id);
+}
 
-    void* sound = self->_sounds[id];
+void UI::UserInterface::Play(int32_t id) {
+
+    void* sound = _sounds[id];
     if (!sound) {  return; }
 
-    uint8_t* scene = reinterpret_cast<uint8_t*>(self->_audioScene);
+    uint8_t* scene = reinterpret_cast<uint8_t*>(_audioScene);
     if (!scene) {  return; }
 
     uint8_t* table = *reinterpret_cast<uint8_t**>(scene + 0x10);
@@ -710,8 +754,15 @@ extern "C" void RtUi_UserInterface_Play(UserInterface* self, int id) {
 // The store to `_cursor` happens BEFORE the null test and is therefore NOT
 // inside the guard — a null cursor still clears the field. Reproduced.
 extern "C" void RtUi_UserInterface_SetCursor(UserInterface* self, void* cursor) {
+    self->UI::UserInterface::SetCursor(
+        Object::ExternalPtr<UI::Cursor>(static_cast<UI::Cursor*>(cursor)));
+}
 
-    self->_cursor = cursor;
+void UI::UserInterface::SetCursor(Object::ExternalPtr<Cursor> cursorPtr) {
+    // `ExternalPtr` by value is the bare pointer in RDX (banner, B6-11).
+    void* const cursor = cursorPtr.Get();
+
+    _cursor = cursor;
     if (!cursor) {  return; }
 
     uint8_t* cur     = reinterpret_cast<uint8_t*>(cursor);
@@ -761,8 +812,12 @@ extern "C" void RtUi_UserInterface_SetCursor(UserInterface* self, void* cursor) 
 // NO ORACLE, and this is the one where a replay is actively misleading — see
 // the lane banner.
 extern "C" void RtUi_UserInterface_EnableCursor(UserInterface* self, bool enable) {
+    self->UI::UserInterface::EnableCursor(enable);
+}
 
-    self->_cursorEnabled = static_cast<uint8_t>(enable);
+void UI::UserInterface::EnableCursor(bool enable) {
+
+    _cursorEnabled = static_cast<uint8_t>(enable);
 
     uint8_t* config = *reinterpret_cast<uint8_t**>(InputConfigSingleton());
     uint8_t* app    = *reinterpret_cast<uint8_t**>(ApplicationSingleton());
@@ -869,16 +924,21 @@ extern "C" void RtUi_UserInterface_EnableCursor(UserInterface* self, bool enable
 // verified (reference_uncalled_port_is_not_verified.md).
 extern "C" void RtUi_UserInterface_BringDialogToFront(UserInterface* self,
                                                       void** dlgPtr) {
+    self->UI::UserInterface::BringDialogToFront(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
+}
 
-    // ENDGAME B.3.2 step 2 — `self->_dialogs` is the real
+void UI::UserInterface::BringDialogToFront(Object::InternalPtr<DialogInstance>* dialog) {
+
+    // ENDGAME B.3.2 step 2 — `_dialogs` is the real
     // `Collection::LinkedList<DialogInstancePtr>` member (UserInterface.h,
     // +0x000), the ONE retail instantiation of the class. The unguarded tail
     // read below is retail's own (CLAUDE.md: a faithful crash on an empty
     // list is not ours to fix) — `GetLast()` returns a null-node `Iterator`
     // exactly like the raw `_tail` this used to read, so dereferencing it
     // still faults the same way on an empty list.
-    void* dlg = *dlgPtr;
-    if (*self->_dialogs.GetLast() == dlg) {
+    void* dlg = dialog->Get();
+    if (*_dialogs.GetLast() == dlg) {
         return;
     }
 
@@ -886,9 +946,8 @@ extern "C" void RtUi_UserInterface_BringDialogToFront(UserInterface* self,
     // tail-append — that whole sequence, re-reading `_tail` after Remove, IS
     // `LinkedList<T>::Add`'s own body (Collection.h), so the conversion is
     // Remove-then-Add rather than a re-derivation of the append.
-    self->_dialogs.Remove(dlg);
-    self->_dialogs.Add(dlg);
-
+    _dialogs.Remove(dlg);
+    _dialogs.Add(dlg);
 }
 
 // ============================================================================
@@ -974,9 +1033,12 @@ namespace {
 // `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` 0x1800c7ad0 — retail's four
 // inlined lock+Free sequences, out of line. Reached through the PORT-AWARE door
 // so that lane E's port of it is what runs when it is registered.
+// ENDGAME B.3.6: a namespace-scope atomic slot (RULE B6-5), not RT_EXPORT_ONCE's
+// function-local static — the member bodies below reach it.
 using UiVoidPtrFn = void (*)(void*);
 inline void UiMemFree(void* p) {
-    RT_EXPORT_ONCE(UiVoidPtrFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    reinterpret_cast<UiVoidPtrFn>(rtuielem::AtomicExport(
+        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
 }
 
 // ENDGAME B.3.2 step 2 — the 0x1800325f0 forwarder (`UiListClear`) that used
@@ -984,10 +1046,11 @@ inline void UiMemFree(void* p) {
 // directly (see `UiDtorBody`'s phase 4).
 
 // Slot 0 of any Object::Base-derived vtable is the scalar deleting destructor;
-// retail calls it with EDX = 1 ("destruct AND free").
-using UiDeletingDtorFn = void (*)(void* self, int flags);
-inline UiDeletingDtorFn UiDeletingDtorOf(void* obj) {
-    return reinterpret_cast<UiDeletingDtorFn>((*reinterpret_cast<void***>(obj))[0]);
+// retail calls it with EDX = 1 ("destruct AND free"). ENDGAME B.3.6: that is
+// `Object::Base::DeletingDtor(unsigned)`, slot 0 of the real `UI::DialogInstance`
+// — a VIRTUAL call, dispatched through the dialog's own (minted or exe) table.
+inline void UiDeleteDialog(void* dlg) {
+    reinterpret_cast<UI::DialogInstance*>(dlg)->DeletingDtor(1);   // B.3.6 bridge
 }
 
 // ---- the NEGATIVE CONTROL knob ---------------------------------------------
@@ -1059,7 +1122,7 @@ void UiDtorBody(UserInterface* self) {
             // does. Kept in that order deliberately.
             const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);
             if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
-                UiDeletingDtorOf(dlg)(dlg, 1);
+                UiDeleteDialog(dlg);
                 *reinterpret_cast<void**>(rd + off) = nullptr;
             }
 
@@ -1074,7 +1137,7 @@ void UiDtorBody(UserInterface* self) {
         uint8_t* dlg = *reinterpret_cast<uint8_t**>(node);
         const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);
         if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
-            UiDeletingDtorOf(dlg)(dlg, 1);
+            UiDeleteDialog(dlg);
             *reinterpret_cast<void**>(node) = nullptr;
         }
     }
@@ -1142,8 +1205,10 @@ void RemoveEventsForDialog(uint8_t* p, void* dlg) {
 // compile-time-constant new size of 0, which is never true for a
 // non-negative old size, so the loop, the realloc arm and the free arm are
 // all unreachable.
-void CleanRemovedDialogsBody(UserInterface* self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+} // namespace
+
+void UI::UserInterface::CleanRemovedDialogs() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
     const int32_t removedCount = *reinterpret_cast<int32_t*>(p + 0x20);
     for (int32_t i = 0; i < removedCount; ++i) {
         uint8_t* removed = *reinterpret_cast<uint8_t**>(p + 0x18);
@@ -1176,7 +1241,7 @@ void CleanRemovedDialogsBody(UserInterface* self) {
             *reinterpret_cast<uint8_t**>(p + 0x18) ? *reinterpret_cast<uint8_t**>(p + 0x18) + static_cast<size_t>(i) * 8 : nullptr);
         const uint32_t flags = *reinterpret_cast<uint32_t*>(dlg + 0x20);   // trap (a): read before the null test
         if (((~static_cast<uint8_t>(flags >> 5)) & 1) != 0 && dlg != nullptr) {
-            UiDeletingDtorOf(dlg)(dlg, 1);
+            UiDeleteDialog(dlg);
             *reinterpret_cast<void**>(*reinterpret_cast<uint8_t**>(p + 0x18) + static_cast<size_t>(i) * 8) = nullptr;
         }
     }
@@ -1195,8 +1260,8 @@ void CleanRemovedDialogsBody(UserInterface* self) {
 // argument). Finishes by clearing `_events` -- `FUN_180079df0`, proven the
 // same way `FUN_180079c90` is above: the dead-branch reasoning is identical,
 // just at stride 0x30 instead of 8.
-void UpdateEventsBody(UserInterface* self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+void UI::UserInterface::UpdateEvents() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
     if (p[0x88] != 0) return;
     p[0x88] = 1;
 
@@ -1205,13 +1270,16 @@ void UpdateEventsBody(UserInterface* self) {
     for (int32_t i = 0; i < count; ++i) {
         uint8_t* ev = data + static_cast<size_t>(i) * 0x30;
         void* dlg = *reinterpret_cast<void**>(ev);
-        void* elem = *reinterpret_cast<void**>(ev + 0x08);
-        void** vt = *reinterpret_cast<void***>(dlg);
-        using Fn = void (*)(void*, void**, int32_t, int32_t, int32_t, int32_t, int32_t, uint64_t);
-        reinterpret_cast<Fn>(vt[8])(dlg, &elem,
+        // The fresh stack copy of the event's element, passed BY ADDRESS
+        // (RULE B6-11: slot 8's InternalPtr<Element> argument is a hidden
+        // pointer to the caller's temporary).
+        Object::InternalPtr<UI::Element> elem(*reinterpret_cast<UI::Element**>(ev + 0x08));
+        // DialogInstance vtable slot 8 (+0x40) `OnElementEvent` — VIRTUAL, so
+        // an exe dialog's hand-built slot 8 is what runs.
+        reinterpret_cast<UI::DialogInstance*>(dlg)->OnElementEvent(&elem,   // B.3.6 bridge
             *reinterpret_cast<int32_t*>(ev + 0x10), *reinterpret_cast<int32_t*>(ev + 0x14),
             *reinterpret_cast<int32_t*>(ev + 0x18), *reinterpret_cast<int32_t*>(ev + 0x1c),
-            *reinterpret_cast<int32_t*>(ev + 0x20), *reinterpret_cast<uint64_t*>(ev + 0x28));
+            *reinterpret_cast<int32_t*>(ev + 0x20), *reinterpret_cast<void**>(ev + 0x28));
     }
 
     *reinterpret_cast<int32_t*>(p + 0x50) = 0;   // FUN_180079df0 -- see banner
@@ -1224,10 +1292,8 @@ void UpdateEventsBody(UserInterface* self) {
 // documents for BringDialogToFront/GetFirstContainedDialog), returns 0 if
 // none contains (x,y), otherwise defers to that dialog's OWN
 // GetMouseCursorIndex starting from its root Element.
-extern "C" int32_t RtUiDialogInstance_GetMouseCursorIndex(const void* self, void** elementPtr,
-                                                          int32_t x, int32_t y);
-int32_t GetMouseCursorIndexBody(const UserInterface* self, int32_t x, int32_t y) {
-    const uint8_t* p = reinterpret_cast<const uint8_t*>(self);
+int32_t UI::UserInterface::GetMouseCursorIndex(int32_t x, int32_t y) const {
+    const uint8_t* p = reinterpret_cast<const uint8_t*>(this);
     for (const uint8_t* node = *reinterpret_cast<uint8_t* const*>(p + 0x08); node;
          node = *reinterpret_cast<uint8_t* const*>(node + 0x08)) {
         void* dlg = *reinterpret_cast<void* const*>(node);
@@ -1237,9 +1303,9 @@ int32_t GetMouseCursorIndexBody(const UserInterface* self, int32_t x, int32_t y)
         const uint8_t* root = *reinterpret_cast<uint8_t* const*>(d + 0x50);
         bool hit;
         if ((flags >> 3) & 1) {
-            void* const* vt = *reinterpret_cast<void* const* const*>(root);
-            using Fn = bool (*)(const void*, int32_t, int32_t, void*);
-            hit = reinterpret_cast<Fn>(vt[9])(root, x, y, *reinterpret_cast<void* const*>(d + 0x10));
+            // Element vtable slot 9 (+0x48) `Contains` — VIRTUAL.
+            hit = reinterpret_cast<const UI::Element*>(root)->Contains(      // B.3.6 bridge
+                x, y, *reinterpret_cast<UserInterface* const*>(d + 0x10));
         } else {
             const int32_t left   = *reinterpret_cast<const int32_t*>(root + 0x68);
             const int32_t right  = *reinterpret_cast<const int32_t*>(root + 0x70);
@@ -1249,26 +1315,28 @@ int32_t GetMouseCursorIndexBody(const UserInterface* self, int32_t x, int32_t y)
         }
         if (hit) {
             if (!dlg) return 0;
-            void* elementPtr = *reinterpret_cast<void* const*>(d + 0x50);
-            return RtUiDialogInstance_GetMouseCursorIndex(d, &elementPtr, x, y);
+            // The dialog's own `GetMouseCursorIndex(InternalPtr<Element>, x, y)`
+            // (0x180114010), a non-virtual member of the real class now.
+            Object::InternalPtr<UI::Element> element(
+                *reinterpret_cast<UI::Element* const*>(d + 0x50));
+            return reinterpret_cast<const UI::DialogInstance*>(d)                // B.3.6 bridge
+                ->GetMouseCursorIndex(element, x, y);
         }
     }
     return 0;
 }
 
-} // namespace
-
 extern "C" void RtUi_UserInterface_CleanRemovedDialogs(UserInterface* self) {
-    CleanRemovedDialogsBody(self);
+    self->UI::UserInterface::CleanRemovedDialogs();
 }
 
 extern "C" void RtUi_UserInterface_UpdateEvents(UserInterface* self) {
-    UpdateEventsBody(self);
+    self->UI::UserInterface::UpdateEvents();
 }
 
 extern "C" int32_t RtUi_UserInterface_GetMouseCursorIndex(const UserInterface* self,
                                                           int32_t x, int32_t y) {
-    return GetMouseCursorIndexBody(self, x, y);
+    return self->UI::UserInterface::GetMouseCursorIndex(x, y);
 }
 
 extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
@@ -1281,6 +1349,7 @@ extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
     const bool didWork = (*reinterpret_cast<int32_t*>(
                               reinterpret_cast<uint8_t*>(self) + 0x20) > 0) ||
                          (*reinterpret_cast<void**>(self) != nullptr);
+    (void)didWork;   // the reporting that read it is gone; kept as the banner's statement
     UiDtorBody(self);
 }
 
@@ -1378,23 +1447,28 @@ extern "C" void RtUi_UserInterface_Dtor(UserInterface* self) {
 namespace {
 
 // The two EXPORTED IO vtables, through the never-caches-a-null data door.
+// ENDGAME B.3.6 (RULE B6-5): namespace-scope atomic slots, not function-local
+// statics — `VtblIoEncoding`'s old `static void* v` was exactly the non-atomic
+// first-call cache the rule removes.
+std::atomic<void*> g_vtIoStreamSlot{nullptr};
+std::atomic<void*> g_vtIoMemStreamSlot{nullptr};
+std::atomic<void*> g_vtIoEncodingSlot{nullptr};
 inline const void* VtblIoStream() {
-    return RT_DATA_SLOT(const void*, "??_7Stream@IO@@6B@");          // 0x1801549a0
+    return rtuielem::AtomicExport(g_vtIoStreamSlot, "??_7Stream@IO@@6B@");        // 0x1801549a0
 }
 inline const void* VtblIoMemoryStream() {
-    return RT_DATA_SLOT(const void*, "??_7MemoryStream@IO@@6B@");    // 0x1801555b0
+    return rtuielem::AtomicExport(g_vtIoMemStreamSlot, "??_7MemoryStream@IO@@6B@"); // 0x1801555b0
 }
 // The shared IO::Encoding vtable. UNEXPORTED — the address door is the only
 // one, and it is PORT-AWARE, so lane C2's mint satisfies it at cutover.
 inline void* VtblIoEncoding() {
-    static void* v = nullptr;
-    if (!v) v = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801554a8ull));
-    return v;
+    return rtuielem::AtomicAddr(g_vtIoEncodingSlot, 0x1801554a8ull);
 }
 
 inline void* UiMemAllocA(size_t n, int align) {
     using Fn = void* (*)(size_t, int);
-    return RT_EXPORT_ONCE(Fn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(n, align);
+    return reinterpret_cast<Fn>(rtuielem::AtomicExport(
+        g_memAllocSlot, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z"))(n, align);
 }
 
 // `IO::Serializer` — {Stream*, ReaderWriter*}, 0x10 bytes
@@ -1403,12 +1477,12 @@ struct UiSerializer { void* stream; void* rw; };
 
 using UiCreateRwFn   = void* (*)(void* enc, UiSerializer* out, const char* name);
 using UiScalarFn     = void  (*)(void* rw, void* value, const char* name);
-using UiStreamVFn    = void  (*)(void* self, void* stream);
-using UiGetIdFn      = int32_t (*)(void* self);
 using UiDelDtorFn    = void  (*)(void* self, int flags);
 
-void UiSaveAllSettingsBody(UserInterface* self) {
-    uint8_t* node = *reinterpret_cast<uint8_t**>(self);   // _dialogs._head
+} // namespace
+
+void UI::UserInterface::SaveAllSettings() {
+    uint8_t* node = *reinterpret_cast<uint8_t**>(this);   // _dialogs._head
     if (!node) return;
 
     const void* vtStream = VtblIoStream();
@@ -1462,8 +1536,8 @@ void UiSaveAllSettingsBody(UserInterface* self) {
             ser.rw = rw;
 
             // ---- 5. the dialog's own OnSerializeSettings ------------------
-            reinterpret_cast<UiStreamVFn>(
-                (*reinterpret_cast<void***>(dlg))[9])(dlg, &st);   // +0x48
+            // DialogInstance vtable slot 9 (+0x48) — VIRTUAL.
+            reinterpret_cast<UI::DialogInstance*>(dlg)->OnSerializeSettings(&st);   // B.3.6 bridge
 
             // ---- 6. the controller loop -----------------------------------
             int32_t count = *reinterpret_cast<int32_t*>(dlg + 0x80);
@@ -1474,8 +1548,9 @@ void UiSaveAllSettingsBody(UserInterface* self) {
             for (int32_t i = 0; i < count; ++i) {
                 uint8_t* arr = *reinterpret_cast<uint8_t**>(dlg + 0x78);
                 void*    ctl = *reinterpret_cast<void**>(arr + i * 8);
-                int32_t  id  = reinterpret_cast<UiGetIdFn>(
-                                   (*reinterpret_cast<void***>(ctl))[2])(ctl);  // +0x10
+                // DialogController vtable slot 2 (+0x10) `Type()` — VIRTUAL.
+                int32_t  id  = static_cast<int32_t>(
+                    reinterpret_cast<UI::DialogController*>(ctl)->Type());      // B.3.6 bridge
                 if (rw) {
                     reinterpret_cast<UiScalarFn>(
                         (*reinterpret_cast<void***>(rw))[19])(rw, &id, nullptr); // +0x98
@@ -1494,8 +1569,9 @@ void UiSaveAllSettingsBody(UserInterface* self) {
                 // RE-READ at 0x1801206a1, not cached across the CreateWriter.
                 arr = *reinterpret_cast<uint8_t**>(dlg + 0x78);
                 ctl = *reinterpret_cast<void**>(arr + i * 8);
-                reinterpret_cast<UiStreamVFn>(
-                    (*reinterpret_cast<void***>(ctl))[10])(ctl, &st);   // +0x50
+                // DialogController vtable slot 10 (+0x50) `OnSerializeSettings`
+                // (B6-1.2: one slot LATER than DialogInstance's) — VIRTUAL.
+                reinterpret_cast<UI::DialogController*>(ctl)->OnSerializeSettings(&st); // B.3.6 bridge
 
                 if (rw2) {
                     reinterpret_cast<UiDelDtorFn>(
@@ -1517,10 +1593,8 @@ void UiSaveAllSettingsBody(UserInterface* self) {
     } while (node);
 }
 
-} // namespace
-
 extern "C" void RtUi_UserInterface_SaveAllSettings(UserInterface* self) {
-    UiSaveAllSettingsBody(self);
+    self->UI::UserInterface::SaveAllSettings();
 }
 
 int RtUiManagerRegister() {

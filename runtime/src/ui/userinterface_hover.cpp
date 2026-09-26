@@ -55,17 +55,20 @@
 #include "../../types/ui/DialogInstance.h"
 #include "../../types/ui/Element.h"
 #include "../../types/system/String.h"
-
+#include "../../types/ui/ToolTipDialog.h"
+#include "../../types/ui/String.h"
 // ResolveAddr lives in standalone/resolve.h, which drags in <windows.h> and so
-// must not be included from runtime/src (rt_port.h explains why). Declared here
-// exactly as ~30 sibling runtime files already declare it.
-enum class Module { Exe, Runtime, VideoDX11 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
+// must not be included from runtime/src (rt_port.h explains why).
+// ENDGAME B.3.6 block E: element_common.h carries the declaration exactly as
+// ~30 sibling runtime files spell it, and the RULE B6-5 atomic door caches.
+#include "element_common.h"
+
+#include <atomic>
+#include <new>
 
 namespace {
 
 using UI::UserInterface;
-using RtUI::DialogInstance;
 using UI::Element;
 
 // ---------------------------------------------------------------------------
@@ -75,24 +78,38 @@ constexpr uintptr_t kEventsSetSizeAddr     = 0x180033690;  // Array<UI::Event>::
 constexpr uintptr_t kAddDialogsSetSizeAddr = 0x18007a0d0;  // Array<InternalPtr<DialogInstance>>::SetSize
 
 using SetSizeFn      = void  (*)(void* array, int32_t newSize, const void* fill);
-using CloseDialogFn  = void  (*)(void* ui, void* dlgPtr);
 using OperatorNewFn  = void* (*)(uint64_t size);
 using DlgInstCtorFn  = void* (*)(void* self, void* ui, const void* dialog, void* parentPtr,
                                  void* dataSource, void* userData, int32_t userFlags);
 using GetTipStringFn = System::String* (*)(const void* element, System::String* ret);
-using UiStrCastFn    = System::String* (*)(const void* uiString, System::String* ret);
-using SetTextFn      = void  (*)(void* toolTipDialog, const System::String* text);
-using SetUpperLeftFn = void  (*)(void* dlg, int32_t x, int32_t y, bool centered);
+
+// ENDGAME B.3.6 (RULE B6-5): the two address doors used to be function-local
+// `static` first-call caches, and every other door this file still needs is a
+// namespace-scope atomic slot — the member bodies below run on UI objects the
+// loader thread constructs.
+std::atomic<void*> g_eventsSetSizeSlot{nullptr};
+std::atomic<void*> g_addDialogsSetSizeSlot{nullptr};
+std::atomic<void*> g_sptSlot{nullptr};
+std::atomic<void*> g_tipOperatorNewSlot{nullptr};
+std::atomic<void*> g_dlgInstCtorSlot{nullptr};
+std::atomic<void*> g_tipVtableSlot{nullptr};
+std::atomic<void*> g_getTipStringSlot{nullptr};
 
 SetSizeFn EventsSetSize() {
-    static SetSizeFn fn = reinterpret_cast<SetSizeFn>(
-        ResolveAddr(Module::Runtime, kEventsSetSizeAddr));
-    return fn;
+    return reinterpret_cast<SetSizeFn>(
+        rtuielem::AtomicAddr(g_eventsSetSizeSlot, kEventsSetSizeAddr));
 }
 SetSizeFn AddDialogsSetSize() {
-    static SetSizeFn fn = reinterpret_cast<SetSizeFn>(
-        ResolveAddr(Module::Runtime, kAddDialogsSetSizeAddr));
-    return fn;
+    return reinterpret_cast<SetSizeFn>(
+        rtuielem::AtomicAddr(g_addDialogsSetSizeSlot, kAddDialogsSetSizeAddr));
+}
+// `?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ` (0x1800356a0) — the
+// member is declared on the real class (block A) but its body is still the
+// door in tooltipdialog.cpp (the fragment pass's file), so it is reached by
+// name. RETSLOT door shape `(this, ret)`.
+void GetToolTipStringInto(const Element* elem, System::String* ret) {
+    reinterpret_cast<GetTipStringFn>(rtuielem::AtomicExport(
+        g_getTipStringSlot, "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ"))(elem, ret);
 }
 
 // ---------------------------------------------------------------------------
@@ -193,16 +210,20 @@ static_assert(offsetof(EventRecord, dragData)  == 0x28, "");
 // bottom} and the tests interleave it. ClipRegion in UserInterface.h already
 // names that member order from GetClipRegion (0x180031000).
 // ============================================================================
-extern "C" bool RtUi_UserInterface_IsInsideClipRegion(const UserInterface* self,
-                                                     int32_t x, int32_t y) {
+bool UI::UserInterface::IsInsideClipRegion(int32_t x, int32_t y) const {
     ++g_clipEntries;
-    const UI::ClipRegion& c = self->_clipRegion;
+    const ClipRegion& c = _clipRegion;
     if (x < c.left)   return false;
     if (x > c.right)  return false;
     if (y < c.top)    return false;
     if (y > c.bottom) return false;
     ++g_clipInside;
     return true;
+}
+
+extern "C" bool RtUi_UserInterface_IsInsideClipRegion(const UserInterface* self,
+                                                     int32_t x, int32_t y) {
+    return self->UI::UserInterface::IsInsideClipRegion(x, y);
 }
 
 // ============================================================================
@@ -229,34 +250,38 @@ extern "C" bool RtUi_UserInterface_IsInsideClipRegion(const UserInterface* self,
 // frees the drag-drop element here. UserInterface.h already records that
 // ("_dragDropElement  Update destroys it (vslot 0)").
 // ============================================================================
-extern "C" void RtUi_UserInterface_EndDragDrop(UserInterface* self) {
+void UI::UserInterface::EndDragDrop() {
     ++g_endDragEntries;
 
     EventRecord rec;                        // deliberately NOT zeroed
-    rec.dialog    = self->_dragDropDialog;  // 0x180120afa / 0x180120b04
+    rec.dialog    = _dragDropDialog;        // 0x180120afa / 0x180120b04
     rec.element   = nullptr;                // 0x180120b21
     rec.eventId   = 0xe;                    // 0x180120b26  drag-drop CANCEL
     rec.elementId = -1;                     // 0x180120b2e
     rec.userData  = nullptr;                // 0x180120b36
-    rec.dragId    = self->_dragDropId;      // 0x180120b09 / 0x180120b10
-    rec.dragData  = self->_dragDropData;    // 0x180120b14 / 0x180120b3b
-    EventsSetSize()(&self->_events, self->_events._size + 1, &rec);   // 0x180120b40
+    rec.dragId    = _dragDropId;            // 0x180120b09 / 0x180120b10
+    rec.dragData  = _dragDropData;          // 0x180120b14 / 0x180120b3b
+    EventsSetSize()(&_events, _events._size + 1, &rec);               // 0x180120b40
 
-    self->_dragDropDialog = nullptr;                                  // 0x180120b45
+    _dragDropDialog = nullptr;                                        // 0x180120b45
 
-    void* const elem = self->_dragDropElement;                        // 0x180120b49
+    void* const elem = _dragDropElement;                              // 0x180120b49
     if (elem) {
         ++g_endDragDestroyed;
-        void** const vt = *reinterpret_cast<void***>(elem);           // 0x180120b52
-        // slot 0, flag 1 == deleting destructor (destroy AND free)
-        reinterpret_cast<void (*)(void*, uint32_t)>(vt[0])(elem, 1);  // 0x180120b58
-        self->_dragDropElement = nullptr;                             // 0x180120b5a
+        // Element vtable slot 0, flag 1 == deleting destructor (destroy AND
+        // free) — VIRTUAL `Object::Base::DeletingDtor`.
+        reinterpret_cast<Element*>(elem)->DeletingDtor(1);            // 0x180120b58  B.3.6 bridge
+        _dragDropElement = nullptr;                                   // 0x180120b5a
     }
-    self->_dragDropElement   = nullptr;                               // 0x180120b5e
-    self->_dragDropId        = 0;                                     // 0x180120b62
-    self->_dragDropData      = nullptr;                               // 0x180120b65
-    self->_dragDropUserData  = nullptr;                               // 0x180120b69
+    _dragDropElement   = nullptr;                                     // 0x180120b5e
+    _dragDropId        = 0;                                           // 0x180120b62
+    _dragDropData      = nullptr;                                     // 0x180120b65
+    _dragDropUserData  = nullptr;                                     // 0x180120b69
     // +0x88 _dragDropActive is NOT cleared by retail. Left alone.
+}
+
+extern "C" void RtUi_UserInterface_EndDragDrop(UserInterface* self) {
+    self->UI::UserInterface::EndDragDrop();
 }
 
 // ============================================================================
@@ -282,15 +307,18 @@ extern "C" void RtUi_UserInterface_EndDragDrop(UserInterface* self) {
 // division retail wrote (via the exported _secondsPerTick) rather than folded
 // to a literal, so it keeps tracking the constant Engine::Startup installs.
 // ============================================================================
-extern "C" void RtUi_DialogInstance_EndHover(DialogInstance* self, UserInterface* ui) {
+// ENDGAME B.3.6 block E: this is a `UI::DialogInstance` member (block B
+// declared it on the real class and left it undefined because the body lives
+// in this file); DEFINED here, the door delegates.
+void UI::DialogInstance::EndHover(UserInterface* ui) {
     ++g_endHoverEntries;
 
-    if (self->_hovering != 0) {                     // 0x180113d16
+    if (_hovering != 0) {                           // 0x180113d16
         ++g_endHoverPushed;
-        self->_hovering = 0;                        // 0x180113d24
+        _hovering = 0;                              // 0x180113d24
 
         EventRecord rec;                            // deliberately NOT zeroed
-        rec.dialog    = self;                       // 0x180113d2b
+        rec.dialog    = this;                       // 0x180113d2b
         rec.element   = nullptr;                    // 0x180113d45
         rec.eventId   = 0x11;                       // 0x180113d39 (a QWORD store,
         rec.elementId = 0;                          //   covering +0x10 AND +0x14)
@@ -301,9 +329,13 @@ extern "C" void RtUi_DialogInstance_EndHover(DialogInstance* self, UserInterface
     }
 
     // 0x180113d5f: XORPS XMM0,XMM0 / DIVSD XMM0,[0x1801fe728] / CVTTSD2SI
-    const double* const spt = RT_EXPORT_ONCE(const double*,
-                                             "?_secondsPerTick@Timer@System@@0NA");
-    self->_hoverTime = static_cast<int64_t>(0.0 / *spt);              // 0x180113d6f
+    const double* const spt = static_cast<const double*>(
+        rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
+    _hoverTime = static_cast<int64_t>(0.0 / *spt);                    // 0x180113d6f
+}
+
+extern "C" void RtUi_DialogInstance_EndHover(UI::DialogInstance* self, UserInterface* ui) {
+    self->UI::DialogInstance::EndHover(ui);
 }
 
 // ============================================================================
@@ -340,7 +372,21 @@ extern "C" void RtUi_DialogInstance_EndHover(DialogInstance* self, UserInterface
 extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
                                                void** dlgPtr, void** elemPtr,
                                                int32_t x, int32_t y) {
+    self->UI::UserInterface::BeginToolTip(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr), x, y);
+}
+
+// ENDGAME B.3.6 block E: the body is the member. Both InternalPtr arguments are
+// the ADDRESSES of the caller's temporaries (RULE B6-11, see above), spelled
+// `dlgPtr`/`elemPtr` below as the port always spelled them.
+void UI::UserInterface::BeginToolTip(Object::InternalPtr<DialogInstance>* dialog,
+                                     Object::InternalPtr<Element>* element,
+                                     int32_t x, int32_t y) {
     ++g_tipEntries;
+    UserInterface* const self = this;
+    void** const dlgPtr  = reinterpret_cast<void**>(dialog);
+    void** const elemPtr = reinterpret_cast<void**>(element);
 
     Element* const elem = reinterpret_cast<Element*>(*elemPtr);       // 0x18012088e
     if (elem->_toolTipDialog == nullptr)      { ++g_tipRejected; return; }  // +0x40
@@ -351,10 +397,9 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
     // --- close whatever tooltip is already up (always, see the quirk above) --
     if (self->_toolTipDialog != nullptr) {                            // 0x1801208be
         ++g_tipClosedPrev;
-        void* local = self->_toolTipDialog;                           // 0x1801208d3
-        RT_EXPORT_ONCE(CloseDialogFn,
-            "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z")
-            (self, &local);                                           // 0x1801208de
+        Object::InternalPtr<DialogInstance> local(                    // 0x1801208d3
+            static_cast<DialogInstance*>(self->_toolTipDialog));
+        CloseDialog(&local);                                          // 0x1801208de
         self->_toolTipDialog = nullptr;                               // 0x1801208e3
         self->_toolTipOwner  = nullptr;                               // 0x1801208e7
     }
@@ -363,18 +408,23 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
     // 0xc0 is retail's literal, and it is why DialogInstance.h's size assert
     // says the ALLOCATED size of a DialogInstance-derived object is 0xc0 while
     // the ctor-initialised extent is 0xb8.
-    void* tip = RT_EXPORT_ONCE(OperatorNewFn,
-                               "??2ToolTipDialog@UI@@SAPEAX_K@Z")(0xc0);   // 0x1801208f0
+    //
+    // ENDGAME B.3.6: `??2ToolTipDialog` (a MemoryAllocator door, B36_RULES 7),
+    // `DialogInstance`'s ctor (a DOOR, B6-3 — no real ctor on a polymorphic
+    // class) and the minted `??_7ToolTipDialog` stamp all STAY doors; only
+    // their caches moved to namespace-scope atomics (RULE B6-5).
+    void* tip = reinterpret_cast<OperatorNewFn>(rtuielem::AtomicExport(
+        g_tipOperatorNewSlot, "??2ToolTipDialog@UI@@SAPEAX_K@Z"))(0xc0);  // 0x1801208f0
     if (tip) {
         void* parentLocal = *dlgPtr;                                  // 0x180120907
-        RT_EXPORT_ONCE(DlgInstCtorFn,
+        reinterpret_cast<DlgInstCtorFn>(rtuielem::AtomicExport(g_dlgInstCtorSlot,
             "??0DialogInstance@UI@@QEAA@PEAVUserInterface@1@PEBVDialog@1@"
-            "V?$InternalPtr@VDialogInstance@UI@@@Object@@PEAVBase@5@PEAXH@Z")
+            "V?$InternalPtr@VDialogInstance@UI@@@Object@@PEAVBase@5@PEAXH@Z"))
             (tip, self, elem->_toolTipDialog, &parentLocal, elem, nullptr, 0);  // 0x180120928
         // Stamp ??_7ToolTipDialog@UI@@6B@ over the base ctor's vtable.
         // Reached by NAME: it is exported DATA (0x180157880).
         *reinterpret_cast<void**>(tip) =
-            RT_EXPORT_ONCE(void*, "??_7ToolTipDialog@UI@@6B@");        // 0x18012092e
+            rtuielem::AtomicExport(g_tipVtableSlot, "??_7ToolTipDialog@UI@@6B@");  // 0x18012092e
     } else {
         ++g_tipAllocFailed;                                            // 0x18012093a
     }
@@ -389,8 +439,7 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
     bool nonEmpty;
     {
         System::String probe;
-        RT_EXPORT_ONCE(GetTipStringFn,
-            "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ")(elem, &probe);  // 0x180120948
+        GetToolTipStringInto(elem, &probe);                             // 0x180120948
 
         // 0x18012094e..0x180120966: empty == (data == 0) || (length == 0), then
         // SETE inverts it, so `nonEmpty` is what the branch below actually tests.
@@ -402,18 +451,20 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
         System::String text;
         if (nonEmpty) {
             ++g_tipNonEmpty;
-            RT_EXPORT_ONCE(GetTipStringFn,
-                "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ")(elem, &text);  // 0x18012099f
+            GetToolTipStringInto(elem, &text);                         // 0x18012099f
         } else {
-            // A 16-byte copy of the element's UI::String, then the exported
-            // conversion operator UI::String -> System::String.
+            // A 16-byte copy of the element's UI::String, then the conversion
+            // operator UI::String -> System::String — a member of the real
+            // value type now (block D, sprite.cpp). Its by-value result is
+            // constructed straight into `text`'s storage, exactly as retail's
+            // retslot call writes the caller's slot (`text` is still the empty
+            // default-constructed string there, so nothing is overwritten).
             ::UIString tmp = elem->_toolTip;                           // 0x1801209b4
-            RT_EXPORT_ONCE(UiStrCastFn,
-                "??BString@UI@@QEBA?AV0System@@XZ")(&tmp, &text);       // 0x1801209c8
+            new (&text) System::String(tmp.operator System::String()); // 0x1801209c8
         }
-        RT_EXPORT_ONCE(SetTextFn,
-            "?SetText@ToolTipDialog@UI@@QEAAXAEBVString@System@@@Z")
-            (self->_toolTipDialog, &text);                              // 0x1801209ac / 0x1801209d6
+        // `ToolTipDialog::SetText` (0x1800dab00) — non-virtual member of the
+        // real class (block B).
+        reinterpret_cast<UI::ToolTipDialog*>(self->_toolTipDialog)->SetText(text);  // B.3.6 bridge
     }                                                                   // 0x1801209dc
 
     // --- position it, open it, queue it -------------------------------------
@@ -427,15 +478,15 @@ extern "C" void RtUi_UserInterface_BeginToolTip(UserInterface* self,
             reinterpret_cast<uint8_t*>(self->_toolTipDialog) + 0x50);   // 0x180120a15
         const int32_t h = *reinterpret_cast<const int32_t*>(
             reinterpret_cast<const uint8_t*>(root) + 0x64);             // 0x180120a1d
-        RT_EXPORT_ONCE(SetUpperLeftFn,
-            "?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z")
-            (self->_toolTipDialog, x, y - h, false);                    // 0x180120a27
+        // `DialogInstance::SetUpperLeft` (0x180114a60) — non-virtual member.
+        reinterpret_cast<DialogInstance*>(self->_toolTipDialog)         // B.3.6 bridge
+            ->SetUpperLeft(x, y - h, false);                            // 0x180120a27
     }
 
     void* queued = self->_toolTipDialog;                                // 0x180120a2c
-    // vtable slot 4 (byte offset 0x20) is DialogInstance::OnOpened.
-    void** const vt = *reinterpret_cast<void***>(queued);               // 0x180120a34
-    reinterpret_cast<void (*)(void*)>(vt[4])(queued);                   // 0x180120a37
+    // vtable slot 4 (byte offset 0x20) is DialogInstance::OnOpened — VIRTUAL,
+    // dispatched through the stamped ToolTipDialog table.
+    reinterpret_cast<DialogInstance*>(queued)->OnOpened();              // 0x180120a37  B.3.6 bridge
 
     AddDialogsSetSize()(&self->_addDialogs,
                         self->_addDialogs._size + 1, &queued);          // 0x180120a47

@@ -11,7 +11,7 @@
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
 //
 // ---------------------------------------------------------------------------
-// SIZE: 0x128 bytes, alignment 4. PROVEN, NOT INFERRED.
+// SIZE: 0x128 bytes (allocated with alignment 4; alignof is 8). PROVEN, NOT INFERRED.
 // ---------------------------------------------------------------------------
 // Retail allocates it in exactly one place, and spells both numbers out:
 //
@@ -189,10 +189,208 @@ struct Event {
 };
 static_assert(sizeof(Event) == 0x30, "UI event record stride, from CleanRemovedDialogs");
 
-// ============================================================
-// UI::UserInterface — 0x128 bytes, no vtable.
-// ============================================================
-struct UserInterface {
+
+} // namespace UI
+
+// ############################################################################
+// UI::UserInterface — THE REAL CLASS (ENDGAME B.3 step 6, block E)
+// ############################################################################
+//
+// NON-POLYMORPHIC ROOT (B36_RULES 2.4): no `??_7UserInterface@UI@@6B@`, no
+// `_typeInfo`, every one of the 52 exports is `QEAA`/`QEBA`/`AEAA`/`CA`. The
+// Wave 7 POD that used to be spelled here occupied the retail name and was
+// field-identical to this class, so it is not moved to `RtUI::` — the POD
+// BECOMES the class (B6-4.1, one definition per layout) and every includer
+// (`UpdateLoop.h`'s two by-value holders, the exe-tree readers of `_dialogs`,
+// `standalone/mouse_inject.cpp`) compiles against the same fields.
+//
+// HELD BY VALUE (RULE B6-4.5 / B5-4): `RtEngine::DialogLoopT` (+0x40, pinned by
+// `?GetUserInterface@DialogLoopT@Engine@@` 0x18004d7c0) and
+// `RtEngine::DialogLoaderLoopT` (+0x60) embed it. So it is CONCRETE, its default
+// constructor is `protected` and `= default`, and the two holders are
+// `friend`s. That `= default` is NOT retail's constructor: `??0UserInterface@UI@@
+// QEAA@XZ` (0x180120de0) seeds `_uiScale = 1.0f`, `_fadeSpriteIndex = -1` and
+// `_fadeColor = 0xffffffff` and leaves 25 bytes unwritten, and it STAYS A DOOR
+// (`RtUi_UserInterface_Ctor`, userinterface.cpp — B4b-2: a C++ ctor would run a
+// second time over what the door seeded). It is constructed on the LOADER
+// thread (`code/Game/Game/gameupdateloop_load.cpp`, `s_fn_UI_Ctor`) and by
+// `ShowDialog` for its nested modal UI — both through the door.
+//
+// `??1UserInterface@UI@@QEAA@XZ` (0x180120b90) likewise STAYS A DOOR and is NOT
+// declared as a C++ destructor: declaring it would replace the implicit
+// member-wise destructor that the two by-value holders' own implicit
+// destructors name, and nothing destroys a UserInterface in C++.
+//
+// NOT TRIVIALLY COPYABLE — and it never was. The block prompt asked for
+// `static_assert(std::is_trivially_copyable_v<UI::UserInterface>)`; that assert
+// is FALSE for this layout and for the POD before it: `_removedDialogs`,
+// `_addDialogs` and `_events` are `Collection::Array<T>`, whose destructor is
+// user-declared (Collection.h `~Array()`, retail's 0x18001c750 family), exactly
+// the reason Camera.h gives for `RendererDrawGroup`. The assert below pins the
+// measured half instead, so an edit cannot silently flip it.
+//
+// ARGUMENT PASSING, read from the RETAIL PROLOGUES (RULE B6-11):
+//   * every `Object::InternalPtr<T>` BY-VALUE parameter arrives as the ADDRESS
+//     of the caller's temporary and is declared `Object::InternalPtr<T>*`:
+//       AddDialog 0x180120ee0            MOV RCX,[RDX]
+//       BringDialogToFront 0x180120440   MOV RAX,[RDX]
+//       CloseDialog 0x180120f20          MOV RDI,RDX / MOV RBX,[RDX]
+//       IsDialogOpen 0x180120410         MOV RCX,[RDX]
+//       ShowDialog 0x18011fd10           MOV R14,RDX / MOV RAX,[R14]
+//       EndToolTip 0x180120aa0           CMP [RDX],RAX
+//       BeginToolTip 0x180120860         MOV RAX,[R8] (element), MOV RCX,[R14] (dialog)
+//       BeginDragDrop 0x18011f5f0        MOV RAX,[RDX] (dialog), MOV RAX,[R8] (element)
+//       PostEvent 0x1800310e0            MOV RDX,[RDX] (dialog), MOV RAX,[R8] (element)
+//   * `Object::ExternalPtr<T>` BY VALUE arrives as the BARE POINTER in the
+//     register (GCC passes the trivially copyable 8-byte class the same way), so
+//     it is declared by value:
+//       SetCursor 0x1801225f0            MOV [RCX+0xd0],RDX, then [RDX+0x20]
+//       SetSound 0x1800310d0             MOV [RCX+RAX*8+0x98],R8
+//   * the 16-byte by-value classes arrive by hidden pointer to the caller's copy:
+//       SetFullscreenFadeSprite 0x18011f560  `UI::Sprite`       MOV RAX,[RDX]
+//       BeginSpriteCapture 0x18011f4c0       `Video::Viewport`  MOV EAX,[R8]
+//
+// HIDDEN RETURN SLOTS (B36_SLOTS sec. 4), all NON-virtual, so the member returns
+// by value (both ends are this GCC) and the registered door keeps retail's
+// `(this, ret, …)` shape and placement-news the prvalue (B5-12):
+//   GetFirstDialog 0x180031150 (`Iterator`), GetFirstContainedDialog 0x18011fb00,
+//   SetClipRegion x2 0x180122470 / 0x1801224d0 (`ClipRegion`).
+//
+// RULE B6-5: no member keeps a static initialiser, a lazy singleton or a
+// non-atomic first-call cache. Doors another namespace owns are resolved through
+// namespace-scope `std::atomic<void*>` slots (`rtuielem::AtomicExport`).
+// ############################################################################
+
+#include <type_traits>
+
+namespace Object {
+template <class T> class InternalPtr;
+template <class T> class ExternalPtr;
+}
+namespace System { class Time; }
+namespace Video  { class Context; struct Viewport; }
+namespace Audio  { class Scene; class SoundEffect; }
+namespace RtEngine { struct DialogLoopT; struct DialogLoaderLoopT; }
+
+namespace UI {
+
+class DialogInstance;
+class Element;
+class Cursor;
+class Sprite;
+class SpriteCapture;
+class SpriteContext;
+
+class UserInterface {
+public:
+    // Retail's nested spellings: `UserInterface::ClipRegion` is the mangled
+    // `UClipRegion@12`; the Event record and the dialog list's iterator.
+    using ClipRegion = ::UI::ClipRegion;
+    using Event      = ::UI::Event;
+    using Iterator   = Collection::LinkedList<DialogInstancePtr>::Iterator;
+
+    // ---- the 52 exports, in B36_SLOTS sec. 6 order --------------------------
+    // ??0UserInterface@UI@@QEAA@AEBV01@@Z  0x180031170 — NOT PORTED, no caller.
+    // Declared (and so no C++ code can reach the Arrays' shallow defaulted copy),
+    // deliberately undefined.
+    UserInterface(const UserInterface& other);
+    // ??0UserInterface@UI@@QEAA@XZ  0x180120de0 — DOOR (see banner; protected
+    //   `= default` below is not it).
+    // ??1UserInterface@UI@@QEAA@XZ  0x180120b90 — DOOR (see banner; not declared).
+
+    void AddDialog(Object::InternalPtr<DialogInstance>* dialog);                 // 0x180120ee0
+    void BeginDragDrop(Object::InternalPtr<DialogInstance>* dialog,
+                       Object::InternalPtr<Element>* element,
+                       int32_t x, int32_t y, uint32_t id, void* data);           // 0x18011f5f0
+    void BeginSpriteCapture(SpriteCapture* capture,
+                            const Video::Viewport* viewport);                    // 0x18011f4c0  not registered
+    void BeginToolTip(Object::InternalPtr<DialogInstance>* dialog,
+                      Object::InternalPtr<Element>* element,
+                      int32_t x, int32_t y);                                     // 0x180120860
+    void BringDialogToFront(Object::InternalPtr<DialogInstance>* dialog);        // 0x180120440
+    void CancelDragDrop();                                                       // 0x18011f580  not ported
+    void CloseDialog(Object::InternalPtr<DialogInstance>* dialog);               // 0x180120f20
+    bool DialogContains(int32_t x, int32_t y) const;                             // 0x18011fbb0  not ported
+    void* DragDropData() const { return _dragDropData; }                         // 0x180031030  not registered
+    uint32_t DragDropId() const { return _dragDropId; }                          // 0x180031040  not registered
+    void Draw(Video::Context& context);                                          // 0x180121890
+    void DrawDragDrop(SpriteContext& context) const;                             // 0x18011f780  not ported
+    void DrawFade(SpriteContext& context, int32_t x, int32_t y,
+                  int32_t w, int32_t h) const;                                   // 0x18011f6f0  not ported
+    void DrawMouse(SpriteContext& context) const;                                // 0x18011f640  not ported
+    void EnableCursor(bool enable);                                              // 0x180122580
+    void EndDragDrop();                                                          // 0x180120af0
+    void EndSpriteCapture();                                                     // 0x18011f4a0
+    void EndToolTip(Object::InternalPtr<Element>* element);                      // 0x180120aa0  not ported
+    int32_t GetAddDialogCount() const;                                           // 0x180031160
+    const ClipRegion& GetClipRegion() const { return _clipRegion; }             // 0x180031000  not registered
+    Object::InternalPtr<DialogInstance> GetFirstContainedDialog(int32_t x,
+                                                                int32_t y) const; // 0x18011fb00  RETSLOT
+    Iterator GetFirstDialog();                                                   // 0x180031150  RETSLOT
+    int32_t GetMouseCursorIndex(int32_t x, int32_t y) const;                     // 0x18011fa40
+    // 0x180120410, fourteen instructions, read whole: MOV RAX,[RCX] (the head)
+    // / JZ false — the argument is NOT read on an empty list — then
+    // MOV RCX,[RDX] (the dialog, through the caller's InternalPtr) and a walk
+    // through `next` (+0x10). Not registered (nothing in the tree calls it).
+    bool IsDialogOpen(Object::InternalPtr<DialogInstance>* dialog) const {
+        auto* node = _dialogs._head;
+        if (node == nullptr) return false;
+        void* const want = *reinterpret_cast<void* const*>(dialog);
+        do {
+            if (node->element == want) return true;
+            node = node->next;
+        } while (node != nullptr);
+        return false;
+    }
+    // 0x180031010: UCOMISS/JP/JNZ — a NaN velocity reads as fading.
+    bool IsFading() const { return !(_fadeVelocity == 0.0f); }                  // 0x180031010  not registered
+    bool IsInsideClipRegion(int32_t x, int32_t y) const;                         // 0x180120830
+    bool PausesGame() const;                                                     // 0x18011fa10
+    void Play(int32_t id);                                                       // 0x1801223d0
+    void PostEvent(Object::InternalPtr<DialogInstance>* dialog,
+                   Object::InternalPtr<Element>* element,
+                   int32_t a, int32_t b, int32_t c, int32_t d, int32_t e,
+                   void* userData);                                              // 0x1800310e0  not ported
+    void SaveAllSettings();                                                      // 0x1801204b0
+    void SetAudioScene(Audio::Scene* scene) { _audioScene = scene; }             // 0x180031050  not registered
+    ClipRegion SetClipRegion(const ClipRegion& region);                          // 0x1801224d0  RETSLOT, not ported
+    ClipRegion SetClipRegion(int32_t left, int32_t top,
+                             int32_t right, int32_t bottom);                     // 0x180122470  RETSLOT, not ported
+    void SetCursor(Object::ExternalPtr<Cursor> cursor);                          // 0x1801225f0
+    void SetFullscreenFade(bool fadeIn, uint32_t color, bool immediate);         // 0x18011f500
+    void SetFullscreenFadeSprite(const Sprite* sprite);                          // 0x18011f560
+    void SetSound(int32_t id, Object::ExternalPtr<Audio::SoundEffect> sound);    // 0x1800310d0  not ported
+    // 0x180031070: CVTDQ2PS / DIVSS [0x180161714] (100.0f).
+    void SetUIScale(int32_t percent) { _uiScale = static_cast<float>(percent) / 100.0f; } // not registered
+    int32_t ShowDialog(Object::InternalPtr<DialogInstance>* dialog);             // 0x18011fd10
+    // 0x180031090 / 0x1800310b0: CVTDQ2PS, MULSS / DIVSS by _uiScale, CVTTSS2SI.
+    int32_t UIScaled(int32_t v) const   { return static_cast<int32_t>(static_cast<float>(v) * _uiScale); }
+    int32_t UIUnscaled(int32_t v) const { return static_cast<int32_t>(static_cast<float>(v) / _uiScale); }
+    int32_t Update(const System::Time& time);                                    // 0x1801213c0  (main-loop hot path)
+    void UpdateEvents();                                                         // 0x18011fc60
+    void UpdateFade(const System::Time& time);                                   // 0x18011f990  not ported
+    void UpdateToolTip(int32_t x, int32_t y);                                    // 0x180120a70  not ported
+    bool WasMouseCaptured() const { return _mouseCaptured != 0; }                // 0x180031060  not registered
+
+    // ---- retail `CA` (private STATIC) and `AEAA` (private) members ----------
+    // PUBLIC here, as SpriteContext.h keeps its AEAA members: the registered
+    // doors (plain functions) delegate to them, and MainLoop's callback arrays
+    // hold the DOORS, whose (context, userData) shape these statics mirror.
+    static void DrawStandAloneUI(Video::Context& context, void* userData);       // 0x1801203f0  CA
+    static void UpdateStandAloneUI(const System::Time& time, void* userData);    // 0x180120310  CA
+    void CleanRemovedDialogs();                                                  // 0x18011f790  AEAA
+
+protected:
+    // RULE B5-4 / B6-4.5: NOT retail's ctor (that is the door, see banner). It
+    // exists only so the two by-value holders below can declare the member.
+    UserInterface() = default;
+    friend struct RtEngine::DialogLoopT;
+    friend struct RtEngine::DialogLoaderLoopT;
+
+public:
+    // ---- the 0x128 bytes, evidence per field in the FIELD EVIDENCE table ----
+    // (public: the exe-tree readers of `_dialogs` and the doors reach them).
+
     // --- the live dialog stack, front-to-back ---------------------------------
     // _head is the BACKmost dialog and _tail the FRONTmost: BringDialogToFront
     // (0x180120440) re-appends at _tail, GetFirstContainedDialog walks from
@@ -214,7 +412,7 @@ struct UserInterface {
     // The element the tooltip belongs to, and the ToolTipDialog built for it.
     // Always cleared as a pair (BeginToolTip, CloseDialog, Update).
     DialogInstancePtr _toolTipOwner;                             // +0x038
-    void*             _toolTipDialog;                            // +0x040
+    void*             _toolTipDialog;                            // +0x040  UI::ToolTipDialog*
 
     Collection::Array<Event> _events;                            // +0x048, 0x10
 
@@ -222,19 +420,18 @@ struct UserInterface {
     int32_t _mouseDownY;                                         // +0x05c
 
     DialogInstancePtr _dragDropDialog;                           // +0x060
-    void*             _dragDropElement;                          // +0x068
+    void*             _dragDropElement;                          // +0x068  UI::Element*
     uint32_t          _dragDropId;                               // +0x070
     uint32_t          _pad74;                                    // +0x074 never written
     void*             _dragDropData;                             // +0x078
     // TWO READINGS, BOTH CORRECT (Wave 10E lane DRAG). The two sites that
-    // CLEAR this -- userinterface_hover.cpp:291 and userinterface_frame.cpp:539
-    // -- zero the whole qword, so `void*` is the right shape for them and the
-    // declaration stays. But the WRITER, BeginDragDrop (0x18011f5f0), fills it
-    // as a PAIR OF int32 GRAB OFFSETS: +0x080 = x - element->_layoutLeft and
-    // +0x084 = y - element->_layoutTop, i.e. where inside the dragged element
-    // the cursor took hold. The pair covers all eight bytes, so a qword clear
-    // zeroes both halves and the two readings never disagree.
+    // CLEAR this (EndDragDrop, Update) zero the whole qword, so `void*` is the
+    // right shape for them and the declaration stays. But the WRITER,
+    // BeginDragDrop (0x18011f5f0), fills it as a PAIR OF int32 GRAB OFFSETS:
+    // +0x080 = x - element->_layoutLeft and +0x084 = y - element->_layoutTop.
+    // The pair covers all eight bytes, so a qword clear zeroes both halves.
     void*             _dragDropUserData;                         // +0x080
+    // Also UpdateEvents' re-entrancy guard (set for the whole drain).
     uint8_t           _dragDropActive;                           // +0x088
     uint8_t           _pad89[7];                                 // +0x089 never written
 
@@ -250,12 +447,9 @@ struct UserInterface {
     uint8_t _pad0da[2];                                          // +0x0da never written
     float   _uiScale;                                            // +0x0dc init 1.0f
 
-    // UI::Sprite, 0x10 bytes: {ExternalPtr<SpriteSheet>, int32 index, pad}.
-    // Spelled out rather than pulled from runtime/types/ui/Sprite.h because
-    // lane F owns that header and this lane only ever copies the 16 bytes
-    // wholesale. The ctor's `index = -1` is the engine's empty-sprite value
-    // (reference_unresolved_lookup_leaves_a_valid_looking_zero.md: index 0 is
-    // a REAL sprite, -1 is the empty one).
+    // UI::Sprite, 0x10 bytes: {ExternalPtr<SpriteSheet>, int32 index, pad},
+    // copied wholesale by SetFullscreenFadeSprite (padding included). The
+    // ctor's `index = -1` is the engine's empty-sprite value.
     void*   _fadeSpriteSheet;                                    // +0x0e0
     int32_t _fadeSpriteIndex;                                    // +0x0e8 init -1
     int32_t _pad0ec;                                             // +0x0ec never written
@@ -268,13 +462,21 @@ struct UserInterface {
     uint32_t   _pad10c;                                          // +0x10c never written
 
     void*   _spriteCapture;                                      // +0x110 UI::SpriteCapture*
-    // Video::Viewport, 0x10 bytes; handed to SpriteContext::Begin by Draw.
-    // Opaque here for the same reason as Event: nothing in this lane reads it.
+    // Video::Viewport, 0x10 bytes; handed to SpriteContext::Begin by Draw and
+    // written dword by dword by BeginSpriteCapture. Kept as bytes so this
+    // header does not pull Video/Context.h into the exe tree's includers.
     uint8_t _captureViewport[0x10];                              // +0x118
 };
 
 static_assert(sizeof(UserInterface) == 0x128,
               "sizeof(UI::UserInterface) is the literal 0x128 in ShowDialog's Allocate");
+// The ALLOCATION alignment retail asks for is 4 (`Allocate(_singleton, 0x128, 4)`
+// in ShowDialog); the TYPE's alignment is its widest member, the qword pointers.
+static_assert(alignof(UserInterface) == 8, "UI::UserInterface is qword-aligned (pointer members)");
+static_assert(!std::is_polymorphic_v<UserInterface>, "no vtable: the ctor's first store is _dialogs._head");
+static_assert(!std::is_trivially_copyable_v<UserInterface>,
+              "Collection::Array's user-declared destructor makes the layout non-trivial "
+              "(see banner: the prompt's is_trivially_copyable assert is false for this layout)");
 
 static_assert(offsetof(UserInterface, _dialogs)          == 0x000, "_dialogs at +0x000");
 static_assert(offsetof(UserInterface, _removedDialogs)   == 0x018, "_removedDialogs at +0x018");
@@ -311,5 +513,7 @@ static_assert(sizeof(Collection::LinkedList<DialogInstancePtr>) == 0x18,
               "LinkedList<T> is head/tail/count/pad = 0x18");
 static_assert(sizeof(Collection::Array<DialogInstancePtr>) == 0x10,
               "Array<T> is data/size/capacity = 0x10");
+static_assert(sizeof(UserInterface::Iterator) == 0x08,
+              "GetFirstDialog's by-value Iterator is one node pointer");
 
 } // namespace UI
