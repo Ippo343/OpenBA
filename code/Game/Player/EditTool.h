@@ -47,10 +47,8 @@ public:
     void Draw(void*, char) override {}                                     // [8]  0x1400fcd90 RET
     char OnCancel() override { return 0; }                                 // [9]  0x1400fd2d0
     bool IsSelected(uint64_t* ref) override;                       // [10] 0x1400fd290
-    // TREE DIVERGENCE kept by the conversion commit: the hand table put a
-    // `return 0` stub in slot 12; retail inherits Tool's `MOV EAX,1`
-    // (0x140105860). Removed by its own behaviour commit.
-    int  GetCursor() const override { return 0; }                          // [12] (tree)
+    // [11] no setting / [12] cursor 1 (0x140105860): Tool's, inherited. The old
+    // hand table put a `return 0` stub in slot 12 (cursor id 0).
     // [13] 0x14002daf0 `MOV RAX,[RCX+0x30]; MOV [RDX],RAX; MOV RAX,RDX; RET`:
     // EditTool's own new virtual — the selected-entity handle, by value through
     // the hidden return slot (B8-11 shape: `this` in RCX, `ret` in RDX).
