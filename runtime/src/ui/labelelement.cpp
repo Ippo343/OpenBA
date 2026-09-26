@@ -48,203 +48,178 @@
 // `??0LabelElement@UI@@QEAA@XZ` (0x1800d2620) is NOT here: it is already
 // ported and registered, table-driven, by runtime/src/ui/ui_factory_wave28.cpp
 // (the factory roster). One address, one owner.
+//
+// ENDGAME B.3.6 block C3: the six slot bodies are `UI::LabelElement` members
+// (runtime/types/ui/LabelElement.h — the layout above, now asserted; the
+// TextElement fields are TextElement's). The registered doors delegate with a
+// QUALIFIED call. Font / SpriteContext / Sprite calls are direct member calls.
 // ============================================================================
+#include <atomic>
+
 #include "element_common.h"
+#include "../../types/ui/LabelElement.h"
+#include "../../types/ui/Font.h"
+#include "../../types/ui/SpriteContext.h"
+#include "../../types/system/String.h"
 
 using namespace rtuielem;
 
 namespace {
 
-constexpr int kIcon        = 0x100;
-constexpr int kIconIndex   = 0x108;
-constexpr int kAlign       = 0x110;
-constexpr int kMode        = 0x114;
-constexpr int kMinTextW    = 0x118;
-constexpr int kGap         = 0x11c;
-constexpr int kIconW       = 0x120;
-constexpr int kIconH       = 0x124;
-constexpr int kIconColor   = 0x128;
-constexpr int kTextWidth   = 0x12c;
+std::atomic<void*> g_typeInfoSlot{nullptr};   // RULE B6-5
 
-// UI::TextElement
-constexpr int kFont        = 0xc0;
-constexpr int kShadow      = 0xe8;   // uint8: draw a 1px black shadow copy
-constexpr int kWrap        = 0xe9;   // uint8, forwarded to ComputeStringLayout
-constexpr int kTextArgA    = 0xec;
-constexpr int kTextArgB    = 0xf0;
-constexpr int kTextArgC    = 0xf4;
-constexpr int kText        = 0xf8;   // System::String
+const uint8_t* LabelElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfoSlot, "?_typeInfo@LabelElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtLabelElement() { return RT_DATA_SLOT(void*, "??_7LabelElement@UI@@6B@"); }
 
-// UI::Font
-constexpr int kFontLineHeight = 0x50;
-constexpr int kFontBaseline   = 0x54;
-
-RTELEM_TYPE_SLOTS(LabelElement)
-
-// Owned by the UI-text agent; reached by address.
-//   ?ComputeStringLayout@Font@UI@@ 0x180116fd0
-//     (font, const String&, bool, int, int, int, int* outW, int* outH, void*)
-using ComputeStringLayoutFn = void (*)(void* font, const void* str, int wrap,
-                                       int a, int b, int c,
-                                       int* outW, int* outH, void* layout);
-// ?AddSprite@SpriteContext@UI@@ (rect form) and ?AddFont@SpriteContext@UI@@
-using AddSpriteRectFn = void (*)(void* ctx, const void* sprite,
-                                 int l, int t, int r, int b, uint32_t color);
-using AddFontFn = void (*)(void* ctx, void* font, const void* str, int wrap,
-                           int a, int b, int c, int x, int y, uint32_t color);
-
-using TextCtorFn     = void* (*)(void* self);
 using TextCopyCtorFn = void* (*)(void* self, const void* other);
 using TextDtorFn     = void  (*)(void* self);
 
+const System::String& AsString(char* const& field) {
+    return *reinterpret_cast<const System::String*>(&field);
+}
+
 }  // namespace
 
-RTELEM_TYPE_BODIES(LabelElement)
+namespace UI {
 
-namespace {
+uint32_t LabelElement::Type() const { return TypeIdOf(LabelElementTypeInfo()); }
+const char* LabelElement::TypeName() const { return TypeNameOf(LabelElementTypeInfo()); }
+
+// Non-virtual, EMPTY: the dtor door keeps retail's body.
+LabelElement::~LabelElement() {}
 
 // The icon's drawn size: the override when positive, else the sprite's own.
-// Both arms test the SAME field — the sprite INDEX at +0x108 — for the
-// "no sprite" case, not the sheet pointer.
-int IconWidth(const void* self) {
-    const int32_t ov = I32c(self, kIconW);
-    if (ov > 0) return ov;
-    if (I32c(self, kIconIndex) < 0) return 0;
-    return SpriteW(static_cast<const uint8_t*>(self) + kIcon);
+// Both arms test the SAME field — the sprite INDEX — for the "no sprite" case,
+// not the sheet pointer.
+static int IconWidth(const LabelElement& e) {
+    if (e._iconWidth > 0) return e._iconWidth;
+    if (e._sprite.spriteIndex < 0) return 0;
+    return e._sprite.Width();
 }
-int IconHeight(const void* self) {
-    const int32_t ov = I32c(self, kIconH);
-    if (ov > 0) return ov;
-    if (I32c(self, kIconIndex) < 0) return 0;
-    return SpriteH(static_cast<const uint8_t*>(self) + kIcon);
+static int IconHeight(const LabelElement& e) {
+    if (e._iconHeight > 0) return e._iconHeight;
+    if (e._sprite.spriteIndex < 0) return 0;
+    return e._sprite.Height();
 }
-
-}  // namespace
 
 // ============================================================================
 // ?ComputeSize@LabelElement@UI@@UEAAXXZ   0x1800d2490
 // ============================================================================
 // Measure the text (only when there IS a font AND a non-empty string), floor
-// its width by +0x118, then combine with the icon according to the mode:
+// its width by _minTextWidth, then combine with the icon according to the mode:
 //
 //   mode >  1  (stacked)   width  = max(iconW, textW)
 //                          height = gap + iconH + textH
 //   mode <= 1  (side)      width  = gap + iconW + textW
 //                          height = max(iconH, textH)
 //
-// `_textWidth` (+0x12c) is set to the RAW measured width, BEFORE the +0x118
-// floor — the floor only affects what is combined with the icon. Draw then
-// reads +0x12c, so a label whose minimum width exceeds its text draws the text
-// at its natural width inside a wider box.
-extern "C" void RtUi_LabelElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
+// `_textWidth` is set to the RAW measured width, BEFORE the floor — the floor
+// only affects what is combined with the icon. Draw then reads `_textWidth`, so
+// a label whose minimum width exceeds its text draws the text at its natural
+// width inside a wider box.
+void LabelElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
 
     int textW = 0;
     int textH = 0;
-    void* font = P(self, kFont);
-    if (font != nullptr) {
-        void* str = P(self, kText);
-        if (str != nullptr && *reinterpret_cast<const int32_t*>(
-                                  static_cast<const uint8_t*>(str) - 8) > 0) {
+    if (_font != nullptr) {
+        char* str = _cachedText;
+        if (str != nullptr && *reinterpret_cast<const int32_t*>(str - 8) > 0) {
             int w = 0, h = 0;
-            RtAddr<ComputeStringLayoutFn>(0x180116fd0ull)(
-                font, self + kText, self[kWrap],
-                I32(self, kTextArgA), I32(self, kTextArgB), 0,
-                &w, &h, nullptr);
-            I32(self, kTextWidth) = w;
+            _font->ComputeStringLayout(AsString(_cachedText), _wrap != 0,
+                                       _lineSpacing, _maxWidth, 0,
+                                       w, h, nullptr);
+            _textWidth = w;
             textH = h;
             textW = w;
-            if (w < I32(self, kMinTextW)) textW = I32(self, kMinTextW);
+            if (w < _minTextWidth) textW = _minTextWidth;
         }
     }
 
-    const int iconW = IconWidth(self);
-    const int iconH = IconHeight(self);
+    const int iconW = IconWidth(*this);
+    const int iconH = IconHeight(*this);
 
-    if (U32(self, kMode) > 1u) {
+    if (_mode > 1u) {
         int w = iconW;
         if (w < textW) w = textW;
-        U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
-        I32(self, kElemLayoutWidth)  = w;
-        I32(self, kElemLayoutHeight) = I32(self, kGap) + iconH + textH;
+        _flags &= ~kElementFlagNeedsSizeCalc;
+        _layoutWidth  = w;
+        _layoutHeight = _gap + iconH + textH;
         return;
     }
 
     int h = iconH;
     if (h < textH) h = textH;
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
-    I32(self, kElemLayoutWidth)  = I32(self, kGap) + iconW + textW;
-    I32(self, kElemLayoutHeight) = h;
+    _flags &= ~kElementFlagNeedsSizeCalc;
+    _layoutWidth  = _gap + iconW + textW;
+    _layoutHeight = h;
 }
 
 // ============================================================================
-// ?ComputeLayout@LabelElement@UI@@UEAAXHHHH@Z   0x1800d2330
+// ?ComputeLayout@LabelElement@UI@@UEAAXHHHH@Z   0x1800d2330 — the standard
+// Element alignment body (element_common.h), which dispatches slots 5/4.
 // ============================================================================
-extern "C" void RtUi_LabelElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    ElementComputeAlignedRect(self, x, y, w, h);
+void LabelElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    ElementComputeAlignedRect(this, x, y, w, h);
 }
 
 // ============================================================================
 // ?Draw@LabelElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800d1c80
 // ============================================================================
 // Four layout modes, each placing the icon and the text inside the element's
-// rectangle and then aligning the pair by `_align` (+0x110). The four arms
-// share a shape but not a body: retail emits them separately, and the
-// differences are real — mode 0 aligns the icon on the X axis but pins it to
-// the right edge, mode 2 pins it to the bottom, and so on.
+// rectangle and then aligning the pair by `_align`. The four arms share a
+// shape but not a body: retail emits them separately, and the differences are
+// real — mode 0 aligns the icon on the X axis but pins it to the right edge,
+// mode 2 pins it to the bottom, and so on.
 //
 // TRANSCRIBED LITERALLY, INCLUDING THE COLLAPSED ARMS. Several placements read
 // as `((R - (R - w)) >> 1 - (w >> 1)) + (R - w)`, which is algebraically just
 // `R - w`; the compiler left the centring expression in because the operands
-// were already live. Simplifying it is safe today and stops being a
-// transcription, so it is kept as it is emitted.
+// were already live. Kept as it is emitted.
 //
 // THE SHADOW PASS IS A SECOND AddFont AT (+1, +1) IN OPAQUE BLACK (0xff000000)
-// drawn BEFORE the real text, gated by the byte at +0xe8. Its colour is a
-// CONSTANT — it does not go through ComputeColor and does not fade with the
-// element's alpha.
+// drawn BEFORE the real text, gated by `_drawShadow`. Its colour is a CONSTANT.
 //
 // The text's Y is `(font.lineHeight - font.baseline) + placedY`, i.e. the
 // placement computes a top edge and AddFont wants a baseline.
-extern "C" void RtUi_LabelElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+void LabelElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
+    if (Element* border = static_cast<Element*>(_border))
+        border->Draw(ctx, alpha);                            // virtual, slot 6
 
-    void* border = Pc(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<DrawFn>(border, kSlotDraw)(border, ctx, alpha);
+    const uint32_t baseColor = _color;
+    alpha = DimAlpha(this, alpha);
 
-    const uint32_t baseColor = U32c(self, kElemColor);
-    alpha = DimAlpha(self, alpha);
-
-    void* font = Pc(self, kFont);
-    void* str  = Pc(self, kText);
+    Font* font = _font;
+    char* str  = _cachedText;
 
     int textW = 0, textH = 0;
     bool hasText = false;
     if (font != nullptr && str != nullptr &&
-        *reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(str) - 8) >= 1) {
-        textW = I32c(self, kTextWidth);
-        textH = I32c(font, kFontLineHeight);
+        *reinterpret_cast<const int32_t*>(str - 8) >= 1) {
+        textW = _textWidth;
+        textH = font->_lineHeight;
         hasText = true;
     }
 
-    const int iconW = IconWidth(self);
-    const int iconH = IconHeight(self);
+    const int iconW = IconWidth(*this);
+    const int iconH = IconHeight(*this);
 
-    const uint32_t mode  = U32c(self, kMode);
-    const int      align = I32c(self, kAlign);
+    const uint32_t mode  = _mode;
+    const int      align = _align;
 
     const int halfTextW = textW >> 1;
     const int halfTextH = textH >> 1;
     const int halfIconW = iconW >> 1;
     const int halfIconH = iconH >> 1;
 
-    const int L = I32c(self, kElemLayoutLeft);
-    const int T = I32c(self, kElemLayoutTop);
-    const int R = I32c(self, kElemLayoutRight);
-    const int B = I32c(self, kElemLayoutBottom);
-    const int gap = I32c(self, kGap);
+    const int L = _layoutLeft;
+    const int T = _layoutTop;
+    const int R = _layoutRight;
+    const int B = _layoutBottom;
+    const int gap = _gap;
 
     int textX, textY, iconX, iconY;
 
@@ -333,58 +308,83 @@ extern "C" void RtUi_LabelElement_Draw(const void* selfv, void* ctx, uint8_t alp
         iconY = (((B - (B - iconH)) >> 1) - halfIconH) + (B - iconH);
     }
 
-    RtAddr<AddSpriteRectFn>(0x18011d3c0ull)(
-        ctx, self + kIcon, iconX, iconY, iconX + iconW, iconH + iconY,
-        U32c(self, kIconColor));
+    ctx.AddSprite(_sprite, iconX, iconY, iconX + iconW, iconH + iconY, _iconColor);
 
     if (!hasText) return;
 
-    const auto addFont = RtAddr<AddFontFn>(0x18011ccb0ull);
-    const int baselineAdj = I32c(font, kFontLineHeight) - I32c(font, kFontBaseline);
+    const int baselineAdj = font->_lineHeight - font->_baseLine;
 
-    if (self[kShadow] != 0) {
-        addFont(ctx, font, self + kText, self[kWrap],
-                I32c(self, kTextArgA), I32c(self, kTextArgC), I32c(self, kTextArgB),
-                textX + 1, baselineAdj + 1 + textY, 0xff000000u);
+    if (_drawShadow != 0) {
+        ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+                    _lineSpacing, _justify, _maxWidth,
+                    textX + 1, baselineAdj + 1 + textY, 0xff000000u);
     }
-    addFont(ctx, font, self + kText, self[kWrap],
-            I32c(self, kTextArgA), I32c(self, kTextArgC), I32c(self, kTextArgB),
-            textX, baselineAdj + textY, ComputeColor(baseColor, alpha));
+    ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+                _lineSpacing, _justify, _maxWidth,
+                textX, baselineAdj + textY,
+                rtuielem::ComputeColor(baseColor, alpha));   // the inlined helper,
+                                                             // not Element's member
 }
 
 // ============================================================================
 // ?SetColor@LabelElement@UI@@UEAAXI@Z   0x180042970
 // ============================================================================
-// Two stores and no dirty walk: the icon colour AND `Element::_color`. Note it
-// does NOT call `Element::SetColor` — it writes +0x38 itself, which is the same
-// thing the base does, and there is no difference to reproduce.
-extern "C" void RtUi_LabelElement_SetColor(void* self, uint32_t color) {
-    U32(self, kIconColor) = color;
-    U32(self, kElemColor) = color;
+// Two stores and no dirty walk: the icon colour AND `Element::_color`. It does
+// NOT call `Element::SetColor` — it writes +0x38 itself.
+void LabelElement::SetColor(uint32_t color) {
+    _iconColor = color;
+    _color     = color;
 }
 
-// ============================================================================
-// Constructors / destructor
-// ============================================================================
-// The constructor's +0x114 store is a QWORD of 1, covering `_mode = 1` AND
-// `_minTextWidth = 0`; the +0x120 store is a QWORD of -1, covering both icon
-// size overrides. Written here as the four fields they cover.
+}  // namespace UI
 
+// ============================================================================
+// Constructor / destructor — DOOR BODIES (no real ctor/dtor, B4b-2)
+// ============================================================================
 extern "C" void* RtUi_LabelElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<TextCopyCtorFn>(0x1800420d0ull)(self, other);
-    P(self, 0x00) = VtLabelElement();
-    *reinterpret_cast<uint64_t*>(self + 0x100) = *reinterpret_cast<const uint64_t*>(other + 0x100);
-    *reinterpret_cast<uint64_t*>(self + 0x108) = *reinterpret_cast<const uint64_t*>(other + 0x108);
-    for (int off = kAlign; off <= kTextWidth; off += 4)
-        I32(self, off) = I32c(other, off);
-    return self;
+    UI::LabelElement* self = reinterpret_cast<UI::LabelElement*>(selfv);               // B.3.6 bridge
+    const UI::LabelElement* other = reinterpret_cast<const UI::LabelElement*>(otherv); // B.3.6 bridge
+    RtAddr<TextCopyCtorFn>(0x1800420d0ull)(selfv, otherv);
+    *reinterpret_cast<void**>(selfv) = VtLabelElement();
+    // The sprite goes over as two raw qwords (pad included).
+    __builtin_memcpy(&self->_sprite, &other->_sprite, sizeof(UI::Sprite));
+    self->_align        = other->_align;
+    self->_mode         = other->_mode;
+    self->_minTextWidth = other->_minTextWidth;
+    self->_gap          = other->_gap;
+    self->_iconWidth    = other->_iconWidth;
+    self->_iconHeight   = other->_iconHeight;
+    self->_iconColor    = other->_iconColor;
+    self->_textWidth    = other->_textWidth;
+    return selfv;
 }
 
 extern "C" void RtUi_LabelElement_Dtor(void* selfv) {
-    P(selfv, 0x00) = VtLabelElement();
+    *reinterpret_cast<void**>(selfv) = VtLabelElement();
     RtAddr<TextDtorFn>(0x18011eda0ull)(selfv);
+}
+
+// ============================================================================
+// The registered doors — one QUALIFIED delegation each.
+// ============================================================================
+extern "C" uint32_t RtUi_LabelElement_Type(const void* self) {
+    return reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_LabelElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_LabelElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::ComputeSize();   // B.3.6 bridge
+}
+extern "C" void RtUi_LabelElement_ComputeLayout(void* self, int x, int y, int w, int h) {
+    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
+}
+extern "C" void RtUi_LabelElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::Draw(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_LabelElement_SetColor(void* self, uint32_t color) {
+    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::SetColor(color);   // B.3.6 bridge
 }
 
 // ============================================================================

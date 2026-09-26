@@ -98,7 +98,7 @@ void Debug_ImageElement_GetSprite(void* self, void* retval) {
 // spriteData points to a 0x10-byte Sprite struct passed by value.
 void Debug_LabelElement_SetSprite(void* self, void* spriteData) {
 #ifdef _DEBUG
-    LabelElement* elem = reinterpret_cast<LabelElement*>(self);
+    RtUI::LabelElement* elem = reinterpret_cast<RtUI::LabelElement*>(self);
     const uint8_t* newSprite = reinterpret_cast<const uint8_t*>(spriteData);
 
     printf("[LabelElement::SetSprite] this=%p\n", self);
@@ -135,7 +135,7 @@ void Debug_LabelElement_GetSprite(void* self, void* retval) {
         fn_LabelElement_GetSprite(self, retval);
     } else {
         // Fallback: read directly from struct at +0x100/+0x108
-        LabelElement* elem = reinterpret_cast<LabelElement*>(self);
+        RtUI::LabelElement* elem = reinterpret_cast<RtUI::LabelElement*>(self);
         uint64_t* out = reinterpret_cast<uint64_t*>(retval);
         out[0] = reinterpret_cast<uint64_t>(elem->spriteSheet);
         uint64_t second = 0;

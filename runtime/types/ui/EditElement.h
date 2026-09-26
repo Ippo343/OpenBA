@@ -2,60 +2,185 @@
 // ============================================================================
 // runtime/types/ui/EditElement.h — UI::EditElement, binary-compatible layout
 // ============================================================================
-// Wave 7 lane D. Only the fields this lane actually reversed and proved are
-// named; the gap between Element's end (+0xC0, lane A) and these offsets is
-// EditElement/TextElement territory this lane did not fully reverse (TextElement
-// itself is lane E's scope per docs/runtime_port/WAVE7.md) and is left as
-// explicit, undescribed padding rather than guessed.
-//
-// PROVEN FIELDS, each cited by the instruction that proves it:
+// Wave 7 lane D named `_text` (+0xC8) and `_flagE0` (+0xE0):
 //
 //   +0xC8  _text    char*    The element's current value, AS TEXT. Read by
 //                            `?GetValue@NumberEditElement@UI@@QEBAHXZ`
-//                            (0x1800d4b50, "*(char**)(this+0xc8)" fed to
-//                            System::String::ToInteger) and read/written by
+//                            (0x1800d4b50) and read/written by
 //                            `?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z`
-//                            (0x1800d0db0, this lane's phantom-name fix target
-//                            — see WAVE7_LANE_D.md §5).
-//                            NOTE: this IS a raw char* to the String's
-//                            character buffer (refcount at [-4], allocation
-//                            base at [-8]) — System::String is exactly ONE
-//                            POINTER at the ABI level in this engine; both
-//                            bodies above prove it independently.
+//                            (0x1800d0db0). System::String is ONE POINTER.
 //   +0xE0  _flagE0  uint8_t  A one-byte flag EditElement::SetText gates its
-//                            write on (`if (this[0xe0] == 0)`), and which
-//                            SpinnerElement::IsActive (0x1800d7c30) returns
-//                            UNNEGATED as its own result when its child is an
-//                            EditElement-derived widget. Preserved byte for
-//                            byte; its semantic sense (0 == "active"? 0 ==
-//                            "not read-only"?) is NOT asserted here, only its
-//                            offset and the two behaviors above.
+//                            write on, and which SpinnerElement::IsActive
+//                            (0x1800d7c30) returns UNNEGATED.
 //
-// sizeof(EditElement) is NOT asserted to be a specific "real" retail size:
-// the struct below is sized only by its own members, and the compiler's
-// natural 8-byte tail padding (from Element's alignof 8) happens to put
-// _flagE0's containing region at 0xE8 — NumberEditElement.h relies on that via
-// a static_assert, so if this file's shape ever changes, that assert will
-// fail loudly rather than silently drifting.
+// ENDGAME B.3 step 6, block C3 — THE SIZE DEFECT, CLOSED FROM RETAIL BYTES.
+// This header used to say its size was "not asserted", and
+// NumberEditElement.h asserted `sizeof(EditElement) == 0xE8` (the compiler's
+// padding of a struct that stopped at +0xE0). RETAIL SAYS 0xF8: `MOV EDX,0xf8`
+// in the slot-0 vector deleting destructor 0x18003fed0 (B36_RULES 2.3). The
+// sixteen bytes +0xE8..+0xF7 are EditElement's own, pinned from
+// `??0EditElement@UI@@QEAA@XZ` (0x1800d0f10), read as DISASSEMBLY:
+//
+//     CALL ??0Element            ; 0x180115e50
+//     MOV [RBX],??_7EditElement  ; 0x180156810
+//     MOV qword [RBX+0xc0],0     _font        ExternalPtr<UI::Font>
+//     MOV qword [RBX+0xc8],0     _text        System::String
+//     MOV dword [RBX+0xd0],0     _maxLength   ?GetMaxLength@ 0x18003fc70 = MOV EAX,[RCX+0xd0]
+//     MOV byte  [RBX+0xd4],0     _password    Draw/ComputeSize mask with '*'
+//     MOV qword [RBX+0xd8],0     _filter      System::String, accepted characters
+//     MOV byte  [RBX+0xe0],0     _active      ?IsActive@ 0x18003fc80 = MOVZX EAX,byte [RCX+0xe0]
+//     MOV dword [RBX+0xe4],0     _caret       caret index, in characters
+//     MOV byte  [RBX+0xe8],0     _blinkOn     caret blink phase
+//     MOV qword [RBX+0xf0],0     _blinkAccumulator  ticks (Update adds Time)
+//
+// +0xD5..+0xD7, +0xE1..+0xE3 and +0xE9..+0xEF are NOT written by the ctor and
+// read by no body: explicit pads. The field names are editelement.cpp's port
+// (each read at its use in Update / Draw / ComputeSize) and the exported
+// accessors' (`GetMaxLength`, `IsActive`, `GetText` = `LEA RAX,[RCX+0xc8]`).
+//
+// So `NumberEditElement` is EditElement + `_min`/`_max` at +0xF8/+0xFC = 0x100,
+// exactly what the old pad arithmetic happened to land on.
+//
+// The old POD moved to `RtUI::EditElement` (B4b-1), WIDENED to the retail 0xF8
+// with the same fields, and keeps its legacy names (`base`, `_text`, `_flagE0`)
+// for widgets_input.cpp, which still reaches EditElement / NumberEditElement /
+// SpinnerElement's child through the PODs.
 // ============================================================================
 
 #include <cstdint>
 #include <cstddef>
 #include "Element.h"
 
-namespace UI {
+namespace RtUI {
 
 struct EditElement {
-    RtUI::Element  base;              // +0x00 .. +0xBF
-    uint8_t  _pad_c0_c8[0x08];  // +0xC0 .. +0xC7 — TextElement's own leading
-                                 //   field(s); not reversed by this lane.
-    char*    _text;              // +0xC8
-    uint8_t  _pad_d0_e0[0x10];  // +0xD0 .. +0xDF — not reversed by this lane.
-    uint8_t  _flagE0;            // +0xE0
+    RtUI::Element base;           // +0x00 .. +0xBF
+    void*    _font;               // +0xC0  ExternalPtr<UI::Font>
+    char*    _text;               // +0xC8
+    int32_t  _maxLength;          // +0xD0
+    uint8_t  _password;           // +0xD4
+    uint8_t  _padD5[3];           // +0xD5  never written
+    char*    _filter;             // +0xD8
+    uint8_t  _flagE0;             // +0xE0  (the class's `_active`)
+    uint8_t  _padE1[3];           // +0xE1  never written
+    int32_t  _caret;              // +0xE4
+    uint8_t  _blinkOn;            // +0xE8
+    uint8_t  _padE9[7];           // +0xE9  never written
+    int64_t  _blinkAccumulator;   // +0xF0
 };
 
 static_assert(offsetof(EditElement, base)    == 0x00, "EditElement::base @ +0x00");
 static_assert(offsetof(EditElement, _text)   == 0xC8, "EditElement::_text @ +0xC8");
 static_assert(offsetof(EditElement, _flagE0) == 0xE0, "EditElement::_flagE0 @ +0xE0");
+static_assert(offsetof(EditElement, _blinkAccumulator) == 0xF0, "EditElement @ +0xF0");
+static_assert(sizeof(EditElement) == 0xF8,
+              "EditElement is 0xF8 (MOV EDX,0xf8 in its deleting dtor 0x18003fed0)");
 
-} // namespace UI
+}  // namespace RtUI
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block C3) — `UI::EditElement`, the REAL C++ class
+// ############################################################################
+//
+// PARENT `UI::Element` — READ (B36_SLOTS.md section 3), RECORDED, NOT USED:
+//     ?_TypeName@EditElement@UI@@CAPEBDXZ       @0x18003faa0 -> "EditElement"
+//     ?_ParentTypeName@EditElement@UI@@CAPEBDXZ @0x18003fab0 -> "Element"
+//
+// `??_7EditElement@UI@@6B@` @ 0x180156810, THIRTEEN slots: [0] 0x18003fed0 ·
+// [1] 0x18003fae0 TypeName · [2] 0x18003fac0 Type · [3] Element::Persist ·
+// [4] 0x1800d0c10 ComputeSize · [5] 0x1800d0ab0 ComputeLayout · [6] 0x1800d0820
+// Draw · [7] 0x1800d0220 Update · [8..11] Element's · [12] 0x1800d0da0
+// FinalizeText — INTRODUCED here (`virtual`, RULE B6-1.6).
+//
+// ABSTRACT in C++; no real ctor: live ones are built by the `??0EditElement`
+// door (factory_ui1.cpp) and wear the MINTED table.
+// ############################################################################
+namespace UI {
+
+class Font;
+
+class EditElement : public Element {
+public:
+    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x18003fed0
+    const char* TypeName() const override;                       // [1] 0x18003fae0
+    uint32_t    Type() const override;                           // [2] 0x18003fac0
+    void ComputeSize() override;                                 // [4] 0x1800d0c10
+    void ComputeLayout(int32_t x, int32_t y,
+                       int32_t w, int32_t h) override;           // [5] 0x1800d0ab0
+    void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x1800d0820
+    void Update(const System::Time& time, UserInterface* ui,
+                Object::InternalPtr<DialogInstance>* dialog,
+                const UpdateState& state) override;              // [7] 0x1800d0220 (B6-11)
+    virtual void FinalizeText();                                 // [12] 0x1800d0da0 — INTRODUCED
+
+    // ---- non-virtual ---------------------------------------------------------
+    // ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z  0x1800d0db0 — the
+    // body is widgets_input.cpp's door (fragment pass); declared, undefined.
+    void SetText(const System::String& text);
+    // ?SelectCharacter@EditElement@UI@@AEBADH@Z  0x1800cfd40 — `AEBA` private;
+    // the body is element_bodies_b5.cpp's door; declared, undefined.
+    char SelectCharacter(int32_t keyIndex) const;
+    // The three one-instruction accessors, whole bodies (disassembly above).
+    const System::String& GetText() const {                      // 0x18003fc60
+        return *reinterpret_cast<const System::String*>(&_text);
+    }
+    int32_t GetMaxLength() const { return _maxLength; }          // 0x18003fc70
+    bool    IsActive() const     { return _active != 0; }        // 0x18003fc80
+
+    EditElement(const EditElement& src);                         // 0x18003fc90  editelement.cpp door
+    EditElement& operator=(const EditElement& src);              // 0x18003fd70  not ported
+    static uint32_t TypeId();                                    // 0x18003fad0  not ported
+    static Object::Base* CreateNewObject();                      // 0x18003fbd0  factory door
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x18003fc50  factory door
+    static void* operator new(std::size_t bytes);                // 0x18003faf0  not ported
+    static void* operator new(std::size_t bytes, void* place);   // 0x18003fb60  not ported
+    static void  operator delete(void* p);                       // 0x18003fb70  not ported
+
+protected:
+    EditElement() = default;   // NOT retail's 0x1800d0f10 (factory_ui1.cpp door)
+    ~EditElement();            // 0x1800d0e50 — empty; the door keeps the body
+
+private:
+    static const char* _TypeName();                              // 0x18003faa0 -> "EditElement"
+    static const char* _ParentTypeName();                        // 0x18003fab0 -> "Element"
+    static Object::BaseTypeInfo _typeInfo;                       // 0x1801f9f60 (minted)
+
+public:
+    // ---- the 0x38 bytes EditElement adds ------------------------------------
+    Font*    _font;               // +0xc0  ExternalPtr<UI::Font>
+    char*    _text;               // +0xc8  System::String (refcounted char*)
+    int32_t  _maxLength;          // +0xd0
+    uint8_t  _password;           // +0xd4
+    uint8_t  _padD5[3];           // +0xd5  never written
+    char*    _filter;             // +0xd8  System::String; empty = any character
+    uint8_t  _active;             // +0xe0  focused; holds the text-input latch
+    uint8_t  _padE1[3];           // +0xe1  never written
+    int32_t  _caret;              // +0xe4
+    uint8_t  _blinkOn;            // +0xe8
+    uint8_t  _padE9[7];           // +0xe9  never written
+    int64_t  _blinkAccumulator;   // +0xf0  System::Time ticks
+};
+
+static_assert(sizeof(EditElement) == 0xf8,
+              "UI::EditElement is 0xf8 (MOV EDX,0xf8 in 0x18003fed0) — NOT 0xe8");
+static_assert(alignof(EditElement) == 8, "UI::EditElement aligns to 8");
+static_assert(offsetof(EditElement, _font) == sizeof(Element),
+              "EditElement's own fields begin at the end of Element");
+static_assert(offsetof(EditElement, _font)             == 0xc0, "");
+static_assert(offsetof(EditElement, _text)             == 0xc8, "");
+static_assert(offsetof(EditElement, _maxLength)        == 0xd0, "");
+static_assert(offsetof(EditElement, _password)         == 0xd4, "");
+static_assert(offsetof(EditElement, _filter)           == 0xd8, "");
+static_assert(offsetof(EditElement, _active)           == 0xe0, "");
+static_assert(offsetof(EditElement, _caret)            == 0xe4, "");
+static_assert(offsetof(EditElement, _blinkOn)          == 0xe8, "");
+static_assert(offsetof(EditElement, _blinkAccumulator) == 0xf0, "");
+// The class and the RtUI POD describe the same bytes.
+static_assert(sizeof(EditElement) == sizeof(RtUI::EditElement), "");
+static_assert(offsetof(EditElement, _text)    == offsetof(RtUI::EditElement, _text), "");
+static_assert(offsetof(EditElement, _active)  == offsetof(RtUI::EditElement, _flagE0), "");
+static_assert(offsetof(EditElement, _caret)   == offsetof(RtUI::EditElement, _caret), "");
+static_assert(offsetof(EditElement, _blinkAccumulator)
+              == offsetof(RtUI::EditElement, _blinkAccumulator), "");
+
+}  // namespace UI

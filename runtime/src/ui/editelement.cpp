@@ -15,65 +15,39 @@
 //    7    Update                0x1800d0220  here
 //   12    FinalizeText          0x1800d0da0  here
 //
-// plus ??0EditElement@UI@@QEAA@XZ         0x1800d0f10
-//      ??0EditElement@UI@@QEAA@AEBV01@@Z  0x18003fc90
-//      ??1EditElement@UI@@UEAA@XZ         0x1800d0e50
+// plus ??0EditElement@UI@@QEAA@AEBV01@@Z  0x18003fc90 (door body)
+//      ??1EditElement@UI@@UEAA@XZ         0x1800d0e50 (door body)
 //
-// Slots 4/5/6/7 are ALSO NumberEditElement's (batch 4 repeats these four
-// addresses); registered once, here.
+// Slots 4/5/6/7 are ALSO NumberEditElement's (it inherits them); registered
+// once, here.
 //
 // *** THE VTABLE IS THIRTEEN SLOTS, NOT TWELVE. *** `?FinalizeText@` is slot 12
-// (+0x60) — one past the end of `UI::Element`'s table as
-// runtime/types/ui/Element.h enumerates it. Update calls it through
-// `[vtable + 0x60]` at 0x1800d0396, which is how the extra slot is known to
-// exist; `?FinalizeText@NumberEditElement@` (0x1800d4a60) is the override that
-// proves it is virtual.
+// (+0x60), INTRODUCED by this class. Update calls it through `[vtable + 0x60]`
+// at 0x1800d0396; `?FinalizeText@NumberEditElement@` (0x1800d4a60) overrides it.
 //
-// `?SetText@EditElement@UI@@` is ALREADY PORTED in
-// runtime/src/ui/widgets_input.cpp.
+// ENDGAME B.3.6 block C3: every slot body is a `UI::EditElement` member
+// (runtime/types/ui/EditElement.h — the 0xf8 layout, pinned from the ctor
+// 0x1800d0f10; the old header's "size not asserted" and NumberEditElement.h's
+// 0xE8 are gone). The registered doors delegate with a QUALIFIED call. The
+// base `Element::Update` call is the qualified member; slot 12 is a C++
+// virtual call (it reads the MINTED table, exactly as retail's
+// `CALL [RAX+0x60]`); Font / SpriteContext calls are direct member calls.
 //
-// LAYOUT — 0xf8 bytes (`MOV EDX,0xf8` at 0x18003feef). runtime/types/ui/
-// EditElement.h already pins `_text` at +0xc8 and the flag at +0xe0; this file
-// names the rest from the constructor at 0x1800d0f10 and the four slots:
-//
-//   +0xc0 UI::Font*      the font (TextElement's slot; EditElement does not
-//                        derive from TextElement, it repeats the field)
-//   +0xc8 System::String the edited text                       (header: _text)
-//   +0xd0 int32          the maximum length, in characters
-//   +0xd4 uint8          PASSWORD MODE: draw '*' per character instead
-//   +0xd8 System::String the allowed-character filter; empty means "any"
-//   +0xe0 uint8          FOCUSED                              (header: _flagE0)
-//   +0xe4 int32          the caret position, in characters
-//   +0xe8 uint8          caret blink phase (visible when non-zero)
-//   +0xf0 int64          blink accumulator, in ticks
-//
-// `??0EditElement@UI@@QEAA@XZ` (0x1800d0f10) is NOT here: it is already
-// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
-// (the factory roster). One address, one owner.
+// NOT HERE: `?SetText@EditElement@UI@@` (widgets_input.cpp's door) and
+// `?SelectCharacter@` (element_bodies_b5.cpp's door, reached by address); the
+// constructor 0x1800d0f10 (factory_ui1.cpp).
 // ============================================================================
+#include <atomic>
+
 #include "element_common.h"
 #include "../../types/ui/EditElement.h"
+#include "../../types/ui/Font.h"
+#include "../../types/ui/SpriteContext.h"
+#include "../../types/system/String.h"
 
 using namespace rtuielem;
 
-static_assert(offsetof(UI::EditElement, _text)   == 0xC8, "");
-static_assert(offsetof(UI::EditElement, _flagE0) == 0xE0, "");
-
 namespace {
-
-constexpr int kFont     = 0xc0;
-constexpr int kText     = 0xc8;
-constexpr int kMaxLen   = 0xd0;
-constexpr int kPassword = 0xd4;
-constexpr int kFilter   = 0xd8;
-constexpr int kFocused  = 0xe0;
-constexpr int kCaret    = 0xe4;
-constexpr int kBlinkOn  = 0xe8;
-constexpr int kBlinkAcc = 0xf0;
-
-// UI::Font
-constexpr int kFontLineHeight = 0x50;
-constexpr int kFontBaseline   = 0x54;
 
 // Input::Device — the per-key "pressed this frame" byte table. The keyboard
 // block starts at +0x6c6 with a stride of 0x18 and 0x69 entries, which is the
@@ -91,45 +65,43 @@ constexpr int kKeyEnd    = 0xe5e;
 constexpr int kKeyBack   = 0xba6;
 constexpr int kKeyDelete = 0xe46;
 
-// UI::Element::UpdateState
-constexpr int kStateMouseDown = 0x01;
-constexpr int kStateMouseX    = 0x18;
-constexpr int kStateMouseY    = 0x1c;
-
 // UI::UserInterface
 constexpr int kUiEvents     = 0x48;
 constexpr int kUiEventCount = 0x50;
 
 constexpr int32_t kEventEditFinished = 0x15;
-constexpr int kSlotFinalizeText = 12;   // +0x60
 
-RTELEM_TYPE_SLOTS(EditElement)
+// RULE B6-5: namespace-scope atomic slots, never a first-call static.
+std::atomic<void*> g_typeInfoSlot{nullptr};
+std::atomic<void*> g_inputDeviceSlot{nullptr};
+std::atomic<void*> g_inputConfigSlot{nullptr};
+std::atomic<void*> g_secondsPerTickSlot{nullptr};
+std::atomic<void*> g_memFreeSlot{nullptr};
+
+const uint8_t* EditElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfoSlot, "?_typeInfo@EditElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtEditElement() { return RT_DATA_SLOT(void*, "??_7EditElement@UI@@6B@"); }
 
 void** InputDeviceSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
+    return static_cast<void**>(AtomicExport(
+        g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
 }
 void** InputConfigSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return static_cast<void**>(AtomicExport(
+        g_inputConfigSlot, "?_singleton@Configuration@Input@@0PEAV12@EA"));
 }
 double SecondsPerTick() {
-    double* p = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
+    double* p = static_cast<double*>(AtomicExport(
+        g_secondsPerTickSlot, "?_secondsPerTick@Timer@System@@0NA"));
     return p ? *p : 0.0;
 }
 
 using MemFreeFn     = void  (*)(void* p);
-using ElemUpdateFn  = void  (*)(void* self, const void* time, void* ui,
-                                void** dlg, const void* state);
-using ElementCtorFn = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
 using ElementDtorFn = void  (*)(void* self);
-using FinalizeFn    = void  (*)(void* self);
 using EventPushFn   = void  (*)(void* array, int newSize, const void* fill);
-// UI::Font, the UI-text agent's class; reached by address.
-using ComputeLineLayoutFn = int (*)(void* font, const void* text, int len,
-                                    int a, int b, int c, int d, void* layout);
-using ComputeCharPosFn    = int (*)(void* font, const void* str, int index);
-using AddFontFn = void (*)(void* ctx, void* font, const void* str, int wrap,
-                           int a, int b, int c, int x, int y, uint32_t color);
 // System::String, reached by address.
 using StrAppendCharFn = void* (*)(void* self, void* tmpOut, char c);
 using StrRemoveAtFn   = void** (*)(void* self, void** out, int index);
@@ -138,7 +110,12 @@ using StrAssignCStrFn = void* (*)(void* self, const char* s);
 using StrSetLengthFn  = void* (*)(void* self, int n);
 using StrInsertAtFn   = void** (*)(void* self, void** out, int index, void* const* str);
 using MemcpyFn        = void* (*)(void* dst, const void* src, uint64_t n);
-using SelectCharFn    = uint8_t (*)(void* self, int keyIndex);
+using SelectCharFn    = uint8_t (*)(const void* self, int keyIndex);
+
+void MemFree(void* p) {
+    reinterpret_cast<MemFreeFn>(AtomicExport(
+        g_memFreeSlot, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
+}
 
 struct Event {
     void*    dialog;
@@ -160,6 +137,13 @@ int StrLen(const void* s) {
     return *reinterpret_cast<const int32_t*>(static_cast<const uint8_t*>(s) - 8);
 }
 
+const System::String& AsString(void* const& field) {
+    return *reinterpret_cast<const System::String*>(&field);
+}
+const System::String& AsString(char* const& field) {
+    return *reinterpret_cast<const System::String*>(&field);
+}
+
 void ReleaseString(void** slot) {
     char* s = static_cast<char*>(*slot);
     if (s == nullptr) return;
@@ -167,7 +151,7 @@ void ReleaseString(void** slot) {
     --*rc;
     if (*rc == 0) {
         *slot = s - 8;
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*slot);
+        MemFree(*slot);
     } else {
         *slot = nullptr;
     }
@@ -183,7 +167,7 @@ void AssignStringInline(void** dst, void* const* src) {
         --*rc;
         if (*rc == 0) {
             *dst = static_cast<uint8_t*>(*dst) - 8;
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*dst);
+            MemFree(*dst);
         } else {
             *dst = nullptr;
         }
@@ -208,7 +192,13 @@ void* BuildMask(int length) {
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(EditElement)
+namespace UI {
+
+uint32_t EditElement::Type() const { return TypeIdOf(EditElementTypeInfo()); }
+const char* EditElement::TypeName() const { return TypeNameOf(EditElementTypeInfo()); }
+
+// Non-virtual, EMPTY: the dtor door keeps retail's body.
+EditElement::~EditElement() {}
 
 // ============================================================================
 // ?ComputeSize@EditElement@UI@@UEAAXXZ   0x1800d0c10
@@ -219,100 +209,89 @@ RTELEM_TYPE_BODIES(EditElement)
 //
 // In password mode the mask is built FIRST and measured instead, so a password
 // box is as wide as its asterisks, not as its secret.
-extern "C" void RtUi_EditElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
+void EditElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
 
-    void* font = P(self, kFont);
-    const auto lineLayout = RtAddr<ComputeLineLayoutFn>(0x180116c70ull);
+    Font* font = _font;
 
-    if (self[kPassword] == 0) {
-        void* text = P(self, kText);
-        *reinterpret_cast<uint64_t*>(self + kElemLayoutWidth) = 0;
-        I32(self, kElemLayoutWidth)  = lineLayout(font, text, StrLen(text),
-                                                  0, 0, -1, 0, nullptr);
-        I32(self, kElemLayoutHeight) = I32(font, kFontLineHeight);
+    if (_password == 0) {
+        char* text = _text;
+        _layoutWidth = 0; _layoutHeight = 0;                 // one qword store
+        _layoutWidth  = font->ComputeLineLayout(text, StrLen(text), 0, 0, -1, 0, nullptr);
+        _layoutHeight = font->_lineHeight;
     } else {
-        void* masked = BuildMask(StrLen(P(self, kText)));
-        *reinterpret_cast<uint64_t*>(self + kElemLayoutWidth) = 0;
-        I32(self, kElemLayoutWidth)  = lineLayout(font, masked, StrLen(masked),
-                                                  0, 0, -1, 0, nullptr);
-        I32(self, kElemLayoutHeight) = I32(font, kFontLineHeight);
+        void* masked = BuildMask(StrLen(_text));
+        _layoutWidth = 0; _layoutHeight = 0;                 // one qword store
+        _layoutWidth  = font->ComputeLineLayout(static_cast<const char*>(masked),
+                                                StrLen(masked), 0, 0, -1, 0, nullptr);
+        _layoutHeight = font->_lineHeight;
         ReleaseString(&masked);
     }
 
-    if (I32(self, kElemLayoutWidth) < I32(self, kElemMinWidth))
-        I32(self, kElemLayoutWidth) = I32(self, kElemMinWidth);
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
+    if (_layoutWidth < _minWidth) _layoutWidth = _minWidth;
+    _flags &= ~kElementFlagNeedsSizeCalc;
 }
 
 // ============================================================================
-// ?ComputeLayout@EditElement@UI@@UEAAXHHHH@Z   0x1800d0ab0
+// ?ComputeLayout@EditElement@UI@@UEAAXHHHH@Z   0x1800d0ab0 — the standard
+// Element alignment body (element_common.h), which dispatches slots 5/4.
 // ============================================================================
-extern "C" void RtUi_EditElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    ElementComputeAlignedRect(self, x, y, w, h);
+void EditElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    ElementComputeAlignedRect(this, x, y, w, h);
 }
 
 // ============================================================================
 // ?Draw@EditElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800d0820
 // ============================================================================
-// *** THE DISABLED TEST IS NOT THE USUAL ONE. *** Every other Draw in this
-// batch ignores the disabled bits. This one returns early when EITHER disabled
-// bit is set UNLESS bit 24 (system-disabled) is ALSO set — i.e. a
-// user-disabled edit box draws nothing, but a system-disabled one still draws.
-// Read off 0x1800d085d..0x1800d086e; inverting it hides every disabled field.
+// *** THE DISABLED TEST IS NOT THE USUAL ONE. *** This one returns early when
+// EITHER disabled bit is set UNLESS bit 24 (system-disabled) is ALSO set — i.e.
+// a user-disabled edit box draws nothing, but a system-disabled one still
+// draws. Read off 0x1800d085d..0x1800d086e.
 //
 // The text is drawn at the element's left edge and a baseline of
 // `top - font.baseline + font.lineHeight`, and the caret — a literal "|" —
 // one pixel LEFT of the character position the caret index resolves to.
-//
-// THE CARET'S STRING IS BUILT FROM A C LITERAL. Retail passes the DLL's own
-// `"|"` at 0x180156804; our own literal is the same bytes and
-// `System::String::operator=` copies them either way.
-extern "C" void RtUi_EditElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    uint8_t* self = const_cast<uint8_t*>(static_cast<const uint8_t*>(selfv));
+void EditElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
+    if (Element* border = static_cast<Element*>(_border))
+        border->Draw(ctx, alpha);                            // virtual, slot 6
 
-    void* border = P(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<DrawFn>(border, kSlotDraw)(border, ctx, alpha);
-
-    const uint32_t flags = U32(self, kElemFlags);
+    const uint32_t flags = _flags;
     if ((flags & kFlagDisabledMask) != 0 && ((flags >> 24) & 1u) == 0) return;
 
-    const uint32_t baseColor = U32(self, kElemColor);
-    if ((flags & kFlagDimColor) != 0) alpha = static_cast<uint8_t>(alpha >> 1);
-    const uint32_t colour = ComputeColor(baseColor, alpha);
+    const uint32_t baseColor = _color;
+    if ((flags & kElementFlagDimColor) != 0) alpha = static_cast<uint8_t>(alpha >> 1);
+    const uint32_t colour = rtuielem::ComputeColor(baseColor, alpha);
 
     // The string actually drawn: the mask in password mode, otherwise a
     // REFERENCE to the real text (retail bumps its refcount and releases it at
     // the end, so the field itself is untouched).
     void* shown = nullptr;
-    if (self[kPassword] != 0) {
-        shown = BuildMask(StrLen(P(self, kText)));
-    } else if (P(self, kText) != nullptr) {
-        shown = P(self, kText);
+    if (_password != 0) {
+        shown = BuildMask(StrLen(_text));
+    } else if (_text != nullptr) {
+        shown = _text;
         ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(shown) - 4);
     }
 
-    void* font = P(self, kFont);
-    const int baseline = I32(self, kElemLayoutTop) - I32(font, kFontBaseline) +
-                         I32(font, kFontLineHeight);
-    const auto addFont = RtAddr<AddFontFn>(0x18011ccb0ull);
-    addFont(ctx, font, &shown, 0, 0, 0, -1, I32(self, kElemLayoutLeft), baseline, colour);
+    Font* font = _font;
+    const int baseline = _layoutTop - font->_baseLine + font->_lineHeight;
+    ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(shown), false, 0, 0, -1,
+                _layoutLeft, baseline, colour);
 
-    if (self[kBlinkOn] != 0 && self[kFocused] != 0) {
-        const int cx = RtAddr<ComputeCharPosFn>(0x180116ee0ull)(
-            P(self, kFont), &shown, I32(self, kCaret)) - 1;
+    if (_blinkOn != 0 && _active != 0) {
+        const int cx = _font->ComputeCharacterPosition(AsString(shown), _caret) - 1;
 
+        // THE CARET'S STRING IS BUILT FROM A C LITERAL. Retail passes the DLL's
+        // own `"|"` at 0x180156804; our own literal is the same bytes and
+        // `System::String::Set` copies them either way.
         void* caret = nullptr;
         static const char kCaretText[] = "|";
         RtAddr<StrAssignCStrFn>(0x1800c95d0ull)(&caret, kCaretText);
 
-        void* f = P(self, kFont);
-        const int y = I32(self, kElemLayoutTop) - I32(f, kFontBaseline) +
-                      I32(f, kFontLineHeight);
-        addFont(ctx, P(self, kFont), &caret, 0, 0, 0, -1,
-                I32(self, kElemLayoutLeft) + cx, y, colour);
+        Font* f = _font;
+        const int y = _layoutTop - f->_baseLine + f->_lineHeight;
+        ctx.AddFont(Object::ExternalPtr<Font>(_font), AsString(caret), false, 0, 0, -1,
+                    _layoutLeft + cx, y, colour);
         ReleaseString(&caret);
     }
 
@@ -331,137 +310,133 @@ extern "C" void RtUi_EditElement_Draw(const void* selfv, void* ctx, uint8_t alph
 // cursor), and dropped on a click OUTSIDE, on Escape, or on Enter. Taking and
 // dropping it INCREMENTS and DECREMENTS a counter inside
 // `Input::Configuration::_singleton` — the engine's "text input is active,
-// stop treating keys as game bindings" latch. Getting that pairing wrong leaves
-// the game permanently unable to read a key, or permanently deaf to text.
+// stop treating keys as game bindings" latch.
 //
 // DROPPING focus calls virtual slot 12 (`FinalizeText`) and raises event 0x15.
-extern "C" void RtUi_EditElement_Update(void* selfv, const void* time, void* ui,
-                                        void** dlg, const void* statev) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* st = static_cast<const uint8_t*>(statev);
-
+void EditElement::Update(const System::Time& time, UserInterface* ui,
+                         Object::InternalPtr<DialogInstance>* dlg,
+                         const UpdateState& st) {
     {
-        void* dlgCopy = *dlg;
-        RtAddr<ElemUpdateFn>(0x180116270ull)(self, time, ui, &dlgCopy, st);
+        // The base body gets its OWN copy of the handle, by address (B6-11).
+        Object::InternalPtr<DialogInstance> dlgCopy = *dlg;
+        UI::Element::Update(time, ui, &dlgCopy, st);
     }
 
     void** devSlot = InputDeviceSlot();
     const uint8_t* dev = devSlot ? static_cast<const uint8_t*>(*devSlot) : nullptr;
 
-    if ((U32(self, kElemFlags) & kFlagDisabledMask) != 0) return;
+    if ((_flags & kFlagDisabledMask) != 0) return;
 
     // ---- take focus -------------------------------------------------------
-    if (st[kStateMouseDown] != 0 && ((U32(self, kElemFlags) >> 17) & 1u) != 0) {
-        if (self[kFocused] == 0) {
+    if (st.buttonPressed != 0 && ((_flags >> 17) & 1u) != 0) {
+        if (_active == 0) {
             void** cfg = InputConfigSlot();
             ++**reinterpret_cast<int32_t**>(*cfg);
         }
-        self[kFocused] = 1;
-        self[kBlinkOn] = 1;
-        *reinterpret_cast<int64_t*>(self + kBlinkAcc) = 0;
-        I32(self, kCaret) = StrLen(P(self, kText));
+        _active = 1;
+        _blinkOn = 1;
+        _blinkAccumulator = 0;
+        _caret = StrLen(_text);
 
-        const int relX = I32c(st, kStateMouseX) - I32(self, kElemLayoutLeft);
-        for (int i = 0; i < StrLen(P(self, kText)); ++i) {
-            const int cx = RtAddr<ComputeCharPosFn>(0x180116ee0ull)(
-                P(self, kFont), self + kText, i + 1);
-            if (relX >= 0 && relX <= cx) { I32(self, kCaret) = i; break; }
+        const int relX = st.mouseX - _layoutLeft;
+        for (int i = 0; i < StrLen(_text); ++i) {
+            const int cx = _font->ComputeCharacterPosition(AsString(_text), i + 1);
+            if (relX >= 0 && relX <= cx) { _caret = i; break; }
         }
     }
 
-    if (self[kFocused] == 0) return;
+    if (_active == 0) return;
 
     // ---- drop focus -------------------------------------------------------
-    const bool clickedAway = st[kStateMouseDown] != 0 &&
-                             (U32(self, kElemFlags) & 0x20000u) == 0;
+    const bool clickedAway = st.buttonPressed != 0 && (_flags & 0x20000u) == 0;
     if (clickedAway || dev[kKeyBase] != 0 || dev[kKeyEscape] != 0 || dev[kKeyEnter] != 0) {
-        self[kFocused] = 0;
+        _active = 0;
         void** cfg = InputConfigSlot();
         --**reinterpret_cast<int32_t**>(*cfg);
 
-        VSlot<FinalizeFn>(self, kSlotFinalizeText)(self);
-        SetNeedsSizeCalc(self);
+        FinalizeText();                                      // virtual, slot 12
+        SetNeedsSizeCalc();
 
         Event ev;
-        ev.dialog    = *dlg;
-        ev.element   = self;
+        ev.dialog    = *reinterpret_cast<void* const*>(dlg);
+        ev.element   = this;
         ev.kind      = kEventEditFinished;
-        ev.elementId = I32(self, kElemElementId);
-        ev.x         = I32c(st, kStateMouseX);
-        ev.y         = I32c(st, kStateMouseY);
+        ev.elementId = _elementId;
+        ev.x         = st.mouseX;
+        ev.y         = st.mouseY;
         ev.index     = 0;
         ev.tail      = 0;
-        RtAddr<EventPushFn>(0x180033690ull)(static_cast<uint8_t*>(ui) + kUiEvents,
+        RtAddr<EventPushFn>(0x180033690ull)(reinterpret_cast<uint8_t*>(ui) + kUiEvents,
                                             I32(ui, kUiEventCount) + 1, &ev);
     }
 
-    if (self[kFocused] == 0) return;
+    if (_active == 0) return;
 
     // ---- blink ------------------------------------------------------------
-    int64_t& acc = *reinterpret_cast<int64_t*>(self + kBlinkAcc);
-    acc += *static_cast<const int64_t*>(time);
-    if (acc > static_cast<int64_t>(0.5 / SecondsPerTick())) {
-        self[kBlinkOn] = (self[kBlinkOn] == 0) ? 1 : 0;
-        acc = 0;
+    _blinkAccumulator += *reinterpret_cast<const int64_t*>(&time);
+    if (_blinkAccumulator > static_cast<int64_t>(0.5 / SecondsPerTick())) {
+        _blinkOn = (_blinkOn == 0) ? 1 : 0;
+        _blinkAccumulator = 0;
     }
 
     // ---- caret movement ---------------------------------------------------
     if (dev[kKeyLeft] != 0 || dev[kKeyLeft + 2] != 0) {
-        I32(self, kCaret) -= 1;
-        if (I32(self, kCaret) < 0) I32(self, kCaret) = 0;
+        _caret -= 1;
+        if (_caret < 0) _caret = 0;
     }
     if (dev[kKeyRight] != 0 || dev[kKeyRight + 2] != 0) {
-        I32(self, kCaret) += 1;
-        const int len = StrLen(P(self, kText));
-        if (I32(self, kCaret) > len) I32(self, kCaret) = len;
+        _caret += 1;
+        const int len = StrLen(_text);
+        if (_caret > len) _caret = len;
     }
-    if (dev[kKeyHome] != 0) I32(self, kCaret) = 0;
-    if (dev[kKeyEnd]  != 0) I32(self, kCaret) = StrLen(P(self, kText));
+    if (dev[kKeyHome] != 0) _caret = 0;
+    if (dev[kKeyEnd]  != 0) _caret = StrLen(_text);
 
     // ---- backspace / delete ----------------------------------------------
     const auto removeAt = RtAddr<StrRemoveAtFn>(0x1800c86b0ull);
     const auto assign   = RtAddr<StrAssignFn>(0x1800c9810ull);
 
-    if ((dev[kKeyBack] != 0 || dev[kKeyBack + 2] != 0) && I32(self, kCaret) > 0) {
+    if ((dev[kKeyBack] != 0 || dev[kKeyBack + 2] != 0) && _caret > 0) {
         void* tmp = nullptr;
-        void** ret = removeAt(self + kText, &tmp, I32(self, kCaret) - 1);
-        assign(self + kText, ret);
+        void** ret = removeAt(&_text, &tmp, _caret - 1);
+        assign(&_text, ret);
         ReleaseString(&tmp);
-        I32(self, kCaret) -= 1;
-        SetNeedsSizeCalc(self);
+        _caret -= 1;
+        SetNeedsSizeCalc();
     }
 
     if (dev[kKeyDelete] != 0 || dev[kKeyDelete + 2] != 0) {
-        if (I32(self, kCaret) < StrLen(P(self, kText))) {
+        if (_caret < StrLen(_text)) {
             void* tmp = nullptr;
-            void** ret = removeAt(self + kText, &tmp, I32(self, kCaret));
-            assign(self + kText, ret);
+            void** ret = removeAt(&_text, &tmp, _caret);
+            assign(&_text, ret);
             ReleaseString(&tmp);
-            SetNeedsSizeCalc(self);
+            SetNeedsSizeCalc();
         }
     }
 
     // ---- character insertion ----------------------------------------------
     // `?SelectCharacter@` (0x1800cfd40) maps a key index to the character it
     // produces under the current modifiers, or 0 for "not a character key".
-    // It belongs to the UI-text agent and is reached by address.
+    // Its body is element_bodies_b5.cpp's door (declared on the class,
+    // undefined), reached by address.
     for (int k = 0; k < kKeyCount; ++k) {
         const int off = kKeyBase + k * kKeyStride;
         if (dev[off] == 0 && dev[off + 2] == 0) continue;
 
-        const uint8_t ch = RtAddr<SelectCharFn>(0x1800cfd40ull)(self, k);
+        const uint8_t ch = RtAddr<SelectCharFn>(0x1800cfd40ull)(this, k);
         if (ch == 0) continue;
 
-        if (StrLen(P(self, kText)) >= I32(self, kMaxLen)) continue;
+        if (StrLen(_text) >= _maxLength) continue;
 
         // The filter: when it is a non-empty String, the character must appear
         // in it. When it is null or empty, anything goes.
-        void* filter = P(self, kFilter);
+        char* filter = _filter;
         const int filterLen = StrLen(filter);
         if (filter != nullptr && filterLen > 0) {
             bool found = false;
             for (int m = 0; m < filterLen; ++m) {
-                if (static_cast<const uint8_t*>(P(self, kFilter))[m] == ch) { found = true; break; }
+                if (static_cast<uint8_t>(_filter[m]) == ch) { found = true; break; }
             }
             if (!found) continue;
         }
@@ -475,8 +450,7 @@ extern "C" void RtUi_EditElement_Update(void* selfv, const void* time, void* ui,
         buf[1] = '\0';
 
         // Both counts are DO-WHILE loops in retail (0x1800d06c0 and
-        // 0x1800d06e5): they step once before testing, so the count is one
-        // more than a leading-NUL-stopping while loop would give.
+        // 0x1800d06e5): they step once before testing.
         int n = 0;
         int64_t idx = 0;
         do { ++n; ++idx; } while (buf[idx] != 0);
@@ -496,55 +470,54 @@ extern "C" void RtUi_EditElement_Update(void* selfv, const void* time, void* ui,
         if (srcLen > cap) static_cast<char*>(one)[idx] = 0;
 
         void* ins = nullptr;
-        void** ret = RtAddr<StrInsertAtFn>(0x1800c8510ull)(
-            self + kText, &ins, I32(self, kCaret), &one);
-        AssignStringInline(reinterpret_cast<void**>(self + kText), ret);
+        void** ret = RtAddr<StrInsertAtFn>(0x1800c8510ull)(&_text, &ins, _caret, &one);
+        AssignStringInline(reinterpret_cast<void**>(&_text), ret);
         ReleaseString(&ins);
         ReleaseString(&one);
 
-        I32(self, kCaret) += 1;
-        SetNeedsSizeCalc(self);
+        _caret += 1;
+        SetNeedsSizeCalc();
     }
 }
 
 // ============================================================================
-// ?FinalizeText@EditElement@UI@@UEAAXXZ   0x1800d0da0
+// ?FinalizeText@EditElement@UI@@UEAAXXZ   0x1800d0da0 — slot 12, INTRODUCED
 // ============================================================================
 // A bare `RET`. It exists so `UI::NumberEditElement` can override it
 // (0x1800d4a60) and clamp its value when the box loses focus. Ported as the
 // empty body it is — see reference_retail_ships_empty_bodies.md.
-extern "C" void RtUi_EditElement_FinalizeText(void*) {}
+void EditElement::FinalizeText() {}
+
+}  // namespace UI
 
 // ============================================================================
-// Constructors / destructor
+// Constructor / destructor — DOOR BODIES (no real ctor/dtor, B4b-2)
 // ============================================================================
-
 extern "C" void* RtUi_EditElement_CopyCtor(void* selfv, const void* otherv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* other = static_cast<const uint8_t*>(otherv);
-    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(self, other);
-    P(self, 0x00) = VtEditElement();
-    P(self, kFont) = Pc(other, kFont);
+    UI::EditElement* self = reinterpret_cast<UI::EditElement*>(selfv);               // B.3.6 bridge
+    const UI::EditElement* other = reinterpret_cast<const UI::EditElement*>(otherv); // B.3.6 bridge
+    RtAddr<ElementCopyCtorFn>(0x1800358c0ull)(selfv, otherv);
+    *reinterpret_cast<void**>(selfv) = VtEditElement();
+    self->_font = other->_font;
 
-    P(self, kText) = nullptr;
-    if (Pc(other, kText) != nullptr) {
-        P(self, kText) = Pc(other, kText);
-        ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(P(self, kText)) - 4);
+    self->_text = nullptr;
+    if (other->_text != nullptr) {
+        self->_text = other->_text;
+        ++*reinterpret_cast<int32_t*>(self->_text - 4);
     }
-    I32(self, kMaxLen) = I32c(other, kMaxLen);
-    self[kPassword] = other[kPassword];
+    self->_maxLength = other->_maxLength;
+    self->_password  = other->_password;
 
-    P(self, kFilter) = nullptr;
-    if (Pc(other, kFilter) != nullptr) {
-        P(self, kFilter) = Pc(other, kFilter);
-        ++*reinterpret_cast<int32_t*>(static_cast<uint8_t*>(P(self, kFilter)) - 4);
+    self->_filter = nullptr;
+    if (other->_filter != nullptr) {
+        self->_filter = other->_filter;
+        ++*reinterpret_cast<int32_t*>(self->_filter - 4);
     }
-    self[kFocused] = other[kFocused];
-    I32(self, kCaret) = I32c(other, kCaret);
-    self[kBlinkOn] = other[kBlinkOn];
-    *reinterpret_cast<uint64_t*>(self + kBlinkAcc) =
-        *reinterpret_cast<const uint64_t*>(other + kBlinkAcc);
-    return self;
+    self->_active  = other->_active;
+    self->_caret   = other->_caret;
+    self->_blinkOn = other->_blinkOn;
+    self->_blinkAccumulator = other->_blinkAccumulator;
+    return selfv;
 }
 
 // ??1EditElement@UI@@UEAA@XZ  0x1800d0e50 — own vtable, DROP the text-input
@@ -552,17 +525,48 @@ extern "C" void* RtUi_EditElement_CopyCtor(void* selfv, const void* otherv) {
 // ~Element. The latch decrement is the destructor's half of Update's pairing;
 // destroying a focused edit box without it deafens the game.
 extern "C" void RtUi_EditElement_Dtor(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    P(self, 0x00) = VtEditElement();
+    UI::EditElement* self = reinterpret_cast<UI::EditElement*>(selfv);   // B.3.6 bridge
+    *reinterpret_cast<void**>(selfv) = VtEditElement();
 
-    if (self[kFocused] != 0) {
+    if (self->_active != 0) {
         void** cfg = InputConfigSlot();
         --**reinterpret_cast<int32_t**>(*cfg);
     }
-    ReleaseString(reinterpret_cast<void**>(self + kFilter));
-    ReleaseString(reinterpret_cast<void**>(self + kText));
+    ReleaseString(reinterpret_cast<void**>(&self->_filter));
+    ReleaseString(reinterpret_cast<void**>(&self->_text));
 
-    RtAddr<ElementDtorFn>(0x1801161a0ull)(self);
+    RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);
+}
+
+// ============================================================================
+// The registered doors — one QUALIFIED delegation each.
+// ============================================================================
+extern "C" uint32_t RtUi_EditElement_Type(const void* self) {
+    return reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_EditElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_EditElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::ComputeSize();   // B.3.6 bridge
+}
+extern "C" void RtUi_EditElement_ComputeLayout(void* self, int x, int y, int w, int h) {
+    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
+}
+extern "C" void RtUi_EditElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::Draw(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+// R9 is the ADDRESS of the caller's InternalPtr<DialogInstance> (B6-11).
+extern "C" void RtUi_EditElement_Update(void* self, const void* time, void* ui,
+                                        void** dlg, const void* state) {
+    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::Update(   // B.3.6 bridge
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),
+        *static_cast<const UI::Element::UpdateState*>(state));
+}
+extern "C" void RtUi_EditElement_FinalizeText(void* self) {
+    reinterpret_cast<UI::EditElement*>(self)->UI::EditElement::FinalizeText();   // B.3.6 bridge
 }
 
 // ============================================================================
