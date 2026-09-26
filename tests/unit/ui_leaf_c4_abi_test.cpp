@@ -241,10 +241,10 @@ UNIT_TEST(ui_c4_description_field_offsets) {
     CHECK_EQ(offsetof(UI::ContainerDescription, _clampHeight),     (size_t)0x71);
     CHECK_EQ(offsetof(UI::ContainerDescription, _barSize),         (size_t)0x74);
     CHECK_EQ(offsetof(UI::ContainerDescription, _partDescs),       (size_t)0x78);
-    // The class and the DescriptionsBatch1.h POD are one layout.
-    CHECK_EQ(sizeof(UI::ContainerDescription), sizeof(RtUI::ContainerDescription));
-    CHECK_EQ(offsetof(UI::ContainerDescription, _barSize),   offsetof(RtUI::ContainerDescription, _word74));
-    CHECK_EQ(offsetof(UI::ContainerDescription, _partDescs), offsetof(RtUI::ContainerDescription, _childDesc));
+    // RtUI::ContainerDescription is an ALIAS of the class since fragment pass
+    // F2 (DescriptionsBatch1.h): the old POD names are gone, the offsets above
+    // are the ones it pinned.
+    CHECK((std::is_same<RtUI::ContainerDescription, UI::ContainerDescription>::value));
 
     CHECK_EQ(offsetof(UI::LayoutDescription, _entries), (size_t)0x68);
     CHECK_EQ(offsetof(UI::LayoutDescription::Entry, name),        (size_t)0x08);

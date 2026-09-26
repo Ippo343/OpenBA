@@ -269,9 +269,9 @@ Object::InternalPtr<Element>* NumberEditDescription::CreateInstance(
 
     void* slot = elem;                                         // 1800d4d5a
     // The non-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0) — a dialog.cpp door, reached by address.
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 1800d4d67
+    // (0x180115ad0) — a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 1800d4d67
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     elem->_font = _font;                                       // 1800d4d70
 

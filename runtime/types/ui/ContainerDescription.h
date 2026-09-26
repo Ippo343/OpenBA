@@ -47,7 +47,7 @@
 #include <cstdint>
 
 #include "ElementDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::ContainerDescription — cross-assert only
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::ContainerDescription aliases this class
 
 namespace UI {
 
@@ -119,14 +119,8 @@ static_assert(offsetof(ContainerDescription, _clampHeight)     == 0x71, "");
 static_assert(offsetof(ContainerDescription, _barSize)         == 0x74, "");
 static_assert(offsetof(ContainerDescription, _partDescs)       == 0x78, "");
 
-// The class and the DescriptionsBatch1.h POD describe the same bytes.
-static_assert(sizeof(ContainerDescription) == sizeof(RtUI::ContainerDescription), "");
-static_assert(offsetof(ContainerDescription, _requestedWidth)  == offsetof(RtUI::ContainerDescription, _width), "");
-static_assert(offsetof(ContainerDescription, _requestedHeight) == offsetof(RtUI::ContainerDescription, _height), "");
-static_assert(offsetof(ContainerDescription, _clampWidth)      == offsetof(RtUI::ContainerDescription, _flag70), "");
-static_assert(offsetof(ContainerDescription, _clampHeight)     == offsetof(RtUI::ContainerDescription, _flag71), "");
-static_assert(offsetof(ContainerDescription, _pad72)           == offsetof(RtUI::ContainerDescription, _pad72), "");
-static_assert(offsetof(ContainerDescription, _barSize)         == offsetof(RtUI::ContainerDescription, _word74), "");
-static_assert(offsetof(ContainerDescription, _partDescs)       == offsetof(RtUI::ContainerDescription, _childDesc), "");
+// RtUI::ContainerDescription is an ALIAS of this class since fragment pass F2; the
+// POD's offsets are the absolute asserts above.
+static_assert(offsetof(ContainerDescription, _pad72)           == 0x72, "");
 
 }  // namespace UI

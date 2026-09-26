@@ -206,7 +206,8 @@ Object::InternalPtr<Element>* ClipRegionDescription::CreateInstance(
     }
 
     void* slot = static_cast<Element*>(elem);               // 1800cbf6c
-    ElementDescriptionApply(this, &slot);                   // 1800cbf79
+    UI::ElementDescription::CreateInstance(                   // 1800cbf79
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     // The two extents are copied AFTER the base applier, so they win over
     // anything it wrote.
