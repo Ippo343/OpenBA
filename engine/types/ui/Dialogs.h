@@ -211,29 +211,8 @@ static_assert(sizeof(ModUploadDialog) == 0xB8, "ModUploadDialog size mismatch");
 // --- OptionInputBindDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/OptionInputBindDialog.h"
 
-// --- SaveLoadDialog (0x160) ---
-// Ctor: Sprite@+0xD0, zeroed +0xF0..+0x158
-struct SaveLoadDialog {
-    DialogInstance base;        // +0x00
-    uint8_t  _padB8[0x18];     // +0xB8: gap (not initialized by ctor, may be from base)
-    uint8_t  sprite[0x20];     // +0xD0: UI::Sprite sub-object (initialized by Sprite::Sprite)
-    uint64_t dataF0;           // +0xF0: zeroed
-    uint64_t dataF8;           // +0xF8: zeroed
-    uint64_t data100;          // +0x100
-    uint64_t data108;          // +0x108
-    uint64_t data110;          // +0x110
-    uint64_t data118;          // +0x118
-    uint64_t data120;          // +0x120
-    uint64_t data128;          // +0x128
-    uint64_t data130;          // +0x130
-    uint64_t data138;          // +0x138
-    uint64_t data140;          // +0x140
-    uint64_t data148;          // +0x148
-    uint64_t data150;          // +0x150
-    uint64_t data158;          // +0x158
-};
-static_assert(sizeof(SaveLoadDialog) == 0x160, "SaveLoadDialog size mismatch");
-static_assert(offsetof(SaveLoadDialog, sprite) == 0xD0, "");
+// --- SaveLoadDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/SaveLoadDialog.h"
 
 // --- ScenarioDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/ScenarioDialog.h"

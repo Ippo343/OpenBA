@@ -101,30 +101,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self);
 void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot);
 
 // ============================================================
-// SaveLoadDialog
-// ============================================================
-
-// Startup (vtable +0x20): Finds 12 named elements (labelLoad/Save, buttonSave/Load/Cancel/Delete,
-// mainPage, textLoading/Saving/PleaseWait, loadingImage, tableSaveList). Sets button IDs,
-// initializes save sprite, starts list operation.
-void SaveLoadDialog_Startup(SaveLoadDialog* self);
-
-// Update (vtable +0x30): State machine for save/load UI. When idle, shows file list
-// with selection highlighting and enables/disables buttons. During operations, shows
-// loading page with rotating spinner and status text.
-void SaveLoadDialog_Update(SaveLoadDialog* self);
-
-// Load (vtable +0x38): Timer/state machine. Accumulates rotation, processes deferred
-// flags when operation completes (refresh file list, close on save/load, re-list on delete,
-// construct game loader loop chain on load completion).
-void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut, uint64_t param4);
-
-// OnEvent (vtable +0x40, exe 0x1400b67e0): Handles button clicks and list selection.
-// eventType 2 (list select): eventData in (3, saveCount+4) → select entry
-// eventType 0x12 (button): 0=cancel(close), 1=save, 2=load, 3=delete
-void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, int eventData);
-
-// ============================================================
 // TutorialSetupDialog
 // ============================================================
 

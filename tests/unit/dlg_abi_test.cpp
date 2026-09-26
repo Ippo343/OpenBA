@@ -36,6 +36,7 @@
 #include "Dialog/FollowDialog.h"
 #include "Dialog/NewGameDialog.h"
 #include "Dialog/OptionsDialog.h"
+#include "Dialog/SaveLoadDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -203,4 +204,17 @@ UNIT_TEST(dlg_options_dialog) {
     CHECK_EQ(offsetof(OptionsDialog, tabOptions), (size_t)0x1b8);
     CheckShape<OptionsDialog>();
     CheckDialogInstanceSlots<OptionsDialog>();
+}
+
+UNIT_TEST(dlg_saveload_dialog) {
+    CHECK_EQ(sizeof(SaveLoadDialog), (size_t)0x160);
+    CHECK_EQ(offsetof(SaveLoadDialog, mode), (size_t)0xb8);
+    CHECK_EQ(offsetof(SaveLoadDialog, selectedIndex), (size_t)0xc0);
+    CHECK_EQ(offsetof(SaveLoadDialog, rotation), (size_t)0xc8);
+    CHECK_EQ(offsetof(SaveLoadDialog, sprite), (size_t)0xd0);
+    CHECK_EQ(offsetof(SaveLoadDialog, engine), (size_t)0xe0);
+    CHECK_EQ(offsetof(SaveLoadDialog, gameWorld), (size_t)0xe8);
+    CHECK_EQ(offsetof(SaveLoadDialog, dataF0), (size_t)0xf0);
+    CheckShape<SaveLoadDialog>();
+    CheckDialogInstanceSlots<SaveLoadDialog>();
 }
