@@ -17,6 +17,8 @@
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
+#include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "Component/coll_bridge.h"
@@ -211,7 +213,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         // GetSpriteName returns String (non-trivial return: RCX=this, RDX=retval)
         {
             System::String spriteNameStr;
-            fn_Achievement_GetSpriteName(scenario, &spriteNameStr);
+            ::new (&spriteNameStr) System::String(reinterpret_cast<const Achievement::Achievement*>(scenario)->GetSpriteName());  // B.3.7 bridge
 
             // Create UI::Sprite(retval, spriteSheet, spriteName)
             // spriteSheet = *(scenario + 0x38)
@@ -227,7 +229,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         // --- Set title text from scenario ---
         {
             System::String titleStr;
-            fn_Achievement_GetTitle(scenario, &titleStr);
+            ::new (&titleStr) System::String(reinterpret_cast<const Achievement::Achievement*>(scenario)->GetTitle());  // B.3.7 bridge
 
             // Create UI::String(retval, stringTable, titleStr)
             // stringTable = *(scenario + 0x20)
@@ -243,7 +245,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         // --- Set description text from scenario ---
         {
             System::String descStr;
-            fn_Achievement_GetDescription(scenario, &descStr);
+            ::new (&descStr) System::String(reinterpret_cast<const Achievement::Achievement*>(scenario)->GetDescription());  // B.3.7 bridge
 
             // Create UI::String(retval, stringTable, descStr)
             uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
@@ -410,10 +412,6 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
             if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) missing = "SaveLoad singleton";
             else if (!g_pPersistenceSingleton || !*g_pPersistenceSingleton) missing = "Persistence singleton";
             else if (!g_pFileSystemSingleton2 || !*g_pFileSystemSingleton2) missing = "FileSystem singleton";
-            else if (!fn_SaveLoad_SetOperation) missing = "SaveLoad::SetOperation";
-            else if (!fn_SaveLoad_SetSaveName) missing = "SaveLoad::SetSaveName";
-            else if (!fn_SaveLoad_GetOperation) missing = "SaveLoad::GetOperation";
-            else if (!fn_SaveLoad_Update) missing = "SaveLoad::Update";
             else if (!fn_Time_Ctor_Float) missing = "Time::Time(float)";
             if (missing) {
                 fprintf(stderr, "[ScenarioDialog] SAVED branch ABORTED - %s is NULL\n", missing);
@@ -422,8 +420,8 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
             }
         }
         void* saveLoad = *g_pSaveLoadSingleton;
-        fn_SaveLoad_SetOperation(saveLoad, 3, 0);
-        fn_SaveLoad_SetSaveName(saveLoad, &saveNameStr, 2);
+        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(3), 0);  // B.3.7 bridge
+        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(saveNameStr, 2);  // B.3.7 bridge
 
         // Get save path and set data directory
         // Original flow (from assembly at 0x140077d41-0x140077d96):
@@ -463,14 +461,14 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         }
 
         // Run SaveLoad::Update loop until operation completes
-        int operation = fn_SaveLoad_GetOperation(saveLoad);
+        int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
         printf("[ScenarioDialog::LoadSelected] SAVED SCENARIO: entering SaveLoad loop, initial operation=%d\n", operation);
         int loopCount = 0;
         while (operation != 0) {
             uint8_t zeroTime[8];
             fn_Time_Ctor_Float(zeroTime, 0.0f);
-            fn_SaveLoad_Update(saveLoad, zeroTime);
-            operation = fn_SaveLoad_GetOperation(saveLoad);
+            reinterpret_cast<Save::SaveLoad*>(saveLoad)->Update(*reinterpret_cast<const System::Time*>(zeroTime));  // B.3.7 bridge
+            operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
             loopCount++;
             if (loopCount % 100 == 0) {
                 printf("[ScenarioDialog::LoadSelected] SaveLoad loop iteration %d, operation=%d\n", loopCount, operation);
@@ -494,7 +492,7 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
         new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
         uint32_t scenarioResIdx = *(uint32_t*)(entryArray + (uintptr_t)selectedIdx * 0x38 + 0x30);
-        void* savedState = fn_SaveLoad_GetSaveState(saveLoad);
+        void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
 
         // Use fn_LoadScenarioFromSave for the complex loop construction
         fn_LoadScenarioFromSave(parentCtrl, savedState,

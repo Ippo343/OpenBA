@@ -16,6 +16,7 @@
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
@@ -75,7 +76,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
             tableGoal = *(void**)retBuf;
         }
 
-        int goalCount = fn_GoalList_GetGoalCount(goalList);
+        int goalCount = reinterpret_cast<const Achievement::GoalList*>(goalList)->GetGoalCount();  // B.3.7 bridge
         void* dialog = *(void**)(s + 0x18); // Dialog* at self+0x18
 
         for (int i = 0; i < goalCount; i++) {
@@ -131,7 +132,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
             {
                 // Get GoalInstance at index i
                 uint8_t goalInstBuf[16] = {0};
-                fn_GoalList_GetGoal(goalList, goalInstBuf, i);
+                ::new (goalInstBuf) Object::InternalPtr<Achievement::GoalInstance>(reinterpret_cast<const Achievement::GoalList*>(goalList)->GetGoal(i));  // B.3.7 bridge
                 void* goalInstPtr = *(void**)goalInstBuf;
 
                 // GoalInstance -> Goal at +0x18
@@ -139,7 +140,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
                 // Get goal text (non-trivial return: fills retval with System::String)
                 System::String textStr;
-                fn_Goal_GetText(goal, &textStr);
+                ::new (&textStr) System::String(reinterpret_cast<const Achievement::Goal*>(goal)->GetText());  // B.3.7 bridge
 
                 // Read StringTable from Goal+0x20 (ExternalPtr<StringTable>)
                 uint64_t stringTable = *(uint64_t*)((uintptr_t)goal + 0x20);
@@ -187,7 +188,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
         // Get title string (non-trivial return)
         System::String titleStr;
-        fn_Achievement_GetTitle(achievement, &titleStr);
+        ::new (&titleStr) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());  // B.3.7 bridge
 
         // Read StringTable from Achievement+0x20
         uint64_t stringTable = *(uint64_t*)((uintptr_t)achievement + 0x20);
@@ -239,11 +240,11 @@ void GoalDialog_Slot6(GoalDialog* self) {
 
         // Get goal at index i from the GoalList
         uint64_t goalInst = 0;
-        fn_GoalList_GetGoal((void*)(goalListObj + 0x10), &goalInst, i);
+        ::new (&goalInst) Object::InternalPtr<Achievement::GoalInstance>(reinterpret_cast<const Achievement::GoalList*>((void*)(goalListObj + 0x10))->GetGoal(i));  // B.3.7 bridge
 
         // Check if goal is met and if it has failed
-        bool isMet = fn_GoalInstance_IsMet((void*)goalInst);
-        bool hasFailed = fn_GoalInstance_HasFailed((void*)goalInst);
+        bool isMet = reinterpret_cast<const Achievement::GoalInstance*>((void*)goalInst)->IsMet();  // B.3.7 bridge
+        bool hasFailed = reinterpret_cast<const Achievement::GoalInstance*>((void*)goalInst)->HasFailed();  // B.3.7 bridge
 
         // Met indicator: show if met, hide if not
         void* metElem = *(void**)(entryArray + entryOffset);
