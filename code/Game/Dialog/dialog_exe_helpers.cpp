@@ -13,6 +13,8 @@
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
+#include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "dialog_exe_helpers.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -92,8 +94,8 @@ static void* Dialog_AutoSaveBuildName(void* keymap, void* retUIString) {
 // param_1 = AutoSaveDialog* (self; UserInterface at +0x10). p2/p3/p4 forwarded.
 //
 // UI::UserInterface::PausesGame is a direct member call (ENDGAME B.3.6, K2: the
-// file-local by-name cache went with its last caller); the rest (incl.
-// fn_SaveLoad_SetSaveName) are existing engine_funcs (ResolveExport).
+// file-local by-name cache went with its last caller); the Save::SaveLoad calls are
+// direct member calls too (ENDGAME B.3.7, K1).
 
 static void AsBail(const char* why, long v) {
     fprintf(stderr, "[AutoSave] timer FIRED but bailed: %s (%ld)\n", why, v);
@@ -113,14 +115,13 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     // Only when no operation is already in progress (Operation::None == 0).
     if (!g_pSaveLoadSingleton || !*g_pSaveLoadSingleton) { AsBail("no SaveLoad singleton", 0); return; }
     void* saveLoad = *g_pSaveLoadSingleton;
-    if (!fn_SaveLoad_GetOperation) { AsBail("GetOperation fn null", 0); return; }
-    { int op = fn_SaveLoad_GetOperation(saveLoad);
+    { int op = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
       if (op != 0) { AsBail("SaveLoad busy, Operation", (long)op); return; } }
 
     // Min operation-display time = 1.0s.
     uint8_t timeBuf[8];
     if (fn_Time_Ctor_Float) fn_Time_Ctor_Float(timeBuf, 1.0f);
-    if (fn_SaveLoad_SetMinOperationTime) fn_SaveLoad_SetMinOperationTime(saveLoad, timeBuf);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(timeBuf));  // B.3.7 bridge
 
     // Screenshot sprite (16 bytes) copied from KeyMap+0xb8.
     if (!g_pKeyMapSingleton || !*g_pKeyMapSingleton) return;
@@ -128,18 +129,18 @@ void Dialog_AutoSaveHandler(void* self, void* /*p2*/, int /*p3*/, int /*p4*/) {
     uint8_t spriteBuf[16];
     *reinterpret_cast<uint64_t*>(spriteBuf)     = *reinterpret_cast<uint64_t*>(keymap + 0xb8);
     *reinterpret_cast<uint64_t*>(spriteBuf + 8) = *reinterpret_cast<uint64_t*>(keymap + 0xc0);
-    if (fn_SaveLoad_SetSaveSprite) fn_SaveLoad_SetSaveSprite(saveLoad, spriteBuf);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.7 bridge
 
     // Localized "Autosave" name → System::String → SetSaveName(slot 2).
     uint8_t uiStrBuf[16];
     Dialog_AutoSaveBuildName(reinterpret_cast<void*>(keymap), uiStrBuf);
     System::String sysStr;
     ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
-    if (fn_SaveLoad_SetSaveName) fn_SaveLoad_SetSaveName(saveLoad, &sysStr, 2);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(sysStr, 2);  // B.3.7 bridge
 
 
     // Kick off the save operation (Operation 4, param -4).
-    if (fn_SaveLoad_SetOperation) fn_SaveLoad_SetOperation(saveLoad, 4, -4);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(4), -4);  // B.3.7 bridge
 }
 
 // ============================================================
@@ -209,19 +210,17 @@ void GameContainer_EnsureLists() {
         void* achievementList = *reinterpret_cast<void**>(container + 0x00);
         void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
                         ? **g_ppAchievementManager : nullptr;
-        typedef void (*SetAchievements_t)(void* self, void* externalList);
-        static SetAchievements_t fn = reinterpret_cast<SetAchievements_t>(ResolveExport(
-            "?SetAchievements@AchievementManager@Achievement@@QEAAXV?$ExternalPtr@VExternalList@Object@@@Object@@@Z"));
-        if (fn && mgr && achievementList) {
-            fn(mgr, achievementList);
+        if (mgr && achievementList) {
+            reinterpret_cast<Achievement::AchievementManager*>(mgr)->SetAchievements(  // B.3.7 bridge
+                Object::ExternalPtr<Object::ExternalList>(reinterpret_cast<Object::ExternalList*>(achievementList)));
             s_achievementsSet = true;
             fprintf(stderr, "[GameContainer] AchievementManager::SetAchievements(mgr=%p, list=%p) "
                             "-> count=%d\n", mgr, achievementList,
                     fn_AchievementManager_GetAchievementCount
                         ? fn_AchievementManager_GetAchievementCount(mgr) : -1);
         } else {
-            fprintf(stderr, "[GameContainer] SetAchievements SKIPPED (fn=%p mgr=%p list=%p)\n",
-                    reinterpret_cast<void*>(fn), mgr, achievementList);
+            fprintf(stderr, "[GameContainer] SetAchievements SKIPPED (mgr=%p list=%p)\n",
+                    mgr, achievementList);
         }
     }
     fflush(stderr);

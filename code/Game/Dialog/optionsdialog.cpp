@@ -18,6 +18,7 @@
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K1)
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: video/Device.h FIRST. It pulls no Volume.h itself, but the
 // house rule (a runtime type header ahead of anything that reaches <windows.h> through
@@ -1060,8 +1061,8 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     // If renderer or adapter changed, need full shutdown/startup
     if (needsFullRestart) {
         void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
-        if (fn_MainLoop_OnVideoError && mainLoop)
-            fn_MainLoop_OnVideoError(mainLoop);
+        if (mainLoop)
+            reinterpret_cast<Engine::MainLoop*>(mainLoop)->OnVideoError();  // B.3.7 bridge
         reinterpret_cast<Video::Device*>(vidDev)->ReleaseDynamic();   // B.3.5 bridge
         reinterpret_cast<Video::Device*>(vidDev)->Shutdown();         // B.3.5 bridge
     }
@@ -1096,8 +1097,8 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
         success = reinterpret_cast<Video::Device*>(vidDev)->Startup();   // B.3.5 bridge
         reinterpret_cast<Video::Device*>(vidDev)->RecreateDynamic();     // B.3.5 bridge
         void* mainLoop = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
-        if (fn_MainLoop_OnVideoRestart && mainLoop)
-            fn_MainLoop_OnVideoRestart(mainLoop);
+        if (mainLoop)
+            reinterpret_cast<Engine::MainLoop*>(mainLoop)->OnVideoRestart();  // B.3.7 bridge
     }
 
 
