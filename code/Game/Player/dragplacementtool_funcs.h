@@ -5,12 +5,6 @@
 #include "DragPlacementTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00): Scalar deleting destructor.
-// Resets vtable chain (DragPlacementTool -> DragTool -> Tool), calls Internal::~Internal,
-// conditionally frees memory if flags & 1.
-// Original: 0x14002d900
-void* DragPlacementTool_Dtor(DragPlacementTool* self, uint32_t flags);
-
 // Startup (vtable +0x20, Slot4): Searches entity component list for two description types:
 //   CreatePlacementDescription (DAT_1401c7430) -> stored at self->placementDesc (+0x38)
 //   AreaDescription (DAT_1401c7a18)            -> stored at self->areaDesc (+0x40)

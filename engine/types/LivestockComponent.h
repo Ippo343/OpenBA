@@ -24,24 +24,8 @@ namespace LivestockComponentAddr {
     // Serialize = base no-op (0x140118a50)
 }
 
-struct LivestockComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `LivestockComponent` is a real class now
+// (code/Game/Component/LivestockComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/LivestockComponent.h"
 
-    // LivestockComponent fields
-    uint64_t data28;       // +0x28: zeroed by ctor
-    uint64_t data30;       // +0x30: zeroed by ctor
-};
-
-static_assert(sizeof(LivestockComponent) == 0x38, "LivestockComponent size mismatch");
-static_assert(offsetof(LivestockComponent, vtable) == 0x00, "");
-static_assert(offsetof(LivestockComponent, next)   == 0x08, "");
-static_assert(offsetof(LivestockComponent, owner)  == 0x10, "");
-static_assert(offsetof(LivestockComponent, flags)  == 0x20, "");
-static_assert(offsetof(LivestockComponent, data28) == 0x28, "");
-static_assert(offsetof(LivestockComponent, data30) == 0x30, "");

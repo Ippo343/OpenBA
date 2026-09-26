@@ -918,7 +918,7 @@ void HerdComponent_Update(HerdComponent* self, int64_t* deltaTime) {
     }
 
     // Get config object via IsDerivedFrom check
-    void* unk18 = self->_unk18;
+    void* unk18 = self->_description;
     bool isDerived = fn_IsDerivedFrom(unk18, *s_pHerdTypeId);
     uint8_t* config = isDerived ? reinterpret_cast<uint8_t*>(unk18) : nullptr;
     if (!config) ++g_hu_noCfg;
@@ -1041,82 +1041,65 @@ void HerdComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x60 (HerdComponent_Factory MemAlloc), flags 0x8b (Ctor 0x140122150:
-// Component base sets +0x20=0x80, leaf OR 0xb => 0x8b). Bit 3 of those flags is
-// what puts the herd in the EntityList update bucket that dispatches slot 9.
-//
-// Live under BANISHED_LIVE_HERD:
-//   slot 4 Startup  -> the ctor tail the inert factory can't express (+0x4c=-1)
-//   slot 6 OnAdd    -> world herd-list registration (0x140121f40)
-//   slot 9 Update   -> the real grazing/migration tick (0x140121bf0)
-// Slot 3 Serialize (0x140121f90) is ported (animalwave_serialize.cpp) and
-// registered (reg_animal_serialize.cpp). hand-expanded (save/load wave
-// 2026-08-28) from COMPONENT_LIVE_FACTORY_SOA to wire it UNCONDITIONALLY: a
-// loaded save's HerdComponent otherwise kept the base-Component serialize and
-// its member list (+0x38/+0x40), grazing/spawn Time, and PopulationComponent
-// backref (+0x28) all reset to 0 on load.
-//
-// A live herd does nothing on its own — PopulationComponent's Startup is what
-// creates herd entities and calls Populate, so the useful recipe is
-// BANISHED_LIVE_HERD=1 BANISHED_LIVE_POPULATION=1.
+// ===== ENDGAME B.3.8 CIT — HerdComponent as a REAL class (HerdComponent.h) =====
+// Before: a 48-slot hand-built HerdComponent_LiveVtable filled at every create
+// (slots 3 Serialize, 4 Startup, 6 OnAdd, 9 Update), Inert_ScalarDtor in slot 0.
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES D1,
+// D2). A live herd does nothing on its own — PopulationComponent's Startup is
+// what creates herd entities and calls Populate.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/HerdComponent.h"
 
+// Retail 0x140121f90 (animalwave_serialize.cpp).
 extern "C" void HerdComponent_Serialize(void* self, void* stream);
 
-static void HerdComponent_UpdateSlot(HerdComponent* self, int64_t* dt) {
-    HerdComponent_Update(self, dt);
-}
-static void HerdComponent_StartupSlot(HerdComponent* self) {
-    HerdComponent_Startup(self);
-}
-static void HerdComponent_OnAddSlot(HerdComponent* self) {
-    HerdComponent_OnAdd(self);
+// 0x140122150. Component() is the CALL 0x1401188b0; the 0x140163680 stamp is
+// the compiler's; +0x28, +0x38, +0x40, +0x48 (byte), +0x50, +0x58 = 0; flags |=
+// 0x0b (0x8b). Retail leaves +0x30 unwritten (zeroed here, as the tree did).
+// +0x4c = -1 is the ctor's own store (0x14012218c). The tree used to write it from
+// the Startup slot (HerdComponent_Startup) because the inert factory could not
+// express it; retail's slot 4 is Component's `RET`, which the class now inherits.
+HerdComponent::HerdComponent()
+    : data28(0), data30(0), data38(0), data40(0), data48(0), _pad49{},
+      data4C(-1), data50(0), data58(0) {
+    OrFlagsInCtor(0x0b);
 }
 
-static uint32_t HerdComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("HerdComponent");
-    return cached;
+// [0] 0x140034ea0. PORT GAP (retail frees the +0x38 member array first) — the
+// tree's Inert_ScalarDtor never did; kept (HerdComponent.h).
+Object::Base* HerdComponent::DeletingDtor(unsigned flags) {
+    this->~HerdComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void* HerdComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void HerdComponent_UpdateVSlot(void* s, void* t) {
-    HerdComponent_UpdateSlot(reinterpret_cast<HerdComponent*>(s),
-                              reinterpret_cast<int64_t*>(t));
+
+void HerdComponent::Persist(void* stream) { HerdComponent_Serialize(this, stream); }   // [3] 0x140121f90
+void HerdComponent::OnAdded() { HerdComponent_OnAdd(this); }     // [6] 0x140121f40
+
+// [7] 0x140121e20. PORT GAP (retail 0x140121e20) — B38 D9: the body is ported
+// (HerdComponent_OnRemove, registered at 0x140121e20 by reg_herd_live.cpp) but
+// the tree's table never installed it; the inert stub is kept here. Installing
+// it is its own titled commit.
+void HerdComponent::OnRemove() {}
+
+// [9] 0x140121bf0. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void HerdComponent::Update(void* time) {
+    HerdComponent_Update(this, static_cast<int64_t*>(time));
 }
-static void HerdComponent_StartupVSlot(void* s) {
-    HerdComponent_StartupSlot(reinterpret_cast<HerdComponent*>(s));
+
+// create 0x140034cd0: MemAlloc(0x60, 8), then the ctor.
+void* HerdComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HerdComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HerdComponent());
 }
-static void HerdComponent_OnAddedVSlot(void* s) {
-    HerdComponent_OnAddSlot(reinterpret_cast<HerdComponent*>(s));
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* HerdComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HerdComponent());
 }
-static void HerdComponent_SerializeVSlot(void* self, void* stream) {
-    HerdComponent_Serialize(self, stream);
-}
-static void HerdComponent_FinishLiveVtable() {
-    HerdComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&HerdComponent_StartupVSlot);
-    HerdComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&HerdComponent_UpdateVSlot);
-    HerdComponent_LiveVtable[6] =
-        reinterpret_cast<void*>(&HerdComponent_OnAddedVSlot);
-    HerdComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&HerdComponent_SerializeVSlot);
-}
-extern "C" void* HerdComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x60, 0x8b,
-        HerdComponent_LiveVtable,
-        reinterpret_cast<void*>(&HerdComponent_LiveGetTypeId));
-    HerdComponent_FinishLiveVtable();
-    return p;
-}
-static void* HerdComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x60, 0x8b,
-        HerdComponent_LiveVtable,
-        reinterpret_cast<void*>(&HerdComponent_LiveGetTypeId));
-    HerdComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(HerdComponent, "Component",
-              &HerdComponent_Factory, &HerdComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(HerdComponent, "_ZTV13HerdComponent")
+DEFINE_EXE_TYPE(HerdComponent, "Component")

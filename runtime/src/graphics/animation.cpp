@@ -413,12 +413,9 @@ extern "C" Particle* RtGraphics_Particle_Ctor(Particle* self) {
     self->_f08 = 0;
     self->_f10 = 0;
     self->_f18 = 0;
-    self->_active = 1;
-    self->_f24 = 1;
-    self->_f28 = 0xf;
-    self->_f30 = 0;
-    self->_f38 = 0;
-    self->_f40 = 0;
+    // ENDGAME B.3.8 block RB (RULE B8-1): +0x20..+0x47 are ONE body with the
+    // real constructor `Graphics::Particle()` (Particle.h, `InitFields`).
+    ::Graphics::Particle::DoorBody::Init(reinterpret_cast<::Graphics::Particle*>(self));   // B.3.8 bridge
 
     return self;
 }
@@ -456,9 +453,9 @@ extern "C" ParticleInstance* RtGraphics_ParticleInstance_Ctor(ParticleInstance* 
     RtGeometryCtor(&self->base);   // Geometry base, +0x00..+0xbf
     *reinterpret_cast<void**>(self) = RtParticleInstanceVtable();  // vtable lives at +0x00,
                                                                     // inside the Geometry base
-    self->_resource  = nullptr;    // +0xc0
-    self->_boundsPtr = nullptr;    // +0xc8
-    self->_index     = -1;         // +0xd0
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `ParticleInstance()`.
+    ::Graphics::ParticleInstance::DoorBody::Init(
+        reinterpret_cast<::Graphics::ParticleInstance*>(self));   // B.3.8 bridge
 
     return self;
 }
@@ -736,4 +733,44 @@ int RtGraphicsAnimationRegister() {
     RegisterRuntimeAddr(0x1800a55a0, (void*)&RtGraphics_ParticleSystemInstance_Ctor);
 
     return count;
+}
+
+// ============================================================================
+// Graphics::Particle::ReleaseFields — ??1Particle@Graphics@@UEAA@XZ 0x180103c70
+// up to its External half (ENDGAME B.3.8 block RB). Read off the disassembly:
+//
+//   for (i = 0; i < [this+0x40]; ++i) {          ; count RE-READ each pass
+//       rec = ([this+0x38])[i];                  ; data RE-READ each pass
+//       if (rec) {
+//           if (rec->+0x18) MemFree(rec->+0x18); ; the record's own buffer
+//           rec->+0x18 = 0; rec->+0x20 = 0;      ; one qword each
+//           MemFree(rec);
+//       }
+//   }
+//   if ([this+0x38]) MemFree([this+0x38]);
+//   [this+0x38] = 0; [this+0x40] = 0;            ; data, then size+capacity
+//   ... ~External (restamp, refs release, path String release) — the
+//   compiler's base chain in the real destructor.
+//
+// Every MemFree is retail's inlined `_singleton+0x640` lock / Free
+// (0x1800c6c00) / unlock, i.e. System::MemoryAllocator::MemFree. The record
+// elements are NOT nulled in the array (retail does not).
+// ============================================================================
+void Graphics::Particle::ReleaseFields() {
+    using MemFreeFn = void (*)(void*);
+    MemFreeFn const memFree =
+        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z");
+    uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+    for (int32_t i = 0; i < *reinterpret_cast<const int32_t*>(self + 0x40); ++i) {
+        uint8_t* const rec =
+            (*reinterpret_cast<uint8_t* const* const*>(self + 0x38))[i];
+        if (rec == nullptr) continue;
+        if (void* const buf = *reinterpret_cast<void* const*>(rec + 0x18)) memFree(buf);
+        *reinterpret_cast<void**>(rec + 0x18) = nullptr;
+        *reinterpret_cast<uint64_t*>(rec + 0x20) = 0;
+        memFree(rec);
+    }
+    if (void* const data = *reinterpret_cast<void* const*>(self + 0x38)) memFree(data);
+    *reinterpret_cast<void**>(self + 0x38) = nullptr;
+    *reinterpret_cast<uint64_t*>(self + 0x40) = 0;
 }

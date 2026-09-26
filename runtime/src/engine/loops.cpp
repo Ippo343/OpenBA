@@ -416,44 +416,18 @@ float TicksToSeconds(int64_t ticks) {
 // the ctor never touches +0x24 after zeroing it.
 void UpdateLoopCtorBody(UpdateLoop* self) {
     self->_vtable        = VTableUpdateLoop();
-    self->_resourceList  = nullptr;
-    self->_internalListA = nullptr;
-    self->_internalListB = nullptr;
-    self->_loadProgress  = 0;
-
-    RtObject::ExternalFactory* factory = Factory();
-    // The allocation mask is the dword at factory + 0x04. Wave 3 declared that
-    // word `_pad04`; this port is what named it, because the only two functions
-    // that touch it are this ctor and ~UpdateLoop — see the correction note in
-    // runtime/types/object/External.h.
-    uint32_t& mask = factory->_cleanBitMask;
-
-    int32_t bit = 0;
-    for (;;) {
-        if ((mask & (1u << bit)) == 0) {          // BT / JNC
-            mask |= (1u << bit);
-            break;
-        }
-        ++bit;
-        if (bit >= 32) { bit = -1; break; }        // OR EAX,-1
-    }
-    self->_loadBit = bit;
+    // ENDGAME B.3.8 block RB (RULE B8-1): the rest is ONE body with the real
+    // constructor: `Engine::UpdateLoop::InitFields`, below the ports banner.
+    Engine::UpdateLoop::DoorBody::Init(reinterpret_cast<Engine::UpdateLoop*>(self));   // B.3.8 bridge
 }
 
 // ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z  0x1800dc1e0
 void LoaderLoopCtorBody(LoaderLoop* self, void* nextLoop, const ::Time* delay) {
     UpdateLoopCtorBody(&self->_base);
     self->_base._vtable = VTableLoaderLoop();
-    self->_nextLoop     = nextLoop;
-    // XORPS xmm0 / DIVSD / CVTTSD2SI — i.e. System::Time(0.0f). Written out as
-    // the conversion rather than folded to the literal 0 because that is what
-    // the instructions say; it IS 0 for every non-zero divisor.
-    self->_elapsedTicks = SecondsToTicks(0.0f);
-    self->_delayTicks   = delay->ticks;
-    self->_autoAdvance  = 1;
-    // +0x41..+0x47 are NOT written. Left alone deliberately: they are the
-    // padding the build oracle below must not compare
-    // (reference_oracle_must_not_compare_unwritten_bytes.md).
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real constructor.
+    Engine::LoaderLoop::DoorBody::Init(reinterpret_cast<Engine::LoaderLoop*>(self),   // B.3.8 bridge
+                                       static_cast<Engine::UpdateLoop*>(nextLoop), delay->ticks);
 }
 
 // ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z  0x1800db3f0
@@ -461,9 +435,9 @@ void DialogLoopTCtorBody(DialogLoopT* self, const RtSystem::String* filename) {
     UpdateLoopCtorBody(&self->_base);
     self->_base._vtable   = VTableDialogLoopT();
     new (&self->_dialogFilename) System::String(RtSystem::Sys(*filename));
-    self->_dialogExternal = nullptr;
-    self->_dialogInstance = nullptr;
-    UserInterfaceCtor()(&self->_ui);
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real constructor
+    // (whose member initialiser is the String copy above).
+    Engine::DialogLoopT::DoorBody::Init(reinterpret_cast<Engine::DialogLoopT*>(self));   // B.3.8 bridge
 }
 
 // ??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z
@@ -473,9 +447,7 @@ void DialogLoaderLoopTCtorBody(DialogLoaderLoopT* self, const RtSystem::String* 
     LoaderLoopCtorBody(&self->_base, nextLoop, delay);
     self->_base._base._vtable = VTableDialogLoaderLoopT();
     new (&self->_dialogFilename) System::String(RtSystem::Sys(*filename));
-    self->_dialogExternal = nullptr;
-    self->_dialogInstance = nullptr;
-    UserInterfaceCtor()(&self->_ui);
+    Engine::DialogLoaderLoopT::DoorBody::Init(reinterpret_cast<Engine::DialogLoaderLoopT*>(self));   // B.3.8 bridge
 }
 
 // ============================================================================
@@ -545,6 +517,92 @@ void ReleaseBitFor(const UpdateLoop* built) {
 // have — CLAUDE.md's rule holds here even where one would look free, and these
 // loops are the boot path, where retail's unguarded derefs are load bearing.
 
+// ============================================================================
+// ENDGAME B.3.8 block RB (RULE B8-1): the loop bases' shared ctor/dtor bodies.
+// Each is its door's body MINUS the vptr stores, moved verbatim; the real
+// constructors/destructors (runtime/types/engine/UpdateLoop.h) and the doors
+// below both run them.
+// ============================================================================
+// ??0UpdateLoop@Engine@@QEAA@XZ 0x1800ddd30: the clean-bit allocation.
+void Engine::UpdateLoop::InitFields() {
+    _resourceList  = nullptr;
+    _internalListA = nullptr;
+    _internalListB = nullptr;
+    _loadProgress  = 0;
+
+    RtObject::ExternalFactory* factory = Factory();
+    // The allocation mask is the dword at factory + 0x04. Wave 3 declared that
+    // word `_pad04`; this port is what named it, because the only two functions
+    // that touch it are this ctor and ~UpdateLoop — see the correction note in
+    // runtime/types/object/External.h.
+    uint32_t& mask = factory->_cleanBitMask;
+
+    int32_t bit = 0;
+    for (;;) {
+        if ((mask & (1u << bit)) == 0) {          // BT / JNC
+            mask |= (1u << bit);
+            break;
+        }
+        ++bit;
+        if (bit >= 32) { bit = -1; break; }        // OR EAX,-1
+    }
+    _loadBit = bit;
+}
+
+// ??1UpdateLoop@Engine@@UEAA@XZ 0x1800dddb0 after the restamp.
+void Engine::UpdateLoop::ReleaseFields() {
+    const int32_t bit = _loadBit;
+    if (bit >= 0) {
+        RtObject::ExternalFactory* factory = Factory();
+        // The dtor hands the slot back in three steps, in this order: publish
+        // the index as the factory's _cleanBitIndex, sweep, THEN clear the bit.
+        // Clean (0x1800be310) reads _cleanBitIndex and evicts every resource
+        // whose usage mask reaches 0 once this bit is cleared from it, so the
+        // order is load bearing — clearing the mask first would sweep for the
+        // wrong bit.
+        factory->_cleanBitIndex = bit;
+        ExternalFactoryClean()(factory);
+        // Retail re-reads this->_loadBit here rather than reusing the register
+        // it tested; reproduced, because Clean could in principle reach code
+        // that writes it.
+        factory->_cleanBitMask &= ~(1u << _loadBit);
+    }
+
+
+    // Tail call in retail: `LEA RCX,[RBX+0x10]; JMP 0x180010ab0`.
+    ListCleanup()(&_internalListA);
+}
+
+// ??0LoaderLoop 0x1800dc1e0 after UpdateLoop() and the stamp.
+void Engine::LoaderLoop::InitFields(UpdateLoop* nextLoop, int64_t delayTicks) {
+    _nextLoop     = nextLoop;
+    // XORPS xmm0 / DIVSD / CVTTSD2SI — i.e. System::Time(0.0f). Written out as
+    // the conversion rather than folded to the literal 0 because that is what
+    // the instructions say; it IS 0 for every non-zero divisor.
+    _elapsedTicks = SecondsToTicks(0.0f);
+    _delayTicks   = delayTicks;
+    _autoAdvance  = 1;
+    // +0x41..+0x47 are NOT written (reference_oracle_must_not_compare_unwritten_bytes.md).
+}
+
+// ??0DialogLoopT 0x1800db3f0 / ??0DialogLoaderLoopT 0x1800db0d0 after the
+// String copy: the two nulls and the UserInterface ctor door on the embedded UI.
+void Engine::DialogLoopT::InitFields() {
+    _dialogExternal = nullptr;
+    _dialogInstance = nullptr;
+    UserInterfaceCtor()(&_ui);
+}
+void Engine::DialogLoaderLoopT::InitFields() {
+    _dialogExternal = nullptr;
+    _dialogInstance = nullptr;
+    UserInterfaceCtor()(&_ui);
+}
+// ??1DialogLoopT 0x1800db340 / ??1DialogLoaderLoopT 0x1800db060: the
+// UserInterface teardown. The ~String and the base teardown after it are the
+// compiler's member/base chain in the real destructor, the doors' own lines.
+void Engine::DialogLoopT::ReleaseFields()       { UserInterfaceDtor()(&_ui); }
+void Engine::DialogLoaderLoopT::ReleaseFields() { UserInterfaceDtor()(&_ui); }
+
 // ---- ??0UpdateLoop@Engine@@QEAA@XZ  0x1800ddd30 ord 468 ---------------------
 extern "C" UpdateLoop* RtEngine_UpdateLoop_Ctor(UpdateLoop* self) {
     UpdateLoopCtorBody(self);
@@ -567,26 +625,9 @@ extern "C" void RtEngine_UpdateLoop_Dtor(UpdateLoop* self) {
     // implementation and not the already-destroyed derived one.
     self->_vtable = VTableUpdateLoop();
 
-    const int32_t bit = self->_loadBit;
-    if (bit >= 0) {
-        RtObject::ExternalFactory* factory = Factory();
-        // The dtor hands the slot back in three steps, in this order: publish
-        // the index as the factory's _cleanBitIndex, sweep, THEN clear the bit.
-        // Clean (0x1800be310) reads _cleanBitIndex and evicts every resource
-        // whose usage mask reaches 0 once this bit is cleared from it, so the
-        // order is load bearing — clearing the mask first would sweep for the
-        // wrong bit.
-        factory->_cleanBitIndex = bit;
-        ExternalFactoryClean()(factory);
-        // Retail re-reads this->_loadBit here rather than reusing the register
-        // it tested; reproduced, because Clean could in principle reach code
-        // that writes it.
-        factory->_cleanBitMask &= ~(1u << self->_loadBit);
-    }
-
-
-    // Tail call in retail: `LEA RCX,[RBX+0x10]; JMP 0x180010ab0`.
-    ListCleanup()(&self->_internalListA);
+    // ENDGAME B.3.8 block RB (RULE B8-1): the teardown is ONE body with the
+    // real destructor: `Engine::UpdateLoop::ReleaseFields`.
+    Engine::UpdateLoop::DoorBody::Release(reinterpret_cast<Engine::UpdateLoop*>(self));   // B.3.8 bridge
 }
 
 // ============================================================================
@@ -599,14 +640,7 @@ extern "C" void RtEngine_UpdateLoop_Dtor(UpdateLoop* self) {
 // ============================================================================
 void UpdateLoopBaseTeardown(UpdateLoop* self) {
     self->_vtable = VTableUpdateLoop();
-    const int32_t bit = self->_loadBit;
-    if (bit >= 0) {
-        RtObject::ExternalFactory* factory = Factory();
-        factory->_cleanBitIndex = bit;
-        ExternalFactoryClean()(factory);
-        factory->_cleanBitMask &= ~(1u << self->_loadBit);
-    }
-    ListCleanup()(&self->_internalListA);
+    Engine::UpdateLoop::DoorBody::Release(reinterpret_cast<Engine::UpdateLoop*>(self));   // B.3.8 bridge
 }
 
 // ---- ??1LoaderLoop@Engine@@UEAA@XZ  0x1800dc170 ord 626 ---------------------
@@ -631,7 +665,7 @@ extern "C" void RtEngine_LoaderLoop_Dtor(LoaderLoop* self) {
 // ExternalFactory/ListCleanup pair.
 extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
     self->_base._vtable = VTableDialogLoopT();
-    UserInterfaceDtor()(&self->_ui);
+    Engine::DialogLoopT::DoorBody::Release(reinterpret_cast<Engine::DialogLoopT*>(self));   // B.3.8 bridge
     RtSystem::Sys(self->_dialogFilename).~String();
     UpdateLoopBaseTeardown(&self->_base);
 }
@@ -644,7 +678,7 @@ extern "C" void RtEngine_DialogLoopT_Dtor(DialogLoopT* self) {
 // ~LoaderLoop on why those two collapse into one sequence.
 extern "C" void RtEngine_DialogLoaderLoopT_Dtor(DialogLoaderLoopT* self) {
     self->_base._base._vtable = VTableDialogLoaderLoopT();
-    UserInterfaceDtor()(&self->_ui);
+    Engine::DialogLoaderLoopT::DoorBody::Release(reinterpret_cast<Engine::DialogLoaderLoopT*>(self));   // B.3.8 bridge
     RtSystem::Sys(self->_dialogFilename).~String();
     self->_base._base._vtable = VTableLoaderLoop();
     UpdateLoopBaseTeardown(&self->_base._base);

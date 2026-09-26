@@ -348,10 +348,8 @@ System::String Achievement::GetSpriteName() const  { return _spriteName; }
 Achievement::AchievementInstance* RtAch_AchievementInstance_Ctor(Achievement::AchievementInstance* self) {
     InternalCtor()(self);
     *reinterpret_cast<void**>(self) = VtableAchievementInstance();   // B.3.7 bridge — the minted vptr
-    self->_goalList._goals._data     = nullptr;
-    self->_goalList._goals._size     = 0;
-    self->_goalList._goals._capacity = 0;
-    self->_achievement._ptr          = nullptr;
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `AchievementInstance()`.
+    Achievement::AchievementInstance::DoorBody::Init(self);
     return self;
 }
 
@@ -377,13 +375,10 @@ void* RtAch_Achievement_Ctor(void* selfRaw) {
     qword(self, 0x10) = nullptr;
     qword(self, 0x18) = nullptr;
     qword(self, 0x00) = VtableAchievement();
-    qword(self, 0x20) = nullptr;
-    qword(self, 0x28) = nullptr;
-    qword(self, 0x30) = nullptr;
-    qword(self, 0x38) = nullptr;
-    qword(self, 0x40) = nullptr;
-    qword(self, 0x48) = nullptr;
-    qword(self, 0x50) = nullptr;
+    // ENDGAME B.3.8 block RB (RULE B8-1): the seven zero stores +0x20..+0x50
+    // are ONE body with the real constructor `Achievement()` (InitFields).
+    ::Achievement::Achievement::DoorBody::Init(
+        reinterpret_cast< ::Achievement::Achievement*>(self));   // B.3.8 bridge
 
     return self;
 }

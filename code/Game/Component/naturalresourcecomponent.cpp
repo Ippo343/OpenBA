@@ -188,70 +188,55 @@ void NaturalResourceComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ===== ENDGAME B.3.8 CIT — NaturalResourceComponent as a REAL class =====
+// (NaturalResourceComponent.h). Before: a hand-expanded COMPONENT_INERT_FACTORY
+// (48-slot NaturalResourceComponent_InertVtable, slot 3 the serializer,
+// Inert_ScalarDtor in slot 0) plus the ctor defaults patched in after the
+// zero-fill. After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); the ctor defaults are the ctor's own.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/NaturalResourceComponent.h"
 
-// The inert factory zero-fills the body, but the exe's NaturalResourceComponent
-// constructor (0x140125dc0; heap twin NaturalResourceComponent_Factory 0x140036550)
-// seeds two non-zero field defaults right after the Component base ctor:
-//
+// 0x140125dc0 (heap twin inlined in create 0x140036550). Component() is the
+// CALL 0x1401188b0; the 0x140163e10 stamp is the compiler's; then
 //   140125de6: MOV dword ptr [RBX+0x28], 0x3f800000   ; resourceScale = 1.0f
 //   140125ded: MOV word  ptr [RBX+0x2c], 0x100        ; +0x2c = 0, +0x2d = 1
-//
-// That second store is a PACKED 16-bit write covering BOTH bools: little-endian
-// 0x0100 => +0x2c (mature) = 0, +0x2d (harvestable) = 1. Ghidra renders it as
-// `*(undefined2 *)(this + 0x2c) = 0x100`, which reads as a +0x2c-only write — the
-// +0x2d half is easy to miss, and missing it is not cosmetic: harvestable=0 makes
-// FUN_1401260f0 early-out, so a chopped tree/rock/ore yields NO resource pile ever
-// (the harvest chain runs to completion and silently produces nothing).
-//
-// Apply the same defaults here so standalone-spawned resources match the exe.
-static void NaturalResourceComponent_InitCtorDefaults(void* mem) {
-    if (!mem) return;
-    uint8_t* s = static_cast<uint8_t*>(mem);
-    *reinterpret_cast<float*>(s + 0x28) = 1.0f;      // resourceScale
-    *reinterpret_cast<uint16_t*>(s + 0x2c) = 0x100;  // +0x2c mature=0, +0x2d harvestable=1
+// That second store is a PACKED 16-bit write covering BOTH bools: +0x2c (mature)
+// = 0, +0x2d (harvestable) = 1. Missing the +0x2d half is not cosmetic:
+// harvestable = 0 makes FUN_1401260f0 early-out, so a chopped tree/rock/ore
+// yields no resource pile. No flag bits are added (flags stay 0x80).
+NaturalResourceComponent::NaturalResourceComponent()
+    : resourceScale(1.0f), resourceFlags(0x100), _pad2E{} {}
+
+// [0] 0x1400366b0: ~NaturalResourceComponent (0x140125d80: restamp +
+// ~Internal, no own work), MemFree on &1.
+Object::Base* NaturalResourceComponent::DeletingDtor(unsigned flags) {
+    this->~NaturalResourceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Hand-rolled equivalent of COMPONENT_INERT_FACTORY(NaturalResourceComponent, 0x30, 0x80)
-// plus the ctor defaults above. Expanded by hand rather than wrapping the macro because
-// the macro derives the type id from its Name argument (GetTypeIdByName(#Name)), so a
-// renamed "...Base" instantiation would resolve a type that does not exist and hand back
-// typeId 0 — breaking every FindComponent(NaturalResourceComponent) lookup.
-static uint32_t NaturalResourceComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("NaturalResourceComponent");
-    return cached;
-}
-static void* NaturalResourceComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+// [3] 0x140125cf0 — the body resolves its own helpers first.
+void NaturalResourceComponent::Persist(void* stream) { NaturalResourceComponent_Shutdown(this, stream); }
 
-static void NaturalResourceComponent_SerVSlot(void* s, void* stream) {
-    NaturalResourceComponent_Shutdown(reinterpret_cast<NaturalResourceComponent*>(s), stream);
-}
-// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-static void NaturalResourceComponent_FinishVtableSer() {
-    NaturalResourceComponent_InertVtable[3] = reinterpret_cast<void*>(&NaturalResourceComponent_SerVSlot);
-}
+// [8] 0x140125c40. PORT GAP (retail 0x140125c40) — B38 D9: the body is ported
+// above (NaturalResourceComponent_OnRemove) but the tree's table never
+// installed it; the inert stub is kept here. Installing it is its own titled
+// commit.
+void NaturalResourceComponent::Tick(void*) {}
 
-extern "C" void* NaturalResourceComponent_Factory(void) {
-    void* mem = ::ComponentFactory::MakeInertTyped(
-        0x30, 0x80, NaturalResourceComponent_InertVtable,
-        reinterpret_cast<void*>(&NaturalResourceComponent_InertGetTypeId));
-    NaturalResourceComponent_InitCtorDefaults(mem);
-    NaturalResourceComponent_FinishVtableSer();
-    return mem;
+// create 0x140036550: MemAlloc(0x30, 8), then the (inlined) ctor.
+void* NaturalResourceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NaturalResourceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) NaturalResourceComponent());
 }
-extern "C" void* NaturalResourceComponent_CreateInPlace(void* mem) {
-    if (mem) {
-        ::ComponentFactory::InitInertTyped(
-            mem, 0x30, 0x80, NaturalResourceComponent_InertVtable,
-            reinterpret_cast<void*>(&NaturalResourceComponent_InertGetTypeId));
-        NaturalResourceComponent_InitCtorDefaults(mem);
-        NaturalResourceComponent_FinishVtableSer();
-    }
-    return mem;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* NaturalResourceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) NaturalResourceComponent());
 }
 
-REGISTER_TYPE(NaturalResourceComponent, "Component",
-              &NaturalResourceComponent_Factory, &NaturalResourceComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(NaturalResourceComponent, "_ZTV24NaturalResourceComponent")
+DEFINE_EXE_TYPE(NaturalResourceComponent, "Component")

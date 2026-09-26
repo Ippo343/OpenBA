@@ -271,7 +271,8 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 //   [11]  0x180031790 AllowsModChanges (UL)                   (UL)                     (UL)
 //   [12]  --                          --                      _purecall (new)          _purecall (new)
 //
-// ABSTRACT-BY-POLICY, NO REAL CONSTRUCTOR (RULE B7-13 / B6-3). The exe builds
+// ABSTRACT-BY-POLICY (RULE B7-13). REAL CONSTRUCTORS since ENDGAME B.3.8
+// block RB (B38_RULES D1), each ONE body with its door, for LOOP's classes. The exe builds
 // five hand-made tables on these bases (GameUpdateLoop, MenuDialogLoopT, the
 // splash loop, two LoaderLoop subclasses: b37_session/EXE_SUBCLASSES.md), all
 // through the ctor DOORS, and every live loop wears one of those tables. So
@@ -282,9 +283,9 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 // through the exe table into itself.
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.2): GCC spends two slots on one, which would
-// push `Startup` off slot 1. The destructors here are protected, non-virtual and
-// defaulted; the registered `??1` DOORS do the teardown on the minted/exe-table
-// objects that are the only live ones.
+// push `Startup` off slot 1. The destructors here are protected and
+// non-virtual; each shares its body with its registered `??1` DOOR, which still
+// does the teardown on the minted/exe-table objects.
 //
 // THREADS (RULE B7-7): `Loader::Run` runs on the LOADER thread and dispatches
 // the loop's slot 6 `Load` there, so every `Load` body and everything it calls
@@ -330,12 +331,27 @@ public:
     UpdateLoop(const UpdateLoop& other);                           // 0x1800317d0
     UpdateLoop& operator=(const UpdateLoop& other);                // 0x180031840
 
+    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
+    // D1): the loops.cpp ctor/dtor doors stamp the MINTED table themselves,
+    // for the still-unconverted exe loop tables, then call these.
+    struct DoorBody {
+        static void Init(UpdateLoop* l)    { l->InitFields(); }
+        static void Release(UpdateLoop* l) { l->ReleaseFields(); }
+    };
+
 protected:
-    // NOT retail's ctor: `??0UpdateLoop@Engine@@QEAA@XZ` 0x1800ddd30 is the DOOR
-    // `RtEngine_UpdateLoop_Ctor`, `??1` 0x1800dddb0 the DOOR
-    // `RtEngine_UpdateLoop_Dtor` (B6-3).
-    UpdateLoop() = default;
-    ~UpdateLoop() = default;
+    // `??0UpdateLoop@Engine@@QEAA@XZ` 0x1800ddd30 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1); ONE body with the door
+    // `RtEngine_UpdateLoop_Ctor` (the ExternalFactory clean-bit allocation).
+    UpdateLoop() { InitFields(); }
+    // `??1UpdateLoop@Engine@@UEAA@XZ` 0x1800dddb0. NON-VIRTUAL; the compiler
+    // restamps on entry. ONE body with the door `RtEngine_UpdateLoop_Dtor`
+    // (bit hand-back, ExternalFactory::Clean, the list cleanup tail).
+    ~UpdateLoop() { ReleaseFields(); }
+
+private:
+    void InitFields();      // 0x1800ddd30 minus the vptr store (loops.cpp)
+    void ReleaseFields();   // 0x1800dddb0 minus the restamp (loops.cpp)
 
 public:
     // ---- the 0x20 bytes after the vptr, evidence in the POD above ----------
@@ -396,11 +412,28 @@ public:
     // static in retail) STAYS a data slot until the end of B.3 (carry-over 5):
     // loops.cpp reads it through `RT_DATA_SLOT`, never as a C++ static member.
 
+    struct DoorBody {   // see UpdateLoop::DoorBody
+        static void Init(LoaderLoop* l, UpdateLoop* nextLoop, int64_t delayTicks) {
+            l->InitFields(nextLoop, delayTicks);
+        }
+    };
+
 protected:
     // `??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z`
-    // 0x1800dc1e0 and `??1` 0x1800dc170 are DOORS (loops.cpp).
-    LoaderLoop() = default;
-    ~LoaderLoop() = default;
+    // 0x1800dc1e0 — the REAL constructor (ENDGAME B.3.8 block RB, B8-1):
+    // UpdateLoop() then the stamp are the compiler's; ONE body with the door
+    // `RtEngine_LoaderLoop_Ctor`. `Time` is by reference in retail too.
+    // `System::Time` is incomplete here on purpose (the banner's Value.h
+    // note); it is ONE int64 tick count at +0x00 (Value.h asserts it).
+    LoaderLoop(UpdateLoop* nextLoop, const System::Time& delay) {
+        InitFields(nextLoop, *reinterpret_cast<const int64_t*>(&delay));
+    }
+    // `??1LoaderLoop@Engine@@UEAA@XZ` 0x1800dc170: its own restamp, then
+    // ~UpdateLoop folded in — both the compiler's chain. Nothing of its own.
+    ~LoaderLoop() {}
+
+private:
+    void InitFields(UpdateLoop* nextLoop, int64_t delayTicks);   // loops.cpp
 
 public:
     UpdateLoop* _nextLoop;      // +0x28  handed to MainLoop when the load is done
@@ -441,13 +474,31 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     DialogLoopT(const DialogLoopT& other);                         // 0x18004d7d0
 
+    struct DoorBody {   // see UpdateLoop::DoorBody
+        static void Init(DialogLoopT* l)    { l->InitFields(); }
+        static void Release(DialogLoopT* l) { l->ReleaseFields(); }
+    };
+
 protected:
-    // `??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z` 0x1800db3f0 and
-    // `??1` 0x1800db340 are DOORS (loops.cpp). UserInterface's default ctor is
-    // protected (it friends the POD), so this defaulted ctor is defined as
-    // deleted, which is the point: nothing constructs a loop in C++.
-    DialogLoopT() = default;
-    ~DialogLoopT() = default;
+    // `??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z` 0x1800db3f0 — the
+    // REAL constructor (ENDGAME B.3.8 block RB, B8-1). Retail: UpdateLoop(),
+    // stamp, String copy ctor (0x180006cb0) into +0x28, two nulls, the
+    // UserInterface ctor on +0x40. The String copy is the member initialiser
+    // (the door placement-copies it); the rest is ONE body with the door
+    // `RtEngine_DialogLoopT_Ctor`.
+    explicit DialogLoopT(const System::String& filename) : _dialogFilename(filename) {
+        InitFields();
+    }
+    // `??1DialogLoopT@Engine@@UEAA@XZ` 0x1800db340: restamp, ~UserInterface
+    // (the body, shared with the door), then ~String on +0x28 and ~UpdateLoop
+    // — which the compiler's member/base chain runs in exactly that order.
+    // `_ui`'s own implicit destructor after the body is a no-op: the
+    // UserInterface door zeroes every array it frees.
+    ~DialogLoopT() { ReleaseFields(); }
+
+private:
+    void InitFields();      // loops.cpp
+    void ReleaseFields();   // loops.cpp
 
 public:
     System::String    _dialogFilename;  // +0x028  the ctor's argument, refcounted
@@ -476,11 +527,29 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     DialogLoaderLoopT(const DialogLoaderLoopT& other);             // 0x18004d570
 
+    struct DoorBody {   // see UpdateLoop::DoorBody
+        static void Init(DialogLoaderLoopT* l)    { l->InitFields(); }
+        static void Release(DialogLoaderLoopT* l) { l->ReleaseFields(); }
+    };
+
 protected:
     // `??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z`
-    // 0x1800db0d0 and `??1` 0x1800db060 are DOORS (loops.cpp).
-    DialogLoaderLoopT() = default;
-    ~DialogLoaderLoopT() = default;
+    // 0x1800db0d0 — the REAL constructor (ENDGAME B.3.8 block RB, B8-1):
+    // LoaderLoop(next, delay), stamp, String copy, then ONE body with the door
+    // `RtEngine_DialogLoaderLoopT_Ctor`.
+    DialogLoaderLoopT(const System::String& filename, UpdateLoop* nextLoop,
+                      const System::Time& delay)
+        : LoaderLoop(nextLoop, delay), _dialogFilename(filename) {
+        InitFields();
+    }
+    // `??1DialogLoaderLoopT@Engine@@UEAA@XZ` 0x1800db060: restamp,
+    // ~UserInterface (shared body), ~String, ~LoaderLoop — the compiler's
+    // chain runs the last two in that order.
+    ~DialogLoaderLoopT() { ReleaseFields(); }
+
+private:
+    void InitFields();      // loops.cpp
+    void ReleaseFields();   // loops.cpp
 
 public:
     System::String    _dialogFilename;  // +0x048

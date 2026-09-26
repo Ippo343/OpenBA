@@ -77,7 +77,7 @@ void TombstoneComponent_Shutdown(TombstoneComponent* self, void* stream) {
 // TombstoneComponent::Serialize (0x140057860) — actually OnCreate
 // ============================================================
 void TombstoneComponent_Serialize(TombstoneComponent* self) {
-    void* baseObj = self->_unk18;
+    void* baseObj = self->_description;
 
     // IsDerivedFrom check for tombstone data type
     void* buildingData = nullptr;
@@ -125,7 +125,7 @@ void TombstoneComponent_Startup(TombstoneComponent* self) {
     // Already initialized (a live tombstone carries a positive lifetime) — leave it.
     if (*(int64_t*)&self->field28 != 0) return;
 
-    void* buildingData = self->_unk18;  // +0x18 = the TombstoneDescription
+    void* buildingData = self->_description;  // +0x18 = the TombstoneDescription
     if (!buildingData) return;
     if (!s_pGameState || !*s_pGameState) return;
 
@@ -155,7 +155,7 @@ void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
     // zero but the description (+0x18) is present, run the body-init now so the
     // countdown starts from the real random lifetime — otherwise the `timer < 1`
     // test below fires on tick 1 and marks the tombstone for instant removal.
-    if (*(int64_t*)&self->field28 == 0 && self->_unk18 != nullptr) {
+    if (*(int64_t*)&self->field28 == 0 && self->_description != nullptr) {
         TombstoneComponent_Startup(self);
     }
 
@@ -164,7 +164,7 @@ void TombstoneComponent_Update(TombstoneComponent* self, int64_t* pDeltaTime) {
 
 
     if (*pTimer < 1) {
-        void* entityPtr = self->owner;
+        void* entityPtr = self->_entity;
         if (!s_pGameState || !*s_pGameState) return;
         void* gameWorld = *(void**)((uintptr_t)*s_pGameState + 0xE8);
 
@@ -213,59 +213,56 @@ void TombstoneComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Live bring-up (Phase 1; graduated unconditional 2026-09-13).
-// Routes vtable slot 4 (+0x20) -> TombstoneComponent_Startup (populates the +0x28
-// random-lifetime timer at spawn, dispatched by ComponentEntity_StartupComponents) and
-// slot 9 (+0x48) -> TombstoneComponent_Update (per-tick countdown, the slot the
-// EntityList bucket round-robin calls — NOT +0x40/slot 8 = empty OnRemove 0x140118a70,
-// verified vs Ghidra vtable 0x14015a980). The only new exe-helper
-// registration is the TombstoneDescription type-id global 0x1401c4a68
-// (reg_component_tombstone.cpp); every other helper was already registered.
+// ============================================================================
+// ENDGAME B.3.8 CIT — TombstoneComponent as a REAL class (TombstoneComponent.h).
+//
+// Before: a 48-slot hand-built TombstoneComponent_LiveVtable filled at every
+// create (FillTypedVtable + FinishLiveVtable), Inert_ScalarDtor in slot 0 (only
+// ~Internal). After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2). Slot 4 keeps the tree's standalone-robust Startup body
+// (TombstoneComponent_Startup above), which is what the table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/TombstoneComponent.h"
 
-// hand-expanded (save/load wave 2026-08-28): COMPONENT_LIVE_FACTORY_S plus
-// UNCONDITIONAL slot 3 (stream Serialize) wiring — save/load round-trip is not
-// an opt-in feature. Everything else identical to the macro expansion.
-static uint32_t TombstoneComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TombstoneComponent");
-    return cached;
+// 0x1400579a0. Component() is the CALL 0x1401188b0; the 0x14015a980 stamp is
+// the compiler's; +0x28 = 0; flags |= 0x88 (0x88 with Component's 0x80).
+TombstoneComponent::TombstoneComponent() : field28(nullptr) {
+    OrFlagsInCtor(0x88);
 }
-static void* TombstoneComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void TombstoneComponent_UpdateVSlot(void* s, void* t) {
-    TombstoneComponent_Update(reinterpret_cast<TombstoneComponent*>(s),
-                               reinterpret_cast<int64_t*>(t));
+
+// [0] 0x14000d480: ~TombstoneComponent (0x140057960: restamp + ~Internal), MemFree on &1.
+Object::Base* TombstoneComponent::DeletingDtor(unsigned flags) {
+    this->~TombstoneComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void TombstoneComponent_StartupVSlot(void* s) {
-    TombstoneComponent_Startup(reinterpret_cast<TombstoneComponent*>(s));
+
+// [3] 0x1400578e0 — the body resolves its own helpers first (slot 3 is the
+// first call into the class on a load-from-save).
+void TombstoneComponent::Persist(void* stream) { TombstoneComponent_Shutdown(this, stream); }
+
+// [4] 0x140057860 — the tree's standalone-robust lifetime roll.
+void TombstoneComponent::Startup() { TombstoneComponent_Startup(this); }
+
+// [9] 0x1400577d0 — RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af: `LEA RDX,[RSP+0x40]; CALL [RAX+0x48]`).
+void TombstoneComponent::Update(void* time) {
+    TombstoneComponent_Update(this, static_cast<int64_t*>(time));
 }
-static void TombstoneComponent_ShutdownVSlot(void* s, void* stream) {
-    TombstoneComponent_Shutdown(reinterpret_cast<TombstoneComponent*>(s), stream);
+
+// create 0x14000d280: MemAlloc(0x30, 8), then the ctor.
+void* TombstoneComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TombstoneComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TombstoneComponent());
 }
-static void TombstoneComponent_FinishLiveVtable() {
-    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-    TombstoneComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&TombstoneComponent_ShutdownVSlot);
-    TombstoneComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&TombstoneComponent_StartupVSlot);
-    TombstoneComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&TombstoneComponent_UpdateVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* TombstoneComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TombstoneComponent());
 }
-extern "C" void* TombstoneComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x30, 0x88,
-        TombstoneComponent_LiveVtable,
-        reinterpret_cast<void*>(&TombstoneComponent_LiveGetTypeId));
-    TombstoneComponent_FinishLiveVtable();
-    return p;
-}
-static void* TombstoneComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x30, 0x88,
-        TombstoneComponent_LiveVtable,
-        reinterpret_cast<void*>(&TombstoneComponent_LiveGetTypeId));
-    TombstoneComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(TombstoneComponent, "Component",
-              &TombstoneComponent_Factory, &TombstoneComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(TombstoneComponent, "_ZTV18TombstoneComponent")
+DEFINE_EXE_TYPE(TombstoneComponent, "Component")

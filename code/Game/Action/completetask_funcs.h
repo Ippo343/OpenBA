@@ -4,10 +4,7 @@
 
 #include <cstdint>
 
-struct CompleteTask;
-
-// CompleteTask::ScalarDtor — set vtables, call ~Internal, optionally free
-void* CompleteTask_ScalarDtor_Impl(CompleteTask* self, uint32_t flags);
+class CompleteTask;
 
 // CompleteTask::Serialize — serialize all CompleteTask fields
 void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream);

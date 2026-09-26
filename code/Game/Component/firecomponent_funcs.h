@@ -1,7 +1,7 @@
 #pragma once
 // Function declarations for the deeply reimplemented FireComponent methods.
 
-#include "FireComponent.h"
+#include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
 #include <cstdint>
 
 // ============================================================
@@ -43,8 +43,6 @@ extern "C" bool FireComponent_BeginBurning_11e7b0(void* destroyComp,
                                                   const int64_t* burnTime);  // 0x14011e7b0
 extern "C" void FireComponent_StopBurning_11ea10(void* destroyComp);         // 0x14011ea10
 
-// Vtable registration (0x140159380) — called from address_registry.cpp.
-extern "C" void RegisterFireComponentVtable();
 
 // Type-id globals, filled after Engine::Startup from game_main.cpp.
 extern "C" void FillTypeIdGlobals_fire();

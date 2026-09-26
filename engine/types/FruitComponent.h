@@ -18,23 +18,8 @@ namespace FruitComponentAddr {
     constexpr uintptr_t Vtable = 0x140159450;
 }
 
-struct FruitComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `FruitComponent` is a real class now
+// (code/Game/Component/FruitComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/FruitComponent.h"
 
-    void*    field28;      // +0x28: zeroed
-    uint32_t field30;      // +0x30: zeroed (dword)
-    uint8_t  fruitFlag;    // +0x34: zeroed (byte)
-    uint8_t  _pad35[3];    // +0x35: padding to 0x38
-};
-
-static_assert(sizeof(FruitComponent) == 0x38, "FruitComponent size mismatch");
-static_assert(offsetof(FruitComponent, vtable) == 0x00, "");
-static_assert(offsetof(FruitComponent, flags) == 0x20, "");
-static_assert(offsetof(FruitComponent, field28) == 0x28, "");
-static_assert(offsetof(FruitComponent, field30) == 0x30, "");
-static_assert(offsetof(FruitComponent, fruitFlag) == 0x34, "");

@@ -42,6 +42,7 @@
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
 
 namespace System   { class Filename; class String; }
 namespace Graphics { class MaterialInstance; }
@@ -178,8 +179,16 @@ class SpriteSheet : public Object::External {
 public:
     using SpriteInfo = ::UI::SpriteInfo;
 
-    // [0] 0x1800037b0 — pure on purpose; the deleting-dtor row is not retired.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;
+    // [0] CONCRETE (ENDGAME B.3.8 block RB, B38_RULES D1/D2): the exe
+    // instantiates the class itself (its table copy 0x14015c3b0; ModDialog,
+    // FrustumOutlineDescription, the thumb loaders), whose slot 0 is the exe
+    // scalar deleting dtor 0x1400121e0 (~SpriteSheet; MemFree on flags & 1).
+    // The DLL's 0x1800037b0 stays the mint's RT_DELDTOR row for the doors.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        this->~SpriteSheet();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;              // [1] 0x180002e50
     uint32_t    Type() const override;                  // [2] 0x180002e30
@@ -222,13 +231,38 @@ public:
     static Object::Base* CreateNewObject();                    // 0x180002f40  (door)
     static Object::Base* CreateInPlaceObject(void* place);     // 0x180003000  (door)
 
+    // `??0SpriteSheet@UI@@QEAA@XZ` 0x18011d600 — the REAL constructor (ENDGAME
+    // B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete. External()
+    // and the stamps are the compiler's; the zero stores are ONE body with the
+    // door `RtUi_SpriteSheet_Ctor` (sprite.cpp).
+    SpriteSheet() { InitFields(); }
+
+    // The doors' way onto the shared bodies.
+    struct DoorBody {
+        static void Init(SpriteSheet* s)    { s->InitFields(); }
+        static void Release(SpriteSheet* s) { s->ReleaseFields(); }
+    };
+
 protected:
-    // NOT retail's `??0SpriteSheet@UI@@QEAA@XZ` (0x18011d600, the door in
-    // sprite.cpp) — see the banner.
-    SpriteSheet() = default;
-    // `??1SpriteSheet@UI@@UEAA@XZ` 0x18011d670. NON-VIRTUAL, DEFINED EMPTY: the
-    // registered dtor door (spritesheet_new.cpp) does retail's release.
+    // `??1SpriteSheet@UI@@UEAA@XZ` 0x18011d670. NON-VIRTUAL; its body
+    // (spritesheet_vtable.cpp) is `ReleaseFields`, ONE body with the door
+    // `RtUi_SpriteSheet_Dtor` (spritesheet_new.cpp); ~External is the chain's.
     ~SpriteSheet();
+
+private:
+    // 0x18011d600's stores after the stamps; +0x51..+0x57 are never written.
+    void InitFields() {
+        m_sprites = nullptr;                  // +0x20
+        m_spriteCount = 0;                    // +0x28 } one qword
+        m_spriteCapacity = 0;                 //       }
+        m_field30 = 0;                        // +0x30
+        m_textureName = nullptr;              // +0x38
+        m_groupName = nullptr;                // +0x40
+        m_field48 = 0;                        // +0x48 } one qword
+        m_field4C = 0;                        //       }
+        m_field50 = 0;                        // +0x50 (BYTE)
+    }
+    void ReleaseFields();   // 0x18011d670 minus the stamp and ~External (spritesheet_new.cpp)
 
 public:
     // ---- the 0x38 bytes SpriteSheet adds after Object::External ------------

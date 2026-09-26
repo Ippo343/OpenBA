@@ -5,12 +5,6 @@
 #include "RoadTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00, Slot0): Scalar deleting destructor.
-// Resets vtable chain RoadTool -> DragTool -> Tool, calls Internal::~Internal,
-// conditionally frees memory if flags & 1.
-// Original: 0x14002e8c0
-void* RoadTool_Dtor(RoadTool* self, uint32_t flags);
-
 // Startup (vtable +0x20, Slot4): Finds CreateRoadDescription component on entity.
 // Iterates entity's component array at self->descriptionPtr (+0x20),
 // matching by type ID DAT_1401c74d8. Stores result at self->roadDesc (+0x38).

@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-struct PickupRawMaterial;
+class PickupRawMaterial;
 
 // PickupRawMaterial::Serialize -- serialize status, entity refs (+0x20, +0x28)
 void PickupRawMaterial_Serialize_Impl(PickupRawMaterial* self, void* stream);

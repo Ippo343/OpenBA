@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-struct CompleteRoad;
+class CompleteRoad;
 
 // CompleteRoad::Serialize -- serialize all fields
 void CompleteRoad_Serialize_Impl(void* self, void* stream);

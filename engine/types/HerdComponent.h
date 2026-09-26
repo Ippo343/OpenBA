@@ -36,37 +36,8 @@ namespace HerdComponentAddr {
     constexpr uintptr_t Update     = 0x140121bf0; // vtable[9]
 }
 
-struct HerdComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `HerdComponent` is a real class now
+// (code/Game/Component/HerdComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/HerdComponent.h"
 
-    // HerdComponent fields
-    uint64_t data28;       // +0x28: zeroed
-    uint64_t data30;       // +0x30: NOT initialized by ctor (inherited or set later)
-    uint64_t data38;       // +0x38: zeroed
-    uint64_t data40;       // +0x40: zeroed
-    uint8_t  data48;       // +0x48: zeroed (byte write)
-    uint8_t  _pad49[3];    // +0x49: gap
-    int32_t  data4C;       // +0x4C: initialized to -1 (0xFFFFFFFF)
-    uint64_t data50;       // +0x50: zeroed
-    uint64_t data58;       // +0x58: zeroed
-};
-
-static_assert(sizeof(HerdComponent) == 0x60, "HerdComponent size mismatch");
-static_assert(offsetof(HerdComponent, vtable) == 0x00, "");
-static_assert(offsetof(HerdComponent, next)   == 0x08, "");
-static_assert(offsetof(HerdComponent, owner)  == 0x10, "");
-static_assert(offsetof(HerdComponent, flags)  == 0x20, "");
-static_assert(offsetof(HerdComponent, data28) == 0x28, "");
-static_assert(offsetof(HerdComponent, data30) == 0x30, "");
-static_assert(offsetof(HerdComponent, data38) == 0x38, "");
-static_assert(offsetof(HerdComponent, data40) == 0x40, "");
-static_assert(offsetof(HerdComponent, data48) == 0x48, "");
-static_assert(offsetof(HerdComponent, data4C) == 0x4C, "");
-static_assert(offsetof(HerdComponent, data50) == 0x50, "");
-static_assert(offsetof(HerdComponent, data58) == 0x58, "");

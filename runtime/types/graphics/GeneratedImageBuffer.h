@@ -181,9 +181,25 @@ public:
     virtual void Render(void* renderer, const void* scene, const void* camera,
                         int32_t generation) const = 0;                    // [11]
 
+    // The ctor door's way onto the shared body (ENDGAME B.3.8 block RB).
+    struct DoorBody { static void Init(GeneratedImageBuffer* g) { g->InitFields(); } };
+
 protected:
-    GeneratedImageBuffer() = default;   // see "NOT CONSTRUCTIBLE"
-    ~GeneratedImageBuffer();            // ??1… 0x1800a3e40 — door in imagebuffer_derived.cpp
+    // ??0GeneratedImageBuffer@Graphics@@QEAA@XZ 0x1800a3e70 — the REAL
+    // constructor (ENDGAME B.3.8 block RB, RULE B8-1), needed by the concrete
+    // FrameCopyImageBuffer below it: ImageBuffer() and the stamp are the
+    // compiler's; `MOV dword [RBX+0x68],0` is ONE body with the door
+    // `RtGraphics_GeneratedImageBuffer_Ctor` (imagebuffer_derived.cpp).
+    GeneratedImageBuffer() { InitFields(); }
+    // ??1… 0x1800a3e40 is `restamp; JMP ~ImageBuffer` — both the compiler's
+    // chain, so the body is empty. Its door (imagebuffer_derived.cpp) keeps
+    // the minted restamp for the minted objects.
+    ~GeneratedImageBuffer() {}
+
+private:
+    void InitFields() { _generation = 0; }   // +0x6c is never written
+
+protected:
 
     // `IEBA` = PROTECTED const, not private. Neither is ported: nothing in the
     // tree calls either, and they exist only as rows in

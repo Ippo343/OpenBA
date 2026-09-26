@@ -74,6 +74,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/SpriteCapture.h"   // ENDGAME B.3.8 RB: the shared ctor/dtor body
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
@@ -1005,13 +1006,9 @@ void* Ctor_SpriteCapture(void* p) {
     U64(self, 0x10, 0);
     U64(self, 0x18, 0);
     VPTR(self, "??_7SpriteCapture@UI@@6B@");
-    U64(self, 0x20, 0);
-    U64(self, 0x28, 0);
-    U64(self, 0x30, 0);
-    U64(self, 0x38, 0);
-    U64(self, 0x40, 0);
-    U64(self, 0x48, 0);
-    U64(self, 0x50, 0);
+    // ENDGAME B.3.8 block RB (RULE B8-1): +0x20..+0x57 are ONE body with the
+    // real constructor `UI::SpriteCapture()` (SpriteCapture.h, InitFields).
+    UI::SpriteCapture::DoorBody::Init(reinterpret_cast<UI::SpriteCapture*>(p));   // B.3.8 bridge
     return p;
 }
 

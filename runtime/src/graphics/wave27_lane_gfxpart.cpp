@@ -498,7 +498,8 @@ bool Particle::Serialize(void* streamv) {
 // `graphics_typeinfo_accessors.cpp`. ENDGAME B.3.5 block GC flipped that: the
 // members ARE the bodies now, in that file, beside the byte decode that is their
 // evidence, and each door is a one-line qualified delegation.
-Particle::~Particle() {}
+// ENDGAME B.3.8 block RB: `~Particle()` is inline in Particle.h now, its body
+// (retail 0x180103c70) ported as `Particle::ReleaseFields` in animation.cpp.
 
 }  // namespace Graphics
 
