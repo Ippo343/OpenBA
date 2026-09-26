@@ -18,6 +18,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/PlantArea.h"
 #include "Work/plantarea_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -92,7 +93,6 @@ static PAW_FindSubEntity_t s_fn_FindSubEntity = nullptr;  // 0x140002e10
 
 // Work::Serialize base
 typedef void (*PAW_Work_Serialize_t)(void* self, void* stream);
-static PAW_Work_Serialize_t s_fn_Work_Serialize = nullptr;  // 0x1400f7400
 
 // ExternalRef serialize (FUN_140002340)
 typedef void (*PAW_ExternalRef_Serialize_t)(void* refPtr, void* serializer);
@@ -122,8 +122,6 @@ static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 static uint32_t* s_typeConst = nullptr;
 
 // Vtable pointers for dtor chain
-static void** s_vtable_PlantArea = nullptr;   // 0x140161890
-static void** s_vtable_Work = nullptr;         // 0x140161a80 (Work vtable)
 
 static bool s_pa_funcs_resolved = false;
 
@@ -165,8 +163,6 @@ bool PlantArea_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_FindSubEntity = reinterpret_cast<PAW_FindSubEntity_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_Work_Serialize = reinterpret_cast<PAW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_ExternalRef_Serialize = reinterpret_cast<PAW_ExternalRef_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140002340));
     s_fn_CropDescComplete = reinterpret_cast<PAW_CropDescComplete_t>(
@@ -187,8 +183,6 @@ bool PlantArea_ResolveFuncs() {
     s_typeConst = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7510));
 
     // Vtable pointers for dtor
-    s_vtable_PlantArea = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161890));
-    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_FindComp_MatDesc && s_fn_FindComp_CropDesc &&
@@ -199,11 +193,11 @@ bool PlantArea_ResolveFuncs() {
               s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_BST_RecursiveFree && s_fn_ValidateTask &&
               s_fn_TaskCancel && s_fn_FindSubEntity &&
-              s_fn_Work_Serialize && s_fn_ExternalRef_Serialize &&
+              s_fn_ExternalRef_Serialize &&
               s_fn_CropDescComplete &&
               fn_MemFreeStatic &&
               g_pGameWorldSingleton && s_fHalfCellOffset &&
-              s_typeConst && s_vtable_PlantArea && s_vtable_Work;
+              s_typeConst;
 
     s_pa_funcs_resolved = ok;
 
@@ -225,7 +219,6 @@ bool PlantArea_ResolveFuncs() {
         if (!s_fn_ValidateTask) printf("  MISSING: ValidateTask\n");
         if (!s_fn_TaskCancel) printf("  MISSING: TaskCancel\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_ExternalRef_Serialize) printf("  MISSING: ExternalRef_Serialize\n");
         if (!s_fn_CropDescComplete) printf("  MISSING: CropDescComplete\n");
     }
@@ -268,9 +261,9 @@ static int* BST_FindInt(void* root, int key) {
 // 7. Create planting action, assign work, insert into BST
 // 8. If no cells remaining and count==0, mark crop description complete
 //
-int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int PlantArea::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Step 1: Find components on workplace entity
     uintptr_t matDescIBP = 0;
@@ -418,11 +411,11 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
             int priority = (int)selfQ[4];
             uintptr_t citizenEnt = *(uintptr_t*)entityIBP;
 
-            uintptr_t vtable = *(uintptr_t*)self;
+            uintptr_t vtable = *(uintptr_t*)this;
             typedef uintptr_t* (*GetTarget_t)(PlantArea*, void*);
             auto getTarget = *(GetTarget_t*)(vtable + 0x50);
             uint32_t resultBuf[4] = {0};
-            uintptr_t* wResult = getTarget(self, resultBuf);
+            uintptr_t* wResult = getTarget(this, resultBuf);
             uintptr_t workEnt = *wResult;
 
             *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -482,12 +475,7 @@ int PlantArea_Slot4_Impl(PlantArea* self, void* entityIBP, uint64_t /*param3*/, 
 }
 
 
-// ============================================================
-// PlantArea::Execute (Slot5) -- 3 bytes, returns false.
-// ============================================================
-bool PlantArea_Execute_Impl(PlantArea* /*self*/) {
-    return false;
-}
+
 
 
 // ============================================================
@@ -509,10 +497,11 @@ namespace { void PA_SlotHit(const char* which) {
         std::fflush(stderr);
     }
 } }
-int PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+int PlantArea::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
     PA_SlotHit("C");
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     uint32_t primaryIdx = param4 & 0xFFFF;
     uint32_t pairedIdx = (param4 >> 16) & 0xFFFF;
@@ -570,10 +559,11 @@ int PlantArea_OnComplete_Impl(PlantArea* self, void* /*param2*/, void* /*param3*
 // Marks cells valid, removes paired BST entry.
 // param4 packed: low 16 = primary cell, high 16 = paired cell.
 // ============================================================
-int PlantArea_OnCancel_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+int PlantArea::OnCancel(void* /*param2*/, void* /*param3*/, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
     PA_SlotHit("X");
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     uint32_t primaryIdx = param4 & 0xFFFF;
     uint32_t pairedIdx = (param4 >> 16) & 0xFFFF;
@@ -620,8 +610,8 @@ int PlantArea_OnCancel_Impl(PlantArea* self, void* /*param2*/, void* /*param3*/,
 // PlantArea::Cleanup (Slot8) -- 0x1400f4460
 // CancelAll: loops BST while count > 0, cancels each work item.
 // ============================================================
-void PlantArea_Cleanup_Impl(PlantArea* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int PlantArea::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -639,6 +629,7 @@ void PlantArea_Cleanup_Impl(PlantArea* self) {
 
         count = *(int*)(selfAddr + 0x50);
     }
+    return 0;
 }
 
 
@@ -647,10 +638,10 @@ void PlantArea_Cleanup_Impl(PlantArea* self) {
 // RemoveInvalid: iterates BST, validates entries, removes dead ones.
 // Marks invalid cells as valid (available for re-planting).
 // ============================================================
-bool PlantArea_Validate_Impl(PlantArea* self, void* param2) {
+int PlantArea::Validate(void* param2) {
     PA_SlotHit("V");
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     int* collectArray = nullptr;
     int* currentArray = nullptr;
@@ -769,8 +760,8 @@ cleanup:
 // PlantArea::GetTarget (Slot10) -- 0x1400f44e0
 // Returns entity ptr from work's entity ref sub-object at +0x48.
 // ============================================================
-void* PlantArea_GetTarget_Impl(PlantArea* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* PlantArea::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -788,8 +779,8 @@ void* PlantArea_GetTarget_Impl(PlantArea* self, void* outPtr) {
 // 9 bytes, shared across ClearArea/PlantArea/PlantOrchard.
 // Returns (this->field_50 > 0).
 // ============================================================
-bool PlantArea_GetPriority_Impl(PlantArea* self) {
-    return self->field_50 > 0;
+int PlantArea::GetPriority() {
+    return field_50 > 0 ? 1 : 0;
 }
 
 
@@ -797,11 +788,11 @@ bool PlantArea_GetPriority_Impl(PlantArea* self) {
 // PlantArea::Serialize -- 0x1400f4540
 // Work::Serialize + BST + count + bool array + ExternalRef.
 // ============================================================
-void PlantArea_Serialize_Impl(PlantArea* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void PlantArea::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Serialize Work base class
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create Serializer with version=0
     alignas(8) uint8_t serializerBuf[24] = {0};
@@ -855,11 +846,9 @@ void PlantArea_Serialize_Impl(PlantArea* self, void* stream) {
 // PlantArea::DtorBody -- 0x1400f4600
 // Sets vtable, frees validity array + BST, calls Work dtor chain.
 // ============================================================
-void PlantArea_DtorBody(PlantArea* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set PlantArea vtable
-    *(void**)selfAddr = s_vtable_PlantArea;
+// PlantArea dtor 0x1400f4600. The stamps and the `~Internal` call are the compiler's chain.
+PlantArea::~PlantArea() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free validity array at +0x58
     fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
@@ -876,9 +865,6 @@ void PlantArea_DtorBody(PlantArea* self) {
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set Work vtable, then call Object::Internal::~Internal
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
@@ -886,89 +872,54 @@ void PlantArea_DtorBody(PlantArea* self) {
 // PlantArea::ScalarDtor -- 0x14002c4b0
 // Calls dtor body, then conditional free.
 // ============================================================
-void* PlantArea_ScalarDtor_Impl(PlantArea* self, uint32_t flags) {
-    PlantArea_DtorBody(self);
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+// [0] 0x14002c4b0: ~PlantArea, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* PlantArea::DeletingDtor(unsigned flags) {
+    this->~PlantArea();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
+
+// Ctor 0x1400f4770 (factory variant): `??0Internal`, the Work base fields, the leaf
+// fields zeroed (the two stamps are the compiler's). PlantArea_ResolveFuncs wires the
+// file's helper pointers (the old factory did the same).
+PlantArea::PlantArea()
+    : Work(), field_48(nullptr), field_50(0), field_58(nullptr), field_60(0), _pad64{},
+      field_68(nullptr) {
+    PlantArea_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161890 (13 slots), size 0x70, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// NOTE: slot4 (+0x20) Execute = PlantArea_Slot4_Impl (the main planting
-// logic). PlantArea_Execute_Impl is the 3-byte returns-false stub documented
-// as "Slot5 (+0x28)", which is the shared Work_Slot5 — it is NOT used here.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_PlantArea_Vtable` (slot 1 null, slot 2 a lazily
+// cached id), PlantArea_Ctor_Impl (the ctor with both stamps written by hand) and
+// REGISTER_TYPE over PlantArea_Factory / _CreateInPlace, plus two vtable-pointer
+// statics for the dtor's stamps.
+
+// create 0x14002c470: MemAlloc(sizeof, 8), then the ctor.
+void* PlantArea::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PlantArea), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PlantArea());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* PlantArea::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PlantArea());
+}
+
+DEFINE_EXE_VTABLE(PlantArea, "_ZTV9PlantArea")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// Constructor — port of PlantArea_Ctor (0x1400f4770, factory variant):
-// Object::Internal::Internal -> Work base fields -> PlantArea vtable + zero fields.
-static void* PlantArea_Ctor_Impl(PlantArea* self) {
-    fn_ObjectInternal_Ctor(self);
-
-    uintptr_t a = (uintptr_t)self;
-    // Work base vtable (intermediate, immediately overwritten)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161a80);
-    *(void**)(a + 0x10) = nullptr;
-    *(void**)(a + 0x18) = nullptr;
-    *(int32_t*)(a + 0x20) = -1;
-    *(int32_t*)(a + 0x24) = 0;
-    *(int32_t*)(a + 0x28) = -1;
-    *(int32_t*)(a + 0x2c) = 0;
-    *(void**)(a + 0x30) = nullptr;
-    *(void**)(a + 0x38) = nullptr;
-    *(int32_t*)(a + 0x40) = 0;
-
-    // PlantArea vtable (our registered standalone table)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161890);
-    *(void**)(a + 0x48) = nullptr;     // BST root
-    *(int32_t*)(a + 0x50) = 0;         // BST count
-    *(void**)(a + 0x58) = nullptr;     // validity array
-    *(void**)(a + 0x60) = nullptr;     // field_60 (cell count + pad)
-    *(void**)(a + 0x68) = nullptr;     // ExternalPtr (crop desc)
-
-    return self;
-}
-
-static uint32_t PlantArea_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PlantArea");
-    return c;
-}
-
-static void* g_PlantArea_Vtable[13] = {
-    (void*)&PlantArea_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
-    (void*)&PlantArea_GetTypeId,        // +0x10 GetTypeId
-    (void*)&PlantArea_Serialize_Impl,   // +0x18 Serialize
-    (void*)&PlantArea_Slot4_Impl,       // +0x20 Execute (main planting logic)
-    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
-    (void*)&PlantArea_OnComplete_Impl,  // +0x30 OnComplete
-    (void*)&PlantArea_OnCancel_Impl,    // +0x38 OnCancel
-    (void*)&PlantArea_Cleanup_Impl,     // +0x40 Cleanup
-    (void*)&PlantArea_Validate_Impl,    // +0x48 Validate
-    (void*)&PlantArea_GetTarget_Impl,   // +0x50 GetTarget
-    (void*)&PlantArea_GetPriority_Impl, // +0x58 GetPriority
-    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x140161890 is still read back BY ADDRESS — CropFieldComponent's state
+// machine (cropfieldcomponent_states.cpp, block MI-B) builds the work by hand and
+// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterPlantAreaVtable() {
-    RegisterExeAddr(0x140161890, (uintptr_t)g_PlantArea_Vtable);
+    RegisterExeAddr(PlantAreaAddr::Vtable, reinterpret_cast<uintptr_t>(PlantArea::Vtable()));   // 0x140161890
 }
-extern "C" void* PlantArea_CreateInPlace(void* mem) {
-    PlantArea_ResolveFuncs();
-    return PlantArea_Ctor_Impl((PlantArea*)mem);
-}
-extern "C" void* PlantArea_Factory(void) {
-    PlantArea_ResolveFuncs();
-    void* p = Work_Alloc(0x70);
-    return p ? PlantArea_Ctor_Impl((PlantArea*)p) : nullptr;
-}
-REGISTER_TYPE(PlantArea, "Work", &PlantArea_Factory, &PlantArea_CreateInPlace);
+DEFINE_EXE_TYPE(PlantArea, "Work")

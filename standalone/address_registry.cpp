@@ -113,23 +113,19 @@ extern "C" {
 
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables).
     void RegisterBuildRoadVtable();
-    void RegisterBuildStructureVtable();
     void RegisterClearAreaVtable();
     void RegisterClearStorageVtable();
     void RegisterConsumeProduceVtable();
     void RegisterFireWorkVtable();
     void RegisterFishingWorkVtable();
-    void RegisterGatherRawMaterialsVtable();
     void RegisterLocationWorkVtable();
     void RegisterMarketWorkVtable();
     void RegisterPickupVtable();
     void RegisterPlantAreaVtable();
-    void RegisterPlantOrchardVtable();
     void RegisterTendAreaVtable();
     void RegisterTradeWorkVtable();
     void RegisterForesterWorkVtable();
     void RegisterHarvestAreaVtable();
-    void RegisterHarvestOrchardVtable();
     void RegisterHerbalistWorkVtable();
     void RegisterHuntWorkVtable();
     void RegisterPastureWorkVtable();
@@ -1781,23 +1777,19 @@ static void RegisterVtablesAndTypeIds() {
     // Factory cascade — Work family (Object::Internal -> Work, 13-slot vtables;
     // shared base helpers in code/Game/Work/work_base_standalone.cpp).
     RegisterBuildRoadVtable();
-    RegisterBuildStructureVtable();
     RegisterClearAreaVtable();
     RegisterClearStorageVtable();
     RegisterConsumeProduceVtable();
     RegisterFireWorkVtable();
     RegisterFishingWorkVtable();
-    RegisterGatherRawMaterialsVtable();
     RegisterLocationWorkVtable();
     RegisterMarketWorkVtable();
     RegisterPickupVtable();
     RegisterPlantAreaVtable();
-    RegisterPlantOrchardVtable();
     RegisterTendAreaVtable();
     RegisterTradeWorkVtable();
     RegisterForesterWorkVtable();
     RegisterHarvestAreaVtable();
-    RegisterHarvestOrchardVtable();
     RegisterHerbalistWorkVtable();
     RegisterHuntWorkVtable();
     RegisterPastureWorkVtable();

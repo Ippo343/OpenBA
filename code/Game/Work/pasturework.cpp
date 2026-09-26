@@ -18,6 +18,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/PastureWork.h"
 #include "Work/pasturework_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -117,7 +118,6 @@ static PW_FindComp_NatRes_t             s_fn_FindComp_NatRes = nullptr;
 static PW_FindComp_Position_t          s_fn_FindComp_Position = nullptr;
 static PW_FindComp_Family_t            s_fn_FindComp_Family = nullptr;   // FUN_1400223c0
 static PW_FindComp_Family2_t           s_fn_FindComp_Family2 = nullptr;  // Entity_FindComponent_Family @ 0x1400012d0
-static PW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 static PW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
 static PW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
 static PW_MemAlloc_t                   s_fn_MemAlloc = nullptr;
@@ -160,9 +160,6 @@ static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 // These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
 // both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
 // (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
-static void** s_vtable_PastureWork = nullptr;     // 0x1401617a0
-static void** s_vtable_AutoPickupWork = nullptr;   // 0x140160fa0
-static void** s_vtable_Work = nullptr;              // 0x140161a80
 
 // Original Slot4 exe function pointer for fallback (complex function)
 typedef int (*PW_OrigSlot4_t)(void* self, void* param2, uint64_t param3, uint64_t param4);
@@ -215,8 +212,6 @@ bool PastureWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400223c0));
     s_fn_FindComp_Family2 = reinterpret_cast<PW_FindComp_Family2_t>(
         ResolveAddr(Module::Exe, 0x1400012d0));  // Entity_FindComponent_Family
-    s_fn_Work_Serialize = reinterpret_cast<PW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<PW_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400296b0));  // verified from original disasm
     s_fn_ValidateEntity = reinterpret_cast<PW_ValidateEntity_t>(
@@ -274,12 +269,6 @@ bool PastureWork_ResolveFuncs() {
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
     // Vtable pointers for dtor
-    s_vtable_PastureWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401617a0));
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140160fa0));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
@@ -291,7 +280,7 @@ bool PastureWork_ResolveFuncs() {
               s_fn_FindComp_Pasture && s_fn_GetAreaComponent &&
               s_fn_Map_CalcDistance && s_fn_Map_FindNearestPassable &&
               s_fn_Map_CanPathTo && s_fn_FindComp_NatRes &&
-              s_fn_Work_Serialize && s_fn_BST_Serialize &&
+              s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
@@ -326,7 +315,6 @@ bool PastureWork_ResolveFuncs() {
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
         if (!s_fn_FindComp_NatRes) printf("  MISSING: FindComp_NatRes\n");
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
@@ -360,10 +348,9 @@ bool PastureWork_ResolveFuncs() {
 //
 // Decompiled from Ghidra at 0x1400F2370, all control flow matched to original.
 //
-int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, uint64_t param4) {
-    (void)param3; (void)param4;  // unused in original, forwarded by action executor
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int PastureWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
     void* citizenIBP = entityIBP;
 
     // local_res20 = *(longlong*)param_2;  local_res10 = param_2
@@ -533,9 +520,9 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 
                             // Call vtable slot +0x50 (GetWorkEntity)
                             typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
-                            uintptr_t vtable = *(uintptr_t*)self;
+                            uintptr_t vtable = *(uintptr_t*)this;
                             auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
-                            uintptr_t* wResult = getWorkEntity(self, &local_90);
+                            uintptr_t* wResult = getWorkEntity(this, &local_90);
                             uintptr_t workEnt = *wResult;
 
                             *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -677,9 +664,9 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 
                 // Call vtable slot +0x50 (GetWorkEntity — returns the profession key)
                 typedef uintptr_t* (*GetWorkEntity_t)(PastureWork*, void*);
-                uintptr_t vtable = *(uintptr_t*)self;
+                uintptr_t vtable = *(uintptr_t*)this;
                 auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
-                uintptr_t* wResult = getWorkEntity(self, &local_res10);
+                uintptr_t* wResult = getWorkEntity(this, &local_res10);
                 uintptr_t workEnt = *wResult;
 
                 *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -709,8 +696,8 @@ int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, 
 // PastureWork::Slot6 -- NOT HOOKABLE (RIP-relative CALL)
 // Thunk: sub rsp,0x28; add rcx,0x48; call CitizenAI_impl_5520; xor al,al; add rsp,0x28; ret
 // ============================================================
-bool PastureWork_Slot6_Impl(PastureWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int PastureWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return false;
 }
 
@@ -725,9 +712,9 @@ bool PastureWork_Slot6_Impl(PastureWork* self, void* param2) {
 //    c. Clear "flagged for removal" bit (0x100000) in entity flags at +0x20
 //    d. If flag changed and entity has parent (+0x10), call UpdateParentEntity
 // ============================================================
-int PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
+int PastureWork::OnCancel(void* param2, void* param3, int /*arg3*/) {
     // Insert citizen into BST
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
 
     // Check if param3 entity is valid
     if (*(uintptr_t*)param3 == 0) {
@@ -771,8 +758,8 @@ int PastureWork_Slot7_Impl(PastureWork* self, void* param2, void* param3) {
 // PastureWork::Slot8 / CancelAll (0x1400F2B90)
 // Identical to HuntWork::Slot8 -- loops tree, cancels each.
 // ============================================================
-int PastureWork_Slot8_Impl(PastureWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int PastureWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -798,9 +785,9 @@ int PastureWork_Slot8_Impl(PastureWork* self) {
 // Identical to HuntWork::Slot9 -- BST traversal, validates, removes.
 // Hook DISABLED (bug class 3 -- MOV RAX,RSP).
 // ============================================================
-bool PastureWork_Slot9_Impl(PastureWork* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    void** bstRootPtr = (void**)((uintptr_t)self + 0x48);
+int PastureWork::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
     void* root = *bstRootPtr;
     uintptr_t* removeArr = nullptr;
@@ -903,8 +890,8 @@ bool PastureWork_Slot9_Impl(PastureWork* self, void* param2) {
 // PastureWork::Slot10 / GetWorkEntity (0x1400F2C00)
 // Identical to HuntWork::Slot10.
 // ============================================================
-void* PastureWork_Slot10_Impl(PastureWork* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* PastureWork::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -920,20 +907,15 @@ void* PastureWork_Slot10_Impl(PastureWork* self, void* outPtr) {
 
 
 // ============================================================
-// PastureWork::Slot11 / HasWorkers -- 9-byte thunk, too small to hook.
+// PastureWork::GetPriority [11] 0x140029860 (shared by 13 tables) / HasWorkers.
 // Returns (this->_field50 > 0).
 // ============================================================
-bool PastureWork_Slot11_Impl(PastureWork* self) {
-    return self->_field50 > 0;
+int PastureWork::GetPriority() {
+    // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
+    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
 }
 
 
-// ============================================================
-// PastureWork::Execute (Slot5) -- 3 bytes, returns false.
-// ============================================================
-bool PastureWork_Execute_Impl(PastureWork* /*self*/) {
-    return false;
-}
 
 
 // ============================================================
@@ -941,10 +923,10 @@ bool PastureWork_Execute_Impl(PastureWork* /*self*/) {
 // Work::Serialize + Serializer(version=0) + BST serialize.
 // Identical to HuntWork::Serialize (no extra int field).
 // ============================================================
-void PastureWork_Serialize_Impl(PastureWork* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void PastureWork::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    s_fn_Work_Serialize(self, stream);
+    Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
     alignas(8) uint8_t serializer1[24] = {0};
     ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -963,10 +945,9 @@ void PastureWork_Serialize_Impl(PastureWork* self, void* stream) {
 // PastureWork::DtorBody (0x1400F2CE0)
 // Identical pattern to HuntWork, uses vtable_PastureWork.
 // ============================================================
-void PastureWork_DtorBody(PastureWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    *(void**)selfAddr = s_vtable_PastureWork;
+// PastureWork dtor (retail 0x1400f2ce0, called by slot 0 0x14002bf70). The stamps and the `~Internal` call are the compiler's chain.
+PastureWork::~PastureWork() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     void* bstRoot = *(void**)(selfAddr + 0x48);
     if (bstRoot != nullptr) {
@@ -980,8 +961,6 @@ void PastureWork_DtorBody(PastureWork* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    *(void**)selfAddr = s_vtable_AutoPickupWork;
-    *(void**)selfAddr = s_vtable_Work;
 }
 
 
@@ -989,60 +968,21 @@ void PastureWork_DtorBody(PastureWork* self) {
 // PastureWork::ScalarDtor (0x14002BF70)
 // Calls dtor body, then conditional free.
 // ============================================================
-void* PastureWork_ScalarDtor_Impl(PastureWork* self, uint32_t flags) {
-    PastureWork_DtorBody(self);
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-    return self;
+// [0] 0x14002bf70: ~PastureWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* PastureWork::DeletingDtor(unsigned flags) {
+    this->~PastureWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
-// ============================================================
-// Standalone factory + vtable — AutoPickupWork family (factory cascade).
-// Vtable @ 0x1401617a0 (13 slots), size 0x58, parent "AutoPickupWork".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// Slot map (this file's actual function names):
-//   slot0  ScalarDtor : PastureWork_ScalarDtor_Impl
-//   slot3  Serialize  : PastureWork_Serialize_Impl
-//   slot4  Execute    : PastureWork_Slot4_Impl
-//   slot6  OnComplete : PastureWork_Slot6_Impl
-//   slot7  OnCancel   : PastureWork_Slot7_Impl
-//   slot8  Cleanup    : PastureWork_Slot8_Impl
-//   slot9  Validate   : PastureWork_Slot9_Impl
-//   slot10 GetTarget  : PastureWork_Slot10_Impl
-//   slot11 GetPriority: PastureWork_Slot11_Impl
-//   Ctor       : PastureWork_Ctor_Impl (retail 0x1400f2d80, Work_Ctor25 base)
-//   ResolveFuncs: PastureWork_ResolveFuncs()
-// ============================================================
-#include "work_base_standalone.h"
-#include "Object/factory_registration.h"
-#include "address_registry.h"
 
-static uint32_t PastureWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PastureWork");
-    return c;
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The three stamps are the compiler's. PastureWork_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+PastureWork::PastureWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
+    PastureWork_ResolveFuncs();
 }
-
-static void* g_PastureWork_Vtable[13] = {
-    (void*)&PastureWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                   // +0x08 slot1 (null)
-    (void*)&PastureWork_GetTypeId,        // +0x10 GetTypeId
-    (void*)&PastureWork_Serialize_Impl,   // +0x18 Serialize
-    (void*)&PastureWork_Slot4_Impl,       // +0x20 Execute
-    (void*)&Work_Slot5,                   // +0x28 slot5 (returns 0)
-    (void*)&PastureWork_Slot6_Impl,       // +0x30 OnComplete
-    (void*)&PastureWork_Slot7_Impl,       // +0x38 OnCancel
-    (void*)&PastureWork_Slot8_Impl,       // +0x40 Cleanup
-    (void*)&PastureWork_Slot9_Impl,       // +0x48 Validate
-    (void*)&PastureWork_Slot10_Impl,      // +0x50 GetTarget
-    (void*)&PastureWork_Slot11_Impl,      // +0x58 GetPriority
-    (void*)&Work_Slot12,                  // +0x60 slot12 (void nop)
-};
 
 // ============================================================
 // PastureWork::PastureWork (0x1400f2d80) — the retail ctor Slot14 cmd-2 calls
@@ -1053,14 +993,12 @@ static void* g_PastureWork_Vtable[13] = {
 //           ((h>>1)+y)*mapDim + (w>>1)+x  from area +0x28/+0x2a/+0x2c/+0x2e
 //   +0x24/+0x2c/+0x30/+0x38/+0x40 = 0
 // PastureWork tail: vtable, +0x48 BST root = 0, +0x50 count = 0.
-// Work_GenericCtor already covers the static part (zero-fill + the two -1s +
-// vtable); this adds the entity-dependent fields on top.
+// The tree's port starts from the default shape (Work(): the zero fields and the two
+// -1s) and adds the entity-dependent fields on top; that is kept.
 // ============================================================
-extern "C" void* PastureWork_Ctor_Impl(void* mem, void* entityIBP) {
-    if (!mem) return nullptr;
+PastureWork::PastureWork(void* entityIBP) : AutoPickupWork(), _field48(nullptr), _field50(0) {
     PastureWork_ResolveFuncs();
-    Work_GenericCtor(mem, 0x58, g_PastureWork_Vtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     *reinterpret_cast<uint64_t*>(s + 0x10) = *reinterpret_cast<uint64_t*>(entityIBP);
     if (*reinterpret_cast<uint64_t*>(s + 0x10) != 0 &&
         g_pGameWorldSingleton && *g_pGameWorldSingleton) {
@@ -1080,28 +1018,59 @@ extern "C" void* PastureWork_Ctor_Impl(void* mem, void* entityIBP) {
         s_fn_FindComp_MatDesc(*reinterpret_cast<uintptr_t*>(entityIBP), wcIBP);  // 0x140003050 = WorkComponent finder
         *reinterpret_cast<uint64_t*>(s + 0x18) = wcIBP[0];
     }
-    return mem;
 }
 
-// Convenience for PastureComponent Slot14: MemAlloc(0x58,8) + the faithful ctor.
-// `entityRefSlot` points at an 8-byte entity ref (the pasture's owner entity).
+// The by-address door for 0x1400f2d80 (registered below): the real ctor on caller
+// memory (B8-5).
+extern "C" void* PastureWork_Ctor_Impl(void* mem, void* entityIBP) {
+    if (!mem) return nullptr;
+    return static_cast<Object::Base*>(new (mem) PastureWork(entityIBP));
+}
+
+// Convenience for PastureComponent Slot14 (pasturecomponent_states.cpp, block MI-B):
+// MemAlloc(0x58,8) + the faithful ctor. `entityRefSlot` points at an 8-byte entity ref
+// (the pasture's owner entity).
 extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot) {
     PastureWork_ResolveFuncs();
-    void* p = Work_Alloc(0x58);
-    return p ? PastureWork_Ctor_Impl(p, entityRefSlot) : nullptr;
+    void* p = Object::detail::InternalMemAlloc(sizeof(PastureWork), 8);
+    return p ? static_cast<Object::Base*>(new (p) PastureWork(entityRefSlot)) : nullptr;
 }
 
+// The by-address door for slot 4 (0x1400f2370), registered in
+// standalone/reg_work_tail_serialize.cpp.
+int PastureWork_Slot4_Impl(PastureWork* self, void* entityIBP, uint64_t param3, uint64_t param4) {
+    return self->PastureWork::Execute(entityIBP, reinterpret_cast<void*>(param3), param4);
+}
+
+// ============================================================
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
+// ============================================================
+// Before: a hand-built 13-slot `g_PastureWork_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over PastureWork_Factory / _CreateInPlace (both
+// Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
+// Nothing outside this block reads 0x1401617a0 back, so that row goes with the table.
+
+// create 0x14002bf00: MemAlloc(sizeof, 8), then the ctor.
+void* PastureWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PastureWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PastureWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* PastureWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PastureWork());
+}
+
+DEFINE_EXE_VTABLE(PastureWork, "_ZTV11PastureWork")
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// The ctor door 0x1400f2d80 stays registered (the function keeps its name because
+// address_registry.cpp calls it by name).
 extern "C" void RegisterPastureWorkVtable() {
-    RegisterExeAddr(0x1401617a0, (uintptr_t)g_PastureWork_Vtable);
-    RegisterExeAddr(0x1400f2d80, (uintptr_t)&PastureWork_Ctor_Impl);
+    RegisterExeAddr(0x1400f2d80, reinterpret_cast<uintptr_t>(&PastureWork_Ctor_Impl));
 }
-extern "C" void* PastureWork_CreateInPlace(void* mem) {
-    PastureWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x58, g_PastureWork_Vtable);
-}
-extern "C" void* PastureWork_Factory(void) {
-    PastureWork_ResolveFuncs();
-    void* p = Work_Alloc(0x58);
-    return p ? Work_GenericCtor(p, 0x58, g_PastureWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(PastureWork, "AutoPickupWork", &PastureWork_Factory, &PastureWork_CreateInPlace);
+DEFINE_EXE_TYPE(PastureWork, "AutoPickupWork")

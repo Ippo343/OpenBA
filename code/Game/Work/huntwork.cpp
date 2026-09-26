@@ -13,6 +13,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/HuntWork.h"
 #include "Work/huntwork_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -97,7 +98,6 @@ static HuW_Map_CalcDistance_t            s_fn_Map_CalcDistance = nullptr;
 static HuW_Map_FindNearestPassable_t    s_fn_Map_FindNearestPassable = nullptr;
 static HuW_Map_CanPathTo_t              s_fn_Map_CanPathTo = nullptr;
 static HuW_Entity_GetGridCell_t         s_fn_Entity_GetGridCell = nullptr;
-static HuW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 static HuW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
 static HuW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
 static HuW_MemAlloc_t                   s_fn_MemAlloc = nullptr;
@@ -124,9 +124,6 @@ static float* s_fHalfCellOffset = nullptr;  // DAT_140172114 = 0.5f
 // These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
 // both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
 // (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
-static void** s_vtable_HuntWork = nullptr;       // 0x140161620
-static void** s_vtable_AutoPickupWork = nullptr;  // 0x140160fa0
-static void** s_vtable_Work = nullptr;             // 0x140161a80
 
 static bool s_hunt_funcs_resolved = false;
 
@@ -171,8 +168,6 @@ bool HuntWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400a00f0));
     s_fn_Entity_GetGridCell = reinterpret_cast<HuW_Entity_GetGridCell_t>(
         ResolveAddr(Module::Exe, 0x140087fb0));
-    s_fn_Work_Serialize = reinterpret_cast<HuW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<HuW_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400296b0));  // verified from original disasm
     s_fn_ValidateEntity = reinterpret_cast<HuW_ValidateEntity_t>(
@@ -208,12 +203,6 @@ bool HuntWork_ResolveFuncs() {
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
     // Vtable pointers for dtor
-    s_vtable_HuntWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161620));
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140160fa0));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
@@ -225,7 +214,7 @@ bool HuntWork_ResolveFuncs() {
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Hunt &&
               s_fn_GetAreaComponent && s_fn_Map_CalcDistance &&
               s_fn_Map_FindNearestPassable && s_fn_Map_CanPathTo &&
-              s_fn_Work_Serialize && s_fn_BST_Serialize &&
+              s_fn_BST_Serialize &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
@@ -254,7 +243,6 @@ bool HuntWork_ResolveFuncs() {
         if (!s_fn_Map_CalcDistance) printf("  MISSING: Map_CalcDistance\n");
         if (!s_fn_Map_FindNearestPassable) printf("  MISSING: Map_FindNearestPassable\n");
         if (!s_fn_Map_CanPathTo) printf("  MISSING: Map_CanPathTo\n");
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_BST_Serialize) printf("  MISSING: BST_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
@@ -285,9 +273,9 @@ bool HuntWork_ResolveFuncs() {
 // 9. Create PerformWork action at valid position
 // 10. On failure: idle animation or replan
 //
-int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HuntWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Save citizen ref
     uintptr_t citizenRef = *(uintptr_t*)entityIBP;
@@ -512,11 +500,11 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
     int priority = (int)selfQ[4];
     uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
-    uintptr_t vtable = *(uintptr_t*)self;
+    uintptr_t vtable = *(uintptr_t*)this;
     typedef uintptr_t* (*GetWorkEntity_t)(HuntWork*, void*);
     auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
     uintptr_t workEntIBP[2] = {0};
-    uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+    uintptr_t* wResult = getWorkEntity(this, workEntIBP);
     uintptr_t workEnt = *wResult;
 
     *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -537,8 +525,8 @@ int HuntWork_Slot4_Impl(HuntWork* self, void* entityIBP, uint64_t /*param3*/, ui
 // Thunk: sub rsp,0x28; add rcx,0x48; call CitizenAI_impl_5520; xor al,al; add rsp,0x28; ret
 // Calls BSTFindRemove on the BST at self+0x48, returns false.
 // ============================================================
-bool HuntWork_Slot6_Impl(HuntWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int HuntWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return false;
 }
 
@@ -548,8 +536,8 @@ bool HuntWork_Slot6_Impl(HuntWork* self, void* param2) {
 // Thunk: add rcx,0x48; jmp CitizenAI_impl_5520
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
-int HuntWork_Slot7_Impl(HuntWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int HuntWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return 0;
 }
 
@@ -559,8 +547,8 @@ int HuntWork_Slot7_Impl(HuntWork* self, void* param2) {
 // Loops through tree at +0x48 while count (+0x50) > 0.
 // For each leftmost node, cancels the work item via engine call.
 // ============================================================
-int HuntWork_Slot8_Impl(HuntWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int HuntWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -591,9 +579,9 @@ int HuntWork_Slot8_Impl(HuntWork* self) {
 // Returns true if all valid (removeCount == 0), false otherwise.
 // Hook DISABLED (bug class 3 -- MOV RAX,RSP).
 // ============================================================
-bool HuntWork_Slot9_Impl(HuntWork* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    void** bstRootPtr = (void**)((uintptr_t)self + 0x48);
+int HuntWork::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
     void* root = *bstRootPtr;
     uintptr_t* removeArr = nullptr;
@@ -701,8 +689,8 @@ bool HuntWork_Slot9_Impl(HuntWork* self, void* param2) {
 // HuntWork::Slot10 / GetWorkEntity (0x1400EF5A0)
 // Returns entity from this->_field10's sub-object at +0x48.
 // ============================================================
-void* HuntWork_Slot10_Impl(HuntWork* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* HuntWork::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -718,19 +706,13 @@ void* HuntWork_Slot10_Impl(HuntWork* self, void* outPtr) {
 
 
 // ============================================================
-// HuntWork::Slot11 / HasWorkers -- 9-byte thunk, too small to hook.
-// Returns (this->_field50 > 0).
+// HuntWork::GetPriority [11] 0x140029860 (shared by 13 tables) / HasWorkers.
+// Returns (this->_field50 > 0). Slot 5 is Work's (0x1400f7540): the old dead
+// HuntWork_Execute_Impl copy of it is gone.
 // ============================================================
-bool HuntWork_Slot11_Impl(HuntWork* self) {
-    return self->_field50 > 0;
-}
-
-
-// ============================================================
-// HuntWork::Execute (Slot5) -- 3 bytes, returns false.
-// ============================================================
-bool HuntWork_Execute_Impl(HuntWork* /*self*/) {
-    return false;
+int HuntWork::GetPriority() {
+    // Retail 0x140029860 is `CMP [RCX+0x50],EAX; SETG` — a SIGNED compare.
+    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
 }
 
 
@@ -739,11 +721,11 @@ bool HuntWork_Execute_Impl(HuntWork* /*self*/) {
 // Work::Serialize + Serializer(version=0) + BST serialize.
 // Note: No extra int field (unlike HerbalistWork/ForesterWork).
 // ============================================================
-void HuntWork_Serialize_Impl(HuntWork* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void HuntWork::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create first serializer (version block, version=0)
     alignas(8) uint8_t serializer1[24] = {0};
@@ -766,11 +748,9 @@ void HuntWork_Serialize_Impl(HuntWork* self, void* stream) {
 // Sets vtables down chain, frees tree nodes at +0x48, then calls
 // AutoPickupWork -> Work -> Internal dtor chain.
 // ============================================================
-void HuntWork_DtorBody(HuntWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set vtable to HuntWork
-    *(void**)selfAddr = s_vtable_HuntWork;
+// HuntWork dtor (retail 0x1400ef680, called by slot 0 0x14002a700). The stamps and the `~Internal` call are the compiler's chain.
+HuntWork::~HuntWork() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free BST nodes at +0x48
     void* bstRoot = *(void**)(selfAddr + 0x48);
@@ -789,10 +769,6 @@ void HuntWork_DtorBody(HuntWork* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to AutoPickupWork, then Work
-    *(void**)selfAddr = s_vtable_AutoPickupWork;
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
@@ -800,71 +776,51 @@ void HuntWork_DtorBody(HuntWork* self) {
 // HuntWork::ScalarDtor (0x14002A700)
 // Calls dtor body, then conditional free based on flags.
 // ============================================================
-void* HuntWork_ScalarDtor_Impl(HuntWork* self, uint32_t flags) {
-    HuntWork_DtorBody(self);
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-    return self;
+// [0] 0x14002a700: ~HuntWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* HuntWork::DeletingDtor(unsigned flags) {
+    this->~HuntWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The three stamps are the compiler's. HuntWork_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+HuntWork::HuntWork() : AutoPickupWork(), _field48(nullptr), _field50(0) {
+    HuntWork_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — AutoPickupWork family (factory cascade).
-// Vtable @ 0x140161620 (13 slots), size 0x58, parent "AutoPickupWork".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// Slot map (this file's actual function names):
-//   slot0  ScalarDtor : HuntWork_ScalarDtor_Impl
-//   slot3  Serialize  : HuntWork_Serialize_Impl
-//   slot4  Execute    : HuntWork_Slot4_Impl
-//   slot6  OnComplete : HuntWork_Slot6_Impl
-//   slot7  OnCancel   : HuntWork_Slot7_Impl
-//   slot8  Cleanup    : HuntWork_Slot8_Impl
-//   slot9  Validate   : HuntWork_Slot9_Impl
-//   slot10 GetTarget  : HuntWork_Slot10_Impl
-//   slot11 GetPriority: HuntWork_Slot11_Impl
-//   Ctor       : FLAG — NO HuntWork_Ctor_Impl in this file -> factory null
-//   ResolveFuncs: HuntWork_ResolveFuncs()
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_HuntWork_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over HuntWork_Factory / _CreateInPlace (both
+// Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
+
+// create 0x14002a690: MemAlloc(sizeof, 8), then the ctor.
+void* HuntWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HuntWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HuntWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* HuntWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HuntWork());
+}
+
+DEFINE_EXE_VTABLE(HuntWork, "_ZTV8HuntWork")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t HuntWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("HuntWork");
-    return c;
-}
-
-static void* g_HuntWork_Vtable[13] = {
-    (void*)&HuntWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                // +0x08 slot1 (null)
-    (void*)&HuntWork_GetTypeId,        // +0x10 GetTypeId
-    (void*)&HuntWork_Serialize_Impl,   // +0x18 Serialize
-    (void*)&HuntWork_Slot4_Impl,       // +0x20 Execute
-    (void*)&Work_Slot5,                // +0x28 slot5 (returns 0)
-    (void*)&HuntWork_Slot6_Impl,       // +0x30 OnComplete
-    (void*)&HuntWork_Slot7_Impl,       // +0x38 OnCancel
-    (void*)&HuntWork_Slot8_Impl,       // +0x40 Cleanup
-    (void*)&HuntWork_Slot9_Impl,       // +0x48 Validate
-    (void*)&HuntWork_Slot10_Impl,      // +0x50 GetTarget
-    (void*)&HuntWork_Slot11_Impl,      // +0x58 GetPriority
-    (void*)&Work_Slot12,               // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x140161620 is still read back BY ADDRESS — HuntComponent's CreateWork
+// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
+// so the exe address serves the COMPILER's table.
 extern "C" void RegisterHuntWorkVtable() {
-    RegisterExeAddr(0x140161620, (uintptr_t)g_HuntWork_Vtable);
+    RegisterExeAddr(HuntWorkAddr::Vtable, reinterpret_cast<uintptr_t>(HuntWork::Vtable()));   // 0x140161620
 }
-extern "C" void* HuntWork_CreateInPlace(void* mem) {
-    HuntWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x58, g_HuntWork_Vtable);
-}
-extern "C" void* HuntWork_Factory(void) {
-    HuntWork_ResolveFuncs();
-    void* p = Work_Alloc(0x58);
-    return p ? Work_GenericCtor(p, 0x58, g_HuntWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(HuntWork, "AutoPickupWork", &HuntWork_Factory, &HuntWork_CreateInPlace);
+DEFINE_EXE_TYPE(HuntWork, "AutoPickupWork")

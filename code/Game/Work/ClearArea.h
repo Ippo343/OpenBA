@@ -1,0 +1,86 @@
+#pragma once
+// ============================================================================
+// code/Game/Work/ClearArea.h — ENDGAME B.3.8 block WRK
+//
+// ClearArea — the "clear this footprint" work of a construction / orchard site:
+// a BST of the entities to cut (+0x48) and one of the ground cells to clear
+// (+0x58). A REAL class with a compiler-generated vtable.
+//
+// RETAIL (B38_SLOTS.md §6): reflected "ClearArea", parent "Work", ti 0x1401c68d0,
+//   create 0x140029820 (MemAlloc(0x78) + ctor 0x1400e68d0); createInPlace = the
+//   imported Internal::CreateInPlaceObject (B8-13: the tree's in-place build kept)
+//   table 0x140161110, 13 slots:
+//   [0] 0x140029870 scalar deleting dtor (the dtor 0x1400e6810 + MemFree on &1)
+//   [1] 0x140029810 TypeName  [2] 0x140029800 Type  [3] 0x1400e6740 Persist
+//   [4] 0x1400e5ee0 Execute   [5] = Work (0x1400f7540)  [6] 0x1400e5e30 OnComplete
+//   [7] 0x1400e5e00 OnCancel  [8] 0x1400e6650 Cleanup   [9] 0x1400e5b10 Validate
+//   [10] 0x1400e6720 GetTarget  [11] 0x140029860 GetPriority (shared, 13 tables)
+//   [12] = Work (0x140006b10)
+//   ctors: 0x1400e68d0 (default); 0x1400e6960 (the parameterised one) is built BY
+//   HAND in clearareacomponent_states.cpp (block MI-A), which stamps 0x140161110 —
+//   that registration serves ClearArea::Vtable() (B38 D5).
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Work/Work.h"
+#include "Object/exe_type.h"
+
+namespace ClearAreaAddr {
+    constexpr uintptr_t Ctor         = 0x1400e68d0;
+    constexpr uintptr_t Vtable       = 0x140161110;
+    constexpr uintptr_t ScalarDtor   = 0x140029870;
+    constexpr uintptr_t BaseDtor     = 0x1400e6810;
+    constexpr uintptr_t Serialize    = 0x1400e6740;
+    constexpr uintptr_t Execute      = 0x1400e5ee0;
+    constexpr uintptr_t OnComplete   = 0x1400e5e30;
+    constexpr uintptr_t OnCancel     = 0x1400e5e00;
+    constexpr uintptr_t Cleanup      = 0x1400e6650;
+    constexpr uintptr_t Validate     = 0x1400e5b10;  // bug class 3 - unhookable
+    constexpr uintptr_t GetTarget    = 0x1400e6720;
+    constexpr uintptr_t GetPriority  = 0x140029860;  // 9 bytes - too small to hook
+}
+
+class ClearArea final : public Work {
+    DECLARE_EXE_TYPE(ClearArea)
+
+public:
+    ClearArea();                                                    // 0x1400e68d0
+
+    Object::Base* DeletingDtor(unsigned flags) override;            // [0]  0x140029870
+    void  Persist(void* stream) override;                           // [3]  0x1400e6740
+    int   Execute(void* actionStack, void* time, uint64_t arg3) override;  // [4]  0x1400e5ee0
+    int   OnComplete(void* citizen, void* treeEntry, int cellIndex) override;  // [6]  0x1400e5e30
+    int   OnCancel(void* citizen, void* treeEntry, int arg3) override;       // [7]  0x1400e5e00
+    int   Cleanup() override;                                       // [8]  0x1400e6650
+    int   Validate(void* citizenIBP) override;                      // [9]  0x1400e5b10
+    void* GetTarget(void* retbuf) override;                         // [10] 0x1400e6720
+    int   GetPriority() override;                                   // [11] 0x140029860
+
+    // --- ClearArea fields (+0x48) ---
+    void*    field_48;           // +0x48: BST root — entities to clear (InternalBasePtr tree nodes)
+    int32_t  field_50;           // +0x50: entity tree count
+    uint8_t  _pad54[4];          // +0x54: padding
+    void*    field_58;           // +0x58: BST root — cell indices to clear (int tree nodes)
+    int32_t  field_60;           // +0x60: cell tree count
+    uint8_t  _pad64[4];          // +0x64: padding
+    void*    field_68;           // +0x68: InternalBasePtr — map component entity
+    uint8_t  field_70;           // +0x70: bool — clear trees/resources
+    uint8_t  field_71;           // +0x71: bool — clear ground (version >= 1)
+    uint8_t  field_72;           // +0x72: bool — clear buildings (version >= 1)
+    uint8_t  _pad73[5];          // +0x73: padding
+
+protected:
+    ~ClearArea();                                                  // 0x1400e6810: frees both BSTs
+};
+
+static_assert(sizeof(ClearArea) == 0x78, "ClearArea is 0x78 (retail create MemAlloc)");
+static_assert(alignof(ClearArea) == 8, "ClearArea is 8-aligned");
+static_assert(offsetof(ClearArea, field_48) == 0x48, "ClearArea +0x48");
+static_assert(offsetof(ClearArea, field_50) == 0x50, "ClearArea +0x50");
+static_assert(offsetof(ClearArea, field_58) == 0x58, "ClearArea +0x58");
+static_assert(offsetof(ClearArea, field_60) == 0x60, "ClearArea +0x60");
+static_assert(offsetof(ClearArea, field_68) == 0x68, "ClearArea +0x68");
+static_assert(offsetof(ClearArea, field_70) == 0x70, "ClearArea +0x70");
+static_assert(offsetof(ClearArea, field_71) == 0x71, "ClearArea +0x71");
+static_assert(offsetof(ClearArea, field_72) == 0x72, "ClearArea +0x72");

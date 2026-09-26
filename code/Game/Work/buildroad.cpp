@@ -8,7 +8,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "BuildActions.h"
+#include "Work/BuildRoad.h"
+#include "buildroad_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
 #include "resolve.h"
@@ -19,115 +20,30 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 // ============================================================
-// Local function pointers resolved at init time
-// (NOT in engine_funcs.h — BuildRoad-specific helpers)
+// Helpers this file reaches (ENDGAME B.3.8, B38_RULES D7)
 // ============================================================
-
-// Object::Internal::Internal(this) — via IAT at 0x140152768
-static void* (*s_fn_ObjectInternal_Ctor)(void* self) = nullptr;
-
-// Object::Internal::~Internal(this) — via IAT at 0x140152770
-static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
-
-// Work::Serialize(this, stream) — base class serialize at 0x1400f7400
-static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
-
-// FUN_1400f7100 — Work::ValidateTask helper (checks if assigned task still valid)
-static uint8_t (*s_fn_Work_ValidateTask)(void* self, void* param2, void* ibp, void** outTask) = nullptr;
-
-// FUN_1400c5400 — task list cleanup (removes pending work entries)
-static void (*s_fn_TaskListCleanup)(void* taskList) = nullptr;
-
-// TypeId at DAT_1401c7158 — used for IsDerivedFrom check in Serialize
-static uint32_t* s_typeId_1401c7158 = nullptr;
-
-static bool s_buildroad_funcs_resolved = false;
-
-// ============================================================
-// Resolution — called once from Install
-// ============================================================
-bool BuildRoad_ResolveFuncs() {
-    if (s_buildroad_funcs_resolved) return true;
-
-    // Object::Internal ctor/dtor via IAT
-    uintptr_t iatCtor = ResolveAddr(Module::Exe, 0x140152768);
-    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatCtor) s_fn_ObjectInternal_Ctor = *reinterpret_cast<void*(**)(void*)>(iatCtor);
-    if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
-
-    // Work::Serialize
-    s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
-
-    // fn_ExternalPtr_BuildSerialize (FUN_140002340) — already in engine_funcs.h
-
-    // Work::ValidateTask (FUN_1400f7100)
-    s_fn_Work_ValidateTask = reinterpret_cast<uint8_t(*)(void*, void*, void*, void**)>(
-        ResolveAddr(Module::Exe, 0x1400f7100));
-
-    // Task list cleanup (FUN_1400c5400)
-    s_fn_TaskListCleanup = reinterpret_cast<void(*)(void*)>(
-        ResolveAddr(Module::Exe, 0x1400c5400));
-
-    // TypeId for IsDerivedFrom check
-    s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7158));
-
-    bool ok = s_fn_ObjectInternal_Ctor && s_fn_ObjectInternal_Dtor &&
-              s_fn_Work_Serialize &&
-              fn_ExternalPtr_BuildSerialize && s_fn_Work_ValidateTask &&
-              s_fn_TaskListCleanup && s_typeId_1401c7158 &&
-              fn_InternalBasePtr_Ctor &&
-              fn_IsDerivedFrom && fn_MemFreeStatic &&
-              g_pGameWorldSingleton;
-
-#ifdef _DEBUG
-    printf("[BuildRoad] ResolveFuncs: ObjCtor=%p ObjDtor=%p WorkSer=%p\n",
-           (void*)s_fn_ObjectInternal_Ctor, (void*)s_fn_ObjectInternal_Dtor,
-           (void*)s_fn_Work_Serialize);
-    printf("[BuildRoad]   ExtBuildSer=%p ValidateTask=%p TaskClean=%p\n",
-           (void*)fn_ExternalPtr_BuildSerialize, (void*)s_fn_Work_ValidateTask,
-           (void*)s_fn_TaskListCleanup);
-    printf("[BuildRoad]   typeId=%p GameWorld=%p\n",
-           (void*)s_typeId_1401c7158,
-           g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
-    if (!ok) printf("[BuildRoad] ERROR: some function pointers not resolved!\n");
-#endif
-
-    s_buildroad_funcs_resolved = ok;
-    return ok;
-}
+// The file used to keep six function-pointer statics filled by a lazy, non-atomic
+// `BuildRoad_ResolveFuncs()` (called from the factory, the 8-argument ctor door and
+// the dtor — i.e. from both the loader and the main thread). Every one is gone:
+//   Object::Internal ctor/dtor (IAT 0x140152768/70) -> the compiler's base chain
+//   Work::Serialize 0x1400f7400                     -> Work::Persist (qualified)
+//   Work::ValidateTask 0x1400f7100                  -> WorkBase_ValidateTask_f7100
+//   task-list cleanup 0x1400c5400                   -> WorkBase_TaskListCleanup_c5400
+//     (both ported in work_base_reimpl.cpp and registered at those addresses by
+//      standalone/reg_work_base.cpp — the function ResolveAddr answered)
+//   type-id cell 0x1401c7158 (CitizenComponent)     -> read where it is used
+extern uint8_t WorkBase_ValidateTask_f7100(void* self, void* citizenAI, void* taskIBP, void** out);
+extern void    WorkBase_TaskListCleanup_c5400(void* self);
 
 // ============================================================
 // Constructor (0x1400e4ad0)
-// Object::Internal::Internal() -> Work fields -> BuildRoad vtable + fields
+// Object::Internal::Internal() -> Work fields -> BuildRoad vtable + fields. The two
+// stamps are the compiler's. +0x60..+0x68 are not written (retail's ctor leaves
+// them to Persist / the 8-argument ctor, as the old C ctor did).
 // ============================================================
-void* BuildRoad_Ctor_Impl(BuildRoad* self) {
-    s_fn_ObjectInternal_Ctor(self);
-
-    // Work base fields
-    self->vtable = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::WorkVtable);
-    self->field_10 = nullptr;
-    self->field_18 = nullptr;
-    self->field_20 = -1;
-    self->field_24 = 0;
-    self->field_28 = -1;
-    self->field_2c = 0;
-    self->field_30 = nullptr;
-    self->field_38 = nullptr;
-    self->field_40 = 0;
-
-    // Set BuildRoad vtable
-    self->vtable = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::Vtable);
-
-    // BuildRoad fields
-    self->field_48 = nullptr;
-    self->field_50 = nullptr;
-    self->field_58 = -1;
-    self->field_5c = 2;
-
-    return self;
-}
+BuildRoad::BuildRoad()
+    : Work(),
+      field_48(nullptr), field_50(nullptr), field_58(-1), field_5c(2) {}
 
 // ============================================================
 // Parameterised constructor (0x1400e4b50)
@@ -137,62 +53,43 @@ void* BuildRoad_Ctor_Impl(BuildRoad* self) {
 //
 // Retail copies *ownerIbp into a LOCAL and passes that local to Work_Ctor25 — the
 // caller's IBP is not handed over directly, and 9c960 goes on to reuse its copy for the
-// pending-road BST insert. Keep the copy.
+// pending-road BST insert. Work(void*) reads the value once and never writes through
+// the pointer, so the caller's copy is untouched either way.
 // ============================================================
+BuildRoad::BuildRoad(uint64_t* ownerIbp, uint32_t cellIdx, uint32_t mapDescVal,
+                     uint64_t roadDescExtra, uint32_t roadTypeExisting,
+                     uint32_t roadState, uint32_t terrainType)
+    : Work(ownerIbp),
+      field_48(nullptr),
+      field_50(reinterpret_cast<void*>(roadDescExtra)),
+      field_58(static_cast<int32_t>(cellIdx)),
+      field_5c(static_cast<int32_t>(mapDescVal)),
+      field_60(static_cast<int32_t>(roadTypeExisting)),
+      field_64(static_cast<int32_t>(roadState)),
+      field_68(static_cast<int32_t>(terrainType)) {
+    field_28 = static_cast<int32_t>(cellIdx);   // retail also mirrors the cell into the Work base
+}
+
+// The by-address door RoadTool's commit path calls (roadtool_calcpath.cpp resolves
+// 0x1400e4b50): the real ctor on the caller's memory (B8-5 — the same bytes).
 void* BuildRoad_CtorParams_Impl(BuildRoad* self, uint64_t* ownerIbp, uint32_t cellIdx,
                                 uint32_t mapDescVal, uint64_t roadDescExtra,
                                 uint32_t roadTypeExisting, uint32_t roadState,
                                 uint32_t terrainType) {
     if (!self) return nullptr;
-    BuildRoad_ResolveFuncs();   // this ctor path bypasses the factory; wire the statics now
-
-    typedef void* (*fn_WorkCtor25_t)(void*, void*);
-    static fn_WorkCtor25_t s_fn_WorkCtor25 = nullptr;
-    if (!s_fn_WorkCtor25)
-        s_fn_WorkCtor25 = (fn_WorkCtor25_t)ResolveAddr(Module::Exe, 0x1400f72e0);
-    if (!s_fn_WorkCtor25) return nullptr;
-
-    uint64_t ownerCopy = ownerIbp ? *ownerIbp : 0;
-    s_fn_WorkCtor25(self, &ownerCopy);
-
-    self->vtable    = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::Vtable);
-    self->field_48  = nullptr;
-    self->field_50  = (void*)roadDescExtra;
-    self->field_58  = (int32_t)cellIdx;
-    self->field_5c  = (int32_t)mapDescVal;
-    self->field_60  = (int32_t)roadTypeExisting;
-    self->field_64  = (int32_t)roadState;
-    self->field_68  = (int32_t)terrainType;
-    self->field_28  = (int32_t)cellIdx;   // retail also mirrors the cell into the Work base
-
-    return self;
+    return static_cast<Object::Base*>(new (static_cast<void*>(self)) BuildRoad(
+        ownerIbp, cellIdx, mapDescVal, roadDescExtra, roadTypeExisting, roadState, terrainType));
 }
 
 // ============================================================
-// ScalarDtor (0x1400295b0)
-// Set vtables to BuildRoad then Work, call ~Internal, optionally free.
+// ScalarDtor (0x1400295b0) — slot 0
+// Set vtables to BuildRoad then Work, call ~Internal, optionally free. ~BuildRoad has
+// no body; the compiler chains ~Work -> ~Internal (the two stamps are its own).
 // ============================================================
-void* BuildRoad_ScalarDtor_Impl(BuildRoad* self, uint32_t flags) {
-    // Lazy resolve: RoadTool's commit path constructs via BuildRoad_CtorParams_Impl
-    // (registered at 0x1400e4b50), NOT the factory — so nothing has run
-    // BuildRoad_ResolveFuncs yet and s_fn_ObjectInternal_Dtor was null here
-    // (CALL 0 when the first completed road work item was released).
-    BuildRoad_ResolveFuncs();
-    // Set BuildRoad vtable (for correct virtual dispatch during destruction)
-    self->vtable = (void*)ResolveAddr(Module::Exe, BuildRoadAddr::Vtable);
-    // Set Work vtable (base class destructor phase). 0x140161a80 IS registered now —
-    // RegisterWorkBaseVtable() (code/Game/Work/work_base_standalone.cpp) is called from
-    // RegisterWorkBaseBatch() — so this branch is taken. The guard is kept only because
-    // this dtor can run before that batch on the direct-construction path.
-    if (uintptr_t wv = ResolveAddr(Module::Exe, BuildRoadAddr::WorkVtable))
-        self->vtable = (void*)wv;
-    // Call Object::Internal::~Internal
-    if (s_fn_ObjectInternal_Dtor) s_fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+Object::Base* BuildRoad::DeletingDtor(unsigned flags) {
+    this->~BuildRoad();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -201,9 +98,9 @@ void* BuildRoad_ScalarDtor_Impl(BuildRoad* self, uint32_t flags) {
 // Serializes: road type (+0x5c via stream vtable +0x98), cell index (+0x58),
 //   entity ref (+0x48), building desc (+0x50), material fields (+0x60..+0x68)
 // ============================================================
-void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
-    // Call base Work::Serialize
-    s_fn_Work_Serialize(self, stream);
+void BuildRoad::Persist(void* stream) {
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create IO::Serializer with version 1
     alignas(8) uint8_t serializerBuf[24];
@@ -214,37 +111,40 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
     // +0x98 is rw_vtbl::kScalarUInt. The old two-argument call form left the
     // `const char* name` register unset; every retail body ignores it, so
     // passing nullptr is wire-identical.
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(&self->field_5c), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(&field_5c), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize cell index (+0x58) via IO::Serializer::Serialize
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_58), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_58), nullptr);   // B.3.4 bridge
 
     // InternalBasePtr::Serialize for entity ref (+0x48)
-    reinterpret_cast<Object::InternalBasePtr*>(&self->field_48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
+    reinterpret_cast<Object::InternalBasePtr*>(&field_48)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Validate entity ref type after deserialize
-    if (self->field_48 != nullptr) {
-        bool valid = fn_IsDerivedFrom(self->field_48, *s_typeId_1401c7158);
+    if (field_48 != nullptr) {
+        // TypeId at DAT_1401c7158 (CitizenComponent), read through the registry cell.
+        const uint32_t* typeId_1401c7158 = reinterpret_cast<const uint32_t*>(
+            ResolveAddr(Module::Exe, 0x1401c7158));
+        bool valid = fn_IsDerivedFrom(field_48, *typeId_1401c7158);
         if (!valid) {
-            self->field_48 = nullptr;
+            field_48 = nullptr;
         }
     }
 
     // ExternalPtr serialize for building description (+0x50)
-    fn_ExternalPtr_BuildSerialize(&self->field_50, serializerBuf);
+    fn_ExternalPtr_BuildSerialize(&field_50, serializerBuf);
 
     // Version-dependent fields
     int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
     if (version < 1) {
         // Default values for old save format
-        self->field_60 = 0xff;
-        self->field_64 = 0;
-        self->field_68 = 2;
+        field_60 = 0xff;
+        field_64 = 0;
+        field_68 = 2;
     } else {
         // Serialize material fields
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_60), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_64), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_68), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_60), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_64), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_68), nullptr);   // B.3.4 bridge
     }
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
@@ -254,11 +154,11 @@ void BuildRoad_Serialize_Impl(BuildRoad* self, void* stream) {
 // OnComplete (0x1400e4150) — slot 6
 // Clears target entity ref, returns (param4 == 1).
 // ============================================================
-int BuildRoad_OnComplete_Impl(BuildRoad* self, void* /*param2*/, void* /*param3*/, int param4) {
+int BuildRoad::OnComplete(void* /*citizen*/, void* /*arg2*/, int param4) {
     // Clear entity ref: InternalBasePtr_Ctor(temp, NULL) then store to +0x48
     uintptr_t temp = 0;
     new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    self->field_48 = (void*)temp;
+    field_48 = (void*)temp;
 
     return (param4 == 1) ? 1 : 0;
 }
@@ -267,10 +167,10 @@ int BuildRoad_OnComplete_Impl(BuildRoad* self, void* /*param2*/, void* /*param3*
 // OnCancel (0x1400e4120) — slot 7
 // Clears target entity ref.
 // ============================================================
-int BuildRoad_OnCancel_Impl(BuildRoad* self) {
+int BuildRoad::OnCancel(void*, void*, int) {
     uintptr_t temp = 0;
     new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    self->field_48 = (void*)temp;
+    field_48 = (void*)temp;
     return 0;
 }
 
@@ -279,15 +179,15 @@ int BuildRoad_OnCancel_Impl(BuildRoad* self) {
 // If target entity exists, clean up its pending task list.
 // Walks entity -> +0x278 (StateMachineComponent) -> +0x48 (task list)
 // ============================================================
-int BuildRoad_Cleanup_Impl(BuildRoad* self) {
-    if (self->field_48 == nullptr) return 0;
+int BuildRoad::Cleanup() {
+    if (field_48 == nullptr) return 0;
 
-    uintptr_t entity = (uintptr_t)self->field_48;
+    uintptr_t entity = (uintptr_t)field_48;
 
     uintptr_t smComp = *(uintptr_t*)(entity + 0x278);
 
     // Call task list cleanup: FUN_1400c5400(smComp + 0x48)
-    s_fn_TaskListCleanup((void*)(smComp + 0x48));
+    WorkBase_TaskListCleanup_c5400((void*)(smComp + 0x48));
     return 0;
 }
 
@@ -296,18 +196,18 @@ int BuildRoad_Cleanup_Impl(BuildRoad* self) {
 // Checks if the assigned task (from field_48) is still valid.
 // Uses shared Work::ValidateTask helper (FUN_1400f7100).
 // ============================================================
-int BuildRoad_Validate_Impl(BuildRoad* self, void* param2) {
-    uintptr_t entityRef = (uintptr_t)self->field_48;
+int BuildRoad::Validate(void* param2) {
+    uintptr_t entityRef = (uintptr_t)field_48;
 
     if (entityRef != 0) {
         // Call shared validate helper with entity ref
         uintptr_t ibpCopy[1] = { entityRef };
-        uint8_t result = s_fn_Work_ValidateTask(self, param2, ibpCopy, nullptr);
+        uint8_t result = WorkBase_ValidateTask_f7100(this, param2, ibpCopy, nullptr);
         if (result == 0) {
             // Task invalid — clear entity ref
             uintptr_t temp = 0;
             new (&temp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            self->field_48 = (void*)temp;
+            field_48 = (void*)temp;
             return 0;
         }
     }
@@ -320,7 +220,7 @@ int BuildRoad_Validate_Impl(BuildRoad* self, void* param2) {
 // Uses hidden return pointer (member function ABI: RCX=this, RDX=retbuf).
 // NOT HOOKED — RIP-relative prologue (bug class 2).
 // ============================================================
-void* BuildRoad_GetTarget_Impl(BuildRoad* /*self*/, void* retbuf) {
+void* BuildRoad::GetTarget(void* retbuf) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t roadMgr = *(uintptr_t*)(gameWorld + 0xb0);
     *(uintptr_t*)retbuf = *(uintptr_t*)(roadMgr + 0x38);
@@ -332,8 +232,8 @@ void* BuildRoad_GetTarget_Impl(BuildRoad* /*self*/, void* retbuf) {
 // Returns true (1) if field_48 is non-null, false (0) otherwise.
 // NOT HOOKED — only 10 bytes total, too small.
 // ============================================================
-int BuildRoad_GetPriority_Impl(BuildRoad* self) {
-    return (self->field_48 != nullptr) ? 1 : 0;
+int BuildRoad::GetPriority() {
+    return (field_48 != nullptr) ? 1 : 0;
 }
 
 // ============================================================
@@ -405,8 +305,8 @@ long long g_brExecNatResWait   = 0;   // blocked by a natural resource (tree/sto
 long long g_brExecClearPath    = 0;   // the plain "walk there and build it" branch
 }
 
-int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
-    if (self->field_48 != nullptr) {
+int BuildRoad::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    if (field_48 != nullptr) {
         return 1;
     }
 
@@ -418,7 +318,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
     uint32_t heightU32 = *(uint32_t*)(posData + 0x160);
     int cellIndex = PosToCellIndex(mapGrid, posData);
 
-    int targetCell = self->field_58;
+    int targetCell = field_58;
 
     uint64_t passResult = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)cellIndex, targetCell);
     if ((char)passResult == '\0') {
@@ -489,13 +389,13 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         uint64_t citizenRef = *(uint64_t*)entityIBP;
 
         fn_PerformWork_Action_Ctor3(
-            &citizenRef, self->field_20, &targetRef, terrainPos, 0, 0);
+            &citizenRef, field_20, &targetRef, terrainPos, 0, 0);
 
-        int priority = self->field_20;
-        return FinalizeAction(self, entityIBP, &targetRef, priority);
+        int priority = field_20;
+        return FinalizeAction(this, entityIBP, &targetRef, priority);
     }
 
-    if ((int64_t)self->field_50 == 0) {
+    if ((int64_t)field_50 == 0) {
         ++g_brExecClearPath;
         uint64_t actionRef = 0;
         new (&actionRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -509,13 +409,13 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         uint64_t citizenRef = *(uint64_t*)entityIBP;
 
         fn_PerformWork_Action_Ctor(
-            &citizenRef, self->field_20, (void*)terrainPos,
+            &citizenRef, field_20, (void*)terrainPos,
             (uint64_t)(uint32_t)targetCell,
-            *(uint32_t*)((uintptr_t)self + 0x5c), 0xff, 1, 0, 0,
+            *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1, 0, 0,
             velocity, &actionRef);
 
-        int priority = self->field_20;
-        return FinalizeAction(self, entityIBP, &actionRef, priority);
+        int priority = field_20;
+        return FinalizeAction(this, entityIBP, &actionRef, priority);
 
     } else {
         uint64_t homeEntity = *(uint64_t*)(*(uintptr_t*)entityIBP + 0x10);
@@ -523,7 +423,7 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
         uint64_t storageComp = 0;
         fn_FindComponent_Storage((void*)(uintptr_t)homeEntity, &storageComp);
 
-        int available = fn_BuildRoad_QueryStorage(storageComp, (int64_t)self->field_50);
+        int available = fn_BuildRoad_QueryStorage(storageComp, (int64_t)field_50);
 
         if (available > 0) {
             uint64_t actionRef = 0;
@@ -538,13 +438,13 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 
             fn_PerformWork_Action_Ctor(
-                &citizenRef, self->field_20, (void*)terrainPos,
+                &citizenRef, field_20, (void*)terrainPos,
                 (uint64_t)(uint32_t)targetCell,
-                *(uint32_t*)((uintptr_t)self + 0x5c), 0xff, 1,
-                (int64_t)self->field_50, 0, velocity, &actionRef);
+                *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1,
+                (int64_t)field_50, 0, velocity, &actionRef);
 
-            int priority = self->field_20;
-            return FinalizeAction(self, entityIBP, &actionRef, priority);
+            int priority = field_20;
+            return FinalizeAction(this, entityIBP, &actionRef, priority);
 
         } else {
             mapGrid = *(int**)(gameWorld + 0xf8);
@@ -562,12 +462,12 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
             fn_FindStorageForResource(
                 citizenList, &foundEntity,
                 mapSize * ((cellIndex / mapSize)) + (cellIndex % mapSize),
-                (int64_t)self->field_50, 1, '\0', velocity, &foundStorageIBP);
+                (int64_t)field_50, 1, '\0', velocity, &foundStorageIBP);
 
-            // 0x140006330 — scans the RawMaterialDescription list for self->field_50's
+            // 0x140006330 — scans the RawMaterialDescription list for field_50's
             // entry. This is NOT the entity component finder (0x1400223c0) used above;
             // both were called fn_FindComponent_RawMaterialC before the rename.
-            fn_FindDescription_RawMaterial((int64_t)self->field_50, &foundStorageIBP);
+            fn_FindDescription_RawMaterial((int64_t)field_50, &foundStorageIBP);
 
             if (foundEntity == 0) {
                 return 1;
@@ -590,62 +490,48 @@ int BuildRoad_Execute(BuildRoad* self, void* entityIBP) {
             uint64_t citizenRef = *(uint64_t*)entityIBP;
 
             fn_PerformWork_Action_Ctor(
-                &citizenRef, self->field_20, (void*)terrainPos,
+                &citizenRef, field_20, (void*)terrainPos,
                 (uint64_t)(uint32_t)targetCell,
-                *(uint32_t*)((uintptr_t)self + 0x5c), 0xff, 1,
-                (int64_t)self->field_50, 1, velocity, &foundStorageIBP);
+                *(uint32_t*)((uintptr_t)this + 0x5c), 0xff, 1,
+                (int64_t)field_50, 1, velocity, &foundStorageIBP);
 
-            int priority = self->field_20;
-            return FinalizeAction(self, entityIBP, &foundStorageIBP, priority);
+            int priority = field_20;
+            return FinalizeAction(this, entityIBP, &foundStorageIBP, priority);
         }
     }
 }
 
 // ============================================================
-// Standalone factory + vtable — Work family keystone (factory cascade).
-// Vtable @ 0x140161020 (13 slots), size 0x70, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// Before: a hand-built 13-slot `g_BuildRoad_Vtable` (slot 1 answered null, slot 2 a
+// lazily cached id) registered at 0x140161020, and REGISTER_TYPE over
+// BuildRoad_Factory / BuildRoad_CreateInPlace. Nothing outside this file reads
+// 0x140161020 back (sweep by hex and by BuildRoadAddr::Vtable), so the table's
+// registration goes with it.
 
-static uint32_t BuildRoad_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("BuildRoad");
-    return c;
+// create 0x140029560: MemAlloc(0x70, 8), then the ctor 0x1400e4ad0.
+void* BuildRoad::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BuildRoad), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) BuildRoad());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* BuildRoad::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) BuildRoad());
 }
 
-static void* g_BuildRoad_Vtable[13] = {
-    (void*)&BuildRoad_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                 // +0x08 slot1 (null)
-    (void*)&BuildRoad_GetTypeId,        // +0x10 GetTypeId
-    (void*)&BuildRoad_Serialize_Impl,   // +0x18 Serialize
-    (void*)&BuildRoad_Execute,          // +0x20 Execute
-    (void*)&Work_Slot5,                 // +0x28 slot5 (returns 0)
-    (void*)&BuildRoad_OnComplete_Impl,  // +0x30 OnComplete
-    (void*)&BuildRoad_OnCancel_Impl,    // +0x38 OnCancel
-    (void*)&BuildRoad_Cleanup_Impl,     // +0x40 Cleanup
-    (void*)&BuildRoad_Validate_Impl,    // +0x48 Validate
-    (void*)&BuildRoad_GetTarget_Impl,   // +0x50 GetTarget
-    (void*)&BuildRoad_GetPriority_Impl, // +0x58 GetPriority
-    (void*)&Work_Slot12,                // +0x60 slot12 (void nop)
-};
+DEFINE_EXE_VTABLE(BuildRoad, "_ZTV9BuildRoad")
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
 
 extern "C" void RegisterBuildRoadVtable() {
     // The parameterised ctor RoadTool's commit path calls by address (FUN_14009c960).
     // Unregistered it resolved to 0, so every road segment posted a NULL work item and
     // faulted inside the work scheduler.
-    RegisterExeAddr(0x1400e4b50, (uintptr_t)&BuildRoad_CtorParams_Impl);
-    RegisterExeAddr(0x140161020, (uintptr_t)g_BuildRoad_Vtable);
+    RegisterExeAddr(BuildRoadAddr::CtorParams, (uintptr_t)&BuildRoad_CtorParams_Impl);
 }
-extern "C" void* BuildRoad_CreateInPlace(void* mem) {
-    BuildRoad_ResolveFuncs();
-    return BuildRoad_Ctor_Impl((BuildRoad*)mem);
-}
-extern "C" void* BuildRoad_Factory(void) {
-    BuildRoad_ResolveFuncs();
-    void* p = Work_Alloc(0x70);
-    return p ? BuildRoad_Ctor_Impl((BuildRoad*)p) : nullptr;
-}
-REGISTER_TYPE(BuildRoad, "Work", &BuildRoad_Factory, &BuildRoad_CreateInPlace);
+DEFINE_EXE_TYPE(BuildRoad, "Work")
