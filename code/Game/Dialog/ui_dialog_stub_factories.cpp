@@ -1669,7 +1669,8 @@ REGISTER_TYPE(BuildUI, "UI::DialogController",
 
 // ---- DialogInstance family --------------------------------------------------
 UI_DIALOG_STUB(AchievementDialog,   "UI::DialogInstance",   0xD0);
-UI_DIALOG_STUB(AutoSaveDialog,      "UI::DialogInstance",   0xD0);
+// AutoSaveDialog: its UI_DIALOG_STUB twin was a DUPLICATE registration of the name
+// (ENDGAME B.3.8 D4); the real class registers in autosavedialog.cpp.
 // EventNotifyDialog / EventPopupDialog: PROMOTED to real per-class standalone vtables
 // in code/Game/Dialog/eventnotifydialog.cpp / eventpopupdialog.cpp (ribbon + modal popup).
 UI_DIALOG_STUB(FollowDialog,        "UI::DialogInstance",   0xD8);
