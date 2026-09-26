@@ -8,7 +8,10 @@
 //   UI::GroupElement             : Element             0xc0  12 slots
 //   UI::PageElement              : GroupElement        0xc8  12 slots
 //   UI::RadioElement             : GroupElement        0xd8  12 slots
-//   (Image / AnimatedImage appended below with their commit)
+//   UI::ImageDescription         : ElementDescription  0x80  10 slots
+//   UI::AnimatedImageDescription : ImageDescription    0x98  10 slots
+//   UI::ImageElement             : Element             0xe0  12 slots
+//   UI::AnimatedImageElement     : ImageElement        0x100 12 slots
 //
 // Built to the contract of ui_element_abi_test.cpp (block A); only what
 // differs is spelled out.
@@ -39,6 +42,10 @@
 #include "runtime/types/ui/PageElement.h"
 #include "runtime/types/ui/RadioDescription.h"
 #include "runtime/types/ui/RadioElement.h"
+#include "runtime/types/ui/ImageDescription.h"
+#include "runtime/types/ui/ImageElement.h"
+#include "runtime/types/ui/AnimatedImageDescription.h"
+#include "runtime/types/ui/AnimatedImageElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -148,6 +155,19 @@ struct RadioDescriptionProbe final : UI::RadioDescription {
     Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 
+struct ImageElementProbe final : UI::ImageElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct AnimatedImageElementProbe final : UI::AnimatedImageElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct ImageDescriptionProbe final : UI::ImageDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct AnimatedImageDescriptionProbe final : UI::AnimatedImageDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+
 struct BareExternalProbe final : Object::External {
     Object::Base* DeletingDtor(unsigned) override { return this; }
     int32_t GetFileVersion() const override { return 0; }
@@ -247,6 +267,69 @@ Object::InternalPtr<Element>* RadioDescription::CreateInstance(
 }
 Object::External* RadioDescription::Construct() { Note(this, kRadioD, 9); return this; }
 RadioDescription::~RadioDescription() {}
+
+// ---- ImageElement ----
+const char* ImageElement::TypeName() const { Note(this, kImageE, 1); return "ImageElement"; }
+uint32_t ImageElement::Type() const { Note(this, kImageE, 2); return 0x1Eu; }
+void ImageElement::ComputeSize() { Note(this, kImageE, 4); }
+void ImageElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
+    Note(this, kImageE, 5, (long long)x * 1000 + h);
+}
+void ImageElement::Draw(SpriteContext&, uint8_t alpha) const { Note(this, kImageE, 6, alpha); }
+ImageElement::~ImageElement() {}
+
+// ---- AnimatedImageElement ----
+const char* AnimatedImageElement::TypeName() const { Note(this, kAnimE, 1); return "AnimatedImageElement"; }
+uint32_t AnimatedImageElement::Type() const { Note(this, kAnimE, 2); return 0xA1u; }
+void AnimatedImageElement::Update(const System::Time&, UserInterface*,
+                                  Object::InternalPtr<DialogInstance>* dialog,
+                                  const UpdateState& state) {
+    Note(this, kAnimE, 7,
+         static_cast<long long>(reinterpret_cast<intptr_t>(dialog->Get())) + state.mouseX);
+}
+AnimatedImageElement::~AnimatedImageElement() {}
+
+// ---- ImageDescription (+ the non-virtual applier, marker slot 80) ----
+const char* ImageDescription::TypeName() const { Note(this, kImageD, 1); return "ImageDescription"; }
+uint32_t ImageDescription::Type() const { Note(this, kImageD, 2); return 0x1Du; }
+int32_t ImageDescription::GetFileVersion() const { Note(this, kImageD, 3); return 0x204; }
+bool ImageDescription::Serialize(void* stream) {
+    Note(this, kImageD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+}
+Object::External* ImageDescription::Reconstruct() { Note(this, kImageD, 6); return this; }
+void ImageDescription::Destruct() { Note(this, kImageD, 7); }
+Object::InternalPtr<Element>* ImageDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    Note(this, kImageD, 8, reinterpret_cast<intptr_t>(dialog));
+    return WriteMarkerHandle(ret, 0x1D1D1D1D);
+}
+void ImageDescription::CreateInstance(Object::InternalPtr<ImageElement>* element) const {
+    Note(this, kImageD, 80, reinterpret_cast<intptr_t>(element->Get()));
+}
+Object::External* ImageDescription::Construct() { Note(this, kImageD, 9); return this; }
+ImageDescription::~ImageDescription() {}
+
+// ---- AnimatedImageDescription — Serialize and slot 8 call the parent QUALIFIED.
+const char* AnimatedImageDescription::TypeName() const { Note(this, kAnimD, 1); return "AnimatedImageDescription"; }
+uint32_t AnimatedImageDescription::Type() const { Note(this, kAnimD, 2); return 0xADu; }
+int32_t AnimatedImageDescription::GetFileVersion() const { Note(this, kAnimD, 3); return 0x10204; }
+bool AnimatedImageDescription::Serialize(void* stream) {
+    Note(this, kAnimD, 5, reinterpret_cast<intptr_t>(stream));
+    return ImageDescription::Serialize(stream);
+}
+Object::External* AnimatedImageDescription::Reconstruct() { Note(this, kAnimD, 6); return this; }
+void AnimatedImageDescription::Destruct() { Note(this, kAnimD, 7); }
+Object::InternalPtr<Element>* AnimatedImageDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    Note(this, kAnimD, 8, reinterpret_cast<intptr_t>(dialog));
+    // The name-hidden applier, reached QUALIFIED as the real body does.
+    Object::InternalPtr<ImageElement> slot(
+        reinterpret_cast<ImageElement*>(static_cast<uintptr_t>(0xA1A1A1A1)));
+    ImageDescription::CreateInstance(&slot);
+    return WriteMarkerHandle(ret, 0xA1A1A1A1);
+}
+Object::External* AnimatedImageDescription::Construct() { Note(this, kAnimD, 9); return this; }
+AnimatedImageDescription::~AnimatedImageDescription() {}
 
 }  // namespace UI
 
@@ -470,4 +553,121 @@ UNIT_TEST(ui_leaf_c2_page_serialize_qualified_does_not_reenter) {
     CHECK_EQ(g_trail[1], kGroupD * 100 + 5);   // …then the PARENT's, not the door again
 
     *reinterpret_cast<const void* const**>(raw) = real;
+}
+
+// ===========================================================================
+// The Image chain (commit 2)
+// ===========================================================================
+UNIT_TEST(ui_leaf_c2_image_chain_sizes_match_retail) {
+    CHECK_EQ(sizeof(UI::ImageDescription),         (size_t)0x80);    // 0x1800361f0
+    CHECK_EQ(sizeof(UI::AnimatedImageDescription), (size_t)0x98);    // 0x1800369e0
+    CHECK_EQ(sizeof(UI::ImageElement),             (size_t)0xe0);    // 0x180036600
+    CHECK_EQ(sizeof(UI::AnimatedImageElement),     (size_t)0x100);   // 0x180036db0
+    CHECK_EQ(alignof(UI::ImageDescription),         (size_t)8);
+    CHECK_EQ(alignof(UI::AnimatedImageDescription), (size_t)8);
+    CHECK_EQ(alignof(UI::ImageElement),             (size_t)8);
+    CHECK_EQ(alignof(UI::AnimatedImageElement),     (size_t)8);
+
+    CHECK_EQ(offsetof(UI::ImageDescription, _spriteSheet), (size_t)0x68);
+    CHECK_EQ(offsetof(UI::ImageDescription, _spriteName),  (size_t)0x70);
+    CHECK_EQ(offsetof(UI::ImageDescription, _width),       (size_t)0x78);
+    CHECK_EQ(offsetof(UI::ImageDescription, _height),      (size_t)0x7c);
+    CHECK_EQ(offsetof(UI::AnimatedImageDescription, _frameNames),      (size_t)0x80);
+    CHECK_EQ(offsetof(UI::AnimatedImageDescription, _framesPerSecond), (size_t)0x90);
+    CHECK_EQ(offsetof(UI::ImageElement, _sprite),   (size_t)0xc0);
+    CHECK_EQ(offsetof(UI::ImageElement, _rotation), (size_t)0xd0);
+    CHECK_EQ(offsetof(UI::ImageElement, _width),    (size_t)0xd4);
+    CHECK_EQ(offsetof(UI::ImageElement, _height),   (size_t)0xd8);
+    CHECK_EQ(offsetof(UI::AnimatedImageElement, _frames),          (size_t)0xe0);
+    CHECK_EQ(offsetof(UI::AnimatedImageElement, _framesPerSecond), (size_t)0xf0);
+    CHECK_EQ(offsetof(UI::AnimatedImageElement, _accumTicks),      (size_t)0xf8);
+    CHECK_EQ(sizeof(UI::Sprite), (size_t)0x10);   // held by value at +0xc0 (B6-10)
+
+    CHECK((std::is_base_of<UI::ElementDescription, UI::ImageDescription>::value));
+    CHECK((std::is_base_of<UI::ImageDescription,   UI::AnimatedImageDescription>::value));
+    CHECK((std::is_base_of<UI::Element,      UI::ImageElement>::value));
+    CHECK((std::is_base_of<UI::ImageElement, UI::AnimatedImageElement>::value));
+    CHECK(std::is_abstract<UI::ImageDescription>::value);
+    CHECK(std::is_abstract<UI::AnimatedImageDescription>::value);
+    CHECK(std::is_abstract<UI::ImageElement>::value);
+    CHECK(std::is_abstract<UI::AnimatedImageElement>::value);
+    CHECK(!std::has_virtual_destructor<UI::ImageElement>::value);
+    CHECK(!std::has_virtual_destructor<UI::AnimatedImageDescription>::value);
+}
+
+UNIT_TEST(ui_leaf_c2_image_descriptions_slot_order) {
+    ImageDescriptionProbe         image;
+    AnimatedImageDescriptionProbe anim;
+    CheckDescriptionOwnSlots(static_cast<void*>(&image), kImageD);
+    CheckDescriptionOwnSlots(static_cast<void*>(&anim),  kAnimD);
+
+    const void* const* vi = VTableOf(static_cast<void*>(&image));
+    const void* const* va = VTableOf(static_cast<void*>(&anim));
+    for (int i = 1; i <= 9; ++i) {
+        if (i == kD4_Compile / 8) CHECK(va[i] == vi[i]);
+        else                      CHECK(va[i] != vi[i]);
+    }
+
+    CheckSlot8Retslot(static_cast<void*>(&image), kImageD, 0x1D1D1D1D);
+
+    // AnimatedImageDescription's slot 8: retail order, and the name-hidden
+    // applier reached QUALIFIED (it lands in ImageDescription's marker, not
+    // back in slot 8).
+    void* raw = static_cast<void*>(&anim);
+    void* slot = nullptr;
+    Reset();
+    void** back = SlotAt<void** (*)(const void*, void**, const void*)>(
+        raw, kD8_CreateInstance)(raw, &slot, nullptr);
+    CHECK(back == &slot);
+    CHECK(slot == reinterpret_cast<void*>(static_cast<uintptr_t>(0xA1A1A1A1)));
+    CHECK_EQ(g_trailN, 2);
+    CHECK_EQ(g_trail[0], kAnimD * 100 + 8);
+    CHECK_EQ(g_trail[1], kImageD * 100 + 80);
+    CHECK_EQ(g_arg, 0xA1A1A1A1);
+}
+
+UNIT_TEST(ui_leaf_c2_image_elements_slot_order) {
+    FactoryScope scope;
+    BareElementProbe          base{};
+    ImageElementProbe         image{};
+    AnimatedImageElementProbe anim{};
+    void* im = static_cast<void*>(&image);
+    void* an = static_cast<void*>(&anim);
+
+    Reset(); SlotAt<const char* (*)(const void*)>(im, kE1_TypeName)(im);
+    CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 1);
+    Reset(); SlotAt<uint32_t (*)(const void*)>(im, kE2_Type)(im);
+    CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 2);
+    Reset(); SlotAt<void (*)(void*)>(im, kE4_ComputeSize)(im);
+    CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 4);
+    Reset(); SlotAt<void (*)(void*, int, int, int, int)>(im, kE5_ComputeLayout)(im, 3, 0, 0, 4);
+    CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 5); CHECK_EQ(g_arg, 3004);
+    Reset(); SlotAt<void (*)(const void*, void*, uint8_t)>(im, kE6_Draw)(im, nullptr, 9);
+    CHECK_EQ(g_who, (int)kImageE); CHECK_EQ(g_slot, 6); CHECK_EQ(g_arg, 9);
+
+    const void* const* vb = VTableOf(static_cast<void*>(&base));
+    const void* const* vi = VTableOf(im);
+    const void* const* va = VTableOf(an);
+    for (int i : {3, 7, 8, 9, 10, 11}) CHECK(vi[i] == vb[i]);
+    // AnimatedImageElement: ONLY Update (7) is its own among 3..11.
+    for (int i = 3; i <= 11; ++i) {
+        if (i == kE7_Update / 8) CHECK(va[i] != vi[i]);
+        else                     CHECK(va[i] == vi[i]);
+    }
+
+    Reset(); SlotAt<const char* (*)(const void*)>(an, kE1_TypeName)(an);
+    CHECK_EQ(g_who, (int)kAnimE); CHECK_EQ(g_slot, 1);
+    Reset(); SlotAt<uint32_t (*)(const void*)>(an, kE2_Type)(an);
+    CHECK_EQ(g_who, (int)kAnimE); CHECK_EQ(g_slot, 2);
+
+    void* handle = reinterpret_cast<void*>(static_cast<uintptr_t>(0x9000));
+    UI::Element::UpdateState state;
+    state.mouseX = 2;
+    Reset();
+    SlotAt<void (*)(void*, const void*, void*, void**, const void*)>(an, kE7_Update)(
+        an, nullptr, nullptr, &handle, &state);
+    CHECK_EQ(g_who, (int)kAnimE); CHECK_EQ(g_slot, 7);
+    CHECK_EQ(g_arg, 0x9000 + 2);
+
+    CHECK(static_cast<void*>(static_cast<UI::Element*>(&anim)) == an);
 }

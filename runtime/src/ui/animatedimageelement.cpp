@@ -17,30 +17,22 @@
 //    6    ImageElement::Draw           0x180118850  imageelement.cpp
 //    7    Update                       0x1800cb290  here
 //
-// plus ??0AnimatedImageElement@UI@@QEAA@XZ        0x1800cb3f0
-//      ??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z 0x180036c30
-//      ??1AnimatedImageElement@UI@@UEAA@XZ        0x1800cb3a0
+// plus ??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z 0x180036c30 (copy ctor, a DOOR)
+//      ??1AnimatedImageElement@UI@@UEAA@XZ        0x1800cb3a0 (a DOOR)
+// `??0AnimatedImageElement@UI@@QEAA@XZ` (0x1800cb3f0) is factory_ui1.cpp's.
 //
-// LAYOUT — 0x100 bytes, from the deleting destructor's `MOV EDX,0x100`
-// (0x180036de2) and confirmed field by field by the constructor at 0x1800cb3f0:
+// LAYOUT: runtime/types/ui/AnimatedImageElement.h — ImageElement (0xE0) plus
+// `_frames` (Array<Sprite>, +0xE0), `_framesPerSecond` (+0xF0, ctor 30) and
+// `_accumTicks` (+0xF8); sizeof 0x100. (The file-local constants this file
+// carried until B.3.6 moved there, RULE B6-8.)
 //
-//   0x000 .. 0x0df   UI::ImageElement
-//   0x0e0            Collection::Array<UI::Sprite>::_data
-//   0x0e8            ..._size        (the frame count)
-//   0x0ec            ..._capacity
-//   0x0f0  int32     frames per second; the constructor's default is 30 (0x1e)
-//   0x0f4            NEVER WRITTEN by the constructor
-//   0x0f8  int64     accumulated ticks
-//
-// There is no type header for this class: every offset above is cited at its
-// use below, which is the same standard runtime/src/ui/widgets_layout.cpp
-// applies to the eight classes it ports without one.
-//
-// `??0AnimatedImageElement@UI@@QEAA@XZ` (0x1800cb3f0) is NOT here: it is already
-// ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
-// (the factory roster). One address, one owner.
+// ENDGAME B.3.6 block C2: slots 1/2/7 are MEMBERS of
+// `UI::AnimatedImageElement`; the registered doors are one-line QUALIFIED
+// delegations. Update's base call (by address 0x180116270 before) is the
+// qualified `ImageElement::Update`, i.e. `Element::Update`.
 // ============================================================================
 #include "element_common.h"
+#include "../../types/ui/AnimatedImageElement.h"
 
 using namespace rtuielem;
 
@@ -50,31 +42,47 @@ constexpr int kFrames      = 0xe0;   // Array<Sprite>::_data
 constexpr int kFrameCount  = 0xe8;   // Array<Sprite>::_size
 constexpr int kFps         = 0xf0;
 constexpr int kAccumTicks  = 0xf8;
+static_assert(kFrames     == offsetof(UI::AnimatedImageElement, _frames), "");
+static_assert(kFps        == offsetof(UI::AnimatedImageElement, _framesPerSecond), "");
+static_assert(kAccumTicks == offsetof(UI::AnimatedImageElement, _accumTicks), "");
 
-constexpr int kSprite      = 0xc0;   // the inherited UI::Sprite
-constexpr int kSpriteIndex = 0xc8;
-
-RTELEM_TYPE_SLOTS(AnimatedImageElement)
-void* VtImageElementBase() { return RT_DATA_SLOT(void*, "??_7ImageElement@UI@@6B@"); }
-
-// `System::Timer::_secondsPerTick`, an exported DOUBLE (ordinal 4797). The
-// same slot runtime/src/audio/audio_scene_update.cpp reads.
+// RULE B6-5: namespace-scope atomic caches for the member bodies.
+std::atomic<void*> g_animatedImageElementTypeInfo{nullptr};
+std::atomic<void*> g_secondsPerTick{nullptr};
+const uint8_t* AnimatedImageElementTypeInfoAtomic() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_animatedImageElementTypeInfo,
+        "?_typeInfo@AnimatedImageElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+// `System::Timer::_secondsPerTick`, an exported DOUBLE (ordinal 4797, read at
+// 0x1800cb2d2 as `MOVSD XMM3,[0x1801fe728]`). The same slot
+// runtime/src/audio/audio_scene_update.cpp reads.
 double SecondsPerTick() {
-    double* p = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
+    const double* p = static_cast<const double*>(
+        AtomicExport(g_secondsPerTick, "?_secondsPerTick@Timer@System@@0NA"));
     return p ? *p : 0.0;
 }
 
-using ArrayDtorFn  = void* (*)(void* array);
-using ArrayCopyFn  = void* (*)(void* dst, const void* src);
-using ElementCtorFn = void* (*)(void* self);
+// Door-only.
+void* VtAnimatedImageElement() { return RT_DATA_SLOT(void*, "??_7AnimatedImageElement@UI@@6B@"); }
+void* VtImageElementBase()     { return RT_DATA_SLOT(void*, "??_7ImageElement@UI@@6B@"); }
+
+using ArrayDtorFn     = void* (*)(void* array);
+using ArrayCopyFn     = void* (*)(void* dst, const void* src);
 using ImageCopyCtorFn = void* (*)(void* self, const void* other);
-using ElementDtorFn = void (*)(void* self);
-using ElemUpdateFn  = void (*)(void* self, const void* time, void* ui,
-                               void** dlg, const void* state);
+using ElementDtorFn   = void (*)(void* self);
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(AnimatedImageElement)
+namespace UI {
+
+uint32_t AnimatedImageElement::Type() const {                   // 0x180036a90
+    return rtuielem::TypeIdOf(AnimatedImageElementTypeInfoAtomic());
+}
+// The key function: GCC emits `vtable for UI::AnimatedImageElement` here.
+const char* AnimatedImageElement::TypeName() const {            // 0x180036ab0
+    return rtuielem::TypeNameOf(AnimatedImageElementTypeInfoAtomic());
+}
 
 // ============================================================================
 // ?Update@AnimatedImageElement@UI@@   0x1800cb290
@@ -91,76 +99,84 @@ RTELEM_TYPE_BODIES(AnimatedImageElement)
 //                            accum = (int64)((double)elapsed / _secondsPerTick) }
 //   frame   = (int)((elapsed / period) * (float)frameCount)
 //   sprite  = frames[frame]                           ; ONE 16-byte MOVUPS
-//   if (sprite.sheet != this->sheet || sprite.index != this->index)
+//   if (sprite.sheet != _sprite.sheet || sprite.index != _sprite.index)
 //        SetNeedsSizeCalc(this)
-//   this->sprite = sprite                             ; the same MOVUPS
+//   _sprite = sprite                                  ; the same MOVUPS
 //
 // *** TWO THINGS A TIDIED PORT GETS WRONG. ***
 //
 //  1. `frameCount` is read TWICE from memory (0x1800cb2da for the period and
 //     0x1800cb318 for the frame index), both times after Element::Update has
 //     returned. Caching it in one local would assert that the base Update
-//     cannot change the frame list, which nothing here establishes.
+//     cannot change the frame list.
 //  2. THE PARENT WALK CLOBBERS THE `this` REGISTER. Retail computes
 //     `RCX = this + 0xc0` BEFORE the walk (0x1800cb340), walks through RBX
 //     — which ends at nullptr — and then stores the sprite through the SAVED
-//     RCX. Writing `self->sprite = s` after a walk that used `self` as its
-//     cursor would store through null. Kept as a separate saved pointer here.
+//     RCX. The walk here uses its own cursor.
 //
 // The comparison is `sheet` (a full qword) and `index` (a dword) only; the
 // 4 pad bytes at +0xcc are copied but never compared.
-extern "C" void RtUi_AnimatedImageElement_Update(void* selfv, const void* time,
-                                                 void* ui, void** dlg,
-                                                 const void* state) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-
-    // The InternalPtr<DialogInstance> parameter arrives BY HIDDEN REFERENCE
-    // (MSVC passes a non-trivially-copyable class that way); retail copies the
-    // pointed-to value into its own home slot and forwards the address of THAT.
-    void* dlgCopy = *dlg;
-    RtAddr<ElemUpdateFn>(0x180116270ull)(self, time, ui, &dlgCopy, state);
+//
+// The InternalPtr<DialogInstance> parameter arrives BY HIDDEN REFERENCE (RULE
+// B6-11; `MOV RAX,[R9]` at 0x1800cb29a); retail copies the pointed-to value
+// into its own home slot and forwards the address of THAT. The base call is
+// QUALIFIED: this object wears the minted table, whose slot 7 is this body.
+void AnimatedImageElement::Update(const System::Time& time, UserInterface* ui,
+                                  Object::InternalPtr<DialogInstance>* dialog,
+                                  const UpdateState& state) {
+    Object::InternalPtr<DialogInstance> dlgCopy = *dialog;     // 1800cb2a5
+    ImageElement::Update(time, ui, &dlgCopy, state);          // 1800cb2b7  Element::Update
 
     const double spt = SecondsPerTick();
 
-    int64_t& accum = *reinterpret_cast<int64_t*>(self + kAccumTicks);
-    accum += *static_cast<const int64_t*>(time);
+    _accumTicks += *reinterpret_cast<const int64_t*>(&time);   // 1800cb2c2  System::Time's ticks
 
-    float elapsed = static_cast<float>(static_cast<double>(accum) * spt);
-    const float period = static_cast<float>(I32(self, kFrameCount)) /
-                         static_cast<float>(I32(self, kFps));
+    float elapsed = static_cast<float>(static_cast<double>(_accumTicks) * spt);
+    const float period = static_cast<float>(_frames._size) /   // 1800cb2da
+                         static_cast<float>(_framesPerSecond);
 
     if (elapsed >= period) {
         elapsed = elapsed - period;
-        accum = static_cast<int64_t>(static_cast<double>(elapsed) / spt);
+        _accumTicks = static_cast<int64_t>(static_cast<double>(elapsed) / spt);
     }
 
     const int frame = static_cast<int>((elapsed / period) *
-                                       static_cast<float>(I32(self, kFrameCount)));
+                                       static_cast<float>(_frames._size));   // 1800cb318
 
-    const uint8_t* src = static_cast<const uint8_t*>(P(self, kFrames)) +
-                         static_cast<int64_t>(frame) * 0x10;
-    uint64_t lo = 0, hi = 0;
-    __builtin_memcpy(&lo, src + 0, 8);
-    __builtin_memcpy(&hi, src + 8, 8);
+    const Sprite next = _frames._data[frame];                  // 1800cb33c  MOVUPS
 
-    uint8_t* dst = self + kSprite;                       // saved BEFORE the walk
-    if (*reinterpret_cast<const uint64_t*>(self + kSprite) != lo ||
-        I32(self, kSpriteIndex) != static_cast<int32_t>(hi)) {
-        SetNeedsSizeCalc(self);
+    if (_sprite.spriteSheet != next.spriteSheet ||
+        _sprite.spriteIndex != next.spriteIndex) {
+        SetNeedsSizeCalc();                                    // 1800cb370..1800cb384
     }
-    __builtin_memcpy(dst + 0, &lo, 8);
-    __builtin_memcpy(dst + 8, &hi, 8);
+    _sprite = next;                                            // 1800cb386  MOVUPS
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — each a one-line QUALIFIED delegation.
+// ============================================================================
+extern "C" uint32_t RtUi_AnimatedImageElement_Type(const void* self) {
+    return reinterpret_cast<const UI::AnimatedImageElement*>(self)                          // B.3.6 bridge
+        ->UI::AnimatedImageElement::Type();
+}
+extern "C" const char* RtUi_AnimatedImageElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::AnimatedImageElement*>(self)                          // B.3.6 bridge
+        ->UI::AnimatedImageElement::TypeName();
+}
+extern "C" void RtUi_AnimatedImageElement_Update(void* selfv, const void* time,
+                                                 void* ui, void** dlg,
+                                                 const void* state) {
+    reinterpret_cast<UI::AnimatedImageElement*>(selfv)->UI::AnimatedImageElement::Update(   // B.3.6 bridge
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),
+        *static_cast<const UI::Element::UpdateState*>(state));
 }
 
 // ============================================================================
-// ??0AnimatedImageElement@UI@@QEAA@XZ   0x1800cb3f0
+// ??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z   0x180036c30   — a CTOR DOOR
 // ============================================================================
-// Element::Element, the ImageElement vtable stamp and ImageElement's five
-// stores INLINED (retail does not call ??0ImageElement here), then its own
-// vtable and four more stores. The dead intermediate stamp is reproduced for
-// the same reason runtime/src/ui/groupdescription.cpp reproduces its three.
-
-// ??0AnimatedImageElement@UI@@QEAA@AEBV01@@Z   0x180036c30
 // Chains to ??0ImageElement (the COPY ctor, out of line this time), then
 // deep-copies the frame array with Collection::Array<Sprite>::operator=
 // (0x180037020) onto a zeroed target.
@@ -179,11 +195,10 @@ extern "C" void* RtUi_AnimatedImageElement_CopyCtor(void* selfv, const void* oth
 }
 
 // ============================================================================
-// ??1AnimatedImageElement@UI@@UEAA@XZ   0x1800cb3a0
+// ??1AnimatedImageElement@UI@@UEAA@XZ   0x1800cb3a0   — a DTOR DOOR (B4b-2)
 // ============================================================================
 // Own vtable, destroy the frame array, re-stamp the BASE (ImageElement) vtable,
-// then ~Element. The intermediate stamp matters: ~Element dispatches nothing,
-// but the object is momentarily an ImageElement and retail says so.
+// then ~Element.
 extern "C" void RtUi_AnimatedImageElement_Dtor(void* selfv) {
     uint8_t* self = static_cast<uint8_t*>(selfv);
     P(self, 0x00) = VtAnimatedImageElement();
