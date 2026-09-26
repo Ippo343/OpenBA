@@ -126,7 +126,7 @@
 #include "../system/string.h"
 
 using UI::Element;
-using UI::SpinnerElement;
+using RtUI::SpinnerElement;   // B.3.6 C5: the Wave 7 POD moved to RtUI (B4b-1); UI::SpinnerElement is the class
 using UI::ComboElement;
 using UI::NumberEditElement;
 using UI::NumberElement;

@@ -35,6 +35,8 @@
 #include "runtime/types/ui/GraphElement.h"
 #include "runtime/types/ui/ProgressDescription.h"
 #include "runtime/types/ui/ProgressElement.h"
+#include "runtime/types/ui/SpinnerDescription.h"
+#include "runtime/types/ui/SpinnerElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -58,6 +60,7 @@ enum Cls : int {
     kNone = 0,
     kGraphD, kGraphE,
     kProgressD, kProgressE,
+    kSpinnerD, kSpinnerE,
 };
 const void* g_self = nullptr;
 int         g_cls  = kNone;
@@ -206,7 +209,7 @@ void CheckCreateInstanceRetslot(void* raw) {
 }
 // Slot 7 on a leaf that overrides Update: the member sees the handle THROUGH
 // the pointer (the marker records the handle it read, plus mouseX).
-[[maybe_unused]] void CheckUpdateTakesHandleAddress(void* raw, int cls) {
+void CheckUpdateTakesHandleAddress(void* raw, int cls) {
     FactoryScope scope;
     Reset(); CallElementSlot(raw, 7);
     CHECK_EQ(g_cls, cls);
@@ -219,7 +222,7 @@ Object::InternalPtr<UI::Element>* FillRet(Object::InternalPtr<UI::Element>* ret)
         reinterpret_cast<UI::Element*>(const_cast<void*>(kFakeElement)));
     return ret;
 }
-[[maybe_unused]] long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
+long long UpdateArg(Object::InternalPtr<UI::DialogInstance>* dialog,
                     const UI::Element::UpdateState& state) {
     return static_cast<long long>(reinterpret_cast<intptr_t>(dialog->Get())) + state.mouseX;
 }
@@ -358,4 +361,40 @@ UNIT_TEST(ui_c5_progress_slots) {
     e.SetMaximumValue(2.0f);        CHECK(e._maxValue == 2.0f);        // 0x180077ec0
     e.SetCurrentValue(0.5f);        CHECK(e._currentValue == 0.5f);    // 0x180077ed0
     e.SetBackgroundColor(0xAABBCCDDu); CHECK_EQ(e._backgroundColor, 0xAABBCCDDu);  // 0x180077ee0
+}
+
+// ===========================================================================
+// Spinner — the Element OVERRIDES slot 7 Update
+// ===========================================================================
+C5_DESCRIPTION_MARKERS(SpinnerDescription, kSpinnerD)
+C5_ELEMENT_MARKERS(SpinnerElement, kSpinnerE)
+C5_ELEMENT_UPDATE_MARKER(SpinnerElement, kSpinnerE)
+
+namespace {
+struct SpinnerDescriptionProbe final : UI::SpinnerDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct SpinnerElementProbe final : UI::SpinnerElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+}  // namespace
+
+UNIT_TEST(ui_c5_spinner_layout) {
+    CheckShape<UI::SpinnerDescription, UI::ElementDescription>(0x88);   // 0x18004b050
+    CheckShape<UI::SpinnerElement, UI::Element>(0xc8);                  // 0x18004b3b0
+    CHECK_EQ(offsetof(UI::SpinnerDescription, _editDescription), sizeof(UI::ElementDescription));
+    CHECK_EQ(offsetof(UI::SpinnerDescription, _increment), (size_t)0x80);
+    CHECK_EQ(offsetof(UI::SpinnerElement, _increment), sizeof(UI::Element));
+}
+
+UNIT_TEST(ui_c5_spinner_slots) {
+    SpinnerDescriptionProbe d;
+    CheckDescriptionSlots(&d, kSpinnerD);
+    CheckCreateInstanceRetslot(&d);
+
+    FactoryScope scope;
+    SpinnerElementProbe e{};
+    CheckElementSlots(&e, kSpinnerE, kOwn4567);    // Update overridden
+    CheckUpdateTakesHandleAddress(&e, kSpinnerE);
+    e.SetIncrement(5); CHECK_EQ(e._increment, 5);   // 0x1800d7d30
 }

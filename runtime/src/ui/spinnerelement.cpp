@@ -14,6 +14,10 @@
 //
 // plus ??0SpinnerElement (0x1800d8670) and ??1SpinnerElement (0x1800d8640).
 //
+// ENDGAME B.3.6 block C5: the six slot bodies MOVED into the members of the
+// real `UI::SpinnerElement`; each registered door is a one-line QUALIFIED
+// delegation. The ctor / dtor stay doors (B4b-2).
+//
 // A spinner is THREE children and one int, exactly as
 // runtime/types/ui/SpinnerElement.h describes: children[0] is the
 // NumberEditElement, children[1] the "up" ButtonElement and children[2] the
@@ -35,6 +39,8 @@
 // vtable. That is retail's unguarded deref and CLAUDE.md says not to guard it.
 // ============================================================================
 
+#include <atomic>
+
 #include "widget_common.h"
 #include "../../types/ui/SpinnerElement.h"
 
@@ -45,13 +51,12 @@ namespace {
 constexpr int kIncrement = 0xC0;
 static_assert(kIncrement == offsetof(UI::SpinnerElement, _increment), "");
 
-// NumberEditElement's own fields, reached through children[0].
+// NumberEditElement's own fields, reached through children[0]. That class is
+// block C3's; its offsets stay file-local raw reads here.
 constexpr int kNeText = 0xC8;
 constexpr int kNeMin  = 0xF8;
 constexpr int kNeMax  = 0xFC;
 
-constexpr int kUsMouseX = 0x18;
-constexpr int kUsMouseY = 0x1c;
 constexpr int kUiEvents     = 0x48;
 constexpr int kUiEventCount = 0x50;
 
@@ -68,22 +73,37 @@ struct WidgetEvent {
 };
 static_assert(sizeof(WidgetEvent) == 0x30, "");
 
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A");
+// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7SpinnerElement@UI@@6B@"); }
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
+std::atomic<void*> g_numberEditTypeInfo{nullptr};
+std::atomic<void*> g_buttonTypeInfo{nullptr};
+
+const uint8_t* SpinnerTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@SpinnerElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtSpinnerElement() { return AtomicExport(g_vtable, "??_7SpinnerElement@UI@@6B@"); }
 
 // The two type ids the IsDerivedFrom calls pass, each the FIRST DWORD of the
 // named BaseTypeInfo static (0x1801fa190 and 0x1801fa938 in retail).
 uint32_t NumberEditTypeId() {
-    const uint8_t* ti = RT_DATA_SLOT(const uint8_t*,
-        "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A");
+    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
+        g_numberEditTypeInfo, "?_typeInfo@NumberEditElement@UI@@0VBaseTypeInfo@Object@@A"));
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 uint32_t ButtonTypeId() {
-    const uint8_t* ti = RT_DATA_SLOT(const uint8_t*,
-        "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A");
+    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
+        g_buttonTypeInfo, "?_typeInfo@ButtonElement@UI@@0VBaseTypeInfo@Object@@A"));
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 
@@ -91,34 +111,21 @@ using SetValueFn = void (*)(void* self, int32_t v);
 
 }  // namespace
 
-extern "C" uint32_t RtUi_SpinnerElement_Type(const void*) {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-extern "C" const char* RtUi_SpinnerElement_TypeName(const void*) {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
+namespace UI {
 
-// ??0SpinnerElement@UI@@QEAA@XZ   0x1800d8670
-extern "C" void* RtUi_SpinnerElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = Vtable();
-    I32(self, kIncrement) = 1;
-    return self;
+// [1] 0x18004b110 / [2] 0x18004b0f0
+const char* SpinnerElement::TypeName() const {
+    const char* v = nullptr; __builtin_memcpy(&v, SpinnerTypeInfo() + 8, sizeof v); return v;
+}
+uint32_t SpinnerElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
 }
 
-// ??1SpinnerElement@UI@@UEAA@XZ   0x1800d8640
-extern "C" void RtUi_SpinnerElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    ElementDtor(self);
-}
+// [4] 0x1800d83b0
+void SpinnerElement::ComputeSize() {
+    if ((_flags & kFlagNeedsSizeCalc) == 0) return;
 
-// slot 4 — 0x1800d83b0
-extern "C" void RtUi_SpinnerElement_ComputeSize(void* self) {
-    if ((U32(self, kElFlags) & kFlagNeedsSizeCalc) == 0) return;
-
-    void** kids = reinterpret_cast<void**>(PTR(self, kElChildren));
+    Element* const* kids = _children.GetData();
 
     int32_t w0 = 0, h0 = 0, w1 = 0, h1 = 0, w2 = 0, h2 = 0;
     InlineGetPaddedSize(kids[0], &w0, &h0);
@@ -126,54 +133,52 @@ extern "C" void RtUi_SpinnerElement_ComputeSize(void* self) {
     InlineGetPaddedSize(kids[2], &w2, &h2);
 
     if (w2 < w1) w2 = w1;
-    I32(self, kElLayoutWidth) = w2 + w0;
+    _layoutWidth = w2 + w0;
 
     int32_t h = h2 + h1;
     if (h < h0) h = h0;
-    U32(self, kElFlags) &= ~kFlagNeedsSizeCalc;
-    I32(self, kElLayoutHeight) = h;
+    _flags &= ~kFlagNeedsSizeCalc;
+    _layoutHeight = h;
 }
 
-// slot 5 — 0x1800d80c0
-extern "C" void RtUi_SpinnerElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                  int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
+// [5] 0x1800d80c0
+void SpinnerElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (_border != nullptr)
+        reinterpret_cast<Element*>(_border)->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
 
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
+    ComputeSize();   // slot 4, VIRTUAL — `CALL [RAX+0x20]` in retail
 
-    int32_t w = I32(self, kElLayoutWidth);
-    int32_t h = I32(self, kElLayoutHeight);
-    const int32_t align = I32(self, kElAlignment);
+    int32_t w = _layoutWidth;
+    int32_t h = _layoutHeight;
+    const int32_t align = _alignment;
 
     if (right  < w + x) x = right  - w;
     if (bottom < h + y) y = bottom - h;
 
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t aw = (right  - _rightPad)  - px;
+    const int32_t ah = (bottom - _bottomPad) - py;
 
-    if ((U32(self, kElFlags) & kFlagStretchX) != 0) w = aw;
-    if ((U32(self, kElFlags) & kFlagStretchY) != 0) h = ah;
+    if ((_flags & kFlagStretchX) != 0) w = aw;
+    if ((_flags & kFlagStretchY) != 0) h = ah;
 
     switch (align) {
         case 1: case 4: case 7: px = ((aw >> 1) - (w >> 1)) + px; break;
-        case 2: case 5: case 8: px = (right - I32(self, kElRightPad)) - w; break;
+        case 2: case 5: case 8: px = (right - _rightPad) - w; break;
         default: break;
     }
     if (align > 2) {
         if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
-        else if (align < 9) py = (bottom - I32(self, kElBottomPad)) - h;
+        else if (align < 9) py = (bottom - _bottomPad) - h;
     }
 
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutRight)  = px + w;
-    I32(self, kElLayoutBottom) = py + h;
+    _layoutTop    = py;
+    _layoutLeft   = px;
+    _layoutRight  = px + w;
+    _layoutBottom = py + h;
 
-    void** kids = reinterpret_cast<void**>(PTR(self, kElChildren));
+    Element* const* kids = _children.GetData();
     int32_t ew = 0, eh = 0;
     InlineGetPaddedSize(kids[0], &ew, &eh);          // only the WIDTH is used
     int32_t bw = 0, bh = 0;
@@ -181,82 +186,70 @@ extern "C" void RtUi_SpinnerElement_ComputeLayout(void* self, int32_t x, int32_t
     int32_t dw = 0, dh = 0;
     InlineGetPaddedSize(kids[2], &dw, &dh);          // measured and discarded
 
-    const int32_t xmid = ew + I32(self, kElLayoutLeft);
-    const int32_t ymid = I32(self, kElLayoutTop) + bh;
+    const int32_t xmid = ew + _layoutLeft;
+    const int32_t ymid = _layoutTop + bh;
 
-    kids = reinterpret_cast<void**>(PTR(self, kElChildren));
-    reinterpret_cast<ComputeLayoutSlotFn>(VTable(kids[0])[kVtComputeLayout / 8])(
-        kids[0], I32(self, kElLayoutLeft), I32(self, kElLayoutTop),
-        xmid, I32(self, kElLayoutBottom));
-
-    kids = reinterpret_cast<void**>(PTR(self, kElChildren));
-    reinterpret_cast<ComputeLayoutSlotFn>(VTable(kids[1])[kVtComputeLayout / 8])(
-        kids[1], xmid, I32(self, kElLayoutTop),
-        I32(self, kElLayoutRight), ymid);
-
-    kids = reinterpret_cast<void**>(PTR(self, kElChildren));
-    reinterpret_cast<ComputeLayoutSlotFn>(VTable(kids[2])[kVtComputeLayout / 8])(
-        kids[2], xmid, ymid,
-        I32(self, kElLayoutRight), I32(self, kElLayoutBottom));
+    // The array is RE-READ before each of the three calls (slot 5, virtual).
+    _children.GetData()[0]->ComputeLayout(_layoutLeft, _layoutTop, xmid, _layoutBottom);
+    _children.GetData()[1]->ComputeLayout(xmid, _layoutTop, _layoutRight, ymid);
+    _children.GetData()[2]->ComputeLayout(xmid, ymid, _layoutRight, _layoutBottom);
 }
 
-// slot 6 — 0x1800d8030
-extern "C" void RtUi_SpinnerElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
+// [6] 0x1800d8030
+void SpinnerElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    if (_border != nullptr)
+        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
-    const int32_t n = I32(me, kElChildCount);
-    for (int32_t i = 0; i < n; ++i) {
-        void* child = reinterpret_cast<void**>(PTR(me, kElChildren))[i];
-        reinterpret_cast<DrawSlotFn>(VTable(child)[kVtDraw / 8])(child, ctx, alpha);
-    }
+    const int32_t n = _children.GetSize();
+    for (int32_t i = 0; i < n; ++i)
+        _children.GetData()[i]->Draw(context, alpha);   // slot 6
 }
 
 // ---------------------------------------------------------------------------
-// slot 7 — ?Update@SpinnerElement@UI@@ ...   0x1800d7e70
+// [7] ?Update@SpinnerElement@UI@@ ...   0x1800d7e70
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_SpinnerElement_Update(void* self, const void* time, void* ui,
-                                           void** dlgPtr, const void* state) {
-    void* slot = *dlgPtr;
-    ElementUpdate(self, time, ui, &slot, state);
+void SpinnerElement::Update(const System::Time& time, UserInterface* ui,
+                            Object::InternalPtr<DialogInstance>* dialog,
+                            const UpdateState& state) {
+    // The base Update, QUALIFIED (this object's slot 7 is this very body), with
+    // the handle copied into a temporary whose ADDRESS is passed — retail's shape.
+    Object::InternalPtr<DialogInstance> slot = *dialog;
+    Element::Update(time, ui, &slot, state);
 
     const uint32_t kNumberEditTypeId = NumberEditTypeId();
     const uint32_t kButtonTypeId     = ButtonTypeId();
 
-    void* edit = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
+    void* edit = _children.GetData()[0];
     if (!RtAddr<IsDerivedFromFn>(0x1800c0390ull)(edit, kNumberEditTypeId)) return;
     if (edit == nullptr) return;
 
     // The "up" button is enabled only while the value is below the maximum.
-    void* upRaw = reinterpret_cast<void**>(PTR(self, kElChildren))[1];
-    void* up = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(upRaw, kButtonTypeId)
-               ? upRaw : nullptr;
+    // `up` may be null (a failed IsDerivedFrom) and is dereferenced anyway —
+    // retail's unguarded deref (`XOR EDI,EDI; CMOVNZ RDI,RBX`), kept.
+    Element* upRaw = _children.GetData()[1];
+    Element* up = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(upRaw, kButtonTypeId)
+                  ? upRaw : nullptr;
     {
-        void** vt = VTable(up);
         const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
             static_cast<const char*>(PTR(edit, kNeText)));
-        reinterpret_cast<EnableSlotFn>(vt[kVtEnable / 8])(up, v < I32(edit, kNeMax));
+        up->Enable(v < I32(edit, kNeMax));                          // slot 8
     }
 
     // ... and the "down" button only while it is above the minimum.
-    void* downRaw = reinterpret_cast<void**>(PTR(self, kElChildren))[2];
-    void* down = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(downRaw, kButtonTypeId)
-                 ? downRaw : nullptr;
+    Element* downRaw = _children.GetData()[2];
+    Element* down = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(downRaw, kButtonTypeId)
+                    ? downRaw : nullptr;
     {
-        void** vt = VTable(down);
         const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
             static_cast<const char*>(PTR(edit, kNeText)));
-        reinterpret_cast<EnableSlotFn>(vt[kVtEnable / 8])(down, I32(edit, kNeMin) < v);
+        down->Enable(I32(edit, kNeMin) < v);                        // slot 8
     }
 
     int32_t step;
-    if ((U32(reinterpret_cast<void**>(PTR(self, kElChildren))[1], kElFlags)
-         & kFlagWasActivated) != 0) {
-        step = I32(self, kIncrement);
-    } else if ((U32(reinterpret_cast<void**>(PTR(self, kElChildren))[2], kElFlags)
-                & kFlagWasActivated) != 0) {
-        step = -I32(self, kIncrement);
+    if ((_children.GetData()[1]->_flags & kFlagWasActivated) != 0) {
+        step = _increment;
+    } else if ((_children.GetData()[2]->_flags & kFlagWasActivated) != 0) {
+        step = -_increment;
     } else {
         return;
     }
@@ -264,19 +257,66 @@ extern "C" void RtUi_SpinnerElement_Update(void* self, const void* time, void* u
 
     const int32_t v = RtAddr<ToIntegerFn>(0x18003f620ull)(
         static_cast<const char*>(PTR(edit, kNeText)));
-    RtAddr<SetValueFn>(0x1800d4bb0ull)(edit, step + v);   // ?SetValue@NumberEditElement@
+    // ?SetValue@NumberEditElement@ — block C3's class, a door by address.
+    RtAddr<SetValueFn>(0x1800d4bb0ull)(edit, step + v);
 
     WidgetEvent ev;
-    ev.dialog    = *dlgPtr;
-    ev.element   = self;
+    ev.dialog    = dialog->Get();
+    ev.element   = this;
     ev.kind      = 0x15;
-    ev.elementId = I32(self, kElElementId);
-    ev.mouseX    = I32c(state, kUsMouseX);
-    ev.mouseY    = I32c(state, kUsMouseY);
+    ev.elementId = _elementId;
+    ev.mouseX    = state.mouseX;
+    ev.mouseY    = state.mouseY;
     ev.value     = 0;
     ev.tail      = 0;
+    // UserInterface's event array (block E's class): raw offsets, by address.
     RtAddr<ArraySetSizeFillFn>(0x180033690ull)(
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_SpinnerElement_Type(const void* self) {
+    return reinterpret_cast<const UI::SpinnerElement*>(self)->UI::SpinnerElement::Type();
+}
+extern "C" const char* RtUi_SpinnerElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::SpinnerElement*>(self)->UI::SpinnerElement::TypeName();
+}
+extern "C" void RtUi_SpinnerElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::SpinnerElement*>(self)->UI::SpinnerElement::ComputeSize();
+}
+extern "C" void RtUi_SpinnerElement_ComputeLayout(void* self, int32_t x, int32_t y,
+                                                  int32_t right, int32_t bottom) {
+    reinterpret_cast<UI::SpinnerElement*>(self)->UI::SpinnerElement::ComputeLayout(
+        x, y, right, bottom);
+}
+extern "C" void RtUi_SpinnerElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::SpinnerElement*>(self)->UI::SpinnerElement::Draw(
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_SpinnerElement_Update(void* self, const void* time, void* ui,
+                                           void** dlgPtr, const void* state) {
+    reinterpret_cast<UI::SpinnerElement*>(self)->UI::SpinnerElement::Update(
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(state));
+}
+
+// ??0SpinnerElement@UI@@QEAA@XZ   0x1800d8670 — a DOOR (B4b-2), unchanged.
+extern "C" void* RtUi_SpinnerElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
+    ElementCtor(self);
+    PTR(self, 0x00) = VtSpinnerElement();
+    I32(self, kIncrement) = 1;
+    return self;
+}
+
+// ??1SpinnerElement@UI@@UEAA@XZ   0x1800d8640 — a DOOR (B4b-2), unchanged.
+extern "C" void RtUi_SpinnerElement_Dtor(void* self) {
+    PTR(self, 0x00) = VtSpinnerElement();
+    ElementDtor(self);
 }
 
 // ============================================================================

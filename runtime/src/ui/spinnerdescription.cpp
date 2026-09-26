@@ -43,6 +43,11 @@
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/Element.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/ui/SpinnerDescription.h"
+#include "../../types/ui/SpinnerElement.h"
+
+#include <atomic>
+#include <new>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -53,12 +58,6 @@ void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"
 void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
 void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
 void* VtSpinnerDescription() { return RT_DATA_SLOT(void*, "??_7SpinnerDescription@UI@@6B@"); }
-void* VtSpinnerElement()     { return RT_DATA_SLOT(void*, "??_7SpinnerElement@UI@@6B@"); }
-const uint8_t* SpinnerDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -78,35 +77,29 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
-
 // One of CreateInstance's three identical child blocks (0x1800d874e,
 // 0x1800d87a6, 0x1800d87f6 — the same instructions with a different source
 // field each time).
-void AddChild(const void* dialog, void** slot, uint8_t* elem, void* childDesc) {
+void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
+    // UI::Dialog::CreateElement (block B's class) — a door, by address.
     using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
     void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, slot, childDesc);
 
-    uint8_t* child = *reinterpret_cast<uint8_t**>(made);
+    UI::Element* child = *reinterpret_cast<UI::Element**>(made);
     if (child != nullptr)
-        *reinterpret_cast<void**>(child + 0x98) = elem;
+        child->_parent = elem;
 
     using PushFn = void (*)(void* array, int n, const void* fill);
-    RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                   *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                   made);
+    RtAddr<PushFn>(0x180076900ull)(&elem->_children, elem->_children.GetSize() + 1, made);
 
-    for (uint8_t* n = elem; n != nullptr; n = *reinterpret_cast<uint8_t**>(n + 0x98))
-        *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
+    for (UI::Element* n = elem; n != nullptr; n = n->_parent)
+        n->_flags |= UI::kElementFlagNeedsSizeCalc;
 }
 
 }  // namespace
 
 // ============================================================================
-// ??0SpinnerDescription@UI@@QEAA@XZ   retail 0x1800d89c0
+// ??0SpinnerDescription@UI@@QEAA@XZ   retail 0x1800d89c0 — a DOOR (B4b-2)
 // ============================================================================
 extern "C" void* RtUi_SpinnerDescription_Ctor(void* selfv) {
     uint8_t* p = static_cast<uint8_t*>(selfv);
@@ -136,26 +129,6 @@ extern "C" void* RtUi_SpinnerDescription_Ctor(void* selfv) {
     return p;                                                   // 1800d8a53
 }
 
-extern "C" uint32_t RtUi_SpinnerDescription_Type(const void*) {
-    const uint8_t* ti = SpinnerDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-extern "C" const char* RtUi_SpinnerDescription_TypeName(const void*) {
-    const uint8_t* ti = SpinnerDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
-extern "C" int32_t RtUi_SpinnerDescription_GetFileVersion(const void*) { return 0x204; }
-
-extern "C" void* RtUi_SpinnerDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 18004af00
-    return RtUi_SpinnerDescription_Ctor(selfv);
-}
-extern "C" void* RtUi_SpinnerDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    return RtUi_SpinnerDescription_Ctor(selfv);
-}
-extern "C" void RtUi_SpinnerDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
 // ??1SpinnerDescription@UI@@UEAA@XZ  0x1800d8950 — ONE String release (the
 // base's _textName at +0x60, under the BASE vtable), then a tail JMP to
 // ??1External@Object@@. The three ExternalPtrs are not released.
@@ -182,13 +155,60 @@ extern "C" void RtUi_SpinnerDescription_Dtor(void* selfv) {
     RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d89ac JMP
 }
 
-// ?Serialize@SpinnerDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d8880
-extern "C" bool RtUi_SpinnerDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+// ============================================================================
+// The MEMBERS
+// ============================================================================
+namespace {
+// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_elementVtable{nullptr};
+const uint8_t* SpinnerTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@SpinnerDescription@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtSpinnerElementAtomic() {
+    return AtomicExport(g_elementVtable, "??_7SpinnerElement@UI@@6B@");
+}
+}  // namespace
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(p, stream);              // 1800d889a
+namespace UI {
+
+// [1] 0x18004ad60 / [2] 0x18004ad40 / [3] 0x1800d8940
+const char* SpinnerDescription::TypeName() const {
+    const char* v = nullptr; __builtin_memcpy(&v, SpinnerTypeInfo() + 8, sizeof v); return v;
+}
+uint32_t SpinnerDescription::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, SpinnerTypeInfo(), sizeof v); return v;
+}
+int32_t SpinnerDescription::GetFileVersion() const { return 0x204; }
+
+// [9] 0x18004af00 — the null-`this` test stays in the door.
+Object::External* SpinnerDescription::Construct() {
+    return reinterpret_cast<Object::External*>(RtUi_SpinnerDescription_Ctor(this));
+}
+// [6] 0x18004aee0 — destroy in place through slot 0 (flag 0), re-run the ctor.
+Object::External* SpinnerDescription::Reconstruct() {
+    DeletingDtor(0);
+    return reinterpret_cast<Object::External*>(RtUi_SpinnerDescription_Ctor(this));
+}
+// [7] 0x18004af10
+void SpinnerDescription::Destruct() { DeletingDtor(0); }
+
+// [5] ?Serialize@SpinnerDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d8880
+bool SpinnerDescription::Serialize(void* streamArg) {
+    Stream* stream = static_cast<Stream*>(streamArg);
+
+    // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
+    ElementDescription::Serialize(stream);                              // 1800d889a
 
     Serializer ser = { stream, nullptr };
 
@@ -197,18 +217,18 @@ extern "C" bool RtUi_SpinnerDescription_Serialize(void* selfv, void* streamv) {
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
     using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
     void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800d88ca
+    ser.readerWriter = rw;                                              // 1800d88ca
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x68, &ser);        // 1800d88d8
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x70, &ser);        // 1800d88e6
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x78, &ser);        // 1800d88f4
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_editDescription, &ser);        // 1800d88d8
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_upDescription, &ser);          // 1800d88e6
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_downDescription, &ser);        // 1800d88f4
 
     using ScalarFn = void (*)(void* rw, void* value, const char* name);
     void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x80, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_increment, nullptr);
 
-    if (rw != nullptr) {                                       // 1800d891a
+    if (rw != nullptr) {                                                // 1800d891a
         using DeleteFn = void (*)(void* rw, int flag);
         reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
     }
@@ -216,40 +236,78 @@ extern "C" bool RtUi_SpinnerDescription_Serialize(void* selfv, void* streamv) {
 }
 
 // ============================================================================
-// ?CreateInstance@SpinnerDescription@UI@@...   retail 0x1800d86b0
+// [8] ?CreateInstance@SpinnerDescription@UI@@...   retail 0x1800d86b0
 // ============================================================================
 // SpinnerElement is 0xc8 bytes (`MOV EDX,0xc8` at 0x1800d86f2); construction
 // calls ??0Element, stamps the SpinnerElement vtable and writes ONE dword,
 // +0xc0 = 1 — which the tail then overwrites with the description's +0x80. Both
 // stores are retail's and both are here.
-extern "C" void** RtUi_SpinnerDescription_CreateInstance(const void* selfv, void** ret,
-                                                         const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
+Object::InternalPtr<Element>* SpinnerDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xc8, 8);   // 1800d86f2 (inlined)
+    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xc8, 8);           // 1800d86f2 (inlined)
 
-    uint8_t* elem = static_cast<uint8_t*>(raw);
-    if (raw != nullptr) {                                      // 1800d871d
+    SpinnerElement* elem = static_cast<SpinnerElement*>(raw);
+    if (raw != nullptr) {                                               // 1800d871d
+        // The SpinnerElement ctor, INLINED by retail: ??0Element (a door) then
+        // the vtable stamp and the one dword.
         using ElementCtorFn = void* (*)(void*);
-        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);            // 1800d8722
-        *reinterpret_cast<void**>(elem) = VtSpinnerElement();  // 1800d8728
-        *reinterpret_cast<int32_t*>(elem + 0xc0) = 1;          // 1800d8732
+        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);                     // 1800d8722
+        *reinterpret_cast<void**>(raw) = VtSpinnerElementAtomic();      // 1800d8728
+        elem->_increment = 1;                                           // 1800d8732
     }
 
-    void* slot = elem;                                         // 1800d873c
+    void* slot = elem;                                                  // 1800d873c
+    // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
+    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
     using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 1800d8749
+    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);            // 1800d8749
 
-    AddChild(dialog, &slot, elem, *reinterpret_cast<void* const*>(self + 0x68));  // 1800d874e
-    AddChild(dialog, &slot, elem, *reinterpret_cast<void* const*>(self + 0x70));  // 1800d87a6
-    AddChild(dialog, &slot, elem, *reinterpret_cast<void* const*>(self + 0x78));  // 1800d87f6
+    AddChild(dialog, &slot, elem, _editDescription);                    // 1800d874e
+    AddChild(dialog, &slot, elem, _upDescription);                      // 1800d87a6
+    AddChild(dialog, &slot, elem, _downDescription);                    // 1800d87f6
 
-    *reinterpret_cast<int32_t*>(elem + 0xc0) =
-        *reinterpret_cast<const int32_t*>(self + 0x80);        // 1800d884c
+    elem->_increment = _increment;                                      // 1800d884c
 
-    *ret = elem;                                               // 1800d8852
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d8852
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_SpinnerDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::SpinnerDescription*>(self)->UI::SpinnerDescription::Type();
+}
+extern "C" const char* RtUi_SpinnerDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::SpinnerDescription*>(self)->UI::SpinnerDescription::TypeName();
+}
+extern "C" int32_t RtUi_SpinnerDescription_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::SpinnerDescription*>(self)
+        ->UI::SpinnerDescription::GetFileVersion();
+}
+extern "C" void* RtUi_SpinnerDescription_Construct(void* self) {
+    if (self == nullptr) return nullptr;                                // 18004af00 (retail null test)
+    return reinterpret_cast<UI::SpinnerDescription*>(self)->UI::SpinnerDescription::Construct();
+}
+extern "C" void* RtUi_SpinnerDescription_Reconstruct(void* self) {
+    return reinterpret_cast<UI::SpinnerDescription*>(self)->UI::SpinnerDescription::Reconstruct();
+}
+extern "C" void RtUi_SpinnerDescription_Destruct(void* self) {
+    reinterpret_cast<UI::SpinnerDescription*>(self)->UI::SpinnerDescription::Destruct();
+}
+extern "C" bool RtUi_SpinnerDescription_Serialize(void* self, void* stream) {
+    return reinterpret_cast<UI::SpinnerDescription*>(self)->UI::SpinnerDescription::Serialize(stream);
+}
+extern "C" void** RtUi_SpinnerDescription_CreateInstance(const void* self, void** ret,
+                                                         const void* dialog) {
+    return reinterpret_cast<void**>(
+        reinterpret_cast<const UI::SpinnerDescription*>(self)
+            ->UI::SpinnerDescription::CreateInstance(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
+                static_cast<const UI::Dialog*>(dialog)));
 }
 
 int RtUiSpinnerDescriptionRegister() {
