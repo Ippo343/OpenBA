@@ -140,7 +140,7 @@ Sprite::Sprite(Object::ExternalPtr<SpriteSheet> sheet, const System::String& nam
     : spriteSheet(sheet.Get()) {
     if (spriteSheet != nullptr) {
         const auto* s = static_cast<const ::SpriteSheet*>(spriteSheet);
-        const char* key = *reinterpret_cast<char* const*>(&name);
+        const char* key = name._data;
         spriteIndex = SpriteIndexFromName(s->m_sprites, s->m_spriteCount, key);
     } else {
         spriteIndex = -1;
@@ -382,16 +382,14 @@ void RtUi_SpriteSheet_AddSpriteInfo(void* selfRaw, const void* nameStrPtr, const
 }
 
 // ============================================================================
-// UI::StringTable
+// UI::StringTable — the non-virtual members (ENDGAME B.3.6 block D). The class
+// is runtime/types/ui/StringTable.h; its slots are in stringtable_factory.cpp.
 // ============================================================================
 
-// StringTable::GetCount() const — retail 0x180002610.
-int RtUi_StringTable_GetCount(const void* selfRaw) {
-    const auto* base = static_cast<const uint8_t*>(selfRaw);
-    const int ours = *reinterpret_cast<const int32_t*>(base + StringTableOffsets::kCount);
+namespace UI {
 
-    return ours;
-}
+// StringTable::GetCount() const — retail 0x180002610: `return *(int*)(this+0x28)`.
+int32_t StringTable::GetCount() const { return _size; }
 
 // StringTable::GetText(int) const — retail 0x180002550. Bounds-checked both
 // ways (unlike Sprite/SpriteSheet's UV accessors); returns an empty String on
@@ -416,49 +414,30 @@ int RtUi_StringTable_GetCount(const void* selfRaw) {
 // `{table = nullptr, id = -1}`, and `UI::String::operator System::String`
 // (0x180035020) forwards it here verbatim (`MOV R8D,[RCX+8]; MOV RCX,[RCX]`).
 // Retail's guard order makes that harmless; the hoisted loads made it an
-// ACCESS_VIOLATION reading 0x20.
-//
-// FOUND BY: porting TextElement::CacheText (Wave 10 lane UIORACLE) — the first
-// caller in the tree to route a never-assigned UI::String through this port
-// rather than through the DLL's own copy. A four-cell A/B on the trading-post
-// panel route isolated it: the pair of ports crashes, either half alone is
-// clean.
+// ACCESS_VIOLATION reading 0x20. (As a member this means `this` may be null
+// on that path; the body never compares or dereferences it there.)
 //
 // AND THIS IS NOT THE "don't fix a faithful crash with a null check" case
-// (CLAUDE.md). No guard is being ADDED: retail's guards are being put back in
-// retail's ORDER. The upstream null is not a defect to hunt — it is the normal
-// representation of "no text", and retail is built to tolerate it here.
-void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int index) {
-    const auto* base = static_cast<const uint8_t*>(selfRaw);
-
-    auto* ret = static_cast<RtSystem::String*>(retval);
-    ret->data = nullptr;
+// (CLAUDE.md). No guard is being ADDED: retail's guards are in retail's ORDER.
+System::String StringTable::GetText(int32_t index) const {
+    System::String out;                                          // data == null
     if (index >= 0) {                                            // 0x18000256c
-        const int count = *reinterpret_cast<const int32_t*>(     // 0x180002573
-            base + StringTableOffsets::kCount);
-        if (index < count) {
-            const auto* data = *reinterpret_cast<StringTableTextEntry* const*>(
-                base + StringTableOffsets::kData);               // 0x180002585
-            char* text = data[index].text;
+        if (index < _size) {                                     // 0x180002573
+            char* text = _data[index].text;                      // 0x180002585
             if (text) {
                 RtSystem::StringRefCount(text) += 1;
-                ret->data = text;
+                out._data = text;
             }
         }
     }
-
-    return retval;
+    return out;
 }
 
 // ?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z  retail 0x180002470
 //
-// Wave 9 lane B3. WAVE7_LANE_F left this on the DLL as out of scope; it is one
-// of WAVE9_LANE_V.md's REAL DEPENDENCY rows (this file, :581 and :629), so at
-// cutover the two call sites below would be calls through null.
-//
-// A linear scan of the table's `StringTableTextEntry` array (stride 0x10, data
-// at +0x20, count at +0x28 — StringTable.h), comparing `entry.name` against
-// `key`. Two details from the listing that a paraphrase loses:
+// A linear scan of the table's TextEntry array (stride 0x10, data at +0x20,
+// count at +0x28 — StringTable.h), comparing `entry.name` against `key`. Two
+// details from the listing that a paraphrase loses:
 //
 //  * retail pre-checks the STORED LENGTHS (`name[-8]` vs `key[-8]`, with a
 //    null string counting as length 0) and skips the strcmp entirely when they
@@ -471,39 +450,55 @@ void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int inde
 //    introduced here.
 //
 // Returns -1 when nothing matches.
-int RtUi_StringTable_GetIndexFromName(const void* selfRaw, const void* keyRaw) {
-
-    const auto* self = static_cast<const uint8_t*>(selfRaw);
-    const auto* entries = *reinterpret_cast<StringTableTextEntry* const*>(
-        self + StringTableOffsets::kData);
-    const int count = *reinterpret_cast<const int32_t*>(self + StringTableOffsets::kCount);
-    const char* key = *static_cast<const char* const*>(keyRaw);
+int32_t StringTable::GetIndexFromName(const System::String& keyString) const {
+    const char* key = keyString._data;
     const int keyLen = (key != nullptr) ? RtSystem::StringLength(key) : 0;
 
     int result = -1;
-    for (int i = 0; i < count; ++i) {
-        const char* name = entries[i].name;
+    for (int i = 0; i < _size; ++i) {
+        const char* name = _data[i].name;
         const int nameLen = (name != nullptr) ? RtSystem::StringLength(name) : 0;
         if (nameLen != keyLen) continue;
         if (name == nullptr || nameLen == 0) { result = i; break; }
         if (key == nullptr) continue;                 // retail: ECX = key+1, non-zero
         if (RtSystem::RtString_StrCompare(name, key) == 0) { result = i; break; }
     }
-
     return result;
 }
 
 // StringTable::GetText(String const& key) const — retail 0x1800025b0. A
 // two-line forwarder in retail: `GetText(this, retval, GetIndexFromName(key))`.
-void* RtUi_StringTable_GetText_Key(const void* selfRaw, void* retval, const void* keyStrPtr) {
-    // Direct call: GetIndexFromName is ported above, in this same
-    // translation unit.
-    const int index = RtUi_StringTable_GetIndexFromName(selfRaw, keyStrPtr);
-    RtUi_StringTable_GetText_Index(selfRaw, retval, index);
+System::String StringTable::GetText(const System::String& name) const {
+    return GetText(GetIndexFromName(name));
+}
 
+}  // namespace UI
+
+// ---- the doors ---------------------------------------------------------------
+// GetText x2 are hidden-retslot: `(this, ret, …)`, the member's prvalue is
+// placement-new'd into the caller's slot. THE DOOR DECIDES THE OVERLOAD.
+
+int RtUi_StringTable_GetCount(const void* selfRaw) {
+    return reinterpret_cast<const UI::StringTable*>(selfRaw)->UI::StringTable::GetCount();  // B.3.6 bridge
+}
+
+void* RtUi_StringTable_GetText_Index(const void* selfRaw, void* retval, int index) {
+    new (retval) System::String(
+        reinterpret_cast<const UI::StringTable*>(selfRaw)->UI::StringTable::GetText(index));  // B.3.6 bridge
     return retval;
 }
 
+int RtUi_StringTable_GetIndexFromName(const void* selfRaw, const void* keyRaw) {
+    return reinterpret_cast<const UI::StringTable*>(selfRaw)                    // B.3.6 bridge
+        ->UI::StringTable::GetIndexFromName(*static_cast<const System::String*>(keyRaw));
+}
+
+void* RtUi_StringTable_GetText_Key(const void* selfRaw, void* retval, const void* keyStrPtr) {
+    new (retval) System::String(
+        reinterpret_cast<const UI::StringTable*>(selfRaw)                       // B.3.6 bridge
+            ->UI::StringTable::GetText(*static_cast<const System::String*>(keyStrPtr)));
+    return retval;
+}
 // ============================================================================
 // UI::String — ENDGAME B.3.6 block D (RULE B6-10); retail's `UI::String`,
 // the tree's `UIString`. Same shape as UI::Sprite above.
@@ -512,11 +507,11 @@ void* RtUi_StringTable_GetText_Key(const void* selfRaw, void* retval, const void
 namespace UI {
 
 // UI::String::String(ExternalPtr<StringTable>, String const& name) — retail
-// 0x18011da60. StringTable::GetIndexFromName is ported above.
+// 0x18011da60. StringTable::GetIndexFromName is a member (above).
 String::String(Object::ExternalPtr<StringTable> t, const System::String& name)
     : table(t.Get()) {
     if (table != nullptr) {
-        index = RtUi_StringTable_GetIndexFromName(table, &name);
+        index = static_cast<const StringTable*>(table)->GetIndexFromName(name);
     } else {
         index = -1;
     }
@@ -539,9 +534,7 @@ Object::ExternalPtr<StringTable> String::GetStringTable() const {
 // WAVE 10 LANE UIORACLE note on RtUi_StringTable_GetText_Index). No null check
 // retail lacks (CLAUDE.md).
 String::operator System::String() const {
-    System::String out;                                  // data == null
-    RtUi_StringTable_GetText_Index(table, &out, index);  // stores the owned ref
-    return out;
+    return static_cast<const StringTable*>(table)->GetText(index);
 }
 
 }  // namespace UI

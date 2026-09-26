@@ -32,6 +32,7 @@
 
 #include "runtime/types/ui/CharacterSet.h"
 #include "runtime/types/ui/Cursor.h"
+#include "runtime/types/ui/StringTable.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -200,6 +201,37 @@ UNIT_TEST(ui_cursor_slot_order_is_retails) {
     CheckCompileInherited(raw);
 }
 
+// ---------------------------------------------------------------------------
+// UI::StringTable
+// ---------------------------------------------------------------------------
+struct StringTableProbe final : UI::StringTable {
+    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+};
+
+UNIT_TEST(ui_stringtable_layout) {
+    CHECK_EQ((int)sizeof(UI::StringTable), 0x30);
+    CHECK_EQ((int)alignof(UI::StringTable), 8);
+    CHECK_EQ((int)offsetof(UI::StringTable, _data),     0x20);
+    CHECK_EQ((int)offsetof(UI::StringTable, _size),     0x28);
+    CHECK_EQ((int)offsetof(UI::StringTable, _capacity), 0x2c);
+    CHECK_EQ((int)offsetof(UI::StringTable, _data), (int)sizeof(Object::External));
+    CHECK_EQ((int)sizeof(UI::StringTable::TextEntry), 0x10);
+    CHECK_EQ((int)offsetof(UI::StringTable::TextEntry, text), 0x08);
+    CHECK((std::is_base_of<Object::External, UI::StringTable>::value));
+    CHECK(std::is_abstract<UI::StringTable>::value);
+    // The B6-4.2 transition aliases name the class and its row.
+    CHECK((std::is_same<::UiStringTable, UI::StringTable>::value));
+    CHECK((std::is_same<::StringTable, UI::StringTable>::value));
+    CHECK((std::is_same<::StringTableTextEntry, UI::StringTable::TextEntry>::value));
+}
+
+UNIT_TEST(ui_stringtable_slot_order_is_retails) {
+    StringTableProbe probe;
+    void* raw = static_cast<void*>(&probe);
+    CheckNineSlots(raw);
+    CheckCompileInherited(raw);
+}
+
 }  // namespace
 
 // ############################################################################
@@ -224,5 +256,14 @@ Object::External* Cursor::Reconstruct() { Note(this, kReconstruct / 8); return t
 void        Cursor::Destruct() { Note(this, kDestruct / 8); }
 Object::External* Cursor::Construct() { Note(this, kConstruct / 8); return this; }
 Cursor::~Cursor() {}
+
+const char* StringTable::TypeName() const { Note(this, kTypeName / 8); return "StringTable"; }
+uint32_t    StringTable::Type() const { Note(this, kType / 8); return 0u; }
+int32_t     StringTable::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
+bool        StringTable::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+Object::External* StringTable::Reconstruct() { Note(this, kReconstruct / 8); return this; }
+void        StringTable::Destruct() { Note(this, kDestruct / 8); }
+Object::External* StringTable::Construct() { Note(this, kConstruct / 8); return this; }
+StringTable::~StringTable() {}
 
 }  // namespace UI
