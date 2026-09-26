@@ -26,6 +26,7 @@
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ModDetailsDialog.h"
+#include "Dialog/ModUploadDialog.h"
 #include <cstdio>
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
@@ -366,17 +367,16 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
     void* dialog = ext;
 
     // Allocate and construct DialogInstance (0xB8 bytes)
-    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, sizeof(ModUploadDialog), 8);
     void* dialogInst = nullptr;
     if (newDialog) {
-        uint64_t nullRef;
-        new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
-        // Set vtable to ModUpdateDialog
-        if (g_ModUpdateDialog_Vtable) {
-            *(uintptr_t*)newDialog = g_ModUpdateDialog_Vtable;
-        }
-        dialogInst = newDialog;
+        // ENDGAME B.3.8 DLG: the real class. The old path ran the DialogInstance
+        // ctor door and stamped g_ModUpdateDialog_Vtable (0x14015c6c0), which is
+        // unregistered, so the stamp was skipped and the object stayed a bare
+        // DialogInstance (B38 D9 #15).
+        dialogInst = ::new (newDialog) ModUploadDialog(
+            *reinterpret_cast<UI::UserInterface**>(s + 0x10), static_cast<const UI::Dialog*>(dialog),
+            Object::InternalPtr<UI::DialogInstance>());
     }
 
     // Add to UI

@@ -182,12 +182,8 @@ namespace TutorialSetupDialogAddr {
 // --- ModDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/ModDialog.h"
 
-// --- ModUploadDialog (0xB8) ---
-// Factory: no subclass fields (size == base DialogInstance)
-struct ModUploadDialog {
-    DialogInstance base;        // +0x00
-};
-static_assert(sizeof(ModUploadDialog) == 0xB8, "ModUploadDialog size mismatch");
+// --- ModUploadDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/ModUploadDialog.h"
 
 // --- NewGameDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/NewGameDialog.h"

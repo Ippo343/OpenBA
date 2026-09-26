@@ -39,6 +39,7 @@
 #include "Dialog/SaveLoadDialog.h"
 #include "Dialog/ModDialog.h"
 #include "Dialog/ModDetailsDialog.h"
+#include "Dialog/ModUploadDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -232,4 +233,10 @@ UNIT_TEST(dlg_mod_dialogs) {
     CHECK_EQ(offsetof(ModDetailsDialog, modIndex), (size_t)0xc0);
     CheckShape<ModDetailsDialog>();
     CheckDialogInstanceSlots<ModDetailsDialog>();
+}
+
+UNIT_TEST(dlg_modupload_dialog) {
+    CHECK_EQ(sizeof(ModUploadDialog), (size_t)0xb8);
+    CheckShape<ModUploadDialog>();
+    CheckDialogInstanceSlots<ModUploadDialog>();
 }

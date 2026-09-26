@@ -1669,6 +1669,7 @@ REGISTER_TYPE(BuildUI, "UI::DialogController",
 
 // ENDGAME B.3.8 DLG: the real DialogInstance classes whose reflection record
 // stays at this TU position (B38_RULES D4).
+#include "Dialog/ModUploadDialog.h"
 #include "Dialog/SaveLoadDialog.h"
 #include "Dialog/FollowDialog.h"
 #include "Dialog/ScenarioDialog.h"
@@ -1684,7 +1685,7 @@ DEFINE_EXE_TYPE(AchievementDialog, "UI::DialogInstance")   // was a UI_DIALOG_ST
 DEFINE_EXE_TYPE(FollowDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 DEFINE_EXE_TYPE(GoalDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 DEFINE_EXE_TYPE(MapParamsDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
-UI_DIALOG_STUB(ModUploadDialog,     "UI::DialogInstance",   0xB8);
+DEFINE_EXE_TYPE(ModUploadDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 DEFINE_EXE_TYPE(ScenarioDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 DEFINE_EXE_TYPE(SaveLoadDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 UI_DIALOG_STUB(ToolbarDialog,       "UI::DialogInstance",   0x108);
