@@ -257,11 +257,12 @@ public:
     AnimationEvent& operator=(const AnimationEvent&);
 
 protected:
-    // NOT retail's 0x1800a2150 — see the banner. `= default` keeps the class
-    // trivially default-constructible so no layout pin moves, and `protected`
-    // makes `Graphics::AnimationEvent e;` a hard compile error while a probe
-    // subclass still reaches it.
-    AnimationEvent() = default;
+    // ??0AnimationEvent@Graphics@@QEAA@XZ  0x1800a2150 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1). Retail's body is the inlined
+    // External() (three zero stores) and the stamps, NOTHING else — so the
+    // compiler-emitted chain is the whole port and the body is empty; the
+    // door `RtGraphics_AnimationEvent_Ctor` has no field of its own to share.
+    AnimationEvent() {}
 
     // ??1AnimationEvent@Graphics@@UEAA@XZ  0x1800a2120. NON-virtual (there is
     // no virtual destructor anywhere — ENDGAME section B.1 decision 2).

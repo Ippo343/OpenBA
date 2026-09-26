@@ -583,33 +583,8 @@ void StorageUI_SortItems(void* items, int count, void* /*scratch*/, void* /*unus
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
-#include "dialog_controller_vtable.h"
 
 namespace storageui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("StorageUI");
-    return c;
-}
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    // Free the cached row-element array at +0x30 (mirrors the exe ScalarDtor).
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* rows = *reinterpret_cast<void**>(s + 0x30);
-    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_raw = 0;
@@ -673,46 +648,58 @@ void W_OnUpdate(void* self, void* /*time*/) {
         StorageUI_Startup(reinterpret_cast<StorageUI*>(self));
     }
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Serialize);
-        g_vt[7] = reinterpret_cast<void*>(&W_Startup);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's StorageUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "StorageUI", &StubNop);
-
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x40); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x40), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace storageui_sa
 
-REGISTER_TYPE(StorageUI, "UI::DialogController",
-              &storageui_sa::Factory, &storageui_sa::InPlace);
+// ~StorageUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
+// WITHOUT ~DialogController); moved here unchanged. The compiler now chains
+// ~DialogController -> ~Internal after it.
+StorageUI::~StorageUI() {
+    void* self = this;
+    // Free the cached row-element array at +0x30 (mirrors the exe ScalarDtor).
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* rows = *reinterpret_cast<void**>(s + 0x30);
+    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
+}
 
+// [4] 0x1400b8820
+void StorageUI::OnCreated() {
+    storageui_sa::W_Serialize(this);
+}
+
+// [7] 0x1400b8450
+void StorageUI::OnUpdateLayout() {
+    storageui_sa::W_Startup(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void StorageUI::OnUpdate(const System::Time& time) {
+    storageui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [0] 0x140021390: ~StorageUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* StorageUI::DeletingDtor(unsigned flags) {
+    this->~StorageUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140021330: MemAlloc(0x40, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* StorageUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StorageUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StorageUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* StorageUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StorageUI());
+}
+
+DEFINE_EXE_VTABLE(StorageUI, "_ZTV9StorageUI")
+DEFINE_EXE_TYPE(StorageUI, "UI::DialogController")
 

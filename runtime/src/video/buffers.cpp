@@ -346,22 +346,10 @@ void Video_ImageBuffer_Ctor(ImageBuffer* self) {
     self->externalData10 = 0;
     self->externalData18 = 0;
 
-    self->width = 0;
-    self->height = 0;
-    self->dimension = 0;
-    self->kind = 2;         // default/none
-    self->format = 0;
-    self->flags = 0;
-    self->addressU = 0;
-    self->addressV = 0;
-    self->addressW = 0;
-    self->filter = 1;       // LINEAR
-    self->pixelData = nullptr;
-    // field50/field58: not written by the ctor (undefined scope for this lane).
-
-    // B.3.5 bridge — the door's parameter is the POD view.
-    reinterpret_cast<Video::ImageBuffer*>(self)
-        ->Video::ImageBuffer::PlatformConstruct();
+    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores and the
+    // PlatformConstruct call are ONE body with the real constructor
+    // `Video::ImageBuffer()` — `InitFields`, beside ~ImageBuffer below.
+    Video::ImageBuffer::DoorBody::Init(reinterpret_cast<Video::ImageBuffer*>(self));   // B.3.8 bridge
 
 }
 
@@ -707,8 +695,37 @@ namespace Video {
 //   4. stamp CompiledExternal's vtable, then tail-jump ~External
 //                                              — the DESTRUCTOR CHAIN, which is
 //      what replaced this file's `ObjectExternalDtor()` resolver
-ImageBuffer::~ImageBuffer() {
-    *reinterpret_cast<void**>(this) = ImageBufferVtable();
+//
+// ENDGAME B.3.8 block RB: step 1's hand-written MINTED stamp is GONE. The
+// destructor now runs on compiler-built objects too (DLG's ModDialog image,
+// the concrete slot 0 above), and a converted object must never wear the
+// minted table (B8-5); the compiler's own stamp on entry is retail's step 1.
+// For the minted objects the door `Video_ImageBuffer_Dtor` still destroys,
+// the vptr during this body is therefore the compiler's ImageBuffer table
+// instead of the minted one — nothing in the body dispatches through `this`
+// (PlatformDestruct walks the companion list; the String release is by hand).
+// Steps 2 and 3 are `ReleaseFields`, the shared body.
+ImageBuffer::~ImageBuffer() { ReleaseFields(); }
+
+// ??0ImageBuffer 0x1800f2580 after the inlined External stores and the stamp.
+void ImageBuffer::InitFields() {
+    _width = 0;
+    _height = 0;
+    _dimension = 0;
+    _kind = 2;         // default/none
+    _format = 0;
+    _flags = 0;
+    _addressU = 0;
+    _addressV = 0;
+    _addressW = 0;
+    _filter = 1;       // LINEAR
+    _sourceName = nullptr;
+    // +0x50/+0x58 are not written by the ctor.
+    PlatformConstruct();
+}
+
+// ??1ImageBuffer 0x1800f2610 steps 2 and 3 (see above).
+void ImageBuffer::ReleaseFields() {
     PlatformDestruct();
 
     if (_sourceName != nullptr) {

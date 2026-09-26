@@ -241,13 +241,9 @@ void* RtUi_SpriteSheet_Ctor(void* selfRaw) {
     qword(self, 0x10) = nullptr;
     qword(self, 0x18) = nullptr;
     qword(self, 0x00) = vtableSheet;
-    qword(self, 0x20) = nullptr;
-    qword(self, 0x28) = nullptr;   // m_spriteCount + m_spriteCapacity (one qword store)
-    qword(self, 0x30) = nullptr;
-    qword(self, 0x38) = nullptr;
-    qword(self, 0x40) = nullptr;
-    qword(self, 0x48) = nullptr;   // m_field48 + m_field4C
-    self[0x50] = 0;                // single byte; +0x51..+0x57 are compiler padding, not retail stores
+    // ENDGAME B.3.8 block RB (RULE B8-1): the +0x20..+0x50 stores are ONE body
+    // with the real constructor `UI::SpriteSheet()` (SpriteSheet.h, InitFields).
+    UI::SpriteSheet::DoorBody::Init(reinterpret_cast<UI::SpriteSheet*>(selfRaw));   // B.3.8 bridge
 
     return selfRaw;
 }

@@ -149,7 +149,10 @@ void SpriteCapture::Destruct() { CallSlot0(this, 0); }
 
 // ~SpriteCapture: NON-VIRTUAL and EMPTY; the registered dtor door below does
 // retail's three ~Array calls and the chain to ~External.
-SpriteCapture::~SpriteCapture() {}
+// ENDGAME B.3.8 block RB: ~SpriteCapture's body is `ReleaseFields` (below),
+// ONE body with the door `RtUi_SpriteCapture_Dtor`; the restamp and the
+// ~External tail are the compiler's.
+SpriteCapture::~SpriteCapture() { ReleaseFields(); }
 
 }  // namespace UI
 
@@ -186,13 +189,21 @@ extern "C" void RtUi_SpriteCapture_Dtor(void* selfv) {
 
     *reinterpret_cast<void**>(p) = VtSpriteCapture();        // 1800d91cd
 
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `~SpriteCapture()`.
+    UI::SpriteCapture::DoorBody::Release(reinterpret_cast<UI::SpriteCapture*>(selfv));   // B.3.8 bridge
+
+    using ExtDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d91f6 JMP
+}
+
+// ??1SpriteCapture 0x1800d91b0 between the restamp and the ~External tail:
+// the three retail ~Array calls, in retail's order (ENDGAME B.3.8 block RB).
+void UI::SpriteCapture::ReleaseFields() {
+    uint8_t* p = reinterpret_cast<uint8_t*>(this);
     using ArrayDtorFn = void* (*)(void*);
     RtAddr<ArrayDtorFn>(0x180037310ull)(p + 0x40);           // 1800d91d4  ~Array<Sprite>
     RtAddr<ArrayDtorFn>(0x18003e4a0ull)(p + 0x30);           // 1800d91de  ~Array<CaptureEntry>
     RtAddr<ArrayDtorFn>(0x18003da00ull)(p + 0x20);           // 1800d91e8  ~Array<ExternalPtr<SpriteSheet>>
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d91f6 JMP
 }
 
 // ============================================================================

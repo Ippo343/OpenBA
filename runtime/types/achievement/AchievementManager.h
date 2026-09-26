@@ -105,8 +105,31 @@ public:
     // order, then runs ~External().
     ~Achievement();
 
+    // The door's way onto the shared body (ENDGAME B.3.8 block RB, B38_RULES
+    // D1): `RtAch_Achievement_Ctor` stamps the MINTED tables and does the
+    // inlined External stores, then runs this. Nothing else may.
+    struct DoorBody { static void Init(Achievement* a) { a->InitFields(); } };
+
 protected:
-    Achievement() = default;   // NOT retail's 0x18009e240 — door (B4b-2, B7-3)
+    // ??0Achievement@0@QEAA@XZ 0x18009e240 — the REAL constructor (ENDGAME
+    // B.3.8 block RB, RULE B8-1): External() and the three stamps are the
+    // compiler's; the seven zero stores +0x20..+0x50 are ONE body with the
+    // door. (The members' own default ctors wrote the same zeros first.)
+    Achievement() { InitFields(); }
+
+private:
+    // The seven qword zero stores of 0x18009e240, as the field writes they are.
+    // Raw member writes, not assignments: the door runs this over raw storage.
+    void InitFields() {
+        _stringTable._ptr = nullptr;              // +0x20
+        *reinterpret_cast<void**>(&_title) = nullptr;         // +0x28
+        *reinterpret_cast<void**>(&_description) = nullptr;   // +0x30
+        _spriteSheet._ptr = nullptr;              // +0x38
+        *reinterpret_cast<void**>(&_spriteName) = nullptr;    // +0x40
+        _goals._data = nullptr;                   // +0x48
+        _goals._size = 0;                         // +0x50 } one qword
+        _goals._capacity = 0;                     //       }
+    }
 
 private:
     //   0x180001000  ?_TypeName@Achievement@1@       -> "Achievement"
@@ -135,8 +158,9 @@ static_assert(offsetof(Achievement, _goals)       == 0x48, "Achievement::_goals 
 // Achievement::AchievementInstance — an Object::Internal subclass, 0x28 bytes.
 // FOUR slots. The exe subclasses it in retail (table 0x14015e350, built in
 // GameUpdateLoop's slot-6 Load ON THE LOADER THREAD); the standalone never
-// registers that table, so the object keeps the Runtime one. Abstract-by-
-// policy all the same (B7-13).
+// registers that table, so the object keeps the Runtime one. CONCRETE since
+// ENDGAME B.3.8 block RB (slot 0 is the exe's scalar deleting dtor), so LOOP
+// can build it as `::new (p) Achievement::AchievementInstance()` (D8).
 //
 // `??_7AchievementInstance@Achievement@@6B@` @ 0x180154700:
 //   [0] +0x00 0x180001a90  vector deleting dtor (MOV EDX,0x28; ~GoalList(+0x10), ~Internal)
@@ -151,7 +175,16 @@ static_assert(offsetof(Achievement, _goals)       == 0x48, "Achievement::_goals 
 // ============================================================================
 class AchievementInstance : public Object::Internal {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x180001a90 — pure (B7-13)
+    // [0] CONCRETE (ENDGAME B.3.8 block RB, B38_RULES D1/D2): the exe
+    // instantiates the class itself (its table copy 0x14015e350, built in
+    // GameUpdateLoop's Load), whose slot 0 is the exe scalar deleting dtor
+    // 0x140019d90: CALL [??1AchievementInstance]; if (flags & 1) MemFree.
+    // The DLL's 0x180001a90 stays the mint's RT_DELDTOR row for the doors.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        this->~AchievementInstance();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char* TypeName() const override;                    // [1] 0x1800017c0
     uint32_t    Type() const override;                        // [2] 0x1800017a0
     void        Persist(void* stream) override;               // [3] 0x18009e4a0 (IO::Stream&)
@@ -183,8 +216,21 @@ public:
     // and is untouched by this block.
     ~AchievementInstance();
 
-protected:
-    AchievementInstance() = default;   // NOT retail's 0x18009e3b0 — door (B4b-2)
+    // ??0AchievementInstance@Achievement@@QEAA@XZ 0x18009e3b0 — the REAL
+    // constructor (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is
+    // concrete. Internal() and the stamp are the compiler's; the four zero
+    // stores are ONE body with the door `RtAch_AchievementInstance_Ctor`.
+    AchievementInstance() { InitFields(); }
+
+    struct DoorBody { static void Init(AchievementInstance* a) { a->InitFields(); } };
+
+private:
+    void InitFields() {
+        _goalList._goals._data     = nullptr;   // +0x10
+        _goalList._goals._size     = 0;         // +0x18 } one qword
+        _goalList._goals._capacity = 0;         //       }
+        _achievement._ptr          = nullptr;   // +0x20
+    }
 
 private:
     //   0x180001780  ?_TypeName@AchievementInstance@…       -> "AchievementInstance"

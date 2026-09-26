@@ -37,83 +37,67 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
-static const uintptr_t kUpgradeUIConfigVtable = 0x14015df60;
+#include "object/Internal.h"
+#include "Dialog/UpgradeUIConfig.h"
 
-static void* g_UpgradeUIConfig_Vtable[9];
+// ============================================================================
+// ENDGAME B.3.8 PNL — UpgradeUIConfig as a REAL class (UpgradeUIConfig.h). The hand-built
+// 9-slot table, its Init/Factory/CreateInPlace entry points and the lazy
+// GetTypeId cache are gone; the compiler emits the table.
+// ============================================================================
 
-static void UpgradeUIConfig_Init(void* self) {
-    if (fn_External_External) fn_External_External(self);
-    *reinterpret_cast<void**>(self) = g_UpgradeUIConfig_Vtable;
-    *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x20) = nullptr;
+// [0] 0x140016d00: ~UpgradeUIConfig (restamp + ~DialogControllerConfig + ~External, all
+// the compiler's), MemFree on &1.
+Object::Base* UpgradeUIConfig::DeletingDtor(unsigned flags) {
+    this->~UpgradeUIConfig();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static uint32_t UpgradeUIConfig_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("UpgradeUIConfig");
-    return cached;
+// [4] not declared: retail's slot is the imported External::Compile, which
+// the class inherits.
+
+// [5] 0x140086fb0 — deserialize the target-template reference
+// (ExternalPtr<ComponentEntity>, the canonical ExternalPtrSerializeGeneric body).
+bool UpgradeUIConfig::Serialize(void* stream) {
+    IO::Serializer serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    ExternalPtrSerializeGeneric(&_target, &serializer, g_TypeId_ComponentEntity,
+                                "ComponentEntity");
+    return true;
 }
 
-// vtable +0x28 (0x140086fb0): deserialize the target-template reference.
-static void UpgradeUIConfig_Serialize(void* self, void* stream) {
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    ExternalPtrSerializeGeneric(
-        reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x20),
-        serializer, g_TypeId_ComponentEntity, "ComponentEntity");
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [6] 0x140016cb0 — destroy in place, construct again.
+Object::External* UpgradeUIConfig::Reconstruct() {
+    this->~UpgradeUIConfig();
+    return new (this) UpgradeUIConfig();
 }
 
-static void* UpgradeUIConfig_Dtor(void* self, uint32_t flags) {
-    *reinterpret_cast<void**>(self) = g_UpgradeUIConfig_Vtable;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
+// [7] 0x140001640, the body shared by 119 exe tables:
+// `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
+void UpgradeUIConfig::Destruct() { DeletingDtor(0); }
 
-static int   UpgradeUIConfig_GetVersion(void*) { return 1; }   // 0x140087000
-static int   UpgradeUIConfig_Return0(void*)    { return 0; }
-static void* UpgradeUIConfig_ReturnNull(void*, ...) { return nullptr; }
+// [8] 0x140016c60 — placement construction (MSVC folded it with createInPlace).
+Object::External* UpgradeUIConfig::Construct() { return new (this) UpgradeUIConfig(); }
 
-extern "C" void* UpgradeUIConfig_CreateInPlace(void* mem);
-
-// vtable +0x30 (0x140016cb0): destroy-then-reconstruct in place.
-static void* UpgradeUIConfig_Reconstruct(void* self) {
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    return UpgradeUIConfig_CreateInPlace(self);
-}
-
-struct UpgradeUIConfig_VtblInit {
-    UpgradeUIConfig_VtblInit() {
-        g_UpgradeUIConfig_Vtable[0] = reinterpret_cast<void*>(&UpgradeUIConfig_Dtor);
-        g_UpgradeUIConfig_Vtable[1] = reinterpret_cast<void*>(&UpgradeUIConfig_ReturnNull);
-        g_UpgradeUIConfig_Vtable[2] = reinterpret_cast<void*>(&UpgradeUIConfig_GetTypeId);
-        g_UpgradeUIConfig_Vtable[3] = reinterpret_cast<void*>(&UpgradeUIConfig_GetVersion);
-        g_UpgradeUIConfig_Vtable[4] = reinterpret_cast<void*>(&UpgradeUIConfig_Return0);
-        g_UpgradeUIConfig_Vtable[5] = reinterpret_cast<void*>(&UpgradeUIConfig_Serialize);
-        g_UpgradeUIConfig_Vtable[6] = reinterpret_cast<void*>(&UpgradeUIConfig_Reconstruct);
-        g_UpgradeUIConfig_Vtable[7] = reinterpret_cast<void*>(&UpgradeUIConfig_Return0);
-        g_UpgradeUIConfig_Vtable[8] = reinterpret_cast<void*>(&UpgradeUIConfig_CreateInPlace);
-    }
-} g_UpgradeUIConfig_vtblInit;
-
-extern "C" void RegisterUpgradeUIConfigVtable() {
-    RegisterExeAddr(kUpgradeUIConfigVtable,
-                    reinterpret_cast<uintptr_t>(g_UpgradeUIConfig_Vtable));
-}
-
-extern "C" void* UpgradeUIConfig_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+// create 0x140016c00: MemAlloc(0x28, 8), then the ctor.
+void* UpgradeUIConfig::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(UpgradeUIConfig), 8);
     if (!p) return nullptr;
-    UpgradeUIConfig_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) UpgradeUIConfig());
+}
+// createInPlace 0x140016c60.
+void* UpgradeUIConfig::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) UpgradeUIConfig());
 }
 
-extern "C" void* UpgradeUIConfig_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    UpgradeUIConfig_Init(mem);
-    return mem;
+DEFINE_EXE_VTABLE(UpgradeUIConfig, "_ZTV15UpgradeUIConfig")
+
+// D5: no by-address reader of 0x14015df60 remains in the tree; the row is kept
+// (serving the compiler table) only because reg_destroy_sm.cpp calls this function —
+// the closing pass deletes both.
+extern "C" void RegisterUpgradeUIConfigVtable() {
+    RegisterExeAddr(0x14015df60, reinterpret_cast<uintptr_t>(UpgradeUIConfig::Vtable()));
 }
 
-REGISTER_TYPE(UpgradeUIConfig, "UI::DialogControllerConfig",
-              &UpgradeUIConfig_Factory, &UpgradeUIConfig_CreateInPlace);
+DEFINE_EXE_TYPE(UpgradeUIConfig, "UI::DialogControllerConfig")
