@@ -46,6 +46,7 @@
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "Dialog/SaveLoadDialog.h"
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
@@ -438,22 +439,22 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
 // Copies sprite data from DAT_1401c3de8+0xB8 (16 bytes) to SaveLoad singleton.
 // Calls SetMinOperationTime(0.75f) and SetOperation(1, mode).
 
-void SaveLoadDialog_Startup(SaveLoadDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void SaveLoadDialog::OnOpened() {
+    uintptr_t s = (uintptr_t)this;
 
     // --- Find all named elements ---
-    *(uint64_t*)(s + 0xF8)  = FindDialogElem(self, "labelLoad");
-    *(uint64_t*)(s + 0x100) = FindDialogElem(self, "labelSave");
-    *(uint64_t*)(s + 0x140) = FindDialogElem(self, "buttonSave");
-    *(uint64_t*)(s + 0x148) = FindDialogElem(self, "buttonLoad");
-    *(uint64_t*)(s + 0x150) = FindDialogElem(self, "buttonCancel");
-    *(uint64_t*)(s + 0x158) = FindDialogElem(self, "buttonDelete");
-    *(uint64_t*)(s + 0xF0)  = FindDialogElem(self, "mainPage");
-    *(uint64_t*)(s + 0x120) = FindDialogElem(self, "textLoading");
-    *(uint64_t*)(s + 0x128) = FindDialogElem(self, "textSaving");
-    *(uint64_t*)(s + 0x130) = FindDialogElem(self, "textPleaseWait");
-    *(uint64_t*)(s + 0x138) = FindDialogElem(self, "loadingImage");
-    *(uint64_t*)(s + 0x108) = FindDialogElem(self, "tableSaveList");
+    *(uint64_t*)(s + 0xF8)  = FindDialogElem(this, "labelLoad");
+    *(uint64_t*)(s + 0x100) = FindDialogElem(this, "labelSave");
+    *(uint64_t*)(s + 0x140) = FindDialogElem(this, "buttonSave");
+    *(uint64_t*)(s + 0x148) = FindDialogElem(this, "buttonLoad");
+    *(uint64_t*)(s + 0x150) = FindDialogElem(this, "buttonCancel");
+    *(uint64_t*)(s + 0x158) = FindDialogElem(this, "buttonDelete");
+    *(uint64_t*)(s + 0xF0)  = FindDialogElem(this, "mainPage");
+    *(uint64_t*)(s + 0x120) = FindDialogElem(this, "textLoading");
+    *(uint64_t*)(s + 0x128) = FindDialogElem(this, "textSaving");
+    *(uint64_t*)(s + 0x130) = FindDialogElem(this, "textPleaseWait");
+    *(uint64_t*)(s + 0x138) = FindDialogElem(this, "loadingImage");
+    *(uint64_t*)(s + 0x108) = FindDialogElem(this, "tableSaveList");
 
     // --- Set button element IDs ---
     reinterpret_cast<UI::Element*>((void*)*(uint64_t*)(s + 0x140))->SetElementId(1);   // B.3.6 bridge; buttonSave
@@ -498,8 +499,8 @@ void SaveLoadDialog_Startup(SaveLoadDialog* self) {
 // 2. Idle (op == 0, no flags): Show main page (page 1), enable/disable buttons,
 //    iterate save entries to show/hide selection highlights.
 
-void SaveLoadDialog_Update(SaveLoadDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void SaveLoadDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     uint8_t mode = *(uint8_t*)(s + 0xB8);
     void* saveLoad = *g_pSaveLoadSingleton;
@@ -697,16 +698,14 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
 // exe subclass polymorphism (the base Runtime ctors set the base vtable; exe code
 // overwrites with the subclass vtable immediately after).
 
-void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut, uint64_t param4) {
-    (void)loaderLoopOut;
-    (void)param4;
-    uintptr_t s = (uintptr_t)self;
+void SaveLoadDialog::OnUpdate(const System::Time& time) {
+    uintptr_t s = (uintptr_t)this;
     void* saveLoad = *g_pSaveLoadSingleton;
 
     // Phase 1: accumulate spinner rotation while I/O is in progress
     int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
     if (operation != 0) {
-        float elapsed = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
+        float elapsed = time.AsSeconds();
         *(float*)(s + 0xC8) += elapsed * 180.0f;
     }
 
@@ -731,7 +730,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         if (count <= *(int*)(s + 0xC0)) {
             *(int*)(s + 0xC0) = count - 1;
         }
-        SaveLoadDialog_PopulateFileList(self);
+        SaveLoadDialog_PopulateFileList(this);
         *(uint8_t*)(s + 0xBB) = 0;
         return;
     }
@@ -1191,14 +1190,14 @@ static void SaveLoadDialog_SelectEntry(SaveLoadDialog* self, int index) {
     *(int*)(s + 0xC0) = index;
 }
 
-void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, int eventData) {
-    uintptr_t s = (uintptr_t)self;
+void SaveLoadDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    uintptr_t s = (uintptr_t)this;
 
     if (eventType == 2) {
         // List row selection change
         int saveCount = *(int*)(s + 0xC4);
         if (eventData > 3 && eventData < saveCount + 4) {
-            SaveLoadDialog_SelectEntry(self, eventData - 4);
+            SaveLoadDialog_SelectEntry(this, eventData - 4);
         }
         return;
     }
@@ -1208,20 +1207,20 @@ void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, 
             // buttonCancel: close dialog
             void* ui = *(void**)(s + 0x10);
             uint64_t basePtr[2];
-            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
             return;
         }
         if (eventData == 2) {
-            SaveLoadDialog_DoLoad(self);
+            SaveLoadDialog_DoLoad(this);
             return;
         }
         if (eventData == 1) {
-            SaveLoadDialog_DoSave(self);
+            SaveLoadDialog_DoSave(this);
             return;
         }
         if (eventData == 3) {
-            SaveLoadDialog_DoDelete(self);
+            SaveLoadDialog_DoDelete(this);
             return;
         }
     }
@@ -1248,82 +1247,78 @@ void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-namespace {
+// ENDGAME B.3.8 block DLG: SaveLoadDialog is a real class (Dialog/SaveLoadDialog.h);
+// the hand-built table is gone. engine_funcs.cpp does not read 0x14015f900 back,
+// so its registration went with the table; the ctor door stays.
 
-void* GetSaveLoadDialogVtable();
-
-void* SLDStub_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *(void**)self = GetSaveLoadDialogVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-const char* SLDStub_TypeName(void* /*self*/) { return "SaveLoadDialog"; }
-uint32_t SLDStub_TypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("SaveLoadDialog");
-    return cached;
-}
-template <int SlotIdx>
-void SLDStub_RuntimeThunk(void* self, ...) {
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[SaveLoadDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
-               SlotIdx, self);
-    }
-}
-
-void* g_SaveLoadDialog_Vtable_Standalone[10] = {
-    reinterpret_cast<void*>(&SLDStub_Dtor),                 // +0x00
-    reinterpret_cast<void*>(&SLDStub_TypeName),             // +0x08
-    reinterpret_cast<void*>(&SLDStub_TypeId),               // +0x10
-    reinterpret_cast<void*>(&SLDStub_RuntimeThunk<3>),      // +0x18 Persist
-    reinterpret_cast<void*>(&SaveLoadDialog_Startup),       // +0x20
-    reinterpret_cast<void*>(&SLDStub_RuntimeThunk<5>),      // +0x28 Shutdown
-    reinterpret_cast<void*>(&SaveLoadDialog_Update),        // +0x30
-    reinterpret_cast<void*>(&SaveLoadDialog_Load),          // +0x38
-    reinterpret_cast<void*>(&SaveLoadDialog_OnEvent),       // +0x40
-    reinterpret_cast<void*>(&SLDStub_RuntimeThunk<9>),      // +0x48
-};
-
-void* GetSaveLoadDialogVtable() {
-    return reinterpret_cast<void*>(g_SaveLoadDialog_Vtable_Standalone);
-}
-
-} // namespace
-
-// In-place ctor — clean reimpl of exe 0x1400b8270. Mirrors the disassembly:
-// DialogInstance base ctor (parent IBP copied to a local, tail args 0,0,0),
-// vtable patch, mode byte at +0xB8, flags/selection/rotation zeroed, Sprite
-// default-ctor at +0xD0, loader/engine ptrs at +0xE0/+0xE8, +0xF0..+0x158 zero.
-extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes,
-                                          void* parentIBP, uint8_t mode,
-                                          void* enginePtr, void* gameWorldPtr) {
-    uintptr_t s = (uintptr_t)self;
-
-    uint64_t ibpCopy = parentIBP ? *(uint64_t*)parentIBP : 0;
-    fn_DialogInstance_Ctor(self, ui, extRes, &ibpCopy, 0, 0, 0);
-    *(void**)self = GetSaveLoadDialogVtable();
-
-    *(uint8_t*)(s + 0xB8) = mode;
+// The ctor body of exe 0x1400b8270 after the DialogInstance base ctor: mode
+// byte at +0xB8, flags/selection/rotation zeroed, Sprite default-ctor at +0xD0,
+// loader/engine ptrs at +0xE0/+0xE8, +0xF0..+0x158 zero.
+void SaveLoadDialog::InitFields(uint8_t modeArg, void* engineArg, void* gameWorldArg) {
+    uintptr_t s = (uintptr_t)this;
+    mode = modeArg;
     *(uint32_t*)(s + 0xB9) = 0;          // saveFlag/loadFlag/refreshFlag/deleteFlag
     *(uint32_t*)(s + 0xC0) = 0;          // selectedIndex
     *(uint32_t*)(s + 0xC8) = 0;          // spinner rotation
     ::new ((void*)(s + 0xD0)) UI::Sprite();
-    *(void**)(s + 0xE0) = enginePtr;
-    *(void**)(s + 0xE8) = gameWorldPtr;
+    engine = engineArg;
+    gameWorld = gameWorldArg;
     for (uintptr_t off = 0xF0; off <= 0x158; off += 8)
         *(uint64_t*)(s + off) = 0;
+}
 
-    // Retail's ctor caller path lands in SaveLoadDialog_Startup via the UI
-    // dialog-open machinery (vtable +0x20); the +0xBB refreshFlag=1 kick that
-    // triggers the initial file-list scan happens there.
-    return self;
+SaveLoadDialog::SaveLoadDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                               Object::InternalPtr<UI::DialogInstance> parent,
+                               uint8_t modeArg, void* engineArg, void* gameWorldArg)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0) {
+    InitFields(modeArg, engineArg, gameWorldArg);
+}
+
+// The reflected create path (create 0x140021160): the tree's factory handed out
+// a zero-filled object; this keeps the zero fields over the default base ctor.
+SaveLoadDialog::SaveLoadDialog() {
+    InitFields(0, nullptr, nullptr);
+    *(uint32_t*)((uintptr_t)this + 0xC4) = 0;   // saveCount
+}
+
+// [0] 0x1400211b0: ~SaveLoadDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* SaveLoadDialog::DeletingDtor(unsigned flags) {
+    this->~SaveLoadDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140021160: MemAlloc(0x160, 8), then the ctor.
+void* SaveLoadDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SaveLoadDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) SaveLoadDialog());
+}
+// createInPlace 0x1400211a0 (the tree's in-place build is kept, B8-13).
+void* SaveLoadDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) SaveLoadDialog());
+}
+
+// The reflection record stays at the TU position of the UI_DIALOG_STUB row it
+// replaces (ui_dialog_stub_factories.cpp, B38 D4).
+DEFINE_EXE_VTABLE(SaveLoadDialog, "_ZTV14SaveLoadDialog")
+
+// The ctor DOOR, reached by address: fn_SaveLoadDialog_Ctor (engine_funcs.cpp)
+// resolves 0x1400b8270. Retail's ctor caller path lands in OnOpened via the UI
+// dialog-open machinery; the +0xBB refreshFlag=1 kick that triggers the initial
+// file-list scan happens there.
+extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes,
+                                          void* parentIBP, uint8_t mode,
+                                          void* enginePtr, void* gameWorldPtr) {
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (parentIBP)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
+    return ::new (self) SaveLoadDialog(static_cast<UI::UserInterface*>(ui),
+                                       static_cast<const UI::Dialog*>(extRes), parent,
+                                       mode, enginePtr, gameWorldPtr);
 }
 
 void RegisterSaveLoadDialog() {
     RegisterExeAddr(0x1400b8270, reinterpret_cast<uintptr_t>(&SaveLoadDialog_Ctor_8270));
-    RegisterExeAddr(0x14015f900, reinterpret_cast<uintptr_t>(g_SaveLoadDialog_Vtable_Standalone));
 }

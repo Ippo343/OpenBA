@@ -56,6 +56,8 @@
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "engine/UpdateLoop.h"   // ENDGAME B.3.7 callers (K1)
+#include "Dialog/ModDialog.h"
+#include "Dialog/ModDetailsDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
@@ -76,193 +78,17 @@
 // Exposed by moddialog.cpp so the retail address 0x14006eec0 can be registered.
 extern "C" void ModDialog_RefreshDisplay(void* self);
 
-namespace {
-
-// ---------------------------------------------------------------------------
-// Base UI::DialogInstance virtuals (resolved by export name, ASLR-safe)
-// ---------------------------------------------------------------------------
-constexpr const char* kSym_TypeName       = "?TypeName@DialogInstance@UI@@UEBAPEBDXZ";                    // +0x08
-constexpr const char* kSym_Type           = "?Type@DialogInstance@UI@@UEBAIXZ";                           // +0x10
-constexpr const char* kSym_Persist        = "?Persist@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z";         // +0x18
-constexpr const char* kSym_OnClosed       = "?OnClosed@DialogInstance@UI@@UEAAXXZ";                       // +0x28
-constexpr const char* kSym_OnUpdateLayout = "?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ";                 // +0x30
-constexpr const char* kSym_OnUpdate       = "?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z";      // +0x38
-constexpr const char* kSym_OnSerSettings  = "?OnSerializeSettings@DialogInstance@UI@@UEAAXAEAVStream@IO@@@Z"; // +0x48
-
-// A slot whose base virtual failed to resolve must never be dispatched as code,
-// so an unresolved base slot stays this no-op instead of a null/garbage pointer.
-void ModDlg_InertSlot(void*, ...) {}
-
-// ---------------------------------------------------------------------------
-// ModDialog vtable (10 slots — the retail width)
-// ---------------------------------------------------------------------------
-void* g_ModDialogVt[10];
-void* g_ModDetailsVt[10];
+// ENDGAME B.3.8 block DLG: both classes are real (Dialog/ModDialog.h,
+// Dialog/ModDetailsDialog.h). The two hand-built tables, the by-name base-slot
+// fills and the zero+stamp factories are gone: every slot the tables filled
+// with a DialogInstance export is now INHERITED (the same Runtime bodies).
 
 // Most recently opened instances, for the unattended click driver
 // (BANISHED_AUTOMENU_CLICKS in standalone/autostart.cpp). Cleared by the dtors.
-void* s_lastModDialog  = nullptr;
-void* s_lastModDetails = nullptr;
+void* g_lastModDialog  = nullptr;
+void* g_lastModDetails = nullptr;
 
-// --- ModDialog +0x00: scalar-deleting destructor -------------------------
-// Faithful port of exe 0x140012a30 -> ~ModDialog (0x14006ff00):
-//   vtable = &vtable_ModDialog
-//   for each 0x58-stride entry i in [0, count at +0xC0):
-//       entry+0x50 (SpriteSheet), +0x48 (MaterialInstance), +0x40 (ImageBuffer)
-//       each: if (p) p->vt[0](p, 1)
-//   MemFree(+0xB8); +0xB8 = 0; +0xC0 = 0
-//   +0xC8 = null IBP; +0xD0 = null IBP
-//   ~DialogInstance(this)
-//   if (flags & 1) MemFree(this)
-void* ModDialog_VDtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    if (self == s_lastModDialog) s_lastModDialog = nullptr;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    *reinterpret_cast<void**>(self) = g_ModDialogVt;
-
-    uintptr_t entries = *reinterpret_cast<uintptr_t*>(s + 0xB8);
-    int count = *reinterpret_cast<int*>(s + 0xC0);
-    for (int i = 0; entries && i < count; ++i) {
-        uintptr_t e = entries + static_cast<uintptr_t>(i) * 0x58;
-        for (uintptr_t off : { (uintptr_t)0x50, (uintptr_t)0x48, (uintptr_t)0x40 }) {
-            void* obj = *reinterpret_cast<void**>(e + off);
-            if (!obj) continue;
-            void** vt = *reinterpret_cast<void***>(obj);
-            if (!vt || !vt[0]) continue;
-            reinterpret_cast<void* (*)(void*, uint32_t)>(vt[0])(obj, 1);
-        }
-    }
-    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(entries));
-    *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xC0) = 0;
-    if (fn_InternalBasePtr_Ctor) {
-        uint64_t nullIbp = 0;
-        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<uint64_t*>(s + 0xC8) = nullIbp;
-        nullIbp = 0;
-        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        *reinterpret_cast<uint64_t*>(s + 0xD0) = nullIbp;
-    }
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-// --- ModDialog +0x10: Type/GetTypeId -------------------------------------
-// Retail returns DWORD_1401c5280, which the exe's ModDialog_RegisterType fills
-// with the CRC32 id of "ModDialog". Standalone reads the same id out of our
-// registration table. Cached after first non-sentinel hit.
-uint32_t ModDialog_VTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c || c == 0xFFFFFFFFu) c = ::Object::GetTypeIdByName("ModDialog");
-    return c;
-}
-uint32_t ModDetails_VTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c || c == 0xFFFFFFFFu) c = ::Object::GetTypeIdByName("ModDetailsDialog");
-    return c;
-}
-
-// --- ModDialog +0x20 / +0x40 ---------------------------------------------
-void ModDialog_VOnOpened(void* self) {
-    if (!self) return;
-    printf("[ModDialog::OnOpened] self=%p building mod list\n", self);
-    ::ModDialog_Slot4(reinterpret_cast<ModDialog*>(self));
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    printf("[ModDialog::OnOpened] rows=%d entries=%p table=%p\n",
-                *reinterpret_cast<int*>(s + 0xC0),
-                *reinterpret_cast<void**>(s + 0xB8),
-                *reinterpret_cast<void**>(s + 0xC8));
-}
-
-void ModDialog_VOnElementEvent(void* self, void* elemEvt, int msg, int id,
-                               uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8) {
-    if (!self) return;
-    if (msg == 0x12)
-        printf("[ModDialog::OnEvent] click id=%d\n", id);
-    ::ModDialog_Slot8(reinterpret_cast<ModDialog*>(self), elemEvt, msg, id, p5, p6, p7, p8);
-}
-
-// --- ModDetailsDialog +0x00 ----------------------------------------------
-// Faithful port of exe 0x140012890: vtable store, ~DialogInstance, conditional free.
-// ModDetailsDialog owns no heap fields (+0xB8 is a borrowed sprite handle,
-// +0xC0 a plain int index), which is why retail's dtor has no cleanup loop.
-void* ModDetails_VDtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    if (self == s_lastModDetails) s_lastModDetails = nullptr;
-    *reinterpret_cast<void**>(self) = g_ModDetailsVt;
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-void ModDetails_VOnOpened(void* self) {
-    if (!self) return;
-    s_lastModDetails = self;
-    printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", self,
-                *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0xC0));
-    ::ModDetailsDialog_Slot4(reinterpret_cast<ModDetailsDialog*>(self));
-}
-
-void ModDetails_VOnElementEvent(void* self, uint64_t elemEvt, int msg, int id) {
-    if (!self) return;
-    if (msg == 0x12)
-        printf("[ModDetailsDialog::OnEvent] click id=%d\n", id);
-    ::ModDetailsDialog_Slot8(reinterpret_cast<ModDetailsDialog*>(self), elemEvt, msg, id);
-}
-
-// ---------------------------------------------------------------------------
-// Table fill. Runs at static init (so a stray construction never sees a null
-// vtable) and again on demand once the Runtime DLL is resolvable, because
-// ResolveExport returns null before ResolveInit.
-// ---------------------------------------------------------------------------
-void FillBaseSlots(void** vt) {
-    struct { int idx; const char* sym; } kBase[] = {
-        { 1, kSym_TypeName       },
-        { 3, kSym_Persist        },
-        { 5, kSym_OnClosed       },
-        { 6, kSym_OnUpdateLayout },
-        { 7, kSym_OnUpdate       },
-        { 9, kSym_OnSerSettings  },
-    };
-    for (auto& b : kBase) {
-        if (vt[b.idx] && vt[b.idx] != reinterpret_cast<void*>(&ModDlg_InertSlot))
-            continue;
-        void* fn = reinterpret_cast<void*>(ResolveExport(b.sym));
-        vt[b.idx] = fn ? fn : reinterpret_cast<void*>(&ModDlg_InertSlot);
-    }
-}
-
-struct ModVtableInit {
-    ModVtableInit() {
-        for (int i = 0; i < 10; ++i) {
-            g_ModDialogVt[i]  = reinterpret_cast<void*>(&ModDlg_InertSlot);
-            g_ModDetailsVt[i] = reinterpret_cast<void*>(&ModDlg_InertSlot);
-        }
-        g_ModDialogVt[0] = reinterpret_cast<void*>(&ModDialog_VDtor);
-        g_ModDialogVt[2] = reinterpret_cast<void*>(&ModDialog_VTypeId);
-        g_ModDialogVt[4] = reinterpret_cast<void*>(&ModDialog_VOnOpened);
-        g_ModDialogVt[8] = reinterpret_cast<void*>(&ModDialog_VOnElementEvent);
-
-        g_ModDetailsVt[0] = reinterpret_cast<void*>(&ModDetails_VDtor);
-        g_ModDetailsVt[2] = reinterpret_cast<void*>(&ModDetails_VTypeId);
-        g_ModDetailsVt[4] = reinterpret_cast<void*>(&ModDetails_VOnOpened);
-        g_ModDetailsVt[8] = reinterpret_cast<void*>(&ModDetails_VOnElementEvent);
-    }
-} g_modVtableInit;
-
-void EnsureBaseSlots() {
-    static bool s_done = false;
-    if (s_done) return;
-    FillBaseSlots(g_ModDialogVt);
-    FillBaseSlots(g_ModDetailsVt);
-    // Only latch once every base virtual actually resolved; before ResolveInit
-    // they are all null and we must retry later.
-    for (int i : { 1, 3, 5, 6, 7, 9 }) {
-        if (g_ModDialogVt[i] == reinterpret_cast<void*>(&ModDlg_InertSlot)) return;
-    }
-    s_done = true;
-}
+namespace {
 
 // ---------------------------------------------------------------------------
 // Local copy of MainMenuDialog's Dialog/*.rsc loader (that one is file-static).
@@ -300,34 +126,128 @@ void* ModDlg_LoadDialogResource(const char* rscPath) {
 }  // namespace
 
 // ===========================================================================
-// ModDialog ctor — faithful port of exe 0x140070030
+// ModDialog — construction / destruction / reflection
 // ===========================================================================
-// Disassembly (0x140070030..0x1400700b0):
+// Ctor, faithful to exe 0x140070030 (0x140070030..0x1400700b0):
 //   RCX=this  RDX=userInterface  R8=externalRes  R9=&parentIBP  [RSP+0x80]=&parentMenuIBP
 //   copy *R9 into a stack local, call DialogInstance::DialogInstance
-//     (this, ui, res, &localIBP, 0, 0, 0)   [the three stack args are all zero]
-//   this->vtable = 0x14015c870
+//     (this, ui, res, &localIBP, 0, 0, 0)
 //   this->+0xB8 = +0xC0 = +0xC8 = +0xD0 = 0
 //   this->+0xD0 = *parentMenuIBP            (the owning MainMenuDialog; ModDialog's
 //                                            Apply path reads it for MainMenu::Reload)
+ModDialog::ModDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                     Object::InternalPtr<UI::DialogInstance> parent, uint64_t parentMenu)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      dataB8(0), dataC0(0), dataC8(0), dataD0(parentMenu) {}
+
+ModDialog::ModDialog() : dataB8(0), dataC0(0), dataC8(0), dataD0(0) {}
+
+// ~ModDialog, faithful port of exe 0x14006ff00 (the part before ~DialogInstance):
+//   for each 0x58-stride entry i in [0, count at +0xC0):
+//       entry+0x50 (SpriteSheet), +0x48 (MaterialInstance), +0x40 (ImageBuffer)
+//       each: if (p) p->vt[0](p, 1)
+//   MemFree(+0xB8); +0xB8 = 0; +0xC0 = 0
+//   +0xC8 = null IBP; +0xD0 = null IBP
+ModDialog::~ModDialog() {
+    if (this == g_lastModDialog) g_lastModDialog = nullptr;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+
+    uintptr_t entries = *reinterpret_cast<uintptr_t*>(s + 0xB8);
+    int count = *reinterpret_cast<int*>(s + 0xC0);
+    for (int i = 0; entries && i < count; ++i) {
+        uintptr_t e = entries + static_cast<uintptr_t>(i) * 0x58;
+        for (uintptr_t off : { (uintptr_t)0x50, (uintptr_t)0x48, (uintptr_t)0x40 }) {
+            void* obj = *reinterpret_cast<void**>(e + off);
+            if (!obj) continue;
+            void** vt = *reinterpret_cast<void***>(obj);
+            if (!vt || !vt[0]) continue;
+            reinterpret_cast<void* (*)(void*, uint32_t)>(vt[0])(obj, 1);
+        }
+    }
+    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(entries));
+    *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0xC0) = 0;
+    if (fn_InternalBasePtr_Ctor) {
+        uint64_t nullIbp = 0;
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        *reinterpret_cast<uint64_t*>(s + 0xC8) = nullIbp;
+        nullIbp = 0;
+        new (&nullIbp) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+        *reinterpret_cast<uint64_t*>(s + 0xD0) = nullIbp;
+    }
+}
+
+// [0] 0x140012a30: ~ModDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* ModDialog::DeletingDtor(unsigned flags) {
+    this->~ModDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140012900: MemAlloc(0xd8, 8), then the ctor.
+void* ModDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ModDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) ModDialog());
+}
+// createInPlace 0x140012970 (the tree's in-place build is kept, B8-13).
+void* ModDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) ModDialog());
+}
+
+DEFINE_EXE_VTABLE(ModDialog, "_ZTV9ModDialog")
+
+// ===========================================================================
+// ModDetailsDialog — construction / destruction / reflection
+// ===========================================================================
+// ModDetailsDialog owns no heap fields (+0xB8 is a borrowed sprite handle,
+// +0xC0 a plain int index), which is why retail's dtor (0x140012890: vtable
+// store, ~DialogInstance, conditional free) has no cleanup of its own.
+ModDetailsDialog::ModDetailsDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                                   Object::InternalPtr<UI::DialogInstance> parent,
+                                   uint64_t sprite, int32_t index)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      dataB8(sprite), modIndex(index) {}
+
+ModDetailsDialog::ModDetailsDialog() : dataB8(0), modIndex(0), _padC4(0) {}
+
+ModDetailsDialog::~ModDetailsDialog() {
+    if (this == g_lastModDetails) g_lastModDetails = nullptr;
+}
+
+// [0] 0x140012890.
+Object::Base* ModDetailsDialog::DeletingDtor(unsigned flags) {
+    this->~ModDetailsDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140012790: MemAlloc(0xc8, 8), then the ctor.
+void* ModDetailsDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ModDetailsDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) ModDetailsDialog());
+}
+// createInPlace 0x1400127e0 (the tree's in-place build is kept, B8-13).
+void* ModDetailsDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) ModDetailsDialog());
+}
+
+DEFINE_EXE_VTABLE(ModDetailsDialog, "_ZTV16ModDetailsDialog")
+
+// The ModDialog ctor DOOR (registered by reg_mods.cpp at 0x140070030).
 extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
                                            void* externalRes, void* parentIBP,
                                            void* parentMenuIBP) {
     if (!self) return nullptr;
-    EnsureBaseSlots();
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
-    if (fn_DialogInstance_Ctor)
-        fn_DialogInstance_Ctor(self, userInterface, externalRes, &parentCopy, 0, 0, 0);
-
-    *reinterpret_cast<void**>(self) = g_ModDialogVt;
-    *reinterpret_cast<uint64_t*>(s + 0xB8) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xC0) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xC8) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0xD0) =
-        parentMenuIBP ? *reinterpret_cast<uint64_t*>(parentMenuIBP) : 0;
-    return self;
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (parentIBP)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
+    return ::new (self) ModDialog(static_cast<UI::UserInterface*>(userInterface),
+                                  static_cast<const UI::Dialog*>(externalRes), parent,
+                                  parentMenuIBP ? *static_cast<const uint64_t*>(parentMenuIBP) : 0);
 }
 
 // ===========================================================================
@@ -342,10 +262,8 @@ extern "C" void* ModDialog_Ctor_Standalone(void* self, void* userInterface,
 // itself the +0xD0 parent-menu back-pointer the Apply path reloads through.
 extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     if (!mainMenuSelf) return;
-    EnsureBaseSlots();
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_DialogInstance_Ctor ||
-        !fn_InternalBasePtr_Ctor) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_InternalBasePtr_Ctor) {
         printf("[ModDialog] open: core engine fns unresolved\n");
         return;
     }
@@ -366,10 +284,8 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     void* extRes = ModDlg_LoadDialogResource("Dialog/Mod.rsc");
     if (!extRes) { printf("[ModDialog] open: Dialog/Mod.rsc not loaded\n"); return; }
 
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(ModDialog), 8);
     if (!dlgMem) return;
-    for (size_t o = 0; o < 0xD8; o += 8)
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(dlgMem) + o) = 0;
 
     uint8_t nullIBP[8] = {};
     new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -377,7 +293,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     new (parentIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(mainMenuSelf));   // B.3.3 bridge
 
     void* dlg = ModDialog_Ctor_Standalone(dlgMem, ui, extRes, nullIBP, parentIBP);
-    s_lastModDialog = dlg;
+    g_lastModDialog = dlg;
 
     uint8_t ibp[8] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
@@ -458,58 +374,13 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
 // ===========================================================================
 // Address-registry entry (called from standalone/reg_mods.cpp)
 // ===========================================================================
-extern "C" void* ModDialog_LastOpened()        { return s_lastModDialog; }
-extern "C" void* ModDetailsDialog_LastOpened() { return s_lastModDetails; }
-extern "C" void* ModDialog_GetVtable()        { EnsureBaseSlots(); return g_ModDialogVt; }
-extern "C" void* ModDetailsDialog_GetVtable() { EnsureBaseSlots(); return g_ModDetailsVt; }
+extern "C" void* ModDialog_LastOpened()        { return g_lastModDialog; }
+extern "C" void* ModDetailsDialog_LastOpened() { return g_lastModDetails; }
+// reg_mods.cpp registers these at 0x14015c870 / 0x14015c670; engine_funcs.cpp reads
+// both back (g_ModDetailsDialog_Vtable, and the registry), so the exe addresses
+// serve the COMPILER tables (B38 D5).
+extern "C" void* ModDialog_GetVtable()        { return const_cast<void*>(ModDialog::Vtable()); }
+extern "C" void* ModDetailsDialog_GetVtable() { return const_cast<void*>(ModDetailsDialog::Vtable()); }
 
-// ===========================================================================
-// Promoted factories — replace UI_DIALOG_STUB(ModDialog…/ModDetailsDialog…)
-// ===========================================================================
-// Same alloc+zero contract as the stub macro (no base ctor: a factory-built
-// instance is never dispatched until the engine fills its base fields), but the
-// REAL per-class vtable is installed instead of the 48 no-ops.
-namespace {
-
-void ZeroFill(void* p, size_t size) {
-    for (size_t o = 0; o < size; o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-
-void* ModDialog_Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0xD8, 8);
-    if (!p) return nullptr;
-    ZeroFill(p, 0xD8);
-    EnsureBaseSlots();
-    *reinterpret_cast<void**>(p) = g_ModDialogVt;
-    return p;
-}
-void* ModDialog_InPlace(void* m) {
-    if (!m) return nullptr;
-    ZeroFill(m, 0xD8);
-    EnsureBaseSlots();
-    *reinterpret_cast<void**>(m) = g_ModDialogVt;
-    return m;
-}
-void* ModDetails_Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
-    if (!p) return nullptr;
-    ZeroFill(p, 0xC8);
-    EnsureBaseSlots();
-    *reinterpret_cast<void**>(p) = g_ModDetailsVt;
-    return p;
-}
-void* ModDetails_InPlace(void* m) {
-    if (!m) return nullptr;
-    ZeroFill(m, 0xC8);
-    EnsureBaseSlots();
-    *reinterpret_cast<void**>(m) = g_ModDetailsVt;
-    return m;
-}
-
-}  // namespace
-
-REGISTER_TYPE(ModDialog,        "UI::DialogInstance", &ModDialog_Factory,  &ModDialog_InPlace);
-REGISTER_TYPE(ModDetailsDialog, "UI::DialogInstance", &ModDetails_Factory, &ModDetails_InPlace);
+DEFINE_EXE_TYPE(ModDialog,        "UI::DialogInstance")
+DEFINE_EXE_TYPE(ModDetailsDialog, "UI::DialogInstance")

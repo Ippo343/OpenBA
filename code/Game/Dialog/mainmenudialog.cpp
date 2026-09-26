@@ -20,6 +20,10 @@
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "application/Application.h"   // ENDGAME B.3.7 callers (K1)
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
+#include "Dialog/MainMenuDialog.h"
+#include "Dialog/MapParamsDialog.h"
+#include "Dialog/AchievementDialog.h"
+#include "Dialog/GoalDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -310,19 +314,12 @@ void MainMenuDialog_OpenAchievement(MainMenuDialog* self) {
 
     void* extRes = LoadDialogResource("Dialog/Achievement.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(AchievementDialog), 8);
     if (dlgMem) {
-        uint8_t nullIBP[8];
-        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint64_t parentBuf = *(uint64_t*)nullIBP;
-        fn_DialogInstance_Ctor(dlgMem,
-                                *(void**)((uintptr_t)self + 0x10),
-                                extRes, &parentBuf, 0, 0, 0);
-        *(void**)dlgMem = (void*)g_AchievementDialog_Vtable;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xB8) = 0;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xC0) = 0;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xC8) = 0;
-        dlgObj = dlgMem;
+        // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here).
+        dlgObj = ::new (dlgMem) AchievementDialog(
+            static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(extRes),
+            Object::InternalPtr<UI::DialogInstance>());
     }
     AddDialogToUI(self, dlgObj);
 }
@@ -355,18 +352,12 @@ void MainMenuDialog_OpenScenario(MainMenuDialog* self) {
 void MainMenuDialog_OpenGoal(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/Goal.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 200, 8);
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(GoalDialog), 8);
     if (dlgMem) {
-        uint8_t nullIBP[8];
-        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint64_t parentBuf = *(uint64_t*)nullIBP;
-        fn_DialogInstance_Ctor(dlgMem,
-                                *(void**)((uintptr_t)self + 0x10),
-                                extRes, &parentBuf, 0, 0, 0);
-        *(void**)dlgMem = (void*)g_GoalDialog_Vtable;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xB8) = 0;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xC0) = 0;
-        dlgObj = dlgMem;
+        // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here).
+        dlgObj = ::new (dlgMem) GoalDialog(
+            static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(extRes),
+            Object::InternalPtr<UI::DialogInstance>());
     }
     AddDialogToUI(self, dlgObj);
 }
@@ -783,87 +774,28 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
 
 
 // ============================================================
-// MainMenuDialog standalone scaffolding
+// MainMenuDialog as a real class (ENDGAME B.3.8 block DLG)
 // ============================================================
-// Provides a 20-slot vtable + factory + REGISTER_TYPE for standalone exe so
-// MenuDLT::CreateDialog can produce a real MainMenuDialog instance instead of
-// returning a null IBP.
-//
-// Vtable layout (exe @ 0x14015f550, 20 slots):
-//   +0x00 Dtor             — sets vtable, ~DialogInstance, free
-//   +0x08 Slot1            — exe returns DAT_1401c5c28 (TypeName const)
-//   +0x10 Slot2            — exe returns DAT_1401c5c20 (TypeId const)
-//   +0x18 Slot3 Persist    — thunk to Runtime DialogInstance::Persist
-//   +0x20 Slot4 Setup      — REIMPL'd in MainMenuDialog_Slot4 (stubbed here)
-//   +0x28 Slot5 Shutdown   — REIMPL'd (stubbed here)
-//   +0x30 Slot6 OnUpdateLayout — thunk
-//   +0x38 Slot7 OnUpdate   — thunk
-//   +0x40 Slot8 OnCommand  — REIMPL'd (stubbed here)
-//   +0x48 Slot9 OnSerializeSettings — thunk
-//   +0x50 Slot10 DIDtor    — ~DialogInstance + free
-//   +0x58..+0x98 Slot11-19 — DialogController interface, all thunks
-//
-// First pass: every slot is a no-op stub. Once Step 3 (rendering) lands and
-// the resource/loader pipeline is alive, the four reimpls (Slot4/5/8/Dtor)
-// can swap in. For now we just need the IBP non-null and Open/Close not to
-// crash through a null vtable slot.
+// Dialog/MainMenuDialog.h carries the retail slot list. The live bodies below
+// are the ones the old hand-built 20-slot table installed (its slots 10-19 were
+// a phantom "DialogController secondary interface" retail does not have).
+// Slots 6/7 are INHERITED: the old table called DialogInstance's bodies there
+// with a qualified call, which is exactly what retail's import thunks reach.
 
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-namespace {
+// [4] OnOpened — PORT GAP (header): slim standalone Setup. Mirrors the
+// button-finding + element ID assignment portion of MainMenuDialog_Slot4
+// (above) and the BuildId child dialog; skips the game-world audio block.
+void MainMenuDialog::OnOpened() {
+    printf("[MainMenuDialog::Setup] self=%p assigning button element IDs\n", (void*)this);
 
-// Used by Stub_Dtor / Stub_DIDtor to reset the vtable.
-void* GetMainMenuDialogVtable();  // forward decl
-
-// Slot 0 — MainMenuDialog::Dtor. Sets vtable, calls DialogInstance::~DialogInstance,
-// then conditionally frees memory.
-void* StandaloneStub_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *(void**)self = GetMainMenuDialogVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-// Slot 1 — TypeName placeholder. Exe returns a static value populated by the
-// type registration system. Standalone returns 0 for now (no callers in current
-// boot path).
-uint64_t StandaloneStub_Slot1_TypeName(void* /*self*/) { return 0; }
-
-// Slot 2 — TypeId placeholder.
-uint32_t StandaloneStub_Slot2_TypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MainMenuDialog");
-    return cached;
-}
-
-// Generic logging stub for the runtime-thunk slots (Slot3/6/7/9/11-19).
-// Most are DialogInstance/DialogController virtuals that the boot path may
-// invoke during Open/Update. Logged once each so we know when wiring matters.
-template <int SlotIdx>
-void StandaloneStub_RuntimeThunk(void* self, ...) {
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[MainMenuDialog::Slot%d_Stub] self=%p (runtime thunk not wired)\n",
-               SlotIdx, self);
-    }
-}
-
-// Slot 4 (Setup) — slim standalone version. Mirrors the button-finding + element
-// ID assignment portion of MainMenuDialog_Slot4 (above). Skips the game-world
-// audio block (no game active in main menu) and the BuildId child dialog
-// (cosmetic version overlay). What's left is just enough to make the OnCommand
-// dispatch work when the user clicks a button.
-void StandaloneStub_Slot4_Setup(void* self) {
-    printf("[MainMenuDialog::Setup] self=%p assigning button element IDs\n", self);
-
-    auto findAndAssign = [self](const char* name, int id) {
+    auto findAndAssign = [this](const char* name, int id) {
         System::String nameStr(name);
         // FindElement uses non-trivial return ABI: RCX=self, RDX=retbuf, R8=name
         uint8_t retBuf[16] = {};
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         void* elem = *reinterpret_cast<void**>(retBuf);
         if (elem) {
             // CheckPtr resolves any lazy/weak pointer inside the IBP, then
@@ -892,62 +824,29 @@ void StandaloneStub_Slot4_Setup(void* self) {
     // --- Create BuildId child dialog (cosmetic version overlay) ---
     // Pulls UI ptr from MainMenuDialog +0x10 (DialogInstance::m_userInterface).
     // Uses the shared CreateBuildIdChildDialog helper.
-    void* userInterface = *reinterpret_cast<void**>(
-        reinterpret_cast<uintptr_t>(self) + 0x10);
-    CreateBuildIdChildDialog(self, userInterface);
+    CreateBuildIdChildDialog(this, _ui);
 }
 
-// Slot 5 (Shutdown) — depends on game world; stubbed.
-void StandaloneStub_Slot5_Shutdown(void* /*self*/) {}
+// [5] OnClosed — PORT GAP (header): the tree's no-op; retail unpauses the
+// audio scenes (MainMenuDialog_Slot5 above is that port).
+void MainMenuDialog::OnClosed() {}
 
-// Slot 6 (OnUpdateLayout) — DialogInstance virtual @ vtable +0x30.
-// In the original exe this slot points at a 6-byte JMP-thunk
-// (0x14003a98a -> [0x1401517b0]) that lands in
-// UI::DialogInstance::OnUpdateLayout @ Runtime DLL 0x1801153a0:
-//   for (int i = 0; i < count(+0x80); ++i)
-//       children[+0x78][i]->vtable[+0x38](child);   // recurse
-// MainMenuDialog itself doesn't override — it just inherits the base impl.
-// Standalone delegates straight to the Runtime DLL function so child
-// elements (buttons, labels, panels) get their layout updated each frame.
-void StandaloneImpl_Slot6_OnUpdateLayout(void* self) {
-    if (!self) return;
-    // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch through this
-    // dialog's hand-built table straight back into this slot body.
-    reinterpret_cast<UI::DialogInstance*>(self)->UI::DialogInstance::OnUpdateLayout();  // B.3.6 bridge
-}
-
-// Slot 7 (OnUpdate) — DialogInstance virtual @ vtable +0x38.
-// In the original exe this slot points at a 6-byte JMP-thunk
-// (0x14003a990 -> [0x1401517b8]) that lands in
-// UI::DialogInstance::OnUpdate @ Runtime DLL 0x180115400:
-//   for (int i = 0; i < count(+0x80); ++i)
-//       children[+0x78][i]->vtable[+0x40](child, time);   // per-frame tick
-// Same pattern as Slot6 — delegate to Runtime DLL so animated/dynamic UI
-// elements (buildId scroller, hover effects, etc.) get their update tick.
-void StandaloneImpl_Slot7_OnUpdate(void* self, const void* time) {
-    if (!self) return;
-    // QUALIFIED (B36_RULES 3.2) -- see Slot6 above.
-    reinterpret_cast<UI::DialogInstance*>(self)->UI::DialogInstance::OnUpdate(  // B.3.6 bridge
-        *static_cast<const System::Time*>(time));
-}
-
-// Slot 8 (OnCommand) — button click dispatch. The runtime sends msg=0x12 with
-// param4 = element ID. We mirror the switch from MainMenuDialog_Slot8 above,
-// but for now only Quit is wired (the others need sub-dialog scaffolding that
-// isn't standalone-ready yet — they'll just log a "not wired" warning so we
-// can see clicks register).
+// [8] OnElementEvent — button click dispatch. The runtime sends msg=0x12 with
+// the element ID as the second int.
 void StandaloneOpenMapParams(void* self);  // defined below (map dialog bring-up)
 
 extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf);
 
-void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
+void MainMenuDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
+                                    int32_t msg, int32_t id, int32_t /*c*/,
+                                    int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (msg != 0x12) return;
-    printf("[MainMenuDialog::OnCommand] self=%p msg=0x%x id=%d\n", self, msg, id);
+    printf("[MainMenuDialog::OnCommand] self=%p msg=0x%x id=%d\n", (void*)this, msg, id);
 
     switch (id) {
     case kButton_New:
         printf("[MainMenuDialog::OnCommand] -> OpenNewGame\n");
-        MainMenuDialog_OpenNewGame(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenNewGame(this);
         break;
     case kButton_Resume: {
         // Resume = close this in-game menu, which removes it from the UI's
@@ -958,8 +857,8 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         // which the standalone toolbar already exercises (so they're resolved).
         printf("[MainMenuDialog::OnCommand] -> Resume (CloseDialog)\n");
         uint8_t selfPtr[16];
-        new (selfPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfPtr));  // B.3.6 bridge
+        new (selfPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+        static_cast<UI::UserInterface*>(_ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfPtr));  // B.3.6 bridge
         break;
     }
     case kButton_Quit:
@@ -985,27 +884,27 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         // (UI+0xF0 == 0) and calls MainLoop::SetNextLoop, which runs the ported
         // teardown (gameupdateloop_teardown.cpp) on the way out.
         printf("[MainMenuDialog::OnCommand] -> ReturnToMenu (gameUpdateLoop=%p)\n",
-               *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0xB8));
-        MainMenuDialog_ReturnToMenu(reinterpret_cast<MainMenuDialog*>(self));
+               reinterpret_cast<void*>(dataB8));
+        MainMenuDialog_ReturnToMenu(this);
         break;
     case kButton_Options:
         printf("[MainMenuDialog::OnCommand] -> OpenOptions\n");
-        MainMenuDialog_OpenOptions(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenOptions(this);
         break;
     case kButton_Load:
         // Save/load wave 2026-08-27: SaveLoadDialog ctor + vtable are now
         // registered, the menu-side Save::SaveLoad exists (+0xb70) and is
         // ticked — the retail load-from-save path is standalone-ready.
         printf("[MainMenuDialog::OnCommand] -> OpenLoad (SaveLoadDialog)\n");
-        MainMenuDialog_OpenLoad(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenLoad(this);
         break;
     case kButton_Save:
         printf("[MainMenuDialog::OnCommand] -> OpenSave (SaveLoadDialog)\n");
-        MainMenuDialog_OpenSave(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenSave(this);
         break;
     case kButton_Map:
         printf("[MainMenuDialog::OnCommand] -> OpenMap (MapParamsDialog)\n");
-        StandaloneOpenMapParams(self);
+        StandaloneOpenMapParams(this);
         break;
     case kButton_Tutorial:
         // The main menu .rsc has NO buttonScenario - the [Setup] log prints it
@@ -1015,11 +914,11 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         // above HAS both cases, but it is not the handler the vtable installs).
         // Wired 2026-08-30 so LANE1 row 42 is reachable by hand.
         printf("[MainMenuDialog::OnCommand] -> OpenTutorial (ScenarioDialog, difficulty=1)\n");
-        MainMenuDialog_OpenTutorial(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenTutorial(this);
         break;
     case kButton_Scenario:
         printf("[MainMenuDialog::OnCommand] -> OpenScenario (ScenarioDialog, difficulty=0)\n");
-        MainMenuDialog_OpenScenario(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenScenario(this);
         break;
     case kButton_Achievement:
         // Wired 2026-09-05. The retail-shaped MainMenuDialog_Slot8 above has had this
@@ -1030,19 +929,19 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         // RegisterMenuDialogVtables (menu_dialog_standalone_vtables.cpp) and all four
         // of its slots are ported, so the opener works as-is.
         printf("[MainMenuDialog::OnCommand] -> OpenAchievement (AchievementDialog)\n");
-        MainMenuDialog_OpenAchievement(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenAchievement(this);
         break;
     case kButton_Goal:
         // Same story as Achievement: present in the dead retail switch, missing here.
         // GoalDialog's vtable comes from the same registration and its slots are ported.
         printf("[MainMenuDialog::OnCommand] -> OpenGoal (GoalDialog)\n");
-        MainMenuDialog_OpenGoal(reinterpret_cast<MainMenuDialog*>(self));
+        MainMenuDialog_OpenGoal(this);
         break;
     case kButton_Mod:
         // ModDialog/ModDetailsDialog live in code/Game/Dialog/mod_dialog_vtables.cpp.
         // Default-on since 2026-09-05 (BANISHED_LIVE_MODDIALOG=0 is the kill-switch).
         printf("[MainMenuDialog::OnCommand] -> OpenMods (ModDialog)\n");
-        ModDialog_OpenFromMainMenu(self);
+        ModDialog_OpenFromMainMenu(this);
         break;
     default:
         printf("[MainMenuDialog::OnCommand] button id=%d not yet wired in standalone\n", id);
@@ -1050,144 +949,34 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
     }
 }
 
-// Slot 10 — DialogInstance::~DialogInstance + conditional free.
-void* StandaloneStub_Slot10_DIDtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-void* g_MainMenuDialog_Vtable_Standalone[20] = {
-    reinterpret_cast<void*>(&StandaloneStub_Dtor),                   // +0x00 Dtor
-    reinterpret_cast<void*>(&StandaloneStub_Slot1_TypeName),         // +0x08 Slot1
-    reinterpret_cast<void*>(&StandaloneStub_Slot2_TypeId),           // +0x10 Slot2
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<3>),        // +0x18 Persist
-    reinterpret_cast<void*>(&StandaloneStub_Slot4_Setup),            // +0x20 Setup
-    reinterpret_cast<void*>(&StandaloneStub_Slot5_Shutdown),         // +0x28 Shutdown
-    reinterpret_cast<void*>(&StandaloneImpl_Slot6_OnUpdateLayout),   // +0x30 OnUpdateLayout
-    reinterpret_cast<void*>(&StandaloneImpl_Slot7_OnUpdate),         // +0x38 OnUpdate
-    reinterpret_cast<void*>(&StandaloneStub_Slot8_OnCommand),        // +0x40 OnCommand
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<9>),        // +0x48 OnSerializeSettings
-    reinterpret_cast<void*>(&StandaloneStub_Slot10_DIDtor),          // +0x50 DI Dtor
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<11>),       // +0x58 TypeName (sec)
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<12>),       // +0x60 Type (sec)
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<13>),       // +0x68 Persist (sec)
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<14>),       // +0x70 OnOpened
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<15>),       // +0x78 OnClosed
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<16>),       // +0x80 OnUpdateLayout (sec)
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<17>),       // +0x88 OnUpdate (sec)
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<18>),       // +0x90 OnElementEvent
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<19>),       // +0x98 OnSerializeSettings (sec)
-};
-
-void* GetMainMenuDialogVtable() {
-    return reinterpret_cast<void*>(g_MainMenuDialog_Vtable_Standalone);
-}
-
 // ============================================================
-// MapParamsDialog standalone bring-up — in-game "Map" button (id 11)
+// MapParamsDialog open path — in-game "Map" button (id 11)
 // ============================================================
-// buttonMap → MainMenuDialog_OpenMap → Dialog/MapParams.rsc (the map name/seed/
-// terrain/climate/condition/disaster info dialog). MapParamsDialog is a no-op
-// stub in standalone, so give it a real 20-slot vtable that wires its already-
-// reimplemented slots (Startup +0x20, Shutdown +0x28, Update +0x30, OnEvent
-// +0x40; exe vtable 0x14015c180) + reuses the shared DialogInstance base stubs.
-// StandaloneOpenMapParams mirrors MainMenuDialog_OpenGoal: DialogInstance_Ctor
-// (builds the element tree + AddController) → patch vtable → AddDialog (which
-// dispatches the dialog's +0x20 Startup). All fn deps are already resolved.
-// MapParamsDialog + its Startup/Slot5/Update/OnEvent are declared globally in
-// Dialog/ui_dialogs.h (included above). Reference them via :: so unqualified
-// lookup inside this anonymous namespace resolves to the real global symbols.
-extern void* g_MapParamsDialog_Vtable_Standalone[20];
-
-static void* MP_VDtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_MapParamsDialog_Vtable_Standalone;
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-static uint32_t MP_VTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("MapParamsDialog");
-    return c;
-}
-static void MP_VStartup(void* self) {
-    printf("[MapParamsDialog::Startup] self=%p\n", self);
-    if (!self) return;
-    MapParamsDialog_Startup(reinterpret_cast<MapParamsDialog*>(self));
-    // Startup stores the found element ptrs at +0xB8..+0xF0; non-null => the
-    // dialog's element tree was built + the named elements resolved (content).
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    printf("[MapParamsDialog::Startup] elems editName=%p seed=%p terrain=%p size=%p "
-           "climate=%p condition=%p disaster=%p ok=%p\n",
-           *reinterpret_cast<void**>(s + 0xB8), *reinterpret_cast<void**>(s + 0xC0),
-           *reinterpret_cast<void**>(s + 0xC8), *reinterpret_cast<void**>(s + 0xD0),
-           *reinterpret_cast<void**>(s + 0xD8), *reinterpret_cast<void**>(s + 0xE0),
-           *reinterpret_cast<void**>(s + 0xE8), *reinterpret_cast<void**>(s + 0xF0));
-}
-static int  MP_VSlot5(void* self) {
-    return self ? MapParamsDialog_Slot5(reinterpret_cast<MapParamsDialog*>(self)) : 0;
-}
-static void MP_VUpdate(void* self) {
-    if (self) MapParamsDialog_Update(reinterpret_cast<MapParamsDialog*>(self));
-}
-static void MP_VOnEvent(void* self, void* elem, int t, int d) {
-    if (self) MapParamsDialog_OnEvent(reinterpret_cast<MapParamsDialog*>(self), elem, t, d);
-}
-
-void* g_MapParamsDialog_Vtable_Standalone[20] = {
-    reinterpret_cast<void*>(&MP_VDtor),                          // +0x00 Dtor
-    reinterpret_cast<void*>(&StandaloneStub_Slot1_TypeName),     // +0x08 TypeName
-    reinterpret_cast<void*>(&MP_VTypeId),                        // +0x10 GetTypeId
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<3>),    // +0x18 Persist
-    reinterpret_cast<void*>(&MP_VStartup),                       // +0x20 Startup
-    reinterpret_cast<void*>(&MP_VSlot5),                         // +0x28 Shutdown
-    reinterpret_cast<void*>(&MP_VUpdate),                        // +0x30 Update
-    reinterpret_cast<void*>(&StandaloneImpl_Slot7_OnUpdate),     // +0x38 OnUpdate
-    reinterpret_cast<void*>(&MP_VOnEvent),                       // +0x40 OnEvent
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<9>),    // +0x48
-    reinterpret_cast<void*>(&StandaloneStub_Slot10_DIDtor),      // +0x50 DI Dtor
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<11>),   // +0x58
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<12>),   // +0x60
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<13>),   // +0x68
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<14>),   // +0x70
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<15>),   // +0x78
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<16>),   // +0x80
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<17>),   // +0x88
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<18>),   // +0x90
-    reinterpret_cast<void*>(&StandaloneStub_RuntimeThunk<19>),   // +0x98
-};
-
-// Core open path — mirrors MainMenuDialog_OpenGoal but with the MapParams vtable.
+// buttonMap -> Dialog/MapParams.rsc (the map name/seed/terrain/climate/
+// condition/disaster info dialog). Builds the real MapParamsDialog
+// (mapparamsdialog.cpp) and AddDialog's it (which dispatches its OnOpened).
 static void StandaloneOpenMapParams_UI(void* ui) {
     if (!ui) { printf("[OpenMap] ui null\n"); return; }
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_DialogInstance_Ctor ||
-        !fn_InternalBasePtr_Ctor) {
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) {
         printf("[OpenMap] core fns unresolved\n"); return;
     }
     void* extRes = LoadDialogResource("Dialog/MapParams.rsc");
     if (!extRes) { printf("[OpenMap] Dialog/MapParams.rsc not loaded\n"); return; }
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xF8, 8);
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(MapParamsDialog), 8);
     if (!dlgMem) return;
-    for (size_t o = 0; o < 0xF8; o += 8)
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(dlgMem) + o) = 0;
-    uint8_t nullIBP[8] = {};
-    new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    uint64_t parentBuf = *reinterpret_cast<uint64_t*>(nullIBP);
-    fn_DialogInstance_Ctor(dlgMem, ui, extRes, &parentBuf, 0, 0, 0);
-    *reinterpret_cast<void**>(dlgMem) = g_MapParamsDialog_Vtable_Standalone;
+    MapParamsDialog* dlg = ::new (dlgMem) MapParamsDialog(
+        static_cast<UI::UserInterface*>(ui), static_cast<const UI::Dialog*>(extRes),
+        Object::InternalPtr<UI::DialogInstance>());
     uint8_t ibp[8] = {};
-    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlgMem));   // B.3.3 bridge
-    reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));  // B.3.6 bridge
-    printf("[OpenMap] MapParamsDialog opened + AddDialog'd (dlg=%p)\n", dlgMem);
+    new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
+    static_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));  // B.3.6 bridge
+    printf("[OpenMap] MapParamsDialog opened + AddDialog'd (dlg=%p)\n", (void*)dlg);
 }
 
-// Called from the Slot8 OnCommand dispatch (id 11 = buttonMap).
+// Called from the OnElementEvent dispatch (id 11 = buttonMap).
 void StandaloneOpenMapParams(void* self) {
     if (!self) return;
-    StandaloneOpenMapParams_UI(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10));
+    StandaloneOpenMapParams_UI(static_cast<MainMenuDialog*>(self)->_ui);
 }
 
 // Harness entry — open the map dialog headlessly (UI from gameWorld+0x98).
@@ -1199,95 +988,60 @@ extern "C" void MapParamsDialog_HarnessOpen() {
     StandaloneOpenMapParams_UI(ui);
 }
 
-// In-place construct MainMenuDialog from a MenuDLT loop. Mirrors exe ctor
-// at 0x14009BA30: builds a null parent IBP, calls DialogInstance::DialogInstance
-// with (this, ui_at_+0x40, rsc_at_+0x30, parentIBP, 0, 0, 0), then patches
-// vtable and sets the two MainMenuDialog-specific fields:
-//   +0xB8 = game world ptr (0 at the menu; only set once a game is active)
-//   +0xC0 = the OWNING LOOP (param_1 == the MenuDLT) — original does
-//           `*(this+0xc0) = param_1`. NOT the engine, despite earlier comments.
+// ============================================================
+// Construction, destruction, reflection
+// ============================================================
+// Retail ctor 0x14009BA30 (from MenuDLT): DialogInstance::DialogInstance with
+// (this, ui_at_+0x40, rsc_at_+0x30, nullParent, 0, 0, 0), then the two
+// MainMenuDialog fields:
+//   +0xB8 = the running game (0 at the menu; set by the in-game pause path)
+//   +0xC0 = the OWNING LOOP (param_1 == the MenuDLT) — `*(this+0xc0) = param_1`.
 // This +0xC0 wiring is load-bearing: NewGameDialog::StartGame reads
 // worldSetup(==this MainMenuDialog)+0xC0 to decide its transition path. If it
 // is 0, StartGame falls into the SetEngineNextLoop(worldSetup+0xB8) branch and
-// dereferences a NULL engine (AV read of +0x98) — the Stage-B blocker. With
-// +0xC0 = loop it correctly takes SetDialogLoaderNextLoop(loop) and writes
-// loop+0xb68 (the loop's pending next-loop).
-//
-// Bare-bones standalone fallback: when m_dialogExternal (loop+0x30) is null
-// — which is the case before Loader::Load wires Dialog/MainMenu.rsc —
-// DialogInstance::DialogInstance crashes inside Runtime reading [rsc+0x40].
-// In that case we skip the Runtime ctor and return a zeroed buffer with our
-// vtable patched in. The dialog has no children but downstream stubs are
-// safe (they no-op on zero fields). M2 (Loader::Load) replaces this with a
-// real DialogInstance ctor call.
-void* MainMenuDialog_Ctor_FromLoop(void* mem, void* loop) {
-    if (!mem) return nullptr;
+// dereferences a NULL engine. With +0xC0 = loop it correctly takes
+// SetDialogLoaderNextLoop(loop) and writes loop+0xb68.
 
-    // Zero the full 0xC8-byte object up front so any field read through the
-    // vtable (e.g. UI::UserInterface dialog list pointer at +0x10) sees zero
-    // instead of uninit'd heap garbage.
-    for (size_t off = 0; off < 0xC8; off += 8) {
-        *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(mem) + off) = 0;
-    }
+MainMenuDialog::MainMenuDialog() : dataB8(0), dataC0(0) {}
 
-    uintptr_t lp = reinterpret_cast<uintptr_t>(loop);
-    void* rsc = loop ? *reinterpret_cast<void**>(lp + 0x30) : nullptr;
+MainMenuDialog::MainMenuDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                               Object::InternalPtr<UI::DialogInstance> parent,
+                               void* game, void* loop)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      dataB8(reinterpret_cast<uint64_t>(game)), dataC0(reinterpret_cast<uint64_t>(loop)) {}
 
-    if (loop && rsc && fn_DialogInstance_Ctor && fn_InternalBasePtr_Ctor) {
-        // Real construction — rsc is loaded.
-        void* ui = reinterpret_cast<void*>(lp + 0x40);
-        uint8_t parentIBP[8] = {0};
-        new (parentIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        fn_DialogInstance_Ctor(mem, ui, rsc, parentIBP, nullptr, nullptr, 0);
-    } else {
-        printf("[MainMenuDialog_FromLoop] bare-bones init (loop=%p rsc=%p) — "
-               "DialogInstance ctor skipped, awaiting Loader::Load (M2)\n",
-               loop, rsc);
-    }
-
-    // +0xC0 = the owning loop (matches original `*(this+0xc0) = param_1`).
-    // +0xB8 (game world) stays 0 — already zeroed above. Required so
-    // NewGameDialog::StartGame takes the SetDialogLoaderNextLoop path instead
-    // of dereferencing a NULL engine. Only meaningful when constructed from a
-    // real loop (bare factory paths pass loop=nullptr and leave it 0).
-    *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(mem) + 0xC0) =
-        reinterpret_cast<uint64_t>(loop);
-
-    *reinterpret_cast<void**>(mem) = GetMainMenuDialogVtable();
-    return mem;
+// [0] 0x140020da0: ~MainMenuDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* MainMenuDialog::DeletingDtor(unsigned flags) {
+    this->~MainMenuDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Factory entry — no-arg, used by Object::Factory::Construct lookups (.rsc loader).
-// Standalone has no .rsc-driven instantiation of MainMenuDialog, so this returns
-// a bare-bones object that won't be wired into UI; primarily satisfies the
-// REGISTER_TYPE contract.
-void* MainMenuDialog_Factory_Bare(void* /*loop*/) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
+// create 0x140020d10: MemAlloc(0xc8, 8), then the ctor.
+void* MainMenuDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MainMenuDialog), 8);
     if (!p) return nullptr;
-    return MainMenuDialog_Ctor_FromLoop(p, nullptr);
+    return static_cast<Object::Base*>(::new (p) MainMenuDialog());
+}
+// createInPlace 0x140020d60 (the tree's in-place build is kept, B8-13).
+void* MainMenuDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) MainMenuDialog());
 }
 
-void* MainMenuDialog_CreateInPlace_Bare(void* mem) {
-    return MainMenuDialog_Ctor_FromLoop(mem, nullptr);
-}
+DEFINE_EXE_VTABLE(MainMenuDialog, "_ZTV14MainMenuDialog")
 
-}  // namespace
-
-// Exposed for the MapParamsDialog ctor registered at exe 0x14006bd80
-// (code/Game/Dialog/unreg_lane2_mapparamsdialog_ctor.cpp). The vtable array lives
-// in the anonymous namespace above, so it has internal linkage and cannot be
-// extern'd from another TU; a function defined out here still sees it. Same trick
-// RegisterMainMenuDialogVtable below already uses.
-extern "C" void* MapParamsDialog_GetStandaloneVtable() {
-    return reinterpret_cast<void*>(g_MapParamsDialog_Vtable_Standalone);
-}
-
+// B38 D5: engine_funcs.cpp still reads 0x14015f550 back (g_PauseDialog_Vtable),
+// so the exe address serves the compiler table.
 extern "C" void RegisterMainMenuDialogVtable() {
-    RegisterExeAddr(0x14015f550, reinterpret_cast<uintptr_t>(g_MainMenuDialog_Vtable_Standalone));
+    RegisterExeAddr(0x14015f550, reinterpret_cast<uintptr_t>(MainMenuDialog::Vtable()));
 }
 
-// Public entry called from MenuDLT::CreateDialog stub.
+// Public entry called from MenuDLT::CreateDialog (standalone/menudialogloopt_stubs.cpp).
+// The loop's dialog resource (+0x30) is always loaded by then; a loop without one
+// keeps the tree's bare-bones fallback (a default-constructed dialog, no element
+// tree) instead of the Runtime ctor faulting on a null Dialog — a standalone-only
+// guard retail does not have.
 extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr) {
     if (!fn_MemAlloc || !g_pMemAllocSingleton) {
         if (retInternalBasePtr) {
@@ -1295,22 +1049,24 @@ extern "C" void* MainMenuDialog_FromMenuDLT(void* loop, void* retInternalBasePtr
         }
         return retInternalBasePtr;
     }
-    void* mem = fn_MemAlloc(g_pMemAllocSingleton, 0xC8, 8);
-    void* dlg = MainMenuDialog_Ctor_FromLoop(mem, loop);
-    if (fn_InternalBasePtr_Ctor) new (retInternalBasePtr) ::Object::InternalBasePtr(
+    void* mem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(MainMenuDialog), 8);
+    uintptr_t lp = reinterpret_cast<uintptr_t>(loop);
+    void* rsc = loop ? *reinterpret_cast<void**>(lp + 0x30) : nullptr;
+    MainMenuDialog* dlg;
+    if (rsc) {
+        dlg = ::new (mem) MainMenuDialog(reinterpret_cast<UI::UserInterface*>(lp + 0x40),
+                                         static_cast<const UI::Dialog*>(rsc),
+                                         Object::InternalPtr<UI::DialogInstance>(),
+                                         nullptr, loop);
+    } else {
+        printf("[MainMenuDialog_FromLoop] bare-bones init (loop=%p rsc=%p) — "
+               "DialogInstance ctor skipped\n", loop, rsc);
+        dlg = ::new (mem) MainMenuDialog();
+        dlg->dataC0 = reinterpret_cast<uint64_t>(loop);
+    }
+    new (retInternalBasePtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
     return retInternalBasePtr;
 }
 
-// Trampolines to satisfy REGISTER_TYPE's FactoryFn / InPlaceCreateFn signatures.
-extern "C" void* MainMenuDialog_StandaloneFactory(void) {
-    return MainMenuDialog_Factory_Bare(nullptr);
-}
-
-extern "C" void* MainMenuDialog_StandaloneCreateInPlace(void* memory) {
-    return MainMenuDialog_CreateInPlace_Bare(memory);
-}
-
-REGISTER_TYPE(MainMenuDialog, "UI::DialogInstance",
-              &MainMenuDialog_StandaloneFactory, &MainMenuDialog_StandaloneCreateInPlace);
-
+DEFINE_EXE_TYPE(MainMenuDialog, "UI::DialogInstance")

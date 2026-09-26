@@ -19,7 +19,9 @@
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
 #include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
+#include "Dialog/ScenarioDialog.h"
 #include "Dialog/ui_dialogs.h"
+#include "Object/factory_registration.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -51,21 +53,21 @@
 // Assertion: "table->ChildCount() >= scenarioCount"
 // Source: Dialog\ScenarioDialog.cpp, line 0x3B
 
-void ScenarioDialog_Slot4(ScenarioDialog* self) {
+void ScenarioDialog::OnOpened() {
     // The Game container slot this function reads (+0x08 scenario ExternalList) is
     // NULL until something loads it - standalone never runs retail GameContainer_Init.
     // Fill it upstream rather than guarding the GetResourceCount deref below, which is
     // byte-faithful and load-bearing.
     GameContainer_EnsureLists();
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
     uint8_t selfDifficulty = *(uint8_t*)(s + 0xB8);
-    printf("[ScenarioDialog::Slot4] Setup called, self=%p, difficulty=%d\n", self, selfDifficulty);
+    printf("[ScenarioDialog::Slot4] Setup called, this=%p, difficulty=%d\n", this, selfDifficulty);
 
     // --- Find "buttonCancel" → set element ID 100, set +0xC0 flag = 8 ---
     {
         System::String nameStr("buttonCancel");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
         void* cancelBtn = *(void**)retBuf;
         reinterpret_cast<UI::Element*>(cancelBtn)->SetElementId(100);  // B.3.6 bridge
         *(uint32_t*)((uintptr_t)cancelBtn + 0xC0) = 8;
@@ -75,7 +77,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     {
         System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
         void* okBtn = *(void**)retBuf;
 
         *(void**)(s + 0xD0) = okBtn;
@@ -96,7 +98,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     {
         System::String nameStr("tableScenario");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(this)->FindElement(nameStr));  // B.3.6 bridge
         table = *(void**)retBuf;
     }
 
@@ -128,7 +130,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
             continue;
         }
 
-        // Filter by difficulty: scenario+0x69 must match self+0xB8
+        // Filter by difficulty: scenario+0x69 must match this+0xB8
         uint8_t scenDifficulty = *(uint8_t*)((uintptr_t)scenario + 0x69);
         uint8_t selfDifficultyVal = *(uint8_t*)(s + 0xB8);
         printf("[ScenarioDialog::Slot4] scenario[%d] at %p: difficulty=%d (want %d), isScenario=%d\n",
@@ -257,7 +259,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
             reinterpret_cast<UI::TextElement*>(textDesc)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
 
-        // --- Push entry to dynamic array at self+0xD8 ---
+        // --- Push entry to dynamic array at this+0xD8 ---
         // B.3.2 bridge: ScenarioDialog+0xD8 is Collection::Array<{7 x uint64
         // fields}> (stride 0x38, count +0xE0, capacity +0xE4) inside a struct
         // §B.2 has not converted, so it is reached at its offset. Was
@@ -295,10 +297,8 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 // ScenarioDialog::Slot7 (vtable +0x38, exe 0x140078000): RET 0 (3 bytes)
 // ============================================================
 // No-op handler; returns 0.
-int ScenarioDialog_Slot7(ScenarioDialog* self) {
-    (void)self;
-    return 0;
-}
+void ScenarioDialog::OnUpdate(const System::Time& /*time*/) {
+    }
 
 // ============================================================
 // ScenarioDialog::Slot6 (vtable +0x30) — Update entry visibility
@@ -310,8 +310,8 @@ int ScenarioDialog_Slot7(ScenarioDialog* self) {
 // Original: 0x140077BE0.
 
 static int s_slot6LogCount = 0;
-void ScenarioDialog_Slot6(ScenarioDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void ScenarioDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     int count = *(int*)(s + 0xE0);
     int selected = *(int*)(s + 0xC8);
@@ -507,9 +507,8 @@ static void ScenarioDialog_LoadSelected(ScenarioDialog* self) {
 // Slot8 (0x140077F80): OnCommand — selection change and button dispatch.
 // param3=2 (selection change): updates selected index from button IDs 1000+
 // param3=0x12 (button click): id=100 → close, id=101 → load selected scenario
-void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
-                          int param3, int param4) {
-    uintptr_t s = (uintptr_t)self;
+void ScenarioDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    uintptr_t s = (uintptr_t)this;
     printf("[ScenarioDialog::Slot8] OnCommand: param3=0x%x, param4=%d\n", param3, param4);
 
     if (param3 == 2) {
@@ -522,12 +521,12 @@ void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
         if (param4 == 100) {
             // Close button
             uint8_t basePtr[16];
-            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+            new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
             void* ui = *(void**)(s + 0x10);
             reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
         } else if (param4 == 0x65) {
             // Confirm/load button — reimpl of FUN_140077cb0
-            ScenarioDialog_LoadSelected(self);
+            ScenarioDialog_LoadSelected(this);
         }
     }
 }
@@ -555,83 +554,69 @@ void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
 //   [7] 0x140078000 OnUpdateLayout-> ScenarioDialog_Slot7 (ported)
 //   [8] 0x140077f80 OnCommand     -> ScenarioDialog_Slot8 (ported)
 //   [9] 0x14003a954 OnSerialize   (base thunk)
-namespace {
 
-void SD_Nop(void*, ...) {}
+ScenarioDialog::ScenarioDialog()
+    : difficulty(0), dataC0(0), dataC8(-1), dataD0(0), dataD8(0), dataE0(0) {}
 
-void* GetScenarioVtable();
-
-// ScenarioDialog_ScalarDtor (0x140013af0): unlike the Achievement/Goal base-thunk
-// dtors, this one frees the +0xD8 scenario entry array before tearing down the
-// DialogInstance base (entries are plain-copy 7xu64, no per-entry String dtor —
-// see the Collection::Array<{7 x uint64}> push above, B.3.2 bridge).
-void* SD_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = GetScenarioVtable();
-    uintptr_t s = (uintptr_t)self;
-    if (fn_MemFreeStatic) fn_MemFreeStatic(*(void**)(s + 0xD8));
-    *(uint64_t*)(s + 0xD8) = 0;
-    *(uint64_t*)(s + 0xE0) = 0;
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-uint32_t SD_TypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("ScenarioDialog");
-    return c;
-}
-void SD_Slot4(void* self) { ScenarioDialog_Slot4(reinterpret_cast<ScenarioDialog*>(self)); }
-void SD_Slot6(void* self) { ScenarioDialog_Slot6(reinterpret_cast<ScenarioDialog*>(self)); }
-int  SD_Slot7(void* self) { return ScenarioDialog_Slot7(reinterpret_cast<ScenarioDialog*>(self)); }
-void SD_Slot8(void* self, uint64_t p2, int p3, int p4) {
-    ScenarioDialog_Slot8(reinterpret_cast<ScenarioDialog*>(self), p2, p3, p4);
-}
-
-void* g_ScenarioDialog_Vtable_Standalone[10] = {
-    reinterpret_cast<void*>(&SD_Dtor),      // +0x00 idx0 ScalarDtor
-    reinterpret_cast<void*>(&SD_Nop),       // +0x08 idx1 static getter (base thunk)
-    reinterpret_cast<void*>(&SD_TypeId),    // +0x10 idx2 GetTypeId
-    reinterpret_cast<void*>(&SD_Nop),       // +0x18 idx3 Persist (base thunk)
-    reinterpret_cast<void*>(&SD_Slot4),     // +0x20 idx4 Setup
-    reinterpret_cast<void*>(&SD_Nop),       // +0x28 idx5 Shutdown (base thunk)
-    reinterpret_cast<void*>(&SD_Slot6),     // +0x30 idx6 OnUpdate
-    reinterpret_cast<void*>(&SD_Slot7),     // +0x38 idx7 OnUpdateLayout
-    reinterpret_cast<void*>(&SD_Slot8),     // +0x40 idx8 OnCommand
-    reinterpret_cast<void*>(&SD_Nop),       // +0x48 idx9 OnSerializeSettings (base thunk)
-};
-void* GetScenarioVtable() { return reinterpret_cast<void*>(g_ScenarioDialog_Vtable_Standalone); }
-
-}  // namespace
-
-void* ScenarioDialog_GetStandaloneVtable() { return GetScenarioVtable(); }
-
-// ScenarioDialog_CopyCtor (0x1400786b0): shared ctor for both ScenarioDialog and
+// ScenarioDialog_CopyCtor (0x1400786b0): shared by ScenarioDialog and the
 // TutorialDialog (same class; difficulty byte at +0xB8 differentiates the two —
 // MainMenuDialog_OpenScenario passes 0, MainMenuDialog_OpenTutorial passes 1).
-//
-// Byte-faithful to the disasm:
-//   base ctor: fn_DialogInstance_Ctor(self, ui, extRes, &(*parentIBP), 0, 0, 0)
-//   self->vtable = vtable_ScenarioDialog
+//   base ctor: DialogInstance(ui, extRes, parent, 0, 0, 0)
 //   +0xB8 (u8)  = difficulty
 //   +0xC0 (u64) = *parentMenuIBP   (selection's parent-controller InternalBasePtr)
-//   +0xC8 (i32) = -1               (selectedIndex, matches Slot8's read of +0xC8)
+//   +0xC8 (i32) = -1               (selectedIndex, read by OnElementEvent)
 //   +0xD0 (u64) = 0
-//   +0xD8 (u64) = 0                (scenario entry array, matches ArrayPush_Impl)
-//   +0xE0 (u64) = 0                (scenario count, matches Slot4's read of +0xE0)
+//   +0xD8 (u64) = 0                (scenario entry array)
+//   +0xE0 (u64) = 0                (scenario count, read by OnOpened)
+ScenarioDialog::ScenarioDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                               Object::InternalPtr<UI::DialogInstance> parent,
+                               uint64_t parentMenu, uint8_t difficultyArg)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      difficulty(difficultyArg), dataC0(parentMenu), dataC8(-1),
+      dataD0(0), dataD8(0), dataE0(0) {}
+
+// The body of ScenarioDialog_ScalarDtor (0x140013af0) before ~DialogInstance:
+// free the +0xD8 scenario entry array (entries are plain-copy 7 x u64, no
+// per-entry String dtor), clear its header.
+ScenarioDialog::~ScenarioDialog() {
+    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dataD8));
+    dataD8 = 0;
+    dataE0 = 0;
+}
+
+// [0] 0x140013af0: the body above, ~DialogInstance, MemFree on &1.
+Object::Base* ScenarioDialog::DeletingDtor(unsigned flags) {
+    this->~ScenarioDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140013970: MemAlloc(0xe8, 8), then the ctor.
+void* ScenarioDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ScenarioDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) ScenarioDialog());
+}
+// createInPlace 0x1400139f0 (the tree's in-place build is kept, B8-13).
+void* ScenarioDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) ScenarioDialog());
+}
+
+// The reflection record stays at the TU position of the UI_DIALOG_STUB row it
+// replaces (ui_dialog_stub_factories.cpp, B38 D4). Nothing reads 0x14015d2d0
+// back by address any more, so its registration (reg_nullsweep.cpp) is gone.
+DEFINE_EXE_VTABLE(ScenarioDialog, "_ZTV14ScenarioDialog")
+
+// The ctor DOOR, bound by name in engine_funcs.cpp (fn_ScenarioDialog_Ctor).
 void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
                           void* parentMenuIBP, uint8_t difficulty) {
     if (!self) return nullptr;
-    uint64_t parentBuf = parentIBP ? *(uint64_t*)parentIBP : 0;
-    fn_DialogInstance_Ctor(self, ui, extRes, &parentBuf, nullptr, nullptr, 0);
-
-    uintptr_t s = (uintptr_t)self;
-    *reinterpret_cast<void**>(self) = GetScenarioVtable();
-    *(uint8_t*)(s + 0xB8) = difficulty;
-    *(uint64_t*)(s + 0xC0) = parentMenuIBP ? *(uint64_t*)parentMenuIBP : 0;
-    *(int32_t*)(s + 0xC8) = -1;
-    *(uint64_t*)(s + 0xD0) = 0;
-    *(uint64_t*)(s + 0xD8) = 0;
-    *(uint64_t*)(s + 0xE0) = 0;
-    return self;
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (parentIBP)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentIBP);
+    return ::new (self) ScenarioDialog(static_cast<UI::UserInterface*>(ui),
+                                       static_cast<const UI::Dialog*>(extRes), parent,
+                                       parentMenuIBP ? *static_cast<const uint64_t*>(parentMenuIBP) : 0,
+                                       difficulty);
 }
