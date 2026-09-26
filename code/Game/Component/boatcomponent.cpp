@@ -253,13 +253,12 @@ extern "C" void BoatCtrl_PopulateTable();
 static const bool s_boatStateTableBuilt = (BoatCtrl_PopulateTable(), true);
 
 // 0x140046800. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
-// +0x28..+0x70 = 0; `_controller(this)` is the member's back-pointer at +0x90. No
-// flag OR (0x80).
-// PORT GAP (B38 D3.2): retail's ctor stores +0x70 = -1; the tree's factory zeroed
-// it, and that is kept here — the retail value is its own titled commit.
+// +0x28..+0x68 = 0, +0x70 = -1 (0x14004685c: the route index, "no waypoint yet" —
+// the route builder resets it to 0 with the first point, boatcomponent_route.cpp);
+// `_controller(this)` is the member's back-pointer at +0x90. No flag OR (0x80).
 BoatComponent::BoatComponent()
     : data28(0), data30(0), data38(0), data40(0), data48(0), _pad4C{}, data50(0), data58(0),
-      _pad5C{}, data60(0), data68(0), data70(0), _pad74{}, _controller(this) {}
+      _pad5C{}, data60(0), data68(0), data70(-1), _pad74{}, _controller(this) {}
 
 // [0] 0x140003970: ~BoatComponent (0x140046770), MemFree on &1.
 Object::Base* BoatComponent::DeletingDtor(unsigned flags) {

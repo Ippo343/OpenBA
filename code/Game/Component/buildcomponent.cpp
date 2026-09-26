@@ -593,13 +593,11 @@ static void BuildComponent_PopulateStateTable() {
 static const bool s_buildStateTableBuilt = (BuildComponent_PopulateStateTable(), true);
 
 // 0x140108fc0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
-// `_controller(this)` is the member's back-pointer; +0x48 = 0, +0x50 = 0 (byte),
-// +0x58..+0x70 = 0; then `_flags |= 0x83`.
-// PORT GAP (B38 D3.2): retail's ctor stores +0x4c = 1 (the cost multiplier); the
-// tree's factory zeroed it, and that is kept here — the retail value is its own
-// titled commit.
+// `_controller(this)` is the member's back-pointer; +0x48 = 0, +0x4c = 1 (the cost
+// multiplier, 0x140109023), +0x50 = 0 (byte), +0x58..+0x70 = 0; then
+// `_flags |= 0x83`.
 BuildComponent::BuildComponent()
-    : _controller(this), buildState(0), buildProgress(0), buildFlag(0), _pad51{},
+    : _controller(this), buildState(0), buildProgress(1), buildFlag(0), _pad51{},
       field58(nullptr), field60(nullptr), field68(nullptr), field70(nullptr) {
     OrFlagsInCtor(0x83);
 }
