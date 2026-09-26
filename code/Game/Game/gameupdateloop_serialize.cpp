@@ -61,6 +61,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
 #include "graphics/AnimationManager.h"   // ENDGAME B.3.5 Video/Graphics caller batch
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -819,7 +820,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     s_fn_ResetPersist(intFactory, stream);
 
     if (IsSaving(stream)) {
-        s_fn_SaveAllSettings(*(void**)(self + 0x98));
+        reinterpret_cast<UI::UserInterface*>(*(void**)(self + 0x98))->SaveAllSettings();  // B.3.6 bridge
     }
 
     s_fn_CfgSer_194a0((void*)(self + 0x50), ser);

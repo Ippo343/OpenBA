@@ -19,6 +19,8 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstdio>
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Sprite.h"          // ENDGAME B.3.6 UI callers (K4)
 
 namespace UIFade {
 
@@ -61,12 +63,6 @@ bool EnsureFadeSprite(void* userInterface) {
         reinterpret_cast<uintptr_t>(userInterface) + UIOff::fadeSpriteSheet);
     if (existing) return true;
 
-    if (!fn_UI_SetFullscreenFadeSprite) {
-        // Resolved at engine_funcs init — if missing, the Runtime export
-        // changed names. Defer silently; fades just won't render.
-        return false;
-    }
-
     void* keyMap = (g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
     if (!keyMap) return false;
 
@@ -78,7 +74,8 @@ bool EnsureFadeSprite(void* userInterface) {
     *reinterpret_cast<uint64_t*>(&spriteBlob[8]) =
         *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(keyMap) + kKeyMapFadeSpriteOffset + 8);
 
-    fn_UI_SetFullscreenFadeSprite(userInterface, spriteBlob);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFadeSprite(  // B.3.6 bridge
+        reinterpret_cast<const UI::Sprite*>(spriteBlob));
 
     void* installedSheet = *reinterpret_cast<void**>(
         reinterpret_cast<uintptr_t>(userInterface) + UIOff::fadeSpriteSheet);
@@ -98,26 +95,26 @@ bool EnsureFadeSprite(void* userInterface) {
 }
 
 void TriggerReveal(void* userInterface, uint32_t color) {
-    if (!userInterface || !fn_UI_SetFullscreenFade) return;
+    if (!userInterface) return;
 
     // 1. Instant set — alpha jumps to 1.0 (opaque) so the very next Draw
     //    fully covers whatever the loop renders behind it.
-    fn_UI_SetFullscreenFade(userInterface, /*fadeIn=*/true,  color, /*instant=*/true);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFade(/*fadeIn=*/true,  color, /*instant=*/true);  // B.3.6 bridge
     // 2. Animated reverse — rate becomes -1.0; UI::Update advances alpha
     //    from 1.0 toward 0.0 over ~0.25s, revealing the loop.
-    fn_UI_SetFullscreenFade(userInterface, /*fadeIn=*/false, color, /*instant=*/false);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFade(/*fadeIn=*/false, color, /*instant=*/false);  // B.3.6 bridge
 
     printf("[UIFade::TriggerReveal] ui=%p color=0x%08x alpha=%.3f rate=%.3f\n",
            userInterface, color, GetCurrentAlpha(userInterface), GetCurrentRate(userInterface));
 }
 
 void TriggerFadeIn(void* userInterface, uint32_t color) {
-    if (!userInterface || !fn_UI_SetFullscreenFade) return;
+    if (!userInterface) return;
     // Animated forward — rate becomes +1.0; UI::Update advances alpha from
     // current value toward 1.0 over ~0.25s. Caller typically sequences this
     // before transitioning to the next loop, so the screen fades to black
     // first.
-    fn_UI_SetFullscreenFade(userInterface, /*fadeIn=*/true, color, /*instant=*/false);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFade(/*fadeIn=*/true, color, /*instant=*/false);  // B.3.6 bridge
     printf("[UIFade::TriggerFadeIn] ui=%p color=0x%08x alpha=%.3f rate=%.3f\n",
            userInterface, color, GetCurrentAlpha(userInterface), GetCurrentRate(userInterface));
 }

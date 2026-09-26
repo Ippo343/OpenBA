@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // EventArray_Grow (0x140019b70) — grow-and-append primitive
@@ -138,8 +139,9 @@ static System::String EventLog_SeasonString(void* gameWorld, void* eventLog) {
     }
     System::String retStr;
     void* seasonsTable = *(void**)((uintptr_t)eventLog + 0x08);
-    if (seasonsTable && fn_StringTable_GetText) {
-        fn_StringTable_GetText(seasonsTable, &retStr, idx);
+    if (seasonsTable) {
+        ::new (&retStr) System::String(
+            reinterpret_cast<const UI::StringTable*>(seasonsTable)->GetText(idx));  // B.3.6 bridge
     } else {
         retStr = System::String("");
     }
@@ -253,8 +255,9 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     System::String seasonStr = EventLog_SeasonString(gameWorld, eventLog);
 
     void* eventsTable = *(void**)eventLog;  // +0x00
-    if (eventsTable && fn_StringTable_GetText) {
-        fn_StringTable_GetText(eventsTable, &templateStr, eventType);
+    if (eventsTable) {
+        ::new (&templateStr) System::String(
+            reinterpret_cast<const UI::StringTable*>(eventsTable)->GetText(eventType));  // B.3.6 bridge
     } else {
         templateStr = System::String("Event");
     }

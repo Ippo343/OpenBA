@@ -46,6 +46,10 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 
 // eventlog.cpp — the shared AddEvent family core, exposed for this sibling.
 extern "C" void EventLog_AddEventWithName(void* eventLog, int eventType, int severity,
@@ -80,15 +84,13 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     // NAME-LOOKUP UI::String ctor (0x140151300), not the index one.
     uint8_t uiName[24] = {0};
     System::String titleText;
-    if (fn_UIString_Ctor && fn_UIString_ToSystemString) {
-        fn_UIString_Ctor(uiName, *(uint64_t*)((uintptr_t)achievement + 0x20), &titleKey);
-        titleKey = System::String();   // retail releases the key here
-        fn_UIString_ToSystemString(uiName, &titleText);
-    } else {
-        // Unresolved exports: announce with the raw key rather than dropping the
-        // toast entirely. Standalone-only deviation, stated.
-        titleText = titleKey;
-    }
+    ::new (uiName) UI::String(
+        Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
+            reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))),
+        titleKey);
+    titleKey = System::String();   // retail releases the key here
+    ::new (&titleText) System::String(
+        reinterpret_cast<const UI::String*>(uiName)->operator System::String());  // B.3.6 bridge
 
     int64_t nullEntity[1] = {0};
     if (fn_InternalBasePtr_Ctor) new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge

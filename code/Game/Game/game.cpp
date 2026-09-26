@@ -16,6 +16,8 @@
 #include "engine_funcs.h"
 #include <cstdint>
 #include <cstring>
+#include <new>
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K4)
 
 extern "C" void* Game_Ctor(void* self) {
     // Zero the entire 0xe0-byte struct, including the regions where the
@@ -25,10 +27,8 @@ extern "C" void* Game_Ctor(void* self) {
 
     // Two embedded UI::Sprite default ctors at slot 0x15 and slot 0x17.
     auto base = reinterpret_cast<uint64_t*>(self);
-    if (fn_Sprite_DefaultCtor2) {
-        fn_Sprite_DefaultCtor2(&base[0x15]);
-        fn_Sprite_DefaultCtor2(&base[0x17]);
-    }
+    ::new (&base[0x15]) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
+    ::new (&base[0x17]) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
 
     // Publish to global KeyMap singleton storage (DAT_1401c3de8).
     if (g_pKeyMapSingleton) {
