@@ -33,6 +33,7 @@
 // actually linked and ticked.
 
 #include "Component/controller_state_table.h"
+#include "Component/PastureComponent.h"
 #include "engine_funcs.h"
 #include "Object/factory_registration.h"
 #include "resolve.h"
@@ -713,12 +714,11 @@ extern "C" char Pasture_State2PerFrame(void* data, void* /*sm*/, void* /*time*/)
 // ============================================================
 // Dispatcher + state table.
 // ============================================================
-namespace { struct PastureCtrlTag {}; }
+// PastureCtrlTag lives in PastureComponent.h (the member type needs it).
 using PastureDispatch = ::ControllerLive::Dispatcher<PastureCtrlTag>;
 
-extern "C" void** PastureCtrl_NodeVtable() { return PastureDispatch::Vtable(); }
 
-extern "C" void PastureCtrl_PopulateTable() {
+static void PastureCtrl_PopulateTable() {
     using namespace ::ControllerLive;
     StateTable& t = PastureDispatch::table;
     if (t.count != 0) return;                       // idempotent
@@ -916,3 +916,8 @@ extern "C" uint64_t MapGrid_StampCellRefs_9f770(void* grid, int x, int y, int w,
     }
     return 0;
 }
+
+// Built ONCE at static-init time, as retail's PastureDescription setup does (B38 D6/D7).
+// Before, every PastureComponent factory call re-ran it from both threads. The
+// "[Pasture] state table populated" line now prints before standalone_error.log opens.
+static const bool s_pastureStateTableBuilt = (PastureCtrl_PopulateTable(), true);

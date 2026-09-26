@@ -78,7 +78,7 @@ void TradeComponent_Draw(TradeComponent* self) {
         !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return;
 
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->owner;
+    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
 
     uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
@@ -113,7 +113,7 @@ void TradeComponent_OnCreate(TradeComponent* self) {
     if (!s_fn_RegisterEntity || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
         return;
 
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->owner;
+    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
 
     uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
@@ -522,135 +522,67 @@ void TradeComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0xa8 (TradeComponent_Factory MemAlloc), flags 0x83 (Ctor 0x14005c430:
-// Component base sets +0x20=0x80, leaf OR 0x3 => 0x83).
+// ===== ENDGAME B.3.8 MI-B — TradeComponent as a REAL class =====
+// (TradeComponent.h). Before: COMPONENT_INERT_FACTORY expanded by hand (48-slot
+// table, slots 1/3/6/13/14/16/17 patched per create, Inert_ScalarDtor in slot 0, a
+// CtorInit writing only +0x2c = -1, and Dispatcher<TradeCtrlTag> stamped into raw
+// bytes at +0x88 with its back-pointer at +0xa0). After: the compiler's 18-slot
+// vtable, a real ctor/dtor chain, the controller a member object at retail's +0x88
+// (B38_RULES D1, D2, D6).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 
-// ── Promotion from inert, 2026-07-31 ─────────────────────────────────────────
-// TradeComponent was COMPONENT_INERT_FACTORY, which zero-fills the body and
-// leaves every vtable slot a no-op stub. That produced two faults at once in
-// TradeUI_RefreshBuyTable (tradeui.cpp:849):
-//
-//   * +0x30 (merchant-name array) stayed NULL, because slot 6 was a stub and
-//     TradeComponent_Draw — which is what calls TradeComponent_Setup, the only
-//     thing that ever allocates that array — never ran.
-//   * +0x2c (selected merchant index) read 0, and 0 passes the `>= 0` guard at
-//     tradeui.cpp:848, so the panel indexed a NULL array.
-//
-// The real ctor (0x14005c430, Ghidra-verified) writes `+0x2c = 0xffffffff`.
-// -1 IS the "no merchant selected" sentinel — the `>= 0` test at tradeui.cpp:848
-// and the `comboEnabled` at :858 both key off it. A zero-filled body turns that
-// sentinel into a valid-looking index 0: exactly the inert-sentinel trap.
-//
-// Only +0x2c is applied here. Every other field the ctor writes is already 0 from
-// the zero-fill, and +0x20's `| 3` is covered by the Flags argument (0x83).
-// DELIBERATELY NOT applied: +0x88 (the controller sub-object's own vtable) and
-// +0xa0 (its self back-pointer). Those two go together, and publishing a
-// controller vtable we have not ported would turn today's null-guarded skips into
-// calls through a half-built object. They stay inert until someone ports the
-// controller.
-static void TradeComponent_CtorInit(void* self) {
-    if (!self) return;
-    *(int32_t*)((uintptr_t)self + 0x2c) = -1;   // ctor 0x14005c430: no merchant selected
+extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream);   // tradecomponent_serialize.cpp
+
+// 0x14005c430. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// +0x28 = 0; +0x2c = -1 (the "no merchant selected" sentinel: tradeui's `>= 0` test
+// and comboEnabled key off it); +0x30..+0x58 = 0; +0x60 = 0 (qword), +0x68 = 0
+// (dword); +0x71 = 0; +0x78 = +0x80 = 0; the member at +0x88 with its back-pointer
+// (+0xa0); then `_flags |= 3` (0x83).
+TradeComponent::TradeComponent()
+    : tradeState(0), tradeId(-1), field30(nullptr), field38(nullptr), field40(nullptr),
+      field48(nullptr), field50(nullptr), field58(nullptr), field60(nullptr), field68(0),
+      _pad6C{}, tradeFlag(0), _pad72{}, field78(nullptr), field80(nullptr),
+      _controller(this) {
+    OrFlagsInCtor(0x3);
 }
 
-static uint32_t TradeComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TradeComponent");
-    return cached;
+// [0] 0x14000dc80: ~TradeComponent (0x14005c340), MemFree on &1.
+Object::Base* TradeComponent::DeletingDtor(unsigned flags) {
+    this->~TradeComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void* TradeComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+// 0x14005c340: frees the +0x60 buy-order BST, +0x50, +0x40 and the +0x30 name array,
+// then the restamps and ~Internal (the compiler chain).
+// PORT GAP (retail 0x14005c380..0x14005c3f9) — B38 D9: the tree's slot 0
+// (Inert_ScalarDtor) freed none of the four; kept that way here.
+TradeComponent::~TradeComponent() {}
 
-// Ghidra calls 0x14005c1d0 "Draw"; it is the OnAdded slot (index 6), dispatched by
-// ComponentEntity_OnAddedPass at register time because Component+0x20 bit 0 is set
-// (Flags 0x83). Same mislabel family as the OnCreate/OnRemove pair.
-static void TradeComponent_OnAddedVSlot(void* s) {
-    TradeComponent_Draw(reinterpret_cast<TradeComponent*>(s));
+// create 0x14000db60: MemAlloc(0xa8, 8), then the ctor.
+void* TradeComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TradeComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TradeComponent());
 }
-
-static uint8_t TradeComponent_Slot13VSlot(void* s) {
-    return TradeComponent_Slot13(reinterpret_cast<TradeComponent*>(s));
-}
-static void TradeComponent_Slot14VSlot(void* s) {
-    TradeComponent_Slot14(reinterpret_cast<TradeComponent*>(s));
-}
-
-// ── Controller state machine (tradecomponent_states.cpp) ─────────────────────────
-// The controller sub-object the note above left inert. Retail's TradeComponent vtable
-// 0x14015acd0 holds slot 16 = 0x1400026c0 (`MOV EAX,2; RET`) and slot 17 = 0x14000dba0
-// (`LEA RAX,[RCX+0x88]; RET`), so the node lives at +0x88, its back-pointer at +0xa0,
-// and the machine starts in state 2. Its own opt-in flag rather than riding
-// BANISHED_LIVE_TRADE_COMPONENT: the panel gate is verified, this is not.
-extern "C" void** TradeCtrl_NodeVtable();
-extern "C" void   TradeCtrl_PopulateTable();
-
-static int   TradeComponent_GetDefaultState(void*) { return 2; }
-static void* TradeComponent_CreateState(void* self) {
-    return reinterpret_cast<uint8_t*>(self) + 0x88;
-}
-static void* TradeComponent_LiveGetTypeInfo(void*) {
-    static void* cached = nullptr;
-    if (!cached) cached = ::Object::GetTypeInfoByName("TradeComponent");
-    return cached;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* TradeComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TradeComponent());
 }
 
-// Wire the node ON THE INSTANCE. This must happen after MakeInertTyped/InitInertTyped
-// (FillTypedVtable rewrites the vtable slots, erasing anything written earlier) —
-// see reference_live_vtable_slot_must_be_wired_in_installlive.
-static void TradeComponent_InstallController(void* mem) {
-    TradeComponent_LiveVtable[1]  = reinterpret_cast<void*>(&TradeComponent_LiveGetTypeInfo);
-    TradeComponent_LiveVtable[16] = reinterpret_cast<void*>(&TradeComponent_GetDefaultState);
-    TradeComponent_LiveVtable[17] = reinterpret_cast<void*>(&TradeComponent_CreateState);
-    TradeCtrl_PopulateTable();
-    if (!mem) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(mem);
-    *reinterpret_cast<void**>(p + 0x88) = reinterpret_cast<void*>(TradeCtrl_NodeVtable());
-    *reinterpret_cast<void**>(p + 0xa0) = mem;   // node+0x18 = owning component
-}
+// [3] 0x14005bd50 — the merchant table / item lists (tradecomponent_serialize.cpp).
+void TradeComponent::Persist(void* stream) { TradeComponent_Serialize(this, stream); }
+// [6] 0x14005c1d0 — Ghidra's "Draw"; it is OnAdded, dispatched by
+// ComponentEntity_OnAddedPass at register time because +0x20 bit 0 is set (0x83).
+void TradeComponent::OnAdded() { TradeComponent_Draw(this); }
+// [7] 0x14005c190 — Ghidra's "OnCreate"; it is the removal hook (erase-by-value).
+void TradeComponent::OnRemove() { TradeComponent_OnCreate(this); }
+// [13] 0x14005c140 / [14] 0x14005c000 — the work-enable pair; they go together (a
+// live query over a stub toggle reports a state nothing can change). Neither
+// reads its command id.
+uint32_t TradeComponent::CommandMask(int /*command*/) { return TradeComponent_Slot13(this); }
+void     TradeComponent::Command(int /*command*/)     { TradeComponent_Slot14(this); }
 
-extern "C" void TradeComponent_Serialize(TradeComponent* self, void* stream);
-static void TradeComponent_SerializeVSlot(void* s, void* stream) {
-    TradeComponent_Serialize(reinterpret_cast<TradeComponent*>(s), stream);
-}
-static void TradeComponent_FinishLiveVtable() {
-    // Slot 3 (stream Serialize, retail 0x14005bd50, tradecomponent_serialize.cpp)
-    // wired UNCONDITIONALLY — save/load wave 2026-08-28. Slot-3 wiring is
-    // symmetric (the same vtable serves save and load), so wiring cannot desync
-    // the stream; leaving it base-only silently reset the trading post's
-    // merchant table / item lists on every load.
-    TradeComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&TradeComponent_SerializeVSlot);
-    TradeComponent_LiveVtable[6] =
-        reinterpret_cast<void*>(&TradeComponent_OnAddedVSlot);
-    // 13 and 14 go in together — see the note on the pair above. A live query
-    // over a stub toggle reports a state nothing can change.
-    TradeComponent_LiveVtable[13] =
-        reinterpret_cast<void*>(&TradeComponent_Slot13VSlot);
-    TradeComponent_LiveVtable[14] =
-        reinterpret_cast<void*>(&TradeComponent_Slot14VSlot);
-}
-
-extern "C" void* TradeComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0xa8, 0x83,
-        TradeComponent_LiveVtable,
-        reinterpret_cast<void*>(&TradeComponent_LiveGetTypeId));
-    TradeComponent_FinishLiveVtable();
-    TradeComponent_CtorInit(p);
-    TradeComponent_InstallController(p);
-    return p;
-}
-
-static void* TradeComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0xa8, 0x83,
-        TradeComponent_LiveVtable,
-        reinterpret_cast<void*>(&TradeComponent_LiveGetTypeId));
-    TradeComponent_FinishLiveVtable();
-    TradeComponent_CtorInit(mem);
-    TradeComponent_InstallController(mem);
-    return mem;
-}
-
-REGISTER_TYPE(TradeComponent, "ControllerComponent",
-              &TradeComponent_Factory, &TradeComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(TradeComponent, "_ZTV14TradeComponent")
+DEFINE_EXE_TYPE(TradeComponent, "ControllerComponent")

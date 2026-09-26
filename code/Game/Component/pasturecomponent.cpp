@@ -416,56 +416,16 @@ void PastureComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory =====
-// Inert by default; BANISHED_LIVE_PASTURE graduates the component to a live
-// ControllerComponent. Size 0x68 and flags 0x8b come from PastureComponent_Ctor
-// (0x1401280e0): Component_Ctor's +0x20=0x80 OR'd with the leaf's 0x8b.
-//
-// Live slots (indices read off the retail primary vtable at 0x140163f60):
-//   [6]  OnAdded  = PastureComponent_Draw   (0x140127a30) — compute +0x40 capacity
-//   [7]  OnRemove = release-all             (0x1401277e0)
-//   [16] GetDefaultState -> 2   (retail 0x1400026c0 is literally `MOV EAX,2; RET`)
-//   [17] CreateState     -> self+0x48       (retail 0x140036770 `LEA RAX,[RCX+0x48]`)
-// plus the embedded node at +0x48: its vtable is the pasture state-table dispatcher
-// and node+0x18 (= comp+0x60) is the back-pointer the ctor writes.
+// ===== ENDGAME B.3.8 MI-B — PastureComponent's own slot bodies =====
+// Slots 13/14/15 live in pasturecomponent_states.cpp (registered by address from
+// standalone/reg_pasture_live.cpp); the class (PastureComponent.h) reaches them and
+// the slot-12 body below through its members, at the bottom of this file.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 
-extern "C" void** PastureCtrl_NodeVtable();
-extern "C" void   PastureCtrl_PopulateTable();
 extern "C" void   Pasture_MsgReceive(void* pasture, int msg);  // slot 15 breed tag
 extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd); // slot 13 capability query
 extern "C" void   Pasture_Command(void* pasture, int cmd);      // slot 14 execute command
 
-static uint32_t PastureComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PastureComponent");
-    return cached;
-}
-static void* PastureComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-static void  PastureComponent_OnAddedVSlot(void* s) {
-    PastureComponent_Draw(reinterpret_cast<PastureComponent*>(s));
-}
-static void  PastureComponent_OnRemoveVSlot(void* s) {
-    PastureComponent_OnCreate(reinterpret_cast<PastureComponent*>(s));
-}
-// Slot 15 (+0x78 OnMessage, retail 0x140127720): the herder's work-complete
-// message tags one random pastured animal breed-eligible (flag bit 23) — the
-// only setter of that bit in the exe; without it livestock never reproduce.
-// Body in pasturecomponent_states.cpp; ABI = (self, msgCode, rest unused).
-static void  PastureComponent_MsgVSlot(void* s, int msg, void*, uint32_t, uint32_t) {
-    Pasture_MsgReceive(s, msg);
-}
-// Slots 13/14 (retail 0x140127dd0 / 0x140127a60): the pasture command pair —
-// slot 13 answers "may command N run?", slot 14 executes it. Cmd 2 is the herder
-// toggle SetLivestockType fires on the first type assignment (posts PastureWork).
-static uint64_t PastureComponent_CanCommandVSlot(void* s, int cmd) {
-    return Pasture_CanCommand(s, cmd);
-}
-static void  PastureComponent_CommandVSlot(void* s, int cmd) {
-    Pasture_Command(s, cmd);
-}
 // ── slot 12 — retail 0x140127540 — claim the pasture's gate cells ─────────────────
 // Only acts on message id 4. For each kind-2 child attach point of the pasture's
 // position component it converts the point to a map cell, forces that cell's terrain
@@ -543,87 +503,75 @@ extern "C" void PastureComponent_Slot12VSlot(void* selfV, int msgId) {
     }
 }
 
-// ── Family-A tail slots 1 / 4 / 19 / 20 / 21 ──────────────────────────────────────
-// PastureComponent does not use the CONTROLLER_LIVE_FACTORY_STATES macro (it has this
-// hand-rolled InstallLive), so none of the shared slot fills reached it and the
-// coverage harness reported it as the weakest of the six at 14/22. All five of these
-// are tiny in retail:
-//   slot 1  0x140036720  MOV RAX,[rip+global]; RET   — the class BaseTypeInfo
-//   slot 4  0x140127a50  *(uint64*)(self+0x28) = 0   — one store
-//   slot 19 0x140036790  MOV RAX,[rip+global]; RET
-//   slot 20 0x140036780  MOV EAX,[rip+global]; RET
-//   slot 21 0x140128280  MOV EAX,2; RET              — 2 here, 3 on Orchard/CropField
+// ============================================================================
+// ENDGAME B.3.8 MI-B — PastureComponent as a REAL class (PastureComponent.h).
 //
-// ⚠ As on Orchard/CropField, 19/20 read globals ADJACENT to the ones 1/2 use — the
-// controller-interface subobject's, for which we hold no separate storage. Returning
-// the class's own type info/id is a stand-in, not byte-exact; still strictly closer
-// than the inert stub, and flagged so it is not mistaken for finished.
-static void* PastureComponent_GetTypeInfoVSlot(void*) {
-    static void* c = nullptr;
-    if (!c) c = ::Object::GetTypeInfoByName("PastureComponent");
-    return c;
-}
-static uint32_t PastureComponent_GetTypeIdVSlot(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PastureComponent");
-    return c;
-}
-static void PastureComponent_Slot4Clear(void* self) {
-    *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(self) + 0x28) = 0;
-}
-static int PastureComponent_Slot21Const(void*) { return 2; }
+// Before: a hand-rolled InstallLive over a 48-slot table (slots 1/3/4/6/7/12-21
+// patched per create, Inert_ScalarDtor in slot 0, Dispatcher<PastureCtrlTag>
+// stamped into raw bytes at +0x48 with its back-pointer at +0x60). Slots 18-21 held
+// ControllerLive_ScalarDeletingDtor, the class's type info / id and `return 2`: that
+// is PastureDescription's table 0x140163ff0 read past this 18-slot table's end
+// (B38 D3.5) — gone; nothing in the tree dispatches a component past slot 17.
+// After: the compiler's 18-slot vtable, a real ctor/dtor chain, the controller a
+// member object at retail's +0x48 (B38_RULES D1, D2, D6).
+// ============================================================================
 
-extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slot 18
-static int   PastureComponent_GetDefaultState(void*) { return 2; }
-static void* PastureComponent_CreateState(void* self) {
-    return reinterpret_cast<uint8_t*>(self) + 0x48;
+// 0x1401280e0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// +0x28 = +0x30 = +0x38 = 0; +0x44 = 0; the member at +0x48 with its back-pointer
+// (+0x60); then `_flags |= 0x8b`. Retail leaves +0x40 unwritten; the tree's factory
+// zeroed it and that is kept.
+PastureComponent::PastureComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr), _pad40{}, field44(0),
+      _controller(this) {
+    OrFlagsInCtor(0x8b);
 }
 
-// Re-run for every instance: InitInertTyped re-stubs the shared vtable each time.
-static void PastureComponent_InstallLive(void* mem) {
-    PastureComponent_LiveVtable[12] = reinterpret_cast<void*>(&PastureComponent_Slot12VSlot);
-    PastureComponent_LiveVtable[1]  = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
-    // Slot 3 = Shutdown/Serialize. The body has been ported in this file since
-    // the original wave and nothing ever wrote it into the live vtable, so the
-    // coverage harness measured the slot as still holding the inert stub. Third
-    // instance of "ported but unwired" in this component family — worth wiring
-    // from InstallLive, the one place FillTypedVtable cannot erase.
-    PastureComponent_LiveVtable[3]  = reinterpret_cast<void*>(
-        static_cast<void(*)(PastureComponent*, void*)>(&PastureComponent_Shutdown));
-    PastureComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
-    PastureComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PastureComponent_Slot4Clear);
-    PastureComponent_LiveVtable[19] = reinterpret_cast<void*>(&PastureComponent_GetTypeInfoVSlot);
-    PastureComponent_LiveVtable[20] = reinterpret_cast<void*>(&PastureComponent_GetTypeIdVSlot);
-    PastureComponent_LiveVtable[21] = reinterpret_cast<void*>(&PastureComponent_Slot21Const);
-    PastureComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PastureComponent_OnAddedVSlot);
-    PastureComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PastureComponent_OnRemoveVSlot);
-    PastureComponent_LiveVtable[13] = reinterpret_cast<void*>(&PastureComponent_CanCommandVSlot);
-    PastureComponent_LiveVtable[14] = reinterpret_cast<void*>(&PastureComponent_CommandVSlot);
-    PastureComponent_LiveVtable[15] = reinterpret_cast<void*>(&PastureComponent_MsgVSlot);
-    PastureComponent_LiveVtable[16] = reinterpret_cast<void*>(&PastureComponent_GetDefaultState);
-    PastureComponent_LiveVtable[17] = reinterpret_cast<void*>(&PastureComponent_CreateState);
-    PastureCtrl_PopulateTable();
-    if (mem) {
-        uint8_t* node = reinterpret_cast<uint8_t*>(mem) + 0x48;
-        *reinterpret_cast<void**>(node) = reinterpret_cast<void*>(PastureCtrl_NodeVtable());
-        *reinterpret_cast<void**>(node + 0x18) = mem;   // = comp+0x60, as the ctor does
-    }
+// [0] 0x140036910: ~PastureComponent (0x140128070), MemFree on &1.
+Object::Base* PastureComponent::DeletingDtor(unsigned flags) {
+    this->~PastureComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x140128070: MemFree(+0x30), +0x30 = +0x38 = 0, then the restamps and ~Internal
+// (the compiler chain).
+// PORT GAP (retail 0x1401280a7 MemFree of the animal list) — B38 D9: the tree's slot
+// 0 (Inert_ScalarDtor) never freed it; kept that way here.
+PastureComponent::~PastureComponent() {}
+
+// create 0x140036730: MemAlloc(0x68, 8), then the ctor.
+void* PastureComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PastureComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PastureComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* PastureComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PastureComponent());
 }
 
-extern "C" void* PastureComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x68, 0x8b,
-        PastureComponent_LiveVtable,
-        reinterpret_cast<void*>(&PastureComponent_LiveGetTypeId));
-    PastureComponent_InstallLive(p);
-    return p;
+// [3] 0x140127f40 (the body resolves at its top; also registered by address from
+// standalone/reg_animal_serialize.cpp).
+void PastureComponent::Persist(void* stream) { PastureComponent_Shutdown(this, stream); }
+// [4] 0x140127a50: `MOV qword [RCX+0x28],0` — one store.
+void PastureComponent::Startup() { field28 = nullptr; }
+// [6] 0x140127a30 (Ghidra "Draw") — compute the +0x40 capacity.
+void PastureComponent::OnAdded() { PastureComponent_Draw(this); }
+// [7] 0x1401277e0 — release every pastured animal.
+void PastureComponent::OnRemove() { PastureComponent_OnCreate(this); }
+// [12] 0x140127540 — claim the gate cells on event 4 (the body above).
+void PastureComponent::OnEvent(int eventId) { PastureComponent_Slot12VSlot(this, eventId); }
+// [13] 0x140127dd0 / [14] 0x140127a60 — the herder command pair.
+uint32_t PastureComponent::CommandMask(int command) {
+    return static_cast<uint32_t>(Pasture_CanCommand(this, command));
 }
-static void* PastureComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x68, 0x8b,
-        PastureComponent_LiveVtable,
-        reinterpret_cast<void*>(&PastureComponent_LiveGetTypeId));
-    PastureComponent_InstallLive(mem);
-    return mem;
+void PastureComponent::Command(int command) { Pasture_Command(this, command); }
+// [15] 0x140127720 — the herder's work-complete message tags one random pastured
+// animal breed-eligible (flag bit 23); ABI = (self, msgCode, rest unused).
+void PastureComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
+    Pasture_MsgReceive(this, message);
 }
 
-REGISTER_TYPE(PastureComponent, "ControllerComponent",
-              &PastureComponent_Factory, &PastureComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(PastureComponent, "_ZTV16PastureComponent")
+DEFINE_EXE_TYPE(PastureComponent, "ControllerComponent")

@@ -757,103 +757,68 @@ extern "C" void OrchardComponent_Command(void* selfV, int cmdId) {
         static_cast<int>(*reinterpret_cast<int8_t*>(smcIBP + 0x51)), eventId);
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 MI-B — OrchardComponent as a REAL class (OrchardComponent.h).
 //
-// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent. While it was
-// inert, the embedded state node at comp+0x28 was never installed and never linked
-// into the entity's StateMachineComponent, so nothing ticked: the slot array at
-// +0x50/+0x58 was never built, no PlantOrchard work was ever posted, no trees grew,
-// and no HarvestOrchard work was ever scheduled. That was the whole "orchard produces
-// no work or yield" symptom.
-//
-// The three macro arguments are byte-verified against retail, not inferred:
-//   Size 0x68 / Flags 0x80 — OrchardComponent_Ctor (0x140051f40) allocates 0x68 and
-//     ORs 0x80 into +0x20.
-//   NodeOff 0x28 — the ctor writes vtable_OrchardComponent_Controller (0x14015a130)
-//     to +0x28, and primary vtable slot 17 (CreateState) at 0x140004080 is literally
-//     `48 8D 41 28 C3` = LEA RAX,[RCX+0x28]; RET. The macro also writes the owner
-//     backptr at NodeOff+0x18 = +0x40, exactly as the ctor's `*(self+0x40) = self`.
-//   DefState 2 — primary vtable slot 16 (GetDefaultState) at 0x1400026c0 is literally
-//     `B8 02 00 00 00 C3` = MOV EAX,2; RET. (The `activeState=3` seen in the runtime
-//     diagnostic is the ENTITY-level StateMachine state, a different thing — do not
-//     conflate them.)
-//
-// GRADUATED 2026-08-10: BANISHED_LIVE_ORCHARD is in the default-on table, so the env var is now
-// only a kill-switch (=0) for A/B runs. It was opt-in while the state table registered null
-// handlers; all six states (2/9/10/12/11/20) now carry real bodies, and the loop is measured
-// end to end — plant, tend, harvest, 6 piles x 50 reaching town STORAGE, and cut/replant.
-// See the default-on table in component_factory_base.cpp for the evidence, and note that
-// BANISHED_LIVE_GROWTH + BANISHED_LIVE_FRUIT graduated with it: without those two the trees
-// plant but never mature or bear, so the three are only meaningful together.
+// Before: CONTROLLER_LIVE_FACTORY_STATES (48-slot table filled per create, slots
+// 3/4/13/14/15/18-21 written from InstallLive, Inert_ScalarDtor in slot 0,
+// Dispatcher<OrchardCtrlTag> stamped into raw bytes at +0x28). Slots 18-21 held
+// ControllerLive_ScalarDeletingDtor, the class's type info / id and `return 3`: that
+// is OrchardDescription's table 0x14015a210 read past this 18-slot table's end
+// (B38 D3.5) — gone; nothing in the tree dispatches a component past slot 17.
+// After: the compiler's 18-slot vtable, a real ctor/dtor chain, the controller a
+// member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
 
-extern "C" void** OrchardCtrl_NodeVtable();     // orchardcomponent_states.cpp
-extern "C" void   OrchardCtrl_PopulateTable();
-
-// Slot 15 (OnMessage) has to be wired from INSIDE InstallLive, not at static-init:
-// MakeInertTyped -> FillTypedVtable rewrites slots 1..N with the inert stub on the first
-// factory call, so anything written earlier is silently erased — the same "reversed order =
-// silently un-wired" trap the stub-controller sweep documented, via a different mechanism.
-// The macro only fills 16/17 itself, but it calls PopulateFn from InstallLive AFTER
-// FillTypedVtable has run, so hanging the slot-15 write off the populate hook puts it in the
-// one place that survives. Idempotent: InstallLive runs per component instance.
-
-// ── Family-A tail slots 4 / 19 / 20 / 21 ──────────────────────────────────────────
-// These four sit past the shared Component block and were the last cheap gaps the
-// slot-coverage harness reported for this class. All four are tiny in retail:
-//   slot 4  0x140051DD0  `*(uint64*)(self+0x60) = 0` — one store, nothing else.
-//   slot 19 0x1400098C0  `MOV RAX,[rip+global]; RET` — returns the class's BaseTypeInfo.
-//   slot 20 0x1400098B0  `MOV EAX,[rip+global]; RET` — returns the class's type id.
-//   slot 21 0x1400523A0  `MOV EAX,3; RET`.
-//
-// ⚠ 19/20 read globals ADJACENT to (not identical with) the ones slots 1/2 use — they
-// are the controller-interface subobject's type info/id. We have no separate storage
-// for that subobject, so these return the class's own type info/id. That is a
-// stand-in, not byte-exact; it is strictly closer than the inert stub (which returned
-// null/garbage) and is flagged here so it is not mistaken for a finished port.
-static void OrchardComponent_Slot4Clear(void* self) {
-    *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(self) + 0x60) = 0;
+// 0x140051f40. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48 = 0; +0x4c = -1; +0x50 =
+// +0x58 = +0x60 = 0; `_flags |= 0x80` (already set by Component()).
+// PORT GAP (retail 0x140051fa3 `MOV dword [RBX+0x4c],0xffffffff`) — B38 D9: the tree's
+// factory zero-filled the body, so +0x4c starts 0 here as before.
+OrchardComponent::OrchardComponent()
+    : _controller(this), orchardFlag(0), _pad49{}, orchardId(0), field50(nullptr),
+      field58(nullptr), field60(nullptr) {
+    OrFlagsInCtor(0x80);
 }
-static void* OrchardComponent_Slot19GetTypeInfo(void*) {
-    static void* c = nullptr;
-    if (!c) c = ::Object::GetTypeInfoByName("OrchardComponent");
-    return c;
-}
-static uint32_t OrchardComponent_Slot20GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("OrchardComponent");
-    return c;
-}
-static int OrchardComponent_Slot21Const(void*) { return 3; }
 
-extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slot 18
-static void OrchardCtrl_PopulateTableAndWireSlot15();
-
-CONTROLLER_LIVE_FACTORY_STATES(OrchardComponent, 0x68, 0x80, 0x28, 2,
-                               OrchardCtrl_NodeVtable, OrchardCtrl_PopulateTableAndWireSlot15)
-
-static void OrchardCtrl_PopulateTableAndWireSlot15() {
-    // 13/14 are the panel command path and 15 is OnMessage. All three must be written
-    // HERE, from inside InstallLive, for the FillTypedVtable reason above.
-    // Slot 3 = Shutdown/Serialize. The body has been ported in this file since
-    // the original wave and nothing ever wrote it into the live vtable, so the
-    // coverage harness measured the slot as still holding the inert stub. Third
-    // instance of "ported but unwired" in this component family — worth wiring
-    // from InstallLive, the one place FillTypedVtable cannot erase.
-    OrchardComponent_LiveVtable[3]  = reinterpret_cast<void*>(
-        static_cast<void(*)(OrchardComponent*, void*)>(&OrchardComponent_Shutdown));
-    OrchardComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
-    OrchardComponent_LiveVtable[4]  = reinterpret_cast<void*>(&OrchardComponent_Slot4Clear);
-    OrchardComponent_LiveVtable[19] = reinterpret_cast<void*>(&OrchardComponent_Slot19GetTypeInfo);
-    OrchardComponent_LiveVtable[20] = reinterpret_cast<void*>(&OrchardComponent_Slot20GetTypeId);
-    OrchardComponent_LiveVtable[21] = reinterpret_cast<void*>(&OrchardComponent_Slot21Const);
-    OrchardComponent_LiveVtable[13] = reinterpret_cast<void*>(&OrchardComponent_CanCommand);
-    OrchardComponent_LiveVtable[14] = reinterpret_cast<void*>(&OrchardComponent_Command);
-    OrchardComponent_LiveVtable[15] = reinterpret_cast<void*>(&OrchardComponent_OnMessage);
-    OrchardCtrl_PopulateTable();
+// [0] 0x140009a70: ~OrchardComponent (0x140051ed0), MemFree on &1.
+Object::Base* OrchardComponent::DeletingDtor(unsigned flags) {
+    this->~OrchardComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-REGISTER_TYPE(OrchardComponent, "ControllerComponent",
-              &OrchardComponent_Factory, &OrchardComponent_CreateInPlace);
+// 0x140051ed0: MemFree(+0x50), +0x50 = +0x58 = 0, then the restamps and ~Internal
+// (the compiler chain).
+// PORT GAP (retail 0x140051ef4 MemFree of the tree-slot array) — B38 D9: the tree's
+// slot 0 (Inert_ScalarDtor) never freed it; kept that way here.
+OrchardComponent::~OrchardComponent() {}
+
+// create 0x140009870: MemAlloc(0x68, 8), then the ctor.
+void* OrchardComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(OrchardComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) OrchardComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* OrchardComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) OrchardComponent());
+}
+
+// [3] 0x140051de0. The body resolves its helpers at its top (slot 3 is the first
+// call into this class on a load-from-save).
+void OrchardComponent::Persist(void* stream) { OrchardComponent_Shutdown(this, stream); }
+// [4] 0x140051dd0: `MOV qword [RCX+0x60],0` — one store, nothing else.
+void OrchardComponent::Startup() { field60 = nullptr; }
+// [13] 0x140051c90 / [14] 0x140051ba0 / [15] 0x140051990 — the bodies above (their
+// extern "C" names stay: standalone/orchard_cut_harness.cpp calls two of them).
+uint32_t OrchardComponent::CommandMask(int command) { return OrchardComponent_CanCommand(this, command); }
+void     OrchardComponent::Command(int command)     { OrchardComponent_Command(this, command); }
+void     OrchardComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t arg1) {
+    OrchardComponent_OnMessage(this, message, data, arg0, arg1);
+}
+
+DEFINE_EXE_VTABLE(OrchardComponent, "_ZTV16OrchardComponent")
+DEFINE_EXE_TYPE(OrchardComponent, "ControllerComponent")

@@ -70,6 +70,7 @@
 // route -> dock -> manifest -> auto-trade delivering goods.
 
 #include "Component/controller_state_table.h"
+#include "Component/TradeComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
@@ -88,10 +89,8 @@ extern "C" void  BoatComponent_SetDestination(int64_t boatComp, int64_t* destEnt
 extern "C" char TradeCtrl_State13_Enter(void* self, void* sm);    // 0x14005a800
 extern "C" char TradeCtrl_State13_Update(void* self, void* sm);   // 0x14005a6d0
 
-namespace { struct TradeCtrlTag {}; }
+// TradeCtrlTag lives in TradeComponent.h (the member type needs it).
 using TradeDispatch = ::ControllerLive::Dispatcher<TradeCtrlTag>;
-
-extern "C" void** TradeCtrl_NodeVtable() { return TradeDispatch::Vtable(); }
 
 namespace {
 
@@ -576,8 +575,8 @@ extern "C" char TradeCtrl_Teardown(void* selfV) {
 // ============================================================
 // Table build — replicates 0x14005c650
 // ============================================================
-// Idempotent: InstallLive runs once per component instance.
-extern "C" void TradeCtrl_PopulateTable() {
+// Built ONCE at static-init time, as retail's 0x14005c650 does (B38 D6/D7).
+static void TradeCtrl_PopulateTable() {
     ::ControllerLive::StateTable& t = TradeDispatch::table;
     if (t.count != 0) return;
     using namespace ::ControllerLive;
@@ -614,3 +613,8 @@ extern "C" void TradeCtrl_PopulateTable() {
     std::fprintf(stderr, "[TradeCtrl] table built: %d states (2, 0x12, 0x13)\n", t.count);
     std::fflush(stderr);
 }
+
+// Built ONCE at static-init time (B38 D6/D7). Before, TradeComponent_InstallController
+// re-ran it from every factory call on both threads. The "[TradeCtrl] table built"
+// line above now prints at static init, before standalone_error.log is opened.
+static const bool s_tradeStateTableBuilt = (TradeCtrl_PopulateTable(), true);

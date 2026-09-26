@@ -332,43 +332,9 @@ void CropFieldComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid CropFieldComponent: size 0x68 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0x80 (from CropFieldComponent_Ctor) + zeroed body.
-#include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-
-// Promoted off COMPONENT_INERT_FACTORY to a live ControllerComponent, so the state
-// machine in cropfieldcomponent_states.cpp actually runs.
-//
-// Macro arguments, byte-verified against retail rather than inferred:
-//   Size 0x68 / Flags 0x80 — CropFieldComponent_Ctor (0x14011afd0) is allocated at 0x68
-//     by CropFieldComponent_Factory (0x140032ed0) and ORs 0x80 into +0x20.
-//   NodeOff 0x28 — the ctor writes vtable_CropFieldComponent_Controller (0x140162e70)
-//     to +0x28 and self to +0x40 (= NodeOff+0x18); primary vtable slot 17 (CreateState)
-//     is the shared 0x140004080 = `LEA RAX,[RCX+0x28]; RET`.
-//   DefState 2 — primary slot 16 (GetDefaultState) is the shared 0x1400026c0 =
-//     `MOV EAX,2; RET`.
-//
-// The ctor also seeds +0x48 = 0x0100 (two bytes: +0x48 = 0, +0x49 = 1) and zeroes
-// +0x50/+0x58/+0x60. MakeInertTyped zeroes the body, so +0x49 currently starts 0 rather
-// than 1; that difference is only observable once the state handlers that read it are
-// ported, and is noted here so it is not rediscovered as a mystery.
-//
-// Opt-in: the state table registers null handlers on this first pass, so the machine
-// runs its real structure and performs no work yet. Nothing to graduate until the
-// handler bodies land.
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
-
-extern "C" void** CropFieldCtrl_NodeVtable();     // cropfieldcomponent_states.cpp
-extern "C" void   CropFieldCtrl_PopulateTable();
-
-// Slots 13/14/15 are the panel command path (CanCommand / Command / OnMessage) at retail
-// 0x14011ada0 / 0x14011acc0 / 0x14011ab50, and 18 is 0x140033040. They are NOT wired yet
-// — their bodies are unported. When they are, write them from INSIDE this hook, never at
-// static init: FillTypedVtable rewrites slots 1..N on the first factory call and would
-// silently erase anything written earlier.
+// ===== ENDGAME B.3.8 MI-B — CropFieldComponent's own slot bodies =====
+// The class (CropFieldComponent.h) reaches these three through its members
+// (OnMessage / CommandMask / Command, below the bodies).
 
 // ── slot 15 — OnMessage — retail 0x14011ab50 ──────────────────────────────────────
 // OnMessage(self, msgId, sender, slotIndex). Two messages, both addressed at ONE slot
@@ -549,67 +515,70 @@ extern "C" void CropFieldComponent_CommandVSlot(void* selfV, int cmdId) {
         node, reinterpret_cast<void*>(sm), curIdx, eventId);
 }
 
-// ── Family-A tail slots 4 / 19 / 20 / 21 ──────────────────────────────────────────
-// These four sit past the shared Component block and were the last cheap gaps the
-// slot-coverage harness reported for this class. All four are tiny in retail:
-//   slot 4  0x14011AE60  `*(uint64*)(self+0x50) = 0` — one store, nothing else.
-//   slot 19 0x140032F20  `MOV RAX,[rip+global]; RET` — returns the class's BaseTypeInfo.
-//   slot 20 0x140032F10  `MOV EAX,[rip+global]; RET` — returns the class's type id.
-//   slot 21 0x14011B2F0  `MOV EAX,3; RET`.
+// ============================================================================
+// ENDGAME B.3.8 MI-B — CropFieldComponent as a REAL class (CropFieldComponent.h).
 //
-// ⚠ 19/20 read globals ADJACENT to (not identical with) the ones slots 1/2 use — they
-// are the controller-interface subobject's type info/id. We have no separate storage
-// for that subobject, so these return the class's own type info/id. That is a
-// stand-in, not byte-exact; it is strictly closer than the inert stub (which returned
-// null/garbage) and is flagged here so it is not mistaken for a finished port.
-static void CropFieldComponent_Slot4Clear(void* self) {
-    *reinterpret_cast<uint64_t*>(reinterpret_cast<uint8_t*>(self) + 0x50) = 0;
-}
-static void* CropFieldComponent_Slot19GetTypeInfo(void*) {
-    static void* c = nullptr;
-    if (!c) c = ::Object::GetTypeInfoByName("CropFieldComponent");
-    return c;
-}
-static uint32_t CropFieldComponent_Slot20GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("CropFieldComponent");
-    return c;
-}
-static int CropFieldComponent_Slot21Const(void*) { return 3; }
+// Before: CONTROLLER_LIVE_FACTORY_STATES (48-slot table filled per create, slots
+// 3/4/13/14/15/18-21 written from InstallLive, Inert_ScalarDtor in slot 0,
+// Dispatcher<CropFieldCtrlTag> stamped into raw bytes at +0x28). Slots 18-21 held
+// ControllerLive_ScalarDeletingDtor, the class's type info / id and `return 3`: that
+// is CropFieldDescription's table 0x140162f50 read past this 18-slot table's end
+// (B38 D3.5) — gone; nothing in the tree dispatches a component past slot 17.
+// After: the compiler's 18-slot vtable, a real ctor/dtor chain, the controller a
+// member object (B38_RULES D1, D2, D6).
+// ============================================================================
+#include "Object/factory_registration.h"
 
-extern "C" void* ControllerLive_ScalarDeletingDtor(void*, unsigned int);  // slot 18
-static void CropFieldCtrl_Populate();
-
-// DEFAULT-ON via the default-on table (graduated 2026-08-17); the env var is now a
-// kill-switch (=0). Positive run at seed 12345: with a crop chosen the field went
-// accepting=1 staffed=2, state 2 -> 1, and a crop resource type appeared in town
-// storage that the flag-off arm never had. Full A/B in component_factory_base.cpp.
-//
-// ⚠ A field with NO crop chosen sits at accepting=0 / state 0 and that is FAITHFUL, not
-// a regression of this flag: CropFieldComponent_Ctor seeds +0x48 = 0 and the state-2
-// enter publishes that byte into the workplace accepting flag. The panel crop pick is
-// what sets it (BANISHED_CROPFIELD_FORCE_START=2 emulates the pick).
-
-CONTROLLER_LIVE_FACTORY_STATES(CropFieldComponent, 0x68, 0x80, 0x28, 2,
-                               CropFieldCtrl_NodeVtable, CropFieldCtrl_Populate)
-
-static void CropFieldCtrl_Populate() {
-    CropFieldComponent_LiveVtable[15] = reinterpret_cast<void*>(&CropFieldComponent_OnMessageVSlot);
-    CropFieldComponent_LiveVtable[13] = reinterpret_cast<void*>(&CropFieldComponent_CanCommandVSlot);
-    CropFieldComponent_LiveVtable[14] = reinterpret_cast<void*>(&CropFieldComponent_CommandVSlot);
-    // Slot 3 = Shutdown/Serialize. The body has been ported in this file since
-    // the original wave and nothing ever wrote it into the live vtable, so the
-    // coverage harness measured the slot as still holding the inert stub. Third
-    // instance of "ported but unwired" in this component family — worth wiring
-    // from InstallLive, the one place FillTypedVtable cannot erase.
-    CropFieldComponent_LiveVtable[3]  = reinterpret_cast<void*>(
-        static_cast<void(*)(CropFieldComponent*, void*)>(&CropFieldComponent_Shutdown));
-    CropFieldComponent_LiveVtable[18] = reinterpret_cast<void*>(&ControllerLive_ScalarDeletingDtor);
-    CropFieldComponent_LiveVtable[4]  = reinterpret_cast<void*>(&CropFieldComponent_Slot4Clear);
-    CropFieldComponent_LiveVtable[19] = reinterpret_cast<void*>(&CropFieldComponent_Slot19GetTypeInfo);
-    CropFieldComponent_LiveVtable[20] = reinterpret_cast<void*>(&CropFieldComponent_Slot20GetTypeId);
-    CropFieldComponent_LiveVtable[21] = reinterpret_cast<void*>(&CropFieldComponent_Slot21Const);
-    CropFieldCtrl_PopulateTable();
+// 0x14011afd0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48 (word) = 0x100; +0x50 =
+// +0x58 = +0x60 = 0; `_flags |= 0x80` (already set by Component()).
+// PORT GAP (retail 0x14011b030 `MOV word [RBX+0x48],0x100`, i.e. +0x49 = 1) — B38 D9:
+// the tree's factory zero-filled the body, so +0x49 starts 0 here as before.
+CropFieldComponent::CropFieldComponent()
+    : _controller(this), cropFlags(0), _pad4A{}, field50(nullptr), field58(nullptr),
+      field60(nullptr) {
+    OrFlagsInCtor(0x80);
 }
-REGISTER_TYPE(CropFieldComponent, "ControllerComponent",
-              &CropFieldComponent_Factory, &CropFieldComponent_CreateInPlace);
+
+// [0] 0x1400330a0: ~CropFieldComponent (0x14011af60), MemFree on &1.
+Object::Base* CropFieldComponent::DeletingDtor(unsigned flags) {
+    this->~CropFieldComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x14011af60: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
+// (the compiler chain).
+// PORT GAP (retail 0x14011af84 MemFree of the slot grid) — B38 D9: the tree's slot 0
+// (Inert_ScalarDtor) never freed it; kept that way here.
+CropFieldComponent::~CropFieldComponent() {}
+
+// create 0x140032ed0: MemAlloc(0x68, 8), then the ctor.
+void* CropFieldComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CropFieldComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CropFieldComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* CropFieldComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CropFieldComponent());
+}
+
+// [3] 0x14011ae70. The body resolves its helpers at its top (slot 3 is the first
+// call into this class on a load-from-save).
+void CropFieldComponent::Persist(void* stream) { CropFieldComponent_Shutdown(this, stream); }
+// [4] 0x14011ae60: `MOV qword [RCX+0x50],0` — one store, nothing else.
+void CropFieldComponent::Startup() { field50 = nullptr; }
+// [13] 0x14011ada0 / [14] 0x14011acc0 / [15] 0x14011ab50 — the bodies above. The
+// OnMessage body takes the slot index from the base's third register (R9 = arg0).
+uint32_t CropFieldComponent::CommandMask(int command) {
+    return CropFieldComponent_CanCommandVSlot(this, command);
+}
+void CropFieldComponent::Command(int command) { CropFieldComponent_CommandVSlot(this, command); }
+void CropFieldComponent::OnMessage(int message, void* data, uint32_t arg0, uint32_t /*arg1*/) {
+    CropFieldComponent_OnMessageVSlot(this, message, data, arg0);
+}
+
+DEFINE_EXE_VTABLE(CropFieldComponent, "_ZTV18CropFieldComponent")
+DEFINE_EXE_TYPE(CropFieldComponent, "ControllerComponent")

@@ -61,6 +61,7 @@
 // argument and the update body in the 5th.
 
 #include "Component/controller_state_table.h"
+#include "Component/CropFieldComponent.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -79,10 +80,8 @@ bool HarvestArea_ResolveFuncs();
 // "never reached" from "reached and rejected".
 extern "C" void* g_pCropPlantWork = nullptr;
 
-namespace { struct CropFieldCtrlTag {}; }
+// CropFieldCtrlTag lives in CropFieldComponent.h (the member type needs it).
 using CropFieldDispatch = ::ControllerLive::Dispatcher<CropFieldCtrlTag>;
-
-extern "C" void** CropFieldCtrl_NodeVtable() { return CropFieldDispatch::Vtable(); }
 
 // ── Resolved helpers ──────────────────────────────────────────────────────────────
 // 0x140002e10 FindComponent_WorkPlace(entity, outIBP) -> WorkPlaceComponent.
@@ -604,10 +603,10 @@ static char CropField_State11PerFrame(void* self, void* sm, void* /*time*/) {
 
 // Replica of the populator at 0x14011b150, in registration order. Order matters: it
 // fixes the state INDEX that StateMachine::Tick carries in its +0x09/+0x0a/+0x0b bytes.
-extern "C" void CropFieldCtrl_PopulateTable() {
+static void CropFieldCtrl_PopulateTable() {
     using namespace ::ControllerLive;
     StateTable& t = CropFieldDispatch::table;
-    if (t.count != 0) return;                       // idempotent — runs per instance
+    if (t.count != 0) return;                       // idempotent
 
     // ── state 2 — DEFAULT / idle ──────────────────────────────────────────────────
     // Slot 16 (GetDefaultState) is the shared 0x1400026c0 = `MOV EAX,2; RET`, so this
@@ -645,3 +644,7 @@ extern "C" void CropFieldCtrl_PopulateTable() {
     TableAddTransition(t, 3,  nullptr);
     TableAddTransition(t, 21, nullptr);
 }
+
+// Built ONCE at static-init time, as retail's populator 0x14011b150 does (B38 D6/D7).
+// Before, every CropFieldComponent factory call re-ran it from both threads.
+static const bool s_cropFieldStateTableBuilt = (CropFieldCtrl_PopulateTable(), true);

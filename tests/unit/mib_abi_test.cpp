@@ -31,6 +31,12 @@
 #include "Component/HerbalistComponent.h"
 #include "Component/HuntComponent.h"
 #include "Component/MarketComponent.h"
+#include "Component/CropFieldComponent.h"
+#include "Component/OrchardComponent.h"
+#include "Component/PastureComponent.h"
+#include "Component/StorageLocationComponent.h"
+#include "Component/TradeComponent.h"
+#include "Component/WorkPlaceComponent.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -138,6 +144,87 @@ UNIT_TEST(mib_rp_own_slots_land_on_retail_indices) {
     CHECK_EQ(SlotOffset(&ForesterComponent::CommandMask),       S(13));   // 0x14011f920
     CHECK_EQ(SlotOffset(&ForesterComponent::Command),           S(14));   // 0x14011f890
     CHECK_EQ(SlotOffset(&HuntComponent::Update),                S(9));    // 0x140122740
+}
+
+// ===========================================================================
+// The ControllerComponent leaves (18 slots, member at retail's per-class offset)
+// ===========================================================================
+UNIT_TEST(mib_controller_sizes_match_retail) {
+    CHECK_EQ(sizeof(CropFieldComponent),       (size_t)0x68);   // create 0x140032ed0
+    CHECK_EQ(sizeof(OrchardComponent),         (size_t)0x68);   // create 0x140009870
+    CHECK_EQ(sizeof(PastureComponent),         (size_t)0x68);   // create 0x140036730
+    CHECK_EQ(sizeof(StorageLocationComponent), (size_t)0x48);   // create 0x140038df0
+    CHECK_EQ(sizeof(TradeComponent),           (size_t)0xa8);   // create 0x14000db60
+    CHECK_EQ(sizeof(WorkPlaceComponent),       (size_t)0x68);   // create 0x14003a030
+}
+
+template <typename T>
+void CheckCtlLeaf(size_t memberOff) {
+    CHECK(std::is_polymorphic<T>::value);
+    CHECK(!std::is_abstract<T>::value);
+    CHECK(std::is_final<T>::value);
+    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK((std::is_base_of<ControllerComponent, T>::value));
+    CHECK(!(std::is_base_of<ResourceProduceComponent, T>::value));
+    CHECK((std::is_base_of<Object::Internal, T>::value));
+    CHECK(!std::has_virtual_destructor<typename T::StateController>::value);
+    CHECK_EQ(alignof(T), (size_t)8);
+    CHECK_EQ(offsetof(T, _controller), memberOff);
+    CHECK_EQ(offsetof(T, _controller) + offsetof(ControllerComponent::Controller, _owner),
+             memberOff + 0x18);
+    CHECK_EQ(sizeof(typename T::StateController), (size_t)0x20);
+    CHECK_EQ(SlotOffset(&T::DeletingDtor),    S(0));
+    CHECK_EQ(SlotOffset(&T::Persist),         S(3));
+    CHECK_EQ(SlotOffset(&T::GetDefaultState), S(16));
+    CHECK_EQ(SlotOffset(&T::GetController),   S(17));
+}
+
+UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
+    CheckCtlLeaf<CropFieldComponent>(0x28);        // slot 17 0x140004080
+    CheckCtlLeaf<OrchardComponent>(0x28);          // slot 17 0x140004080
+    CheckCtlLeaf<PastureComponent>(0x48);          // slot 17 0x140036770
+    CheckCtlLeaf<StorageLocationComponent>(0x28);  // slot 17 0x140004080
+    CheckCtlLeaf<TradeComponent>(0x88);            // slot 17 0x14000dba0
+    CheckCtlLeaf<WorkPlaceComponent>(0x28);        // slot 17 0x140004080
+}
+
+UNIT_TEST(mib_controller_member_fields) {
+    CHECK_EQ(offsetof(CropFieldComponent, cropFlags),  (size_t)0x48);
+    CHECK_EQ(offsetof(CropFieldComponent, field58),    (size_t)0x58);
+    CHECK_EQ(offsetof(OrchardComponent, orchardId),    (size_t)0x4c);
+    CHECK_EQ(offsetof(OrchardComponent, field50),      (size_t)0x50);
+    CHECK_EQ(offsetof(PastureComponent, field28),      (size_t)0x28);
+    CHECK_EQ(offsetof(PastureComponent, field44),      (size_t)0x44);
+    CHECK_EQ(offsetof(TradeComponent, tradeId),        (size_t)0x2c);
+    CHECK_EQ(offsetof(TradeComponent, tradeFlag),      (size_t)0x71);
+    CHECK_EQ(offsetof(TradeComponent, field80),        (size_t)0x80);
+    CHECK_EQ(offsetof(WorkPlaceComponent, workerData), (size_t)0x48);
+    CHECK_EQ(offsetof(WorkPlaceComponent, isAccepting),(size_t)0x50);
+    CHECK_EQ(offsetof(WorkPlaceComponent, field60),    (size_t)0x60);
+}
+
+UNIT_TEST(mib_controller_own_slots_land_on_retail_indices) {
+    CHECK_EQ(SlotOffset(&CropFieldComponent::Startup),     S(4));    // 0x14011ae60
+    CHECK_EQ(SlotOffset(&CropFieldComponent::CommandMask), S(13));   // 0x14011ada0
+    CHECK_EQ(SlotOffset(&CropFieldComponent::Command),     S(14));   // 0x14011acc0
+    CHECK_EQ(SlotOffset(&CropFieldComponent::OnMessage),   S(15));   // 0x14011ab50
+    CHECK_EQ(SlotOffset(&OrchardComponent::Startup),       S(4));    // 0x140051dd0
+    CHECK_EQ(SlotOffset(&OrchardComponent::CommandMask),   S(13));   // 0x140051c90
+    CHECK_EQ(SlotOffset(&OrchardComponent::Command),       S(14));   // 0x140051ba0
+    CHECK_EQ(SlotOffset(&OrchardComponent::OnMessage),     S(15));   // 0x140051990
+    CHECK_EQ(SlotOffset(&PastureComponent::Startup),       S(4));    // 0x140127a50
+    CHECK_EQ(SlotOffset(&PastureComponent::OnAdded),       S(6));    // 0x140127a30
+    CHECK_EQ(SlotOffset(&PastureComponent::OnRemove),      S(7));    // 0x1401277e0
+    CHECK_EQ(SlotOffset(&PastureComponent::OnEvent),       S(12));   // 0x140127540
+    CHECK_EQ(SlotOffset(&PastureComponent::CommandMask),   S(13));   // 0x140127dd0
+    CHECK_EQ(SlotOffset(&PastureComponent::Command),       S(14));   // 0x140127a60
+    CHECK_EQ(SlotOffset(&PastureComponent::OnMessage),     S(15));   // 0x140127720
+    CHECK_EQ(SlotOffset(&StorageLocationComponent::OnRemove), S(7)); // 0x14012d270
+    CHECK_EQ(SlotOffset(&TradeComponent::OnAdded),         S(6));    // 0x14005c1d0
+    CHECK_EQ(SlotOffset(&TradeComponent::OnRemove),        S(7));    // 0x14005c190
+    CHECK_EQ(SlotOffset(&TradeComponent::CommandMask),     S(13));   // 0x14005c140
+    CHECK_EQ(SlotOffset(&TradeComponent::Command),         S(14));   // 0x14005c000
+    CHECK_EQ(SlotOffset(&WorkPlaceComponent::OnRemove),    S(7));    // 0x14012f090
 }
 
 // ===========================================================================
