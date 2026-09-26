@@ -43,6 +43,7 @@
 #include "Work/PlantArea.h"
 #include "Work/PlantOrchard.h"
 #include "Work/TendArea.h"
+#include "Work/TradeWork.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -303,6 +304,12 @@ UNIT_TEST(wrk_leaf_tendarea) {
     CHECK_EQ(offsetof(TendArea, bstRoot), (size_t)0x48);
     CHECK_EQ(offsetof(TendArea, workerCount), (size_t)0x50);
     CHECK_EQ(offsetof(TendArea, tendMode), (size_t)0x58);
+}
+
+UNIT_TEST(wrk_leaf_tradework) {
+    WRK_LEAF_SHAPE(TradeWork, Work, 0x58);
+    CHECK_EQ(offsetof(TradeWork, bstRoot), (size_t)0x48);
+    CHECK_EQ(offsetof(TradeWork, workerCount), (size_t)0x50);
 }
 
 // ===========================================================================
