@@ -26,6 +26,7 @@
 #include "Work/BuildRoad.h"
 #include "Work/BuildStructure.h"
 #include "Work/ClearArea.h"
+#include "Work/ClearStorage.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -150,6 +151,14 @@ UNIT_TEST(wrk_leaf_cleararea) {
     CHECK_EQ(offsetof(ClearArea, field_68), (size_t)0x68);
     CHECK_EQ(offsetof(ClearArea, field_70), (size_t)0x70);
     CHECK_EQ(offsetof(ClearArea, field_72), (size_t)0x72);
+}
+
+UNIT_TEST(wrk_leaf_clearstorage) {
+    WRK_LEAF_SHAPE(ClearStorage, Work, 0x68);
+    CHECK_EQ(offsetof(ClearStorage, _field48), (size_t)0x48);
+    CHECK_EQ(offsetof(ClearStorage, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(ClearStorage, _field58), (size_t)0x58);
+    CHECK_EQ(offsetof(ClearStorage, _field60), (size_t)0x60);
 }
 
 // ===========================================================================
