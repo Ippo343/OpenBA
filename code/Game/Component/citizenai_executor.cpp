@@ -317,17 +317,11 @@ static fn_transformCtor_t   s_slot_xfCtor   = nullptr;
 static fn_pickSetXform_t    s_slot_pickXf   = nullptr;
 static fn_scalarMax_t       s_slot_max      = nullptr;
 
-// Picking::Scene::AddMesh — registers a pick mesh, returns its id (stored at
-// PickingComponent+0x28). Runtime 0x1801252e0 (verified signature:
-// uint AddMesh(Scene* this, ExternalPtr<Picking::PickingMesh> mesh, Transform* xform,
-//              void* owner, int, int, callback*)). ABI from Entity_impl_8f50
-// (exe 0x140128f50): (scene, meshHandle, &transform, ownerIBP, 0, 0, 0).
-// NOTE: FloorComponent's 0x1800f8d80 is the WRONG address (not a function entry) —
-// it just never crashed because floors are never placed on the autostart path.
-typedef uint32_t (*fn_pickAddMesh_t)(void* scene, void* mesh, void* xform,
-                                     void* owner, int a, int b, void* callback);
+// Picking::Scene::AddMesh (Runtime 0x1801252e0) registers a pick mesh and returns its
+// id (stored at PickingComponent+0x28); ABI from Entity_impl_8f50 (exe 0x140128f50):
+// (scene, meshHandle, &transform, ownerIBP, 0, 0, 0). ENDGAME B.3.7: called as a
+// member (RegisterCitizenPickMesh); its file-local cache went with the last reader.
 typedef bool     (*fn_isDerived_t)(void* obj, uint32_t typeId);   // [0x140152a98]
-static fn_pickAddMesh_t s_fn_pickAddMesh = nullptr;
 static fn_isDerived_t   s_slot_isDerived = nullptr;
 static uint32_t         s_tidPickingDesc = 0;
 
@@ -370,7 +364,6 @@ static void EnsureTailInit() {
     s_slot_pickXf   = reinterpret_cast<fn_pickSetXform_t>(ResolveSlot(0x1401529a8));
     s_slot_max      = reinterpret_cast<fn_scalarMax_t>(ResolveSlot(0x140151e78));
     // Picking-registration closure (port of Entity_impl_8f50 = PickingComponent OnAdded).
-    s_fn_pickAddMesh = reinterpret_cast<fn_pickAddMesh_t>(ResolveAddr(Module::Runtime, 0x1801252e0));
     s_slot_isDerived = reinterpret_cast<fn_isDerived_t>(ResolveSlot(0x140152a98));
     s_tidPickingDesc = ::Object::GetTypeIdByName("PickingDescription");
     s_tailInit = true;
@@ -413,8 +406,8 @@ static int RegisterCitizenPickMesh(uint8_t* self) {
     int64_t group = *reinterpret_cast<int64_t*>(meshTable + static_cast<int64_t>(variantIdx) * 0x10);
     if (group == 0) { PickRegFail("mesh group null"); return -1; }
     void* meshHandle = *reinterpret_cast<void**>(group + static_cast<int64_t>(modelVariant) * 8);
-    if (meshHandle == nullptr || s_fn_pickAddMesh == nullptr) {
-        PickRegFail("meshHandle null / AddMesh unresolved"); return -1;
+    if (meshHandle == nullptr) {
+        PickRegFail("meshHandle null"); return -1;
     }
 
     // Transform snapshot (0x1C bytes, model+0x148..+0x163) — the move-tick wrote it
