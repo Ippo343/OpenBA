@@ -20,6 +20,7 @@
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdio>
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 namespace Game {
 
@@ -128,27 +129,20 @@ void RegisterDefaultInputBindings() {
         return;
     }
 
-    if (!fn_KeyMap_ClearAll || !fn_KeyMap_RegisterInput || !fn_KeyMap_Load) {
-        printf("[InputBindings] FATAL: missing fn pointers (ClearAll=%p, "
-               "RegisterInput=%p, Load=%p)\n",
-               (void*)fn_KeyMap_ClearAll, (void*)fn_KeyMap_RegisterInput,
-               (void*)fn_KeyMap_Load);
-        return;
-    }
 
     printf("[InputBindings] Populating KeyMap %p with %zu default bindings...\n",
            keyMap, kBindingCount);
 
-    fn_KeyMap_ClearAll(keyMap);
+    reinterpret_cast<Input::KeyMap*>(keyMap)->ClearAll();  // B.3.7 bridge
 
     for (const Binding& b : kDefaultBindings) {
-        fn_KeyMap_RegisterInput(keyMap, b.id, b.deviceType, b.keyCode,
-                                 b.name, b.flag);
+        reinterpret_cast<Input::KeyMap*>(keyMap)->RegisterInput(b.id, b.deviceType, b.keyCode,  // B.3.7 bridge
+                                                                 b.name, b.flag);
     }
 
     // Load saved overrides from Persistence (HKCU\...\Banished\Input...).
     // No-op on a fresh install.
-    fn_KeyMap_Load(keyMap);
+    reinterpret_cast<Input::KeyMap*>(keyMap)->Load();  // B.3.7 bridge
 
     printf("[InputBindings] Done — %zu bindings + Load applied.\n",
            kBindingCount);

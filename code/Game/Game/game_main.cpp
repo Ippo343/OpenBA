@@ -33,6 +33,7 @@
 #include "engine/Engine.h"                    // ENDGAME B.3.7 callers (K2)
 #include "engine/MainLoop.h"                  // ENDGAME B.3.7 callers (K2)
 #include "engine/UpdateLoop.h"                // ENDGAME B.3.7 callers (K2)
+#include "input/Input.h"                      // ENDGAME B.3.7 callers (K3)
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::Device and
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
@@ -142,55 +143,39 @@ extern "C" void BootState_MarkQuitting();
 //   0x1800dd640 = Engine::MainLoop::~MainLoop(this)          dtor
 //   0x1800dd3c0 = Engine::MainLoop::Run(this, UpdateLoop*)
 //
-// Engine::Engine::Startup / Shutdown have not yet been pinned to a Ghidra
-// address. We resolve those by mangled name.
+// ENDGAME B.3.7: Engine::Startup and MainLoop::Run are called as members; only
+// the ctor/dtor doors (B37_RULES 2.4) are still resolved here. The never-called
+// Engine::Shutdown probe went with them.
 
 typedef void     (*fn_Engine_Ctor_t)(void* self, void* hInstance);
 typedef void     (*fn_Engine_Dtor_t)(void* self);
-// Engine::Engine::Startup(this, const char* cmdLine, uint, uint, bool) -> uint (0 = fail)
-typedef unsigned (*fn_Engine_Startup_t)(void* self, const char* cmdLine, unsigned p1, unsigned p2, bool p3);
 // GameSettings <-> IO::Persistence bridge (code/Game/Game/game_settings_persist.cpp).
 extern "C" void GameSettings_Load(int32_t* settings);   // 0x140098b60
 extern "C" void GameSettings_Save(int32_t* settings);   // 0x140098970
-
-typedef void     (*fn_Engine_Shutdown_t)(void* self);
 
 // Engine::MainLoop::MainLoop(this, Engine*)
 typedef void* (*fn_MainLoop_Ctor_t)(void* self, void* engine);
 // Engine::MainLoop::~MainLoop(this)
 typedef void  (*fn_MainLoop_Dtor_t)(void* self);
-// Engine::MainLoop::Run(this, UpdateLoop*)
-typedef void  (*fn_MainLoop_Run_t)(void* self, UpdateLoop* loop);
 
 static fn_Engine_Ctor_t      s_fn_Engine_Ctor      = nullptr;
 static fn_Engine_Dtor_t      s_fn_Engine_Dtor      = nullptr;
-static fn_Engine_Startup_t   s_fn_Engine_Startup   = nullptr;
-static fn_Engine_Shutdown_t  s_fn_Engine_Shutdown  = nullptr;
 static fn_MainLoop_Ctor_t    s_fn_MainLoop_Ctor    = nullptr;
 static fn_MainLoop_Dtor_t    s_fn_MainLoop_Dtor    = nullptr;
-static fn_MainLoop_Run_t     s_fn_MainLoop_Run     = nullptr;
 
 static void EnsureResolved() {
     if (s_fn_Engine_Ctor) return;
 
-    // Mangled names verified against Application-x64.exe symbol table at
-    // 0x1401B618E (Startup) and 0x1401B6170 (Shutdown).
     s_fn_Engine_Ctor = reinterpret_cast<fn_Engine_Ctor_t>(
         ResolveExport("??0Engine@0@QEAA@PEAX@Z"));
     s_fn_Engine_Dtor = reinterpret_cast<fn_Engine_Dtor_t>(
         ResolveExport("??1Engine@0@QEAA@XZ"));
-    s_fn_Engine_Startup = reinterpret_cast<fn_Engine_Startup_t>(
-        ResolveExport("?Startup@Engine@1@QEAAIPEBDII_N@Z"));
-    s_fn_Engine_Shutdown = reinterpret_cast<fn_Engine_Shutdown_t>(
-        ResolveExport("?Shutdown@Engine@1@QEAAXXZ"));
 
-    // Engine::MainLoop ctor / dtor / Run — Ghidra-confirmed addresses.
+    // Engine::MainLoop ctor / dtor — Ghidra-confirmed addresses.
     s_fn_MainLoop_Ctor = reinterpret_cast<fn_MainLoop_Ctor_t>(
         ResolveAddr(Module::Runtime, 0x1800dd6b0));
     s_fn_MainLoop_Dtor = reinterpret_cast<fn_MainLoop_Dtor_t>(
         ResolveAddr(Module::Runtime, 0x1800dd640));
-    s_fn_MainLoop_Run = reinterpret_cast<fn_MainLoop_Run_t>(
-        ResolveAddr(Module::Runtime, 0x1800dd3c0));
 
     // Note: MemAlloc/MemFree come from engine_funcs.h (fn_MemAlloc takes the
     // MemoryAllocator singleton as first arg; fn_MemFreeStatic is the static
@@ -275,18 +260,15 @@ static void ShutdownEngineStaged(void* engineP) {
         reinterpret_cast<Achievement::AchievementManager*>(am)->RemoveAll();   // B.3.7 bridge
     }
 
-    // 3. Input::Device::PlatformShutdown
+    // 3. Input::Device::PlatformShutdown. ENDGAME B.3.7: the ResolveFn readiness
+    // probe goes with the door — PlatformShutdown is a real member.
     if (void* d = load_ptr(0x6e0)) {
-        if (auto fn = ResolveFn<void(*)(void*)>(
-                "?PlatformShutdown@Device@Input@@AEAAXXZ"))
-            fn(d);
+        reinterpret_cast<Input::Device*>(d)->PlatformShutdown();   // B.3.7 bridge
     }
 
     // 4. Input::Configuration::Save (skip the FUN_180053440 inner-buffer free)
     if (void* cfg = load_ptr(0x6d8)) {
-        if (auto save = ResolveFn<void(*)(void*)>(
-                "?Save@Configuration@Input@@QEAAXXZ"))
-            save(cfg);
+        reinterpret_cast<Input::Configuration*>(cfg)->Save();   // B.3.7 bridge
     }
 
     // 5. Audio sub-object teardown — vtable[+0x12] / [+0x2] of two children
@@ -429,18 +411,13 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
 
     printf("[GameMain] Engine ctor          = %p\n", (void*)s_fn_Engine_Ctor);
     printf("[GameMain] Engine dtor          = %p\n", (void*)s_fn_Engine_Dtor);
-    printf("[GameMain] Engine::Startup      = %p\n", (void*)s_fn_Engine_Startup);
-    printf("[GameMain] Engine::Shutdown     = %p\n", (void*)s_fn_Engine_Shutdown);
+
 
     if (!s_fn_Engine_Ctor || !s_fn_Engine_Dtor) {
         fprintf(stderr, "[GameMain] FATAL: Engine ctor/dtor not resolved\n");
         return 1;
     }
 
-    if (!s_fn_Engine_Startup || !s_fn_Engine_Shutdown) {
-        fprintf(stderr, "[GameMain] FATAL: Engine::Startup/Shutdown not resolved\n");
-        return 2;
-    }
 
     EngineStorage engine;
     std::memset(&engine, 0, sizeof(engine));
@@ -687,7 +664,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 //     zero m_autoAdvance at +0x40
                 //
                 // Both Update stubs return false so Run exits on the first tick.
-                if (s_fn_MainLoop_Run && g_MenuDialogLoopT_Vtable && fn_DialogLoopT_Ctor &&
+                if (g_MenuDialogLoopT_Vtable && fn_DialogLoopT_Ctor &&
                     fn_AudioScene_Ctor && fn_Random_Default_Ctor && fn_DialogLoaderLoopT_Ctor && fn_Time_Ctor_Float &&
                     g_GameLoadDialogLoopT_Vtable) {
 
@@ -762,19 +739,17 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         // m_dialogExternal so Stub_Startup's fallback synchronous
                         // load is skipped.
                         StallDebug::Mark("splash DLT ctors");
-                        if (fn_DialogLoaderLoopT_Load) {
-                            if (shiningRockLoop) {
-                                printf("[GameMain] pre-loading ShiningRock.rsc\n");
-                                // QUALIFIED: the door is the base body; the splash's
-                                // hand-built table would dispatch slot 6 to its stub.
-                                reinterpret_cast<Engine::DialogLoaderLoopT*>(shiningRockLoop)
-                                    ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
-                            }
-                            if (loadingLoop) {
-                                printf("[GameMain] pre-loading Loading.rsc\n");
-                                reinterpret_cast<Engine::DialogLoaderLoopT*>(loadingLoop)
-                                    ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
-                            }
+                        if (shiningRockLoop) {
+                            printf("[GameMain] pre-loading ShiningRock.rsc\n");
+                            // QUALIFIED: the door is the base body; the splash's
+                            // hand-built table would dispatch slot 6 to its stub.
+                            reinterpret_cast<Engine::DialogLoaderLoopT*>(shiningRockLoop)
+                                ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
+                        }
+                        if (loadingLoop) {
+                            printf("[GameMain] pre-loading Loading.rsc\n");
+                            reinterpret_cast<Engine::DialogLoaderLoopT*>(loadingLoop)
+                                ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
                         }
 
                         StallDebug::Mark("splash .rsc preloads (ShiningRock + Loading)");
@@ -865,9 +840,9 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                     }
                 } else {
                     printf("[GameMain] WARN: missing deps for splash chain — "
-                           "Run=%p, MenuVT=%p, SplashVT=%p, DLLT_Ctor=%p, "
+                           "MenuVT=%p, SplashVT=%p, DLLT_Ctor=%p, "
                            "DLT_Ctor=%p, AudioScene=%p, Random=%p, Time=%p\n",
-                           (void*)s_fn_MainLoop_Run, (void*)g_MenuDialogLoopT_Vtable,
+                           (void*)g_MenuDialogLoopT_Vtable,
                            (void*)g_GameLoadDialogLoopT_Vtable,
                            (void*)fn_DialogLoaderLoopT_Ctor,
                            (void*)fn_DialogLoopT_Ctor, (void*)fn_AudioScene_Ctor,

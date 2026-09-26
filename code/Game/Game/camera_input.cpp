@@ -39,6 +39,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 extern "C" bool StartTown_GetSpawnTile(int* x, int* y);   // starttown.cpp (BANISHED_CAMERA_PIN=town)
 
@@ -123,7 +124,7 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     void* keyMap = CamKeyMap();
-    if (!keyMap || !fn_KeyMap_GetValue || !fn_KeyMap_Pressed) return;
+    if (!keyMap) return;
 
     uint8_t* ui = (uint8_t*)entityUI;
     uint8_t* pc = (uint8_t*)*(void**)((uintptr_t)*g_pGameWorldSingleton + 0xe0); // PlayerController
@@ -134,10 +135,10 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
 
     // ── yaw: keyboard rotate (ids 9/10) + middle-mouse drag (id 7 + mouseDeltaX id 2) ──
     float yaw = *(float*)(pc + 0x28);
-    if (fn_KeyMap_GetValue(keyMap, 0, 9))  yaw -= dt * kRotSpeed;   // RotateLeft
-    if (fn_KeyMap_GetValue(keyMap, 0, 10)) yaw += dt * kRotSpeed;   // RotateRight
-    if (fn_KeyMap_GetValue(keyMap, 0, 7)) {                          // MouseMiddle drag
-        short ddx = fn_KeyMap_GetValue(keyMap, 0, 2);
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 9))  yaw -= dt * kRotSpeed;   // RotateLeft  // B.3.7 bridge
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 10)) yaw += dt * kRotSpeed;   // RotateRight  // B.3.7 bridge
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 7)) {                          // MouseMiddle drag  // B.3.7 bridge
+        short ddx = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 2);  // B.3.7 bridge
         yaw -= (float)ddx * kMidDragScale;
     }
 
@@ -146,37 +147,37 @@ void Camera_UpdateMovement(void* entityUI, int inputFlag, int64_t timeTicks) {
     float panY = 0.0f; // forward/back axis
     if (SettingByte(0x14)) { // edge-scroll enabled in game settings
         int sw, sh; ScreenSize(sw, sh);
-        unsigned mx = (unsigned)(uint16_t)fn_KeyMap_GetValue(keyMap, 0, 0);
-        unsigned my = (unsigned)(uint16_t)fn_KeyMap_GetValue(keyMap, 0, 1);
+        unsigned mx = (unsigned)(uint16_t)reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
+        unsigned my = (unsigned)(uint16_t)reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
         if (mx < 4)                               panX = -1.0f;
         if ((int)mx > sw - 5 && (int)mx < sw)     panX =  1.0f;
         if (my < 4)                               panY = -1.0f;
         if ((int)my > sh - 5 && (int)my < sh)     panY =  1.0f;
     }
-    if (fn_KeyMap_GetValue(keyMap, 0, 0xd)) panX = -1.0f; // Left
-    if (fn_KeyMap_GetValue(keyMap, 0, 0xe)) panX =  1.0f; // Right
-    if (fn_KeyMap_GetValue(keyMap, 0, 0xb)) panY = -1.0f; // Forward
-    if (fn_KeyMap_GetValue(keyMap, 0, 0xc)) panY =  1.0f; // Back
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xd)) panX = -1.0f; // Left  // B.3.7 bridge
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xe)) panX =  1.0f; // Right  // B.3.7 bridge
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xb)) panY = -1.0f; // Forward  // B.3.7 bridge
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0xc)) panY =  1.0f; // Back  // B.3.7 bridge
 
     // ── zoom target init + wheel/key input ──
     if (*(float*)(ui + 0x3c) == 0.0f)
         *(float*)(ui + 0x3c) = *(float*)(pc + 0x30); // seed from current distance
 
-    short wheel = fn_KeyMap_GetValue(keyMap, 0, 4);
+    short wheel = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 4);  // B.3.7 bridge
     if (inputFlag == 0 && *(char*)(ui + 0x38) == 0) wheel = 0; // no wheel zoom if UI focused
     int zoomDir;
-    if (fn_KeyMap_Pressed(keyMap, 0, 0xf)) {          // ZoomIn
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0xf)) {          // ZoomIn  // B.3.7 bridge
         zoomDir = 1;
-    } else if (fn_KeyMap_Pressed(keyMap, 0, 0x10)) {  // ZoomOut
+    } else if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x10)) {  // ZoomOut  // B.3.7 bridge
         zoomDir = -1;
     } else {
         zoomDir = wheel;
     }
 
     // ── manual pitch accumulator (0..1) from PitchUp/PitchDown (ids 0x11/0x12) ──
-    if (fn_KeyMap_Pressed(keyMap, 0, 0x11))
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x11))  // B.3.7 bridge
         *(float*)(ui + 0x44) += kPitchStep;
-    else if (fn_KeyMap_Pressed(keyMap, 0, 0x12))
+    else if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x12))  // B.3.7 bridge
         *(float*)(ui + 0x44) -= kPitchStep;
     *(float*)(ui + 0x44) = clampf(*(float*)(ui + 0x44), 0.0f, 1.0f);
 
@@ -341,11 +342,11 @@ static void Camera_ApplyPreset(void* entityUI, int index, int64_t /*unused*/) {
 void Camera_UpdateHotkeys(void* entityUI, int /*inputFlag*/, int64_t timeTicks) {
     if (!entityUI || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     void* keyMap = CamKeyMap();
-    if (!keyMap || !fn_KeyMap_Pressed) return;
+    if (!keyMap) return;
     uint8_t* ui = (uint8_t*)entityUI;
 
     // TogglePause (id 0x17) — unless the pause is locked (GameWorld+0xd0 bit 10).
-    if (fn_KeyMap_Pressed(keyMap, 0, 0x17)) {
+    if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x17)) {  // B.3.7 bridge
         uint32_t worldFlags = *(uint32_t*)((uintptr_t)*g_pGameWorldSingleton + 0xd0);
         if (((worldFlags >> 10) & 1) == 0)
             *(char*)(ui + 0x30) = (*(char*)(ui + 0x30) == 0) ? 1 : 0;
@@ -354,7 +355,7 @@ void Camera_UpdateHotkeys(void* entityUI, int /*inputFlag*/, int64_t timeTicks) 
     // Camera presets 0..4 (ids 0x2d..0x31). The original gates these on the active
     // tool allowing camera control; in standalone no tool is wired, so allow them.
     for (int i = 0; i < 5; ++i) {
-        if (fn_KeyMap_Pressed(keyMap, 0, i + 0x2d))
+        if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, i + 0x2d))  // B.3.7 bridge
             Camera_ApplyPreset(entityUI, i, timeTicks);
     }
 }
