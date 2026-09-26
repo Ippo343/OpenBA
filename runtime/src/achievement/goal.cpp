@@ -2,493 +2,332 @@
 // runtime/src/achievement/goal.cpp — Wave 5 lane A — Achievement::Goal /
 //                                    GoalInstance / GoalList
 // ============================================================================
-// Ports 13 of the 15 REAL exports in this family that our tree calls.
+// ENDGAME B.3.7 block B3: `Achievement::Goal`, `GoalInstance` and `GoalList`
+// are real classes (runtime/types/achievement/Goal.h). Each ported body below
+// is now a MEMBER; each registered door keeps its mangled name and retail
+// address and is a one-line QUALIFIED, non-virtual delegation — qualified
+// because a live Goal/GoalInstance wears the MINTED table or an EXE subclass's
+// hand-built table, whose slot resolves back to the very door, so an
+// unqualified virtual call inside a door would re-enter it (B34_BRIEFS §A.1).
 //
-// *** THE TWO HOLDBACKS ARE NO LONGER HELD BACK — see goal_serialize.cpp. ***
-// This banner used to end here saying that `Goal::Serialize` and
-// `GoalInstance::Persist` "stay on the DLL", because no oracle could run both
-// implementations without double-consuming the stream. That was true of the
-// READ path and was believed of both. Wave 9 lane S showed it is false on the
-// WRITE path — a write-path Serialize is a pure read of the object, so it
-// replays into two independent synthetic sinks — and Wave 9 lane P ported both
-// against that oracle (runtime/src/achievement/goal_serialize.cpp, which also
-// records the two new lane-D rows the ports create).
+// What is NOT a member, and why (B4b-2 / B7-13): the two CONSTRUCTOR doors.
+// `Goal` and `GoalInstance` have exe subclasses with hand-built tables, and
+// every construction in the tree goes through `??0Goal`/`??0GoalInstance`,
+// which must stamp the MINTED tables. A C++ constructor would stamp GCC's.
+// They stay free functions over the class's own fields.
 //
-// The desync WORRY behind the old note stands and is why those two bodies are
-// commented field by field: a wrong record order or count there is the silent
-// save corruption this project has paid for repeatedly (see reg_goal.cpp's own
-// comment on slot 0x140152868, and reference_slot3_wrapper_must_resolve_first.md).
-// Their reversed bodies are in docs/runtime_port/WAVE5_LANE_A.md, and Wave 9's
-// reading of the same bytes agrees with them.
+// The DESTRUCTORS are members now, and real: `~Goal()` / `~GoalInstance()`
+// are empty bodies whose compiler-emitted chain (vptr store, `~String` on
+// `_text`, `~External` / `~Internal`) is exactly retail's
+// re-stamp / release / tail-jump. The exe subclasses' slot-0 bodies call them
+// as qualified member calls (code/Game/Goal/*.cpp).
 //
-// *** THE BRIEF'S "20 EXPORTS" ARE NOT 20. Four of the names do not exist. ***
-// `??1Goal@Achievement@@QEAA@XZ`, `??1GoalInstance@Achievement@@QEAA@XZ`,
-// `?Persist@GoalInstance@Achievement@@QEAAXAEAVStream@IO@@@Z` and
-// `?~Goal@Achievement@@QEAA@XZ` are ALL absent from the shipped DLL's export
-// directory. The first three are the QEAA (non-virtual) spelling of members
-// that are virtual and therefore exported as UEAA; the fourth is not a valid
-// MSVC mangling at all. Two of them are live in `code/Game/Goal/` today and
-// resolve to null forever — see the wave doc §5, this file cannot fix them.
-//
-// Every body below was disassembled at its retail address (all verified
-// non-phantom against the shipped export table before a line was written) and
-// is transcribed instruction-for-instruction. No null guards retail lacks.
-//
-// PLAN §6 step 8: this file corrects nothing outside itself; the stale claims
-// this lane disproved are listed in the wave doc's "comments to correct".
+// Retail's historical notes that still matter, kept from the Wave 5 banner:
+//   * `??1Goal@Achievement@@QEAA@XZ`, `??1GoalInstance@…@QEAA@XZ`,
+//     `?Persist@GoalInstance@…@QEAA…` and `?~Goal@…` do NOT exist in the
+//     shipped export table — the destructors and Persist are VIRTUAL and
+//     exported as UEAA. A QEAA spelling resolves null forever.
+//   * Every body is transcribed from the disassembly. No null guards retail
+//     lacks.
 // ============================================================================
 
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
-#include <new>          // ENDGAME B.3.1 step 2: placement new into the ret slot
+#include <atomic>
+#include <new>          // placement new into the retslot doors
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
-#include "../system/pod_bridge.h"   // the one transitional POD<->class cast
+#include "../../types/system/Value.h"
 
-using RtAchievement::Goal;
-using RtAchievement::GoalInstance;
-using RtAchievement::GoalList;
-using RtSystem::StringRefCount;   // still read by the Goal::~Goal oracle snapshot
-
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// -----------------------------------------------------------------------------
-// Same reasoning rt_port.h gives for declaring the seam locally: resolve.h drags
-// in <windows.h>, and PLAN §4.1 requires runtime/src/ to stay platform-neutral.
-// This declaration must stay byte-identical to resolve.h's; the two are checked
-// against each other by the linker and by standalone/resolve_standalone.cpp.
-// It has to sit at FILE scope, not inside the anonymous namespace below, or it
-// would declare a different, internal-linkage function that never links.
+// Forward-declared rather than pulled in from standalone/resolve.h: that
+// header drags in <windows.h>, and runtime/src/ stays platform-neutral
+// (PLAN §4.1). Byte-identical to resolve.h's; the linker checks the pair.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-// ---------------------------------------------------------------------------
-// Dependencies, and why each is reached the way it is
-// ---------------------------------------------------------------------------
-// Three of these bodies call a base-class ctor/dtor that ANOTHER LANE HAS
-// ALREADY PORTED (`Object::Internal` and `Object::External`, Wave 3, registered
-// by BOTH name and address — runtime/src/object/{internal,external}.cpp). So
-// the choice of lookup here is not cosmetic:
-//
-//   * ResolveAddr / ResolveExport go through the runtime registry, so they
-//     pick up whatever Wave 3 registered.
-//   * the raw DLL door / the raw DLL door is GetProcAddress: the SHIPPED DLL, always,
-//     whatever any lane has registered.
-//
-// These three go through the REGISTRY, and that is a deliberate reversal of the
-// position WAVE4_LANE_C.md took for `String::Format` ("always ask the DLL, so
-// this lane is correct standing alone"). The reason is that here the DLL is not
-// the only thing on the other side of the call — an ORACLE is:
-//
-//   `Object::Internal`'s ctor/dtor have a predict-and-verify shadow wrapper
-//   (RtObject_Internal_Ctor_Shadow / _Dtor_Shadow, internal.cpp:655/681, armed
-//   with RT_INTERNAL_SHADOW=1) that checks the handle table's size,
-//   capacity, the object's factoryIndex, the cleared generation and the
-//   swap-remove fixup. Wave 3 ran it clean at 93,387 calls. A raw
-//   GetProcAddress here would step straight PAST that wrapper, so this lane's
-//   teardown path — the one that reaches ~Internal — would be the one path in
-//   the tree the handle-table oracle cannot see. That is a real cost and it is
-//   the whole reason for the choice.
-//
-// The "correct standing alone" property mostly survives: the shadow wrappers
-// call the DLL's own body and only observe. It is genuinely given up only if
-// someone arms RT_INTERNAL_TABLE=1, Wave 3's real handle-table port,
-// which carries a standing NO-GO — and at that point PLAN §4.1 decision 5
-// ("stateful subsystems switch atomically as a class") says every caller should
-// flip together anyway, this one included.
-//
-// Cached in a function-local static, so the registry lookup happens once per
-// site per process, not once per call.
-// ---------------------------------------------------------------------------
-
-// (ResolveAddr is forward-declared at file scope, just above this namespace.)
-
-// The three vtables these constructors and destructors stamp. All EXPORTED data
-// symbols, so we install the DLL's own table and never own one of ours; an
-// object built here is byte-identical to one built by the DLL and dispatches
-// into the DLL for every slot this lane did not port.
-void* BaseVtable() {
-    static void* p = ResolveExport("??_7Base@Object@@6B@");           // 0x180154788
-    return p;
-}
-void* ExternalVtable() {
-    static void* p = ResolveExport("??_7External@Object@@6B@");       // 0x1801547a0
-    return p;
-}
-void* GoalVtable() {
-    static void* p = ResolveExport("??_7Goal@Achievement@@6B@");      // 0x1801546b0
-    return p;
-}
-void* GoalInstanceVtable() {
-    static void* p = ResolveExport("??_7GoalInstance@Achievement@@6B@"); // 0x180154678
-    return p;
-}
-
-using VoidThisFn = void (*)(void*);
-using PtrThisFn  = void* (*)(void*);
+// The vtables the two constructor DOORS stamp. All EXPORTED data symbols,
+// resolved by name so the door installs the MINTED table, never GCC's
+// (B4b-2). Each is an RT_DATA_SLOT-shaped constant-initialised cache
+// (`RtResolveCached`), which is the B6-5 thread shape: GoalInstance objects are
+// constructed on the LOADER thread (GameUpdateLoop::Load -> GoalList::Initialize
+// -> Factory::CreateObject), B37_RULES §5.
+void* BaseVtable()         { return RT_EXPORT_ONCE(void*, "??_7Base@Object@@6B@"); }             // 0x180154788
+void* ExternalVtable()     { return RT_EXPORT_ONCE(void*, "??_7External@Object@@6B@"); }         // 0x1801547a0
+void* GoalVtable()         { return RT_EXPORT_ONCE(void*, "??_7Goal@Achievement@@6B@"); }        // 0x1801546b0
+void* GoalInstanceVtable() { return RT_EXPORT_ONCE(void*, "??_7GoalInstance@Achievement@@6B@"); } // 0x180154678
 
 // ??0Internal@Object@@QEAA@XZ  retail 0x1800bfd10 — allocates this object's
-// handle-table slot. GoalInstance's constructor CALLs it (not inlined).
+// handle-table slot. GoalInstance's constructor CALLs it (not inlined). Stays
+// a by-address door: `Object::Internal` has no public real constructor either
+// (B4b-2), and the address is registered by runtime/src/object/, so
+// ResolveAddr lands on the port (registry first).
+using PtrThisFn = void* (*)(void*);
+std::atomic<void*> g_internalCtor{nullptr};
 void CallInternalCtor(void* self) {
-    static const PtrThisFn fn =
-        reinterpret_cast<PtrThisFn>(ResolveAddr(Module::Runtime, 0x1800bfd10));
-    fn(self);
-}
-// ??1Internal@Object@@UEAA@XZ  retail 0x1800bfdb0 — releases it, by swap-remove
-// out of the InternalFactory's table. Reached by a TAIL JMP from
-// ~GoalInstance, so it runs with the frame already torn down; a plain call here
-// is equivalent because it takes only `this`.
-void CallInternalDtor(void* self) {
-    static const VoidThisFn fn =
-        reinterpret_cast<VoidThisFn>(ResolveAddr(Module::Runtime, 0x1800bfdb0));
-    fn(self);
-}
-// ??1External@Object@@UEAA@XZ  retail 0x1800bc950 — same shape, tail-jumped
-// from ~Goal. Wave 3 ported this one for real and DEFAULT-ON
-// (RtObject_External_Dtor, external.cpp:207), so every other caller in the tree
-// already reaches the port; going through the registry here keeps this lane
-// from being the single anomalous caller that does not.
-void CallExternalDtor(void* self) {
-    static const VoidThisFn fn =
-        reinterpret_cast<VoidThisFn>(ResolveAddr(Module::Runtime, 0x1800bc950));
-    fn(self);
+    void* p = g_internalCtor.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800bfd10));
+        if (p != nullptr) g_internalCtor.store(p, std::memory_order_release);
+    }
+    reinterpret_cast<PtrThisFn>(p)(self);
 }
 
-// The dword retail's Goal::GetInstanceType copies out. Retail reads
-// `dword ptr [0x1801f9940]`, which is the ADDRESS OF THE EXPORTED DATA SYMBOL
-// ?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A — so this reads
-// the same four bytes retail reads, without needing to model BaseTypeInfo at
-// all. (Note the class asymmetry, which is not a typo: Goal::GetInstanceType
-// returns GOALINSTANCE's type, because "the instance type" is the type
-// GoalList::Initialize must ask the factory to create for this goal.)
-const uint32_t* GoalInstanceTypeInfo() {
+// `?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A` @
+// 0x1801f9940 — retail's Goal::GetInstanceType reads its first dword. Note the
+// class asymmetry, which is not a typo: Goal::GetInstanceType returns
+// GOALINSTANCE's type, because "the instance type" is what GoalList::Initialize
+// asks the factory to create for this goal.
+uint32_t GoalInstanceTypeId() {
     const uint32_t* p = RT_DATA_SLOT(const uint32_t*,
         "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
-    return p;
+    return *p;
 }
 
 }  // namespace
 
+namespace Achievement {
+
 // ============================================================================
-// Achievement::Goal::Goal()
-// ??0Goal@Achievement@@QEAA@XZ   retail 0x18009ed50, ordinal 207
+// ??1Goal@Achievement@@UEAA@XZ   retail 0x18009edb0
 //
-// ORACLE: FULL BYTE COMPARE. The constructor calls nothing and touches no
-// global — it is six qword stores into `this` covering 0x00..0x2f exactly — so
-// the original can be run into a private scratch buffer and the two objects
-// compared byte for byte. That is a real oracle, not a self-check: it would
-// catch a wrong vtable, a missed field, or a wrong store order's residue.
+//     [this] = ??_7Goal@Achievement@@6B@     ; re-stamp
+//     _text.~String()                        ; the release idiom, INCLUDING
+//                                            ; retail's asymmetry (String.h)
+//     JMP ~External                          ; tail call
+//
+// All three are the compiler's: the vptr store on entry to a destructor, the
+// member destructor of `_text` (a `System::String`), then the base destructor.
+// The vptr stored is GCC's table for Goal, not the minted one — correct for a
+// destructor (nothing dispatches through it before ~External re-stamps), and
+// the one thing a hand-written store here could get wrong.
 // ============================================================================
-Goal* RtAch_Goal_Ctor(Goal* self) {
+Goal::~Goal() {}
 
-    // The two dead vtable stores are MSVC's inlined base constructors. They are
-    // overwritten below before anything can read them; transcribed anyway
-    // because "byte-faithful first, readable second" (PLAN §6 step 4) and
-    // because a future reader comparing against the disassembly should find
-    // every instruction accounted for.
-    *reinterpret_cast<void**>(self) = BaseVtable();
-    *reinterpret_cast<void**>(self) = ExternalVtable();
-    self->_base._path.data          = nullptr;   // +0x08
-    self->_base._refs._data         = nullptr;   // +0x10
-    self->_base._refs._size         = 0;         // +0x18 — one qword store covering
-    self->_base._refs._capacity     = 0;         //         both size and capacity
-    *reinterpret_cast<void**>(self) = GoalVtable();
-    self->_stringTable.ptr          = nullptr;   // +0x20
-    self->_text.data                = nullptr;   // +0x28
-
-    return self;   // retail returns `this` in RAX
+// ============================================================================
+// Object::Type Goal::GetInstanceType() const — SLOT 9, RULE B7-4
+// ?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ   retail 0x18009eeb0
+//
+//     MOV EAX,dword ptr [0x1801f9940]   ; GoalInstance::_typeInfo.typeId
+//     MOV dword ptr [RDX],EAX           ; *ret
+//     MOV RAX,RDX                       ; return ret
+//     RET
+//
+// `this` is never read: the answer is a class constant. The hidden return slot
+// is raw storage, so the value is placement-constructed into it.
+// ============================================================================
+Object::Type* Goal::GetInstanceType(Object::Type* ret) const {
+    return new (ret) Object::Type(GoalInstanceTypeId());
 }
 
 // ============================================================================
-// Achievement::Goal::~Goal()
-// ??1Goal@Achievement@@UEAA@XZ   retail 0x18009edb0, ordinal 600
-//
-// ORACLE: SHADOW SELF-CHECK ONLY, and that is a real limitation, not a
-// formality. The destructor releases a refcounted String (possibly freeing it)
-// and then runs Object::External's destructor, which frees an owning array.
-// Running the original as well would double-free. There is also no scratch
-// stand-in to destroy: the String this object holds is SHARED with whoever else
-// copied it, so a scratch copy would decrement the same refcount.
-// So the check below verifies what this body itself is responsible for — the
-// vtable re-stamp and the String release having done exactly one of its two
-// legal things — and nothing about External's half. See the wave doc §4.
+// System::String Goal::GetText() const
+// ?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ   retail 0x180001ba0
+// `*retval = 0; if (src) { *retval = src; ++src[-4]; }` — the String copy
+// constructor (0x180006cb0).
 // ============================================================================
-void RtAch_Goal_Dtor(Goal* self) {
-
-    char* const  textBefore = self->_text.data;
-    const int32_t rcBefore  = textBefore ? StringRefCount(textBefore) : 0;
-
-    *reinterpret_cast<void**>(self) = GoalVtable();
-
-    // The String release idiom IS `~String` (0x180006c80) — including retail's
-    // asymmetry, which looks like a bug and is not ours to fix: on the FREEING
-    // branch the field is left pointing at `data - 8`, on the SHARING branch it
-    // is nulled. That behaviour now lives inside the class. `_text` is a POD
-    // member of the unconverted `Achievement::Goal`, so the destructor is
-    // spelled explicitly, through the one bridge.
-    RtSystem::Sys(self->_text).~String();
-
-
-    // Retail TAIL-JUMPS here (`JMP 0x1800bc950`), so ~External finishes the job
-    // and its return is ours.
-    CallExternalDtor(self);
+System::String Goal::GetText() const {
+    return _text;
 }
 
 // ============================================================================
-// Achievement::GoalInstance::GoalInstance()
-// ??0GoalInstance@Achievement@@QEAA@XZ   retail 0x18009ef00, ordinal 209
-//
-// ORACLE: SHADOW SELF-CHECK. Object::Internal's constructor claims a slot in
-// the global handle table, so a scratch construction would consume one — and
-// the scratch object's factoryIndex/generation would legitimately differ from
-// the real one's, so even a byte compare of the base would be meaningless. The
-// check below covers the three stores this body owns.
+// ??1GoalInstance@Achievement@@UEAA@XZ   retail 0x18009ef40
+// `[this] = ??_7GoalInstance; JMP ~Internal` — both the compiler's. ~Internal
+// IS the InternalFactory swap-remove (runtime/src/object/internal_class.cpp).
 // ============================================================================
-GoalInstance* RtAch_GoalInstance_Ctor(GoalInstance* self) {
+GoalInstance::~GoalInstance() {}
 
-    CallInternalCtor(self);
-    *reinterpret_cast<void**>(self) = GoalInstanceVtable();
-    self->_flags    = 0;         // +0x10, a DWORD store — +0x14 is left alone
-    self->_goal.ptr = nullptr;   // +0x18
+// ?IsMet@GoalInstance@Achievement@@QEBA_NXZ      retail 0x18009eed0 — bit 0.
+bool GoalInstance::IsMet() const { return (_flags & kFlagMet) != 0; }
 
-    return self;   // retail returns `this` in RAX
-}
+// ?HasFailed@GoalInstance@Achievement@@QEBA_NXZ  retail 0x18009eec0 — bit 1.
+bool GoalInstance::HasFailed() const { return ((_flags >> 1) & 1u) != 0; }
 
 // ============================================================================
-// Achievement::GoalInstance::~GoalInstance()
-// ??1GoalInstance@Achievement@@UEAA@XZ   retail 0x18009ef40, ordinal 601
-//
-// Two instructions and a tail jump. ORACLE: shadow self-check — running the
-// original would release the handle-table slot twice.
-// ============================================================================
-void RtAch_GoalInstance_Dtor(GoalInstance* self) {
-
-    *reinterpret_cast<void**>(self) = GoalInstanceVtable();
-
-
-    CallInternalDtor(self);   // retail: JMP 0x1800bfdb0
-}
-
-// ============================================================================
-// int Achievement::GoalList::GetGoalCount() const
-// ?GetGoalCount@GoalList@Achievement@@QEBAHXZ   retail 0x180001700, ordinal 2684
-//
-// One instruction. ORACLE: full.
-// ============================================================================
-int RtAch_GoalList_GetGoalCount(const GoalList* self) {
-    const int ours = self->_goals._size;
-    using Fn = int (*)(const GoalList*);
-    return ours;
-}
-
-// ============================================================================
-// InternalPtr<GoalInstance> Achievement::GoalList::GetGoal(int) const
-// ?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z
-//                                              retail 0x180001710, ordinal 2683
-//
-// HIDDEN RETURN SLOT: returns InternalPtr<T> BY VALUE, so the ABI is
-// (RCX=this, RDX=retval, R8=index) — the trap
-// reference_hidden_retslot_wild_write.md exists for. `index` is the THIRD
-// argument, not the second. Retail does NOT bounds-check it; neither do we.
-//
-// ORACLE: full. Read-only on both sides, so the original can run into a private
-// scratch slot.
-// ============================================================================
-void* RtAch_GoalList_GetGoal(const GoalList* self, void* retval, int index) {
-    void* const ours = self->_goals._data[index].ptr;
-    *static_cast<void**>(retval) = ours;
-
-    return retval;   // retail returns the slot in RAX
-}
-
-// ============================================================================
-// ExternalPtr<Goal> Achievement::GoalInstance::GetGoal() const
-// ?GetGoal@GoalInstance@Achievement@@QEBA?AV?$ExternalPtr@VGoal@Achievement@@@Object@@XZ
-//                                              retail 0x180001fe0, ordinal 2682
-//
-// Same hidden-return-slot shape, no index. ORACLE: full.
-// ============================================================================
-void* RtAch_GoalInstance_GetGoal(const GoalInstance* self, void* retval) {
-    void* const ours = self->_goal.ptr;
-    *static_cast<void**>(retval) = ours;
-
-    return retval;
-}
-
-// ============================================================================
-// Object::Type Achievement::Goal::GetInstanceType() const
-// ?GetInstanceType@Goal@Achievement@@UEBA?AVType@Object@@XZ
-//                                              retail 0x18009eeb0, ordinal 2724
-//
-// HIDDEN RETURN SLOT EVEN THOUGH THE RESULT IS FOUR BYTES: `Object::Type` is a
-// class (`?AV` in the mangling), and MSVC returns a class by value through the
-// slot regardless of size. The disassembly settles it — `MOV dword ptr [RDX],EAX
-// / MOV RAX,RDX`. Getting this one wrong is a wild write, not a wrong value.
-//
-// ORACLE: full — a pure read of a DLL global into a private scratch dword.
-// ============================================================================
-void* RtAch_Goal_GetInstanceType(const Goal* self, void* retval) {
-    (void)self;   // retail never reads `this`; the answer is a class constant
-    const uint32_t ours = *GoalInstanceTypeInfo();
-    *static_cast<uint32_t*>(retval) = ours;
-
-    return retval;
-}
-
-// ============================================================================
-// System::String Achievement::Goal::GetText() const
-// ?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ  retail 0x180001ba0, ord 2958
-//
-// HIDDEN RETURN SLOT (String by value), and the body ADDREFS — so this is the
-// WAVE4_LANE_C GetSavePath shape: the original really is run, and the extra
-// reference its copy took is released again before returning. Both sides hand
-// back the SAME block, so comparing the raw pointers is exact and strictly
-// stronger than comparing contents.
-// ============================================================================
-void* RtAch_Goal_GetText(const Goal* self, void* retval) {
-
-    // ENDGAME B.3.1 step 2: `*retval = 0; if (src) { *retval = src; ++src[-4]; }`
-    // is `??0String@System@@QEAA@AEBV01@@Z` (0x180006cb0), the copy constructor.
-    // `retval` is the hidden return slot — raw, uninitialised bytes — so it is
-    // placement-constructed, never assigned. `_text` stays POD: `Goal` is not a
-    // converted class, so it comes through the one bridge.
-    new (retval) System::String(RtSystem::Sys(self->_text));
-
-    return retval;
-}
-
-// ============================================================================
-// bool Achievement::GoalInstance::IsMet() const
-// ?IsMet@GoalInstance@Achievement@@QEBA_NXZ   retail 0x18009eed0, ordinal 3141
-// bool Achievement::GoalInstance::HasFailed() const
-// ?HasFailed@GoalInstance@Achievement@@QEBA_NXZ  retail 0x18009eec0, ordinal 3046
-//
-// One bit each out of the +0x10 flag dword. ORACLE: full.
-// ============================================================================
-bool RtAch_GoalInstance_IsMet(const GoalInstance* self) {
-    const bool ours = (self->_flags & RtAchievement::GoalStateBits::kMet) != 0;
-    using Fn = bool (*)(const GoalInstance*);
-    return ours;
-}
-
-bool RtAch_GoalInstance_HasFailed(const GoalInstance* self) {
-    const bool ours = ((self->_flags >> 1) & 1u) != 0;
-    using Fn = bool (*)(const GoalInstance*);
-    return ours;
-}
-
-// ============================================================================
-// bool Achievement::GoalList::AreGoalsMetExcept(InternalPtr<GoalInstance>) const
-// ?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z
-//                                              retail 0x18009f070, ordinal 1609
-//
-// The parameter is a class passed BY VALUE, so MSVC passes the caller's copy BY
-// ADDRESS in RDX — `MOV RDX,qword ptr [RDX]` at 0x18009f07c is retail loading
-// the pointer OUT of that copy. Declaring it as a plain `GoalInstance*` would
-// compile and be wrong at every call.
-//
-// TWO DETAILS THE DECOMPILER GETS WRONG, both taken from the disassembly:
-//   * the count is loaded ONCE into R9 at entry (`MOVSXD R9,[RCX+8]`) and the
-//     loop compares against R9 — Ghidra's C re-reads `*(int*)(this+8)` in the
-//     condition, which would behave differently if a CheckGoalState side effect
-//     resized the list.
-//   * the element read is an UNGUARDED deref: `TEST byte ptr [RCX+0x10],0x1`
-//     with RCX straight out of the array. A null entry faults, in retail too.
-//     CLAUDE.md: do not "fix" that.
-//
-// ORACLE: full — read-only on both sides.
-// ============================================================================
-bool RtAch_GoalList_AreGoalsMetExcept(const GoalList* self, const void* exceptPtr) {
-
-    bool ours = true;
-    const int64_t count = self->_goals._size;      // loaded once, as retail does
-    if (count > 0) {
-        const GoalInstance* except =
-            *static_cast<const GoalInstance* const*>(exceptPtr);
-        const RtObject::InternalBasePtr* p = self->_goals._data;
-        for (int64_t i = 0; i < count; ++i, ++p) {
-            const GoalInstance* g = reinterpret_cast<const GoalInstance*>(p->ptr);
-            if (g != except && (*reinterpret_cast<const uint8_t*>(
-                    reinterpret_cast<const uint8_t*>(g) + 0x10) & 1) == 0) {
-                ours = false;
-                break;
-            }
-        }
-    }
-
-    using Fn = bool (*)(const GoalList*, const void*);
-    return ours;
-}
-
-// ============================================================================
-// void Achievement::GoalInstance::Update(const System::Time&, const GoalList&)
+// void GoalInstance::Update(const System::Time&, const GoalList&) — SLOT 5
 // ?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z
-//                                              retail 0x18009f010, ordinal 4492
+//                                              retail 0x18009f010
 //
-// Retail reads NEITHER argument. Both are there for the overrides: the subclass
-// hierarchy is in the exe (TimeGoalInstance et al.), and this base body only
-// polls the virtual CheckGoalState (GoalInstance vtable +0x30) and folds the
-// answer into the flag dword. The "failed" bit LATCHES — once set, the entry
-// guard makes every later Update a no-op.
-//
-// ORACLE: FULL, by save-restore. CheckGoalState is a `const` member (UEBA in
-// its mangling) and every override in our tree is a query, so it is safe to
-// call twice; the only state Update itself writes is the +0x10 dword, so the
-// original can be run first, its answer captured, the dword restored, and ours
-// run for real. Both calls hit the same virtual, so this really does compare
-// two implementations rather than compare ours to itself.
+// Retail reads NEITHER argument (they are for the exe overrides). It polls the
+// virtual CheckGoalState (slot 6) — an UNQUALIFIED call on purpose: retail
+// dispatches (`CALL [RAX+0x30]`), and on an exe subclass that is the
+// subclass's override — and folds the answer into the flags. The FAILED bit
+// LATCHES: once set, the entry test makes every later Update a no-op.
 // ============================================================================
-namespace {
-// The retail body, exactly. Split out so the oracle can run it after the
-// original without duplicating it.
-void GoalInstance_UpdateBody(GoalInstance* self) {
-    if (((self->_flags >> 1) & 1u) != 0)
+void GoalInstance::Update(const System::Time& /*time*/, const GoalList& /*list*/) {
+    if (((_flags >> 1) & 1u) != 0)
         return;
 
-    void** vt = *reinterpret_cast<void***>(self);
-    using CheckFn = int32_t (*)(GoalInstance*);
-    const int32_t state = reinterpret_cast<CheckFn>(
-        vt[RtAchievement::GoalInstanceVtbl::kCheckGoalState / 8])(self);
+    const Goal::GoalState state = CheckGoalState();
 
-    if (state == 1) { self->_flags |= 1u;  return; }
-    if (state == 0) { self->_flags &= 0xfffffffeu; return; }
-    if (state == 2) { self->_flags |= 2u; }
-}
-}  // namespace
-
-void RtAch_GoalInstance_Update(GoalInstance* self, const void* time, const void* list) {
-
-    GoalInstance_UpdateBody(self);
+    if (state == Goal::kMet)    { _flags |= kFlagMet;  return; }
+    if (state == Goal::kNotMet) { _flags &= 0xfffffffeu; return; }
+    if (state == Goal::kFailed) { _flags |= kFlagFailed; }
 }
 
 // ============================================================================
-// Registration
+// GoalList::GoalList()  ??0GoalList@Achievement@@QEAA@XZ  retail 0x18009f0b0
+// Two zero qwords — `Collection::Array`'s own default constructor.
 // ============================================================================
-// `?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z` (0x18009ee20) and
-// `?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z` (0x18009ef70) are
-// absent HERE but no longer absent from the build: Wave 9 lane P registers both
-// from runtime/src/achievement/goal_serialize.cpp, under this same
-// RT_GOAL switch. They live in their own file only so that two lanes
-// never edit one file, not because they are still held back — the "DELIBERATELY
-// ABSENT, see WAVE5_LANE_A.md §4" this line used to say is superseded.
+GoalList::GoalList() {}
+
+// ============================================================================
+// GoalList::GoalList(const GoalList&)  ??0GoalList@…@QEAA@AEBV01@@Z  0x180001730
+//     XOR EAX,EAX; MOV [RCX],RAX; MOV [RCX+8],RAX    ; the member's zero init
+//     CALL 0x180003a30                               ; Array<InternalPtr>::operator=
+// 0x180003a30 is the kSpec_PtrZero `operator=` (Assign8Z per element into a
+// freshly allocated buffer) — `Collection::Array::Assign` driven by the row
+// `_goals` names in its type. See Goal.h: the copy SHARES the instances.
+// ============================================================================
+GoalList::GoalList(const GoalList& other) : _goals() {
+    _goals.Assign(other._goals);
+}
+
+// ??4GoalList@Achievement@@QEAAAEAV01@AEBV01@@Z  retail 0x180001760:
+// `CALL 0x180003a30; MOV RAX,RBX; RET`.
+GoalList& GoalList::operator=(const GoalList& other) {
+    _goals.Assign(other._goals);
+    return *this;
+}
+
+// ============================================================================
+// bool GoalList::AreGoalsMetExcept(InternalPtr<GoalInstance>) const
+// ?AreGoalsMetExcept@GoalList@Achievement@@QEBA_NV?$InternalPtr@VGoalInstance@Achievement@@@Object@@@Z
+//                                              retail 0x18009f070
 //
-// Both the exported NAME and the retail ADDRESS are registered for every port.
-// Registering only the name would leave `ResolveAddr(Module::Runtime, ...)`
-// callers on the DLL, which is the gap WAVE3_LANE_A.md found the hard way:
-// `engine/funcs/engine_funcs.cpp` falls back to an address on a failed name
-// resolve, and for `Persist` that fallback is the ONLY path that ever works
-// (its name there is a phantom — see §5 of the wave doc).
-//
-// Every mangled name below is spelled as ONE string literal on ONE line:
-// tools/runtime_census.py and tools/export_name_audit.py cannot see a name
-// split across lines or hidden behind a named constant, and a port the census
-// cannot see is a port nobody will ever check
-// (reference_census_cannot_see_nonliteral_registrations.md).
+// The InternalPtr arrives by HIDDEN POINTER (`MOV RDX,[RDX]` at 0x18009f07c).
+// Two details the decompiler gets wrong, both from the disassembly:
+//   * the count is loaded ONCE (`MOVSXD R9,[RCX+8]`) — hoisted here too;
+//   * the element read is UNGUARDED (`TEST byte [RCX+0x10],0x1` straight out
+//     of the array): a null entry faults, in retail too. Not "fixed".
+// ============================================================================
+bool GoalList::AreGoalsMetExcept(const Object::InternalPtr<GoalInstance>* except) const {
+    const GoalInstance* const skip = except->Get();
+    const int64_t count = _goals._size;      // loaded once, as retail does
+    for (int64_t i = 0; i < count; ++i) {
+        const GoalInstance* g = _goals._data[i].Get();
+        if (g != skip && (g->_flags & GoalInstance::kFlagMet) == 0)
+            return false;
+    }
+    return true;
+}
+
+}  // namespace Achievement
+
+// ############################################################################
+// The CONSTRUCTOR doors — NOT members (B4b-2, B7-13; see the banner).
+// ############################################################################
+
+// ??0Goal@Achievement@@QEAA@XZ   retail 0x18009ed50
+//     [this] = ??_7Base; [this] = ??_7External;           (dead: MSVC's inlined
+//     [+0x08] = [+0x10] = [+0x18] = 0;                     base constructors)
+//     [this] = ??_7Goal; [+0x20] = [+0x28] = 0
+// Six qword stores covering 0x00..0x2f exactly. The two dead stores are kept:
+// a debugger or detour between them would make them observable.
+Achievement::Goal* RtAch_Goal_Ctor(Achievement::Goal* self) {
+    *reinterpret_cast<void**>(self) = BaseVtable();        // B.3.7 bridge — the minted vptr
+    *reinterpret_cast<void**>(self) = ExternalVtable();    // B.3.7 bridge
+    self->_path.data     = nullptr;                        // +0x08
+    self->_refs._data    = nullptr;                        // +0x10
+    self->_refs._size    = 0;                              // +0x18 — one qword store over
+    self->_refs._capacity = 0;                             //         size and capacity
+    *reinterpret_cast<void**>(self) = GoalVtable();        // B.3.7 bridge
+    self->_stringTable._ptr = nullptr;                     // +0x20
+    self->_text._data       = nullptr;                     // +0x28 — raw bytes, not constructed
+    return self;   // retail returns `this` in RAX
+}
+
+// ??0GoalInstance@Achievement@@QEAA@XZ   retail 0x18009ef00
+//     CALL ??0Internal; [this] = ??_7GoalInstance;
+//     MOV dword [+0x10],0 (a DWORD — +0x14 is left alone); [+0x18] = 0
+Achievement::GoalInstance* RtAch_GoalInstance_Ctor(Achievement::GoalInstance* self) {
+    CallInternalCtor(self);
+    *reinterpret_cast<void**>(self) = GoalInstanceVtable();   // B.3.7 bridge — the minted vptr
+    self->_flags     = 0;
+    self->_goal._ptr = nullptr;
+    return self;
+}
+
+// ############################################################################
+// The registered doors — one-line QUALIFIED delegations.
+// ############################################################################
+
+// ??1Goal@Achievement@@UEAA@XZ  0x18009edb0
+void RtAch_Goal_Dtor(Achievement::Goal* self) {
+    self->Achievement::Goal::~Goal();
+}
+
+// ??1GoalInstance@Achievement@@UEAA@XZ  0x18009ef40
+void RtAch_GoalInstance_Dtor(Achievement::GoalInstance* self) {
+    self->Achievement::GoalInstance::~GoalInstance();
+}
+
+// ?GetGoalCount@GoalList@Achievement@@QEBAHXZ  0x180001700
+int RtAch_GoalList_GetGoalCount(const Achievement::GoalList* self) {
+    return self->Achievement::GoalList::GetGoalCount();
+}
+
+// ?GetGoal@GoalList@…  0x180001710 — HIDDEN RETURN SLOT: (this, ret, index).
+// The index is the THIRD argument (reference_hidden_retslot_wild_write.md).
+void* RtAch_GoalList_GetGoal(const Achievement::GoalList* self, void* retval, int index) {
+    new (retval) Object::InternalPtr<Achievement::GoalInstance>(
+        self->Achievement::GoalList::GetGoal(index));
+    return retval;
+}
+
+// ?GetGoal@GoalInstance@…  0x180001fe0 — (this, ret).
+void* RtAch_GoalInstance_GetGoal(const Achievement::GoalInstance* self, void* retval) {
+    new (retval) Object::ExternalPtr<Achievement::Goal>(
+        self->Achievement::GoalInstance::GetGoal());
+    return retval;
+}
+
+// ?GetInstanceType@Goal@…  0x18009eeb0 — (this, ret), the slot-9 shape.
+Object::Type* RtAch_Goal_GetInstanceType(const Achievement::Goal* self, Object::Type* retval) {
+    return self->Achievement::Goal::GetInstanceType(retval);
+}
+
+// ?GetText@Goal@…  0x180001ba0 — (this, ret). `retval` is raw storage.
+void* RtAch_Goal_GetText(const Achievement::Goal* self, void* retval) {
+    new (retval) System::String(self->Achievement::Goal::GetText());
+    return retval;
+}
+
+// ?IsMet@GoalInstance@…  0x18009eed0
+bool RtAch_GoalInstance_IsMet(const Achievement::GoalInstance* self) {
+    return self->Achievement::GoalInstance::IsMet();
+}
+
+// ?HasFailed@GoalInstance@…  0x18009eec0
+bool RtAch_GoalInstance_HasFailed(const Achievement::GoalInstance* self) {
+    return self->Achievement::GoalInstance::HasFailed();
+}
+
+// ?AreGoalsMetExcept@GoalList@…  0x18009f070 — the InternalPtr by hidden pointer.
+bool RtAch_GoalList_AreGoalsMetExcept(const Achievement::GoalList* self,
+                                      const Object::InternalPtr<Achievement::GoalInstance>* except) {
+    return self->Achievement::GoalList::AreGoalsMetExcept(except);
+}
+
+// ?Update@GoalInstance@…  0x18009f010
+void RtAch_GoalInstance_Update(Achievement::GoalInstance* self, const System::Time* time,
+                               const Achievement::GoalList* list) {
+    self->Achievement::GoalInstance::Update(*time, *list);
+}
+
+// ============================================================================
+// Registration — by NAME and by ADDRESS, unchanged. Every mangled name is ONE
+// string literal on ONE line (tools/runtime_census.py cannot see any other
+// spelling — reference_census_cannot_see_nonliteral_registrations.md).
+// `Goal::Serialize` and `GoalInstance::Persist` register from
+// goal_serialize.cpp; the GoalList copy constructor and `operator=` are real
+// members but have no caller and no registration (an unregistered address is
+// the honest state of a body nothing reaches).
+// ============================================================================
 int RtAchGoalRegister() {
     int n = 0;
 
@@ -531,13 +370,6 @@ int RtAchGoalRegister() {
     RegisterRuntimeExport("?Update@GoalInstance@Achievement@@UEAAXAEBVTime@System@@AEBVGoalList@2@@Z", (void*)&RtAch_GoalInstance_Update); ++n;
     RegisterRuntimeAddr(0x18009f010, (void*)&RtAch_GoalInstance_Update);
 
-    // Counts THIS file's registrations only. Goal::Serialize and
-    // GoalInstance::Persist are the other two of the 15 and are registered by
-    // goal_serialize.cpp (Wave 9 lane P) under this same RT_GOAL switch.
-    // This line used to say they were "held back -- see WAVE5_LANE_A.md", which
-    // stayed in the log after they were ported: a banner asserting a function is
-    // held back while it is registered is the same invisible-to-review defect as
-    // a comment contradicting its code.
     printf("[RtPort] Achievement::Goal: %d/15 exports registered here "
            "(+2 in goal_serialize.cpp: Goal::Serialize, GoalInstance::Persist)\n", n);
     return n;

@@ -20,6 +20,7 @@
 #include "resolve.h"
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 #include <new>
 
 // Vtable pointer for PopulationGoal (resolved at runtime)
@@ -42,10 +43,8 @@ void* PopulationGoal_Dtor(PopulationGoal* self, uint32_t flags) {
     // Set vtable to PopulationGoal
     *(void**)self = s_vtable_PopulationGoal;
 
-    // Call Goal base destructor
-    if (fn_Goal_BaseDtor) {
-        fn_Goal_BaseDtor(self);
-    }
+    // Achievement::Goal::~Goal (0x18009edb0) — a QUALIFIED member call (B7-13).
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
 
     // If bit 0 set, free memory
     if ((flags & 1) != 0) {
@@ -65,10 +64,8 @@ void* PopulationGoal_Dtor(PopulationGoal* self, uint32_t flags) {
 int PopulationGoal_Slot5(PopulationGoal* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
-    // Call Goal base serialize
-    if (fn_Goal_BaseSerialize) {
-        fn_Goal_BaseSerialize(self, stream);
-    }
+    // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];

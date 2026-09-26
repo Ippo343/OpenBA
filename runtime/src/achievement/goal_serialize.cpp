@@ -95,16 +95,14 @@
 // counter. The write path is idempotent and the replay is sound.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/Goal.h"
 #include "../../types/io/Serializer.h"
-#include "../system/pod_bridge.h"   // the one transitional POD<->class cast
 
-using RtAchievement::Goal;
-using RtAchievement::GoalInstance;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
@@ -112,8 +110,7 @@ using rt::io::Stream;
 
 // Forward-declared rather than pulled in from standalone/resolve.h, for the
 // reason rt_port.h gives: that header drags in <windows.h> and runtime/src/
-// must stay platform-neutral. Byte-identical to resolve.h's declaration; the
-// same pair already appears in goal.cpp.
+// must stay platform-neutral. Byte-identical to resolve.h's declaration.
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
@@ -121,27 +118,25 @@ namespace {
 
 // The two ExternalBasePtr::Serialize instantiations (see the banner). Both take
 // (ExternalBasePtr* self, Serializer* ser) — RCX/RDX at the call sites — and
-// return nothing the caller reads.
+// return nothing the caller reads. Both addresses are REGISTERED by
+// runtime/src/object/external_ptr_serialize.cpp, so ResolveAddr (registry
+// first) lands on the port.
+//
+// ENDGAME B.3.7: the caches are namespace-scope ATOMIC slots, not
+// function-local statics — `GoalInstance::Persist` runs on the LOADER thread
+// on every save load (B37_RULES §5, RULE B6-5).
 using PtrSerializeFn = void (*)(void*, Serializer*);
+std::atomic<void*> g_ptrSerGoal{nullptr};           // 0x1800042a0
+std::atomic<void*> g_ptrSerGoalInstance{nullptr};   // 0x180005dc0
 
-// CALL 0x1800042a0 from Goal::Serialize at 0x18009ee6b.
-PtrSerializeFn ExternalPtrSerialize_Goal() {
-    static PtrSerializeFn f =
-        reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, 0x1800042a0));
-    return f;
+PtrSerializeFn RuntimeAddr(std::atomic<void*>& slot, uintptr_t addr) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, addr));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return reinterpret_cast<PtrSerializeFn>(p);
 }
-// CALL 0x180005dc0 from GoalInstance::Persist at 0x18009efbb.
-PtrSerializeFn ExternalPtrSerialize_GoalInstance() {
-    static PtrSerializeFn f =
-        reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, 0x180005dc0));
-    return f;
-}
-
-// ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
-// (0x1800c9930) is a member of `System::String` now, so the by-address door
-// that used to stand here is gone and the one call site calls it directly. The
-// registry row at that address registers the shim, and the shim is one line
-// over this member, so it is the same body either way.
 
 // The shared prologue of both bodies, transcribed once.
 //
@@ -153,10 +148,7 @@ PtrSerializeFn ExternalPtrSerialize_GoalInstance() {
 //
 // The third argument is the save-format VERSION and it is ZERO here: retail
 // zeroes R8D at 0x18009ee44 / 0x18009ef94 for the `CMP [stream+8],R8D` and
-// never reloads it before the factory call, so the version reaching
-// BinaryReader/BinaryWriter's ctor is 0. (Serializer.h's note that this
-// argument is NOT ignored is what makes it worth spelling out: it is written
-// into the file by BinaryWriter.)
+// never reloads it before the factory call.
 ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
     ser->stream = stream;
     ser->readerWriter = nullptr;
@@ -184,97 +176,75 @@ void DestroyCodec(ReaderWriter* rw) {
 
 }  // namespace
 
+namespace Achievement {
+
 // ============================================================================
-// bool Achievement::Goal::Serialize(IO::Stream&)
+// bool Goal::Serialize(IO::Stream&) — SLOT 5
 // ?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z   retail 0x18009ee20
 //
-// VIRTUAL (UEAA, not QEAA — goal.cpp's banner records that the QEAA spelling is
-// a phantom that resolves null forever). RCX = this, RDX = the Stream.
-//
-// Serializes exactly Goal's own two fields, in declaration order and nothing
-// else, which is what runtime/types/achievement/Goal.h already documents:
-//   +0x20 _stringTable  ExternalPtr<UI::StringTable>  -> FUN_1800042a0
+// Serializes exactly Goal's own two fields, in declaration order:
+//   +0x20 _stringTable  ExternalPtr<UI::StringTable>  -> 0x1800042a0
 //   +0x28 _text         System::String                -> String::Serialize
 // A load therefore consumes precisely those two records. Getting the ORDER or
-// the COUNT wrong here is the silent save-desync failure this project has paid
-// for four times (reference_slot3_wrapper_must_resolve_first.md).
+// the COUNT wrong is the silent save-desync this project has paid for four
+// times (reference_slot3_wrapper_must_resolve_first.md). Always `MOV AL,1`.
 //
-// Always returns `true` (`MOV AL,1`) — there is no failure path.
-//
-// PORTING THIS COMPLETES Achievement::Goal (5 of 5 members).
-//
-// ORACLE: the emission oracle, in the WRITING direction against two synthetic
-// sinks, run in situ on the first 16 real calls. No prefix stop is needed: this
-// body mutates nothing (the two field serializers read the object; the codec is
-// the sink's own stub), so the whole emission sequence is replayable.
+// The slot's parameter is `void*` because `Object::External` declares it so
+// (External.h); the object behind it is retail's `IO::Stream`.
 // ============================================================================
-bool RtAch_Goal_Serialize(Goal* self, Stream* stream) {
+bool Goal::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    ExternalPtrSerialize_Goal()(&self->_stringTable, &ser);   // Goal+0x20
-    // `_text` is a POD member of the unconverted `Achievement::Goal`, so it
-    // reaches its own member through the one bridge.
-    RtSystem::Sys(self->_text).Serialize(&ser);               // Goal+0x28
+    RuntimeAddr(g_ptrSerGoal, 0x1800042a0)(&_stringTable, &ser);   // Goal+0x20
+    _text.Serialize(&ser);                                          // Goal+0x28
 
     DestroyCodec(rw);
     return true;
 }
 
 // ============================================================================
-// void Achievement::GoalInstance::Persist(IO::Stream&)
+// void GoalInstance::Persist(IO::Stream&) — SLOT 3
 // ?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z  retail 0x18009ef70
 //
-// VIRTUAL. RCX = this, RDX = the Stream. Same prologue and epilogue as
-// Goal::Serialize; the middle is two records:
-//   +0x18 _goal   ExternalPtr<Achievement::Goal> -> FUN_180005dc0
-//   +0x10 _flags  uint                           -> ReaderWriter slot +0x98
-//
-// **The +0x98 slot is `uint`, and that is retail's offset, not the profile
-// build's.** In `Runtime-x64-profile.dll` the same slot sits at +0xb0 and +0x98
-// means something else; copying the offset from a profile decompile here would
-// emit the wrong record type into every save
-// (reference_encoding_vtable_offsets_differ_between_builds.md). The value used
-// below comes from `rt::io::rw_vtbl::kScalarUInt`, which Wave 4 pinned against
-// the shipped bytes twice over.
-//
-// The third argument is the record's NAME and it is NULL (`XOR R8D,R8D` at
-// 0x18009efcc) — retail passes no label for this field.
-//
-// Note the field ORDER is NOT declaration order: the ExternalPtr at +0x18 is
-// written BEFORE the uint at +0x10. That is what the bytes do and it is what a
-// reader expects; "tidying" it to ascending offset would desync every save.
-//
-// PORTING THIS COMPLETES Achievement::GoalInstance (7 of 7 members).
-//
-// ORACLE: as above — the emission oracle, writing direction, synthetic sinks,
-// first 16 real calls, no prefix stop needed.
+// Same prologue and epilogue; the middle is two records, NOT in declaration
+// order — the ExternalPtr at +0x18 goes BEFORE the uint at +0x10. That is what
+// the bytes do; "tidying" it to ascending offset would desync every save.
+//   +0x18 _goal   ExternalPtr<Achievement::Goal> -> 0x180005dc0
+//   +0x10 _flags  uint                           -> ReaderWriter +0x98
+// +0x98 is `uint` in RETAIL (+0xb0 in the profile build — never copy offsets
+// from it). The record's NAME argument is NULL (`XOR R8D,R8D` at 0x18009efcc).
 // ============================================================================
-void RtAch_GoalInstance_Persist(GoalInstance* self, Stream* stream) {
+void GoalInstance::Persist(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    ExternalPtrSerialize_GoalInstance()(&self->_goal, &ser);   // GoalInstance+0x18
+    RuntimeAddr(g_ptrSerGoalInstance, 0x180005dc0)(&_goal, &ser);   // GoalInstance+0x18
 
     using UIntFn = void (*)(ReaderWriter*, uint32_t*, const char*);
     reinterpret_cast<UIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarUInt / 8])(
-        rw, &self->_flags, nullptr);                          // GoalInstance+0x10
+        rw, &_flags, nullptr);                                      // GoalInstance+0x10
 
     DestroyCodec(rw);
 }
 
+}  // namespace Achievement
+
+// ---- The registered doors — QUALIFIED delegations --------------------------
+bool RtAch_Goal_Serialize(Achievement::Goal* self, void* stream) {
+    return self->Achievement::Goal::Serialize(stream);
+}
+
+void RtAch_GoalInstance_Persist(Achievement::GoalInstance* self, void* stream) {
+    self->Achievement::GoalInstance::Persist(stream);
+}
+
 // ---- Registration ----------------------------------------------------------
-// Called from RtAchievementPortInit() under RT_GOAL, the same switch
-// that gates goal.cpp — the class-atomicity rule (§4.1 decision 5) means these
-// two must flip together with the ctors and destructors that build the objects
-// they serialize.
-//
-// Registered by NAME and by ADDRESS. The name is what
-// engine/funcs/engine_funcs.cpp:4800 and standalone/reg_goal.cpp:73 ask for
-// (both are `ResolveExport` sites, and both appear in
-// wave9_residue_gameplay.txt today, which is the evidence that these are
-// REACHED and not dead). The address is registered so a vtable slot read out of
-// the DLL and called back through the address registry also lands on us.
+// Registered by NAME and by ADDRESS. The name is what engine_funcs.cpp and
+// standalone/reg_goal.cpp ask for; the address so a by-address call site also
+// lands on the port.
 int RtAchGoalSerializeRegister() {
     int n = 0;
     RegisterRuntimeExport("?Serialize@Goal@Achievement@@UEAA_NAEAVStream@IO@@@Z",

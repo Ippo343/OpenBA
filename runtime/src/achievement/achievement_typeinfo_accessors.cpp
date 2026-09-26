@@ -129,7 +129,7 @@
 // hidden return slot to omit (reference_hidden_retslot_wild_write.md). The
 // `JMP` rather than `CALL/RET` in retail is itself the proof: a body with a
 // hidden return-slot argument cannot tail-jump to a function that does not take
-// one. `RtAchievement::GoalState` is `int32_t`-backed, per Goal.h.
+// one. `Achievement::Goal::GoalState` is `int32_t`-backed, per Goal.h.
 //
 // ============================================================================
 // Startup — AN EMPTY BODY IS STILL A PORT
@@ -164,46 +164,20 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/achievement/Goal.h"
+#include "../../types/achievement/AchievementManager.h"
 
-extern "C" uint32_t    RtAch_Achievement_Type(const void*);
-extern "C" const char* RtAch_Achievement_TypeName(const void*);
-extern "C" uint32_t    RtAch_AchievementInstance_Type(const void*);
-extern "C" const char* RtAch_AchievementInstance_TypeName(const void*);
-extern "C" uint32_t    RtAch_Goal_Type(const void*);
-extern "C" const char* RtAch_Goal_TypeName(const void*);
-extern "C" int32_t     RtAch_Goal_GetFileVersion(const void*);
-extern "C" uint32_t    RtAch_GoalInstance_Type(const void*);
-extern "C" const char* RtAch_GoalInstance_TypeName(const void*);
-extern "C" void        RtAch_GoalInstance_Startup(void*);
-extern "C" int32_t     RtAch_GoalInstance_CheckGoalState(const void*);
+// ENDGAME B.3.7 block B3: the eleven bodies are MEMBERS of the four real
+// classes now; each registered door is a one-line QUALIFIED delegation.
 
 namespace {
 
 // BaseTypeInfo's first two fields, and the ONLY two any body here touches:
 //     +0x00  uint32_t     typeId
 //     +0x08  const char*  name
-// Read with memcpy rather than a struct cast so no alignment or
-// strict-aliasing assumption is made about storage that may be ours or the
-// DLL's depending on whether the `?_typeInfo@` row is promoted.
+// Read with memcpy so no alignment or aliasing assumption is made about
+// storage that may be ours or the mint's.
 constexpr size_t kTypeInfoTypeIdOffset = 0x00;
 constexpr size_t kTypeInfoNameOffset   = 0x08;
-static_assert(kTypeInfoTypeIdOffset == 0, "BaseTypeInfo::typeId is at +0x00");
-static_assert(kTypeInfoNameOffset == 8,   "BaseTypeInfo::name is at +0x08");
-static_assert(sizeof(uint32_t) == 4,      "typeId is a DWORD (MOV EAX, not RAX)");
-static_assert(sizeof(const char*) == 8,   "name is a QWORD (MOV RAX)");
-
-// `??_7Goal@Achievement@@6B@` slot 8. Read out of the RETAIL bytes at
-// 0x18009f067 (`JMP qword ptr [RAX + 0x40]`) and NOT carried over from the
-// profile build, whose vtable offsets are known to differ
-// (reference_encoding_vtable_offsets_differ_between_builds.md). Goal.h's
-// `GoalVtbl` namespace deliberately lists only the slots ITS lane dispatched
-// through, so this one is pinned here, beside the instruction it came from.
-constexpr int kGoalVtblCheckGoalState = 0x40;
-static_assert(kGoalVtblCheckGoalState / 8 == 8,
-              "Goal vtable +0x40 is slot 8 (purecall in retail; EXE subclasses override)");
-static_assert(kGoalVtblCheckGoalState < RtAchievement::GoalVtbl::kGetInstanceType,
-              "slot 8 precedes GetInstanceType at +0x48, which Goal.h already pinned");
 
 const uint8_t* AchievementTypeInfo() {
     return RT_DATA_SLOT(const uint8_t*,
@@ -222,10 +196,6 @@ const uint8_t* GoalInstanceTypeInfo() {
                         "?_typeInfo@GoalInstance@Achievement@@0VBaseTypeInfo@Object@@A");
 }
 
-typedef uint32_t    (*U32ThisFn)(const void*);
-typedef const char* (*CStrThisFn)(const void*);
-typedef int32_t     (*I32ThisFn)(const void*);
-
 uint32_t ReadTypeId(const uint8_t* node) {
     uint32_t v = 0;
     std::memcpy(&v, node + kTypeInfoTypeIdOffset, sizeof v);
@@ -239,112 +209,83 @@ const char* ReadTypeName(const uint8_t* node) {
 
 }  // namespace
 
-// ---- ??_7Achievement@0@6B@  slots 2 and 1 ----------------------------------
+namespace Achievement {
 
-extern "C" uint32_t RtAch_Achievement_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(AchievementTypeInfo());
-    return ours;
+// ---- ??_7Achievement@0@6B@  slots 1 and 2 ----------------------------------
+const char* Achievement::TypeName() const { return ReadTypeName(AchievementTypeInfo()); }  // 0x180001040
+uint32_t    Achievement::Type() const     { return ReadTypeId(AchievementTypeInfo()); }    // 0x180001020
+
+// ---- ??_7AchievementInstance@Achievement@@6B@  slots 1 and 2 ---------------
+const char* AchievementInstance::TypeName() const { return ReadTypeName(AchievementInstanceTypeInfo()); }  // 0x1800017c0
+uint32_t    AchievementInstance::Type() const     { return ReadTypeId(AchievementInstanceTypeInfo()); }    // 0x1800017a0
+
+// ---- ??_7Goal@Achievement@@6B@  slots 1, 2 and 3 ---------------------------
+const char* Goal::TypeName() const { return ReadTypeName(GoalTypeInfo()); }   // 0x180001b60
+uint32_t    Goal::Type() const     { return ReadTypeId(GoalTypeInfo()); }     // 0x180001b40
+
+// `MOV EAX,0x10000 ; RET`. A literal: the on-disk format version of a Goal,
+// 65536 — NOT derived from anything in our tree.
+int32_t Goal::GetFileVersion() const { return 0x10000; }                      // 0x18009ee10
+
+// ---- ??_7GoalInstance@Achievement@@6B@  slots 1, 2, 4 and 6 ----------------
+const char* GoalInstance::TypeName() const { return ReadTypeName(GoalInstanceTypeInfo()); }  // 0x180001e60
+uint32_t    GoalInstance::Type() const     { return ReadTypeId(GoalInstanceTypeInfo()); }    // 0x180001e40
+
+// `RET`. One byte; the exe subclasses override it.
+void GoalInstance::Startup() {}                                               // 0x18009f000
+
+// `MOV RCX,[RCX+0x18] ; MOV RAX,[RCX] ; JMP [RAX+0x40]` — Goal slot 8 on
+// `_goal`, a VIRTUAL call (the callee is always an exe override: slot 8 is
+// `_purecall` in `??_7Goal@Achievement@@6B@`). The deref of `_goal` is
+// UNGUARDED in retail and stays so.
+Goal::GoalState GoalInstance::CheckGoalState() const {                        // 0x18009f060
+    return _goal->CheckGoalState();
 }
 
-extern "C" const char* RtAch_Achievement_TypeName(const void* self) {
-    const char* const ours = ReadTypeName(AchievementTypeInfo());
-    return ours;
+}  // namespace Achievement
+
+// ============================================================================
+// The registered doors — one-line QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtAch_Achievement_Type(const Achievement::Achievement* self) {
+    return self->Achievement::Achievement::Type();
 }
-
-// ---- ??_7AchievementInstance@Achievement@@6B@  slots 2 and 1 ---------------
-
-extern "C" uint32_t RtAch_AchievementInstance_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(AchievementInstanceTypeInfo());
-    return ours;
+extern "C" const char* RtAch_Achievement_TypeName(const Achievement::Achievement* self) {
+    return self->Achievement::Achievement::TypeName();
 }
-
-extern "C" const char* RtAch_AchievementInstance_TypeName(const void* self) {
-    const char* const ours = ReadTypeName(AchievementInstanceTypeInfo());
-    return ours;
+extern "C" uint32_t RtAch_AchievementInstance_Type(const Achievement::AchievementInstance* self) {
+    return self->Achievement::AchievementInstance::Type();
 }
-
-// ---- ??_7Goal@Achievement@@6B@  slots 2, 1 and 3 ---------------------------
-
-extern "C" uint32_t RtAch_Goal_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(GoalTypeInfo());
-    return ours;
+extern "C" const char* RtAch_AchievementInstance_TypeName(const Achievement::AchievementInstance* self) {
+    return self->Achievement::AchievementInstance::TypeName();
 }
-
-extern "C" const char* RtAch_Goal_TypeName(const void* self) {
-    const char* const ours = ReadTypeName(GoalTypeInfo());
-    return ours;
+extern "C" uint32_t RtAch_Goal_Type(const Achievement::Goal* self) {
+    return self->Achievement::Goal::Type();
 }
-
-// `MOV EAX,0x10000 ; RET`. A literal, not a read: the on-disk serialised format
-// version of an Achievement::Goal, and it is 65536, NOT the 4 / 0x1000 that
-// Graphics::MaterialInstance and Graphics::Particle return. Each of these
-// constants was decoded separately, and this one is written as its own literal
-// for that reason. Faithful means returning 0x10000, NOT deriving it from
-// anything in our tree — a derived spelling would silently track OUR format if
-// Goal::Serialize is ever revised, and retail's does not.
-extern "C" int32_t RtAch_Goal_GetFileVersion(const void* self) {
-    const int32_t ours = 0x10000;
-    return ours;
+extern "C" const char* RtAch_Goal_TypeName(const Achievement::Goal* self) {
+    return self->Achievement::Goal::TypeName();
 }
-
-// ---- ??_7GoalInstance@Achievement@@6B@  slots 2, 1, 4 and 6 ----------------
-
-extern "C" uint32_t RtAch_GoalInstance_Type(const void* self) {
-    const uint32_t ours = ReadTypeId(GoalInstanceTypeInfo());
-    return ours;
+extern "C" int32_t RtAch_Goal_GetFileVersion(const Achievement::Goal* self) {
+    return self->Achievement::Goal::GetFileVersion();
 }
-
-extern "C" const char* RtAch_GoalInstance_TypeName(const void* self) {
-    const char* const ours = ReadTypeName(GoalInstanceTypeInfo());
-    return ours;
+extern "C" uint32_t RtAch_GoalInstance_Type(const Achievement::GoalInstance* self) {
+    return self->Achievement::GoalInstance::Type();
 }
-
-// `RET`. Retail's body is one byte and does nothing at all — it does not read
-// `this`, does not touch the flags word, does not call the Goal. The base
-// class's Startup hook is a no-op that the EXE's GoalInstance subclasses
-// override. No diff probe: there is no value, no argument read and no side
-// effect for an oracle to compare.
-extern "C" void RtAch_GoalInstance_Startup(void* /*self*/) {
+extern "C" const char* RtAch_GoalInstance_TypeName(const Achievement::GoalInstance* self) {
+    return self->Achievement::GoalInstance::TypeName();
 }
-
-// `MOV RCX,[RCX+0x18] ; MOV RAX,[RCX] ; JMP [RAX+0x40]`.
-//
-// Reads GoalInstance::_goal (+0x18, an ExternalPtr<Goal> whose sole member is
-// the raw pointer) and tail-calls that object's vtable slot 8. Slot 8 is
-// purecall on `??_7Goal@Achievement@@6B@` itself, so the callee is always an
-// EXE subclass override — see this file's banner.
-//
-// The deref is UNGUARDED and stays that way: retail does not test _goal.
-//
-// No diff probe. This body has no computation of its own to compare — it is one
-// dispatch — and calling the DLL's copy as an oracle would run the EXE
-// subclass's CheckGoalState a SECOND time on the same object. Those overrides
-// read live town state; re-running one is a behaviour change, not an
-// observation.
-extern "C" int32_t RtAch_GoalInstance_CheckGoalState(const void* self) {
-    const RtAchievement::GoalInstance* gi =
-        static_cast<const RtAchievement::GoalInstance*>(self);
-    void* goal = gi->_goal.ptr;
-    void* const* vtable = *static_cast<void* const* const*>(goal);
-    using CheckFn = int32_t (*)(void*);
-    return reinterpret_cast<CheckFn>(vtable[kGoalVtblCheckGoalState / 8])(goal);
+extern "C" void RtAch_GoalInstance_Startup(Achievement::GoalInstance* self) {
+    self->Achievement::GoalInstance::Startup();
+}
+extern "C" int32_t RtAch_GoalInstance_CheckGoalState(const Achievement::GoalInstance* self) {
+    return self->Achievement::GoalInstance::CheckGoalState();
 }
 
 // ============================================================================
-// REGISTRATION — by NAME and by ADDRESS, both, for every body.
-//
-// A body PORTED but never REGISTERED is indistinguishable from an ABSENT one to
-// the census (reference_half_registered_port_reads_as_absent.md), and the mint
-// fills a slot by NAME for RT_MINT_NAMED and by ADDRESS otherwise. All eleven
-// of these slots are RT_MINT_NAMED; the address door is registered anyway so a
-// by-address call site (ResolveAddr consults the port registry FIRST —
-// reference_resolveaddr_consults_port_registry_first.md) reaches the same body.
-//
-// TWO register functions, not one, because the two halves sit on DIFFERENT kill
-// switches (class atomicity, PLAN §4.1 decision 5).
+// REGISTRATION — by NAME and by ADDRESS, both, for every body (unchanged).
 // ============================================================================
 
-// Goal + GoalInstance — flips with RT_GOAL, beside goal.cpp.
+// Goal + GoalInstance.
 int RtAchGoalTypeInfoAccessorsRegister() {
     int n = 0;
 
@@ -379,8 +320,7 @@ int RtAchGoalTypeInfoAccessorsRegister() {
     return n;
 }
 
-// Achievement + AchievementInstance — flips with RT_ACHMGR, beside
-// achievement_manager.cpp.
+// Achievement + AchievementInstance.
 int RtAchManagerTypeInfoAccessorsRegister() {
     int n = 0;
 

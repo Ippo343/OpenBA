@@ -33,14 +33,12 @@ inline int TimeGoal_Slot8(TimeGoal* /*self*/) { return 0; }
 
 // Slot9 (vtable +0x48, 0x1400267f0): Returns TypeInfo for TimeGoalInstance.
 // Original is "mov eax,[rip+TypeInfo]; mov [rdx],eax; mov rax,rdx; ret" (12 bytes, unhookable).
-// This returns the type ID of the GoalInstance class to create.
-// Implemented inline since it just reads a global.
-inline void* TimeGoal_Slot9(TimeGoal* /*self*/, void* retval) {
-    // Read TypeInfo_TimeGoalInstance from 0x1401c6320
-    // At runtime, this reads the type ID and stores it at *retval.
-    // Stub: the type-id read is not implemented here; returns retval unchanged.
-    return retval;
-}
+// This returns the type ID of the GoalInstance class to create. It is the
+// exe override of Achievement::Goal::GetInstanceType (slot 9, a retslot
+// virtual — B37_RULES B7-4) and lives in timegoal.cpp as
+// TimeGoal_Slot9_Standalone with the `Object::Type* (this, ret)` shape. The
+// unused inline stub that stood here (it returned the slot UNWRITTEN) was
+// removed at ENDGAME B.3.7.
 
 // Slot10/CreateInstance (vtable +0x50, 0x140026750): Allocate + construct TimeGoal.
 void* TimeGoal_Slot10(void* memory);

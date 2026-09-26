@@ -17,6 +17,7 @@
 #include <cstdio>
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 #include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Time
 #include <new>
 
@@ -24,21 +25,9 @@
 // Resolved helpers
 // ============================================================
 
-// Achievement::GoalInstance::Persist — dispatch slot at 0x140152868
-typedef void (*fn_GoalInstancePersist_t)(void* self, void* stream);
-static fn_GoalInstancePersist_t s_fn_GoalInstancePersist = nullptr;
-
 // fn_InternalBasePtr_Ctor — dispatch slot at 0x140152a90
 typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
 static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
-
-// Achievement::GoalList::AreGoalsMetExcept — dispatch slot at 0x140152878
-typedef bool (*fn_AreGoalsMetExcept_t)(void* goalList, void* exceptIBP);
-static fn_AreGoalsMetExcept_t s_fn_AreGoalsMetExcept = nullptr;
-
-// Achievement::GoalInstance::Update — dispatch slot at 0x140152880
-typedef void (*fn_GoalInstanceUpdate_t)(void* self, void* time, void* goalList);
-static fn_GoalInstanceUpdate_t s_fn_GoalInstanceUpdate = nullptr;
 
 // fn_IsDerivedFrom — dispatch slot at 0x140152a98
 typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
@@ -55,17 +44,8 @@ static void EnsureHelpers() {
     // Resolve dispatch slots (read function pointer from .rdata slot)
     uintptr_t slot;
 
-    slot = ResolveAddr(Module::Exe, 0x140152868);
-    if (slot) s_fn_GoalInstancePersist = *reinterpret_cast<fn_GoalInstancePersist_t*>(slot);
-
     slot = ResolveAddr(Module::Exe, 0x140152a90);
     if (slot) s_fn_IBPCtor = *reinterpret_cast<fn_IBPCtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152878);
-    if (slot) s_fn_AreGoalsMetExcept = *reinterpret_cast<fn_AreGoalsMetExcept_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152880);
-    if (slot) s_fn_GoalInstanceUpdate = *reinterpret_cast<fn_GoalInstanceUpdate_t*>(slot);
 
     slot = ResolveAddr(Module::Exe, 0x140152a98);
     if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
@@ -85,30 +65,14 @@ void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
     EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
-    // Call base GoalInstance::Persist.
-    //
-    // ⚠ This guard is not a safety net, it is a STREAM HAZARD. Retail calls the
-    // base unconditionally, and the base reads an ExternalPtr + a uint off the
-    // stream, so skipping it consumes fewer bytes than the save wrote and
-    // desyncs everything after this object. Slot 0x140152868 was unregistered
-    // for exactly this reason and the skip was silent: our own saves skipped the
-    // same bytes on the SAVE leg, so the round trip stayed self-consistent and
-    // only a RETAIL-authored save (the packaged tutorial) exposed it -- as a
-    // crash three objects later in InternalFactory::PersistObject. Say so loudly
-    // rather than quietly dropping a read.
-    if (s_fn_GoalInstancePersist) {
-        s_fn_GoalInstancePersist(self, stream);
-    } else {
-        static bool s_warned = false;
-        if (!s_warned) {
-            s_warned = true;
-            fprintf(stderr, "[TimeGoalInstance] *** GoalInstance::Persist is NULL "
-                            "(dispatch slot 0x140152868 unregistered) — the base "
-                            "fields are NOT being serialized and the stream is now "
-                            "DESYNCED. See standalone/reg_goal.cpp.\n");
-            fflush(stderr);
-        }
-    }
+    // Achievement::GoalInstance::Persist (slot 3, retail 0x18009ef70) — a
+    // QUALIFIED member call (B37_RULES B7-13): unqualified, it would dispatch
+    // through this exe table back into this slot. Retail calls the base
+    // UNCONDITIONALLY; the base reads an ExternalPtr + a uint off the stream,
+    // and skipping it desyncs everything after this object. The exe import
+    // slot 0x140152868 this used to read (and warn about when unregistered)
+    // is no longer on the path, so that silent-skip hazard is gone.
+    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::Persist(stream);   // B.3.7 bridge
 
     // Create serializer
     alignas(8) uint8_t serializerBuf[24];
@@ -148,18 +112,21 @@ void TimeGoalInstance_Slot5(TimeGoalInstance* self, void* time, void* goalList) 
         s_fn_IBPCtor(ibpBuf, self);
     }
 
-    if (s_fn_AreGoalsMetExcept) {
-        bool othersMet = s_fn_AreGoalsMetExcept(goalList, ibpBuf);
-        if (!othersMet) {
-            // Reset elapsed time to zero — other goals not met
-            *(int64_t*)(s + 0x20) = 0;
-        }
+    // Achievement::GoalList::AreGoalsMetExcept (retail 0x18009f070, NON-virtual)
+    // — the InternalPtr argument by HIDDEN POINTER (B37_RULES B7-5). Was the exe
+    // import slot 0x140152878, which resolved to the same door.
+    const auto* list = reinterpret_cast<const Achievement::GoalList*>(goalList);   // B.3.7 bridge
+    bool othersMet = list->AreGoalsMetExcept(
+        reinterpret_cast<const Object::InternalPtr<Achievement::GoalInstance>*>(ibpBuf));   // B.3.7 bridge
+    if (!othersMet) {
+        // Reset elapsed time to zero — other goals not met
+        *(int64_t*)(s + 0x20) = 0;
     }
 
-    // Call base GoalInstance::Update
-    if (s_fn_GoalInstanceUpdate) {
-        s_fn_GoalInstanceUpdate(self, time, goalList);
-    }
+    // Achievement::GoalInstance::Update (slot 5, retail 0x18009f010) — QUALIFIED
+    // (B7-13); was the exe import slot 0x140152880.
+    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::Update(   // B.3.7 bridge
+        *reinterpret_cast<const System::Time*>(time), *list);   // B.3.7 bridge
 }
 
 // ============================================================

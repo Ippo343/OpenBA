@@ -18,9 +18,8 @@
 //   *(uint64*)&this->_goals._size = 0;             // _size AND _capacity
 //
 // `vtable[0]` WITH FLAG 1 IS THE SCALAR DELETING DESTRUCTOR: the list OWNS its
-// GoalInstances and frees each one. Goal.h's GoalInstanceVtbl::
-// kScalarDeletingDtor records the same slot and the same flag, sourced from
-// this very call.
+// GoalInstances and frees each one — `Object::Destroy(p)`, the virtual
+// `DeletingDtor(1)` (Goal.h's slot 0).
 //
 // THE FREE IS INLINED IN RETAIL as lock / Free / unlock around the allocator's
 // +0x640 critical section. goal_list.cpp:194 already records that this triple
@@ -42,48 +41,43 @@
 #include "../../types/achievement/Goal.h"
 #include "../../types/object/Internal.h"
 
-// runtime/src/collection/array.cpp, Wave 9 lane Q. DECLARED rather than
-// #included — the same one-function link-time reuse goal_list.cpp documents.
-namespace rtcoll { void MemFree(void* p); }
+namespace Achievement {
 
-using RtAchievement::GoalList;
-namespace GoalInstanceVtbl = RtAchievement::GoalInstanceVtbl;
-
-extern "C" void RtAch_GoalList_Dtor(void* selfv) {
-    GoalList* const self = static_cast<GoalList*>(selfv);
-
-    const bool didWork = (self->_goals._size > 0);
-
-    using DeletingDtorFn = void* (*)(void*, int);
-
-    for (int32_t i = 0; i < self->_goals._size; ++i) {
+// ============================================================================
+// GoalList::~GoalList()   ??1GoalList@Achievement@@QEAA@XZ   retail 0x18009f420
+//
+// ENDGAME B.3.7: a REAL destructor of the value type (B7-8). The body is the
+// element loop ONLY; the tail — free the buffer, zero `_data` and the
+// `_size`/`_capacity` qword — is the compiler-emitted `~Array` of `_goals`,
+// which for kSpec_PtrZero (no element destroy) is exactly `ArrayDtorImpl`:
+// `MemFree(_data)` (the null test lives inside 0x1800c7ad0) then the zeroes.
+// Retail's order is the same: loop, free, zero.
+//
+// `slot 0 WITH FLAG 1` is the scalar DELETING destructor — `Object::Destroy`.
+// It is VIRTUAL: the instance is an exe subclass (TimeGoalInstance,
+// FinishTutorialInstance) and ITS slot 0 must run.
+// ============================================================================
+GoalList::~GoalList() {
+    for (int32_t i = 0; i < _goals._size; ++i) {
         // `MOV R14,[RDI]` sits INSIDE the loop at 0x18009f450 — the base is
-        // re-read every pass, so a destructor that reallocates the list is
-        // seen. Not hoisted.
-        void** const slot = reinterpret_cast<void**>(self->_goals._data) + i;
-        void* const inst = *slot;
+        // re-read every pass. Not hoisted.
+        Object::InternalPtr<GoalInstance>& slot = _goals._data[i];
+        GoalInstance* const inst = slot.Get();
         if (inst == nullptr) continue;
-        void** const vt = *reinterpret_cast<void***>(inst);
-        reinterpret_cast<DeletingDtorFn>(vt[GoalInstanceVtbl::kScalarDeletingDtor / 8])(inst, 1);
-        *slot = nullptr;
+        Object::Destroy(inst);
+        slot = Object::InternalPtr<GoalInstance>();
     }
+}
 
-    if (self->_goals._data != nullptr)
-        rtcoll::MemFree(self->_goals._data);
+}  // namespace Achievement
 
-    self->_goals._data = nullptr;
-    // ONE qword store over _size and _capacity (0x18009f4b6), the
-    // Collection::Array teardown shape Wave 2 pinned.
-    *reinterpret_cast<uint64_t*>(&self->_goals._size) = 0;
-
+// ---- The registered door — a QUALIFIED delegation --------------------------
+extern "C" void RtAch_GoalList_Dtor(Achievement::GoalList* self) {
+    self->Achievement::GoalList::~GoalList();
 }
 
 // ============================================================================
 // Registration — BOTH DOORS, unconditionally.
-//
-// 0x18009f420 was grepped across code/, engine/, runtime/, standalone/ and
-// dx11/ first: it appears only in Goal.h's two comments, never as an identity
-// token, so the address door is safe.
 // ============================================================================
 extern "C" int RtAchBatchCGoalListDtorRegister() {
     RegisterRuntimeExport("??1GoalList@Achievement@@QEAA@XZ", (void*)&RtAch_GoalList_Dtor);
