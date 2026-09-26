@@ -1015,10 +1015,10 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
         // Retail loads the index as a QWORD and truncates: `MOV RAX,[RBX+0x68]`
         // then uses EAX. The pad dword at +0x6c rides along in that load and is
         // discarded, so a 32-bit read here is equivalent and is what is written.
-        const int32_t spriteIndex = self->_saveSprite.index;
+        const int32_t spriteIndex = self->_saveSprite.spriteIndex;
         uint32_t w = 0, h = 0;
         if (spriteIndex >= 0) {
-            uint8_t* sheet   = static_cast<uint8_t*>(self->_saveSprite.sheet);
+            uint8_t* sheet   = static_cast<uint8_t*>(self->_saveSprite.spriteSheet);
             uint8_t* entries = *reinterpret_cast<uint8_t**>(sheet + 0x20);
             uint8_t* entry   = entries + static_cast<int64_t>(spriteIndex) * 0x38;
             w = *reinterpret_cast<const uint32_t*>(entry + 0x1c);
@@ -1484,7 +1484,7 @@ using LoadMetaDataFn = void (*)(SaveLoad* self, const char** description,
 //    empty name short-circuits to "equal" without calling StrCompare at all.
 //
 // 5. STATE 4's FAILURE ARM ALLOCATES A BLACK IMAGE, AND RECOMPUTES ITS SIZE
-//    THREE TIMES. Retail reloads `_saveSprite.index` and re-reads the sheet
+//    THREE TIMES. Retail reloads `_saveSprite.spriteIndex` and re-reads the sheet
 //    entry before the MemAlloc, before the memset, and again before the
 //    SetThumbnail call (0x1800c2404, 0x1800c245a, 0x1800c24ad). It is
 //    transcribed as three calls to one helper rather than folded to one, for
@@ -1602,9 +1602,9 @@ using LoadMetaDataFn = void (*)(SaveLoad* self, const char** description,
 // and `+0x20` for the height — the same stride and the same two offsets
 // UpdateSave's state 0 uses on the same sprite.
 void SaveSpriteDims(const SaveLoad* self, int32_t* w, int32_t* h) {
-    const int32_t index = self->_saveSprite.index;
+    const int32_t index = self->_saveSprite.spriteIndex;
     if (index < 0) { *w = 0; *h = 0; return; }
-    uint8_t* sheet   = static_cast<uint8_t*>(self->_saveSprite.sheet);
+    uint8_t* sheet   = static_cast<uint8_t*>(self->_saveSprite.spriteSheet);
     uint8_t* entries = *reinterpret_cast<uint8_t**>(sheet + 0x20);
     uint8_t* entry   = entries + static_cast<int64_t>(index) * 0x38;
     *w = *reinterpret_cast<const int32_t*>(entry + 0x1c);
@@ -1619,8 +1619,8 @@ void SaveSpriteDims(const SaveLoad* self, int32_t* w, int32_t* h) {
 // `row` is deliberately left uninitialised by the caller — see point 3 of the
 // banner. This function assigns exactly the eleven fields retail assigns.
 void InitSaveInfoTemplate(SaveInfo* row, int32_t saveIndex) {
-    row->thumbnail.sheet = nullptr;   // +0x00 qword 0
-    row->thumbnail.index = -1;        // +0x08 dword -1  (+0x0c NOT written)
+    row->thumbnail.spriteSheet = nullptr;   // +0x00 qword 0
+    row->thumbnail.spriteIndex = -1;        // +0x08 dword -1  (+0x0c NOT written)
     row->description     = nullptr;   // +0x10
     row->imageBuffer     = nullptr;   // +0x18   (+0x20, +0x24 NOT written)
     row->thumbPixels     = nullptr;   // +0x28   (+0x2c NOT written)
@@ -1824,11 +1824,11 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
                          + static_cast<int64_t>(i) * 0x58;
             if (*reinterpret_cast<const int32_t*>(row + 0x40) < 0) {
                 out.U64(row + 0x00,
-                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.sheet),
-                        "row.thumbnail.sheet = _saveSprite.sheet");
+                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.spriteSheet),
+                        "row.thumbnail.spriteSheet = _saveSprite.spriteSheet");
                 out.U64(row + 0x08,
-                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.index),
-                        "row.thumbnail.index = _saveSprite.index");
+                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.spriteIndex),
+                        "row.thumbnail.spriteIndex = _saveSprite.spriteIndex");
             }
         }
 
