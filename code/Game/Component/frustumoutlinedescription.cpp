@@ -78,12 +78,14 @@ bool FrustumOutlineDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140012390. PORT GAP (retail: DeletingDtor(0), then the ctor again on
-// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept.
-Object::External* FrustumOutlineDescription::Reconstruct() { return nullptr; }
-// [7] 0x140001640. PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept.
-void FrustumOutlineDescription::Destruct() {}
+// [6] 0x140012390: retail destroys and rebuilds in place: a virtual
+// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+Object::External* FrustumOutlineDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) FrustumOutlineDescription();
+}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
+void FrustumOutlineDescription::Destruct() { DeletingDtor(0); }
 
 // ============================================================
 // CreateElement (vtable +0x40, exe 0x14006c340)

@@ -57,12 +57,14 @@ bool AnimAudioEvent::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140016fb0. PORT GAP (retail: DeletingDtor(0), then the ctor again on
-// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept.
-Object::External* AnimAudioEvent::Reconstruct() { return nullptr; }
-// [7] 0x140001640. PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept.
-void AnimAudioEvent::Destruct() {}
+// [6] 0x140016fb0: retail destroys and rebuilds in place: a virtual
+// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+Object::External* AnimAudioEvent::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) AnimAudioEvent();
+}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
+void AnimAudioEvent::Destruct() { DeletingDtor(0); }
 // [8] 0x140087e40. PORT GAP (retail: the audio trigger — roll a random float,
 // and when it is under +0x28 play +0x20 at the event transform's position).
 // The hand-built table had a `return null` stub; kept.

@@ -46,8 +46,8 @@ public:
     Object::Base*     DeletingDtor(unsigned flags) override;             // [0] 0x140017000
     int32_t           GetFileVersion() const override { return 2; }      // [3] 0x140087f30
     bool              Serialize(void* stream) override;                  // [5] 0x140087ed0
-    Object::External* Reconstruct() override;                            // [6] 0x140016fb0 PORT GAP
-    void              Destruct() override;                               // [7] 0x140001640 PORT GAP
+    Object::External* Reconstruct() override;                            // [6] 0x140016fb0
+    void              Destruct() override;                               // [7] 0x140001640
     Object::External* Construct() override;                              // [8] 0x140087e40 PORT GAP (the trigger)
     virtual Object::External* ConstructInPlace();                        // [9] 0x140016f60
 

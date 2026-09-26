@@ -40,8 +40,8 @@ public:
     Object::Base*     DeletingDtor(unsigned flags) override;             // [0] 0x140014010
     int32_t           GetFileVersion() const override;                   // [3] 0x140079210
     bool              Serialize(void* stream) override;                  // [5] 0x1400791a0
-    Object::External* Reconstruct() override;                            // [6] 0x140013e40 PORT GAP
-    void              Destruct() override;                               // [7] 0x140001640 PORT GAP
+    Object::External* Reconstruct() override;                            // [6] 0x140013e40
+    void              Destruct() override;                               // [7] 0x140001640
     Object::InternalPtr<UI::Element>* CreateInstance(
         Object::InternalPtr<UI::Element>* ret,
         const UI::Dialog* dialog) const override;                        // [8] 0x1400790a0 RETSLOT

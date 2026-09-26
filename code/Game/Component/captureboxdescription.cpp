@@ -68,12 +68,14 @@ bool CaptureBoxDescription::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x140013e40. PORT GAP (retail: DeletingDtor(0), then the ctor again on
-// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept.
-Object::External* CaptureBoxDescription::Reconstruct() { return nullptr; }
-// [7] 0x140001640. PORT GAP (retail: the shared `DeletingDtor(0)` body). The
-// hand-built table had a `return 0` stub; kept.
-void CaptureBoxDescription::Destruct() {}
+// [6] 0x140013e40: retail destroys and rebuilds in place: a virtual
+// DeletingDtor(0), then the ctor again on `this` (B38_RULES §2.2, D9 #10).
+Object::External* CaptureBoxDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) CaptureBoxDescription();
+}
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0).
+void CaptureBoxDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400790a0 — CreateInstance (RETSLOT: RCX this, RDX the caller's
 // InternalPtr<Element>). Transcribed:
