@@ -131,6 +131,7 @@
 // RULE B5-3: the real `Video::DeviceData` abstract base, whose destructor the
 // scalar deleting dtor calls by qualified name.
 #include "video/CompanionData.h"
+#include "application/Application.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include <new>
 
 namespace VideoDX11 {
@@ -226,14 +227,14 @@ struct Imports {
     // `Video::ImageBuffer::CopyFromTexture` (runtime/src/video/buffers.cpp).
 
     // --- Application ------------------------------------------------------
-    // THESE THREE STAY, AND THE REASON IS NOT "scope". `Application::Application`
-    // is not a real C++ class yet: the layout lives in
-    // `runtime/types/application/Application.h` as the POD
-    // `RtApplication::Application`, which is a step-6 conversion, not a
-    // Video/Graphics one. There is no member to call.
-    void  (*AppRegisterMessageCallback)(void*, unsigned, void*);   // 0x180013290
-    void  (*AppUnregisterMessageCallback)(void*, unsigned);        // 0x180013298
-    HINSTANCE (*AppGetInstance)(void*);                            // 0x1800132a8
+    // ENDGAME B.3.7 callers (K5): the three function imports are GONE —
+    // 0x180013290 `?RegisterMessageCallback@Application@1@`, 0x180013298
+    // `?UnregisterMessageCallback@Application@1@`, 0x1800132a8
+    // `?GetInstance@Application@1@`. `Application::Application` is a real C++
+    // class since B.3.7 block B1 (runtime/types/application/Application.h), and
+    // the plugin calls the three members directly on the object read through
+    // `appSingleton` below. That DATA slot (0x180013310) stays a slot until the
+    // class-static conversion at the end of B.3 (carry-over 5).
 
     // --- the three singleton slots ---------------------------------------
     void** appSingleton;                               // 0x180013310
@@ -277,11 +278,6 @@ const Imports* GetImports() {
         { (void**)&g_im.DisplayModeCtor,        "??0DisplayMode@Device@Video@@QEAA@HH@Z",                        0x180013308 },
         { (void**)&g_im.DisplayModeDtor,        "??1DisplayMode@Device@Video@@QEAA@XZ",                          0x1800132f8 },
 
-        { (void**)&g_im.AppRegisterMessageCallback,
-              "?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z",                          0x180013290 },
-        { (void**)&g_im.AppUnregisterMessageCallback,
-              "?UnregisterMessageCallback@Application@1@QEAAXI@Z",                                              0x180013298 },
-        { (void**)&g_im.AppGetInstance,         "?GetInstance@Application@1@QEBAPEAUHINSTANCE__@@XZ",            0x1800132a8 },
 
         { (void**)&g_im.appSingleton,           "?_singleton@Application@1@0PEAV11@EA",                          0x180013310 },
         { (void**)&g_im.configSingleton,        "?_singleton@Configuration@Video@@0PEAV12@EA",                   0x180013480 },
@@ -1193,8 +1189,8 @@ void DeviceData_Shutdown(DeviceData* self) {
     if (!im) { Orig<void (*)(DeviceData*)>(3)(self); return; }
 
     void* app = AppOf(im);
-    im->AppUnregisterMessageCallback(app, 0x20);
-    im->AppUnregisterMessageCallback(app, 6);
+    reinterpret_cast< ::Application::Application*>(app)->UnregisterMessageCallback(0x20);  // B.3.7 bridge
+    reinterpret_cast< ::Application::Application*>(app)->UnregisterMessageCallback(6);     // B.3.7 bridge
 
     if (self->cursor)
         DestroyCursor(static_cast<HCURSOR>(self->cursor));
@@ -1439,10 +1435,10 @@ bool DeviceData_CreateDevice(DeviceData* self) {
 
     // 17
     void* app = AppOf(im);
-    im->AppRegisterMessageCallback(app, 0x20,
-                                   reinterpret_cast<void*>(&DeviceData_OnSetCursor));
-    im->AppRegisterMessageCallback(app, 6,
-                                   reinterpret_cast<void*>(&DeviceData_OnActivate));
+    reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
+        0x20, reinterpret_cast< ::Application::Application::MessageCallback>(&DeviceData_OnSetCursor));
+    reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
+        6, reinterpret_cast< ::Application::Application::MessageCallback>(&DeviceData_OnActivate));
     return true;
 }
 
@@ -1518,8 +1514,10 @@ void DeviceData_SetImageBuffer(DeviceData* self, void* imageBuffer, int hotX, in
                         ((x << 8) & 0xff0000u) | (x << 24);
     }
 
-    HCURSOR cursor = CreateCursor(im->AppGetInstance(AppOf(im)),
-                                  hotX, hotY, 32, 32, andPlane, xorPlane);
+    HCURSOR cursor = CreateCursor(
+        static_cast<HINSTANCE>(
+            reinterpret_cast<const ::Application::Application*>(AppOf(im))->GetInstance()),  // B.3.7 bridge
+        hotX, hotY, 32, 32, andPlane, xorPlane);
     self->cursor = cursor;
     SetCursor(cursor);
 
