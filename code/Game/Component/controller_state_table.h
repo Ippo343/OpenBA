@@ -171,16 +171,23 @@ struct Dispatcher {
     // The state handlers call this to request a transition: it searches the CURRENT
     // state's registered transition list for one whose targetId == *pDesired and returns
     // that transition's index (which StateMachine::Tick later feeds to OnState/slot28 to
-    // run the transition action). Mirrors the exe node slot +0x08 dispatcher. It does NOT
-    // remap *pDesired for this table (transition targetIds are literal state ids).
+    // run the transition action). Mirrors the exe node slot +0x08 dispatcher (Well's
+    // 0x1400100c0, read 2026-09-26): on a MISS retail stores -1 to *pDesired
+    // (0x140010103 `MOV dword [R10],-1; OR EAX,-1; RET`) — B38_RULES D9 #9. A hit
+    // leaves *pDesired alone. The idx/null bounds rejection is the tree's (retail has
+    // none); it returns -1 without touching *pDesired, as before.
     static int RequestTransition(void* /*node*/, int curIdx, int* pDesired) {
         if (!pDesired || curIdx < 0 || curIdx >= table.count) return -1;
         const StateEntry& e = table.entries[curIdx];
         int desired = *pDesired;
         for (int i = 0; i < e.transitionCount; ++i)
             if (e.transitions[i].targetId == desired) return i;
+        *pDesired = -1;
         return -1;
     }
+    // slot 8 (+0x40): retail (Well 0x140010260) `XOR EAX,EAX; CMP [count],EAX;
+    // SETNZ AL; RET` — true iff the class's state table has any state (D9 #9).
+    static char HasStates(void* /*node*/) { return table.count != 0 ? 1 : 0; }
     // slot 4 (+0x20): Update — dispatch table[idx].updateHandler(node+0x18, sm)
     // Like Enter, the exe update dispatcher tail-calls `MOV RCX,[node+0x18]; JMP handler`
     // preserving RDX=sm (bug-class #6), so real update handlers (e.g. sub_81e0/sub_76e0)
@@ -275,6 +282,7 @@ struct Dispatcher {
             vtbl[5] = reinterpret_cast<void*>(&OnState);
             vtbl[6] = reinterpret_cast<void*>(&Trans30);
             vtbl[7] = reinterpret_cast<void*>(&Trans38);
+            vtbl[8] = reinterpret_cast<void*>(&HasStates);   // retail slot 8 (D9 #9)
         }
         return vtbl;
     }
@@ -359,11 +367,8 @@ public:
     char TickAlt(void* sm, void* time, int stateIndex) override {
         return Dispatcher<Tag>::Trans38(this, sm, time, stateIndex);
     }
-    // PORT GAP (B38_RULES D9 list): retail slot 8 (Well 0x140010260) answers
-    // `table count != 0`; the hand-built Dispatcher table had `Stub` (0) here,
-    // and this keeps the tree's 0 so the pilot changes no behaviour. The MI
-    // blocks make it retail's in a titled behaviour-change commit.
-    char HasStates() override { return 0; }
+    // [8] retail (Well 0x140010260): `table count != 0` (B38_RULES D9 #9).
+    char HasStates() override { return Dispatcher<Tag>::HasStates(this); }
 };
 
 }  // namespace ControllerLive
