@@ -1669,15 +1669,17 @@ REGISTER_TYPE(BuildUI, "UI::DialogController",
 
 // ENDGAME B.3.8 DLG: the real DialogInstance classes whose reflection record
 // stays at this TU position (B38_RULES D4).
+#include "Dialog/GoalDialog.h"
+#include "Dialog/AchievementDialog.h"
 #include "Dialog/MapParamsDialog.h"
 // ---- DialogInstance family --------------------------------------------------
-UI_DIALOG_STUB(AchievementDialog,   "UI::DialogInstance",   0xD0);
+DEFINE_EXE_TYPE(AchievementDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 // AutoSaveDialog: its UI_DIALOG_STUB twin was a DUPLICATE registration of the name
 // (ENDGAME B.3.8 D4); the real class registers in autosavedialog.cpp.
 // EventNotifyDialog / EventPopupDialog: PROMOTED to real per-class standalone vtables
 // in code/Game/Dialog/eventnotifydialog.cpp / eventpopupdialog.cpp (ribbon + modal popup).
 UI_DIALOG_STUB(FollowDialog,        "UI::DialogInstance",   0xD8);
-UI_DIALOG_STUB(GoalDialog,          "UI::DialogInstance",   0xC8);
+DEFINE_EXE_TYPE(GoalDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 DEFINE_EXE_TYPE(MapParamsDialog, "UI::DialogInstance")   // was a UI_DIALOG_STUB twin (D4)
 UI_DIALOG_STUB(ModUploadDialog,     "UI::DialogInstance",   0xB8);
 UI_DIALOG_STUB(ScenarioDialog,      "UI::DialogInstance",   0xE8);

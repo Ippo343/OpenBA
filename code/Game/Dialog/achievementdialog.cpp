@@ -23,7 +23,8 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
-#include "Dialog/ui_dialogs.h"
+#include "Dialog/AchievementDialog.h"
+#include "Object/factory_registration.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -40,8 +41,8 @@
 //
 // Original: 0x14005D490.
 
-void AchievementDialog_Slot4(AchievementDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void AchievementDialog::OnOpened() {
+    uintptr_t s = (uintptr_t)this;
 
     // Find "buttonOk" element, set ID 100, set +0xC0 flags = 8
     uint64_t btnResult = 0;
@@ -177,9 +178,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
 // AchievementDialog::Slot7 (vtable +0x38, exe 0x14005D480): RET 0 (3 bytes)
 // ============================================================
 // No-op handler; returns 0.
-int AchievementDialog_Slot7(AchievementDialog* self) {
-    (void)self;
-    return 0;
+void AchievementDialog::OnUpdate(const System::Time& /*time*/) {
 }
 
 // ============================================================
@@ -197,8 +196,8 @@ int AchievementDialog_Slot7(AchievementDialog* self) {
 //
 // Original: 0x14005D240.
 
-void AchievementDialog_Slot6(AchievementDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void AchievementDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Get AchievementManager singleton (double-indirect via .rdata dispatch)
     void* manager = **g_ppAchievementManager;
@@ -334,12 +333,11 @@ void AchievementDialog_Slot17(AchievementDialog* self) {
 // from buttonOk (id 100), wrap self in an InternalBasePtr and ask the UserInterface
 // at self+0x10 to close this dialog. Without it the Achievements panel had no way to
 // dismiss itself -- the Setup body sets buttonOk id 100 and nothing consumed it.
-void AchievementDialog_Slot8(AchievementDialog* self, void* /*param2*/,
-                             int param3, int param4) {
+void AchievementDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 == 0x12 && param4 == 100) {
         uint8_t selfIBP[16];
-        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
+        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)this + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
 }
 
@@ -357,3 +355,47 @@ void AchievementDialog_Slot8(AchievementDialog* self, void* /*param2*/,
 // copies that are wired. Neither of the two below is installed anywhere; they are
 // kept only so the addresses stay searchable. Do not wire them into the
 // AchievementDialog vtable (menu_dialog_standalone_vtables.cpp).
+
+// ============================================================
+// Construction, destruction, reflection (ENDGAME B.3.8 block DLG)
+// ============================================================
+
+// [5] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed; the
+// hand-built table had a no-op. Kept for this commit.
+void AchievementDialog::OnClosed() {}
+
+AchievementDialog::AchievementDialog() : dataB8(0), dataC0(0), dataC8(0) {}
+
+// MainMenuDialog's opener inlines this ctor: DialogInstance(ui, dialog,
+// nullParent, 0, 0, 0), then the fields zeroed.
+AchievementDialog::AchievementDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+             Object::InternalPtr<UI::DialogInstance> parent)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0), dataC8(0) {}
+
+// PORT GAP (B38 D2): retail's dtor 0x1400103f0 also frees the entry array at
+// +0xc0 and zeroes its header; the hand-built slot 0 did not (it leaked the
+// array). Kept for this commit; the retail body is a separate titled commit.
+AchievementDialog::~AchievementDialog() {}
+
+// [0] 0x1400103f0: ~AchievementDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* AchievementDialog::DeletingDtor(unsigned flags) {
+    this->~AchievementDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140010320: MemAlloc(0xd0, 8), then the ctor.
+void* AchievementDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AchievementDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) AchievementDialog());
+}
+// createInPlace 0x140010390 (the tree's in-place build is kept, B8-13).
+void* AchievementDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) AchievementDialog());
+}
+
+// The reflection record stays at the TU position of the UI_DIALOG_STUB row it
+// replaces (ui_dialog_stub_factories.cpp, B38 D4).
+DEFINE_EXE_VTABLE(AchievementDialog, "_ZTV17AchievementDialog")

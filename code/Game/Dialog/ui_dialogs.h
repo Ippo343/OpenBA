@@ -246,54 +246,6 @@ void TutorialSetupDialog_Slot7(void* self);
 void* TutorialSetupDialog_Slot11(void* self);
 
 // ============================================================
-// AchievementDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds buttonOk, tableAchievement, textComplete.
-// Clones template rows, populates each with achievement icon, star, title, description.
-// Builds entry array at +0xC0 (stride 0x20) for Slot6 to update colors.
-void AchievementDialog_Slot4(AchievementDialog* self);
-
-// ============================================================
-// GoalDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds buttonOk, tableGoal, textScenario.
-// Creates rows from template for each goal, populates text, hides indicators.
-// Sets scenario title on textScenario or hides it.
-void GoalDialog_Slot4(GoalDialog* self);
-
-// Slot6 (vtable +0x30): Updates goal entry visibility (met/failed indicators).
-void GoalDialog_Slot6(GoalDialog* self);
-
-// Slot7 (vtable +0x38): No-op handler — returns 0.
-int GoalDialog_Slot7(GoalDialog* self);
-
-// Slot8 (vtable +0x40): OnCommand — close dialog on msg=0x12, id=100.
-void GoalDialog_Slot8(GoalDialog* self, void* param2, int param3, int param4);
-
-// ============================================================
-// AchievementDialog
-// ============================================================
-
-// Slot6 (vtable +0x30): Updates achievement display — checks awarded status,
-// sets entry colors and check visibility, formats percentage text.
-void AchievementDialog_Slot6(AchievementDialog* self);
-
-// Slot7 (vtable +0x38, exe 0x14005D480): RET 0 no-op (3 bytes).
-int AchievementDialog_Slot7(AchievementDialog* self);
-
-// Slot8 (vtable +0x40, exe 0x14005D440): OnCommand -- buttonOk (id 100) closes.
-void AchievementDialog_Slot8(AchievementDialog* self, void* param2, int param3, int param4);
-
-// Slot14 (vtable +0x70): Finds ProgressElement by type, stores at +0x30,
-// reads attendance capacity from sub-component, sets progress max.
-void AchievementDialog_Slot14(AchievementDialog* self);
-
-// Slot17 (vtable +0x88): Reads attendance count, updates progress bar value and text.
-void AchievementDialog_Slot17(AchievementDialog* self);
-
-// ============================================================
 // ToolbarDialog
 // ============================================================
 

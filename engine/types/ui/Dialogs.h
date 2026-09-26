@@ -20,7 +20,8 @@
 namespace AchievementDialogAddr {
     constexpr uintptr_t Factory          = 0x140010320;
     constexpr uintptr_t Vtable           = 0x14015b020;
-    constexpr uintptr_t SecondaryVtable  = 0x14015b070; // DialogController secondary vtable
+    // (SecondaryVtable = 0x14015b070 deleted, ENDGAME B.3.8 D9 #14: that is
+    //  AttendanceUI's table; AchievementDialog has no second vptr. 0 readers.)
 }
 
 namespace AutoSaveDialogAddr {
@@ -143,16 +144,8 @@ namespace TutorialSetupDialogAddr {
 // Struct definitions
 // ============================================================
 
-// --- AchievementDialog (0xD0) ---
-// Factory inits: +0xB8=0, +0xC0=0, +0xC8=0
-struct AchievementDialog {
-    DialogInstance base;        // +0x00: DialogInstance (0xB8)
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint64_t dataC8;           // +0xC8: zeroed
-};
-static_assert(sizeof(AchievementDialog) == 0xD0, "AchievementDialog size mismatch");
-static_assert(offsetof(AchievementDialog, dataB8) == 0xB8, "");
+// --- AchievementDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/AchievementDialog.h"
 
 // --- AutoSaveDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/AutoSaveDialog.h"
@@ -175,15 +168,8 @@ struct FollowDialog {
 static_assert(sizeof(FollowDialog) == 0xD8, "FollowDialog size mismatch");
 static_assert(offsetof(FollowDialog, dataB8) == 0xB8, "");
 
-// --- GoalDialog (0xC8) ---
-// Factory inits: +0xB8=0, +0xC0=0
-struct GoalDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-};
-static_assert(sizeof(GoalDialog) == 0xC8, "GoalDialog size mismatch");
-static_assert(offsetof(GoalDialog, dataB8) == 0xB8, "");
+// --- GoalDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/GoalDialog.h"
 
 // --- LoaderDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/LoaderDialog.h"

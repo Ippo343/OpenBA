@@ -22,6 +22,8 @@
 #include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Dialog/MainMenuDialog.h"
 #include "Dialog/MapParamsDialog.h"
+#include "Dialog/AchievementDialog.h"
+#include "Dialog/GoalDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -312,19 +314,12 @@ void MainMenuDialog_OpenAchievement(MainMenuDialog* self) {
 
     void* extRes = LoadDialogResource("Dialog/Achievement.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 0xD0, 8);
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(AchievementDialog), 8);
     if (dlgMem) {
-        uint8_t nullIBP[8];
-        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint64_t parentBuf = *(uint64_t*)nullIBP;
-        fn_DialogInstance_Ctor(dlgMem,
-                                *(void**)((uintptr_t)self + 0x10),
-                                extRes, &parentBuf, 0, 0, 0);
-        *(void**)dlgMem = (void*)g_AchievementDialog_Vtable;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xB8) = 0;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xC0) = 0;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xC8) = 0;
-        dlgObj = dlgMem;
+        // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here).
+        dlgObj = ::new (dlgMem) AchievementDialog(
+            static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(extRes),
+            Object::InternalPtr<UI::DialogInstance>());
     }
     AddDialogToUI(self, dlgObj);
 }
@@ -357,18 +352,12 @@ void MainMenuDialog_OpenScenario(MainMenuDialog* self) {
 void MainMenuDialog_OpenGoal(MainMenuDialog* self) {
     void* extRes = LoadDialogResource("Dialog/Goal.rsc");
     void* dlgObj = nullptr;
-    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, 200, 8);
+    void* dlgMem = fn_MemAlloc(g_pMemAllocSingleton, sizeof(GoalDialog), 8);
     if (dlgMem) {
-        uint8_t nullIBP[8];
-        new (nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        uint64_t parentBuf = *(uint64_t*)nullIBP;
-        fn_DialogInstance_Ctor(dlgMem,
-                                *(void**)((uintptr_t)self + 0x10),
-                                extRes, &parentBuf, 0, 0, 0);
-        *(void**)dlgMem = (void*)g_GoalDialog_Vtable;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xB8) = 0;
-        *(uint64_t*)((uintptr_t)dlgMem + 0xC0) = 0;
-        dlgObj = dlgMem;
+        // ENDGAME B.3.8 DLG: the real class (retail inlines this ctor here).
+        dlgObj = ::new (dlgMem) GoalDialog(
+            static_cast<UI::UserInterface*>(self->_ui), static_cast<const UI::Dialog*>(extRes),
+            Object::InternalPtr<UI::DialogInstance>());
     }
     AddDialogToUI(self, dlgObj);
 }

@@ -19,7 +19,8 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
-#include "Dialog/ui_dialogs.h"
+#include "Dialog/GoalDialog.h"
+#include "Object/factory_registration.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -48,14 +49,14 @@
 //
 // Original: 0x140069810.
 
-void GoalDialog_Slot4(GoalDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void GoalDialog::OnOpened() {
+    uintptr_t s = (uintptr_t)this;
 
     // Find "buttonOk" and set element ID 100
     {
         System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         void* buttonOk = *(void**)retBuf;
         if (buttonOk) reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(100);  // B.3.6 bridge
     }
@@ -72,12 +73,12 @@ void GoalDialog_Slot4(GoalDialog* self) {
         {
             System::String nameStr("tableGoal");
             uint8_t retBuf[16];
-            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+            ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
             tableGoal = *(void**)retBuf;
         }
 
         int goalCount = reinterpret_cast<const Achievement::GoalList*>(goalList)->GetGoalCount();  // B.3.7 bridge
-        void* dialog = *(void**)(s + 0x18); // Dialog* at self+0x18
+        void* dialog = *(void**)(s + 0x18); // Dialog* at this+0x18
 
         for (int i = 0; i < goalCount; i++) {
             // Create row element from dialog template[0]
@@ -178,7 +179,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
     {
         System::String nameStr("textScenario");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         textScenario = *(void**)retBuf;
     }
 
@@ -225,8 +226,8 @@ void GoalDialog_Slot4(GoalDialog* self) {
 //
 // Original: 0x140069640.
 
-void GoalDialog_Slot6(GoalDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void GoalDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Get GoalList from game world singleton at +0x150
     void* world = *g_pGameWorldSingleton;
@@ -262,9 +263,7 @@ void GoalDialog_Slot6(GoalDialog* self) {
 // 3-byte no-op: XOR EAX,EAX; RET. Returns 0.
 // Original: 0x140069800.
 
-int GoalDialog_Slot7(GoalDialog* /*self*/) {
-    return 0;
-}
+void GoalDialog::OnUpdate(const System::Time& /*time*/) {}
 
 // ============================================================
 // GoalDialog::Slot8 (vtable +0x40) — OnCommand
@@ -274,10 +273,54 @@ int GoalDialog_Slot7(GoalDialog* /*self*/) {
 //
 // Original: 0x1400697C0.
 
-void GoalDialog_Slot8(GoalDialog* self, void* /*param2*/, int param3, int param4) {
+void GoalDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 == 0x12 && param4 == 100) {
         uint8_t selfIBP[16];
-        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
+        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)this + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
 }
+
+// ============================================================
+// Construction, destruction, reflection (ENDGAME B.3.8 block DLG)
+// ============================================================
+
+// [5] PORT GAP (B38 D3.1): retail inherits DialogInstance::OnClosed; the
+// hand-built table had a no-op. Kept for this commit.
+void GoalDialog::OnClosed() {}
+
+GoalDialog::GoalDialog() : dataB8(0), dataC0(0) {}
+
+// MainMenuDialog's opener inlines this ctor: DialogInstance(ui, dialog,
+// nullParent, 0, 0, 0), then the fields zeroed.
+GoalDialog::GoalDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+             Object::InternalPtr<UI::DialogInstance> parent)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0) {}
+
+// PORT GAP (B38 D2): retail's dtor 0x140011c10 also frees the entry array at
+// +0xb8 and zeroes its header; the hand-built slot 0 did not (it leaked the
+// array). Kept for this commit; the retail body is a separate titled commit.
+GoalDialog::~GoalDialog() {}
+
+// [0] 0x140011c10: ~GoalDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* GoalDialog::DeletingDtor(unsigned flags) {
+    this->~GoalDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140011b60: MemAlloc(0xc8, 8), then the ctor.
+void* GoalDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(GoalDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) GoalDialog());
+}
+// createInPlace 0x140011bc0 (the tree's in-place build is kept, B8-13).
+void* GoalDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) GoalDialog());
+}
+
+// The reflection record stays at the TU position of the UI_DIALOG_STUB row it
+// replaces (ui_dialog_stub_factories.cpp, B38 D4).
+DEFINE_EXE_VTABLE(GoalDialog, "_ZTV10GoalDialog")

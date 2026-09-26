@@ -30,6 +30,8 @@
 #include "Dialog/AutoSaveDialog.h"
 #include "Dialog/MainMenuDialog.h"
 #include "Dialog/MapParamsDialog.h"
+#include "Dialog/AchievementDialog.h"
+#include "Dialog/GoalDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -145,4 +147,18 @@ UNIT_TEST(dlg_mainmenu_mapparams_dialogs) {
     CHECK_EQ(offsetof(MapParamsDialog, dataF0), (size_t)0xf0);
     CheckShape<MapParamsDialog>();
     CheckDialogInstanceSlots<MapParamsDialog>();
+}
+
+UNIT_TEST(dlg_achievement_goal_dialogs) {
+    CHECK_EQ(sizeof(AchievementDialog), (size_t)0xd0);
+    CHECK_EQ(offsetof(AchievementDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(AchievementDialog, dataC0), (size_t)0xc0);
+    CHECK_EQ(offsetof(AchievementDialog, dataC8), (size_t)0xc8);
+    CheckShape<AchievementDialog>();
+    CheckDialogInstanceSlots<AchievementDialog>();
+    CHECK_EQ(sizeof(GoalDialog), (size_t)0xc8);
+    CHECK_EQ(offsetof(GoalDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(GoalDialog, dataC0), (size_t)0xc0);
+    CheckShape<GoalDialog>();
+    CheckDialogInstanceSlots<GoalDialog>();
 }
