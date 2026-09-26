@@ -156,20 +156,110 @@ void AbsorbResourceComponent_InitFuncs() {
 #include "Object/factory_registration.h"
 #include "Component/AbsorbResourceComponent.h"
 
+#include "Component/coll_bridge.h"
+
 using AbsorbResourceCtrlDispatch = ::ControllerLive::Dispatcher<AbsorbResourceCtrlTag>;
+
+// ============================================================
+// State 0 per-frame handler — retail 0x140105950 (member column +0x18, TickAlt).
+// ============================================================
+// Every frame while the entity is in state 0, sweep the tiles of its footprint
+// and pull every loose raw material lying there into the entity's own storage:
+//
+//   map  = FindComponent<MapComponent>(entity)            0x140004680 (tile rect)
+//   stor = FindComponent<StorageComponent>(entity)        0x140006270
+//   for y in [map.y, map.y + map.h), x in [map.x, map.x + map.w):
+//       e = world grid cell (x, y)'s entity               (*(gw+0xf8): width @+0,
+//                                                          cells @+0x80, stride 0x30,
+//                                                          entity @ cell+8)
+//       rm = first component of e whose Type() == tid(0x1401c7c80), then
+//            IsDerivedFrom-confirmed, as every retail finder does
+//       if (rm && StorageCanAdd(stor, e+0x28, rm+0x28))    0x14012cd80
+//           StorageAdd(stor, e+0x28, rm+0x28)             0x14012d000
+//           if (!(e+0x40 bit 10)) { MarkForRemoval(e)     0x1400c2ea0
+//               append e to (gw+0xe8)+0xd0 }              0x140003110 SetSize(n+1, &e)
+//   return 1
+//
+// Read from the disassembly (the decompile names this AbsorbResourceDescription_
+// helper_ec70_sub_5950). The map/storage finds and the grid, storage and removal
+// derefs are UNGUARDED in retail and stay so: retail relies on every entity
+// carrying this component also carrying a MapComponent and a StorageComponent.
+// The helpers are resolved per call (no first-use cache: this runs from the main
+// thread's SM tick, the controller is built on the loader thread, B38 D7).
+typedef void*    (*fn_AbsorbFindComp_t)(int64_t entity, void* outIBP);          // 0x140004680 / 0x140006270
+typedef uint32_t (*fn_AbsorbStorageCanAdd_t)(void* storage, void* item, int qty); // 0x14012cd80
+typedef void     (*fn_AbsorbStorageAdd_t)(void* storage, void* item, int qty);    // 0x14012d000
+typedef void     (*fn_AbsorbMarkRemoval_t)(int64_t entity);                     // 0x1400c2ea0
+
+extern "C" char AbsorbResource_State0Tick(void* compV, void* /*sm*/, void* /*time*/) {
+    const uintptr_t comp = reinterpret_cast<uintptr_t>(compV);
+    const auto findMap = reinterpret_cast<fn_AbsorbFindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
+    const auto findStorage = reinterpret_cast<fn_AbsorbFindComp_t>(ResolveAddr(Module::Exe, 0x140006270));
+    const auto canAdd = reinterpret_cast<fn_AbsorbStorageCanAdd_t>(ResolveAddr(Module::Exe, 0x14012cd80));
+    const auto add = reinterpret_cast<fn_AbsorbStorageAdd_t>(ResolveAddr(Module::Exe, 0x14012d000));
+    const auto markRemoval = reinterpret_cast<fn_AbsorbMarkRemoval_t>(ResolveAddr(Module::Exe, 0x1400c2ea0));
+    const uint32_t* tidRawMaterial = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7c80));
+
+    const int64_t entity = *reinterpret_cast<int64_t*>(comp + 0x10);
+    uintptr_t map = 0;
+    findMap(entity, &map);
+    void* storage = nullptr;
+    findStorage(entity, &storage);
+
+    const int64_t y0 = *reinterpret_cast<int16_t*>(map + 0x2a);
+    const int64_t x0 = *reinterpret_cast<int16_t*>(map + 0x28);
+    const int64_t yEnd = static_cast<int>(y0) + *reinterpret_cast<int16_t*>(map + 0x2e);
+    const int64_t xEnd = static_cast<int>(x0) + *reinterpret_cast<int16_t*>(map + 0x2c);
+    const uintptr_t gameWorld = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
+    const int* grid = *reinterpret_cast<int* const*>(gameWorld + 0xf8);
+
+    for (int64_t y = y0; y < yEnd; ++y) {
+        for (int64_t x = x0; x < xEnd; ++x) {
+            const int64_t cellIndex = static_cast<int64_t>(grid[0]) * y + x;
+            const int64_t cell = *reinterpret_cast<const int64_t*>(grid + 0x20) + cellIndex * 0x30;
+            int64_t cellEntity = *reinterpret_cast<int64_t*>(cell + 8);
+            if (cellEntity == 0) continue;
+
+            void* rawMaterial = nullptr;
+            const int compCount = *reinterpret_cast<int*>(cellEntity + 0x38);
+            const int64_t comps = *reinterpret_cast<int64_t*>(cellEntity + 0x30);
+            for (int i = 0; i < compCount; ++i) {
+                ::Component* c = *reinterpret_cast<::Component**>(comps + static_cast<int64_t>(i) * 8);
+                if (c->Type() != *tidRawMaterial) continue;
+                if (fn_IsDerivedFrom(c, *tidRawMaterial)) rawMaterial = c;
+                break;
+            }
+            int64_t rmIBP = 0;
+            new (&rmIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(rawMaterial));   // B.3.3 bridge
+            if (rmIBP == 0) continue;
+
+            void* item = *reinterpret_cast<void**>(cellEntity + 0x28);
+            const int quantity = *reinterpret_cast<int*>(rmIBP + 0x28);
+            if (!(canAdd(storage, item, quantity) & 0xff)) continue;
+            add(storage, item, *reinterpret_cast<int*>(rmIBP + 0x28));
+
+            const int64_t entityList = *reinterpret_cast<int64_t*>(
+                reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xe8);
+            if (((*reinterpret_cast<uint32_t*>(cellEntity + 0x40) >> 10) & 1) != 0) continue;
+            markRemoval(cellEntity);
+            // B.3.2 bridge: exe 0x140003110 IS Collection::Array<void*>::SetSize(n, fill).
+            GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(entityList + 0xd0))
+                .SetSizeFill(*reinterpret_cast<int*>(entityList + 0xd8) + 1, &cellEntity);
+        }
+    }
+    return 1;
+}
 
 // The retail table, transcribed from the static initializer 0x14014e4f0 ->
 // 0x14002ec70: ONE state, id 0, with only the per-frame TickAlt column (+0x18)
-// set (0x140105950); no enter, no update, no transition, no event. Built ONCE at
-// static-init time, as retail's initializer does (B38 D6/D7).
-// PORT GAP (B38 D3.2): the per-frame handler 0x140105950 has no port yet, so the
-// column holds null (the dispatcher's graceful 0); its transcription is its own
-// titled commit.
+// set (0x140105950 above); no enter, no update, no transition, no event. Built
+// ONCE at static-init time, as retail's initializer does (B38 D6/D7).
 static void AbsorbResourceComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = AbsorbResourceCtrlDispatch::table;
     if (t.count != 0) return;                      // idempotent
-    TableRegisterState(t, 0, nullptr, nullptr, nullptr, nullptr);
+    TableRegisterState(t, 0, nullptr, nullptr,
+                       reinterpret_cast<void*>(&AbsorbResource_State0Tick), nullptr);
 }
 static const bool s_absorbResourceStateTableBuilt = (AbsorbResourceComponent_PopulateStateTable(), true);
 
