@@ -18,7 +18,6 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "ControllerComponent.h"
 
 namespace ResourceProduceComponentAddr {
     constexpr uintptr_t Ctor              = 0x14012b3d0;
@@ -26,27 +25,7 @@ namespace ResourceProduceComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x1401643a0;
 }
 
-struct ResourceProduceComponent {
-    // ControllerComponent base (0x48 bytes)
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    void*    controllerVtable;  // +0x28
-    void*    controllerData0;   // +0x30
-    void*    controllerData1;   // +0x38
-    void*    selfPtr;           // +0x40
-
-    // ResourceProduceComponent own fields
-    uint8_t  produceFlag;       // +0x48: bool/flag, zeroed by ctor
-    uint8_t  _pad49[7];         // +0x49: padding to 0x50
-};
-
-static_assert(sizeof(ResourceProduceComponent) == 0x50, "ResourceProduceComponent size mismatch");
-static_assert(offsetof(ResourceProduceComponent, vtable) == 0x00, "");
-static_assert(offsetof(ResourceProduceComponent, controllerVtable) == 0x28, "");
-static_assert(offsetof(ResourceProduceComponent, selfPtr) == 0x40, "");
-static_assert(offsetof(ResourceProduceComponent, produceFlag) == 0x48, "");
+// ENDGAME B.3.8 MI-B: the POD is gone — `ResourceProduceComponent` is a real class now
+// (code/Game/Component/ResourceProduceComponent.h, compiler vtable). This forwarder keeps the old
+// include spelling working until the closing pass deletes it (B8-4).
+#include "Component/ResourceProduceComponent.h"

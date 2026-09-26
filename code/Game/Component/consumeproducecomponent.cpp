@@ -22,10 +22,6 @@
 // Resolved helpers
 // ============================================================
 
-// ResourceProduceComponent_Shutdown (parent) at 0x14012b4a0
-typedef void (*fn_ParentShutdown_t)(void* self, void* stream);
-static fn_ParentShutdown_t s_fn_ParentShutdown = nullptr;
-
 // FUN_140023a00 IS Collection::Array<float>::SetSize (ENDGAME B.3.2 step 2), but
 // with a derived row that DEVIATES from the header's zero-tail assumption: the
 // ported body (ConsumeProduceComponent_ResizeArray below) has NO else-arm write
@@ -48,9 +44,6 @@ static bool s_initialized = false;
 
 static void EnsureHelpers() {
     if (s_initialized) return;
-
-    s_fn_ParentShutdown = reinterpret_cast<fn_ParentShutdown_t>(
-        ResolveAddr(Module::Exe, 0x14012b4a0));
 
     uintptr_t slot;
     // ConsumeProduceDescription type ID at 0x1401c7388
@@ -77,10 +70,8 @@ static void EnsureHelpers() {
 void ConsumeProduceComponent_Shutdown(ConsumeProduceComponent* self, void* stream) {
     EnsureHelpers();
 
-    // Call parent ResourceProduceComponent::Shutdown
-    if (s_fn_ParentShutdown) {
-        s_fn_ParentShutdown(self, stream);
-    }
+    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
+    self->ResourceProduceComponent::Persist(stream);
 
     // Create versioned serializer (version 1)
     alignas(8) uint8_t serBuf[24];
@@ -152,7 +143,7 @@ void ConsumeProduceComponent_Serialize(ConsumeProduceComponent* self) {
     if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_ConsumeProduceDescription)
         return;
 
-    void* entity = self->owner;
+    void* entity = self->_entity;
     if (!entity) return;
 
     // Walk the entity DESCRIPTION's child list, not the component array.
@@ -253,142 +244,75 @@ void ConsumeProduceComponent_ResizeArray(void* arrayFieldPtr, int newCount) {
 }
 
 // ============================================================
-// Reimpl of FUN_14012b4a0 (ResourceProduceComponent_Controller_Slot13:
-//   base Shutdown/serialize — Component base + empty v0 block + bool at +0x48)
-// ============================================================
-void ResourceProduceComponent_BaseShutdown(void* self, void* stream) {
-    EnsureHelpers();
-    // Component base serialize
-    typedef void (*fn_CompSer_t)(void*, void*);
-    static fn_CompSer_t s_compSer = nullptr;
-    if (!s_compSer)
-        s_compSer = reinterpret_cast<fn_CompSer_t>(ResolveAddr(Module::Exe, 0x1401189b0));
-    if (s_compSer) s_compSer(self, stream);
-
-    // Empty version-0 block
-    alignas(8) uint8_t ser0[24];
-    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();                                       // B.3.4 bridge
-
-    // Version-0 block with a single bool at +0x48
-    alignas(8) uint8_t ser1[24];
-    ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    // bool serialize: reuse the int-serialize dispatch is wrong; use the serializer
-    // vtable bool path via the dedicated dispatch slot 0x140152a58.
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>((uintptr_t)self + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
 // Init: resolve function pointers
 // ============================================================
 void ConsumeProduceComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[ConsumeProduceComponent] Funcs resolved: ParentShutdown=%p "
-           "TypeId=%p IsDerived=%p\n",
-           (void*)s_fn_ParentShutdown,
+    printf("[ConsumeProduceComponent] Funcs resolved: TypeId=%p IsDerived=%p\n",
            (void*)s_TypeId_ConsumeProduceDescription,
            (void*)s_fn_IsDerivedFrom_dispatch);
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 MI-B — ConsumeProduceComponent as a REAL class
+// (ConsumeProduceComponent.h).
+//
+// Before: CONTROLLER_LIVE_FACTORY_STATES (48-slot table filled per create, slots
+// 3/4/13/14/18 written from InstallLive, Inert_ScalarDtor in slot 0, the shared RP
+// dispatcher stamped at +0x28). After: the compiler's 22-slot vtable (13/14 — the
+// panel "work" checkbox pair — 16/17 and 19-21 inherited from
+// ResourceProduceComponent, which is what retail's table holds), a real ctor/dtor
+// chain, the controller the base's member (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-
-// Hand-expanded from COMPONENT_INERT_FACTORY(ConsumeProduceComponent, 0x70, 0x80) so
-// vtable slots 13/14 — the panel command pair — can carry real bodies.
-//
-// Why this was dead: the "work" checkbox on a building panel is a ControlUI (element id
-// 50000) whose click dispatches subComp->vtable[14] and whose per-frame enable test reads
-// subComp->vtable[13]. Both slots held the inert stub, so the click was a literal no-op
-// AND slot 13's 0 return greyed the checkbox every frame via ControlUI_Slot7. That is the
-// whole "the work checkbox does nothing on the non-food buildings" symptom.
-//
-// Byte-verified 2026-08-15 by reading vtable_ConsumeProduceComponent (0x140162a80):
-//   slot 13 = 0x14012b520   slot 14 = 0x14012b5a0
-// Those are EXACTLY the entries on vtable_ResourceProduceComponent (0x1401643f0), i.e.
-// ConsumeProduce declares no override and inherits the base pair verbatim. Both bodies
-// have been ported for some time as ResourceProduceComponent_CommandMask / _Command
-// (resourceproducecomponent_states.cpp) — this type simply never pointed at them.
-//
-// ⚠ Ghidra names those two bodies "HerbalistComponent_Slot13/14". That is a subclass
-// label on a BASE-vtable body; do not read it as "these belong to the herbalist".
-//
-// Opt-in until measured (BANISHED_LIVE_CONSUMEPRODUCE_CMD). A quiet run cannot tell a
-// working checkbox from a stubbed one, so this graduates only on a positive observation.
-// ⚠ MEASURED 2026-08-15: wiring 13/14 alone is NOT enough on this class. With only the
-// command pair filled, the panel probe read `command value = 0x02` (checkbox drawn
-// enabled, no longer greyed) but a click moved nothing — `mask 0x02 -> 0x02`. The base
-// slot 13 derives its mask from the STATE MACHINE, not from a component flag:
-//     cur  = smc+0x52 (pending) or smc+0x50 (current)
-//     mask = (cur != 14) ? 2 : 0;  if (self+0x48 == 0) mask |= ((unsigned)(cur-13) < 2)
-// and the base slot 14 posts its event to the component's own controller NODE. With the
-// component inert, slots 16/17 (GetDefaultState/CreateState) were stubs, the embedded
-// node at +0x28 was never linked into the entity's StateMachineComponent, and the post
-// had nowhere to land. So the promotion below is required, not optional — the same one
-// fishingcomponent.cpp already does.
-//
-// Macro arguments, byte-verified from vtable_ConsumeProduceComponent (0x140162a80):
-//   Size 0x70 / Flags 0x80 — unchanged from the previous inert factory.
-//   NodeOff 0x28  — slot 17 is the shared 0x140004080 `LEA RAX,[RCX+0x28]; RET`.
-//   DefState 2    — slot 16 is the shared 0x1400026c0 `MOV EAX,2; RET`.
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
-
-extern "C" void** RPCtrl_NodeVtable();      // resourceproducecomponent_states.cpp
-extern "C" void   RPCtrl_PopulateTable();
-extern "C" uint8_t ResourceProduceComponent_CommandMask(void* self);  // 0x14012b520
-extern "C" void    ResourceProduceComponent_Command(void* self);      // 0x14012b5a0
 
 // Slot 18 (+0x90) CreateWork -- retail 0x140118d00, ported in
-// resourceproduce_creatework.cpp alongside its five siblings. Slot 18 is _purecall on
-// the ResourceProduceComponent base vtable, so leaving it as the inert stub is not
-// "inherits the base" -- it is "the building never mints a work". Measured on a staffed
-// demo tavern: a four-minute soak logged ZERO "[ConsumeProduce]" lines, so the work
-// class was never instantiated and the tavern brewed nothing, which in turn is what
-// kept HappinessComponent's goods arm (desc+0x25) permanently inactive -- the tavern's
-// storage held only its potato input (RawMaterial flags 0x22 against wantMask 0x20000).
-extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void*, uintptr_t*);  // slot 18
+// resourceproduce_creatework.cpp alongside its five siblings.
+extern "C" uintptr_t* ConsumeProduceComponent_CreateWork(void*, uintptr_t*);
 
-// Slots 13/14 must be written from INSIDE InstallLive: MakeInertTyped -> FillTypedVtable
-// rewrites slots 1..N with the inert stub on the first factory call, so a static-init
-// write is silently erased. The macro calls PopulateFn from InstallLive AFTER
-// FillTypedVtable has run, which is the one surviving place.
-static void ConsumeProduceCtrl_PopulateAndWireCmd();
-
-CONTROLLER_LIVE_FACTORY_STATES(ConsumeProduceComponent, 0x70, 0x80, 0x28, 2,
-                               RPCtrl_NodeVtable, ConsumeProduceCtrl_PopulateAndWireCmd)
-
-// void*-ABI adapters for the two lifecycle slots. Slot 3 takes the stream; slot 4
-// takes only self (it reads the template, it does not serialize).
-static void ConsumeProduceComponent_ShutdownVSlot(void* self, void* stream) {
-    ConsumeProduceComponent_Shutdown(reinterpret_cast<ConsumeProduceComponent*>(self), stream);
-}
-static void ConsumeProduceComponent_StartupVSlot(void* self) {
-    ConsumeProduceComponent_Serialize(reinterpret_cast<ConsumeProduceComponent*>(self));
+// 0x140119050: the RP ctor (CALL 0x14012b3d0), the compiler's stamp, then
+// +0x50 = -1, +0x58 = +0x60 = 0 (qwords), +0x68 = 0, `_flags |= 0x80` (already
+// set by Component()).
+// PORT GAP (retail 0x14011907b `MOV dword [RBX+0x50],0xffffffff`) — B38 D9: the
+// tree's factory zero-filled the body, so +0x50 starts 0 here as before.
+ConsumeProduceComponent::ConsumeProduceComponent()
+    : ResourceProduceComponent(), consumeResourceId(0), _pad54{}, consumeRates(nullptr),
+      consumeCount(0), consumeCapacity(0), consumeState(0), _pad6C{} {
+    OrFlagsInCtor(0x80);
 }
 
-static void ConsumeProduceCtrl_PopulateAndWireCmd() {
-    ConsumeProduceComponent_LiveVtable[13] =
-        reinterpret_cast<void*>(&ResourceProduceComponent_CommandMask);
-    ConsumeProduceComponent_LiveVtable[14] =
-        reinterpret_cast<void*>(&ResourceProduceComponent_Command);
-    ConsumeProduceComponent_LiveVtable[18] =
-        reinterpret_cast<void*>(&ConsumeProduceComponent_CreateWork);
-    // Slots 3 (Shutdown/serialize, 0x140118e00) and 4 (Startup -- init the consume
-    // config from the building template, 0x140118ef0). Both bodies have been ported in
-    // this file for a long time and were registered and wired NOWHERE, so the inert stub
-    // ran instead: consumeResourceId (+0x50) kept the ctor zero instead of the
-    // description's +0x4c, and the consume-rate array at +0x58 was never sized. Most of
-    // the component family already wires this pair (attendance, cropfield, decal,
-    // destroy, disease...); this class simply never pointed at its own bodies.
-    ConsumeProduceComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&ConsumeProduceComponent_ShutdownVSlot);
-    ConsumeProduceComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&ConsumeProduceComponent_StartupVSlot);
-    RPCtrl_PopulateTable();
+// [0] 0x140032460: CALL the dtor 0x140118fd0, MemFree on &1.
+Object::Base* ConsumeProduceComponent::DeletingDtor(unsigned flags) {
+    this->~ConsumeProduceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-REGISTER_TYPE(ConsumeProduceComponent, "ResourceProduceComponent",
-              &ConsumeProduceComponent_Factory, &ConsumeProduceComponent_CreateInPlace);
+// 0x140118fd0: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
+// (the compiler chain).
+// PORT GAP (retail 0x140118ff4 MemFree of the rate array) — B38 D9: the tree's
+// slot 0 (Inert_ScalarDtor) never freed it; kept that way here.
+ConsumeProduceComponent::~ConsumeProduceComponent() {}
+
+// create 0x140032300: MemAlloc(0x70, 8), then the ctor.
+void* ConsumeProduceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ConsumeProduceComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ConsumeProduceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ConsumeProduceComponent());
+}
+
+// [3] 0x140118e00 (serialize) and [4] 0x140118ef0 (Startup: init the consume config
+// from the building's ConsumeProduceDescription).
+void       ConsumeProduceComponent::Persist(void* stream)     { ConsumeProduceComponent_Shutdown(this, stream); }
+void       ConsumeProduceComponent::Startup()                 { ConsumeProduceComponent_Serialize(this); }
+uintptr_t* ConsumeProduceComponent::CreateWork(uintptr_t* out) { return ConsumeProduceComponent_CreateWork(this, out); }  // [18] 0x140118d00
+
+DEFINE_EXE_VTABLE(ConsumeProduceComponent, "_ZTV23ConsumeProduceComponent")
+DEFINE_EXE_TYPE(ConsumeProduceComponent, "ResourceProduceComponent")

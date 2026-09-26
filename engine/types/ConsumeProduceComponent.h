@@ -15,46 +15,13 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "ResourceProduceComponent.h"
 
 namespace ConsumeProduceComponentAddr {
     constexpr uintptr_t Ctor    = 0x140119050;
     constexpr uintptr_t Vtable  = 0x140162a80;
 }
 
-struct ConsumeProduceComponent {
-    // ResourceProduceComponent base (0x50 bytes)
-    void*    vtable;            // +0x00: 0x140162a80
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    void*    controllerVtable;  // +0x28
-    void*    controllerData0;   // +0x30
-    void*    controllerData1;   // +0x38
-    void*    selfPtr;           // +0x40
-
-    uint8_t  produceFlag;       // +0x48: from ResourceProduceComponent
-    uint8_t  _pad49[7];         // +0x49: padding to 0x50
-
-    // ConsumeProduceComponent own fields
-    int32_t  consumeResourceId; // +0x50: initialized to -1 (0xFFFFFFFF), resource type sentinel
-    uint8_t  _pad54[4];         // +0x54: padding
-    float*   consumeRates;      // +0x58: float array (consume rate per slot), zeroed
-    int32_t  consumeCount;      // +0x60: number of consume slots (dword access in asm)
-    uint8_t  _pad64[4];         // +0x64: padding
-    int32_t  consumeState;      // +0x68: zeroed
-    uint8_t  _pad6C[4];         // +0x6C: padding to 0x70
-};
-
-static_assert(sizeof(ConsumeProduceComponent) == 0x70, "ConsumeProduceComponent size mismatch");
-static_assert(offsetof(ConsumeProduceComponent, vtable) == 0x00, "");
-static_assert(offsetof(ConsumeProduceComponent, controllerVtable) == 0x28, "");
-static_assert(offsetof(ConsumeProduceComponent, selfPtr) == 0x40, "");
-static_assert(offsetof(ConsumeProduceComponent, produceFlag) == 0x48, "");
-static_assert(offsetof(ConsumeProduceComponent, consumeResourceId) == 0x50, "");
-static_assert(offsetof(ConsumeProduceComponent, consumeRates) == 0x58, "");
-static_assert(offsetof(ConsumeProduceComponent, consumeCount) == 0x60, "");
-static_assert(offsetof(ConsumeProduceComponent, consumeState) == 0x68, "");
+// ENDGAME B.3.8 MI-B: the POD is gone — `ConsumeProduceComponent` is a real class now
+// (code/Game/Component/ConsumeProduceComponent.h, compiler vtable). This forwarder keeps the old
+// include spelling working until the closing pass deletes it (B8-4).
+#include "Component/ConsumeProduceComponent.h"
