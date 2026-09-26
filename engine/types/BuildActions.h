@@ -16,64 +16,12 @@
 #include <cstddef>
 #include "Work/BuildRoad.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 #include "Work/BuildStructure.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
+#include "Work/ClearArea.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 
 // BuildRoad — the real class code/Game/Work/BuildRoad.h (ENDGAME B.3.8).
 // BuildStructure — the real class code/Game/Work/BuildStructure.h (ENDGAME B.3.8).
 
-// ============================================================
-// ClearArea — area clearing work. Size = 0x78.
-// Ctor: 0x1400e68d0, Vtable: 0x140161110, Factory: 0x140029720
-// Inherits: Object::Internal -> Work (0x48) -> ClearArea
-// BaseDtor: 0x1400e6810
-// ============================================================
-namespace ClearAreaAddr {
-    constexpr uintptr_t Ctor         = 0x1400e68d0;
-    constexpr uintptr_t Vtable       = 0x140161110;
-    constexpr uintptr_t ScalarDtor   = 0x140029870;
-    constexpr uintptr_t BaseDtor     = 0x1400e6810;
-    constexpr uintptr_t Serialize    = 0x1400e6740;
-    constexpr uintptr_t Execute      = 0x1400e5ee0;
-    constexpr uintptr_t OnComplete   = 0x1400e5e30;
-    constexpr uintptr_t OnCancel     = 0x1400e5e00;
-    constexpr uintptr_t Cleanup      = 0x1400e6650;
-    constexpr uintptr_t Validate     = 0x1400e5b10;  // bug class 3 - unhookable
-    constexpr uintptr_t GetTarget    = 0x1400e6720;
-    constexpr uintptr_t GetPriority  = 0x140029860;  // 9 bytes - too small to hook
-}
-
-struct ClearArea {
-    // --- Work base (0x48 bytes) ---
-    void*    vtable;             // +0x00: -> 0x140161110
-    uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr
-    void*    field_18;           // +0x18: entity ptr
-    int32_t  field_20;           // +0x20: -1
-    int32_t  field_24;           // +0x24: 0
-    int32_t  field_28;           // +0x28: -1
-    int32_t  field_2c;           // +0x2C: 0
-    void*    field_30;           // +0x30: zeroed
-    void*    field_38;           // +0x38: zeroed
-    int32_t  field_40;           // +0x40: 0
-    uint8_t  _pad44[4];          // +0x44: padding
-
-    // --- ClearArea fields ---
-    void*    field_48;           // +0x48: BST root — entities to clear (InternalBasePtr tree nodes)
-    int32_t  field_50;           // +0x50: entity tree count
-    uint8_t  _pad54[4];          // +0x54: padding
-    void*    field_58;           // +0x58: BST root — cell indices to clear (int tree nodes)
-    int32_t  field_60;           // +0x60: cell tree count
-    uint8_t  _pad64[4];          // +0x64: padding
-    void*    field_68;           // +0x68: InternalBasePtr — map component entity
-    uint8_t  field_70;           // +0x70: bool — clear trees/resources
-    uint8_t  field_71;           // +0x71: bool — clear ground (version >= 1)
-    uint8_t  field_72;           // +0x72: bool — clear buildings (version >= 1)
-    uint8_t  _pad73[5];          // +0x73: padding
-};
-
-static_assert(sizeof(ClearArea) == 0x78, "ClearArea size mismatch");
-static_assert(offsetof(ClearArea, vtable) == 0x00, "");
-static_assert(offsetof(ClearArea, field_48) == 0x48, "");
-static_assert(offsetof(ClearArea, field_68) == 0x68, "");
+// ClearArea — the real class code/Game/Work/ClearArea.h (ENDGAME B.3.8).
 
 // ============================================================
 // ConsumeProduce — consume/produce work cycle. Size = 0x78.

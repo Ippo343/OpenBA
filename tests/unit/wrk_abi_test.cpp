@@ -25,6 +25,7 @@
 #include "Work/AutoPickupWork.h"
 #include "Work/BuildRoad.h"
 #include "Work/BuildStructure.h"
+#include "Work/ClearArea.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -138,6 +139,17 @@ UNIT_TEST(wrk_leaf_buildstructure) {
     CHECK_EQ(offsetof(BuildStructure, field_5c), (size_t)0x5c);
     CHECK_EQ(offsetof(BuildStructure, field_60), (size_t)0x60);
     CHECK_EQ(offsetof(BuildStructure, field_68), (size_t)0x68);
+}
+
+UNIT_TEST(wrk_leaf_cleararea) {
+    WRK_LEAF_SHAPE(ClearArea, Work, 0x78);
+    CHECK_EQ(offsetof(ClearArea, field_48), (size_t)0x48);
+    CHECK_EQ(offsetof(ClearArea, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(ClearArea, field_58), (size_t)0x58);
+    CHECK_EQ(offsetof(ClearArea, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(ClearArea, field_68), (size_t)0x68);
+    CHECK_EQ(offsetof(ClearArea, field_70), (size_t)0x70);
+    CHECK_EQ(offsetof(ClearArea, field_72), (size_t)0x72);
 }
 
 // ===========================================================================
