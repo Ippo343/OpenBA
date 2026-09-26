@@ -42,59 +42,17 @@ namespace Object { uint32_t GetTypeIdByName(const char* name); }
 void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode);
 
 // ============================================================
-// EditTool vtable addresses (for vtable chain in Dtor)
+// EditTool::DeletingDtor (vtable +0x00) — 0x14002db00
 // ============================================================
-static void* s_vtable_EditTool = nullptr;
-static void* s_vtable_Tool     = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_EditTool) {
-        s_vtable_EditTool = (void*)ResolveAddr(Module::Exe, EditToolAddr::Vtable);
-        s_vtable_Tool     = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
-}
-
-// ============================================================
-// Object::Internal::~Internal — called from base dtor
-// Resolved via the function pointer slot at 0x140152770
-// ============================================================
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
-
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
-
-// ============================================================
-// EditTool::Dtor (vtable +0x00, Slot0) — Scalar deleting destructor
-// ============================================================
-// Resets vtable chain: EditTool -> Tool, then calls
-// Object::Internal::~Internal for base cleanup. If flags & 1,
-// frees the memory allocation.
-//
-// Original: 0x14002db00
-void* EditTool_Dtor_Impl(EditTool* self, uint32_t flags) {
-    EnsureVtables();
-    EnsureInternalDtor();
-
-    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
-    self->vtable = s_vtable_EditTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+// ENDGAME B.3.8 TOOL: the hand-rolled EditTool_Dtor_Impl restamped the Edit
+// and Tool tables read by address — Tool's UNREGISTERED, so it stored a NULL
+// vptr before ~Internal (B38 D9 #3). The compiler's dtor chain restamps the
+// real tables, then runs Object::Internal::~Internal. Retail's dtor
+// (0x1400fd300) does no other work: the +0x28/+0x30 handles are not released.
+Object::Base* EditTool::DeletingDtor(unsigned flags) {
+    this->~EditTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -854,66 +812,34 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
 }
 
 // ============================================================
-// Standalone factory + vtable (factory cascade).
-// EditTool: size 0x38, parent Tool, 13-slot vtable @ 0x140161ca0.
+// EditTool members (EditTool.h) — ENDGAME B.3.8 TOOL.
+// The hand-built g_EditTool_Vtable[13], its slot stubs, the _SA factories and
+// RegisterEditToolVtable are gone: the compiler builds the table, and nothing
+// reads 0x140161ca0 back by address (the old dtor was the only reader).
+// Inherited from Tool, as in retail: [11] no setting (0x140004950 `*ret = 0`:
+// EditTool has no ToolSetting; SetEditMode dereferences the returned slot).
 // ============================================================
-#include "tool_base_standalone.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
 
-static uint32_t EditTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("EditTool");
-    return c;
+// [5] 0x1400fd2e0 is a JMP thunk straight to 0x1400fcc90 (deselect + close the
+// info dialog). SetEditMode's teardown (the only slot-5 caller) invokes it, and
+// that is HOW retail clears the selection outline AND closes the panel when the
+// player right-clicks. NOT the same as registering 0x1400fcc90 by address: that
+// address also backs a per-frame deactivate slot on a DIFFERENT table
+// (0x1401ee710), and registering it made cc90 run every frame
+// (reg_player_render.cpp records the measurement). Retail reads the dialog IBP
+// from +0x28 itself.
+void EditTool::Shutdown() { EditTool_CloseInfoDialog(this, static_cast<uintptr_t>(entityRef)); }
+
+char EditTool::OnKey(char active) {                                            // [6] 0x1400fd030
+    return static_cast<char>(EditTool_OnKey_Impl(this, active));
 }
-// Slot11 (+0x58) GetSettingTypeId — EditTool has no ToolSetting. Retail (0x140004950)
-// writes 0 into the caller's retbuf and returns it; SetEditMode reads *result and skips
-// setting creation when 0. A plain Tool_Ret0 (returns the *value* 0 = null ptr) would make
-// SetEditMode deref null — the same trap Phase 3 fixed for PlacementTool. Return the retbuf.
-static uint32_t* EditTool_GetSettingTypeId(void*, uint32_t* retbuf) {
-    if (retbuf) *retbuf = 0;
-    return retbuf;
-}
-// Slot5 (+0x28) -- retail EditTool vtable 0x140161ca0 holds 0x1400fd2e0 here, which
-// is a JMP thunk straight to 0x1400fcc90 (EditTool deselect + close info dialog).
-// SetEditMode teardown (entityui.cpp, the only slot-5 caller in this build) invokes
-// it, and that is HOW retail clears the selection outline AND closes the panel when
-// the player right-clicks. We had Tool_Ret0 here, so the dialog closed by another
-// route while the outline stayed on the building forever.
-//
-// NOT the same as registering 0x1400fcc90 by address: that address ALSO backs a
-// per-frame deactivate slot on a DIFFERENT vtable (0x1401ee710), and registering it
-// made cc90 run every frame and wipe the outline one frame after it was set
-// (reg_player_render.cpp records the measurement: c9e0=1 vs cc90=8973). Wiring only
-// our own vtable slot keeps the single tool-switch caller and avoids that.
-static void EditTool_DeselectClose_Slot5(void* selfRaw) {
-    EditTool* self = reinterpret_cast<EditTool*>(selfRaw);
-    if (!self) return;
-    // Retail reads the dialog IBP from tool+0x28 itself.
-    EditTool_CloseInfoDialog(self, static_cast<uintptr_t>(self->entityRef));
-}
-static void* g_EditTool_Vtable[13] = {
-    (void*)&EditTool_Dtor_Impl,      // +0x00 Dtor
-    (void*)&Tool_Slot1,              // +0x08
-    (void*)&EditTool_GetTypeId,      // +0x10 GetTypeId
-    (void*)&Tool_Persist,            // +0x18 Serialize (base)
-    // +0x20 is genuinely a no-op: retail 0x1400fd2f0 is literally RET 0 (c2 00 00).
-    (void*)&Tool_Ret0,               // +0x20
-    (void*)&EditTool_DeselectClose_Slot5,  // +0x28 deselect+close (thunk -> 0x1400fcc90)
-    (void*)&EditTool_OnKey_Impl,     // +0x30 OnKey
-    (void*)&EditTool_Startup_Impl,   // +0x38 Startup
-    (void*)&Tool_Ret0,               // +0x40
-    (void*)&Tool_Ret0,               // +0x48
-    // +0x50 Slot10 — `bool(self, longlong* entityRef)` = "is *entityRef the entity I
-    // have selected?". Callers MUST pass the second argument; a one-arg call site left
-    // RDX stale and faulted inside it (see the typedef note in nomadcomponent.cpp).
-    (void*)&EditTool_IsSelectedEntity,
-    (void*)&EditTool_GetSettingTypeId, // +0x58 GetSettingTypeId (writes 0 to retbuf)
-    (void*)&Tool_Ret0,               // +0x60
-};
-extern "C" void RegisterEditToolVtable() {
-    RegisterExeAddr(0x140161ca0, (uintptr_t)g_EditTool_Vtable);
-}
+void EditTool::Update(void*, char) { EditTool_Startup_Impl(this); }            // [7] 0x1400fcda0
+
+// [10] 0x1400fd290 — `bool(self, uint64_t* entityRef)`: "is *entityRef the
+// entity I have selected?". Callers MUST pass the second argument (a one-arg
+// call site once left RDX stale and faulted inside it — nomadcomponent.cpp).
+bool EditTool::IsSelected(uint64_t* ref) { return EditTool_IsSelectedEntity(this, ref); }
 
 // Cursor-free select harness (BANISHED_TOOL_HARNESS=select). The live pick needs the OS
 // cursor over an entity, which the headless settle-frame lacks. This mirrors OnKey's
@@ -934,8 +860,7 @@ extern "C" void RegisterEditToolVtable() {
 // entity+0x38. So the answer decides whether this pointer may be used as an EditTool.
 extern "C" bool EditTool_IsEditTool(void* tool) {
     if (!tool) return false;
-    static uint32_t tid = 0;
-    if (tid == 0 || tid == 0xFFFFFFFFu) tid = ::Object::GetTypeIdByName("EditTool");
+    const uint32_t tid = EditTool::TypeId();   // B38 D4: the class static, not a lazy cache
     if (tid == 0 || tid == 0xFFFFFFFFu || !fn_IsDerivedFrom) return false;
     return fn_IsDerivedFrom(tool, tid);
 }
@@ -1094,8 +1019,17 @@ extern "C" int EditTool_HarnessSelectNearby(void* editTool) {
            "entities may lack a UIDescription\n", found, tried);
     return 0;
 }
-extern "C" void* EditTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x38, g_EditTool_Vtable, 0);}
-extern "C" void* EditTool_Factory_SA(void) {
-    return Tool_Alloc(0x38, g_EditTool_Vtable, 0);
+// create 0x14002daa0: MemAlloc(0x38, 8), then the ctor 0x1400fd340.
+void* EditTool::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EditTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) EditTool());
 }
-REGISTER_TYPE(EditTool, "Tool", &EditTool_Factory_SA, &EditTool_CreateInPlace_SA);
+// createInPlace 0x14002dae0: `if (storage) ctor(storage)`.
+void* EditTool::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) EditTool());
+}
+
+DEFINE_EXE_VTABLE(EditTool, "_ZTV8EditTool")
+DEFINE_EXE_TYPE(EditTool, "Tool")
