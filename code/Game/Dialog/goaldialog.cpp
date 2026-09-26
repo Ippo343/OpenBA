@@ -7,6 +7,9 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -91,7 +94,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
             // Insert the new element as a child of the table
             if (tableGoal) {
-                fn_TableElement_SetChild2(tableGoal, newElemBuf, i);
+                reinterpret_cast<UI::TableElement*>(tableGoal)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf), i);  // B.3.6 bridge
             }
 
             // Find sub-elements within the new row
@@ -147,7 +150,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
                 // Set text on textGoal element
                 if (textGoal) {
-                    fn_TextElement_SetText(textGoal, uiStr);
+                    reinterpret_cast<UI::TextElement*>(textGoal)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
                 }
             }
 
@@ -199,7 +202,7 @@ void GoalDialog_Slot4(GoalDialog* self) {
 
         // Set as parameter 0 on textScenario
         if (textScenario) {
-            fn_TextElement_SetParameter(textScenario, 0, &sysStr);
+            reinterpret_cast<UI::TextElement*>(textScenario)->SetParameter(0, sysStr);  // B.3.6 bridge
         }
     } else {
         // No achievement/scenario — hide textScenario

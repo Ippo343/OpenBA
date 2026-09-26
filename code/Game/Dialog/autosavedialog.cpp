@@ -1,3 +1,4 @@
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "object/Internal.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -154,7 +155,7 @@ void AutoSaveDialog_Slot6(AutoSaveDialog* self) {
     // Apply rotation to first indicator element
     float angle = *(float*)(s + 0xC8);
     if (elem1) {
-        fn_ImageElement_SetRotation(elem1, angle);
+        reinterpret_cast<UI::ImageElement*>(elem1)->SetRotation(angle);  // B.3.6 bridge
     }
 }
 

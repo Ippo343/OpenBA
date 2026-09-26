@@ -1,3 +1,6 @@
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -48,7 +51,7 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
 
     // Get current sprite from imageIcon (16 bytes: sheetPtr + index)
     uint8_t oldSprite[16];
-    fn_ImageElement_GetSprite(imageIcon, oldSprite);
+    ::new (oldSprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(imageIcon)->GetSprite());  // B.3.6 bridge
     void* sheetPtr = *(void**)oldSprite;
 
     // Build new sprite: same sheet, new index from name
@@ -64,10 +67,10 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
     *(int32_t*)(newSprite + 12) = 0;
 
     // Set new sprite on imageIcon
-    fn_ImageElement_SetSprite(imageIcon, newSprite);
+    reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(newSprite));  // B.3.6 bridge
 
     // Set text parameter 0 on textEvent to event text string at eventEntry+0x08
-    fn_TextElement_SetParameter(textEvent, 0, eventEntry + 0x08);
+    reinterpret_cast<UI::TextElement*>(textEvent)->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));  // B.3.6 bridge
 
     // Set button ID 200 on buttonOk
     reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(200);  // B.3.6 bridge

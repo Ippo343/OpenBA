@@ -7,6 +7,11 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ProgressElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -80,7 +85,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         void* rowElem = *(void**)newElemBuf;
 
         // Set as table child at index i
-        fn_TableElement_SetChild2(tableElem, newElemBuf, i);
+        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(newElemBuf), i);  // B.3.6 bridge
 
         // Find child elements in the cloned row
         // imageIcon
@@ -126,7 +131,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         uint64_t spriteSheet = *(uint64_t*)((uintptr_t)achievement + 0x38);
         uint8_t spriteBuf[16];
         ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), spriteName);  // B.3.6 bridge
-        fn_ImageElement_SetSprite(imageIcon, spriteBuf);
+        reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
         // Hide imageStar initially (Slot6 will show it if awarded)
         reinterpret_cast<UI::Element*>(imageStar)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
@@ -136,14 +141,14 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         fn_Achievement_GetTitle(achievement, &titleText);
         uint8_t titleStrBuf[16];
         ::new (titleStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), titleText);  // B.3.6 bridge
-        fn_TextElement_SetText(textTitle, titleStrBuf);
+        reinterpret_cast<UI::TextElement*>(textTitle)->SetText(reinterpret_cast<const UI::String*>(titleStrBuf));  // B.3.6 bridge
 
         // Set description text
         uint8_t descStrBuf[16];
         System::String descText;
         fn_Achievement_GetDescription(achievement, &descText);
         ::new (descStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), descText);  // B.3.6 bridge
-        fn_TextElement_SetText(textDesc, descStrBuf);
+        reinterpret_cast<UI::TextElement*>(textDesc)->SetText(reinterpret_cast<const UI::String*>(descStrBuf));  // B.3.6 bridge
 
         // Push 4-pointer entry (stride 0x20) to dynamic array at +0xC0.
         // B.3.2 bridge: <AchievementDialog>+0xC0 is Collection::Array<{imageIcon,
@@ -233,7 +238,7 @@ void AchievementDialog_Slot6(AchievementDialog* self) {
     System::String pctStr = System::String::Format("%i", (uint64_t)(uint32_t)(int)pct);
 
     void* pctText = (void*)*(uint64_t*)(s + 0xB8);
-    fn_TextElement_SetParameter(pctText, 0, &pctStr);
+    reinterpret_cast<UI::TextElement*>(pctText)->SetParameter(0, pctStr);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -318,7 +323,7 @@ void AchievementDialog_Slot17(AchievementDialog* self) {
 
     // Format count text and set as progress parameter
     System::String countStr = System::String::Format("%i", (uint64_t)(uint32_t)count);
-    fn_ProgressElement_SetProgressTextParameter(progressElem, 0, &countStr);
+    reinterpret_cast<UI::ProgressElement*>(progressElem)->SetProgressTextParameter(0, countStr);  // B.3.6 bridge
 }
 
 // ============================================================

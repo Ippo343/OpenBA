@@ -17,6 +17,7 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -468,7 +469,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
                         uintptr_t slotArray = *(uintptr_t*)(s + 0xC8);
                         void* imageElem = *(void**)(slotArray + 8);  // first entry's image
                         uint8_t spriteBuf[16];
-                        fn_ImageElement_GetSprite(imageElem, spriteBuf);
+                        ::new (spriteBuf) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(imageElem)->GetSprite());  // B.3.6 bridge
 
                         // Create sprite with icon name (copies sprite sheet, sets index)
                         uint8_t newSprite[32];
@@ -689,7 +690,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         *(uint64_t*)(sprite + 8)  = *(uint64_t*)(activeEntry + 0x18);
 
         // Set icon sprite on image element
-        fn_ImageElement_SetSprite(imageElem, sprite);
+        reinterpret_cast<UI::ImageElement*>(imageElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
 
         // Get child[4] of button element — may be an ImageElement for embedded icon
         uint8_t childBuf[16];
@@ -711,7 +712,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
             // SetSprite on imgChild (only if non-null after CheckPtr)
             void* imgElemResolved = *(void**)imgChildPtr;
             if (imgElemResolved) {
-                fn_ImageElement_SetSprite(imgElemResolved, sprite2);
+                reinterpret_cast<UI::ImageElement*>(imgElemResolved)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite2));  // B.3.6 bridge
             }
         }
 

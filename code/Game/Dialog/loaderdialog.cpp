@@ -1,3 +1,4 @@
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
@@ -33,7 +34,7 @@ void LoaderDialog_Slot6(LoaderDialog* self) {
     void* imageElem = *(void**)(s + 0xB8);
     if (imageElem) {
         float angle = *(float*)(s + 0xC0);
-        fn_ImageElement_SetRotation(imageElem, angle);
+        reinterpret_cast<UI::ImageElement*>(imageElem)->SetRotation(angle);  // B.3.6 bridge
     }
 }
 

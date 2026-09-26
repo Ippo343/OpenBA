@@ -5,6 +5,10 @@
 // Layout: +0xC8 = selected index (int32), +0xD8 = scenario array,
 //         +0xE0 = scenario count
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -146,7 +150,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         // --- Insert clone into table ---
         uint8_t clonePtr[8];
         *(void**)clonePtr = clonedElem;
-        fn_TableElement_SetChild2(table, clonePtr, entryIndex);
+        reinterpret_cast<UI::TableElement*>(table)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(clonePtr), entryIndex);  // B.3.6 bridge
 
         // --- Build 0x38-byte entry ---
         // Layout: +0x00 = element ptr, +0x08 = selectSave ptr,
@@ -217,7 +221,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 
             // SetSprite on imageIcon
             void* imageIcon = *(void**)(entry + 0x10);
-            fn_ImageElement_SetSprite(imageIcon, sprite);
+            reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
         }
 
         // --- Set title text from scenario ---
@@ -233,7 +237,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 
             // SetText on textTitle
             void* textTitle = *(void**)(entry + 0x18);
-            fn_TextElement_SetText(textTitle, uiStr);
+            reinterpret_cast<UI::TextElement*>(textTitle)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
 
         // --- Set description text from scenario ---
@@ -248,7 +252,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
 
             // SetText on textDescription
             void* textDesc = *(void**)(entry + 0x20);
-            fn_TextElement_SetText(textDesc, uiStr);
+            reinterpret_cast<UI::TextElement*>(textDesc)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
 
         // --- Push entry to dynamic array at self+0xD8 ---

@@ -8,6 +8,7 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -97,7 +98,7 @@ void FollowDialog_Slot4(FollowDialog* self) {
         // Get entity at +0xB8, read its name at +0x28
         void* entity = *(void**)(s + 0xB8);
         if (entity && elem) {
-            fn_TextElement_SetParameter(elem, 0, (uint8_t*)((uintptr_t)entity + 0x28));
+            reinterpret_cast<UI::TextElement*>(elem)->SetParameter(0, *reinterpret_cast<const System::String*>((uint8_t*)((uintptr_t)entity + 0x28)));  // B.3.6 bridge
         }
     }
 
@@ -172,7 +173,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
             System::String sysStr;
             ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
 
-            fn_TextElement_SetParameter(textFollow, 1, &sysStr);
+            reinterpret_cast<UI::TextElement*>(textFollow)->SetParameter(1, sysStr);  // B.3.6 bridge
         }
     }
 
@@ -225,7 +226,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
         uint8_t textVal[16];
         *(uint64_t*)textVal = *(uint64_t*)uiStr;
         *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-        fn_TextElement_SetText(textAction, textVal);
+        reinterpret_cast<UI::TextElement*>(textAction)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
     }
 }
 
