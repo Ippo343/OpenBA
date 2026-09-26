@@ -96,6 +96,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Device.h"
 #include "../../types/video/CompanionData.h"   // ENDGAME B.3.5: Video::DeviceData
+#include "../../types/application/Application.h"  // ENDGAME B.3.7 callers (K5)
 #include "../collection/set_avl.h"
 
 using RtVideo::Adapter;
@@ -121,9 +122,6 @@ extern "C" int  RtVideo_Device_MoveWindow(void* hwnd, unsigned msg, uint64_t w, 
 // Device.h (see its banner), so a typed declaration here could drift from the
 // definition there and C linkage would not catch it.
 extern "C" int  RtVideo_Device_GetDefaultResolution(void* self, const void* adapter);
-
-// The Application message-callback Set (runtime/src/application/message_callbacks.cpp).
-extern "C" void RtApp_RegisterMessageCallback(void* app, unsigned id, void* cb);
 
 namespace {
 
@@ -695,10 +693,12 @@ bool Video::Device::PlatformStartup() {
                 cfg->interfaceIndex = active;
 
                 void* app = *AppSlot();
-                RtApp_RegisterMessageCallback(app, 5,
-                    reinterpret_cast<void*>(&Video::Device::SizeWindow));
-                RtApp_RegisterMessageCallback(app, 0x232,
-                    reinterpret_cast<void*>(&Video::Device::MoveWindow));
+                // ENDGAME B.3.7 callers (K5): members of the real class (the
+                // callback Set lives in runtime/src/application/message_callbacks.cpp).
+                reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
+                    5, &Video::Device::SizeWindow);
+                reinterpret_cast< ::Application::Application*>(app)->RegisterMessageCallback(  // B.3.7 bridge
+                    0x232, &Video::Device::MoveWindow);
                 return true;
             }
 
