@@ -83,22 +83,53 @@
 // element layouts the two ports settled are recorded with them:
 //   _buffers element  {float @+0x00, Array<Sample> @+0x08}      stride 0x18
 //   Sample   element  {ExternalPtr @+0x00, 3x float @+0x08..}   stride 0x18
+//
+// ENDGAME B.3 step 7, block B4: both classes are REAL C++ classes now
+// (runtime/types/audio/SoundBuffer.h, SoundEffect.h). The two anonymous-
+// namespace structs that carried the layouts here MOVED into those headers
+// under the retail names and the getter-attested field names (B6-8): the
+// SoundBuffer's `str1`/`str2` are `_string28`/`_streamPath`, `audioData`/
+// `audioBytes` are `_data`/`_length`, `segmentTable`/`segmentBytes` are
+// `_wmaData`/`_wmaLength`; the SoundEffect's `f20`/`f24` are `_radius`/
+// `_innerRadius`, `offsetTicks` is `_maxLength` and the `buffer*` triple is
+// `_samples` (Array<Sample>). The slot bodies are the members below; every
+// registered door is a one-line QUALIFIED delegation, because a live object
+// wears the MINTED table whose slots resolve back to these doors.
+//
+// The by-address calls the move converted (RULE B7-11, hex literals checked
+// against standalone/rt_export_addrs.inc):
+//   0x1800c9930 `?Serialize@String@System@@` -> `System::String::Serialize`
+//   0x1800c7ad0 `?MemFree@MemoryAllocator@System@@` -> `rtcoll::MemFree`, the
+//               one allocator door PlatformSerialize's `rtcoll::MemAlloc`
+//               already uses (Collection.h's allocator banner: a heap must not
+//               be half-shimmed; same allocator on a normal run)
+//   0x180053300 (unexported, this file's own body) -> a direct call
+// 0x180053190 / 0x180052e60 (the two SoundEffect Array SetSize bodies,
+// Collection code in array.cpp) and 0x180052a50 (the ExternalPtr<SoundBuffer>
+// serialize helper) stay by-address calls: unexported, not this block's, and
+// resolved per call with no cache.
 // ============================================================================
 
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>          // placement new of the two SoundBuffer Strings
 
 #include "../../funcs/rt_port.h"
 #include "../../../standalone/resolve.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
-#include "../object/deleting_dtor_internal.h"   // rtcoll::MemAlloc
+#include "../../types/collection/Collection.h"   // rtcoll::MemAlloc / MemFree
+#include "../../types/system/String.h"
+#include "../../types/audio/SoundBuffer.h"
+#include "../../types/audio/SoundEffect.h"
 
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
 namespace rw_vtbl = rt::io::rw_vtbl;
+
+extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count, void* basev);
 
 namespace {
 
@@ -132,219 +163,185 @@ void DestroyReaderWriter(ReaderWriter* rw) {
     using DtorFn = void (*)(ReaderWriter*, int);
     reinterpret_cast<DtorFn>(rw->vtable[0])(rw, 1);
 }
+// `?MemFree@MemoryAllocator@System@@` — retail tests for null OUTSIDE the call.
 void MemFreeIfSet(void* p) {
     if (!p) return;
-    using FreeFn = void (*)(void*);
-    RtAddr<FreeFn>(0x1800c7ad0ull)(p);
+    rtcoll::MemFree(p);
 }
 
 void* BaseVTable()             { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
 void* ExternalVTable()         { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
 void* CompiledExternalVTable() { return RT_DATA_SLOT(void*, "??_7CompiledExternal@Object@@6B@"); }
+void* SoundBufferVTable()      { return RT_DATA_SLOT(void*, "??_7SoundBuffer@Audio@@6B@"); }
+void* SoundEffectVTable()      { return RT_DATA_SLOT(void*, "??_7SoundEffect@Audio@@6B@"); }
+const uint8_t* SoundBufferTypeInfo() {
+    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A");
+}
+const uint8_t* SoundEffectTypeInfo() {
+    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A");
+}
 
+// Slot 0 dispatched VIRTUALLY on whatever table the object wears (a subclass's
+// deleting destructor is what has to run), exactly as retail's
+// `MOV RAX,[RCX] ; XOR EDX,EDX ; CALL [RAX]`.
 using Slot0Fn = void* (*)(void* self, int flag);
 void CallSlot0(void* self, int flag) {
     void** vt = *reinterpret_cast<void***>(self);
     reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
 }
 
-}  // namespace
-
-// ============================================================================
-// Audio::SoundBuffer
-// ============================================================================
-namespace {
-
-struct SoundBuffer {
-    RtObject::External base;              // +0x00 (0x20)
-    uint8_t loopForever;                   // +0x20
-    uint8_t streaming;                      // +0x21
-    uint8_t pad22[2];
-    float   loopDurationSeconds;             // +0x24
-    void*   str1;                              // +0x28
-    void*   str2;                                // +0x30
-    void*   audioData;                             // +0x38
-    int32_t audioBytes; uint8_t pad44[4];            // +0x40
-    void*   segmentTable;                              // +0x48
-    int32_t segmentBytes;                                // +0x50
-    uint8_t format[0x80 - 0x54];                           // +0x54
-};
-static_assert(offsetof(SoundBuffer, loopDurationSeconds) == 0x24, "+0x24");
-static_assert(offsetof(SoundBuffer, str1) == 0x28, "+0x28");
-static_assert(offsetof(SoundBuffer, str2) == 0x30, "+0x30");
-static_assert(offsetof(SoundBuffer, audioData) == 0x38, "+0x38");
-static_assert(offsetof(SoundBuffer, segmentTable) == 0x48, "+0x48");
-static_assert(offsetof(SoundBuffer, segmentBytes) == 0x50, "+0x50");
-static_assert(offsetof(SoundBuffer, format) == 0x54, "+0x54");
-static_assert(sizeof(SoundBuffer) == 0x80, "Audio::SoundBuffer must be 0x80 bytes");
-
-void* SoundBufferVTable() { return RT_DATA_SLOT(void*, "??_7SoundBuffer@Audio@@6B@"); }
-const uint8_t* SoundBufferTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundBuffer@Audio@@0VBaseTypeInfo@Object@@A");
-}
-
-void ConstructBody(SoundBuffer* self) {
+// The stores retail inlines into Construct (0x18000bbd0) and Reconstruct
+// (0x18000bb30) — ctor 0x18000ba90's list, the same the factory rows
+// (rt_factories_audio.inc) transcribe. Three-level stamp chain.
+void InlineCtorStores(Audio::SoundBuffer* self) {
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();
     *vp = ExternalVTable();
-    self->base._path.data      = nullptr;
-    self->base._refs._data     = nullptr;
-    self->base._refs._size     = 0;
-    self->base._refs._capacity = 0;
+    self->_path.data      = nullptr;
+    self->_refs._data     = nullptr;
+    self->_refs._size     = 0;
+    self->_refs._capacity = 0;
     *vp = CompiledExternalVTable();
     *vp = SoundBufferVTable();
-    self->loopForever = 0; self->streaming = 0;
-    self->loopDurationSeconds = 0.0f;
-    self->str1 = nullptr; self->str2 = nullptr;
-    std::memset(self->format, 0, sizeof self->format);
-    self->audioData = nullptr; self->audioBytes = 0;
-    self->segmentTable = nullptr; self->segmentBytes = 0;
+    self->_loopForever = 0; self->_streamed = 0;
+    self->_durationSeconds = 0.0f;
+    // Retail writes one null qword per String; the default constructor
+    // (0x180006760) is that one store, placement-constructed because the
+    // object body is raw memory here.
+    new (&self->_string28) System::String();
+    new (&self->_streamPath) System::String();
+    std::memset(self->_format, 0, sizeof self->_format);
+    self->_data = nullptr; self->_length = 0;
+    self->_wmaData = nullptr; self->_wmaLength = 0;
 }
 
-// 0x1800e05c0 — the raw-buffer half of Serialize: two counts, a conditional
-// (re)allocate-on-read of the two owned buffers, then three raw byte streams
-// (segment table, format window, audio data), in that exact order.
-void PlatformSerialize(SoundBuffer* self, Serializer* ser) {
-    ReaderWriter* rw = ser->readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarInt, &self->audioBytes);
-    rw = ser->readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarInt, &self->segmentBytes);
-
-    if (IsReading(ser->stream)) {
-        MemFreeIfSet(self->audioData);
-        MemFreeIfSet(self->segmentTable);
-        self->audioData    = (self->audioBytes   > 0) ? rtcoll::MemAlloc(self->audioBytes, 4)   : nullptr;
-        self->segmentTable = (self->segmentBytes > 0) ? rtcoll::MemAlloc(self->segmentBytes, 4) : nullptr;
-    }
-
-    rw = ser->readerWriter;
-    RwBytes(rw, self->segmentBytes, self->segmentTable);
-    rw = ser->readerWriter;
-    RwBytes(rw, 0x28, self->format);
-    rw = ser->readerWriter;
-    RwBytes(rw, self->audioBytes, self->audioData);
+void InlineCtorStores(Audio::SoundEffect* self) {
+    void** vp = reinterpret_cast<void**>(self);
+    *vp = BaseVTable();
+    *vp = ExternalVTable();
+    self->_path.data      = nullptr;
+    self->_refs._data     = nullptr;
+    self->_refs._size     = 0;
+    self->_refs._capacity = 0;
+    *vp = SoundEffectVTable();
+    self->_radius = 1.0f;          // one qword immediate 0x3f800000 over +0x20/+0x24
+    self->_innerRadius = 0.0f;
+    self->_maxLength = 0;
+    self->_samples._data = nullptr;
+    self->_samples._size = 0;
+    self->_samples._capacity = 0;
 }
 
 }  // namespace
 
-extern "C" uint32_t RtAudio_SoundBuffer_Type(const void*) {
+// ############################################################################
+// Audio::SoundBuffer's member bodies
+// ############################################################################
+namespace Audio {
+
+// [2] 0x18000b890: `MOV EAX,[_typeInfo] ; RET`.
+uint32_t SoundBuffer::Type() const {
     uint32_t v = 0; std::memcpy(&v, SoundBufferTypeInfo(), sizeof v); return v;
 }
-extern "C" const char* RtAudio_SoundBuffer_TypeName(const void*) {
+// [1] 0x18000b8b0: the same node at +8.
+const char* SoundBuffer::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, SoundBufferTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" int32_t RtAudio_SoundBuffer_GetFileVersion(const void*) { return 0xa; }
+// [3] 0x1800e0470: `MOV EAX,0xa ; RET`.
+int32_t SoundBuffer::GetFileVersion() const { return 0xa; }
 
-extern "C" void* RtAudio_SoundBuffer_Construct(void* selfv) {
-    if (!selfv) return nullptr;
-    ConstructBody(static_cast<SoundBuffer*>(selfv));
-    return selfv;
+// [8] 0x18000bbd0 — retail's null test is in the DOOR.
+Object::External* SoundBuffer::Construct() {
+    InlineCtorStores(this);
+    return this;
 }
-extern "C" void* RtAudio_SoundBuffer_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<SoundBuffer*>(selfv));
-    return selfv;
+// [6] 0x18000bb30: slot0(this, 0), then the same inlined constructor.
+Object::External* SoundBuffer::Reconstruct() {
+    CallSlot0(this, 0);
+    InlineCtorStores(this);
+    return this;
 }
-extern "C" void RtAudio_SoundBuffer_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+// [7] 0x18000bc70: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
+void SoundBuffer::Destruct() { CallSlot0(this, 0); }
 
-extern "C" bool RtAudio_SoundBuffer_Serialize(void* selfv, void* streamv) {
-    SoundBuffer* self = static_cast<SoundBuffer*>(selfv);
+// 0x1800e05c0 — the raw-buffer half of Serialize: two counts, a conditional
+// (re)allocate-on-read of the two owned buffers, then three raw byte streams
+// (seek table, format window, audio data), in that exact order.
+void SoundBuffer::PlatformSerialize(void* serializer) {
+    Serializer* ser = static_cast<Serializer*>(serializer);
+    ReaderWriter* rw = ser->readerWriter;
+    RwScalar(rw, rw_vtbl::kScalarInt, &_length);
+    rw = ser->readerWriter;
+    RwScalar(rw, rw_vtbl::kScalarInt, &_wmaLength);
+
+    if (IsReading(ser->stream)) {
+        MemFreeIfSet(_data);
+        MemFreeIfSet(_wmaData);
+        _data    = (_length    > 0) ? rtcoll::MemAlloc(_length, 4) : nullptr;
+        _wmaData = (_wmaLength > 0) ? static_cast<uint32_t*>(rtcoll::MemAlloc(_wmaLength, 4)) : nullptr;
+    }
+
+    rw = ser->readerWriter;
+    RwBytes(rw, _wmaLength, _wmaData);
+    rw = ser->readerWriter;
+    RwBytes(rw, 0x28, _format);
+    rw = ser->readerWriter;
+    RwBytes(rw, _length, _data);
+}
+
+// [5] 0x1800e0480.
+bool SoundBuffer::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
     Serializer ser{};
     ReaderWriter* rw = MakeReaderWriter(&ser, stream);
 
-    RwScalar(rw, rw_vtbl::kScalarBool, &self->loopForever);
-    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarBool, &self->streaming);
+    RwScalar(rw, rw_vtbl::kScalarBool, &_loopForever);
+    rw = ser.readerWriter; RwScalar(rw, rw_vtbl::kScalarBool, &_streamed);
 
-    using StrSerFn = void (*)(void* str, Serializer* ser);
-    StrSerFn strSer = RtAddr<StrSerFn>(0x1800c9930ull);
-    strSer(&self->str1, &ser);
-    strSer(&self->str2, &ser);
+    // `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z` (0x1800c9930).
+    _string28.Serialize(&ser);
+    _streamPath.Serialize(&ser);
 
     rw = ser.readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarFloat, &self->loopDurationSeconds);
+    RwScalar(rw, rw_vtbl::kScalarFloat, &_durationSeconds);
 
-    PlatformSerialize(self, &ser);
+    PlatformSerialize(&ser);
 
     DestroyReaderWriter(ser.readerWriter);
     return true;
 }
 
-// ============================================================================
-// Audio::SoundEffect
-// ============================================================================
-namespace {
+// ~SoundBuffer: NON-VIRTUAL and EMPTY; the registered dtor door
+// (batchc_audio_leaves.cpp) does retail's work on the minted objects.
+SoundBuffer::~SoundBuffer() {}
 
-// Compile (0x1800e09a0) is the WRITER that settles +0x28's identity: it is a
-// plain int64 duration/offset accumulator (`self->offsetTicks = (int64)(0.0 /
-// secondsPerTick)`, then rewritten inside the buffer loop), NOT a pointer --
-// the array data pointer used by both Compile and Serialize's SetSize call
-// lives at +0x30, with the element COUNT cached separately at +0x38.
-struct SoundEffect {
-    RtObject::External base;   // +0x00 (0x20)
-    float    f20;                // +0x20  default 1.0f (ctor stores both +0x20/+0x24
-    float    f24;                 //        +0x24  default 0.0f  as ONE qword immediate 0x3f800000)
-    int64_t  offsetTicks;          // +0x28
-    // The SAMPLE table. Element stride 0x18, pinned by Compile's outer loop
-    // (`ADD RDI,0x18` at 0x1800e0a53) and independently by
-    // audio_scene_update.cpp:149-158's reader: {float startSeconds @+0x00,
-    // variant table @+0x08, variant count @+0x10}. `buffer*` are batch 7's
-    // names, kept because Serialize hands SetSize the address of +0x30.
-    void*    bufferData;            // +0x30  Array<T>::_data -- Serialize's own
-    int32_t  bufferCount;             // +0x38  ::_size  (SetSize is handed &+0x30
-    int32_t  bufferCap;                // +0x3c  ::_capacity  directly as the Array<T>*)
-};
-static_assert(offsetof(SoundEffect, f20) == 0x20, "+0x20");
-static_assert(offsetof(SoundEffect, f24) == 0x24, "+0x24");
-static_assert(offsetof(SoundEffect, offsetTicks) == 0x28, "+0x28");
-static_assert(offsetof(SoundEffect, bufferData) == 0x30, "+0x30");
-static_assert(offsetof(SoundEffect, bufferCount) == 0x38, "+0x38");
-static_assert(offsetof(SoundEffect, bufferCap) == 0x3c, "+0x3c");
-static_assert(sizeof(SoundEffect) == 0x40, "Audio::SoundEffect must be 0x40 bytes");
+// ############################################################################
+// Audio::SoundEffect's member bodies
+// ############################################################################
 
-void* SoundEffectVTable() { return RT_DATA_SLOT(void*, "??_7SoundEffect@Audio@@6B@"); }
-const uint8_t* SoundEffectTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*, "?_typeInfo@SoundEffect@Audio@@0VBaseTypeInfo@Object@@A");
-}
-
-void ConstructBody(SoundEffect* self) {
-    void** vp = reinterpret_cast<void**>(self);
-    *vp = BaseVTable();
-    *vp = ExternalVTable();
-    self->base._path.data      = nullptr;
-    self->base._refs._data     = nullptr;
-    self->base._refs._size     = 0;
-    self->base._refs._capacity = 0;
-    *vp = SoundEffectVTable();
-    self->f20 = 1.0f;
-    self->f24 = 0.0f;
-    self->offsetTicks = 0;
-    self->bufferData = nullptr;
-    self->bufferCount = 0;
-    self->bufferCap = 0;
-}
-
-}  // namespace
-
-extern "C" uint32_t RtAudio_SoundEffect_Type(const void*) {
+// [2] 0x180050320 / [1] 0x180050340.
+uint32_t SoundEffect::Type() const {
     uint32_t v = 0; std::memcpy(&v, SoundEffectTypeInfo(), sizeof v); return v;
 }
-extern "C" const char* RtAudio_SoundEffect_TypeName(const void*) {
+const char* SoundEffect::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, SoundEffectTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" int32_t RtAudio_SoundEffect_GetFileVersion(const void*) { return 3; }
+// [3] 0x1800e0990: `MOV EAX,3 ; RET`.
+int32_t SoundEffect::GetFileVersion() const { return 3; }
 
-extern "C" void* RtAudio_SoundEffect_Construct(void* selfv) {
-    if (!selfv) return nullptr;
-    ConstructBody(static_cast<SoundEffect*>(selfv));
-    return selfv;
+// [8] 0x1800505d0 — retail's null test is in the DOOR.
+Object::External* SoundEffect::Construct() {
+    InlineCtorStores(this);
+    return this;
 }
-extern "C" void* RtAudio_SoundEffect_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<SoundEffect*>(selfv));
-    return selfv;
+// [6] 0x180050560.
+Object::External* SoundEffect::Reconstruct() {
+    CallSlot0(this, 0);
+    InlineCtorStores(this);
+    return this;
 }
-extern "C" void RtAudio_SoundEffect_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+// [7] 0x180050640.
+void SoundEffect::Destruct() { CallSlot0(this, 0); }
 
 // ============================================================================
 // 0x1800e09a0 — `?Compile@SoundEffect@Audio@@`, WHOLE, byte for byte.
@@ -413,70 +410,70 @@ extern "C" void RtAudio_SoundEffect_Destruct(void* selfv) { CallSlot0(selfv, 0);
 //
 // Self-contained: no calls at all, and one data read (_secondsPerTick).
 // ============================================================================
-extern "C" int32_t RtAudio_SoundEffect_Compile(void* selfv, const void* /*filename*/) {
-    SoundEffect* self = static_cast<SoundEffect*>(selfv);
+// (B.3.7: `self->_durationTicks` / `self->_samples` above are the members
+// `_maxLength` / `_samples`; the SoundBuffer's +0x20/+0x24 are `_loopForever`
+// and `_durationSeconds`.)
+Object::External::CompileResult SoundEffect::Compile(const System::Filename&) {
     double* secondsPerTickSlot = RT_DATA_SLOT(double*, "?_secondsPerTick@Timer@System@@0NA");
     const double secondsPerTick = secondsPerTickSlot ? *secondsPerTickSlot : 1.0;
-    self->offsetTicks = static_cast<int64_t>(0.0 / secondsPerTick);   // 1800e09bc
+    _maxLength = static_cast<int64_t>(0.0 / secondsPerTick);          // 1800e09bc
 
-    const int32_t sampleCount = self->bufferCount;                     // 1800e09c0
+    const int32_t sampleCount = _samples._size;                        // 1800e09c0
     if (sampleCount <= 0)
         return 1;                                                      // 1800e0a80
 
-    uint8_t* sample = static_cast<uint8_t*>(self->bufferData);         // 1800e09d5
+    const Sample* sample = _samples._data;                             // 1800e09d5
     bool anyLoopForever = false;                                        // R11B
 
-    for (int32_t s = 0; s < sampleCount; ++s, sample += 0x18) {
-        const int32_t variantCount = *reinterpret_cast<const int32_t*>(sample + 0x10);
+    for (int32_t s = 0; s < sampleCount; ++s, ++sample) {
+        const int32_t variantCount = sample->variants._size;
         if (variantCount <= 0) continue;                                // 1800e09e9
 
-        int64_t running = self->offsetTicks;                            // 1800e09eb
-        uint8_t* const variants = *reinterpret_cast<uint8_t**>(sample + 0x08);
-        const float startSeconds = *reinterpret_cast<const float*>(sample + 0x00);
+        int64_t running = _maxLength;                                   // 1800e09eb
+        const Variant* const variants = sample->variants._data;
+        const float startSeconds = sample->startSeconds;
 
         for (int32_t k = 0; k < variantCount; ++k) {
-            const SoundBuffer* buf = *reinterpret_cast<SoundBuffer* const*>(
-                variants + static_cast<int64_t>(k) * 0x18);             // 1800e0a07
+            const SoundBuffer* buf = variants[k].buffer.Get();          // 1800e0a07
             float end = 0.0f;                                            // XMM1
             if (buf) {                                                   // 1800e0a0e
-                end = buf->loopDurationSeconds + startSeconds;            // 1800e0a15/1f
-                if (buf->loopForever != 0) anyLoopForever = true;         // 1800e0a23
+                end = buf->_durationSeconds + startSeconds;              // 1800e0a15/1f
+                if (buf->_loopForever != 0) anyLoopForever = true;       // 1800e0a23
             }
             // Retail's own mixed-unit compare; see note 1 in the banner.
             if (end > static_cast<float>(running)) {                     // 1800e0a2f
                 running = static_cast<int64_t>(static_cast<double>(end) / secondsPerTick);
-                self->offsetTicks = running;                             // 1800e0a44
+                _maxLength = running;                                    // 1800e0a44
             }
         }
     }
 
     if (anyLoopForever)                                                  // 1800e0a6f
-        self->offsetTicks = 0;                                           // 1800e0a71
+        _maxLength = 0;                                                  // 1800e0a71
 
     return 1;  // External::CompileResult::Success — retail returns 1 on both exits
 }
 
-extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {
-    SoundEffect* self = static_cast<SoundEffect*>(selfv);
+// [5] 0x1800e0aa0.
+bool SoundEffect::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
     Serializer ser{};
     ReaderWriter* rw = MakeReaderWriter(&ser, stream);
 
-    RwScalar(rw, rw_vtbl::kScalarFloat, &self->f20);
+    RwScalar(rw, rw_vtbl::kScalarFloat, &_radius);
     rw = ser.readerWriter;
-    RwScalar(rw, rw_vtbl::kScalarFloat, &self->f24);
+    RwScalar(rw, rw_vtbl::kScalarFloat, &_innerRadius);
 
-    int32_t n = self->bufferCount;
+    int32_t n = _samples._size;
     rw = ser.readerWriter;
     RwScalar(rw, rw_vtbl::kScalarInt, &n);
     if (IsReading(stream)) {
+        // 0x180053190 — kSpec_SfxBuffer18 (array.cpp), unexported Collection code.
         using SetSizeFn = void (*)(void*, int32_t);
-        RtAddr<SetSizeFn>(0x180053190ull)(&self->bufferData, n);
+        RtAddr<SetSizeFn>(0x180053190ull)(&_samples, n);
     }
-    {
-        using ElemSerFn = void (*)(Serializer*, int32_t, void*);
-        RtAddr<ElemSerFn>(0x180053300ull)(&ser, n, self->bufferData);
-    }
+    // 0x180053300 — this file's own element walk, called directly.
+    RtAudio_SoundEffect_SerializeBuffers(&ser, n, _samples._data);
 
     // GetVersion()==0 (writer path skips; reader path on an OLD save consumes
     // and discards one legacy field via a throwaway CreateReader/CreateWriter
@@ -487,7 +484,7 @@ extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {
     const int32_t version = reinterpret_cast<GetVersionFn>(rw->vtable[rw_vtbl::kGetVersion / 8])(rw);
     if (version >= 1) {
         rw = ser.readerWriter;
-        RwScalar(rw, rw_vtbl::kScalarInt64, &self->offsetTicks);
+        RwScalar(rw, rw_vtbl::kScalarInt64, &_maxLength);
     } else if (IsReading(stream)) {
         // retail (0x1800e0b88..0x1800e0bc3) calls vtable[0x20](this->encoding,
         // &ser, 0) to create ANOTHER throwaway ReaderWriter here, checks it for
@@ -500,9 +497,16 @@ extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {
     return true;
 }
 
+// ~SoundEffect: NON-VIRTUAL and EMPTY; the registered dtor door is the
+// coordinator's runtime/src/object/deleting_dtor_leaves.cpp.
+SoundEffect::~SoundEffect() {}
+
+}  // namespace Audio
+
 // ============================================================================
 // The `_buffers` element serialize walk   0x180053300   (batch D1)
-// =====================================================================// Serialize above calls this by address. Element {float @+0x00,
+// ============================================================================
+// SoundEffect::Serialize above calls this directly (B.3.7). Element {float @+0x00,
 // Collection::Array<Sample> @+0x08}, stride 0x18:
 //
 //   18005333e  kScalarFloat  e+0x00
@@ -560,8 +564,63 @@ extern "C" void RtAudio_SoundEffect_SerializeBuffers(void* serv, int32_t count,
 // `AEAA` = PRIVATE, which this DLL still exports
 // (reference_aeaa_is_private_not_unexported.md), so the NAME door is real.
 // ============================================================================
+
+// ============================================================================
+// THE DOORS — one-line QUALIFIED delegations (a live object wears the MINTED
+// table, whose slots resolve back to these doors; an unqualified virtual call
+// here would dispatch into the door again).
+// ============================================================================
+extern "C" uint32_t RtAudio_SoundBuffer_Type(const void* selfv) {
+    return reinterpret_cast<const Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Type();            // B.3.7 bridge
+}
+extern "C" const char* RtAudio_SoundBuffer_TypeName(const void* selfv) {
+    return reinterpret_cast<const Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::TypeName();        // B.3.7 bridge
+}
+extern "C" int32_t RtAudio_SoundBuffer_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::GetFileVersion();  // B.3.7 bridge
+}
+extern "C" void* RtAudio_SoundBuffer_Construct(void* selfv) {
+    if (!selfv) return nullptr;                          // retail's null test
+    return reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Construct();             // B.3.7 bridge
+}
+extern "C" void* RtAudio_SoundBuffer_Reconstruct(void* selfv) {
+    return reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Reconstruct();           // B.3.7 bridge
+}
+extern "C" void RtAudio_SoundBuffer_Destruct(void* selfv) {
+    reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Destruct();                     // B.3.7 bridge
+}
+extern "C" bool RtAudio_SoundBuffer_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::Serialize(streamv);      // B.3.7 bridge
+}
 extern "C" void RtAudio_SoundBuffer_PlatformSerialize(void* selfv, void* serv) {
-    PlatformSerialize(static_cast<SoundBuffer*>(selfv), static_cast<Serializer*>(serv));
+    reinterpret_cast<Audio::SoundBuffer*>(selfv)->Audio::SoundBuffer::PlatformSerialize(serv);        // B.3.7 bridge
+}
+
+extern "C" uint32_t RtAudio_SoundEffect_Type(const void* selfv) {
+    return reinterpret_cast<const Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Type();            // B.3.7 bridge
+}
+extern "C" const char* RtAudio_SoundEffect_TypeName(const void* selfv) {
+    return reinterpret_cast<const Audio::SoundEffect*>(selfv)->Audio::SoundEffect::TypeName();        // B.3.7 bridge
+}
+extern "C" int32_t RtAudio_SoundEffect_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const Audio::SoundEffect*>(selfv)->Audio::SoundEffect::GetFileVersion();  // B.3.7 bridge
+}
+extern "C" void* RtAudio_SoundEffect_Construct(void* selfv) {
+    if (!selfv) return nullptr;                          // retail's null test
+    return reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Construct();             // B.3.7 bridge
+}
+extern "C" void* RtAudio_SoundEffect_Reconstruct(void* selfv) {
+    return reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Reconstruct();           // B.3.7 bridge
+}
+extern "C" void RtAudio_SoundEffect_Destruct(void* selfv) {
+    reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Destruct();                     // B.3.7 bridge
+}
+extern "C" int32_t RtAudio_SoundEffect_Compile(void* selfv, const void* pathv) {
+    return static_cast<int32_t>(reinterpret_cast<Audio::SoundEffect*>(selfv)                          // B.3.7 bridge
+        ->Audio::SoundEffect::Compile(*static_cast<const System::Filename*>(pathv)));
+}
+extern "C" bool RtAudio_SoundEffect_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<Audio::SoundEffect*>(selfv)->Audio::SoundEffect::Serialize(streamv);      // B.3.7 bridge
 }
 
 int RtAudioBatch7SoundBufferSoundEffectRegister() {

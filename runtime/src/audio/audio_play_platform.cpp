@@ -199,39 +199,31 @@
 // this file does the same, for the same reason.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Device.h"
+#include "../../types/audio/SoundBuffer.h"
+#include "../../types/system/Value.h"          // System::Time
+#include "../engine/mainloop_internal.h"       // rtengine::AtomicResolve (B6-5)
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
 
 namespace {
 
-// ---- Audio::Device offsets (no Device.h -- Audio.h's own header notes it
-// carries neither Device nor SoundBuffer; these are single-reader byte offsets
-// per PLAN §6 step 8, cross-confirmed where noted) --------------------------
-constexpr int kOffXAudio2         = 0xa88;  // IXAudio2* (audio_platform_startup_win.cpp)
-constexpr int kVoiceCallbackBase  = 0xa98;  // &VoiceCallback[slot], stride 0x20
-constexpr int kVoiceCallbackVoice = 0x08;   // VoiceCallback::voice, +0x08 (audio_voice_callback_win.cpp)
-constexpr int kVoiceCallbackStride = 0x20;
-constexpr int kDeviceStreamOffset = 0xa00;  // the embedded Audio::Stream
-
-// ---- SoundBuffer offsets, all pinned by an instruction cited in the banner -
-constexpr int kSbLoopForever   = 0x20;  // byte
-constexpr int kSbStreaming     = 0x21;  // byte
-constexpr int kSbLoopDuration  = 0x24;  // float, seconds
-constexpr int kSbAudioData     = 0x38;  // const void*
-constexpr int kSbAudioBytes    = 0x40;  // uint32
-constexpr int kSbSegmentTable  = 0x48;  // const uint32_t*
-constexpr int kSbSegmentBytes  = 0x50;  // int32 -- byte length of the table
-constexpr int kSbFormat        = 0x54;  // embedded WAVEFORMATEX
-constexpr int kWfChannels       = kSbFormat + 0x02;
-constexpr int kWfSamplesPerSec  = kSbFormat + 0x04;
-constexpr int kWfBlockAlign     = kSbFormat + 0x0c;
-constexpr int kWfBitsPerSample  = kSbFormat + 0x0e;
+// ENDGAME B.3.7 block B4: the `kOffXAudio2` / `kVoiceCallback*` /
+// `kDeviceStreamOffset` and `kSb*` byte offsets MOVED into
+// runtime/types/audio/Device.h and SoundBuffer.h (B6-8). What stays here is
+// the WAVEFORMATEX window inside `SoundBuffer::_format` (+0x54), read at the
+// standard WAVEFORMATEX offsets.
+constexpr int kWfChannels       = 0x02;   // WORD  nChannels
+constexpr int kWfSamplesPerSec  = 0x04;   // DWORD nSamplesPerSec
+constexpr int kWfBlockAlign     = 0x0c;   // WORD  nBlockAlign
+constexpr int kWfBitsPerSample  = 0x0e;   // WORD  wBitsPerSample
 
 // ---- XAudio2 (2.7) vtable byte offsets used by THIS body, each pinned by the
 // argument shapes in the banner (not by a header this project does not carry)
@@ -278,10 +270,14 @@ double SecondsPerTick() {
 
 // FUN_180127560 -- a plain CRT powf(base, exponent). Out of this batch's
 // scope; reached by ADDRESS, port registry first, DLL fallback. See the banner.
+// B.3.7 (B6-5): the function-local first-call cache that lived here is a
+// NAMESPACE-SCOPE atomic slot now that PlayPlatform is a Device member.
+std::atomic<void*> g_powfSlot{nullptr};
 float PowF(float base, float exponent) {
     using Fn = float (*)(float, float);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180127560));
+    Fn fn = reinterpret_cast<Fn>(rtengine::AtomicResolve(g_powfSlot, [] {
+        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180127560));
+    }));
     return fn ? fn(base, exponent) : 1.0f;
 }
 
@@ -315,10 +311,10 @@ static_assert(sizeof(Xa2BufferWma) == 0x10, "XAUDIO2_BUFFER_WMA-shaped local mus
 // Computes bytePos (used unconditionally, including for Stream::Play) and
 // playBegin (used only when NOT streaming). See the banner for the exact
 // instruction sequence this reproduces.
-void ComputePlayPosition(const void* buf, int64_t nowTicks,
+void ComputePlayPosition(const Audio::SoundBuffer* buf, int64_t nowTicks,
                          int32_t* outBytePos, uint32_t* outPlayBegin) {
     const double spt = SecondsPerTick();
-    const float loopDurationSeconds = Load<float>(buf, kSbLoopDuration);
+    const float loopDurationSeconds = buf->_durationSeconds;
     const double loopDurationTicksD = static_cast<double>(loopDurationSeconds) / spt;
     const int64_t loopDurationTicks = static_cast<int64_t>(loopDurationTicksD);  // CVTTSD2SI
 
@@ -326,9 +322,9 @@ void ComputePlayPosition(const void* buf, int64_t nowTicks,
     const double secondsInLoopD = static_cast<double>(remainderTicks) * spt;
     const float secondsInLoop = static_cast<float>(secondsInLoopD);  // CVTPD2PS
 
-    const uint32_t nChannels      = Load<uint16_t>(buf, kWfChannels);
-    const uint32_t wBitsPerSample = Load<uint16_t>(buf, kWfBitsPerSample);
-    const uint32_t nSamplesPerSec = Load<uint32_t>(buf, kWfSamplesPerSec);
+    const uint32_t nChannels      = Load<uint16_t>(buf->_format, kWfChannels);
+    const uint32_t wBitsPerSample = Load<uint16_t>(buf->_format, kWfBitsPerSample);
+    const uint32_t nSamplesPerSec = Load<uint32_t>(buf->_format, kWfSamplesPerSec);
     uint32_t bitsPerSecondAllCh = nChannels * wBitsPerSample;    // 32-bit wraparound,
     bitsPerSecondAllCh = bitsPerSecondAllCh * nSamplesPerSec;    // reproduced as-is
     const uint32_t bytesPerSecond = bitsPerSecondAllCh >> 3;     // logical shift
@@ -337,13 +333,13 @@ void ComputePlayPosition(const void* buf, int64_t nowTicks,
     const int32_t bytePos = static_cast<int32_t>(bytePosF);  // CVTTSS2SI, truncate
 
     uint32_t playBegin = 0;
-    const int64_t segByteLen = static_cast<int32_t>(Load<int32_t>(buf, kSbSegmentBytes));
+    const int64_t segByteLen = static_cast<int32_t>(buf->_wmaLength);
     const int64_t segCount = static_cast<uint64_t>(segByteLen) >> 2;  // matches the
                                                                        // sign-extend-then-
                                                                        // logical-shift retail does
     if (segCount > 0) {
-        const uint32_t* segTable = Load<const uint32_t*>(buf, kSbSegmentTable);
-        const uint16_t nBlockAlign = Load<uint16_t>(buf, kWfBlockAlign);
+        const uint32_t* segTable = buf->_wmaData;
+        const uint16_t nBlockAlign = Load<uint16_t>(buf->_format, kWfBlockAlign);
         for (int64_t idx = 0; ; ) {
             if (segTable[idx] > static_cast<uint32_t>(bytePos)) {  // JA, unsigned
                 playBegin = static_cast<uint32_t>(nBlockAlign) * static_cast<uint32_t>(idx);
@@ -362,21 +358,23 @@ void ComputePlayPosition(const void* buf, int64_t nowTicks,
 // ============================================================================
 // Audio::Device::PlayPlatform — retail 0x1800de7a0, ord 3424
 // ============================================================================
-extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bufferRef,
-                                            const int64_t* startTime, float vol,
-                                            float pitch, float third) {
+namespace Audio {
+
+bool Device::PlayPlatform(int32_t slot, Object::ExternalPtr<SoundBuffer> buffer,
+                          const System::Time& startTime, float vol, float pitch,
+                          float third) {
     (void)third;  // read by NOTHING in retail -- see the banner
     ++g_calls;
 
-    auto* self = static_cast<uint8_t*>(device);
+    const SoundBuffer* const bufferRef = buffer.Get();
 
-    void* engine = Load<void*>(self, kOffXAudio2);                        // 1800de7b4
+    void* engine = _xaudio2;                                              // 1800de7b4
     if (!engine) {                                                        // 1800de7c4
         return false;
     }
 
-    uint8_t* record = self + kVoiceCallbackBase + static_cast<int64_t>(slot) * kVoiceCallbackStride;
-    void** voiceSlot = reinterpret_cast<void**>(record + kVoiceCallbackVoice);
+    PlatformChannel* record = &_platformChannels[slot];                   // 1800de7ec
+    void** voiceSlot = &record->voice;                                    // 1800de809
 
     // ---- CreateSourceVoice ---------------------------------------------
     using CreateSourceVoiceFn = int32_t (*)(void* engine, void** ppVoice, const void* pFormat,
@@ -384,7 +382,7 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
                                             void* pSendList, void* pEffectChain);
     void** engineVtbl = *reinterpret_cast<void***>(engine);
     auto createSourceVoice = reinterpret_cast<CreateSourceVoiceFn>(engineVtbl[kEngineCreateSourceVoice / 8]);
-    const void* pFormat = static_cast<const uint8_t*>(bufferRef) + kSbFormat;   // 1800de817
+    const void* pFormat = bufferRef->_format;                                   // 1800de817
     int32_t hr = createSourceVoice(engine, voiceSlot, pFormat, 0, kMaxFrequencyRatio,
                                    record, nullptr, nullptr);                    // 1800de827
     if (hr != 0) {                                                              // 1800de82a
@@ -396,16 +394,16 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
     // ---- byte position / PlayBegin -------------------------------------
     int32_t bytePos = 0;
     uint32_t playBegin = 0;
-    ComputePlayPosition(bufferRef, *startTime, &bytePos, &playBegin);
+    ComputePlayPosition(bufferRef, startTime._ticks, &bytePos, &playBegin);
 
-    const bool loopForever = Load<uint8_t>(bufferRef, kSbLoopForever) != 0;
-    const bool isStreaming = Load<uint8_t>(bufferRef, kSbStreaming) != 0;
+    const bool loopForever = bufferRef->_loopForever != 0;
+    const bool isStreaming = bufferRef->_streamed != 0;
     if (isStreaming) playBegin = 0;  // CMOVNZ, unconditional override
 
     Xa2Buffer buf{};
     buf.flags      = kXAudio2EndOfStream;
-    buf.audioBytes = Load<uint32_t>(bufferRef, kSbAudioBytes);
-    buf.audioData  = Load<const void*>(bufferRef, kSbAudioData);
+    buf.audioBytes = static_cast<uint32_t>(bufferRef->_length);
+    buf.audioData  = bufferRef->_data;
     buf.playBegin  = playBegin;
     buf.playLength = 0;
     buf.loopBegin  = 0;
@@ -414,10 +412,9 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
     buf.context    = nullptr;
 
     Xa2BufferWma wma{};
-    wma.cumulativeBytes = Load<const uint32_t*>(bufferRef, kSbSegmentTable);
+    wma.cumulativeBytes = bufferRef->_wmaData;
     wma.packetCount     = static_cast<uint32_t>(
-        static_cast<uint64_t>(static_cast<int64_t>(static_cast<int32_t>(
-            Load<int32_t>(bufferRef, kSbSegmentBytes)))) >> 2);
+        static_cast<uint64_t>(static_cast<int64_t>(bufferRef->_wmaLength)) >> 2);
 
     void** voiceVtbl = *reinterpret_cast<void***>(voice);
 
@@ -466,15 +463,25 @@ extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bu
 
     ++g_placed;
     if (isStreaming) {                                                       // 1800de9d5
-        using StreamPlayFn = void (*)(void*, int32_t, int32_t);
-        static StreamPlayFn streamPlay = nullptr;
-        if (!streamPlay)
-            streamPlay = reinterpret_cast<StreamPlayFn>(
-                ResolveExport("?Play@Stream@Audio@@QEAAXHH@Z"));
-        if (streamPlay) streamPlay(self + kDeviceStreamOffset, slot, bytePos);  // 1800de9e4
+        // `?Play@Stream@Audio@@QEAAXHH@Z` on the embedded Stream (+0xa00): a
+        // direct member call now (the name lookup behind a function-local
+        // cache that stood here is gone, B6-5 / B7-11).
+        StreamObject()->Play(slot, bytePos);                                 // 1800de9e4
     }
 
     return true;                                                             // 1800de9e9
+}
+
+}  // namespace Audio
+
+// The door: `bufferRef` arrives as the bare register pointer (B7-5) and
+// `startTime` as a pointer to the caller's Time.
+extern "C" bool RtAudio_Device_PlayPlatform(void* device, int32_t slot, void* bufferRef,
+                                            const int64_t* startTime, float vol,
+                                            float pitch, float third) {
+    return reinterpret_cast<Audio::Device*>(device)->Audio::Device::PlayPlatform(          // B.3.7 bridge
+        slot, Object::ExternalPtr<Audio::SoundBuffer>(static_cast<Audio::SoundBuffer*>(bufferRef)),
+        *reinterpret_cast<const System::Time*>(startTime), vol, pitch, third);           // B.3.7 bridge
 }
 
 // ============================================================================

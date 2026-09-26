@@ -77,6 +77,15 @@
 #include "../../types/io/Serializer.h"        // Stream / Serializer / rw_vtbl (Wave 4)
 #include "../system/timer.h"                  // Wave 9 lane W: TimerSecondsPerTick
 #include "../collection/array_internal.h"     // ENDGAME B.3.2 step 2: kSpec_EffectSlot bridge
+#include "../../types/audio/Device.h"
+#include "../../types/audio/SoundEffect.h"
+#include "../../types/system/Value.h"         // System::Time
+#include "../engine/mainloop_internal.h"      // rtengine::AtomicResolve (B6-5)
+#include <atomic>
+
+// The EffectSlot bulk serialize, this directory's own body at 0x180052640
+// (audio_effectslot_serialize.cpp). Called directly (B.3.7).
+extern "C" void RtAudio_Scene_SerializeEffectSlots(void* serv, int32_t count, void* datav);
 
 // ----------------------------------------------------------------------------
 // ResolveAddr / Module, forward-declared rather than pulled in from
@@ -114,12 +123,15 @@ namespace {
 using MemAllocFn = void* (*)(uint64_t size, int align);
 using MemFreeFn  = void  (*)(void* p);
 
-void* MemAlloc(uint64_t size, int align) {
-    return RT_EXPORT_ONCE(MemAllocFn, "?MemAlloc@MemoryAllocator@System@@SAPEAX_KH@Z")(size, align);
-}
-void MemFree(void* p) {
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
+//
+// ENDGAME B.3.7 block B4: both now go through `rtcoll::MemAlloc` /
+// `rtcoll::MemFree`, the one allocator door every Collection::Array body uses
+// (Collection.h's allocator banner). Scene's destructor is the IMPLICIT one
+// now (runtime/types/audio/Audio.h), i.e. `~Array`, which frees through that
+// door — so the buffers the ctor door and AddEmitter allocate must come from
+// it too, or the heap is half-shimmed. Same allocator on a normal run.
+void* MemAlloc(uint64_t size, int align) { return rtcoll::MemAlloc(size, align); }
+void MemFree(void* p) { rtcoll::MemFree(p); }
 
 // System::Timer::_secondsPerTick and Time helpers are not needed by anything
 // this lane ports (Scene::Update, the only consumer, is held back).
@@ -189,7 +201,7 @@ void ArraySetSize(Collection::Array<T>* arr, int32_t n, const T& fillValue) {
 // stored idTag with the top-19-bit mask. Shared by every EffectSlot-table
 // accessor (AddEmitter, MoveEmitter, RemoveEmitter, SetEmitterVolume,
 // GetEmitterCount all repeat this exact check in retail).
-EffectSlot* FindEffectSlot(Scene* self, uint32_t id) {
+EffectSlot* FindEffectSlot(const Scene* self, uint32_t id) {
     uint32_t idx = (id >> 1) & 0xfff;
     EffectSlot* slot = &self->effects._data[idx];
     if (((slot->idTag ^ id) & 0xffffe000) != 0) return nullptr;
@@ -233,18 +245,10 @@ void* RtAudio_Scene_Ctor(void* selfPtr) {
 // buffers, matching retail's order (+0x20 torn down before +0x10).
 // ============================================================================
 void RtAudio_Scene_Dtor(void* selfPtr) {
-    auto* self = static_cast<Scene*>(selfPtr);
-    for (int32_t i = 0; i < self->effects._size; ++i) {
-        if (self->effects._data[i].positions._data)
-            MemFree(self->effects._data[i].positions._data);
-    }
-    // The buffers are freed by hand just above, so the headers are zeroed by
-    // hand too — a deep `operator=` here would free them a SECOND time.
-    if (self->effects._data) MemFree(self->effects._data);
-    ZeroHeader(&self->effects);
-
-    if (self->channels._data) MemFree(self->channels._data);
-    ZeroHeader(&self->channels);
+    // B.3.7: the IMPLICIT destructor IS retail's body (Audio.h banner):
+    // ~Array<AttenutedEffect> (each slot's `positions`, then the buffer, +0x20)
+    // then ~Array<Channel> (+0x10), reverse declaration order.
+    reinterpret_cast<Audio::Scene*>(selfPtr)->~Scene();   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -253,11 +257,12 @@ void RtAudio_Scene_Dtor(void* selfPtr) {
 // oracle (verified against the DLL's own read-only GetEmitterCount on the
 // SAME slot afterward, since both implementations share one Scene object).
 // ============================================================================
-void RtAudio_Scene_AddEmitter(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
-    auto* self = static_cast<Scene*>(selfPtr);
-    EffectSlot* slot = FindEffectSlot(self, id);
+namespace Audio {
+
+void Scene::AddEmitter(uint32_t id, const Vector3& pos, float volume) {
+    EffectSlot* slot = FindEffectSlot(this, id);
     if (slot) {
-        EmitterInstance inst{pos->x, pos->y, pos->z, volume};
+        EmitterInstance inst{pos.x, pos.y, pos.z, volume};
         ArraySetSize(&slot->positions, slot->positions._size + 1, inst);
     }
 
@@ -268,17 +273,13 @@ void RtAudio_Scene_AddEmitter(void* selfPtr, uint32_t id, const Vector3* pos, fl
 // retail 0x1800dec40 — finds the FIRST instance whose position exactly equals
 // oldPos and overwrites its xyz (volume untouched). SHADOW oracle.
 // ============================================================================
-void RtAudio_Scene_MoveEmitter(void* selfPtr, uint32_t id, const Vector3* oldPos,
-                                const Vector3* newPos) {
-    auto* self = static_cast<Scene*>(selfPtr);
-    EffectSlot* slot = FindEffectSlot(self, id);
-    bool moved = false;
+void Scene::MoveEmitter(uint32_t id, const Vector3& oldPos, const Vector3& newPos) {
+    EffectSlot* slot = FindEffectSlot(this, id);
     if (slot) {
         for (int32_t i = 0; i < slot->positions._size; ++i) {
             EmitterInstance& e = slot->positions._data[i];
-            if (e.x == oldPos->x && e.y == oldPos->y && e.z == oldPos->z) {
-                e.x = newPos->x; e.y = newPos->y; e.z = newPos->z;
-                moved = true;
+            if (e.x == oldPos.x && e.y == oldPos.y && e.z == oldPos.z) {
+                e.x = newPos.x; e.y = newPos.y; e.z = newPos.z;
                 break;
             }
         }
@@ -291,19 +292,16 @@ void RtAudio_Scene_MoveEmitter(void* selfPtr, uint32_t id, const Vector3* oldPos
 // pos (retail's inner shift loop re-checks the index it just compacted into,
 // so a duplicate position is fully removed in one call). SHADOW oracle.
 // ============================================================================
-void RtAudio_Scene_RemoveEmitter(void* selfPtr, uint32_t id, const Vector3* pos) {
-    auto* self = static_cast<Scene*>(selfPtr);
-    EffectSlot* slot = FindEffectSlot(self, id);
-    int removed = 0;
+void Scene::RemoveEmitter(uint32_t id, const Vector3& pos) {
+    EffectSlot* slot = FindEffectSlot(this, id);
     if (slot) {
         int32_t i = 0;
         while (i < slot->positions._size) {
             EmitterInstance& e = slot->positions._data[i];
-            if (e.x == pos->x && e.y == pos->y && e.z == pos->z) {
+            if (e.x == pos.x && e.y == pos.y && e.z == pos.z) {
                 for (int32_t j = i; j + 1 < slot->positions._size; ++j)
                     slot->positions._data[j] = slot->positions._data[j + 1];
                 --slot->positions._size;
-                ++removed;
                 // do not advance i: the slid-down element must be re-checked
             } else {
                 ++i;
@@ -318,16 +316,13 @@ void RtAudio_Scene_RemoveEmitter(void* selfPtr, uint32_t id, const Vector3* pos)
 // retail 0x1800ded60 — finds the FIRST instance whose position exactly equals
 // pos and overwrites its volume. SHADOW oracle.
 // ============================================================================
-void RtAudio_Scene_SetEmitterVolume(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
-    auto* self = static_cast<Scene*>(selfPtr);
-    EffectSlot* slot = FindEffectSlot(self, id);
-    bool set = false;
+void Scene::SetEmitterVolume(uint32_t id, const Vector3& pos, float volume) {
+    EffectSlot* slot = FindEffectSlot(this, id);
     if (slot) {
         for (int32_t i = 0; i < slot->positions._size; ++i) {
             EmitterInstance& e = slot->positions._data[i];
-            if (e.x == pos->x && e.y == pos->y && e.z == pos->z) {
+            if (e.x == pos.x && e.y == pos.y && e.z == pos.z) {
                 e.volume = volume;
-                set = true;
                 break;
             }
         }
@@ -338,12 +333,9 @@ void RtAudio_Scene_SetEmitterVolume(void* selfPtr, uint32_t id, const Vector3* p
 // int Audio::Scene::GetEmitterCount(uint id) const — retail 0x1800dec00.
 // Pure read. Full replay oracle.
 // ============================================================================
-int RtAudio_Scene_GetEmitterCount(void* selfPtr, uint32_t id) {
-    auto* self = static_cast<Scene*>(selfPtr);
-    EffectSlot* slot = FindEffectSlot(self, id);
+int32_t Scene::GetEmitterCount(uint32_t id) const {
+    const EffectSlot* slot = FindEffectSlot(this, id);
     int ours = slot ? slot->positions._size : 0;
-
-    using GetCountFn = int (*)(void*, uint32_t);
     return ours;
 }
 
@@ -352,14 +344,11 @@ int RtAudio_Scene_GetEmitterCount(void* selfPtr, uint32_t id) {
 // Pure read of the Channel table (a DIFFERENT table/handle space than the
 // EffectSlot functions above — see the header note). Full replay oracle.
 // ============================================================================
-bool RtAudio_Scene_IsEffectPlaying(void* selfPtr, uint32_t handle) {
-    auto* self = static_cast<Scene*>(selfPtr);
+bool Scene::IsEffectPlaying(uint32_t handle) const {
     uint32_t idx = (handle >> 1) & 0xff;
     bool ours = false;
-    if ((int32_t)idx < self->channels._size)
-        ours = ((self->channels._data[idx].handleTag ^ handle) & 0xfffffe00) == 0;
-
-    using IsPlayingFn = bool (*)(void*, uint32_t);
+    if ((int32_t)idx < channels._size)
+        ours = ((channels._data[idx].handleTag ^ handle) & 0xfffffe00) == 0;
     return ours;
 }
 
@@ -368,17 +357,15 @@ bool RtAudio_Scene_IsEffectPlaying(void* selfPtr, uint32_t handle) {
 // retail 0x1800dee70. Pure linear scan of the 4096-slot EffectSlot table for
 // a matching soundEffectRef. Full replay oracle.
 // ============================================================================
-uint32_t RtAudio_Scene_FindEffect3D(void* selfPtr, uint64_t soundRef) {
-    auto* self = static_cast<Scene*>(selfPtr);
+uint32_t Scene::FindEffect3D(Object::ExternalPtr<SoundEffect> effect) {
+    const uint64_t soundRef = reinterpret_cast<uint64_t>(effect.Get());
     uint32_t ours = 0;
-    for (int32_t i = 0; i < self->effects._size; ++i) {
-        if (self->effects._data[i].soundEffectRef == soundRef) {
-            ours = self->effects._data[i].idTag;
+    for (int32_t i = 0; i < effects._size; ++i) {
+        if (effects._data[i].soundEffectRef == soundRef) {
+            ours = effects._data[i].idTag;
             break;
         }
     }
-
-    using FindFn = uint32_t (*)(void*, uint64_t);
     return ours;
 }
 
@@ -392,21 +379,22 @@ uint32_t RtAudio_Scene_FindEffect3D(void* selfPtr, uint64_t soundRef) {
 // — calling both implementations would consume two — so SHADOW, verified via
 // the DLL's own read-only IsEffectPlaying on the handle we just minted.
 // ============================================================================
-uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soundType, const Time* time) {
-    auto* self = static_cast<Scene*>(selfPtr);
+uint32_t Scene::PlayEffect(Object::ExternalPtr<SoundEffect> effect, SoundType soundType,
+                           const System::Time& time) {
+    const uint64_t soundRef = reinterpret_cast<uint64_t>(effect.Get());
     uint32_t handle = 0;
     if (soundRef != 0) {
         int32_t free = -1;
-        for (int32_t i = 0; i < self->channels._size && i < 0x100; ++i) {
-            if (self->channels._data[i].handleTag == 0) { free = i; break; }
+        for (int32_t i = 0; i < channels._size && i < 0x100; ++i) {
+            if (channels._data[i].handleTag == 0) { free = i; break; }
         }
         if (free >= 0) {
-            Channel& ch = self->channels._data[free];
+            Channel& ch = channels._data[free];
             ch.soundEffectRef = soundRef;
             ch.soundType = (uint32_t)soundType;
-            ch.startTime = time->ticks;
-            self->playGeneration += 1;
-            handle = ((uint32_t)free << 1) | ((uint32_t)self->playGeneration << 9);
+            ch.startTime = time._ticks;
+            playGeneration += 1;
+            handle = ((uint32_t)free << 1) | ((uint32_t)playGeneration << 9);
             ch.handleTag = handle;
         }
     }
@@ -469,15 +457,16 @@ uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soun
 // the same unmodified inputs, compare the returned int. `calls=` therefore
 // counts real work: a zero means no positional sound was played, not agreement.
 // ============================================================================
-int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
-                                       const Time* time, const Vector3* pos) {
-    const auto* self = static_cast<const Scene*>(selfPtr);
+int32_t Scene::FindFree3DEffect(Object::ExternalPtr<SoundEffect> effect,
+                               const System::Time& time, const Vector3& pos) const {
 
     // The reuse window, in ticks. Retail seeds it from Scene::time — which is a
     // tick count — and only replaces it when the effect declares a longer one.
-    int64_t window = self->time;
-    const uint8_t* effect = reinterpret_cast<const uint8_t*>(soundRef);
-    const int64_t declared = *reinterpret_cast<const int64_t*>(effect + 0x28);
+    const uint64_t soundRef = reinterpret_cast<uint64_t>(effect.Get());
+    int64_t window = this->time;
+    // FAITHFUL UNGUARDED DEREF: retail's first instruction reads RDX+0x28.
+    const SoundEffect* const fx = effect.Get();
+    const int64_t declared = fx->_maxLength;                  // MOV RAX,[RDX+0x28]
     if (declared != 0) {
         const float kTwenty = 20.0f;                 // 0x41A00000 @ 0x180161700
         const float seconds = static_cast<float>(declared) / kTwenty;
@@ -486,10 +475,10 @@ int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
                                           RtSystem::TimerSecondsPerTick());
     }
 
-    const float radius = *reinterpret_cast<const float*>(effect + 0x20);
+    const float radius = fx->_radius;                         // MOVSS XMM3,[RDX+0x20]
     const float radiusSq = radius * radius;
 
-    const EffectSlot* slot = self->effects._data;
+    const EffectSlot* slot = effects._data;
     int32_t firstFree = -1;
     int32_t ours = -1;
     bool early = false;
@@ -497,12 +486,12 @@ int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
         if (firstFree < 0 && slot->idTag == 0)
             firstFree = i;
         if (slot->soundEffectRef == soundRef) {
-            const float dx = pos->x - slot->posX;
-            const float dy = pos->y - slot->posY;
-            const float dz = pos->z - slot->posZ;
+            const float dx = pos.x - slot->posX;
+            const float dy = pos.y - slot->posY;
+            const float dz = pos.z - slot->posZ;
             const float d2 = (dy * dy + dx * dx) + dz * dz;   // retail's association
             if (!(d2 >= radiusSq)) {                          // COMISS/JNC: CF==1, NaN included
-                int64_t dt = slot->startTime - time->ticks;
+                int64_t dt = slot->startTime - time._ticks;
                 if (dt < 0) dt = -dt;
                 if (dt < window) { ours = -1; early = true; break; }
             }
@@ -540,24 +529,22 @@ int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
 // reaches our own body rather than falling through to a null.
 // SHADOW oracle (mutates the slot; verified via read-only FindEffect3D after).
 // ============================================================================
-uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t soundType,
-                                     const Time* time, const Vector3* pos) {
-    auto* self = static_cast<Scene*>(selfPtr);
+uint32_t Scene::PlayEffect3D(Object::ExternalPtr<SoundEffect> effect, SoundType soundType,
+                             const System::Time& time, const Vector3& pos) {
+    const uint64_t soundRef = reinterpret_cast<uint64_t>(effect.Get());
     uint32_t handle = 0;
     if (soundRef != 0) {
-        using FindFreeFn = int32_t (*)(void*, uint64_t, const Time*, const Vector3*);
-        int32_t idx = RT_EXPORT_ONCE(FindFreeFn,
-            "?FindFree3DEffect@Scene@Audio@@AEBAHV?$ExternalPtr@VSoundEffect@Audio@@@Object@@AEBVTime@System@@AEBVVector3@Math@@@Z"
-            )(self, soundRef, time, pos);
+        // B.3.7 (B7-11): was RT_EXPORT_ONCE by name; the member is this class's.
+        int32_t idx = FindFree3DEffect(effect, time, pos);
         if (idx >= 0) {
-            EffectSlot& slot = self->effects._data[idx];
+            EffectSlot& slot = effects._data[idx];
             slot.soundEffectRef = soundRef;
             slot.soundType = (uint32_t)soundType;
-            slot.posX = pos->x; slot.posY = pos->y; slot.posZ = pos->z;
-            slot.startTime = time->ticks;
+            slot.posX = pos.x; slot.posY = pos.y; slot.posZ = pos.z;
+            slot.startTime = time._ticks;
             slot.channelHandle = 0;
-            self->playGeneration += 1;
-            handle = ((uint32_t)idx << 1) | 1u | ((uint32_t)self->playGeneration << 13);
+            playGeneration += 1;
+            handle = ((uint32_t)idx << 1) | 1u | ((uint32_t)playGeneration << 13);
             slot.idTag = handle;
         }
     }
@@ -574,22 +561,19 @@ uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t so
 // being enabled. SHADOW oracle: verified via IO::Persistence::Get(int) — a
 // full round trip, same shape as Wave 4's own Set(int) oracle.
 // ============================================================================
-void RtAudio_Configuration_Save(void* selfPtr) {
-    auto* self = static_cast<Configuration*>(selfPtr);
+void Configuration::Save() {
 
-    using SetIntFn = void (*)(void*, const char*, const char*, int);
-    using GetIntFn = bool (*)(void*, const char*, const char*, int*);
-    void** persistenceSingleton = reinterpret_cast<void**>(
+    using SetIntFn = void (*)(void*, const char*, const char*, int);    void** persistenceSingleton = reinterpret_cast<void**>(
         ResolveExport("?_singleton@Persistence@IO@@0PEAV12@EA"));
     void* persistence = persistenceSingleton ? *persistenceSingleton : nullptr;
 
     // RT_EXPORT_ONCE: IO::Persistence::Set(int) is ported (io/persistence.cpp:311).
     auto setFn = RT_EXPORT_ONCE(SetIntFn, "?Set@Persistence@IO@@QEAAXPEBD0H@Z");
     if (persistence) {
-        setFn(persistence, "Audio", "UIVolume",      self->uiVolume);
-        setFn(persistence, "Audio", "MusicVolume",   self->musicVolume);
-        setFn(persistence, "Audio", "AmbientVolume", self->ambientVolume);
-        setFn(persistence, "Audio", "EffectVolume",  self->effectVolume);
+        setFn(persistence, "Audio", "UIVolume",      uiVolume);
+        setFn(persistence, "Audio", "MusicVolume",   musicVolume);
+        setFn(persistence, "Audio", "AmbientVolume", ambientVolume);
+        setFn(persistence, "Audio", "EffectVolume",  effectVolume);
     }
 
 }
@@ -603,8 +587,7 @@ void RtAudio_Configuration_Save(void* selfPtr) {
 // are functionally identical (same key format, same map, same strtol), which
 // is exactly what the diff below checks.
 // ============================================================================
-bool RtAudio_Configuration_Startup(void* selfPtr) {
-    auto* self = static_cast<Configuration*>(selfPtr);
+bool Configuration::Startup() {
 
     using GetIntFn = bool (*)(void*, const char*, const char*, int*);
     void** persistenceSingleton = reinterpret_cast<void**>(
@@ -617,10 +600,10 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
     // only writing on success.
     if (persistence) {
         int v;
-        if (getFn(persistence, "Audio", "UIVolume", &v))      self->uiVolume = v;
-        if (getFn(persistence, "Audio", "MusicVolume", &v))   self->musicVolume = v;
-        if (getFn(persistence, "Audio", "AmbientVolume", &v)) self->ambientVolume = v;
-        if (getFn(persistence, "Audio", "EffectVolume", &v))  self->effectVolume = v;
+        if (getFn(persistence, "Audio", "UIVolume", &v))      uiVolume = v;
+        if (getFn(persistence, "Audio", "MusicVolume", &v))   musicVolume = v;
+        if (getFn(persistence, "Audio", "AmbientVolume", &v)) ambientVolume = v;
+        if (getFn(persistence, "Audio", "EffectVolume", &v))  effectVolume = v;
     }
 
   // retail's own body always returns true (no failure path)
@@ -701,13 +684,7 @@ bool RtAudio_Configuration_Startup(void* selfPtr) {
 // (a real per-element copy-assign and destroy-range, not a byte trait), so it
 // stays a hand-derived `rtcoll::AsArray<&kSpec_EffectSlot>` bridge rather than
 // a plain `.SetSize(n)`. The row stays registered in array.cpp.
-using AudioBulkSerFn     = void (*)(void* serializer, int32_t count, void* data);
-
-void RtAudio_Scene_Serialize(void* self, void* serializer) {
-    static auto bulkSerialize = reinterpret_cast<AudioBulkSerFn>(
-        ResolveAddr(Module::Runtime, 0x180052640));
-
-    auto* scene = static_cast<Scene*>(self);
+void Scene::Serialize(void* serializer) {
     auto* ser = static_cast<rt::io::Serializer*>(serializer);
 
     // Retail's stack-local Serializer: the caller's Stream, a null ReaderWriter
@@ -727,7 +704,7 @@ void RtAudio_Scene_Serialize(void* self, void* serializer) {
     void** rwVtable = *reinterpret_cast<void***>(rw);
 
     // kScalarInt (+0xa0) -- (int& value, const char* name)
-    int32_t count = scene->effects.GetSize();
+    int32_t count = effects.GetSize();
     using ScalarIntFn = void (*)(void*, int32_t*, const char*);
     reinterpret_cast<ScalarIntFn>(rwVtable[rt::io::rw_vtbl::kScalarInt / 8])(
         rw, &count, nullptr);
@@ -736,14 +713,16 @@ void RtAudio_Scene_Serialize(void* self, void* serializer) {
     // 0x1800e00c0 skips this when writing, so saving never reallocates.
     // retail 0x180051390 — kSpec_EffectSlot; see the banner above.
     if (local.stream->direction == rt::io::kDirectionReading)
-        rtcoll::AsArray<&rtcoll::kSpec_EffectSlot>(&scene->effects)->SetSize(count);
+        rtcoll::AsArray<&rtcoll::kSpec_EffectSlot>(&effects)->SetSize(count);
 
-    bulkSerialize(&local, count, scene->effects.GetData());
+    // 0x180052640 — this directory's own body, called directly (B.3.7:
+    // the function-local first-call cache that resolved it by address is gone).
+    RtAudio_Scene_SerializeEffectSlots(&local, count, effects.GetData());
 
     // kArrayBool (+0x20) -- (int n, bool* data, const char* name), n == 5.
     using ArrayBoolFn = void (*)(void*, int32_t, void*, const char*);
     reinterpret_cast<ArrayBoolFn>(rwVtable[rt::io::rw_vtbl::kArrayBool / 8])(
-        rw, 5, scene->paused, nullptr);
+        rw, 5, paused, nullptr);
 
     if (rw) {
         using DtorFn = void (*)(void*, uint32_t);
@@ -811,10 +790,7 @@ void RtAudio_Scene_Serialize(void* self, void* serializer) {
 
 // Audio::Device::Stop(AudioChannel*) — retail 0x1800de200, ord 4105. The one
 // device entry point this family needs, and the one that fires the stored
-// completion callback (WAVE8_5.md §9). Left on the DLL: it is Device's own
-// code, not Scene's, and calling it by address is the same faithful delegation
-// this file already uses for the two Collection internals in Scene::Serialize.
-using AudioDeviceStopFn = void (*)(void* device, void* audioChannel);
+// completion callback (WAVE8_5.md §9). A direct member call since B.3.7.
 
 static void* AudioDeviceSingleton() {
     // ?_singleton@Device@Audio@@0PEAV12@EA (ord 4805) is an exported DATA
@@ -833,16 +809,16 @@ static void* AudioDeviceSingleton() {
 // because the whole record is overwritten with the default two instructions
 // later.
 static void ReleasePlatformChannels(Scene* self, uint32_t chOffsetBytes, bool clearSlots) {
-    void* device = AudioDeviceSingleton();
+    Audio::Device* device = reinterpret_cast<Audio::Device*>(AudioDeviceSingleton());   // B.3.7 bridge
     for (int b = 0; b < 8; ++b) {
         // Retail RE-READS channels._data on every iteration (the callee could
         // in principle move it); reproduced rather than hoisted.
         auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
         auto* ch = reinterpret_cast<Channel*>(base + chOffsetBytes);
-        void* p = ch->platformChannel[b];
+        Audio::Device::AudioChannel* p = ch->platformChannel[b];
         if (!p) continue;
-        RT_EXPORT_ONCE(AudioDeviceStopFn,
-            "?Stop@Device@Audio@@QEAAXPEAUAudioChannel@12@@Z")(device, p);
+        // B.3.7 (B7-11): was RT_EXPORT_ONCE `?Stop@Device@Audio@@`; now the member.
+        device->Stop(p);
         if (clearSlots) {
             base = reinterpret_cast<uint8_t*>(self->channels._data);
             ch = reinterpret_cast<Channel*>(base + chOffsetBytes);
@@ -889,27 +865,11 @@ static bool ChannelHandleMatches(const Scene* self, uint32_t handle, uint32_t* o
 // it) and a port of Pause that left this on the DLL would be the half-ported
 // hazard WAVE8.md §1 warns about.
 // ============================================================================
-void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
-    auto* self = static_cast<Scene*>(selfPtr);
+void Scene::PauseEffect(uint32_t handle) {
     uint32_t idx;
-    const bool matched = ChannelHandleMatches(self, handle, &idx);
-
-    // SHADOW, and it is a FULL REPLAY of the only branch this function has.
-    // The DLL's IsEffectPlaying (0x1800df680) computes the identical predicate
-    // on the same channel, so asking it is asking retail whether our guard
-    // agreed with retail's, for real handles on a real scene. Reported BEFORE
-    // the early return, so the guard-fail path still counts as a call: a shadow
-    // placed after the return makes `calls=` mean "did work" when every reader
-    // of that column takes it to mean "was entered".
-    using IsPlayingFn = bool (*)(void*, uint32_t);
+    const bool matched = ChannelHandleMatches(this, handle, &idx);
     if (!matched) return;
-    ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/true);
-
-    // POST-CONDITION, stated exactly: a paused channel keeps its record (that
-    // is the whole difference from StopEffect) and holds no platform channel.
-    const Channel& ch = self->channels._data[idx];
-    bool anyLeft = false;
-    for (int b = 0; b < 8; ++b) if (ch.platformChannel[b]) anyLeft = true;
+    ReleasePlatformChannels(this, idx * 0x70u, /*clearSlots=*/true);
 }
 
 // ============================================================================
@@ -919,14 +879,13 @@ void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
 // the handle stops validating. Reached from our tree only through
 // StopEffect3D; ported for the same reason as PauseEffect.
 // ============================================================================
-void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
-    auto* self = static_cast<Scene*>(selfPtr);
+void Scene::StopEffect(uint32_t handle) {
     uint32_t idx;
-    const bool matched = ChannelHandleMatches(self, handle, &idx);
+    const bool matched = ChannelHandleMatches(this, handle, &idx);
 
     if (!matched) return;
-    ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/false);
-    ResetChannel(&self->channels._data[idx]);
+    ReleasePlatformChannels(this, idx * 0x70u, /*clearSlots=*/false);
+    ResetChannel(&channels._data[idx]);
 
     // POST-CONDITION. Stated as "the record was zeroed", NOT as "the handle no
     // longer validates" -- the first attempt said the latter and it is FALSE
@@ -962,32 +921,31 @@ void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
 // into `paused[5]`; a negative or >4 value reads and writes out of bounds in
 // retail too. Left faithful (CLAUDE.md: do not "fix" a faithful deref).
 // ============================================================================
-void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
-    auto* self = static_cast<Scene*>(selfPtr);
+void Scene::Pause(int32_t soundType, bool paused) {
     int64_t t = soundType;
-    const bool alreadyThere = (self->paused[t] == (uint8_t)paused);
+    const bool alreadyThere = (this->paused[t] == (uint8_t)paused);
 
     if (!alreadyThere) {
         if (paused) {
             for (uint32_t off = 0; off < 0x7000u; off += 0x70u) {
-                auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
+                auto* base = reinterpret_cast<uint8_t*>(channels._data);
                 auto* ch = reinterpret_cast<Channel*>(base + off);
                 uint32_t tag = ch->handleTag;
                 if (tag == 0 || (int32_t)ch->soundType != soundType) continue;
-                RtAudio_Scene_PauseEffect(self, tag);
+                PauseEffect(tag);
             }
         } else {
             for (uint32_t off = 0; off < 0x7000u; off += 0x70u) {
-                auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
+                auto* base = reinterpret_cast<uint8_t*>(channels._data);
                 auto* ch = reinterpret_cast<Channel*>(base + off);
                 uint32_t tag = ch->handleTag;
                 if (tag == 0 || (int32_t)ch->soundType != soundType) continue;
                 uint32_t idx;
-                if (!ChannelHandleMatches(self, tag, &idx)) continue;
-                self->channels._data[idx].started = 0;
+                if (!ChannelHandleMatches(this, tag, &idx)) continue;
+                channels._data[idx].started = 0;
             }
         }
-        self->paused[t] = (uint8_t)paused;
+        this->paused[t] = (uint8_t)paused;
     }
 }
 
@@ -1022,13 +980,18 @@ void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
 // POD, so the trait-derived `~Array()` on the stack temporary IS that body.
 using AudioArrayAssignFn = void (*)(void* dst, const void* src);
 
-void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
-    static auto arrayAssign = reinterpret_cast<AudioArrayAssignFn>(
-        ResolveAddr(Module::Runtime, 0x180050d30));
+// B.3.7 (B6-5): the function-local first-call cache StopEffect3D kept for this
+// address door is a NAMESPACE-SCOPE atomic slot now.
+static std::atomic<void*> g_arrayAssignSlot{nullptr};
+static AudioArrayAssignFn ArrayAssign16() {
+    return reinterpret_cast<AudioArrayAssignFn>(rtengine::AtomicResolve(g_arrayAssignSlot, [] {
+        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180050d30));
+    }));
+}
 
-    auto* self = static_cast<Scene*>(selfPtr);
+void Scene::StopEffect3D(uint32_t id) {
     uint32_t idx = (id >> 1) & 0xfff;
-    EffectSlot* slot = &self->effects._data[idx];
+    EffectSlot* slot = &effects._data[idx];
     if ((slot->idTag >> 13) != (id >> 13)) {
         // SHADOW on the reject path -- reported rather than returned silently,
         // for the same reason as Pause's early-out: `calls=` must mean
@@ -1045,7 +1008,7 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
     }
 
     if (slot->channelHandle != 0)
-        RtAudio_Scene_StopEffect(self, slot->channelHandle);
+        StopEffect(slot->channelHandle);
 
     // Retail's stack-local default EffectSlot; only its `positions` member is
     // used (as the empty source of the assign), but the whole record is built.
@@ -1059,7 +1022,7 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
     slot->channelHandle  = 0;
     slot->idTag          = 0;
     slot->baseVolume     = 1.0f;
-    arrayAssign(&slot->positions, &tmp.positions);
+    ArrayAssign16()(&slot->positions, &tmp.positions);
     // retail 0x180051d80 (`tmp`'s ~Array() tail call) is GONE, not converted to
     // an explicit `.~Array()` call: `tmp` is a local EffectSlot, and now that
     // `Collection::Array<EmitterInstance>` carries a real destructor,
@@ -1093,8 +1056,7 @@ void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
 // the same channel for any handle the Scene itself minted, so the difference
 // is invisible in a normal run — and reproducing it costs one line.
 // ============================================================================
-void RtAudio_Scene_StopAll(void* selfPtr) {
-    auto* self = static_cast<Scene*>(selfPtr);
+void Scene::StopAll() {
 
     // The set this call is OBLIGED to retire, computed BEFORE any of it runs
     // and computed with the DLL's OWN predicate (IsEffectPlaying is
@@ -1106,15 +1068,90 @@ void RtAudio_Scene_StopAll(void* selfPtr) {
     // predicate reported 8 divergences in 9 calls and all 8 were the predicate.
 
     for (uint32_t off = 0; off < 0x7000u; off += 0x70u) {
-        auto* base = reinterpret_cast<uint8_t*>(self->channels._data);
+        auto* base = reinterpret_cast<uint8_t*>(channels._data);
         uint32_t tag = reinterpret_cast<Channel*>(base + off)->handleTag;
         if (tag == 0) continue;
         uint32_t idx;
-        if (!ChannelHandleMatches(self, tag, &idx)) continue;
-        ReleasePlatformChannels(self, idx * 0x70u, /*clearSlots=*/false);
-        ResetChannel(&self->channels._data[idx]);
+        if (!ChannelHandleMatches(this, tag, &idx)) continue;
+        ReleasePlatformChannels(this, idx * 0x70u, /*clearSlots=*/false);
+        ResetChannel(&channels._data[idx]);
     }
 
+}
+
+}  // namespace Audio
+
+// ============================================================================
+// THE DOORS — one-line QUALIFIED delegations. B7-5: `soundRef` arrives as the
+// bare register pointer (ExternalPtr by value); `const Time&` / `const
+// Vector3&` arrive as pointers. Non-virtual members, so qualification is not a
+// recursion guard here; it is the door convention.
+// ============================================================================
+namespace {
+inline Audio::Scene* AsScene(void* p) { return reinterpret_cast<Audio::Scene*>(p); }   // B.3.7 bridge
+inline Object::ExternalPtr<Audio::SoundEffect> AsEffect(uint64_t ref) {
+    return Object::ExternalPtr<Audio::SoundEffect>(reinterpret_cast<Audio::SoundEffect*>(ref));   // B.3.7 bridge
+}
+inline const System::Time& AsTime(const Time* t) { return *reinterpret_cast<const System::Time*>(t); }   // B.3.7 bridge
+}  // namespace
+
+void RtAudio_Scene_AddEmitter(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
+    AsScene(selfPtr)->Audio::Scene::AddEmitter(id, *pos, volume);
+}
+void RtAudio_Scene_MoveEmitter(void* selfPtr, uint32_t id, const Vector3* oldPos, const Vector3* newPos) {
+    AsScene(selfPtr)->Audio::Scene::MoveEmitter(id, *oldPos, *newPos);
+}
+void RtAudio_Scene_RemoveEmitter(void* selfPtr, uint32_t id, const Vector3* pos) {
+    AsScene(selfPtr)->Audio::Scene::RemoveEmitter(id, *pos);
+}
+void RtAudio_Scene_SetEmitterVolume(void* selfPtr, uint32_t id, const Vector3* pos, float volume) {
+    AsScene(selfPtr)->Audio::Scene::SetEmitterVolume(id, *pos, volume);
+}
+int RtAudio_Scene_GetEmitterCount(void* selfPtr, uint32_t id) {
+    return AsScene(selfPtr)->Audio::Scene::GetEmitterCount(id);
+}
+bool RtAudio_Scene_IsEffectPlaying(void* selfPtr, uint32_t handle) {
+    return AsScene(selfPtr)->Audio::Scene::IsEffectPlaying(handle);
+}
+uint32_t RtAudio_Scene_FindEffect3D(void* selfPtr, uint64_t soundRef) {
+    return AsScene(selfPtr)->Audio::Scene::FindEffect3D(AsEffect(soundRef));
+}
+uint32_t RtAudio_Scene_PlayEffect(void* selfPtr, uint64_t soundRef, int32_t soundType, const Time* time) {
+    return AsScene(selfPtr)->Audio::Scene::PlayEffect(
+        AsEffect(soundRef), static_cast<Audio::Scene::SoundType>(soundType), AsTime(time));
+}
+int32_t RtAudio_Scene_FindFree3DEffect(void* selfPtr, uint64_t soundRef,
+                                       const Time* time, const Vector3* pos) {
+    return AsScene(selfPtr)->Audio::Scene::FindFree3DEffect(AsEffect(soundRef), AsTime(time), *pos);
+}
+uint32_t RtAudio_Scene_PlayEffect3D(void* selfPtr, uint64_t soundRef, int32_t soundType,
+                                    const Time* time, const Vector3* pos) {
+    return AsScene(selfPtr)->Audio::Scene::PlayEffect3D(
+        AsEffect(soundRef), static_cast<Audio::Scene::SoundType>(soundType), AsTime(time), *pos);
+}
+void RtAudio_Scene_Serialize(void* self, void* serializer) {
+    AsScene(self)->Audio::Scene::Serialize(serializer);
+}
+void RtAudio_Scene_PauseEffect(void* selfPtr, uint32_t handle) {
+    AsScene(selfPtr)->Audio::Scene::PauseEffect(handle);
+}
+void RtAudio_Scene_StopEffect(void* selfPtr, uint32_t handle) {
+    AsScene(selfPtr)->Audio::Scene::StopEffect(handle);
+}
+void RtAudio_Scene_Pause(void* selfPtr, int32_t soundType, bool paused) {
+    AsScene(selfPtr)->Audio::Scene::Pause(soundType, paused);
+}
+void RtAudio_Scene_StopEffect3D(void* selfPtr, uint32_t id) {
+    AsScene(selfPtr)->Audio::Scene::StopEffect3D(id);
+}
+void RtAudio_Scene_StopAll(void* selfPtr) {
+    AsScene(selfPtr)->Audio::Scene::StopAll();
+}
+void RtAudio_Configuration_Save(void* selfPtr) {
+    reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::Save();       // B.3.7 bridge
+}
+bool RtAudio_Configuration_Startup(void* selfPtr) {
+    return reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::Startup();   // B.3.7 bridge
 }
 
 int RtAudioSceneRegister() {
@@ -1197,12 +1234,13 @@ int RtAudioSceneRegister() {
 // RIP-relative store into a door. See this lane's report for why the row is
 // NOT promoted today regardless.
 // ---------------------------------------------------------------------------
-void RtAudio_Configuration_Dtor(void* /*selfPtr - never read*/) {
-          // unconditional; there is no branch
-
-    // `this` is genuinely unused - retail's two instructions never touch RCX.
+// `this` is genuinely unused - retail's two instructions never touch RCX.
+Audio::Configuration::~Configuration() {
     *RT_DATA_SLOT(void**, "?_singleton@Configuration@Audio@@0PEAV12@EA") = nullptr;
+}
 
+void RtAudio_Configuration_Dtor(void* selfPtr) {
+    reinterpret_cast<Audio::Configuration*>(selfPtr)->Audio::Configuration::~Configuration();   // B.3.7 bridge
 }
 
 int RtAudioConfigurationRegister() {

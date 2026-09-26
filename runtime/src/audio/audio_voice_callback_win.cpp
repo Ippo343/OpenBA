@@ -162,23 +162,18 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Device.h"
 
 namespace RtAudio {
 
-// The per-channel XAudio2 voice-callback record. Modelled here and nowhere else;
-// `audio_device.cpp` models the SIBLING array (AudioChannel, stride 0x28) and
-// the two are cross-linked by the Device constructor's third loop.
-struct VoiceCallback {
-    const void* vptr;      // +0x00  0x180157c60
-    void*       voice;     // +0x08  IXAudio2SourceVoice*
-    void*       channel;   // +0x10  Audio::Device::AudioChannel* (stride 0x28)
-    HANDLE      bufferEnd; // +0x18  Audio::Stream's +0x48 event, or null
-};
-static_assert(sizeof(VoiceCallback) == 0x20,
-              "Audio VoiceCallback record must be 0x20 (Device ctor loop 2 stride)");
-static_assert(offsetof(VoiceCallback, voice)     == 0x08, "voice @ +0x08");
-static_assert(offsetof(VoiceCallback, channel)   == 0x10, "channel @ +0x10");
-static_assert(offsetof(VoiceCallback, bufferEnd) == 0x18, "bufferEnd @ +0x18");
+// The per-channel XAudio2 voice-callback record. ENDGAME B.3.7 block B4: it is
+// `Audio::Device::PlatformChannel` (runtime/types/audio/Device.h) — the retail
+// name `?GetPlatformChannel@Device@Audio@@QEAAPEAUPlatformChannel@12@H@Z`
+// (0x18000c720: `SHL RAX,5 ; ADD RAX,0xa98 ; ADD RAX,RCX`) gives the 0x20
+// record whose first qword is this table. The layout moved there (B6-8); the
+// descriptive `VoiceCallback` spelling is kept as an alias for this file. The
+// seven slot bodies stay here as they are (B37_RULES section 7).
+using VoiceCallback = Audio::Device::PlatformChannel;
 
 // The bit slot 2 raises. `audio_device.cpp`'s `Update` tests `flags & 2` as
 // "finished, reap me" and its reap clears bits 0 and 1 (`and $0xfffffffc`).
@@ -208,7 +203,7 @@ extern "C" void RtAudio_VoiceCallback_OnVoiceProcessingPassEnd(void* self) {
 // faithful crash with a null check").
 extern "C" void RtAudio_VoiceCallback_OnStreamEnd(void* self) {
     VoiceCallback* cb = static_cast<VoiceCallback*>(self);
-    *static_cast<uint32_t*>(cb->channel) |= kChannelFinished;
+    cb->channel->flags |= kChannelFinished;
 }
 
 // ---- slot 3  0x180050210 ---------------------------------------------------
@@ -227,8 +222,8 @@ extern "C" void RtAudio_VoiceCallback_OnBufferStart(void* self, void* bufferCont
 extern "C" void RtAudio_VoiceCallback_OnBufferEnd(void* self, void* bufferContext) {
     (void)bufferContext;
     VoiceCallback* cb = static_cast<VoiceCallback*>(self);
-    if (cb->bufferEnd != nullptr)
-        SetEvent(cb->bufferEnd);            // tail-jmp *[0x18014b368] in retail
+    if (cb->bufferEvent != nullptr)
+        SetEvent(static_cast<HANDLE>(cb->bufferEvent));   // tail-jmp *[0x18014b368] in retail
 }
 
 // ---- slot 5  0x180050220 ---------------------------------------------------

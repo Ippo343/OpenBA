@@ -55,6 +55,7 @@ void RtAudioPortInit() {
         // Hoisted out of the printf: the perf build compiles printf to ((void)0) (standalone/log_strip.h).
         const int n_audiobatchcleaves = RtAudioBatchCLeavesRegister();
         printf("[RtPort] BATCH C: %d audio leaves registered\n", n_audiobatchcleaves);
+        (void)n_audiobatchcleaves;   // the perf build strips the printf (B.3.7: warning fix)
     }
     int n = 0;
     n += RtAudioSceneRegister();

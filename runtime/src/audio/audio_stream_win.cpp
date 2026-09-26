@@ -228,38 +228,35 @@
 // ---------------------------------------------------------------------------
 // ============================================================================
 
+// ENDGAME B.3.7 block B4: the ctor and dtor STAY DOORS (B4b-2: a polymorphic
+// Thread subclass has no real constructor; `Ctor_AudioDevice` builds the one
+// Stream in place). The `kStream*` offsets that lived here are the fields of
+// `Audio::Stream` (runtime/types/audio/Stream.h, B6-8). Three first-call
+// caches went with them (B6-5 / B7-11, hex literals checked against
+// standalone/rt_export_addrs.inc):
+//   0x180154950 `??_7Stream@Audio@@6B@` -> RT_DATA_SLOT by name (the minted row)
+//   0x18000c4a0 (the +0x30 `~Array`, J1) -> `rtcoll::ArrayDtorImpl`, the J1 body
+// `??0/??1Thread@System@@` stay RT_EXPORT_ONCE name doors.
+
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Stream.h"
+#include "../../types/collection/Collection.h"   // rtcoll::ArrayDtorImpl
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 
-// Declared locally rather than by including standalone/resolve.h (PLAN §4.1
-// decision 1), exactly as ~30 sibling runtime files do.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module m, uintptr_t ghidra_addr);
-
 namespace {
 
-// ---- field offsets, every one pinned by an instruction in the banner --------
-constexpr int kStreamField30      = 0x30;   // the heap buffer 0x18000c4a0 releases
-constexpr int kStreamField38      = 0x38;
-constexpr int kStreamLock         = 0x50;   // the SECOND CRITICAL_SECTION
-constexpr int kStreamField78      = 0x78;
-constexpr int kStreamFlag80       = 0x80;   // a BYTE
-constexpr int kStreamEventSecond  = 0x40;   // created SECOND, stored at +0x40
-constexpr int kStreamEventFirst   = 0x48;   // created FIRST,  stored at +0x48
 constexpr uint32_t kStreamStackSize = 0x10000;   // MOV EDX,0x10000 — 64 KB
 constexpr DWORD    kStreamSpinCount = 0x1388;    // MOV EDX,0x1388  — 5000
 
 // ---- attendance ------------------------------------------------------------
 uint64_t g_ctorEntries = 0;
 uint64_t g_dtorEntries = 0;
-uint64_t g_ctorChecks  = 0;   // EFFECTIVENESS: predicate actually evaluated
-uint64_t g_dtorChecks  = 0;   // EFFECTIVENESS: predicate actually evaluated
 uint64_t g_ctorEventFail = 0; // control: CreateEventW refused
 
 struct AudioStreamSummary {
@@ -271,63 +268,34 @@ struct AudioStreamSummary {
             return;
         }
         printf("[RtPort] Audio::Stream ATTENDANCE (entries, not comparisons): "
-               "ctor=%llu dtor=%llu eventFail=%llu | SELF-CHECKS EVALUATED "
-               "ctor=%llu dtor=%llu (these are SELF-CHECKS, not oracles -- they "
-               "never consult the DLL)\n",
+               "ctor=%llu dtor=%llu eventFail=%llu\n",
                (unsigned long long)g_ctorEntries,
                (unsigned long long)g_dtorEntries,
-               (unsigned long long)g_ctorEventFail,
-               (unsigned long long)g_ctorChecks,
-               (unsigned long long)g_dtorChecks);
+               (unsigned long long)g_ctorEventFail);
         fflush(stdout);
     }
 };
 AudioStreamSummary g_summary;
 
-template <typename T> inline T& Field(void* p, int off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
-
-// `??_7Stream@Audio@@6B@` @ 0x180154950. Reached through ResolveAddr so the
-// stamp follows the mint table once that row exists — see the banner. Retail
-// reaches it with a RIP-relative LEA, which is NOT a door; this IS one.
-const void* StreamVtable() {
-    static const void* v = nullptr;
-    if (!v) v = reinterpret_cast<const void*>(ResolveAddr(Module::Runtime, 0x180154950));
-    return v;
-}
+// `??_7Stream@Audio@@6B@` @ 0x180154950 — minted since B.3.6 (the Wave 24
+// HANDOVER below is discharged), so it is asked for BY NAME like every other
+// vtable stamp in this directory.
+void* StreamVtable() { return RT_DATA_SLOT(void*, "??_7Stream@Audio@@6B@"); }
 
 // `??0Thread@System@@QEAA@I@Z` @ 0x1800ca4e0 — PORTED and registered
-// (runtime/src/system/thread_win.cpp:457). Reached BY NAME, which is what makes
-// this call site follow the port.
+// (runtime/src/system/thread_win.cpp). Reached BY NAME.
 void ThreadCtor(void* self, uint32_t stackSize) {
     using Fn = void* (*)(void*, uint32_t);
     Fn fn = RT_EXPORT_ONCE(Fn, "??0Thread@System@@QEAA@I@Z");
     if (fn) fn(self, stackSize);
 }
 
-// `??1Thread@System@@QEAA@XZ` @ 0x1800ca590 — PORTED and registered
-// (thread_win.cpp:458). Retail INLINES it into the Stream dtor; the two were
-// disassembled side by side and are the same twelve steps in the same order, so
-// calling it reproduces the inlined tail exactly.
+// `??1Thread@System@@QEAA@XZ` @ 0x1800ca590 — PORTED and registered. Retail
+// INLINES it into the Stream dtor; the two are the same twelve steps.
 void ThreadDtor(void* self) {
     using Fn = void (*)(void*);
     Fn fn = RT_EXPORT_ONCE(Fn, "??1Thread@System@@QEAA@XZ");
     if (fn) fn(self);
-}
-
-// 0x18000c4a0 — the +0x30 `Collection::Array<T>::~Array`. PORTED (Wave 25 lane
-// INTERNAL42, array.cpp's J1 family); reached by address so the registry gets
-// first refusal and now answers with our body. See the banner.
-// NOT CONVERTED (ENDGAME B.3.2 step 2): the same +0x30 field
-// audio_stream_play_win.cpp's GrowStreamBuffers grows — no `runtime/types`
-// struct exists for Audio::Stream, so `p` is a raw byte offset with no typed
-// `Collection::Array<T>` field to call `.~Array()` on.
-void ReleaseField30Buffer(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x18000c4a0));
-    if (fn) fn(p);
 }
 
 }  // namespace
@@ -335,56 +303,29 @@ void ReleaseField30Buffer(void* p) {
 // ============================================================================
 // ??0Stream@Audio@@QEAA@XZ                                 retail 0x1800a0e30
 // ============================================================================
-extern "C" void* RtAudio_Stream_Ctor(void* self) {
+extern "C" void* RtAudio_Stream_Ctor(void* selfv) {
     ++g_ctorEntries;
+    Audio::Stream* const self = reinterpret_cast<Audio::Stream*>(selfv);   // B.3.7 bridge
 
     ThreadCtor(self, kStreamStackSize);                  // 0x1800a0e55
-    Field<const void*>(self, 0x00) = StreamVtable();     // 0x1800a0e62
-    Field<uint64_t>(self, kStreamField30) = 0;           // 0x1800a0e67
-    Field<uint64_t>(self, kStreamField38) = 0;           // 0x1800a0e6b
+    *reinterpret_cast<void**>(self) = StreamVtable();    // 0x1800a0e62
+    self->_buffers = nullptr;                            // 0x1800a0e67 (qword)
+    self->_buffersSize = 0; self->_buffersCapacity = 0;  // 0x1800a0e6b (ONE qword store at +0x38)
     InitializeCriticalSection(                           // 0x1800a0e73
-        reinterpret_cast<CRITICAL_SECTION*>(static_cast<uint8_t*>(self) + kStreamLock));
+        reinterpret_cast<CRITICAL_SECTION*>(self->_lock));
     SetCriticalSectionSpinCount(                         // 0x1800a0e82
-        reinterpret_cast<CRITICAL_SECTION*>(static_cast<uint8_t*>(self) + kStreamLock),
-        kStreamSpinCount);
+        reinterpret_cast<CRITICAL_SECTION*>(self->_lock), kStreamSpinCount);
 
-    Field<uint64_t>(self, kStreamField78) = 0;           // 0x1800a0e89
-    Field<uint8_t>(self, kStreamFlag80)   = 0;           // 0x1800a0e8d, a BYTE store
+    self->_bytePosition = 0; self->_channel = 0;        // 0x1800a0e89 (ONE qword store at +0x78)
+    self->_stopping = 0;                                 // 0x1800a0e8d, a BYTE store
 
     // Both auto-reset, both initially non-signalled. +0x48 FIRST, then +0x40 —
     // the order retail creates them in.
-    Field<HANDLE>(self, kStreamEventFirst)  =            // 0x1800a0e9e / 0x1800a0ea4
-        CreateEventW(nullptr, FALSE, FALSE, nullptr);
-    Field<HANDLE>(self, kStreamEventSecond) =            // 0x1800a0eb2 / 0x1800a0eb8
-        CreateEventW(nullptr, FALSE, FALSE, nullptr);
+    self->_bufferEvent = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0ea4
+    self->_wakeEvent   = CreateEventW(nullptr, FALSE, FALSE, nullptr);   // 0x1800a0eb8
 
-    if (Field<HANDLE>(self, kStreamEventFirst) == nullptr ||
-        Field<HANDLE>(self, kStreamEventSecond) == nullptr)
+    if (self->_bufferEvent == nullptr || self->_wakeEvent == nullptr)
         ++g_ctorEventFail;
-
-    // ---- SELF-CHECK: the post-conditions the disassembly pins ---------------
-    // The two HANDLE fields are checked only for NON-NULLNESS and DISTINCTNESS.
-    // Their VALUES must not be compared against anything: they legitimately vary
-    // per run, and a predicate that examined them would be the mirror control
-    // failure (corrupting/comparing a byte that should not be compared).
-    // THE VPTR TERM IS AN *ORDERING* CHECK, NOT AN IDENTITY ONE, AND THE
-    // DIFFERENCE MATTERS. Wave 24 lane DIFF's armed sweep found
-    // `IO::MemoryStream::MemoryStream`'s oracle permanently red because it
-    // compares a vptr at +0x00 that MUST differ between our table and retail's
-    // (reference_a_control_can_corrupt_a_byte_that_should_not_be_compared.md).
-    // This site does NOT make that mistake: it never compares our vptr against
-    // retail's. It compares the field against the value THIS BODY WROTE, which
-    // can only disagree if the stamp landed in the wrong ORDER — and that is a
-    // real and specific defect mode here, because `??0Thread@System@@` stamps
-    // `??_7Thread@System@@6B@` (0x180155f20) and our stamp must come AFTER it.
-    //
-    // ENDGAME B.3.3 step 7: the `!= ThreadBaseVtable()` term this paragraph
-    // describes is NOT in the check any more and has not been for some time —
-    // the helper it called had no caller left, only this comment, so it is
-    // deleted here (B33_RULES §5, §9 step 7). The ordering defect the term
-    // would have caught is still the one to look for if this self-check ever
-    // fires; 0x180155f20 itself stays, reached by persistence_worker_win.cpp
-    // and by the mint/export tables.
 
     return self;                                         // 0x1800a0ebc
 }
@@ -392,24 +333,25 @@ extern "C" void* RtAudio_Stream_Ctor(void* self) {
 // ============================================================================
 // ??1Stream@Audio@@QEAA@XZ                                 retail 0x1800a0d90
 // ============================================================================
-extern "C" void RtAudio_Stream_Dtor(void* self) {
+extern "C" void RtAudio_Stream_Dtor(void* selfv) {
     ++g_dtorEntries;
+    Audio::Stream* const self = reinterpret_cast<Audio::Stream*>(selfv);   // B.3.7 bridge
 
-    const HANDLE hFirst  = Field<HANDLE>(self, kStreamEventFirst);
-    const HANDLE hSecond = Field<HANDLE>(self, kStreamEventSecond);
+    const HANDLE hFirst  = static_cast<HANDLE>(self->_bufferEvent);
+    const HANDLE hSecond = static_cast<HANDLE>(self->_wakeEvent);
 
-    Field<const void*>(self, 0x00) = StreamVtable();      // 0x1800a0dad
+    *reinterpret_cast<void**>(self) = StreamVtable();     // 0x1800a0dad
     CloseHandle(hFirst);                                  // 0x1800a0db4, +0x48
     CloseHandle(hSecond);                                 // 0x1800a0dbe, +0x40
     DeleteCriticalSection(                                // 0x1800a0dc9
-        reinterpret_cast<CRITICAL_SECTION*>(static_cast<uint8_t*>(self) + kStreamLock));
-    ReleaseField30Buffer(static_cast<uint8_t*>(self) + kStreamField30);  // 0x1800a0dd4
+        reinterpret_cast<CRITICAL_SECTION*>(self->_lock));
+    // 0x1800a0dd4 CALL 0x18000c4a0 — the +0x30 `Array<Block>::~Array`, a J1
+    // body (free the buffer, zero the header; no element destroy).
+    rtcoll::ArrayDtorImpl(reinterpret_cast<rtcoll::ArrayHdr*>(&self->_buffers));
 
     // The inlined ~Thread: the 0x180155f20 re-stamp, SetEvent(hStop),
     // WaitForSingleObject(hThread, INFINITE) and all FOUR base CloseHandles.
-    // Proved equal to the shipped 0x1800ca590 body, which is already ported.
     ThreadDtor(self);                                     // 0x1800a0dda..0x1800a0e22
-
 }
 
 // ============================================================================
