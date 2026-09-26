@@ -384,7 +384,7 @@ bool KeyMap::Pressed(int32_t joystick, int32_t id) const {
         [](const State& s) -> bool { return s.pressed; });
 }
 
-// ?Released@KeyMap@Input@@QEBA_NHH@Z  retail 0x1800a79b0  ord 3546
+// ?Released@KeyMap@Input@@QEBA_NHH@Z  retail 0x1800a79b0
 // PORTED by block B5 (it was the one KeyMap reader nothing registered):
 // read as disassembly, it is Pressed's body with the State byte at +0x07
 // (`MOVZX ECX,byte [R8+RDX*8+0x7]` at 0x1800a7a45) instead of +0x06. Same
