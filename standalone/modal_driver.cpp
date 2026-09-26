@@ -108,6 +108,7 @@
 #include "options.h"
 #include "ui/Dialogs.h"      // MessageDialogAddr::Vtable, for the self-test subject
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 namespace ModalDriver {
 namespace {
@@ -262,7 +263,8 @@ void Tick(void*, void*) {
     *reinterpret_cast<uint32_t*>(d + kDlg_Result) = (uint32_t)s_answer;
     uint8_t ibp[16] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialog));   // B.3.3 bridge
-    fn_UI_CloseDialog(ui, ibp);
+    reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));
 
     ++s_dismissed;
     s_seenDialog = nullptr;

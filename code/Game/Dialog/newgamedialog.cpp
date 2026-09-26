@@ -12,6 +12,16 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/NewGameDialog.h
 //                  Dialog\NewGameDialog.cpp
 
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/EditElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/NumberEditElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
@@ -35,7 +45,7 @@
 static void* FindElement(void* dialog, const char* name) {
     System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elem = *(void**)retBuf;
     return elem;
 }
@@ -132,12 +142,11 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
         if (typed && *(uint8_t*)((uintptr_t)typed + visibilityOffset) != 0) {
             // Build UI::String from resource name (at +0x20 stringTable, +0x28 stringName)
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)typed + 0x20),
-                              (void*)((uintptr_t)typed + 0x28));
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)typed + 0x20))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)typed + 0x28)));  // B.3.6 bridge
 
             // Convert UI::String to System::String
             System::String sysStr;
-            fn_UIString_ToSystemString(uiStr, &sysStr);
+            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
 
             void* combo = *comboFieldPtr;
 
@@ -145,7 +154,7 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
             uint8_t sprite[16];
             fn_Sprite_Ctor(sprite, 0, nullptr);
 
-            fn_ComboElement_AddItem(combo, sprite, &sysStr, (void*)(intptr_t)i);
+            reinterpret_cast<UI::ComboElement*>(combo)->AddItem(*reinterpret_cast<const UI::Sprite*>(sprite), sysStr, (void*)(intptr_t)i);  // B.3.6 bridge
         }
 
         // Re-fetch count in case it changed (matches original)
@@ -222,7 +231,7 @@ static void GenerateRandomName(void* editNamePtr, void* random) {
         fflush(stderr);
     }
 
-    fn_EditElement_SetText_SysStr(*(void**)editNamePtr, &nameStr);
+    reinterpret_cast<UI::EditElement*>(*(void**)editNamePtr)->SetText(nameStr);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -264,7 +273,7 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
     if (envSeed && envSeed[0]) {
         uint32_t fixed = (uint32_t)strtoul(envSeed, nullptr, 0);
         if (maxVal > 0) fixed %= (uint32_t)(maxVal + 1);
-        fn_NumberEditElement_SetValue(seedElem, fixed);
+        reinterpret_cast<UI::NumberEditElement*>(seedElem)->SetValue(fixed);  // B.3.6 bridge
         fprintf(stderr, "[NewGameDialog] BANISHED_SEED=%s -> seed PINNED to %u "
                 "(also seeds the gameplay RNG at gw+0xd8; runs still diverge — see the "
                 "scope note above)\n", envSeed, fixed);
@@ -273,7 +282,7 @@ static void GenerateRandomSeed(void* editSeedPtr, void* random) {
     }
 
     uint32_t seed = reinterpret_cast<System::Random*>(random)->Rand((uint32_t)(maxVal + 1));   // B.3.4 bridge
-    fn_NumberEditElement_SetValue(seedElem, seed);
+    reinterpret_cast<UI::NumberEditElement*>(seedElem)->SetValue(seed);  // B.3.6 bridge
     fprintf(stderr, "[NewGameDialog] BANISHED_SEED unset -> world seed RANDOMISED to %u\n",
             seed);
     fflush(stderr);
@@ -301,11 +310,10 @@ static void UpdateDescription(NewGameDialog* self) {
 
     // Build UI::String from description (at +0x20 stringTable, +0x30 stringName)
     uint8_t uiStr[16];
-    fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)mapGen + 0x20),
-                      (void*)((uintptr_t)mapGen + 0x30));
+    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)mapGen + 0x20))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)mapGen + 0x30)));  // B.3.6 bridge
 
     // Set on textDescription element
-    fn_TextElement_SetText(self->textDescription, uiStr);
+    reinterpret_cast<UI::TextElement*>(self->textDescription)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -368,7 +376,7 @@ static void SelectStartConditionOverride(NewGameDialog* self) {
         if (idx >= 0 && idx < count) target = idx;
     }
     if (target >= 0) {
-        fn_ComboElement_SetCurrentItem(self->comboCondition, target);
+        reinterpret_cast<UI::ComboElement*>(self->comboCondition)->SetCurrentItem(target);  // B.3.6 bridge
         fprintf(stderr, "[NewGameDialog] start condition FORCED to [%d] (want=\"%s\")\n",
                 target, want);
     } else {
@@ -447,17 +455,17 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 
     // --- Assign element IDs ---
     // buttonNewName = 0, buttonNewSeed = 1, buttonOk = 2, buttonCancel = 3, comboCondition = 4
-    fn_Element_SetElementId(buttonNewName, 0);
+    reinterpret_cast<UI::Element*>(buttonNewName)->SetElementId(0);  // B.3.6 bridge
 
-    fn_Element_SetElementId(buttonNewSeed, 1);
+    reinterpret_cast<UI::Element*>(buttonNewSeed)->SetElementId(1);  // B.3.6 bridge
 
     // Store buttonOk in struct at +0xF0
     self->buttonOk = buttonOk;
-    fn_Element_SetElementId(self->buttonOk, 2);
+    reinterpret_cast<UI::Element*>(self->buttonOk)->SetElementId(2);  // B.3.6 bridge
 
-    fn_Element_SetElementId(buttonCancel, 3);
+    reinterpret_cast<UI::Element*>(buttonCancel)->SetElementId(3);  // B.3.6 bridge
 
-    fn_Element_SetElementId(self->comboCondition, 4);
+    reinterpret_cast<UI::Element*>(self->comboCondition)->SetElementId(4);  // B.3.6 bridge
 
     // --- Generate random name (guarded: editName must be present) ---
     if (self->editName)
@@ -479,15 +487,15 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x2c);
         void* combo = self->comboCondition;
         if (idx < 0) {
-            int count = fn_ComboElement_GetItemCount(combo);
+            int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
                 // Use the index as-is
-                fn_ComboElement_SetCurrentItem(self->comboCondition, *(int*)(cfg + 0x2c));
+                reinterpret_cast<UI::ComboElement*>(self->comboCondition)->SetCurrentItem(*(int*)(cfg + 0x2c));  // B.3.6 bridge
             } else {
-                fn_ComboElement_SetCurrentItem(self->comboCondition, 0);
+                reinterpret_cast<UI::ComboElement*>(self->comboCondition)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            fn_ComboElement_SetCurrentItem(self->comboCondition, *(int*)(cfg + 0x2c));
+            reinterpret_cast<UI::ComboElement*>(self->comboCondition)->SetCurrentItem(*(int*)(cfg + 0x2c));  // B.3.6 bridge
         }
     }
 
@@ -496,14 +504,14 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x20);
         void* combo = self->comboTerrain;
         if (idx < 0) {
-            int count = fn_ComboElement_GetItemCount(combo);
+            int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
-                fn_ComboElement_SetCurrentItem(self->comboTerrain, *(int*)(cfg + 0x20));
+                reinterpret_cast<UI::ComboElement*>(self->comboTerrain)->SetCurrentItem(*(int*)(cfg + 0x20));  // B.3.6 bridge
             } else {
-                fn_ComboElement_SetCurrentItem(self->comboTerrain, 0);
+                reinterpret_cast<UI::ComboElement*>(self->comboTerrain)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            fn_ComboElement_SetCurrentItem(self->comboTerrain, *(int*)(cfg + 0x20));
+            reinterpret_cast<UI::ComboElement*>(self->comboTerrain)->SetCurrentItem(*(int*)(cfg + 0x20));  // B.3.6 bridge
         }
     }
 
@@ -512,14 +520,14 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x24);
         void* combo = self->comboTerrainSize;
         if (idx < 0) {
-            int count = fn_ComboElement_GetItemCount(combo);
+            int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
-                fn_ComboElement_SetCurrentItem(self->comboTerrainSize, *(int*)(cfg + 0x24));
+                reinterpret_cast<UI::ComboElement*>(self->comboTerrainSize)->SetCurrentItem(*(int*)(cfg + 0x24));  // B.3.6 bridge
             } else {
-                fn_ComboElement_SetCurrentItem(self->comboTerrainSize, 0);
+                reinterpret_cast<UI::ComboElement*>(self->comboTerrainSize)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            fn_ComboElement_SetCurrentItem(self->comboTerrainSize, *(int*)(cfg + 0x24));
+            reinterpret_cast<UI::ComboElement*>(self->comboTerrainSize)->SetCurrentItem(*(int*)(cfg + 0x24));  // B.3.6 bridge
         }
     }
 
@@ -528,14 +536,14 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x28);
         void* combo = self->comboClimate;
         if (idx < 0) {
-            int count = fn_ComboElement_GetItemCount(combo);
+            int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (idx < count) {
-                fn_ComboElement_SetCurrentItem(self->comboClimate, *(int*)(cfg + 0x28));
+                reinterpret_cast<UI::ComboElement*>(self->comboClimate)->SetCurrentItem(*(int*)(cfg + 0x28));  // B.3.6 bridge
             } else {
-                fn_ComboElement_SetCurrentItem(self->comboClimate, 0);
+                reinterpret_cast<UI::ComboElement*>(self->comboClimate)->SetCurrentItem(0);  // B.3.6 bridge
             }
         } else {
-            fn_ComboElement_SetCurrentItem(self->comboClimate, *(int*)(cfg + 0x28));
+            reinterpret_cast<UI::ComboElement*>(self->comboClimate)->SetCurrentItem(*(int*)(cfg + 0x28));  // B.3.6 bridge
         }
     }
 
@@ -544,14 +552,14 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         int idx = *(int*)(cfg + 0x30);
         void* combo = self->comboDisaster;
         if (idx < 0) {
-            int count = fn_ComboElement_GetItemCount(combo);
+            int count = reinterpret_cast<const UI::ComboElement*>(combo)->GetItemCount();  // B.3.6 bridge
             if (count <= idx) {
-                fn_ComboElement_SetCurrentItem(self->comboDisaster, 0);
+                reinterpret_cast<UI::ComboElement*>(self->comboDisaster)->SetCurrentItem(0);  // B.3.6 bridge
             } else {
-                fn_ComboElement_SetCurrentItem(self->comboDisaster, *(int*)(cfg + 0x30));
+                reinterpret_cast<UI::ComboElement*>(self->comboDisaster)->SetCurrentItem(*(int*)(cfg + 0x30));  // B.3.6 bridge
             }
         } else {
-            fn_ComboElement_SetCurrentItem(self->comboDisaster, *(int*)(cfg + 0x30));
+            reinterpret_cast<UI::ComboElement*>(self->comboDisaster)->SetCurrentItem(*(int*)(cfg + 0x30));  // B.3.6 bridge
         }
     }
 
@@ -646,7 +654,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     int terrainIdx = *(int*)((uintptr_t)self->comboTerrain + 0x118);
 
     // Get combo item data pointers from ExternalList arrays
-    void* mapGenItem = fn_ComboElement_GetItemData(self->comboCondition, condIdx);
+    void* mapGenItem = reinterpret_cast<const UI::ComboElement*>(self->comboCondition)->GetItemData(condIdx);  // B.3.6 bridge
     void** mapPtrArray = *(void***)((uintptr_t)self->mapGeneratorList + 0x20);
     void* mapGenResource = mapPtrArray[(intptr_t)mapGenItem];
     void* mapGen = nullptr;
@@ -690,13 +698,13 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
         }
     }
 
-    void* climateItem = fn_ComboElement_GetItemData(self->comboClimate, climateIdx);
+    void* climateItem = reinterpret_cast<const UI::ComboElement*>(self->comboClimate)->GetItemData(climateIdx);  // B.3.6 bridge
     void** climatePtrArray = *(void***)((uintptr_t)self->climateGeneratorList + 0x20);
     void* climateResource = climatePtrArray[(intptr_t)climateItem];
     void* climateGen = nullptr;
     if (ResourceIsType(climateResource, g_TypeId_ClimateGenerator)) climateGen = climateResource;
 
-    void* terrainItem = fn_ComboElement_GetItemData(self->comboTerrain, terrainIdx);
+    void* terrainItem = reinterpret_cast<const UI::ComboElement*>(self->comboTerrain)->GetItemData(terrainIdx);  // B.3.6 bridge
     void** terrainPtrArray = *(void***)((uintptr_t)self->terrainGeneratorList + 0x20);
     void* terrainResource = terrainPtrArray[(intptr_t)terrainItem];
     void* terrainGen = nullptr;
@@ -726,7 +734,7 @@ static void NewGameDialog_StartGame(NewGameDialog* self) {
     }
 
     // Get seed value
-    uint32_t seed = (uint32_t)fn_NumberEditElement_GetValue(self->editSeed);
+    uint32_t seed = (uint32_t)reinterpret_cast<const UI::NumberEditElement*>(self->editSeed)->GetValue();  // B.3.6 bridge
 
     // Get disaster enabled (0 = disasters on, nonzero = off)
     int32_t disasterIdx = *(int32_t*)((uintptr_t)self->comboDisaster + 0x118);
@@ -936,7 +944,7 @@ void NewGameDialog_OnEvent(NewGameDialog* self, void* /*element*/, int eventType
             void* ui = *(void**)(s + 0x10);
             uint64_t basePtr[2];
             new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            fn_UI_CloseDialog(ui, basePtr);
+            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
             return;
         }
         if (eventData == 0) {
@@ -978,9 +986,7 @@ void NewGameDialog_Slot6(NewGameDialog* self) {
     }
 
     // Virtual call: vtable[8] = SetEnabled(bool)
-    void** vtable = *(void***)okBtn;
-    typedef void (*fn_SetEnabled_t)(void*, int);
-    ((fn_SetEnabled_t)vtable[8])(okBtn, len > 0 ? 1 : 0);
+    reinterpret_cast<UI::Element*>(okBtn)->Enable(len > 0 ? 1 : 0);  // B.3.6 bridge
 }
 
 
@@ -1057,15 +1063,10 @@ void NewGameStub_RuntimeThunk(void* self, ...) {
 // Delegate straight to the Runtime function so the dialog's controls tick.
 void NewGameImpl_Slot7_OnUpdate(void* self, const void* time) {
     if (!self) return;
-    if (fn_DialogInstance_OnUpdate) {
-        fn_DialogInstance_OnUpdate(self, time);
-        return;
-    }
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[NewGameDialog::Slot7] fn_DialogInstance_OnUpdate NULL (mangled name?)\n");
-    }
+    // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch through this
+    // dialog's hand-built table straight back into this slot body.
+    reinterpret_cast<UI::DialogInstance*>(self)->UI::DialogInstance::OnUpdate(  // B.3.6 bridge
+        *static_cast<const System::Time*>(time));
 }
 
 void* g_NewGameDialog_Vtable_Standalone[10] = {

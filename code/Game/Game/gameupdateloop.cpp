@@ -48,6 +48,9 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
@@ -205,10 +208,6 @@ static fn_AchievementManager_Update_t fn_AchievementManager_Update = nullptr;
 // Achievement::AchievementManager::SetEventHandler(this, handler)
 typedef void (*fn_AchievementManager_SetEventHandler_t)(void* self, void* handler);
 static fn_AchievementManager_SetEventHandler_t fn_AchievementManager_SetEventHandler = nullptr;
-
-// UI::UserInterface::PausesGame(this) -> bool (Runtime)
-typedef bool (*fn_UI_PausesGame_t)(void* self);
-static fn_UI_PausesGame_t fn_UI_PausesGame = nullptr;
 
 // Graphics::Scene::Clean(this) — moved to engine_funcs.{h,cpp}; reuse the
 // project-wide extern so MenuDLT can also call it.
@@ -615,8 +614,6 @@ static void EnsureInit() {
 
     // Runtime functions — resolved via ResolveExport (by mangled name)
     // These resolve directly to Runtime-x64.dll function addresses.
-    fn_UI_PausesGame = reinterpret_cast<fn_UI_PausesGame_t>(
-        ResolveExport("?PausesGame@UserInterface@UI@@QEBA_NXZ"));
     // fn_Graphics_Scene_Clean is now resolved in engine_funcs.cpp (extern).
     // B.3.5: the Scene::RemoveGlobalObject resolve went with its cache.
     // [FIX-M5], kept for the record even though the binding is gone (ENDGAME B.3.5
@@ -691,7 +688,6 @@ static void EnsureInit() {
     CHECK_FN(fn_AchievementInstance_HasFailed);
     CHECK_FN(fn_QuickSave);
     CHECK_FN(fn_CalcWindFactor);
-    CHECK_FN(fn_UI_PausesGame);
     CHECK_FN(fn_GUL_AudioSceneUpdate);
     CHECK_FN(fn_Audio_Scene_StopAll);
     CHECK_FN(fn_MainLoop_SetNextLoop);
@@ -1111,7 +1107,7 @@ bool GameUpdateLoop_Update(GameUpdateLoop* self, void* time) {
 
     // Step 1: Check if UI pauses game
     TRACE("[GameUpdateLoop::Update] checking PausesGame...\n");
-    bool paused = fn_UI_PausesGame(self->m_userInterface);
+    bool paused = reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->PausesGame();  // B.3.6 bridge
     TRACE("[GameUpdateLoop::Update] PausesGame = %d\n", (int)paused);
 
     if (paused) {
@@ -1418,19 +1414,19 @@ post_simulation:
     // fn_UI_Update returns the cursor id; engine_funcs.h now declares that directly
     // (the export is ...QEAAH...). The local cast below is now redundant.
     TRACE("[GameUpdateLoop::Update] calling UI::UserInterface::Update...\n");
-    typedef int (*fn_UI_Update_RetInt_t)(void* self, void* time);
     // Wave 10D lane MOUSE: the ONLY seam at which a synthetic cursor can be
     // placed -- after this frame's input poll, before the UI decodes it. Both
     // calls are a cached-getenv no-op unless BANISHED_MOUSE_INJECT is set.
     MouseInject::PreUpdate(self->m_userInterface);
-    int uiCursor = ((fn_UI_Update_RetInt_t)fn_UI_Update)(self->m_userInterface, time);
+    int uiCursor = reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->Update(  // B.3.6 bridge
+        *reinterpret_cast<const System::Time*>(time));
     MouseInject::PostUpdate(self->m_userInterface);
     TRACE("[GameUpdateLoop::Update] UI::UserInterface::Update done (cursor=%d)\n", uiCursor);
 
     // Step 10: EntityUI / player tool update
     int cursorIndex = 1;
     {
-        bool pausedNow = fn_UI_PausesGame(self->m_userInterface);
+        bool pausedNow = reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->PausesGame();  // B.3.6 bridge
         if (!pausedNow) {
             // Check if UI has input focus: userInterface+0xd9 == 0 means no dialog has input
             bool noInputFocus = (*(uint8_t*)((uintptr_t)self->m_userInterface + 0xd9) == 0);
@@ -1455,7 +1451,7 @@ post_simulation:
 
         // Override cursor if UI has input or game is paused
         bool hasInput = (*(uint8_t*)((uintptr_t)self->m_userInterface + 0xd9) != 0);
-        if (hasInput || fn_UI_PausesGame(self->m_userInterface)) {
+        if (hasInput || reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->PausesGame()) {  // B.3.6 bridge
             cursorIndex = uiCursor;
         }
     }
@@ -1466,7 +1462,8 @@ post_simulation:
         void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x28 + (int64_t)cursorIndex * 8);
-            fn_UI_SetCursor(self->m_userInterface, cursorVal);
+            reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->SetCursor(  // B.3.6 bridge
+                Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
         }
     }
     TRACE("[GameUpdateLoop::Update] cursor set\n");
@@ -1708,7 +1705,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     TRACE("[GameUpdateLoop::Draw] ENTER (alpha=%.3f)\n", alpha);
 
     // Step 1: Check pause — if paused, force alpha to 1.0 (no interpolation)
-    bool paused = fn_UI_PausesGame(self->m_userInterface);
+    bool paused = reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->PausesGame();  // B.3.6 bridge
     bool entityUIPaused = (*(char*)((uintptr_t)self->m_entityUI + 0x30) != 0);
     if (paused || entityUIPaused) {
         alpha = *g_fConst_1_0; // 1.0f
@@ -1972,7 +1969,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
 
         // Check if UI has input focus or pauses game -> pass as flag
         bool hasInput = (*(uint8_t*)((uintptr_t)self->m_userInterface + 0xd9) != 0);
-        bool pauseCheck = fn_UI_PausesGame(self->m_userInterface);
+        bool pauseCheck = reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->PausesGame();  // B.3.6 bridge
         uint64_t drawFlag = (hasInput || pauseCheck) ? 1 : 0;
 
         // EntityUI+0x28 is InternalBasePtr to current tool
@@ -1992,7 +1989,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     {
         void* engine = *g_pEngineSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
-        fn_UI_Draw(self->m_userInterface, videoCtx);
+        reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->Draw(*reinterpret_cast<Video::Context*>(videoCtx));  // B.3.6 bridge
     }
     TRACE("[GameUpdateLoop::Draw] UI::UserInterface::Draw done\n");
 
@@ -2118,13 +2115,14 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
         void* keyMapMgr = g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr;  // [GUARD-M5]
         if (keyMapMgr) {
             uint64_t cursorVal = *(uint64_t*)((uintptr_t)keyMapMgr + 0x30);
-            fn_UI_SetCursor(self->m_userInterface, cursorVal);
+            reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->SetCursor(  // B.3.6 bridge
+                Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
         }
     }
 
     // Enable cursor
     TRACE("[GameUpdateLoop::Startup] enabling cursor...\n");
-    fn_UI_EnableCursor(self->m_userInterface, true);
+    reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->EnableCursor(true);  // B.3.6 bridge
 
     // ProfessionList startup — builds the sorted profession ARRAY at profList+0x20/+0x28
     // (FUN_1400a90a0) for the profession UI panel. m_professionList (gw+0xb0) is normally
@@ -2249,7 +2247,8 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             int64_t dialogPtr[1];
             new (dialogPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(toolbar));   // B.3.3 bridge
-            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+            reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->AddDialog(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
             fprintf(stderr, "[HUD] Toolbar CONSTRUCTED + added to UI: toolbar=%p itemCount(+0xD8)=%d "
                     "buttonCount(+0xC8)=%d speedCount(+0x100)=%d\n", toolbar,
                     *(int32_t*)((uintptr_t)toolbar + 0xD8), *(int32_t*)((uintptr_t)toolbar + 0xC8),
@@ -2303,7 +2302,8 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             int64_t dialogPtr[1];
             new (dialogPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(eventNotify));   // B.3.3 bridge
-            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+            reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->AddDialog(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
             fprintf(stderr, "[HUD] EventNotify ribbon CONSTRUCTED + added to UI: %p\n", eventNotify);
             fflush(stderr);
         } else if (mem) {
@@ -2351,7 +2351,8 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             int64_t dialogPtr[1];
             new (dialogPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(autoSave));   // B.3.3 bridge
-            fn_UI_AddDialog(self->m_userInterface, dialogPtr);
+            reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->AddDialog(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));
         } else if (mem) {
             fn_MemFreeStatic(mem);
         }
@@ -2363,8 +2364,8 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
 
     // Set fullscreen fade
     TRACE("[GameUpdateLoop::Startup] setting fullscreen fade...\n");
-    fn_UI_SetFullscreenFade(self->m_userInterface, true, 0xFF000000, true);
-    fn_UI_SetFullscreenFade(self->m_userInterface, false, 0xFF000000, false);
+    reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->SetFullscreenFade(true, 0xFF000000, true);  // B.3.6 bridge
+    reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->SetFullscreenFade(false, 0xFF000000, false);  // B.3.6 bridge
     TRACE("[GameUpdateLoop::Startup] fullscreen fade set\n");
 
     // EntityUI startup — fn_EntityUI_Startup (exe FUN_140101ee0) not yet wired in
@@ -2431,7 +2432,7 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
 
     // Disable cursor
     TRACE("[GameUpdateLoop::Shutdown] disabling cursor...\n");
-    fn_UI_EnableCursor(self->m_userInterface, false);
+    reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->EnableCursor(false);  // B.3.6 bridge
 
     // Stop all audio
     TRACE("[GameUpdateLoop::Shutdown] stopping all audio...\n");
@@ -2751,18 +2752,19 @@ void GameUpdateLoop_OnScenarioComplete(GameUpdateLoop* self) {
         System::String titleStr;
         fn_Achievement_GetTitle(achievement, &titleStr);
 
-        // Build UI::String from achievement name
-        // fn_UIString_Ctor(retval, stringTable, stringName)
-        uint8_t uiStr[24]; // UI::String scratch (non-trivial return in first param)
-        fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)achievement + 0x20), &titleStr);
+        // Build UI::String from achievement name (B.3.6: the old `uint8_t uiStr[24]`
+        // scratch, whose only uses were this ctor and the conversion below).
+        UI::String uiStr(
+            Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
+                reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))),
+            titleStr);
 
         // Retail destructs the title String here — it reuses that same stack slot
         // for the UI::String -> System::String conversion below.
         titleStr = System::String();
 
         // Convert to System::String (member, non-trivial return: self, retval)
-        System::String sysStr;
-        fn_UIString_ToSystemString(uiStr, &sysStr);
+        System::String sysStr(uiStr.operator System::String());
 
         int64_t nullEntity[1] = {0};
         new (nullEntity) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge

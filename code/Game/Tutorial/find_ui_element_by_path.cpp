@@ -43,6 +43,9 @@
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 
 namespace {
 
@@ -159,17 +162,17 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
         if (controllerTypeId == 0 || partCount < 3) {
             // "Dialog:element" — the element is looked up on the dialog itself.
             if (outDialog) *outDialog = reinterpret_cast<uint64_t>(dialog);
-            if (!fn_DialogInstance_FindElement) continue;
             uint64_t elemIBP = 0;
-            fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[1]);
+            ::new (&elemIBP) Object::InternalPtr<UI::Element>(
+                reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(parts[1]));  // B.3.6 bridge
             if (elemIBP) found = elemIBP;
             continue;
         }
 
         // "Dialog:Controller:element[:resource]"
         uint64_t controller = 0;
-        if (fn_DialogInstance_GetController)
-            fn_DialogInstance_GetController(dialog, &controller, controllerTypeId);
+        ::new (&controller) Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(controllerTypeId));  // B.3.6 bridge
         if (controller == 0) continue;
 
         if (partCount == 4) {
@@ -180,16 +183,19 @@ extern "C" void* FindUIElementByPath_Impl(void* outElementIBP, void* pathStr, ui
 
         // The controller's container first...
         uint64_t elemIBP = 0;
-        if (fn_DialogController_GetContainer && fn_Element_FindElement) {
+        {
             uint64_t containerIBP = 0;
-            fn_DialogController_GetContainer(reinterpret_cast<void*>(controller), &containerIBP);
+            ::new (&containerIBP) Object::InternalPtr<UI::Element>(
+                reinterpret_cast<UI::DialogController*>(controller)->GetContainer());  // B.3.6 bridge
             if (containerIBP) {
-                fn_Element_FindElement(reinterpret_cast<void*>(containerIBP), &elemIBP, &parts[2]);
+                ::new (&elemIBP) Object::InternalPtr<UI::Element>(
+                    reinterpret_cast<UI::Element*>(containerIBP)->FindElement(parts[2]));  // B.3.6 bridge
             }
         }
         // ...then the dialog itself.
-        if (elemIBP == 0 && fn_DialogInstance_FindElement) {
-            fn_DialogInstance_FindElement(dialog, &elemIBP, &parts[2]);
+        if (elemIBP == 0) {
+            ::new (&elemIBP) Object::InternalPtr<UI::Element>(
+                reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(parts[2]));  // B.3.6 bridge
         }
         if (elemIBP) found = elemIBP;
     }

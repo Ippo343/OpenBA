@@ -51,6 +51,12 @@
 #include <cstdlib>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 extern "C" void* GetTutorialHighlightDialogVtable();
 // Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
@@ -81,23 +87,6 @@ inline uintptr_t GameWorld() {
 inline UI::UserInterface* UserInterface() {
     uintptr_t gw = GameWorld();
     return gw ? *reinterpret_cast<UI::UserInterface**>(gw + 0x98) : nullptr;
-}
-
-// Runtime exports the Tutorial helpers need that engine_funcs does not carry.
-// Mangled names read straight out of Runtime-x64.dll's export table.
-typedef int  (*fn_GetAddDialogCount_t)(const void*);
-typedef bool (*fn_UIStringIsValid_t)(const void*);
-fn_GetAddDialogCount_t s_GetAddDialogCount = nullptr;
-fn_UIStringIsValid_t   s_UIStringIsValid   = nullptr;
-
-void EnsureRuntimeFuncs() {
-    static bool done = false;
-    if (done) return;
-    done = true;
-    s_GetAddDialogCount = reinterpret_cast<fn_GetAddDialogCount_t>(
-        ResolveExport("?GetAddDialogCount@UserInterface@UI@@QEBAHXZ"));
-    s_UIStringIsValid = reinterpret_cast<fn_UIStringIsValid_t>(
-        ResolveExport("?IsValid@String@UI@@QEBA_NXZ"));
 }
 
 // TutorialHighlightDialog type id (retail DAT_1401C6550 — written by
@@ -222,27 +211,28 @@ extern "C" void TutWave_TutorialTreeInsert(void* treeOwner, uint64_t tutorialId,
 // ===========================================================================
 extern "C" void TutWave_SetElementFlagsRecursive(void* self, void* elemIBP, char show) {
     if (!elemIBP) return;
-    if (!fn_Element_SetFlagsOnOff || !fn_Element_ChildCount || !fn_Element_Child) return;
 
     void* elem = *reinterpret_cast<void**>(elemIBP);
     if (!elem) return;
 
     uint32_t hideFlags = show ? 0u : 0x1000000u;
     uint32_t showFlags = show ? 0x1000000u : 0u;
-    fn_Element_SetFlagsOnOff(elem, hideFlags, showFlags);
+    reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
 
     int i = 0;
-    int n = fn_Element_ChildCount(*reinterpret_cast<void**>(elemIBP));
+    int n = reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->ChildCount();  // B.3.6 bridge
     while (i < n) {
         uint64_t probe = 0;
-        fn_Element_Child(*reinterpret_cast<void**>(elemIBP), &probe, i);
+        ::new (&probe) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->Child(i));  // B.3.6 bridge
         if (probe != 0) {
             uint64_t child = 0;
-            fn_Element_Child(*reinterpret_cast<void**>(elemIBP), &child, i);
+            ::new (&child) Object::InternalPtr<UI::Element>(
+                reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->Child(i));  // B.3.6 bridge
             TutWave_SetElementFlagsRecursive(self, &child, show);
         }
         ++i;
-        n = fn_Element_ChildCount(*reinterpret_cast<void**>(elemIBP));
+        n = reinterpret_cast<UI::Element*>(*reinterpret_cast<void**>(elemIBP))->ChildCount();  // B.3.6 bridge
     }
 }
 
@@ -255,8 +245,7 @@ extern "C" void TutWave_SetElementFlagsRecursive(void* self, void* elemIBP, char
 // ===========================================================================
 extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
     UI::UserInterface* ui = UserInterface();
-    if (!ui || !fn_DialogInstance_GetRoot) return;
-    if (!fn_Element_SetFlagsOnOff || !fn_Element_ChildCount || !fn_Element_Child) return;
+    if (!ui) return;
 
     // `_dialogs.GetFirst()` IS retail's GetFirstDialog (0x180031150, which is
     // literally `*retval = this->_dialogs._head`); the iterator is the bare node
@@ -264,27 +253,30 @@ extern "C" void TutWave_SetAllDialogFlags(void* self, char show) {
     int dialogs = 0;
     for (auto it = ui->_dialogs.GetFirst(); it; ++it) {
         uint64_t rootIBP = 0;
-        fn_DialogInstance_GetRoot(it.node->element, &rootIBP);
+        ::new (&rootIBP) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetRoot());  // B.3.6 bridge
         if (rootIBP) {
             // Retail applies the flags to the root itself and then walks the
             // children — the root pass is inlined here, the children go through
             // the shared recursive helper (same code, same order).
             uint32_t hideFlags = show ? 0u : 0x1000000u;
             uint32_t showFlags = show ? 0x1000000u : 0u;
-            fn_Element_SetFlagsOnOff(reinterpret_cast<void*>(rootIBP), hideFlags, showFlags);
+            reinterpret_cast<UI::Element*>(rootIBP)->SetFlagsOnOff(hideFlags, showFlags);  // B.3.6 bridge
 
             int i = 0;
-            int n = fn_Element_ChildCount(reinterpret_cast<void*>(rootIBP));
+            int n = reinterpret_cast<UI::Element*>(rootIBP)->ChildCount();  // B.3.6 bridge
             while (i < n) {
                 uint64_t probe = 0;
-                fn_Element_Child(reinterpret_cast<void*>(rootIBP), &probe, i);
+                ::new (&probe) Object::InternalPtr<UI::Element>(
+                    reinterpret_cast<UI::Element*>(rootIBP)->Child(i));  // B.3.6 bridge
                 if (probe != 0) {
                     uint64_t child = 0;
-                    fn_Element_Child(reinterpret_cast<void*>(rootIBP), &child, i);
+                    ::new (&child) Object::InternalPtr<UI::Element>(
+                        reinterpret_cast<UI::Element*>(rootIBP)->Child(i));  // B.3.6 bridge
                     TutWave_SetElementFlagsRecursive(self, &child, show);
                 }
                 ++i;
-                n = fn_Element_ChildCount(reinterpret_cast<void*>(rootIBP));
+                n = reinterpret_cast<UI::Element*>(rootIBP)->ChildCount();  // B.3.6 bridge
             }
         }
         ++dialogs;
@@ -384,7 +376,6 @@ extern "C" void* TutWave_ExternalRefResolve(void* out, void* ref) {
 // ===========================================================================
 extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
     if (!self) return;
-    EnsureRuntimeFuncs();
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     uintptr_t pathStr = *reinterpret_cast<uintptr_t*>(s + 0x40);
@@ -397,7 +388,7 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
 
     void* ui = UserInterface();
     if (!ui) return;
-    if (s_GetAddDialogCount && s_GetAddDialogCount(ui) > 0) return;
+    if (reinterpret_cast<UI::UserInterface*>(ui)->GetAddDialogCount() > 0) return;  // B.3.6 bridge
 
     uint64_t existing = 0;
     TutWave_FindHighlightDialog(self, &existing);
@@ -405,7 +396,7 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
 
     ResolveExternalByName_Impl(reinterpret_cast<void*>(s + 0x58));
 
-    if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_UI_AddDialog) return;
+    if (!fn_MemAlloc || !g_pMemAllocSingleton) return;
 
     uint64_t targetElem = 0;     // -> ctor arg that lands at +0xE8 (branch A)
     uint64_t parentIBP  = 0;     // -> ctor R9 parent
@@ -463,7 +454,8 @@ extern "C" void TutWave_OpenHighlightDialog(void* self, char checkExisting) {
     }
 
     uint64_t dlgIBP = reinterpret_cast<uint64_t>(dlg);
-    fn_UI_AddDialog(ui, &dlgIBP);
+    reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(  // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgIBP));
 }
 
 // ===========================================================================
@@ -518,7 +510,6 @@ extern "C" void TutWave_ShowListedElements(void* self) {
 // ===========================================================================
 extern "C" void TutWave_RefreshStepUI(void* self) {
     if (!self) return;
-    EnsureRuntimeFuncs();
     uintptr_t s = reinterpret_cast<uintptr_t>(self);
 
     uintptr_t tutorial = *reinterpret_cast<uintptr_t*>(s + 0x30);
@@ -545,7 +536,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     if (!ui) return;   // no TutorialUI controller attached yet
 
     // 2/3. the two text elements
-    if (fn_UIString_Ctor && fn_TextElement_SetText && s_UIStringIsValid && fn_Element_SetFlagsOnOff) {
+    {
         uint64_t stringTable = *reinterpret_cast<uint64_t*>(step + 0x28);
         struct UIStr { uint64_t a, b; };
 
@@ -555,11 +546,14 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
         };
         for (const auto& t : texts) {
             uint8_t retbuf[32] = {};
-            void* r = fn_UIString_Ctor(retbuf, stringTable, reinterpret_cast<const void*>(t.srcString));
+            void* r = ::new (retbuf) UI::String(
+                Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)),  // B.3.6 bridge
+                *reinterpret_cast<const System::String*>(t.srcString));
             UIStr tmp = *reinterpret_cast<UIStr*>(r ? r : retbuf);
             void* elem = *reinterpret_cast<void**>(t.uiField);
             if (!elem) continue;
-            fn_TextElement_SetText(elem, &tmp);
+            reinterpret_cast<UI::TextElement*>(elem)->SetText(  // B.3.6 bridge
+                reinterpret_cast<const UI::String*>(&tmp));
         }
         for (const auto& t : texts) {
             void* elem = *reinterpret_cast<void**>(t.uiField);
@@ -567,8 +561,8 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
             UIStr cur;
             cur.a = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(elem) + 0xD8);
             cur.b = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(elem) + 0xE0);
-            bool valid = s_UIStringIsValid(&cur);
-            fn_Element_SetFlagsOnOff(elem, valid ? 0u : 1u, valid ? 1u : 0u);
+            bool valid = reinterpret_cast<const UI::String*>(&cur)->IsValid();  // B.3.6 bridge
+            reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(valid ? 0u : 1u, valid ? 1u : 0u);  // B.3.6 bridge
         }
     }
 
@@ -576,14 +570,15 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     void* table = nullptr;
     {
         table = *reinterpret_cast<void**>(ui + 0x48);
-        if (table && fn_Element_ChildCount && fn_Element_RemoveChildren && fn_Element_AddChild &&
+        if (table &&
             fn_InternalBasePtr_Ctor) {
-            int n = fn_Element_ChildCount(table);
-            fn_Element_RemoveChildren(table);
+            int n = reinterpret_cast<UI::Element*>(table)->ChildCount();  // B.3.6 bridge
+            reinterpret_cast<UI::Element*>(table)->RemoveChildren();  // B.3.6 bridge
             for (int i = 0; i < n; ++i) {
                 uint64_t nullChild = 0;
                 new (&nullChild) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-                fn_Element_AddChild(table, &nullChild);
+                reinterpret_cast<UI::Element*>(table)->AddChild(  // B.3.6 bridge
+                    *reinterpret_cast<Object::InternalPtr<UI::Element>*>(&nullChild));
             }
         }
     }
@@ -592,7 +587,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     {
         int n = *reinterpret_cast<int32_t*>(step + 0x48);
         uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x40);
-        if (n > 0 && data && table && fn_TableElement_SetChild3) {
+        if (n > 0 && data && table) {
             uintptr_t dlgIBP = *reinterpret_cast<uintptr_t*>(ui + 0x18);
             void* dialog = dlgIBP ? *reinterpret_cast<void**>(dlgIBP + 0x18) : nullptr;
             for (int i = 0; i < n; ++i) {
@@ -604,7 +599,9 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
                 if (!vt || !vt[9]) continue;
                 uint8_t retbuf[16] = {};
                 void* elemPtr = reinterpret_cast<void* (*)(void*, void*, void*)>(vt[9])(img, retbuf, dialog);
-                fn_TableElement_SetChild3(table, elemPtr ? elemPtr : retbuf, row, col);
+                reinterpret_cast<UI::TableElement*>(table)->SetChild(  // B.3.6 bridge
+                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr ? elemPtr : retbuf),
+                    row, col);
             }
         }
     }
@@ -668,7 +665,7 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
         uint32_t uiTid = TutorialUITypeId();
         void* controller = nullptr;
         void* ctrlRaw = nullptr;   // whatever GetController handed back, before narrowing
-        if (fn_DialogInstance_GetController) {
+        {
             uint64_t ctrl = 0;
             // Third arg is a TYPE FILTER, not padding: retail is
             //   MOV R8D,[0x1401c67f0]   ; TutorialUI type id
@@ -678,7 +675,8 @@ extern "C" void TutWave_StepExecute(void* self, void* param2, void* param3, uint
             // the TutorialUI narrow below could not run, and RefreshStepUI had no panel
             // to write into — the tutorial panel rendered as a bare title and two "Ok"
             // rows. Measured as `ctrl=0 tid=0 (?) wantTutorialUI=857087488`.
-            fn_DialogInstance_GetController(reinterpret_cast<void*>(dlg), &ctrl, uiTid);
+            ::new (&ctrl) Object::InternalPtr<UI::DialogController>(
+                reinterpret_cast<UI::DialogInstance*>(dlg)->GetController(uiTid));  // B.3.6 bridge
             ctrlRaw = reinterpret_cast<void*>(ctrl);
             if (ctrl && fn_IsDerivedFrom && uiTid && fn_IsDerivedFrom(reinterpret_cast<void*>(ctrl), uiTid)) {
                 controller = reinterpret_cast<void*>(ctrl);

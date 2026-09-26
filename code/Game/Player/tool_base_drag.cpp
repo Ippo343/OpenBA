@@ -15,6 +15,7 @@
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // FindDescription (FUN_140005160) — closure-safe
@@ -83,7 +84,8 @@ void DragTool_CloseToolDialog_ff980(uint64_t* param_1) {
     if (local != 0) {
         void* ui = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x98);
-        if (fn_UI_CloseDialog) fn_UI_CloseDialog(ui, &local);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&local));
         if (fn_InternalBasePtr_Ctor) new (&local) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *param_1 = local;
     }

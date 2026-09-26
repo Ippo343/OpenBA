@@ -25,6 +25,7 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K4)
 
 static const uintptr_t kCaptureBoxDescriptionVtable = 0x14015d4a0;
 
@@ -40,10 +41,11 @@ static void CaptureBoxDescription_Init(void* self) {
 
 void CaptureBoxDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ElementDescription_Serialize || !fn_ExternalPtr_Serialize) {
+    if (!fn_ExternalPtr_Serialize) {
         return;
     }
-    fn_ElementDescription_Serialize(self, stream);           // base
+    // base — QUALIFIED: this body IS slot 5 of a hand-built ElementDescription table.
+    reinterpret_cast<UI::ElementDescription*>(self)->UI::ElementDescription::Serialize(stream);  // B.3.6 bridge
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     fn_ExternalPtr_Serialize(s + 0x68, serializer);          // ExternalPtr +0x68
@@ -74,8 +76,9 @@ static uint32_t CaptureBoxDescription_GetTypeId(void* /*self*/) {
 // GetVersion (vtable +0x18): ElementDescription::GetFileVersion() | 0x100 — the 0x100
 // bit flags a custom serialize format on top of the base ElementDescription version.
 static uint32_t CaptureBoxDescription_GetVersion(void* self) {
-    uint32_t base = fn_ElementDescription_GetFileVersion
-                        ? fn_ElementDescription_GetFileVersion(self) : 0;
+    // base — QUALIFIED: this body IS slot 3 of a hand-built ElementDescription table.
+    uint32_t base = static_cast<uint32_t>(
+        reinterpret_cast<const UI::ElementDescription*>(self)->UI::ElementDescription::GetFileVersion());  // B.3.6 bridge
     return base | 0x100u;
 }
 

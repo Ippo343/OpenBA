@@ -26,6 +26,10 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -206,16 +210,19 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
     uintptr_t s = (uintptr_t)self;
 
     // 1. Create UI element from imageRef at +0x20
-    if (fn_Dialog_CreateElement)
-        fn_Dialog_CreateElement(dialog, retIBP, *(void**)(s + 0x20));
+    ::new (retIBP) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<const UI::Dialog*>(dialog)->CreateElement(  // B.3.6 bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                reinterpret_cast<UI::ElementDescription*>(*(void**)(s + 0x20)))));
 
     // 2. CheckPtr on the returned IBP
 
     // 3. FindElementType — find TextElement child
     void* element = *(void**)retIBP;
     uint8_t foundIBP[16] = {};
-    if (fn_Element_FindElementType && g_TypeId_TextElement)
-        fn_Element_FindElementType(element, foundIBP, *g_TypeId_TextElement);
+    if (g_TypeId_TextElement)
+        ::new (foundIBP) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::Element*>(element)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
 
     // 4. CheckPtr on found element
 
@@ -274,8 +281,9 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
     Game::Hotkey_BuildKeyName(uiStr, deviceType, inputIndex);
 
     // 14. Set text on the TextElement
-    if (fn_TextElement_SetText && textRef)
-        fn_TextElement_SetText(textRef, uiStr);
+    if (textRef)
+        reinterpret_cast<UI::TextElement*>(textRef)->SetText(  // B.3.6 bridge
+            reinterpret_cast<const UI::String*>(uiStr));
 
     return retIBP;
 }

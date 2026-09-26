@@ -180,7 +180,6 @@ using RefreshListFn    = void (*)(void*);
 using SetupFileSystemFn = void (*)(void*);
 using ModArrayCopyFn   = void (*)(void*, const void*);
 using UiCtorFn         = void* (*)(void*);
-using UiUpdateFn       = int (*)(void*, const void*);
 using ArraySetSizeFillFn = void (*)(void*, int, const void*);
 using SecondsToTicksFn = int64_t (*)(float);
 using TicksToSecondsFn = float (*)(int64_t);
@@ -223,11 +222,6 @@ using UiDtorFn = void (*)(void*);
 UiDtorFn UserInterfaceDtor() {
     static UiDtorFn fn = reinterpret_cast<UiDtorFn>(
         ResolveExport("??1UserInterface@UI@@QEAA@XZ"));
-    return fn;
-}
-UiUpdateFn UserInterfaceUpdate() {
-    static UiUpdateFn fn = reinterpret_cast<UiUpdateFn>(
-        ResolveExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z"));
     return fn;
 }
 
@@ -818,7 +812,7 @@ extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* tim
     rounded.ticks = SecondsToTicks(TicksToSeconds(time->ticks));
 
 
-    UserInterfaceUpdate()(&self->_ui, &rounded);
+    self->_ui.Update(*reinterpret_cast<const System::Time*>(&rounded));  // B.3.6 bridge (::Time POD)
     return true;   // MOV AL,1 — unconditional
 }
 
@@ -1035,8 +1029,6 @@ Loader* LoaderLoopLoader() {
 using LoaderLoadFn2       = void (*)(void*, void*);
 using ThreadWaitFn        = void (*)(void*);
 using SleepThreadFn       = void (*)(void*, int);
-using UiDrawFn            = void (*)(void*, void*);
-using UiCloseDialogFn     = void (*)(void*, void*);
 using LoadResourcesFn     = void (*)(void*);
 using CurrentTimeTicksFn  = int64_t (*)();
 
@@ -1186,10 +1178,8 @@ extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* /*self*/, float /*dt*/) {
 // copy. Passing the field's own address instead would let the callee mutate the
 // member — hence the local.
 extern "C" void RtEngine_DialogLoaderLoopT_Shutdown(DialogLoaderLoopT* self) {
-    static UiCloseDialogFn closeDialog = reinterpret_cast<UiCloseDialogFn>(ResolveExport(
-        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     void* byValue = self->_dialogInstance;
-    closeDialog(&self->_ui, &byValue);
+    self->_ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
 
     static ThreadWaitFn wait = reinterpret_cast<ThreadWaitFn>(
         ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
@@ -1206,7 +1196,7 @@ extern "C" bool RtEngine_DialogLoaderLoopT_Update(DialogLoaderLoopT* self,
 
     ::Time rounded;
     rounded.ticks = SecondsToTicks(TicksToSeconds(time->ticks));
-    UserInterfaceUpdate()(&self->_ui, &rounded);
+    self->_ui.Update(*reinterpret_cast<const System::Time*>(&rounded));  // B.3.6 bridge (::Time POD)
 
     SleepFourteen();
 
@@ -1256,9 +1246,7 @@ extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float /
     staging[0] = secs; staging[1] = 0.0f; staging[2] = 0.0f; staging[3] = 0.0f;
     ctx->_dirty |= 0x10800u;
 
-    static UiDrawFn uiDraw = reinterpret_cast<UiDrawFn>(
-        ResolveExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z"));
-    uiDraw(&self->_ui, ctx);
+    self->_ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
 }
 
 // ---- ?Shutdown@DialogLoopT@Engine@@UEAAXXZ  0x1800db2c0  ord 4046 -----------
@@ -1266,10 +1254,8 @@ extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float /
 // offsets (_dialogInstance +0x38, _ui +0x40 — thirty-two bytes lower than the
 // DialogLoaderLoopT pair, because there is no LoaderLoop subobject).
 extern "C" void RtEngine_DialogLoopT_Shutdown(DialogLoopT* self) {
-    static UiCloseDialogFn closeDialog = reinterpret_cast<UiCloseDialogFn>(ResolveExport(
-        "?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     void* byValue = self->_dialogInstance;
-    closeDialog(&self->_ui, &byValue);
+    self->_ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
 }
 
 // ---- ?Draw@DialogLoopT@Engine@@UEAAXM@Z  0x1800db210  ord 2239 --------------
@@ -1286,9 +1272,7 @@ extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float /*dt*/) {
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0xff808080u, 1.0f, 0);
 
-    static UiDrawFn uiDraw = reinterpret_cast<UiDrawFn>(
-        ResolveExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z"));
-    uiDraw(&self->_ui, ctx);
+    self->_ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
 }
 
 // ---- ?Run@Loader@Engine@@UEAAXXZ  0x1800dbfc0  ord 3600 ---------------------

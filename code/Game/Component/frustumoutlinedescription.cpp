@@ -26,6 +26,9 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Sprite.h"               // ENDGAME B.3.6 UI callers (K4)
+#include "object/External.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
 static const uintptr_t kFrustumOutlineDescriptionVtable = 0x14015c300;
@@ -43,10 +46,11 @@ static void FrustumOutlineDescription_Init(void* self) {
 
 void FrustumOutlineDescription_Serialize(void* self, void* stream) {
     uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ElementDescription_Serialize || !fn_ExternalPtr_Serialize) {
+    if (!fn_ExternalPtr_Serialize) {
         return;
     }
-    fn_ElementDescription_Serialize(self, stream);           // base
+    // base — QUALIFIED: this body IS slot 5 of a hand-built ElementDescription table.
+    reinterpret_cast<UI::ElementDescription*>(self)->UI::ElementDescription::Serialize(stream);  // B.3.6 bridge
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
     fn_ExternalPtr_Serialize(s + 0x68, serializer);          // ExternalPtr +0x68
@@ -78,8 +82,9 @@ static uint32_t FrustumOutlineDescription_GetTypeId(void* /*self*/) {
 
 // GetVersion (vtable +0x18): ElementDescription::GetFileVersion() | 0x100.
 static uint32_t FrustumOutlineDescription_GetVersion(void* self) {
-    uint32_t base = fn_ElementDescription_GetFileVersion
-                        ? fn_ElementDescription_GetFileVersion(self) : 0;
+    // base — QUALIFIED: this body IS slot 3 of a hand-built ElementDescription table.
+    uint32_t base = static_cast<uint32_t>(
+        reinterpret_cast<const UI::ElementDescription*>(self)->UI::ElementDescription::GetFileVersion());  // B.3.6 bridge
     return base | 0x100u;
 }
 
@@ -117,8 +122,10 @@ static void* FrustumOutlineDescription_CreateElement(void* self, void** param_2)
     uint8_t ibp[16] = {};
     if (fn_InternalBasePtr_Ctor) new (ibp) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(elem));   // B.3.3 bridge
-    if (fn_ElementDescription_CreateInstance)
-        fn_ElementDescription_CreateInstance(self, ibp);
+    // Non-virtual applier; QUALIFIED because this body is slot 8 of a hand-built
+    // Description table (the leaf slot-8 name hides the base overload).
+    reinterpret_cast<const UI::ElementDescription*>(self)->UI::ElementDescription::CreateInstance(  // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ibp));
     void* e = *reinterpret_cast<void**>(ibp);
 
     if (e) {
@@ -131,9 +138,11 @@ static void* FrustumOutlineDescription_CreateElement(void* self, void** param_2)
         // so without this the frustum outline never draws. Guard on a non-null
         // spriteSheet so a Map.rsc that omits the sprite stays crash-safe.
         uint64_t spriteSheet = *reinterpret_cast<uint64_t*>(d + 0x68);
-        if (spriteSheet && fn_Sprite_Sprite) {
+        if (spriteSheet) {
             uint64_t spriteRet[2] = {0, 0};
-            fn_Sprite_Sprite(spriteRet, spriteSheet, d + 0x70);
+            ::new (spriteRet) UI::Sprite(
+                Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
+                *reinterpret_cast<const System::String*>(d + 0x70));
             *reinterpret_cast<uint64_t*>(el + 0xc0) = spriteRet[0];
             *reinterpret_cast<uint64_t*>(el + 0xc8) = spriteRet[1];
         }

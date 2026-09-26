@@ -34,6 +34,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ---- .rdata float constants (NULL via ResolveAddr in standalone → use literals) ----
 //   g_fUVScale       0x14017214c = 1.0f
@@ -44,19 +45,9 @@ static const float kScale01   = 0.01f;
 static const float kHalf      = 0.5f;
 
 // ---- Resolved Runtime engine functions ----
-typedef void  (*fn_GetUVs_t)(void* sheet, int idx, float* u0, float* v0, float* u1, float* v1); // SpriteSheet::GetUVs
 // cc!=0 camera-constant-screen-size projection uses the Math:: classes directly
 // (Transform3::Inverse / AsMatrix, Matrix::operator*(Matrix|Vector4)).
 
-static fn_GetUVs_t            s_GetUVs         = nullptr;
-static bool                   s_resolved       = false;
-
-static void EnsureDrawFuncs() {
-    if (s_resolved) return;
-    s_GetUVs = reinterpret_cast<fn_GetUVs_t>(ResolveExport(
-        "?GetUVs@SpriteSheet@UI@@QEBAXHAEAM000@Z"));
-    s_resolved = true;
-}
 
 
 // 32-byte billboard vertex: pos(12) + color(4) + uv(8) + pad(8). Layout matches the
@@ -75,7 +66,6 @@ static_assert(sizeof(SIVertex) == 32, "SIVertex must be 32 bytes");
 // Registers the billboard with the renderer if it has any active sprite bits AND
 // the game-settings icon-visibility byte (settings+0xc) is set.
 static void StatusIconGeom_AddDrawItems(void* geometry, void* /*scene*/, void* renderer) {
-    EnsureDrawFuncs();
     uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
 
     int32_t activeMask = *reinterpret_cast<int32_t*>(g + 0xc8);
@@ -104,7 +94,6 @@ static void StatusIconGeom_AddDrawItems(void* geometry, void* /*scene*/, void* r
 //   (geometry, Context*, camera, p4, lerpT)
 static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
                                 void* /*p4*/, float t) {
-    EnsureDrawFuncs();
     uint8_t* g = reinterpret_cast<uint8_t*>(geometry);
 
     // 1) Model transform = Lerp(state, t) -> AsMatrix -> Context::SetTransform(0, M).
@@ -199,7 +188,7 @@ static void StatusIconGeom_Draw(void* geometry, void* ctx, void* camera,
         if (!((activeMask >> i) & 1u)) continue;
 
         float u0 = 0.0f, v0 = 0.0f, u1 = 1.0f, v1 = 1.0f;
-        if (s_GetUVs && sheet) s_GetUVs(sheet, i, &u0, &v0, &u1, &v1);
+        if (sheet) reinterpret_cast<const UI::SpriteSheet*>(sheet)->GetUVs(i, u0, v0, u1, v1);  // B.3.6 bridge
 
         SIVertex vtx[4];
         std::memset(vtx, 0, sizeof(vtx));

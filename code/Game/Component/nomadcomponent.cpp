@@ -21,6 +21,7 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // Resolved helpers
@@ -339,14 +340,10 @@ typedef void  (*fn_TradeWork_c690_t)(int64_t* listBase, void* ibp); // 0x14002c6
 // passes whatever the previous call left in R8 as the filter, and GetController
 // returns nothing for a garbage id -- silently, with no crash and no log.
 // See reference_getcontroller_third_arg_is_a_type_filter.
-typedef void* (*fn_GetController_t)(void* dialog, void* retbuf, uint32_t typeIdFilter);
-typedef void  (*fn_CloseDialog_slot_t)(void* ui, void* dlgPtr);// slot 0x140151550
 typedef void  (*fn_IBP_CtorFrom_t)(void* dst, void* src);  // slot 0x140152a90
 
 static fn_FUN_140102b60_t   s_fn_FUN_140102b60 = nullptr;
 static fn_TradeWork_c690_t  s_fn_TradeWork_c690 = nullptr;
-static fn_GetController_t    s_fn_GetController = nullptr;
-static fn_CloseDialog_slot_t s_fn_CloseDialog_slot = nullptr;
 static fn_IBP_CtorFrom_t     s_fn_IBP_CtorFrom = nullptr;
 static uint32_t              s_TypeId_EntityUI = 0;           // DAT_1401c4f00 = EntityUI
 static uint32_t              s_TypeId_EntityUI_cache = 0;
@@ -364,10 +361,6 @@ static void Ensure3480() {
     // entity), which confirms the type. Resolve by value with a by-name fallback.
     s_TypeId_EntityUI = ResolveExeTypeId(0x1401c4f00, "EntityUI", &s_TypeId_EntityUI_cache);
     uintptr_t slot;
-    slot = ResolveAddr(Module::Exe, 0x140151768);
-    if (slot) s_fn_GetController = *reinterpret_cast<fn_GetController_t*>(slot);
-    slot = ResolveAddr(Module::Exe, 0x140151550);
-    if (slot) s_fn_CloseDialog_slot = *reinterpret_cast<fn_CloseDialog_slot_t*>(slot);
     slot = ResolveAddr(Module::Exe, 0x140152a90);
     if (slot) s_fn_IBP_CtorFrom = *reinterpret_cast<fn_IBP_CtorFrom_t*>(slot);
 
@@ -386,10 +379,6 @@ static void Ensure3480() {
     //
     // Every one of these resolves to the same Runtime export the slot names, so a
     // fallback cannot change WHICH function runs -- only whether one runs at all.
-    if (!s_fn_GetController && fn_DialogInstance_GetController)
-        s_fn_GetController = reinterpret_cast<fn_GetController_t>(fn_DialogInstance_GetController);
-    if (!s_fn_CloseDialog_slot && fn_UI_CloseDialog)
-        s_fn_CloseDialog_slot = reinterpret_cast<fn_CloseDialog_slot_t>(fn_UI_CloseDialog);
     if (!s_fn_IBP_CtorFrom && fn_InternalBasePtr_Ctor)
         s_fn_IBP_CtorFrom = reinterpret_cast<fn_IBP_CtorFrom_t>(fn_InternalBasePtr_Ctor);
     s_fn3480Resolved = true;
@@ -468,8 +457,9 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
             // IsDerivedFrom(EntityUI) narrow just below is retail's own second check,
             // NOT a substitute for this filter -- without it the call returns nothing
             // and the narrow never gets anything to reject.
-            if (s_fn_GetController)
-                s_fn_GetController(it.node->element, ctrlBuf, s_TypeId_EntityUI);
+            ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(
+                reinterpret_cast<UI::DialogInstance*>(it.node->element)->GetController(  // B.3.6 bridge
+                    s_TypeId_EntityUI));
             void* found = nullptr;
             if (ctrlBuf[0] != nullptr) {
                 if (s_TypeId_EntityUI && fn_IsDerivedFrom(ctrlBuf[0], s_TypeId_EntityUI))
@@ -481,7 +471,7 @@ void NomadComp_FUN_140103480(int64_t param_1, void* param_2) {
                 int64_t bound = *reinterpret_cast<int64_t*>(ibp + 0x30);
                 if (bound == *reinterpret_cast<int64_t*>(param_2)) {
                     void* dlgPtr = it.node->element;
-                    if (s_fn_CloseDialog_slot) s_fn_CloseDialog_slot(ui, &dlgPtr);
+                    ui->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dlgPtr));  // B.3.6 bridge
                     closed = 1;
                     if (traceWalk) {
                         fprintf(stderr, "[NomadDlgWalk] #%d visited=%d CLOSED the removed "

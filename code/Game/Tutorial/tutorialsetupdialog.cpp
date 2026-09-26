@@ -37,6 +37,8 @@
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "object/Internal.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // TutorialSetupDialog::Slot3 (vtable +0x18, exe 0x1400e2be0): MOV EAX,6; RET
@@ -310,7 +312,8 @@ void TutorialSetupDialog_Slot8(void* self) {
             }
             void* ui = *(void**)(gameSingleton + 0x98);
             uint64_t instCopy = instance;
-            fn_UI_CloseDialog(ui, &instCopy);
+            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&instCopy));
         }
     }
 }
@@ -353,6 +356,7 @@ void TutorialSetupDialog_Slot10(void* self) {
         uintptr_t gameSingleton = (uintptr_t)(*g_pGameWorldSingleton);
         void* ui = *(void**)(gameSingleton + 0x98);
         uint64_t instPtr = instance;
-        fn_UI_CloseDialog(ui, &instPtr);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&instPtr));
     }
 }

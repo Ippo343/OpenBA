@@ -27,6 +27,11 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Sprite.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // Vtable pointers (resolved once)
@@ -210,16 +215,19 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     auto p = reinterpret_cast<uint8_t*>(self);
 
     // 1. Create UI element from imageRef at +0x20
-    if (fn_Dialog_CreateElement)
-        fn_Dialog_CreateElement(dialog, retIBP, *(void**)(p + 0x20));
+    ::new (retIBP) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<const UI::Dialog*>(dialog)->CreateElement(  // B.3.6 bridge
+            Object::ExternalPtr<UI::ElementDescription>(
+                reinterpret_cast<UI::ElementDescription*>(*(void**)(p + 0x20)))));
 
     // 2. CheckPtr on the returned IBP
 
     // 3. FindElementType — find ImageElement child
     void* element = *(void**)retIBP;
     uint8_t foundIBP[16] = {};
-    if (fn_Element_FindElementType && g_TypeId_ImageElement)
-        fn_Element_FindElementType(element, foundIBP, *g_TypeId_ImageElement);
+    if (g_TypeId_ImageElement)
+        ::new (foundIBP) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::Element*>(element)->FindElementType(*g_TypeId_ImageElement));  // B.3.6 bridge
 
     // 4. CheckPtr on found element
 
@@ -303,13 +311,16 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
 
     // 9. Construct Sprite from spriteSheet + spriteName
     uint8_t spriteBuf[16] = {};
-    if (fn_Sprite_Sprite && spriteName)
-        fn_Sprite_Sprite(spriteBuf, spriteSheet, spriteName);
+    if (spriteName)
+        ::new (spriteBuf) UI::Sprite(
+            Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
+            *static_cast<const System::String*>(spriteName));
 
 
     // 10. Set sprite on the ImageElement
-    if (fn_ImageElement_SetSprite && imageRef)
-        fn_ImageElement_SetSprite(imageRef, spriteBuf);
+    if (imageRef)
+        reinterpret_cast<UI::ImageElement*>(imageRef)->SetSprite(  // B.3.6 bridge
+            reinterpret_cast<const UI::Sprite*>(spriteBuf));
     return retIBP;
 }
 

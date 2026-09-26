@@ -22,6 +22,11 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdlib>
+#include <new>
+#include "object/Internal.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
 
 // BANISHED_SELECT_DIAG=1 traces the live EditTool pick path (A/B-safe: off by default).
 static int SelDiagOn() {
@@ -172,16 +177,6 @@ static fn_PickingGetUserData_t s_fn_PickingGetUserData = nullptr;
 typedef void (*fn_RectangleCtor_t)(void* self);
 static fn_RectangleCtor_t s_fn_RectangleCtor = nullptr;
 
-// DialogInstance::GetRoot — IAT dispatch slot [0x1401517a8]
-// Returns InternalPtr<Element> BY VALUE: RCX=dialog, RDX=hidden retbuf (Phase-4 ABI).
-typedef void* (*fn_GetRoot_t)(void* dialog, void* retbuf);
-static fn_GetRoot_t s_fn_GetRoot = nullptr;
-
-// DialogInstance::GetController — IAT dispatch slot [0x140151768]
-// Member, non-trivial return ABI: RCX=dialog, RDX=retval, R8=typeId
-typedef void* (*fn_GetController_t)(void* dialog, void* retval, uint32_t typeId);
-static fn_GetController_t s_fn_GetController = nullptr;
-
 // IsDerivedFrom — IAT dispatch slot [0x140152a98]
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
 static fn_IsDerived_t s_fn_IsDerived = nullptr;
@@ -189,10 +184,6 @@ static fn_IsDerived_t s_fn_IsDerived = nullptr;
 // InternalBasePtr::Ctor — IAT dispatch slot [0x140152a90]
 typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
 static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
-
-// Element::GetPaddedSize — IAT dispatch slot [0x140152750]
-typedef void (*fn_GetPaddedSize_t)(void* element, int* outWidth, int* outHeight);
-static fn_GetPaddedSize_t s_fn_GetPaddedSize = nullptr;
 
 // DialogInstance::SetUpperLeft — IAT dispatch slot [0x140151dd0]
 typedef void (*fn_SetUpperLeft_t)(void* dialog, int x, int y, bool animate);
@@ -219,12 +210,9 @@ static void EnsureEditFuncs() {
     };
 
     // IAT slots
-    s_fn_GetController    = (fn_GetController_t)resolveIAT(0x140151768);
     s_fn_IsDerived        = (fn_IsDerived_t)resolveIAT(0x140152a98);
     s_fn_IBPCtor          = (fn_IBPCtor_t)resolveIAT(0x140152a90);
     s_fn_RectangleCtor    = (fn_RectangleCtor_t)resolveIAT(0x1401528a8);
-    s_fn_GetRoot          = (fn_GetRoot_t)resolveIAT(0x1401517a8);
-    s_fn_GetPaddedSize    = (fn_GetPaddedSize_t)resolveIAT(0x140152750);
     s_fn_SetUpperLeft     = (fn_SetUpperLeft_t)resolveIAT(0x140151dd0);
     s_fn_KeyMapPressed    = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     s_fn_PickingIntersect = (fn_PickingIntersect_t)resolveIAT(0x140152428);
@@ -248,16 +236,10 @@ static void EnsureEditFuncs() {
     // returns before ever picking). Fall back to the engine_funcs pointers, which ARE
     // resolved by mangled export name from Runtime-x64.dll and work in standalone (the same
     // ones placement/utility use). Only override when the slot came back null.
-    if (!s_fn_GetController && fn_DialogInstance_GetController)
-        s_fn_GetController = (fn_GetController_t)fn_DialogInstance_GetController;
     if (!s_fn_IsDerived && fn_IsDerivedFrom)
         s_fn_IsDerived = (fn_IsDerived_t)fn_IsDerivedFrom;
     if (!s_fn_IBPCtor && fn_InternalBasePtr_Ctor)
         s_fn_IBPCtor = (fn_IBPCtor_t)fn_InternalBasePtr_Ctor;
-    if (!s_fn_GetRoot && fn_DialogInstance_GetRoot)
-        s_fn_GetRoot = (fn_GetRoot_t)fn_DialogInstance_GetRoot;   // 2-arg (self, retbuf) ABI
-    if (!s_fn_GetPaddedSize && fn_Element_GetPaddedSize)
-        s_fn_GetPaddedSize = (fn_GetPaddedSize_t)fn_Element_GetPaddedSize;
     if (!s_fn_SetUpperLeft && fn_DialogInstance_SetUpperLeft)
         s_fn_SetUpperLeft = (fn_SetUpperLeft_t)fn_DialogInstance_SetUpperLeft;
     if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
@@ -404,9 +386,10 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // when +0x40 (pinned) is clear; a pinned panel survives deselect. The old direct
     // caller had already done this check, so it was omitted here -- but slot 5 (tool
     // teardown) has NOT, and without it a right-click would close pinned panels too.
-    if (s_fn_GetController && s_pTypeId_ToolUI) {
+    if (s_pTypeId_ToolUI) {
         uintptr_t ctrl = 0;
-        s_fn_GetController((void*)dialogPtr, &ctrl, *s_pTypeId_ToolUI);
+        ::new (&ctrl) Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(*s_pTypeId_ToolUI));  // B.3.6 bridge
         if (ctrl != 0) {
             if (s_fn_IsDerived && s_fn_IsDerived((void*)ctrl, *s_pTypeId_ToolUI)) {
                 if (*(char*)(ctrl + 0x40) != 0) return;   // pinned -> leave it open
@@ -418,12 +401,13 @@ void EditTool_CloseInfoDialog(EditTool* self, uintptr_t dialogPtr) {
     // we are only reached from the unpinned branch). CloseDialog takes the
     // UserInterface (dialog+0x10) and an InternalPtr<DialogInstance>& — pass a
     // stack copy, matching the toolui.cpp close-button path.
-    if (!fn_UI_CloseDialog || !dialogPtr) return;
+    if (!dialogPtr) return;
     if (dialogPtr < 0x10000 || dialogPtr > 0x00007FFFFFFFFFFFULL) return;
     void* userInterface = *(void**)(dialogPtr + 0x10);
     if (!userInterface) return;
     uint64_t dialogRef = dialogPtr;
-    fn_UI_CloseDialog(userInterface, (void*)&dialogRef);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(  // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));
     // Fires on entity-death AND on right-click deselect (vtable slot 5), so this
     // must not claim a cause it cannot know.
     printf("[EditTool] deselect -> closed info dialog %p\n", (void*)dialogPtr);
@@ -485,8 +469,9 @@ void EditTool_Startup_Impl(EditTool* self) {
     uintptr_t controllerResult = 0;
     uintptr_t toolUIObj = 0;
 
-    if (s_fn_GetController && s_pTypeId_ToolUI) {
-        s_fn_GetController((void*)dialogPtr, &controllerResult, *s_pTypeId_ToolUI);
+    if (s_pTypeId_ToolUI) {
+        ::new (&controllerResult) Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(*s_pTypeId_ToolUI));  // B.3.6 bridge
         if (controllerResult != 0) {
             void* ctrObj = (void*)controllerResult;
             if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, *s_pTypeId_ToolUI)) {
@@ -504,8 +489,9 @@ void EditTool_Startup_Impl(EditTool* self) {
     controllerResult = 0;
     uintptr_t pageToggleObj = 0;
 
-    if (s_fn_GetController && s_pTypeId_PageToggleUI) {
-        s_fn_GetController((void*)dialogPtr, &controllerResult, *s_pTypeId_PageToggleUI);
+    if (s_pTypeId_PageToggleUI) {
+        ::new (&controllerResult) Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetController(*s_pTypeId_PageToggleUI));  // B.3.6 bridge
         if (controllerResult != 0) {
             void* ctrObj = (void*)controllerResult;
             if (s_fn_IsDerived && s_fn_IsDerived(ctrObj, *s_pTypeId_PageToggleUI)) {
@@ -605,13 +591,15 @@ void EditTool_Startup_Impl(EditTool* self) {
     dialogPtr = *(uintptr_t*)entityIBP;
     void* rootIBPPtr = nullptr;
     uintptr_t rootRetbuf = 0;  // InternalPtr<Element> return-by-value buffer
-    if (s_fn_GetRoot) { s_fn_GetRoot((void*)dialogPtr, &rootRetbuf); rootIBPPtr = &rootRetbuf; }
+    ::new (&rootRetbuf) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(dialogPtr)->GetRoot());  // B.3.6 bridge
+    rootIBPPtr = &rootRetbuf;
 
 
     int dialogWidth = 0, dialogHeight = 0;
     uintptr_t rootElement = rootIBPPtr ? *(uintptr_t*)rootIBPPtr : 0;
-    if (s_fn_GetPaddedSize && rootElement) {
-        s_fn_GetPaddedSize((void*)rootElement, &dialogWidth, &dialogHeight);
+    if (rootElement) {
+        reinterpret_cast<UI::Element*>(rootElement)->GetPaddedSize(dialogWidth, dialogHeight);  // B.3.6 bridge
     }
 
     // Calculate dialog position from entity rect.
@@ -672,9 +660,7 @@ void EditTool_Startup_Impl(EditTool* self) {
     REPO_DIAG("[Repos] SETPOS midX=%.1f rectTop=%.1f dlgW=%d dlgH=%d uiScale=%.3f "
               "-> scaled=(%d,%d) SetUpperLeft=%p\n", midX, rectTop, dialogWidth,
               dialogHeight, uiScale, scaledX, scaledY, (void*)s_fn_SetUpperLeft);
-    if (s_fn_SetUpperLeft) {
-        s_fn_SetUpperLeft((void*)dialogPtr, scaledX, scaledY, true);
-    }
+    reinterpret_cast<UI::DialogInstance*>(dialogPtr)->SetUpperLeft(scaledX, scaledY, true);  // B.3.6 bridge
 
     // If game world flag bit 10 is set and pageToggle controller exists, call helper
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;

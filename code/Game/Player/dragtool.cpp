@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // DragTool vtable addresses (for vtable chain in Dtor)
@@ -244,7 +245,8 @@ uint64_t DragTool_OnKey(DragTool* self, char key) {
         // Original: CMP [RBX], 0 — dereferences the pointer-to-IBP
         if (DIALOG_IBP() != nullptr && *DIALOG_IBP() != 0) {
             uint64_t tempIBP = *DIALOG_IBP();  // copy the IBP value
-            fn_UI_CloseDialog(GetUserInterface(), &tempIBP);
+            reinterpret_cast<UI::UserInterface*>(GetUserInterface())->CloseDialog(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&tempIBP));
             new (&tempIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
             *DIALOG_IBP() = tempIBP;  // write null IBP back through the pointer
         }
@@ -451,9 +453,10 @@ extern "C" int DragTool_CancelDrag_Impl(DragTool* self) {
     self->dragState = 0;
     self->singleClick = 0;   // retail: MOV word ptr [self+0x28], 0
     uint64_t* ibp = (uint64_t*)self->dialogPtr;
-    if (ibp && *ibp && fn_UI_CloseDialog && fn_InternalBasePtr_Ctor) {
+    if (ibp && *ibp && fn_InternalBasePtr_Ctor) {
         uint64_t tempIBP = *ibp;
-        fn_UI_CloseDialog(GetUserInterface(), &tempIBP);
+        reinterpret_cast<UI::UserInterface*>(GetUserInterface())->CloseDialog(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&tempIBP));
         new (&tempIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
         *ibp = tempIBP;
     }

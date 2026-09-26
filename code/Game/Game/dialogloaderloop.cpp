@@ -20,6 +20,7 @@
 #include "MainLoop.h"
 #include "engine_funcs.h"
 #include <cstdint>
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 
 void DialogLoaderLoopT_Draw_Impl(DialogLoaderLoopT* self) {
     MainLoop* mainLoop = reinterpret_cast<MainLoop*>(
@@ -68,5 +69,6 @@ void DialogLoaderLoopT_Draw_Impl(DialogLoaderLoopT* self) {
     *reinterpret_cast<uint32_t*>(ctx + 0x10) |= 0x10800;
 
     // 9. Draw the UI overlay (UserInterface at self+0x60)
-    fn_UI_Draw(reinterpret_cast<uint8_t*>(self) + 0x60, mainLoop->m_context);
+    reinterpret_cast<UI::UserInterface*>(reinterpret_cast<uint8_t*>(self) + 0x60)->Draw(  // B.3.6 bridge
+        *reinterpret_cast<Video::Context*>(mainLoop->m_context));
 }

@@ -202,6 +202,7 @@
 #include "../../types/graphics/Material.h"   // ENDGAME B.3.5: Graphics::MaterialInstance
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../../types/ui/SpriteCapture.h"   // ENDGAME B.3.6 UI callers (K4)
 
 using RtSave::SaveLoad;
 using RtVideo::Context;
@@ -334,11 +335,7 @@ using OpNewFn      = void* (*)(uint64_t);
 using VoidThisFn   = void  (*)(void*);
 // ENDGAME B.3.1 step 2: the String::Set door typedef is gone with its one call
 // site — it is `diffuse.Set("diffuse")` now.
-using SheetSetFn   = void  (*)(void*, int32_t, int32_t, const char**, const char**, bool);
-using AddSpriteInfoFn = void (*)(void*, const char**, const char**, int32_t, int32_t, int32_t, int32_t);
 using CameraCtorFn = void  (*)(void*, const Frustum*, const Transform3*, bool);  // return ignored, see above
-using SpriteCtxFn  = void  (*)(UI::SpriteContext*);
-using AddSpriteDrawFn = void (*)(UI::SpriteContext*, const UI::SpriteDraw*);
 
 // The two Video singletons Draw reads. Both are DATA exports whose slot holds
 // the pointer, so the slot is dereferenced, unlike the vtable symbols below.
@@ -628,16 +625,17 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
         // null here, so the sheet gets no texture name and no group name.
         const char* emptyA = nullptr;   // RSP+0x70
         const char* emptyB = nullptr;   // RBP+0xe0
-        RT_EXPORT_ONCE(SheetSetFn, "?Set@SpriteSheet@UI@@QEAAXHHAEBVString@System@@0_N@Z")(
-            sheet, ImageBufferWidth(frameCopy), ImageBufferHeight(frameCopy),
-            &emptyB, &emptyA, false);
+        sheet->Set(ImageBufferWidth(frameCopy), ImageBufferHeight(frameCopy),
+                   *reinterpret_cast<const System::String*>(&emptyB),   // B.3.6 bridge
+                   *reinterpret_cast<const System::String*>(&emptyA), false);
 
         // AddSpriteInfo's two Strings are a DIFFERENT pair of empty slots (the
         // two above are consumed by Set), zeroed immediately before the call.
         const char* nameA = nullptr;
         const char* nameB = nullptr;
-        RT_EXPORT_ONCE(AddSpriteInfoFn, "?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z")(
-            sheet, &nameA, &nameB, offX, offY, offX + fitW, offY + fitH);
+        sheet->AddSpriteInfo(*reinterpret_cast<const System::String*>(&nameA),   // B.3.6 bridge
+                             *reinterpret_cast<const System::String*>(&nameB),
+                             offX, offY, offX + fitW, offY + fitH);
     }
 
     // Sprite entry 0's device-space size and normalised UV rect, written
@@ -774,7 +772,7 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     // a DIFFERENT non-null sheet was current.
     if (sc._currentSheet != sheet) {
         if (sc._currentSheet != nullptr)
-            RT_EXPORT_ONCE(SpriteCtxFn, "?Flush@SpriteContext@UI@@AEAAXXZ")(&sc);
+            sc.Flush();
         sc._currentSheet = sheet;
     }
 
@@ -790,12 +788,11 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     draw.isLine      = 0;
     // +0x25..+0x27 are NOT written by retail (the stores stop at the byte at
     // +0x24), so they are left alone here too.
-    RT_EXPORT_ONCE(AddSpriteDrawFn, "?AddSpriteDraw@SpriteContext@UI@@AEAAXAEBUSpriteDraw@12@@Z")(
-        &sc, &draw);
-    RT_EXPORT_ONCE(SpriteCtxFn, "?Flush@SpriteContext@UI@@AEAAXXZ")(&sc);
+    sc.AddSpriteDraw(draw);
+    sc.Flush();
 
     if (sc._spriteCapture != nullptr)
-        RT_EXPORT_ONCE(VoidThisFn, "?EndAddingSprites@SpriteCapture@UI@@QEAAXXZ")(sc._spriteCapture);
+        sc._spriteCapture->EndAddingSprites();
 
     // ---- put the context back ---------------------------------------------
     // The scissor is set to the FULL DEVICE and is NOT restored — the only

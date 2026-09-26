@@ -41,6 +41,8 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "io/Stream.h"      // ENDGAME B.3.4 callers batch H: IO::Stream::GetDirection
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
+#include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 #include <new>
 
 // ============================================================
@@ -832,7 +834,7 @@ void EntityList_Update(EntityList* self, void* time) {
 // entity panel (pinned or not), not just ResidenceUI.
 static void EntityList_CloseDialogsForDyingEntities() {
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    if (!gw || !fn_UI_CloseDialog || !fn_DialogInstance_GetController)
+    if (!gw)
         return;
     void* ui = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x98);
     if (!ui) return;
@@ -858,7 +860,8 @@ static void EntityList_CloseDialogsForDyingEntities() {
         void* dialog = *it;                                        // node[0] = DialogInstance*
         if (dialog) {
             uintptr_t ctrlBuf[2] = {};
-            fn_DialogInstance_GetController(dialog, ctrlBuf, s_tidEntityUI);
+            ::new (ctrlBuf) Object::InternalPtr<UI::DialogController>(
+                reinterpret_cast<UI::DialogInstance*>(dialog)->GetController(s_tidEntityUI));  // B.3.6 bridge
             if (ctrlBuf[0] != 0) {
                 void* ctrl = reinterpret_cast<void*>(ctrlBuf[0]);
                 void* ds = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(ctrl) + 0x28);
@@ -872,7 +875,8 @@ static void EntityList_CloseDialogsForDyingEntities() {
         void* dlgUI = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(toClose[i]) + 0x10);
         if (!dlgUI) dlgUI = ui;
         uint64_t dialogRef = reinterpret_cast<uint64_t>(toClose[i]);
-        fn_UI_CloseDialog(dlgUI, &dialogRef);
+        reinterpret_cast<UI::UserInterface*>(dlgUI)->CloseDialog(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));
         printf("[EntityList] closed info dialog %p on dying (marked-for-removal) entity\n",
                toClose[i]);
     }

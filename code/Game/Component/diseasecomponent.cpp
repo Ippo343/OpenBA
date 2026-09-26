@@ -90,6 +90,9 @@
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
 
 namespace {
 
@@ -485,11 +488,14 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
             ? *reinterpret_cast<uint64_t*>((uintptr_t)self->entity + 0x28) : 0;
         int64_t found = 0;
         if (s_findDesc && entityDesc) s_findDesc(entityDesc, &found);
-        if (found && fn_UIString_Ctor && fn_UIString_ToSystemString) {
+        if (found) {
             uint8_t uiStr[16] = {0};
-            fn_UIString_Ctor(uiStr, *reinterpret_cast<uint64_t*>(found + 0x30),
-                             reinterpret_cast<const void*>(found + 0x40));
-            fn_UIString_ToSystemString(uiStr, &cropName);
+            ::new (uiStr) UI::String(
+                Object::ExternalPtr<UI::StringTable>(  // B.3.6 bridge
+                    reinterpret_cast<UI::StringTable*>(*reinterpret_cast<uint64_t*>(found + 0x30))),
+                *reinterpret_cast<const System::String*>(found + 0x40));
+            ::new (&cropName) System::String(
+                reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
             haveName = true;
         }
     }
@@ -502,8 +508,9 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
         EventLog_SeasonString_Reg(gw, eventLog, &seasonStr);
 
         void* eventsTable = *reinterpret_cast<void**>(eventLog);
-        if (eventsTable && fn_StringTable_GetText)
-            fn_StringTable_GetText(eventsTable, &templateStr, 0xC);
+        if (eventsTable)
+            ::new (&templateStr) System::String(
+                reinterpret_cast<const UI::StringTable*>(eventsTable)->GetText(0xC));  // B.3.6 bridge
         else
             templateStr.Set("Crop infestation");
 

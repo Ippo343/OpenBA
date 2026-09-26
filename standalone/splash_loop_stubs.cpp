@@ -40,6 +40,14 @@
 #include <cstdint>
 #include "system/String.h"   // -Iruntime/types
 #include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Random
+#include "object/External.h"                 // ENDGAME B.3.6 UI callers (K4)
+#include "runtime/types/ui/DialogInstance.h" // ENDGAME B.3.6 UI callers (K4)
+#include "ui/Element.h"                      // ENDGAME B.3.6 UI callers (K4)
+#include "ui/String.h"                       // ENDGAME B.3.6 UI callers (K4)
+#include "ui/StringTable.h"                  // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TextElement.h"                  // ENDGAME B.3.6 UI callers (K4)
+#include "ui/UserInterface.h"                // ENDGAME B.3.6 UI callers (K4)
+#include <new>
 #include <windows.h>
 
 // Defined in code/Game/Game/gameupdateloop_load.cpp. Returns true once the
@@ -68,16 +76,13 @@ static void TipBail(const char* why, const void* p) {
 void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     if (!self) { TipBail("self==null", nullptr); return; }
     if (!self->m_dialogInstance) { TipBail("m_dialogInstance==null", self); return; }
-    if (!fn_DialogInstance_FindElement)  { TipBail("fn_DialogInstance_FindElement", nullptr); return; }
-    if (!fn_StringTable_GetCount)        { TipBail("fn_StringTable_GetCount", nullptr); return; }
-    if (!fn_UIString_Ctor_Index)         { TipBail("fn_UIString_Ctor_Index", nullptr); return; }
-    if (!fn_TextElement_SetText)         { TipBail("fn_TextElement_SetText", nullptr); return; }
 
     // Find "descText" in the dialog instance (member value-return ABI:
     // RCX=this, RDX=retbuf, R8=name — the typedef carries all three).
     const System::String nameStr("descText");
     uint64_t elemBuf = 0;
-    fn_DialogInstance_FindElement(self->m_dialogInstance, &elemBuf, &nameStr);
+    ::new (&elemBuf) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<UI::DialogInstance*>(self->m_dialogInstance)->FindElement(nameStr));  // B.3.6 bridge
 
     // Normalise the missing-element sentinel (0xffffffff........) to null.
     uintptr_t raw = static_cast<uintptr_t>(elemBuf);
@@ -101,18 +106,19 @@ void SetRandomLoadingTip(DialogLoaderLoopT* self) {
     // StringTable at element+0xD8; pick a random 1-based index in [1, count].
     void* table = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(elem) + 0xD8);
     if (!table) { TipBail("elem+0xD8 StringTable==null", elem); return; }
-    int count = fn_StringTable_GetCount(table);
+    int count = reinterpret_cast<const UI::StringTable*>(table)->GetCount();  // B.3.6 bridge
     if (count <= 0) { TipBail("StringTable count<=0", table); return; }
     void* rng = reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(self) + 0x194);
     uint32_t idx = reinterpret_cast<System::Random*>(rng)->Rand(static_cast<uint32_t>(count - 1));   // B.3.4 bridge
 
     uint8_t uiStr[16];
-    fn_UIString_Ctor_Index(uiStr, reinterpret_cast<uint64_t>(table),
-                           static_cast<int>(idx + 1));
+    ::new (uiStr) UI::String(
+        Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(table)),  // B.3.6 bridge
+        static_cast<int>(idx + 1));
     uint8_t textVal[16];
     *reinterpret_cast<uint64_t*>(textVal)     = *reinterpret_cast<uint64_t*>(uiStr);
     *reinterpret_cast<uint64_t*>(textVal + 8) = *reinterpret_cast<uint64_t*>(uiStr + 8);
-    fn_TextElement_SetText(elem, textVal);
+    reinterpret_cast<UI::TextElement*>(elem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
 
     static int s_tipLog = 0;
     if (s_tipLog++ < 8) {
@@ -284,9 +290,10 @@ bool Stub_Update(UpdateLoop* self, void* time) {
         }
     }
 
-    if (fn_UI_Update) {
+    {
         void* ui = reinterpret_cast<uint8_t*>(self) + 0x60;
-        fn_UI_Update(ui, time);
+        reinterpret_cast<UI::UserInterface*>(ui)->Update(  // B.3.6 bridge
+            *reinterpret_cast<const System::Time*>(time));
     }
 
     // Safety net for the deferred window reveal — if the Draw path never runs,

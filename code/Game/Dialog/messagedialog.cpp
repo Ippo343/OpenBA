@@ -1,3 +1,7 @@
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -21,11 +25,11 @@ void MessageDialog_Slot4(MessageDialog* self) {
     for (auto& btn : buttons) {
         System::String nameStr(btn.name);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
 
         if (elem) {
-            fn_Element_SetElementId(elem, btn.id);
+            reinterpret_cast<UI::Element*>(elem)->SetElementId(btn.id);  // B.3.6 bridge
         }
     }
 }
@@ -86,7 +90,7 @@ void MessageDialog_Slot10(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 1;
     uint8_t selfIBP[16];
     new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+    reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -99,7 +103,7 @@ void MessageDialog_Slot11(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 0;
     uint8_t selfIBP[16];
     new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+    reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -112,7 +116,7 @@ void MessageDialog_Slot12(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 2;
     uint8_t selfIBP[16];
     new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+    reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -125,7 +129,7 @@ void MessageDialog_Slot13(MessageDialog* self) {
     *(uint32_t*)((uintptr_t)self + 0x24) = 3;
     uint8_t selfIBP[16];
     new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-    fn_UI_CloseDialog(*(void**)((uintptr_t)self + 0x10), selfIBP);
+    reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
 }
 
 // ============================================================

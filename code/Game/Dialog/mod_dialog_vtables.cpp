@@ -53,6 +53,8 @@
 // standalone/autostart.cpp): build, toggle, reorder, details, cancel-revert,
 // ok-save-reload, and registry persistence across a clean quit.
 
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Object/factory_registration.h"
 #include "Component/component_factory_base.h"
@@ -342,7 +344,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
     EnsureBaseSlots();
 
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_DialogInstance_Ctor ||
-        !fn_InternalBasePtr_Ctor || !fn_UI_AddDialog) {
+        !fn_InternalBasePtr_Ctor) {
         printf("[ModDialog] open: core engine fns unresolved\n");
         return;
     }
@@ -378,7 +380,7 @@ extern "C" void ModDialog_OpenFromMainMenu(void* mainMenuSelf) {
 
     uint8_t ibp[8] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlg));   // B.3.3 bridge
-    fn_UI_AddDialog(ui, ibp);
+    reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));  // B.3.6 bridge
     // ENDGAME B.3.4a closing: the count was computed INSIDE the printf argument
     // list, where the perf build strips it (reference_perf_build_strips_printf_
     // arguments). Hoisted to a local first, then converted; the `? :` guard went
