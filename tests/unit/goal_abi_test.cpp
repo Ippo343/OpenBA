@@ -316,3 +316,16 @@ UNIT_TEST(tutorialgoaldialog_is_retail_10_slots_and_0x40) {
     CHECK_EQ(offsetof(TutorialGoalDialog, targetStamp), (size_t)0x30);
     CHECK_EQ(offsetof(TutorialGoalDialog, targetDescription), (size_t)0x38);
 }
+
+// ===========================================================================
+// TutorialSetupDialog : TutorialSetup — 12 slots, 0x78
+// ===========================================================================
+#include "Tutorial/TutorialSetupDialog.h"
+
+UNIT_TEST(tutorialsetupdialog_is_retail_12_slots_and_0x78) {
+    CheckTutorialSetupLeaf<TutorialSetupDialog>();
+    CHECK_EQ(sizeof(TutorialSetupDialog), (size_t)0x78);
+    CHECK_EQ(offsetof(TutorialSetupDialog, highlightDialog), (size_t)0x50);
+    CHECK_EQ(offsetof(TutorialSetupDialog, toolbarStamp), (size_t)0x60);
+    CHECK_EQ(offsetof(TutorialSetupDialog, toolbarIndex), (size_t)0x70);
+}

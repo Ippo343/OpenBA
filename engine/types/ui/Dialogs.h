@@ -222,26 +222,5 @@ struct TutorialHighlightDialog {
 static_assert(sizeof(TutorialHighlightDialog) == 0xF0, "TutorialHighlightDialog size mismatch");
 static_assert(offsetof(TutorialHighlightDialog, dataB8) == 0xB8, "");
 
-// --- TutorialSetupDialog (0x78) ---
-// NOT DialogInstance-based. Extends Object::External (base ~0x20).
-// Ctor inits: +0x20..+0x58=0, +0x60(u32)=0xFFFFFFFF, +0x68=0, +0x70(u32)=0
-struct TutorialSetupDialog {
-    void*    vtable;            // +0x00
-    uint8_t  externalBase[0x18];// +0x08: Object::External base data
-    uint64_t data20;           // +0x20: zeroed
-    uint64_t data28;           // +0x28: zeroed
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-    uint32_t data48;           // +0x48: zeroed (u32 write)
-    uint8_t  _pad4C[4];        // +0x4C: gap
-    uint64_t data50;           // +0x50: zeroed
-    uint64_t data58;           // +0x58: zeroed
-    int32_t  data60;           // +0x60: initialized to -1 (0xFFFFFFFF)
-    uint8_t  _pad64[4];        // +0x64: gap
-    uint64_t data68;           // +0x68: zeroed
-    uint32_t data70;           // +0x70: zeroed
-    uint8_t  _pad74[4];        // +0x74: gap
-};
-static_assert(sizeof(TutorialSetupDialog) == 0x78, "TutorialSetupDialog size mismatch");
-static_assert(offsetof(TutorialSetupDialog, data60) == 0x60, "");
+// --- TutorialSetupDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
+#include "Tutorial/TutorialSetupDialog.h"

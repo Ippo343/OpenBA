@@ -58,6 +58,7 @@
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/ui_panels.h"
 #include "Tutorial/TutorialGoalDialog.h"
+#include "Tutorial/TutorialSetupDialog.h"
 #include "Object/factory_registration.h"
 #include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (see TutDlg_UnregisterInternal)
 #include "engine_funcs.h"
@@ -67,17 +68,6 @@
 #include <cstdio>
 #include <cstdlib>
 #include "Dialog/dialog_controller_vtable.h"
-
-// Bodies that live in their own translation units.
-void TutorialSetupDialog_Slot8(void* self);
-void TutorialSetupDialog_Slot9(void* self);
-void TutorialSetupDialog_Slot10(void* self);
-int  TutorialSetupDialog_Slot3(void* self);
-void TutorialSetupDialog_Slot7(void* self);
-void* TutorialSetupDialog_Slot11(void* self);
-void* TutorialSetupDialog_ScalarDtor(void* self, uint32_t flags);
-uint64_t TutorialSetupDialog_Shutdown(void* self, void* stream);
-void TutorialSetupDialog_OnEvent(void* self);
 
 namespace {
 
@@ -230,89 +220,6 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 }  // namespace tut_ui
 
 // ===========================================================================
-// TutorialSetupDialog  (parent "TutorialSetup", 0x78)
-// ===========================================================================
-namespace tut_setupdlg {
-
-void* g_vt[kSlots];
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialSetupDialog");
-    return c;
-}
-const char* TypeName(void*) { return "TutorialSetupDialog"; }
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    TutDlg_UnregisterInternal(self);   // see the note above � MUST run before the free
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-int  Slot3(void* self) { return TutorialSetupDialog_Slot3(self); }
-
-// Slot5 — the .rsc deserializer (two String vectors, two inline Strings, an
-// ExternalPtr and two ints). Same stream-desync argument as TutorialGoalDialog.
-uint64_t Slot5(void* self, void* stream) {
-    if (!self || !stream) return 0;
-    return TutorialSetupDialog_Shutdown(self, stream);
-}
-void Slot6(void* self) { if (self) TutorialSetupDialog_OnEvent(self); }
-void Slot7(void* self) { if (self) TutorialSetupDialog_Slot7(self); }
-void Slot8(void* self) {
-    // _Slot8 derefs *g_TypeId_ComponentDescription_FC / *g_TypeId_ComponentEntity.
-    if (!self || !g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity) return;
-    if (!fn_TSD_Slot9Helper || !fn_TSD_OpenDialog) return;
-    TutorialSetupDialog_Slot8(self);
-}
-void Slot9(void* self) {
-    if (!self || !fn_TSD_Slot9Helper || !fn_TSD_OpenDialog) return;
-    TutorialSetupDialog_Slot9(self);
-}
-void Slot10(void* self) {
-    if (!self || !fn_TSD_SetDialogFlags || !fn_TSD_FindInstance) return;
-    TutorialSetupDialog_Slot10(self);
-}
-void* Slot11(void* self) { return TutorialSetupDialog_Slot11(self); }
-
-struct Init {
-    Init() {
-        FillNops(g_vt);
-        g_vt[0]  = reinterpret_cast<void*>(&Dtor);
-        g_vt[1]  = reinterpret_cast<void*>(&TypeName);
-        g_vt[2]  = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[3]  = reinterpret_cast<void*>(&Slot3);
-        g_vt[5]  = reinterpret_cast<void*>(&Slot5);
-        g_vt[6]  = reinterpret_cast<void*>(&Slot6);
-        g_vt[7]  = reinterpret_cast<void*>(&Slot7);
-        g_vt[8]  = reinterpret_cast<void*>(&Slot8);
-        g_vt[9]  = reinterpret_cast<void*>(&Slot9);
-        g_vt[10] = reinterpret_cast<void*>(&Slot10);
-        g_vt[11] = reinterpret_cast<void*>(&Slot11);
-    }
-} g_init;
-
-void Zero(void* p) { for (size_t o = 0; o < 0x78; o += 8) *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0; }
-void SeedCtorScalars(void* p) {
-    // Retail TutorialSetupDialog_Ctor (0x1400E2CC0) seeds +0x60 with -1.
-    // [[reference-ctor-scalars-in-startup-are-unset-after-load]]: a zero there
-    // is a legal value, so the sentinel has to come from construction.
-    *reinterpret_cast<int32_t*>(static_cast<char*>(p) + 0x60) = -1;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
-    if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; SeedCtorScalars(p);
-    return p;
-}
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; SeedCtorScalars(m); return m; }
-
-}  // namespace tut_setupdlg
-
-// ===========================================================================
 // TutorialHighlightDialog  (UI::DialogInstance, 0xF0)
 //
 // This one is NOT built by the External factory. TutorialSetupDialog's
@@ -397,7 +304,6 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 // tutorial_wave.cpp and registered in standalone/reg_tutorial_wave.cpp.
 // ---------------------------------------------------------------------------
 extern "C" void* GetTutorialUIVtable()              { return tut_ui::g_vt; }
-extern "C" void* GetTutorialSetupDialogVtable()     { return tut_setupdlg::g_vt; }
 extern "C" void* GetTutorialHighlightDialogVtable() { return tut_highlight::g_vt; }
 
 // 0x1400E01D0 — TutorialHighlightDialog::TutorialHighlightDialog.
@@ -437,34 +343,8 @@ extern "C" void* TutWave_HighlightDialogCtor(void* self, void* ui, void* dialogE
     return self;
 }
 
-// 0x1400E2CC0 — TutorialSetupDialog::TutorialSetupDialog. Retail:
-//   Object::External::External(this); vtable = TutorialSetup; vtable =
-//   TutorialSetupDialog; zero +0x20..+0x58; +0x60 = -1; +0x68 = 0; +0x70 = 0.
-// Reached from TutorialSetupDialog_Slot11 and _OnEvent, both of which resolve
-// this address and would EXEC 0 without it.
-extern "C" void* TutWave_TutorialSetupDialogCtor(void* self) {
-    if (!self) return nullptr;
-    if (fn_External_External) fn_External_External(self);
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    *reinterpret_cast<void**>(self) = tut_setupdlg::g_vt;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x40) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x48) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x58) = 0;
-    *reinterpret_cast<int32_t*>(s  + 0x60) = -1;
-    *reinterpret_cast<uint64_t*>(s + 0x68) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x70) = 0;
-    return self;
-}
-
 extern "C" void* TutorialUI_SAFactory(void)                    { return tut_ui::Factory(); }
 extern "C" void* TutorialUI_SAInPlace(void* m)                 { return tut_ui::InPlace(m); }
-extern "C" void* TutorialSetupDialog_SAFactory(void)           { return tut_setupdlg::Factory(); }
-extern "C" void* TutorialSetupDialog_SAInPlace(void* m)        { return tut_setupdlg::InPlace(m); }
 extern "C" void* TutorialHighlightDialog_SAFactory(void)       { return tut_highlight::Factory(); }
 extern "C" void* TutorialHighlightDialog_SAInPlace(void* m)    { return tut_highlight::InPlace(m); }
 
@@ -475,7 +355,8 @@ REGISTER_TYPE(TutorialUI, "UI::DialogController",
 // ENDGAME B.3.8 block GOAL: a real class (Tutorial/TutorialGoalDialog.h); its
 // registration stays HERE, where the REGISTER_TYPE was (B8-7).
 DEFINE_EXE_TYPE(TutorialGoalDialog, "TutorialGoal")
-REGISTER_TYPE(TutorialSetupDialog, "TutorialSetup",
-              &TutorialSetupDialog_SAFactory, &TutorialSetupDialog_SAInPlace);
+// ENDGAME B.3.8 block GOAL: a real class (Tutorial/TutorialSetupDialog.h); its
+// registration stays HERE, where the REGISTER_TYPE was (B8-7).
+DEFINE_EXE_TYPE(TutorialSetupDialog, "TutorialSetup")
 REGISTER_TYPE(TutorialHighlightDialog, "UI::DialogInstance",
               &TutorialHighlightDialog_SAFactory, &TutorialHighlightDialog_SAInPlace);
