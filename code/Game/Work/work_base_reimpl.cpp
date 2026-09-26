@@ -22,6 +22,7 @@
 #include <windows.h>
 #include <new>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Work/Work.h"         // ENDGAME B.3.8 (WRK): Work::Persist / Work::InitFromEntity
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
 
 namespace Object { uint32_t GetTypeIdByName(const char* name); }  // factory_registration.h
@@ -143,8 +144,13 @@ void* WorkBase_FindComponent_15140(uintptr_t entity, void* retIBP) {
 // Ctor ports (e.g. GatherRawMaterials_Ctor_Impl) call 0x1400f72e0 — NULL in standalone —
 // leaving the Work base (incl. the +0x10 entity ptr) uninitialised, so Execute later
 // deref'd *(work+0x10)=null. Registering this fixes those direct-construction paths.
+//
+// ENDGAME B.3.8 (WRK): ONE body, two entry points (B8-1). `Work::InitFromEntity` is
+// the ctor MINUS its `??0Internal` call and vptr store; `Work::Work(void*)` runs it
+// after the compiler's stamps, and this by-address door (reached from the component
+// CreateWork bodies of other blocks, which then stamp the leaf table over it) runs it
+// after `??0Internal` and the 0x140161a80 stamp — the table Work::Vtable() serves.
 void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
     if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
     // Was 0x1401612e0, which is not a vtable at all: it is the INTERIOR of FireWork's
     // 13-slot vtable (starts 0x1401612a0, ends 0x140161308 where the "FishingWork" name
@@ -152,27 +158,31 @@ void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
     // 0x1401612e0; every Work-hierarchy ctor/dtor LEAs 0x140161a80 instead
     // (0x1400f730a LEA RAX,[0x140161a80] right here in retail's Work_Ctor25).
     uintptr_t vtWork = ResolveAddr(Module::Exe, 0x140161a80);
-    if (vtWork) *reinterpret_cast<uintptr_t*>(s) = vtWork;
+    if (vtWork) *reinterpret_cast<uintptr_t*>(self) = vtWork;
+    reinterpret_cast<Work*>(self)->InitFromEntity(pEntityIBP);   // B.3.8 bridge (door onto a raw object)
+    return self;
+}
 
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = pEntityIBP ? *reinterpret_cast<uint64_t*>(pEntityIBP) : 0;
-    *reinterpret_cast<uint64_t*>(s + 0x18) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x20) = 0xffffffff;
-    *reinterpret_cast<uint32_t*>(s + 0x24) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x28) = 0xffffffff;
-    *reinterpret_cast<uint32_t*>(s + 0x2c) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    *reinterpret_cast<uint32_t*>(s + 0x40) = 0;
+void Work::InitFromEntity(void* pEntityIBP) {
+    field_10 = nullptr;
+    field_10 = pEntityIBP ? *reinterpret_cast<void**>(pEntityIBP) : nullptr;
+    field_18 = nullptr;
+    field_20 = -1;
+    field_24 = 0;
+    field_28 = -1;
+    field_2c = 0;
+    field_30 = nullptr;
+    field_38 = nullptr;
+    field_40 = 0;
 
-    if (*reinterpret_cast<uint64_t*>(s + 0x10) != 0) {
+    if (field_10 != nullptr) {
         typedef void* (*Find_t)(uintptr_t, void*);
         Find_t f4680 = reinterpret_cast<Find_t>(ResolveAddr(Module::Exe, 0x140004680));
         uintptr_t tmp = 0;
         if (f4680) {
-            void* r = f4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &tmp);
+            void* r = f4680(reinterpret_cast<uintptr_t>(field_10), &tmp);
             if (r && *reinterpret_cast<uintptr_t*>(r) != 0) {
-                r = f4680(*reinterpret_cast<uintptr_t*>(s + 0x10), &tmp);
+                r = f4680(reinterpret_cast<uintptr_t>(field_10), &tmp);
                 uintptr_t comp = *reinterpret_cast<uintptr_t*>(r);
                 if (comp && g_pGameWorldSingleton && *g_pGameWorldSingleton) {
                     uintptr_t gw = reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton);
@@ -182,16 +192,14 @@ void* Work_Ctor25_Impl(void* self, void* pEntityIBP) {
                     int16_t f2a = *reinterpret_cast<int16_t*>(comp + 0x2a);
                     int16_t f2c = *reinterpret_cast<int16_t*>(comp + 0x2c);
                     int16_t f28 = *reinterpret_cast<int16_t*>(comp + 0x28);
-                    *reinterpret_cast<int*>(s + 0x28) =
-                        (((int)f2e >> 1) + (int)f2a) * mapSize + (((int)f2c >> 1) + (int)f28);
+                    field_28 = (((int)f2e >> 1) + (int)f2a) * mapSize + (((int)f2c >> 1) + (int)f28);
                 }
             }
         }
         void* r2 = WorkBase_FindComponent_3050(
             pEntityIBP ? *reinterpret_cast<uintptr_t*>(pEntityIBP) : 0, &tmp);
-        if (r2) *reinterpret_cast<uint64_t*>(s + 0x18) = *reinterpret_cast<uint64_t*>(r2);
+        if (r2) field_18 = *reinterpret_cast<void**>(r2);
     }
-    return self;
 }
 
 // ============================================================
@@ -278,35 +286,40 @@ void WorkBase_TaskListCleanup_c5400(void* self) {
 // type 0x1401c8070) are post-validated and nulled on type mismatch; ints at +0x20/+0x28;
 // +0x24 is version-gated (copied from +0x20 pre-v1); two Times + an int at +0x30..+0x40
 // added at v3+.   Caller signature: void fn(void* self, void* stream)
-void WorkBase_Serialize_f7400(void* self, void* stream) {
+void Work::Persist(void* stream) {
     EnsureTypeIds();
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
     alignas(8) uint64_t ser[3];  // IO::Serializer, 0x18 bytes on the original's stack
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
 
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x10)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (*reinterpret_cast<void**>(s + 0x10) && fn_IsDerivedFrom && g_TypeId_ComponentEntity) {
-        if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x10), *g_TypeId_ComponentEntity))
-            *reinterpret_cast<void**>(s + 0x10) = nullptr;
+    reinterpret_cast<Object::InternalBasePtr*>(&field_10)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    if (field_10 && fn_IsDerivedFrom && g_TypeId_ComponentEntity) {
+        if (!fn_IsDerivedFrom(field_10, *g_TypeId_ComponentEntity))
+            field_10 = nullptr;
     }
-    reinterpret_cast<Object::InternalBasePtr*>(s + 0x18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
-    if (*reinterpret_cast<void**>(s + 0x18) && fn_IsDerivedFrom && s_pTid_3050) {
-        if (!fn_IsDerivedFrom(*reinterpret_cast<void**>(s + 0x18), *s_pTid_3050))
-            *reinterpret_cast<void**>(s + 0x18) = nullptr;
+    reinterpret_cast<Object::InternalBasePtr*>(&field_18)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4 bridge
+    if (field_18 && fn_IsDerivedFrom && s_pTid_3050) {
+        if (!fn_IsDerivedFrom(field_18, *s_pTid_3050))
+            field_18 = nullptr;
     }
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_20, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_28, nullptr);   // B.3.4 bridge
     int ver = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
     if (ver < 1)
-        *reinterpret_cast<int*>(s + 0x24) = *reinterpret_cast<int*>(s + 0x20);
+        field_24 = field_20;
     else
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_24, nullptr);   // B.3.4 bridge
     if (reinterpret_cast<IO::Serializer*>(ser)->GetVersion() > 2) {   // B.3.4 bridge
-        reinterpret_cast<System::Time*>(s + 0x30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-        reinterpret_cast<System::Time*>(s + 0x38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
+        reinterpret_cast<System::Time*>(&field_30)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<System::Time*>(&field_38)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+        reinterpret_cast<IO::Serializer*>(ser)->Serialize(field_40, nullptr);   // B.3.4 bridge
     }
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+
+// The by-address door (B38 D5 (b), 22 leaf Serialize bodies reach 0x1400f7400):
+// one QUALIFIED delegation, so a leaf calling it never re-enters its own slot 3.
+void WorkBase_Serialize_f7400(void* self, void* stream) {
+    reinterpret_cast<Work*>(self)->Work::Persist(stream);   // B.3.8 bridge (door onto a raw object)
 }
 
 uint8_t WorkBase_ValidateTask_f7100(void* self, void* /*citizenAI*/, void* taskIBP, void** out) {
