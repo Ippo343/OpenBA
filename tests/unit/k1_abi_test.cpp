@@ -39,6 +39,21 @@
 #include "Component/CharacterDescription.h"
 #include "Component/NaturalResourceDescription.h"
 #include "Component/CitizenDescription.h"
+#include "Component/AttendanceDescription.h"
+#include "Component/AutoPickupDescription.h"
+#include "Component/CemeteryDescription.h"
+#include "Component/TombstoneDescription.h"
+#include "Component/PastureDescription.h"
+#include "Component/CropFieldDescription.h"
+#include "Component/HuntDescription.h"
+#include "Component/ForesterDescription.h"
+#include "Component/NomadDescription.h"
+#include "Component/QuarryDescription.h"
+#include "Component/FishingDescription.h"
+#include "Component/FloorDescription.h"
+#include "Component/LivestockDescription.h"
+#include "Component/FruitDescription.h"
+#include "Component/TerraformDescription.h"
 
 namespace {
 
@@ -96,6 +111,24 @@ UNIT_TEST(k1_description_leaves_that_now_run_external_dtor) {
     CHECK_EQ(CheckDescriptionLeaf<CharacterDescription>(0x48), 0);
     CHECK_EQ(CheckDescriptionLeaf<NaturalResourceDescription>(0x88), 0);
     CHECK_EQ(CheckDescriptionLeaf<CitizenDescription>(0x148), 0);
+}
+
+UNIT_TEST(k1_scalar_description_leaves) {
+    CHECK_EQ(CheckDescriptionLeaf<AttendanceDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<AutoPickupDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CemeteryDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<TombstoneDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<PastureDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CropFieldDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<HuntDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ForesterDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<NomadDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<QuarryDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<FishingDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<FloorDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<LivestockDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<FruitDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<TerraformDescription>(0x38), 0);
 }
 
 }  // namespace

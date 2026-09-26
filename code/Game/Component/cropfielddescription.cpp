@@ -9,87 +9,73 @@
 //   float @ +0x24
 //   enum  @ +0x20   (serializer-encoding vtable +0x98 dispatch, version-gated)
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (CropFieldDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140162f50) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/CropFieldDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kCropFieldDescriptionVtable = 0x140162f50;
+// ctor (inlined into create 0x140032f30 / createInPlace 0x140032f90):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+CropFieldDescription::CropFieldDescription()
+    : Description(),
+      _type(5),
+      _f24(0.0f) {}
 
-static void CropFieldDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kCropFieldDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(int32_t*)(s + 0x20) = 5;   // enum (farming type)
-    *(int32_t*)(s + 0x24) = 0;
+// [0] 0x140033040: ~CropFieldDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* CropFieldDescription::DeletingDtor(unsigned flags) {
+    this->~CropFieldDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void CropFieldDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x24), nullptr);   // B.3.4 bridge
-    // Original version-gates the enum: if (0 < GetVersion()) { enum +0x20 }
-    if (reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0) {   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge (enum +0x20, version-gated)
-    }
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x14011b270: stream order as retail.
+bool CropFieldDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_f24, nullptr);
+    if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
+    return true;
 }
 
-void* CropFieldDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kCropFieldDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140032fe0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* CropFieldDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void CropFieldDescription::Destruct() {}
+
+// [8] 0x140033030: CropFieldComponent's type id through the hidden return slot.
+Object::Type* CropFieldDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("CropFieldComponent");
+    return ret;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CropFieldDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CropFieldDescription");
-    return cached;
+// [9] 0x140032f90: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* CropFieldDescription::Construct() {
+    return new (static_cast<void*>(this)) CropFieldDescription();
 }
-static int   CropFieldDescription_Stub_Return3(void* /*self*/) { return 3; } // GetVersion
-static int   CropFieldDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* CropFieldDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* CropFieldDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* CropFieldDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "CropFieldComponent"); }
-
-static void* g_CropFieldDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CropFieldDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&CropFieldDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&CropFieldDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&CropFieldDescription_Stub_Return3),    // +0x18 GetVersion=3
-    reinterpret_cast<void*>(&CropFieldDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&CropFieldDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&CropFieldDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&CropFieldDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&CropFieldDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&CropFieldDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CropFieldDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterCropFieldDescriptionVtable() {
-    RegisterExeAddr(kCropFieldDescriptionVtable, reinterpret_cast<uintptr_t>(g_CropFieldDescription_Vtable));
-}
-extern "C" void* CropFieldDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+// create 0x140032f30: MemAlloc(0x28, 8), then the (inlined) ctor.
+void* CropFieldDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CropFieldDescription), 8);
     if (!p) return nullptr;
-    CropFieldDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) CropFieldDescription());
 }
-static void* CropFieldDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    CropFieldDescription_Init(memory);
-    return memory;
+// createInPlace 0x140032f90.
+void* CropFieldDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CropFieldDescription());
 }
-REGISTER_TYPE(CropFieldDescription, "Description",
-              &CropFieldDescription_Factory, &CropFieldDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(CropFieldDescription, "_ZTV20CropFieldDescription")
+DEFINE_EXE_TYPE(CropFieldDescription, "Description")

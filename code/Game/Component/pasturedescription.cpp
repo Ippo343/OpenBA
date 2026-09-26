@@ -8,87 +8,71 @@
 // Serialize (vtable +0x28, 0x140128220), stream order:
 //   enum @ +0x20   (serializer-encoding vtable +0x98 dispatch, version-gated)
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (PastureDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140163ff0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/PastureDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kPastureDescriptionVtable = 0x140163ff0;
+// ctor (inlined into create 0x1400367a0 / createInPlace 0x140036800):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+PastureDescription::PastureDescription()
+    : Description(),
+      _type(5) {}
 
-static void PastureDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kPastureDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(int32_t*)(s + 0x20) = 5;   // enum
+// [0] 0x1400368b0: ~PastureDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* PastureDescription::DeletingDtor(unsigned flags) {
+    this->~PastureDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void PastureDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    // enum +0x20 is VERSION-GATED in the original (0x140128220): only read when
-    // Serializer::GetVersion() > 0. Reading it unconditionally over-reads past a
-    // version-0 resource -> CompressedStream::Read zero-progress spin.
-    if (reinterpret_cast<IO::Serializer*>(serializer)->GetVersion() > 0) {   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge (enum +0x20)
-    }
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140128220: stream order as retail.
+bool PastureDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    if (ser.GetVersion() > 0) ser.Serialize(_type, nullptr);   // version-gated, as retail
+    return true;
 }
 
-void* PastureDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kPastureDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140036850 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* PastureDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void PastureDescription::Destruct() {}
+
+// [8] 0x1400368a0: PastureComponent's type id through the hidden return slot.
+Object::Type* PastureDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("PastureComponent");
+    return ret;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t PastureDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PastureDescription");
-    return cached;
+// [9] 0x140036800: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* PastureDescription::Construct() {
+    return new (static_cast<void*>(this)) PastureDescription();
 }
-static int   PastureDescription_Stub_Return2(void* /*self*/) { return 2; } // GetVersion
-static int   PastureDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* PastureDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* PastureDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* PastureDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "PastureComponent"); }
-
-static void* g_PastureDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&PastureDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&PastureDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&PastureDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&PastureDescription_Stub_Return2),    // +0x18 GetVersion=2
-    reinterpret_cast<void*>(&PastureDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&PastureDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&PastureDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&PastureDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&PastureDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&PastureDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&PastureDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterPastureDescriptionVtable() {
-    RegisterExeAddr(kPastureDescriptionVtable, reinterpret_cast<uintptr_t>(g_PastureDescription_Vtable));
-}
-extern "C" void* PastureDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+// create 0x1400367a0: MemAlloc(0x28, 8), then the (inlined) ctor.
+void* PastureDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PastureDescription), 8);
     if (!p) return nullptr;
-    PastureDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) PastureDescription());
 }
-static void* PastureDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    PastureDescription_Init(memory);
-    return memory;
+// createInPlace 0x140036800.
+void* PastureDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PastureDescription());
 }
-REGISTER_TYPE(PastureDescription, "Description",
-              &PastureDescription_Factory, &PastureDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(PastureDescription, "_ZTV18PastureDescription")
+DEFINE_EXE_TYPE(PastureDescription, "Description")
