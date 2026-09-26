@@ -15,90 +15,79 @@
 //   int  @ +0x2c
 // GetVersion (vtable +0x18, 0x14004ad50): mov eax,3; ret.
 // Decompiled READ-ONLY from Application-x64.exe (Foundation C wave 2).
+//
+// ENDGAME B.3.8 K1: a REAL class (HappinessDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140159660) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/HappinessDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kHappinessDescriptionVtable = 0x140159660;
+// ctor (inlined into create 0x140005c10 / createInPlace 0x140005c80):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+HappinessDescription::HappinessDescription()
+    : Description(),
+      _happinessType(5),
+      _b24(false),
+      _b25(false),
+      _u28(0),
+      _i2c(0) {}
 
-static void HappinessDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kHappinessDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(int32_t*) (s + 0x20) = 5;   // HappinessType enum
-    *(uint16_t*)(s + 0x24) = 0;   // two bools
-    *(uint64_t*)(s + 0x28) = 0;   // enum + int
+// [0] 0x140005d50: ~HappinessDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* HappinessDescription::DeletingDtor(unsigned flags) {
+    this->~HappinessDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void HappinessDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)
-        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // enum +0x20   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);      // bool +0x24   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x25), nullptr);      // bool +0x25   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)
-        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x28), nullptr);   // enum +0x28   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);       // int  +0x2c   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x14004acb0: stream order as retail.
+bool HappinessDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_happinessType, nullptr);
+    ser.Serialize(_b24, nullptr);
+    ser.Serialize(_b25, nullptr);
+    ser.Serialize(_u28, nullptr);
+    ser.Serialize(_i2c, nullptr);
+    return true;
 }
 
-void* HappinessDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kHappinessDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140005ce0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* HappinessDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void HappinessDescription::Destruct() {}
+
+// [8] 0x140005d40: HappinessComponent's type id through the hidden return slot.
+Object::Type* HappinessDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("HappinessComponent");
+    return ret;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t HappinessDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("HappinessDescription");
-    return cached;
+// [9] 0x140005c80: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* HappinessDescription::Construct() {
+    return new (static_cast<void*>(this)) HappinessDescription();
 }
-static int   HappinessDescription_Stub_Return3(void* /*self*/) { return 3; } // GetVersion=3
-static int   HappinessDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* HappinessDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* HappinessDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* HappinessDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "HappinessComponent"); }
-
-static void* g_HappinessDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&HappinessDescription_Dtor),             // +0x00
-    reinterpret_cast<void*>(&HappinessDescription_Stub_ReturnNull),  // +0x08
-    reinterpret_cast<void*>(&HappinessDescription_GetTypeId),        // +0x10
-    reinterpret_cast<void*>(&HappinessDescription_Stub_Return3),     // +0x18 GetVersion=3
-    reinterpret_cast<void*>(&HappinessDescription_Stub_Return0),     // +0x20 Compile
-    reinterpret_cast<void*>(&HappinessDescription_Serialize),        // +0x28 Serialize
-    reinterpret_cast<void*>(&HappinessDescription_Stub_Return0),     // +0x30
-    reinterpret_cast<void*>(&HappinessDescription_Stub_Return0),     // +0x38
-    reinterpret_cast<void*>(&HappinessDescription_GetComponentTypeId),  // +0x40
-    reinterpret_cast<void*>(&HappinessDescription_CreateInPlace),    // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&HappinessDescription_Stub_ReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterHappinessDescriptionVtable() {
-    RegisterExeAddr(kHappinessDescriptionVtable, reinterpret_cast<uintptr_t>(g_HappinessDescription_Vtable));
-}
-extern "C" void* HappinessDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
+// create 0x140005c10: MemAlloc(0x30, 8), then the (inlined) ctor.
+void* HappinessDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HappinessDescription), 8);
     if (!p) return nullptr;
-    HappinessDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) HappinessDescription());
 }
-static void* HappinessDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    HappinessDescription_Init(memory);
-    return memory;
+// createInPlace 0x140005c80.
+void* HappinessDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HappinessDescription());
 }
-REGISTER_TYPE(HappinessDescription, "Description",
-              &HappinessDescription_Factory, &HappinessDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(HappinessDescription, "_ZTV20HappinessDescription")
+DEFINE_EXE_TYPE(HappinessDescription, "Description")

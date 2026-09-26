@@ -54,6 +54,14 @@
 #include "Component/LivestockDescription.h"
 #include "Component/FruitDescription.h"
 #include "Component/TerraformDescription.h"
+#include "Component/HappinessDescription.h"
+#include "Component/OrchardDescription.h"
+#include "Component/HerdDescription.h"
+#include "Component/TornadoDescription.h"
+#include "Component/DiseaseDescription.h"
+#include "Component/StorageLocationDescription.h"
+#include "Component/ResidenceDescription.h"
+#include "Component/WorkPlaceDescription.h"
 
 namespace {
 
@@ -129,6 +137,14 @@ UNIT_TEST(k1_scalar_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<LivestockDescription>(0x30), 0);
     CHECK_EQ(CheckDescriptionLeaf<FruitDescription>(0x38), 0);
     CHECK_EQ(CheckDescriptionLeaf<TerraformDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<HappinessDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<OrchardDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<HerdDescription>(0x40), 0);
+    CHECK_EQ(CheckDescriptionLeaf<TornadoDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<DiseaseDescription>(0x48), 0);
+    CHECK_EQ(CheckDescriptionLeaf<StorageLocationDescription>(0x28), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ResidenceDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<WorkPlaceDescription>(0x30), 0);
 }
 
 }  // namespace

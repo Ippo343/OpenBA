@@ -12,91 +12,88 @@
 //   int   @ +0x40
 // GetVersion (vtable +0x18, 0x140048f20): mov eax,1; ret.
 // Decompiled READ-ONLY from Application-x64.exe (Foundation C wave 2).
+//
+// ENDGAME B.3.8 K1: a REAL class (DiseaseDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140159310) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/DiseaseDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kDiseaseDescriptionVtable = 0x140159310;
+// ctor (inlined into create 0x140004e10 / createInPlace 0x140004e70):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+DiseaseDescription::DiseaseDescription()
+    : Description(),
+      firstMonth(0),
+      lastMonth(0),
+      yearsIfChanged(0.0f),
+      yearsIfSame(0.0f),
+      rollMonths(0.0f),
+      killMonths(0.0f),
+      spreadMonths(0.0f),
+      durationMonths(0.0f),
+      spreadRadius(0),
+      _i44(0) {}
 
-static void DiseaseDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kDiseaseDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    // fresh-alloc zero for +0x20..+0x47 (exe ctor sets no explicit defaults)
-    for (int o = 0x20; o < 0x48; o += 4) *(int32_t*)(s + o) = 0;
+// [0] 0x140004f20: ~DiseaseDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* DiseaseDescription::DeletingDtor(unsigned flags) {
+    this->~DiseaseDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void DiseaseDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x30), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x34), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x38), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x3c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x140048e40: stream order as retail.
+bool DiseaseDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(firstMonth, nullptr);
+    ser.Serialize(lastMonth, nullptr);
+    ser.Serialize(yearsIfChanged, nullptr);
+    ser.Serialize(yearsIfSame, nullptr);
+    ser.Serialize(rollMonths, nullptr);
+    ser.Serialize(killMonths, nullptr);
+    ser.Serialize(spreadMonths, nullptr);
+    ser.Serialize(durationMonths, nullptr);
+    ser.Serialize(spreadRadius, nullptr);
+    return true;
 }
 
-void* DiseaseDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kDiseaseDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140004ec0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* DiseaseDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void DiseaseDescription::Destruct() {}
+
+// [8] 0x140004f10: DiseaseComponent's type id through the hidden return slot.
+Object::Type* DiseaseDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("DiseaseComponent");
+    return ret;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t DiseaseDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("DiseaseDescription");
-    return cached;
+// [9] 0x140004e70: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* DiseaseDescription::Construct() {
+    return new (static_cast<void*>(this)) DiseaseDescription();
 }
-static int   DiseaseDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion=1
-static int   DiseaseDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* DiseaseDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* DiseaseDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* DiseaseDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "DiseaseComponent"); }
-
-static void* g_DiseaseDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&DiseaseDescription_Dtor),             // +0x00
-    reinterpret_cast<void*>(&DiseaseDescription_Stub_ReturnNull),  // +0x08
-    reinterpret_cast<void*>(&DiseaseDescription_GetTypeId),        // +0x10
-    reinterpret_cast<void*>(&DiseaseDescription_Stub_Return1),     // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&DiseaseDescription_Stub_Return0),     // +0x20 Compile
-    reinterpret_cast<void*>(&DiseaseDescription_Serialize),        // +0x28 Serialize
-    reinterpret_cast<void*>(&DiseaseDescription_Stub_Return0),     // +0x30
-    reinterpret_cast<void*>(&DiseaseDescription_Stub_Return0),     // +0x38
-    reinterpret_cast<void*>(&DiseaseDescription_GetComponentTypeId),  // +0x40
-    reinterpret_cast<void*>(&DiseaseDescription_CreateInPlace),    // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&DiseaseDescription_Stub_ReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterDiseaseDescriptionVtable() {
-    RegisterExeAddr(kDiseaseDescriptionVtable, reinterpret_cast<uintptr_t>(g_DiseaseDescription_Vtable));
-}
-extern "C" void* DiseaseDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+// create 0x140004e10: MemAlloc(0x48, 8), then the (inlined) ctor.
+void* DiseaseDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DiseaseDescription), 8);
     if (!p) return nullptr;
-    DiseaseDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) DiseaseDescription());
 }
-static void* DiseaseDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    DiseaseDescription_Init(memory);
-    return memory;
+// createInPlace 0x140004e70.
+void* DiseaseDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DiseaseDescription());
 }
-REGISTER_TYPE(DiseaseDescription, "Description",
-              &DiseaseDescription_Factory, &DiseaseDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(DiseaseDescription, "_ZTV18DiseaseDescription")
+DEFINE_EXE_TYPE(DiseaseDescription, "Description")

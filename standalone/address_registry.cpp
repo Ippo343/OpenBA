@@ -80,8 +80,6 @@ extern "C" {
     void RegisterComponentDescriptionVtable();
     void RegisterBuildDescriptionVtable();
     void RegisterWorkDescriptionVtable();
-    void RegisterWorkPlaceDescriptionVtable();
-    void RegisterResidenceDescriptionVtable();
     void RegisterMapDescriptionVtable();
     void RegisterCreatePlacedDescriptionVtable();
     void RegisterCreateDragDescriptionVtable();
@@ -93,14 +91,12 @@ extern "C" {
     void RegisterClearAreaDescriptionVtable();
     void RegisterDestroyDescriptionVtable();
     void RegisterStorageDescriptionVtable();
-    void RegisterStorageLocationDescriptionVtable();
     void RegisterModelDescriptionVtable();
     void RegisterPickingDescriptionVtable();
     void RegisterHighlightDescriptionVtable();
     void RegisterDecalDescriptionVtable();
     void RegisterParticleDescriptionVtable();
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
-    void RegisterHerdDescriptionVtable();
     void RegisterPopulationDescriptionVtable();
     void RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
@@ -111,7 +107,6 @@ extern "C" {
     void RegisterCreateFencedDescriptionVtable();
     void RegisterCreateRemovalDescriptionVtable();
     void RegisterCreateRoadDescriptionVtable();
-    void RegisterDiseaseDescriptionVtable();
     void RegisterEnvironmentDescriptionVtable();
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
@@ -119,16 +114,13 @@ extern "C" {
     void RegisterFireComponentVtable();
     void RegisterFrustumOutlineDescriptionVtable();
     void RegisterGrowthDescriptionVtable();
-    void RegisterHappinessDescriptionVtable();
     void RegisterHerbalistDescriptionVtable();
     void RegisterImmigrationDescriptionVtable();
     void RegisterMarketDescriptionVtable();
-    void RegisterOrchardDescriptionVtable();
     void RegisterRadiusDescriptionVtable();
     void RegisterRawMaterialDescriptionVtable();
     void RegisterSelectDescriptionVtable();
     void RegisterSpawnDescriptionVtable();
-    void RegisterTornadoDescriptionVtable();
     void RegisterTradeDescriptionVtable();
     void RegisterValueDescriptionVtable();
     void RegisterWellDescriptionVtable();
@@ -1788,8 +1780,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterComponentDescriptionVtable();
     RegisterBuildDescriptionVtable();
     RegisterWorkDescriptionVtable();
-    RegisterWorkPlaceDescriptionVtable();
-    RegisterResidenceDescriptionVtable();
     RegisterMapDescriptionVtable();
     RegisterCreatePlacedDescriptionVtable();
     RegisterCreateDragDescriptionVtable();
@@ -1801,14 +1791,12 @@ static void RegisterVtablesAndTypeIds() {
     RegisterClearAreaDescriptionVtable();
     RegisterDestroyDescriptionVtable();
     RegisterStorageDescriptionVtable();
-    RegisterStorageLocationDescriptionVtable();
     RegisterModelDescriptionVtable();
     RegisterPickingDescriptionVtable();
     RegisterHighlightDescriptionVtable();
     RegisterDecalDescriptionVtable();
     RegisterParticleDescriptionVtable();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
-    RegisterHerdDescriptionVtable();
     RegisterPopulationDescriptionVtable();
     RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
@@ -1819,23 +1807,19 @@ static void RegisterVtablesAndTypeIds() {
     RegisterCreateFencedDescriptionVtable();
     RegisterCreateRemovalDescriptionVtable();
     RegisterCreateRoadDescriptionVtable();
-    RegisterDiseaseDescriptionVtable();
     RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireDescriptionVtable();
     RegisterFireComponentVtable();
     RegisterFrustumOutlineDescriptionVtable();
     RegisterGrowthDescriptionVtable();
-    RegisterHappinessDescriptionVtable();
     RegisterHerbalistDescriptionVtable();
     RegisterImmigrationDescriptionVtable();
     RegisterMarketDescriptionVtable();
-    RegisterOrchardDescriptionVtable();
     RegisterRadiusDescriptionVtable();
     RegisterRawMaterialDescriptionVtable();
     RegisterSelectDescriptionVtable();
     RegisterSpawnDescriptionVtable();
-    RegisterTornadoDescriptionVtable();
     RegisterTradeDescriptionVtable();
     RegisterValueDescriptionVtable();
     RegisterWellDescriptionVtable();

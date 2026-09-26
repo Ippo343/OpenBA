@@ -16,91 +16,80 @@
 //   int   @ +0x34
 // GetVersion (vtable +0x18, 0x140058e30): mov eax,1; ret.
 // Decompiled READ-ONLY from Application-x64.exe (Foundation C wave 2).
+//
+// ENDGAME B.3.8 K1: a REAL class (TornadoDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015ab00) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/TornadoDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
-#include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
-static const uintptr_t kTornadoDescriptionVtable = 0x14015ab00;
-
-static void TornadoDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kTornadoDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(float*)   (s + 0x20) = 1.0f;
-    *(int32_t*) (s + 0x24) = 10;
-    *(uint64_t*)(s + 0x28) = 0;     // Time (8 bytes)
-    *(int32_t*) (s + 0x30) = 1;
-    *(int32_t*) (s + 0x34) = 2;
+// ctor (inlined into create 0x14000d560 / createInPlace 0x14000d5a0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+TornadoDescription::TornadoDescription()
+    : Description(),
+      _f20(1.0f),
+      _i24(10),
+      _i30(1),
+      _i34(2) {
+    _time28._ticks = 0;
 }
 
-void TornadoDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x20), nullptr);  // float +0x20   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);                       // int   +0x24   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);                       // int   +0x30   // B.3.4 bridge
-    reinterpret_cast<System::Time*>(s + 0x28)->Serialize(*reinterpret_cast<IO::Serializer*>(serializer));                               // Time  +0x28   // B.3.4b bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);                       // int   +0x34   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [0] 0x14000d5e0: ~TornadoDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* TornadoDescription::DeletingDtor(unsigned flags) {
+    this->~TornadoDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void* TornadoDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kTornadoDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [5] 0x140058d90: stream order as retail.
+bool TornadoDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_f20, nullptr);
+    ser.Serialize(_i24, nullptr);
+    ser.Serialize(_i30, nullptr);
+    _time28.Serialize(ser);
+    ser.Serialize(_i34, nullptr);
+    return true;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [6] 0x14000d5b0 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* TornadoDescription::Reconstruct() { return nullptr; }
 
-static uint32_t TornadoDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TornadoDescription");
-    return cached;
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void TornadoDescription::Destruct() {}
+
+// [8] 0x14000d5d0: TornadoComponent's type id through the hidden return slot.
+Object::Type* TornadoDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("TornadoComponent");
+    return ret;
 }
-static int   TornadoDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion=1
-static int   TornadoDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* TornadoDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* TornadoDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* TornadoDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "TornadoComponent"); }
-
-static void* g_TornadoDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&TornadoDescription_Dtor),             // +0x00
-    reinterpret_cast<void*>(&TornadoDescription_Stub_ReturnNull),  // +0x08
-    reinterpret_cast<void*>(&TornadoDescription_GetTypeId),        // +0x10
-    reinterpret_cast<void*>(&TornadoDescription_Stub_Return1),     // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&TornadoDescription_Stub_Return0),     // +0x20 Compile
-    reinterpret_cast<void*>(&TornadoDescription_Serialize),        // +0x28 Serialize
-    reinterpret_cast<void*>(&TornadoDescription_Stub_Return0),     // +0x30
-    reinterpret_cast<void*>(&TornadoDescription_Stub_Return0),     // +0x38
-    reinterpret_cast<void*>(&TornadoDescription_GetComponentTypeId),  // +0x40
-    reinterpret_cast<void*>(&TornadoDescription_CreateInPlace),    // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&TornadoDescription_Stub_ReturnNull),  // +0x50 guard
-};
-
-extern "C" void RegisterTornadoDescriptionVtable() {
-    RegisterExeAddr(kTornadoDescriptionVtable, reinterpret_cast<uintptr_t>(g_TornadoDescription_Vtable));
+// [9] 0x14000d5a0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* TornadoDescription::Construct() {
+    return new (static_cast<void*>(this)) TornadoDescription();
 }
-extern "C" void* TornadoDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+
+// create 0x14000d560: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* TornadoDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TornadoDescription), 8);
     if (!p) return nullptr;
-    TornadoDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) TornadoDescription());
 }
-static void* TornadoDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    TornadoDescription_Init(memory);
-    return memory;
+// createInPlace 0x14000d5a0.
+void* TornadoDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TornadoDescription());
 }
-REGISTER_TYPE(TornadoDescription, "Description",
-              &TornadoDescription_Factory, &TornadoDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(TornadoDescription, "_ZTV18TornadoDescription")
+DEFINE_EXE_TYPE(TornadoDescription, "Description")
