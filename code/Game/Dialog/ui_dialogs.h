@@ -50,31 +50,6 @@ void MainMenuDialog_Slot5(MainMenuDialog* self);
 void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int param4);
 
 // ============================================================
-// ScenarioDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds buttons, queries scenario list,
-// populates table with cloned template rows for each matching scenario.
-void ScenarioDialog_Slot4(ScenarioDialog* self);
-
-// Slot6 (vtable +0x30): Updates entry visibility based on selected index.
-void ScenarioDialog_Slot6(ScenarioDialog* self);
-
-// Slot7 (vtable +0x38, exe 0x140078000): RET 0 no-op (3 bytes).
-int ScenarioDialog_Slot7(ScenarioDialog* self);
-
-// Slot8 (vtable +0x40): OnCommand — selection change and button dispatch.
-void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
-                          int param3, int param4);
-
-// Ctor (0x1400786b0): shared with TutorialDialog (difficulty byte differentiates).
-void* ScenarioDialog_Ctor(void* self, void* ui, void* extRes, void* parentIBP,
-                          void* parentMenuIBP, uint8_t difficulty);
-
-// Returns the standalone-built vtable_ScenarioDialog (0x14015d2d0) array.
-void* ScenarioDialog_GetStandaloneVtable();
-
-// ============================================================
 // ModDetailsDialog
 // ============================================================
 

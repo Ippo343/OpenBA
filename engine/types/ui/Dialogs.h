@@ -313,21 +313,8 @@ struct SaveLoadDialog {
 static_assert(sizeof(SaveLoadDialog) == 0x160, "SaveLoadDialog size mismatch");
 static_assert(offsetof(SaveLoadDialog, sprite) == 0xD0, "");
 
-// --- ScenarioDialog (0xE8) ---
-// Factory inits: +0xC0=0, +0xC8(u32)=0xFFFFFFFF, +0xD0=0, +0xD8=0, +0xE0=0
-struct ScenarioDialog {
-    DialogInstance base;        // +0x00
-    uint8_t  _padB8[8];        // +0xB8: gap
-    uint64_t dataC0;           // +0xC0: zeroed
-    int32_t  dataC8;           // +0xC8: initialized to -1 (0xFFFFFFFF)
-    uint8_t  _padCC[4];        // +0xCC: gap
-    uint64_t dataD0;           // +0xD0: zeroed
-    uint64_t dataD8;           // +0xD8: zeroed
-    uint64_t dataE0;           // +0xE0: zeroed
-};
-static_assert(sizeof(ScenarioDialog) == 0xE8, "ScenarioDialog size mismatch");
-static_assert(offsetof(ScenarioDialog, dataC0) == 0xC0, "");
-static_assert(offsetof(ScenarioDialog, dataC8) == 0xC8, "");
+// --- ScenarioDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/ScenarioDialog.h"
 
 // --- ToolbarDialog (0x108) ---
 // Ctor inits: +0xB8..+0xE8=0, +0xF4(u32)=0, +0xF8=0, +0x100=0
