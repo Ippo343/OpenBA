@@ -10,6 +10,7 @@
 #include "Object/factory_registration.h"   // Object::ResolveTypeIdByNameLazy
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 
 // ---- Element type ids: UI::ButtonElement and UI::CheckElement ----------------
 // Retail reads these through exe .rdata exrefs 0x1401514f8 (ButtonElement, tested
@@ -81,7 +82,7 @@ void ControlUI_Slot4(ControlUI* self) {
     // Set element ID 50000 (0xC350). SA guard: retail assumes the .rsc always binds
     // an element here; a dialog that lacks it would take SetElementId(null).
     if (*(uint64_t*)(s + 0x30))
-        fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x30), 50000);
+        reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(50000);  // B.3.6 bridge
 
     // Get entity, find sub-component via component type array search
     void* entity = (void*)*(uint64_t*)(s + 0x28);
@@ -187,9 +188,7 @@ void ControlUI_Slot7(ControlUI* self) {
 
     void* elem = (void*)*(uint64_t*)(s + 0x30);
     if (!elem) return;
-    void** elemVtable = *(void***)elem;
-    typedef void (*fn_SetEnabled_t)(void*, bool);
-    ((fn_SetEnabled_t)elemVtable[8])(elem, enabled);
+    reinterpret_cast<UI::Element*>(elem)->Enable(enabled);  // B.3.6 bridge: Element slot 8 Enable
 }
 
 // Slot9: On checkbox click (event 0x12, id 50000), toggle component state.

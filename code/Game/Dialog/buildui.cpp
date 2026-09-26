@@ -20,6 +20,13 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 #ifdef _DEBUG
 // Debug sprite logging wrappers (runtime/src/ui/)
@@ -85,7 +92,7 @@ static int CountOccupiedBuildTiles_Impl(void* smComp)
 static void* BuildUI_FindChildElem(void* parentElem, const char* name) {
     uint8_t retBuf[16];
     System::String nameStr(name);
-    fn_FindElement(parentElem, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
     void* result = *(void**)retBuf;
     return result;
 }
@@ -140,14 +147,12 @@ void BuildUI_Slot4(BuildUI* self) {
 
     // Find "buttonPause" element, set ID 6000
     uint64_t buttonPause = BuildUI_FindElemAsBasePtr(dialogElem, "buttonPause");
-    fn_Element_SetElementId((void*)buttonPause, 6000);
+    reinterpret_cast<UI::Element*>(buttonPause)->SetElementId(6000);  // B.3.6 bridge
 
     // Configure pause button based on workplace state
     if (workplaceComp == 0) {
         // No workplace — hide button via vtable[8](button, false)
-        typedef void (*fn_VSlot8_t)(void*, int);
-        void** vtable = *(void***)(void*)buttonPause;
-        ((fn_VSlot8_t)vtable[8])((void*)buttonPause, 0);
+        reinterpret_cast<UI::Element*>(buttonPause)->Enable(false);  // B.3.6 bridge: Element slot 8 Enable
     } else {
         // Set button checked state: element+0xD8 = (workplace+0x50 == 0)
         char wpEnabled = *(char*)(workplaceComp + 0x50);
@@ -175,7 +180,7 @@ void BuildUI_Slot4(BuildUI* self) {
     // Find first child's "textTotal" element → store at +0x48
     // First child (row 0) is the header/total row
     uint8_t childBuf[16];
-    fn_Element_Child((void*)tableElem, childBuf, 0);
+    ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(0));  // B.3.6 bridge
     void* firstChild = *(void**)childBuf;
     uint64_t textTotalElem = BuildUI_FindElemAsBasePtr(firstChild, "textTotal");
     *(uint64_t*)(s + 0x48) = textTotalElem;
@@ -195,12 +200,12 @@ void BuildUI_Slot4(BuildUI* self) {
     }
 
     // Iterate storage table rows (skip first child = header)
-    int childCount = fn_Element_ChildCount((void*)tableElem);
+    int childCount = reinterpret_cast<const UI::Element*>(tableElem)->ChildCount();  // B.3.6 bridge
     int rowIdx = 0;
 
     for (int i = 1; i < childCount; i++) {
         // Get row child element
-        fn_Element_Child((void*)tableElem, childBuf, i);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(i));  // B.3.6 bridge
         void* rowElem = *(void**)childBuf;
 
         // Find "labelStorage" and "textTotal" in this row
@@ -258,8 +263,8 @@ void BuildUI_Slot4(BuildUI* self) {
                 Debug_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)resType + 0x20),
                                (void*)((uintptr_t)resType + 0x30));
 #else
-                fn_Sprite_Ctor(spriteBuf, *(uint64_t*)((uintptr_t)resType + 0x20),
-                               (void*)((uintptr_t)resType + 0x30));
+                ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)((uintptr_t)resType + 0x20))),
+                               *reinterpret_cast<const System::String*>((uintptr_t)resType + 0x30));  // B.3.6 bridge
 #endif
 #ifdef _DEBUG
                 Debug_LabelElement_SetSprite((void*)labelStorage, spriteBuf);
@@ -269,16 +274,16 @@ void BuildUI_Slot4(BuildUI* self) {
 
                 // Set text from resource type
                 uint8_t uiStrBuf[16];
-                fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)resType + 0x28),
-                                 (void*)((uintptr_t)resType + 0x30));
+                ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)resType + 0x28))),
+                                 *reinterpret_cast<const System::String*>((uintptr_t)resType + 0x30));  // B.3.6 bridge
                 fn_TextElement_SetText((void*)labelStorage, uiStrBuf);
 
                 // Set tooltip: "ResourceTip" string from label's string table
                 System::String tipNameStr("ResourceTip");
                 uint64_t stringTable = *(uint64_t*)(labelStorage + 0x48);
                 uint8_t tipStrBuf[16];
-                fn_UIString_Ctor(tipStrBuf, stringTable, &tipNameStr);
-                fn_Element_SetToolTip((void*)labelStorage, tipStrBuf);
+                ::new (tipStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), tipNameStr);  // B.3.6 bridge
+                reinterpret_cast<UI::Element*>(labelStorage)->SetToolTip(*reinterpret_cast<const UI::String*>(tipStrBuf));  // B.3.6 bridge
             }
         } else if (rowIdx == resourceCount && resourceComp != nullptr) {
             // Total row: shows total required materials
@@ -298,23 +303,23 @@ void BuildUI_Slot4(BuildUI* self) {
             // /"Labor"). fn_UIString_DefaultCtor is the correct default ctor (dispatch
             // 0x140151ca8 + Runtime-export fallback) and resolves in standalone (same call
             // TradeUI/ProductionUI use to blank their surplus rows).
-            if (fn_UIString_DefaultCtor && fn_TextElement_SetText) {
+            if (fn_TextElement_SetText) {
                 uint8_t emptyStr[16] = {};
-                fn_UIString_DefaultCtor(emptyStr);
+                ::new (emptyStr) UI::String();  // B.3.6 bridge
                 fn_TextElement_SetText((void*)rowTextTotal, emptyStr);
 
                 uint8_t emptyStr2[16] = {};
-                fn_UIString_DefaultCtor(emptyStr2);
+                ::new (emptyStr2) UI::String();  // B.3.6 bridge
                 fn_TextElement_SetText((void*)labelStorage, emptyStr2);
             }
 
-            if (fn_Sprite_Default_Ctor && fn_LabelElement_SetSprite) {
+            if (fn_LabelElement_SetSprite) {
                 uint8_t emptySprite[16];
 #ifdef _DEBUG
                 Debug_Sprite_DefaultCtor(emptySprite);
                 Debug_LabelElement_SetSprite((void*)labelStorage, emptySprite);
 #else
-                fn_Sprite_Default_Ctor(emptySprite);
+                ::new (emptySprite) UI::Sprite();  // B.3.6 bridge
                 fn_LabelElement_SetSprite((void*)labelStorage, emptySprite);
 #endif
             }
