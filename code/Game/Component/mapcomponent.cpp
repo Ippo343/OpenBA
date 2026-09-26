@@ -103,13 +103,13 @@ extern "C" void MapTerrainClear_Reimpl(void* gridPtr, int value, int x, int y,
 // ============================================================
 // Helper: Get MapDescription sibling component
 // ============================================================
-// Pattern: IsDerivedFrom(self->_unk18, MapDescription typeId)
+// Pattern: IsDerivedFrom(self->_description, MapDescription typeId)
 // Returns the component pointer if type matches, else nullptr.
 static void* GetMapDescription(MapComponent* self) {
     EnsureHelpers();
     if (!s_fn_IsDerivedFrom_dispatch || !s_TypeId_MapDescription) return nullptr;
 
-    void* obj = self->_unk18;
+    void* obj = self->_description;
     if (!obj) return nullptr;
 
     bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_MapDescription);
@@ -245,7 +245,8 @@ void MapComponent_InitFuncs() {
 
 // ===== Standalone factory (Foundation D — component instantiation) =====
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/MapComponent.h"
+#include <atomic>
 #include <cstdlib>
 
 // ============================================================
@@ -410,18 +411,36 @@ extern "C" void MapComponent_DetachOccupancy_4750(void* selfV) {
     *(uint32_t*)(self + 0x20) = flags & ~0x100000u;
 }
 
-// COMPONENT_INERT_FACTORY(MapComponent, 0x38, 0x83), expanded by hand so the
-// per-type vtable's +0x38 slot (index 7 — the slot FUN_1400c2ea0 dispatches at
-// entity removal) routes to the ported MapComponent_OnCreate above (whose
-// impl_4750 tail is the grid un-mark). Default-safe: the bit-0x100000 gate means
-// it no-ops unless the spawn-side collapse wrote occupancy for this component.
-static uint32_t MapComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MapComponent");
-    return cached;
+// ============================================================================
+// ENDGAME B.3.8 VIS — MapComponent as a REAL class (MapComponent.h).
+//
+// Before: a 48-slot MapComponent_InertVtable filled per create, Inert_ScalarDtor
+// in slot 0 (only ~Internal). After: the compiler's 16-slot vtable and a real
+// ctor/dtor chain (B38_RULES D1, D2); slot bodies are the ones the old table
+// installed. Slot 7 (the slot FUN_1400c2ea0 dispatches at entity removal)
+// routes to MapComponent_OnCreate above, whose impl_4750 tail is the grid
+// un-mark; the bit-0x100000 gate means it no-ops unless occupancy was written.
+// ============================================================================
+
+// Diagnostic counters of the BANISHED_MAP_TRACE lines (B6-5: namespace-scope
+// atomics, not function-local statics — OnAdded runs on the loader thread too).
+static std::atomic<int> s_mapSpawnClaimTraceCount{0};
+
+// 0x1401244d0: Component() is the CALL 0x1401188b0; the 0x140163aa0 stamp is
+// the compiler's; flags |= 3 (0x83). PORT GAP (retail 0x1401244d0) — B38 D1:
+// retail writes 0xFFFF into the four rect words; the tree's zero-fill is kept
+// here and transcribing the sentinel is its own titled commit.
+MapComponent::MapComponent()
+    : tileX0(0), tileY0(0), tileX1(0), tileY1(0), extraField(0), _pad34{} {
+    OrFlagsInCtor(0x3);
 }
-static void* MapComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static void MapComponent_OnAddedVSlot(void* s) {
+
+// [3] 0x1401243e0
+void MapComponent::Persist(void* stream) { MapComponent_Shutdown(this, stream); }
+
+// [6] 0x140124370
+void MapComponent::OnAdded() {
+    void* s = this;
     // slot 6 (+0x30) — dispatched by ComponentEntity_OnAddedPass at register
     // time (MapComponent flags 0x83 have bit 0 set). Paint the minimap dot.
     MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/false);
@@ -451,10 +470,10 @@ static void MapComponent_OnAddedVSlot(void* s) {
     // same standalone accommodation PaintMinimapRect and DetachOccupancy_4750 already make
     // (MapDescription is not in standalone's partial factory tree, so retail's cast yields
     // null and every desc read here would fault).
-    static bool s_trace = Opt().mapTrace != nullptr;
-    if (s_trace) {
-        static int s_n = 0;
-        if (++s_n <= 400)
+    const bool trace = Opt().mapTrace != nullptr;
+    if (trace) {
+        const int s_n = ++s_mapSpawnClaimTraceCount;
+        if (s_n <= 400)
             fprintf(stderr, "[MapSpawnClaim] #%d comp=%p rect=(%d,%d %dx%d) desc+0x30=%d "
                     "desc+0x31=%d alreadyWritten=%d -> %s\n",
                     s_n, s, (int)*(int16_t*)(mc + 0x28), (int)*(int16_t*)(mc + 0x2a),
@@ -468,13 +487,15 @@ static void MapComponent_OnAddedVSlot(void* s) {
     if (desc[0x30] == 0) return;                 // retail: MapComponent::Draw's gate
     MapComponent_ApplyOccupancy_41b0(s);         // 41b0's occupancy half (+ the 0x100000 bit)
 }
-static void MapComponent_DetachVSlot(void* s) {
+// [7] 0x1401242f0
+void MapComponent::OnRemove() {
+    void* s = this;
     // Retail removal (0x1401242f0) first clears the minimap overlay rect via
     // helper_4d30(minimap, 0, ...) when desc+0x32. The same branch inside the
     // ported MapComponent_OnCreate is dead in standalone (IsDerivedFrom
     // landmine), so do it here trusting the linked description.
     MapComponent_PaintMinimapRect(reinterpret_cast<uint8_t*>(s), /*clear=*/true);
-    MapComponent_OnCreate(reinterpret_cast<MapComponent*>(s));
+    MapComponent_OnCreate(this);
 }
 // Slot 12 (+0x60) — the per-component MESSAGE slot, retail `MapComponent_Slot12`
 // (0x1401243c0), which is only three instructions:
@@ -497,12 +518,13 @@ static void MapComponent_DetachVSlot(void* s) {
 // Measured 2026-07-28: standalone ports the state-2 handler and does broadcast event 1, but
 // this slot was an unwired stub, so the message landed on nothing and no player-placed
 // building ever registered its cells.
-static void MapComponent_Slot12VSlot(void* s, int msgId) {
+void MapComponent::OnEvent(int msgId) {
+    void* s = this;
     // [diag] BANISHED_MAP_TRACE — this is the only observable point for "the building just
     // became solid". dc20 itself logs nothing on clear ground (it only reports evictions),
     // so without this line a successful solidify is indistinguishable from a no-op.
-    static bool s_trace = Opt().mapTrace != nullptr;
-    if (s_trace && msgId == 1) {
+    const bool trace = Opt().mapTrace != nullptr;
+    if (trace && msgId == 1) {
         uint8_t* mc = reinterpret_cast<uint8_t*>(s);
         bool already = (*(uint32_t*)(mc + 0x20) >> 0x14) & 1;
         fprintf(stderr, "[MapSolidify] slot12 msg=1 comp=%p rect=(%d,%d %dx%d) alreadyWritten=%d -> %s\n",
@@ -514,27 +536,25 @@ static void MapComponent_Slot12VSlot(void* s, int msgId) {
     if (msgId != 1) return;                       // retail: CMP EDX,1 / JZ / RET
     MapComponent_ApplyOccupancy_41b0(s);
 }
-static void MapComponent_SerVSlot(void* s, void* stream) {
-    MapComponent_Shutdown(reinterpret_cast<MapComponent*>(s), stream);
+// [0] 0x140035850: ~MapComponent (0x140124490: restamp + ~Internal), MemFree on &1.
+Object::Base* MapComponent::DeletingDtor(unsigned flags) {
+    this->~MapComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void MapComponent_FinishVtable() {
-    MapComponent_InertVtable[6]  = reinterpret_cast<void*>(&MapComponent_OnAddedVSlot);
-    MapComponent_InertVtable[7]  = reinterpret_cast<void*>(&MapComponent_DetachVSlot);
-    MapComponent_InertVtable[12] = reinterpret_cast<void*>(&MapComponent_Slot12VSlot);
-    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-    MapComponent_InertVtable[3]  = reinterpret_cast<void*>(&MapComponent_SerVSlot);
+
+// create 0x140035700: MemAlloc(0x38, 8), then the ctor.
+void* MapComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MapComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) MapComponent());
 }
-extern "C" void* MapComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x83,
-        MapComponent_InertVtable, reinterpret_cast<void*>(&MapComponent_InertGetTypeId));
-    MapComponent_FinishVtable();
-    return p;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* MapComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) MapComponent());
 }
-static void* MapComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x83,
-        MapComponent_InertVtable, reinterpret_cast<void*>(&MapComponent_InertGetTypeId));
-    MapComponent_FinishVtable();
-    return mem;
-}
-REGISTER_TYPE(MapComponent, "Component",
-              &MapComponent_Factory, &MapComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(MapComponent, "_ZTV12MapComponent")
+DEFINE_EXE_TYPE(MapComponent, "Component")

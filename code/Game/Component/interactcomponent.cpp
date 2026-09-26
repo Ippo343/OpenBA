@@ -276,74 +276,55 @@ void InteractComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid InteractComponent
-// (size 0x38, +0x20 capability flags 0x81, Object::Internal base + shared stub
-// vtable, zeroed body). Size from InteractComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================================
+// ENDGAME B.3.8 VIS — InteractComponent as a REAL class (InteractComponent.h).
+//
+// Before: a 48-slot InteractComponent_InertVtable filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/InteractComponent.h"
 
-// Hand-expanded from COMPONENT_INERT_FACTORY(InteractComponent, 0x38, 0x81) so vtable
-// slot 6 (+0x30) can carry the real InteractComponent_Draw.
-//
-// Slot 6 is the ON-ADDED broadcast: ComponentEntity_OnAddedPass (FUN_1400c2f60, the tail
-// of EntityList::RegisterEntity 0x1400c48a0) calls it on every component whose capability
-// flags (+0x20) have bit 0 — InteractComponent's 0x81 qualifies. 0x140123110 has always
-// been ported AND registered by address, and was reached by nothing, because the inert
-// vtable's slot 6 was a stub. Exactly the CitizenComponent::OnAdd gap again.
-//
-// What it costs to leave it unwired: the function rebuilds the owner's interact
-// use-location list (+0x28 array / +0x30 count) from the owner's MultiObjectComponent
-// children. FUN_140122b00 (CalcChildTargetPos) recurses over precisely that list to find
-// a tile a worker can stand on. A bridge master's own footprint is all water, so its only
-// reachable access points are the two bank end-pieces — which live in that child list.
-// With the list empty, GatherRawMaterials bailed "no target pos (found==0)" on every tick
-// and no material was ever hauled to a bridge.
-//
-// Graduated default-on 2026-07-30 (the default-on table; BANISHED_LIVE_INTERACT_ONADD=0 is the
-// kill-switch). The same gap blocks a fenced PASTURE master, whose description carries zero
-// access points of its own (measured accessPts=0), so every haul bailed "no target pos" and
-// the site never took a single log. With the slot live the master rebuilds children=1 from
-// its 29 MultiObject entries, delivers 56/56, and builds to completion.
-static uint32_t InteractComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("InteractComponent");
-    return cached;
+// Slot 6 is the ON-ADDED broadcast: ComponentEntity_OnAddedPass (FUN_1400c2f60, the
+// tail of EntityList::RegisterEntity 0x1400c48a0) calls it on every component whose
+// capability flags (+0x20) have bit 0 — InteractComponent's 0x81 qualifies. The body
+// rebuilds the owner's interact use-location list (+0x28 array / +0x30 count) from the
+// owner's MultiObjectComponent children; FUN_140122b00 (CalcChildTargetPos) recurses
+// over that list to find a tile a worker can stand on (bridge bank end-pieces, fenced
+// pasture masters).
+
+// 0x140123480: Component() is the CALL 0x1401188b0; the 0x1401638b0 stamp is
+// the compiler's; +0x28 = +0x30 = 0; flags |= 1 (0x81).
+InteractComponent::InteractComponent() : field28(nullptr), field30(nullptr) {
+    OrFlagsInCtor(0x1);
 }
-static void* InteractComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static void InteractComponent_OnAddedVSlot(void* self) {
-    InteractComponent_Draw(reinterpret_cast<InteractComponent*>(self));
+
+// [3] 0x140123340 — the use-location IBP array (+0x28/+0x30) round-trips here.
+void InteractComponent::Persist(void* stream) { InteractComponent_Shutdown(this, stream); }
+// [6] 0x140123110
+void InteractComponent::OnAdded() { InteractComponent_Draw(this); }
+
+// [0] 0x1400352f0: ~InteractComponent (0x140123420; its array free is a PORT GAP, see the header), MemFree on &1.
+Object::Base* InteractComponent::DeletingDtor(unsigned flags) {
+    this->~InteractComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-// Slot 3 = Shutdown/Serialize (0x140123340). The body has been ported in this file
-// since the original wave (InteractComponent_Shutdown, above) but nothing ever wrote
-// it into the live vtable, so a loaded save's InteractComponent kept the
-// FillTypedVtable base-Component serialize only — the use-location IBP array (+0x28/
-// +0x30) never round-tripped. Wired UNCONDITIONALLY (save/load wave 2026-08-27),
-// unlike the OnAdded slot below which stays on its own kill-switch.
-static void InteractComponent_ShutdownVSlot(void* self, void* stream) {
-    InteractComponent_Shutdown(reinterpret_cast<InteractComponent*>(self), stream);
+
+// create 0x1400351a0: MemAlloc(0x38, 8), then the ctor.
+void* InteractComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(InteractComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) InteractComponent());
 }
-static void InteractComponent_FinishVtable() {
-    InteractComponent_InertVtable[3] =
-        reinterpret_cast<void*>(&InteractComponent_ShutdownVSlot);
-    InteractComponent_InertVtable[6] =
-        reinterpret_cast<void*>(&InteractComponent_OnAddedVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* InteractComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) InteractComponent());
 }
-extern "C" void* InteractComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x81,
-        InteractComponent_InertVtable,
-        reinterpret_cast<void*>(&InteractComponent_InertGetTypeId));
-    InteractComponent_FinishVtable();
-    return p;
-}
-static void* InteractComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x81,
-        InteractComponent_InertVtable,
-        reinterpret_cast<void*>(&InteractComponent_InertGetTypeId));
-    InteractComponent_FinishVtable();
-    return mem;
-}
-REGISTER_TYPE(InteractComponent, "Component",
-              &InteractComponent_Factory, &InteractComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(InteractComponent, "_ZTV17InteractComponent")
+DEFINE_EXE_TYPE(InteractComponent, "Component")

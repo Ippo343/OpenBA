@@ -1,41 +1,95 @@
 // code/Game/Component/captureboxelement.cpp
-// Standalone factory for CaptureBoxElement (factory cascade).
+// CaptureBoxElement — the rubber-band box of the debug SpriteCaptureUI (a UI::Element).
 //
 // CaptureBoxElement (size 0xe0) extends UI::Element. The exe factory
 // (0x140013eb0): MemAlloc(0xe0,8) -> UI::Element::Element -> install
 // vtable_CaptureBoxElement (0x14015d440) -> UI::Sprite::Sprite(this+0xc0)
 // (default ctor) -> *(this+0xd0) = 0, *(this+0xd8) = 0.
 //
-// DORMANT-SAFE FACTORY: runs the real UI::Element + UI::Sprite base ctors and
-// zeroes the type fields, but does NOT install the exe subclass vtable (large
-// Element vtable of exe->Runtime thunks that don't resolve standalone). The
-// object keeps the working UI::Element base vtable from fn_Element_Ctor.
-// Divergence: GetTypeId reports Element; subclass overrides not applied.
-// Acceptable for landmine removal — no current path instantiates this; it is
-// registered for completeness. To fully activate, rebuild the 0x14015d440 vtable.
+// ENDGAME B.3.8 VIS: a REAL class (CaptureBoxElement.h) with the compiler's
+// 12-slot table and retail's slots 4/5/6. Before, the tree's "dormant-safe"
+// factory built the object through the ??0Element DOOR and kept the minted
+// UI::Element table — slot 4 (ComputeSize) was _purecall there, slots 1/2
+// answered Element, and nothing drew the box.
 
+// graphics/Camera.h FIRST (via video/Context.h): runtime/types/volume/Volume.h's
+// global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()` once
+// <windows.h> has been seen.
+#include "video/Context.h"
+#include "ui/Element.h"
+#include "ui/Sprite.h"
+#include "ui/SpriteContext.h"
+#include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "Object/factory_registration.h"
-#include "engine_funcs.h"
+#include "Component/CaptureBoxElement.h"
 #include <cstdint>
 #include <new>
-#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K4)
 
-static void* CaptureBoxElement_Build(void* p) {
+// 0x140079040 / create 0x140013eb0: Element() is `??0Element@UI@@`; the
+// 0x14015d440 stamp is the compiler's; Sprite() on +0xc0; +0xd0 = +0xd8 = 0.
+CaptureBoxElement::CaptureBoxElement()
+    : _lineSprite(), _x0(0), _y0(0), _x1(0), _y1(0) {}
+
+// [0] 0x140014070: restamp, ~Element, MemFree on &1.
+Object::Base* CaptureBoxElement::DeletingDtor(unsigned flags) {
+    this->~CaptureBoxElement();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [4] 0x140078fb0 — ComputeSize: if the "size-pending" flag (bit 27 of +0x34)
+// is set, the element's size (+0x60/+0x64) is 1x1 and the flag is cleared.
+void CaptureBoxElement::ComputeSize() {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
+    uint32_t flags = *reinterpret_cast<uint32_t*>(s + 0x34);
+    if ((flags >> 27) & 1u) {
+        *reinterpret_cast<int32_t*>(s + 0x60) = 1;
+        *reinterpret_cast<int32_t*>(s + 0x64) = 1;
+        *reinterpret_cast<uint32_t*>(s + 0x34) = flags & 0xf7ffffffu;
+    }
+}
+
+// [5] 0x140078ee0 — ComputeLayout: the base, then the aligned screen rect into
+// +0x68 (left) / +0x6c (top) / +0x70 (right) / +0x74 (bottom).
+void CaptureBoxElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    UI::Element::ComputeLayout(x, y, w, h);   // base — QUALIFIED (slot 5)
+    int outX = 0, outY = 0, outW = 0, outH = 0;
+    GetAlignedPosition(x, y, w, h, 0, 0, outX, outY, outW, outH, false, false);
+    uint8_t* e = reinterpret_cast<uint8_t*>(this);
+    *reinterpret_cast<int*>(e + 0x68) = outX;
+    *reinterpret_cast<int*>(e + 0x70) = outX + outW;
+    *reinterpret_cast<int*>(e + 0x6c) = outY;
+    *reinterpret_cast<int*>(e + 0x74) = outY + outH;
+}
+
+// [6] 0x140078da0 — Draw: the base, then the four sides of the box
+// (+0xd0,+0xd4)-(+0xd8,+0xdc) in the element color (+0x38) modulated by alpha
+// (halved if flag bit 18 of +0x34 is set).
+void CaptureBoxElement::Draw(UI::SpriteContext& context, uint8_t alpha) const {
+    UI::Element::Draw(context, alpha);   // base — QUALIFIED (slot 6)
+    const uint8_t* e = reinterpret_cast<const uint8_t*>(this);
+    uint32_t a32 = alpha;
+    if (*reinterpret_cast<const uint32_t*>(e + 0x34) & 0x40000) a32 = (uint32_t)(alpha >> 1);
+    uint32_t v = *reinterpret_cast<const uint32_t*>(e + 0x38);
+    uint32_t color = ((((v >> 8) & 0xffff0000u) * a32 ^ v) & 0xffffffu)
+                     ^ (((v >> 8) & 0xff0000u) * a32);
+    context.AddLine(_lineSprite, _x0, _y0, _x1, _y0, color);
+    context.AddLine(_lineSprite, _x0, _y1, _x1, _y1, color);
+    context.AddLine(_lineSprite, _x0, _y0, _x0, _y1, color);
+    context.AddLine(_lineSprite, _x1, _y0, _x1, _y1, color);
+}
+
+// create 0x140013eb0: MemAlloc(0xe0, 8), then the (inlined) ctor.
+void* CaptureBoxElement::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CaptureBoxElement), 8);
     if (!p) return nullptr;
-    if (fn_Element_Ctor) fn_Element_Ctor(p);
-    uint8_t* s = reinterpret_cast<uint8_t*>(p);
-    ::new (s + 0xc0) UI::Sprite();   // B.3.6: value-type ctor in place (B6-10)
-    *(int64_t*)(s + 0xd0) = 0;
-    *(int64_t*)(s + 0xd8) = 0;
-    return p;
+    return static_cast<Object::Base*>(new (p) CaptureBoxElement());
 }
-extern "C" void* CaptureBoxElement_CreateInPlace_SA(void* mem) {
-    return CaptureBoxElement_Build(mem);
+// createInPlace 0x140013f20: the same construction on `storage`.
+void* CaptureBoxElement::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CaptureBoxElement());
 }
-extern "C" void* CaptureBoxElement_Factory_SA(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0xe0, 8);
-    return CaptureBoxElement_Build(p);
-}
-REGISTER_TYPE(CaptureBoxElement, "Element",
-              &CaptureBoxElement_Factory_SA, &CaptureBoxElement_CreateInPlace_SA);
+
+DEFINE_EXE_VTABLE(CaptureBoxElement, "_ZTV17CaptureBoxElement")
+DEFINE_EXE_TYPE(CaptureBoxElement, "Element")
