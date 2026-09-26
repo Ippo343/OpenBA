@@ -1,10 +1,9 @@
 // code/Game/Goal/statgoal.cpp
-// Clean reimplementation of StatGoal vtable methods.
+// StatGoal (0x80 bytes) — achievement goal requiring a stat comparison.
+// ENDGAME B.3.8 block GOAL: a REAL class (Goal/StatGoal.h) with a
+// compiler-generated vtable; the retail evidence per slot is in the header.
 //
-// StatGoal (0x80 bytes) — achievement goal requiring stat comparison.
-// Vtable: 0x1401604c0
-//
-// Field layout (from StatGoal_Ctor at 0x1400daa80 and Slot5 at 0x1400da8b0):
+// Field layout (from StatGoal_Ctor at 0x1400daa80 and Serialize at 0x1400da8b0):
 //   +0x30: int32  statTypeA           — stat type enum for first operand (default 5)
 //   +0x34: int32  statTypeB           — stat type enum for second operand (default 5)
 //   +0x38: int32  comparisonType      — comparison enum (0-11: EQ/NE/LT/LE/GT/GE, even=A, odd=B)
@@ -21,9 +20,12 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Goal/statgoal_funcs.h"
-#include "engine_funcs.h"
+#include "Goal/StatGoal.h"
 #include "Goal/goal_exe_helpers.h"
+#include "Goal/statvaluedispatch.h"
+#include "engine_funcs.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
@@ -33,91 +35,75 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 
+// The two exe helpers the slots call — FUN_1400265b0 (the lazy ExternalPtr
+// resolve) and FUN_1400da4e0 (the stat value switch) — are ported
+// (goal_exe_helpers.cpp, statvaluedispatch.cpp) and registered at those
+// addresses by standalone/reg_goal.cpp. ENDGAME B.3.8 (B6-5): the members call
+// them directly instead of a lazily filled ResolveAddr cache.
+
 // ============================================================
-// Resolved helpers
+// Construction / destruction
 // ============================================================
+// ctor 0x1400daa80: Goal(), the vptr, then the stat defaults.
+StatGoal::StatGoal()
+    : statTypeA(5), statTypeB(5), comparisonType(10), fixedValue(1),
+      requireOtherGoalsMet(0), _pad41{}, statAString{}, statAGeneration(-1), _pad54{},
+      statAExternal(nullptr), statBString{}, statBGeneration(-1), _pad6c{},
+      statBExternal(nullptr), statFlags(0x20), statSubType(1) {}
 
-// Achievement::Goal::Goal — constructor
-typedef void* (*fn_GoalCtor_t)(void* self);
+// The dtor inside [0] 0x140026540: the two name Strings (B then A); the
+// compiler then runs ~Goal. B.3.1 bridge: the ExternalPtr triples are bytes.
+StatGoal::~StatGoal() {
+    reinterpret_cast<System::String*>(statBString)->~String();   // B.3.1 bridge
+    reinterpret_cast<System::String*>(statAString)->~String();   // B.3.1 bridge
+}
 
-// Achievement::Goal::~Goal — destructor
-typedef void (*fn_GoalDtor_t)(void* self);
-
-// FUN_1400265b0 — resolve ExternalPtr (refresh External* from string name)
-typedef void (*fn_ResolveExternalPtr_t)(void* stringField);
-static fn_ResolveExternalPtr_t s_fn_ResolveExternalPtr = nullptr;
-
-// FUN_1400da4e0 — stat value dispatch (giant switch on statTypeId)
-typedef int (*fn_StatValueDispatch_t)(void* self, int statTypeId, void* externalPtr);
-static fn_StatValueDispatch_t s_fn_StatValueDispatch = nullptr;
-
-// System::MemoryAllocator::MemFree (static wrapper)
-// Already declared in engine_funcs.h as fn_MemFreeStatic
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    s_fn_ResolveExternalPtr = (fn_ResolveExternalPtr_t)ResolveAddr(Module::Exe, 0x1400265b0);
-    s_fn_StatValueDispatch = (fn_StatValueDispatch_t)ResolveAddr(Module::Exe, 0x1400da4e0);
-
-    s_helpersResolved = true;
+// [0] 0x140026540: ~StatGoal -> ~Goal -> ~External, MemFree on &1.
+Object::Base* StatGoal::DeletingDtor(unsigned flags) {
+    this->~StatGoal();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// StatGoal::Slot5/Load (vtable +0x28, 0x1400da8b0)
+// StatGoal::Serialize (vtable +0x28, 0x1400da8b0)
 // ============================================================
-// Serializes all stat goal fields to/from a stream.
-// Calls base Goal::Serialize first, then serializes stat-specific fields.
-// The serializer vtable +0x98 dispatch is used for enum-typed int fields.
-
-void StatGoal_Slot5(StatGoal* self, void* stream) {
-    EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
+// Calls base Goal::Serialize first, then serializes the stat-specific fields.
+// Retail ends in `MOV AL,1` (0x1400da9ee).
+bool StatGoal::Serialize(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
-    // Was the exe import slot 0x140152840, which resolved to the same door.
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
+    Achievement::Goal::Serialize(stream);
 
-    // Create serializer (stack-local, 24 bytes: [0]=?, [8]=serializerPtr)
+    // Create serializer (stack-local, 24 bytes)
     alignas(8) uint8_t serializerBuf[24];
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // statTypeA / statTypeB / comparisonType, each through the UINT door.
-    // `serializerBuf + 8` was the READERWRITER (IO::Serializer::_readerWriter),
-    // not "the actual serializer" and not an Encoding, and its vtable +0x98 is
-    // rw_vtbl::kScalarUInt. Retail 0x1400da8e2 is the same three loads with no
-    // test of either the object or the slot.
+    // statTypeA / statTypeB / comparisonType, each through the UINT door
+    // (rw_vtbl::kScalarUInt, readerWriter vtable +0x98). Retail 0x1400da8e2.
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x30), nullptr);   // B.3.4 bridge  (0x98 = uint door)  statTypeA
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x34), nullptr);   // B.3.4 bridge  (0x98 = uint door)  statTypeB
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x38), nullptr);   // B.3.4 bridge  (0x98 = uint door)  comparisonType
 
     // Serialize fixedValue (+0x3c) via Serialize_Int
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(fixedValue, nullptr);   // B.3.4 bridge
 
     // Serialize requireOtherGoalsMet (+0x40) via Serialize_Bool
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x40), nullptr);   // B.3.4 bridge
 
-    // Serialize statA string (+0x48) via String::Serialize
-    // Each leg is wrapped in the Filename stack temporary retail's compiler
-    // emitted; it is only ever constructed and destroyed.
+    // Serialize statA string (+0x48) via String::Serialize. Each leg is wrapped
+    // in the Filename stack temporary retail's compiler emitted.
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        // B.3.1 bridge: StatGoal is still an untyped byte struct.
-        reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializerBuf);
+        reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializerBuf);   // B.3.1 bridge
 
-        // If loading (mode == 0), resolve the ExternalPtr.
-        // Original (0x1400da960): RAX = *(serializer+0) [the reader/writer], then
-        // check *(int*)(RAX+8) == 0. serializerBuf+0 is the reader, NOT serializerBuf+8
-        // (that is the field-dispatch object). Reading the wrong field mis-gates the
-        // External resolve.
+        // If loading (mode == 0), resolve the ExternalPtr. Original (0x1400da960):
+        // RAX = *(serializer+0) [the reader/writer], then *(int*)(RAX+8) == 0.
         void* reader = *(void**)(serializerBuf + 0);
         if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            if (s_fn_ResolveExternalPtr) {
-                s_fn_ResolveExternalPtr((void*)(s + 0x48));
-            }
+            StatGoal_ResolveExternalPtr((void*)(s + 0x48));
         }
     }
 
@@ -125,13 +111,11 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
     {
         System::Filename filenameBuf;
         (void)filenameBuf;
-        reinterpret_cast<System::String*>(s + 0x60)->Serialize(serializerBuf);
+        reinterpret_cast<System::String*>(s + 0x60)->Serialize(serializerBuf);   // B.3.1 bridge
 
         void* reader = *(void**)(serializerBuf + 0);
         if (reader && static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-            if (s_fn_ResolveExternalPtr) {
-                s_fn_ResolveExternalPtr((void*)(s + 0x60));
-            }
+            StatGoal_ResolveExternalPtr((void*)(s + 0x60));
         }
     }
 
@@ -139,126 +123,98 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x78), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize statSubType (+0x7c) via Serialize_Int
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x7c), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(statSubType, nullptr);   // B.3.4 bridge
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// StatGoal::Slot6/Cleanup (vtable +0x30, 0x140026520)
+// StatGoal::Reconstruct [6] 0x140026520 / Destruct [7] 0x140001640
 // ============================================================
-// Resets the goal to its default constructed state.
-// Calls the scalar dtor with flags=0 (cleanup without dealloc),
-// then re-constructs in place.
-
-void StatGoal_Slot6(StatGoal* self) {
-    // Call scalar dtor via vtable +0x00 with flags=0
-    typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
-    void** vtable = *(void***)self;
-    fn_ScalarDtor_t scalarDtor = (fn_ScalarDtor_t)vtable[0];
-    if (scalarDtor) {
-        scalarDtor(self, 0);
-    }
-
-    // Re-construct in place
-    StatGoal_Ctor_Impl(self);
+// Retail: DeletingDtor(0) (destroy in place), then the ctor on `this`.
+Object::External* StatGoal::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) StatGoal();
 }
+void StatGoal::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// StatGoal::Slot8/Check (vtable +0x40, 0x1400da720)
+// StatGoal::CheckGoalState (vtable +0x40, 0x1400da720)
 // ============================================================
-// Checks whether the stat comparison goal is met.
-//
-// 1. Copies statA string, resolves ExternalPtr, looks up stat value via dispatch
-// 2. If comparisonType is odd, copies statB string, resolves, looks up second value
-//    Otherwise uses fixedValue (+0x3c) as the second operand
-// 3. Switch on comparisonType (even/odd pairs share comparison):
+// 1. Copies statA's ExternalPtr, resolves it, looks the stat value up
+// 2. If comparisonType is odd, the same for statB; else fixedValue (+0x3c)
+// 3. Switch on comparisonType (even/odd pairs share the comparison):
 //    0,1 = EQ; 2,3 = NE; 4,5 = LT; 6,7 = LE; 8,9 = GT; 10,11 = GE
-// 4. If requireOtherGoalsMet, result is: comparisonMet ? 2 : 1
-//    Otherwise: comparisonMet ? 1 : 0
+// 4. requireOtherGoalsMet: comparisonMet ? 2 : 1, otherwise comparisonMet ? 1 : 0
 
-// Operand computation, split out of Slot8 unchanged so a diagnostic can read the
-// two numbers the comparison is about to use. Retail has no such split; the
+// Operand computation, split out unchanged so a diagnostic can read the two
+// numbers the comparison is about to use. Retail has no such split; the
 // instruction order inside is untouched.
-static void StatGoal_ComputeOperands(StatGoal* self, int& statValueA, int& comparisonValue) {
-    EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
-
+void StatGoal::ComputeOperands(int& statValueA, int& comparisonValue) const {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    void* self = const_cast<StatGoal*>(this);
 
     // Local ExternalPtr struct layout matching original:
     //   [0x00..0x07]: String (8 bytes, copy)
     //   [0x08..0x0B]: int32 generation
-    //   [0x0C..0x0F]: padding
     //   [0x10..0x17]: void* external ptr
-    //   ...
     //   [0x28..0x2F]: parent ptr (points back to start)
 
     // --- Resolve statA ---
-    // Copy string from self+0x48 into local struct
     uint8_t localA[0x30];
     memset(localA, 0, sizeof(localA));
     *(uintptr_t*)(localA + 0x28) = (uintptr_t)localA;  // parent ptr
 
-    // B.3.1 bridge: StatGoal and the local ExternalPtr are still untyped bytes.
+    // B.3.1 bridge: the local ExternalPtr is still untyped bytes.
     new (localA) System::String(*reinterpret_cast<const System::String*>(s + 0x48));
-    *(int32_t*)(localA + 0x08) = *(int32_t*)(s + 0x50);   // generation
-    *(void**)(localA + 0x10)   = *(void**)(s + 0x58);      // external ptr
+    *(int32_t*)(localA + 0x08) = statAGeneration;          // generation
+    *(void**)(localA + 0x10)   = statAExternal;            // external ptr
     *(uintptr_t*)(localA + 0x28) = (uintptr_t)localA;      // parent ptr
 
-    // Resolve ExternalPtr
-    if (s_fn_ResolveExternalPtr) {
-        s_fn_ResolveExternalPtr(localA);
-    }
+    StatGoal_ResolveExternalPtr(localA);
     void* extA = *(void**)(localA + 0x10);
 
     // Destroy string copy
     reinterpret_cast<System::String*>(localA)->~String();
 
     // Look up stat value A
-    statValueA = 0;
-    if (s_fn_StatValueDispatch) {
-        statValueA = s_fn_StatValueDispatch(self, self->statTypeA, extA);
-    }
+    statValueA = static_cast<int>(StatGoal_StatValueDispatch(self, static_cast<uint32_t>(statTypeA), extA));
 
     // --- Determine comparison value ---
     comparisonValue = 0;
-    if ((self->comparisonType & 1) != 0) {
+    if ((comparisonType & 1) != 0) {
         // Odd comparisonType: use statB
         uint8_t localB[0x30];
         memset(localB, 0, sizeof(localB));
         *(uintptr_t*)(localB + 0x28) = (uintptr_t)localB;
 
         new (localB) System::String(*reinterpret_cast<const System::String*>(s + 0x60));
-        *(int32_t*)(localB + 0x08) = *(int32_t*)(s + 0x68);
-        *(void**)(localB + 0x10)   = *(void**)(s + 0x70);
+        *(int32_t*)(localB + 0x08) = statBGeneration;
+        *(void**)(localB + 0x10)   = statBExternal;
         *(uintptr_t*)(localB + 0x28) = (uintptr_t)localB;
 
-        if (s_fn_ResolveExternalPtr) {
-            s_fn_ResolveExternalPtr(localB);
-        }
+        StatGoal_ResolveExternalPtr(localB);
         void* extB = *(void**)(localB + 0x10);
 
         reinterpret_cast<System::String*>(localB)->~String();
 
-        if (s_fn_StatValueDispatch) {
-            comparisonValue = s_fn_StatValueDispatch(self, self->statTypeB, extB);
-        }
+        comparisonValue = static_cast<int>(StatGoal_StatValueDispatch(self, static_cast<uint32_t>(statTypeB), extB));
     } else {
         // Even comparisonType: use fixedValue
-        comparisonValue = self->fixedValue;
+        comparisonValue = fixedValue;
     }
-
 }
 
-int StatGoal_Slot8(StatGoal* self) {
+Achievement::Goal::GoalState StatGoal::CheckGoalState() const {
     int statValueA = 0;
     int comparisonValue = 0;
-    StatGoal_ComputeOperands(self, statValueA, comparisonValue);
+    ComputeOperands(statValueA, comparisonValue);
 
     // --- Evaluate comparison ---
     bool comparisonMet = false;
-    int cmpType = self->comparisonType;
+    int cmpType = comparisonType;
     if (cmpType >= 0 && cmpType <= 11) {
         switch (cmpType) {
             case 0: case 1:   comparisonMet = (statValueA == comparisonValue); break;
@@ -271,197 +227,51 @@ int StatGoal_Slot8(StatGoal* self) {
     }
 
     // Apply requireOtherGoalsMet modifier
-    if (self->requireOtherGoalsMet != 0) {
-        // requireOtherGoalsMet: 1 if not met, 2 if met
-        return comparisonMet ? 2 : 1;
+    if (requireOtherGoalsMet != 0) {
+        return static_cast<GoalState>(comparisonMet ? 2 : 1);
     }
-
-    // Normal: 0 if not met, 1 if met
-    return comparisonMet ? 1 : 0;
+    return static_cast<GoalState>(comparisonMet ? 1 : 0);
 }
 
 // ============================================================
 // StatGoal_ProbeOperands — diagnostic accessor (not retail)
 // ============================================================
-// Returns the two numbers Check() compares, so a census can print
-// "have N, need M" per goal instead of a bare met/not-met bit. Uses the same
-// helper Check does, so it can never disagree with the verdict.
+// Returns the two numbers CheckGoalState compares. Uses the same member, so it
+// can never disagree with the verdict.
 extern "C" void StatGoal_ProbeOperands(void* goal, int* outA, int* outB) {
     int a = 0, b = 0;
-    if (goal) StatGoal_ComputeOperands(reinterpret_cast<StatGoal*>(goal), a, b);
+    if (goal) reinterpret_cast<const StatGoal*>(goal)->ComputeOperands(a, b);   // B.3.8 bridge
     if (outA) *outA = a;
     if (outB) *outB = b;
 }
 
 // ============================================================
-// StatGoal::Slot10/CreateInstance (vtable +0x50, 0x140026510)
+// StatGoal::Construct (vtable +0x50, 0x140026510)
 // ============================================================
-// Construct a StatGoal in pre-allocated memory.
-// If memory is NULL, return NULL.
-
-void* StatGoal_Slot10(void* memory) {
-    if (!memory) return nullptr;
-    return StatGoal_Ctor_Impl(memory);
+Object::External* StatGoal::Construct() {
+    return ::new (static_cast<void*>(this)) StatGoal();
 }
 
-// ============================================================
-// StatGoal::Dtor (vtable +0x00, 0x140026540)
-// ============================================================
-// Destructor: set vtable, destroy String fields, call base ~Goal.
-// If flags & 1, free memory.
-
-void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Set vtable to StatGoal (for correct virtual dispatch during destruction)
-    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x1401604c0);
-    if (vtableAddr) {
-        *(void**)self = (void*)vtableAddr;
-    }
-
-    // Destroy String fields (B.3.1 bridge: StatGoal is still untyped bytes)
-    reinterpret_cast<System::String*>(s + 0x60)->~String();  // statBString
-    reinterpret_cast<System::String*>(s + 0x48)->~String();  // statAString
-
-    // Achievement::Goal::~Goal (retail 0x18009edb0) — a QUALIFIED member call
-    // (B37_RULES B7-13), unconditional as retail's CALL is. History worth
-    // keeping: until 2026-09-06 this resolved the phantom QEAA spelling
-    // "??1Goal@Achievement@@QEAA@XZ" by name, got null, skipped the call and
-    // MemFree'd the object anyway — every StatGoal leaked its text String and
-    // skipped ~External. A member call cannot resolve to nothing.
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
-
-    // Free memory if requested
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
-}
-
-// ============================================================
-// StatGoal_Factory / StatGoal_CreateInPlace
-// ============================================================
-// Object::Factory entry points. Called from Runtime DLL's External::Load
-// after the typeId tree-walk locates our BaseTypeInfo.
-//
-// Factory: allocate sizeof(StatGoal)=0x80 with 8-byte alignment, then
-// run the in-place constructor. Mirrors the original exe's
-// StatGoal_Factory at 0x140026500 (MemAlloc + StatGoal_Ctor).
-//
-// CreateInPlace: just the constructor (memory provided by caller).
-// Equivalent to the existing StatGoal_Slot10 vtable entry — kept as a
-// separate name because the BaseTypeInfo's inPlaceCreateFn slot is
-// distinct from the vtable slot in the original layout.
-
-
-#include "Object/factory_registration.h"
-
-// ============================================================
-// StatGoal vtable (exe addr 0x1401604c0, 11 slots)
-// Slots we've reimplemented are wired up; inherited Achievement::Goal
-// slots are nullptr placeholders — calling them will crash, but the
-// loader's instantiation path only needs Dtor/Slot2/Slot5/Slot10. Fill the
-// inherited slots when something virtual-calls them.
-// ============================================================
-// Forward decls — these live below in this same TU with C++ linkage.
-static int StatGoal_Slot3_Trampoline(StatGoal* self) { return StatGoal_Slot3(self); }
-
-// Slot +0x10: Object::Base::GetTypeId() — virtual that returns the runtime
-// CRC32 typeId. Original exe reads from StatGoal's static BaseTypeInfo at
-// 0x1401C62B0; we read from our REGISTER_TYPE storage instead (same layout,
-// typeId at offset 0). Cached after first lookup.
-static uint32_t StatGoal_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) {
-        cached = ::Object::GetTypeIdByName("StatGoal");
-    }
-    return cached;
-}
-
-static void* g_StatGoal_Vtable[11] = {
-    reinterpret_cast<void*>(&StatGoal_Dtor),               // +0x00 dtor
-    nullptr,                                               // +0x08 Slot1 (Goal inherited)
-    reinterpret_cast<void*>(&StatGoal_GetTypeId),          // +0x10 Slot2 / GetTypeId
-    reinterpret_cast<void*>(&StatGoal_Slot3_Trampoline),   // +0x18 Slot3 (returns 1)
-    nullptr,                                               // +0x20 Slot4 (Goal JMP thunk)
-    reinterpret_cast<void*>(&StatGoal_Slot5),              // +0x28 Slot5 / Load
-    reinterpret_cast<void*>(&StatGoal_Slot6),              // +0x30 Slot6 / Cleanup
-    nullptr,                                               // +0x38 Slot7 (Goal stub)
-    reinterpret_cast<void*>(&StatGoal_Slot8),              // +0x40 Slot8 / Check
-    nullptr,                                               // +0x48 Slot9 (Goal stub)
-    reinterpret_cast<void*>(&StatGoal_Slot10),             // +0x50 Slot10 / CreateInstance
-};
-
-#include "address_registry.h"
-
-// Called from address_registry.cpp's RegisterVtablesAndTypeIds() so the
-// exe address 0x1401604c0 resolves to our synthesized vtable.
-extern "C" void RegisterStatGoalVtable() {
-    Goal_FillInheritedVtableSlots(g_StatGoal_Vtable, "StatGoal");
-    RegisterExeAddr(0x1401604c0, reinterpret_cast<uintptr_t>(g_StatGoal_Vtable));
-}
-
-extern "C" void* StatGoal_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(StatGoal), 8);
+// create 0x1400264d0: MemAlloc(0x80, 8), then the ctor (0x1400daa80).
+void* StatGoal::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StatGoal), 8);
     if (!p) return nullptr;
-    return StatGoal_Ctor_Impl(p);
+    return static_cast<Object::Base*>(::new (p) StatGoal());
+}
+// createInPlace 0x140026510.
+void* StatGoal::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) StatGoal());
 }
 
-extern "C" void* StatGoal_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return StatGoal_Ctor_Impl(memory);
+DEFINE_EXE_VTABLE(StatGoal, "_ZTV8StatGoal")
+
+// B38_RULES D5: standalone/main.cpp's factory self-test (RunFactorySelfTest
+// "StatGoal", 0x1401604c0) still reads the retail table address back and
+// compares it with a factory-built object's vptr, so the exe address serves
+// the COMPILER's table.
+extern "C" void RegisterStatGoalVtable() {
+    RegisterExeAddr(0x1401604c0, reinterpret_cast<uintptr_t>(StatGoal::Vtable()));
 }
 
-REGISTER_TYPE(StatGoal, "Achievement::Goal",
-              &StatGoal_Factory, &StatGoal_CreateInPlace);
-
-// ============================================================
-// StatGoal_Ctor_Impl (0x1400daa80)
-// ============================================================
-// Construct a StatGoal object in pre-allocated memory.
-// Calls Achievement::Goal::Goal base constructor, sets vtable,
-// initializes all stat-specific fields to defaults.
-
-void* StatGoal_Ctor_Impl(void* memory) {
-    // Call base constructor Achievement::Goal::Goal
-    typedef void* (*fn_GoalCtor_t)(void* self);
-    static fn_GoalCtor_t s_fn_GoalCtor = nullptr;
-    static bool s_ctorResolved = false;
-    if (!s_ctorResolved) {
-        s_fn_GoalCtor = (fn_GoalCtor_t)ResolveExport(
-            "??0Goal@Achievement@@QEAA@XZ");
-        s_ctorResolved = true;
-    }
-    if (s_fn_GoalCtor) {
-        s_fn_GoalCtor(memory);
-    }
-
-    uintptr_t s = (uintptr_t)memory;
-
-    // Set vtable to StatGoal
-    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x1401604c0);
-    if (vtableAddr) {
-        *(void**)memory = (void*)vtableAddr;
-    }
-
-    // Initialize stat-specific fields (from StatGoal_Ctor at 0x1400daa80)
-    *(int32_t*)(s + 0x30) = 5;           // statTypeA (default 5)
-    *(int32_t*)(s + 0x34) = 5;           // statTypeB (default 5)
-    *(int32_t*)(s + 0x38) = 10;          // comparisonType (default 10 = GE)
-    *(int32_t*)(s + 0x3c) = 1;           // fixedValue (default 1)
-    *(uint8_t*)(s + 0x40) = 0;           // requireOtherGoalsMet (default false)
-    *(uint64_t*)(s + 0x48) = 0;          // statAString (zeroed)
-    *(int32_t*)(s + 0x50) = -1;          // statAGeneration (0xFFFFFFFF)
-    *(uint64_t*)(s + 0x58) = 0;          // statAExternal (null)
-    *(uint64_t*)(s + 0x60) = 0;          // statBString (zeroed)
-    *(int32_t*)(s + 0x68) = -1;          // statBGeneration (0xFFFFFFFF)
-    *(uint64_t*)(s + 0x70) = 0;          // statBExternal (null)
-    *(int32_t*)(s + 0x78) = 0x20;        // statFlags (default 0x20)
-    *(int32_t*)(s + 0x7c) = 1;           // statSubType (default 1)
-
-    return memory;
-}
+DEFINE_EXE_TYPE(StatGoal, "Achievement::Goal")

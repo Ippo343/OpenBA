@@ -290,18 +290,8 @@ namespace WorkPlaceUIAddr {
 // --- TradeUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/TradeUI.h"
 
-// --- TutorialUI (0x60) ---
-// Factory inits: +0x30..+0x58=0 (6 qwords)
-struct TutorialUI {
-    DialogController base;     // +0x00
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38
-    uint64_t data40;           // +0x40
-    uint64_t data48;           // +0x48
-    uint64_t data50;           // +0x50
-    uint64_t data58;           // +0x58
-};
-static_assert(sizeof(TutorialUI) == 0x60, "TutorialUI size mismatch");
+// --- TutorialUI --- the class: ENDGAME B.3.8 GOAL (B8-4 forwarder)
+#include "Tutorial/TutorialUI.h"
 
 // --- UpgradeUI --- the class: ENDGAME B.3.8 PNL (B8-4 forwarder)
 #include "Dialog/UpgradeUI.h"

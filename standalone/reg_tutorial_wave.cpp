@@ -2,16 +2,15 @@
 //
 // Lane 2 (Tutorial) wave registrations.
 //
-// TWO kinds of entry:
-//   (a) 12 exe-internal helper FUNCTIONS the Tutorial module resolves by
-//       address and that nothing registered, so every one of them was a null
-//       function pointer. Bodies in code/Game/Tutorial/tutorial_wave.cpp.
-//   (b) 6 .rdata VTABLE addresses and 1 ctor address that already-ported
-//       Tutorial bodies STORE INTO LIVE OBJECTS. Unregistered they resolve to
-//       0, so e.g. TutorialGoalDialog_OnDestroy writes 0 over slot 0 of a
-//       healthy object — a guaranteed crash, not mere inertness (the shape
-//       [[project-menu-dialog-vtables-unregistered]] documents). Bodies in
-//       code/Game/Tutorial/tutorial_dialog_vtables.cpp.
+// The 12 exe-internal helper FUNCTIONS the Tutorial module resolves by
+// address and that nothing registered, so every one of them was a null
+// function pointer. Bodies in code/Game/Tutorial/tutorial_wave.cpp.
+//
+// (The second kind this file used to hold, the six hand-built tutorial dialog
+// vtables and two hand-rolled ctors registered at their .rdata / code
+// addresses, is gone: ENDGAME B.3.8 block GOAL made TutorialUI and the three
+// tutorial dialogs real classes and no by-address reader of those addresses
+// remains.)
 //
 // ENTRY VERIFICATION: every function address below was checked in Ghidra with
 // get_function_by_address and Entry == the address, so none of them is a
@@ -52,14 +51,6 @@ extern "C" void* TutWave_ExternalRefResolve(void*, void*);                      
 extern "C" void  TutWave_RefreshStepUI(void*);                                  // 0x1400E1260
 extern "C" void  TutWave_StepExecute(void*, void*, void*, uint64_t);            // 0x1400E1DB0
 
-// --- (b) vtables + ctors (code/Game/Tutorial/tutorial_dialog_vtables.cpp) ---
-extern "C" void* GetTutorialUIVtable();
-extern "C" void* GetTutorialGoalDialogVtable();
-extern "C" void* GetTutorialSetupDialogVtable();
-extern "C" void* GetTutorialHighlightDialogVtable();
-extern "C" void* TutWave_HighlightDialogCtor(void*, void*, void*, void*, void*, int32_t, void*);
-extern "C" void* TutWave_TutorialSetupDialogCtor(void*);
-
 void RegisterTutorialWaveBatch() {
     // (a) helpers
     RegisterExeAddr(0x1400262b0, reinterpret_cast<uintptr_t>(&TutWave_SerializeTutorialRef));
@@ -74,21 +65,4 @@ void RegisterTutorialWaveBatch() {
     RegisterExeAddr(0x14001afe0, reinterpret_cast<uintptr_t>(&TutWave_ExternalRefResolve));
     RegisterExeAddr(0x1400e1260, reinterpret_cast<uintptr_t>(&TutWave_RefreshStepUI));
     RegisterExeAddr(0x1400e1db0, reinterpret_cast<uintptr_t>(&TutWave_StepExecute));
-
-    // (b) vtable storage the ported dtor/reset bodies write back into objects.
-    //     0x1401607A0 (TutorialGoal) and 0x140160C30 (TutorialSetup) are the
-    //     ABSTRACT bases; the dialog dtors store them transiently between
-    //     destroying their own fields and calling ~External. Pointing them at
-    //     the concrete subclass table keeps slot 0/1/2 valid for that window —
-    //     the alternative today is a null store.
-    RegisterExeAddr(0x140160f30, reinterpret_cast<uintptr_t>(GetTutorialUIVtable()));
-    RegisterExeAddr(0x140160870, reinterpret_cast<uintptr_t>(GetTutorialGoalDialogVtable()));
-    RegisterExeAddr(0x1401607a0, reinterpret_cast<uintptr_t>(GetTutorialGoalDialogVtable()));
-    RegisterExeAddr(0x140160d20, reinterpret_cast<uintptr_t>(GetTutorialSetupDialogVtable()));
-    RegisterExeAddr(0x140160c30, reinterpret_cast<uintptr_t>(GetTutorialSetupDialogVtable()));
-    RegisterExeAddr(0x1401609e0, reinterpret_cast<uintptr_t>(GetTutorialHighlightDialogVtable()));
-
-    // (b) ctors
-    RegisterExeAddr(0x1400e01d0, reinterpret_cast<uintptr_t>(&TutWave_HighlightDialogCtor));
-    RegisterExeAddr(0x1400e2cc0, reinterpret_cast<uintptr_t>(&TutWave_TutorialSetupDialogCtor));
 }

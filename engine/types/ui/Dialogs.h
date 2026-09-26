@@ -203,57 +203,11 @@ namespace TutorialSetupDialogAddr {
 // --- ToolbarDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/ToolbarDialog.h"
 
-// --- TutorialGoalDialog (0x40) ---
-// NOT DialogInstance-based. Extends Object::External (base ~0x20).
-// Factory inits: +0x20=0, +0x28=0, +0x30(u32)=0xFFFFFFFF, +0x38=0
-struct TutorialGoalDialog {
-    void*    vtable;            // +0x00
-    uint8_t  externalBase[0x18];// +0x08: Object::External base data
-    uint64_t data20;           // +0x20: zeroed
-    uint64_t data28;           // +0x28: zeroed
-    int32_t  data30;           // +0x30: initialized to -1
-    uint8_t  _pad34[4];        // +0x34: gap
-    uint64_t data38;           // +0x38: zeroed
-};
-static_assert(sizeof(TutorialGoalDialog) == 0x40, "TutorialGoalDialog size mismatch");
-static_assert(offsetof(TutorialGoalDialog, data30) == 0x30, "");
+// --- TutorialGoalDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
+#include "Tutorial/TutorialGoalDialog.h"
 
-// --- TutorialHighlightDialog (0xF0) ---
-// Ctor inits: +0xB8=0, +0xC0=0, +0xC8=0, +0xD0=0, +0xD8(u32)=0, +0xE0=0, +0xE8=0
-struct TutorialHighlightDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint64_t dataC8;           // +0xC8: zeroed
-    uint64_t dataD0;           // +0xD0: zeroed
-    uint32_t dataD8;           // +0xD8: zeroed (u32 write)
-    uint8_t  _padDC[4];        // +0xDC: gap
-    uint64_t dataE0;           // +0xE0: zeroed
-    uint64_t dataE8;           // +0xE8: zeroed
-};
-static_assert(sizeof(TutorialHighlightDialog) == 0xF0, "TutorialHighlightDialog size mismatch");
-static_assert(offsetof(TutorialHighlightDialog, dataB8) == 0xB8, "");
+// --- TutorialHighlightDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
+#include "Tutorial/TutorialHighlightDialog.h"
 
-// --- TutorialSetupDialog (0x78) ---
-// NOT DialogInstance-based. Extends Object::External (base ~0x20).
-// Ctor inits: +0x20..+0x58=0, +0x60(u32)=0xFFFFFFFF, +0x68=0, +0x70(u32)=0
-struct TutorialSetupDialog {
-    void*    vtable;            // +0x00
-    uint8_t  externalBase[0x18];// +0x08: Object::External base data
-    uint64_t data20;           // +0x20: zeroed
-    uint64_t data28;           // +0x28: zeroed
-    uint64_t data30;           // +0x30: zeroed
-    uint64_t data38;           // +0x38: zeroed
-    uint64_t data40;           // +0x40: zeroed
-    uint32_t data48;           // +0x48: zeroed (u32 write)
-    uint8_t  _pad4C[4];        // +0x4C: gap
-    uint64_t data50;           // +0x50: zeroed
-    uint64_t data58;           // +0x58: zeroed
-    int32_t  data60;           // +0x60: initialized to -1 (0xFFFFFFFF)
-    uint8_t  _pad64[4];        // +0x64: gap
-    uint64_t data68;           // +0x68: zeroed
-    uint32_t data70;           // +0x70: zeroed
-    uint8_t  _pad74[4];        // +0x74: gap
-};
-static_assert(sizeof(TutorialSetupDialog) == 0x78, "TutorialSetupDialog size mismatch");
-static_assert(offsetof(TutorialSetupDialog, data60) == 0x60, "");
+// --- TutorialSetupDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
+#include "Tutorial/TutorialSetupDialog.h"

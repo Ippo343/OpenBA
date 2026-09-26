@@ -14,19 +14,31 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialsetupgamespeed_funcs.h"
+#include "Tutorial/TutorialSetupGameSpeed.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
 // ============================================================
-// TutorialSetupGameSpeed::Slot8/Apply (vtable +0x40, 0x1400e2d60)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-// Sets game speed from self->speed into the game's time controller.
-// If _field24 is set, also pauses the game (controller +0x30 = 0).
-//
+// ctor 0x1400e2e40 (inlined in create 0x1400289c0 / createInPlace 0x140028a20):
+// External(), the two stamps (the compiler's), speed = 1, +0x24 = 0.
+TutorialSetupGameSpeed::TutorialSetupGameSpeed() : speed(1), _field24(0), _pad25{} {}
+
+// [0] 0x140028ac0: stamp, stamp TutorialSetup, ~External, MemFree on &1.
+Object::Base* TutorialSetupGameSpeed::DeletingDtor(unsigned flags) {
+    this->~TutorialSetupGameSpeed();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// ============================================================
+// TutorialSetupGameSpeed::Begin (vtable +0x40, 0x1400e2d60)
+// ============================================================
 // Original disassembly:
 //   MOV R8,[g_pGameWorldSingleton]   ; R8 = game singleton
 //   MOV EAX,[RCX+0x20]              ; EAX = self->speed
@@ -37,9 +49,7 @@
 //   MOV RAX,[R8+0x120]              ;   re-read controller
 //   MOV byte [RAX+0x30],0           ;   controller->paused = 0
 //   skip: RET
-void TutorialSetupGameSpeed_Slot8(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
+void TutorialSetupGameSpeed::Begin() {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     uintptr_t game = (uintptr_t)*g_pGameWorldSingleton;
 
@@ -48,12 +58,10 @@ void TutorialSetupGameSpeed_Slot8(void* self) {
     if (timeCtrl == 0) return;
 
     // Write speed to controller +0x34
-    int32_t speed = *(int32_t*)(s + 0x20);
     *(int32_t*)(timeCtrl + 0x34) = speed;
 
-    // If _field24 is set, also set controller +0x30 to 0 (pause)
-    uint8_t field24 = *(uint8_t*)(s + 0x24);
-    if (field24 != 0) {
+    // If _field24 is set, also set controller +0x30 to 0
+    if (_field24 != 0) {
         // Re-read controller (matching original code)
         timeCtrl = *(uintptr_t*)(game + 0x120);
         *(uint8_t*)(timeCtrl + 0x30) = 0;
@@ -61,157 +69,47 @@ void TutorialSetupGameSpeed_Slot8(void* self) {
 }
 
 // ============================================================
-// TutorialSetupGameSpeed::Dtor (vtable +0x00, 0x140028ac0)
-// ============================================================
-// 1. Set vtable to TutorialSetupGameSpeed
-// 2. Set vtable to TutorialSetup base
-// 3. Call External::~External
-// 4. Optionally free memory
-void* TutorialSetupGameSpeed_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Set vtable to TutorialSetupGameSpeed (standard MSVC dtor pattern)
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialSetupGameSpeedAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
-
-    // Set vtable to TutorialSetup base
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-
-    // Call External::~External
-    if (fn_External_Dtor) {
-        fn_External_Dtor(self);
-    }
-
-    // Conditional free
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
-}
-
-// ============================================================
 // TutorialSetupGameSpeed::Serialize (vtable +0x28, 0x1400e2d90)
 // ============================================================
-// Creates serializer, serializes speed (int32) and _field24 (bool).
-void TutorialSetupGameSpeed_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-
+// speed (int32) and _field24 (bool).
+bool TutorialSetupGameSpeed::Serialize(void* stream) {
     alignas(8) uint8_t ser[32];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // Serialize speed (+0x20) -- int
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge
-
-    // Serialize _field24 (+0x24) -- bool
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x24), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(speed, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(&_field24), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// TutorialSetupGameSpeed::Cleanup (vtable +0x30, 0x140028a70)
+// TutorialSetupGameSpeed::Reconstruct [6] 0x140028a70 / Destruct [7] 0x140001640
 // ============================================================
-// Calls ScalarDtor(self, 0) via vtable, re-initializes, sets defaults.
-void TutorialSetupGameSpeed_Cleanup(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Call ScalarDtor(self, 0) via vtable
-    uintptr_t* vtable = *(uintptr_t**)s;
-    typedef void* (*DtorFn)(void*, uint32_t);
-    DtorFn dtor = (DtorFn)vtable[0];
-    dtor(self, 0);
-
-    // Re-initialize via External::External
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable chain: TutorialSetup -> TutorialSetupGameSpeed
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialSetupGameSpeedAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
-
-    // Reset fields to defaults
-    *(int32_t*)(s + 0x20) = 1;
-    *(uint8_t*)(s + 0x24) = 0;
+Object::External* TutorialSetupGameSpeed::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialSetupGameSpeed();
 }
+void TutorialSetupGameSpeed::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// TutorialSetupGameSpeed::Ctor (vtable +0x58, 0x140028a20)
+// TutorialSetupGameSpeed::Construct (vtable +0x58, 0x140028a20)
 // ============================================================
-// Constructor/init called by factory after allocation.
-void* TutorialSetupGameSpeed_Ctor(void* self) {
-    if (self == nullptr) {
-        return nullptr;
-    }
-
-    uintptr_t s = (uintptr_t)self;
-
-    // Call External::External base init
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable chain: TutorialSetup -> TutorialSetupGameSpeed
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialSetupGameSpeedAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
-
-    // Set default field values
-    *(int32_t*)(s + 0x20) = 1;
-    *(uint8_t*)(s + 0x24) = 0;
-
-    return self;
+Object::External* TutorialSetupGameSpeed::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialSetupGameSpeed();
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160da0 (9 slots, Object::External base), size 0x28, parent "TutorialSetup".
-// GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t TutorialSetupGameSpeed_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialSetupGameSpeed");
-    return c;
+// create 0x1400289c0: MemAlloc(0x28, 8), then the (inlined) ctor.
+void* TutorialSetupGameSpeed::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialSetupGameSpeed), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialSetupGameSpeed());
 }
-static int TutorialSetupGameSpeed_GetFileVersion(void*) { return 1; }
-
-// Retail slots 9/10 on the TutorialSetup family are empty `ret` bodies.
-static void TutorialSetup_SlotEmpty(void*) {}
-
-static void* g_TutorialSetupGameSpeed_Vtable[12] = {
-    (void*)&TutorialSetupGameSpeed_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialSetupGameSpeed_GetTypeId,       // +0x10 GetTypeId
-    (void*)&TutorialSetupGameSpeed_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialSetupGameSpeed_Serialize,       // +0x28 Serialize
-    (void*)&TutorialSetupGameSpeed_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialSetupGameSpeed_Slot8,   // +0x40 Apply (0x1400e2d60)
-    (void*)&TutorialSetup_SlotEmpty,   // +0x48 Update (0x1400e2d50 - empty in retail)
-    (void*)&TutorialSetup_SlotEmpty,   // +0x50 Undo (0x1400e2d40 - empty in retail)
-    (void*)&TutorialSetupGameSpeed_Ctor,   // +0x58 Ctor/CreateInPlace (0x140028a20)
-};
-
-extern "C" void RegisterTutorialSetupGameSpeedVtable() {
-    RegisterExeAddr(0x140160da0, (uintptr_t)g_TutorialSetupGameSpeed_Vtable);
+// createInPlace 0x140028a20.
+void* TutorialSetupGameSpeed::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialSetupGameSpeed());
 }
-extern "C" void* TutorialSetupGameSpeed_CreateInPlace(void* mem) {
-    return TutorialSetupGameSpeed_Ctor(mem);
-}
-extern "C" void* TutorialSetupGameSpeed_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
-    return p ? TutorialSetupGameSpeed_Ctor(p) : nullptr;
-}
-REGISTER_TYPE(TutorialSetupGameSpeed, "TutorialSetup", &TutorialSetupGameSpeed_Factory, &TutorialSetupGameSpeed_CreateInPlace);
+
+DEFINE_EXE_VTABLE(TutorialSetupGameSpeed, "_ZTV22TutorialSetupGameSpeed")
+DEFINE_EXE_TYPE(TutorialSetupGameSpeed, "TutorialSetup")
