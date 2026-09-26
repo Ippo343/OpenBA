@@ -15,7 +15,9 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include <cstdio>
-#include "Tutorial/finishtutorialinstance_funcs.h"
+#include "Tutorial/FinishTutorialInstance.h"
+#include "Tutorial/FinishTutorialGoal.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
@@ -24,9 +26,17 @@
 #include "achievement/Goal.h"   // ENDGAME B.3.7 callers (K2): QUALIFIED base calls
 #include "object/TypeInfo.h"    // ENDGAME B.3.7 callers (K2): Object::Base::IsDerivedFrom
 #include <new>
+#include <atomic>
 
-// No class-level resolved state needed — all resolved lazily in individual functions.
-// Slot4/Slot5 use function pointers from engine_funcs.h (resolved at startup).
+// Startup/Update use function pointers from engine_funcs.h (resolved at startup).
+// ENDGAME B.3.8 (B6-5): the one-shot diagnostic counters are namespace-scope
+// atomics, not function-local statics — goal instances are built on the loader
+// thread (GameUpdateLoop::Load) and ticked on the main thread.
+namespace {
+std::atomic<int> s_logStartup{0};
+std::atomic<int> s_logUpdate{0};
+std::atomic<int> s_logCreate{0};
+}  // namespace
 
 // ============================================================
 // FinishTutorialInstance::Slot3 (vtable +0x18, 0x1400d7bf0)
@@ -45,12 +55,12 @@
 //       }
 //   }
 //   IO::Serializer::~Serializer(local_20);
-void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
+void FinishTutorialInstance::Persist(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Achievement::GoalInstance::Persist (slot 3, 0x18009ef70) — QUALIFIED (B7-13):
-    // an unqualified call would dispatch through this exe table back into this slot.
-    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::Persist(stream);   // B.3.7 bridge
+    // an unqualified call would dispatch back into this slot.
+    Achievement::GoalInstance::Persist(stream);
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
@@ -104,8 +114,14 @@ void FinishTutorialInstance_Slot3(FinishTutorialInstance* self, void* stream) {
 //      - param3 (forwarded)
 //      - *(int*)(*(void**)singleton_exref + 4) - 0x1d0
 //   8. OR gameWorld+0xd0 flags with 0x5f0
-void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* p3) {
-    uintptr_t s = (uintptr_t)self;
+//
+// Retail passes R8 through to 0x1401001f0 untouched (Startup takes no
+// argument; `?Startup@GoalInstance@Achievement@@UEAAXXZ`); the tree's
+// TutWave_TutorialTreeInsert ignores that parameter, so null is passed.
+void FinishTutorialInstance::Startup() {
+    FinishTutorialInstance* self = this;
+    void* p3 = nullptr;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Step 1-3: Allocate and initialize TutorialInstance (0x38 bytes)
     void* newObj = nullptr;
@@ -169,7 +185,7 @@ void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* 
         *(int32_t*)(tutInst + 0x10) = 0;
     }
 
-    { static bool once = false; if (!once) { once = true;
+    { if (s_logStartup.fetch_add(1) == 0) {
         std::fprintf(stderr, "[FinTutInst] Slot4 INIT self=%p tutInst=%p goalObj=%p ftGoal=%p "
                              "tutDef=%p (goalTid=%u) treeInsert=%p\n",
                 (void*)self, (void*)tutInst, goalObj, ftGoal,
@@ -220,14 +236,21 @@ void FinishTutorialInstance_Slot4(FinishTutorialInstance* self, void* p2, void* 
 //   2. Tail-call FinishTutorialInstance_helper_1db0(*(self+0x20), p2, p3, p4)
 //
 // Note: R8 (p3) and R9 (p4) are implicitly forwarded through the tail JMP.
-void FinishTutorialInstance_Slot5(FinishTutorialInstance* self, void* p2, void* p3, void* p4) {
-    uintptr_t s = (uintptr_t)self;
+//
+// Update(const Time&, const GoalList&): RDX / R8 reach the helper unchanged;
+// R9 is whatever the caller left (TutWave_StepExecute ignores it and R8).
+void FinishTutorialInstance::Update(const System::Time& time, const Achievement::GoalList& list) {
+    FinishTutorialInstance* self = this;
+    void* p2 = const_cast<void*>(static_cast<const void*>(&time));
+    void* p3 = const_cast<void*>(static_cast<const void*>(&list));
+    void* p4 = nullptr;
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // CheckPtr on IBP at +0x20
 
     // Read the TutorialInstance pointer
     void* tutInst = *(void**)(s + 0x20);
-    { static int once = 0; if (once < 3) { ++once;
+    { if (s_logUpdate.fetch_add(1) < 3) {
         std::fprintf(stderr, "[FinTutInst] Slot5 TICK self=%p tutInst=%p exec=%p\n",
                 (void*)self, tutInst, (void*)fn_TutorialStepExecute); std::fflush(stderr); } }
 
@@ -252,109 +275,63 @@ void FinishTutorialInstance_Slot5(FinishTutorialInstance* self, void* p2, void* 
 //   fn_InternalBasePtr_CheckPtr(&this->+0x20);
 //   lVar1 = *(this+0x20);  // TutorialInstance*
 //   return *(int*)(*(int64_t*)(lVar1+0x30) + 0x30) <= *(int*)(lVar1+0x10);
-int FinishTutorialInstance_Slot6(FinishTutorialInstance* self) {
-    uintptr_t s = (uintptr_t)self;
+Achievement::Goal::GoalState FinishTutorialInstance::CheckGoalState() const {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // CheckPtr on IBP at +0x20
 
     // Read the TutorialInstance pointer
-    uintptr_t tutInst = *(uintptr_t*)(s + 0x20);
-    if (tutInst == 0) return 0;
+    uintptr_t tutInst = *(const uintptr_t*)(s + 0x20);
+    if (tutInst == 0) return static_cast<Achievement::Goal::GoalState>(0);
 
     // Read tutorial definition pointer at tutInst+0x30
     uintptr_t tutDef = *(uintptr_t*)(tutInst + 0x30);
-    if (tutDef == 0) return 0;
+    if (tutDef == 0) return static_cast<Achievement::Goal::GoalState>(0);
 
     // Compare: totalSteps (tutDef+0x30) <= currentStep (tutInst+0x10)
     int totalSteps = *(int*)(tutDef + 0x30);
     int currentStep = *(int*)(tutInst + 0x10);
 
-    return (totalSteps <= currentStep) ? 1 : 0;
+    return static_cast<Achievement::Goal::GoalState>((totalSteps <= currentStep) ? 1 : 0);
 }
 
 // ============================================================
-// In-place constructor used by both Factory and CreateInPlace.
-// The original game allocates FinishTutorialInstance inside FinishTutorialGoal_Slot10
-// when the tutorial starts; the loader path needs an explicit factory because
-// .rsc-stored save games may instantiate one directly.
-//
-// Layout: vtable + GoalInstance(0x10) + currentStep + 2 IBPs = 0x28 bytes.
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-static void* FinishTutorialInstance_Ctor_Impl(void* memory) {
-    if (!memory) return nullptr;
+// create 0x140026070: MemAlloc(0x28, 8), GoalInstance() (import slot
+// 0x140152858), the vptr, +0x20 = 0 (the base ctor zeroes +0x10 and +0x18).
+FinishTutorialInstance::FinishTutorialInstance() : _field20(nullptr) {}
 
-    typedef void* (*fn_GoalInstanceCtor_t)(void* self);
-    static fn_GoalInstanceCtor_t s_fn_GoalInstanceCtor = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_fn_GoalInstanceCtor = (fn_GoalInstanceCtor_t)ResolveExport(
-            "??0GoalInstance@Achievement@@QEAA@XZ");
-        s_resolved = true;
+// The dtor inside [0] 0x140026200 (and 0x1400d7c70): stamp, DeletePtr on the
+// TutorialInstance handle at +0x20; the compiler then runs ~GoalInstance
+// (re-stamp + ~Internal, the InternalFactory swap-remove).
+FinishTutorialInstance::~FinishTutorialInstance() {
+    if (fn_InternalBasePtr_DeletePtr) {
+        reinterpret_cast< ::Object::InternalBasePtr*>(&_field20)->DeletePtr();   // B.3.3 bridge
     }
-    if (s_fn_GoalInstanceCtor) {
-        s_fn_GoalInstanceCtor(memory);
-    }
-
-    uintptr_t s = (uintptr_t)memory;
-
-    // Set vtable to FinishTutorialInstance
-    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x140160478);
-    if (vtableAddr) {
-        *(void**)memory = (void*)vtableAddr;
-    }
-
-    // Initialize subclass fields — Slot4 (Startup) will populate the IBPs.
-    *(int32_t*)(s + 0x10) = 0;        // currentStep
-    *(uint64_t*)(s + 0x18) = 0;       // goalPtr (IBP to parent Goal)
-    *(uint64_t*)(s + 0x20) = 0;       // tutorialInst (IBP to TutorialInstance)
-
-    return memory;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-#include "Tutorial/finishtutorialgoal_funcs.h"  // for FinishTutorialGoal_Slot11 (shared dtor)
-
-// ============================================================
-// FinishTutorialInstance vtable (exe addr 0x140160478, 7 slots)
-// ============================================================
-// Slot +0x00 Dtor: SHARED with FinishTutorialGoal_Slot11 — see finishtutorialgoal.cpp.
-//   The shared dtor sets vtable to FinishTutorialInstance, deletes the IBP at +0x20,
-//   calls GoalInstance::~GoalInstance, optionally frees.
-static uint32_t FinishTutorialInstance_GetTypeId_Std(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("FinishTutorialInstance");
-    return cached;
+// [0] 0x140026200: ~FinishTutorialInstance, MemFree on &1.
+Object::Base* FinishTutorialInstance::DeletingDtor(unsigned flags) {
+    this->~FinishTutorialInstance();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_FinishTutorialInstance_Vtable[7] = {
-    reinterpret_cast<void*>(&FinishTutorialGoal_Slot11),                  // +0x00 dtor (SHARED)
-    nullptr,                                                              // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&FinishTutorialInstance_GetTypeId_Std),       // +0x10 GetTypeId
-    reinterpret_cast<void*>(&FinishTutorialInstance_Slot3),               // +0x18 Slot3 / Serialize
-    reinterpret_cast<void*>(&FinishTutorialInstance_Slot4),               // +0x20 Slot4 / Startup
-    reinterpret_cast<void*>(&FinishTutorialInstance_Slot5),               // +0x28 Slot5 / Update
-    reinterpret_cast<void*>(&FinishTutorialInstance_Slot6),               // +0x30 Slot6 / IsComplete
-};
-
-extern "C" void RegisterFinishTutorialInstanceVtable() {
-    RegisterExeAddr(0x140160478, reinterpret_cast<uintptr_t>(g_FinishTutorialInstance_Vtable));
-}
-
-extern "C" void* FinishTutorialInstance_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+void* FinishTutorialInstance::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FinishTutorialInstance), 8);
     if (!p) return nullptr;
-    return FinishTutorialInstance_Ctor_Impl(p);
+    return static_cast<Object::Base*>(::new (p) FinishTutorialInstance());
 }
 
-extern "C" void* FinishTutorialInstance_CreateInPlace(void* memory) {
-    { static int once = 0; if (once < 3) { ++once;
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (null);
+// the tree's in-place build is kept (B38_RULES B8-13).
+void* FinishTutorialInstance::CreateInPlaceObject(void* memory) {
+    { if (s_logCreate.fetch_add(1) < 3) {
         std::fprintf(stderr, "[FinTutInst] CREATED (in place) mem=%p\n", memory); std::fflush(stderr); } }
     if (!memory) return nullptr;
-    return FinishTutorialInstance_Ctor_Impl(memory);
+    return static_cast<Object::Base*>(::new (memory) FinishTutorialInstance());
 }
 
-REGISTER_TYPE(FinishTutorialInstance, "Achievement::GoalInstance",
-              &FinishTutorialInstance_Factory, &FinishTutorialInstance_CreateInPlace);
+DEFINE_EXE_VTABLE(FinishTutorialInstance, "_ZTV22FinishTutorialInstance")
+DEFINE_EXE_TYPE(FinishTutorialInstance, "Achievement::GoalInstance")

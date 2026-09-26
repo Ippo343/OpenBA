@@ -52,15 +52,9 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
     void RegisterStatGoalVtable();
-    void RegisterTimeGoalVtable();
     void RegisterScenarioVtable();
     void RegisterToolbarVtable();
     void RegisterMusicListVtable();
-    void RegisterBuildingGoalVtable();
-    void RegisterPopulationGoalVtable();
-    void RegisterTimeGoalInstanceVtable();
-    void RegisterFinishTutorialGoalVtable();
-    void RegisterFinishTutorialInstanceVtable();
     void RegisterMainMenuDialogVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
@@ -1693,15 +1687,9 @@ static void RegisterVtablesAndTypeIds() {
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
     RegisterStatGoalVtable();
-    RegisterTimeGoalVtable();
     RegisterScenarioVtable();
     RegisterToolbarVtable();
     RegisterMusicListVtable();
-    RegisterBuildingGoalVtable();
-    RegisterPopulationGoalVtable();
-    RegisterTimeGoalInstanceVtable();
-    RegisterFinishTutorialGoalVtable();
-    RegisterFinishTutorialInstanceVtable();
     RegisterMainMenuDialogVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();

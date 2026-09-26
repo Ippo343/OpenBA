@@ -21,8 +21,10 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Goal/buildinggoal_funcs.h"
+#include "Goal/BuildingGoal.h"
 #include "Goal/goal_exe_helpers.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
@@ -34,69 +36,42 @@
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 
-// Vtable pointer for BuildingGoal (resolved at runtime)
-static void* s_vtable_BuildingGoal = nullptr;
-static bool s_resolved = false;
-
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_vtable_BuildingGoal = (void*)ResolveAddr(Module::Exe, 0x140160300);
-    s_resolved = true;
-}
-
 // ============================================================
-// BuildingGoal::Dtor (vtable +0x00, 0x140025e80)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-// Scalar destructor: sets vtable, destroys building type array at +0x38,
-// calls Goal::~Goal, optionally frees memory.
-//
-// Decompiled:
-//   *(vtable*)this = &vtable_BuildingGoal;
-//   FUN_14001b030(&this->+0x38);  // destroy building type array
-//   Goal::~Goal(this);
-//   if (flags & 1) MemFree(this);
-void* BuildingGoal_Dtor(BuildingGoal* self, uint32_t flags) {
-    EnsureResolved();
-    uintptr_t s = (uintptr_t)self;
+// ctor 0x1400d77a0: Goal() (the base's real ctor), the vptr (the compiler's),
+// then requireAll = 1 and the entry array header zeroed.
+BuildingGoal::BuildingGoal() : _field30(1), _pad31{}, _field38(nullptr), _field40(nullptr) {}
 
-    // Set vtable
-    *(void**)self = s_vtable_BuildingGoal;
-
-    // Destroy building type array at +0x38
+// The dtor inside [0] 0x140025e80: destroy the entry array at +0x38
+// (0x14001b030); the compiler then runs ~Goal (retail's CALL).
+BuildingGoal::~BuildingGoal() {
     if (fn_BuildingTypeArray_Dtor) {
-        fn_BuildingTypeArray_Dtor((void*)(s + 0x38));
+        fn_BuildingTypeArray_Dtor(static_cast<void*>(&_field38));
     }
+}
 
-    // Achievement::Goal::~Goal (0x18009edb0) — a QUALIFIED member call
-    // (B37_RULES B7-13): retail CALLs the base dtor unconditionally.
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
-
-    // If bit 0 set, free memory
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
+// [0] 0x140025e80: ~BuildingGoal -> ~Goal -> ~External, MemFree on &1.
+Object::Base* BuildingGoal::DeletingDtor(unsigned flags) {
+    this->~BuildingGoal();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// BuildingGoal::Slot5 (vtable +0x28, 0x1400d76a0)
+// BuildingGoal::Serialize (vtable +0x28, 0x1400d76a0)
 // ============================================================
-// Serialize/Load: calls Goal::Serialize base, then serializes:
-//   1. requireAll (bool at +0x30) via Serialize_Bool
-//   2. entry count (int, copy at local then written to +0x40)
-//   3. On load (encoding mode 0): resize array via FUN_14001b340
-//   4. For each entry: Filename ctor, String::Serialize, hash if loading, Filename dtor
-//
-// Decompiled from 0x1400d76a0 disassembly.
-int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
+// Calls Goal::Serialize, then serializes:
+//   1. requireAll (bool at +0x30)
+//   2. the entry count (int, a local copy)
+//   3. on load (encoding mode 0): resize the array (0x14001b340)
+//   4. each entry: Filename temporary, String::Serialize, resolve if loading
+bool BuildingGoal::Serialize(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED: an
-    // unqualified call would dispatch through this exe table back into this slot.
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
+    // unqualified call would dispatch back into this slot.
+    Achievement::Goal::Serialize(stream);
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
@@ -135,8 +110,7 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
             // On load: resolve the entry's description reference (0x14001b1d0).
             // NOT a string hash despite the old `fn_StringHash` name — it is the
             // lazy ExternalPtr resolve already ported as ResolveExternalByName_Impl
-            // (engine_funcs.h), which every other caller in the tree calls inline
-            // rather than by address. Writes entry+0x10 (resolved Description*) and
+            // (engine_funcs.h). Writes entry+0x10 (resolved Description*) and
             // entry+0x08 (factory generation).
             if (encodingMode == 0) {
                 ResolveExternalByName_Impl(entry);
@@ -149,83 +123,52 @@ int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
     // Destroy Serializer
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 
-    return 1;
+    return true;
 }
 
 // ============================================================
-// BuildingGoal::Slot6 (vtable +0x30, 0x140025e30)
+// BuildingGoal::Reconstruct [6] 0x140025e30 / Destruct [7] 0x140001640
 // ============================================================
-// Factory constructor: calls Goal::Goal() base ctor, sets vtable,
-// initializes fields: +0x30=1 (requireAll), +0x38=0 (array), +0x40=0 (count).
-// Returns null if input is null.
-BuildingGoal* BuildingGoal_Slot6(BuildingGoal* self) {
-    EnsureResolved();
-
-    if (self == nullptr) {
-        return nullptr;
-    }
-
-    // Call Goal base default constructor
-    if (fn_Goal_BaseCtor) {
-        fn_Goal_BaseCtor(self);
-    }
-
-    // Set vtable
-    *(void**)self = s_vtable_BuildingGoal;
-
-    // Initialize fields
-    *(uint8_t*)((uintptr_t)self + 0x30) = 1;   // requireAll = true
-    *(uint64_t*)((uintptr_t)self + 0x38) = 0;   // array ptr = null
-    *(uint64_t*)((uintptr_t)self + 0x40) = 0;   // count = 0
-
-    return self;
+// PORT GAP (retail 0x140025e30) — B38 D3.2: retail first runs DeletingDtor(0)
+// (`CALL [RAX]` with EDX=0), then the ctor on `this`; the tree's slot 6 built
+// over the live object without destroying it. The tree's body is kept here.
+Object::External* BuildingGoal::Reconstruct() {
+    return ::new (static_cast<void*>(this)) BuildingGoal();
 }
+void BuildingGoal::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// BuildingGoal::Slot8 (vtable +0x40, 0x1400d75d0)
+// BuildingGoal::CheckGoalState (vtable +0x40, 0x1400d7580)
 // ============================================================
-// Checks whether the goal's required buildings have been built.
-// Iterates entries in the building type array, hashes each name,
-// looks up in the world's building BST, counts matches.
+// Iterates the entries, resolves each name, looks the resolved description up
+// in the world's building BST (game+0xF0+0x160), counts matches.
 //
 // Returns:
-//   requireAll mode (+0x30 != 0):
-//     1 if ALL types matched, 0 otherwise
-//   requireAny mode (+0x30 == 0):
-//     1 if NO types matched (goal not started)
-//     2 if SOME types matched (goal in progress)
-//     0 otherwise
-
-int BuildingGoal_Slot8(BuildingGoal* self) {
-    uintptr_t s = (uintptr_t)self;
+//   requireAll mode (+0x30 != 0): 1 if ALL types matched, 0 otherwise
+//   requireAny mode (+0x30 == 0): 1 if NO types matched, 2 if SOME matched
+Achievement::Goal::GoalState BuildingGoal::CheckGoalState() const {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Get world data
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     uintptr_t worldData = *(uintptr_t*)(gameWorld + 0xF0);
 
     int matchCount = 0;
-    int entryCount = *(int*)(s + 0x40);
+    int entryCount = *(const int*)(s + 0x40);
     int entryIdx = 0;
 
     if (entryCount > 0) {
         uintptr_t offset = 0;
         do {
             // Get entry from array
-            uintptr_t entry = *(uintptr_t*)(s + 0x38) + offset;
+            uintptr_t entry = *(const uintptr_t*)(s + 0x38) + offset;
 
             // Retail copies the WHOLE 0x18 ExternalPtr triple to the stack, resolves
             // into the COPY, and reads the pointer back out of it — the array entry
             // is deliberately left untouched, so each evaluation re-resolves.
             //
-            // The previous port passed an 8-byte `strBuf` here, which was wrong twice
-            // over: it read the "key" BEFORE resolving (so it always saw the stale
-            // value), and the resolver writes at +0x08 and +0x10, i.e. 0x18 bytes into
-            // an 8-byte stack buffer — a latent smash of whatever local followed it,
-            // armed the moment the resolve stopped being a no-op.
-            //
             // The BST key is not a hash: it is the resolved ComponentDescription
-            // pointer. While the resolve never ran it stayed 0, so every goal looked
-            // up key 0, matched nothing, and could never be met.
+            // pointer.
             uint8_t refCopy[0x18];
             // B.3.1 bridge: the ExternalPtr triple is still untyped bytes.
             new (refCopy) System::String(*reinterpret_cast<const System::String*>(entry));  // +0x00 name
@@ -258,83 +201,48 @@ int BuildingGoal_Slot8(BuildingGoal* self) {
     }
 
     // Evaluate result based on requireAll flag
-    char requireAll = *(char*)(s + 0x30);
+    char requireAll = *(const char*)(s + 0x30);
 
     if (requireAll != 0) {
         // requireAll mode
         if (matchCount == entryCount) {
-            return 1;  // all matched — goal complete
+            return static_cast<GoalState>(1);  // all matched — goal complete
         }
-        // requireAll is still set, not all matched
-        return 0;
+        return static_cast<GoalState>(0);
     }
 
     // requireAny mode
     if (matchCount == 0) {
-        return 1;  // none matched — goal not started
+        return static_cast<GoalState>(1);      // none matched
     }
     if (matchCount > 0) {
-        return 2;  // some matched — goal in progress
+        return static_cast<GoalState>(2);      // some matched
     }
-    return 0;
+    return static_cast<GoalState>(0);
 }
 
 // ============================================================
-// BuildingGoal::CreateInstance (vtable +0x50, 0x140025de0)
+// BuildingGoal::Construct (vtable +0x50, 0x140025de0)
 // ============================================================
-// Same as Slot6 — constructs a new BuildingGoal in-place.
-BuildingGoal* BuildingGoal_CreateInstance(BuildingGoal* self) {
-    return BuildingGoal_Slot6(self);
+// Placement-new on `this` (retail folded it with createInPlace).
+Object::External* BuildingGoal::Construct() {
+    return ::new (static_cast<void*>(this)) BuildingGoal();
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-// ============================================================
-// BuildingGoal vtable (exe addr 0x140160300, 11 slots)
-// ============================================================
-static uint32_t BuildingGoal_GetTypeId_Std(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("BuildingGoal");
-    return cached;
-}
-
-static int BuildingGoal_Slot3_Trampoline(BuildingGoal* self) { return BuildingGoal_Slot3(self); }
-
-static void* g_BuildingGoal_Vtable[11] = {
-    reinterpret_cast<void*>(&BuildingGoal_Dtor),                // +0x00 dtor
-    nullptr,                                                    // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&BuildingGoal_GetTypeId_Std),       // +0x10 GetTypeId
-    reinterpret_cast<void*>(&BuildingGoal_Slot3_Trampoline),    // +0x18 Slot3 (returns 2)
-    nullptr,                                                    // +0x20 Slot4 (Goal JMP thunk)
-    reinterpret_cast<void*>(&BuildingGoal_Slot5),               // +0x28 Slot5 / Load
-    reinterpret_cast<void*>(&BuildingGoal_Slot6),               // +0x30 Slot6 / Cleanup
-    nullptr,                                                    // +0x38 Slot7 (base stub)
-    reinterpret_cast<void*>(&BuildingGoal_Slot8),               // +0x40 Slot8 / Check
-    nullptr,                                                    // +0x48 Slot9 (base stub)
-    reinterpret_cast<void*>(&BuildingGoal_CreateInstance),      // +0x50 Slot10 / CreateInstance
-};
-
-extern "C" void RegisterBuildingGoalVtable() {
-    Goal_FillInheritedVtableSlots(g_BuildingGoal_Vtable, "BuildingGoal");
-    RegisterExeAddr(0x140160300, reinterpret_cast<uintptr_t>(g_BuildingGoal_Vtable));
-}
-
-extern "C" void* BuildingGoal_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
+// create 0x140025d80: MemAlloc(0x48, 8), then the (inlined) ctor.
+void* BuildingGoal::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BuildingGoal), 8);
     if (!p) return nullptr;
-    return BuildingGoal_Slot6(reinterpret_cast<BuildingGoal*>(p));
+    return static_cast<Object::Base*>(::new (p) BuildingGoal());
+}
+// createInPlace 0x140025de0.
+void* BuildingGoal::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) BuildingGoal());
 }
 
-extern "C" void* BuildingGoal_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return BuildingGoal_Slot6(reinterpret_cast<BuildingGoal*>(memory));
-}
-
-REGISTER_TYPE(BuildingGoal, "Achievement::Goal",
-              &BuildingGoal_Factory, &BuildingGoal_CreateInPlace);
+DEFINE_EXE_VTABLE(BuildingGoal, "_ZTV12BuildingGoal")
+DEFINE_EXE_TYPE(BuildingGoal, "Achievement::Goal")
 
 // ============================================================
 // BuildingGoal_Probe — diagnostic, env-gated (BANISHED_GOAL_PROBE)
@@ -402,7 +310,10 @@ extern "C" void BuildingGoal_Probe(const char* templateName) {
     reinterpret_cast<System::String*>(refCopy)->~String();
 
     *reinterpret_cast<uint64_t*>(goal + 0x40) = 1;     // count = 1
-    int verdict = BuildingGoal_Slot8(reinterpret_cast<BuildingGoal*>(goal));
+    // B.3.8 bridge: a raw stack image of the class (no vptr), evaluated through
+    // a QUALIFIED (non-dispatching) member call.
+    int verdict = static_cast<int>(
+        reinterpret_cast<const BuildingGoal*>(goal)->BuildingGoal::CheckGoalState());   // B.3.8 bridge
 
     fprintf(stderr, "[GoalProbe] name=\"%s\" resolved=%p verdict=%d "
                     "(requireAll: 1=met, 0=not met)\n",

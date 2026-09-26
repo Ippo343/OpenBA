@@ -1,204 +1,110 @@
 // code/Game/Goal/populationgoal.cpp
-// Clean reimplementation of PopulationGoal vtable methods.
-//
-// PopulationGoal (0x38 bytes) — achievement goal requiring population count.
-// Vtable: 0x140160370
+// PopulationGoal (0x38 bytes) — achievement goal requiring a population count.
+// ENDGAME B.3.8 block GOAL: a REAL class (Goal/PopulationGoal.h) with a
+// compiler-generated vtable; the retail evidence per slot is in the header.
 //
 // Fields (from Ghidra decompilation):
-//   +0x00: void*    vtable
-//   +0x08: uint8_t  _goalBase[0x28]  — Goal base fields
 //   +0x30: int32_t  targetPop        — required population count (default 100)
-//   +0x34: uint8_t  _pad34[4]        — padding
 //
 // The world population count is at game+0xF0+0xA8.
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Goal/populationgoal_funcs.h"
+#include "Goal/PopulationGoal.h"
 #include "engine_funcs.h"
-#include "Goal/goal_exe_helpers.h"
-#include "resolve.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 #include "engine/UpdateLoop.h"  // ENDGAME B.3.7 callers (K2): UpdateLoop::IsRunning
 #include <new>
 
-// Vtable pointer for PopulationGoal (resolved at runtime)
-static void* s_vtable_PopulationGoal = nullptr;
-static bool s_resolved = false;
+// ctor 0x1400d78f0: Goal(), the vptr, targetPop = 100.
+PopulationGoal::PopulationGoal() : targetPop(100), _pad34{} {}
 
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_vtable_PopulationGoal = (void*)ResolveAddr(Module::Exe, 0x140160370);
-    s_resolved = true;
+// [0] 0x140026000: ~PopulationGoal (empty) -> ~Goal -> ~External, MemFree on &1.
+Object::Base* PopulationGoal::DeletingDtor(unsigned flags) {
+    this->~PopulationGoal();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// PopulationGoal::Dtor (vtable +0x00, 0x140026000)
+// PopulationGoal::Serialize (vtable +0x28, 0x1400d7870)
 // ============================================================
-// Scalar destructor: sets vtable, calls Goal::~Goal, optionally frees.
-void* PopulationGoal_Dtor(PopulationGoal* self, uint32_t flags) {
-    EnsureResolved();
-
-    // Set vtable to PopulationGoal
-    *(void**)self = s_vtable_PopulationGoal;
-
-    // Achievement::Goal::~Goal (0x18009edb0) — a QUALIFIED member call (B7-13).
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
-
-    // If bit 0 set, free memory
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
-}
-
-// ============================================================
-// PopulationGoal::Slot5 (vtable +0x28, 0x1400d7870)
-// ============================================================
-// Serialize/Load: calls Goal::Serialize base, then serializes
-// targetPop (int32 at +0x30) via Serializer.
-int PopulationGoal_Slot5(PopulationGoal* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-
+// Calls Goal::Serialize, then serializes targetPop (int32 at +0x30).
+bool PopulationGoal::Serialize(void* stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
+    Achievement::Goal::Serialize(stream);
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize targetPop at +0x30
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(targetPop, nullptr);   // B.3.4 bridge
 
     // Destroy Serializer
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
 
-    return 1;
+    return true;
 }
 
 // ============================================================
-// PopulationGoal::Slot6 (vtable +0x30, 0x140025fb0)
+// PopulationGoal::Reconstruct [6] 0x140025fb0 / Destruct [7] 0x140001640
 // ============================================================
-// Factory constructor: calls Goal::Goal() base ctor, sets vtable,
-// initializes targetPop to 100.
-// Returns null if input is null.
-PopulationGoal* PopulationGoal_Slot6(PopulationGoal* self) {
-    EnsureResolved();
-
-    if (self == nullptr) {
-        return nullptr;
-    }
-
-    // Call Goal base default constructor
-    if (fn_Goal_BaseCtor) {
-        fn_Goal_BaseCtor(self);
-    }
-
-    // Set vtable to PopulationGoal
-    *(void**)self = s_vtable_PopulationGoal;
-
-    // Initialize targetPop to 100
-    self->targetPop = 100;
-
-    return self;
+// PORT GAP (retail 0x140025fb0) — B38 D3.2: retail first runs DeletingDtor(0)
+// (0x140025fc7 `CALL [RAX]`, EDX=0), then the ctor on `this`; the tree's slot 6
+// built over the live object without destroying it. The tree's body is kept.
+Object::External* PopulationGoal::Reconstruct() {
+    return ::new (static_cast<void*>(this)) PopulationGoal();
 }
+void PopulationGoal::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// PopulationGoal::Slot8 (vtable +0x40, 0x1400d7820)
+// PopulationGoal::CheckGoalState (vtable +0x40, 0x1400d7820)
 // ============================================================
-// Check goal completion: compares world population against targetPop.
-//
-// Decompiled:
-//   if (g_pGameWorldSingleton != NULL) {
-//       if (IsRunning(g_pGameWorldSingleton)) {
-//           return *(int*)(*(int64_t*)(g_pGameWorldSingleton+0xF0) + 0xA8) >= self->targetPop;
-//       }
-//   }
+//   if (g_pGameWorldSingleton != NULL && IsRunning(g_pGameWorldSingleton))
+//       return *(int*)(*(int64_t*)(g_pGameWorldSingleton+0xF0) + 0xA8) >= targetPop;
 //   return false;
-//
-// NOTE: Hook is DISABLED due to RIP-relative MOV in prologue.
-// This clean reimplementation works regardless of hook status.
-int PopulationGoal_Slot8(PopulationGoal* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    if (g_pGameWorldSingleton == nullptr) return 0;
+Achievement::Goal::GoalState PopulationGoal::CheckGoalState() const {
+    if (g_pGameWorldSingleton == nullptr) return static_cast<GoalState>(0);
     void* gameWorld = *g_pGameWorldSingleton;
-    if (gameWorld == nullptr) return 0;
+    if (gameWorld == nullptr) return static_cast<GoalState>(0);
 
     // Check IsRunning — Engine::UpdateLoop::IsRunning (import slot 0x140152850),
     // non-virtual. The door's null-`this` test is covered by the check above.
     bool running = reinterpret_cast<const Engine::UpdateLoop*>(gameWorld)->IsRunning();   // B.3.7 bridge
-    if (!running) return 0;
+    if (!running) return static_cast<GoalState>(0);
 
     // Read world data pointer at game+0xF0
     uintptr_t worldData = *(uintptr_t*)((uintptr_t)gameWorld + 0xF0);
-    if (worldData == 0) return 0;
+    if (worldData == 0) return static_cast<GoalState>(0);
 
-    // Compare population at worldData+0xA8 against targetPop at self+0x30
+    // Compare population at worldData+0xA8 against targetPop
     int currentPop = *(int*)(worldData + 0xA8);
-    int targetPop = *(int*)(s + 0x30);
-
-    return (currentPop >= targetPop) ? 1 : 0;
+    return static_cast<GoalState>((currentPop >= targetPop) ? 1 : 0);
 }
 
 // ============================================================
-// PopulationGoal::CreateInstance (vtable +0x50, 0x140025f60)
+// PopulationGoal::Construct (vtable +0x50, 0x140025f60)
 // ============================================================
-// Same as Slot6 — constructs a new PopulationGoal in-place.
-PopulationGoal* PopulationGoal_CreateInstance(PopulationGoal* self) {
-    return PopulationGoal_Slot6(self);
+Object::External* PopulationGoal::Construct() {
+    return ::new (static_cast<void*>(this)) PopulationGoal();
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-// ============================================================
-// PopulationGoal vtable (exe addr 0x140160370, 11 slots)
-// ============================================================
-static uint32_t PopulationGoal_GetTypeId_Std(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PopulationGoal");
-    return cached;
-}
-
-static int PopulationGoal_Slot3_Trampoline(PopulationGoal* self) { return PopulationGoal_Slot3(self); }
-
-static void* g_PopulationGoal_Vtable[11] = {
-    reinterpret_cast<void*>(&PopulationGoal_Dtor),                // +0x00 dtor
-    nullptr,                                                      // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&PopulationGoal_GetTypeId_Std),       // +0x10 GetTypeId
-    reinterpret_cast<void*>(&PopulationGoal_Slot3_Trampoline),    // +0x18 Slot3 (returns 1)
-    nullptr,                                                      // +0x20 Slot4 (Goal JMP thunk)
-    reinterpret_cast<void*>(&PopulationGoal_Slot5),               // +0x28 Slot5 / Load
-    reinterpret_cast<void*>(&PopulationGoal_Slot6),               // +0x30 Slot6 / Cleanup
-    nullptr,                                                      // +0x38 Slot7 (base stub)
-    reinterpret_cast<void*>(&PopulationGoal_Slot8),               // +0x40 Slot8 / Check
-    nullptr,                                                      // +0x48 Slot9 (base stub)
-    reinterpret_cast<void*>(&PopulationGoal_CreateInstance),      // +0x50 Slot10 / CreateInstance
-};
-
-extern "C" void RegisterPopulationGoalVtable() {
-    Goal_FillInheritedVtableSlots(g_PopulationGoal_Vtable, "PopulationGoal");
-    RegisterExeAddr(0x140160370, reinterpret_cast<uintptr_t>(g_PopulationGoal_Vtable));
-}
-
-extern "C" void* PopulationGoal_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+// create 0x140025f00: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* PopulationGoal::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PopulationGoal), 8);
     if (!p) return nullptr;
-    return PopulationGoal_Slot6(reinterpret_cast<PopulationGoal*>(p));
+    return static_cast<Object::Base*>(::new (p) PopulationGoal());
+}
+// createInPlace 0x140025f60.
+void* PopulationGoal::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) PopulationGoal());
 }
 
-extern "C" void* PopulationGoal_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return PopulationGoal_Slot6(reinterpret_cast<PopulationGoal*>(memory));
-}
-
-REGISTER_TYPE(PopulationGoal, "Achievement::Goal",
-              &PopulationGoal_Factory, &PopulationGoal_CreateInPlace);
+DEFINE_EXE_VTABLE(PopulationGoal, "_ZTV14PopulationGoal")
+DEFINE_EXE_TYPE(PopulationGoal, "Achievement::Goal")

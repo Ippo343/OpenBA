@@ -1,263 +1,136 @@
 // code/Game/Goal/timegoalinstance.cpp
-// Clean reimplementation of TimeGoalInstance vtable methods.
-//
 // TimeGoalInstance (0x28 bytes) — tracks elapsed time for TimeGoal.
-// Vtable: 0x140160598
+// ENDGAME B.3.8 block GOAL: a REAL class (Goal/TimeGoalInstance.h) with a
+// compiler-generated vtable; the retail evidence per slot is in the header.
 //
 // Fields:
-//   +0x08..+0x1F: GoalInstance base (0x18 bytes)
-//     +0x18: void*  goal — pointer to parent TimeGoal (from GoalInstance base)
+//   +0x10..+0x1F: GoalInstance base (_flags, _goal = the parent TimeGoal)
 //   +0x20: int64   elapsedTime — accumulated time in engine ticks (System::Time)
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Goal/timegoalinstance_funcs.h"
+#include "Goal/TimeGoalInstance.h"
+#include "Goal/TimeGoal.h"
 #include "engine_funcs.h"
 #include "resolve.h"
-#include <cstdio>
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "object/TypeInfo.h"      // Object::Base::IsDerivedFrom
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 #include "system/Value.h"    // ENDGAME B.3.4b System callers: System::Time
 #include <new>
 
-// ============================================================
-// Resolved helpers
-// ============================================================
+// ctor 0x1400dad90 (inlined in create 0x140026670): GoalInstance(), the vptr,
+// elapsedTime = 0.
+TimeGoalInstance::TimeGoalInstance() : elapsedTime(0) {}
 
-// fn_InternalBasePtr_Ctor — dispatch slot at 0x140152a90
-typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
-static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
-
-// fn_IsDerivedFrom — dispatch slot at 0x140152a98
-typedef bool (*fn_IsDerivedFrom_dispatch_t)(void* obj, uint32_t typeId);
-static fn_IsDerivedFrom_dispatch_t s_fn_IsDerivedFrom_dispatch = nullptr;
-
-// TypeInfo_TimeGoal — type ID at 0x1401c62e8
-static uint32_t* s_TypeInfo_TimeGoal = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    // Resolve dispatch slots (read function pointer from .rdata slot)
-    uintptr_t slot;
-
-    slot = ResolveAddr(Module::Exe, 0x140152a90);
-    if (slot) s_fn_IBPCtor = *reinterpret_cast<fn_IBPCtor_t*>(slot);
-
-    slot = ResolveAddr(Module::Exe, 0x140152a98);
-    if (slot) s_fn_IsDerivedFrom_dispatch = *reinterpret_cast<fn_IsDerivedFrom_dispatch_t*>(slot);
-
-    s_TypeInfo_TimeGoal = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c62e8);
-
-    s_helpersResolved = true;
+// [0] 0x140026800: ~TimeGoalInstance (empty) -> ~GoalInstance -> ~Internal
+// (the InternalFactory swap-remove), MemFree on &1.
+Object::Base* TimeGoalInstance::DeletingDtor(unsigned flags) {
+    this->~TimeGoalInstance();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// TimeGoalInstance::Slot3/Serialize (vtable +0x18, 0x1400dad30)
+// TimeGoalInstance::Persist (vtable +0x18, 0x1400dad30)
 // ============================================================
-// Serializes instance state. Calls GoalInstance::Persist first,
-// then serializes the elapsed time field via Time::Serialize.
-
-void TimeGoalInstance_Slot3(TimeGoalInstance* self, void* stream) {
-    EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
-
-    // Achievement::GoalInstance::Persist (slot 3, retail 0x18009ef70) — a
-    // QUALIFIED member call (B37_RULES B7-13): unqualified, it would dispatch
-    // through this exe table back into this slot. Retail calls the base
-    // UNCONDITIONALLY; the base reads an ExternalPtr + a uint off the stream,
-    // and skipping it desyncs everything after this object. The exe import
-    // slot 0x140152868 this used to read (and warn about when unregistered)
-    // is no longer on the path, so that silent-skip hazard is gone.
-    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::Persist(stream);   // B.3.7 bridge
+// GoalInstance::Persist first, then the elapsed time via Time::Serialize.
+void TimeGoalInstance::Persist(void* stream) {
+    // Achievement::GoalInstance::Persist (slot 3, retail 0x18009ef70) — QUALIFIED
+    // (B37_RULES B7-13). Retail calls the base UNCONDITIONALLY; the base reads an
+    // ExternalPtr + a uint off the stream, and skipping it desyncs everything
+    // after this object.
+    Achievement::GoalInstance::Persist(stream);
 
     // Create serializer
     alignas(8) uint8_t serializerBuf[24];
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize elapsed time (+0x20) via System::Time::Serialize
-    reinterpret_cast<System::Time*>((void*)(s + 0x20))->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
+    reinterpret_cast<System::Time*>(&elapsedTime)->Serialize(*reinterpret_cast<IO::Serializer*>(serializerBuf));   // B.3.4 bridge
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
 
 // ============================================================
-// TimeGoalInstance::Slot5/Startup (vtable +0x28, 0x1400dac30)
+// TimeGoalInstance::Update (vtable +0x28, 0x1400dac30)
 // ============================================================
-// Accumulates elapsed time. Checks if other goals are met via
-// AreGoalsMetExcept; if not, resets elapsed time to zero.
-// Then calls base GoalInstance::Update.
-//
-// From disassembly:
-//   self->elapsedTime += *time;
-//   InternalBasePtr ibp; IBPCtor(&ibp, self);
-//   if (!GoalList::AreGoalsMetExcept(goalList, &ibp)) self->elapsedTime = 0;
-//   GoalInstance::Update(self, time, goalList);
+//   elapsedTime += time;
+//   InternalBasePtr ibp(this);
+//   if (!list.AreGoalsMetExcept(&ibp)) elapsedTime = 0;
+//   GoalInstance::Update(time, list);
+void TimeGoalInstance::Update(const System::Time& time, const Achievement::GoalList& list) {
+    // Accumulate time
+    elapsedTime += *reinterpret_cast<const int64_t*>(&time);   // B.3.4 bridge (System::Time is one int64)
 
-void TimeGoalInstance_Slot5(TimeGoalInstance* self, void* time, void* goalList) {
-    EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
-
-    // Accumulate time: self->elapsedTime += *(int64_t*)time
-    int64_t deltaTime = *(int64_t*)time;
-    *(int64_t*)(s + 0x20) += deltaTime;
-
-    // Check if other goals are met (except this instance)
+    // Check if other goals are met (except this instance). The InternalPtr is
+    // built through the IBP ctor (import slot 0x140152a90) exactly as retail.
     uint8_t ibpBuf[8];
-    if (s_fn_IBPCtor) {
-        s_fn_IBPCtor(ibpBuf, self);
-    }
+    ::new (static_cast<void*>(ibpBuf)) Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
 
     // Achievement::GoalList::AreGoalsMetExcept (retail 0x18009f070, NON-virtual)
-    // — the InternalPtr argument by HIDDEN POINTER (B37_RULES B7-5). Was the exe
-    // import slot 0x140152878, which resolved to the same door.
-    const auto* list = reinterpret_cast<const Achievement::GoalList*>(goalList);   // B.3.7 bridge
-    bool othersMet = list->AreGoalsMetExcept(
+    // — the InternalPtr argument by HIDDEN POINTER (B37_RULES B7-5).
+    bool othersMet = list.AreGoalsMetExcept(
         reinterpret_cast<const Object::InternalPtr<Achievement::GoalInstance>*>(ibpBuf));   // B.3.7 bridge
     if (!othersMet) {
         // Reset elapsed time to zero — other goals not met
-        *(int64_t*)(s + 0x20) = 0;
+        elapsedTime = 0;
     }
 
-    // Achievement::GoalInstance::Update (slot 5, retail 0x18009f010) — QUALIFIED
-    // (B7-13); was the exe import slot 0x140152880.
-    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::Update(   // B.3.7 bridge
-        *reinterpret_cast<const System::Time*>(time), *list);   // B.3.7 bridge
+    // Achievement::GoalInstance::Update (slot 5, retail 0x18009f010) — QUALIFIED (B7-13).
+    Achievement::GoalInstance::Update(time, list);
 }
 
 // ============================================================
-// TimeGoalInstance::Slot6/Shutdown (vtable +0x30, 0x1400dacb0)
+// TimeGoalInstance::CheckGoalState (vtable +0x30, 0x1400dacb0)
 // ============================================================
-// Checks if the time goal is complete.
-//
-// From disassembly:
-//   goal = self->+0x18 (parent goal pointer)
-//   IsDerivedFrom(goal, TypeInfo_TimeGoal) -> timeGoal (or null)
-//   seconds = Time::AsSeconds(&self->elapsedTime)
+//   goal = this->_goal
+//   timeGoal = IsDerivedFrom(goal, TypeInfo_TimeGoal) ? goal : null
+//   seconds = Time::AsSeconds(&elapsedTime)
 //   return (timeGoal->requiredYears * 0xe10) <= seconds
-//
-// 0xe10 = 3600 = seconds per year in game time (1 year = 1 hour real time)
-
-int TimeGoalInstance_Slot6(TimeGoalInstance* self) {
-    EnsureHelpers();
-    uintptr_t s = (uintptr_t)self;
-
+// 0xe10 = 3600 = seconds per year in game time.
+Achievement::Goal::GoalState TimeGoalInstance::CheckGoalState() const {
     // Get parent goal pointer
-    void* goal = *(void**)(s + 0x18);
+    const Object::Base* goal = reinterpret_cast<const Object::Base*>(_goal._ptr);
 
-    // Cast to TimeGoal via IsDerivedFrom
-    void* timeGoal = nullptr;
-    if (s_fn_IsDerivedFrom_dispatch && goal && s_TypeInfo_TimeGoal) {
-        bool isDerived = s_fn_IsDerivedFrom_dispatch(goal, *s_TypeInfo_TimeGoal);
-        if (isDerived) {
-            timeGoal = goal;
-        }
+    // Cast to TimeGoal via IsDerivedFrom (import slot 0x140152a98) against the
+    // id in TypeInfo_TimeGoal (dword 0x1401c62e8). That cell is NOT registered
+    // in the tree, so the resolve answers 0 and the cast is skipped (kept as the
+    // tree had it; the fix is its own commit).
+    const TimeGoal* timeGoal = nullptr;
+    const uint32_t* tidTimeGoal = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c62e8));
+    if (goal && tidTimeGoal && goal->IsDerivedFrom(*tidTimeGoal)) {
+        timeGoal = static_cast<const TimeGoal*>(goal);
     }
 
     // Convert elapsed time to seconds
-    float elapsedSeconds = reinterpret_cast<const System::Time*>((void*)(s + 0x20))->AsSeconds();   // B.3.4 bridge
+    float elapsedSeconds = reinterpret_cast<const System::Time*>(&elapsedTime)->AsSeconds();   // B.3.4 bridge
 
     // Compare against required time
     if (timeGoal) {
-        int requiredYears = *(int32_t*)((uintptr_t)timeGoal + 0x30);
-        float requiredSeconds = (float)(requiredYears * 0xe10);
-        return (requiredSeconds <= elapsedSeconds) ? 1 : 0;
+        float requiredSeconds = (float)(timeGoal->requiredYears * 0xe10);
+        return static_cast<Achievement::Goal::GoalState>((requiredSeconds <= elapsedSeconds) ? 1 : 0);
     }
 
-    return 0;
+    return static_cast<Achievement::Goal::GoalState>(0);
 }
 
-// ============================================================
-// In-place constructor used by both Factory and CreateInPlace.
-// Original TimeGoalInstance is allocated by TimeGoal_Slot10 in the running
-// game; the loader path needs an explicit factory because the .rsc loader
-// calls Factory::Construct(typeId) for instances that are stored standalone.
-//
-// Layout: vtable + GoalInstance(0x18) + elapsedTime int64 (+0x20) = 0x28 bytes.
-// ============================================================
-static void* TimeGoalInstance_Ctor_Impl(void* memory) {
-    if (!memory) return nullptr;
-
-    // Call base Achievement::GoalInstance::GoalInstance
-    typedef void* (*fn_GoalInstanceCtor_t)(void* self);
-    static fn_GoalInstanceCtor_t s_fn_GoalInstanceCtor = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_fn_GoalInstanceCtor = (fn_GoalInstanceCtor_t)ResolveExport(
-            "??0GoalInstance@Achievement@@QEAA@XZ");
-        s_resolved = true;
-    }
-    if (s_fn_GoalInstanceCtor) {
-        s_fn_GoalInstanceCtor(memory);
-    }
-
-    uintptr_t s = (uintptr_t)memory;
-
-    // Set vtable to TimeGoalInstance
-    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x140160598);
-    if (vtableAddr) {
-        *(void**)memory = (void*)vtableAddr;
-    }
-
-    // Initialize elapsedTime to 0
-    *(int64_t*)(s + 0x20) = 0;
-
-    return memory;
-}
-
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-#include "Goal/timegoal_funcs.h"  // for TimeGoal_Slot11 (shared dtor)
-
-// ============================================================
-// TimeGoalInstance vtable (exe addr 0x140160598, 7 slots)
-// ============================================================
-// Slot +0x00 Dtor: SHARED with TimeGoal_Slot11 — see timegoal.cpp.
-//   The shared dtor sets vtable to TimeGoalInstance, calls
-//   GoalInstance::~GoalInstance, optionally frees. Declared in timegoal_funcs.h.
-
-// Slot +0x10 GetTypeId: returns CRC32 typeId from REGISTER_TYPE storage.
-static uint32_t TimeGoalInstance_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TimeGoalInstance");
-    return cached;
-}
-
-// Trampoline for inline-defined TimeGoalInstance_Slot4.
-static int TimeGoalInstance_Slot4_Trampoline(TimeGoalInstance* self) {
-    return TimeGoalInstance_Slot4(self);
-}
-
-static void* g_TimeGoalInstance_Vtable[7] = {
-    reinterpret_cast<void*>(&TimeGoal_Slot11),                        // +0x00 dtor (SHARED)
-    nullptr,                                                          // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&TimeGoalInstance_GetTypeId),             // +0x10 GetTypeId
-    reinterpret_cast<void*>(&TimeGoalInstance_Slot3),                 // +0x18 Slot3 / Serialize
-    reinterpret_cast<void*>(&TimeGoalInstance_Slot4_Trampoline),      // +0x20 Slot4 (returns 0)
-    reinterpret_cast<void*>(&TimeGoalInstance_Slot5),                 // +0x28 Slot5 / Update
-    reinterpret_cast<void*>(&TimeGoalInstance_Slot6),                 // +0x30 Slot6 / IsComplete
-};
-
-extern "C" void RegisterTimeGoalInstanceVtable() {
-    RegisterExeAddr(0x140160598, reinterpret_cast<uintptr_t>(g_TimeGoalInstance_Vtable));
-}
-
-extern "C" void* TimeGoalInstance_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);  // TimeGoalInstance size = 0x28
+// create 0x140026670: MemAlloc(0x28, 8), then the (inlined) ctor.
+void* TimeGoalInstance::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TimeGoalInstance), 8);
     if (!p) return nullptr;
-    return TimeGoalInstance_Ctor_Impl(p);
+    return static_cast<Object::Base*>(::new (p) TimeGoalInstance());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (null);
+// the tree's in-place build is kept (B38_RULES B8-13).
+void* TimeGoalInstance::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TimeGoalInstance());
 }
 
-extern "C" void* TimeGoalInstance_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return TimeGoalInstance_Ctor_Impl(memory);
-}
-
-REGISTER_TYPE(TimeGoalInstance, "Achievement::GoalInstance",
-              &TimeGoalInstance_Factory, &TimeGoalInstance_CreateInPlace);
+DEFINE_EXE_VTABLE(TimeGoalInstance, "_ZTV16TimeGoalInstance")
+DEFINE_EXE_TYPE(TimeGoalInstance, "Achievement::GoalInstance")

@@ -1,8 +1,7 @@
 // code/Game/Goal/timegoal.cpp
-// Clean reimplementation of TimeGoal vtable methods.
-//
 // TimeGoal (0x38 bytes) — achievement goal requiring elapsed time.
-// Vtable: 0x140160540
+// ENDGAME B.3.8 block GOAL: a REAL class (Goal/TimeGoal.h) with a
+// compiler-generated vtable; the retail evidence per slot is in the header.
 //
 // Fields:
 //   +0x30: int32  requiredYears         — years to survive (multiplied by 0xe10=3600 for seconds)
@@ -10,227 +9,89 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Goal/timegoal_funcs.h"
+#include "Goal/TimeGoal.h"
+#include "Goal/TimeGoalInstance.h"
 #include "engine_funcs.h"
-#include "Goal/goal_exe_helpers.h"
-#include "resolve.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 #include <new>
 
-// ============================================================
-// TimeGoal::Slot5/Load (vtable +0x28, 0x1400dab20)
-// ============================================================
-// Serializes TimeGoal fields. Calls base Goal::Serialize,
-// then serializes requiredYears (int) and requireOtherGoalsMet (bool).
+// ctor 0x1400dabb0 (inlined in create 0x1400266f0): Goal(), the vptr,
+// requiredYears = 1, requireOtherGoalsMet = 0.
+TimeGoal::TimeGoal() : requiredYears(1), requireOtherGoalsMet(0), _pad35{} {}
 
-void TimeGoal_Slot5(TimeGoal* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
+// [0] 0x140026850: ~TimeGoal (empty) -> ~Goal -> ~External, MemFree on &1.
+Object::Base* TimeGoal::DeletingDtor(unsigned flags) {
+    this->~TimeGoal();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
+// ============================================================
+// TimeGoal::Serialize (vtable +0x28, 0x1400dab20)
+// ============================================================
+// Calls base Goal::Serialize, then requiredYears (int) and
+// requireOtherGoalsMet (bool).
+bool TimeGoal::Serialize(void* stream) {
     // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
-    // Was the exe import slot 0x140152840, which resolved to the same door.
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
+    Achievement::Goal::Serialize(stream);
 
     // Create serializer
     alignas(8) uint8_t serializerBuf[24];
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize requiredYears (+0x30)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(requiredYears, nullptr);   // B.3.4 bridge
 
     // Serialize requireOtherGoalsMet (+0x34)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(s + 0x34), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&requireOtherGoalsMet), nullptr);   // B.3.4 bridge
 
     // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// TimeGoal::Slot6/Cleanup (vtable +0x30, 0x1400267a0)
+// TimeGoal::Reconstruct [6] 0x1400267a0 / Destruct [7] 0x140001640
 // ============================================================
-// Resets the goal to its default constructed state.
+// DeletingDtor(0) (destroy in place), then the ctor on `this`.
+Object::External* TimeGoal::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TimeGoal();
+}
+void TimeGoal::Destruct() { DeletingDtor(0); }
 
-void TimeGoal_Slot6(TimeGoal* self) {
-    // Call scalar dtor via vtable +0x00 with flags=0
-    typedef void* (*fn_ScalarDtor_t)(void* self, uint32_t flags);
-    void** vtable = *(void***)self;
-    fn_ScalarDtor_t scalarDtor = (fn_ScalarDtor_t)vtable[0];
-    if (scalarDtor) {
-        scalarDtor(self, 0);
-    }
-
-    // Re-construct in place
-    TimeGoal_Ctor_Impl(self);
+// ============================================================
+// TimeGoal::GetInstanceType [9] 0x1400267f0
+// ============================================================
+// `MOV EAX,[TypeInfo_TimeGoalInstance]; MOV [RDX],EAX; MOV RAX,RDX; RET` —
+// the B7-4 retslot shape of Achievement::Goal::GetInstanceType.
+Object::Type* TimeGoal::GetInstanceType(Object::Type* ret) const {
+    ret->_type = TimeGoalInstance::TypeId();
+    return ret;
 }
 
 // ============================================================
-// TimeGoal::Slot10/CreateInstance (vtable +0x50, 0x140026750)
+// TimeGoal::Construct (vtable +0x50, 0x140026750)
 // ============================================================
-// Construct a TimeGoal in pre-allocated memory.
-
-void* TimeGoal_Slot10(void* memory) {
-    if (!memory) return nullptr;
-    return TimeGoal_Ctor_Impl(memory);
+Object::External* TimeGoal::Construct() {
+    return ::new (static_cast<void*>(this)) TimeGoal();
 }
 
-// ============================================================
-// TimeGoal::Slot11/SharedDtor (vtable +0x58, 0x140026800)
-// ============================================================
-// This is the destructor shared between TimeGoal Slot11 and TimeGoalInstance Dtor.
-// It sets the vtable to TimeGoalInstance, calls base GoalInstance::~GoalInstance,
-// then optionally frees memory.
-
-void* TimeGoal_Slot11(void* self, uint32_t flags) {
-    // Set vtable to TimeGoalInstance
-    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x140160598);
-    if (vtableAddr) {
-        *(void**)self = (void*)vtableAddr;
-    }
-
-    // Achievement::GoalInstance::~GoalInstance (retail 0x18009ef40) — a
-    // QUALIFIED member call (B37_RULES B7-13): re-stamp + ~Internal, i.e. the
-    // InternalFactory swap-remove. Until 2026-09-06 this resolved the phantom
-    // QEAA spelling, got null, skipped the call and MemFree'd the object with
-    // its handle-table entry still pointing at it
-    // (reference_internalfactory_swapremove_wild_write.md). A member call
-    // cannot resolve to nothing.
-    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::~GoalInstance();   // B.3.7 bridge
-
-    // Free memory if requested
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
-}
-
-// ============================================================
-// TimeGoal::Dtor (vtable +0x00, 0x140026850)
-// ============================================================
-// TimeGoal destructor. Sets vtable, calls base Goal::~Goal, optionally frees.
-
-void* TimeGoal_Dtor(TimeGoal* self, uint32_t flags) {
-    // Set vtable to TimeGoal
-    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x140160540);
-    if (vtableAddr) {
-        *(void**)self = (void*)vtableAddr;
-    }
-
-    // Achievement::Goal::~Goal (retail 0x18009edb0) — a QUALIFIED member call (B7-13).
-    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
-
-    // Free memory if requested
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
-}
-
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-// ============================================================
-// TimeGoal vtable (exe addr 0x140160540, 12 slots)
-// ============================================================
-// Slot +0x10: GetTypeId — returns CRC32 typeId from REGISTER_TYPE storage.
-static uint32_t TimeGoal_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TimeGoal");
-    return cached;
-}
-
-// Slot +0x48: Slot9 — the exe OVERRIDE of Achievement::Goal::GetInstanceType
-// (retail 0x1400267f0): returns TimeGoalInstance's type id BY VALUE.
-// Original: MOV EAX,[TypeInfo_TimeGoalInstance]; MOV [RDX],EAX; MOV RAX,RDX; RET.
-// RULE B7-4: the override takes the base's retslot shape
-// `Object::Type* (const Goal* this, Object::Type* ret)` — `this` first, the
-// hidden return slot second, the slot handed back in RAX — exactly what
-// `virtual Object::Type* Goal::GetInstanceType(Object::Type* ret) const`
-// compiles to, so GoalList::Initialize's virtual call lands here correctly.
-static Object::Type* TimeGoal_Slot9_Standalone(const Achievement::Goal* /*self*/, Object::Type* retval) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TimeGoalInstance");
-    if (retval) retval->_type = cached;
-    return retval;
-}
-
-// Trampolines for inline-defined helpers in timegoal_funcs.h.
-static int TimeGoal_Slot3_Trampoline(TimeGoal* self) { return TimeGoal_Slot3(self); }
-static int TimeGoal_Slot8_Trampoline(TimeGoal* self) { return TimeGoal_Slot8(self); }
-
-static void* g_TimeGoal_Vtable[12] = {
-    reinterpret_cast<void*>(&TimeGoal_Dtor),                // +0x00 dtor
-    nullptr,                                                // +0x08 Slot1
-    reinterpret_cast<void*>(&TimeGoal_GetTypeId),           // +0x10 Slot2 / GetTypeId
-    reinterpret_cast<void*>(&TimeGoal_Slot3_Trampoline),    // +0x18 Slot3 (returns 1)
-    nullptr,                                                // +0x20 Slot4 (Goal JMP thunk)
-    reinterpret_cast<void*>(&TimeGoal_Slot5),               // +0x28 Slot5 / Load
-    reinterpret_cast<void*>(&TimeGoal_Slot6),               // +0x30 Slot6 / Cleanup
-    nullptr,                                                // +0x38 Slot7 (base stub)
-    reinterpret_cast<void*>(&TimeGoal_Slot8_Trampoline),    // +0x40 Slot8 (returns 0)
-    reinterpret_cast<void*>(&TimeGoal_Slot9_Standalone),    // +0x48 Slot9 / GetInstanceTypeId
-    reinterpret_cast<void*>(&TimeGoal_Slot10),              // +0x50 Slot10 / CreateInstance
-    reinterpret_cast<void*>(&TimeGoal_Slot11),              // +0x58 Slot11 / SharedDtor
-};
-
-extern "C" void RegisterTimeGoalVtable() {
-    // TimeGoal overrides slot 9 itself; 4 and 7 are inherited like the others.
-    Goal_FillInheritedVtableSlots(g_TimeGoal_Vtable, "TimeGoal");
-    RegisterExeAddr(0x140160540, reinterpret_cast<uintptr_t>(g_TimeGoal_Vtable));
-}
-
-extern "C" void* TimeGoal_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);  // TimeGoal size = 0x38
+// create 0x1400266f0: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* TimeGoal::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TimeGoal), 8);
     if (!p) return nullptr;
-    return TimeGoal_Ctor_Impl(p);
+    return static_cast<Object::Base*>(::new (p) TimeGoal());
+}
+// createInPlace 0x140026750.
+void* TimeGoal::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TimeGoal());
 }
 
-extern "C" void* TimeGoal_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    return TimeGoal_Ctor_Impl(memory);
-}
-
-REGISTER_TYPE(TimeGoal, "Achievement::Goal",
-              &TimeGoal_Factory, &TimeGoal_CreateInPlace);
-
-// ============================================================
-// TimeGoal_Ctor_Impl
-// ============================================================
-// Construct TimeGoal in place. From decompiled TimeGoal_Factory (0x1400266f0).
-
-void* TimeGoal_Ctor_Impl(void* memory) {
-    // Call base constructor Achievement::Goal::Goal
-    typedef void* (*fn_GoalCtor_t)(void* self);
-    static fn_GoalCtor_t s_fn_GoalCtor = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_fn_GoalCtor = (fn_GoalCtor_t)ResolveExport(
-            "??0Goal@Achievement@@QEAA@XZ");
-        s_resolved = true;
-    }
-    if (s_fn_GoalCtor) {
-        s_fn_GoalCtor(memory);
-    }
-
-    uintptr_t s = (uintptr_t)memory;
-
-    // Set vtable to TimeGoal
-    uintptr_t vtableAddr = ResolveAddr(Module::Exe, 0x140160540);
-    if (vtableAddr) {
-        *(void**)memory = (void*)vtableAddr;
-    }
-
-    // Initialize fields
-    *(int32_t*)(s + 0x30) = 1;    // requiredYears (default 1)
-    *(uint8_t*)(s + 0x34) = 0;    // requireOtherGoalsMet (default false)
-
-    return memory;
-}
+DEFINE_EXE_VTABLE(TimeGoal, "_ZTV8TimeGoal")
+DEFINE_EXE_TYPE(TimeGoal, "Achievement::Goal")
