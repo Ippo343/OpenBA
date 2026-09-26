@@ -156,17 +156,8 @@ namespace TutorialSetupDialogAddr {
 // --- EventPopupDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/EventPopupDialog.h"
 
-// --- FollowDialog (0xD8) ---
-// Factory inits: +0xB8=0, +0xC0=0, +0xC8=0, +0xD0=0
-struct FollowDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint64_t dataC8;           // +0xC8: zeroed
-    uint64_t dataD0;           // +0xD0: zeroed
-};
-static_assert(sizeof(FollowDialog) == 0xD8, "FollowDialog size mismatch");
-static_assert(offsetof(FollowDialog, dataB8) == 0xB8, "");
+// --- FollowDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/FollowDialog.h"
 
 // --- GoalDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/GoalDialog.h"

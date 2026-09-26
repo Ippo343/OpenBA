@@ -33,6 +33,7 @@
 #include "Dialog/AchievementDialog.h"
 #include "Dialog/GoalDialog.h"
 #include "Dialog/ScenarioDialog.h"
+#include "Dialog/FollowDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -173,4 +174,12 @@ UNIT_TEST(dlg_scenario_dialog) {
     CHECK_EQ(offsetof(ScenarioDialog, dataE0), (size_t)0xe0);
     CheckShape<ScenarioDialog>();
     CheckDialogInstanceSlots<ScenarioDialog>();
+}
+
+UNIT_TEST(dlg_follow_dialog) {
+    CHECK_EQ(sizeof(FollowDialog), (size_t)0xd8);
+    CHECK_EQ(offsetof(FollowDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(FollowDialog, dataD0), (size_t)0xd0);
+    CheckShape<FollowDialog>();
+    CheckDialogInstanceSlots<FollowDialog>();
 }

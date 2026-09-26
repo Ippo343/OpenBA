@@ -135,29 +135,6 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, int eventData);
 
 // ============================================================
-// FollowDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Finds buttonClose (ID 100), textFollow, textAction.
-// Sets followed entity name text and activates follow camera flag.
-void FollowDialog_Slot4(FollowDialog* self);
-
-// Slot5 (vtable +0x28): Shutdown — clears follow-active flag (gameWorld->+0x120->+0x38 = 0).
-void FollowDialog_Slot5(FollowDialog* self);
-
-// Slot6 (vtable +0x30): Draw — updates profession text (parameter 1 on textFollow)
-// and action text (textAction) each frame from citizen's current state.
-void FollowDialog_Slot6(FollowDialog* self, void* p2, void* p3, void* p4);
-
-// Slot7 (vtable +0x38): Update — reads character position, updates camera target.
-// Checks Escape key to close dialog.
-void FollowDialog_Slot7(FollowDialog* self);
-
-// Slot8 (vtable +0x40): OnCommand — handles buttonClose click (id 100).
-// Nulls back-reference on followed entity, closes dialog.
-void FollowDialog_Slot8(FollowDialog* self, void* param2, int param3, int param4);
-
-// ============================================================
 // NewGameDialog
 // ============================================================
 
