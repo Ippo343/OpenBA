@@ -45,6 +45,7 @@
 #include "Object/factory_registration.h"
 #include "Tutorial/TutorialSetupRestrictPlayer.h"
 #include "Tutorial/TutorialHighlightDialog.h"
+#include "Tutorial/TutorialUI.h"
 #include "Game/serialize_externals.h"
 #include "ui/UserInterface.h"
 #include <cstdint>
@@ -90,17 +91,10 @@ inline UI::UserInterface* UserInterface() {
 // TutorialHighlightDialog type id (retail DAT_1401C6550) — the class's own
 // registration (ENDGAME B.3.8: no lazy cache).
 uint32_t HighlightTypeId() { return TutorialHighlightDialog::TypeId(); }
-// TutorialUI type id (retail DAT_1401C67F0).
-uint32_t TutorialUITypeId() {
-    static uint32_t c = 0;
-    // TutorialUI is an EXE-side REGISTER_TYPE (tutorial_dialog_vtables.cpp:534), so the
-    // exe registration table is the authority; ResolveTypeIdByNameLazy walks the live
-    // Factory tree and is the fallback, not the primary. Order matters: a 0 here makes
-    // StepExecute's controller narrow fail and the step panel is never bound.
-    if (!c) c = ::Object::GetTypeIdByName("TutorialUI");
-    if (!c) c = ::Object::ResolveTypeIdByNameLazy("TutorialUI");
-    return c;
-}
+// TutorialUI type id (retail DAT_1401C67F0) — the class's own registration
+// (ENDGAME B.3.8: no lazy cache). A 0 here makes StepExecute's controller
+// narrow fail and the step panel is never bound.
+uint32_t TutorialUITypeId() { return TutorialUI::TypeId(); }
 
 // A BST node in the (gameWorld+0xF0)+0x160 map, and in the FinishTutorialGoal
 // tree at goal+0x50. Same shape both places:

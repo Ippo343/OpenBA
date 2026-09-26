@@ -353,3 +353,27 @@ UNIT_TEST(tutorialhighlightdialog_is_retail_10_slots_and_0xf0) {
     CHECK_EQ(offsetof(T, rotation), (size_t)0xD8);
     CHECK_EQ(offsetof(T, targetEntity), (size_t)0xE8);
 }
+
+// ===========================================================================
+// TutorialUI : UI::DialogController — 11 slots, 0x60
+// ===========================================================================
+#include "Tutorial/TutorialUI.h"
+
+UNIT_TEST(tutorialui_is_retail_11_slots_and_0x60) {
+    using T = TutorialUI;
+    CHECK_EQ(SlotOffset(&T::DeletingDtor),        (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&T::TypeName),            (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&T::Type),                (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&T::Persist),             (uintptr_t)0x18);
+    CHECK_EQ(SlotOffset(&T::OnCreated),           (uintptr_t)0x20);
+    CHECK_EQ(SlotOffset(&T::OnOpened),            (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&T::OnClosed),            (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&T::OnUpdateLayout),      (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&T::OnUpdate),            (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&T::OnElementEvent),      (uintptr_t)0x48);
+    CHECK_EQ(SlotOffset(&T::OnSerializeSettings), (uintptr_t)0x50);
+    CheckShape<T, UI::DialogController>(false);
+    CHECK_EQ(sizeof(T), (size_t)0x60);
+    CHECK_EQ(offsetof(T, nextButton), (size_t)0x50);
+    CHECK_EQ(offsetof(T, quitButton), (size_t)0x58);
+}
