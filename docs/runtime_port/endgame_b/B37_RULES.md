@@ -233,6 +233,14 @@ built inline by a retail function that the tree ports as a door keeps the door.
 | `Engine::MainLoop`, `Save::SaveLoad`, `Save::SavedState` | NO — heap (`MemAlloc` + imported ctor) | deep (MainLoop 0x180031580 Array copy; SaveLoad 0x180030d50 String refcount + Arrays) | NO | ctor/dtor doors stay (exe imports them); members convert |
 | `Application`, `AchievementManager`, `Audio::Configuration`, `Audio::Device`, `Input::Configuration`, `Input::Device`, `Input::KeyMap` | NO — heap, ctor INLINED in `Engine::Startup` / `Configuration::Startup` | shallow or none | — | ctors are the `singleton_ctors.cpp` stampers today (`Ctor_Application`, `Ctor_AudioDevice`, `Ctor_InputDevice`, `Ctor_InputConfiguration`, `Ctor_AudioConfiguration`); keep them as doors this step |
 
+**The by-value EXE holders (b37-0X: MenuDLT+0xb30 `Audio::Scene`, exe Game+0x8 `Picking::Scene`,
+`GameMain`'s stack `Engine`) and B5-4.** All three held classes are non-polymorphic, so they are concrete
+by construction; no abstract-class problem arises. The holders are unconverted exe PODs that construct in
+place through the ctor DOORS (`engine_funcs.h:2610`, `gameupdateloop_load.cpp:639-641`,
+`game_main.cpp:446`). By the B4b-3 ruling, a POD holding a POD does not trigger `= default` + `friend`.
+So in step 7: the ctor/dtor doors stay callable, and the classes get public members. A C++ holder, and
+with it the protected ctor and `friend` shape, arrives with the exe subclasses in step 8.
+
 ### 2.5 Hidden return slots — 31 exports, ONE through a vtable slot
 
 `B37_SLOTS.md` §4 lists 25; the script's `@@` anchor skipped the six `Achievement::Achievement` retslots,
@@ -573,7 +581,12 @@ PASS** (`blocks.py`); five body straddlers, all resolved without a line split �
 holds `Application`'s unexported scalar deleting dtor (0x18004da00). Two more one-definition items the file
 map found: `pickingmesh.cpp:87`'s anonymous-namespace `PickingMesh` (full Array header, capacity at +0x44)
 duplicates `RtPicking::PickingMesh`, and `loops.cpp:1023-1027` (`LoaderLoopLoader()`, a function-local
-`static Loader* p = ResolveExport(...)` read on the loader thread) is a further B6-5 site (B7-7).
+`static Loader* p = ResolveExport(...)` read on the loader thread) is a further B6-5 site (B7-7). Coordinator edits at merges (`B37_FILEMAP.md` §7.1):
+`runtime/types/ui/UserInterface.h` carries the `friend` declarations of the `RtEngine` loop PODs (B1) and
+the tree's only `namespace Audio` forward declaration (B4); `engine_funcs.h`'s `MenuDialogLoopT_Ctor`
+(`:2601-2615`, B1 + B4) is the closing sweep's; `input_platform_shutdown_win.cpp` (B5) includes B1's
+`Application.h`, so B5 runs after B1. The file map's "15 mint rows" is the 15 EXPORTED `??_7` rows; with the
+unnamed 0x180157c60 row the mint holds 16.
 
 ---
 
