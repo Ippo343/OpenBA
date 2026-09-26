@@ -27,7 +27,7 @@
 //
 // | Ord  | Export                                            | Retail      | This lane |
 // |------|---------------------------------------------------|-------------|-----------|
-// | 3401 | ?PlatformStartup@AchievementManager@Achievement@@  | 0x18009eb70 | PORTED here |
+// | 3401 | ?PlatformStartup@AchievementManager@Achievement@@  | 0x18009eb70 | PORTED here (member since the B.3.7 fragment) |
 // | 3402 | ?PlatformStartup@Application@1@                    | 0x18009fc10 | PORTED here — THE WALL |
 // | 3403 | ?PlatformStartup@Device@Audio@@                    | 0x1800de600 | DECLINED, see WAVE9_LANE_PLAT.md |
 // | 3404 | ?PlatformStartup@Device@Input@@                    | 0x1800e1880 | DECLINED, see WAVE9_LANE_PLAT.md |
@@ -76,6 +76,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 #include "../../types/engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
+#include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: AchievementManager::PlatformStartup
 #include "../collection/set_avl.h"
 #include "../system/widestring.h"
 
@@ -423,8 +424,15 @@ extern "C" void RtApp_PlatformShutdown(App* self) {
 //     18009eb72: RET
 // `this` is never touched. There is no achievement backend to bring up in this
 // build; the class's platform hook is a stub in the shipped DLL.
-extern "C" bool RtAchievement_AchievementManager_PlatformStartup(void* /*self*/) {
+// ENDGAME B.3.7 fragment: the body is the member's; the registered door
+// delegates with a QUALIFIED call (the class is non-polymorphic, so the
+// qualifier is only the house shape here).
+bool Achievement::AchievementManager::PlatformStartup() {
     return true;
+}
+
+extern "C" bool RtAchievement_AchievementManager_PlatformStartup(void* self) {
+    return reinterpret_cast<Achievement::AchievementManager*>(self)->Achievement::AchievementManager::PlatformStartup();  // B.3.7 bridge
 }
 
 // ?PlatformStartup@ExternalFactory@Object@@AEAA_NXZ           0x1800bf6c0 ord 3407

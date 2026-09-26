@@ -200,6 +200,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformStartup / PlatformShutdown
+#include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: the ctor door's named fields
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
@@ -344,10 +345,24 @@ extern "C" void* RtSystem_Configuration_Ctor(void* self) {
 //
 // Eight qwords and a dword, then the singleton. Identical to the inlined block
 // at 0x1800dbe55-0x1800dbe83.
+//
+// ENDGAME B.3.7 fragment: the stores name the class's fields (same bytes:
+// +0x00..+0x3f and the dword at +0x40; `_pad44` stays untouched, as retail
+// leaves it). The door stays a door (B36_RULES 7 / B7-13).
 extern "C" void* RtAchievement_AchievementManager_Ctor(void* self) {
-    uint8_t* p = static_cast<uint8_t*>(self);
-    for (int i = 0; i < 8; ++i) *reinterpret_cast<void**>(p + i * 8) = nullptr;
-    *reinterpret_cast<int32_t*>(p + 0x40) = 0;
+    auto* m = reinterpret_cast<Achievement::AchievementManager*>(self);  // B.3.7 bridge
+    m->_achievements          = nullptr;   // +0x00
+    m->_completed._data       = nullptr;   // +0x08
+    m->_completed._size       = 0;         // +0x10
+    m->_completed._capacity   = 0;         // +0x14
+    m->_instances._data       = nullptr;   // +0x18
+    m->_instances._size       = 0;         // +0x20
+    m->_instances._capacity   = 0;         // +0x24
+    m->_eventHandler          = nullptr;   // +0x28
+    m->_updateTimes._data     = nullptr;   // +0x30
+    m->_updateTimes._size     = 0;         // +0x38
+    m->_updateTimes._capacity = 0;         // +0x3c
+    m->_lastAchievementUpdate = 0;         // +0x40
     if (void** slot = AchievementManagerSingletonSlot()) *slot = self;
     return self;
 }

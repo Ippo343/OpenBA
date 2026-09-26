@@ -211,8 +211,8 @@ static_assert(offsetof(AchievementInstance, _achievement) == 0x20, "AchievementI
 // constructor INLINED there, so the ctor stays the door in
 // runtime/src/engine/engine_lifecycle.cpp (block B1's file); `_singleton`
 // stays an RT_DATA_SLOT / manifest row until the end of B.3 (carry-over 5).
-// `PlatformStartup` is ported in B1's platform_startup_win.cpp and moves in the
-// fragment pass; it is DECLARED here so no one has to edit this header.
+// `PlatformStartup` is defined on the member in B1's platform_startup_win.cpp
+// (the B.3.7 fragment pass); its registered door there delegates to it.
 //
 // THREE OF THE SIX FIELD NAMES ARE THE ENGINE'S OWN, from the profile build's
 // assert strings (`Achievement\AchievementManager.cpp`): `_achievements` (+0x00),
@@ -276,12 +276,13 @@ public:
     bool Startup();                                            // 0x18009eaa0 — not ported (no caller)
     void Shutdown();                                           // 0x18009ea90 — not ported (no caller)
 
-private:
     // The four private `AEAA` platform hooks (exported — this DLL exports its
-    // privates, reference_aeaa_is_private_not_unexported.md).
+    // privates, reference_aeaa_is_private_not_unexported.md). PUBLIC here, as
+    // in Application.h: each registered door is a free function that has to
+    // call its member, and access control is not ABI (B.3.7 fragment).
     void PlatformConstruct();                                  // 0x18009eb50 — not ported
     void PlatformDestruct();                                   // 0x18009eb60 — not ported
-    bool PlatformStartup();                                    // 0x18009eb70 — B1's door (fragment)
+    bool PlatformStartup();                                    // 0x18009eb70 — platform_startup_win.cpp (member since the B.3.7 fragment)
     void PlatformShutdown();                                   // 0x18009eb80 — not ported
 
 public:
