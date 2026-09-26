@@ -29,64 +29,96 @@
 // are kept in two registers (RSI = container, RDI = clip region) and NEITHER is
 // re-read from the caller's slot, so the whole body is written with two locals.
 //
-// Layout: runtime/types/ui/DescriptionsBatch1.h. sizeof 0x90.
+// Layout: runtime/types/ui/ContainerDescription.h (the real class, B.3.6
+// block C4; cross-asserted against DescriptionsBatch1.h's POD). sizeof 0x90.
+//
+// ENDGAME B.3.6 block C4: every body below is a MEMBER of
+// UI::ContainerDescription; each registered door is a one-line QUALIFIED
+// delegation (a live description wears the MINTED table, whose slots resolve
+// back to these doors). RULE B6-5: the vtables, the type-info record and the
+// ctor door the members reach are cached in namespace-scope std::atomic slots,
+// never in a function-local static.
 // ============================================================================
+#include <atomic>
+#include <new>
+
 #include "description_common.h"
-#include "../../types/ui/DescriptionsBatch1.h"
+#include "../../types/ui/ContainerDescription.h"
+#include "../../types/ui/ContainerElement.h"
+
+// UI::ClipRegionElement is block C1's class. CreateInstance builds one inline
+// (retail inlines its ctor); its own bytes are reached raw below, exactly as
+// before, and the site is on the fragment list.
+namespace UI { class ClipRegionElement; }
 
 namespace {
 
 using namespace rtdesc;
 
-void* VtContainerDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblContainerDescription); }
-void* VtContainerElement()     { return RT_DATA_SLOT(void*, RtUI::kVtblContainerElement); }
-void* VtClipRegionElement()    { return RT_DATA_SLOT(void*, RtUI::kVtblClipRegionElement); }
-const uint8_t* ContainerTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A");
+// RULE B6-5 door cache: RT_DATA_SLOT's never-cache-a-null contract, in a
+// namespace-scope atomic instead of a function-local static.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
 
+std::atomic<void*> g_vtContainerDescription{nullptr};
+std::atomic<void*> g_vtContainerElement{nullptr};
+std::atomic<void*> g_vtClipRegionElement{nullptr};
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_ctor{nullptr};
+
+void* VtContainerDescription() {
+    return AtomicExport(g_vtContainerDescription, RtUI::kVtblContainerDescription);
+}
+void* VtContainerElement()  { return AtomicExport(g_vtContainerElement, RtUI::kVtblContainerElement); }
+void* VtClipRegionElement() { return AtomicExport(g_vtClipRegionElement, RtUI::kVtblClipRegionElement); }
+const uint8_t* ContainerTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@ContainerDescription@UI@@0VBaseTypeInfo@Object@@A"));
+}
+
+// ??0ContainerDescription@UI@@QEAA@XZ (0x1800cd060) — factory_ui1.cpp's door.
 void* ContainerCtor(void* self) {
     using CtorFn = void* (*)(void*);
-    return RT_EXPORT_ONCE(CtorFn, "??0ContainerDescription@UI@@QEAA@XZ")(self);
+    return reinterpret_cast<CtorFn>(
+        AtomicExport(g_ctor, "??0ContainerDescription@UI@@QEAA@XZ"))(self);
 }
 
 }  // namespace
 
-extern "C" uint32_t RtUi_ContainerDescription_Type(const void*) {
+// ============================================================================
+// The member bodies (ENDGAME B.3.6 block C4)
+// ============================================================================
+namespace UI {
+
+uint32_t ContainerDescription::Type() const {
     const uint8_t* ti = ContainerTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_ContainerDescription_TypeName(const void*) {
+const char* ContainerDescription::TypeName() const {
     const uint8_t* ti = ContainerTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
-extern "C" int32_t RtUi_ContainerDescription_GetFileVersion(const void*) { return 0x204; }
+int32_t ContainerDescription::GetFileVersion() const { return 0x204; }
 
-extern "C" void* RtUi_ContainerDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                   // 180039a73
-    return ContainerCtor(selfv);                            // 180039a68 JMP
+// 0x180039a70 — the null test stays in the door.
+Object::External* ContainerDescription::Construct() {
+    return static_cast<Object::External*>(ContainerCtor(this));    // 180039a68 JMP
 }
-extern "C" void* RtUi_ContainerDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                    // 180039a5e
-    return ContainerCtor(selfv);                            // 180039a68 JMP
+// 0x180039a50 — slot 0 with flag 0 (destroy, do not free), then the ctor. The
+// slot-0 call is VIRTUAL, as in retail: it runs the minted deleting-dtor row.
+Object::External* ContainerDescription::Reconstruct() {
+    DeletingDtor(0);                                        // 180039a5e
+    return static_cast<Object::External*>(ContainerCtor(this));    // 180039a68 JMP
 }
-extern "C" void RtUi_ContainerDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
-// ============================================================================
-// ??1ContainerDescription@UI@@UEAA@XZ   0x1800ccff0
-// ============================================================================
-extern "C" void RtUi_ContainerDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtContainerDescription();                          // 1800cd00d
-    *v = VtElementDescription();                            // 1800cd017
-    ReleaseStringField(p, 0x60);                            // 1800cd01a
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cd04c JMP
-}
+// 0x180039a80
+void ContainerDescription::Destruct() { DeletingDtor(0); }
 
 // ============================================================================
 // ?Serialize@ContainerDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cced0
@@ -96,26 +128,25 @@ extern "C" void RtUi_ContainerDescription_Dtor(void* selfv) {
 // descriptions, and only THEN the two bools at +0x70/+0x71 — which sit between
 // the ints in memory. Sorting them into offset order would change the byte
 // stream a .rsc parses.
-extern "C" bool RtUi_ContainerDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+bool ContainerDescription::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
 
-    ElementDescriptionSerialize(p, stream);                 // 1800cceea
+    UI::ElementDescription::Serialize(stream);              // 1800cceea (qualified)
 
     Serializer ser = { stream, nullptr };
     void* rw = MakeReaderWriter(stream, &ser);
 
-    RwScalar(rw, kRwScalarInt, p + 0x68);                   // 1800ccf2e
-    RwScalar(rw, kRwScalarInt, p + 0x6c);                   // 1800ccf43
-    RwScalar(rw, kRwScalarInt, p + 0x74);                   // 1800ccf58
+    RwScalar(rw, kRwScalarInt, &_requestedWidth);           // 1800ccf2e
+    RwScalar(rw, kRwScalarInt, &_requestedHeight);          // 1800ccf43
+    RwScalar(rw, kRwScalarInt, &_barSize);                  // 1800ccf58
 
     using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x78, &ser);     // 1800ccf5e
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x80, &ser);     // 1800ccf6c
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x88, &ser);     // 1800ccf7d
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[0], &ser);   // 1800ccf5e
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[1], &ser);   // 1800ccf6c
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[2], &ser);   // 1800ccf7d
 
-    RwScalar(rw, kRwScalarBool, p + 0x70);                  // 1800ccf9d
-    RwScalar(rw, kRwScalarBool, p + 0x71);                  // 1800ccfaf
+    RwScalar(rw, kRwScalarBool, &_clampWidth);              // 1800ccf9d
+    RwScalar(rw, kRwScalarBool, &_clampHeight);             // 1800ccfaf
 
     DestroyReaderWriter(rw);                                // 1800ccfc5
     return true;
@@ -134,44 +165,47 @@ extern "C" bool RtUi_ContainerDescription_Serialize(void* selfv, void* streamv) 
 //  3. ClipRegionElement (0xd8), its constructor inlined exactly as in
 //     runtime/src/ui/clipregiondescription.cpp, including the two UNALIGNED
 //     qwords at +0xc4 and +0xcc.
-//  4. child = CreateElement(dialog, &slot, self->_childDesc[2]) attached to the
+//  4. child = CreateElement(dialog, &slot, _partDescs[2]) attached to the
 //     CLIP REGION, not the container.
-//  5. clip->vt[0x20](clip) TWICE. Two identical virtual calls in a row; kept.
+//  5. clip->ComputeSize() TWICE. Two identical virtual calls in a row; kept.
 //  6. the size negotiation (see below)
 //  7. the container's own five fields are copied from the description
 //  8. slot = clip ; clip->_parent = container ; push clip into container
-//  9. two more children from _childDesc[1] and _childDesc[0], in that order —
+//  9. two more children from _partDescs[1] and _partDescs[0], in that order —
 //     DESCENDING, and after the clip region, so the final child order is
 //     [clip, desc1, desc0].
 //
 // STEP 6, TRANSCRIBED LITERALLY because its shape is not obvious:
 //     w = clip->+0xc8
-//     h = self->_height ; if (h <= 0) h = clip->+0xcc
-//     t = self->_width  ; if (t >  0) w = t
+//     h = _requestedHeight ; if (h <= 0) h = clip->+0xcc
+//     t = _requestedWidth  ; if (t >  0) w = t
 //     if (clip->+0xc0 != w || clip->+0xc4 != h) { store both; mark the chain }
 // i.e. the description's extents override the clip region's measured ones only
 // when positive, and the mark is skipped when nothing changed.
-extern "C" void** RtUi_ContainerDescription_CreateInstance(const void* selfv,
-                                                           void** ret,
-                                                           const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
+//
+// The ClipRegionElement's OWN fields (+0xc0..+0xd4) belong to block C1's
+// header; they stay raw offsets here (fragment list).
+Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     // ---- 1. the container ---------------------------------------------------
     void* rawC = MemAlloc(0xd8, 8);                         // 1800ccbd6
-    uint8_t* container = nullptr;
+    ContainerElement* container = nullptr;
     if (rawC != nullptr) {                                  // 1800ccc01
         ElementCtor(rawC);                                  // 1800ccc06
-        uint8_t* e = static_cast<uint8_t*>(rawC);
-        *reinterpret_cast<void**>(e)           = VtContainerElement();  // 1800ccc13
-        *reinterpret_cast<int32_t*>(e + 0xc8)  = 0;                     // 1800ccc18
-        *reinterpret_cast<uint16_t*>(e + 0xcc) = 0;                     // 1800ccc1e WORD
-        *reinterpret_cast<int32_t*>(e + 0xd0)  = 0;                     // 1800ccc25
-        container = e;
+        *reinterpret_cast<void**>(rawC) = VtContainerElement();          // 1800ccc13
+        container = reinterpret_cast<ContainerElement*>(rawC);           // B.3.6 bridge
+        container->_barSize      = 0;                                    // 1800ccc18
+        container->_clampWidth   = 0;                                    // 1800ccc1e WORD
+        container->_clampHeight  = 0;
+        container->_wheelImpulse = 0;                                    // 1800ccc25
     }
 
     // ---- 2. the base applier ------------------------------------------------
+    // ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@… (0x180115ad0)
+    // is name-hidden by slot 8 and its body is still a dialog.cpp door, so it
+    // is reached by address, as before.
     void* slot = container;                                 // 1800ccc31
-    ElementDescriptionApply(self, &slot);                   // 1800ccc3e
+    ElementDescriptionApply(this, &slot);                   // 1800ccc3e
 
     // ---- 3. the clip region -------------------------------------------------
     void* rawR = MemAlloc(0xd8, 8);                         // 1800ccc60
@@ -187,69 +221,112 @@ extern "C" void** RtUi_ContainerDescription_CreateInstance(const void* selfv,
         *reinterpret_cast<int32_t*>(e + 0xd4) = 0;                      // 1800cccc0
         clip = e;
     }
+    Element* const clipElem = reinterpret_cast<Element*>(clip);         // B.3.6 bridge
 
     // ---- 4. the clip region's child -----------------------------------------
-    void** made = DialogCreateElement(dialog, &slot,
-                                      *reinterpret_cast<void* const*>(self + 0x88)); // 1800cccda
+    void** made = DialogCreateElement(dialog, &slot, _partDescs[2]);    // 1800cccda
     AttachAndPushChild(clip, made);                         // 1800ccce7 .. 1800ccd24
 
-    // ---- 5. two identical virtual calls -------------------------------------
-    {
-        using LayoutFn = void (*)(void*);
-        reinterpret_cast<LayoutFn>(VTableOf(clip)[0x20 / 8])(clip);     // 1800ccd2c
-        reinterpret_cast<LayoutFn>(VTableOf(clip)[0x20 / 8])(clip);     // 1800ccd35
-    }
+    // ---- 5. two identical virtual calls (slot 4) ----------------------------
+    clipElem->ComputeSize();                                // 1800ccd2c
+    clipElem->ComputeSize();                                // 1800ccd35
 
     // ---- 6. the size negotiation --------------------------------------------
     {
         int32_t w = *reinterpret_cast<int32_t*>(clip + 0xc8);           // 1800ccd38
-        int32_t h = *reinterpret_cast<const int32_t*>(self + 0x6c);     // 1800ccd3e
+        int32_t h = _requestedHeight;                                   // 1800ccd3e
         if (h <= 0) h = *reinterpret_cast<int32_t*>(clip + 0xcc);       // 1800ccd46
-        const int32_t t = *reinterpret_cast<const int32_t*>(self + 0x68);
+        const int32_t t = _requestedWidth;
         if (t > 0) w = t;                                              // 1800ccd52 CMOVG
         if (*reinterpret_cast<int32_t*>(clip + 0xc0) != w ||            // 1800ccd55
             *reinterpret_cast<int32_t*>(clip + 0xc4) != h) {            // 1800ccd5d
             *reinterpret_cast<int32_t*>(clip + 0xc0) = w;               // 1800ccd65
             *reinterpret_cast<int32_t*>(clip + 0xc4) = h;               // 1800ccd6b
-            MarkNeedsSizeCalc(clip);                                    // 1800ccd80
+            clipElem->SetNeedsSizeCalc();                               // 1800ccd80
         }
     }
 
     // ---- 7. the container's own fields --------------------------------------
-    *reinterpret_cast<int32_t*>(container + 0xc8) =
-        *reinterpret_cast<const int32_t*>(self + 0x74);     // 1800ccd96
-    *reinterpret_cast<int32_t*>(container + 0xc0) =
-        *reinterpret_cast<const int32_t*>(self + 0x68);     // 1800ccda0
-    *reinterpret_cast<int32_t*>(container + 0xc4) =
-        *reinterpret_cast<const int32_t*>(self + 0x6c);     // 1800ccdaa
-    *reinterpret_cast<uint8_t*>(container + 0xcc) =
-        *reinterpret_cast<const uint8_t*>(self + 0x70);     // 1800ccdb4 BYTE
-    *reinterpret_cast<uint8_t*>(container + 0xcd) =
-        *reinterpret_cast<const uint8_t*>(self + 0x71);     // 1800ccdbf BYTE
+    container->_barSize         = _barSize;                 // 1800ccd96
+    container->_requestedWidth  = _requestedWidth;          // 1800ccda0
+    container->_requestedHeight = _requestedHeight;         // 1800ccdaa
+    container->_clampWidth      = _clampWidth;              // 1800ccdb4 BYTE
+    container->_clampHeight     = _clampHeight;             // 1800ccdbf BYTE
 
     // ---- 8. the clip region becomes the container's first child -------------
     slot = clip;                                            // 1800ccdca
-    *reinterpret_cast<void**>(clip + kElemParent) = container;   // 1800ccdcf
+    clipElem->_parent = container;                          // 1800ccdcf
     {
         using PushFn = void (*)(void*, int, const void*);
         RtAddr<PushFn>(0x180076900ull)(
-            container + kElemChildren,
-            *reinterpret_cast<int32_t*>(container + kElemChildren + 8) + 1,
-            &slot);                                         // 1800ccdea
-        MarkNeedsSizeCalc(container);                       // 1800ccdf2
+            &container->_children, container->_children.GetSize() + 1, &slot);  // 1800ccdea
+        container->SetNeedsSizeCalc();                      // 1800ccdf2
     }
 
     // ---- 9. the container's two remaining children, DESCENDING --------------
-    made = DialogCreateElement(dialog, &slot,
-                               *reinterpret_cast<void* const*>(self + 0x80));  // 1800cce17
-    AttachAndPushChild(container, made);                    // 1800cce24 .. 1800cce54
+    uint8_t* const containerBytes = reinterpret_cast<uint8_t*>(container);
+    made = DialogCreateElement(dialog, &slot, _partDescs[1]);           // 1800cce17
+    AttachAndPushChild(containerBytes, made);               // 1800cce24 .. 1800cce54
 
-    made = DialogCreateElement(dialog, &slot,
-                               *reinterpret_cast<void* const*>(self + 0x78));  // 1800cce62
-    AttachAndPushChild(container, made);                    // 1800cce6f .. 1800ccea4
+    made = DialogCreateElement(dialog, &slot, _partDescs[0]);           // 1800cce62
+    AttachAndPushChild(containerBytes, made);               // 1800cce6f .. 1800ccea4
 
-    *ret = container;                                       // 1800ccea6
+    *reinterpret_cast<void**>(ret) = container;             // 1800ccea6
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+using UI::ContainerDescription;
+
+extern "C" uint32_t RtUi_ContainerDescription_Type(const ContainerDescription* self) {
+    return self->UI::ContainerDescription::Type();
+}
+extern "C" const char* RtUi_ContainerDescription_TypeName(const ContainerDescription* self) {
+    return self->UI::ContainerDescription::TypeName();
+}
+extern "C" int32_t RtUi_ContainerDescription_GetFileVersion(const ContainerDescription* self) {
+    return self->UI::ContainerDescription::GetFileVersion();
+}
+extern "C" void* RtUi_ContainerDescription_Construct(ContainerDescription* self) {
+    if (self == nullptr) return nullptr;                    // 180039a73
+    return self->UI::ContainerDescription::Construct();
+}
+extern "C" void* RtUi_ContainerDescription_Reconstruct(ContainerDescription* self) {
+    return self->UI::ContainerDescription::Reconstruct();
+}
+extern "C" void RtUi_ContainerDescription_Destruct(ContainerDescription* self) {
+    self->UI::ContainerDescription::Destruct();
+}
+extern "C" bool RtUi_ContainerDescription_Serialize(ContainerDescription* self, void* stream) {
+    return self->UI::ContainerDescription::Serialize(stream);
+}
+// RDX is the caller's slot; the member writes it and hands it back (B6-2).
+extern "C" void** RtUi_ContainerDescription_CreateInstance(const ContainerDescription* self,
+                                                           void** ret,
+                                                           const void* dialog) {
+    return reinterpret_cast<void**>(self->UI::ContainerDescription::CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
+        static_cast<const UI::Dialog*>(dialog)));
+}
+
+// ============================================================================
+// ??1ContainerDescription@UI@@UEAA@XZ   0x1800ccff0 — stays a DOOR (B4b-2)
+// ============================================================================
+extern "C" void RtUi_ContainerDescription_Dtor(void* selfv) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
+    void**   v = reinterpret_cast<void**>(p);
+
+    *v = VtContainerDescription();                          // 1800cd00d
+    *v = VtElementDescription();                            // 1800cd017
+    ReleaseStringField(p, 0x60);                            // 1800cd01a
+
+    using ExtDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cd04c JMP
 }
 
 int RtUiContainerDescriptionRegister() {
