@@ -18,7 +18,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialimagehotkey_funcs.h"
+#include "Tutorial/TutorialImageHotKey.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
@@ -36,91 +37,60 @@
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
 
 // ============================================================
-// Local function pointers resolved on first use
+// Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5: the loader thread
+// serializes tutorial resources; no first-call cache)
 // ============================================================
 
 // TutorialImage External ref serialize helper (0x140027ad0)
-// Serializes/deserializes an External pointer with factory lookup
 typedef void (*fn_ExternalRef_Serialize_t)(void* externalPtr, void* serializer);
-static fn_ExternalRef_Serialize_t s_fn_ExternalRef_Serialize = nullptr;
+static fn_ExternalRef_Serialize_t ExternalRefSerializeFn() {
+    return (fn_ExternalRef_Serialize_t)ResolveAddr(Module::Exe, 0x140027ad0);
+}
 
 // FUN_140027de0 — resolves hotkey string to External ref via ExternalFactory
 typedef void (*fn_ResolveHotkeyRef_t)(void* stringField);
-static fn_ResolveHotkeyRef_t s_fn_ResolveHotkeyRef = nullptr;
-
-static bool s_funcsResolved = false;
-
-static void EnsureFuncsResolved() {
-    if (s_funcsResolved) return;
-    s_funcsResolved = true;
-
-    s_fn_ExternalRef_Serialize = (fn_ExternalRef_Serialize_t)
-        ResolveAddr(Module::Exe, 0x140027ad0);
-    s_fn_ResolveHotkeyRef = (fn_ResolveHotkeyRef_t)
-        ResolveAddr(Module::Exe, 0x140027de0);
+static fn_ResolveHotkeyRef_t ResolveHotkeyRefFn() {
+    return (fn_ResolveHotkeyRef_t)ResolveAddr(Module::Exe, 0x140027de0);
 }
 
 // ============================================================
-// TutorialImageHotKey::Dtor (vtable +0x00, 0x140027d70)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-// Scalar deleting destructor.
-// 1. Set vtable to TutorialImageHotKey
-// 2. Destroy String at +0x30
-// 3. Set vtable to TutorialImage (base)
-// 4. Call External::~External
-// 5. If (flags & 1), free memory
-void* TutorialImageHotKey_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
+// ctor 0x1400e0680: External(), the TutorialImage stamp + its two zeroed
+// fields (TutorialImage()), the own stamp, then the derived fields.
+TutorialImageHotKey::TutorialImageHotKey()
+    : hotkeyName(0), _field38(-1), _pad3C{}, _field40(nullptr) {}
 
-    // Set vtable to TutorialImageHotKey
-    uintptr_t vtable = ResolveAddr(Module::Exe, TutorialImageHotKeyAddr::Vtable);
-    *(uintptr_t*)s = vtable;
+// The dtor inside [0] 0x140027d70: ~String +0x30; the compiler re-stamps
+// TutorialImage and runs ~External.
+TutorialImageHotKey::~TutorialImageHotKey() {
+    reinterpret_cast<System::String*>(&hotkeyName)->~String();   // B.3.1 bridge
+}
 
-    // Destroy String at +0x30
-    reinterpret_cast<System::String*>(s + 0x30)->~String();
-
-    // Set vtable to TutorialImage (base)
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialImageAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-
-    // Call External::~External
-    if (fn_External_Dtor) {
-        fn_External_Dtor(self);
-    }
-
-    // Conditional free
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
+// [0] 0x140027d70: ~TutorialImageHotKey, MemFree on &1.
+Object::Base* TutorialImageHotKey::DeletingDtor(unsigned flags) {
+    this->~TutorialImageHotKey();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
 // TutorialImageHotKey::Serialize (vtable +0x28, 0x1400e0540)
 // ============================================================
-// Two-phase serialization:
-// Phase 1: Serialize base TutorialImage fields (int +0x28, int +0x2c, external ref +0x20)
-// Phase 2: Serialize HotKey string +0x30, resolve external ref on load
-void TutorialImageHotKey_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-    EnsureFuncsResolved();
+// Phase 1: the TutorialImage fields (int +0x28, int +0x2c, external ref +0x20)
+// Phase 2: the hot key string +0x30, resolved on load
+bool TutorialImageHotKey::Serialize(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Phase 1: Base TutorialImage fields
     alignas(8) uint8_t ser1[32];
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // Serialize int at +0x28
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-
-    // Serialize int at +0x2c
     reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
 
-    // Serialize external ref at +0x20
-    if (s_fn_ExternalRef_Serialize) {
-        s_fn_ExternalRef_Serialize((void*)(s + 0x20), ser1);
+    if (auto serializeRef = ExternalRefSerializeFn()) {
+        serializeRef((void*)(s + 0x20), ser1);
     }
 
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
@@ -130,69 +100,29 @@ void TutorialImageHotKey_Serialize(void* self, void* stream) {
     ::new (static_cast<void*>(ser2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize String at +0x30
-    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser2);
+    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser2);   // B.3.1 bridge
 
     // If loading (version == 0), resolve the hotkey string to an External ref
     int version = reinterpret_cast<IO::Serializer*>(ser2)->GetVersion();   // B.3.4 bridge
     if (version == 0) {
-        if (s_fn_ResolveHotkeyRef) {
-            s_fn_ResolveHotkeyRef((void*)(s + 0x30));
+        if (auto resolve = ResolveHotkeyRefFn()) {
+            resolve((void*)(s + 0x30));
         }
     }
 
     reinterpret_cast<IO::Serializer*>(ser2)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// TutorialImageHotKey::Cleanup (vtable +0x30, 0x140027d50)
+// TutorialImageHotKey::Reconstruct [6] 0x140027d50 / Construct [8] 0x140027d40
 // ============================================================
-// Calls dtor(self, 0) via vtable, then re-initializes via Ctor.
-void TutorialImageHotKey_Cleanup(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Call ScalarDtor(self, 0) via vtable — destroys fields
-    uintptr_t* vtable = *(uintptr_t**)s;
-    typedef void* (*DtorFn)(void*, uint32_t);
-    DtorFn dtor = (DtorFn)vtable[0];
-    dtor(self, 0);
-
-    // Re-initialize
-    TutorialImageHotKey_Ctor(self);
+Object::External* TutorialImageHotKey::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialImageHotKey();
 }
-
-// ============================================================
-// TutorialImageHotKey::Ctor (real at 0x1400e0680)
-// ============================================================
-// Called by factory after allocation and by Cleanup for re-init.
-// 1. Call External::External base init
-// 2. Set vtable to TutorialImage, zero base fields
-// 3. Set vtable to TutorialImageHotKey, zero derived fields
-void* TutorialImageHotKey_Ctor(void* self) {
-    if (self == nullptr) {
-        return nullptr;
-    }
-
-    uintptr_t s = (uintptr_t)self;
-
-    // Call External::External base init
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable to TutorialImage (base), zero base fields
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialImageAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-    *(uint64_t*)(s + 0x20) = 0;  // imageRef = null
-    *(uint64_t*)(s + 0x28) = 0;  // field28 + field2c = 0
-
-    // Set vtable to TutorialImageHotKey, init derived fields
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialImageHotKeyAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
-    *(uint64_t*)(s + 0x30) = 0;       // hotkeyName = empty string
-    *(int32_t*)(s + 0x38) = -1;       // field38 = -1 sentinel
-    *(uint64_t*)(s + 0x40) = 0;       // field40 = null
-
-    return self;
+Object::External* TutorialImageHotKey::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialImageHotKey();
 }
 
 // ============================================================
@@ -206,9 +136,8 @@ void* TutorialImageHotKey_Ctor(void* self) {
 //   param_1 = self (TutorialImageHotKey*)
 //   param_2 = retIBP (InternalBasePtr* — return buffer, also output)
 //   param_3 = dialog (Dialog* — parent dialog to create element in)
-void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
-    EnsureFuncsResolved();
-    uintptr_t s = (uintptr_t)self;
+void* TutorialImageHotKey::CreateElement(void* retIBP, void* dialog) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // 1. Create UI element from imageRef at +0x20
     ::new (retIBP) Object::InternalPtr<UI::Element>(
@@ -242,8 +171,8 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
             reinterpret_cast<RtObject::Internal*>(textElement));   // B.3.3 bridge
 
     // 7. Resolve hotkey ref from string at +0x30
-    if (s_fn_ResolveHotkeyRef)
-        s_fn_ResolveHotkeyRef((void*)(s + 0x30));
+    if (auto resolve = ResolveHotkeyRefFn())
+        resolve((void*)(s + 0x30));
 
     // 8. Get actual KeyMap object (triple deref from exref)
     void* keymap = nullptr;
@@ -264,8 +193,8 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
         deviceType = reinterpret_cast<const Input::KeyMap*>(keymap)->GetDeviceForId(keyId, 0);  // B.3.7 bridge
 
     // 11. Resolve hotkey ref again (matches original)
-    if (s_fn_ResolveHotkeyRef)
-        s_fn_ResolveHotkeyRef((void*)(s + 0x30));
+    if (auto resolve = ResolveHotkeyRefFn())
+        resolve((void*)(s + 0x30));
 
     // 12. Get input index for this key
     int inputIndex = 0;
@@ -289,43 +218,17 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
     return retIBP;
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160ab0 (9 slots, Object::External base), size 0x48, parent "TutorialImage".
-// GetFileVersion (+0x18) = 0x1001. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// create 0x140027d00: MemAlloc(0x48, 8), then the ctor.
+void* TutorialImageHotKey::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialImageHotKey), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialImageHotKey());
+}
+// createInPlace 0x140027d40.
+void* TutorialImageHotKey::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialImageHotKey());
+}
 
-static uint32_t TutorialImageHotKey_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialImageHotKey");
-    return c;
-}
-static int TutorialImageHotKey_GetFileVersion(void*) { return 0x1001; }
-
-static void* g_TutorialImageHotKey_Vtable[10] = {
-    (void*)&TutorialImageHotKey_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialImageHotKey_GetTypeId,       // +0x10 GetTypeId
-    (void*)&TutorialImageHotKey_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialImageHotKey_Serialize,       // +0x28 Serialize
-    (void*)&TutorialImageHotKey_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialImageHotKey_Ctor,   // +0x40 Ctor/CreateInPlace (0x140027d40)
-    (void*)&TutorialImageHotKey_Slot9,   // +0x48 BuildElement (0x1400e0420)
-};
-
-extern "C" void RegisterTutorialImageHotKeyVtable() {
-    RegisterExeAddr(0x140160ab0, (uintptr_t)g_TutorialImageHotKey_Vtable);
-}
-extern "C" void* TutorialImageHotKey_CreateInPlace(void* mem) {
-    return TutorialImageHotKey_Ctor(mem);
-}
-extern "C" void* TutorialImageHotKey_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-    return p ? TutorialImageHotKey_Ctor(p) : nullptr;
-}
-REGISTER_TYPE(TutorialImageHotKey, "TutorialImage", &TutorialImageHotKey_Factory, &TutorialImageHotKey_CreateInPlace);
+DEFINE_EXE_VTABLE(TutorialImageHotKey, "_ZTV19TutorialImageHotKey")
+DEFINE_EXE_TYPE(TutorialImageHotKey, "TutorialImage")

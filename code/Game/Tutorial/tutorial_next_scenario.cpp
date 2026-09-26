@@ -43,7 +43,7 @@
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
-#include "Tutorial/tutorial_funcs.h"
+#include "Tutorial/Tutorial.h"
 #include "io/Persistence.h"   // ENDGAME B.3.4 caller batch P
 #include "io/FileSystem.h"    // ENDGAME B.3.4 caller batch P
 #include "save/SaveLoad.h"    // ENDGAME B.3.7 callers (K2)

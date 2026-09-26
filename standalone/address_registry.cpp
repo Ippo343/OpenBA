@@ -52,15 +52,8 @@ extern "C" void SetStandaloneKeyMap(void* keyMap) {
 // reimplementation in code/Game/<Module>/<Class>.cpp.
 extern "C" {
     void RegisterStatGoalVtable();
-    void RegisterTimeGoalVtable();
-    void RegisterScenarioVtable();
     void RegisterToolbarVtable();
     void RegisterMusicListVtable();
-    void RegisterBuildingGoalVtable();
-    void RegisterPopulationGoalVtable();
-    void RegisterTimeGoalInstanceVtable();
-    void RegisterFinishTutorialGoalVtable();
-    void RegisterFinishTutorialInstanceVtable();
     void RegisterMainMenuDialogVtable();
     void RegisterOptionsDialogVtable();
     void RegisterNewGameDialogVtable();
@@ -130,18 +123,6 @@ extern "C" {
 
     // Factory cascade — External-resource family (Object::External, 9-slot
     // vtables w/ GetFileVersion @ +0x18; MusicList pattern). Tutorial types.
-    void RegisterTutorialVtable();
-    void RegisterTutorialGoalButtonVtable();
-    void RegisterTutorialGoalGameSpeedVtable();
-    void RegisterTutorialGoalCountVtable();
-    void RegisterTutorialImageVtable();
-    void RegisterTutorialImageHotKeyVtable();
-    void RegisterTutorialImageInputKeyVtable();
-    void RegisterTutorialImageToolbarIconVtable();
-    void RegisterTutorialSetupCameraVtable();
-    void RegisterTutorialSetupGameSpeedVtable();
-    void RegisterTutorialSetupRestrictPlayerVtable();
-    void RegisterTutorialStepVtable();
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
     // no tool vtable is registered at its exe address any more.
@@ -1693,15 +1674,8 @@ static void RegisterVtablesAndTypeIds() {
     // Per-class vtables defined alongside their reimplementation in
     // code/Game/<Module>/<Class>.cpp — declared at file scope above.
     RegisterStatGoalVtable();
-    RegisterTimeGoalVtable();
-    RegisterScenarioVtable();
     RegisterToolbarVtable();
     RegisterMusicListVtable();
-    RegisterBuildingGoalVtable();
-    RegisterPopulationGoalVtable();
-    RegisterTimeGoalInstanceVtable();
-    RegisterFinishTutorialGoalVtable();
-    RegisterFinishTutorialInstanceVtable();
     RegisterMainMenuDialogVtable();
     RegisterOptionsDialogVtable();
     RegisterNewGameDialogVtable();
@@ -1805,18 +1779,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterPastureWorkVtable();
 
     // Factory cascade — External-resource family (MusicList pattern). Tutorial types.
-    RegisterTutorialVtable();
-    RegisterTutorialGoalButtonVtable();
-    RegisterTutorialGoalGameSpeedVtable();
-    RegisterTutorialGoalCountVtable();
-    RegisterTutorialImageVtable();
-    RegisterTutorialImageHotKeyVtable();
-    RegisterTutorialImageInputKeyVtable();
-    RegisterTutorialImageToolbarIconVtable();
-    RegisterTutorialSetupCameraVtable();
-    RegisterTutorialSetupGameSpeedVtable();
-    RegisterTutorialSetupRestrictPlayerVtable();
-    RegisterTutorialStepVtable();
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
     RegisterPathToolSetSelected();

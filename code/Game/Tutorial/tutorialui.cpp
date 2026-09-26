@@ -1,12 +1,12 @@
-// engine/src/ui/tutorialui.cpp
-// Clean reimplementation of TutorialUI panel methods.
+// code/Game/Tutorial/tutorialui.cpp
+// TutorialUI — the controller on the tutorial step panel.
 //
-// TutorialUI (0x60 bytes): Tutorial step display panel.
-// Layout: +0x30 = unknown, +0x38 = "preText" element, +0x40 = "postText" element,
-//         +0x48 = "imageTable" element, +0x50 = "nextButton" element,
-//         +0x58 = "quitButton" element
+// TutorialUI (0x60 bytes), table 0x140160f30, on UI::DialogController.
+// ENDGAME B.3.8 block GOAL: a real class (Tutorial/TutorialUI.h); the
+// hand-built 48-slot table in tutorial_dialog_vtables.cpp and its
+// dialog_controller_vtable.cpp inherit-fill are gone. Field map: the header.
 
-#include "Dialog/ui_panels.h"
+#include "Tutorial/TutorialUI.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
@@ -17,13 +17,30 @@
 #include "ui/UserInterface.h"                 // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 
+// ============================================================
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
+// ============================================================
+// create 0x140029400: DialogController() (the base's real ctor), the stamp
+// (the compiler's), then +0x30..+0x58 zeroed.
+TutorialUI::TutorialUI()
+    : data30(0), preText(nullptr), postText(nullptr), imageTable(nullptr),
+      nextButton(nullptr), quitButton(nullptr) {}
+
+// [0] 0x140029470: ~TutorialUI (restamp; ~DialogController chained by the
+// compiler), MemFree on &1.
+Object::Base* TutorialUI::DeletingDtor(unsigned flags) {
+    this->~TutorialUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
 // Helper: FindElemByName with IsDerivedFrom check, stores InternalBasePtr
-static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
+static void FindAndStore(void* container, const char* name, void** field) {
     System::String nameBuf(name);
 
     uint64_t foundResult = 0;
     ::new (&foundResult) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::Element*>(*(uint64_t*)(self + 0x20))->FindElement(nameBuf));  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(container)->FindElement(nameBuf));  // B.3.6 bridge
 
     void* found = (void*)foundResult;
     void* checked = nullptr;
@@ -34,48 +51,52 @@ static void FindAndStore(uintptr_t self, const char* name, int fieldOffset) {
     }
     uint64_t stored = 0;
     new (&stored) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(checked));   // B.3.3 bridge
-    *(uint64_t*)(self + fieldOffset) = stored;
+    *field = reinterpret_cast<void*>(stored);
 }
 
-// Serialize (vtable +0x20): Finds named elements, sets button IDs, hides close button.
-void TutorialUI_Serialize(TutorialUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Find and cache UI elements
-    FindAndStore(s, "preText",   0x38);
-    FindAndStore(s, "postText",  0x40);
-    FindAndStore(s, "imageTable", 0x48);
-    FindAndStore(s, "nextButton", 0x50);
-    FindAndStore(s, "quitButton", 0x58);
+// ============================================================
+// TutorialUI::OnCreated (vtable +0x20, 0x1400e37a0)
+// ============================================================
+// Finds the named elements under the container (+0x20), numbers the two
+// buttons and hides the dialog's own "buttonClose".
+void TutorialUI::OnCreated() {
+    FindAndStore(_container, "preText",    &preText);
+    FindAndStore(_container, "postText",   &postText);
+    FindAndStore(_container, "imageTable", &imageTable);
+    FindAndStore(_container, "nextButton", &nextButton);
+    FindAndStore(_container, "quitButton", &quitButton);
 
     // Set button IDs
-    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x50))->SetElementId(0x578);  // nextButton = 1400  // B.3.6 bridge
-    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x58))->SetElementId(0x579);  // quitButton = 1401  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(nextButton)->SetElementId(0x578);  // nextButton = 1400  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(quitButton)->SetElementId(0x579);  // quitButton = 1401  // B.3.6 bridge
 
-    // Hide the "buttonClose" element in the dialog instance
+    // Hide the "buttonClose" element in the owning dialog instance (+0x18)
     System::String closeName("buttonClose");
     uint64_t closeElem = 0;
-    ::new (&closeElem) Object::InternalPtr<UI::Element>(
-        reinterpret_cast<UI::DialogInstance*>(*(uint64_t*)(s + 0x18))->FindElement(closeName));  // B.3.6 bridge
+    ::new (&closeElem) Object::InternalPtr<UI::Element>(_dialog->FindElement(closeName));
     // SetFlagsOnOff(elem, hideFlags=1, showFlags=0) — hide element
     reinterpret_cast<UI::Element*>(closeElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 }
 
-// OnRemove (vtable +0x48): Quit tutorial button handler.
-// On button click (eventType=0x12) for quitButton (id=0x579):
+// ============================================================
+// TutorialUI::OnElementEvent (vtable +0x48, 0x1400e36e0)
+// ============================================================
+// `CMP R8D,0x12; JNZ ret; CMP R9D,0x579; JZ 0x1400e34e0` — a click (event
+// 0x12) on quitButton (id 0x579) quits the tutorial.
+void TutorialUI::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
+                                int32_t a, int32_t b, int32_t /*c*/,
+                                int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    if (a == 0x12 && b == 0x579) QuitTutorial();
+}
+
+// QuitTutorial (0x1400e34e0, the tail of OnElementEvent):
 //   - Destroys the SaveLoad singleton stored at game+0x140.
 //   - Allocates and constructs three nested loop objects:
 //       MenuDialogLoopT (0xc00): "Dialog/MainMenu.rsc" — the main menu dialog loop
 //       GameLoadDialogLoopT (0xb60): "Dialog/Loading.rsc" — loading screen wrapper
 //       GameLoaderLoop (0x48): outermost loader, queued as engine's next loop
 //   - Sets fullscreen fade to black and transitions back to main menu.
-// Called from reimpl/tutorialui.cpp Reimpl_OnRemove.
-void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int eventId) {
-    (void)self;
-    (void)param2;
-    if (eventType != 0x12 || eventId != 0x579)
-        return;
-
+void TutorialUI::QuitTutorial() {
     // Grab the engine singleton (DAT_1401c3dd8 = *g_pGameWorldSingleton)
     uintptr_t eng = (uintptr_t)*g_pGameWorldSingleton;
 
@@ -149,18 +170,36 @@ void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int even
     }
 }
 
-// Startup (vtable +0x38): Toggle visibility of next/quit buttons.
-// If the element has visibility flags (0x1800000) set, hide it; otherwise show it.
-void TutorialUI_Startup(TutorialUI* self) {
-    uintptr_t s = (uintptr_t)self;
-
+// ============================================================
+// TutorialUI::OnUpdateLayout (vtable +0x38, 0x1400e3700)
+// ============================================================
+// Toggle visibility of next/quit buttons: if the element has visibility
+// flags (0x1800000) set, hide it; otherwise show it.
+void TutorialUI::OnUpdateLayout() {
     // nextButton (+0x50): check flags at element +0x34
-    void* nextBtn = (void*)*(uint64_t*)(s + 0x50);
+    void* nextBtn = nextButton;
     bool nextHidden = (*(uint32_t*)((uintptr_t)nextBtn + 0x34) & 0x1800000) != 0;
     reinterpret_cast<UI::Element*>(nextBtn)->SetFlagsOnOff(nextHidden ? 1 : 0, nextHidden ? 0 : 1);  // B.3.6 bridge
 
     // quitButton (+0x58): same check
-    void* quitBtn = (void*)*(uint64_t*)(s + 0x58);
+    void* quitBtn = quitButton;
     bool quitHidden = (*(uint32_t*)((uintptr_t)quitBtn + 0x34) & 0x1800000) != 0;
     reinterpret_cast<UI::Element*>(quitBtn)->SetFlagsOnOff(quitHidden ? 1 : 0, quitHidden ? 0 : 1);  // B.3.6 bridge
 }
+
+// create 0x140029400: MemAlloc(0x60, 8), then the (inlined) ctor.
+void* TutorialUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialUI());
+}
+// Retail's createInPlace is DialogController's import and does not build a
+// controller in place (B8-13); the tree's in-place entry did, and that is kept.
+void* TutorialUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialUI());
+}
+
+DEFINE_EXE_VTABLE(TutorialUI, "_ZTV10TutorialUI")
+// DEFINE_EXE_TYPE(TutorialUI, "UI::DialogController") stays where its
+// REGISTER_TYPE was — tutorial_dialog_vtables.cpp (B38_RULES B8-7).

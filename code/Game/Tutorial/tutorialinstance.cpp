@@ -12,74 +12,37 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialinstance_funcs.h"
+#include "Tutorial/TutorialInstance.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
-#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B; InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
 // ============================================================
-// Local function pointers (resolved lazily)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
+// The ctor inlined in create 0x140028120 and in FinishTutorialInstance's
+// Startup (0x1400d7a90): Internal() (the base's real ctor), the stamp (the
+// compiler's), then the fields. +0x28 is not written (retail's).
+TutorialInstance::TutorialInstance()
+    : currentStep(-1), ibpField18(nullptr), ibpField20(nullptr), tutorialDef(nullptr) {
+    ::new (static_cast<void*>(&ibpField18)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+    ::new (static_cast<void*>(&ibpField20)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
+}
 
-// Internal::~Internal -- dispatch slot 0x140152770
-typedef void (*fn_Internal_Dtor_dispatch_t)(void* self);
-static fn_Internal_Dtor_dispatch_t s_fn_Internal_Dtor = nullptr;
-
-static bool s_resolved = false;
-
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-
-    void** slot;
-
-    // Internal::~Internal
-    slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152770));
-    if (slot && *slot) s_fn_Internal_Dtor = reinterpret_cast<fn_Internal_Dtor_dispatch_t>(*slot);
+// [0] 0x1400281a0: stamp, ~Internal (the InternalFactory swap-remove),
+// MemFree on &1.
+Object::Base* TutorialInstance::DeletingDtor(unsigned flags) {
+    this->~TutorialInstance();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// TutorialInstance_Dtor -- Slot0 (vtable +0x00, 0x1400281a0)
-// ============================================================
-// Scalar destructor: sets vtable, calls Internal::~Internal,
-// optionally frees memory.
-//
-// Disassembly:
-//   LEA RAX,[0x140160bf8]   ; vtable
-//   MOV [RCX],RAX           ; set vtable
-//   CALL [0x140152770]      ; Internal::~Internal
-//   TEST BL,0x1             ; check flags
-//   JZ skip
-//   CALL [0x140152b68]      ; MemFreeStatic
-void* TutorialInstance_Dtor(void* self, uint32_t flags) {
-    EnsureResolved();
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-
-    // Set vtable to TutorialInstance
-    uintptr_t vtable = ResolveAddr(Module::Exe, TutorialInstanceAddr::Vtable);
-    *reinterpret_cast<uintptr_t*>(s) = vtable;
-
-    // Call Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) fn_MemFreeStatic(self);
-    }
-
-    return self;
-}
-
-// ============================================================
-// TutorialInstance_Serialize -- Slot3 (vtable +0x18, 0x1400e1520)
+// TutorialInstance::Persist -- Slot3 (vtable +0x18, 0x1400e1520)
 // ============================================================
 // Serializes the tutorial instance:
 //   1. ExternalPtr<Tutorial> at +0x30 via ExternalPtr_SerializeTutorial
@@ -94,10 +57,8 @@ void* TutorialInstance_Dtor(void* self, uint32_t flags) {
 //   CMP [serializer+8],0  ; check if loading
 //   ...step adjustment loop...
 //   CALL [0x140152ad0]  ; Serializer::~Serializer
-void TutorialInstance_Serialize(void* self, void* stream) {
-    EnsureResolved();
-
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+void TutorialInstance::Persist(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];
@@ -109,14 +70,12 @@ void TutorialInstance_Serialize(void* self, void* stream) {
     }
 
     // 2. Serialize int32_t currentStep at +0x10
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x10), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(currentStep, nullptr);   // B.3.4 bridge
 
     // 3. On load: adjust currentStep backwards if steps are not completed
-    //    The serializer's encoding mode at *(serializer[0]+8) == 0 means "reading"
     if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        // Loading from save -- check if current step needs adjustment
-        void* tutDef = *reinterpret_cast<void**>(s + 0x30);
-        int32_t step = *reinterpret_cast<int32_t*>(s + 0x10);
+        void* tutDef = tutorialDef;
+        int32_t step = currentStep;
 
         if (tutDef != nullptr) {
             uintptr_t td = reinterpret_cast<uintptr_t>(tutDef);
@@ -124,9 +83,7 @@ void TutorialInstance_Serialize(void* self, void* stream) {
 
             // Only adjust if step is within range and positive
             if (step < totalSteps && step > 0) {
-                // Walk backwards: if the current step is not completed, go back
-                // tutDef->+0x28 is the steps array, each element is a pointer
-                // step[i]->+0x20 is the completed bool
+                // tutDef->+0x28 is the steps array; step[i]->+0x20 the completed bool
                 while (step > 0) {
                     void** stepsArray = *reinterpret_cast<void***>(td + 0x28);
                     void* currentStepObj = stepsArray[step];
@@ -134,7 +91,7 @@ void TutorialInstance_Serialize(void* self, void* stream) {
                         reinterpret_cast<uintptr_t>(currentStepObj) + 0x20);
                     if (completed != 0) break;
                     step--;
-                    *reinterpret_cast<int32_t*>(s + 0x10) = step;
+                    currentStep = step;
                 }
             }
         }
@@ -145,41 +102,32 @@ void TutorialInstance_Serialize(void* self, void* stream) {
 }
 
 // ============================================================
-// Standalone factory (factory cascade — concrete landmine removal)
+// By-address doors (B38_RULES D5): standalone/reg_w2_lane2.cpp's opt-in
+// hand table (BANISHED_LIVE_TUTORIALINSTANCE_VT) still names these two by
+// address; each is one QUALIFIED delegation to the member.
 // ============================================================
-// Exe factory TutorialInstance_Factory (0x140028120): MemAlloc(0x38,8) ->
-//   Object::Internal::Internal(p)
-//   *(p)        = &vtable_TutorialInstance (0x140160bf8)
-//   *(int p+0x10) = -1
-//   InternalBasePtr::Ctor(p+0x18, null)
-//   InternalBasePtr::Ctor(p+0x20, null)
-//   *(p+0x30)   = 0
-// Registered as the real factory so CreateObject("TutorialInstance") /
-// External::Load no longer hits the NullFactory -> IsDerivedFrom(NULL) crash.
-// DORMANT-SAFE: installs the exe TutorialInstance vtable only if it resolves in
-// standalone (ResolveAddr != 0); otherwise keeps the Object::Internal base vtable
-// that fn_ObjectInternal_Ctor installs. Nothing currently drives a TutorialInstance.
-static void* TutorialInstance_Build(void* p) {
+void* TutorialInstance_Dtor(void* self, uint32_t flags) {
+    return static_cast<TutorialInstance*>(static_cast<Object::Internal*>(self))->TutorialInstance::DeletingDtor(flags);   // B.3.8 bridge
+}
+void TutorialInstance_Serialize(void* self, void* stream) {
+    static_cast<TutorialInstance*>(static_cast<Object::Internal*>(self))->TutorialInstance::Persist(stream);   // B.3.8 bridge
+}
+
+// ============================================================
+// Reflection (ENDGAME B.3.8)
+// ============================================================
+// create 0x140028120: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* TutorialInstance::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialInstance), 8);
     if (!p) return nullptr;
-    uint8_t* s = reinterpret_cast<uint8_t*>(p);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(p);
-    uintptr_t vt = ResolveAddr(Module::Exe, TutorialInstanceAddr::Vtable);
-    if (vt) *reinterpret_cast<uintptr_t*>(s) = vt;
-    *reinterpret_cast<int32_t*>(s + 0x10) = -1;
-    if (fn_InternalBasePtr_Ctor) {
-        new (s + 0x18) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        new (s + 0x20) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-    }
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    return p;
+    return static_cast<Object::Base*>(::new (p) TutorialInstance());
 }
-extern "C" void* TutorialInstance_CreateInPlace_SA(void* mem) {
-    return TutorialInstance_Build(mem);
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (null);
+// the tree's in-place build is kept (B38_RULES B8-13).
+void* TutorialInstance::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialInstance());
 }
-extern "C" void* TutorialInstance_Factory_SA(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
-    return TutorialInstance_Build(p);
-}
-REGISTER_TYPE(TutorialInstance, "Object::Internal",
-              &TutorialInstance_Factory_SA, &TutorialInstance_CreateInPlace_SA);
+
+DEFINE_EXE_VTABLE(TutorialInstance, "_ZTV16TutorialInstance")
+DEFINE_EXE_TYPE(TutorialInstance, "Object::Internal")

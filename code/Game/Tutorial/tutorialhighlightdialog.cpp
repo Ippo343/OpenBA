@@ -1,7 +1,17 @@
-#include "Dialog/ui_dialogs.h"
+// code/Game/Tutorial/tutorialhighlightdialog.cpp
+// TutorialHighlightDialog — the glow ring and bobbing arrow over the thing the
+// current tutorial step wants clicked.
+//
+// TutorialHighlightDialog (0xF0 bytes), table 0x1401609e0, on UI::DialogInstance.
+// ENDGAME B.3.8 block GOAL: a real class (Tutorial/TutorialHighlightDialog.h);
+// the hand-built 48-slot table and the hand-rolled ctor in
+// tutorial_dialog_vtables.cpp are gone.
+
+#include "Tutorial/TutorialHighlightDialog.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "system/Value.h"   // ENDGAME B.3.4b System callers: System::Time
+#include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Sprite.h"                        // ENDGAME B.3.6 UI callers (K4)
@@ -9,36 +19,62 @@
 #include <new>
 #include <cstdint>
 
-// TutorialHighlightDialog::Startup (0x1400E0020)
-// Finds "glowGroup", "glow", "arrow" elements by name and stores them
-// at +0xC0, +0xC8, +0xD0 respectively.
-void TutorialHighlightDialog_Startup(TutorialHighlightDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+// ============================================================
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
+// ============================================================
+// 0x1400e0290 (create 0x1400278c0 runs it): DialogInstance() (the base's
+// default ctor), the stamp (the compiler's), then +0xb8..+0xe8 zeroed.
+TutorialHighlightDialog::TutorialHighlightDialog()
+    : elapsedTicks(0), glowGroup(nullptr), glow(nullptr), arrow(nullptr),
+      rotation(0), targetElement(nullptr), targetEntity(nullptr) {}
 
-    struct { const char* name; uintptr_t offset; } elements[] = {
-        { "glowGroup", 0xC0 },
-        { "glow",      0xC8 },
-        { "arrow",     0xD0 },
+// 0x1400e01d0: DialogInstance(ui, dialog, parent, 0, 0, 0), the stamp, the
+// fields zeroed, then +0xd8 = rotation, +0xe0 = *targetElement,
+// +0xe8 = *targetEntity (retail passes the two handles by address; the caller
+// dereferences them here). The tree's hand-rolled copy skipped the base ctor
+// when `dialog` was null; retail never does.
+TutorialHighlightDialog::TutorialHighlightDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                                                 Object::InternalPtr<UI::DialogInstance> parent,
+                                                 void* targetElementArg, int32_t rotationArg,
+                                                 void* targetEntityArg)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      elapsedTicks(0), glowGroup(nullptr), glow(nullptr), arrow(nullptr),
+      rotation(rotationArg), targetElement(targetElementArg), targetEntity(targetEntityArg) {}
+
+// [0] 0x140027910: the dtor 0x1400e01a0 (restamp, ~DialogInstance — the
+// compiler's chain; the tree ran a guarded ~Internal), MemFree on &1.
+Object::Base* TutorialHighlightDialog::DeletingDtor(unsigned flags) {
+    this->~TutorialHighlightDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// ============================================================
+// TutorialHighlightDialog::OnOpened (vtable +0x20, 0x1400e0020)
+// ============================================================
+// Finds "glowGroup", "glow", "arrow" by name and keeps them at +0xC0, +0xC8, +0xD0.
+void TutorialHighlightDialog::OnOpened() {
+    struct { const char* name; void** slot; } elements[] = {
+        { "glowGroup", &glowGroup },
+        { "glow",      &glow },
+        { "arrow",     &arrow },
     };
 
     for (auto& e : elements) {
         System::String nameStr(e.name);
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(
-            reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
-
-        // Store the found element pointer at the target offset
-        void* elem = *(void**)retBuf;
-        *(void**)(s + e.offset) = elem;
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));
+        *e.slot = *reinterpret_cast<void**>(retBuf);
     }
 }
 
-// TutorialHighlightDialog::Load (0x1400e0000) — vtable slot +0x38
-// Original is 11 bytes: MOV RAX,[RDX]; ADD [RCX+0xB8],RAX; RET
-// Accumulates a delta-time tick count (pointed to by param2) into dataB8,
-// which is a System::Time accumulator used by Update for animation timing.
-void TutorialHighlightDialog_Load(TutorialHighlightDialog* self, void* param2) {
-    self->dataB8 += *(uint64_t*)param2;
+// ============================================================
+// TutorialHighlightDialog::OnUpdate (vtable +0x38, 0x1400e0000)
+// ============================================================
+// Retail is 11 bytes: MOV RAX,[RDX]; ADD [RCX+0xB8],RAX; RET — the frame's
+// tick count added to the elapsed time the arrow's bob reads.
+void TutorialHighlightDialog::OnUpdate(const System::Time& time) {
+    elapsedTicks += time._ticks;
 }
 
 // ===========================================================================
@@ -75,17 +111,12 @@ typedef void* (*fn_RectCtor_t)(void* self);
 // param_1 is unused by the body; retail passes the rectangle itself here.
 typedef bool (*fn_EntityScreenRect_t)(uintptr_t unused, void* entityIBP, void* rectOut);
 
-fn_RectCtor_t         s_RectCtor         = nullptr;
-fn_EntityScreenRect_t s_EntityScreenRect = nullptr;
-bool                  s_resolvedHL       = false;
-
-void EnsureHighlightFuncs() {
-    if (s_resolvedHL) return;
-    s_resolvedHL = true;
-    s_RectCtor = reinterpret_cast<fn_RectCtor_t>(
-        ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
-    s_EntityScreenRect = reinterpret_cast<fn_EntityScreenRect_t>(
-        ResolveAddr(Module::Exe, 0x140100380));
+// Resolved PER CALL (ENDGAME B.3.8, B6-5: no first-call cache in a member's path).
+fn_RectCtor_t RectCtorFn() {
+    return reinterpret_cast<fn_RectCtor_t>(ResolveExport("??0Rectangle@Volume@@QEAA@XZ"));
+}
+fn_EntityScreenRect_t EntityScreenRectFn() {
+    return reinterpret_cast<fn_EntityScreenRect_t>(ResolveAddr(Module::Exe, 0x140100380));
 }
 
 // sinf(elapsed * pi) * 8 — the shared bob offset both helpers apply.
@@ -102,8 +133,8 @@ float ArrowBob(uintptr_t self) {
 // glowGroup with a four-sided padding measured against the scaled screen, then
 // puts the arrow on the corner selected by the rotation field.
 // ---------------------------------------------------------------------------
-void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+void TutorialHighlightDialog::PlaceOnElement() {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
     void* targetIBP = reinterpret_cast<void*>(s + 0xE0);
     uintptr_t elem = *reinterpret_cast<uintptr_t*>(targetIBP);
@@ -199,18 +230,16 @@ typedef void* (*fn_FindComp_t)(uintptr_t entity, void* outIBP);
 // 0x14009f3e0 — grid cell -> world position (fills a real terrain z).
 typedef float* (*fn_GridToWorld_t)(int* grid, float* out, float* in, char flag, void* extra);
 
+// The diagnostic's reprint-on-change filter (main thread only: OnUpdateLayout).
+uint64_t s_diagLastEntity = 0;
+int      s_diagLastRect[4] = { -12345, 0, 0, 0 };
+
 void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
 
-    static fn_FindComp_t    findModel = nullptr;
-    static fn_FindComp_t    findMap   = nullptr;
-    static fn_GridToWorld_t gridToWorld = nullptr;
-    static bool resolved = false;
-    if (!resolved) {
-        resolved = true;
-        findModel   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
-        findMap     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
-        gridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
-    }
+    // Resolved per call (B6-5).
+    fn_FindComp_t    findModel   = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003f60));
+    fn_FindComp_t    findMap     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140004680));
+    fn_GridToWorld_t gridToWorld = reinterpret_cast<fn_GridToWorld_t>(ResolveAddr(Module::Exe, 0x14009f3e0));
     if (!findModel || !findMap) return;
 
     uint64_t modelIBP = 0, mapIBP = 0;
@@ -250,8 +279,9 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
     }
 
     // Only reprint when something actually changes.
-    static uint64_t lastEntity = 0;
-    static int lastRect[4] = { -12345, 0, 0, 0 };
+    // The reprint-on-change filter lives at namespace scope (s_diagLast*).
+    uint64_t& lastEntity = s_diagLastEntity;
+    int* lastRect = s_diagLastRect;
     if (entity == lastEntity && rx == lastRect[0] && ry == lastRect[1] &&
         rw == lastRect[2] && rh == lastRect[3]) return;
     lastEntity = entity;
@@ -330,19 +360,20 @@ void TutHLDiag(uintptr_t self, uint64_t entity, bool ok, const float* rect) {
 
 }  // namespace
 
-void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    EnsureHighlightFuncs();
+void TutorialHighlightDialog::PlaceOnEntity() {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
+    fn_RectCtor_t         rectCtor         = RectCtorFn();
+    fn_EntityScreenRect_t entityScreenRect = EntityScreenRectFn();
 
     if (void* glowGroup = *reinterpret_cast<void**>(s + 0xC0))
         reinterpret_cast<UI::Element*>(glowGroup)->SetFlagsOnOff(1, 0);   // hide  // B.3.6 bridge
 
     // Volume::Rectangle rect; ok = EntityScreenRect(rect, &entityIBP, &rect)
     alignas(16) uint8_t rect[16] = {};
-    if (s_RectCtor) s_RectCtor(rect);
+    if (rectCtor) rectCtor(rect);
     uint64_t entityIBP = *reinterpret_cast<uint64_t*>(s + 0xE8);
-    bool ok = s_EntityScreenRect &&
-              s_EntityScreenRect(reinterpret_cast<uintptr_t>(rect), &entityIBP, rect);
+    bool ok = entityScreenRect &&
+              entityScreenRect(reinterpret_cast<uintptr_t>(rect), &entityIBP, rect);
 
     // [diag] BANISHED_TUTHL_DIAG — where the arrow thinks the target is.
     //
@@ -387,13 +418,28 @@ void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
         static_cast<float>(-*reinterpret_cast<int32_t*>(s + 0xD8)));
 }
 
-// TutorialHighlightDialog::Draw (0x1400DFFE0) — vtable slot 6.
+// TutorialHighlightDialog::OnUpdateLayout (0x1400DFFE0) — vtable slot 6.
 // Retail is the dispatch plus an inlined copy of the 0x1400DFDA0 body.
-void TutorialHighlightDialog_Draw(TutorialHighlightDialog* self) {
-    if (!self) return;
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    if (*reinterpret_cast<uint64_t*>(s + 0xE8) == 0)
-        TutorialHighlightDialog_UpdateElement(self);
+void TutorialHighlightDialog::OnUpdateLayout() {
+    if (targetEntity == nullptr)
+        PlaceOnElement();
     else
-        TutorialHighlightDialog_UpdateWorld(self);
+        PlaceOnEntity();
 }
+
+// create 0x1400278c0: MemAlloc(0xf0, 8), then the default ctor 0x1400e0290.
+void* TutorialHighlightDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialHighlightDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialHighlightDialog());
+}
+// Retail's createInPlace 0x140027900 does not build a dialog in place (B8-13);
+// the tree's in-place entry did, and that is kept.
+void* TutorialHighlightDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialHighlightDialog());
+}
+
+DEFINE_EXE_VTABLE(TutorialHighlightDialog, "_ZTV23TutorialHighlightDialog")
+// DEFINE_EXE_TYPE(TutorialHighlightDialog, "UI::DialogInstance") stays where
+// its REGISTER_TYPE was — tutorial_dialog_vtables.cpp (B38_RULES B8-7).

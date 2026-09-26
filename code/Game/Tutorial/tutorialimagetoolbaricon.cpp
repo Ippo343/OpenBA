@@ -16,7 +16,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialimagetoolbaricon_funcs.h"
+#include "Tutorial/TutorialImageToolbarIcon.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "system/String.h"
@@ -34,85 +35,49 @@
 #include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
-// Vtable pointers (resolved once)
-// ============================================================
-static void* s_vtable_TutorialImageToolbarIcon = nullptr;
-static void* s_vtable_TutorialImage = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_TutorialImageToolbarIcon) {
-        s_vtable_TutorialImageToolbarIcon = (void*)ResolveAddr(Module::Exe, TutorialImageToolbarIconAddr::Vtable);
-        s_vtable_TutorialImage = (void*)ResolveAddr(Module::Exe, TutorialImageAddr::Vtable);
-    }
-}
-
-// ============================================================
-// Local function pointers (resolved once)
+// Exe helpers, resolved PER CALL (ENDGAME B.3.8, B6-5). The External ctor
+// dispatch slot and the two vtable addresses this file cached lazily are
+// gone: the compiler runs External() and stamps both tables.
 // ============================================================
 
-// External::External() ctor -- dispatch slot 0x140151e98
-typedef void (*fn_External_Ctor_t)(void* self);
-static fn_External_Ctor_t s_fn_External_Ctor = nullptr;
-
-// TutorialImage_sub_7ad0 -- ExternalPtr serialize helper (exe function)
+// TutorialImage_sub_7ad0 -- ExternalPtr serialize helper (exe 0x140027ad0)
 typedef void (*fn_ExternalPtr_SerializeImage_t)(void* externalPtrField, void* serializer);
-static fn_ExternalPtr_SerializeImage_t s_fn_ExternalPtr_SerializeImage = nullptr;
+static fn_ExternalPtr_SerializeImage_t ExternalPtrSerializeImageFn() {
+    return reinterpret_cast<fn_ExternalPtr_SerializeImage_t>(ResolveAddr(Module::Exe, 0x140027ad0));
+}
 
 // FUN_140027de0 -- resolves toolbar from String at +0x30
 typedef void (*fn_ResolveToolbar_t)(void* stringField);
-static fn_ResolveToolbar_t s_fn_ResolveToolbar = nullptr;
-
-static void EnsureFuncs() {
-    if (!s_fn_External_Ctor) {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151e98));
-        if (dispatch && *dispatch)
-            s_fn_External_Ctor = reinterpret_cast<fn_External_Ctor_t>(*dispatch);
-    }
-    if (!s_fn_ExternalPtr_SerializeImage) {
-        s_fn_ExternalPtr_SerializeImage = reinterpret_cast<fn_ExternalPtr_SerializeImage_t>(
-            ResolveAddr(Module::Exe, 0x140027ad0));
-    }
-    if (!s_fn_ResolveToolbar) {
-        s_fn_ResolveToolbar = reinterpret_cast<fn_ResolveToolbar_t>(
-            ResolveAddr(Module::Exe, 0x140027de0));
-    }
+static fn_ResolveToolbar_t ResolveToolbarFn() {
+    return reinterpret_cast<fn_ResolveToolbar_t>(ResolveAddr(Module::Exe, 0x140027de0));
 }
 
 // ============================================================
-// Slot0: Dtor (0x140028090)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-void* TutorialImageToolbarIcon_Dtor(void* self, uint32_t flags) {
-    EnsureVtables();
-    auto p = reinterpret_cast<uint8_t*>(self);
+// ctor 0x1400e0c30: External(), TutorialImage's stamp + zeroed fields
+// (TutorialImage()), the own stamp, then String +0x30 = 0, tag -1, ref null.
+TutorialImageToolbarIcon::TutorialImageToolbarIcon()
+    : _toolbarString(nullptr), _toolbarStringTag(-1), _pad3C{}, _toolbarRef(nullptr) {}
 
-    // Set own vtable
-    *(void**)p = s_vtable_TutorialImageToolbarIcon;
+// The dtor inside [0] 0x140028090: ~String +0x30; the compiler re-stamps
+// TutorialImage and runs ~External.
+TutorialImageToolbarIcon::~TutorialImageToolbarIcon() {
+    reinterpret_cast<System::String*>(&_toolbarString)->~String();   // B.3.1 bridge
+}
 
-    // Destroy String at +0x30 (B.3.1 bridge: the object is still untyped bytes)
-    reinterpret_cast<System::String*>(p + 0x30)->~String();
-
-    // Set base vtable
-    *(void**)p = s_vtable_TutorialImage;
-
-    // Call External::~External
-    if (fn_External_Dtor)
-        fn_External_Dtor(self);
-
-    // Conditional free
-    if (flags & 1) {
-        if (fn_MemFreeStatic)
-            fn_MemFreeStatic(self);
-    }
-
-    return self;
+// [0] 0x140028090: ~TutorialImageToolbarIcon, MemFree on &1.
+Object::Base* TutorialImageToolbarIcon::DeletingDtor(unsigned flags) {
+    this->~TutorialImageToolbarIcon();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
 // Slot5: Serialize (0x1400e0af0)
 // ============================================================
-void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
-    EnsureFuncs();
-    auto p = reinterpret_cast<uint8_t*>(self);
+bool TutorialImageToolbarIcon::Serialize(void* stream) {
+    auto p = reinterpret_cast<uint8_t*>(this);
 
     // First serializer block: serialize +0x28, +0x2C as ints, then ExternalPtr at +0x20
     alignas(8) uint8_t serializerBuf[32] = {};
@@ -121,8 +86,8 @@ void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x28), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(p + 0x2C), nullptr);   // B.3.4 bridge
 
-    if (s_fn_ExternalPtr_SerializeImage)
-        s_fn_ExternalPtr_SerializeImage(p + 0x20, serializerBuf);
+    if (auto serializeImage = ExternalPtrSerializeImageFn())
+        serializeImage(p + 0x20, serializerBuf);
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 
@@ -135,63 +100,31 @@ void TutorialImageToolbarIcon_Serialize(void* self, void* stream) {
     (void)filenameBuf;
 
     // String::Serialize on +0x30
-    reinterpret_cast<System::String*>(p + 0x30)->Serialize(serializerBuf2);
+    reinterpret_cast<System::String*>(p + 0x30)->Serialize(serializerBuf2);   // B.3.1 bridge
 
     // If loading (serializer stream mode == 0), resolve toolbar
     void* innerStream = *(void**)(serializerBuf2 + 0x00);
     if (innerStream) {
         int streamMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializerBuf2)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
         if (streamMode == 0) {
-            // Resolve toolbar from the string
-            if (s_fn_ResolveToolbar)
-                s_fn_ResolveToolbar(p + 0x30);
+            if (auto resolve = ResolveToolbarFn())
+                resolve(p + 0x30);
         }
     }
 
     reinterpret_cast<IO::Serializer*>(serializerBuf2)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// Slot6: Cleanup (0x140028070)
+// Slot6: Reconstruct (0x140028070) / Slot8: Construct (0x140028060)
 // ============================================================
-void TutorialImageToolbarIcon_Cleanup(void* self) {
-    // Call own Dtor with flags=0 via vtable slot 0
-    void** vtable = *(void***)self;
-    typedef void* (*fn_ScalarDtor_t)(void*, uint32_t);
-    fn_ScalarDtor_t scalarDtor = reinterpret_cast<fn_ScalarDtor_t>(vtable[0]);
-    scalarDtor(self, 0);
-
-    // Reinitialize via real Ctor
-    TutorialImageToolbarIcon_Ctor(self);
+Object::External* TutorialImageToolbarIcon::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialImageToolbarIcon();
 }
-
-// ============================================================
-// Slot8: Ctor/Init (real: 0x1400e0c30)
-// ============================================================
-void* TutorialImageToolbarIcon_Ctor(void* self) {
-    EnsureVtables();
-    EnsureFuncs();
-
-    auto p = reinterpret_cast<uint8_t*>(self);
-
-    // Call External::External ctor
-    if (s_fn_External_Ctor)
-        s_fn_External_Ctor(self);
-
-    // Set base vtable, zero base fields
-    *(void**)p = s_vtable_TutorialImage;
-    *(uint64_t*)(p + 0x20) = 0;
-    *(uint64_t*)(p + 0x28) = 0;
-
-    // Set own vtable
-    *(void**)p = s_vtable_TutorialImageToolbarIcon;
-
-    // Initialize String at +0x30 (zero), tag at +0x38 (-1), toolbar ref at +0x40 (null)
-    *(uint64_t*)(p + 0x30) = 0;
-    *(int32_t*)(p + 0x38) = -1;
-    *(uint64_t*)(p + 0x40) = 0;
-
-    return self;
+Object::External* TutorialImageToolbarIcon::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialImageToolbarIcon();
 }
 
 // ============================================================
@@ -210,9 +143,8 @@ void* TutorialImageToolbarIcon_Ctor(void* self) {
 // return value straight to TableElement::SetChild as the child pointer, so a
 // void return leaves whatever the last call left in RAX and the table gets a
 // garbage child, which faults later inside UI::UserInterface::Update.
-void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
-    EnsureFuncs();
-    auto p = reinterpret_cast<uint8_t*>(self);
+void* TutorialImageToolbarIcon::CreateElement(void* retIBP, void* dialog) {
+    auto p = reinterpret_cast<uint8_t*>(this);
 
     // 1. Create UI element from imageRef at +0x20
     ::new (retIBP) Object::InternalPtr<UI::Element>(
@@ -246,8 +178,8 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
             reinterpret_cast<RtObject::Internal*>(imageElement));   // B.3.3 bridge
 
     // 7. Resolve toolbar ref from String at +0x30
-    if (s_fn_ResolveToolbar)
-        s_fn_ResolveToolbar(p + 0x30);
+    if (auto resolve = ResolveToolbarFn())
+        resolve(p + 0x30);
 
     // 8. Get resolved toolbar object at +0x40
     uintptr_t toolbar = *(uintptr_t*)(p + 0x40);
@@ -259,18 +191,18 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
 
         if (componentList == 0) {
             // No component list — use toolbar's direct sprite data
-            if (s_fn_ResolveToolbar)
-                s_fn_ResolveToolbar(p + 0x30);
-            if (s_fn_ResolveToolbar)
-                s_fn_ResolveToolbar(p + 0x30);
+            if (auto resolve = ResolveToolbarFn())
+                resolve(p + 0x30);
+            if (auto resolve = ResolveToolbarFn())
+                resolve(p + 0x30);
 
             toolbar = *(uintptr_t*)(p + 0x40); // re-read after resolve
             spriteSheet = *(uint64_t*)(toolbar + 0x28);
             spriteName = (const void*)(toolbar + 0x38);
         } else {
             // Has component list — iterate to find ToolbarDescription
-            if (s_fn_ResolveToolbar)
-                s_fn_ResolveToolbar(p + 0x30);
+            if (auto resolve = ResolveToolbarFn())
+                resolve(p + 0x30);
 
             componentList = *(uintptr_t*)(toolbar + 0x58);
             int count = *(int*)(componentList + 0x30);
@@ -324,43 +256,17 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
     return retIBP;
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160b90 (9 slots, Object::External base), size 0x48, parent "TutorialImage".
-// GetFileVersion (+0x18) = 0x1001. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// create 0x140028020: MemAlloc(0x48, 8), then the ctor.
+void* TutorialImageToolbarIcon::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialImageToolbarIcon), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialImageToolbarIcon());
+}
+// createInPlace 0x140028060.
+void* TutorialImageToolbarIcon::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialImageToolbarIcon());
+}
 
-static uint32_t TutorialImageToolbarIcon_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialImageToolbarIcon");
-    return c;
-}
-static int TutorialImageToolbarIcon_GetFileVersion(void*) { return 0x1001; }
-
-static void* g_TutorialImageToolbarIcon_Vtable[10] = {
-    (void*)&TutorialImageToolbarIcon_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialImageToolbarIcon_GetTypeId,       // +0x10 GetTypeId
-    (void*)&TutorialImageToolbarIcon_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialImageToolbarIcon_Serialize,       // +0x28 Serialize
-    (void*)&TutorialImageToolbarIcon_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialImageToolbarIcon_Ctor,   // +0x40 Ctor/CreateInPlace (0x140028060)
-    (void*)&TutorialImageToolbarIcon_Slot9,   // +0x48 BuildElement (0x1400e0940)
-};
-
-extern "C" void RegisterTutorialImageToolbarIconVtable() {
-    RegisterExeAddr(0x140160b90, (uintptr_t)g_TutorialImageToolbarIcon_Vtable);
-}
-extern "C" void* TutorialImageToolbarIcon_CreateInPlace(void* mem) {
-    return TutorialImageToolbarIcon_Ctor(mem);
-}
-extern "C" void* TutorialImageToolbarIcon_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x48, 8);
-    return p ? TutorialImageToolbarIcon_Ctor(p) : nullptr;
-}
-REGISTER_TYPE(TutorialImageToolbarIcon, "TutorialImage", &TutorialImageToolbarIcon_Factory, &TutorialImageToolbarIcon_CreateInPlace);
+DEFINE_EXE_VTABLE(TutorialImageToolbarIcon, "_ZTV24TutorialImageToolbarIcon")
+DEFINE_EXE_TYPE(TutorialImageToolbarIcon, "TutorialImage")

@@ -18,140 +18,87 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialgoalbutton_funcs.h"
+#include "Tutorial/TutorialGoalButton.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "system/String.h"
-#include <cstdint>
-#include <cstdio>
-#include <cstdlib>
-#include <cstring>
-#include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "object/Internal.h"   // ENDGAME B.3.3 step 6B; InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <cstdint>
 #include <new>
 
 // ============================================================
-// TutorialGoalButton::Dtor (vtable +0x00, 0x1400273b0)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-// 1. Set vtable to TutorialGoalButton
-// 2. Destroy String at +0x20
-// 3. Set vtable to TutorialGoal (base class)
-// 4. Call External::~External
-// 5. Optionally free memory
-void* TutorialGoalButton_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
+// ctor 0x1400dee90 (inlined in create 0x140027290 / createInPlace 0x140027300):
+// External(), the TutorialGoal and TutorialGoalButton stamps (the compiler's),
+// then the two fields zeroed.
+TutorialGoalButton::TutorialGoalButton() : elementPath(0), invertCheck(0), _pad29{} {}
 
-    // Set vtable to TutorialGoalButton
-    uintptr_t vtable = ResolveAddr(Module::Exe, TutorialGoalButtonAddr::Vtable);
-    *(uintptr_t*)s = vtable;
+// The dtor inside [0] 0x1400273b0: ~String on +0x20; the compiler re-stamps
+// TutorialGoal and runs ~External.
+TutorialGoalButton::~TutorialGoalButton() {
+    reinterpret_cast<System::String*>(&elementPath)->~String();   // B.3.1 bridge
+}
 
-    // Destroy String at +0x20
-    reinterpret_cast<System::String*>(s + 0x20)->~String();
-
-    // Set vtable to TutorialGoal (base)
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialGoalAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-
-    // Call External::~External
-    if (fn_External_Dtor) {
-        fn_External_Dtor(self);
-    }
-
-    // Conditional free
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
+// [0] 0x1400273b0: ~TutorialGoalButton, MemFree on &1.
+Object::Base* TutorialGoalButton::DeletingDtor(unsigned flags) {
+    this->~TutorialGoalButton();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
 // TutorialGoalButton::Serialize (vtable +0x28, 0x1400deda0)
 // ============================================================
-// 1. Call base TutorialGoal::Serialize (creates/destroys empty serializer)
-// 2. Create a new Serializer from stream
-// 3. Serialize String at +0x20 (elementPath)
-// 4. Serialize bool at +0x28 (invertCheck)
-// 5. Destroy serializer
-void TutorialGoalButton_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Base class serialize (empty — just creates/destroys serializer)
-    alignas(8) uint8_t ser0[32];
-    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
+// 1. TutorialGoal::Serialize (its empty Serializer scope)
+// 2. a Serializer over the stream: String +0x20, bool +0x28
+bool TutorialGoalButton::Serialize(void* stream) {
+    TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
     // Create serializer for our fields
     alignas(8) uint8_t ser[32];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize elementPath (+0x20)
-    reinterpret_cast<System::String*>(s + 0x20)->Serialize(ser);
+    reinterpret_cast<System::String*>(&elementPath)->Serialize(ser);   // B.3.1 bridge
 
     // Serialize invertCheck (+0x28) — bool
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(&invertCheck), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// TutorialGoalButton::Cleanup (vtable +0x30, 0x140027350)
+// TutorialGoalButton::Reconstruct [6] 0x140027350 / Destruct [7] 0x140001640
 // ============================================================
-// Calls ScalarDtor(self, 0) via vtable slot 0, then re-initializes.
-// The dtor destroys the string, the re-init zeroes fields.
-// Equivalent to: self->vtable[0](self, 0); External::External(self);
-//                set vtable chain; zero fields.
-void TutorialGoalButton_Cleanup(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Call ScalarDtor(self, 0) via vtable — this destroys the object
-    uintptr_t* vtable = *(uintptr_t**)s;
-    typedef void* (*DtorFn)(void*, uint32_t);
-    DtorFn dtor = (DtorFn)vtable[0];
-    dtor(self, 0);
-
-    // Re-initialize via External::External
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable chain
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialGoalAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialGoalButtonAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
-
-    // Zero fields
-    *(uint64_t*)(s + 0x20) = 0;  // elementPath = empty string
-    *(uint8_t*)(s + 0x28) = 0;   // invertCheck = false
+// DeletingDtor(0) (destroy in place), then the ctor on `this`.
+Object::External* TutorialGoalButton::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialGoalButton();
 }
+void TutorialGoalButton::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// TutorialGoalButton::Check (vtable +0x40, 0x1400dece0)
+// TutorialGoalButton::IsComplete (vtable +0x40, 0x1400dece0)
 // ============================================================
-// Finds UI element by path string, checks element visibility flags.
-int TutorialGoalButton_Check(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-
+// Finds the UI element by path, checks its flag bits.
+bool TutorialGoalButton::IsComplete(void* /*time*/, void* /*instance*/) {
     // Find UI element by elementPath (+0x20)
     uintptr_t elementIBP = 0;
     if (fn_FindUIElementByPath) {
-        fn_FindUIElementByPath(&elementIBP, (void*)(s + 0x20), nullptr);
+        fn_FindUIElementByPath(&elementIBP, static_cast<void*>(&elementPath), nullptr);
     }
 
     if (elementIBP == 0) {
-        return 0;
+        return false;
     }
 
-    // CheckPtr on the found element
-
-    // Check if element IsDerivedFrom Object::Internal
+    // Check if element IsDerivedFrom UI::Element
     uintptr_t element = elementIBP;
     if (!fn_IsDerivedFrom || !g_TypeId_Element) {
-        return 0;
+        return false;
     }
 
     bool isDerived = fn_IsDerivedFrom((void*)element, *g_TypeId_Element);
@@ -165,91 +112,39 @@ int TutorialGoalButton_Check(void* self) {
     }
 
     if (wrappedIBP == 0) {
-        return 0;
+        return false;
     }
 
     // Read flags from element+0x34
-    bool invertCheck = *(uint8_t*)(s + 0x28) != 0;
-
     uintptr_t elem = wrappedIBP;
     uint32_t flags = *(uint32_t*)(elem + 0x34);
 
-
-    if (invertCheck) {
+    if (invertCheck != 0) {
         // Bit 23 NOT set = success
-        return (~(flags >> 23)) & 1;
-    } else {
-        // Bit 22 set = success
-        return (flags >> 22) & 1;
+        return ((~(flags >> 23)) & 1) != 0;
     }
+    // Bit 22 set = success
+    return ((flags >> 22) & 1) != 0;
 }
 
 // ============================================================
-// TutorialGoalButton::Init (vtable +0x48, 0x140027300)
+// TutorialGoalButton::Construct (vtable +0x48, 0x140027300)
 // ============================================================
-// Constructor/init called by factory after allocation.
-void* TutorialGoalButton_Init(void* self) {
-    if (self == nullptr) {
-        return nullptr;
-    }
-
-    uintptr_t s = (uintptr_t)self;
-
-    // Call External::External base init
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable chain: TutorialGoal -> TutorialGoalButton
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialGoalAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialGoalButtonAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
-
-    // Zero fields
-    *(uint64_t*)(s + 0x20) = 0;  // elementPath = null string
-    *(uint8_t*)(s + 0x28) = 0;   // invertCheck = false
-
-    return self;
+Object::External* TutorialGoalButton::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialGoalButton();
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160800 (9 slots, Object::External base), size 0x30, parent "TutorialGoal".
-// GetFileVersion (+0x18) = 2. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// create 0x140027290: MemAlloc(0x30, 8), then the (inlined) ctor.
+void* TutorialGoalButton::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialGoalButton), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialGoalButton());
+}
+// createInPlace 0x140027300.
+void* TutorialGoalButton::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialGoalButton());
+}
 
-static uint32_t TutorialGoalButton_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialGoalButton");
-    return c;
-}
-static int TutorialGoalButton_GetFileVersion(void*) { return 2; }
-
-static void* g_TutorialGoalButton_Vtable[10] = {
-    (void*)&TutorialGoalButton_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialGoalButton_GetTypeId,       // +0x10 GetTypeId
-    (void*)&TutorialGoalButton_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialGoalButton_Serialize,       // +0x28 Serialize
-    (void*)&TutorialGoalButton_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialGoalButton_Check,   // +0x40 Check (0x1400dece0)
-    (void*)&TutorialGoalButton_Init,   // +0x48 Ctor/CreateInPlace (0x140027300)
-};
-
-extern "C" void RegisterTutorialGoalButtonVtable() {
-    RegisterExeAddr(0x140160800, (uintptr_t)g_TutorialGoalButton_Vtable);
-}
-extern "C" void* TutorialGoalButton_CreateInPlace(void* mem) {
-    return TutorialGoalButton_Init(mem);
-}
-extern "C" void* TutorialGoalButton_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
-    return p ? TutorialGoalButton_Init(p) : nullptr;
-}
-REGISTER_TYPE(TutorialGoalButton, "TutorialGoal", &TutorialGoalButton_Factory, &TutorialGoalButton_CreateInPlace);
+DEFINE_EXE_VTABLE(TutorialGoalButton, "_ZTV18TutorialGoalButton")
+DEFINE_EXE_TYPE(TutorialGoalButton, "TutorialGoal")

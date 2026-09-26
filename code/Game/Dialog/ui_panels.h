@@ -223,20 +223,6 @@ void ProductionUI_Slot4(ProductionUI* self);
 void ProductionUI_Slot7(ProductionUI* self);
 
 // ============================================================
-// TutorialUI
-// ============================================================
-
-// Serialize (vtable +0x20): Finds named elements, sets button IDs, hides close button.
-void TutorialUI_Serialize(TutorialUI* self);
-
-// Startup (vtable +0x38): Toggles visibility of next/quit buttons based on current flags.
-void TutorialUI_Startup(TutorialUI* self);
-
-// OnRemove (vtable +0x48): On quitButton click (eventType=0x12, id=0x579), destroys SaveLoad
-// singleton at game+0x140 and transitions back to main menu through loading screen.
-void TutorialUI_OnRemove(TutorialUI* self, void* param2, int eventType, int eventId);
-
-// ============================================================
 // CitizenUI
 // ============================================================
 
@@ -650,9 +636,6 @@ inline void TitleDescToolTipUI_Shutdown(TitleDescToolTipUI* /*self*/) {}
 
 // ToolUI::Shutdown (vtable +0x18, 0x14007c070): 3-byte RET 0 no-op.
 inline void ToolUI_Shutdown(ToolUI* /*self*/) {}
-
-// TutorialUI::Shutdown (vtable +0x18, 0x1400e3aa0): 3-byte RET 0 no-op.
-inline void TutorialUI_Shutdown(TutorialUI* /*self*/) {}
 
 // UpgradeUI::Startup (vtable +0x38, 0x140086d80): 3-byte RET 0 no-op.
 inline void UpgradeUI_Startup(UpgradeUI* /*self*/) {}

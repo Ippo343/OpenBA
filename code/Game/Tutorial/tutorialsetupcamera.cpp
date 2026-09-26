@@ -17,114 +17,62 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialsetupcamera_funcs.h"
+#include "Tutorial/TutorialSetupCamera.h"
 #include "engine_funcs.h"
-#include "resolve.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include <cstdint>
-#include <cstdio>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
 
 // ============================================================
-// TutorialSetupCamera::Dtor (vtable +0x00, 0x140028530)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-// Scalar deleting destructor.
-// 1. Set vtable to TutorialSetupCamera
-// 2. Set vtable to TutorialSetup (base class dtor chain)
-// 3. Call External::~External(self)
-// 4. If (flags & 1), free memory
-// 5. Return self
-void* TutorialSetupCamera_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
+// ctor 0x1400e2200 (inlined in create 0x140028400 / createInPlace 0x140028470):
+// External(), the TutorialSetup and TutorialSetupCamera stamps (the
+// compiler's), then two qword stores of -1 over the four fields.
+TutorialSetupCamera::TutorialSetupCamera()
+    : cameraX(-1), cameraChunkRow(-1), cameraY(-1), cameraChunkCol(-1) {}
 
-    // Set vtable to TutorialSetupCamera (this class)
-    uintptr_t cameraVtable = ResolveAddr(Module::Exe, TutorialSetupCameraAddr::Vtable);
-    *(uintptr_t*)s = cameraVtable;
-
-    // Set vtable to TutorialSetup (base class dtor)
-    uintptr_t setupVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = setupVtable;
-
-    // Call External::~External
-    if (fn_External_Dtor) {
-        fn_External_Dtor(self);
-    }
-
-    // Conditional free
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
+// [0] 0x140028530: stamp, stamp TutorialSetup, ~External, MemFree on &1.
+Object::Base* TutorialSetupCamera::DeletingDtor(unsigned flags) {
+    this->~TutorialSetupCamera();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
 // TutorialSetupCamera::Serialize (vtable +0x28, 0x1400e2120)
 // ============================================================
 // Serializes 4 int32 fields: cameraX, cameraChunkRow, cameraY, cameraChunkCol.
-// Creates Serializer(stream, version=0), serializes fields, destroys serializer.
-void TutorialSetupCamera_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Create serializer
+bool TutorialSetupCamera::Serialize(void* stream) {
     alignas(8) uint8_t serializer[32];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // Serialize 4 int32 fields
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x20), nullptr);   // B.3.4 bridge  cameraX
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge  cameraChunkRow
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge  cameraY
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2C), nullptr);   // B.3.4 bridge  cameraChunkCol
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraX, nullptr);          // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraChunkRow, nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraY, nullptr);          // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(cameraChunkCol, nullptr);   // B.3.4 bridge
 
-    // Destroy serializer
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// TutorialSetupCamera::Cleanup (vtable +0x30, 0x1400284d0)
+// TutorialSetupCamera::Reconstruct [6] 0x1400284d0 / Destruct [7] 0x140001640
 // ============================================================
-// Destroys and reinitializes: calls Dtor(flags=0) via vtable, then
-// calls External::External to re-init base, sets Camera vtable, resets fields.
-void TutorialSetupCamera_Cleanup(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Call Dtor via vtable with flags=0 (no free)
-    uintptr_t vtable = *(uintptr_t*)s;
-    typedef void* (*fn_Dtor_t)(void* self, uint32_t flags);
-    fn_Dtor_t dtorFn = *reinterpret_cast<fn_Dtor_t*>(vtable);
-    if (dtorFn) {
-        dtorFn(self, 0);
-    }
-
-    // Re-init External base
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable chain: TutorialSetup then TutorialSetupCamera
-    uintptr_t setupVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = setupVtable;
-
-    uintptr_t cameraVtable = ResolveAddr(Module::Exe, TutorialSetupCameraAddr::Vtable);
-    *(uintptr_t*)s = cameraVtable;
-
-    // Reset fields to -1
-    *(int64_t*)(s + 0x20) = -1LL;
-    *(int64_t*)(s + 0x28) = -1LL;
+Object::External* TutorialSetupCamera::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialSetupCamera();
 }
+void TutorialSetupCamera::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// TutorialSetupCamera::Slot8 / Apply (vtable +0x40, 0x1400e20d0)
+// TutorialSetupCamera::Begin (vtable +0x40, 0x1400e20d0)
 // ============================================================
-// Sets camera position from the 4 stored fields.
-// Computes absolute position: absX = chunkRow * cellSize + cellX
-//                             absY = chunkCol * cellSize + cellY
-// Writes to camera object (GameWorld+0x120) fields +0xa4, +0xa8, +0xac.
-void TutorialSetupCamera_Slot8(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
+// absX = chunkRow * cellSize + cellX; absY = chunkCol * cellSize + cellY,
+// written to the camera object (GameWorld+0x120) +0xa8 / +0xac, flag +0xa4.
+void TutorialSetupCamera::Begin() {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
 
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
@@ -138,14 +86,9 @@ void TutorialSetupCamera_Slot8(void* self) {
     uintptr_t camera = *reinterpret_cast<uintptr_t*>(gameWorld + 0x120);
     if (!camera) return;
 
-    int32_t cellX = *(int32_t*)(s + 0x20);
-    int32_t chunkRow = *(int32_t*)(s + 0x24);
-    int32_t cellY = *(int32_t*)(s + 0x28);
-    int32_t chunkCol = *(int32_t*)(s + 0x2C);
-
     // Compute absolute camera position
-    int32_t absX = chunkRow * cellSize + cellX;
-    int32_t absY = chunkCol * cellSize + cellY;
+    int32_t absX = cameraChunkRow * cellSize + cameraX;
+    int32_t absY = cameraChunkCol * cellSize + cameraY;
 
     // Write to camera object
     *(int32_t*)(camera + 0xA8) = absX;
@@ -154,76 +97,23 @@ void TutorialSetupCamera_Slot8(void* self) {
 }
 
 // ============================================================
-// TutorialSetupCamera::Ctor (vtable +0x58, 0x140028470)
+// TutorialSetupCamera::Construct (vtable +0x58, 0x140028470)
 // ============================================================
-// Construct from raw memory. Null-check, call External::External,
-// set vtable chain, init fields to -1.
-void* TutorialSetupCamera_Ctor(void* self) {
-    if (!self) return nullptr;
-
-    uintptr_t s = (uintptr_t)self;
-
-    // Init External base
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable chain: TutorialSetup then TutorialSetupCamera
-    uintptr_t setupVtable = ResolveAddr(Module::Exe, TutorialSetupAddr::Vtable);
-    *(uintptr_t*)s = setupVtable;
-
-    uintptr_t cameraVtable = ResolveAddr(Module::Exe, TutorialSetupCameraAddr::Vtable);
-    *(uintptr_t*)s = cameraVtable;
-
-    // Init fields to -1
-    *(int64_t*)(s + 0x20) = -1LL;
-    *(int64_t*)(s + 0x28) = -1LL;
-
-    return self;
+Object::External* TutorialSetupCamera::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialSetupCamera();
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160ca0 (9 slots, Object::External base), size 0x30, parent "TutorialSetup".
-// GetFileVersion (+0x18) = 1. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t TutorialSetupCamera_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialSetupCamera");
-    return c;
+// create 0x140028400: MemAlloc(0x30, 8), then the (inlined) ctor.
+void* TutorialSetupCamera::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialSetupCamera), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialSetupCamera());
 }
-static int TutorialSetupCamera_GetFileVersion(void*) { return 1; }
-
-// Retail slots 9/10 on the TutorialSetup family are empty `ret` bodies.
-static void TutorialSetup_SlotEmpty(void*) {}
-
-static void* g_TutorialSetupCamera_Vtable[12] = {
-    (void*)&TutorialSetupCamera_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialSetupCamera_GetTypeId,       // +0x10 GetTypeId
-    (void*)&TutorialSetupCamera_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialSetupCamera_Serialize,       // +0x28 Serialize
-    (void*)&TutorialSetupCamera_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialSetupCamera_Slot8,   // +0x40 Apply (0x1400e20d0)
-    (void*)&TutorialSetup_SlotEmpty,   // +0x48 Update (0x1400e20c0 - empty in retail)
-    (void*)&TutorialSetup_SlotEmpty,   // +0x50 Undo (0x1400e20b0 - empty in retail)
-    (void*)&TutorialSetupCamera_Ctor,   // +0x58 Ctor/CreateInPlace (0x140028470)
-};
-
-extern "C" void RegisterTutorialSetupCameraVtable() {
-    RegisterExeAddr(0x140160ca0, (uintptr_t)g_TutorialSetupCamera_Vtable);
+// createInPlace 0x140028470.
+void* TutorialSetupCamera::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialSetupCamera());
 }
-extern "C" void* TutorialSetupCamera_CreateInPlace(void* mem) {
-    return TutorialSetupCamera_Ctor(mem);
-}
-extern "C" void* TutorialSetupCamera_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x30, 8);
-    return p ? TutorialSetupCamera_Ctor(p) : nullptr;
-}
-REGISTER_TYPE(TutorialSetupCamera, "TutorialSetup", &TutorialSetupCamera_Factory, &TutorialSetupCamera_CreateInPlace);
+
+DEFINE_EXE_VTABLE(TutorialSetupCamera, "_ZTV19TutorialSetupCamera")
+DEFINE_EXE_TYPE(TutorialSetupCamera, "TutorialSetup")
