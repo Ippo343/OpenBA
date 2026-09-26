@@ -34,32 +34,24 @@
 // blocked on those two helpers being registered).
 //
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (AmbientEnvironmentDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140158bf0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/AmbientEnvironmentDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
-
-static const uintptr_t kAmbientEnvironmentDescriptionVtable = 0x140158bf0;
 
 // exe helper FUN_140002540 — resize 0x28-byte-element array {ptr@arr+0, count@arr+8, cap@arr+0xc}.
 typedef void (*fn_AmbientArrayResize_t)(void* arrayBase, int newCount);
 // exe helper FUN_1400019a0 — serialize a single ambient ExternalPtr field.
 typedef void (*fn_AmbientExternalPtr_Serialize_t)(void* field, void* serializer);
-
-static fn_AmbientArrayResize_t           s_fn_AmbientArrayResize = nullptr;
-static fn_AmbientExternalPtr_Serialize_t s_fn_AmbientExternalPtr = nullptr;
-static bool s_ambientHelpersResolved = false;
-
-static void AmbientEnvironmentDescription_EnsureHelpers() {
-    if (s_ambientHelpersResolved) return;
-    s_fn_AmbientArrayResize =
-        (fn_AmbientArrayResize_t)ResolveAddr(Module::Exe, 0x140002540);
-    s_fn_AmbientExternalPtr =
-        (fn_AmbientExternalPtr_Serialize_t)ResolveAddr(Module::Exe, 0x1400019a0);
-    s_ambientHelpersResolved = true;
-}
 
 // ============================================================
 // Reimpl of FUN_140002540 (grow/shrink the 0x28-byte-element entry array)
@@ -68,6 +60,8 @@ static void AmbientEnvironmentDescription_EnsureHelpers() {
 // past capacity: cap = newCount (or newCount*3 when growing by exactly one from a
 // non-empty array), MemAlloc(cap*0x28, 8), copy existing elements, zero-init the new
 // tail with elem+0x20 = 1 default, free the old block. 1:1 port of the exe helper.
+// Registered at 0x140002540 (reg_component_visuals.cpp) and called by
+// ambient_externalptr_serialize.cpp: a free function, not a member.
 extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
     uint8_t* arr = reinterpret_cast<uint8_t*>(arrayBase);
     int oldCount = *(int*)(arr + 8);
@@ -114,121 +108,103 @@ extern "C" void AmbientArrayResize_Reimpl(void* arrayBase, int newCount) {
     }
 }
 
-static void AmbientEnvironmentDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kAmbientEnvironmentDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x20) = 0;            // array base
-    *(uint64_t*)(s + 0x28) = 0;            // count (+cap)
-    *(uint32_t*)(s + 0x30) = 0x42000000;   // float 32.0f
-    *(uint32_t*)(s + 0x34) = 0x42340000;   // float 45.0f
+// ctor (inlined into create 0x140001f40 / createInPlace 0x140001fb0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+AmbientEnvironmentDescription::AmbientEnvironmentDescription()
+    : Description(),
+      _entries(nullptr),
+      _entryCount(0),
+      _entryCap(0),
+      _f30(32.0f),
+      _f34(45.0f) {}
+
+// dtor (slot 0 0x140002100 minus the stamps): frees the entry array.
+// The compiler then chains ~Description -> ~External.
+AmbientEnvironmentDescription::~AmbientEnvironmentDescription() {
+    if (fn_MemFreeStatic && _entries) fn_MemFreeStatic(_entries);   // dynamic entry array
+    _entries = nullptr;
+    _entryCount = 0;
+    _entryCap = 0;
 }
 
-void AmbientEnvironmentDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalPtr_BuildSerialize) {
-        return;
-    }
-    AmbientEnvironmentDescription_EnsureHelpers();
+// [0] 0x140002100: ~AmbientEnvironmentDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* AmbientEnvironmentDescription::DeletingDtor(unsigned flags) {
+    this->~AmbientEnvironmentDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    int count = *(int*)(s + 0x28);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);     // int count +0x28   // B.3.4 bridge
-
+// [5] 0x140043950: stream order as retail.
+bool AmbientEnvironmentDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    // B6-5: the two exe helpers are resolved per call (was a non-atomic first-call
+    // cache; descriptions load on the loader thread).
+    fn_AmbientArrayResize_t resizeFn =
+        reinterpret_cast<fn_AmbientArrayResize_t>(ResolveAddr(Module::Exe, 0x140002540));
+    fn_AmbientExternalPtr_Serialize_t extPtrFn =
+        reinterpret_cast<fn_AmbientExternalPtr_Serialize_t>(ResolveAddr(Module::Exe, 0x1400019a0));
+    
+    int count = _entryCount;
+    ser.Serialize(count, nullptr);   // int count +0x28
+    
     // On load: resize the 0x28-byte-element array at +0x20.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        if (s_fn_AmbientArrayResize) s_fn_AmbientArrayResize(s + 0x20, count);
+    if (static_cast<int>(ser.GetDirection()) == 0) {
+        if (resizeFn) resizeFn(&_entries, count);
     }
-
-    // Per-element loop (requires both exe helpers; skipped if unavailable in standalone).
-    if (count > 0 && s_fn_AmbientExternalPtr) {
-        uint8_t* elem = *(uint8_t**)(s + 0x20);
+    
+    // Per-element loop (requires the exe helper; skipped if unavailable in standalone).
+    if (count > 0 && extPtrFn) {
+        uint8_t* elem = static_cast<uint8_t*>(_entries);
         for (int i = 0; i < count; ++i, elem += 0x28) {
-            reinterpret_cast<IO::Serializer*>(serializer)
-                ->Serialize(*reinterpret_cast<unsigned int*>(elem + 0x00), nullptr);   // B.3.4 bridge  (enum)
-            fn_ExternalPtr_BuildSerialize(elem + 0x08, serializer);  // ExternalPtr
-            s_fn_AmbientExternalPtr(elem + 0x10, serializer);        // ExternalPtr
-            s_fn_AmbientExternalPtr(elem + 0x18, serializer);        // ExternalPtr
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(elem + 0x20), nullptr);    // B.3.4 bridge  (int)
+            ser.Serialize(*reinterpret_cast<unsigned int*>(elem + 0x00), nullptr);   // enum
+            fn_ExternalPtr_BuildSerialize(elem + 0x08, &ser);  // ExternalPtr
+            extPtrFn(elem + 0x10, &ser);                       // ExternalPtr
+            extPtrFn(elem + 0x18, &ser);                       // ExternalPtr
+            ser.Serialize(*reinterpret_cast<int*>(elem + 0x20), nullptr);            // int
         }
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x30), nullptr);   // B.3.4 bridge  (float +0x30, 4-byte serialize)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x34), nullptr);   // B.3.4 bridge  (float +0x34)
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    
+    // +0x30 / +0x34: floats written through the 4-byte INT door (the tree's
+    // choice; same four bytes either way).
+    ser.Serialize(*reinterpret_cast<int*>(&_f30), nullptr);
+    ser.Serialize(*reinterpret_cast<int*>(&_f34), nullptr);
+    return true;
 }
 
-void* AmbientEnvironmentDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kAmbientEnvironmentDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_MemFreeStatic && *(void**)(s + 0x20)) {
-        fn_MemFreeStatic(*(void**)(s + 0x20));   // dynamic entry array
-    }
-    *(uint64_t*)(s + 0x20) = 0;
-    *(uint64_t*)(s + 0x28) = 0;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140002010 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* AmbientEnvironmentDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void AmbientEnvironmentDescription::Destruct() {}
+
+// [8] 0x140002070: AmbientEnvironmentComponent's type id through the hidden return slot.
+Object::Type* AmbientEnvironmentDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("AmbientEnvironmentComponent");
+    return ret;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t AmbientEnvironmentDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("AmbientEnvironmentDescription");
-    return cached;
+// [9] 0x140001fb0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* AmbientEnvironmentDescription::Construct() {
+    return new (static_cast<void*>(this)) AmbientEnvironmentDescription();
 }
 
-static int   AmbientEnvironmentDescription_VtblStub_Return2(void* /*self*/) { return 2; } // GetVersion
-static int   AmbientEnvironmentDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* AmbientEnvironmentDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* AmbientEnvironmentDescription_CreateInPlace(void* memory);
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* AmbientEnvironmentDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "AmbientEnvironmentComponent"); }
-
-static void* g_AmbientEnvironmentDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_VtblStub_Return2),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_GetComponentTypeId),// +0x40 Slot8
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&AmbientEnvironmentDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterAmbientEnvironmentDescriptionVtable() {
-    RegisterExeAddr(kAmbientEnvironmentDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_AmbientEnvironmentDescription_Vtable));
-}
-
-extern "C" void* AmbientEnvironmentDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
+// create 0x140001f40: MemAlloc(0x38, 8), then the (inlined) ctor.
+void* AmbientEnvironmentDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AmbientEnvironmentDescription), 8);
     if (!p) return nullptr;
-    AmbientEnvironmentDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) AmbientEnvironmentDescription());
+}
+// createInPlace 0x140001fb0.
+void* AmbientEnvironmentDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AmbientEnvironmentDescription());
 }
 
-static void* AmbientEnvironmentDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    AmbientEnvironmentDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(AmbientEnvironmentDescription, "Description",
-              &AmbientEnvironmentDescription_Factory, &AmbientEnvironmentDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(AmbientEnvironmentDescription, "_ZTV29AmbientEnvironmentDescription")
+DEFINE_EXE_TYPE(AmbientEnvironmentDescription, "Description")

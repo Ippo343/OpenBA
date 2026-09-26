@@ -80,6 +80,12 @@
 #include "Component/CreateFencedDescription.h"
 #include "Component/CreatePlacedDescription.h"
 #include "Component/CreateRemovalDescription.h"
+#include "Component/AmbientEnvironmentDescription.h"
+#include "Component/AnimalDescription.h"
+#include "Component/AmbientEmitterDescription.h"
+#include "Component/ClearAreaDescription.h"
+#include "Component/DestroyDescription.h"
+#include "Component/InteractDescription.h"
 
 namespace {
 
@@ -187,6 +193,16 @@ UNIT_TEST(k1_tool_and_work_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<CreateFencedDescription>(0x78), 0);
     CHECK_EQ(CheckDescriptionLeaf<CreatePlacedDescription>(0x58), 0);
     CHECK_EQ(CheckDescriptionLeaf<CreateRemovalDescription>(0x48), 0);
+}
+
+UNIT_TEST(k1_ambient_and_building_description_leaves) {
+    CHECK_EQ(CheckDescriptionLeaf<AmbientEnvironmentDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<AnimalDescription>(0x58), 0);
+    CHECK_EQ(CheckDescriptionLeaf<AmbientEmitterDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ClearAreaDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<DestroyDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<InteractDescription>(0x58), 0);
+    CHECK_EQ(sizeof(InteractDescription::NodeArray), (size_t)0x10);
 }
 
 }  // namespace

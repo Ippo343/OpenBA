@@ -81,10 +81,6 @@ extern "C" {
     void RegisterBuildDescriptionVtable();
     void RegisterUIDescriptionVtable();
     void RegisterToolbarDescriptionVtable();
-    void RegisterAmbientEmitterDescriptionVtable();
-    void RegisterInteractDescriptionVtable();
-    void RegisterClearAreaDescriptionVtable();
-    void RegisterDestroyDescriptionVtable();
     void RegisterStorageDescriptionVtable();
     void RegisterModelDescriptionVtable();
     void RegisterPickingDescriptionVtable();
@@ -92,9 +88,7 @@ extern "C" {
     void RegisterDecalDescriptionVtable();
     void RegisterParticleDescriptionVtable();
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
-    void RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
-    void RegisterAmbientEnvironmentDescriptionVtable();
     void RegisterCaptureBoxDescriptionVtable();
     void RegisterConsumeProduceDescriptionVtable();
     void RegisterEnvironmentDescriptionVtable();
@@ -1763,10 +1757,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterBuildDescriptionVtable();
     RegisterUIDescriptionVtable();
     RegisterToolbarDescriptionVtable();
-    RegisterAmbientEmitterDescriptionVtable();
-    RegisterInteractDescriptionVtable();
-    RegisterClearAreaDescriptionVtable();
-    RegisterDestroyDescriptionVtable();
     RegisterStorageDescriptionVtable();
     RegisterModelDescriptionVtable();
     RegisterPickingDescriptionVtable();
@@ -1774,9 +1764,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterDecalDescriptionVtable();
     RegisterParticleDescriptionVtable();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
-    RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
-    RegisterAmbientEnvironmentDescriptionVtable();
     RegisterCaptureBoxDescriptionVtable();
     RegisterConsumeProduceDescriptionVtable();
     RegisterEnvironmentDescriptionVtable();
