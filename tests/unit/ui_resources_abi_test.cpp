@@ -35,6 +35,7 @@
 #include "runtime/types/ui/StringTable.h"
 #include "runtime/types/ui/SpriteSheet.h"
 #include "runtime/types/ui/SpriteCapture.h"
+#include "runtime/types/ui/Font.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -317,6 +318,80 @@ UNIT_TEST(ui_spritecapture_slot_order_is_retails) {
     CheckCompileInherited(raw);
 }
 
+// ---------------------------------------------------------------------------
+// UI::Font
+// ---------------------------------------------------------------------------
+struct FontProbe final : UI::Font {
+    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+};
+
+UNIT_TEST(ui_font_layout) {
+    CHECK_EQ((int)sizeof(UI::Font), 0x90);
+    CHECK_EQ((int)alignof(UI::Font), 8);
+    CHECK_EQ((int)offsetof(UI::Font, _string20),      0x20);
+    CHECK_EQ((int)offsetof(UI::Font, _charToGlyph),   0x30);
+    CHECK_EQ((int)offsetof(UI::Font, _glyphs),        0x40);
+    CHECK_EQ((int)offsetof(UI::Font, _lineHeight),    0x50);
+    CHECK_EQ((int)offsetof(UI::Font, _baseLine),      0x54);
+    CHECK_EQ((int)offsetof(UI::Font, _ellipsisWidth), 0x58);
+    CHECK_EQ((int)offsetof(UI::Font, _spaceWidth),    0x5c);
+    CHECK_EQ((int)offsetof(UI::Font, _spriteSheet),   0x60);
+    CHECK_EQ((int)offsetof(UI::Font, _string88),      0x88);
+    CHECK_EQ((int)offsetof(UI::Font, _string20), (int)sizeof(Object::External));
+    CHECK_EQ((int)sizeof(UI::Font::Kerning), 0x10);
+    CHECK_EQ((int)sizeof(UI::Font::Layout), 0x28);
+    CHECK((std::is_base_of<Object::External, UI::Font>::value));
+    CHECK(std::is_abstract<UI::Font>::value);
+}
+
+// The getters read exactly the bytes retail's do (read this pass).
+UNIT_TEST(ui_font_getters_read_retails_offsets) {
+    FontProbe probe;
+    int32_t table[3] = { 5, 0xffff, 7 };
+    UI::Font::Kerning rows[2] = { {1, 2, 3, 4}, {5, 6, 7, 8} };
+    probe._charToGlyph._data = table;  probe._charToGlyph._size = 3;
+    probe._glyphs._data = rows;        probe._glyphs._size = 2;
+    probe._lineHeight = 11; probe._baseLine = 9; probe._spaceWidth = 4;
+
+    CHECK_EQ(probe.GetHeight(), 11);          // 0x180031de0  +0x50
+    CHECK_EQ(probe.GetBaseLine(), 9);         // 0x180031df0  +0x54
+    CHECK_EQ(probe.GetSpaceWidth(), 4);       // 0x180031e00  +0x5c
+    CHECK(&probe.GetKern(1) == &rows[1]);     // 0x180031dd0  &_glyphs[i]
+    CHECK_EQ(probe.GetSpriteIndex(0), 5);     // 0x180031da0
+    CHECK_EQ(probe.GetSpriteIndex(1), -1);    //   0xffff -> -1
+    CHECK_EQ(probe.GetSpriteIndex(3), -1);    //   out of range -> -1
+    CHECK_EQ(probe.GetSpriteIndex(-1), -1);
+
+    // Detach the stack arrays before the probe's member ~Array runs.
+    probe._charToGlyph._data = nullptr; probe._charToGlyph._size = 0;
+    probe._glyphs._data = nullptr;      probe._glyphs._size = 0;
+}
+
+UNIT_TEST(ui_font_slot_order_is_retails) {
+    FontProbe probe;
+    void* raw = static_cast<void*>(&probe);
+    CheckNineSlots(raw);
+    CheckCompileOverridden(raw);
+}
+
+// RULE B6-1 across the six resources at once: nine slots each, `Construct`
+// at +0x40 distinct from slots 0..7; slot 4 inherited on four, overridden on
+// Font and SpriteSheet.
+UNIT_TEST(ui_block_d_resources_construct_at_slot8) {
+    CharacterSetProbe cs; CursorProbe cu; StringTableProbe st;
+    SpriteSheetProbe ss; SpriteCaptureProbe sc; FontProbe fo;
+    void* all[6] = { &cs, &cu, &st, &ss, &sc, &fo };
+    for (int c = 0; c < 6; ++c) {
+        Reset();
+        using PtrFn = void* (*)(void*);
+        SlotAt<PtrFn>(all[c], kConstruct)(all[c]);
+        CHECK_EQ(g_lastMark, kConstruct / 8);
+        CHECK(g_lastSelf == all[c]);
+        for (int i = 0; i < 8; ++i)
+            CHECK(VTableOf(all[c])[i] != VTableOf(all[c])[kConstruct / 8]);
+    }
+}
+
 }  // namespace
 
 // ############################################################################
@@ -372,5 +447,18 @@ Object::External* SpriteCapture::Reconstruct() { Note(this, kReconstruct / 8); r
 void        SpriteCapture::Destruct() { Note(this, kDestruct / 8); }
 Object::External* SpriteCapture::Construct() { Note(this, kConstruct / 8); return this; }
 SpriteCapture::~SpriteCapture() {}
+
+const char* Font::TypeName() const { Note(this, kTypeName / 8); return "Font"; }
+uint32_t    Font::Type() const { Note(this, kType / 8); return 0u; }
+int32_t     Font::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 8; }
+// The OVERRIDE of slot 4; answers retail's 1 (0x1801176c0).
+Object::External::CompileResult Font::Compile(const System::Filename&) {
+    Note(this, kCompile / 8); return 1u;
+}
+bool        Font::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+Object::External* Font::Reconstruct() { Note(this, kReconstruct / 8); return this; }
+void        Font::Destruct() { Note(this, kDestruct / 8); }
+Object::External* Font::Construct() { Note(this, kConstruct / 8); return this; }
+Font::~Font() {}
 
 }  // namespace UI

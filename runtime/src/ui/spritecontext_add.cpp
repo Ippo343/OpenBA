@@ -198,18 +198,12 @@ inline SpriteExtent ExtentOf(void* sheetRaw, int32_t spriteIndex) {
 
 }  // namespace
 
-// Font::ComputeStringLayout (0x180116fd0), ported and registered in
-// runtime/src/ui/font.cpp. ENDGAME B.3.6 block D: this was a `ResolveAddr`
-// static cache (`TheComputeStringLayout`, RULE B6-5 removes it); it is the
-// registered body, called directly until `UI::Font` converts. Argument order is
-// read off the nine stores at 0x18011ccfb..0x18011cd61: the `Justify` and the
-// sixth AddFont parameter arrive at the callee in the OPPOSITE order to the one
+// Font::ComputeStringLayout (0x180116fd0) is a UI::Font member (font.cpp).
+// ENDGAME B.3.6 block D: this was a `ResolveAddr` static cache
+// (`TheComputeStringLayout`, RULE B6-5 removes it). Argument order is read off
+// the nine stores at 0x18011ccfb..0x18011cd61: the `Justify` and the sixth
+// AddFont parameter arrive at the callee in the OPPOSITE order to the one
 // AddFont declares them in.
-extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* strRefv,
-                                              bool multiline, int32_t wrapWidth,
-                                              int32_t maxWidth, int32_t justify,
-                                              int32_t* outWidth, int32_t* outHeight,
-                                              void* layoutv);
 
 // ============================================================================
 // The ports — UI::SpriteContext's AddSprite/AddFont members
@@ -328,7 +322,7 @@ void SpriteContext::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
 void SpriteContext::AddFont(Object::ExternalPtr<Font> font, const System::String& text,
                             bool multiline, int32_t layoutA, int32_t justify,
                             int32_t layoutB, int32_t x, int32_t y, uint32_t color) {
-    const RtUI::Font* f = reinterpret_cast<const RtUI::Font*>(font.Get());  // B.3.6 bridge
+    const Font* f = font.Get();
 
     // --- the first vertical cull, 0x18011ccd7..0x18011ccf5 ------------------
     // `font` is dereferenced here with no null test. Faithful.
@@ -342,13 +336,13 @@ void SpriteContext::AddFont(Object::ExternalPtr<Font> font, const System::String
     // first act is to zero them (0x180117034/0x180117037). Kept.
     int32_t outWidth  = 0;
     int32_t outAscent = 0;
-    RtUi_Font_ComputeStringLayout(f, &text, multiline, layoutA, layoutB, justify,
-                                  &outWidth, &outAscent, &_layout);
+    f->ComputeStringLayout(text, multiline, layoutA, layoutB, justify,
+                           outWidth, outAscent, &_layout);
 
     // --- the second vertical cull, 0x18011cd69..0x18011cd98 -----------------
     // The font pointer is reloaded from its home slot; the sheet is read out of
     // it BEFORE the compare and is what every glyph below is drawn from.
-    void*         sheet  = f->_spriteSheet;
+    void*         sheet  = f->_spriteSheet.Get();
     const int32_t bottom = (outAscent - f->_lineHeight) + y;
     const float   scissorTop = static_cast<float>(_scissorY) * _scale;
     if (scissorTop > static_cast<float>(bottom)) return;
