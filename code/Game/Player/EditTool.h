@@ -51,6 +51,10 @@ public:
     // `return 0` stub in slot 12; retail inherits Tool's `MOV EAX,1`
     // (0x140105860). Removed by its own behaviour commit.
     int  GetCursor() const override { return 0; }                          // [12] (tree)
+    // [13] 0x14002daf0 `MOV RAX,[RCX+0x30]; MOV [RDX],RAX; MOV RAX,RDX; RET`:
+    // EditTool's own new virtual — the selected-entity handle, by value through
+    // the hidden return slot (B8-11 shape: `this` in RCX, `ret` in RDX).
+    virtual uint64_t* GetSelected(uint64_t* ret) const { *ret = lastEntityRef; return ret; }
 
     uint64_t entityRef;       // +0x28 InternalBasePtr: the open info dialog
     uint64_t lastEntityRef;   // +0x30 InternalBasePtr: the selected entity

@@ -173,6 +173,9 @@ UNIT_TEST(tool_leaf_overrides_land_on_retail_slots) {
     CHECK_EQ(SlotOffset(&PathTool::GetCursor),      (uintptr_t)0x60);   // 0x1400de910
     CHECK_EQ(SlotOffset(&RemovalTool::CalcPath),    (uintptr_t)0x68);   // 0x1401035e0
     CHECK_EQ(SlotOffset(&DragPlacementTool::CalcCost), (uintptr_t)0x70);   // 0x1400fbae0
+    // D9 #4: EditTool and PathTool have 14 slots in retail — their own slot 13.
+    CHECK_EQ(SlotOffset(&EditTool::GetSelected),    (uintptr_t)0x68);   // 0x14002daf0
+    CHECK_EQ(SlotOffset(&PathTool::GetSelected),    (uintptr_t)0x68);   // 0x140026b60
 }
 
 UNIT_TEST(tool_leaf_shape) {

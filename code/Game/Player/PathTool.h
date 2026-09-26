@@ -53,6 +53,10 @@ public:
     char OnCancel() override { return 0; }                                 // [9]  0x1400de920
     bool IsSelected(uint64_t* ref) override;                               // [10] 0x1400de8d0
     int  GetCursor() const override { return 4; }                         // [12] 0x1400de910
+    // [13] 0x140026b60 `MOV RAX,[RCX+0x28]; MOV [RDX],RAX; MOV RAX,RDX; RET`:
+    // PathTool's own new virtual — the selected-entity handle, by value through
+    // the hidden return slot (B8-11 shape: `this` in RCX, `ret` in RDX).
+    virtual uint64_t* GetSelected(uint64_t* ret) const { *ret = selectedEntity; return ret; }
 
     uint64_t selectedEntity;   // +0x28 InternalBasePtr: the selected entity
     void*    _field30;         // +0x30 array data (freed by the retail dtor)
