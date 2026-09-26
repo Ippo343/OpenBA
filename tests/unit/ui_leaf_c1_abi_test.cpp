@@ -8,7 +8,10 @@
 //   UI::CheckElement           : ButtonElement       0xe0  12 slots
 //   UI::ComboDescription       : ButtonDescription   0xb8  10 slots
 //   UI::ComboElement           : ButtonElement       0x128 12 slots
-//   (Border / ClipRegion appended below as each pair lands)
+//   UI::BorderDescription      : ElementDescription  0xb8  10 slots
+//   UI::BorderElement          : Element             0x150 12 slots
+//   UI::ClipRegionDescription  : ElementDescription  0x78  10 slots
+//   UI::ClipRegionElement      : Element             0xd8  12 slots
 //
 // Built to the contract of ui_element_abi_test.cpp (block A); only what
 // differs is spelled out.
@@ -40,6 +43,10 @@
 #include "runtime/types/ui/CheckElement.h"
 #include "runtime/types/ui/ComboDescription.h"
 #include "runtime/types/ui/ComboElement.h"
+#include "runtime/types/ui/BorderDescription.h"
+#include "runtime/types/ui/BorderElement.h"
+#include "runtime/types/ui/ClipRegionDescription.h"
+#include "runtime/types/ui/ClipRegionElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -60,7 +67,8 @@ namespace {
 // ---------------------------------------------------------------------------
 // Observation channel: WHICH class's member ran, and which slot it stands for.
 // ---------------------------------------------------------------------------
-enum Who : int { kNone = 0, kButtonD, kCheckD, kButtonE, kCheckE, kComboD, kComboE };
+enum Who : int { kNone = 0, kButtonD, kCheckD, kButtonE, kCheckE, kComboD, kComboE,
+                 kBorderD, kBorderE, kClipD, kClipE, kElementBase };
 
 const void* g_self = nullptr;
 int         g_who  = kNone;
@@ -131,6 +139,18 @@ struct ButtonElementProbe final : UI::ButtonElement {
     Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct CheckElementProbe final : UI::CheckElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct BorderElementProbe final : UI::BorderElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct BorderDescriptionProbe final : UI::BorderDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct ClipRegionElementProbe final : UI::ClipRegionElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct ClipRegionDescriptionProbe final : UI::ClipRegionDescription {
     Object::Base* DeletingDtor(unsigned) override { return this; }
 };
 struct ComboElementProbe final : UI::ComboElement {
@@ -263,6 +283,72 @@ Object::InternalPtr<Element>* ComboDescription::CreateInstance(
 }
 Object::External* ComboDescription::Construct() { Note(this, kComboD, 9); return this; }
 ComboDescription::~ComboDescription() {}
+
+// ---- BorderElement: overrides 1, 2, 4, 5, 6.
+const char* BorderElement::TypeName() const { Note(this, kBorderE, 1); return "BorderElement"; }
+uint32_t BorderElement::Type() const { Note(this, kBorderE, 2); return 0xBE0u; }
+void BorderElement::ComputeSize() { Note(this, kBorderE, 4); }
+void BorderElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
+    Note(this, kBorderE, 5, (long long)x * 1000 + h);
+}
+void BorderElement::Draw(SpriteContext&, uint8_t alpha) const { Note(this, kBorderE, 6, alpha); }
+BorderElement::~BorderElement() {}
+
+// ---- ClipRegionElement: overrides 1, 2, 4, 5, 6, 7 and 9. Contains chains
+// to Element::Contains QUALIFIED, as the real body does.
+const char* ClipRegionElement::TypeName() const { Note(this, kClipE, 1); return "ClipRegionElement"; }
+uint32_t ClipRegionElement::Type() const { Note(this, kClipE, 2); return 0xC1E0u; }
+void ClipRegionElement::ComputeSize() { Note(this, kClipE, 4); }
+void ClipRegionElement::ComputeLayout(int32_t x, int32_t, int32_t, int32_t h) {
+    Note(this, kClipE, 5, (long long)x * 1000 + h);
+}
+void ClipRegionElement::Draw(SpriteContext&, uint8_t alpha) const { Note(this, kClipE, 6, alpha); }
+void ClipRegionElement::Update(const System::Time&, UserInterface*,
+                               Object::InternalPtr<DialogInstance>*, const UpdateState&) {
+    Note(this, kClipE, 7);
+}
+bool ClipRegionElement::Contains(int32_t x, int32_t y, UserInterface* ui) const {
+    Note(this, kClipE, 9);
+    return Element::Contains(x, y, ui);
+}
+ClipRegionElement::~ClipRegionElement() {}
+
+// ---- BorderDescription / ClipRegionDescription: direct ElementDescription leaves.
+const char* BorderDescription::TypeName() const { Note(this, kBorderD, 1); return "BorderDescription"; }
+uint32_t BorderDescription::Type() const { Note(this, kBorderD, 2); return 0xBD0u; }
+int32_t BorderDescription::GetFileVersion() const { Note(this, kBorderD, 3); return 0x104; }
+bool BorderDescription::Serialize(void* stream) {
+    Note(this, kBorderD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+}
+Object::External* BorderDescription::Reconstruct() { Note(this, kBorderD, 6); return this; }
+void BorderDescription::Destruct() { Note(this, kBorderD, 7); }
+Object::InternalPtr<Element>* BorderDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    Note(this, kBorderD, 8, reinterpret_cast<intptr_t>(dialog));
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
+        reinterpret_cast<Element*>(static_cast<uintptr_t>(0xBDBDBDBD)));
+    return ret;
+}
+Object::External* BorderDescription::Construct() { Note(this, kBorderD, 9); return this; }
+BorderDescription::~BorderDescription() {}
+
+const char* ClipRegionDescription::TypeName() const { Note(this, kClipD, 1); return "ClipRegionDescription"; }
+uint32_t ClipRegionDescription::Type() const { Note(this, kClipD, 2); return 0xC1D0u; }
+int32_t ClipRegionDescription::GetFileVersion() const { Note(this, kClipD, 3); return 0x104; }
+bool ClipRegionDescription::Serialize(void* stream) {
+    Note(this, kClipD, 5, reinterpret_cast<intptr_t>(stream)); return true;
+}
+Object::External* ClipRegionDescription::Reconstruct() { Note(this, kClipD, 6); return this; }
+void ClipRegionDescription::Destruct() { Note(this, kClipD, 7); }
+Object::InternalPtr<Element>* ClipRegionDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    Note(this, kClipD, 8, reinterpret_cast<intptr_t>(dialog));
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(
+        reinterpret_cast<Element*>(static_cast<uintptr_t>(0xC1C2C1C2)));
+    return ret;
+}
+Object::External* ClipRegionDescription::Construct() { Note(this, kClipD, 9); return this; }
+ClipRegionDescription::~ClipRegionDescription() {}
 
 }  // namespace UI
 
@@ -610,4 +696,135 @@ UNIT_TEST(ui_c1_combodescription_slot_order_is_retails) {
     for (int i = 1; i < 10; ++i)
         if (i != kD4_Compile / 8) CHECK(vt[i] != bv[i]);
     ExpectCreateInstanceRetslot(raw, kComboD, 0xC0C0C0C0u);
+}
+
+// ===========================================================================
+// BORDER and CLIPREGION — layout, slot order, retslot, qualified Contains
+// ===========================================================================
+UNIT_TEST(ui_c1_border_clipregion_layout) {
+    CHECK_EQ(sizeof(UI::BorderElement),         (size_t)0x150);  // 0x1800414f0
+    CHECK_EQ(sizeof(UI::BorderDescription),     (size_t)0xb8);   // 0x180040ff0
+    CHECK_EQ(sizeof(UI::ClipRegionElement),     (size_t)0xd8);   // 0x180038370
+    CHECK_EQ(sizeof(UI::ClipRegionDescription), (size_t)0x78);   // 0x180037eb0
+    CHECK_EQ(alignof(UI::BorderElement), (size_t)8);
+    CHECK_EQ(alignof(UI::BorderDescription), (size_t)8);
+    CHECK_EQ(alignof(UI::ClipRegionElement), (size_t)8);
+    CHECK_EQ(alignof(UI::ClipRegionDescription), (size_t)8);
+    CHECK((std::is_base_of<UI::Element, UI::BorderElement>::value));
+    CHECK((std::is_base_of<UI::Element, UI::ClipRegionElement>::value));
+    CHECK((std::is_base_of<UI::ElementDescription, UI::BorderDescription>::value));
+    CHECK((std::is_base_of<UI::ElementDescription, UI::ClipRegionDescription>::value));
+    CHECK(std::is_abstract<UI::BorderElement>::value);
+    CHECK(std::is_abstract<UI::ClipRegionElement>::value);
+    CHECK(std::is_abstract<UI::BorderDescription>::value);
+    CHECK(std::is_abstract<UI::ClipRegionDescription>::value);
+    CHECK(!std::has_virtual_destructor<UI::BorderElement>::value);
+    CHECK(!std::has_virtual_destructor<UI::ClipRegionElement>::value);
+
+    // Nine 0x10-byte sprites, row major, fill BorderElement to its end.
+    CHECK_EQ(offsetof(UI::BorderElement, _topLeft),     (size_t)0x0c0);
+    CHECK_EQ(offsetof(UI::BorderElement, _centre),      (size_t)0x100);
+    CHECK_EQ(offsetof(UI::BorderElement, _bottomRight), (size_t)0x140);
+    CHECK_EQ(offsetof(UI::BorderElement, _bottomRight) + 0x10, sizeof(UI::BorderElement));
+
+    CHECK_EQ(offsetof(UI::ClipRegionElement, _reqWidth),    (size_t)0xc0);
+    CHECK_EQ(offsetof(UI::ClipRegionElement, _innerWidth),  (size_t)0xc8);
+    CHECK_EQ(offsetof(UI::ClipRegionElement, _offsetX),     (size_t)0xd0);
+    CHECK_EQ(offsetof(UI::ClipRegionElement, _offsetY),     (size_t)0xd4);
+
+    CHECK_EQ(offsetof(UI::BorderDescription, _spriteSheet), (size_t)0x68);
+    CHECK_EQ(offsetof(UI::BorderDescription, _spriteName),  (size_t)0x70);
+    CHECK_EQ(sizeof(UI::BorderDescription), sizeof(RtUI::BorderDescription));
+    CHECK_EQ(offsetof(UI::ClipRegionDescription, _width),     (size_t)0x68);
+    CHECK_EQ(offsetof(UI::ClipRegionDescription, _height),    (size_t)0x6c);
+    CHECK_EQ(offsetof(UI::ClipRegionDescription, _childDesc), (size_t)0x70);
+    CHECK_EQ(sizeof(UI::ClipRegionDescription), sizeof(RtUI::ClipRegionDescription));
+    // The three names ClipRegionDescription hides live elsewhere in the base.
+    CHECK_EQ(offsetof(UI::ElementDescription, _width),  (size_t)0x28);
+    CHECK_EQ(offsetof(UI::ElementDescription, _height), (size_t)0x2c);
+}
+
+UNIT_TEST(ui_c1_borderelement_slot_order_is_retails) {
+    FactoryScope scope;
+    BorderElementProbe probe{};
+    BareElementProbe element{};
+    void* raw = static_cast<void*>(&probe);
+    const void* const* vt = VTableOf(raw);
+    const void* const* ev = VTableOf(static_cast<void*>(&element));
+    for (int off : { kE1_TypeName, kE2_Type, kE4_ComputeSize, kE5_ComputeLayout, kE6_Draw })
+        ExpectElementSlot(raw, off, kBorderE);
+    for (int off : { kE3_Persist, kE7_Update, kE8_Enable, kE9_Contains, kE10_SetColor,
+                     kE11_GetBorder })
+        CHECK(vt[off / 8] == ev[off / 8]);
+}
+
+UNIT_TEST(ui_c1_clipregionelement_slot_order_is_retails) {
+    FactoryScope scope;
+    ClipRegionElementProbe probe{};
+    BareElementProbe element{};
+    void* raw = static_cast<void*>(&probe);
+    const void* const* vt = VTableOf(raw);
+    const void* const* ev = VTableOf(static_cast<void*>(&element));
+    for (int off : { kE1_TypeName, kE2_Type, kE4_ComputeSize, kE5_ComputeLayout, kE6_Draw })
+        ExpectElementSlot(raw, off, kClipE);
+    void* handle = nullptr;
+    UI::Element::UpdateState state;
+    Reset();
+    SlotAt<void (*)(void*, const void*, void*, void**, const void*)>(raw, kE7_Update)(
+        raw, nullptr, nullptr, &handle, &state);
+    CHECK_EQ(g_who, (int)kClipE); CHECK_EQ(g_slot, 7);
+    // Slot 9 Contains is ClipRegion's own (the only one in this block).
+    CHECK(vt[kE9_Contains / 8] != ev[kE9_Contains / 8]);
+    for (int off : { kE3_Persist, kE8_Enable, kE10_SetColor, kE11_GetBorder })
+        CHECK(vt[off / 8] == ev[off / 8]);
+}
+
+UNIT_TEST(ui_c1_border_clipregion_description_slots) {
+    BorderDescriptionProbe border;
+    ClipRegionDescriptionProbe clip;
+    BareExternalProbe bare;
+    const void* compile = VTableOf(static_cast<void*>(&bare))[kD4_Compile / 8];
+    for (int off : { kD1_TypeName, kD2_Type, kD3_GetFileVersion, kD5_Serialize,
+                     kD6_Reconstruct, kD7_Destruct, kD9_Construct }) {
+        ExpectDescriptionSlot(static_cast<void*>(&border), off, kBorderD);
+        ExpectDescriptionSlot(static_cast<void*>(&clip), off, kClipD);
+    }
+    CHECK(VTableOf(static_cast<void*>(&border))[kD4_Compile / 8] == compile);
+    CHECK(VTableOf(static_cast<void*>(&clip))[kD4_Compile / 8] == compile);
+    ExpectCreateInstanceRetslot(static_cast<void*>(&border), kBorderD, 0xBDBDBDBDu);
+    ExpectCreateInstanceRetslot(static_cast<void*>(&clip), kClipD, 0xC1C2C1C2u);
+}
+
+namespace {
+int g_containsDoorEntries = 0;
+bool MintedClipContainsDoor(const void* self, int x, int y, void* ui) {
+    ++g_containsDoorEntries;
+    return reinterpret_cast<const UI::ClipRegionElement*>(self)            // B.3.6 bridge
+        ->UI::ClipRegionElement::Contains(x, y, static_cast<UI::UserInterface*>(ui));
+}
+}  // namespace
+
+UNIT_TEST(ui_c1_clipregion_contains_reaches_the_base_without_reentry) {
+    FactoryScope scope;
+    ClipRegionElementProbe probe{};
+    void* raw = static_cast<void*>(&probe);
+
+    const void* minted[12] = {};
+    const void* const* real = VTableOf(raw);
+    for (int i = 0; i < 12; ++i) minted[i] = real[i];
+    minted[kE9_Contains / 8] = reinterpret_cast<const void*>(&MintedClipContainsDoor);
+    *reinterpret_cast<const void* const**>(raw) = minted;
+
+    g_containsDoorEntries = 0;
+    Reset();
+    // Element::Contains is ui_element_abi_test.cpp's marker, which returns
+    // true: a true here is the base body answering, reached exactly once.
+    const bool r = SlotAt<bool (*)(const void*, int, int, void*)>(raw, kE9_Contains)(
+        raw, 3, 4, nullptr);
+    CHECK(r);
+    CHECK_EQ(g_containsDoorEntries, 1);
+    CHECK_EQ(g_trailN, 1);
+    CHECK_EQ(g_trail[0], kClipE * 100 + 9);
+
+    *reinterpret_cast<const void* const**>(raw) = real;
 }
