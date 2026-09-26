@@ -115,9 +115,9 @@ void HighlightComponent_InitFuncs() {
 // was the ONLY scene-object-owning component missing it (Model 0x83 / Storage
 // Display 0xCB / StatusIcon 0xC2 all have it). No-ops when no outline is
 // registered (+0x120 < 0), so it is safe on every non-selected teardown.
-static void HighlightComponent_OnRemovedFromWorld(void* self) {
+void HighlightComponent::OnRemove() {
     EnsureHelpers();
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
     // A null +0x28 vtable is the "fresh/inert" tell (same test Impl_c4a0 uses):
     // the embedded EdgeMeshInstance was never constructed, so nothing of ours is
     // in the Scene and +0x120 is not a real object id. Must precede the sceneId
@@ -132,60 +132,57 @@ static void HighlightComponent_OnRemovedFromWorld(void* self) {
     *reinterpret_cast<int32_t*>(s + 0x120) = -1;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Manual expansion of COMPONENT_INERT_FACTORY with two deltas: capability flags
-// 0x80 -> 0x82 (add removed-from-world broadcast bit 1) and slot 7 (+0x38) wired
-// to the outline-remover above. Slot 7 is installed AFTER InitInertTyped, which
-// re-stubs the shared per-type vtable on first fill (idempotent thereafter).
+// ============================================================================
+// ENDGAME B.3.8 VIS — HighlightComponent as a REAL class (HighlightComponent.h).
+//
+// Before: a 48-slot HighlightComponent_InertVtable filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal), +0x120 = -1 patched in after the
+// zero-fill. After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/HighlightComponent.h"
 
-static uint32_t HighlightComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("HighlightComponent");
-    return cached;
+// 0x14004c930: Component() is the CALL 0x1401188b0; the 0x140159990 stamp is
+// the compiler's. TREE DIVERGENCE: the EdgeMeshInstance / Transform are left
+// zero (see the header) and flags get bit 1 (0x82). +0x120 = -1 ("not in
+// scene") is retail's and load-bearing: slot 7 runs on EVERY entity teardown,
+// and a 0 would make it Scene::RemoveObject(scene, 0) on whichever object
+// genuinely owns id 0 (live freeze 2026-07-25).
+HighlightComponent::HighlightComponent()
+    : edgeMeshInstance{}, fieldF8(nullptr), transform{}, highlightFlag(0),
+      _pad11D{}, highlightId(-1), _pad124{} {
+    OrFlagsInCtor(0x2);
 }
-static void* HighlightComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static void HighlightComponent_InstallSlots() {
-    // Slot 3 (+0x18) is the stream Serialize. The inert vtable fills it with the
-    // BASE-ONLY Component::Serialize, which is 16 bytes short of what retail
-    // writes for this component: retail's slot 3 (0x14004c880) is
-    // Component::Serialize PLUS its own Serializer scope, and an "empty" scope
-    // still occupies 16 bytes in the save encoding (sentinel-bracketed). Leaving
-    // the base-only fill here silently truncated every HighlightComponent record
-    // and desynced the stream for every object after it -- measured on the
-    // packaged tutorial save, the record is 66 bytes and the base-only read took
-    // 50. The ported body is right there in this file; it was never installed.
-    HighlightComponent_InertVtable[3] =
-        reinterpret_cast<void*>(&HighlightComponent_Shutdown);
-    HighlightComponent_InertVtable[7] =
-        reinterpret_cast<void*>(&HighlightComponent_OnRemovedFromWorld);
+
+// [3] 0x14004c880 — Component::Persist PLUS its own (empty) Serializer scope:
+// 16 real bytes in the save encoding (the tutorial save's record is 66 bytes).
+void HighlightComponent::Persist(void* stream) { HighlightComponent_Shutdown(this, stream); }
+
+// [8] 0x14004c850 / [12] 0x14004c870. PORT GAP — B38 D9: never ported; the
+// tree's table left them inert; kept inert here.
+void HighlightComponent::Tick(void*) {}
+void HighlightComponent::OnEvent(int) {}
+
+// [0] 0x140007040: ~HighlightComponent (0x14004c8c0; its EdgeMeshInstance teardown is a PORT GAP, see the header), MemFree on &1.
+Object::Base* HighlightComponent::DeletingDtor(unsigned flags) {
+    this->~HighlightComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-// InitInertTyped zero-fills from +0x28, which leaves the embedded EdgeMeshInstance's
-// scene-object id at +0x120 == 0 where the real ctor writes -1 ("not in scene").
-// Impl_c4a0 (tool_base_render.cpp:501) repairs that lazily when an entity is actually
-// outlined, but slot 7 above runs on EVERY entity teardown — including entities that
-// were never selected — so the sentinel has to be right from construction or the
-// removal broadcast calls Scene::RemoveObject(scene, 0) and takes out whichever
-// object genuinely owns id 0 (live freeze 2026-07-25: the engine's list walk spins).
-static void HighlightComponent_InitSceneId(void* mem) {
-    if (mem) *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(mem) + 0x120) = -1;
+
+// create 0x140006e40: MemAlloc(0x128, 8), then the ctor.
+void* HighlightComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HighlightComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HighlightComponent());
 }
-extern "C" void* HighlightComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x128, 0x82,
-        HighlightComponent_InertVtable,
-        reinterpret_cast<void*>(&HighlightComponent_InertGetTypeId));
-    HighlightComponent_InstallSlots();
-    HighlightComponent_InitSceneId(p);
-    return p;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* HighlightComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HighlightComponent());
 }
-static void* HighlightComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x128, 0x82,
-        HighlightComponent_InertVtable,
-        reinterpret_cast<void*>(&HighlightComponent_InertGetTypeId));
-    HighlightComponent_InstallSlots();
-    HighlightComponent_InitSceneId(mem);
-    return mem;
-}
-REGISTER_TYPE(HighlightComponent, "Component",
-              &HighlightComponent_Factory, &HighlightComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(HighlightComponent, "_ZTV18HighlightComponent")
+DEFINE_EXE_TYPE(HighlightComponent, "Component")
