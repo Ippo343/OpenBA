@@ -151,8 +151,9 @@ void* CreateNaturalResource_ScalarDtor_Impl(CreateNaturalResource* self, uint32_
     // Set CreateNaturalResource vtable (for correct virtual dispatch during destruction)
     self->vtable = (void*)ResolveAddr(Module::Exe, CreateNaturalResourceAddr::Vtable);
     // Set Action base vtable (base class destructor phase)
-    // Action vtable at 0x14015f700 (base Action vtable)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x14015f700);
+    // Action base vtable 0x14015faa0 (retail store at 0x14002226e). B38 D9 #1: this
+    // stamped 0x14015f700, which is slot 6 of ResidenceUI's table 0x14015f6d0.
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x14015faa0);
 
     // If entity ref at +0x10 is non-null, delete it
     if (self->entity != nullptr) {

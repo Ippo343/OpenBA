@@ -222,8 +222,9 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
 void* CreateRawMaterial_ScalarDtor_Impl(CreateRawMaterial* self, uint32_t flags) {
     // Set CreateRawMaterial vtable
     self->vtable = (void*)ResolveAddr(Module::Exe, CreateRawMaterialAddr::Vtable);
-    // Set Action base vtable
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x14015f700);
+    // Set Action base vtable 0x14015faa0 (retail store at 0x14002237e). B38 D9 #1: this
+    // stamped 0x14015f700, which is slot 6 of ResidenceUI's table 0x14015f6d0.
+    self->vtable = (void*)ResolveAddr(Module::Exe, 0x14015faa0);
 
     // If entity ref at +0x10 is non-null, delete it
     if (self->entity != nullptr) {
