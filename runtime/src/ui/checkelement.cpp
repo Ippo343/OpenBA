@@ -20,39 +20,48 @@
 //      ??0CheckElement@UI@@QEAA@AEBV01@@Z  0x180048ca0
 //      ??1CheckElement@UI@@UEAA@XZ         0x180111700
 //
-// LAYOUT — 0xe0 bytes (`MOV EDX,0xe0` at 0x180048db2): ButtonElement's 0xd8,
-// then ONE BYTE at +0xd8, the check state, and seven bytes of tail padding.
-// `_children[5]` is the tick mark: the only child index past ButtonElement's
-// five, drawn only while +0xd8 is set.
+// ENDGAME B.3.6 block C1: the six slot bodies are MEMBERS of
+// `UI::CheckElement` (runtime/types/ui/CheckElement.h, which now owns the
+// layout: ButtonElement's 0xd8, then the check BYTE at +0xd8 and seven bytes
+// of tail padding). Every call into ButtonElement's slot bodies is a QUALIFIED
+// member call (it used to be a `ResolveAddr` by address). `_children[5]` is
+// the tick mark: the only child index past ButtonElement's five, drawn only
+// while `_checked` is set.
 // ============================================================================
 #include "element_common.h"
+#include "../../types/ui/CheckElement.h"
 
 using namespace rtuielem;
 
 namespace {
 
-constexpr int kChecked   = 0xd8;   // uint8_t
 constexpr int kChildTick = 5;
-constexpr int kKeyIndex  = 0xc0;   // inherited from ButtonElement
 
-RTELEM_TYPE_SLOTS(CheckElement)
+// B6-5: namespace-scope atomic door cache for the member bodies.
+std::atomic<void*> g_checkTypeInfo{nullptr};
+const uint8_t* CheckElementTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_checkTypeInfo, "?_typeInfo@CheckElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+// The ctor/dtor doors only.
+void* VtCheckElement()      { return RT_DATA_SLOT(void*, "??_7CheckElement@UI@@6B@"); }
 void* VtButtonElementBase() { return RT_DATA_SLOT(void*, "??_7ButtonElement@UI@@6B@"); }
 
 using ElementCtorFn      = void* (*)(void* self);
 using ButtonCopyCtorFn   = void* (*)(void* self, const void* other);
 using ElementDtorFn      = void  (*)(void* self);
-using ButtonComputeSize  = void  (*)(void* self);
-using ButtonDrawFn       = void  (*)(const void* self, void* ctx, uint8_t alpha);
-using ButtonUpdateFn     = void  (*)(void* self, const void* time, void* ui,
-                                     void** dlg, const void* state);
 using KeyPressedFn       = bool  (*)(void* keyMap, int a, int b);
 
-constexpr int kStateMouseUp = 0x04;
-constexpr int kStateKeyMap  = 0x28;
+// Element::_flags bits Element.h does not name (see buttonelement.cpp).
+constexpr uint32_t kFlagHover        = 0x00020000u;
+constexpr uint32_t kFlagPressStarted = 0x00200000u;
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(CheckElement)
+namespace UI {
+
+uint32_t CheckElement::Type() const { return TypeIdOf(CheckElementTypeInfo()); }
+const char* CheckElement::TypeName() const { return TypeNameOf(CheckElementTypeInfo()); }
 
 // ============================================================================
 // ?ComputeSize@CheckElement@UI@@UEAAXXZ   0x180111740
@@ -66,22 +75,21 @@ RTELEM_TYPE_BODIES(CheckElement)
 // Bit 27 is cleared TWICE on this path: once by ButtonElement::ComputeSize and
 // again at the end here. Reproduced; the second clear is a no-op unless the
 // tick's own ComputeSize dirtied us back, which it can (it walks parents).
-extern "C" void RtUi_CheckElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
+void CheckElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
 
-    RtAddr<ButtonComputeSize>(0x180110d10ull)(self);
+    ButtonElement::ComputeSize();
 
-    void* tick = Child(self, kChildTick);
+    Element* tick = _children._data[kChildTick];
     if (tick != nullptr) {
-        VSlot<ComputeSizeFn>(tick, kSlotComputeSize)(tick);
-        const int w = I32(tick, kElemLayoutWidth);
-        const int h = I32(tick, kElemLayoutHeight);
-        if (I32(self, kElemLayoutWidth)  < w) I32(self, kElemLayoutWidth)  = w;
-        if (I32(self, kElemLayoutHeight) < h) I32(self, kElemLayoutHeight) = h;
+        tick->ComputeSize();
+        const int w = tick->_layoutWidth;
+        const int h = tick->_layoutHeight;
+        if (_layoutWidth  < w) _layoutWidth  = w;
+        if (_layoutHeight < h) _layoutHeight = h;
     }
 
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
+    _flags &= ~kFlagNeedsSizeCalc;
 }
 
 // ============================================================================
@@ -90,16 +98,12 @@ extern "C" void RtUi_CheckElement_ComputeSize(void* selfv) {
 // ButtonElement's layout, then the tick over the same rect. Retail's tail is a
 // JUMP into the tick's slot 5 (0x1801117f0), which is why Ghidra loses the
 // fourth argument; the disassembly shows all four plus the stack slot.
-extern "C" void RtUi_CheckElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    RtAddr<ComputeLayoutFn>(0x180110e70ull)(self, x, y, w, h);
+void CheckElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    ButtonElement::ComputeLayout(x, y, w, h);
 
-    void* tick = Child(self, kChildTick);
-    if (tick != nullptr) {
-        VSlot<ComputeLayoutFn>(tick, kSlotComputeLayout)(
-            tick, I32(self, kElemLayoutLeft), I32(self, kElemLayoutTop),
-            I32(self, kElemLayoutRight), I32(self, kElemLayoutBottom));
-    }
+    Element* tick = _children._data[kChildTick];
+    if (tick != nullptr)
+        tick->ComputeLayout(_layoutLeft, _layoutTop, _layoutRight, _layoutBottom);
 }
 
 // ============================================================================
@@ -111,15 +115,14 @@ extern "C" void RtUi_CheckElement_ComputeLayout(void* selfv, int x, int y, int w
 // tests +0x34 and shifts, then 0x180111020 tests +0x34 and shifts), so a
 // dimmed CheckElement is drawn at a quarter alpha and its tick at a quarter of
 // that. Not a transcription slip — do not "fix" it.
-extern "C" void RtUi_CheckElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
-    alpha = DimAlpha(self, alpha);
+void CheckElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    alpha = DimAlpha(this, alpha);
 
-    RtAddr<ButtonDrawFn>(0x180111020ull)(self, ctx, alpha);
+    ButtonElement::Draw(context, alpha);
 
-    if (self[kChecked] != 0) {
-        void* tick = Child(self, kChildTick);
-        if (tick != nullptr) VSlot<DrawFn>(tick, kSlotDraw)(tick, ctx, alpha);
+    if (_checked != 0) {
+        const Element* tick = _children._data[kChildTick];
+        if (tick != nullptr) tick->Draw(context, alpha);
     }
 }
 
@@ -129,33 +132,61 @@ extern "C" void RtUi_CheckElement_Draw(const void* selfv, void* ctx, uint8_t alp
 // Toggle on a click or on the shortcut key, then run ButtonElement::Update —
 // which is what actually raises the activation event. The toggle happens
 // FIRST, so the event a listener sees already reflects the new check state.
-extern "C" void RtUi_CheckElement_Update(void* selfv, const void* time, void* ui,
-                                         void** dlg, const void* statev) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    const uint8_t* st = static_cast<const uint8_t*>(statev);
-
-    const uint32_t flags = U32(self, kElemFlags);
+// UpdateState +0x04 is `b04` (the mouse-up edge), +0x28 `config` (the KeyMap).
+void CheckElement::Update(const System::Time& time, UserInterface* ui,
+                          Object::InternalPtr<DialogInstance>* dialog,
+                          const UpdateState& state) {
+    const uint32_t flags = _flags;
     bool toggle = false;
     if ((flags & kFlagDisabledMask) == 0) {
-        if (st[kStateMouseUp] != 0 && ((flags >> 17) & 1u) != 0 &&
-            ((flags >> 21) & 1u) != 0) {
+        if (state.b04 != 0 && (flags & kFlagHover) != 0 &&
+            (flags & kFlagPressStarted) != 0) {
             toggle = true;
         } else {
-            const int32_t key = I32(self, kKeyIndex);
+            const int32_t key = _keyIndex;
             if (key >= 0 &&
-                RtAddr<KeyPressedFn>(0x1800a7a80ull)(Pc(st, kStateKeyMap), 0, key)) {
+                RtAddr<KeyPressedFn>(0x1800a7a80ull)(state.config, 0, key)) {
                 toggle = true;
             }
         }
     }
-    if (toggle) self[kChecked] = (self[kChecked] == 0) ? 1 : 0;
+    if (toggle) _checked = (_checked == 0) ? 1 : 0;
 
-    void* dlgCopy = *dlg;
-    RtAddr<ButtonUpdateFn>(0x1801110b0ull)(self, time, ui, &dlgCopy, st);
+    Object::InternalPtr<DialogInstance> dlgCopy = *dialog;
+    ButtonElement::Update(time, ui, &dlgCopy, state);
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS
+// ============================================================================
+extern "C" uint32_t RtUi_CheckElement_Type(const void* self) {
+    return reinterpret_cast<const UI::CheckElement*>(self)->UI::CheckElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_CheckElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::CheckElement*>(self)->UI::CheckElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_CheckElement_ComputeSize(void* selfv) {
+    reinterpret_cast<UI::CheckElement*>(selfv)->UI::CheckElement::ComputeSize();   // B.3.6 bridge
+}
+extern "C" void RtUi_CheckElement_ComputeLayout(void* selfv, int x, int y, int w, int h) {
+    reinterpret_cast<UI::CheckElement*>(selfv)->UI::CheckElement::ComputeLayout(x, y, w, h);   // B.3.6 bridge
+}
+extern "C" void RtUi_CheckElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::CheckElement*>(selfv)->UI::CheckElement::Draw(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_CheckElement_Update(void* selfv, const void* time, void* ui,
+                                         void** dlg, const void* statev) {
+    reinterpret_cast<UI::CheckElement*>(selfv)->UI::CheckElement::Update(   // B.3.6 bridge
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlg),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(statev));
 }
 
 // ============================================================================
-// Constructors / destructor
+// Constructors / destructor — DOORS (B4b-2), unchanged
 // ============================================================================
 // The default constructor INLINES ButtonElement's body (Element ctor, the base
 // vtable stamp, +0xc0 = -1, +0xc4 = 0) rather than calling ??0ButtonElement,
@@ -168,7 +199,7 @@ extern "C" void* RtUi_CheckElement_Ctor(void* selfv) {
     I32(self, 0xc0) = -1;
     I32(self, 0xc4) = 0;
     P(self, 0x00) = VtCheckElement();
-    self[kChecked] = 0;
+    self[offsetof(UI::CheckElement, _checked)] = 0;
     return self;
 }
 
@@ -177,7 +208,7 @@ extern "C" void* RtUi_CheckElement_CopyCtor(void* selfv, const void* otherv) {
     const uint8_t* other = static_cast<const uint8_t*>(otherv);
     RtAddr<ButtonCopyCtorFn>(0x180048460ull)(self, other);
     P(self, 0x00) = VtCheckElement();
-    self[kChecked] = other[kChecked];
+    self[offsetof(UI::CheckElement, _checked)] = other[offsetof(UI::CheckElement, _checked)];
     return self;
 }
 
