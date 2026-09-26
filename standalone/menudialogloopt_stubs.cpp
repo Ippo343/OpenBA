@@ -59,8 +59,10 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes
 #include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
+#include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
 #include <new>
 #include <cstring>
+#include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
 
 namespace {
 
@@ -378,14 +380,73 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
 
 void Stub_Shutdown(UpdateLoop* self) {
     printf("[MenuDLT::Shutdown] self=%p\n", (void*)self);
-    // Retail MenuDLT::Shutdown (exe 0x14009b280) tears down the menu scene,
-    // renderer and SaveLoad (still skipped here — a leak, not a race), then
-    // DialogLoopT::Shutdown, then `Audio::Scene::StopAll(self+0xb30)` at
-    // 0x14009b41a. The StopAll is NOT skippable: it is what parks the streamed
-    // menu music's thread before the next LoaderLoop's Loader::Load remounts
-    // the packages under it (open defect (c): the stream thread faulting in
-    // FileSystem::ReadFile on `_packfiles[]`). See MenuDialogLoopT_StopMusic.
+    // ENDGAME B.3.7 CARRY-OVER 11: retail MenuDialogLoopT::Shutdown
+    // (Application-x64.exe 0x14009b280), transcribed from its DISASSEMBLY, whole.
+    // This stub used to run only step 11 (the StopAll) and skip the rest -- in
+    // particular the call to `DialogLoopT::Shutdown`, which retail makes
+    // DIRECTLY through import 0x1401523a0 (`?Shutdown@DialogLoopT@Engine@@`),
+    // and which closes the menu dialog. Now that the base member is callable
+    // it is called QUALIFIED (slot 2 is VIRTUAL on the base; this stub IS the
+    // exe table's slot 2). Import names read from the exe's IAT with pefile:
+    //   0x140151eb8 ?RemoveGlobalObject@Scene@Graphics@@   0x140151360 ?RemoveObject@Scene@Graphics@@
+    //   0x140152b68 ?MemFree@MemoryAllocator@System@@       0x140151fa8 ??1Scene@Graphics@@
+    //   0x1401521f0 ??1Renderer@Graphics@@                 0x140151f88 ??1SaveLoad@Save@@
+    //   0x1401523a0 ?Shutdown@DialogLoopT@Engine@@          0x140151f98 ?StopAll@Scene@Audio@@
+    //   0x140151bf8 ?EnableCursor@UserInterface@UI@@ (tail JMP)
+    // Retail re-reads every field from `this` at each use and NEVER nulls one
+    // after freeing it; both are reproduced. Unguarded where retail is.
+    uint8_t* const base = reinterpret_cast<uint8_t*>(self);
+    auto field = [base](uint32_t off) -> void* {
+        return *reinterpret_cast<void**>(base + off);
+    };
+    auto scene = [&field]() {                        // MOV RCX,[RBX+0xba0], re-read
+        return static_cast<Graphics::Scene*>(field(0xba0));
+    };
+    auto deleteObject = [](void* o) {                // MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]
+        reinterpret_cast<Object::Base*>(o)->DeletingDtor(1);
+    };
+    typedef void (*DtorFn)(void*);
+    static DtorFn s_sceneDtor = reinterpret_cast<DtorFn>(
+        ResolveExport("??1Scene@Graphics@@QEAA@XZ"));
+    static DtorFn s_rendererDtor = reinterpret_cast<DtorFn>(
+        ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
+    static DtorFn s_saveLoadDtor = reinterpret_cast<DtorFn>(
+        ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
+
+    // 1. +0xbc0: the menu scene's first Geometry -- REMOVED, not owned (no delete).
+    if (field(0xbc0))
+        scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(field(0xbc0)));
+    // 2-4. +0xbb0 (SunLight), +0xba8 (main mesh), +0xbc8 (DLC ship): removed
+    //      from the scene's global list, then deleted through slot 0.
+    for (uint32_t off : {0xbb0u, 0xba8u, 0xbc8u}) {
+        if (field(off)) {
+            scene()->RemoveGlobalObject(static_cast<Graphics::Geometry*>(field(off)));
+            if (void* o = field(off)) deleteObject(o);
+        }
+    }
+    // 5. every scene-grid instance: RemoveObject(id[i]) then delete object[i].
+    //    Count from +0xbe8, ids from +0xbf0 (uint32), objects from +0xbe0.
+    for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(base + 0xbe8); ++i) {
+        const uint32_t id = static_cast<const uint32_t*>(field(0xbf0))[i];
+        scene()->RemoveObject(id);
+        if (void* o = static_cast<void**>(field(0xbe0))[i]) deleteObject(o);
+    }
+    // 6. +0xbb8 (the Transform block): freed.
+    if (void* t = field(0xbb8)) fn_MemFreeStatic(t);
+    // 7. +0xba0 Graphics::Scene: ~Scene then freed.
+    if (void* g = field(0xba0)) { s_sceneDtor(g); fn_MemFreeStatic(g); }
+    // 8. +0xb98 Graphics::Renderer: ~Renderer then freed.
+    if (void* r = field(0xb98)) { s_rendererDtor(r); fn_MemFreeStatic(r); }
+    // 9. +0xb70 the menu's Save::SaveLoad: ~SaveLoad then freed.
+    if (void* sl = field(0xb70)) { s_saveLoadDtor(sl); fn_MemFreeStatic(sl); }
+    // 10. `CALL [0x1401523a0]` -- Engine::DialogLoopT::Shutdown, QUALIFIED.
+    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Shutdown();  // B.3.7 bridge
+    // 11. Audio::Scene::StopAll(this+0xb30). NOT skippable: it parks the
+    //     streamed menu music's thread before the next LoaderLoop's
+    //     Loader::Load remounts the packages under it (open defect (c)).
     MenuDialogLoopT_StopMusic(self);
+    // 12. The tail `JMP UI::UserInterface::EnableCursor(this+0x40, false)`.
+    reinterpret_cast<UI::UserInterface*>(base + 0x40)->EnableCursor(false);  // B.3.6 bridge
 }
 
 bool Stub_Update(UpdateLoop* self, void* time) {
