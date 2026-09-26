@@ -16,6 +16,7 @@
 #include "resolve.h"
 #include "system/String.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2): QUALIFIED base calls
 #include <cstdint>
 #include <new>
 
@@ -28,21 +29,6 @@
 // ?Achievement@0@QEAA@XZ
 typedef void (*fn_Achievement_Ctor_t)(void* self);
 static fn_Achievement_Ctor_t s_fn_Achievement_Ctor = nullptr;
-
-// Achievement::Achievement::~Achievement() -- ordinal 0x26e (622)
-// ??1Achievement@0@UEAA@XZ
-typedef void (*fn_Achievement_Dtor_local_t)(void* self);
-static fn_Achievement_Dtor_local_t s_fn_Achievement_Dtor = nullptr;
-
-// Achievement::Achievement::GetFileVersion() const -- ordinal 0x26f (623)
-// ?GetFileVersion@Achievement@1@UEBAHXZ
-typedef int (*fn_Achievement_GetFileVersion_t)(void* self);
-static fn_Achievement_GetFileVersion_t s_fn_Achievement_GetFileVersion = nullptr;
-
-// Achievement::Achievement::Serialize(stream) -- ordinal 0x309 (777)
-// From callees of Scenario_Slot5
-typedef void (*fn_Achievement_Serialize_t)(void* self, void* stream);
-static fn_Achievement_Serialize_t s_fn_Achievement_Serialize = nullptr;
 
 // Typed ExternalPtr serialize for MapGenerator (0x140019ec0)
 typedef void (*fn_ExtPtr_MapGen_Serialize_t)(void* field, void* serializer);
@@ -73,12 +59,6 @@ static void EnsureResolved() {
     //   GetFileVersion (vtable+0x18) 0x18009e170, Serialize 0x18009e070.
     s_fn_Achievement_Ctor = reinterpret_cast<fn_Achievement_Ctor_t>(
         ResolveAddr(Module::Runtime, 0x18009e240));
-    s_fn_Achievement_Dtor = reinterpret_cast<fn_Achievement_Dtor_local_t>(
-        ResolveAddr(Module::Runtime, 0x18009e180));
-    s_fn_Achievement_GetFileVersion = reinterpret_cast<fn_Achievement_GetFileVersion_t>(
-        ResolveAddr(Module::Runtime, 0x18009e170));
-    s_fn_Achievement_Serialize = reinterpret_cast<fn_Achievement_Serialize_t>(
-        ResolveAddr(Module::Runtime, 0x18009e070));
 
     s_fn_ExtPtr_MapGen_Serialize = reinterpret_cast<fn_ExtPtr_MapGen_Serialize_t>(
         ResolveAddr(Module::Exe, 0x140019ec0));
@@ -107,10 +87,9 @@ void* Scenario_Dtor(Scenario* self, uint32_t flags) {
     reinterpret_cast<System::String*>(&self->_field88)->~String();
     reinterpret_cast<System::String*>(&self->scenarioName)->~String();
 
-    // Call Achievement base destructor
-    if (s_fn_Achievement_Dtor) {
-        s_fn_Achievement_Dtor(self);
-    }
+    // Achievement::Achievement::~Achievement (0x18009e180) — a QUALIFIED member
+    // call (B7-3/B7-13): retail CALLs the base dtor unconditionally.
+    reinterpret_cast<Achievement::Achievement*>(self)->Achievement::Achievement::~Achievement();   // B.3.7 bridge
 
     // Conditional free
     if (flags & 1) {
@@ -129,10 +108,10 @@ void* Scenario_Dtor(Scenario* self, uint32_t flags) {
 uint32_t Scenario_Slot3(Scenario* self) {
     EnsureResolved();
 
-    uint32_t baseVersion = 0;
-    if (s_fn_Achievement_GetFileVersion) {
-        baseVersion = (uint32_t)s_fn_Achievement_GetFileVersion(self);
-    }
+    // Achievement::Achievement::GetFileVersion (slot 3, 0x18009e170) — QUALIFIED:
+    // an unqualified call would dispatch through this exe table back into this slot.
+    uint32_t baseVersion = (uint32_t)reinterpret_cast<const Achievement::Achievement*>(self)   // B.3.7 bridge
+        ->Achievement::Achievement::GetFileVersion();
     return baseVersion | 0x600;
 }
 
@@ -148,10 +127,9 @@ uint32_t Scenario_Slot3(Scenario* self) {
 void Scenario_Serialize(Scenario* self, void* stream) {
     EnsureResolved();
 
-    // Serialize Achievement base first
-    if (s_fn_Achievement_Serialize) {
-        s_fn_Achievement_Serialize(self, stream);
-    }
+    // Serialize Achievement base first: Achievement::Achievement::Serialize (slot 5,
+    // 0x18009e070) — QUALIFIED (B7-3).
+    reinterpret_cast<Achievement::Achievement*>(self)->Achievement::Achievement::Serialize(stream);   // B.3.7 bridge
 
     // Create serializer on stack (24 bytes), version 0
     alignas(8) uint8_t serializer[24];

@@ -62,6 +62,8 @@
 #include "graphics/AnimationManager.h"   // ENDGAME B.3.5 Video/Graphics caller batch
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
 #include "ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K4)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
+#include "save/SaveLoad.h"                    // ENDGAME B.3.7 callers (K2)
 
 // code/Game/Game/minimap_upload.cpp — ports FUN_1400a4e80 + the CopyToTexture tail.
 extern "C" void Minimap_CreateAndUpload(void* mapObj);
@@ -857,7 +859,8 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
     // perfectly. That false reading cost a full detour of this investigation;
     // the PersistObject probe measures the real arguments instead.
     if (s_ppAchMgr && *s_ppAchMgr) {
-        s_fn_AchMgr_Persist(*s_ppAchMgr, stream);
+        reinterpret_cast<Achievement::AchievementManager*>(*s_ppAchMgr)->Persist(   // B.3.7 bridge
+            *reinterpret_cast<IO::Stream*>(stream));
     }
     // B.3.5 bridge — ?Serialize@AnimationManager@Graphics@@QEAAXAEAVSerializer@IO@@@Z.
     // The `s_fn_AnimMgr_Serialize` cache, its typedef, its resolver and the
@@ -911,8 +914,7 @@ extern "C" void GameUpdateLoop_Serialize_95a90(void* selfVoid, void* stream,
 extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
                                            void* savedState, int* outParam) {
     EnsureResolved();
-    if (!s_fn_CMS_Ctor || !s_fn_CMS_GetMemStream ||
-        !s_fn_SavedState_Store || !s_fn_SavedState_Retrieve) {
+    if (!s_fn_CMS_Ctor || !s_fn_CMS_GetMemStream) {
         fprintf(stderr, "[GUL::SaveRestore] MISSING Runtime exports — no-op\n");
         fflush(stderr);
         return;
@@ -925,7 +927,8 @@ extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
     alignas(16) uint8_t cms[0x100];
     s_fn_CMS_Ctor(cms);
     if (save == 0) {
-        s_fn_SavedState_Retrieve(savedState, s_fn_CMS_GetMemStream(cms));
+        reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
+            *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
         s_fn_CMS_Open(cms);
         GameUpdateLoop_Serialize_95a90(self, cms, savedState, outParam);
         s_fn_CMS_Close(cms);
@@ -933,7 +936,8 @@ extern "C" void GameUpdateLoop_SaveRestore(void* self, char save,
         s_fn_CMS_Create(cms);
         GameUpdateLoop_Serialize_95a90(self, cms, savedState, outParam);
         s_fn_CMS_Close(cms);
-        s_fn_SavedState_Store(savedState, s_fn_CMS_GetMemStream(cms));
+        reinterpret_cast<Save::SavedState*>(savedState)->Store(   // B.3.7 bridge
+            *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
     }
     s_fn_CMS_Dtor(cms);
 }
@@ -965,7 +969,8 @@ static bool RoundtripDecompress(void* savedState, uint8_t** outData, uint32_t* o
     if (!s_read || !s_size) return false;
     alignas(16) uint8_t cms[0x100];
     s_fn_CMS_Ctor(cms);
-    s_fn_SavedState_Retrieve(savedState, s_fn_CMS_GetMemStream(cms));
+    reinterpret_cast<Save::SavedState*>(savedState)->Retrieve(   // B.3.7 bridge
+        *reinterpret_cast<IO::MemoryStream*>(s_fn_CMS_GetMemStream(cms)));
     if (!s_fn_CMS_Open(cms)) { s_fn_CMS_Dtor(cms); return false; }
     const uint32_t size = s_size(cms);
     uint8_t* data = static_cast<uint8_t*>(std::malloc(size ? size : 1));

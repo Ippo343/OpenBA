@@ -32,6 +32,7 @@
 
 #include "engine_funcs.h"
 #include "resolve.h"
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -139,27 +140,6 @@ static constexpr float kRayStartZ  = 50.0f;    // DAT_1401721e8
 static constexpr float kRayDirZ    = -1.0f;    // DAT_140172280
 static constexpr float kRayMaxDist = 100.0f;   // DAT_140172208
 
-typedef int (*fn_PickingIntersect_t)(void* scene, const float* rayStart, const float* rayDir,
-                                     const float* maxDist, float* hitPosOut, float* hitNormalOut);
-static fn_PickingIntersect_t s_fn_PickingIntersect = nullptr;
-static bool s_pickResolved = false;
-
-static void EnsurePickingIntersect() {
-    if (s_pickResolved) return;
-    s_pickResolved = true;
-    // Retail reads the IAT dispatch slot, so read it first (registered in
-    // address_registry.cpp alongside Picking::Scene::GetUserData). Fall back to the
-    // Runtime export by mangled name so this file keeps working if that registration
-    // is ever dropped.
-    void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152428));
-    if (d) s_fn_PickingIntersect = reinterpret_cast<fn_PickingIntersect_t>(*d);
-    if (!s_fn_PickingIntersect)
-        s_fn_PickingIntersect = reinterpret_cast<fn_PickingIntersect_t>(ResolveExport(
-            "?Intersect@Scene@Picking@@QEBAHAEBVVector3@Math@@0AEBVScalar@4@AEAV34@2@Z"));
-    if (!s_fn_PickingIntersect)
-        std::fprintf(stderr, "[MapQuery] Picking::Scene::Intersect UNRESOLVED — the floor/deck "
-                             "height refine is dead; citizens walk at terrain height.\n");
-}
 
 // The map grid the refine indexes. Retail reads param_1 directly and every retail call
 // site passes *(gw+0xf8); our ported call sites are not all provably doing so, and a wrong
@@ -214,16 +194,19 @@ extern "C" float* Reimpl_MapGetTerrainPos(void* game, float* outPos3, float* inX
             const int8_t floorCount =
                 *(int8_t*)(cells + 0x2d + (int64_t)((int64_t)dim * iy + ix) * 0x30);
             if (floorCount > 0) {
-                EnsurePickingIntersect();
-                if (s_fn_PickingIntersect) {
+                {
                     const float rayStart[3] = { inX, inZ, kRayStartZ };
                     const float rayDir[3]   = { 0.0f, 0.0f, kRayDirZ };
                     const float maxDist     = kRayMaxDist;
                     float hitPos[3]    = { 0.0f, 0.0f, 0.0f };
                     float hitNormal[3] = { 0.0f, 0.0f, 0.0f };
-                    const int hit = s_fn_PickingIntersect(
-                        (void*)((uintptr_t)mapGrid + 8), rayStart, rayDir,
-                        &maxDist, hitPos, hitNormal);
+                    // Picking::Scene::Intersect (import slot 0x140152428); the Scene is
+                    // embedded at mapGrid+8.
+                    const int hit = reinterpret_cast<const Picking::Scene*>(   // B.3.7 bridge
+                        (uintptr_t)mapGrid + 8)->Intersect(
+                        *reinterpret_cast<const Vector3*>(rayStart), *reinterpret_cast<const Vector3*>(rayDir),
+                        *reinterpret_cast<const Math::Scalar*>(&maxDist),
+                        *reinterpret_cast<Vector3*>(hitPos), *reinterpret_cast<Vector3*>(hitNormal));
                     if (hit >= 0 && hitPos[2] > height) {
                         if (outTri) {
                             ((float*)outTri)[0] = hitNormal[0];

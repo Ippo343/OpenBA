@@ -28,6 +28,11 @@
 #include "io/Modification.h"   // ENDGAME B.3.4 caller batch P
 #include "io/Persistence.h"    // ENDGAME B.3.4 caller batch P
 #include "io/FileSystem.h"     // ENDGAME B.3.4a closing: FileSystem::ClosePackages
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
+#include "application/Application.h"          // ENDGAME B.3.7 callers (K2)
+#include "engine/Engine.h"                    // ENDGAME B.3.7 callers (K2)
+#include "engine/MainLoop.h"                  // ENDGAME B.3.7 callers (K2)
+#include "engine/UpdateLoop.h"                // ENDGAME B.3.7 callers (K2)
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::Device and
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
@@ -264,11 +269,10 @@ static void ShutdownEngineStaged(void* engineP) {
                *reinterpret_cast<uint8_t*>(base + 0x6f0));
     }
 
-    // 2. AchievementManager::RemoveAll
+    // 2. AchievementManager::RemoveAll. ENDGAME B.3.7: the ResolveFn readiness
+    // probe goes with the door — RemoveAll is a real member.
     if (void* am = load_ptr(0x6e8)) {
-        if (auto fn = ResolveFn<void(*)(void*)>(
-                "?RemoveAll@AchievementManager@Achievement@@QEAAXXZ"))
-            fn(am);
+        reinterpret_cast<Achievement::AchievementManager*>(am)->RemoveAll();   // B.3.7 bridge
     }
 
     // 3. Input::Device::PlatformShutdown
@@ -359,10 +363,9 @@ static void ShutdownEngineStaged(void* engineP) {
     }
 
     // 9. Application::PlatformShutdown — DestroyWindow + UnregisterClass.
+    // ENDGAME B.3.7: the ResolveFn readiness probe goes with the door.
     if (void* app = load_ptr(0x690)) {
-        if (auto fn = ResolveFn<void(*)(void*)>(
-                "?PlatformShutdown@Application@1@AEAAXXZ"))
-            fn(app);
+        reinterpret_cast< ::Application::Application*>(app)->PlatformShutdown();   // B.3.7 bridge
     }
 
     // 10. FreeLibrary on the Modification DLL slot (Runtime 0x1801fc6d0).
@@ -458,7 +461,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
     // shadow-verified operations said nothing about it (WAVE9_LANE_E2.md 5.1).
     const unsigned arenaMB = 0x200;
     printf("[GameMain] Engine::Startup(cmdLine=%p, %u, 0, false)...\n", (void*)cmdLine, arenaMB);
-    unsigned ok = s_fn_Engine_Startup(&engine, cmdLine, arenaMB, 0, false);
+    unsigned ok = reinterpret_cast<Engine::Engine*>(&engine)->Startup(cmdLine, arenaMB, 0, false);   // B.3.7 bridge
     // Engine::Startup somehow disconnects stdout/stderr from the log files
     // that WinMain freopen()'d (cause TBD — Engine::Startup itself doesn't call
     // AllocConsole/FreeConsole/SetStdHandle/freopen per Ghidra). Re-redirect
@@ -762,11 +765,15 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         if (fn_DialogLoaderLoopT_Load) {
                             if (shiningRockLoop) {
                                 printf("[GameMain] pre-loading ShiningRock.rsc\n");
-                                fn_DialogLoaderLoopT_Load(shiningRockLoop);
+                                // QUALIFIED: the door is the base body; the splash's
+                                // hand-built table would dispatch slot 6 to its stub.
+                                reinterpret_cast<Engine::DialogLoaderLoopT*>(shiningRockLoop)
+                                    ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
                             }
                             if (loadingLoop) {
                                 printf("[GameMain] pre-loading Loading.rsc\n");
-                                fn_DialogLoaderLoopT_Load(loadingLoop);
+                                reinterpret_cast<Engine::DialogLoaderLoopT*>(loadingLoop)
+                                    ->Engine::DialogLoaderLoopT::Load();   // B.3.7 bridge
                             }
                         }
 
@@ -842,7 +849,8 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                         if (topLoop) {
                             printf("[GameMain] Calling MainLoop::Run with %s top "
                                    "loop = %p...\n", topTag, (void*)topLoop);
-                            s_fn_MainLoop_Run(ml, topLoop);
+                            reinterpret_cast<Engine::MainLoop*>(ml)->Run(   // B.3.7 bridge
+                                reinterpret_cast<Engine::UpdateLoop*>(topLoop));
                             // Run has returned: no more frames will ever be
                             // rendered, so the boot-state watchdog's hang
                             // detector must switch to its teardown budget here

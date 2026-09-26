@@ -51,6 +51,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "object/TypeInfo.h"   // ENDGAME B.3.3 step 6C
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 
 // ============================================================
 // Externs from sibling reimpl TUs (already registered/defined)
@@ -1280,8 +1281,8 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                 ResolveExport("?SetEventHandler@AchievementManager@Achievement@@QEAAXP6AXH@Z@Z"));
         void* achMgr = (g_ppAchievementManager && *g_ppAchievementManager)
                            ? **g_ppAchievementManager : nullptr;
-        if (s_setEventHandler && achMgr) {
-            s_setEventHandler(achMgr, &EventLog_OnAchievementAwarded);
+        if (achMgr) {
+            reinterpret_cast<Achievement::AchievementManager*>(achMgr)->SetEventHandler(&EventLog_OnAchievementAwarded);   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30 AchievementManager::SetEventHandler "
                             "(mgr=%p handler=EventLog_OnAchievementAwarded)\n", achMgr);
         } else {
@@ -1325,8 +1326,8 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
             ResolveExport("?Reset@AchievementManager@Achievement@@QEAAXXZ"));
         void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
                         ? **g_ppAchievementManager : nullptr;
-        if (s_fn_AchMgr_Reset && mgr) {
-            s_fn_AchMgr_Reset(mgr);
+        if (mgr) {
+            reinterpret_cast<Achievement::AchievementManager*>(mgr)->Reset();   // B.3.7 bridge
             fprintf(stderr, "[GUL::Load] step30b AchievementManager::Reset(mgr=%p) -> "
                             "instances=%d\n", mgr, *(int32_t*)((uintptr_t)mgr + 0x20));
         } else {
@@ -1659,7 +1660,9 @@ extern "C" void GameUpdateLoop_Load(void* loopVoid) {
                     achievementId, inst, scenario, checked,
                     s_AchievementTypeId ? *s_AchievementTypeId : 0u);
             fflush(stderr);
-            if (inst) s_fn_AchievementInstance_SetAchievement(inst, checked);
+            // ExternalPtr<Achievement> arrives as a bare register value (B7-5).
+            if (inst) reinterpret_cast<Achievement::AchievementInstance*>(inst)->SetAchievement(   // B.3.7 bridge
+                Object::ExternalPtr<Achievement::Achievement>(reinterpret_cast<Achievement::Achievement*>(checked)));
             *(int32_t*)(p + 0x15C) = achievementId;
         }
     }

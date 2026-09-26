@@ -49,6 +49,7 @@
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/StringTable.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 #include <new>
 
 // eventlog.cpp — the shared AddEvent family core, exposed for this sibling.
@@ -68,16 +69,23 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId) {
     // below only covers the case where the slot never resolved at all.
     void* mgr = (g_ppAchievementManager && *g_ppAchievementManager)
                     ? **g_ppAchievementManager : nullptr;
-    if (!mgr || !fn_AchievementManager_GetAchievement) return;
+    if (!mgr) return;
 
     uint64_t achievement = 0;   // ExternalPtr<Achievement> (8 bytes, trivially destructible)
-    fn_AchievementManager_GetAchievement(mgr, &achievement, achievementId);
+    // B.3.7 bridge: GetAchievement returns ExternalPtr<Achievement> BY VALUE (a
+    // retslot in retail); the prvalue is constructed straight into the slot the
+    // door was handed — one construction, as before.
+    ::new (&achievement) Object::ExternalPtr<Achievement::Achievement>(
+        reinterpret_cast<const Achievement::AchievementManager*>(mgr)->GetAchievement(achievementId));   // B.3.7 bridge
     if (achievement == 0) {
         return;
     }
 
     System::String titleKey;  // the achievement's title KEY
-    fn_Achievement_GetTitle((void*)achievement, &titleKey);
+    // B.3.7 bridge: GetTitle returns System::String BY VALUE; constructed
+    // straight into titleKey's storage (one AddRef, as the door did).
+    ::new (&titleKey) System::String(
+        reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());   // B.3.7 bridge
 
     // UI::String(ExternalPtr<StringTable> = *(achievement+0x20), key), then
     // operator System::String() — the LOOKED-UP display text. This is the

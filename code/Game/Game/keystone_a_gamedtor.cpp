@@ -58,16 +58,15 @@
 #include "collection/Collection.h"
 #include <cstdint>
 #include "system/Thread.h"     // ENDGAME B.3.4b System caller batch (CriticalSection/Thread)
+#include "application/Application.h"   // ENDGAME B.3.7 callers (K2)
 
 namespace {
 
 // ---- Runtime-DLL exports (resolved by mangled name; same strings as keystone_a_zone.cpp).
-typedef void (*fn_YieldToThreads_t)(void* app);
 typedef void (*fn_CSDtor_t)(void* cs);
 typedef void (*fn_ThreadDtor_t)(void* thread);
 typedef void (*fn_SceneDtor_t)(void* scene);
 
-static fn_YieldToThreads_t s_fn_Yield       = nullptr;
 static fn_CSDtor_t        s_fn_CSDtor       = nullptr;
 static fn_ThreadDtor_t    s_fn_ThreadDtor   = nullptr;
 static fn_SceneDtor_t     s_fn_SceneDtor    = nullptr;
@@ -88,7 +87,6 @@ static fn_TreeFree14c30_t   s_fn_TreeFree14c30 = nullptr;
 static bool s_init = false;
 static void EnsureFns() {
     if (s_init) return;
-    s_fn_Yield       = reinterpret_cast<fn_YieldToThreads_t>(ResolveExport("?YieldToThreads@Application@1@QEAAXXZ"));
     s_fn_CSDtor      = reinterpret_cast<fn_CSDtor_t>(ResolveExport("??1CriticalSection@System@@QEAA@XZ"));
     s_fn_ThreadDtor  = reinterpret_cast<fn_ThreadDtor_t>(ResolveExport("??1Thread@System@@QEAA@XZ"));
     s_fn_SceneDtor   = reinterpret_cast<fn_SceneDtor_t>(ResolveExport("??1Scene@Picking@@QEAA@XZ"));
@@ -378,8 +376,8 @@ extern "C" void GameDtor_DrainQueue_a6690(int64_t thread) {
         }
         if (count == 0) break;
         // YieldToThreads(*g_pAppSingleton)
-        if (s_fn_Yield && g_pAppSingleton)
-            s_fn_Yield(*reinterpret_cast<void**>(g_pAppSingleton));
+        if (g_pAppSingleton)
+            reinterpret_cast< ::Application::Application*>(*reinterpret_cast<void**>(g_pAppSingleton))->YieldToThreads();   // B.3.7 bridge
         reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
     }
     reinterpret_cast<System::CriticalSection*>(reinterpret_cast<void*>(thread + 0x30))->Unlock();   // B.3.4b bridge
