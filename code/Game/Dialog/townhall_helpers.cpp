@@ -29,6 +29,9 @@
 #include <cstdint>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"      // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/String.h"       // ENDGAME B.3.6 UI callers (K1)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K1)
 
 // AssignHousing (0x140111ee0) — sets citizen+0x248 (workplace roster link); ported in
 // citizencomponent.cpp and registered in standalone. Same decl as citizen_employ_cascade.
@@ -56,7 +59,7 @@ void PushPtr(uint64_t* base, uint64_t value) {
 void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
     System::String strBuf(name);
     uint64_t foundBuf[2] = {0, 0};
-    fn_FindElement(parent, foundBuf, &strBuf);
+    ::new (static_cast<void*>(foundBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parent)->FindElement(strBuf));  // B.3.6 bridge
     void* elem = *(void**)foundBuf;
     if (elem && fn_IsDerivedFrom(elem, typeId)) return elem;
     return nullptr;
@@ -72,11 +75,11 @@ void* FindCastElem(void* parent, const char* name, uint32_t typeId) {
 // ===========================================================================
 extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
     uint64_t* r = (uint64_t*)rating;
-    int childCount = fn_Element_ChildCount(*(void**)groupIBPPtr);
+    int childCount = reinterpret_cast<const UI::Element*>(*(void**)groupIBPPtr)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < childCount; i++) {
         // child(i) -> FindElement("whole") -> cast ImageElement -> push
         uint64_t childBuf[2] = {0, 0};
-        fn_Element_Child(*(void**)groupIBPPtr, childBuf, i);
+        ::new (static_cast<void*>(childBuf)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)groupIBPPtr)->Child(i));  // B.3.6 bridge
         void* whole = FindCastElem(*(void**)childBuf, "whole",
                                    g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0);
         uint64_t wholeIBP = 0;
@@ -85,14 +88,14 @@ extern "C" void TownHall_GroupRatingInit(void* rating, void* groupIBPPtr) {
 
         // child(i) -> FindElement("half") -> cast ImageElement -> push
         uint64_t childBuf2[2] = {0, 0};
-        fn_Element_Child(*(void**)groupIBPPtr, childBuf2, i);
+        ::new (static_cast<void*>(childBuf2)) ::Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)groupIBPPtr)->Child(i));  // B.3.6 bridge
         void* half = FindCastElem(*(void**)childBuf2, "half",
                                   g_TypeId_ImageElement ? *g_TypeId_ImageElement : 0);
         uint64_t halfIBP = 0;
         IbpCtor(&halfIBP, half);
         PushPtr(r + 2, halfIBP);
 
-        childCount = fn_Element_ChildCount(*(void**)groupIBPPtr);  // faithful re-read
+        childCount = reinterpret_cast<const UI::Element*>(*(void**)groupIBPPtr)->ChildCount();  // B.3.6 bridge — faithful re-read
     }
 }
 
@@ -108,11 +111,9 @@ extern "C" void TownHall_GroupRatingUpdate(void* rating, float value, float maxV
     int odd = 1;
     for (int i = 0; i < wholeCount; i++, odd += 2) {
         uint64_t* wholeSlot = (uint64_t*)(r[0] + (uintptr_t)i * 8);
-        fn_Element_SetFlagsOnOff(*(void**)wholeSlot,
-                                 (odd >= halfSteps) ? 1u : 0u, (odd < halfSteps) ? 1u : 0u);
+        reinterpret_cast<UI::Element*>(*(void**)wholeSlot)->SetFlagsOnOff((odd >= halfSteps) ? 1u : 0u, (odd < halfSteps) ? 1u : 0u);  // B.3.6 bridge
         uint64_t* halfSlot = (uint64_t*)(r[2] + (uintptr_t)i * 8);
-        fn_Element_SetFlagsOnOff(*(void**)halfSlot,
-                                 (odd != halfSteps) ? 1u : 0u, (odd == halfSteps) ? 1u : 0u);
+        reinterpret_cast<UI::Element*>(*(void**)halfSlot)->SetFlagsOnOff((odd != halfSteps) ? 1u : 0u, (odd == halfSteps) ? 1u : 0u);  // B.3.6 bridge
     }
 }
 
@@ -344,10 +345,10 @@ bool InvNameLess(const InvEntry* a, const InvEntry* b) {
     if (!a->desc || !b->desc) return a->desc && !b->desc ? true : false;
     uint8_t uiA[16], uiB[16];
     System::String sysA, sysB;
-    fn_UIString_Ctor(uiA, *(uint64_t*)(a->desc + 0x28), (void*)(a->desc + 0x30));
-    fn_UIString_ToSystemString(uiA, &sysA);
-    fn_UIString_Ctor(uiB, *(uint64_t*)(b->desc + 0x28), (void*)(b->desc + 0x30));
-    fn_UIString_ToSystemString(uiB, &sysB);
+    ::new (static_cast<void*>(uiA)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(a->desc + 0x28))), *reinterpret_cast<const System::String*>(a->desc + 0x30));  // B.3.6 bridge
+    ::new (static_cast<void*>(&sysA)) System::String(reinterpret_cast<const UI::String*>(uiA)->operator System::String());  // B.3.6 bridge
+    ::new (static_cast<void*>(uiB)) UI::String(::Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(b->desc + 0x28))), *reinterpret_cast<const System::String*>(b->desc + 0x30));  // B.3.6 bridge
+    ::new (static_cast<void*>(&sysB)) System::String(reinterpret_cast<const UI::String*>(uiB)->operator System::String());  // B.3.6 bridge
     bool less = SysStrLess(&sysA, &sysB);
     return less;
 }
