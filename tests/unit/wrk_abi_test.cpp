@@ -42,6 +42,7 @@
 #include "Work/Pickup.h"
 #include "Work/PlantArea.h"
 #include "Work/PlantOrchard.h"
+#include "Work/TendArea.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -295,6 +296,13 @@ UNIT_TEST(wrk_leaf_plantorchard) {
     CHECK_EQ(offsetof(PlantOrchard, field_60), (size_t)0x60);
     CHECK_EQ(offsetof(PlantOrchard, field_64), (size_t)0x64);
     CHECK_EQ(offsetof(PlantOrchard, field_68), (size_t)0x68);
+}
+
+UNIT_TEST(wrk_leaf_tendarea) {
+    WRK_LEAF_SHAPE(TendArea, Work, 0x60);
+    CHECK_EQ(offsetof(TendArea, bstRoot), (size_t)0x48);
+    CHECK_EQ(offsetof(TendArea, workerCount), (size_t)0x50);
+    CHECK_EQ(offsetof(TendArea, tendMode), (size_t)0x58);
 }
 
 // ===========================================================================
