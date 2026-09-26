@@ -147,82 +147,59 @@ void FireComponent_InitFuncs() {
 }
 
 // ============================================================
-// Standalone factory — a REAL vtable, not the all-stubs inert one.
+// ENDGAME B.3.8 CIT — FireComponent as a REAL class (FireComponent.h).
 // ============================================================
-// FireComponent overrides six slots in retail (0, 1, 2, 3, 9, 15 — read from the
-// vtable BYTES at 0x140159380, which ends at 0x1401593ff where FireDescription's
-// begins). The inert base gives us 0 (ScalarDtor) and 2 (GetTypeId); this fills
-// the three that carry the mechanic:
-//   3  Serialize      FireComponent_Shutdown
-//   9  Update         FireComponent_Update       <- the per-frame tick
-//   15 water applied  FireComponent_WaterApplied <- SendComponentMessage +0x78
-//
-// ⚠ The slot writes MUST happen after InitInertTyped/MakeInertTyped, never at
-// static-init time: FillTypedVtable re-stubs the table on first construction and
-// would erase them (reference_live_vtable_slot_must_be_wired_in_installlive).
-//
-// GATE: BANISHED_LIVE_FIRE — GRADUATED 2026-08-22, now in the default-on table. The
-// "brand-new lane with no positive soak yet" that used to be written here is no
-// longer true: see the graduation note in component_factory_base.cpp for the two
-// arms that settled it. The var survives as a kill-switch (=0) for A/B runs.
-#include "Component/component_factory_base.h"
-#include "address_registry.h"
+// Before: a 48-slot hand-built g_FireComponent_LiveVtable filled at every create
+// (slots 3 Serialize, 9 Update, 15 water applied), Inert_ScalarDtor in slot 0,
+// and registered at the retail table address 0x140159380. After: the compiler's
+// 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2). The retail
+// table address had no by-address reader in the tree (every SendComponentMessage
+// +0x78 dispatch goes through the object's own vptr), so its registration went
+// with the hand-built table (B38 D5).
+#include "Object/factory_registration.h"
+#include "Component/FireComponent.h"
 
-static uint32_t FireComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("FireComponent");
-    return cached;
+// 0x140049b80. Component() is the CALL 0x1401188b0; the 0x140159380 stamp is
+// the compiler's; +0x28..+0x40 = 0; flags |= 0x08 (0x88).
+FireComponent::FireComponent()
+    : bucketsApplied(0), bucketsAtSpread(0), fireTimer(0), spreadTimer(0), igniteAccum(0) {
+    OrFlagsInCtor(0x08);
 }
 
-static void* g_FireComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-static void FireComponent_UpdateVSlot(void* self, void* dt) {
-    FireComponent_Update(reinterpret_cast<FireComponent*>(self),
-                         reinterpret_cast<int64_t*>(dt));
-}
-static void FireComponent_SerializeVSlot(void* self, void* stream) {
-    FireComponent_Shutdown(reinterpret_cast<FireComponent*>(self), stream);
-}
-static void FireComponent_WaterVSlot(void* self, int msg) {
-    FireComponent_WaterApplied_090(self, msg);
+// [0] 0x140005720: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* FireComponent::DeletingDtor(unsigned flags) {
+    this->~FireComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void FireComponent_FinishLiveVtable() {
-    // Slot 3 (Serialize) is wired UNCONDITIONALLY, above the live gate.
-    // Serializer wiring is not a feature flag: PersistObject dispatches slot 3
-    // on every load, and a component whose slot 3 is absent falls back to the
-    // base Component serialize and consumes FEWER bytes than the save leg wrote
-    // -- a silent stream desync that surfaces as wild objIds on a LATER record.
-    // It also made every BANISHED_LIVE_*=0 A/B run change the save-stream shape,
-    // so such an A/B could "prove" something that was really a desync.
-    // See reference_slot3_wrapper_must_resolve_first.
-    g_FireComponent_LiveVtable[3]  = reinterpret_cast<void*>(&FireComponent_SerializeVSlot);
-    g_FireComponent_LiveVtable[9]  = reinterpret_cast<void*>(&FireComponent_UpdateVSlot);
-    g_FireComponent_LiveVtable[15] = reinterpret_cast<void*>(&FireComponent_WaterVSlot);
+// [3] 0x140049a90.
+void FireComponent::Persist(void* stream) { FireComponent_Shutdown(this, stream); }
+
+// [9] 0x140048fb0. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void FireComponent::Update(void* time) {
+    FireComponent_Update(this, static_cast<int64_t*>(time));
 }
 
-extern "C" void* FireComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(
-        0x48, 0x88, g_FireComponent_LiveVtable,
-        reinterpret_cast<void*>(&FireComponent_LiveGetTypeId));
-    FireComponent_FinishLiveVtable();
-    return p;
+// [15] 0x140049090 — the water-bucket message (SendComponentMessage +0x78). The
+// body reads only the message id.
+void FireComponent::OnMessage(int message, void*, uint32_t, uint32_t) {
+    FireComponent_WaterApplied_090(this, message);
 }
 
-static void* FireComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(
-        mem, 0x48, 0x88, g_FireComponent_LiveVtable,
-        reinterpret_cast<void*>(&FireComponent_LiveGetTypeId));
-    FireComponent_FinishLiveVtable();
-    return mem;
+// create 0x1400055e0: MemAlloc(0x48, 8), then the ctor.
+void* FireComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FireComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) FireComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* FireComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) FireComponent());
 }
 
-// Register the vtable at its exe address so anything resolving 0x140159380 (and
-// SendComponentMessage's +0x78 dispatch in particular) lands on our table.
-extern "C" void RegisterFireComponentVtable() {
-    RegisterExeAddr(FireComponentAddr::Vtable,
-                    reinterpret_cast<uintptr_t>(g_FireComponent_LiveVtable));
-}
-
-REGISTER_TYPE(FireComponent, "Component",
-              &FireComponent_Factory, &FireComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(FireComponent, "_ZTV13FireComponent")
+DEFINE_EXE_TYPE(FireComponent, "Component")

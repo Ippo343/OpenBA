@@ -846,15 +846,14 @@ void ParticleComponent_InitFuncs() {
 // reading it, never SKIPPING the read.
 // See [[reference_null_guard_on_a_serializer_call_is_a_desync]] and
 // [[reference_stub_comment_outlived_the_port_that_replaced_it]].)
-#include "Component/component_factory_base.h"
+//
+// ENDGAME B.3.8 CIT: ParticleComponent is a REAL class now (ParticleComponent.h) —
+// the 48-slot ParticleComponent_LiveVtable, its per-create fills and
+// Inert_ScalarDtor slot 0 are gone; the compiler's 16-slot vtable carries the
+// slots above, with a real ctor/dtor chain (B38_RULES D1, D2).
+#include "Object/factory_registration.h"
+#include "Component/ParticleComponent.h"
 #include "address_registry.h"
-
-static uint32_t ParticleComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ParticleComponent");
-    return cached;
-}
-static void* ParticleComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
 // ---- Per-frame frame-index un-stamp (Runtime-semantics fix, NOT a tick driver) ----
 // The tick itself is now driven faithfully by the EntityList tree walk: StartEmitter's
@@ -939,18 +938,6 @@ static void PC_UnstampOwnEmitters(ParticleComponent* self) {
     }
 }
 
-static void PC_StartupVSlot(void* s) {
-    ParticleComponent_InitFuncs();
-    ParticleComponent_Serialize(reinterpret_cast<ParticleComponent*>(s));
-}
-static void PC_OnAddedVSlot(void* s) {
-    ParticleComponent_InitFuncs();
-    ParticleComponent_Draw(reinterpret_cast<ParticleComponent*>(s));
-}
-static void PC_OnRemovedVSlot(void* s) {
-    ParticleComponent_InitFuncs();
-    ParticleComponent_OnCreate(reinterpret_cast<ParticleComponent*>(s));
-}
 // [PerfX PARTICLE_CULL -- NON-RETAIL] a particle system nobody can see is FROZEN (not
 // ticked) rather than simulated; when the camera reaches it the plume it had simply
 // continues. Position = the first live emitter geometry's transform (+0x94).
@@ -966,66 +953,88 @@ static bool PC_Culled(ParticleComponent* self) {
     }
     return false;
 }
-static void PC_TickVSlot(void* s, void* time) {
-    ParticleComponent* self = reinterpret_cast<ParticleComponent*>(s);
-    if (PC_Culled(self)) return;   // frozen off-screen: neither the unstamp nor the tick
-    PC_UnstampOwnEmitters(self);   // SA per-frame frame-index advance (see helper) before the tick
-    ParticleComponent_UpdateTick(self, time);
-}
-static void PC_OnUpdate2VSlot(void* s) {
-    ParticleComponent_InitFuncs();
-    ParticleComponent_OnUpdate2(reinterpret_cast<ParticleComponent*>(s));
-}
-static void PC_EventVSlot(void* s, int eventCode) {
-    ParticleComponent_InitFuncs();
-    ParticleComponent_Event(reinterpret_cast<ParticleComponent*>(s), eventCode);
+
+// 0x1400533d0. Component() is the CALL 0x1401188b0; the 0x14015a290 stamp is
+// the compiler's; +0x28..+0x40 = 0; flags |= 0xc3.
+ParticleComponent::ParticleComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr) {
+    OrFlagsInCtor(0xc3);
 }
 
-static void PC_SerSlot3(void* s, void* stream) {
-    // MUST resolve first, exactly like the five sibling wrappers below.
-    // Slot 3 is the FIRST call into this class on a load-from-save:
-    // PersistObject creates the object and dispatches vt[0x18] immediately,
-    // before Startup or any tick has run. Until InitFuncs() has been called
-    // every s_fn_* here is null, and the body null-guards EVERY stream call --
-    // so it consumed ZERO bytes and the record was just the 13-byte outer IBP
-    // header, against 71 bytes on the save leg (where 1200 frames of ticks had
-    // already resolved everything). Symmetric code, asymmetric state.
-    // The rule is already written down in uicomponent_serialize.cpp: resolve
-    // unconditionally at the top of every call, because this can be the very
-    // first call into the class on load-from-save.
+// [0] 0x14000a560. PORT GAP (retail 0x140053310 destroys the geometry objects
+// and frees both arrays first) — the tree's Inert_ScalarDtor never did; kept
+// (ParticleComponent.h).
+Object::Base* ParticleComponent::DeletingDtor(unsigned flags) {
+    this->~ParticleComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [3] 0x140053270. MUST resolve first: slot 3 is the FIRST call into this class
+// on a load-from-save (PersistObject creates the object and dispatches +0x18
+// before Startup or any tick has run). Until InitFuncs() has run every s_fn_*
+// is null and the body null-guards EVERY stream call — it would consume ZERO
+// bytes of a record the save leg wrote (a stream desync). Retail 0x140053270
+// reads an emitter count and then that many bools.
+void ParticleComponent::Persist(void* stream) {
     ParticleComponent_InitFuncs();
-    ParticleComponent_Shutdown(reinterpret_cast<ParticleComponent*>(s), stream);
+    ParticleComponent_Shutdown(this, stream);
 }
-static void ParticleComponent_FinishLiveVtable() {
-    // Slot 3 (+0x18), OUTSIDE the live gate — serializer wiring is not a feature
-    // flag. Retail 0x140053270 reads an emitter count and then that many bools;
-    // the base-only fill read none of it, so every ParticleComponent record came
-    // up short and desynced the stream for every object after it. The count makes
-    // the shortfall VARIABLE, which is why it did not look like a fixed offset.
-    ParticleComponent_LiveVtable[3]  = reinterpret_cast<void*>(&PC_SerSlot3);
-    ParticleComponent_LiveVtable[4]  = reinterpret_cast<void*>(&PC_StartupVSlot);
-    ParticleComponent_LiveVtable[6]  = reinterpret_cast<void*>(&PC_OnAddedVSlot);
-    ParticleComponent_LiveVtable[7]  = reinterpret_cast<void*>(&PC_OnRemovedVSlot);
-    ParticleComponent_LiveVtable[8]  = reinterpret_cast<void*>(&PC_TickVSlot);
-    ParticleComponent_LiveVtable[11] = reinterpret_cast<void*>(&PC_OnUpdate2VSlot);
-    ParticleComponent_LiveVtable[12] = reinterpret_cast<void*>(&PC_EventVSlot);
+
+// [4] 0x140053230 — setup: create the ParticleSystemInstances.
+void ParticleComponent::Startup() {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_Serialize(this);
 }
-extern "C" void* ParticleComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0xC3,
-        ParticleComponent_LiveVtable,
-        reinterpret_cast<void*>(&ParticleComponent_LiveGetTypeId));
-    ParticleComponent_FinishLiveVtable();
-    return p;
+
+// [6] 0x140052f70 — fade-in start of the autoStart (b1) emitters.
+void ParticleComponent::OnAdded() {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_Draw(this);
 }
-static void* ParticleComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0xC3,
-        ParticleComponent_LiveVtable,
-        reinterpret_cast<void*>(&ParticleComponent_LiveGetTypeId));
-    ParticleComponent_FinishLiveVtable();
-    return mem;
+
+// [7] 0x140052e80 — remove every emitter from the scene.
+void ParticleComponent::OnRemove() {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_OnCreate(this);
 }
-REGISTER_TYPE(ParticleComponent, "Component",
-              &ParticleComponent_Factory, &ParticleComponent_CreateInPlace);
+
+// [8] 0x140052b30 — the per-frame tick (node-follow + fade + geometry Update),
+// dispatched by the EntityList tree walk (0x1400c2e5d: RDX = the update's time
+// pointer, passed through).
+void ParticleComponent::Tick(void* time) {
+    if (PC_Culled(this)) return;   // frozen off-screen: neither the unstamp nor the tick
+    PC_UnstampOwnEmitters(this);   // SA per-frame frame-index advance (see helper) before the tick
+    ParticleComponent_UpdateTick(this, time);
+}
+
+// [11] 0x1400531b0 — setup + restart the flagged emitters.
+void ParticleComponent::Slot11() {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_OnUpdate2(this);
+}
+
+// [12] 0x140053090 — event 2/3 fade-in/out of the b2 emitters.
+void ParticleComponent::OnEvent(int eventId) {
+    ParticleComponent_InitFuncs();
+    ParticleComponent_Event(this, eventId);
+}
+
+// create 0x14000a360: MemAlloc(0x48, 8), then the ctor.
+void* ParticleComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ParticleComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ParticleComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ParticleComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ParticleComponent());
+}
+
+DEFINE_EXE_VTABLE(ParticleComponent, "_ZTV17ParticleComponent")
+DEFINE_EXE_TYPE(ParticleComponent, "Component")
 
 // Register the helper closure at its exe addresses so the shared bodies above
 // (and any other reimpl referencing them) resolve in standalone.

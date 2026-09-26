@@ -54,39 +54,10 @@ namespace DiseaseComponentAddr {
 // ------------------------------------------------------------------
 // DiseaseComponent — 0x58 bytes
 // ------------------------------------------------------------------
-struct DiseaseComponent {
-    void*    vtable;        // +0x00
-    void*    next;          // +0x08  (Component base link)
-    void*    entity;        // +0x10  owning entity (InternalBasePtr storage)
-    void*    description;   // +0x18  DiseaseDescription*
-    uint32_t flags;         // +0x20  Component capability flags (ctor ORs 0x8B)
-    uint8_t  _pad24[4];     // +0x24
-
-    // All four are System::Time (int64 ticks). A Time ctor writes 8 BYTES — never
-    // narrow any of these to int32.
-    int64_t  rollAccum;     // +0x28  time accumulated toward the next infection roll
-    int64_t  duration;      // +0x30  infestation time REMAINING (>0 == infested)
-    int64_t  killAccum;     // +0x38  time accumulated toward the next kill tick
-    int64_t  spreadAccum;   // +0x40  time accumulated toward the next spread attempt
-
-    int32_t  isPasture;     // +0x48  1 when the entity has a PastureComponent
-    uint8_t  _pad4C[4];     // +0x4C
-    uint64_t curedIdentity; // +0x50  ExternalPtr: what was growing at the last Cure.
-                            //        The same-crop probe compares tile cells to this.
-};
-
-static_assert(sizeof(DiseaseComponent) == 0x58, "DiseaseComponent size mismatch");
-static_assert(offsetof(DiseaseComponent, vtable)        == 0x00, "");
-static_assert(offsetof(DiseaseComponent, next)          == 0x08, "");
-static_assert(offsetof(DiseaseComponent, entity)        == 0x10, "");
-static_assert(offsetof(DiseaseComponent, description)   == 0x18, "");
-static_assert(offsetof(DiseaseComponent, flags)         == 0x20, "");
-static_assert(offsetof(DiseaseComponent, rollAccum)     == 0x28, "");
-static_assert(offsetof(DiseaseComponent, duration)      == 0x30, "");
-static_assert(offsetof(DiseaseComponent, killAccum)     == 0x38, "");
-static_assert(offsetof(DiseaseComponent, spreadAccum)   == 0x40, "");
-static_assert(offsetof(DiseaseComponent, isPasture)     == 0x48, "");
-static_assert(offsetof(DiseaseComponent, curedIdentity) == 0x50, "");
+// ENDGAME B.3.8 CIT: the POD is gone — `DiseaseComponent` is a real class now
+// (code/Game/Component/DiseaseComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/DiseaseComponent.h"
 
 // ------------------------------------------------------------------
 // DiseaseDescription — 0x48 bytes (Object::External 0x20 base + params)
