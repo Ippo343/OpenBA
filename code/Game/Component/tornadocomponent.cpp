@@ -1057,67 +1057,57 @@ extern "C" void Tornado_AudioMoveEmitters_42960(void* audioComp, void* newPos) {
 }
 
 // ============================================================
-// Standalone factory
+// ENDGAME B.3.8 CIT — TornadoComponent as a REAL class (TornadoComponent.h)
 // ============================================================
-// Hand-rolled rather than COMPONENT_LIVE_FACTORY_S: the macros only fill slots
-// 4/6/9, and this component needs 3 (Serialize), 4 (Startup) and 8 (Update).
+// Before: TWO tables — the 48-slot g_TornadoComponent_LiveVtable this file
+// filled at every create, and a 16-slot copy in standalone/reg_tornado.cpp
+// registered at the retail address 0x14015aa80 (the same three bodies at the
+// same indices; only the Ghidra-derived NAMES differed). After: ONE compiler
+// 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2); the retail
+// address had no by-address reader, so its registration went too (B38 D5).
 // Slot 8 — NOT 9 — is the per-frame tick for a flag-0x84 (bit 2) component.
-namespace {
+#include "Object/factory_registration.h"
+#include "Component/TornadoComponent.h"
 
-uint32_t TornadoComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TornadoComponent");
-    return cached;
-}
-void* g_TornadoComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-void TC_SerializeVSlot(void* s, void* stream) {
-    TornadoComponent_Shutdown(reinterpret_cast<TornadoComponent*>(s), stream);
-}
-void TC_StartupVSlot(void* s) {
-    TornadoComponent_Serialize(reinterpret_cast<TornadoComponent*>(s));
-}
-void TC_UpdateVSlot(void* s, void* t) {
-    TornadoComponent_OnRemove(reinterpret_cast<TornadoComponent*>(s), t);
+// 0x140058cf0. Component() is the CALL 0x1401188b0; the 0x14015aa80 stamp is
+// the compiler's; +0x28 = 0, the path block {+0x30 = 0, +0x38 (dword) = 0,
+// +0x40 = +0x48 = 0, +0x50 = -1}, +0x58 = 0, +0x60 (dword) = 0; flags |= 0x84.
+TornadoComponent::TornadoComponent()
+    : damageCountdown(0), waypointX(0.0f), waypointY(0.0f), waypointZ(0.0f), _pad3C{},
+      pathData(nullptr), pathCount(0), pathCapacity(0), pathIndex(-1), _pad54{},
+      posX(0.0f), posY(0.0f), posZ(0.0f), _pad64{} {
+    OrFlagsInCtor(0x84);
 }
 
-void TornadoComponent_FinishLiveVtable() {
-    // Slot 3 (Serialize) is wired UNCONDITIONALLY, above the live gate.
-    // Serializer wiring is not a feature flag: PersistObject dispatches slot 3
-    // on every load, and a component whose slot 3 is absent falls back to the
-    // base Component serialize and consumes FEWER bytes than the save leg wrote
-    // -- a silent stream desync that surfaces as wild objIds on a LATER record.
-    // It also made every BANISHED_LIVE_*=0 A/B run change the save-stream shape,
-    // so such an A/B could "prove" something that was really a desync.
-    // See reference_slot3_wrapper_must_resolve_first.
-    g_TornadoComponent_LiveVtable[3] = reinterpret_cast<void*>(&TC_SerializeVSlot);
-
-    g_TornadoComponent_LiveVtable[4] = reinterpret_cast<void*>(&TC_StartupVSlot);
-    g_TornadoComponent_LiveVtable[8] = reinterpret_cast<void*>(&TC_UpdateVSlot);
+// [0] 0x14000d640. PORT GAP (retail frees the +0x40 waypoint array first) —
+// the tree's Inert_ScalarDtor never did; kept (TornadoComponent.h).
+Object::Base* TornadoComponent::DeletingDtor(unsigned flags) {
+    this->~TornadoComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-}  // namespace
+// [3] 0x140058b80 (Ghidra "_Shutdown").
+void TornadoComponent::Persist(void* stream) { TornadoComponent_Shutdown(this, stream); }
+// [4] 0x1400585a0 (Ghidra "_Serialize") — the path build.
+void TornadoComponent::Startup() { TornadoComponent_Serialize(this); }
+// [8] 0x140057cd0 (Ghidra "_OnRemove") — the per-frame tick. RDX is the
+// EntityList_Update time pointer, passed through unchanged by the tree walk
+// (0x1400c2e5d: `MOV RDX,RBP; CALL [RAX+0x40]`).
+void TornadoComponent::Tick(void* time) { TornadoComponent_OnRemove(this, time); }
 
-extern "C" void* TornadoComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(
-        0x68, 0x84, g_TornadoComponent_LiveVtable,
-        reinterpret_cast<void*>(&TornadoComponent_LiveGetTypeId));
-    TornadoComponent_FinishLiveVtable();
-    // The inert base zeroes the body; the ctor's one non-zero default is the -1
-    // path index at +0x50.
-    if (p) *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(p) + 0x50) = -1;
-    return p;
+// create 0x14000d500: MemAlloc(0x68, 8), then the ctor.
+void* TornadoComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TornadoComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TornadoComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* TornadoComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TornadoComponent());
 }
 
-static void* TornadoComponent_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    ::ComponentFactory::InitInertTyped(
-        mem, 0x68, 0x84, g_TornadoComponent_LiveVtable,
-        reinterpret_cast<void*>(&TornadoComponent_LiveGetTypeId));
-    TornadoComponent_FinishLiveVtable();
-    *reinterpret_cast<int32_t*>(reinterpret_cast<uintptr_t>(mem) + 0x50) = -1;
-    return mem;
-}
-
-REGISTER_TYPE(TornadoComponent, "Component",
-              &TornadoComponent_Factory, &TornadoComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(TornadoComponent, "_ZTV16TornadoComponent")
+DEFINE_EXE_TYPE(TornadoComponent, "Component")

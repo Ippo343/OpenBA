@@ -385,7 +385,7 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
 
     if (self->isPasture == 1) {
         int64_t pastureIBP = 0;
-        if (s_findPasture) s_findPasture((int64_t)self->entity, &pastureIBP);
+        if (s_findPasture) s_findPasture((int64_t)self->_entity, &pastureIBP);
         // Faithful: retail derefs unguarded — isPasture==1 means the finder
         // already located a PastureComponent at Startup.
         if (*reinterpret_cast<int32_t*>(pastureIBP + 0x38) != 0) return false;
@@ -396,7 +396,7 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
     void* map = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xF8) : nullptr;
 
     int64_t mapIBP = 0;
-    if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
+    if (s_findMap) s_findMap((int64_t)self->_entity, &mapIBP);
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
     struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
@@ -423,7 +423,7 @@ extern "C" bool DiseaseComp_CheckCure(DiseaseComponent* self) {
 extern "C" void DiseaseComp_Cure(DiseaseComponent* self) {
     EnsureInit();
     int64_t particleIBP = 0;
-    if (s_findParticle) s_findParticle(self->entity, &particleIBP);
+    if (s_findParticle) s_findParticle(self->_entity, &particleIBP);
     if (particleIBP) ParticleComponent_StopEmitterFade((void*)particleIBP);
 
     bool wasInfested = (self->duration != 0);
@@ -435,7 +435,7 @@ extern "C" void DiseaseComp_Cure(DiseaseComponent* self) {
 
     // Record what is growing NOW. The next infection roll compares the field's
     // tiles against this: unchanged => the (shorter) yearsIfSame mean applies.
-    int64_t entitySlot = (int64_t)self->entity;
+    int64_t entitySlot = (int64_t)self->_entity;
     uint64_t identity = 0;
     DiseaseComp_GrownIdentity(&identity, &entitySlot);
     self->curedIdentity = identity;
@@ -462,7 +462,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
     }
 
     int64_t smcIBP = 0;
-    if (s_findSMC) s_findSMC((int64_t)self->entity, &smcIBP);
+    if (s_findSMC) s_findSMC((int64_t)self->_entity, &smcIBP);
     // State gate: the field must be past stage 1. +0x52 is the override, used
     // unless negative, in which case +0x50 (the live state) is read.
     int8_t stage = *reinterpret_cast<int8_t*>(smcIBP + 0x52);
@@ -484,8 +484,8 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
     System::String cropName;
     bool haveName = false;
     {
-        uint64_t entityDesc = self->entity
-            ? *reinterpret_cast<uint64_t*>((uintptr_t)self->entity + 0x28) : 0;
+        uint64_t entityDesc = self->_entity
+            ? *reinterpret_cast<uint64_t*>((uintptr_t)self->_entity + 0x28) : 0;
         int64_t found = 0;
         if (s_findDesc && entityDesc) s_findDesc(entityDesc, &found);
         if (found) {
@@ -518,7 +518,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
                                     seasonStr._data, yearStr._data,
                                     haveName ? cropName._data : "");
 
-        void* entityIBP = &self->entity;
+        void* entityIBP = &self->_entity;
         int tileIdx = EventLog_TileIndex_Reg(nullptr, entityIBP);
 
         uint8_t entry[0x28] = {0};
@@ -544,7 +544,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
 
     // ---- Start every emitter on the entity's ParticleComponent (the swarm VFX).
     int64_t particleIBP = 0;
-    if (s_findParticle) s_findParticle(self->entity, &particleIBP);
+    if (s_findParticle) s_findParticle(self->_entity, &particleIBP);
     int emitters = 0;
     if (particleIBP) {
         emitters = *reinterpret_cast<int32_t*>(particleIBP + 0x40);
@@ -553,7 +553,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
     }
 
     // ---- Arm the timers.
-    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->description);
+    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->_description);
     self->duration    = TimeFromSeconds(desc->durationMonths * SecsPerMonth());
     self->killAccum   = 0;
     self->spreadAccum = 0;
@@ -563,7 +563,7 @@ extern "C" void DiseaseComp_Infect(DiseaseComponent* self) {
                "emitters=%d tile=%d\n",
                (void*)self, (int)self->isPasture, (int)stage,
                (double)desc->durationMonths, emitters,
-               EventLog_TileIndex_Reg(nullptr, &self->entity));
+               EventLog_TileIndex_Reg(nullptr, &self->_entity));
         fflush(stdout);
     }
 }
@@ -582,7 +582,7 @@ extern "C" void DiseaseComp_KillOnePlant(DiseaseComponent* self) {
     void* rng = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xD8) : nullptr;
 
     int64_t mapIBP = 0;
-    if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
+    if (s_findMap) s_findMap((int64_t)self->_entity, &mapIBP);
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
     struct { int64_t data; int32_t count; int32_t cap; } list = {0, 0, 0};
@@ -633,7 +633,7 @@ extern "C" void DiseaseComp_KillOneAnimal(DiseaseComponent* self) {
     void* entityMgr = gw ? *reinterpret_cast<void**>((uintptr_t)gw + 0xE8) : nullptr;
 
     int64_t pastureIBP = 0;
-    if (s_findPasture) s_findPasture((int64_t)self->entity, &pastureIBP);
+    if (s_findPasture) s_findPasture((int64_t)self->_entity, &pastureIBP);
     if (*reinterpret_cast<int32_t*>(pastureIBP + 0x38) == 0) return;
 
     int attempts = 0;
@@ -684,7 +684,7 @@ extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* delta
     // The noCropDisease debug flag (GameWorld+0xD0 bit 5) — retail's own kill switch.
     if (((*reinterpret_cast<uint32_t*>((uintptr_t)gw + 0xD0) >> 5) & 1) != 0) return;
 
-    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->description);
+    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->_description);
 
     void* clock = *reinterpret_cast<void**>((uintptr_t)gw + 0x128);
     float secs = clock ? reinterpret_cast<const System::Time*>((char*)clock + 8)->AsSeconds() : 0.0f;   // B.3.4b bridge
@@ -697,7 +697,7 @@ extern "C" void DiseaseComp_InfectionTick(DiseaseComponent* self, int64_t* delta
     void* rng = *reinterpret_cast<void**>((uintptr_t)gw + 0xD8);
 
     int64_t mapIBP = 0;
-    if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
+    if (s_findMap) s_findMap((int64_t)self->_entity, &mapIBP);
     const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
     int16_t fx = *(const int16_t*)(mc + 0x28), fy = *(const int16_t*)(mc + 0x2a);
     int16_t fw = *(const int16_t*)(mc + 0x2c), fh = *(const int16_t*)(mc + 0x2e);
@@ -738,7 +738,7 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
     EnsureInit();
     void* gw = GameWorld();
     if (!gw) return;
-    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->description);
+    DiseaseDescription* desc = reinterpret_cast<DiseaseDescription*>(self->_description);
 
     self->duration    -= *deltaTime;
     self->killAccum   += *deltaTime;
@@ -773,7 +773,7 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
         self->spreadAccum -= spreadPeriod;
 
         int64_t mapIBP = 0;
-        if (s_findMap) s_findMap((int64_t)self->entity, &mapIBP);
+        if (s_findMap) s_findMap((int64_t)self->_entity, &mapIBP);
         const uint8_t* mc = reinterpret_cast<const uint8_t*>(mapIBP);
 
         int width = *mapInts;
@@ -798,14 +798,14 @@ extern "C" void DiseaseComp_ActiveDisease(DiseaseComponent* self, int64_t* delta
         else if (cell[1] != 0) target = cell[1];           // else entity raster
 
         const char* outcome = "empty-cell";
-        if (target != (int64_t)self->entity && target != 0) {
+        if (target != (int64_t)self->_entity && target != 0) {
             int64_t sibIBP = 0;
             DiseaseComp_FindSibling(target, &sibIBP);
             if (sibIBP != 0) {
                 int64_t targetSlot = target;
                 uint64_t theirId = 0, myId = 0;
                 DiseaseComp_GrownIdentity(&theirId, &targetSlot);
-                int64_t mySlot = (int64_t)self->entity;
+                int64_t mySlot = (int64_t)self->_entity;
                 DiseaseComp_GrownIdentity(&myId, &mySlot);
                 if (theirId == myId) {
                     int64_t victimIBP = 0;
@@ -848,12 +848,12 @@ extern "C" void DiseaseComponent_Update(DiseaseComponent* self, int64_t* deltaTi
 extern "C" void DiseaseComponent_Startup(DiseaseComponent* self) {
     EnsureInit();
     int64_t pastureIBP = 0;
-    if (s_findPasture) s_findPasture((int64_t)self->entity, &pastureIBP);
+    if (s_findPasture) s_findPasture((int64_t)self->_entity, &pastureIBP);
     self->isPasture = (pastureIBP != 0) ? 1 : 0;
 
     if (CDTrace()) {
         printf("[CropDisease] STARTUP self=%p pasture=%d desc=%p entity=%p\n",
-               (void*)self, (int)self->isPasture, self->description, self->entity);
+               (void*)self, (int)self->isPasture, self->_description, self->_entity);
         fflush(stdout);
     }
 }
@@ -943,70 +943,54 @@ void DiseaseComponent_InitFuncs() {
 }
 
 // ============================================================
-// Standalone factory — a REAL vtable (the crop-disease gate graduated 2026-09-13)
+// ENDGAME B.3.8 CIT — DiseaseComponent as a REAL class (DiseaseComponent.h).
 // ============================================================
-// Modelled on COMPONENT_LIVE_FACTORY_SOA but installs five slots (3 Serialize,
-// 4 Startup, 6 OnAdded, 7 OnRemoved, 9 Update) under one gate, because they are
-// one feature: OnAdded puts the component in the registry the debug trigger walks,
-// Startup sets the pasture discriminator every other body branches on, Update
-// drives it, OnRemoved unregisters, Serialize persists it.
-//
-// The installs MUST live in FinishLiveVtable: InitInertTyped re-stubs the shared
-// per-type vtable on every instance creation, so a slot written once at static-init
-// (or from a per-instance body) is erased by the next component of any type.
+// Before: a 48-slot hand-built g_DiseaseComponent_LiveVtable filled at every
+// create (slots 3 Serialize, 4 Startup, 6 OnAdded, 7 OnRemoved, 9 Update),
+// Inert_ScalarDtor in slot 0. After: the compiler's 16-slot vtable and a real
+// ctor/dtor chain (B38_RULES D1, D2). Slot 3 is wired by construction: a
+// class's table cannot lose its serializer.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/DiseaseComponent.h"
 
-namespace {
-void* g_DiseaseComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-uint32_t DiseaseComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("DiseaseComponent");
-    return cached;
-}
-void DC_SerializeVSlot(void* s, void* stream) {
-    DiseaseComponent_Serialize(reinterpret_cast<DiseaseComponent*>(s), stream);
-}
-void DC_StartupVSlot(void* s)  { DiseaseComponent_Startup(reinterpret_cast<DiseaseComponent*>(s)); }
-void DC_OnAddedVSlot(void* s)  { DiseaseComponent_OnAdded(reinterpret_cast<DiseaseComponent*>(s)); }
-void DC_OnRemovedVSlot(void* s){ DiseaseComponent_OnRemoved(reinterpret_cast<DiseaseComponent*>(s)); }
-void DC_UpdateVSlot(void* s, void* t) {
-    DiseaseComponent_Update(reinterpret_cast<DiseaseComponent*>(s),
-                            reinterpret_cast<int64_t*>(t));
-}
-void DiseaseComponent_FinishLiveVtable() {
-    // Slot 3 (Serialize) is wired UNCONDITIONALLY, above the live gate.
-    // Serializer wiring is not a feature flag: PersistObject dispatches slot 3
-    // on every load, and a component whose slot 3 is absent falls back to the
-    // base Component serialize and consumes FEWER bytes than the save leg wrote
-    // -- a silent stream desync that surfaces as wild objIds on a LATER record.
-    // It also made every BANISHED_LIVE_*=0 A/B run change the save-stream shape,
-    // so such an A/B could "prove" something that was really a desync.
-    // See reference_slot3_wrapper_must_resolve_first.
-    g_DiseaseComponent_LiveVtable[3] = reinterpret_cast<void*>(&DC_SerializeVSlot);
-
-    g_DiseaseComponent_LiveVtable[4] = reinterpret_cast<void*>(&DC_StartupVSlot);
-    g_DiseaseComponent_LiveVtable[6] = reinterpret_cast<void*>(&DC_OnAddedVSlot);
-    g_DiseaseComponent_LiveVtable[7] = reinterpret_cast<void*>(&DC_OnRemovedVSlot);
-    g_DiseaseComponent_LiveVtable[9] = reinterpret_cast<void*>(&DC_UpdateVSlot);
-}
-} // namespace
-
-extern "C" void* DiseaseComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x8B,
-        g_DiseaseComponent_LiveVtable,
-        reinterpret_cast<void*>(&DiseaseComponent_LiveGetTypeId));
-    DiseaseComponent_FinishLiveVtable();
-    return p;
-}
-static void* DiseaseComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x8B,
-        g_DiseaseComponent_LiveVtable,
-        reinterpret_cast<void*>(&DiseaseComponent_LiveGetTypeId));
-    DiseaseComponent_FinishLiveVtable();
-    return mem;
+// 0x140048db0. Component() is the CALL 0x1401188b0; the 0x140159290 stamp is
+// the compiler's; +0x28..+0x40 (4 qwords), +0x48 (dword), +0x50 = 0; flags |= 0x8b.
+DiseaseComponent::DiseaseComponent()
+    : rollAccum(0), duration(0), killAccum(0), spreadAccum(0),
+      isPasture(0), _pad4C{}, curedIdentity(0) {
+    OrFlagsInCtor(0x8b);
 }
 
-REGISTER_TYPE(DiseaseComponent, "Component",
-              &DiseaseComponent_Factory, &DiseaseComponent_CreateInPlace);
+// [0] 0x140004f80: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* DiseaseComponent::DeletingDtor(unsigned flags) {
+    this->~DiseaseComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+void DiseaseComponent::Persist(void* stream) { DiseaseComponent_Serialize(this, stream); }   // [3] 0x140048ca0
+void DiseaseComponent::Startup()  { DiseaseComponent_Startup(this); }                         // [4] 0x140048c50
+void DiseaseComponent::OnAdded()  { DiseaseComponent_OnAdded(this); }                         // [6] 0x140048c00
+void DiseaseComponent::OnRemove() { DiseaseComponent_OnRemoved(this); }                       // [7] 0x140048bb0
+
+// [9] 0x140048b90. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void DiseaseComponent::Update(void* time) {
+    DiseaseComponent_Update(this, static_cast<int64_t*>(time));
+}
+
+// create 0x140004db0: MemAlloc(0x58, 8), then the ctor.
+void* DiseaseComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DiseaseComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) DiseaseComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* DiseaseComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DiseaseComponent());
+}
+
+DEFINE_EXE_VTABLE(DiseaseComponent, "_ZTV16DiseaseComponent")
+DEFINE_EXE_TYPE(DiseaseComponent, "Component")

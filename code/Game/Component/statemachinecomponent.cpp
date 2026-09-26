@@ -676,6 +676,13 @@ static void StateMachineComponent_LinkControllers_Standalone(StateMachineCompone
         uint32_t tid = gt ? gt(comp) : 0;
         bool isController =
             ::Object::IsTypeDerivedFromByName(tid, "ControllerComponent");
+        // Slots 16/17 exist only on ControllerComponent's table (18 slots); a plain
+        // Component has 16 (B38_RULES §2.1). Retail's linker (the 0x14012b6a0 port above)
+        // asks IsDerivedFrom first; this lazy copy called
+        // +0x88 on EVERY sibling, which only worked while every component carried the
+        // 48-slot inert table. A non-controller was never live here (its inert slot 17
+        // returned null), so skipping it is the same behaviour.
+        if (!isController) continue;
 
         typedef void* (*CreateState_t)(void*);
         auto cs = *reinterpret_cast<CreateState_t*>(vt + 0x88);

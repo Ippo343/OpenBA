@@ -251,29 +251,10 @@ void ControlUI_Slot9(ControlUI* self, uint64_t* param2, int param3, int param4) 
 #include "resolve.h"
 #include <cstdio>
 #include <cstdlib>
-#include "dialog_controller_vtable.h"
 
 namespace controlui_sa {
 
 constexpr uintptr_t kVtable = 0x14015b380;
-constexpr int       kSlots  = 48;
-
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("ControlUI");
-    return c;
-}
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 // Report Slot4's INPUTS as well as its outputs. The first version of this printed only
 // +0x30/+0x38 — which are Slot4's OUTPUTS — so when the type-id guard rejected every call
@@ -373,51 +354,53 @@ void W_Slot9(void* self, uint64_t* p2, int p3, int p4) {
     if (p3 == 0x12 && p4 == 50000) Trace("Slot9(click)", self);
     ControlUI_Slot9(reinterpret_cast<ControlUI*>(self), p2, p3, p4);
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);   // OnCreated      (AddController)
-        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);   // OnUpdateLayout (per frame)
-        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);   // OnElementEvent (clicks)
-        // idx8 left inherited/no-op on purpose — see the note above W_Slot9.
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's ControlUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "ControlUI", &StubNop);
-
-// ControlUI object size 0x40 (+0x30 element IBP, +0x38 target component).
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x40); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x40), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace controlui_sa
 
+// D5: no by-address reader of 0x14015b380 remains in the tree; the row serves
+// the compiler table and stays only because reg_controlui.cpp calls this
+// function — the closing pass deletes both.
 extern "C" void RegisterControlUIVtable() {
     RegisterExeAddr(controlui_sa::kVtable,
-                    reinterpret_cast<uintptr_t>(controlui_sa::g_vt));
+                    reinterpret_cast<uintptr_t>(ControlUI::Vtable()));
 }
 
-REGISTER_TYPE(ControlUI, "UI::DialogController",
-              &controlui_sa::Factory, &controlui_sa::InPlace);
+// [4] 0x14005f9b0
+void ControlUI::OnCreated() {
+    controlui_sa::W_Slot4(this);
+}
+
+// [7] 0x14005f870
+void ControlUI::OnUpdateLayout() {
+    controlui_sa::W_Slot7(this);
+}
+
+// [9] 0x14005f7f0
+void ControlUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                               int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    controlui_sa::W_Slot9(this, reinterpret_cast<uint64_t*>(element), a, b);
+}
+
+// [0] 0x140010e20: ~ControlUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* ControlUI::DeletingDtor(unsigned flags) {
+    this->~ControlUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140010c00: MemAlloc(0x40, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* ControlUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ControlUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ControlUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* ControlUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ControlUI());
+}
+
+DEFINE_EXE_VTABLE(ControlUI, "_ZTV9ControlUI")
+DEFINE_EXE_TYPE(ControlUI, "UI::DialogController")

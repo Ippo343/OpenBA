@@ -6,7 +6,7 @@
 // function names here keep Ghidra's spelling so grepping the address registry and
 // the decompiler agree, but the COMMENTS say what each one really is.
 
-#include "TornadoComponent.h"
+#include "engine/types/TornadoComponent.h"   // the forwarder: also carries TornadoDescriptionFields
 #include <cstdint>
 
 // vtable slot [3] (+0x18), 0x140058b80 — the real Serialize (save/load).

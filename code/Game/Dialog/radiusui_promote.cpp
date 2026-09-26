@@ -45,31 +45,8 @@
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include "dialog_controller_vtable.h"
 
 namespace radiusui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("RadiusUI");
-    return c;
-}
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    // Retail's dtor path runs the base DialogController dtor, which for a still-open
-    // panel has already had idx6 dispatched. Drop the overlay here too so a destroyed
-    // controller cannot leak a highlight slot.
-    RadiusUI_Slot6(reinterpret_cast<RadiusUI*>(self));
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 // idx5 (+0x28) — retail 0x140077650. Needs the DialogInstance (+0x18) the framework
 // seats before dispatch, same precondition orchardui.cpp's idx4 wrapper checks.
@@ -87,51 +64,50 @@ void W_Slot6(void* self) {
     if (!self) return;
     RadiusUI_Slot6(reinterpret_cast<RadiusUI*>(self));
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[5] = reinterpret_cast<void*>(&W_Slot5);
-        g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's RadiusUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "RadiusUI", &StubNop);
-
-// RadiusUI object size 0x38. Factory_RadiusUI (0x140013590) alloc's 0x38/8, runs the
-// DialogController base ctor, installs the vtable and — critically — seeds
-// +0x30 = 0xFFFFFFFF. The generic UI_DIALOG_STUB Zero() left it 0, which would have
-// made the very first Slot6 call RadiusDisplay_Remove(mgr, 0) on an overlay slot this
-// controller never owned. The base ctor is skipped here (as in orchardui.cpp /
-// cropui_promote.cpp): every base field is zero and the framework seats +0x18/+0x20/
-// +0x28 before dispatch.
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x38); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-    *reinterpret_cast<int32_t*>(static_cast<char*>(p) + 0x30) = -1;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x38), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace radiusui_sa
 
-REGISTER_TYPE(RadiusUI, "UI::DialogController",
-              &radiusui_sa::Factory, &radiusui_sa::InPlace);
+// ~RadiusUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
+// WITHOUT ~DialogController); moved here unchanged. The compiler now chains
+// ~DialogController -> ~Internal after it.
+RadiusUI::~RadiusUI() {
+    void* self = this;
+    // Retail's dtor path runs the base DialogController dtor, which for a still-open
+    // panel has already had idx6 dispatched. Drop the overlay here too so a destroyed
+    // controller cannot leak a highlight slot.
+    RadiusUI_Slot6(reinterpret_cast<RadiusUI*>(self));
+}
+
+// [5] 0x140077650
+void RadiusUI::OnOpened() {
+    radiusui_sa::W_Slot5(this);
+}
+
+// [6] 0x140077600
+void RadiusUI::OnClosed() {
+    radiusui_sa::W_Slot6(this);
+}
+
+// [0] 0x140013640: ~RadiusUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* RadiusUI::DeletingDtor(unsigned flags) {
+    this->~RadiusUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140013590: MemAlloc(0x38, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* RadiusUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RadiusUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) RadiusUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* RadiusUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) RadiusUI());
+}
+
+DEFINE_EXE_VTABLE(RadiusUI, "_ZTV8RadiusUI")
+DEFINE_EXE_TYPE(RadiusUI, "UI::DialogController")

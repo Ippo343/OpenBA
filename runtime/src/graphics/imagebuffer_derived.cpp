@@ -383,7 +383,8 @@ extern "C" void* RtGraphics_GeneratedImageBuffer_Ctor(void* self) {
         reinterpret_cast<Graphics::GeneratedImageBuffer*>(self);   // B.3.5 bridge
     ImageBufferCtor(p);
     *reinterpret_cast<void**>(p) = VtGenerated();
-    p->_generation = 0;
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `GeneratedImageBuffer()`.
+    Graphics::GeneratedImageBuffer::DoorBody::Init(p);
     return self;
 }
 

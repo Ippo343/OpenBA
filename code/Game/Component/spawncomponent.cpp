@@ -99,7 +99,7 @@ void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
         s_fn_GetLinkedObject(*(void**)ownerIBP, &linkedObjPtr);
 
     // Get resource data via IsDerivedFrom check on _unk18
-    void* baseObj = self->_unk18;
+    void* baseObj = self->_description;
     if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) {
         return;
     }
@@ -239,7 +239,7 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
     const float growth = *(float*)(natRes + 0x28);
 
     // SpawnDescription at +0x18 (IsDerivedFromOrTrust — same policy as Update).
-    void* baseObj = self->_unk18;
+    void* baseObj = self->_description;
     if (!baseObj) return;
     void* spawnDesc = baseObj;
     if (fn_IsDerivedFrom && fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId))
@@ -603,64 +603,48 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
     }
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x38 (SpawnComponent_Factory MemAlloc), flags 0x88 (Ctor 0x140056030:
-// Component base sets +0x20=0x80, leaf OR 0x88 => 0x88).
+// ===== ENDGAME B.3.8 CIT — SpawnComponent as a REAL class (SpawnComponent.h) =====
+// Before: a 48-slot hand-built SpawnComponent_LiveVtable filled at every create
+// (slots 3 Serialize, 4 Startup, 9 Update), Inert_ScalarDtor in slot 0. After:
+// the compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/SpawnComponent.h"
 
-// Live bring-up (Phase 1, env BANISHED_LIVE_SPAWN or global the global live-components switch).
-// All four recipe steps wired:
-//   * slot 4 (+0x20 Startup) -> SpawnComponent_Startup — sizes the +0x28 per-entry
-//     timer array from the SpawnDescription at spawn (ComponentEntity_StartupComponents).
-//   * slot 9 (+0x48 Update)  -> SpawnComponent_Update — the per-tick growth-gated
-//     timer accumulation (the slot the EntityList bucket round-robin calls).
-// The two type-id globals it reads (DAT_1401c4918 SpawnDescription, DAT_1401c77e8
-// GrowthDescription) are registered + filled by reg_component_spawn.cpp. The full
-// DoSpawn closure is already registered, so real spawning is live.
-// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_S to
-// ALSO wire slot 3 (Shutdown/Serialize, 0x140055ee0 — Ghidra mislabel; see
-// SpawnComponent_Serialize above). Wired UNCONDITIONALLY, same rationale as
-// ResidenceComponent/StorageComponent/GrowthComponent: serialize round-trip
-// is not an opt-in feature. Without this, a loaded save's SpawnComponent kept
-// the base-Component serialize and its per-entry timer array (+0x28/+0x30)
-// came back null, silently disabling wild-food/tree spawn timers post-load.
-static uint32_t SpawnComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("SpawnComponent");
-    return cached;
+// 0x140056030. Component() is the CALL 0x1401188b0; the 0x14015a670 stamp is
+// the compiler's; +0x28 = +0x30 = 0; flags |= 0x88.
+SpawnComponent::SpawnComponent() : field28(nullptr), field30(nullptr) {
+    OrFlagsInCtor(0x88);
 }
-static void* SpawnComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void SpawnComponent_UpdateVSlot(void* s, void* t) {
-    SpawnComponent_Update(reinterpret_cast<SpawnComponent*>(s), reinterpret_cast<int64_t*>(t));
+
+// [0] 0x14000c350. PORT GAP (retail frees the +0x28 timer array first) — the
+// tree's Inert_ScalarDtor never did; kept (SpawnComponent.h).
+Object::Base* SpawnComponent::DeletingDtor(unsigned flags) {
+    this->~SpawnComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void SpawnComponent_StartupVSlot(void* s) {
-    SpawnComponent_Startup(reinterpret_cast<SpawnComponent*>(s));
+
+void SpawnComponent::Persist(void* stream) { SpawnComponent_Serialize(this, stream); }   // [3] 0x140055ee0
+void SpawnComponent::Startup() { SpawnComponent_Startup(this); }                          // [4] 0x140055e90
+
+// [9] 0x140055ad0. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void SpawnComponent::Update(void* time) {
+    SpawnComponent_Update(this, static_cast<int64_t*>(time));
 }
-static void SpawnComponent_SerializeVSlot(void* self, void* stream) {
-    SpawnComponent_Serialize(self, stream);
+
+// create 0x14000c170: MemAlloc(0x38, 8), then the ctor.
+void* SpawnComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(SpawnComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) SpawnComponent());
 }
-static void SpawnComponent_FinishLiveVtable() {
-    SpawnComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&SpawnComponent_SerializeVSlot);
-    SpawnComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&SpawnComponent_StartupVSlot);
-    SpawnComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&SpawnComponent_UpdateVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* SpawnComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) SpawnComponent());
 }
-extern "C" void* SpawnComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x88,
-        SpawnComponent_LiveVtable,
-        reinterpret_cast<void*>(&SpawnComponent_LiveGetTypeId));
-    SpawnComponent_FinishLiveVtable();
-    return p;
-}
-static void* SpawnComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x88,
-        SpawnComponent_LiveVtable,
-        reinterpret_cast<void*>(&SpawnComponent_LiveGetTypeId));
-    SpawnComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(SpawnComponent, "Component",
-              &SpawnComponent_Factory, &SpawnComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(SpawnComponent, "_ZTV14SpawnComponent")
+DEFINE_EXE_TYPE(SpawnComponent, "Component")

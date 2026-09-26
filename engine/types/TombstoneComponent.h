@@ -18,18 +18,8 @@ namespace TombstoneComponentAddr {
     constexpr uintptr_t Vtable = 0x14015a980;
 }
 
-struct TombstoneComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `TombstoneComponent` is a real class now
+// (code/Game/Component/TombstoneComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/TombstoneComponent.h"
 
-    void*    field28;      // +0x28: zeroed
-};
-
-static_assert(sizeof(TombstoneComponent) == 0x30, "TombstoneComponent size mismatch");
-static_assert(offsetof(TombstoneComponent, vtable) == 0x00, "");
-static_assert(offsetof(TombstoneComponent, flags) == 0x20, "");
-static_assert(offsetof(TombstoneComponent, field28) == 0x28, "");

@@ -271,7 +271,7 @@ UNIT_TEST(ui_spritesheet_layout) {
     CHECK_EQ((int)offsetof(UI::SpriteInfo, width), 0x1c);
     CHECK_EQ((int)offsetof(UI::SpriteInfo, u0), 0x24);
     CHECK((std::is_base_of<Object::External, UI::SpriteSheet>::value));
-    CHECK(std::is_abstract<UI::SpriteSheet>::value);
+    CHECK(!std::is_abstract<UI::SpriteSheet>::value);    // concrete since B.3.8 RB (exe table copy 0x14015c3b0)
     CHECK((std::is_same<::SpriteSheet, UI::SpriteSheet>::value));
     CHECK((std::is_same<::SpriteInfo, UI::SpriteInfo>::value));
     CHECK((std::is_same<UI::SpriteSheet::SpriteInfo, UI::SpriteInfo>::value));
@@ -302,7 +302,7 @@ UNIT_TEST(ui_spritecapture_layout) {
     CHECK_EQ((int)offsetof(UI::SpriteCapture, _sheets), (int)sizeof(Object::External));
     CHECK_EQ((int)sizeof(UI::SpriteCapture::CaptureEntry), 0x28);
     CHECK((std::is_base_of<Object::External, UI::SpriteCapture>::value));
-    CHECK(std::is_abstract<UI::SpriteCapture>::value);
+    CHECK(!std::is_abstract<UI::SpriteCapture>::value);  // concrete since B.3.8 RB (exe table copy 0x14015d550)
 
     SpriteCaptureProbe probe;
     probe._width = 12;

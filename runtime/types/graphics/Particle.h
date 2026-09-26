@@ -448,19 +448,40 @@ public:
     Particle(const Particle& src);
     Particle& operator=(const Particle& src);
 
+    // The ctor door's way onto the shared body (ENDGAME B.3.8 block RB,
+    // B38_RULES D1): `RtGraphics_Particle_Ctor` (animation.cpp) stamps the
+    // MINTED table and does the inlined External stores, then runs this.
+    struct DoorBody { static void Init(Particle* p) { p->InitFields(); } };
+
 protected:
-    // NOT retail's 0x180103e80 — see the banner. `= default` keeps the class
-    // trivially default-constructible so no layout pin moves.
-    Particle() = default;
+    // ??0Particle@Graphics@@QEAA@XZ  0x180103e80 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1): External() and the stamps are the
+    // compiler's; the six stores are ONE body with the door. The two gaps
+    // (+0x21..+0x23, +0x2c..+0x2f) stay unwritten.
+    Particle() { InitFields(); }
 
     // ??1Particle@Graphics@@UEAA@XZ  0x180103c70. NON-virtual (ENDGAME section
-    // B.1 decision 2), and DUPLICATED rather than delegated: the retail body
-    // stamps the MINTED table and walks `_records` freeing each element's own
-    // buffer, which is right for the minted objects that are the only ones alive
-    // today. It is not ported anywhere in the tree, so the member is defined
-    // EMPTY (in `wave27_lane_gfxpart.cpp`, beside `Serialize`) and nothing is
-    // claimed for it. The `Object::External` precedent verbatim.
-    ~Particle();
+    // B.1 decision 2). PORTED by ENDGAME B.3.8 block RB as `ReleaseFields`
+    // (animation.cpp): free each pool record's +0x18 buffer, zero the record's
+    // +0x18/+0x20, free the record, then free `_records` and zero its header.
+    // The External half that follows in retail is the compiler's ~External.
+    // No door exists (0x180103c70 is still reached only through the mint's
+    // RT_DELDTOR row, unregistered), so this body has one entry point: the
+    // real destructor, which only a converted subclass (LOOP's Tornado) runs.
+    ~Particle() { ReleaseFields(); }
+
+private:
+    void InitFields() {
+        _active      = 1;          // +0x20 (BYTE)
+        _recordCount = 1;          // +0x24
+        _subCount    = 0xf;        // +0x28
+        _material    = nullptr;    // +0x30
+        _records._data     = nullptr;   // +0x38
+        _records._size     = 0;         // +0x40 } one qword
+        _records._capacity = 0;         //       }
+    }
+    void ReleaseFields();   // 0x180103c70 up to the External half (animation.cpp)
+public:
 
 public:
     // ---- the 0x28 bytes Particle adds --------------------------------------

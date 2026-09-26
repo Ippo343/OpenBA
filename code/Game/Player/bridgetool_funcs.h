@@ -5,12 +5,6 @@
 #include "BridgeTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00): Scalar deleting destructor.
-// Resets vtable chain (BridgeTool -> DragTool -> Tool), calls Internal::~Internal,
-// conditionally frees memory if flags & 1.
-// Original: 0x14002d7f0
-void* BridgeTool_Dtor(BridgeTool* self, uint32_t flags);
-
 // Startup (vtable +0x20, Slot4): Finds BridgeDescription component on the entity
 // at self->entity (+0x20) and stores it at self->bridgeDesc (+0x38).
 // Iterates entity's component array, matching by CreateBridgeDescription type ID.

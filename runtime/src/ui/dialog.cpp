@@ -994,31 +994,11 @@ void RtUiDialogInstance_Dtor(DialogInstance* self) {
 
     *reinterpret_cast<void**>(p) = VtblDialogInstance();
 
-    // --- the root Element, through its scalar deleting destructor ------------
-    if (self->_root) {
-        DeletingDtorOf(self->_root)(self->_root, 1);
-        self->_root = nullptr;
-    }
-
-    // --- every controller, same way. _data is re-read each iteration ---------
-    for (int i = 0; i < self->_controllers._size; ++i) {
-        DialogController** data = self->_controllers._data;   // re-read: see above
-        DialogController*  c    = data[i];
-        if (c) {
-            DeletingDtorOf(c)(c, 1);
-            data[i] = nullptr;
-        }
-    }
-
-    if (self->_controllers._data) MemFreeStatic(self->_controllers._data);
-    self->_controllers._data = nullptr;
-    self->_controllers._size = 0;      // _capacity deliberately untouched
-
-    if (self->_timers._data) MemFreeStatic(self->_timers._data);
-    self->_timers._data = nullptr;
-    self->_timers._size = 0;           // _capacity deliberately untouched
-
-    self->_children.Clear();           // retail 0x1800325f0
+    // ENDGAME B.3.8 block RB (RULE B8-1): the teardown between the vptr store
+    // and the inlined ~Internal is ONE body with the real destructor
+    // `UI::DialogInstance::~DialogInstance` — `ReleaseFields`, in the UI
+    // section of this file.
+    UI::DialogInstance::DoorBody::Release(reinterpret_cast<UI::DialogInstance*>(self));   // B.3.8 bridge
 
     // Retail inlines Object::Internal::~Internal here; the instruction-for-
     // instruction comparison is in the block above. Reached through the seam so
@@ -1055,16 +1035,11 @@ void* RtUiElementDescription_Ctor(ElementDescription* self) {
     *reinterpret_cast<uint64_t*>(p + 0x10) = 0;       // External::_refs data
     *reinterpret_cast<uint64_t*>(p + 0x18) = 0;       // External::_refs size/capacity
     *reinterpret_cast<void**>(p + 0x00) = vtblEd;     // UI::ElementDescription
-    *reinterpret_cast<uint64_t*>(p + 0x20) = 0;       // _x, _y
-    *reinterpret_cast<uint64_t*>(p + 0x28) = 0;       // _width, _height
-    *reinterpret_cast<uint64_t*>(p + 0x30) = 0;       // _minWidth, _minHeight
-    *reinterpret_cast<int32_t*>(p + 0x38)  = 0;       // _tabOrder
-    *reinterpret_cast<int32_t*>(p + 0x3c)  = -1;      // _id
-    *reinterpret_cast<uint64_t*>(p + 0x40) = 3;       // _elementType = 3, _flags = 0
-    *reinterpret_cast<uint64_t*>(p + 0x48) = 0;       // _childDesc
-    *reinterpret_cast<uint64_t*>(p + 0x50) = 0;       // _userData
-    *reinterpret_cast<uint64_t*>(p + 0x58) = 0;       // _stringTable
-    *reinterpret_cast<uint64_t*>(p + 0x60) = 0;       // _textName
+    // ENDGAME B.3.8 block RB (RULE B8-1): the field stores +0x20..+0x67 are
+    // ONE body with the real constructor `UI::ElementDescription()` —
+    // `InitFields`, in the UI member section of this file.
+    UI::ElementDescription::DoorBody::Init(
+        reinterpret_cast<UI::ElementDescription*>(self));   // B.3.8 bridge
 
     return self;   // MOV RAX,RCX — a ctor returns `this`
 }
@@ -1174,27 +1149,14 @@ extern "C" uint32_t RtUiElementDescription_Type(const void* self) {
 // how many calls actually released a buffer; `calls=` stays 0 because there is
 // no comparison to report. Liveness, not correctness.
 void RtUiElementDescription_Dtor(ElementDescription* self) {
-    bool didWork = false;
-
     static void* const vtblEd = ResolveExport(RtUI::kVtblElementDescription);
     if (vtblEd) *reinterpret_cast<void**>(self) = vtblEd;
 
-    // Retail's String release, with its asymmetry intact: the FREEING branch
-    // leaves the field holding `data - 8` (dangling), the SHARING branch nulls
-    // it. See runtime/types/system/String.h.
-    if (char* p = self->_textName) {
-        if (--RtSystem::StringRefCount(p) == 0) {
-            self->_textName = p - 8;
-            using FreeFn = void (*)(void*);
-            static FreeFn freeFn = reinterpret_cast<FreeFn>(
-                ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
-            if (freeFn) freeFn(self->_textName);
-            didWork = true;
-        } else {
-            self->_textName = nullptr;
-        }
-    }
-
+    // ENDGAME B.3.8 block RB (RULE B8-1): the String release between the
+    // restamp and the ~External tail is ONE body with the real destructor
+    // `UI::ElementDescription::~ElementDescription` — `ReleaseFields`.
+    UI::ElementDescription::DoorBody::Release(
+        reinterpret_cast<UI::ElementDescription*>(self));   // B.3.8 bridge
 
     // ~External — a TAIL JMP in retail, a normal call here (the same single
     // deliberate departure `??1Element` makes, for the same reason).
@@ -1618,9 +1580,41 @@ uint32_t DialogInstance::Type() const {                        // [2] 0x1800453e
         DialogInstanceTypeInfo() + kBaseTypeInfoTypeId);
 }
 
-// ??1DialogInstance@UI@@UEAA@XZ 0x180114d40 — EMPTY on purpose; the teardown
-// is the door `RtUiDialogInstance_Dtor` above.
-DialogInstance::~DialogInstance() {}
+// ============================================================================
+// UI::DialogInstance::ReleaseFields — ??1DialogInstance 0x180114d40 between
+// the vptr store and the inlined ~Internal (ENDGAME B.3.8 block RB, B8-1).
+// Shared by the real destructor (DialogInstance.h) and the door
+// `RtUiDialogInstance_Dtor`. Moved verbatim (`self->x` -> `x`); the four
+// details the door's banner lists hold unchanged.
+// ============================================================================
+void DialogInstance::ReleaseFields() {
+    // --- the root Element, through its scalar deleting destructor ------------
+    if (_root) {
+        DeletingDtorOf(_root)(_root, 1);
+        _root = nullptr;
+    }
+
+    // --- every controller, same way. _data is re-read each iteration ---------
+    for (int i = 0; i < _controllers._size; ++i) {
+        DialogController** data = _controllers._data;   // re-read: see above
+        DialogController*  c    = data[i];
+        if (c) {
+            DeletingDtorOf(c)(c, 1);
+            data[i] = nullptr;
+        }
+    }
+
+    if (_controllers._data) MemFreeStatic(_controllers._data);
+    _controllers._data = nullptr;
+    _controllers._size = 0;      // _capacity deliberately untouched
+
+    if (_timers._data) MemFreeStatic(_timers._data);
+    _timers._data = nullptr;
+    _timers._size = 0;           // _capacity deliberately untouched
+
+    _children.Clear();           // retail 0x1800325f0
+}
+
 
 // ---- accessors -------------------------------------------------------------
 Object::InternalPtr<Element> DialogInstance::GetRoot() {       // 0x180045580
@@ -2156,12 +2150,45 @@ int32_t ElementDescription::GetFileVersion() const {               // [3] 0x1801
     return 4;
 }
 
-// ??1ElementDescription@UI@@UEAA@XZ 0x180116100 — EMPTY on purpose, as every
-// other converted base's is. The retail teardown (vtable restamp, the one
-// String release at +0x60, ~External) is the door `RtUiElementDescription_Dtor`
-// above, reached through the minted slot 0. Definable now that `TypeName`
-// (the key function) is defined in this TU (fragment pass F2).
-ElementDescription::~ElementDescription() {}
+// ??0ElementDescription@UI@@QEAA@XZ 0x180115a40 MINUS the inlined External
+// ctor and the three vptr stores (ENDGAME B.3.8 block RB, RULE B8-1). Shared by
+// `ElementDescription()` (ElementDescription.h) and the door
+// `RtUiElementDescription_Ctor`. Retail writes these as QWORD pairs; the bytes
+// are identical.
+void ElementDescription::InitFields() {
+    _x = 0;              _y = 0;              // +0x20
+    _width = 0;          _height = 0;         // +0x28
+    _minWidth = 0;       _minHeight = 0;      // +0x30
+    _tabOrder = 0;                            // +0x38
+    _id = -1;                                 // +0x3c
+    _elementType = 3;    _flags = 0;          // +0x40 (QWORD 3)
+    _childDesc = nullptr;                     // +0x48
+    _userData = 0;                            // +0x50
+    _stringTable = nullptr;                   // +0x58
+    _textName = nullptr;                      // +0x60
+}
+
+// ??1ElementDescription@UI@@UEAA@XZ 0x180116100 MINUS the restamp and the
+// ~External tail: the one String release (ENDGAME B.3.8 block RB). Shared by
+// `~ElementDescription()` and the door `RtUiElementDescription_Dtor`; moved
+// verbatim (the door's never-read `didWork` flag is gone).
+void ElementDescription::ReleaseFields() {
+    // Retail's String release, with its asymmetry intact: the FREEING branch
+    // leaves the field holding `data - 8` (dangling), the SHARING branch nulls
+    // it. See runtime/types/system/String.h.
+    if (char* p = _textName) {
+        if (--RtSystem::StringRefCount(p) == 0) {
+            _textName = p - 8;
+            using FreeFn = void (*)(void*);
+            static FreeFn freeFn = reinterpret_cast<FreeFn>(
+                ResolveExport("?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
+            if (freeFn) freeFn(_textName);
+        } else {
+            _textName = nullptr;
+        }
+    }
+}
+
 
 // ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
 // 0x180115ad0. RULE B6-11: the handle arrives by HIDDEN POINTER (retail

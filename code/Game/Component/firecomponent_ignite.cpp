@@ -36,7 +36,7 @@
 #include "Work/firework_funcs.h"
 #include "Component/firecomponent_funcs.h"
 #include "Object/factory_registration.h"
-#include "FireComponent.h"
+#include "engine/types/FireComponent.h"   // the forwarder: also carries FireDescriptionField
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>

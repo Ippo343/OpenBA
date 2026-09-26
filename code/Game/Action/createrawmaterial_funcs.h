@@ -4,10 +4,7 @@
 
 #include <cstdint>
 
-struct CreateRawMaterial;
-
-// CreateRawMaterial::ScalarDtor -- set vtables, call ~Internal, optionally free
-void* CreateRawMaterial_ScalarDtor_Impl(CreateRawMaterial* self, uint32_t flags);
+class CreateRawMaterial;
 
 // CreateRawMaterial::Serialize -- versioned serialization with 3 version gates
 void CreateRawMaterial_Serialize_Impl(CreateRawMaterial* self, void* stream);

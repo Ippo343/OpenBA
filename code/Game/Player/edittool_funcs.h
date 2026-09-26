@@ -5,12 +5,6 @@
 #include "EditTool.h"
 #include <cstdint>
 
-// Dtor (vtable +0x00, Slot0): Scalar deleting destructor.
-// Resets vtable chain (EditTool -> Tool), calls Object::Internal::~Internal,
-// conditionally frees memory if flags & 1.
-// Original: 0x14002db00
-void* EditTool_Dtor_Impl(EditTool* self, uint32_t flags);
-
 // Slot10 (vtable +0x50): "is *entityRef the entity I currently have selected?"
 // Calls CheckPtr on self->lastEntityRef (+0x30), then compares *entityRef with it.
 // NOT a serializer — it was called EditTool_Serialize_Impl until 2026-07-31, and a

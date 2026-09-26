@@ -416,6 +416,47 @@ void* Graphics_SunLight_Ctor(SunLight* self) {
     self->_base._vtable = LightVtable();
     self->_base._vtable = SunLightVtable();
 
+    // ENDGAME B.3.8 block RB (RULE B8-1): everything after the two stamps is
+    // ONE body with the real constructor `Graphics::SunLight()` — below.
+    ::Graphics::SunLight::DoorBody::Init(reinterpret_cast<::Graphics::SunLight*>(self));   // B.3.8 bridge
+
+    return self;
+}
+
+// ============================================================================
+// Graphics::SunLight::~SunLight()   — 0x180108160
+//
+// Restore this class's own vtable, release the two image buffers through their
+// slot-0 deleting destructors, tear the render buffer out of the global list
+// and free it, then TAIL-CALL ~Geometry. The tail call matters: ~Geometry frees
+// the `_attached` array, so skipping it leaks on every teardown
+// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is the same family).
+//
+// No oracle: it frees. It IS executed on both sides of the ctor probe below,
+// which is what stops it being wholly unexercised code.
+// ============================================================================
+void Graphics_SunLight_Dtor(SunLight* self) {
+    self->_base._vtable = SunLightVtable();
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `~SunLight()`.
+    ::Graphics::SunLight::DoorBody::Release(reinterpret_cast<::Graphics::SunLight*>(self));   // B.3.8 bridge
+    // Retail TAIL-JUMPS here (0x1801081db JMP 0x1800a41c0), so whatever ~Geometry
+    // leaves in RAX is ~SunLight's result. Both are `UEAA@XZ`, i.e. void, and the
+    // only caller is the vtable's slot-0 deleting destructor, which discards it —
+    // so a plain call and a void return are faithful. Spelled out because the
+    // NewImageBuffer note above is the same hazard read the other way round.
+    GeometryDtor()(self);
+}
+
+// ============================================================================
+// Graphics::SunLight::InitFields / ReleaseFields (ENDGAME B.3.8 block RB,
+// RULE B8-1): 0x1801081f0 after its two stamps, and 0x180108160 between its
+// restamp and the ~Geometry tail. Shared by the real ctor/dtor (SunLight.h)
+// and the two doors above; MOVED VERBATIM through the field-identical
+// `RtGraphics::SunLight` POD view (cross-asserted in SunLight.h).
+// ============================================================================
+void Graphics::SunLight::InitFields() {
+    RtGraphics::SunLight* const self = reinterpret_cast<RtGraphics::SunLight*>(this);   // B.3.8 bridge (the POD view)
+
     self->_dirX = 0.0f;  self->_dirY = 0.0f;  self->_dirZ = -1.0f;
     self->_sunR = 1.0f;  self->_sunG = 1.0f;  self->_sunB = 1.0f;  self->_sunA = 1.0f;
     self->_ambientR = 0.0f; self->_ambientG = 0.0f; self->_ambientB = 0.0f;
@@ -451,32 +492,12 @@ void* Graphics_SunLight_Ctor(SunLight* self) {
         self->_base._dirtyFlags |= 2u;
     }
 
-    return self;
 }
 
-// ============================================================================
-// Graphics::SunLight::~SunLight()   — 0x180108160
-//
-// Restore this class's own vtable, release the two image buffers through their
-// slot-0 deleting destructors, tear the render buffer out of the global list
-// and free it, then TAIL-CALL ~Geometry. The tail call matters: ~Geometry frees
-// the `_attached` array, so skipping it leaks on every teardown
-// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md is the same family).
-//
-// No oracle: it frees. It IS executed on both sides of the ctor probe below,
-// which is what stops it being wholly unexercised code.
-// ============================================================================
-void Graphics_SunLight_Dtor(SunLight* self) {
-    self->_base._vtable = SunLightVtable();
-    DeleteImageBuffer(self->_colourTarget);
-    DeleteImageBuffer(self->_depthTarget);
-    DeleteRenderBuffer(self->_renderBuffer);
-    // Retail TAIL-JUMPS here (0x1801081db JMP 0x1800a41c0), so whatever ~Geometry
-    // leaves in RAX is ~SunLight's result. Both are `UEAA@XZ`, i.e. void, and the
-    // only caller is the vtable's slot-0 deleting destructor, which discards it —
-    // so a plain call and a void return are faithful. Spelled out because the
-    // NewImageBuffer note above is the same hazard read the other way round.
-    GeometryDtor()(self);
+void Graphics::SunLight::ReleaseFields() {
+    DeleteImageBuffer(_colourTarget);
+    DeleteImageBuffer(_depthTarget);
+    DeleteRenderBuffer(_renderBuffer);
 }
 
 // ============================================================================

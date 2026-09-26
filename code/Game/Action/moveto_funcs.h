@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-struct MoveTo;
+class MoveTo;
 
 // MoveTo::Serialize -- versioned serialization of all path/movement data
 void MoveTo_Serialize_Impl(void* self, void* stream);

@@ -1,0 +1,48 @@
+#pragma once
+// ============================================================================
+// code/Game/Action/SendComponentMessage.h — ENDGAME B.3.8 block ACT (B38_RULES.md D1-D5)
+//
+// `SendComponentMessage`, an exe Action leaf, as a real C++ class with a compiler vtable.
+// RETAIL (Application-x64.exe, B38_SLOTS.md §6):
+//   reflected "SendComponentMessage", parent "Action", ti 0x1401c60f0
+//   create 0x140023070: MemAlloc(0x40, 8) + the inlined ctor
+//   createInPlace = the IMPORTED `Internal::CreateInPlaceObject` (returns null);
+//     the tree's in-place entry builds the object and that is KEPT (B8-13).
+//   table 0x1401600c0, 10 slots; every slot not declared below is Action's (= parent)
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Action/Action.h"
+#include "Object/exe_type.h"
+
+class SendComponentMessage final : public Action {
+    DECLARE_EXE_TYPE(SendComponentMessage)
+
+public:
+    SendComponentMessage();                                                   // create 0x140023070
+    SendComponentMessage(uint64_t* target, uint32_t* compTypeId, uint32_t message, uint64_t* second,
+                         uint32_t arg);   // 0x1400cb1d0
+    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x1400230f0
+    void Persist(void* stream) override;                       // [3] 0x1400cb000
+    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400caef0
+    bool GetTarget(void* param) override;                      // [9] 0x1400cae80
+
+    // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
+    void*     _field20;          // +0x20 target entity IBP
+    void*     _field28;          // +0x28 second IBP
+    uint32_t  _field30;          // +0x30 component type id
+    int32_t   _field34;          // +0x34 message id
+    void*     _field38;          // +0x38 message arg (+0x38) / 0 (+0x3c)
+
+protected:
+    ~SendComponentMessage() = default;
+};
+
+static_assert(sizeof(SendComponentMessage) == 0x40, "SendComponentMessage is 0x40 (create 0x140023070 MemAlloc)");
+static_assert(alignof(SendComponentMessage) == 8, "SendComponentMessage is 8-aligned");
+static_assert(offsetof(SendComponentMessage, _field20) == 0x20, "SendComponentMessage +0x20");
+static_assert(offsetof(SendComponentMessage, _field28) == 0x28, "SendComponentMessage +0x28");
+static_assert(offsetof(SendComponentMessage, _field30) == 0x30, "SendComponentMessage +0x30");
+static_assert(offsetof(SendComponentMessage, _field34) == 0x34, "SendComponentMessage +0x34");
+static_assert(offsetof(SendComponentMessage, _field38) == 0x38, "SendComponentMessage +0x38");

@@ -8,7 +8,7 @@
 // engine's g_fUVScale 0.98 threshold, snapping to exactly 1.0).
 //
 // Key formula (faithful to 0x140049de0):
-//   resData       = IsDerivedFrom(self->_unk18, FruitDescription) ? self->_unk18 : 0
+//   resData       = IsDerivedFrom(self->_description, FruitDescription) ? self->_description : 0
 //   ripeningSpeed = g_fUVScale / (resData->+0x20 * SECS_PER_SEASON)
 //   tempDelta     = |currentTemp - resData->+0x24| / resData->+0x28
 //   if fruitFlag clear && (*(self->+0x28))->+0x28 >= g_fUVScale:
@@ -152,8 +152,8 @@ void FruitComponent_Update(FruitComponent* self, int64_t* pDeltaTime) {
 
     const float fUV = s_fUVScale ? *s_fUVScale : 0.98f;  // ~1.0 comparison/clamp
 
-    // resData = IsDerivedFrom(self->_unk18, FruitDescription) ? self->_unk18 : 0
-    void* baseObj = self->_unk18;
+    // resData = IsDerivedFrom(self->_description, FruitDescription) ? self->_description : 0
+    void* baseObj = self->_description;
     void* resData = nullptr;
     if (baseObj && fn_IsDerivedFrom && s_pFruitDescTypeId) {
         if (fn_IsDerivedFrom(baseObj, *s_pFruitDescTypeId))
@@ -247,63 +247,51 @@ void FruitComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Phase 1 inert->live component bring-up) =====
-// ⚠ GRADUATED 2026-08-10: BANISHED_LIVE_FRUIT is now in the default-on table, so this component
-// is LIVE by default and the env var is only a kill-switch (=0). The line below described
-// the pre-graduation default and is kept for the shape of the opt-in path.
-// By DEFAULT FruitComponent stays inert exactly like every other standalone
-// component (default run byte-for-byte unchanged). Set BANISHED_LIVE_FRUIT=1 (or
-// the global the global live-components switch=1) to graduate it to a real per-type vtable:
-//   * slot 4 (+0x20 Startup) -> FruitComponent_Startup  (body-init field28@+0x28)
-//   * slot 9 (+0x48 Update)  -> FruitComponent_Update    (per-tick ripening sim)
-// Size 0x38, capability flags +0x20 = 0x88 (from FruitComponent_Ctor).
+// ===== ENDGAME B.3.8 CIT — FruitComponent as a REAL class (FruitComponent.h) =====
+// Before: a 48-slot hand-built FruitComponent_LiveVtable filled at every create
+// (slots 3 Serialize, 4 Startup, 9 Update), Inert_ScalarDtor in slot 0. After:
+// the compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/FruitComponent.h"
 
-// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_S to
-// ALSO wire slot 3 (Shutdown/Serialize, 0x14004a070 — Ghidra mislabel, see
-// fruitcomponent_serialize.cpp). Wired UNCONDITIONALLY, same rationale as
-// GrowthComponent/ResidenceComponent/StorageComponent: serialize round-trip
-// is not an opt-in feature the way the live ripening simulation is. Without
-// this, a loaded save's FruitComponent kept the base-Component serialize and
-// its ripeness (+0x30) / fruitFlag (+0x34) came back zeroed.
+// Retail 0x14004a070 (fruitcomponent_serialize.cpp).
 extern "C" void FruitComponent_Serialize(void* self, void* stream);
-static uint32_t FruitComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("FruitComponent");
-    return cached;
+
+// 0x14004a160. Component() is the CALL 0x1401188b0; the 0x140159450 stamp is
+// the compiler's; +0x28 = 0, +0x30 (dword) = 0, +0x34 (byte) = 0; flags |= 0x88.
+FruitComponent::FruitComponent()
+    : field28(nullptr), field30(0), fruitFlag(0), _pad35{} {
+    OrFlagsInCtor(0x88);
 }
-static void* FruitComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void FruitComponent_UpdateVSlot(void* s, void* t) {
-    FruitComponent_Update(reinterpret_cast<FruitComponent*>(s), reinterpret_cast<int64_t*>(t));
+
+// [0] 0x140005b20: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* FruitComponent::DeletingDtor(unsigned flags) {
+    this->~FruitComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void FruitComponent_StartupVSlot(void* s) {
-    FruitComponent_Startup(reinterpret_cast<FruitComponent*>(s));
+
+void FruitComponent::Persist(void* stream) { FruitComponent_Serialize(this, stream); }   // [3] 0x14004a070
+void FruitComponent::Startup() { FruitComponent_Startup(this); }                          // [4] 0x14004a030
+
+// [9] 0x140049de0. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void FruitComponent::Update(void* time) {
+    FruitComponent_Update(this, static_cast<int64_t*>(time));
 }
-static void FruitComponent_SerializeVSlot(void* self, void* stream) {
-    FruitComponent_Serialize(self, stream);
+
+// create 0x140005920: MemAlloc(0x38, 8), then the ctor.
+void* FruitComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FruitComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) FruitComponent());
 }
-static void FruitComponent_FinishLiveVtable() {
-    FruitComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&FruitComponent_SerializeVSlot);
-    FruitComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&FruitComponent_StartupVSlot);
-    FruitComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&FruitComponent_UpdateVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* FruitComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) FruitComponent());
 }
-extern "C" void* FruitComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x88,
-        FruitComponent_LiveVtable,
-        reinterpret_cast<void*>(&FruitComponent_LiveGetTypeId));
-    FruitComponent_FinishLiveVtable();
-    return p;
-}
-static void* FruitComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x88,
-        FruitComponent_LiveVtable,
-        reinterpret_cast<void*>(&FruitComponent_LiveGetTypeId));
-    FruitComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(FruitComponent, "Component",
-              &FruitComponent_Factory, &FruitComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(FruitComponent, "_ZTV14FruitComponent")
+DEFINE_EXE_TYPE(FruitComponent, "Component")

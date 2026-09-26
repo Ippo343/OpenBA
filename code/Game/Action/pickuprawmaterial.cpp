@@ -232,42 +232,54 @@ bool PickupRawMaterial_GetTarget_Impl(PickupRawMaterial* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015ff10 (10 slots), size 0x30, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class PickupRawMaterial (PickupRawMaterial.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_PickupRawMaterial_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t PickupRawMaterial_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("PickupRawMaterial");
-    return c;
+// create 0x140022c60 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+PickupRawMaterial::PickupRawMaterial()
+    : _field20(nullptr),
+      _field28(nullptr) {}
+
+// [0] 0x140022cd0
+Object::Base* PickupRawMaterial::DeletingDtor(unsigned flags) {
+    this->~PickupRawMaterial();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_PickupRawMaterial_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&PickupRawMaterial_GetTypeId,           // +0x10 GetTypeId
-    (void*)&PickupRawMaterial_Serialize_Impl,      // +0x18 Serialize
-    (void*)&PickupRawMaterial_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
-    (void*)&PickupRawMaterial_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c99e0
+void PickupRawMaterial::Persist(void* stream) { PickupRawMaterial_Serialize_Impl(this, stream); }
+// [4] 0x1400c98d0
+int  PickupRawMaterial::AbstractImpl(void* actionStack) { return PickupRawMaterial_AbstractImpl_Impl(this, actionStack); }
+// [9] 0x1400c9860
+bool PickupRawMaterial::GetTarget(void* param) { return PickupRawMaterial_GetTarget_Impl(this, param); }
 
+void* PickupRawMaterial::CreateNewObject() {
+    PickupRawMaterial_ResolveFuncs();
+    void* p = Object::detail::InternalMemAlloc(sizeof(PickupRawMaterial), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PickupRawMaterial());
+}
+void* PickupRawMaterial::CreateInPlaceObject(void* storage) {
+    PickupRawMaterial_ResolveFuncs();
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PickupRawMaterial());
+}
+
+DEFINE_EXE_VTABLE(PickupRawMaterial, "_ZTV17PickupRawMaterial")
+
+// B38 D5: 0x14015ff10 is still read back BY ADDRESS outside this block
+// (work_base_actionctor.cpp:164),
+// so the row stays, serving the compiler table (every such reader builds the
+// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterPickupRawMaterialVtable() {
-    RegisterExeAddr(0x14015ff10, (uintptr_t)g_PickupRawMaterial_Vtable);
+    RegisterExeAddr(0x14015ff10, reinterpret_cast<uintptr_t>(PickupRawMaterial::Vtable()));
 }
-extern "C" void* PickupRawMaterial_CreateInPlace(void* mem) {
-    PickupRawMaterial_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x30, g_PickupRawMaterial_Vtable);
-}
-extern "C" void* PickupRawMaterial_Factory(void) {
-    PickupRawMaterial_ResolveFuncs();
-    return Action_Alloc(0x30, g_PickupRawMaterial_Vtable);
-}
-REGISTER_TYPE(PickupRawMaterial, "Action", &PickupRawMaterial_Factory, &PickupRawMaterial_CreateInPlace);
+
+DEFINE_EXE_TYPE(PickupRawMaterial, "Action")

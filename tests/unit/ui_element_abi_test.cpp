@@ -189,7 +189,7 @@ Object::InternalPtr<Element>* Element::GetBorder(Object::InternalPtr<Element>* r
     new (static_cast<void*>(ret)) Object::InternalPtr<Element>(static_cast<Element*>(_border));
     return ret;
 }
-Element::~Element() {}
+// (dtor inline since ENDGAME B.3.8 block RB; markers in rb_ui_abi_test.cpp)
 
 const char* ElementDescription::TypeName() const { Note(this, kD1_TypeName / 8); return "ElementDescription"; }
 uint32_t ElementDescription::Type() const { Note(this, kD2_Type / 8); return 0x5678u; }
@@ -197,7 +197,7 @@ int32_t ElementDescription::GetFileVersion() const { Note(this, kD3_GetFileVersi
 bool ElementDescription::Serialize(void* stream) {
     Note(this, kD5_Serialize / 8, reinterpret_cast<intptr_t>(stream)); return true;
 }
-ElementDescription::~ElementDescription() {}
+// (dtor inline since ENDGAME B.3.8 block RB; markers in rb_ui_abi_test.cpp)
 }  // namespace UI
 
 // ===========================================================================
