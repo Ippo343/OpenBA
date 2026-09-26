@@ -17,6 +17,8 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // DestroyComponent_CanReclaim (0x14011e690)
@@ -208,7 +210,7 @@ static uint64_t FindElemByName(void* dialogElem, const char* name) {
     System::String nameStr(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, &nameStr);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
 
     return result;
 }
@@ -267,15 +269,15 @@ void DestroyUI_Slot4(DestroyUI* self) {
 
     // buttonReclaim → +0x60, ID = 0x1771
     self->data60 = FindElemAsBasePtr(dialogElem, "buttonReclaim");
-    fn_Element_SetElementId((void*)self->data60, 0x1771);
+    reinterpret_cast<UI::Element*>(self->data60)->SetElementId(0x1771);  // B.3.6 bridge
 
     // buttonDestroy → +0x68, ID = 0x1773
     self->data68 = FindElemAsBasePtr(dialogElem, "buttonDestroy");
-    fn_Element_SetElementId((void*)self->data68, 0x1773);
+    reinterpret_cast<UI::Element*>(self->data68)->SetElementId(0x1773);  // B.3.6 bridge
 
     // buttonRebuild → +0x70, ID = 0x1772
     self->data70 = FindElemAsBasePtr(dialogElem, "buttonRebuild");
-    fn_Element_SetElementId((void*)self->data70, 0x1772);
+    reinterpret_cast<UI::Element*>(self->data70)->SetElementId(0x1772);  // B.3.6 bridge
 
     // --- Check if reclaim should be hidden ---
     // Find DestroyComponent on entity
@@ -288,7 +290,7 @@ void DestroyUI_Slot4(DestroyUI* self) {
 
     if (canReclaim || compFlag) {
         // Hide the reclaim button (SetFlagsOnOff: set flag 1 = hidden)
-        fn_Element_SetFlagsOnOff((void*)self->data60, 1, 0);
+        reinterpret_cast<UI::Element*>(self->data60)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     }
 }
 
@@ -347,12 +349,12 @@ void DestroyUI_Slot7(DestroyUI* self) {
         // --- Building is being demolished: show reclaim, update progress ---
 
         // Hide rebuild, destroy buttons and textDamage
-        if (buttonRebuild) fn_Element_SetFlagsOnOff(buttonRebuild, 1, 0);
-        fn_Element_SetFlagsOnOff(buttonDestroy, 1, 0);
-        if (textDamage) fn_Element_SetFlagsOnOff(textDamage, 1, 0);
+        if (buttonRebuild) reinterpret_cast<UI::Element*>(buttonRebuild)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(buttonDestroy)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textDamage) reinterpret_cast<UI::Element*>(textDamage)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
         // Show reclaim button
-        fn_Element_SetFlagsOnOff(buttonReclaim, 0, 1);
+        reinterpret_cast<UI::Element*>(buttonReclaim)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
         // --- Update storage removal progress bar ---
         if (smComp != nullptr) {
@@ -397,13 +399,13 @@ void DestroyUI_Slot7(DestroyUI* self) {
         // --- Show/hide progress bars based on destruction state ---
         bool isDestroying = (destroyRatio != 0.0f);
         if (isDestroying) {
-            fn_Element_SetFlagsOnOff(progressRemove, 1, 0);   // hide storage bar
+            reinterpret_cast<UI::Element*>(progressRemove)->SetFlagsOnOff(1, 0);   // B.3.6 bridge; hide storage bar
         } else {
-            fn_Element_SetFlagsOnOff(progressRemove, 0, 1);   // show storage bar
+            reinterpret_cast<UI::Element*>(progressRemove)->SetFlagsOnOff(0, 1);   // B.3.6 bridge; show storage bar
         }
-        fn_Element_SetFlagsOnOff(progressDestruct,
+        reinterpret_cast<UI::Element*>(progressDestruct)->SetFlagsOnOff(
                                  isDestroying ? 0 : 1,
-                                 isDestroying ? 1 : 0);
+                                 isDestroying ? 1 : 0);  // B.3.6 bridge
 
         // --- Text visibility based on component state ---
         // Check if the building's current state matches its target state
@@ -413,20 +415,20 @@ void DestroyUI_Slot7(DestroyUI* self) {
 
         if (currentState == targetState) {
             // Building state matches target → show "fixing" text
-            if (textFixing) fn_Element_SetFlagsOnOff(textFixing, 0, 1);
-            if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 1, 0);
+            if (textFixing) reinterpret_cast<UI::Element*>(textFixing)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+            if (textRemove) reinterpret_cast<UI::Element*>(textRemove)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
             hideAtEnd = textUpgrade;
         } else {
             // Check if building can be rebuilt (upgraded)
             bool canRebuild = DestroyComponent_CanRebuild_Impl(destroyComp);
             if (!canRebuild) {
                 // Regular removal: show textRemove
-                if (textUpgrade) fn_Element_SetFlagsOnOff(textUpgrade, 1, 0);
-                if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 0, 1);
+                if (textUpgrade) reinterpret_cast<UI::Element*>(textUpgrade)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+                if (textRemove) reinterpret_cast<UI::Element*>(textRemove)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
             } else {
                 // Can rebuild: show textUpgrade
-                if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 1, 0);
-                if (textUpgrade) fn_Element_SetFlagsOnOff(textUpgrade, 0, 1);
+                if (textRemove) reinterpret_cast<UI::Element*>(textRemove)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+                if (textUpgrade) reinterpret_cast<UI::Element*>(textUpgrade)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
             }
             hideAtEnd = textFixing;
         }
@@ -448,41 +450,35 @@ void DestroyUI_Slot7(DestroyUI* self) {
         // Call virtual method at vtable+0x40 on buttonRebuild
         // (likely SetEnabled or SetChecked: true when state != 6)
         {
-            typedef void (*fn_VSlot8_t)(void* self, bool param);
-            void** vtable = *(void***)buttonRebuild;
-            fn_VSlot8_t vfunc = (fn_VSlot8_t)vtable[8];
-            vfunc(buttonRebuild, stateByte != 6);
+            reinterpret_cast<UI::Element*>(buttonRebuild)->Enable(stateByte != 6);  // B.3.6 bridge: Element slot 8 Enable
         }
 
         // Same virtual call on buttonDestroy
         void* buildState2 = nullptr;
         fn_FindComponent_BuildState(compEntity, &buildState2);
         {
-            typedef void (*fn_VSlot8_t)(void* self, bool param);
-            void** vtable = *(void***)buttonDestroy;
-            fn_VSlot8_t vfunc = (fn_VSlot8_t)vtable[8];
-            vfunc(buttonDestroy, true);
+            reinterpret_cast<UI::Element*>(buttonDestroy)->Enable(true);  // B.3.6 bridge: Element slot 8 Enable
         }
 
         // Show rebuild and destroy buttons
-        fn_Element_SetFlagsOnOff(buttonRebuild, 0, 1);
-        fn_Element_SetFlagsOnOff(buttonDestroy, 0, 1);
+        reinterpret_cast<UI::Element*>(buttonRebuild)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(buttonDestroy)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
         // Show textDamage
-        if (textDamage) fn_Element_SetFlagsOnOff(textDamage, 0, 1);
+        if (textDamage) reinterpret_cast<UI::Element*>(textDamage)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
         // Hide everything else
-        if (textFixing) fn_Element_SetFlagsOnOff(textFixing, 1, 0);
-        if (textRemove) fn_Element_SetFlagsOnOff(textRemove, 1, 0);
-        if (textUpgrade) fn_Element_SetFlagsOnOff(textUpgrade, 1, 0);
-        fn_Element_SetFlagsOnOff(progressRemove, 1, 0);
-        fn_Element_SetFlagsOnOff(progressDestruct, 1, 0);
+        if (textFixing) reinterpret_cast<UI::Element*>(textFixing)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textRemove) reinterpret_cast<UI::Element*>(textRemove)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textUpgrade) reinterpret_cast<UI::Element*>(textUpgrade)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(progressRemove)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(progressDestruct)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
         hideAtEnd = buttonReclaim;
     }
 
     // Hide the last element (buttonReclaim when reclaim active, or a text element)
-    if (hideAtEnd) fn_Element_SetFlagsOnOff(hideAtEnd, 1, 0);
+    if (hideAtEnd) reinterpret_cast<UI::Element*>(hideAtEnd)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -576,8 +572,7 @@ void EnsureGlobals() {
 bool Ready() {
     return g_TypeId_ComponentEntity && *g_TypeId_ComponentEntity
         && g_TypeId_DestroyComponent && *g_TypeId_DestroyComponent
-        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor
-        && fn_Element_SetFlagsOnOff;
+        && fn_IsDerivedFrom && fn_InternalBasePtr_Ctor;
 }
 
 // SA-guard: the data-source entity ref (+0x28) is nulled by entity destruction

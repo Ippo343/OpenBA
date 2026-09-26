@@ -30,6 +30,12 @@
 #include <cstdlib>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 namespace Game {
 
@@ -80,7 +86,7 @@ void Hotkey_BuildKeyName(void* retval, int device, int keyIndex) {
     }
 
     uint64_t keyNamesTable = *(uint64_t*)((uintptr_t)container + 0xD0);
-    fn_UIString_Ctor(retval, keyNamesTable, &tempStr);  // (retbuf, table, name)
+    ::new (retval) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(keyNamesTable)), tempStr);  // B.3.6 bridge; (retbuf, table, name)
 }
 
 // Find the named TextElement in the controller's dialog, resolve the bound key
@@ -90,7 +96,7 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
     System::String nameStr(elemName);
     void* dlgInst = *(void**)((uintptr_t)self + 0x18);
     uint64_t retval = 0;
-    fn_DialogInstance_FindElement(dlgInst, &retval, &nameStr);
+    ::new (&retval) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dlgInst)->FindElement(nameStr));  // B.3.6 bridge
 
     void* textElem = (void*)retval;
     if (!textElem) return;
@@ -104,7 +110,7 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
     // UI::String -> System::String (member, hidden retval). TextElement params
     // take a System::String; the converted string owns a ref released by its dtor.
     System::String sysStr;
-    fn_UIString_ToSystemString(uiStr, &sysStr);
+    ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
 
     fn_TextElement_SetParameter(textElem, paramIndex, &sysStr);
 }
@@ -113,8 +119,7 @@ static void FillHotKeyText(void* self, const char* elemName, int paramIndex,
 void HotKeyToolTipUI_Slot4(void* self) {
     if (!self) return;
     if (!fn_InternalBasePtr_Ctor || !fn_IsDerivedFrom
-        || !fn_UIString_Ctor || !fn_UIString_ToSystemString
-        || !fn_DialogInstance_FindElement || !fn_TextElement_SetParameter
+        || !fn_TextElement_SetParameter
         || !fn_KeyMap_GetInputForId || !fn_KeyMap_GetDeviceForId
         || !g_TypeId_ObjectInternal) {
         return;

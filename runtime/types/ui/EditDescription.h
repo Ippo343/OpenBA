@@ -34,7 +34,7 @@
 #include <cstddef>
 
 #include "ElementDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::EditDescription — cross-asserted below
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::EditDescription aliases this class
 
 namespace UI {
 
@@ -94,12 +94,7 @@ static_assert(offsetof(EditDescription, _string70) == 0x70, "");
 static_assert(offsetof(EditDescription, _word78)   == 0x78, "");
 static_assert(offsetof(EditDescription, _flag7c)   == 0x7c, "");
 static_assert(offsetof(EditDescription, _string80) == 0x80, "");
-// The class and the DescriptionsBatch1.h POD describe the same bytes.
-static_assert(sizeof(EditDescription) == sizeof(RtUI::EditDescription), "");
-static_assert(offsetof(EditDescription, _ptr68)    == offsetof(RtUI::EditDescription, _ptr68), "");
-static_assert(offsetof(EditDescription, _string70) == offsetof(RtUI::EditDescription, _string70), "");
-static_assert(offsetof(EditDescription, _word78)   == offsetof(RtUI::EditDescription, _word78), "");
-static_assert(offsetof(EditDescription, _flag7c)   == offsetof(RtUI::EditDescription, _flag7c), "");
-static_assert(offsetof(EditDescription, _string80) == offsetof(RtUI::EditDescription, _string80), "");
+// RtUI::EditDescription is an ALIAS of this class since fragment pass F2; the
+// POD's offsets are the absolute asserts above.
 
 }  // namespace UI

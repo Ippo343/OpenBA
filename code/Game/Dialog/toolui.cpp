@@ -27,6 +27,16 @@
 #include <cstdlib>
 #include "resolve.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogControllerConfig.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/TabElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // code/Game/Object/factory_registration.cpp
 namespace Object { uint32_t ResolveTypeIdByNameLazy(const char* simpleName); }
@@ -124,7 +134,7 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
         void* foundElement = nullptr;
         void* nameStr = (void*)(entry + 0x20);
-        fn_DialogInstance_FindElement(dialogInst, &foundElement, nameStr);
+        ::new (&foundElement) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(*reinterpret_cast<const System::String*>(nameStr)));  // B.3.6 bridge
 
         if (foundElement != nullptr) ++g_uidescFound;
 
@@ -132,13 +142,14 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
             // No matching element found — use 6-arg AddController (non-tab path)
             uint32_t typeId = *(uint32_t*)entry;
             dialogInst = *(void**)dialogInstPtr;
-            fn_DialogInstance_AddController6(
-                dialogInst,
+            reinterpret_cast<UI::DialogInstance*>(dialogInst)->AddController(  // B.3.6 bridge
                 typeId,
-                dataSource,
-                *(void**)(entry + 0x10),   // controllerConfig
-                *(void**)(entry + 0x08),   // elementDesc
-                (void*)(entry + 0x20));    // nameStr
+                reinterpret_cast<Object::Base*>(dataSource),
+                Object::ExternalPtr<UI::DialogControllerConfig>(
+                    reinterpret_cast<UI::DialogControllerConfig*>(*(void**)(entry + 0x10))),   // controllerConfig
+                Object::ExternalPtr<UI::ElementDescription>(
+                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x08))),     // elementDesc
+                *reinterpret_cast<const System::String*>(entry + 0x20));    // nameStr
             continue;
         }
 
@@ -149,13 +160,14 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
             // Not a tab — use 6-arg AddController (non-tab path)
             uint32_t typeId = *(uint32_t*)entry;
             dialogInst = *(void**)dialogInstPtr;
-            fn_DialogInstance_AddController6(
-                dialogInst,
+            reinterpret_cast<UI::DialogInstance*>(dialogInst)->AddController(  // B.3.6 bridge
                 typeId,
-                dataSource,
-                *(void**)(entry + 0x10),   // controllerConfig
-                *(void**)(entry + 0x08),   // elementDesc
-                (void*)(entry + 0x20));    // nameStr
+                reinterpret_cast<Object::Base*>(dataSource),
+                Object::ExternalPtr<UI::DialogControllerConfig>(
+                    reinterpret_cast<UI::DialogControllerConfig*>(*(void**)(entry + 0x10))),   // controllerConfig
+                Object::ExternalPtr<UI::ElementDescription>(
+                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x08))),     // elementDesc
+                *reinterpret_cast<const System::String*>(entry + 0x20));    // nameStr
             continue;
         }
 
@@ -171,21 +183,22 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
         // Create a new tab page: AddTab(tabElement, retval, tabDesc, elementDesc)
         // Non-trivial return ABI: this=RCX, retval=RDX, tabDesc=R8, elementDesc=R9
         void* tabPage = nullptr;
-        fn_TabElement_AddTab(
-            tabPtr,              // this (TabElement)
-            &tabPage,            // hidden return: InternalPtr<Element>
-            *(void**)(entry + 0x18),  // tabDesc
-            *(void**)(entry + 0x08)); // elementDesc
+        ::new (&tabPage) Object::InternalPtr<UI::Element>(  // B.3.6 bridge
+            reinterpret_cast<UI::TabElement*>(tabPtr)->AddTab(   // this (TabElement)
+                Object::ExternalPtr<UI::ElementDescription>(
+                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x18))),  // tabDesc
+                Object::ExternalPtr<UI::ElementDescription>(
+                    reinterpret_cast<UI::ElementDescription*>(*(void**)(entry + 0x08))))); // elementDesc
 
         // Use 5-arg AddController with the tab page element
         uint32_t typeId = *(uint32_t*)entry;
         dialogInst = *(void**)dialogInstPtr;
-        fn_DialogInstance_AddControllerTab(
-            dialogInst,
+        reinterpret_cast<UI::DialogInstance*>(dialogInst)->AddController(  // B.3.6 bridge
             typeId,
-            dataSource,
-            *(void**)(entry + 0x10),  // controllerConfig
-            &tabPage);                // tab page element
+            reinterpret_cast<Object::Base*>(dataSource),
+            Object::ExternalPtr<UI::DialogControllerConfig>(
+                reinterpret_cast<UI::DialogControllerConfig*>(*(void**)(entry + 0x10))),  // controllerConfig
+            Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tabPage)));   // tab page element (the door read it through &tabPage)
     }
 }
 
@@ -238,7 +251,7 @@ void ToolUI_Slot4(ToolUI* self) {
         uint8_t retBuf[16];
         System::String nameStr("labelTitle");
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         *(void**)(s + 0x38) = *(void**)retBuf;
     }
 
@@ -260,8 +273,8 @@ void ToolUI_Slot4(ToolUI* self) {
                 if (check && entry != nullptr) {
                     // Create UI::String from entry's string table (+0x30) and name (+0x38)
                     uint8_t uiStrBuf[16];
-                    fn_UIString_Ctor(uiStrBuf, *(uint64_t*)((uintptr_t)entry + 0x30),
-                                     (void*)((uintptr_t)entry + 0x38));
+                    ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)entry + 0x30))),
+                                     *reinterpret_cast<const System::String*>((uintptr_t)entry + 0x38));  // B.3.6 bridge
                     // Set text on labelTitle element
                     fn_TextElement_SetText(*(void**)(s + 0x38), uiStrBuf);
                 }
@@ -275,11 +288,11 @@ void ToolUI_Slot4(ToolUI* self) {
         uint8_t retBuf[16];
         System::String nameStr("buttonClose");
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         void* closeBtn = *(void**)retBuf;
 
         if (closeBtn != nullptr) {
-            fn_Element_SetElementId(closeBtn, 1);
+            reinterpret_cast<UI::Element*>(closeBtn)->SetElementId(1);  // B.3.6 bridge
         }
     }
 
@@ -289,14 +302,14 @@ void ToolUI_Slot4(ToolUI* self) {
         uint8_t retBuf[16];
         System::String nameStr("borderTitle");
         void* dialogInst = *(void**)(s + 0x18);
-        fn_DialogInstance_FindElement(dialogInst, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         borderTitle = *(void**)retBuf;
 
         if (borderTitle == nullptr) {
             *(uint8_t*)(s + 0x40) = 0;
         } else {
-            fn_Element_SetElementId(borderTitle, 0);
-            fn_Element_SetFlagsOnOff(borderTitle, 0x10000, 0);
+            reinterpret_cast<UI::Element*>(borderTitle)->SetElementId(0);  // B.3.6 bridge
+            reinterpret_cast<UI::Element*>(borderTitle)->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
             *(uint16_t*)(s + 0x40) = 1;
         }
     }
@@ -347,11 +360,11 @@ void ToolUI_Slot4(ToolUI* self) {
 static bool ToolUI_DialogHasEntityUI(uintptr_t s) {
     static uint32_t s_tidEntityUI = 0;
     if (!s_tidEntityUI) s_tidEntityUI = ::Object::ResolveTypeIdByNameLazy("EntityUI");
-    if (!s_tidEntityUI || !fn_DialogInstance_GetController) return false;
+    if (!s_tidEntityUI) return false;
     uintptr_t di = *(uintptr_t*)(s + 0x18);
     if (di < 0x10000 || di > 0x00007FFFFFFFFFFFULL) return false;
     uint64_t ctrlBuf = 0;
-    fn_DialogInstance_GetController((void*)di, &ctrlBuf, s_tidEntityUI);
+    ::new (&ctrlBuf) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(di)->GetController(s_tidEntityUI));  // B.3.6 bridge
     return ctrlBuf != 0;
 }
 
@@ -456,7 +469,7 @@ void ToolUI_Slot8(ToolUI* self) {
         if (newY < 0) newY = 0;
 
         // Move dialog
-        fn_DialogInstance_SetUpperLeft(*(void**)(s + 0x18), newX, newY, false);
+        reinterpret_cast<UI::DialogInstance*>(*(void**)(s + 0x18))->SetUpperLeft(newX, newY, false);  // B.3.6 bridge
 
         // Update entity tracking BST with new position
         uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);
@@ -556,7 +569,7 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         // Focus events (8, 9, 10) — bring dialog to front
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
         void* userInterface = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
-        fn_UI_BringDialogToFront(userInterface, (void*)&dialogRef);
+        reinterpret_cast<UI::UserInterface*>(userInterface)->BringDialogToFront(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
         return;
     } else if (msg == 0x12 && id == 1) {
         // Close button — close dialog and remove from entity tracking
@@ -623,7 +636,7 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         // the dialog-instance pointer behind the IBP at +0x18 (deref'd for its
         // UserInterface at +0x10). Range check matches CitUI_OkPtr (canonical Win64
         // user-space heap window).
-        if (!fn_UI_CloseDialog || !g_pGameWorldSingleton || !*g_pGameWorldSingleton)
+        if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton)
             return;
         {
             uintptr_t di = *(uintptr_t*)(s + 0x18);
@@ -631,7 +644,7 @@ void ToolUI_Slot9(ToolUI* self, void* /*param2*/, int msg, int id,
         }
         uint64_t dialogRef = *(uint64_t*)(s + 0x18);
         void* userInterface = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
-        fn_UI_CloseDialog(userInterface, (void*)&dialogRef);
+        reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
 
         // Remove from entity tracking BST
         uintptr_t worldObj = *(uintptr_t*)((uintptr_t)(*g_pGameWorldSingleton) + 0x120);

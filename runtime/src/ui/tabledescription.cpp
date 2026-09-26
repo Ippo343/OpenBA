@@ -282,8 +282,8 @@ Object::InternalPtr<Element>* TableDescription::CreateInstance(
     }
 
     void* slot = elem;                                         // 18011e3d5
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 18011e3e2
+    UI::ElementDescription::CreateInstance(                   // 18011e3e2
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     const int32_t columns = _columnCount;
     const int32_t rows    = _rowCount;

@@ -14,6 +14,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // UpgradeUI::Serialize (vtable +0x20) — Slot4
@@ -47,12 +52,12 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
 
     // Set button element ID to 33000
     void* button = *(void**)(s + 0x30);
-    fn_Element_SetElementId(button, 33000);
+    reinterpret_cast<UI::Element*>(button)->SetElementId(33000);  // B.3.6 bridge
 
     // Get button's child at index 4 (the ImageElement)
     button = *(void**)(s + 0x30);
     uint8_t childBuf[16];
-    fn_Element_Child(button, childBuf, 4);
+    ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(button)->Child(4));  // B.3.6 bridge
 
     // Check if child is an ImageElement type
     void* childElem = *(void**)childBuf;
@@ -97,7 +102,7 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
     // Create a Sprite from the ToolbarDescription using proper constructor
     uintptr_t brc = (uintptr_t)buildReqComp;
     uint8_t sprite[16];
-    fn_Sprite_Ctor(sprite, *(uint64_t*)(brc + 0x20), (void*)(brc + 0x28));
+    ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(brc + 0x20))), *reinterpret_cast<const System::String*>(brc + 0x28));  // B.3.6 bridge
 
     // Set sprite on the image element
     void* imageElem = *(void**)imageIBP;
@@ -106,7 +111,7 @@ void UpgradeUI_Serialize(UpgradeUI* self) {
     // Set button's user data to the target template
     void* subDescBase = *(void**)((uintptr_t)upgradeDesc + 0x20);
     button = *(void**)(s + 0x30);
-    fn_Element_SetUserData(button, subDescBase);
+    reinterpret_cast<UI::Element*>(button)->SetUserData(reinterpret_cast<Object::Base*>(subDescBase));  // B.3.6 bridge
 }
 
 // ============================================================

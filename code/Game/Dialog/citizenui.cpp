@@ -28,6 +28,12 @@
 #include "system/Filename.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A
 #include <cstdint>
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
@@ -151,7 +157,7 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
 static uint64_t FindDialogElem(void* dialogInst, const char* name) {
     System::String nameStr(name);
     uint64_t result = 0;
-    fn_DialogInstance_FindElement(dialogInst, &result, &nameStr);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
     // A missing element yields a non-null sentinel / unresolved value here rather than
     // 0 (seen as 0xffffffff00000000), which defeats the `if (elem)` guards downstream
     // and faults inside the engine. Normalise anything that isn't a real pointer to 0.
@@ -162,7 +168,7 @@ static uint64_t FindDialogElem(void* dialogInst, const char* name) {
 static uint64_t FindElemInTree(void* elem, const char* name) {
     System::String nameStr(name);
     uint64_t result = 0;
-    fn_FindElement(elem, &result, &nameStr);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(elem)->FindElement(nameStr));  // B.3.6 bridge
     // Normalise a missing/unresolved element to 0 (see FindDialogElem).
     return CitUI_OkPtr(result) ? result : 0;
 }
@@ -214,9 +220,9 @@ void CitizenUI_Slot4(CitizenUI* self) {
     *(uint64_t*)(s + 0x80) = FindDialogElem(dialogInst, "buttonHome");
     *(uint64_t*)(s + 0x88) = FindDialogElem(dialogInst, "buttonFollow");
 
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x78), 0x227);
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x80), 0x226);
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x88), 0x228);
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x78))->SetElementId(0x227);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x80))->SetElementId(0x226);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x88))->SetElementId(0x228);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -232,7 +238,7 @@ void CitizenUI_Slot6(CitizenUI* self) {
         // Get the UserInterface from DialogInstance (+0x18) -> +0x10
         void* dialogInst = (void*)*(uint64_t*)(s + 0x18);
         void* userInterface = *(void**)((uintptr_t)dialogInst + 0x10);
-        fn_UI_CloseDialog(userInterface, (void*)(s + 0xE0));
+        reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(s + 0xE0));  // B.3.6 bridge
     }
 
     // Reset +0xE0 to null InternalBasePtr
@@ -301,12 +307,12 @@ void CitizenUI_Slot7(CitizenUI* self) {
     // Actually: if isMale, show imageMale (hide female), else show imageFemale (hide male)
     void* imageFemale = (void*)*(uint64_t*)(s + 0x38);
     if (isMale) {
-        if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 1, 0);  // hide imageFemale
+        if (imageFemale) reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; hide imageFemale
     } else {
-        if (imageFemale) fn_Element_SetFlagsOnOff(imageFemale, 0, 1);  // show imageFemale
+        if (imageFemale) reinterpret_cast<UI::Element*>(imageFemale)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; show imageFemale
     }
     void* imageMale = (void*)*(uint64_t*)(s + 0x30);
-    if (imageMale) fn_Element_SetFlagsOnOff(imageMale, isMale ? 0 : 1, isMale ? 1 : 0);
+    if (imageMale) reinterpret_cast<UI::Element*>(imageMale)->SetFlagsOnOff(isMale ? 0 : 1, isMale ? 1 : 0);  // B.3.6 bridge
 
     // --- Education visibility ---
     // age at +0x210 (int), education age threshold at description+0x118 (aiDesc = the
@@ -314,13 +320,13 @@ void CitizenUI_Slot7(CitizenUI* self) {
     bool isEducated = aiDesc && (*(int*)(ai + 0x210) < *(int*)(aiDesc + 0x118));
     void* textEducatedNo = (void*)*(uint64_t*)(s + 0x60);
     if (isEducated) {
-        if (textEducatedNo) fn_Element_SetFlagsOnOff(textEducatedNo, 0, 1);  // show textEducatedNo
+        if (textEducatedNo) reinterpret_cast<UI::Element*>(textEducatedNo)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; show textEducatedNo
     } else {
-        if (textEducatedNo) fn_Element_SetFlagsOnOff(textEducatedNo, 1, 0);  // hide textEducatedNo
+        if (textEducatedNo) reinterpret_cast<UI::Element*>(textEducatedNo)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; hide textEducatedNo
     }
     void* textEducatedYes = (void*)*(uint64_t*)(s + 0x58);
-    if (textEducatedYes) fn_Element_SetFlagsOnOff(textEducatedYes,
-                             isEducated ? 1 : 0, isEducated ? 0 : 1);
+    if (textEducatedYes) reinterpret_cast<UI::Element*>(textEducatedYes)->SetFlagsOnOff(
+                             isEducated ? 1 : 0, isEducated ? 0 : 1);  // B.3.6 bridge
 
     // --- Name text ---
     // CitizenAI+0x28 is the citizen's name (System::String)
@@ -352,7 +358,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             // Build UI::String from element's string table (+0xD8) and string entry (+0xE0)
             uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
             uint8_t uiStr[16];
-            fn_UIString_Ctor_Index(uiStr, stringTable, clothingIdx);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), clothingIdx);  // B.3.6 bridge
             uint8_t textVal[16];
             *(uint64_t*)textVal = *(uint64_t*)uiStr;
             *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
@@ -383,7 +389,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             uintptr_t elemPtr = (uintptr_t)toolElem;
             uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
             uint8_t uiStr[16];
-            fn_UIString_Ctor_Index(uiStr, stringTable, toolValue);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), toolValue);  // B.3.6 bridge
             uint8_t textVal[16];
             *(uint64_t*)textVal = *(uint64_t*)uiStr;
             *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
@@ -425,7 +431,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
                 if (okPtr(profEntry)) {
                     uint64_t strTable = *(uint64_t*)(profEntry + 0x20);
                     uint8_t uiStr[16];
-                    fn_UIString_Ctor(uiStr, strTable, (void*)(profEntry + 0x30));
+                    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(strTable)), *reinterpret_cast<const System::String*>(profEntry + 0x30));  // B.3.6 bridge
                     *(uint64_t*)textVal = *(uint64_t*)uiStr;
                     *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
                     haveText = true;
@@ -435,7 +441,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
                 if (okPtr(profDesc)) {
                     uint64_t strTable = *(uint64_t*)(profDesc + 0x20);
                     uint8_t uiStr[16];
-                    fn_UIString_Ctor(uiStr, strTable, (void*)(profDesc + 0x30));
+                    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(strTable)), *reinterpret_cast<const System::String*>(profDesc + 0x30));  // B.3.6 bridge
                     *(uint64_t*)textVal = *(uint64_t*)uiStr;
                     *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
                     haveText = true;
@@ -462,10 +468,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
     {
         void* profBtn = (void*)*(uint64_t*)(s + 0x78);
         if (profBtn) {
-            typedef void (*fn_VSetEnabled_t)(void* self, bool enabled);
-            void** vtable = *(void***)profBtn;
-            fn_VSetEnabled_t vfunc = (fn_VSetEnabled_t)vtable[8]; // vtable+0x40
-            vfunc(profBtn, profEnabled);
+            reinterpret_cast<UI::Element*>(profBtn)->Enable(profEnabled);  // B.3.6 bridge: Element slot 8 Enable (vtable+0x40)
         }
     }
 
@@ -473,11 +476,8 @@ void CitizenUI_Slot7(CitizenUI* self) {
     {
         void* homeBtn = (void*)*(uint64_t*)(s + 0x80);
         if (homeBtn) {
-            typedef void (*fn_VSetEnabled_t)(void* self, bool enabled);
-            void** vtable = *(void***)homeBtn;
-            fn_VSetEnabled_t vfunc = (fn_VSetEnabled_t)vtable[8]; // vtable+0x40
             // Original passes result of CheckPtr on CitizenAI (always true if we got here)
-            vfunc(homeBtn, true);
+            reinterpret_cast<UI::Element*>(homeBtn)->Enable(true);  // B.3.6 bridge: Element slot 8 Enable (vtable+0x40)
         }
     }
 
@@ -539,7 +539,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             uintptr_t elemPtr = (uintptr_t)actionElem;
             uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
             uint8_t uiStr[16];
-            fn_UIString_Ctor_Index(uiStr, stringTable, actionIndex);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), actionIndex);  // B.3.6 bridge
             uint8_t textVal[16];
             *(uint64_t*)textVal = *(uint64_t*)uiStr;
             *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
@@ -688,7 +688,7 @@ void CitizenUI_Slot9(CitizenUI* self, uint64_t /*param2*/, int param3, int param
         // Add dialog to UI
         uint64_t dialogRef = dialogIBP;
         void* ui = *(void**)((uintptr_t)*(void**)(s + 0x18) + 0x10);
-        fn_UI_AddDialog(ui, &dialogRef);
+        reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
     }
 }
 

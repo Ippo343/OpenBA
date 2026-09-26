@@ -205,7 +205,8 @@ Object::InternalPtr<Element>* ContainerDescription::CreateInstance(
     // is name-hidden by slot 8 and its body is still a dialog.cpp door, so it
     // is reached by address, as before.
     void* slot = container;                                 // 1800ccc31
-    ElementDescriptionApply(this, &slot);                   // 1800ccc3e
+    UI::ElementDescription::CreateInstance(                   // 1800ccc3e
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     // ---- 3. the clip region -------------------------------------------------
     void* rawR = MemAlloc(0xd8, 8);                         // 1800ccc60

@@ -238,8 +238,8 @@ Object::InternalPtr<Element>* ScrollDescription::CreateInstance(
     ScrollElement* elem = reinterpret_cast<ScrollElement*>(obj);   // B.3.6 bridge
 
     void* slot = elem;                                         // 18011ab37
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 18011ab42
+    UI::ElementDescription::CreateInstance(                   // 18011ab42
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     ::Sprite* const sprites[9] = {
         &elem->_trackStart, &elem->_trackMiddle, &elem->_trackEnd,

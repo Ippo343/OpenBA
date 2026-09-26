@@ -140,8 +140,9 @@ Object::InternalPtr<Element>* GraphDescription::CreateInstance(
 
     void* slot = elem;                                                  // 1800d1999
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
-    ElementDescriptionApply(this, &slot);                               // 1800d19a6
+    // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 1800d19a6
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     elem->_width     = _width;                                          // 1800d19ae
     elem->_height    = _height;                                         // 1800d19b7

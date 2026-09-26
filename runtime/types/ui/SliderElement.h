@@ -81,10 +81,14 @@ protected:
     SliderElement() = default;   // NOT ??0SliderElement (0x1800d7570, a door)
     ~SliderElement();            // ??1SliderElement 0x180049ee0 — the door; declared only
 
-private:
-    // Body in element_bodies_b5.cpp (door RtUi_SliderElement_UpdateNumber);
-    // Update reaches it by address until the fragment pass moves it.
+public:
+    // `?UpdateNumber@SliderElement@UI@@AEAAXXZ` — `AEAA` private in retail;
+    // PUBLIC here only because its registered door RtUi_SliderElement_
+    // UpdateNumber delegates to it (fragment pass F1; access is not part of
+    // the GCC ABI). Body: element_bodies_b5.cpp.
     void UpdateNumber();                                          // 0x1800d6c20
+
+private:
     void GetSliderBounds(int32_t& left, int32_t& top,
                          int32_t& right, int32_t& bottom) const;  // 0x1800d7270  not ported
 

@@ -82,7 +82,11 @@ public:
     // export; the door keeps `(this, ret)` and the member returns by value.
     Sprite GetSprite() const;                                     // 0x1801182a0  RETSLOT door
     void   SetRotation(float degrees);                            // 0x1801182c0
-    void   SetSprite(Sprite sprite);                              // 0x180118600
+    // `?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z` — the 0x10-byte Sprite BY
+    // VALUE, which retail passes by HIDDEN POINTER (RULE B6-11): the register
+    // holds the ADDRESS of the caller's copy, so the member takes the pointer
+    // (fragment pass F1; was declared by value).
+    void   SetSprite(const Sprite* sprite);                       // 0x180118600
     void   SetWidthHeight(int32_t width, int32_t height);         // 0x180118260
 
     // ---- exported, NOT PORTED as members ----------------------------------

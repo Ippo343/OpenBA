@@ -30,6 +30,10 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"      // ENDGAME B.3.4b System callers: System::Random
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // Thumbnail vtable stamps — see code/Game/Dialog/thumb_vtables.cpp.
 extern uintptr_t ThumbVtable_StampMaterialInstance(void* obj);
@@ -42,7 +46,7 @@ static uint64_t NoiseUI_FindElemAsBasePtr(void* parentElem, const char* name) {
     System::String nameStr(name);
 
     // fn_FindElement: member function, RCX=parentElem, RDX=retBuf, R8=nameStr
-    fn_FindElement(parentElem, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
 
     // Check the InternalBasePtr result
     void* raw = *(void**)retBuf;
@@ -141,20 +145,20 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
     imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
     System::String nameEmpty;
     System::String groupEmpty;
-    fn_SpriteSheet_AddSpriteInfo(*spriteSheetOut, &nameEmpty, &groupEmpty, 0, 0, imgW, imgH);
+    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->AddSpriteInfo(nameEmpty, groupEmpty, 0, 0, imgW, imgH);  // B.3.6 bridge
 
     // Set sprite info with UV scale
     imgW = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Width();    // B.3.5 bridge
     imgH = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)->Height();   // B.3.5 bridge
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
-    fn_SpriteSheet_SetSpriteInfo(*spriteSheetOut, 0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);
+    reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)->SetSpriteInfo(0, imgW, imgH, 0.0f, 0.0f, uvScale, uvScale);  // B.3.6 bridge
 
     // --- Find "noiseImage" element and set sprite ---
     System::String elemNameStr("noiseImage");
 
     void* dialogElem = *(void**)(s + 0x20);
     uint64_t foundElem = 0;
-    fn_FindElement(dialogElem, &foundElem, &elemNameStr);
+    ::new (&foundElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(elemNameStr));  // B.3.6 bridge
 
     void* rawElem = (void*)foundElem;
 
@@ -169,7 +173,7 @@ void NoiseUI_SetupImage(void* self, void* imageBuffer,
 
     // Create Sprite from SpriteSheet (index 0) and set on element
     uint8_t spriteBuf[16];
-    fn_Sprite_Ctor_ByIndex(spriteBuf, *spriteSheetOut, 0);
+    ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*spriteSheetOut)), 0);  // B.3.6 bridge
     fn_ImageElement_SetSprite((void*)imageElemPtr, spriteBuf);
 }
 
@@ -353,13 +357,13 @@ void NoiseUI_Slot4(NoiseUI* self) {
     uint8_t retBuf[16], bpBuf[8];
     System::String nameStr("buttonGenerate");
 
-    fn_FindElement(dialogElem, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
     void* raw = *(void**)retBuf;
     new (bpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(raw));   // B.3.3 bridge
 
     // Set element ID on the button
     void* buttonElem = *(void**)bpBuf;
-    fn_Element_SetElementId(buttonElem, 1000);
+    reinterpret_cast<UI::Element*>(buttonElem)->SetElementId(1000);  // B.3.6 bridge
 }
 
 // ============================================================

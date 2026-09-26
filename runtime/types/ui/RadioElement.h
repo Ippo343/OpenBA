@@ -91,14 +91,16 @@ protected:
     // the real build; the retail body is the door `RtUi_RadioElement_Dtor`.
     ~RadioElement();
 
-private:
+public:
     // `?FindCheckBoxes@RadioElement@UI@@AEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z`
     // (0x1800d5750, `AEAA` = PRIVATE). The handle is by value in the source, so
     // retail passes the ADDRESS of the caller's copy (RULE B6-11) — declared as
-    // that pointer. Body: widgets_input.cpp's door `RtUi_RadioElement_
-    // FindCheckBoxesPrivate` (fragment pass); undefined until then.
+    // that pointer. PUBLIC here only because its registered door
+    // `RtUi_RadioElement_FindCheckBoxesPrivate` delegates to it (fragment pass
+    // F1; access is not part of the GCC ABI). Body: widgets_input.cpp.
     void FindCheckBoxes(Object::InternalPtr<Element>* root);      // 0x1800d5750
 
+private:
     static const char* _TypeName();                               // 0x1800479c0 -> "RadioElement"
     static const char* _ParentTypeName();                         // 0x1800479d0 -> "GroupElement"
     static Object::BaseTypeInfo _typeInfo;                        // minted

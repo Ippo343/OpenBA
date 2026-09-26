@@ -157,7 +157,7 @@ bool EditDescription::Serialize(void* streamv) {
 // (`??0EditElement@UI@@QEAA@XZ`, 0x1800d0f10, a door in factory_ui1.cpp);
 // retail takes its RETURN value as the element. The base applier is the
 // non-virtual `ElementDescription::CreateInstance(InternalPtr<Element>)`
-// (0x180115ad0) — a dialog.cpp door, reached by address.
+// (0x180115ad0) — a QUALIFIED member call since fragment pass F2.
 //
 // The field copies are a QWORD, two refcounted String assignments, a DWORD and
 // a BYTE — and the BYTE copy is LAST, after both strings (0x1800d10d7).
@@ -173,7 +173,8 @@ Object::InternalPtr<Element>* EditDescription::CreateInstance(
     }
 
     void* slot = elem;                                       // 1800d100d
-    ElementDescriptionApply(this, &slot);                    // 1800d101a
+    UI::ElementDescription::CreateInstance(                   // 1800d101a
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     elem->_font = _ptr68;                                    // 1800d1023 QWORD
     AssignStringField(elem->_text, _string70);               // 1800d102a

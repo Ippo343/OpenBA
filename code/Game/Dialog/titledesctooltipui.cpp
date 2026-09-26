@@ -10,6 +10,8 @@
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // TitleDescToolTipUI::Serialize (vtable +0x20)
@@ -34,14 +36,14 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self) {
     System::String titleNameStr("textTitle");
 
     void* titleResult = nullptr;
-    fn_FindElement(dialogInstance, &titleResult, &titleNameStr);
+    ::new (&titleResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogInstance)->FindElement(titleNameStr));  // B.3.6 bridge
     void* titleElement = titleResult;
 
     // --- Find "textDesc" element ---
     System::String descNameStr("textDesc");
 
     void* descResult = nullptr;
-    fn_FindElement(dialogInstance, &descResult, &descNameStr);
+    ::new (&descResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogInstance)->FindElement(descNameStr));  // B.3.6 bridge
     void* descElement = descResult;
 
     // --- Check data source type and get user data ---
@@ -53,7 +55,7 @@ void TitleDescToolTipUI_Serialize(TitleDescToolTipUI* self) {
     // object. For correctness we replicate this check.
     // However, the type ID comes from an exe-internal _exref. Since we can't
     // easily resolve that, we use GetUserData directly with a null check.
-    void* userData = fn_Element_GetUserData(dataSource);
+    void* userData = reinterpret_cast<UI::Element*>(dataSource)->GetUserData();  // B.3.6 bridge
 
     if (userData) {
         // userData points to two consecutive System::String objects:

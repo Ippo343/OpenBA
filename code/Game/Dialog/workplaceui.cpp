@@ -18,6 +18,11 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // Original FUN_14000d6c0 — FindComponent with type DAT_1401c7008 (guard check only)
 typedef void* (*fn_OrigFindComp_t)(void* entity, void* retval);
@@ -133,7 +138,7 @@ static uint64_t FindElemByName(void* dialogElem, const char* name) {
     System::String nameStr(name);
 
     uint64_t result = 0;
-    fn_FindElement(dialogElem, &result, &nameStr);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameStr));  // B.3.6 bridge
 
     return result;
 }
@@ -168,14 +173,14 @@ void WorkplaceUI_Serialize(WorkPlaceUI* self) {
     self->data58 = FindElemAsBasePtr(dialogElem, "jobCountDown");
 
     // --- Set element IDs on buttons ---
-    fn_Element_SetElementId((void*)self->data40, 0x1450);
-    fn_Element_SetElementId((void*)self->data48, 0x1451);
-    fn_Element_SetElementId((void*)self->data50, 0x1452);
-    fn_Element_SetElementId((void*)self->data58, 0x1453);
+    reinterpret_cast<UI::Element*>(self->data40)->SetElementId(0x1450);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(self->data48)->SetElementId(0x1451);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(self->data50)->SetElementId(0x1452);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(self->data58)->SetElementId(0x1453);  // B.3.6 bridge
 
     // Find and set workPlaceButton element ID
     uint64_t workplaceBtn = FindElemAsBasePtr(dialogElem, "workPlaceButton");
-    fn_Element_SetElementId((void*)workplaceBtn, 0x1454);
+    reinterpret_cast<UI::Element*>(workplaceBtn)->SetElementId(0x1454);  // B.3.6 bridge
 
     // --- Check entity component for job count visibility ---
     void* entity = *(void**)((uintptr_t)self + 0x28);
@@ -206,8 +211,8 @@ void WorkplaceUI_Serialize(WorkPlaceUI* self) {
 
     if (isJobType && *(uint8_t*)((uintptr_t)subComp + 0x20) == 0) {
         // Hide job count up/down buttons if sub-component flag is zero
-        fn_Element_SetFlagsOnOff((void*)self->data50, 1, 0);
-        fn_Element_SetFlagsOnOff((void*)self->data58, 1, 0);
+        reinterpret_cast<UI::Element*>(self->data50)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->data58)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     }
 }
 
@@ -251,12 +256,12 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
 #ifdef _DEBUG
         printf("[WorkPlaceUI] HIDDEN: wpComp=%p profession(+0x48)=NULL entity=%p\n", wpComp, entityPtr);
 #endif
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x20), 1, 0);
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
         return;
     }
 
     // Building complete — show the panel
-    fn_Element_SetFlagsOnOff(*(void**)(s + 0x20), 0, 1);
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
 #ifdef _DEBUG
     printf("[WorkPlaceUI] entity=%p wpComp=%p workComp=%p jobType=%p jt+0x20=%d prof=%p\n",
@@ -279,13 +284,13 @@ void WorkplaceUI_Startup(WorkPlaceUI* self) {
         }
 
         // Hide job count up/down
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x50), 1, 0);
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x58), 1, 0);
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x58))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     } else {
 showUpDown:
         // Show job count up/down
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x50), 0, 1);
-        fn_Element_SetFlagsOnOff(*(void**)(s + 0x58), 0, 1);
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x50))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(*(void**)(s + 0x58))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
     }
 
     // Get worker count and max worker count
@@ -307,8 +312,8 @@ showUpDown:
     {
         uintptr_t profPtr = *(uintptr_t*)((uintptr_t)wpComp + 0x48);
         uint8_t spriteBuf[16];
-        fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(profPtr + 0x28),
-                        (void*)(profPtr + 0x30));
+        ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(profPtr + 0x28))),
+                        *reinterpret_cast<const System::String*>(profPtr + 0x30));  // B.3.6 bridge
         fn_LabelElement_SetSprite(*(void**)(s + 0x30), spriteBuf);
     }
 
@@ -367,17 +372,13 @@ showUpDown:
     // Enable/disable workerCountUp (+0x40) based on laborer count > 0
     {
         void* btnUp = *(void**)(s + 0x40);
-        void** vtbl = *(void***)btnUp;
-        typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnUp, laborerCount > 0);
+        reinterpret_cast<UI::Element*>(btnUp)->Enable(laborerCount > 0);  // B.3.6 bridge: Element slot 8 Enable
     }
 
     // Enable/disable workerCountDown (+0x48) based on workers assigned > 0
     {
         void* btnDown = *(void**)(s + 0x48);
-        void** vtbl = *(void***)btnDown;
-        typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnDown, (int)workplaceWorkerCount > 0);
+        reinterpret_cast<UI::Element*>(btnDown)->Enable((int)workplaceWorkerCount > 0);  // B.3.6 bridge: Element slot 8 Enable
     }
 
     // Job count up/down enable based on workplace capacity
@@ -427,14 +428,11 @@ showUpDown:
             }
             // Enable up if current max < capacity limit
             void* btnUp = *(void**)(s + 0x50);
-            void** vtbl = *(void***)btnUp;
-            typedef void (*VCall_Enable_t)(void*, int);
-            ((VCall_Enable_t)vtbl[8])(btnUp, wpMaxCount < maxCap);
+            reinterpret_cast<UI::Element*>(btnUp)->Enable(wpMaxCount < maxCap);  // B.3.6 bridge: Element slot 8 Enable
 
             // Enable down if current max > 1
             void* btnDown = *(void**)(s + 0x58);
-            void** vtbl2 = *(void***)btnDown;
-            ((VCall_Enable_t)vtbl2[8])(btnDown, wpMaxCount > 1);
+            reinterpret_cast<UI::Element*>(btnDown)->Enable(wpMaxCount > 1);  // B.3.6 bridge: Element slot 8 Enable
             return;
         }
     }
@@ -478,15 +476,11 @@ showUpDown:
     }
     {
         void* btnUp = *(void**)(s + 0x50);
-        void** vtbl = *(void***)btnUp;
-        typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnUp, wpMaxCount < *(int*)((uintptr_t)jobType + 0x2c));
+        reinterpret_cast<UI::Element*>(btnUp)->Enable(wpMaxCount < *(int*)((uintptr_t)jobType + 0x2c));  // B.3.6 bridge: Element slot 8 Enable
     }
     {
         void* btnDown = *(void**)(s + 0x58);
-        void** vtbl = *(void***)btnDown;
-        typedef void (*VCall_Enable_t)(void*, int);
-        ((VCall_Enable_t)vtbl[8])(btnDown, wpMaxCount != jobMinCount && wpMaxCount > jobMinCount);
+        reinterpret_cast<UI::Element*>(btnDown)->Enable(wpMaxCount != jobMinCount && wpMaxCount > jobMinCount);  // B.3.6 bridge: Element slot 8 Enable
     }
 }
 
@@ -622,7 +616,7 @@ void UpdateVisibility(void* self) {
                 *reinterpret_cast<uintptr_t*>(static_cast<uintptr_t>(workComp) + 0x48) != 0;
 
 
-    fn_Element_SetFlagsOnOff(panelElem, show ? 0u : 1u, show ? 1u : 0u);
+    reinterpret_cast<UI::Element*>(panelElem)->SetFlagsOnOff(show ? 0u : 1u, show ? 1u : 0u);  // B.3.6 bridge
 }
 
 // ------------------------------------------------------------------
@@ -716,7 +710,7 @@ void PopulateCounts(void* self) {
             if (*slot != nullptr) return;
             *reinterpret_cast<uint64_t*>(self + off) = FindElemAsBasePtr(panel, name);
             void* e = *slot;
-            if (e && fn_Element_SetElementId) fn_Element_SetElementId(e, id);
+            if (e) reinterpret_cast<UI::Element*>(e)->SetElementId(id);  // B.3.6 bridge
         }
     };
     ArmOne::go(s, 0x40, panelElem, "workerCountUp",   0x1450);
@@ -727,9 +721,9 @@ void PopulateCounts(void* self) {
     // until it takes (idempotent — SetElementId just writes +0x88).
     {
         void* wpb = reinterpret_cast<void*>(FindElemAsBasePtr(panelElem, "workPlaceButton"));
-        if (wpb && fn_Element_SetElementId &&
+        if (wpb &&
             *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(wpb) + 0x88) != 0x1454)
-            fn_Element_SetElementId(wpb, 0x1454);
+            reinterpret_cast<UI::Element*>(wpb)->SetElementId(0x1454);  // B.3.6 bridge
     }
 
     // Roster = seated workers/builders at this site (WorkPlaceComponent+0x60).
@@ -759,10 +753,10 @@ void PopulateCounts(void* self) {
     // workPlaceCount: profession sprite + "roster / capacity".
     if (elem30) {
         uint64_t sheet = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(profession) + 0x28);
-        if (sheet && fn_Sprite_Ctor && fn_LabelElement_SetSprite) {
+        if (sheet && fn_LabelElement_SetSprite) {
             uint8_t spriteBuf[16];
-            fn_Sprite_Ctor(spriteBuf, sheet,
-                           reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(profession) + 0x30));
+            ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(sheet)),
+                           *reinterpret_cast<const System::String*>(reinterpret_cast<void*>(reinterpret_cast<uintptr_t>(profession) + 0x30)));  // B.3.6 bridge
             fn_LabelElement_SetSprite(elem30, spriteBuf);
         }
         if (fn_TextElement_SetParameter) {
