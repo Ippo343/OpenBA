@@ -486,101 +486,71 @@ void ModelComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation F — real renderable ModelComponent) =====
-// Unlike the inert components (Foundation D/E), ModelComponent graduates to a
-// REAL factory: it constructs the embedded Graphics::MeshInstance (+0x28) and
-// Math::Transform (+0x148) sub-objects and installs a real vtable whose
-// lifecycle slots route to the reimplemented methods above. The spawn chain
-// then drives rendering for free — ComponentEntity::CtorFromDescription calls
-// vtable+0x20 (Startup = ModelComponent_Serialize, sets the mesh from the
-// description) during instantiation, and OnAddedPass calls vtable+0x30
-// (OnAdded = ModelComponent_Draw, registers the geometry in Graphics::Scene).
-// Mirrors the exe constructor at 0x140124d20.
-#include "Object/factory_registration.h"
-
-// GetTypeId (vtable +0x10): return the ModelComponent type id, cached.
-static uint32_t ModelComponent_Real_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ModelComponent");
-    return cached;
-}
-
-// ScalarDtor (vtable +0x00): destroy the embedded MeshInstance, unregister from the
-// InternalFactory handle table, free if deleting.
+// ============================================================================
+// ENDGAME B.3.8 VIS — ModelComponent as a REAL class (ModelComponent.h).
 //
-// The ctor below runs the real Object::Internal::Internal, so this MUST run the matching
-// ~Internal — otherwise the freed block stays in the handle table and the next unrelated
-// ~Internal swap-removes it, writing `*(int*)(freedPtr+0x08) = idx` into a block the
-// allocator has already reused. Caught live by ObjAudit: table slots 325/346/352 held
-// stale ModelComponents whose memory had been recycled into SendComponentMessage actions.
-// The IsRegistered guard keeps a never-registered instance from swap-removing through a
-// garbage index. (See Object/internal_factory_audit.h.)
-static void* ModelComponent_Real_ScalarDtor(void* self, uint32_t flags) {
+// Before: a 24-slot g_ModelComponent_RealVtable filled on first use, every
+// unset slot a file-local stub, ModelComponent_InitReal as the ctor. After: the
+// compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2). The
+// spawn chain still drives rendering: ComponentEntity::CtorFromDescription
+// calls slot 4 (Startup = ModelComponent_Serialize, sets the mesh from the
+// description) and OnAddedPass calls slot 6 (OnAdded = ModelComponent_Draw,
+// registers the geometry in Graphics::Scene).
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/ModelComponent.h"
+
+// 0x140124d20: Component() is the CALL 0x1401188b0 (the Object::Internal base
+// registers the object — the dtor's ~Internal must match it); the 0x140163ba0
+// stamp is the compiler's. The body is zeroed, the MeshInstance door builds
+// +0x28, Transform() builds +0x148, variant/scale = 0, modelId = -1,
+// flags |= 0x83.
+ModelComponent::ModelComponent()
+    : meshInstance{}, transform{}, _pad164{}, modelId(-1) {
     EnsureHelpers();
-    if (self && s_fn_MeshInstance_Dtor)
-        s_fn_MeshInstance_Dtor((void*)((uintptr_t)self + 0x28));
-    if (self && fn_ObjectInternal_Dtor && ObjAudit::IsRegistered(self)) {
-        fn_ObjectInternal_Dtor(self);
-    }
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    if (s_fn_MeshInstance_Ctor) s_fn_MeshInstance_Ctor(meshInstance);                 // +0x28 Graphics::MeshInstance
+    ::new (static_cast<void*>(transform)) Math::Transform();   // +0x148 Math::Transform (slot 0x140151328)   // B.3.1 bridge
+    OrFlagsInCtor(0x83);
 }
 
-// Safe no-op for every slot we don't override (base Component behaviour). Returns
-// 0 in RAX, which reads correctly as void/int/pointer under the Win64 ABI.
-static void* ModelComponent_Real_Stub(void*, ...) { return nullptr; }
-
-// 24 slots — comfortable headroom over the original 19-slot vtable (0x140163ba0).
-static void* g_ModelComponent_RealVtable[24];
-static bool  g_mcVtableInit = false;
-
-static void EnsureRealVtable() {
-    if (g_mcVtableInit) return;
-    for (int i = 0; i < 24; ++i)
-        g_ModelComponent_RealVtable[i] = reinterpret_cast<void*>(&ModelComponent_Real_Stub);
-    g_ModelComponent_RealVtable[0] = reinterpret_cast<void*>(&ModelComponent_Real_ScalarDtor); // +0x00
-    g_ModelComponent_RealVtable[2] = reinterpret_cast<void*>(&ModelComponent_Real_GetTypeId);  // +0x10
-    g_ModelComponent_RealVtable[3] = reinterpret_cast<void*>(&ModelComponent_Shutdown);        // +0x18 stream serialize
-    g_ModelComponent_RealVtable[4] = reinterpret_cast<void*>(&ModelComponent_Serialize);       // +0x20 Startup (set mesh)
-    g_ModelComponent_RealVtable[6] = reinterpret_cast<void*>(&ModelComponent_Draw);            // +0x30 OnAdded (scene add)
-    g_ModelComponent_RealVtable[7] = reinterpret_cast<void*>(&ModelComponent_OnCreate);        // +0x38
-    g_ModelComponent_RealVtable[8] = reinterpret_cast<void*>(&ModelComponent_OnRemove);        // +0x40
-    g_mcVtableInit = true;
-}
-
-// In-place construct a real ModelComponent at `self` (0x170 bytes). Mirrors the
-// exe ctor 0x140124d20: Internal base, our vtable, MeshInstance(+0x28),
-// Transform(+0x148), variant/scale = 0, modelId = -1, flags |= 0x83.
-static void* ModelComponent_InitReal(void* self) {
+// 0x140124cd0: ~MeshInstance(+0x28); the compiler then chains ~Component and
+// ~Internal (the old slot 0 guarded ~Internal with ObjAudit::IsRegistered for
+// never-registered instances; the real ctor always registers).
+ModelComponent::~ModelComponent() {
     EnsureHelpers();
-    EnsureRealVtable();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *(void**)s          = g_ModelComponent_RealVtable;  // +0x00 our vtable
-    *(void**)(s + 0x10) = nullptr;                       // +0x10 owner IBP (set by CtorFromDescription)
-    *(void**)(s + 0x18) = nullptr;                       // +0x18 description (set by CtorFromDescription)
-    *(uint32_t*)(s + 0x20) = 0x83;                       // +0x20 capability flags
-
-    // Zero the component body, then construct the embedded sub-objects.
-    std::memset(s + 0x28, 0, 0x170 - 0x28);
-    if (s_fn_MeshInstance_Ctor) s_fn_MeshInstance_Ctor(s + 0x28);   // +0x28 Graphics::MeshInstance
-    ::new (static_cast<void*>(s + 0x148)) Math::Transform();          // +0x148 Math::Transform (slot 0x140151328)   // B.3.1 bridge
-    *(int64_t*)(s + 0x164) = 0;                          // variantIdx / modelVariant / scale
-    *(int32_t*)(s + 0x16c) = -1;                         // modelId = not in scene
-    return self;
+    if (s_fn_MeshInstance_Dtor) s_fn_MeshInstance_Dtor(meshInstance);
 }
 
-extern "C" void* ModelComponent_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x170, 8);
+// [3] 0x140124b70
+void ModelComponent::Persist(void* stream) { ModelComponent_Shutdown(this, stream); }
+// [4] 0x140124ac0 — set the mesh from the description.
+void ModelComponent::Startup() { ModelComponent_Serialize(this); }
+// [6] 0x140124a30 — scene add.
+void ModelComponent::OnAdded() { ModelComponent_Draw(this); }
+// [7] 0x1401249d0
+void ModelComponent::OnRemove() { ModelComponent_OnCreate(this); }
+// [8] 0x140124960 — RDX is the elapsed-time pointer, forwarded to the mesh Update.
+void ModelComponent::Tick(void* time) { ModelComponent_OnRemove(this, time); }
+
+// [0] 0x140035ad0: ~ModelComponent (0x140124cd0: ~MeshInstance(+0x28) + ~Internal), MemFree on &1.
+Object::Base* ModelComponent::DeletingDtor(unsigned flags) {
+    this->~ModelComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400358d0: MemAlloc(0x170, 8), then the ctor.
+void* ModelComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ModelComponent), 8);
     if (!p) return nullptr;
-    return ModelComponent_InitReal(p);
+    return static_cast<Object::Base*>(new (p) ModelComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ModelComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ModelComponent());
 }
 
-static void* ModelComponent_CreateInPlace(void* mem) {
-    return mem ? ModelComponent_InitReal(mem) : nullptr;
-}
-
-REGISTER_TYPE(ModelComponent, "Component",
-              &ModelComponent_Factory, &ModelComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(ModelComponent, "_ZTV14ModelComponent")
+DEFINE_EXE_TYPE(ModelComponent, "Component")

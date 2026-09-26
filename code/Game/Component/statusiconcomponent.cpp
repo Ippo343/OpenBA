@@ -243,12 +243,10 @@ void StatusIconComponent_OnRemove(StatusIconComponent* self) {
 //
 // ⚠ CALL THE PORT DIRECTLY, NEVER DISPATCH VTABLE SLOT 4 HERE.
 // Retail's slot 4 is exactly StatusIconComponent_Serialize (0x14012bed0) — the sprite
-// setup and nothing else. OUR slot 4 is StatusIconComponent_StartupVSlot, which runs
-// StatusIconComponent_StartupInit = CtorScalars (CONSTRUCTION) + Serialize; the extra
-// half exists because standalone has to get the construction work done during
-// ComponentEntity::StartupComponents. Dispatching that slot mid-life re-runs the
-// constructor on a live component: it re-runs Geometry_BaseCtor on the embedded
-// geometry at +0x28 and, fatally, resets the scene-object id at +0x100 to -1.
+// setup and nothing else. Until ENDGAME B.3.8 VIS OUR slot 4 ALSO re-ran the
+// construction half (the Geometry ctor door on +0x28 and the scene-object id at
+// +0x100 = -1), so dispatching it mid-life reset a live component. The real class's
+// slot 4 no longer does, but the rule stands: call the port.
 //
 // This function is called from StatusIcon_Toggle — itself a standalone deviation,
 // since retail's 0x14012c3f0 never touches slot 4 — immediately before Toggle's
@@ -354,40 +352,14 @@ void StatusIconComponent_InitFuncs() {
 // Standalone bring-up (Phase A): faithful construction + diagnostics
 // ============================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/StatusIconComponent.h"
 #include <cstdlib>
 
-// The StatusIcon's embedded Graphics::Geometry sub-object (+0x28) normally uses the
-// exe-resident billboard vtable PTR_FUN_14015f0c0, whose draw slots (AddDrawItems
-// 0x1400a9b90 / Draw 0x1400a9c10) live in the unmapped exe. Until those are ported
-// (Phase B), give the sub-object a SAFE standalone vtable: every slot is a no-op so
-// that even when the occupancy toggle AddObject's the geometry, the scene's
-// AddDrawItems call (vtable slot +0x18 here) is a no-op → nothing is drawn and the
-// Draw slot is never reached → crash-free. Slot 0 (dtor) is also a no-op (the
-// embedded sub-object is freed with the component; leaking its internals for a
-// session is acceptable). 16 slots = comfortable headroom over the 12-slot original.
-static void SIGeom_Noop() {}
-static void* g_StatusIconGeometryVtable[16];
-static bool  g_siGeomVtableInit = false;
-static void EnsureGeometryVtable() {
-    if (g_siGeomVtableInit) return;
-    for (int i = 0; i < 16; ++i)
-        g_StatusIconGeometryVtable[i] = reinterpret_cast<void*>(&SIGeom_Noop);
-    g_siGeomVtableInit = true;
-}
-
-// ============================================================
-// Phase B — real billboard draw + positioning (standalone)
-// ============================================================
-// The real billboard Draw/AddDrawItems vtable lives in statusicon_geometry.cpp.
-void  StatusIconGeometry_BuildVtable(void** baseVtbl);
-void** StatusIconGeometry_Vtable();
-bool  StatusIconGeometry_VtableBuilt();
-
-// Runtime base Graphics::Geometry ctor (??0Geometry@Graphics@@QEAA@XZ) — sets the base
-// vtable + initializes InterpolatedState<Transform> / bounds fields the draw path needs.
-typedef void* (*fn_Geometry_BaseCtor_t)(void* geometry);
-static fn_Geometry_BaseCtor_t s_fn_Geometry_BaseCtor = nullptr;
+// The embedded billboard (+0x28) is a real Graphics::Geometry subclass since
+// ENDGAME B.3.8 VIS (StatusIconGeometry, StatusIconComponent.h; bodies in
+// statusicon_geometry.cpp). The all-no-op fallback table and the minted-table
+// copy it replaced are gone, and with them the Geometry ctor door this file
+// resolved.
 
 // Graphics::Geometry::SetTransform (Runtime export) — used by OnRemove positioning.
 
@@ -404,8 +376,6 @@ static fn_GridToWorld_t s_fn_GridToWorld = nullptr;
 static bool s_drawHelpersResolved = false;
 static void EnsureDrawHelpers() {
     if (s_drawHelpersResolved) return;
-    s_fn_Geometry_BaseCtor = reinterpret_cast<fn_Geometry_BaseCtor_t>(
-        ResolveExport("??0Geometry@Graphics@@QEAA@XZ"));
     s_fn_FindModel = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140003f60));
     s_fn_FindMulti = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004740));
     s_fn_FindMap   = reinterpret_cast<fn_Finder_t>(ResolveAddr(Module::Exe, 0x140004680));
@@ -495,9 +465,6 @@ static inline bool SI_Initialised(uintptr_t c) {
 // directly to position the icon after AddObject. Original signature is (self, Time*);
 // the Time arg is ignored by the body (0x14012bbd0). Forward-decl; defined further down.
 void StatusIconComponent_OnRemove_Standalone(StatusIconComponent* self);
-static void StatusIcon_OnRemove_VSlot(void* self, void* /*time*/) {
-    StatusIconComponent_OnRemove_Standalone(reinterpret_cast<StatusIconComponent*>(self));
-}
 
 
 // Removed-from-world handler (component vtable +0x38, idx 7). Entity teardown
@@ -508,9 +475,9 @@ static void StatusIcon_OnRemove_VSlot(void* self, void* /*time*/) {
 // 2026-07-20 (demolition → Draw-phase Transform::Lerp on freed memory). Retail
 // additionally strips icons at demolition start (state-3 enter → helper_c2a0);
 // this teardown-time removal is the safety net that must always run.
-static void StatusIcon_OnRemovedFromWorld_VSlot(void* self) {
+void StatusIconComponent::OnRemove() {
     EnsureHelpers();
-    uintptr_t c = (uintptr_t)self;
+    uintptr_t c = (uintptr_t)this;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
     void* scene = *(void**)((uintptr_t)*g_pGameWorldSingleton + 0x60);
     int32_t sceneId = *(int32_t*)(c + 0x100);
@@ -527,69 +494,27 @@ static void StatusIcon_OnRemovedFromWorld_VSlot(void* self) {
     }
 }
 
-// StatusIconComponent_CtorScalars — the CTOR half of the spawn-time init, split out of
-// StartupInit (save/load wave 2026-08-29) because it MUST run at CONSTRUCTION.
-//
-// Retail's ctor (0x14012c0c0) does exactly this and nothing about it is Startup work:
-//     Graphics::Geometry::Geometry(this + 0x28);
-//     *(this + 0x28)  = &PTR_FUN_14015f0c0;      // the geometry vtable
-//     *(this + 0x100) = 0xffffffff;              // sceneObjId = "not registered"
-// Retail's load path (ComponentEntity::Serialize 0x1400c3140) rebuilds a stream-restored
-// component through the factory ctor and then calls ONLY RefreshEntityFlags — vtable
-// +0x20 (Startup) is NEVER dispatched for it. See
-// [[reference_ctor_scalars_in_startup_are_unset_after_load]]; this is the same fix
-// d06def5 made for CitizenComponent, on the component that commit flagged next.
-//
-// While this lived in the Startup body, a LOADED status icon kept the inert factory's
-// zero-fill: geometry vtable +0x28 == 0 and sceneObjId +0x100 == 0. That is the
-// upstream cause of the corrupt scene node behind the `EXEC of <heap>` crash — the
-// flag setter (0x14012c3f0) repairs the 0 sentinel to -1 on its clear path, which then
-// lets its set path AddObject a geometry that has no vtable. Fixing it here is the
-// faithful direction and leaves the flag setter byte-faithful.
-//
-// The two component-vtable routings move with it for the same reason: they are written
-// into the SHARED per-type LiveVtable, so on a pure load — where no instance ever runs
-// Startup — nothing would install them at all.
-void StatusIconComponent_CtorScalars(void* mem) {
-    if (!mem) return;
-    EnsureHelpers();
-    EnsureGeometryVtable();
-    uintptr_t s = (uintptr_t)mem;
-
-    EnsureDrawHelpers();
-    if (s_fn_Geometry_BaseCtor) {
-        s_fn_Geometry_BaseCtor((void*)(s + 0x28));
-        void** baseV = *(void***)(s + 0x28);
-        StatusIconGeometry_BuildVtable(baseV);
-    }
-    *(void**)(s + 0x28) = StatusIconGeometry_VtableBuilt()
-                              ? StatusIconGeometry_Vtable()
-                              : g_StatusIconGeometryVtable;
-    void** vt = *(void***)s;
-    if (vt) vt[8] = reinterpret_cast<void*>(&StatusIcon_OnRemove_VSlot);
-    *(uint32_t*)(s + 0x100) = 0xFFFFFFFFu;   // sceneObjId = -1 (NOT scene-registered)
-
-    void** vtAll = *(void***)s;
-    if (vtAll) vtAll[7] = reinterpret_cast<void*>(&StatusIcon_OnRemovedFromWorld_VSlot);
-}
+// The CTOR half of the spawn-time init (StatusIconComponent_CtorScalars until
+// ENDGAME B.3.8 VIS) is the real ctor now — see StatusIconComponent::
+// StatusIconComponent() at the end of this file. It MUST run at construction:
+// retail's load path (ComponentEntity::Serialize 0x1400c3140) rebuilds a
+// stream-restored component through the factory ctor and then calls ONLY
+// RefreshEntityFlags — vtable +0x20 (Startup) is NEVER dispatched for it. See
+// [[reference_ctor_scalars_in_startup_are_unset_after_load]].
 
 // StatusIconComponent_StartupInit — the STARTUP half: the description-driven geometry
 // sprite setup the inert factory skips. Routed to the component's Startup slot
 // (vtable +0x20 / index 4) so it runs during ComponentEntity::StartupComponents, exactly
 // where the original dispatches the real Serialize.
 // ⚠ A LOAD never dispatches this slot — anything that must hold for a stream-restored
-// component belongs in StatusIconComponent_CtorScalars above, not here.
+// component belongs in the ctor (StatusIconComponent::StatusIconComponent), not here.
 void StatusIconComponent_StartupInit(StatusIconComponent* self) {
     EnsureHelpers();
-    EnsureGeometryVtable();
 
-    // The ctor half (embedded geometry + vtable, sceneObjId = -1, and the two shared
-    // component-vtable routings) now runs at CONSTRUCTION -- see
-    // StatusIconComponent_CtorScalars above for why. Calling it here too keeps the
-    // new-game path byte-identical and is idempotent. It is deliberately NOT duplicated
-    // inline: two copies of one init is the same trap as one retail function ported
-    // twice, and they drift ([[reference_one_retail_fn_ported_twice_diverges]]).
-    StatusIconComponent_CtorScalars(self);
+    // The ctor half runs at CONSTRUCTION (the real ctor). It used to be re-run here
+    // too (Geometry door + the table stamp + sceneObjId = -1 a second time, on a
+    // component nothing had touched since construction); a C++ member cannot be
+    // re-constructed in place, and retail's slot 4 is the sprite setup alone.
 
     // Real geometry-sprite setup from the StatusIconDescription's SpriteSheet (guarded
     // — no-ops if desc/spriteSheet absent). The icon's warning bit is now raised/cleared
@@ -874,46 +799,59 @@ void StatusIcon_Toggle(StatusIconComponent* selfC, int bit, bool setFlag) {
 // is already initialised to 1 at settings creation (game_main.cpp: settings[3]=1), so no
 // per-frame poke is needed.
 
-// COMPONENT_LIVE_FACTORY_STARTUP(StatusIconComponent, 0x108, 0xC2,
-//                                "BANISHED_LIVE_STATUSICON", StatusIconComponent_StartupInit)
-// hand-expanded (save/load wave 2026-08-28) to ALSO wire slot 3 (Shutdown/Serialize,
-// see StatusIconComponent_Shutdown above) UNCONDITIONALLY — not behind the STARTUP env
-// var, since serialize round-trip is not an opt-in feature the way the startup init is.
-// Previously the class fell through to base-only Component_SerializeReimpl and the
-// icon value (+0x30-ish, serialized via Serialize_UInt above) silently reset on load.
-static uint32_t StatusIconComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StatusIconComponent");
-    return cached;
+// ============================================================================
+// ENDGAME B.3.8 VIS — StatusIconComponent as a REAL class (StatusIconComponent.h).
+//
+// Before: a 48-slot StatusIconComponent_LiveVtable filled per create (slots 7/8
+// patched in by CtorScalars), Inert_ScalarDtor in slot 0, the billboard built by
+// the Geometry ctor DOOR and re-stamped with a copy of the minted Geometry table.
+// After: the compiler's 16-slot vtable, a real ctor/dtor chain (B38_RULES D1,
+// D2) and the billboard as a real Graphics::Geometry member (D6).
+// ============================================================================
+
+// 0x14012c0c0: Component() is the CALL 0x1401188b0; the 0x140164620 stamp is the
+// compiler's; the member's Geometry() is the `??0Geometry@Graphics@@` call and
+// its 0x14015f0c0 stamp is the compiler's (StatusIconGeometry); +0x100 = -1
+// (sceneObjId "not registered": a 0 there would make Scene::RemoveObject spin);
+// flags |= 0xc2.
+StatusIconComponent::StatusIconComponent() : _geometry(), iconId(-1), _pad104{} {
+    OrFlagsInCtor(0xc2);
 }
-static void* StatusIconComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void StatusIconComponent_StartupVSlot(void* s) {
-    StatusIconComponent_StartupInit(reinterpret_cast<StatusIconComponent*>(s));
+
+// [3] 0x14012bff0 — the icon bits (+0xf0) round-trip here.
+void StatusIconComponent::Persist(void* stream) { StatusIconComponent_Shutdown(this, stream); }
+// [4] 0x14012bed0 — the description-driven sprite setup.
+void StatusIconComponent::Startup() { StatusIconComponent_StartupInit(this); }
+// [7] TREE DIVERGENCE (retail 0x14012beb0, 15 B): the removed-from-world handler
+// above (StatusIconComponent::OnRemove) — MarkForRemoval (0x1400c2ea0) dispatches
+// it for capability bit 1 (0xc2 has it); it removes the icon's scene object so
+// the renderer never holds freed geometry.
+// [8] 0x14012bbd0 — positioning (Time arg ignored by the body).
+void StatusIconComponent::Tick(void*) { StatusIconComponent_OnRemove_Standalone(this); }
+// [11] 0x14012bf40. PORT GAP (retail 0x14012bf40) — B38 D9: the body is ported
+// above (StatusIconComponent_OnUpdate2) but the tree's table never installed it;
+// the inert stub is kept here.
+void StatusIconComponent::Slot11() {}
+
+// [0] 0x140038ac0: ~StatusIconComponent (0x14012c070: ~Geometry on the billboard member, then ~Internal), MemFree on &1.
+Object::Base* StatusIconComponent::DeletingDtor(unsigned flags) {
+    this->~StatusIconComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void StatusIconComponent_ShutdownVSlot(void* self, void* stream) {
-    StatusIconComponent_Shutdown(reinterpret_cast<StatusIconComponent*>(self), stream);
+
+// create 0x1400388c0: MemAlloc(0x108, 8), then the ctor.
+void* StatusIconComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StatusIconComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StatusIconComponent());
 }
-static void StatusIconComponent_FinishLiveVtable() {
-    StatusIconComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&StatusIconComponent_ShutdownVSlot);
-        StatusIconComponent_LiveVtable[4] =
-            reinterpret_cast<void*>(&StatusIconComponent_StartupVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* StatusIconComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StatusIconComponent());
 }
-extern "C" void* StatusIconComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x108, 0xC2,
-        StatusIconComponent_LiveVtable,
-        reinterpret_cast<void*>(&StatusIconComponent_LiveGetTypeId));
-    StatusIconComponent_FinishLiveVtable();
-    StatusIconComponent_CtorScalars(p);     // retail ctor 0x14012c0c0
-    return p;
-}
-static void* StatusIconComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x108, 0xC2,
-        StatusIconComponent_LiveVtable,
-        reinterpret_cast<void*>(&StatusIconComponent_LiveGetTypeId));
-    StatusIconComponent_FinishLiveVtable();
-    StatusIconComponent_CtorScalars(mem);   // retail ctor 0x14012c0c0
-    return mem;
-}
-REGISTER_TYPE(StatusIconComponent, "Component",
-              &StatusIconComponent_Factory, &StatusIconComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(StatusIconComponent, "_ZTV19StatusIconComponent")
+DEFINE_EXE_TYPE(StatusIconComponent, "Component")

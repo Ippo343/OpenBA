@@ -86,7 +86,7 @@ void ZoneComponent_Shutdown(ZoneComponent* self, void* stream) {
 
     int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version == 0 && static_cast<int>(reinterpret_cast<IO::Stream*>(stream)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Stream::GetDirection, retail 0x180006200)
-        void* entityPtr = self->owner;
+        void* entityPtr = self->_entity;
         if (s_pGameState && *s_pGameState && s_fn_ZoneMapAdd) {
             void* zoneMap = *(void**)((uintptr_t)*s_pGameState + 0xF0);
             s_fn_ZoneMapAdd(zoneMap, &entityPtr);
@@ -315,75 +315,64 @@ void ZoneComponent_InitFuncs() {
     EnsureZoneHelpers();
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid ZoneComponent
-// (size 0x28, +0x20 capability flags 0x83, Object::Internal base + shared stub
-// vtable, zeroed body). Size from ZoneComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================================
+// ENDGAME B.3.8 VIS — ZoneComponent as a REAL class (ZoneComponent.h).
+//
+// Before: a 48-slot ZoneComponent_InertVtable filled per create, Inert_ScalarDtor in
+// slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/ZoneComponent.h"
 
-// ============================================================
-// Vtable slots 6/7 — the CELL+0x00 occupant write (placed-building click-pick)
-// ============================================================
 // Retail dispatch: EntityList::RegisterEntity -> ComponentEntity_OnAddedPass ->
-// ZoneComponent vtable slot 6 = Draw (0x1401301f0, xref'd ONLY from the vtable at
-// 0x140164e60) -> sub_d360 (0x14009d360), which writes the owning entity into
-// **cell + 0x00** for every non-'.' footprint cell, notifies the pathfinder mirror
-// per cell (a6f00 cmd 3), and bumps the '.'-cell reserve counter at cell+0x28.
-// Slot 7 = OnCreate (0x140130080), dispatched by MarkForRemoval's vtable+0x38
-// walk, rasterizes the same rect with a NULL ref — the symmetric teardown.
+// ZoneComponent slot 6 = Draw (0x1401301f0) -> sub_d360 (0x14009d360), which
+// writes the owning entity into **cell + 0x00** for every non-'.' footprint
+// cell, notifies the pathfinder mirror per cell (a6f00 cmd 3), and bumps the
+// '.'-cell reserve counter at cell+0x28. Slot 7 = OnCreate (0x140130080),
+// dispatched by MarkForRemoval's vtable+0x38 walk, rasterizes the same rect
+// with a NULL ref — the symmetric teardown.
 //
 // cell+0x00 is the slot EditTool's cell pick (FUN_1400a0280) resolves FIRST —
 // before the cell+0x08 solid layer buildings only claim when their clearing
 // finishes (MapComponent slot 12). This is what makes a just-placed foundation
-// clickable in retail while the trees still hold +0x08 (user-verified in the
-// shipped game 2026-07-28; recorded as the "cell+0x00 writer" open).
-//
-// Everything below Draw was already ported AND registered (d360 in
-// keystone_a_zone.cpp, a6f00, the 88e20 zone-map insert) — but the inert factory
-// shipped with the shared stub vtable, so OnAddedPass dispatched slot 6 into a
-// stub and no placed building ever reached cell+0x00. Same one-guard-away shape
-// as PickingComponent slot 6 and MapComponent slot 12 before it.
-static uint32_t ZoneComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ZoneComponent");
-    return cached;
+// clickable in retail while the trees still hold +0x08.
+
+// 0x1401303c0: Component() is the CALL 0x1401188b0; the 0x140164e30 stamp is
+// the compiler's; flags |= 3 (0x83 with Component's 0x80 — bit 0 puts every
+// ZoneComponent in the OnAddedPass dispatch, exactly as retail).
+ZoneComponent::ZoneComponent() {
+    OrFlagsInCtor(0x3);
 }
-static void* ZoneComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static void ZoneComponent_OnAddedVSlot(void* s) {
-    // slot 6 (+0x30) — flags 0x83 bit 0 puts every ZoneComponent in the
-    // OnAddedPass dispatch, exactly as retail.
-    ZoneComponent_Draw(reinterpret_cast<ZoneComponent*>(s));
+
+// [3] 0x1401302f0
+void ZoneComponent::Persist(void* stream) { ZoneComponent_Shutdown(this, stream); }
+// [6] 0x1401301f0 — the footprint claim of cell+0x00.
+void ZoneComponent::OnAdded() { ZoneComponent_Draw(this); }
+// [7] 0x140130080 — the removal walk. Must mirror slot 6 or a removed building
+// leaves a dangling entity ref in cell+0x00.
+void ZoneComponent::OnRemove() { ZoneComponent_OnCreate(this); }
+
+// [0] 0x14003a870: ~ZoneComponent (0x140130380: restamp + ~Internal), MemFree on &1.
+Object::Base* ZoneComponent::DeletingDtor(unsigned flags) {
+    this->~ZoneComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void ZoneComponent_DetachVSlot(void* s) {
-    // slot 7 (+0x38) — the removal walk. Must mirror slot 6 or a removed
-    // building leaves a dangling entity ref in cell+0x00 (the exact
-    // use-after-free shape MapComponent_DetachOccupancy_4750 exists to prevent
-    // on the +0x08 layer).
-    ZoneComponent_OnCreate(reinterpret_cast<ZoneComponent*>(s));
+
+// create 0x14003a6a0: MemAlloc(0x28, 8), then the ctor.
+void* ZoneComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ZoneComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ZoneComponent());
 }
-static void ZoneComponent_SerVSlot(void* s, void* stream) {
-    ZoneComponent_Shutdown(reinterpret_cast<ZoneComponent*>(s), stream);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ZoneComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ZoneComponent());
 }
-static void ZoneComponent_FinishVtable() {
-    ZoneComponent_InertVtable[6] = reinterpret_cast<void*>(&ZoneComponent_OnAddedVSlot);
-    ZoneComponent_InertVtable[7] = reinterpret_cast<void*>(&ZoneComponent_DetachVSlot);
-    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-    ZoneComponent_InertVtable[3] = reinterpret_cast<void*>(&ZoneComponent_SerVSlot);
-}
-extern "C" void* ZoneComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x28, 0x83,
-        ZoneComponent_InertVtable, reinterpret_cast<void*>(&ZoneComponent_InertGetTypeId));
-    ZoneComponent_FinishVtable();
-    return p;
-}
-static void* ZoneComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x28, 0x83,
-        ZoneComponent_InertVtable, reinterpret_cast<void*>(&ZoneComponent_InertGetTypeId));
-    ZoneComponent_FinishVtable();
-    return mem;
-}
-REGISTER_TYPE(ZoneComponent, "Component",
-              &ZoneComponent_Factory, &ZoneComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(ZoneComponent, "_ZTV13ZoneComponent")
+DEFINE_EXE_TYPE(ZoneComponent, "Component")

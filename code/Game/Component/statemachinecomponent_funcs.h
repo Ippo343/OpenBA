@@ -7,21 +7,15 @@
 
 // ============================================================
 // StateMachineComponent -- state machine tick dispatcher
-// Vtable: 0x140164520 (12 slots)
+// Vtable: 0x140164520 (16 slots)
 // Size: 0x58 bytes
 // ============================================================
 
-// Resolve helper function pointers (call once at hook install time).
+// Resolve the ControllerComponent type id for the two uninstalled reference ports.
 void StateMachineComponent_ResolveHelpers();
 
-// ScalarDtor (vtable slot [0], 0x1400384a0):
-// Resets vtables to SMC -> purecall -> Component base, calls base Internal dtor,
-// conditionally frees memory.
-void* StateMachineComponent_ScalarDtor(StateMachineComponent* self, uint32_t flags);
-
-// Startup/GetType (vtable slot [2], 0x1400382b0): 7 bytes, UNHOOKABLE.
-// Returns the registered type ID for StateMachineComponent.
-uint32_t StateMachineComponent_Startup(StateMachineComponent* self);
+// Slot 0 (ScalarDtor 0x1400384a0) and slot 2 (Type 0x1400382b0) are the
+// class's members now (ENDGAME B.3.8 VIS, StateMachineComponent.h).
 
 // Shutdown (vtable slot [3], 0x14012b940):
 // Calls Component base serialize, then IO::Serializer to serialize 4 state bytes

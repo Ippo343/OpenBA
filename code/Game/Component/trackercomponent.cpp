@@ -118,58 +118,48 @@ void TrackerComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid TrackerComponent: size 0x50 + Object::Internal base + shared stub
-// vtable + capability flags +0x20=0x80 (from TrackerComponent_Ctor) + zeroed body.
+// ============================================================================
+// ENDGAME B.3.8 VIS — TrackerComponent as a REAL class (TrackerComponent.h).
+//
+// Before: a 48-slot TrackerComponent_InertVtable filled per create, Inert_ScalarDtor
+// in slot 0 (only ~Internal), +0x48 = -1 patched in after the zero-fill.
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/TrackerComponent.h"
 
-// NOT COMPONENT_INERT_FACTORY: that macro leaves the whole body zeroed, but the
-// retail ctor (TrackerComponent_Factory 0x14000d7a0) writes +0x48 = -1. +0x48 is
-// the "game-world item-count generation" stamp, and 0 is a LEGAL generation
-// value: with a zeroed body ProductionUI's per-frame update (0x140075a50) would
-// compare gameWorld item count 0 == stamp 0 on the very first frame of a fresh
-// world and SKIP the one-shot array rebuild that the -1 sentinel is there to
-// force. Documented project trap: "inert-component sentinel fields" — a zero
-// where a -1 belongs. Everything else is the macro's inert body verbatim.
-static uint32_t TrackerComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TrackerComponent");
-    return cached;
-}
-static void* TrackerComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+// The retail ctor (inlined in TrackerComponent_Factory 0x14000d7a0) writes
+// +0x48 = -1. +0x48 is the "game-world item-count generation" stamp, and 0 is a
+// LEGAL generation value: with 0 ProductionUI's per-frame update (0x140075a50)
+// would compare gameWorld item count 0 == stamp 0 on the very first frame of a
+// fresh world and SKIP the one-shot array rebuild the -1 sentinel forces.
+TrackerComponent::TrackerComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr),
+      trackerId(-1), _pad4C{} {}
 
-// Retail ctor tail: +0x28/+0x30/+0x38/+0x40 = 0 (already zeroed), +0x48 = -1.
-static void TrackerComponent_ApplyCtorDefaults(void* p) {
-    if (p) *reinterpret_cast<int32_t*>(static_cast<char*>(p) + 0x48) = -1;
-}
+// [3] 0x140059130
+void TrackerComponent::Persist(void* stream) { TrackerComponent_Shutdown(this, stream); }
 
-static void TrackerComponent_SerVSlot(void* s, void* stream) {
-    TrackerComponent_Shutdown(reinterpret_cast<TrackerComponent*>(s), stream);
-}
-// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-static void TrackerComponent_FinishVtableSer() {
-    TrackerComponent_InertVtable[3] = reinterpret_cast<void*>(&TrackerComponent_SerVSlot);
+// [0] 0x14000d9a0: ~TrackerComponent (0x140059280; its array frees are a PORT GAP, see the header), MemFree on &1.
+Object::Base* TrackerComponent::DeletingDtor(unsigned flags) {
+    this->~TrackerComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-extern "C" void* TrackerComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x50, 0x80,
-        TrackerComponent_InertVtable,
-        reinterpret_cast<void*>(&TrackerComponent_InertGetTypeId));
-    TrackerComponent_ApplyCtorDefaults(p);
-    TrackerComponent_FinishVtableSer();
-    return p;
+// create 0x14000d7a0: MemAlloc(0x50, 8), then the ctor.
+void* TrackerComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TrackerComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TrackerComponent());
 }
-static void* TrackerComponent_CreateInPlace(void* mem) {
-    if (mem) {
-        ::ComponentFactory::InitInertTyped(mem, 0x50, 0x80,
-            TrackerComponent_InertVtable,
-            reinterpret_cast<void*>(&TrackerComponent_InertGetTypeId));
-        TrackerComponent_ApplyCtorDefaults(mem);
-        TrackerComponent_FinishVtableSer();
-    }
-    return mem;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* TrackerComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TrackerComponent());
 }
 
-REGISTER_TYPE(TrackerComponent, "Component",
-              &TrackerComponent_Factory, &TrackerComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(TrackerComponent, "_ZTV16TrackerComponent")
+DEFINE_EXE_TYPE(TrackerComponent, "Component")

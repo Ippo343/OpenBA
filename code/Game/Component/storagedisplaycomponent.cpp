@@ -695,97 +695,73 @@ void StorageDisplayComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 VIS — StorageDisplayComponent as a REAL class (StorageDisplayComponent.h).
+//
+// Before: a 48-slot StorageDisplayComponent_LiveVtable filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/StorageDisplayComponent.h"
 
-// StorageYard/StorageCart resource-pile rendering (BANISHED_LIVE_STORAGEDISPLAY,
-// default OFF unless SA_LIVE_ENV enables it).
-//
-// DRIVER: faithful — the pile refresh is the component's own per-frame Update (+0x48),
-// dispatched natively by EntityList::Update's 5-bucket round-robin (see entitylist.cpp
-// Step 4). That tick was previously believed dead in SA and replaced by an explicit
-// per-frame drain; it is in fact alive (processCount is set, buckets are populated). The
-// one thing that blocked THIS component was its owner StorageYard being wrongly stamped
-// with entity flag bit 0x400 ("removed from world") by StartTown_RunOnCreatePass — fixed
-// there. With that clear, the bucket tick calls this component's vtable +0x48 (slot 9 =
-// TickVSlot below = Draw+Update) every cadence, exactly like retail. No explicit driver.
-//
-// The live vtable wires the real bodies into slots 6/9/11 (Draw / Update / OnUpdate2).
-// Slot 9 is the active native driver; 6 and 11 back any incidental vtable dispatch.
-static uint32_t StorageDisplayComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StorageDisplayComponent");
-    return cached;
-}
-static void* StorageDisplayComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+// DRIVER: faithful — the pile refresh is the component's own per-frame Update
+// (+0x48), dispatched natively by EntityList::Update's 5-bucket round-robin
+// (entitylist.cpp Step 4) every cadence, exactly like retail.
 
-// index 6 — Draw(self): grid position layout.
-static void StorageDisplayComponent_DrawVSlot(void* s) {
-    StorageDisplayComponent_Draw(reinterpret_cast<StorageDisplayComponent*>(s));
+// 0x140056a00: Component() is the CALL 0x1401188b0; the 0x14015a780 stamp is
+// the compiler's; +0x28 = +0x30 = 0; flags |= 0xcb.
+StorageDisplayComponent::StorageDisplayComponent()
+    : displayData0(nullptr), displayData1(nullptr) {
+    OrFlagsInCtor(0xcb);
 }
-// index 9 — Update tick (self, Time*): the NATIVE +0x48 driver dispatched by the
-// EntityList 5-bucket round-robin. Draw lays out the w*h pile grid; Update allocates the
-// pile meshes from the (seeded/live) StorageComponent contents. Both early-out cheaply
-// when unchanged, so steady-state cost is a handful of yards * a few slots per cadence.
-static void StorageDisplayComponent_TickVSlot(void* s, void* /*time*/) {
-    StorageDisplayComponent* self = reinterpret_cast<StorageDisplayComponent*>(s);
-    StorageDisplayComponent_Draw(self);
-    StorageDisplayComponent_Update(self);
-}
-// index 11 — OnUpdate2(self): retail Draw+Update refresh (event/broadcast path).
-static void StorageDisplayComponent_OnUpdate2VSlot(void* s) {
-    StorageDisplayComponent_OnUpdate2(reinterpret_cast<StorageDisplayComponent*>(s));
-}
-// index 7 (+0x38) — removed-from-world: Scene::RemoveObject every pile-display
-// entry (ids at entry+0x120). Entity teardown dispatches this via MarkForRemoval
-// (0x1400c2ea0: for each component with capability bit 1 — our flags 0xCB have
-// it — call vtable+0x38, THEN set the 0x400 bit). Leaving this slot inert
-// crashed live 2026-07-20: demolishing a building freed the component while its
-// pile meshes stayed registered in the renderer's draw list, and the next
-// GameUpdateLoop::Draw died in Renderer::DrawItemList -> EdgeMeshInstance::Draw
-// -> MeshInstance::GetNodeToWorld -> Transform::Lerp on the freed entries.
-// Wired UNCONDITIONALLY (not only when the display is live): the handler
-// no-ops on an empty/never-populated display array, and teardown safety must
-// not depend on the display feature flag.
-static void StorageDisplayComponent_OnRemovedVSlot(void* s) {
-    StorageDisplayComponent_OnCreate(reinterpret_cast<StorageDisplayComponent*>(s));
-}
-static void StorageDisplayComponent_SerSlot3(void* s, void* stream) {
-    StorageDisplayComponent_Shutdown(reinterpret_cast<StorageDisplayComponent*>(s),
-                                     stream);
-}
-static void StorageDisplayComponent_FinishLiveVtable() {
-    // Slot 3 (+0x18), UNCONDITIONAL — serializer wiring is not a feature flag.
-    // Retail 0x140056970 is Component::Serialize plus one empty Serializer scope,
-    // and an empty scope is still 16 real bytes in the save encoding. Without this
-    // the ported body below was dead code and every record was 16 bytes short,
-    // desyncing the stream for every object deserialized after it.
-    StorageDisplayComponent_LiveVtable[3]  =
-        reinterpret_cast<void*>(&StorageDisplayComponent_SerSlot3);
-    StorageDisplayComponent_LiveVtable[7]  =
-        reinterpret_cast<void*>(&StorageDisplayComponent_OnRemovedVSlot);
-    StorageDisplayComponent_LiveVtable[6]  =
-        reinterpret_cast<void*>(&StorageDisplayComponent_DrawVSlot);
-    StorageDisplayComponent_LiveVtable[9]  =
-        reinterpret_cast<void*>(&StorageDisplayComponent_TickVSlot);
-    StorageDisplayComponent_LiveVtable[11] =
-        reinterpret_cast<void*>(&StorageDisplayComponent_OnUpdate2VSlot);
-}
-extern "C" void* StorageDisplayComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xCB,
-        StorageDisplayComponent_LiveVtable,
-        reinterpret_cast<void*>(&StorageDisplayComponent_LiveGetTypeId));
-    StorageDisplayComponent_FinishLiveVtable();
-    return p;
-}
-static void* StorageDisplayComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0xCB,
-        StorageDisplayComponent_LiveVtable,
-        reinterpret_cast<void*>(&StorageDisplayComponent_LiveGetTypeId));
-    StorageDisplayComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(StorageDisplayComponent, "Component",
-              &StorageDisplayComponent_Factory, &StorageDisplayComponent_CreateInPlace);
 
+// [3] 0x140056970 — Component::Persist plus one empty Serializer scope (16 real
+// bytes in the save encoding).
+void StorageDisplayComponent::Persist(void* stream) { StorageDisplayComponent_Shutdown(this, stream); }
+// [4] 0x140056930 — the class's own `RET` body.
+void StorageDisplayComponent::Startup() {}
+// [6] 0x140056730 — Draw: grid position layout.
+void StorageDisplayComponent::OnAdded() { StorageDisplayComponent_Draw(this); }
+
+// [7] 0x1400566b0 — removed-from-world: Scene::RemoveObject every pile-display
+// entry (ids at entry+0x120). MarkForRemoval (0x1400c2ea0) dispatches it for
+// each component with capability bit 1 (0xcb has it) BEFORE the 0x400 bit;
+// leaving it inert left freed pile meshes in the renderer's draw list.
+void StorageDisplayComponent::OnRemove() { StorageDisplayComponent_OnCreate(this); }
+
+// [9] 0x1400566a0 (`JMP 0x1400563e0`) — the NATIVE +0x48 driver. The tree's
+// body lays out the w*h pile grid (Draw) and then allocates the pile meshes
+// from the StorageComponent contents (Update); both early-out cheaply when
+// unchanged.
+void StorageDisplayComponent::Update(void* /*time*/) {
+    StorageDisplayComponent_Draw(this);
+    StorageDisplayComponent_Update(this);
+}
+
+// [11] 0x140056940 — OnUpdate2: retail Draw+Update refresh (event/broadcast path).
+void StorageDisplayComponent::Slot11() { StorageDisplayComponent_OnUpdate2(this); }
+
+// [0] 0x14000c940: ~StorageDisplayComponent (0x1400569b0; its array teardown is a PORT GAP, see the header), MemFree on &1.
+Object::Base* StorageDisplayComponent::DeletingDtor(unsigned flags) {
+    this->~StorageDisplayComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x14000c770: MemAlloc(0x38, 8), then the ctor.
+void* StorageDisplayComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StorageDisplayComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StorageDisplayComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* StorageDisplayComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StorageDisplayComponent());
+}
+
+DEFINE_EXE_VTABLE(StorageDisplayComponent, "_ZTV23StorageDisplayComponent")
+DEFINE_EXE_TYPE(StorageDisplayComponent, "Component")

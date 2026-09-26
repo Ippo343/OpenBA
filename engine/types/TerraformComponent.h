@@ -29,28 +29,7 @@ namespace TerraformComponentAddr {
     constexpr uintptr_t Vtable = 0x14015a880;
 }
 
-struct TerraformComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10  entity InternalBasePtr
-    void*    description;  // +0x18  TerraformDescription*
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    void*    heightRecord; // +0x28: Vector3[] of original terrain points
-    int32_t  heightCount;  // +0x30
-    int32_t  heightCap;    // +0x34
-    void*    tileRecord;   // +0x38: int32[] of retyped map cell indices
-    int32_t  tileCount;    // +0x40
-    int32_t  tileCap;      // +0x44
-};
-
-static_assert(sizeof(TerraformComponent) == 0x48, "TerraformComponent size mismatch");
-static_assert(offsetof(TerraformComponent, vtable) == 0x00, "");
-static_assert(offsetof(TerraformComponent, flags) == 0x20, "");
-static_assert(offsetof(TerraformComponent, heightRecord) == 0x28, "");
-static_assert(offsetof(TerraformComponent, heightCount) == 0x30, "");
-static_assert(offsetof(TerraformComponent, heightCap) == 0x34, "");
-static_assert(offsetof(TerraformComponent, tileRecord) == 0x38, "");
-static_assert(offsetof(TerraformComponent, tileCount) == 0x40, "");
-static_assert(offsetof(TerraformComponent, tileCap) == 0x44, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `TerraformComponent` is a real class now
+// (code/Game/Component/TerraformComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/TerraformComponent.h"

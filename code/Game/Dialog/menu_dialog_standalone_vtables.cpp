@@ -51,104 +51,21 @@
 // installed here. (One retail function ported twice under two names is a known trap in
 // this codebase; grep the ADDRESS, not the name.)
 
-#include "Dialog/ui_dialogs.h"
-#include "Object/factory_registration.h"
-#include "engine_funcs.h"
+// ENDGAME B.3.8 block DLG: both classes are real now (Dialog/AchievementDialog.h,
+// Dialog/GoalDialog.h); the two hand-built tables and their wrappers are gone. The
+// menu openers construct the real classes. engine_funcs.cpp still resolves both
+// retail addresses into g_AchievementDialog_Vtable / g_GoalDialog_Vtable, so the
+// addresses keep serving the COMPILER tables (B38 D5).
+
+#include "Dialog/AchievementDialog.h"
+#include "Dialog/GoalDialog.h"
 #include "resolve.h"
 #include "address_registry.h"
 #include <cstdint>
 
-namespace {
-
-// Unused/base slots. Retail points these at tiny shared thunks in the 0x14003a9xx
-// block (RET, RET 0, base serialize); a variadic no-op reproduces all of them for a
-// dialog that is only ever driven by the UserInterface.
-void MenuDlg_Nop(void*, ...) {}
-
-// ── AchievementDialog ─────────────────────────────────────────────────────────
-void* GetAchievementVtable();
-
-void* AD_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = GetAchievementVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-uint32_t AD_TypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("AchievementDialog");
-    return c;
-}
-void AD_Slot4(void* self) { AchievementDialog_Slot4(reinterpret_cast<AchievementDialog*>(self)); }
-void AD_Slot6(void* self) { AchievementDialog_Slot6(reinterpret_cast<AchievementDialog*>(self)); }
-int  AD_Slot7(void* self) { return AchievementDialog_Slot7(reinterpret_cast<AchievementDialog*>(self)); }
-void AD_Slot8(void* self, void* e, int msg, int id) {
-    AchievementDialog_Slot8(reinterpret_cast<AchievementDialog*>(self), e, msg, id);
-}
-
-void* g_AchievementDialog_Vtable_Standalone[10] = {
-    reinterpret_cast<void*>(&AD_Dtor),      // +0x00 idx0 ScalarDtor
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x08 idx1 static getter
-    reinterpret_cast<void*>(&AD_TypeId),    // +0x10 idx2 GetTypeId
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x18 idx3 Persist (base thunk)
-    reinterpret_cast<void*>(&AD_Slot4),     // +0x20 idx4 Setup
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x28 idx5 Shutdown (base thunk)
-    reinterpret_cast<void*>(&AD_Slot6),     // +0x30 idx6 OnUpdate
-    reinterpret_cast<void*>(&AD_Slot7),     // +0x38 idx7 OnUpdateLayout
-    reinterpret_cast<void*>(&AD_Slot8),     // +0x40 idx8 OnCommand
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x48 idx9 OnSerializeSettings (base thunk)
-};
-void* GetAchievementVtable() {
-    return reinterpret_cast<void*>(g_AchievementDialog_Vtable_Standalone);
-}
-
-// ── GoalDialog ────────────────────────────────────────────────────────────────
-void* GetGoalVtable();
-
-void* GD_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = GetGoalVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-uint32_t GD_TypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("GoalDialog");
-    return c;
-}
-void GD_Slot4(void* self) { GoalDialog_Slot4(reinterpret_cast<GoalDialog*>(self)); }
-void GD_Slot6(void* self) { GoalDialog_Slot6(reinterpret_cast<GoalDialog*>(self)); }
-int  GD_Slot7(void* self) { return GoalDialog_Slot7(reinterpret_cast<GoalDialog*>(self)); }
-void GD_Slot8(void* self, void* e, int msg, int id) {
-    GoalDialog_Slot8(reinterpret_cast<GoalDialog*>(self), e, msg, id);
-}
-
-void* g_GoalDialog_Vtable_Standalone[10] = {
-    reinterpret_cast<void*>(&GD_Dtor),      // +0x00 idx0 ScalarDtor
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x08 idx1 static getter
-    reinterpret_cast<void*>(&GD_TypeId),    // +0x10 idx2 GetTypeId
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x18 idx3 Persist (base thunk)
-    reinterpret_cast<void*>(&GD_Slot4),     // +0x20 idx4 Setup
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x28 idx5 Shutdown (base thunk)
-    reinterpret_cast<void*>(&GD_Slot6),     // +0x30 idx6 OnUpdate
-    reinterpret_cast<void*>(&GD_Slot7),     // +0x38 idx7 OnUpdateLayout
-    reinterpret_cast<void*>(&GD_Slot8),     // +0x40 idx8 OnCommand
-    reinterpret_cast<void*>(&MenuDlg_Nop),  // +0x48 idx9 OnSerializeSettings (base thunk)
-};
-void* GetGoalVtable() {
-    return reinterpret_cast<void*>(g_GoalDialog_Vtable_Standalone);
-}
-
-}  // namespace
-
-// Registered at the retail .rdata addresses so engine_funcs' existing
-// ResolveAddr(Module::Exe, 0x14015b020 / 0x14015beb0) lookups fill the globals the
-// MainMenuDialog open-handlers already read. No caller changes needed.
 extern "C" void RegisterMenuDialogVtables() {
     RegisterExeAddr(0x14015b020,
-                    reinterpret_cast<uintptr_t>(g_AchievementDialog_Vtable_Standalone));
+                    reinterpret_cast<uintptr_t>(AchievementDialog::Vtable()));
     RegisterExeAddr(0x14015beb0,
-                    reinterpret_cast<uintptr_t>(g_GoalDialog_Vtable_Standalone));
+                    reinterpret_cast<uintptr_t>(GoalDialog::Vtable()));
 }

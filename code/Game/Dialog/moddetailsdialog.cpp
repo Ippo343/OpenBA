@@ -25,6 +25,9 @@
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "Dialog/ModDetailsDialog.h"
+#include "Dialog/ModUploadDialog.h"
+#include <cstdio>
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -138,29 +141,32 @@ static bool BSTContains(void* root, void* filename) {
 // ============================================================
 // Slot4 (0x14006D700): Setup — populates mod details UI
 // ============================================================
-void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+extern void* g_lastModDetails;   // mod_dialog_vtables.cpp (autostart click driver)
+void ModDetailsDialog::OnOpened() {
+    g_lastModDetails = this;
+    printf("[ModDetailsDialog::OnOpened] self=%p modIndex=%d\n", (void*)this, modIndex);
+    uintptr_t s = (uintptr_t)this;
 
     // --- Find 12 UI elements ---
-    void* buttonOk = FindElem(self, "buttonOk");
+    void* buttonOk = FindElem(this, "buttonOk");
     reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(0);  // B.3.6 bridge
     *(uint32_t*)((uintptr_t)buttonOk + 0xC0) = 8;
 
-    void* buttonCreate = FindElem(self, "buttonCreate");
+    void* buttonCreate = FindElem(this, "buttonCreate");
     reinterpret_cast<UI::Element*>(buttonCreate)->SetElementId(1);  // B.3.6 bridge
 
-    void* buttonUpdate = FindElem(self, "buttonUpdate");
+    void* buttonUpdate = FindElem(this, "buttonUpdate");
     reinterpret_cast<UI::Element*>(buttonUpdate)->SetElementId(2);  // B.3.6 bridge
 
-    void* imageIcon       = FindElem(self, "imageIcon");
-    void* textName        = FindElem(self, "textName");
-    void* textPath        = FindElem(self, "textPath");
-    void* textAuthor      = FindElem(self, "textAuthor");
-    void* textVersion     = FindElem(self, "textVersion");
-    void* textDescription = FindElem(self, "textDescription");
-    void* textConflictTitle = FindElem(self, "textConflictTitle");
-    void* textConflictList  = FindElem(self, "textConflictList");
-    void* textResourceList  = FindElem(self, "textResourceList");
+    void* imageIcon       = FindElem(this, "imageIcon");
+    void* textName        = FindElem(this, "textName");
+    void* textPath        = FindElem(this, "textPath");
+    void* textAuthor      = FindElem(this, "textAuthor");
+    void* textVersion     = FindElem(this, "textVersion");
+    void* textDescription = FindElem(this, "textDescription");
+    void* textConflictTitle = FindElem(this, "textConflictTitle");
+    void* textConflictList  = FindElem(this, "textConflictList");
+    void* textResourceList  = FindElem(this, "textResourceList");
 
     // --- Get mod data ---
     void* modification = *g_ppModificationSingleton;
@@ -361,17 +367,16 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
     void* dialog = ext;
 
     // Allocate and construct DialogInstance (0xB8 bytes)
-    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0xB8, 8);
+    void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, sizeof(ModUploadDialog), 8);
     void* dialogInst = nullptr;
     if (newDialog) {
-        uint64_t nullRef;
-        new (&nullRef) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        fn_DialogInstance_Ctor(newDialog, *(void**)(s + 0x10), dialog, &nullRef, 0, 0, 0);
-        // Set vtable to ModUpdateDialog
-        if (g_ModUpdateDialog_Vtable) {
-            *(uintptr_t*)newDialog = g_ModUpdateDialog_Vtable;
-        }
-        dialogInst = newDialog;
+        // ENDGAME B.3.8 DLG: the real class. The old path ran the DialogInstance
+        // ctor door and stamped g_ModUpdateDialog_Vtable (0x14015c6c0), which is
+        // unregistered, so the stamp was skipped and the object stayed a bare
+        // DialogInstance (B38 D9 #15).
+        dialogInst = ::new (newDialog) ModUploadDialog(
+            *reinterpret_cast<UI::UserInterface**>(s + 0x10), static_cast<const UI::Dialog*>(dialog),
+            Object::InternalPtr<UI::DialogInstance>());
     }
 
     // Add to UI
@@ -383,23 +388,24 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
 // ============================================================
 // Slot8 (0x14006D6A0): OnCommand — button dispatch.
 // ============================================================
-void ModDetailsDialog_Slot8(ModDetailsDialog* self, uint64_t /*param2*/,
-                            int param3, int param4) {
-    uintptr_t s = (uintptr_t)self;
+void ModDetailsDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    if (param3 == 0x12)
+        printf("[ModDetailsDialog::OnEvent] click id=%d\n", param4);
+    uintptr_t s = (uintptr_t)this;
 
     if (param3 != 0x12)
         return;
 
     if (param4 == 0) {
         uint8_t basePtr[16];
-        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
+        new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
     } else if (param4 == 1) {
         // OpenUpdateDialog — opens ModUpdate.rsc dialog
-        ModDetailsDialog_OpenDialog_Impl(self, "Dialog/ModUpdate.rsc");
+        ModDetailsDialog_OpenDialog_Impl(this, "Dialog/ModUpdate.rsc");
     } else if (param4 == 2) {
         // DeleteMod — also opens ModUpdate.rsc dialog (same behavior as OpenUpdateDialog)
-        ModDetailsDialog_OpenDialog_Impl(self, "Dialog/ModUpdate.rsc");
+        ModDetailsDialog_OpenDialog_Impl(this, "Dialog/ModUpdate.rsc");
     }
 }

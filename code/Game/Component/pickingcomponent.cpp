@@ -292,82 +292,73 @@ void PickingComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-#include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-
-// Hand-expanded from COMPONENT_INERT_FACTORY(PickingComponent, 0x38, 0xC3) so the
-// per-type vtable's +0x38 slot (index 7 = OnRemovedFromWorld, retail 0x140128b50 =
-// PickingComponent_OnCreate; verified as vtable 0x140164040[+0x38]) routes to the
-// mesh teardown. Retail: entity mark-removal FUN_1400c2ea0 broadcasts vtable+0x38 to
-// every component whose capability flags (+0x20) have bit 1 (PickingComponent 0xC3
-// qualifies) BEFORE the entity is freed; OnCreate removes the picking mesh from
-// Picking::Scene (gw+0x70) and resets pickingId to -1. Without this the removed/
-// upgraded building's mesh dangled in the scene with userData = the freed entity, so
-// EditTool_SelectEntity_Impl's mesh pick (Picking::Scene::GetUserData) returned the
-// freed pointer and crashed when the now-empty foundation was clicked (2026-07-21).
-// This is the Picking-scene twin of the map-cell-occupancy fix (MapComponent +
-// starttown.cpp StartTown_MarkBuildingCells).
-static uint32_t PickingComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PickingComponent");
-    return cached;
-}
-static void* PickingComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static void PickingComponent_DetachVSlot(void* s) {
-    PickingComponent_InitFuncs();   // the file's exe-slot/type-id statics (RemoveMesh is a member call)
-    PickingComponent_OnCreate(reinterpret_cast<PickingComponent*>(s));
-}
-// Slot 6 (+0x30) = OnAdded, retail 0x140128f50 — dispatched by ComponentEntity_OnAddedPass
-// at EntityList_RegisterEntity time, in COMPONENT ARRAY ORDER. That order is the whole
-// point: on a WoodHouse, Picking is index [5] and Build is index [16], so retail registers
-// the pick mesh while the model still carries the FOUNDATION decal (modelVariant 0) and
-// only then does BuildComponent's own OnAdded Stage 3 un-frame it to -1.
+// ============================================================================
+// ENDGAME B.3.8 VIS — PickingComponent as a REAL class (PickingComponent.h).
 //
-// Standalone left this slot a stub and compensated with explicit
-// PickingComponent_RegisterMeshForEntity calls at each creation site — but the placement
-// site calls it AFTER RegisterEntity, i.e. after index [16] has already stamped -1, so
-// `modelVariant < 0` bails and a hand-placed building registers no pick mesh at all.
-// Measured 2026-07-28: that is why a placed foundation could not be clicked. Wiring the
-// slot puts the registration back in its retail window and retires the workarounds.
-static void PickingComponent_OnAddedVSlot(void* s) {
-    PickingComponent_RegisterMesh(s);
+// Before: a 48-slot PickingComponent_InertVtable filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal), pickingId = -1 patched in after
+// the zero-fill.
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/PickingComponent.h"
+
+// 0x140128c80: Component() is the CALL 0x1401188b0; the 0x140164040 stamp is
+// the compiler's; +0x28 = -1 (so OnRemove's `pickingId >= 0` guard skips the
+// RemoveMesh for a component that never registered a mesh), +0x30 = 0,
+// flags |= 0xc3.
+PickingComponent::PickingComponent() : pickingId(-1), _pad2C{}, field30(nullptr) {
+    OrFlagsInCtor(0xc3);
 }
-static void PickingComponent_SerVSlot(void* s, void* stream) {
-    PickingComponent_Shutdown(reinterpret_cast<PickingComponent*>(s), stream);
+
+// [3] 0x140128bb0
+void PickingComponent::Persist(void* stream) { PickingComponent_Shutdown(this, stream); }
+
+// [4] 0x140128c30. PORT GAP (retail 0x140128c30) — B38 D9: retail's 9-byte
+// Startup body was never ported or installed (inert stub); kept inert here.
+void PickingComponent::Startup() {}
+
+// [6] 0x140128b90 = OnAdded, `JMP 0x140128f50` — dispatched by
+// ComponentEntity_OnAddedPass at EntityList_RegisterEntity time, in COMPONENT
+// ARRAY ORDER. That order is the whole point: on a WoodHouse, Picking is index
+// [5] and Build is index [16], so retail registers the pick mesh while the model
+// still carries the FOUNDATION decal (modelVariant 0) and only then does
+// BuildComponent's own OnAdded Stage 3 un-frame it to -1.
+void PickingComponent::OnAdded() { PickingComponent_RegisterMesh(this); }
+
+// [7] 0x140128b50 — entity mark-removal FUN_1400c2ea0 broadcasts vtable+0x38 to
+// every component whose flags have bit 1 BEFORE the entity is freed; the body
+// removes the picking mesh from Picking::Scene (gw+0x70) and resets pickingId.
+// Without it a removed building's mesh dangles with userData = the freed entity.
+void PickingComponent::OnRemove() {
+    PickingComponent_InitFuncs();   // the file's exe-slot/type-id statics (RemoveMesh is a member call)
+    PickingComponent_OnCreate(this);
 }
-static void PickingComponent_FinishVtable() {
-    PickingComponent_InertVtable[6] =
-        reinterpret_cast<void*>(&PickingComponent_OnAddedVSlot);
-    PickingComponent_InertVtable[7] =
-        reinterpret_cast<void*>(&PickingComponent_DetachVSlot);
-    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-    PickingComponent_InertVtable[3] =
-        reinterpret_cast<void*>(&PickingComponent_SerVSlot);
+
+// [11] 0x140128ba0. PORT GAP (retail 0x140128ba0, `JMP 0x140128f50`, the same
+// body as slot 6) — B38 D9: the tree's table left it inert; kept inert here.
+void PickingComponent::Slot11() {}
+
+// [0] 0x140036fa0: ~PickingComponent (0x140128c40: restamp + ~Internal), MemFree on &1.
+Object::Base* PickingComponent::DeletingDtor(unsigned flags) {
+    this->~PickingComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-// Retail Startup (0x140128c30) stamps pickingId(+0x28) = -1 so OnCreate's
-// `pickingId >= 0` guard skips the RemoveMesh for a component that never registered a
-// mesh. The inert factory zero-fills the body (pickingId = 0, which would wrongly
-// RemoveMesh(0)), so replicate that -1 init per instance. RegisterMesh overwrites it
-// with the real meshId when a mesh is actually added.
-static inline void PickingComponent_InitBody(void* inst) {
-    if (inst) *(int32_t*)((uint8_t*)inst + 0x28) = -1;
+
+// create 0x140036da0: MemAlloc(0x38, 8), then the ctor.
+void* PickingComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PickingComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PickingComponent());
 }
-extern "C" void* PickingComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xC3,
-        PickingComponent_InertVtable,
-        reinterpret_cast<void*>(&PickingComponent_InertGetTypeId));
-    PickingComponent_FinishVtable();
-    PickingComponent_InitBody(p);
-    return p;
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* PickingComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PickingComponent());
 }
-static void* PickingComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0xC3,
-        PickingComponent_InertVtable,
-        reinterpret_cast<void*>(&PickingComponent_InertGetTypeId));
-    PickingComponent_FinishVtable();
-    PickingComponent_InitBody(mem);
-    return mem;
-}
-REGISTER_TYPE(PickingComponent, "Component",
-              &PickingComponent_Factory, &PickingComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(PickingComponent, "_ZTV16PickingComponent")
+DEFINE_EXE_TYPE(PickingComponent, "Component")

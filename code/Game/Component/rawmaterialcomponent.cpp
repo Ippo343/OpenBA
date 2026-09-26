@@ -178,7 +178,7 @@ void RawMaterialComponent_Serialize(RawMaterialComponent* self) {
     EnsureHelpers();
 
     // Get building data via IsDerivedFrom check on _unk18
-    void* baseObj = self->_unk18;
+    void* baseObj = self->_description;
     void* buildingData = nullptr;
     if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
         bool isDerived = fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription);
@@ -240,7 +240,7 @@ void RawMaterialComponent_Draw(RawMaterialComponent* self) {
     }
 
     // Get RawMaterialDescription via IsDerivedFrom
-    void* baseObj = self->_unk18;
+    void* baseObj = self->_description;
     void* rawMatDesc = nullptr;
     if (fn_IsDerivedFrom && g_TypeId_RawMaterialDescription) {
         if (fn_IsDerivedFrom(baseObj, *g_TypeId_RawMaterialDescription)) {
@@ -440,66 +440,66 @@ void RawMaterialComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-#include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-
-// COMPONENT_INERT_FACTORY(RawMaterialComponent, 0x40, 0x89), expanded by hand so the
-// per-type vtable's +0x30 slot (index 6) routes to the ported RawMaterialComponent_Draw —
-// the pile-pickup trigger (it posts a Pickup work to the citizen work-scheduler; see the
-// note there). The inert vtable left slot 6 a stub, so a harvested pile joined the world and
-// no laborer was ever told to collect it: the pile just lay on the ground forever.
-// ComponentEntity_OnAddedPass dispatches this slot at EntityList_RegisterEntity time
-// (flags 0x89, bit 0 set) — exactly when RemoveNaturalResource's yield spawns the pile.
+// ============================================================================
+// ENDGAME B.3.8 VIS — RawMaterialComponent as a REAL class (RawMaterialComponent.h).
 //
-// 🔑 Do NOT rename the macro instantiation: COMPONENT_INERT_FACTORY derives its type-id from
-// GetTypeIdByName(#Name), so a renamed wrapper returns typeId 0 and breaks every
-// FindComponent(RawMaterialComponent) (the lesson from NaturalResourceComponent).
-static uint32_t RawMaterialComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("RawMaterialComponent");
-    return cached;
-}
-static void* RawMaterialComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
+// Before: a 48-slot RawMaterialComponent_InertVtable filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/RawMaterialComponent.h"
 
-static void RawMaterialComponent_OnAddedVSlot(void* s) {
-    if (!s) return;
-    RawMaterialComponent_Draw(reinterpret_cast<RawMaterialComponent*>(s));
+// 0x140129400: Component() is the CALL 0x1401188b0; the 0x140164170 stamp is
+// the compiler's; +0x30 = +0x38 = 0; flags |= 0x89 (bit 0 enrols it in the
+// OnAddedPass, bit 7 in StartupComponents). Retail leaves +0x28 unwritten
+// (Startup sets it); the tree's zero is kept.
+RawMaterialComponent::RawMaterialComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr) {
+    OrFlagsInCtor(0x89);
 }
-static void RawMaterialComponent_SerVSlot(void* s, void* stream) {
-    RawMaterialComponent_Shutdown(reinterpret_cast<RawMaterialComponent*>(s), stream);
+
+// [3] 0x140129330
+void RawMaterialComponent::Persist(void* stream) { RawMaterialComponent_Shutdown(this, stream); }
+
+// [4] 0x1401292c0 (Ghidra "Serialize"): copies the material type out of the
+// description AND registers the pile's template into the town resource
+// registry (townMgr+0x110, via 0x140091e60). Without it no produced material
+// type is known to the market/trade code at all.
+void RawMaterialComponent::Startup() { RawMaterialComponent_Serialize(this); }
+
+// [6] 0x1401291d0 — the pile-pickup trigger: posts a Pickup work to the citizen
+// work-scheduler. ComponentEntity_OnAddedPass dispatches it at
+// EntityList_RegisterEntity time — exactly when RemoveNaturalResource's yield
+// spawns the pile.
+void RawMaterialComponent::OnAdded() { RawMaterialComponent_Draw(this); }
+
+// [9] 0x140129130. PORT GAP (retail 0x140129130) — B38 D9: the body is ported
+// above (RawMaterialComponent_Update, the pile expiry timer) but the tree's
+// table never installed it; the inert stub is kept here. Installing it is its
+// own titled commit.
+void RawMaterialComponent::Update(void*) {}
+
+// [0] 0x1400373c0: ~RawMaterialComponent (0x1401293c0: restamp + ~Internal), MemFree on &1.
+Object::Base* RawMaterialComponent::DeletingDtor(unsigned flags) {
+    this->~RawMaterialComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void RawMaterialComponent_StartupVSlot(void* s) {
-    RawMaterialComponent_Serialize(reinterpret_cast<RawMaterialComponent*>(s));
+
+// create 0x140037270: MemAlloc(0x40, 8), then the ctor.
+void* RawMaterialComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(RawMaterialComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) RawMaterialComponent());
 }
-static void RawMaterialComponent_FinishVtable() {
-    RawMaterialComponent_InertVtable[6] = reinterpret_cast<void*>(&RawMaterialComponent_OnAddedVSlot);
-    // slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-    RawMaterialComponent_InertVtable[3] = reinterpret_cast<void*>(&RawMaterialComponent_SerVSlot);
-    // slot 4 (Startup, retail 0x1401292c0 — Ghidra calls it "Serialize"): copies the
-    // material type out of the description AND registers the pile's template into the
-    // town resource registry (townMgr+0x110, via 0x140091e60). Dispatched by
-    // ComponentEntity_StartupComponents for flag-bit-7 components (ours are 0x89) at
-    // RegisterEntity time, i.e. for every pile CreateRawMaterial spawns. It was PORTED
-    // but never installed, so the registry only ever held the start-condition pool and
-    // MarketWork's per-type tree (built from that registry) faulted on the first gathered
-    // mushroom (BANISHED_STRESS town, 2026-09-03). Wired unconditionally: without it no
-    // produced material type is known to the market/trade code at all.
-    RawMaterialComponent_InertVtable[4] = reinterpret_cast<void*>(&RawMaterialComponent_StartupVSlot);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* RawMaterialComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) RawMaterialComponent());
 }
-extern "C" void* RawMaterialComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x40, 0x89,
-        RawMaterialComponent_InertVtable,
-        reinterpret_cast<void*>(&RawMaterialComponent_InertGetTypeId));
-    RawMaterialComponent_FinishVtable();
-    return p;
-}
-static void* RawMaterialComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x40, 0x89,
-        RawMaterialComponent_InertVtable,
-        reinterpret_cast<void*>(&RawMaterialComponent_InertGetTypeId));
-    RawMaterialComponent_FinishVtable();
-    return mem;
-}
-REGISTER_TYPE(RawMaterialComponent, "Component",
-              &RawMaterialComponent_Factory, &RawMaterialComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(RawMaterialComponent, "_ZTV20RawMaterialComponent")
+DEFINE_EXE_TYPE(RawMaterialComponent, "Component")

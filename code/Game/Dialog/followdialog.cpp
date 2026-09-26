@@ -17,6 +17,7 @@
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "input/Input.h"   // ENDGAME B.3.7 callers (K3)
+#include "Dialog/FollowDialog.h"
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -72,14 +73,14 @@ static void* WorldGrid_FindEntity_Impl(void* worldGrid, void* retval, int tileIn
 //
 // Original: 0x140069340.
 
-void FollowDialog_Slot4(FollowDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void FollowDialog::OnOpened() {
+    uintptr_t s = (uintptr_t)this;
 
     // Find "buttonClose" and set element ID 100
     {
         System::String nameStr("buttonClose");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
 
         if (elem) {
@@ -91,7 +92,7 @@ void FollowDialog_Slot4(FollowDialog* self) {
     {
         System::String nameStr("textFollow");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
 
         *(void**)(s + 0xC8) = elem;
@@ -107,7 +108,7 @@ void FollowDialog_Slot4(FollowDialog* self) {
     {
         System::String nameStr("textAction");
         uint8_t retBuf[16];
-        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
+        ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
 
         *(void**)(s + 0xD0) = elem;
@@ -131,8 +132,8 @@ void FollowDialog_Slot4(FollowDialog* self) {
 //
 // Original: 0x140068F70.
 
-void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*p4*/) {
-    uintptr_t s = (uintptr_t)self;
+void FollowDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Get CitizenAI inner ptr from InternalBasePtr at +0xB8
     uintptr_t ai = *(uintptr_t*)(s + 0xB8);
@@ -239,7 +240,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
 //
 // Original: 0x140069320 (19 bytes).
 
-void FollowDialog_Slot5(FollowDialog* /*self*/) {
+void FollowDialog::OnClosed() {
     void* gameWorld = *g_pGameWorldSingleton;
     void* subsys = *(void**)((uintptr_t)gameWorld + 0x120);
     *(uint8_t*)((uintptr_t)subsys + 0x38) = 0;
@@ -255,11 +256,11 @@ void FollowDialog_Slot5(FollowDialog* /*self*/) {
 //
 // Original: 0x140069230 (18 bytes).
 
-void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int param4) {
+void FollowDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/, int32_t param3, int32_t param4, int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 != 0x12 || param4 != 100)
         return;
 
-    uintptr_t s = (uintptr_t)self;
+    uintptr_t s = (uintptr_t)this;
 
     // Validate and read the followed entity InternalBasePtr at +0xC0
     uintptr_t inner = *(uintptr_t*)(s + 0xC0);
@@ -271,10 +272,10 @@ void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int pa
         *(uint64_t*)(inner + 0xE0) = *(uint64_t*)nullPtr;
     }
 
-    // Close dialog: wrap self in InternalBasePtr, call CloseDialog
+    // Close dialog: wrap this in InternalBasePtr, call CloseDialog
     {
         uint8_t selfIBP[8];
-        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
+        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
         reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
@@ -296,8 +297,10 @@ void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int pa
 //
 // Original: 0x140069250.
 
-void FollowDialog_Slot7(FollowDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+namespace { void EnsureFollowGlobals(); }
+void FollowDialog::OnUpdate(const System::Time& /*time*/) {
+    EnsureFollowGlobals();
+    uintptr_t s = (uintptr_t)this;
 
     // Get the followed entity from InternalBasePtr at +0xB8
     // CheckPtr validates the reference, then read entity+0x10 to get inner ref
@@ -333,7 +336,7 @@ void FollowDialog_Slot7(FollowDialog* self) {
     }
 
     // Check Escape key (key ID 8) — if pressed, close the follow dialog.
-    // FUN_140068f00: null back-ref on followed entity at +0xC0, then CloseDialog on self.
+    // FUN_140068f00: null back-ref on followed entity at +0xC0, then CloseDialog on this.
     void* keyMap = g_pInputConfigSingletonExref ? ***(void****)g_pInputConfigSingletonExref : nullptr;
     if (keyMap && reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 8)) {  // B.3.7 bridge
         uintptr_t followedInner = *(uintptr_t*)(s + 0xC0);
@@ -345,11 +348,11 @@ void FollowDialog_Slot7(FollowDialog* self) {
             *(uint64_t*)(followedInner + 0xE0) = *(uint64_t*)nullPtr;
         }
 
-        // Close dialog: wrap self, call CloseDialog
+        // Close dialog: wrap this, call CloseDialog
         {
             uint8_t selfIBP[8];
             new (selfIBP) ::Object::InternalBasePtr(
-                reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
+                reinterpret_cast<RtObject::Internal*>((void*)this));   // B.3.3 bridge
             void* ui = *(void**)(s + 0x10);
             reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
         }
@@ -389,83 +392,62 @@ void FollowDialog_Slot7(FollowDialog* self) {
 
 #include "Object/factory_registration.h"
 
+// ENDGAME B.3.8 block DLG: FollowDialog is a real class (Dialog/FollowDialog.h);
+// the hand-built table above is gone. CitizenUI's Follow button (citizenui.cpp,
+// block PNL) still builds the dialog as door + stamp: it runs the DialogInstance
+// ctor door, then stamps FollowDialog_GetStandaloneVtable() and fills +0xB8..+0xD0
+// itself. That getter now answers FollowDialog::Vtable(), so the reader builds the
+// same bytes the real ctor builds (B38 B8-5). 0x14015be00 stays unregistered (its
+// one by-address reader, engine_funcs.cpp's g_FollowDialog_Vtable, gets 0 and
+// CitizenUI falls back to the getter, as before).
+
+// The ModelComponent type id the follow camera's fn_FindComponent_Character needs.
+// g_TypeId_ModelComponent_FC is DAT_1401c7a50 (documented misnomer,
+// engine_funcs.h); its raw exe .rdata slot is never registered in the standalone
+// build, so it is resolved by name from the live factory tree into namespace-scope
+// storage (no function-local static, B6-5) on each tick until it holds a real id.
 namespace {
-
-void* GetFollowDialogVtable();  // fwd
-
-// idx0 — scalar deleting destructor. Mirrors FollowDialog_ScalarDtor (0x140011AF0):
-// reset vtable, run the DialogInstance base dtor, free the object if flag bit 0.
-void* FD_SA_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = GetFollowDialogVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-// idx1 — small static getter in the exe (returns DAT_1401c4fe8). Not consulted on
-// the follow path; return 0.
-void* FD_SA_Slot1(void*) { return nullptr; }
-
-// idx2 — GetTypeId.
-uint32_t FD_SA_TypeId(void*) {
-    static uint32_t cached = 0;
-    if (!cached) cached = ::Object::GetTypeIdByName("FollowDialog");
-    return cached;
-}
-
-// idx3 / idx9 — base DialogInstance serialization thunks. Never invoked for a live
-// follow dialog; harmless no-op.
-void FD_SA_SerializeStub(void*, ...) {}
-
-// Typed reimpl trampolines wrapping the void*-based vtable ABI.
-void FD_SA_Slot4(void* self) { FollowDialog_Slot4(reinterpret_cast<FollowDialog*>(self)); }
-void FD_SA_Slot5(void* self) { FollowDialog_Slot5(reinterpret_cast<FollowDialog*>(self)); }
-void FD_SA_Slot6(void* self, void* p2, void* p3, void* p4) {
-    FollowDialog_Slot6(reinterpret_cast<FollowDialog*>(self), p2, p3, p4);
-}
-// Lazily bind the ModelComponent type-id fn_FindComponent_Character needs. The global
-// g_TypeId_ModelComponent_FC is DAT_1401c7a50 = ModelComponent's TypeInfo (documented
-// misnomer, engine_funcs.h:4476). Its raw exe .rdata slot is never registered in the
-// standalone build (ResolveAddr -> 0), so the finder early-returns null and the follow
-// camera never receives the citizen's ModelComponent+0x158 position -> the dialog ticks
-// but the camera never tracks. Resolve it by name from the live factory tree (same fix
-// pattern as statusiconcomponent.cpp). The value written by name equals what the
-// exe .rdata holds.
+uint32_t s_followModelTypeId = 0;
 void EnsureFollowGlobals() {
-    static uint32_t s_tidModel = 0;
     uint32_t* g = g_TypeId_ModelComponent_FC;
     if (!g || *g == 0 || *g == 0xFFFFFFFFu) {
-        if (!s_tidModel) s_tidModel = ::Object::GetTypeIdByName("ModelComponent");
-        if (s_tidModel) g_TypeId_ModelComponent_FC = &s_tidModel;
+        if (!s_followModelTypeId) s_followModelTypeId = ::Object::GetTypeIdByName("ModelComponent");
+        if (s_followModelTypeId) g_TypeId_ModelComponent_FC = &s_followModelTypeId;
     }
 }
-
-void FD_SA_Slot7(void* self) { EnsureFollowGlobals(); FollowDialog_Slot7(reinterpret_cast<FollowDialog*>(self)); }
-void FD_SA_Slot8(void* self, void* e, int msg, int id) {
-    FollowDialog_Slot8(reinterpret_cast<FollowDialog*>(self), e, msg, id);
-}
-
-void* g_FollowDialog_Vtable_Standalone[10] = {
-    reinterpret_cast<void*>(&FD_SA_Dtor),           // +0x00 idx0 ScalarDtor
-    reinterpret_cast<void*>(&FD_SA_Slot1),          // +0x08 idx1 getter
-    reinterpret_cast<void*>(&FD_SA_TypeId),         // +0x10 idx2 GetTypeId
-    reinterpret_cast<void*>(&FD_SA_SerializeStub),  // +0x18 idx3 Persist
-    reinterpret_cast<void*>(&FD_SA_Slot4),          // +0x20 idx4 Setup
-    reinterpret_cast<void*>(&FD_SA_Slot5),          // +0x28 idx5 Shutdown
-    reinterpret_cast<void*>(&FD_SA_Slot6),          // +0x30 idx6 OnUpdateLayout
-    reinterpret_cast<void*>(&FD_SA_Slot7),          // +0x38 idx7 OnUpdate (per-frame)
-    reinterpret_cast<void*>(&FD_SA_Slot8),          // +0x40 idx8 OnCommand
-    reinterpret_cast<void*>(&FD_SA_SerializeStub),  // +0x48 idx9 OnSerializeSettings
-};
-
-void* GetFollowDialogVtable() {
-    return reinterpret_cast<void*>(g_FollowDialog_Vtable_Standalone);
-}
-
 }  // namespace
 
-extern "C" void* FollowDialog_GetStandaloneVtable() {
-    return GetFollowDialogVtable();
+FollowDialog::FollowDialog() : dataB8(0), dataC0(0), dataC8(0), dataD0(0) {}
+
+FollowDialog::FollowDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                           Object::InternalPtr<UI::DialogInstance> parent)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0),
+      dataB8(0), dataC0(0), dataC8(0), dataD0(0) {}
+
+// [0] 0x140011af0: ~FollowDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* FollowDialog::DeletingDtor(unsigned flags) {
+    this->~FollowDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
+// create 0x140011a20: MemAlloc(0xd8, 8), then the ctor.
+void* FollowDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FollowDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) FollowDialog());
+}
+// createInPlace 0x140011a90 (the tree's in-place build is kept, B8-13).
+void* FollowDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) FollowDialog());
+}
+
+// The reflection record stays at the TU position of the UI_DIALOG_STUB row it
+// replaces (ui_dialog_stub_factories.cpp, B38 D4).
+DEFINE_EXE_VTABLE(FollowDialog, "_ZTV12FollowDialog")
+
+// CitizenUI's reader (see above).
+extern "C" void* FollowDialog_GetStandaloneVtable() {
+    return const_cast<void*>(FollowDialog::Vtable());
+}
