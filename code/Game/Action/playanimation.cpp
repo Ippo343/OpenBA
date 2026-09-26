@@ -242,7 +242,15 @@ static void* g_PlayAnimation_Vtable[10] = {
     reinterpret_cast<void*>(&PlayAnimation_GetTarget_Impl),    // +0x48 GetTarget
 };
 
+extern "C" void RegisterActionVtable();   // action.cpp — the Action base table 0x14015faa0
+
 extern "C" void RegisterPlayAnimationVtable() {
+    // B38 D9 #2: serve Action::Vtable() at 0x14015faa0. This is the first
+    // Action-family row of RegisterVtablesAndTypeIds, which runs after the old
+    // `&g_ComponentEntity_StandaloneVtable[5]` row in RegisterCodeFunctions and
+    // so overrides it (last write wins) until the coordinator's address_registry
+    // hunk calls RegisterActionVtable directly.
+    RegisterActionVtable();
     RegisterExeAddr(kPlayAnimation_VtableAddr,
                     reinterpret_cast<uintptr_t>(g_PlayAnimation_Vtable));
 }
