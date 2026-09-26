@@ -135,27 +135,6 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
 void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, int eventData);
 
 // ============================================================
-// NewGameDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Startup — finds UI elements, populates combo boxes
-// with map/climate/terrain generators, generates random name and seed,
-// restores saved combo selections from game settings.
-void NewGameDialog_Slot4(NewGameDialog* self);
-
-// Slot6 (vtable +0x30): Update — enables/disables OK button based on
-// whether the name field has content.
-void NewGameDialog_Slot6(NewGameDialog* self);
-
-// Slot5 (vtable +0x28, exe 0x1400706c0): Shutdown — RET 0 no-op (3 bytes).
-int NewGameDialog_Shutdown(NewGameDialog* self);
-
-// OnEvent (vtable +0x40, exe 0x140070110): Handles button clicks and combo changes.
-// eventType 0x12 (button): 0=newName, 1=newSeed, 2=ok(startGame), 3=cancel(close)
-// eventType 0x14 (combo): 4=comboCondition (update description text)
-void NewGameDialog_OnEvent(NewGameDialog* self, void* element, int eventType, int eventData);
-
-// ============================================================
 // TutorialSetupDialog
 // ============================================================
 

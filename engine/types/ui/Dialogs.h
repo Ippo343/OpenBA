@@ -202,33 +202,8 @@ struct ModUploadDialog {
 };
 static_assert(sizeof(ModUploadDialog) == 0xB8, "ModUploadDialog size mismatch");
 
-// --- NewGameDialog (0xAE8) ---
-// Ctor inits: +0xB8..+0x110=0, Random@+0x118, +0xAE0=0
-// Largest dialog. Contains System::Random sub-object at +0x118.
-// Original source: C:\Projects\Buildy\code\Game\Dialog/NewGameDialog.h
-struct NewGameDialog {
-    DialogInstance base;        // +0x00
-    void* comboTerrain;         // +0xB8: "comboTerrain" ComboElement
-    void* comboTerrainSize;     // +0xC0: "comboTerrainSize" ComboElement
-    void* comboClimate;         // +0xC8: "comboClimate" ComboElement (0xC8 = 200)
-    void* comboCondition;       // +0xD0: "comboCondition" ComboElement (map generator)
-    void* comboDisaster;        // +0xD8: "comboDisaster" ComboElement
-    void* editName;             // +0xE0: "editName" EditElement
-    void* editSeed;             // +0xE8: "editSeed" NumberEditElement
-    void* buttonOk;             // +0xF0: "buttonOk" ButtonElement
-    void* textDescription;      // +0xF8: "textDescription" TextElement
-    void* mapGeneratorList;     // +0x100: ExternalList* (DAT_1401c3de8+0x18)
-    void* climateGeneratorList; // +0x108: ExternalList* (DAT_1401c3de8+0x10)
-    void* terrainGeneratorList; // +0x110: ExternalList* (DAT_1401c3de8+0x20)
-    uint8_t  random[0x9C0];    // +0x118: System::Random sub-object
-                                //         extends to +0xAD8
-    uint64_t _pad_AD8;          // +0xAD8: gap
-    void*    worldSetup;        // +0xAE0: world setup ptr (used by StartGame)
-};
-static_assert(sizeof(NewGameDialog) == 0xAE8, "NewGameDialog size mismatch");
-static_assert(offsetof(NewGameDialog, comboTerrain) == 0xB8, "");
-static_assert(offsetof(NewGameDialog, random) == 0x118, "");
-static_assert(offsetof(NewGameDialog, worldSetup) == 0xAE0, "");
+// --- NewGameDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/NewGameDialog.h"
 
 // --- OptionsDialog (0x1C0) ---
 // Ctor inits: +0xB8..+0x188=0 (all zeroed), +0x1B0=0, +0x1B8=0
