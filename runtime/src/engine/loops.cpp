@@ -90,6 +90,7 @@
 // platform seam for exactly this.
 // ============================================================================
 
+#include <atomic>       // ENDGAME B.3.7: RULE B6-5 namespace-scope door caches
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
@@ -97,9 +98,13 @@
 #include <new>          // ENDGAME B.3.1 step 2: placement new into a POD member
 
 #include "../../funcs/rt_port.h"
+#include "mainloop_internal.h"             // ENDGAME B.3.7: rtengine::AtomicExport
 #include "../system/pod_bridge.h"          // the one transitional POD<->class cast
 #include "../../types/engine/UpdateLoop.h"
 #include "../../types/engine/MainLoop.h"   // lane B; for MainLoop::_currentLoop
+#include "../../types/engine/Engine.h"     // ENDGAME B.3.7: Engine::Engine (Loader::Run)
+#include "../../types/application/Application.h"  // ENDGAME B.3.7: SleepThread
+#include "../../types/ui/DialogInstance.h" // ENDGAME B.3.7: slot 4 OnOpened
 #include "../../types/object/External.h"
 #include "../../types/system/Value.h"
 // WAVE 27 lane LOOPS: the three Draw slots and MainLoop::Draw reach into the
@@ -120,15 +125,10 @@ enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 void*     ResolveExport(const char* mangled_name);
 
-// System::Thread::Start, already ported by Wave 2 (thread_win.cpp).
-// ENDGAME B.3.4b: `System::Thread` is a real CLASS now
-// (runtime/types/system/Thread.h), so the forward declaration says `class`.
-// GCC accepts a struct/class tag mismatch silently, which is exactly why this
-// is corrected rather than left working. The door's signature is unchanged and
-// the cast at the call site below is unchanged — the class keeps the POD's
-// layout, cross-asserted field for field in the header.
-namespace System { class Thread; }
-void RtSystem_Thread_Start(System::Thread* self);
+// ENDGAME B.3.7: the `RtSystem_Thread_Start` forward declaration that stood
+// here is gone. `Engine::Loader` derives from the real `System::Thread`
+// (runtime/types/system/Thread.h), so Loader::Load calls the base's `Start`
+// member and the three waits call `WaitForFinish` directly.
 
 using RtEngine::UpdateLoop;
 using RtEngine::LoaderLoop;
@@ -184,35 +184,51 @@ using ArraySetSizeFillFn = void (*)(void*, int, const void*);
 using SecondsToTicksFn = int64_t (*)(float);
 using TicksToSecondsFn = float (*)(int64_t);
 
+// ENDGAME B.3.7 (RULE B7-7.1 / B6-5). These used to be function-local
+// `static Fn fn = ResolveExport(...)` caches -- a guarded lazy initialiser that
+// the loader thread reaches first (`FindOrLoad`/`IsDerivedFrom` from the two
+// slot-6 `Load` bodies Loader::Run dispatches; the UI ctor/dtor from the loop
+// ctor/dtor doors GameUpdateLoop::Load runs there). Each is now a
+// NAMESPACE-SCOPE atomic slot (`rtengine::AtomicExport`, mainloop_internal.h).
+std::atomic<void*> g_findOrLoad{nullptr};
+std::atomic<void*> g_isDerivedFrom{nullptr};
+std::atomic<void*> g_externalFactoryClean{nullptr};
+std::atomic<void*> g_modificationRefreshList{nullptr};
+std::atomic<void*> g_modificationSetupFileSystem{nullptr};
+std::atomic<void*> g_userInterfaceCtor{nullptr};
+std::atomic<void*> g_userInterfaceDtor{nullptr};
+std::atomic<void*> g_listCleanup{nullptr};
+std::atomic<void*> g_modArrayCopy{nullptr};
+std::atomic<void*> g_vtUpdateLoop{nullptr};
+std::atomic<void*> g_vtLoaderLoop{nullptr};
+std::atomic<void*> g_vtDialogLoopT{nullptr};
+std::atomic<void*> g_vtDialogLoaderLoopT{nullptr};
+std::atomic<void*> g_loaderLoopLoader{nullptr};
+std::atomic<void*> g_applicationSingleton{nullptr};
+
 FindOrLoadFn FindOrLoad() {
-    static FindOrLoadFn fn = reinterpret_cast<FindOrLoadFn>(ResolveExport(
+    return reinterpret_cast<FindOrLoadFn>(rtengine::AtomicExport(g_findOrLoad,
         "?FindOrLoad@ExternalFactory@Object@@QEAAPEBVExternal@2@AEBVFilename@System@@@Z"));
-    return fn;
 }
 IsDerivedFromFn IsDerivedFrom() {
-    static IsDerivedFromFn fn = reinterpret_cast<IsDerivedFromFn>(
-        ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-    return fn;
+    return reinterpret_cast<IsDerivedFromFn>(rtengine::AtomicExport(g_isDerivedFrom,
+        "?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
 }
 ExtFactoryCleanFn ExternalFactoryClean() {
-    static ExtFactoryCleanFn fn = reinterpret_cast<ExtFactoryCleanFn>(
-        ResolveExport("?Clean@ExternalFactory@Object@@QEAAXXZ"));
-    return fn;
+    return reinterpret_cast<ExtFactoryCleanFn>(rtengine::AtomicExport(g_externalFactoryClean,
+        "?Clean@ExternalFactory@Object@@QEAAXXZ"));
 }
 RefreshListFn ModificationRefreshList() {
-    static RefreshListFn fn = reinterpret_cast<RefreshListFn>(
-        ResolveExport("?RefreshList@Modification@IO@@QEAAXXZ"));
-    return fn;
+    return reinterpret_cast<RefreshListFn>(rtengine::AtomicExport(g_modificationRefreshList,
+        "?RefreshList@Modification@IO@@QEAAXXZ"));
 }
 SetupFileSystemFn ModificationSetupFileSystem() {
-    static SetupFileSystemFn fn = reinterpret_cast<SetupFileSystemFn>(
-        ResolveExport("?SetupFileSystem@Modification@IO@@QEAAXXZ"));
-    return fn;
+    return reinterpret_cast<SetupFileSystemFn>(rtengine::AtomicExport(g_modificationSetupFileSystem,
+        "?SetupFileSystem@Modification@IO@@QEAAXXZ"));
 }
 UiCtorFn UserInterfaceCtor() {
-    static UiCtorFn fn = reinterpret_cast<UiCtorFn>(
-        ResolveExport("??0UserInterface@UI@@QEAA@XZ"));
-    return fn;
+    return reinterpret_cast<UiCtorFn>(rtengine::AtomicExport(g_userInterfaceCtor,
+        "??0UserInterface@UI@@QEAA@XZ"));
 }
 // BATCH 8: the three loop dtors below each embed a UI::UserInterface and
 // destroy it by calling this same exported dtor (0x180120b90, already ported
@@ -220,9 +236,8 @@ UiCtorFn UserInterfaceCtor() {
 // — so this reaches OUR body, not the DLL's).
 using UiDtorFn = void (*)(void*);
 UiDtorFn UserInterfaceDtor() {
-    static UiDtorFn fn = reinterpret_cast<UiDtorFn>(
-        ResolveExport("??1UserInterface@UI@@QEAA@XZ"));
-    return fn;
+    return reinterpret_cast<UiDtorFn>(rtengine::AtomicExport(g_userInterfaceDtor,
+        "??1UserInterface@UI@@QEAA@XZ"));
 }
 
 // ---- the two the DLL does not export ---------------------------------------
@@ -237,17 +252,17 @@ UiDtorFn UserInterfaceDtor() {
 // here to call `.~Array()` on, and inventing the element type is struct work
 // this "callers" step does not cover.
 ListCleanupFn ListCleanup() {
-    static ListCleanupFn fn = reinterpret_cast<ListCleanupFn>(
-        ResolveAddr(Module::Runtime, 0x180010ab0));
-    return fn;
+    return reinterpret_cast<ListCleanupFn>(rtengine::AtomicResolve(g_listCleanup, [] {
+        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180010ab0));
+    }));
 }
 // 0x180010110 — Array<IO::Mod>::operator=, the deep copy Loader::Load runs when
 // mod changes are switched OFF. Our tree already resolves this exact address as
 // fn_ModArrayCopy (engine_funcs.cpp:1823).
 ModArrayCopyFn ModArrayCopy() {
-    static ModArrayCopyFn fn = reinterpret_cast<ModArrayCopyFn>(
-        ResolveAddr(Module::Runtime, 0x180010110));
-    return fn;
+    return reinterpret_cast<ModArrayCopyFn>(rtengine::AtomicResolve(g_modArrayCopy, [] {
+        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x180010110));
+    }));
 }
 // 0x18007a0d0 — Collection::Array<InternalPtr<UI::DialogInstance>>::SetSize
 // (newSize, fillValue): the 8-byte-element, fill-the-new-tail instantiation.
@@ -283,7 +298,7 @@ T* DataExport(const char* mangled) {
 // below resolve a `??_7` symbol whose value is an ADDRESS rather than a live
 // mutable pointer, and freezing that is not the same hazard.
 using ExternalFactorySlot = RtObject::ExternalFactory**;
-using MainLoopSlot        = RtEngine::MainLoop**;
+using MainLoopSlot        = Engine::MainLoop**;
 RtObject::ExternalFactory* Factory() {
     ExternalFactorySlot p = RT_DATA_SLOT(ExternalFactorySlot,
         "?_singleton@ExternalFactory@Object@@0PEAV12@EA");
@@ -309,7 +324,7 @@ uint8_t* ModificationSingleton() {
 // of a hand-written `+ 0x20` in this file. `_currentLoop` is an
 // `RtEngine::UpdateLoop*`, the same type this lane's ports take, so the
 // comparison below is type-checked end to end.
-RtEngine::MainLoop* MainLoopSingleton() {
+Engine::MainLoop* MainLoopSingleton() {
     MainLoopSlot p = RT_DATA_SLOT(MainLoopSlot,
         "?_singleton@MainLoop@Engine@@1PEAV12@EA");
     return p ? *p : nullptr;
@@ -322,21 +337,19 @@ uint32_t DialogTypeId() {
     return p ? *p : 0u;
 }
 
+// ENDGAME B.3.7: the four `??_7` reads are atomic slots too -- the ctor doors
+// run on the loader thread (GameUpdateLoop::Load builds loops there).
 void* VTableUpdateLoop() {
-    static void* v = ResolveExport("??_7UpdateLoop@Engine@@6B@");        // 0x180155ba0
-    return v;
+    return rtengine::AtomicExport(g_vtUpdateLoop, "??_7UpdateLoop@Engine@@6B@");               // 0x180155ba0
 }
 void* VTableLoaderLoop() {
-    static void* v = ResolveExport("??_7LoaderLoop@Engine@@6B@");        // 0x180157940
-    return v;
+    return rtengine::AtomicExport(g_vtLoaderLoop, "??_7LoaderLoop@Engine@@6B@");               // 0x180157940
 }
 void* VTableDialogLoopT() {
-    static void* v = ResolveExport("??_7DialogLoopT@Engine@@6B@");       // 0x1801579a0
-    return v;
+    return rtengine::AtomicExport(g_vtDialogLoopT, "??_7DialogLoopT@Engine@@6B@");             // 0x1801579a0
 }
 void* VTableDialogLoaderLoopT() {
-    static void* v = ResolveExport("??_7DialogLoaderLoopT@Engine@@6B@"); // 0x1801578d0
-    return v;
+    return rtengine::AtomicExport(g_vtDialogLoaderLoopT, "??_7DialogLoaderLoopT@Engine@@6B@"); // 0x1801578d0
 }
 
 // ============================================================================
@@ -651,16 +664,19 @@ extern "C" void RtEngine_DialogLoaderLoopT_Dtor(DialogLoaderLoopT* self) {
 // full replay oracle. Note it is a member that tests its own `this` for null:
 // retail really does `TEST RCX,RCX / JZ`, so the guard is FAITHFUL, not one we
 // added (CLAUDE.md's rule cuts the other way here — removing it would diverge).
+// ENDGAME B.3.7: the body is the member; the door keeps retail's null-`this`
+// test (`TEST RCX,RCX / JZ`), which a member cannot express.
+bool Engine::UpdateLoop::IsRunning() const {
+    // _currentLoop (+0x20) is the loop MainLoop::Run is driving right now.
+    // Retail dereferences the singleton unguarded; so do we — CLAUDE.md's
+    // rule holds, and by the time any UpdateLoop exists MainLoop does too.
+    return MainLoopSingleton()->_currentLoop == this;
+}
+
 extern "C" bool RtEngine_UpdateLoop_IsRunning(const UpdateLoop* self) {
-    bool ours = false;
-    if (self) {
-        // _currentLoop (+0x20) is the loop MainLoop::Run is driving right now.
-        // Retail dereferences the singleton unguarded; so do we — CLAUDE.md's
-        // rule holds, and by the time any UpdateLoop exists MainLoop does too.
-        ours = (MainLoopSingleton()->_currentLoop == self);
-    }
-    using Fn = bool (*)(const UpdateLoop*);
-    return ours;
+    if (!self) return false;
+    return reinterpret_cast<const Engine::UpdateLoop*>(self)
+        ->Engine::UpdateLoop::IsRunning();                           // B.3.7 bridge
 }
 
 // ---- ??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z --------
@@ -680,16 +696,15 @@ extern "C" LoaderLoop* RtEngine_LoaderLoop_Ctor(LoaderLoop* self, void* nextLoop
 // (or whose DLL body) is verified elsewhere; what this port can get wrong is
 // the ORDER and the two byte flags, and those are stated field by field below
 // so a reviewer can check them against the disassembly without re-deriving it.
-extern "C" void RtEngine_Loader_Load(Loader* self, void* loop) {
+void Engine::Loader::Load(UpdateLoop* loop) {
 
-    self->_loop = loop;
+    _loop = loop;
 
     // slot 11 (+0x58) = UpdateLoop::AllowsModChanges. Base returns false
-    // (0x180031790); a menu loop overrides it to true.
-    using AllowsFn = bool (*)(void*);
-    void** vtable = *reinterpret_cast<void***>(loop);
-    const bool allowsModChanges =
-        reinterpret_cast<AllowsFn>(vtable[RtEngine::kSlot_AllowsModChanges])(loop);
+    // (0x180031790); a menu loop overrides it to true. ENDGAME B.3.7: an
+    // ordinary virtual call -- it dispatches through the loop's own (exe or
+    // minted) table exactly as the hand-inlined `vtable[11]` did.
+    const bool allowsModChanges = loop->AllowsModChanges();
 
     uint8_t* mod = ModificationSingleton();
     RtObject::ExternalFactory* factory = Factory();
@@ -722,8 +737,14 @@ extern "C" void RtEngine_Loader_Load(Loader* self, void* loop) {
     // which is instruction-for-instruction ?Start@Thread@System@@QEAAXXZ
     // (0x1800ca610). Calling the ported Start keeps the two Win32 calls behind
     // the platform seam instead of dragging <windows.h> into this file.
-    RtSystem_Thread_Start(reinterpret_cast<System::Thread*>(&self->_thread));
+    // ENDGAME B.3.7: `Loader` IS a `System::Thread` now; `Start` is a
+    // non-virtual member of the base (thread_win.cpp), called directly.
+    Start();
+}
 
+extern "C" void RtEngine_Loader_Load(Loader* self, void* loop) {
+    reinterpret_cast<Engine::Loader*>(self)->Engine::Loader::Load(   // B.3.7 bridge
+        static_cast<Engine::UpdateLoop*>(loop));
 }
 
 // ---- ??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z  0x1800db3f0 ord 153 -
@@ -739,14 +760,15 @@ extern "C" DialogLoopT* RtEngine_DialogLoopT_Ctor(DialogLoopT* self,
 // dialog resource off disk and inserts it into the global resource table.
 // Running it twice is a second cache lookup with a real side effect on the
 // clean-bit usage masks, and on a cold cache a second file read.
-extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
-
+void Engine::DialogLoopT::Load() {
+    // LOADER THREAD (dispatched by Loader::Run's slot-6 call).
+    //
     // The local is a System::Filename, layout-identical to String; retail
     // copies the String field into it and normalises the delimiters in place —
     // which is the whole body of `??0Filename@System@@QEAA@AEBVString@1@@Z`
     // (0x18000c780), so the Adopt/AdjustDelimiters pair IS this construction,
     // and RAII is the release retail does at the bottom.
-    System::Filename tmp(RtSystem::Sys(self->_dialogFilename));
+    System::Filename tmp(_dialogFilename);
 
     void* external = FindOrLoad()(Factory(), &tmp);
     void* result = nullptr;
@@ -755,43 +777,47 @@ extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
         // that skips the store: the field is written either way.
         if (IsDerivedFrom()(external, DialogTypeId())) result = external;
     }
-    self->_dialogExternal = result;
+    _dialogExternal = result;
+}
+
+extern "C" void RtEngine_DialogLoopT_Load(DialogLoopT* self) {
+    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Load();  // B.3.7 bridge
 }
 
 // ---- ?Startup@DialogLoopT@Engine@@UEAAXXZ  0x1800db2f0 ord 4093 -------------
 // SHADOW: slot 12 CREATES a dialog instance (a live Object::Internal with a
 // handle-table entry) and the body then queues it for display. A replay builds
 // a second dialog and shows two.
-extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
+void Engine::DialogLoopT::Startup() {
 
     // Slot 12, CreateDialog, returns InternalPtr<UI::DialogInstance> BY VALUE —
     // an 8-byte class type, so MSVC still gives it a HIDDEN RETURN SLOT in RDX
     // and returns that pointer in RAX (an `int`-typed or missing return slot in
     // an fn_* typedef is the wild-write family this project has paid for twice:
-    // reference_hidden_retslot_wild_write.md).
-    using CreateDialogFn = void* (*)(void*, void*);
-    void*  ret = nullptr;
-    void** vtable = *reinterpret_cast<void***>(self);
-    void*  retSlot =
-        reinterpret_cast<CreateDialogFn>(vtable[RtEngine::kSlot_CreateDialog])(self, &ret);
+    // reference_hidden_retslot_wild_write.md). ENDGAME B.3.7: the slot is
+    // declared retslot-first on the class, so this is an ordinary virtual call.
+    void* ret = nullptr;
+    Object::InternalPtr<UI::DialogInstance>* retSlot = CreateLoopDialog(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&ret));
 
     void* dialog = *reinterpret_cast<void**>(retSlot);
-    self->_dialogInstance = dialog;
+    _dialogInstance = dialog;
     ret = dialog;   // retail re-stores it into the same slot before passing it on
 
-    // dialog->vtable[4] — the DialogInstance virtual retail calls before the
-    // instance is queued.
-    using Slot4Fn = void (*)(void*);
-    void** dialogVtable = *reinterpret_cast<void***>(dialog);
-    reinterpret_cast<Slot4Fn>(dialogVtable[4])(dialog);
+    // dialog->OnOpened() -- slot 4 of UI::DialogInstance (B.3.6), the virtual
+    // retail calls before the instance is queued.
+    reinterpret_cast<UI::DialogInstance*>(dialog)->OnOpened();       // B.3.7 bridge
 
     // _ui._addDialogs.SetSize(size + 1, ret) — the append. Update drains that
     // array back-to-front into the live dialog list next frame
     // (runtime/types/ui/UserInterface.h).
     // retail 0x18007a0d0 — kSpec_Fill8Z; see the banner above.
-    rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&self->_ui._addDialogs)
-        ->SetSizeFill(self->_ui._addDialogs.GetSize() + 1, &ret);
+    rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&_ui._addDialogs)
+        ->SetSizeFill(_ui._addDialogs.GetSize() + 1, &ret);
+}
 
+extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
+    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Startup();  // B.3.7 bridge
 }
 
 // ---- ?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z  0x1800db270 -----
@@ -802,18 +828,22 @@ extern "C" void RtEngine_DialogLoopT_Startup(DialogLoopT* self) {
 // DLL's own two Timer conversions on every call — that is a full oracle for the
 // only arithmetic in the function. The UI call is not replayed, for the obvious
 // reason.
-extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* time) {
+bool Engine::DialogLoopT::Update(const System::Time& time) {
 
     // CVTSI2SD / MULSD / CVTPD2PS / CVTPS2PD / DIVSD / CVTTSD2SI — i.e. the
     // tick count narrowed to a float number of seconds and converted straight
     // back. The narrowing is LOSSY and is the whole reason this line exists;
     // folding it away would diverge on any tick count over 2^24.
-    ::Time rounded;
-    rounded.ticks = SecondsToTicks(TicksToSeconds(time->ticks));
+    System::Time rounded;
+    rounded._ticks = SecondsToTicks(TicksToSeconds(time._ticks));
 
-
-    self->_ui.Update(*reinterpret_cast<const System::Time*>(&rounded));  // B.3.6 bridge (::Time POD)
+    _ui.Update(rounded);
     return true;   // MOV AL,1 — unconditional
+}
+
+extern "C" bool RtEngine_DialogLoopT_Update(DialogLoopT* self, const ::Time* time) {
+    return reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Update(  // B.3.7 bridge
+        *reinterpret_cast<const System::Time*>(time));
 }
 
 // ---- ??0DialogLoaderLoopT@Engine@@…  0x1800db0d0 ord 151 --------------------
@@ -829,18 +859,24 @@ extern "C" DialogLoaderLoopT* RtEngine_DialogLoaderLoopT_Ctor(
 // Byte-for-byte the same body as DialogLoopT::Load with the LoaderLoop base's
 // +0x20 offsets. Written out rather than shared, because retail emitted two
 // bodies and a shared helper would hide a divergence between them.
-extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
-
+void Engine::DialogLoaderLoopT::Load() {
+    // LOADER THREAD (dispatched by Loader::Run's slot-6 call).
+    //
     // As DialogLoopT::Load above: the Adopt/AdjustDelimiters pair is the
     // Filename ctor 0x18000c780 and the release at the bottom is ~Filename.
-    System::Filename tmp(RtSystem::Sys(self->_dialogFilename));
+    System::Filename tmp(_dialogFilename);
 
     void* external = FindOrLoad()(Factory(), &tmp);
     void* result = nullptr;
     if (external) {
         if (IsDerivedFrom()(external, DialogTypeId())) result = external;
     }
-    self->_dialogExternal = result;
+    _dialogExternal = result;
+}
+
+extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
+    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
+        ->Engine::DialogLoaderLoopT::Load();
 }
 
 // ---- ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800db000 ord 4092 -------
@@ -850,38 +886,37 @@ extern "C" void RtEngine_DialogLoaderLoopT_Load(DialogLoaderLoopT* self) {
 //     LEA RCX,[0x1801fe7b8]        ; &LoaderLoop::_loader
 //     JMP 0x1800dc050              ; Engine::Loader::Load
 // Note RCX is a LEA, not a load: `_loader` IS the object, not a pointer to one.
-extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
+// LoaderLoop::_loader, defined further down (the one spelling of the slot).
+namespace { Engine::Loader* LoaderLoopLoader(); }
 
-    using CreateDialogFn = void* (*)(void*, void*);
-    void*  ret = nullptr;
-    void** vtable = *reinterpret_cast<void***>(self);
-    void*  retSlot =
-        reinterpret_cast<CreateDialogFn>(vtable[RtEngine::kSlot_CreateDialog])(self, &ret);
+void Engine::DialogLoaderLoopT::Startup() {
+
+    // The same slot-12 call as DialogLoopT::Startup (see there).
+    void* ret = nullptr;
+    Object::InternalPtr<UI::DialogInstance>* retSlot = CreateLoopDialog(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&ret));
 
     void* dialog = *reinterpret_cast<void**>(retSlot);
-    self->_dialogInstance = dialog;
+    _dialogInstance = dialog;
     ret = dialog;
 
-    using Slot4Fn = void (*)(void*);
-    void** dialogVtable = *reinterpret_cast<void***>(dialog);
-    reinterpret_cast<Slot4Fn>(dialogVtable[4])(dialog);
+    reinterpret_cast<UI::DialogInstance*>(dialog)->OnOpened();       // B.3.7 bridge
 
     // retail 0x18007a0d0 — kSpec_Fill8Z; see the banner above.
-    rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&self->_ui._addDialogs)
-        ->SetSizeFill(self->_ui._addDialogs.GetSize() + 1, &ret);
+    rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(&_ui._addDialogs)
+        ->SetSizeFill(_ui._addDialogs.GetSize() + 1, &ret);
 
+    // The tail call `LEA RCX,[LoaderLoop::_loader]; JMP Loader::Load`.
+    // `_loader` is the DLL-data slot (carry-over 5), resolved through the
+    // port-aware door and never minted by this file; ENDGAME B.3.7: `Load` is
+    // a direct member call now (it was a function-local `static` export cache
+    // -- a B6-5 site -- before).
+    LoaderLoopLoader()->Load(_nextLoop);
+}
 
-    // The DLL's own static Loader instance, by NAME. Resolved, never minted:
-    // the DLL's loader thread was created on THAT object and waits on ITS
-    // events, so a Loader of ours would be a second, unwatched object.
-    static Loader* loader = reinterpret_cast<Loader*>(
-        ResolveExport("?_loader@LoaderLoop@Engine@@1VLoader@2@A"));
-    // Reached through the registered export so a single implementation serves
-    // the object, exactly as retail's near-CALL keeps both halves in the DLL.
-    using LoaderLoadFn = void (*)(void*, void*);
-    static LoaderLoadFn load = reinterpret_cast<LoaderLoadFn>(
-        ResolveExport("?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
-    load(loader, self->_base._nextLoop);
+extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
+    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
+        ->Engine::DialogLoaderLoopT::Startup();
 }
 
 // ============================================================================
@@ -945,31 +980,58 @@ extern "C" void RtEngine_DialogLoaderLoopT_Startup(DialogLoaderLoopT* self) {
 // [ATTENDANCE] site rather than a `divergences=0` site that cannot fail.  The
 // real check on all six is the [ORACLE] probe below, which consults the DLL.
 
-extern "C" void RtEngine_UpdateLoop_DrawFailed(void* /*self*/) {
+// ENDGAME B.3.7: the six bodies are members of Engine::UpdateLoop; each door
+// delegates with a QUALIFIED call (the doors sit in minted and exe tables, so
+// an unqualified call would dispatch through those tables).
+void Engine::UpdateLoop::DrawFailed() {
     // retail 0x180031740: `ret`. Nothing else.
 }
 
-extern "C" void RtEngine_UpdateLoop_SaveRestore(void* /*self*/, bool /*saving*/,
-                                                void* /*savedState*/) {
+void Engine::UpdateLoop::SaveRestore(bool /*saving*/, Save::SavedState* /*state*/) {
     // retail 0x180031750: `ret`. Both arguments are ignored by the base class.
 }
 
-extern "C" void RtEngine_UpdateLoop_OnVideoError(void* /*self*/) {
+void Engine::UpdateLoop::OnVideoError() {
     // retail 0x180031760: `ret`.  NOTE this is UpdateLoop's OnVideoError;
-    // LoaderLoop overrides it with its OWN body at 0x1800dc360, which is a
-    // different function and is NOT ported here.
+    // LoaderLoop overrides it with its OWN body at 0x1800dc360.
 }
 
-extern "C" void RtEngine_UpdateLoop_OnVideoRestart(void* /*self*/) {
+void Engine::UpdateLoop::OnVideoRestart() {
     // retail 0x180031770: `ret`.
 }
 
-extern "C" const char* RtEngine_UpdateLoop_GetResourceFilename(void* /*self*/) {
+const char* Engine::UpdateLoop::GetResourceFilename() {
     return nullptr;   // retail 0x180031780: xor eax,eax ; ret
 }
 
-extern "C" bool RtEngine_UpdateLoop_AllowsModChanges(void* /*self*/) {
+bool Engine::UpdateLoop::AllowsModChanges() {
     return false;     // retail 0x180031790: xor al,al ; ret
+}
+
+extern "C" void RtEngine_UpdateLoop_DrawFailed(void* self) {
+    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::DrawFailed();  // B.3.7 bridge
+}
+
+extern "C" void RtEngine_UpdateLoop_SaveRestore(void* self, bool saving,
+                                                void* savedState) {
+    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::SaveRestore(  // B.3.7 bridge
+        saving, static_cast<Save::SavedState*>(savedState));
+}
+
+extern "C" void RtEngine_UpdateLoop_OnVideoError(void* self) {
+    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::OnVideoError();  // B.3.7 bridge
+}
+
+extern "C" void RtEngine_UpdateLoop_OnVideoRestart(void* self) {
+    reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::OnVideoRestart();  // B.3.7 bridge
+}
+
+extern "C" const char* RtEngine_UpdateLoop_GetResourceFilename(void* self) {
+    return reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::GetResourceFilename();  // B.3.7 bridge
+}
+
+extern "C" bool RtEngine_UpdateLoop_AllowsModChanges(void* self) {
+    return reinterpret_cast<Engine::UpdateLoop*>(self)->Engine::UpdateLoop::AllowsModChanges();  // B.3.7 bridge
 }
 
 
@@ -1020,16 +1082,17 @@ namespace {
 //               the loading screen would hang forever rather than crash.
 // The existing `?Startup@DialogLoaderLoopT@` port above resolves the same
 // symbol the same way; this helper just gives the four new users one spelling.
-Loader* LoaderLoopLoader() {
-    static Loader* p = reinterpret_cast<Loader*>(
-        ResolveExport("?_loader@LoaderLoop@Engine@@1VLoader@2@A"));
-    return p;
+// ENDGAME B.3.7 (RULE B7-7.1): this was `static Loader* p = ResolveExport(...)`,
+// a function-local lazy initialiser read from Update/Draw on the main thread
+// AND from Startup chains the loader thread can reach; now a namespace-scope
+// atomic slot. The object is the real `Engine::Loader` class (a
+// `System::Thread`), still the DLL-data slot, never a C++ static member
+// (carry-over 5).
+Engine::Loader* LoaderLoopLoader() {
+    return static_cast<Engine::Loader*>(rtengine::AtomicExport(g_loaderLoopLoader,
+        "?_loader@LoaderLoop@Engine@@1VLoader@2@A"));
 }
 
-using LoaderLoadFn2       = void (*)(void*, void*);
-using ThreadWaitFn        = void (*)(void*);
-using SleepThreadFn       = void (*)(void*, int);
-using LoadResourcesFn     = void (*)(void*);
 using CurrentTimeTicksFn  = int64_t (*)();
 
 // The Video::Context backend object hangs off Context::_contextData (+0x2160).
@@ -1056,19 +1119,20 @@ inline Video::ContextData* CtxDataOf(RtVideo::Context* ctx) {
 // reg_mint_promoted.cpp, so it necessarily reads the DLL's own slot — which is
 // what every body below needs, because retail's MainLoop ctor wrote it.
 
-void* ApplicationSingleton() {
-    void** slot = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@Application@1@0PEAV11@EA"));
-    return slot ? *slot : nullptr;
+// `?_singleton@Application@1@0PEAV11@EA` -- the DATA slot (carry-over 5),
+// through a namespace-scope atomic cache.
+Application::Application* ApplicationSingleton() {
+    void** slot = static_cast<void**>(rtengine::AtomicExport(g_applicationSingleton,
+        "?_singleton@Application@1@0PEAV11@EA"));
+    return slot ? static_cast<Application::Application*>(*slot) : nullptr;
 }
 
 // `mov 0x1801fc678,%rcx ; mov $0xe,%edx ; call Application::SleepThread` — the
 // identical three instructions open BOTH Update bodies below, unconditionally
-// and before anything is read off `this`.
+// and before anything is read off `this`. ENDGAME B.3.7: a direct member call
+// (it was a `static` ResolveExport cache of the export).
 void SleepFourteen() {
-    static SleepThreadFn sleepThread = reinterpret_cast<SleepThreadFn>(
-        ResolveExport("?SleepThread@Application@1@QEAAXH@Z"));
-    if (void* app = ApplicationSingleton()) sleepThread(app, 14);
+    if (Application::Application* app = ApplicationSingleton()) app->SleepThread(14);
 }
 
 // The tail half of LoaderLoop::Update, lifted out because
@@ -1076,22 +1140,21 @@ void SleepFourteen() {
 // it twice (the derived Update is not a call to the base); the port shares one
 // function, which is a SOURCE-level difference with no observable behavioural
 // one — same reads, same comparisons, same single store.
-void LoaderLoopAdvance(LoaderLoop* self, const ::Time* time) {
+void LoaderLoopAdvance(Engine::LoaderLoop* self, const System::Time& time) {
     // `cmpb $0,0x40(%rbx)` — _autoAdvance, set to 1 by the ctor and never
     // written again (runtime/types/engine/UpdateLoop.h records that correction).
     if (self->_autoAdvance) {
-        const Loader* loader = LoaderLoopLoader();
+        const Engine::Loader* loader = LoaderLoopLoader();
         // `testb $1,0x1801fe7c0` — _loader._thread.runFlags bit 0, the
         // still-running flag. NOT a "finished" field on the loop itself.
         const bool stillRunning =
-            loader && (loader->_thread.runFlags & 1u) != 0;
+            loader && (loader->_runFlags & 1u) != 0;
         if (!stillRunning && self->_elapsedTicks >= self->_delayTicks) {
-            if (RtEngine::MainLoop* ml = MainLoopSingleton())
-                ml->_nextLoop =
-                    reinterpret_cast<RtEngine::UpdateLoop*>(self->_nextLoop);
+            if (Engine::MainLoop* ml = MainLoopSingleton())
+                ml->_nextLoop = self->_nextLoop;
         }
     }
-    self->_elapsedTicks += time->ticks;   // `add %rax,0x30(%rbx)`
+    self->_elapsedTicks += time._ticks;   // `add %rax,0x30(%rbx)`
 }
 
 }  // namespace
@@ -1104,10 +1167,12 @@ void LoaderLoopAdvance(LoaderLoop* self, const ::Time* time) {
 // The LEA-then-work-through-the-register shape is exactly what the
 // `?_loader@LoaderLoop@` UNPROMOTABLE tag names as the reason a RIP-relative
 // read/write census reports R=0 for that row.
+void Engine::LoaderLoop::Startup() {
+    LoaderLoopLoader()->Load(_nextLoop);
+}
+
 extern "C" void RtEngine_LoaderLoop_Startup(LoaderLoop* self) {
-    static LoaderLoadFn2 load = reinterpret_cast<LoaderLoadFn2>(
-        ResolveExport("?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
-    load(LoaderLoopLoader(), self->_nextLoop);
+    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Startup();  // B.3.7 bridge
 }
 
 // ---- ?Shutdown@LoaderLoop@Engine@@UEAAXXZ  0x1800dc280  ord 4052 ------------
@@ -1115,10 +1180,14 @@ extern "C" void RtEngine_LoaderLoop_Startup(LoaderLoop* self) {
 //     or   $0xffffffff,%edx         ; INFINITE
 //     jmp  *WaitForSingleObject
 // `self` is not read at all — the wait is on the one static loader.
-extern "C" void RtEngine_LoaderLoop_Shutdown(LoaderLoop* /*self*/) {
-    static ThreadWaitFn wait = reinterpret_cast<ThreadWaitFn>(
-        ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
-    wait(&LoaderLoopLoader()->_thread);
+void Engine::LoaderLoop::Shutdown() {
+    // ENDGAME B.3.7: `Loader` IS a `System::Thread`; `WaitForFinish` is the
+    // base's non-virtual member (thread_win.cpp), called directly.
+    LoaderLoopLoader()->WaitForFinish();
+}
+
+extern "C" void RtEngine_LoaderLoop_Shutdown(LoaderLoop* self) {
+    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Shutdown();  // B.3.7 bridge
 }
 
 // ---- ?OnVideoError@LoaderLoop@Engine@@UEAAXXZ  0x1800dc360  ord 3290 --------
@@ -1129,26 +1198,37 @@ extern "C" void RtEngine_LoaderLoop_Shutdown(LoaderLoop* /*self*/) {
 // they shared a body. This is slot 8 of BOTH ??_7LoaderLoop@ and
 // ??_7DialogLoaderLoopT@; DialogLoopT's slot 8 is the BASE
 // `?OnVideoError@UpdateLoop@` (0x180031760, a bare `ret`, ported in Wave 25).
-extern "C" void RtEngine_LoaderLoop_OnVideoError(LoaderLoop* /*self*/) {
-    static ThreadWaitFn wait = reinterpret_cast<ThreadWaitFn>(
-        ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
-    wait(&LoaderLoopLoader()->_thread);
+void Engine::LoaderLoop::OnVideoError() {
+    LoaderLoopLoader()->WaitForFinish();
+}
+
+extern "C" void RtEngine_LoaderLoop_OnVideoError(LoaderLoop* self) {
+    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::OnVideoError();  // B.3.7 bridge
 }
 
 // ---- ?Load@LoaderLoop@Engine@@UEAAXXZ  0x1800dc350  ord 3205 ----------------
 // `ret $0x0` and nothing else. The derived classes override it; LoaderLoop
 // itself loads nothing, because the WORK is done on the loader thread by
 // Loader::Run, which Startup kicks off.
-extern "C" void RtEngine_LoaderLoop_Load(LoaderLoop* /*self*/) {
+void Engine::LoaderLoop::Load() {
+}
+
+extern "C" void RtEngine_LoaderLoop_Load(LoaderLoop* self) {
+    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Load();  // B.3.7 bridge
 }
 
 // ---- ?Update@LoaderLoop@Engine@@UEAA_NAEBVTime@System@@@Z 0x1800dc2a0 -------
 //      ord 4495.  Matches the pseudocode runtime/types/engine/UpdateLoop.h
 //      recorded in Wave 8 instruction for instruction.
-extern "C" bool RtEngine_LoaderLoop_Update(LoaderLoop* self, const ::Time* time) {
+bool Engine::LoaderLoop::Update(const System::Time& time) {
     SleepFourteen();
-    LoaderLoopAdvance(self, time);
+    LoaderLoopAdvance(this, time);
     return true;   // `mov $0x1,%al`
+}
+
+extern "C" bool RtEngine_LoaderLoop_Update(LoaderLoop* self, const ::Time* time) {
+    return reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Update(  // B.3.7 bridge
+        *reinterpret_cast<const System::Time*>(time));
 }
 
 // ---- ?Draw@LoaderLoop@Engine@@UEAAXM@Z  0x1800dc310  ord 2250 ---------------
@@ -1159,12 +1239,16 @@ extern "C" bool RtEngine_LoaderLoop_Update(LoaderLoop* self, const ::Time* time)
 //     Clear(flags=7, colour=0x00000000, depth=1.0f, stencil=0)
 // 7 is COLOUR|DEPTH|STENCIL; 1.0f is the literal at 0x18016169c, read out of
 // .rdata rather than assumed.
-extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* /*self*/, float /*dt*/) {
-    RtEngine::MainLoop* ml = MainLoopSingleton();
+void Engine::LoaderLoop::Draw(float /*interpolation*/) {
+    MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0u, 1.0f, 0);
+}
+
+extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* self, float dt) {
+    reinterpret_cast<Engine::LoaderLoop*>(self)->Engine::LoaderLoop::Draw(dt);  // B.3.7 bridge
 }
 
 // ---- ?Shutdown@DialogLoaderLoopT@Engine@@UEAAXXZ  0x1800dafc0  ord 4045 -----
@@ -1177,13 +1261,18 @@ extern "C" void RtEngine_LoaderLoop_Draw(LoaderLoop* /*self*/, float /*dt*/) {
 // class type, so MSVC hands it to CloseDialog as a hidden reference to a stack
 // copy. Passing the field's own address instead would let the callee mutate the
 // member — hence the local.
-extern "C" void RtEngine_DialogLoaderLoopT_Shutdown(DialogLoaderLoopT* self) {
-    void* byValue = self->_dialogInstance;
-    self->_ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
+void Engine::DialogLoaderLoopT::Shutdown() {
+    void* byValue = _dialogInstance;
+    _ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
 
-    static ThreadWaitFn wait = reinterpret_cast<ThreadWaitFn>(
-        ResolveExport("?WaitForFinish@Thread@System@@QEAAXXZ"));
-    wait(&LoaderLoopLoader()->_thread);
+    // The Shutdown@LoaderLoop tail, INLINED by retail (not a call): the wait on
+    // the one static loader.
+    LoaderLoopLoader()->WaitForFinish();
+}
+
+extern "C" void RtEngine_DialogLoaderLoopT_Shutdown(DialogLoaderLoopT* self) {
+    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
+        ->Engine::DialogLoaderLoopT::Shutdown();
 }
 
 // ---- ?Update@DialogLoaderLoopT@Engine@@UEAA_N…  0x1800daf20  ord 4484 -------
@@ -1191,19 +1280,25 @@ extern "C" void RtEngine_DialogLoaderLoopT_Shutdown(DialogLoaderLoopT* self) {
 // LoaderLoop::Update, both inlined. The Time round-trip through FLOAT is the
 // same lossy narrowing DialogLoopT::Update above documents at length, and is
 // reproduced for the same reason: it is observable on any tick count over 2^24.
-extern "C" bool RtEngine_DialogLoaderLoopT_Update(DialogLoaderLoopT* self,
-                                                  const ::Time* time) {
+bool Engine::DialogLoaderLoopT::Update(const System::Time& time) {
 
-    ::Time rounded;
-    rounded.ticks = SecondsToTicks(TicksToSeconds(time->ticks));
-    self->_ui.Update(*reinterpret_cast<const System::Time*>(&rounded));  // B.3.6 bridge (::Time POD)
+    System::Time rounded;
+    rounded._ticks = SecondsToTicks(TicksToSeconds(time._ticks));
+    _ui.Update(rounded);
 
     SleepFourteen();
 
-    // `self->_base` is the LoaderLoop subobject at +0x00 — the inlined copy
-    // reads 0x40/0x38/0x30/0x28 off `this` directly, which are exactly those.
-    LoaderLoopAdvance(&self->_base, time);
+    // The LoaderLoop base at +0x00 — the inlined copy reads 0x40/0x38/0x30/0x28
+    // off `this` directly, which are exactly those. NOT a call to
+    // LoaderLoop::Update: retail inlined a second copy (no second Sleep).
+    LoaderLoopAdvance(this, time);
     return true;
+}
+
+extern "C" bool RtEngine_DialogLoaderLoopT_Update(DialogLoaderLoopT* self,
+                                                  const ::Time* time) {
+    return reinterpret_cast<Engine::DialogLoaderLoopT*>(self)         // B.3.7 bridge
+        ->Engine::DialogLoaderLoopT::Update(*reinterpret_cast<const System::Time*>(time));
 }
 
 // ---- ?Draw@DialogLoaderLoopT@Engine@@UEAAXM@Z  0x1800dae20  ord 2238 --------
@@ -1225,15 +1320,15 @@ extern "C" bool RtEngine_DialogLoaderLoopT_Update(DialogLoaderLoopT* self,
 // same multiply-and-narrow). Retail computes it TWICE from the same input, once
 // per constant group; one computation here, because a double-to-float narrowing
 // of the same value is deterministic and the two cannot differ.
-extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float /*dt*/) {
-    RtEngine::MainLoop* ml = MainLoopSingleton();
+void Engine::DialogLoaderLoopT::Draw(float /*interpolation*/) {
+    MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
 
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0u, 1.0f, 0);
 
-    const float secs = TicksToSeconds(self->_base._elapsedTicks);
+    const float secs = TicksToSeconds(_elapsedTicks);
 
     ctx->_time.x = secs;   ctx->_time.y = 0.0f;
     ctx->_time.z = 0.0f;   ctx->_time.w = 0.0f;
@@ -1246,16 +1341,25 @@ extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float /
     staging[0] = secs; staging[1] = 0.0f; staging[2] = 0.0f; staging[3] = 0.0f;
     ctx->_dirty |= 0x10800u;
 
-    self->_ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
+    _ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
+}
+
+extern "C" void RtEngine_DialogLoaderLoopT_Draw(DialogLoaderLoopT* self, float dt) {
+    reinterpret_cast<Engine::DialogLoaderLoopT*>(self)                // B.3.7 bridge
+        ->Engine::DialogLoaderLoopT::Draw(dt);
 }
 
 // ---- ?Shutdown@DialogLoopT@Engine@@UEAAXXZ  0x1800db2c0  ord 4046 -----------
 // DialogLoaderLoopT::Shutdown without the thread wait, and at DialogLoopT's own
 // offsets (_dialogInstance +0x38, _ui +0x40 — thirty-two bytes lower than the
 // DialogLoaderLoopT pair, because there is no LoaderLoop subobject).
+void Engine::DialogLoopT::Shutdown() {
+    void* byValue = _dialogInstance;
+    _ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
+}
+
 extern "C" void RtEngine_DialogLoopT_Shutdown(DialogLoopT* self) {
-    void* byValue = self->_dialogInstance;
-    self->_ui.CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&byValue));  // B.3.6 bridge
+    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Shutdown();  // B.3.7 bridge
 }
 
 // ---- ?Draw@DialogLoopT@Engine@@UEAAXM@Z  0x1800db210  ord 2239 --------------
@@ -1264,15 +1368,19 @@ extern "C" void RtEngine_DialogLoopT_Shutdown(DialogLoopT* self) {
 // backdrop, and it is the one thing that distinguishes this body from the other
 // two Draws. No shader constants are published either: a menu dialog is not
 // animated off a load timer.
-extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float /*dt*/) {
-    RtEngine::MainLoop* ml = MainLoopSingleton();
+void Engine::DialogLoopT::Draw(float /*interpolation*/) {
+    MainLoop* ml = MainLoopSingleton();
     if (!ml) return;
     RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(ml->_context);
 
     Video::ContextData* cd = CtxDataOf(ctx);
     cd->Clear(7u, 0xff808080u, 1.0f, 0);
 
-    self->_ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
+    _ui.Draw(*ctx);   // B.3.6: `_ui` IS a UI::UserInterface; RtVideo::Context aliases Video::Context
+}
+
+extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float dt) {
+    reinterpret_cast<Engine::DialogLoopT*>(self)->Engine::DialogLoopT::Draw(dt);  // B.3.7 bridge
 }
 
 // ---- ?Run@Loader@Engine@@UEAAXXZ  0x1800dbfc0  ord 3600 ---------------------
@@ -1305,48 +1413,67 @@ extern "C" void RtEngine_DialogLoopT_Draw(DialogLoopT* self, float /*dt*/) {
 // below and WAVE8_LANE_A.md §3. This body reaches it through ResolveExport, so
 // it gets the DLL's implementation today and will pick up a port the moment one
 // is registered, with no edit here.
-extern "C" void RtEngine_Loader_Run(Loader* self) {
+namespace {
+std::atomic<void*> g_engineSingletonSlot{nullptr};
+std::atomic<void*> g_factorySingletonSlot{nullptr};
+}  // namespace
 
-    void** engineSlot = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@Engine@1@0PEAV11@EA"));
-    void** factorySlot = reinterpret_cast<void**>(
-        ResolveExport("?_singleton@ExternalFactory@Object@@0PEAV12@EA"));
+void Engine::Loader::Run() {
+    // LOADER THREAD. ENDGAME B.3.7 (RULE B7-7.1): the two singleton reads were
+    // uncached ResolveExport calls and `LoadResources` a function-local `static`
+    // export cache; the slots are namespace-scope atomics now and LoadResources
+    // is a direct member call. The ORDER of the calls below is unchanged
+    // (B7-7.4: the device-lost / loader race is the user's decision, and this
+    // conversion neither moves nor adds a call in the bracket).
+    void** engineSlot = static_cast<void**>(rtengine::AtomicExport(
+        g_engineSingletonSlot, "?_singleton@Engine@1@0PEAV11@EA"));
+    void** factorySlot = static_cast<void**>(rtengine::AtomicExport(
+        g_factorySingletonSlot, "?_singleton@ExternalFactory@Object@@0PEAV12@EA"));
     if (!engineSlot || !factorySlot) return;
 
-    uint8_t* engine  = reinterpret_cast<uint8_t*>(*engineSlot);
+    ::Engine::Engine* engine = static_cast< ::Engine::Engine*>(*engineSlot);
     uint8_t* factory = reinterpret_cast<uint8_t*>(*factorySlot);
 
     // `mov 0x6c0(%rsi),%rax ; mov 0x100(%rax),%rcx` — two plain loads, no null
     // test in retail. Left unguarded: retail relies on both being live for the
     // whole lifetime of the loader thread, and a guard here would SKIP the
     // bracket rather than restore it (CLAUDE.md, "Don't 'fix' a faithful crash").
+    //
+    // KEPT A RAW SLOT CALL, deliberately: the receiver is `Video::DeviceData`
+    // (B.3.5), whose slot 4 is declared `void Slot4()` with NO argument
+    // (runtime/types/video/CompanionData.h), while retail passes the bool in
+    // DL (1 before, 0 after). A member call would drop that argument.
     using SetModeFn = void (*)(void*, bool);
-    void* owner = *reinterpret_cast<void**>(engine + 0x6c0);
+    void* owner = engine->_videoDevice;
     void* mode  = *reinterpret_cast<void**>(
                       reinterpret_cast<uint8_t*>(owner) + 0x100);
     reinterpret_cast<SetModeFn>((*reinterpret_cast<void***>(mode))[4])(mode, true);
 
     factory[0x41] = 1;
-    RtEngine::UpdateLoop* loop =
-        reinterpret_cast<RtEngine::UpdateLoop*>(self->_loop);
+    UpdateLoop* loop = _loop;
     *reinterpret_cast<int32_t*>(factory) = loop->_loadBit;
 
-    static LoadResourcesFn loadResources = reinterpret_cast<LoadResourcesFn>(
-        ResolveExport("?LoadResources@UpdateLoop@Engine@@QEAAXXZ"));
-    loadResources(loop);
+    // `CALL ?LoadResources@UpdateLoop@Engine@@QEAAXXZ` -- a near CALL in
+    // retail, so no qualification question: it is non-virtual.
+    loop->LoadResources();
 
-    // slot 6 == kSlot_Load, dispatched off the loop's OWN table, so a
-    // LoaderLoop gets the empty body above and a DialogLoaderLoopT gets its own.
-    using LoopLoadFn = void (*)(void*);
-    void** loopVt = *reinterpret_cast<void***>(loop);
-    reinterpret_cast<LoopLoadFn>(loopVt[RtEngine::kSlot_Load])(loop);
+    // slot 6 Load, dispatched off the loop's OWN table, so a LoaderLoop gets
+    // the empty body and a DialogLoaderLoopT or the exe's GameUpdateLoop its
+    // own. An ordinary virtual call.
+    loop->Load();
 
     factory[0x41] = 0;
 
-    void* owner2 = *reinterpret_cast<void**>(engine + 0x6c0);
+    void* owner2 = engine->_videoDevice;
     void* mode2  = *reinterpret_cast<void**>(
                        reinterpret_cast<uint8_t*>(owner2) + 0x100);
     reinterpret_cast<SetModeFn>((*reinterpret_cast<void***>(mode2))[4])(mode2, false);
+}
+
+extern "C" void RtEngine_Loader_Run(Loader* self) {
+    // QUALIFIED: the live object wears the minted `??_7Loader` table whose
+    // slot 0 is THIS door (B34_BRIEFS A.1).
+    reinterpret_cast<Engine::Loader*>(self)->Engine::Loader::Run();  // B.3.7 bridge
 }
 
 // ---- ?Draw@MainLoop@Engine@@QEAAXM@Z  0x1800dcd40  ord 2251 -----------------
@@ -1371,33 +1498,31 @@ extern "C" void RtEngine_Loader_Run(Loader* self) {
 //     buffer's full extent, and the zeroing of x and y is a single 8-byte store
 //     (`mov %rsi,0x1d0(%rcx)`), not two 4-byte ones. Written as two stores here
 //     because Viewport::x and ::y are adjacent int32s and no observer can tell.
-extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
+void Engine::MainLoop::Draw(float dt) {
 
-    RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(self->_context);
+    RtVideo::Context* ctx = reinterpret_cast<RtVideo::Context*>(_context);
     Video::ContextData* cd = CtxDataOf(ctx);
 
     if (!cd->BeginCommands()) {
         // The device is gone. Tell the current loop, drop the dirty flag, and
         // hard-reset the context — then RETURN: nothing else in the frame runs.
-        using DrawFailedFn = void (*)(void*);
-        void** loopVt = *reinterpret_cast<void***>(self->_currentLoop);
-        reinterpret_cast<DrawFailedFn>(loopVt[RtEngine::kSlot_DrawFailed])(
-            self->_currentLoop);
+        // ENDGAME B.3.7: slot 5 as an ordinary virtual call.
+        _currentLoop->DrawFailed();
 
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(self->_context);
-        self->_contextDirty = 0;
+        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
+        _contextDirty = 0;
         reinterpret_cast<Video::Context*>(c)->Reset();        // B.3.5 bridge
         return;
     }
 
-    if (self->_contextDirty) {
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(self->_context);
-        self->_contextDirty = 0;
+    if (_contextDirty) {
+        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
+        _contextDirty = 0;
         reinterpret_cast<Video::Context*>(c)->ClearResources();  // B.3.5 bridge
     }
 
     {
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(self->_context);
+        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
         // RenderBuffer width/height at +0x10/+0x14. Read off this body's own
         // loads; no RenderBuffer type is pulled in for two ints.
         const uint8_t* rb =
@@ -1414,36 +1539,40 @@ extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
         }
     }
 
-    using LoopDrawFn = void (*)(void*, float);
-    void** loopVt = *reinterpret_cast<void***>(self->_currentLoop);
-    reinterpret_cast<LoopDrawFn>(loopVt[RtEngine::kSlot_Draw])(self->_currentLoop, dt);
+    // slot 4 Draw as an ordinary virtual call (ENDGAME B.3.7).
+    _currentLoop->Draw(dt);
 
     // `_postDraw` walked by BYTE offset in retail (rbx += 0x10 per entry); the
     // size is re-read from the array on every iteration (`cmp 0x88(%rdi),%esi`),
     // so a callback that appends is seen by this same loop. Reproduced.
-    for (int32_t i = 0; i < self->_postDraw._size; ++i) {
-        RtEngine::MainLoopCallback e = self->_postDraw._data[i];
+    for (int32_t i = 0; i < _postDraw._size; ++i) {
+        RtEngine::MainLoopCallback e = _postDraw._data[i];
         using PostDrawFn = void (*)(void*, void*);
-        reinterpret_cast<PostDrawFn>(e._func)(self->_context, e._context);
+        reinterpret_cast<PostDrawFn>(e._func)(_context, e._context);
     }
 
     {
-        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(self->_context);
+        RtVideo::Context* c = reinterpret_cast<RtVideo::Context*>(_context);
         Video::ContextData* cd2 = CtxDataOf(c);
         cd2->EndCommands();
     }
 
-    RtVideo::Context* last = reinterpret_cast<RtVideo::Context*>(self->_context);
+    RtVideo::Context* last = reinterpret_cast<RtVideo::Context*>(_context);
 
-    // See note 1 above: the GLOBAL singleton, deliberately.
-    static CurrentTimeTicksFn nowTicks = reinterpret_cast<CurrentTimeTicksFn>(
-        ResolveExport("?CurrentTimeTicks@Timer@System@@SA_JXZ"));
-    if (RtEngine::MainLoop* g = MainLoopSingleton())
-        g->_frameUpdateTime = nowTicks() - g->_frameStartTicks;
+    // See note 1 above: the GLOBAL singleton, deliberately. ENDGAME B.3.7:
+    // RT_EXPORT_ONCE (B7-7.2's accepted shape) replaces a function-local
+    // `static` ResolveExport cache.
+    if (MainLoop* g = MainLoopSingleton())
+        g->_frameUpdateTime = RT_EXPORT_ONCE(CurrentTimeTicksFn,
+            "?CurrentTimeTicks@Timer@System@@SA_JXZ")() - g->_frameStartTicks;
 
     Video::ContextData* cd3 = CtxDataOf(last);
     ++last->_frameIndex;
     cd3->Finish();
+}
+
+extern "C" void RtEngine_MainLoop_Draw(RtEngine::MainLoop* self, float dt) {
+    self->Engine::MainLoop::Draw(dt);
 }
 
 // ============================================================================

@@ -89,7 +89,6 @@ namespace {
 // and `System::Filename` / `System::String` are the same eight bytes as the
 // PODs they used to name (the static_asserts in Filename.h pin that), so every
 // one of these calls keeps its exact shape: pointers in, hidden return slot in.
-typedef const char* (*GetResourceFilenameFn)(void*);
 typedef const void* (*FindOrLoadFn)(void* factory, const System::Filename* name);
 typedef bool        (*IsDerivedFromFn)(const void* base, uint32_t typeId);
 typedef System::Filename* (*GetPathFilenameFn)(const System::Filename* self,
@@ -191,21 +190,25 @@ unsigned g_refUsed   = 0;   // the `-ref` command-line override fired
 // ============================================================================
 // ?LoadResources@UpdateLoop@Engine@@QEAAXXZ   retail 0x1800dd7d0
 // ============================================================================
-extern "C" void RtEngine_UpdateLoop_LoadResources(RtEngine::UpdateLoop* self) {
+// ENDGAME B.3.7: the body is the member; the registered door below delegates.
+// LOADER THREAD (Loader::Run calls it before the loop's slot-6 Load). Every
+// door this body reaches is an RT_EXPORT_ONCE / RT_DATA_SLOT -- the
+// constant-initialised caching door B37_RULES B7-7.2 accepts as it stands.
+void Engine::UpdateLoop::LoadResources() {
     ++g_calls;
 
     // ---- 0x1800dd7ef: the loop's OWN resource list ------------------------
-    // vtable slot 10, GetResourceFilename. The base returns null, which is why
+    // vtable slot 10, GetResourceFilename -- an ordinary virtual call since
+    // B.3.7. The base returns null, which is why
     // standalone/gameupdateloop_stubs.cpp's default null makes this block a
     // no-op rather than a crash.
-    void** vt = *reinterpret_cast<void***>(self);
-    const char* root = reinterpret_cast<GetResourceFilenameFn>(vt[10])(self);
+    const char* root = GetResourceFilename();
     if (root != nullptr) {
         System::String spec = System::String::Format("%sResources.rsc", root);
         System::Filename name(spec);       // 0x18000c780: Adopt + AdjustDelimiters
 
         const void* list = FindAndCheck(name, true);
-        self->_resourceList = const_cast<void*>(list);
+        _resourceList = const_cast<void*>(list);
         if (list) ++g_ownList;
         // `name` then `spec` release here — retail's 0x1800dd8a4 / 0x1800dd8b6,
         // in that order, which is C++'s reverse declaration order.
@@ -281,6 +284,11 @@ extern "C" void RtEngine_UpdateLoop_LoadResources(RtEngine::UpdateLoop* self) {
         System::Filename name(value);
         FindAndCheck(name, false);
     }
+}
+
+extern "C" void RtEngine_UpdateLoop_LoadResources(RtEngine::UpdateLoop* self) {
+    reinterpret_cast<Engine::UpdateLoop*>(self)                       // B.3.7 bridge
+        ->Engine::UpdateLoop::LoadResources();
 }
 
 extern "C" void RtEngineLoadResourcesSummary() {

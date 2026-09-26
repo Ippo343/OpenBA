@@ -75,10 +75,13 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
+#include "../../types/engine/Engine.h"   // ENDGAME B.3.7: Engine::Engine::PlatformStartup
 #include "../collection/set_avl.h"
 #include "../system/widestring.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 using RtSystem::WideString;
 using rtsetavl::Node;
 
@@ -109,8 +112,8 @@ static_assert(sizeof(Element) == 0x10, "Set element is 0x10 bytes");
 // `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678. The port-aware door, so
 // a minted run and a DLL run both land on whatever storage the ported ctor
 // (singleton_ctors.cpp) published into.
-Application** AppSingletonSlot() {
-    return RT_DATA_SLOT(Application**, "?_singleton@Application@1@0PEAV11@EA");
+App** AppSingletonSlot() {
+    return RT_DATA_SLOT(App**, "?_singleton@Application@1@0PEAV11@EA");
 }
 
 // `?SetText@Error@System@@SAXPEBD_N@Z` @ 0x1800c5fa0 — ported in Wave 2
@@ -164,10 +167,13 @@ const char kClassName[]   = "Banished";
 //     WPARAM against VK_F10, not a compare of its low dword.
 //
 // ============================================================================
-extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
-                                             WPARAM wParam, LPARAM lParam) {
-    Application** slot = AppSingletonSlot();
-    Application*  app  = slot ? *slot : nullptr;
+int64_t Application::Application::WindowProc(void* hwndArg, uint32_t msg,
+                                             uint64_t wParamArg, int64_t lParamArg) {
+    HWND   hwnd   = static_cast<HWND>(hwndArg);
+    WPARAM wParam = static_cast<WPARAM>(wParamArg);
+    LPARAM lParam = static_cast<LPARAM>(lParamArg);
+    App** slot = AppSingletonSlot();
+    App*  app  = slot ? *slot : nullptr;
 
     if (app != nullptr) {                                   // 0x18009f95c
         Node* n = static_cast<Node*>(app->_messageCallbackRoot);
@@ -214,6 +220,12 @@ extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
             break;
     }
     return DefWindowProcW(hwnd, msg, wParam, lParam);       // 0x18009f9e0
+}
+
+extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
+                                             WPARAM wParam, LPARAM lParam) {
+    return static_cast<LRESULT>(Application::Application::WindowProc(
+        hwnd, msg, static_cast<uint64_t>(wParam), static_cast<int64_t>(lParam)));
 }
 
 // ============================================================================
@@ -264,7 +276,7 @@ extern "C" LRESULT CALLBACK RtApp_WindowProc(HWND hwnd, UINT msg,
 // spelling: retail makes no call there at all.
 //
 // ============================================================================
-extern "C" bool RtApp_PlatformStartup(Application* self) {
+bool Application::Application::PlatformStartup() {
 
     WideString className;
     RtSystem::RtSystem_WideString_CtorFromChars(&className, kClassName);  // 0x18009fc39
@@ -274,7 +286,7 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
     wc.lpfnWndProc   = &RtApp_WindowProc;                          // 0x18009fc45
     wc.cbClsExtra    = 0;                                          // 0x18009fc51 (one qword
     wc.cbWndExtra    = 0;                                          //   store covering both)
-    wc.hInstance     = static_cast<HINSTANCE>(self->_platformHandle);  // 0x18009fc59
+    wc.hInstance     = static_cast<HINSTANCE>(_platformHandle);  // 0x18009fc59
     wc.hIcon         = nullptr;                                    // 0x18009fc68 XORPS/MOVDQA
     wc.hCursor       = nullptr;
     wc.hbrBackground = reinterpret_cast<HBRUSH>(static_cast<uintptr_t>(6));  // 0x180161780
@@ -297,9 +309,9 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
             10,                             // nHeight [RSP+0x38]
             nullptr,                        // hWndParent  [RSP+0x40]
             nullptr,                        // hMenu       [RSP+0x48]
-            static_cast<HINSTANCE>(self->_platformHandle),  // [RSP+0x50], re-read
+            static_cast<HINSTANCE>(_platformHandle),  // [RSP+0x50], re-read
             nullptr);                       // lpParam     [RSP+0x58]
-        self->_windowHandle = hwnd;                                 // 0x18009fcf4
+        _windowHandle = hwnd;                                 // 0x18009fcf4
         if (hwnd == nullptr) {                                      // 0x18009fcf7
             ErrorSetText(kErrCreate, false);
             ok = false;
@@ -314,6 +326,10 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
     RtSystem::RtSystem_WideString_Dtor(&className);
 
     return ok;
+}
+
+extern "C" bool RtApp_PlatformStartup(App* self) {
+    return self->Application::PlatformStartup();
 }
 
 // ============================================================================
@@ -371,12 +387,12 @@ extern "C" bool RtApp_PlatformStartup(Application* self) {
 // that the window really was destroyed and the class really was unregistered.
 // That is an EXECUTION record, not a comparison, and is labelled as one.
 // ============================================================================
-extern "C" void RtApp_PlatformShutdown(Application* self) {
+void Application::Application::PlatformShutdown() {
 
     BOOL destroyed = FALSE;
     DWORD destroyErr = 0;
-    if (self->_windowHandle) {                                   // 0x18009fd82/85
-        destroyed = DestroyWindow(static_cast<HWND>(self->_windowHandle));
+    if (_windowHandle) {                                   // 0x18009fd82/85
+        destroyed = DestroyWindow(static_cast<HWND>(_windowHandle));
         if (!destroyed) destroyErr = GetLastError();             // 0x18009fd8a
     }
 
@@ -385,11 +401,15 @@ extern "C" void RtApp_PlatformShutdown(Application* self) {
 
     const BOOL unregistered =                                    // 0x18009fda9
         UnregisterClassW(className.data,
-                         static_cast<HINSTANCE>(self->_platformHandle));
+                         static_cast<HINSTANCE>(_platformHandle));
     const DWORD unregisterErr = unregistered ? 0 : GetLastError();
 
     RtSystem::RtSystem_WideString_Dtor(&className);              // 0x18009fdb0..fde1
 
+}
+
+extern "C" void RtApp_PlatformShutdown(App* self) {
+    self->Application::PlatformShutdown();
 }
 
 // ============================================================================
@@ -435,9 +455,13 @@ extern "C" bool RtObject_ExternalFactory_PlatformStartup(void* /*self*/) {
 // is therefore the exported spelling of a thing the tree already does; it is
 // registered so the NAME resolves at cutover, and it is reported as
 // UNREACHABLE rather than as verified.
-extern "C" bool RtEngine_Engine_PlatformStartup(void* /*self*/) {
+bool Engine::Engine::PlatformStartup() {
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
     return true;
+}
+
+extern "C" bool RtEngine_Engine_PlatformStartup(void* self) {
+    return reinterpret_cast<Engine::Engine*>(self)->Engine::Engine::PlatformStartup();  // B.3.7 bridge
 }
 
 // ============================================================================

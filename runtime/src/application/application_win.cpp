@@ -50,7 +50,9 @@
 #include "../system/timer.h"
 #include "../system/widestring.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 using RtSystem::WideString;
 
 namespace {
@@ -97,8 +99,8 @@ int64_t QpcToEngineTicks(int64_t qpc) {
 //   }
 //   return false;
 // ============================================================================
-bool RtApp_PlatformUpdate(Application* self) {
-    if (self->_quitRequested) PostQuitMessage(0);
+bool Application::Application::PlatformUpdate() {
+    if (_quitRequested) PostQuitMessage(0);
 
     MSG msg;
     BOOL got = PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);
@@ -110,6 +112,10 @@ bool RtApp_PlatformUpdate(Application* self) {
         got = PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE);
     }
     return false;
+}
+
+bool RtApp_PlatformUpdate(App* self) {
+    return self->Application::PlatformUpdate();
 }
 
 // ============================================================================
@@ -126,7 +132,7 @@ bool RtApp_PlatformUpdate(Application* self) {
 // which is why the parameter below is unused and untyped-through only for
 // signature fidelity.
 // ============================================================================
-void RtApp_SleepThread(Application* /*self*/, int ms) {
+void Application::Application::SleepThread(int32_t ms) {
 
     LARGE_INTEGER t0;
     QueryPerformanceCounter(&t0);
@@ -145,6 +151,10 @@ void RtApp_SleepThread(Application* /*self*/, int ms) {
     }
 }
 
+void RtApp_SleepThread(App* self, int ms) {
+    self->Application::SleepThread(ms);
+}
+
 // ============================================================================
 // Application::Application::YieldToThreads()   retail 0x18009f920   ord 4568
 // ?YieldToThreads@Application@1@QEAAXXZ
@@ -155,8 +165,12 @@ void RtApp_SleepThread(Application* /*self*/, int ms) {
 // direct CALL to the imported SwitchToThread thunk, nothing indirect. `this`
 // is not read.
 // ============================================================================
-void RtApp_YieldToThreads(Application* /*self*/) {
+void Application::Application::YieldToThreads() {
     SwitchToThread();
+}
+
+void RtApp_YieldToThreads(App* self) {
+    self->Application::YieldToThreads();
 }
 
 // ============================================================================
@@ -209,7 +223,7 @@ struct CursorCallbackElement {
 
 // The body, written against the live sink (rt_sink.h): every store goes
 // through `out` and lands for real.
-void EnableCursorBody(Application* self, bool enabled, RtSink& out) {
+void EnableCursorBody(App* self, bool enabled, RtSink& out) {
     const uint8_t prev = out.ReadU8(&self->_cursorEnabled);
     if (prev == static_cast<uint8_t>(enabled)) return;          // 0x18009f803
 
@@ -239,9 +253,13 @@ void EnableCursorBody(Application* self, bool enabled, RtSink& out) {
 
 }  // namespace
 
-void RtApp_EnableCursor(Application* self, bool enabled) {
+void Application::Application::EnableCursor(bool enabled) {
     RtSink live;
-    EnableCursorBody(self, enabled, live);
+    EnableCursorBody(this, enabled, live);
+}
+
+void RtApp_EnableCursor(App* self, bool enabled) {
+    self->Application::EnableCursor(enabled);
 }
 
 // ============================================================================
@@ -322,7 +340,7 @@ namespace {
 constexpr char kLaunchVerbOpen[] = "open";  // literal @ 0x180154900
 }  // namespace
 
-bool RtApp_LaunchProcess(Application* /*self*/, const char* cmd, bool wait) {
+bool Application::Application::LaunchProcess(const char* cmd, bool wait) {
 
     bool ok;
     if (wait) {
@@ -374,6 +392,10 @@ bool RtApp_LaunchProcess(Application* /*self*/, const char* cmd, bool wait) {
     return ok;
 }
 
+bool RtApp_LaunchProcess(App* self, const char* cmd, bool wait) {
+    return self->Application::LaunchProcess(cmd, wait);
+}
+
 // ==========================================================================
 // Application::Application::PlatformConstruct(void* platformHandle)
 // ?PlatformConstruct@Application@1@AEAAXPEAX@Z  retail 0x18009fbe0   ord 3331
@@ -406,11 +428,15 @@ bool RtApp_LaunchProcess(Application* /*self*/, const char* cmd, bool wait) {
 // two distinct `uint8_t` members and writing one `uint16_t` across them through
 // a reinterpret_cast is undefined behaviour GCC is entitled to reorder.
 // ============================================================================
-extern "C" void RtApp_PlatformConstruct(Application* self, void* platformHandle) {
+void Application::Application::PlatformConstruct(void* platformHandle) {
 
 
-    self->_windowHandle   = nullptr;                 // 0x18009fbe0
-    self->_platformHandle = platformHandle;          // 0x18009fbe7
+    _windowHandle   = nullptr;                 // 0x18009fbe0
+    _platformHandle = platformHandle;          // 0x18009fbe7
     const uint16_t stateWord = 0x0100;               // 0x18009fbeb
-    std::memcpy(&self->_cursorEnabled, &stateWord, sizeof(stateWord));
+    std::memcpy(&_cursorEnabled, &stateWord, sizeof(stateWord));
+}
+
+extern "C" void RtApp_PlatformConstruct(App* self, void* platformHandle) {
+    self->Application::PlatformConstruct(platformHandle);
 }

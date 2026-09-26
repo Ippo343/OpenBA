@@ -44,8 +44,12 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"
+#include "../engine/mainloop_internal.h"   // ENDGAME B.3.7: rtengine::AtomicResolve
+#include <atomic>
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 using rtsetavl::Node;
 using rtsetavl::Set;
 
@@ -58,9 +62,9 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // keeps `Application` free of runtime/src/ includes by declaring the Set as two
 // raw fields; if either side ever moves, this fails at compile time rather than
 // corrupting a live tree.
-static_assert(offsetof(Application, _messageCallbackRoot) + offsetof(Set, root)
+static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, root)
                   == 0x18, "Application's Set::root must land at +0x18");
-static_assert(offsetof(Application, _messageCallbackRoot) + offsetof(Set, count)
+static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, count)
                   == 0x20, "Application's Set::count must land at +0x20");
 
 namespace {
@@ -81,7 +85,7 @@ struct Element {
 static_assert(sizeof(Element) == 0x10, "Set element is 0x10 bytes (0x18000a5b0 copies two qwords)");
 
 // The Set living inside the Application. Retail reaches it as `this + 0x18`.
-inline Set* CallbackSet(Application* app) {
+inline Set* CallbackSet(App* app) {
     return reinterpret_cast<Set*>(reinterpret_cast<uint8_t*>(app) + 0x18);
 }
 
@@ -98,10 +102,14 @@ inline Set* CallbackSet(Application* app) {
 // would make every later registration silently fail for the life of the
 // process — the ordering defect attempt 14 fixed.
 // ---------------------------------------------------------------------------
+// ENDGAME B.3.7 (B6-5): a namespace-scope atomic slot, not a function-local
+// `static Fn fn` first-call cache.
+std::atomic<void*> g_memAlloc{nullptr};
 void* MemAlloc(uint64_t bytes, int align) {
     using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    Fn fn = reinterpret_cast<Fn>(rtengine::AtomicResolve(g_memAlloc, [] {
+        return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800c7a50));
+    }));
     return fn ? fn(bytes, align) : nullptr;
 }
 
@@ -190,8 +198,8 @@ extern "C" Node* RtApp_SetAllocNode(void* /*unused, never read*/,
 // (exactly the trap lane D recorded for `KeyMap::RegisterInput`). Verified by
 // the lockstep probe in set_avl_probe.cpp instead.
 // ============================================================================
-extern "C" void RtApp_RegisterMessageCallback(Application* app, unsigned id,
-                                              void* callback) {
+void Application::Application::RegisterMessageCallback(uint32_t id, MessageCallback callback) {
+    App* app = this;
     Set* set = CallbackSet(app);
 
     // The element, built on OUR stack exactly as retail builds it on its own —
@@ -247,6 +255,11 @@ extern "C" void RtApp_RegisterMessageCallback(Application* app, unsigned id,
     set->count += 1;                   // 0x18009fb63
 }
 
+extern "C" void RtApp_RegisterMessageCallback(App* app, unsigned id,
+                                              void* callback) {
+    app->Application::RegisterMessageCallback(id, reinterpret_cast<App::MessageCallback>(callback));
+}
+
 // ============================================================================
 // ?UnregisterMessageCallback@Application@1@QEAAXI@Z    retail 0x18009fa20
 // ============================================================================
@@ -255,7 +268,8 @@ extern "C" void RtApp_RegisterMessageCallback(Application* app, unsigned id,
 // touch the count — the count is decremented inside the erase, so a miss
 // leaving it alone falls out of the structure rather than from a check.
 // ============================================================================
-extern "C" void RtApp_UnregisterMessageCallback(Application* app, unsigned id) {
+void Application::Application::UnregisterMessageCallback(uint32_t id) {
+    App* app = this;
     Set* set = CallbackSet(app);
     for (Node* n = set->root; n; ) {
         const unsigned key = *reinterpret_cast<const unsigned*>(n);
@@ -263,6 +277,10 @@ extern "C" void RtApp_UnregisterMessageCallback(Application* app, unsigned id) {
         else if (key >= id) { rtsetavl::Erase(set, n); return; }  // 0x18009fa47
         else                n = n->right;   // 0x18009fa3b
     }
+}
+
+extern "C" void RtApp_UnregisterMessageCallback(App* app, unsigned id) {
+    app->Application::UnregisterMessageCallback(id);
 }
 
 // ============================================================================

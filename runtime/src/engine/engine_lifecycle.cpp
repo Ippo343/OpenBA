@@ -199,6 +199,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/Engine.h"
+#include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformStartup / PlatformShutdown
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
@@ -223,7 +224,9 @@ void RtEngineLifecyclePlatformFreeLibrary(void* module);
 // This lane checks the seam at REGISTRATION time, not in the body.
 bool RtLaneXEnsureAllocatorPlatform();
 
-using RtEngine::Engine;
+// ENDGAME B.3.7: `Engine::Engine` is the real class; a global
+// `using RtEngine::Engine;` is ill-formed next to `namespace Engine`.
+using EngineT = ::Engine::Engine;
 // NOT `using rt::system::MemoryAllocator;` -- runtime/types/common.h
 // forward-declares a GLOBAL `struct MemoryAllocator`, and the using-declaration
 // collides with it. Spelled out at each use instead.
@@ -277,8 +280,8 @@ void MemFree(void* p) {
 // and it is wrong at cutover, where there is no DLL code and the storage is
 // lane C2's mint. RT_DATA_SLOT is the door that gets both: registry first
 // (the mint, at cutover), the DLL's .data second (today).
-Engine** EngineSingletonSlot() {
-    return RT_DATA_SLOT(Engine**, "?_singleton@Engine@1@0PEAV11@EA");
+EngineT** EngineSingletonSlot() {
+    return RT_DATA_SLOT(EngineT**, "?_singleton@Engine@1@0PEAV11@EA");
 }
 void** ConfigurationSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Configuration@System@@0PEAV12@EA");
@@ -386,7 +389,7 @@ extern "C" void RtVideo_Device_OperatorDelete(void* p) {
 //
 // `_platformHandle` is stored between the zeroed fields, from RBX, which was
 // loaded from RDX before the call. Writing it in field order below matches.
-extern "C" Engine* RtEngine_Engine_Ctor(Engine* self, void* platformHandle) {
+extern "C" EngineT* RtEngine_Engine_Ctor(EngineT* self, void* platformHandle) {
 
     RT_EXPORT_ONCE(CtorFn, "??0MemoryAllocator@System@@QEAA@XZ")(&self->_allocator);
 
@@ -411,7 +414,7 @@ extern "C" Engine* RtEngine_Engine_Ctor(Engine* self, void* platformHandle) {
     // +0x6f2..+0x6f7: retail's 16-bit store at +0x6f0 does not reach them and
     // neither do we.
 
-    if (Engine** slot = EngineSingletonSlot()) *slot = self;
+    if (EngineT** slot = EngineSingletonSlot()) *slot = self;
 
     ++g_ctorRuns;
 
@@ -439,9 +442,9 @@ extern "C" Engine* RtEngine_Engine_Ctor(Engine* self, void* platformHandle) {
 //
 // The Engine object itself is NOT freed here: game_main.cpp owns the storage
 // (a 0x700-byte stack object), exactly as retail's caller did.
-extern "C" void RtEngine_Engine_Dtor(Engine* self) {
+extern "C" void RtEngine_Engine_Dtor(EngineT* self) {
 
-    if (Engine** slot = EngineSingletonSlot()) *slot = nullptr;
+    if (EngineT** slot = EngineSingletonSlot()) *slot = nullptr;
 
     RT_EXPORT_ONCE(VoidThisFn, "??1MemoryAllocator@System@@QEAA@XZ")(&self->_allocator);
 
@@ -475,23 +478,22 @@ extern "C" void RtEngine_Engine_Dtor(Engine* self) {
 //     on the next run (Engine.h, CLAUDE.md "Launcher Dialog").
 //
 // The `unsigned` return is 1 on success and 0 on every failure.
-extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
-                                            unsigned minRangeMB, unsigned maxTotalMB,
-                                            bool noConfigure) {
+uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
+                                uint32_t maxTotalMB, bool noConfigure) {
 
     ++g_startupRuns;
     g_startupFailAt = 0;
 
     // 0x1800db8c5-0x1800db8cf. The bool argument arrives on the stack (5th).
-    self->_noConfigure     = noConfigure ? 1 : 0;
-    self->_startupComplete = 0;
+    _noConfigure     = noConfigure ? 1 : 0;
+    _startupComplete = 0;
 
     // --- 0x1800db8d6 .. 0x1800db91e: MemoryAllocator::Startup, inlined -------
     // See §2 of the banner. This is the only place in the process an arena is
     // created, and this call is retail's four operations plus retail's error
     // string, not a substitute for them.
     if (!RT_EXPORT_ONCE(AllocStartupFn, "?Startup@MemoryAllocator@System@@QEAA_N_K0@Z")(
-            &self->_allocator, static_cast<uint64_t>(minRangeMB),
+            &_allocator, static_cast<uint64_t>(minRangeMB),
             static_cast<uint64_t>(maxTotalMB))) {
         g_startupFailAt = 1;
         return 0;
@@ -500,7 +502,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     // --- 0x1800db923: System::Configuration ---------------------------------
     void* configuration = MemAlloc(0x30, 4);
     if (configuration) RtSystem_Configuration_Ctor(configuration);
-    self->_configuration = configuration;
+    _configuration = configuration;
 
     // --- 0x1800db967: Configuration::SetCommandLine(String(cmdLine)) --------
     // A temporary System::String, which is one pointer. Retail zeroes it,
@@ -512,7 +514,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
         System::String tmp(cmdLine);
         RT_EXPORT_ONCE(SetCommandLineFn,
             "?SetCommandLine@Configuration@System@@QEAAXAEBVString@2@@Z")(
-                self->_configuration, &tmp);
+                _configuration, &tmp);
     }
 
     // --- 0x1800db9aa .. 0x1800db9d9: System::Timer::Startup, inlined --------
@@ -532,7 +534,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* fileSystem = MemAlloc(0x50, 4);
     if (fileSystem)
         RT_EXPORT_ONCE(CtorFn, "??0FileSystem@IO@@QEAA@XZ")(fileSystem);
-    self->_fileSystem = fileSystem;
+    _fileSystem = fileSystem;
     if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@FileSystem@IO@@QEAA_NXZ")(fileSystem)) {
         g_startupFailAt = 3;
         return 0;
@@ -542,7 +544,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* persistence = MemAlloc(0x98, 4);
     if (persistence)
         RT_EXPORT_ONCE(CtorFn, "??0Persistence@IO@@QEAA@XZ")(persistence);
-    self->_persistence = persistence;
+    _persistence = persistence;
     if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@Persistence@IO@@QEAA_NXZ")(persistence)) {
         g_startupFailAt = 4;
         return 0;
@@ -554,14 +556,14 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* modification = MemAlloc(0x28, 4);
     if (modification)
         RT_EXPORT_ONCE(CtorFn, "??0Modification@IO@@QEAA@XZ")(modification);
-    self->_modification = modification;
+    _modification = modification;
     RT_EXPORT_ONCE(VoidThisFn, "?RefreshList@Modification@IO@@QEAAXXZ")(modification);
 
     // --- 0x1800dbae0: Object::Factory ---------------------------------------
     void* factory = MemAlloc(0x10, 4);
     if (factory)
         RT_EXPORT_ONCE(CtorFn, "??0Factory@Object@@QEAA@XZ")(factory);
-    self->_factory = factory;
+    _factory = factory;
     if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@Factory@Object@@QEAA_NXZ")(factory)) {
         g_startupFailAt = 5;
         return 0;
@@ -571,13 +573,13 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* internalFactory = MemAlloc(0x9e8, 4);
     if (internalFactory)
         RT_EXPORT_ONCE(CtorFn, "??0InternalFactory@Object@@QEAA@XZ")(internalFactory);
-    self->_internalFactory = internalFactory;
+    _internalFactory = internalFactory;
 
     // --- 0x1800dbb47: Object::ExternalFactory (no Startup) -------------------
     void* externalFactory = MemAlloc(0x48, 4);
     if (externalFactory)
         RT_EXPORT_ONCE(CtorFn, "??0ExternalFactory@Object@@QEAA@XZ")(externalFactory);
-    self->_externalFactory = externalFactory;
+    _externalFactory = externalFactory;
 
     // --- 0x1800dbbb3: Engine::Application ------------------------------------
     // The ctor takes the platform handle, read back out of the Engine field at
@@ -586,10 +588,12 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* application = MemAlloc(0x30, 4);
     if (application)
         RT_EXPORT_ONCE(CtorArgFn, "??0Application@0@QEAA@PEAX@Z")(
-            application, self->_platformHandle);
-    self->_application = application;
-    if (!RT_EXPORT_ONCE(BoolThisFn, "?PlatformStartup@Application@1@AEAA_NXZ")(
-            application)) {
+            application, _platformHandle);
+    _application = application;
+    // ENDGAME B.3.7: `?PlatformStartup@Application@1@AEAA_NXZ` was a name
+    // door; a member call on the real class now (the ctor above stays the
+    // `Ctor_Application` door, B7-10).
+    if (!static_cast< ::Application::Application*>(application)->PlatformStartup()) {
         g_startupFailAt = 6;
         return 0;
     }
@@ -602,7 +606,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* videoConfiguration = MemAlloc(0x44, 4);
     if (videoConfiguration)
         RT_EXPORT_ONCE(CtorFn, "??0Configuration@Video@@QEAA@XZ")(videoConfiguration);
-    self->_videoConfiguration = videoConfiguration;
+    _videoConfiguration = videoConfiguration;
     if (!reinterpret_cast<Video::Configuration*>(videoConfiguration)
              ->Startup()) {                                  // B.3.5 bridge
         g_startupFailAt = 7;
@@ -613,9 +617,9 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     // Both re-READ `this->_videoConfiguration` (0x1800dbcb3, 0x1800dbcc5) and
     // dereference it unguarded. If the allocation above failed this faults, in
     // retail exactly as here.
-    if (self->_noConfigure)
-        *(static_cast<uint8_t*>(self->_videoConfiguration) + 0x40) = 0;
-    *(static_cast<uint8_t*>(self->_videoConfiguration) + 0x42) = self->_noConfigure;
+    if (_noConfigure)
+        *(static_cast<uint8_t*>(_videoConfiguration) + 0x40) = 0;
+    *(static_cast<uint8_t*>(_videoConfiguration) + 0x42) = _noConfigure;
 
     // --- 0x1800dbccf: Video::Device -----------------------------------------
     // Allocated through Video::Device's own class operator new (align 8, not 4)
@@ -627,7 +631,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     if (videoDevice)
         RT_EXPORT_ONCE(CtorEnumFn, "??0Device@Video@@QEAA@W4DeviceType@01@@Z")(
             videoDevice, 0);
-    self->_videoDevice = videoDevice;
+    _videoDevice = videoDevice;
     (void)reinterpret_cast<Video::Device*>(videoDevice)
         ->EnumerateVideoModes();                             // B.3.5 bridge
 
@@ -635,7 +639,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* audioConfiguration = MemAlloc(0x10, 4);
     if (audioConfiguration)
         RT_EXPORT_ONCE(CtorFn, "??0Configuration@Audio@@QEAA@XZ")(audioConfiguration);
-    self->_audioConfiguration = audioConfiguration;
+    _audioConfiguration = audioConfiguration;
     if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Audio@@QEAA_NXZ")(
             audioConfiguration)) {
         g_startupFailAt = 8;
@@ -646,7 +650,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* inputConfiguration = MemAlloc(0x10, 4);
     if (inputConfiguration)
         RT_EXPORT_ONCE(CtorFn, "??0Configuration@Input@@QEAA@XZ")(inputConfiguration);
-    self->_inputConfiguration = inputConfiguration;
+    _inputConfiguration = inputConfiguration;
     if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Input@@QEAA_NXZ")(
             inputConfiguration)) {
         g_startupFailAt = 9;
@@ -659,9 +663,9 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     // error box) and returns 0. CLAUDE.md's "Launcher Dialog" section and
     // standalone/main.cpp's HarnessGuardUnattendedBoot both depend on this
     // branch being reached exactly when `_noConfigure` is false; it is.
-    if (!self->_noConfigure) {
-        if (!RT_EXPORT_ONCE(PlatformConfigureFn, "?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z")(
-                self, true, self->_platformHandle)) {
+    if (!_noConfigure) {
+        // ENDGAME B.3.7: a member call (was the name door).
+        if (!PlatformConfigure(true, _platformHandle)) {
             if (bool* hide = ErrorHideDisplaySlot()) *hide = true;
             g_startupFailAt = 10;
             return 0;
@@ -669,7 +673,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     }
 
     // --- 0x1800dbdc0: Video::Device::PlatformStartup ------------------------
-    if (!reinterpret_cast<Video::Device*>(self->_videoDevice)
+    if (!reinterpret_cast<Video::Device*>(_videoDevice)
              ->PlatformStartup()) {                          // B.3.5 bridge
         g_startupFailAt = 11;
         return 0;
@@ -679,7 +683,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* audioDevice = MemAlloc(0x1298, 4);
     if (audioDevice)
         RT_EXPORT_ONCE(CtorFn, "??0Device@Audio@@QEAA@XZ")(audioDevice);
-    self->_audioDevice = audioDevice;
+    _audioDevice = audioDevice;
     if (!RT_EXPORT_ONCE(BoolThisFn, "?PlatformStartup@Device@Audio@@AEAA_NXZ")(
             audioDevice)) {
         g_startupFailAt = 12;
@@ -690,7 +694,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* inputDevice = MemAlloc(0x1200, 4);
     if (inputDevice)
         RT_EXPORT_ONCE(CtorFn, "??0Device@Input@@QEAA@XZ")(inputDevice);
-    self->_inputDevice = inputDevice;
+    _inputDevice = inputDevice;
     if (!RT_EXPORT_ONCE(BoolThisFn, "?PlatformStartup@Device@Input@@AEAA_NXZ")(
             inputDevice)) {
         g_startupFailAt = 13;
@@ -701,13 +705,20 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
     void* achievementManager = MemAlloc(0x48, 4);
     if (achievementManager)
         RtAchievement_AchievementManager_Ctor(achievementManager);
-    self->_achievementManager = achievementManager;
+    _achievementManager = achievementManager;
 
     // --- 0x1800dbe96 -------------------------------------------------------
-    self->_startupComplete = 1;
+    _startupComplete = 1;
 
 
     return 1;
+}
+
+extern "C" unsigned RtEngine_Engine_Startup(EngineT* self, const char* cmdLine,
+                                            unsigned minRangeMB, unsigned maxTotalMB,
+                                            bool noConfigure) {
+    return self->Engine::Engine::Startup(
+        cmdLine, minRangeMB, maxTotalMB, noConfigure);
 }
 
 // ============================================================================
@@ -733,7 +744,7 @@ extern "C" unsigned RtEngine_Engine_Startup(Engine* self, const char* cmdLine,
 // exported name is byte-equivalent AND port-aware; using the raw address would
 // be dead memory at cutover. The one place that was NOT reducible to an export
 // is flagged inline.
-extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
+void Engine::Engine::Shutdown() {
 
     ++g_shutdownRuns;
     unsigned steps = 0;
@@ -743,18 +754,18 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
     // 0x1800db50f. The launcher-dialog arming bit: byte 0 of Video::Configuration
     // becomes `_startupComplete == 0`, and Video::Configuration::Save (below)
     // writes it to the registry. Engine.h documents the whole chain.
-    if (void* videoCfg = self->_videoConfiguration)
-        *static_cast<uint8_t*>(videoCfg) = (self->_startupComplete == 0) ? 1 : 0;
+    if (void* videoCfg = _videoConfiguration)
+        *static_cast<uint8_t*>(videoCfg) = (_startupComplete == 0) ? 1 : 0;
 
-    if (void* p = self->_achievementManager) {
+    if (void* p = _achievementManager) {
         RT_EXPORT_ONCE(VoidThisFn,
             "?RemoveAll@AchievementManager@Achievement@@QEAAXXZ")(p); ++steps;
     }
-    if (void* p = self->_inputDevice) {
+    if (void* p = _inputDevice) {
         RT_EXPORT_ONCE(VoidThisFn,
             "?PlatformShutdown@Device@Input@@AEAAXXZ")(p); ++steps;
     }
-    if (void* p = self->_inputConfiguration) {
+    if (void* p = _inputConfiguration) {
         RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Input@@QEAAXXZ")(p);
         // 0x1800db55d: destroy the object hanging off the config's first field.
         // 0x180053440 is an unnamed scalar deleting destructor (a two-node BST
@@ -768,7 +779,7 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
         }
         ++steps;
     }
-    if (void* p = self->_audioDevice) {
+    if (void* p = _audioDevice) {
         // 0x1800db576: two virtual calls on objects the device owns, each
         // followed by an unconditional null store. Slot 0x90 on the first,
         // slot 0x10 on the second.
@@ -785,10 +796,10 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
         *reinterpret_cast<void**>(dev + 0xa88) = nullptr;
         ++steps;
     }
-    if (void* p = self->_audioConfiguration) {
+    if (void* p = _audioConfiguration) {
         RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Audio@@QEAAXXZ")(p); ++steps;
     }
-    if (void* p = self->_videoDevice) {
+    if (void* p = _videoDevice) {
         reinterpret_cast<Video::Device*>(p)->PlatformShutdown();  // B.3.5 bridge
         // 0x1800db5cd: three 0x18-byte plugin slots at device+0xb0; FreeLibrary
         // each non-null module and clear all three qwords of every slot,
@@ -803,13 +814,13 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
         }
         ++steps;
     }
-    if (void* p = self->_videoConfiguration) {
+    if (void* p = _videoConfiguration) {
         reinterpret_cast<Video::Configuration*>(p)->Save(); ++steps;  // B.3.5 bridge
     }
-    if (void* p = self->_application) {
-        RT_EXPORT_ONCE(VoidThisFn, "?PlatformShutdown@Application@1@AEAAXXZ")(p); ++steps;
+    if (void* p = _application) {
+        static_cast< ::Application::Application*>(p)->PlatformShutdown(); ++steps;  // ENDGAME B.3.7: member call
     }
-    if (self->_factory != nullptr) {
+    if (_factory != nullptr) {
         // 0x1800db62d: FreeLibrary on a module held in an UNEXPORTED global at
         // 0x1801fc6d0 — the only address in these four bodies with no name in
         // either build. At cutover ResolveAddr hands back 0 for it (the module
@@ -823,14 +834,14 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
         }
         ++steps;
     }
-    if (void* p = self->_modification) {
+    if (void* p = _modification) {
         RT_EXPORT_ONCE(VoidThisFn, "?SaveList@Modification@IO@@QEAAXXZ")(p); ++steps;
     }
-    if (self->_persistence != nullptr && self->_noConfigure == 0) {
+    if (_persistence != nullptr && _noConfigure == 0) {
         RT_EXPORT_ONCE(VoidThisFn,
-            "?WriteSettings@Persistence@IO@@QEBAXXZ")(self->_persistence); ++steps;
+            "?WriteSettings@Persistence@IO@@QEBAXXZ")(_persistence); ++steps;
     }
-    if (void* p = self->_fileSystem) {
+    if (void* p = _fileSystem) {
         RT_EXPORT_ONCE(VoidThisFn, "?ClosePackages@FileSystem@IO@@QEAAXXZ")(p); ++steps;
     }
 
@@ -841,42 +852,42 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
     // System::Configuration, Factory, InternalFactory, ExternalFactory,
     // Modification, Persistence, FileSystem, in that order. Kept as written.
 
-    if (void* p = self->_achievementManager) {
+    if (void* p = _achievementManager) {
         RT_EXPORT_ONCE(VoidThisFn,
             "??1AchievementManager@Achievement@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_inputDevice) {
+    if (void* p = _inputDevice) {
         // 0x1800db6c4: retail calls NO destructor here — just the free. Input::
         // Device's dtor exists (??1Device@Input@@, 0x1800e1480) and Shutdown
         // does not call it. Faithful, and worth flagging as a retail leak
         // rather than a transcription slip.
         MemFree(p);
     }
-    if (void* p = self->_inputConfiguration) {
+    if (void* p = _inputConfiguration) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Configuration@Input@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_audioDevice) {
+    if (void* p = _audioDevice) {
         // 0x1800db6fe: only the Audio::Stream sub-object at +0xa00 is destroyed;
         // ??1Device@Audio@@ (0x1800de4f0) is NOT called. Faithful.
         RT_EXPORT_ONCE(VoidThisFn, "??1Stream@Audio@@QEAA@XZ")(
             static_cast<uint8_t*>(p) + 0xa00);
         MemFree(p);
     }
-    if (void* p = self->_audioConfiguration) {
+    if (void* p = _audioConfiguration) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Configuration@Audio@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_videoDevice) {
+    if (void* p = _videoDevice) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Device@Video@@QEAA@XZ")(p);
         RtVideo_Device_OperatorDelete(p);     // ??3Device@Video@@, == MemFree
     }
-    if (void* p = self->_videoConfiguration) {
+    if (void* p = _videoConfiguration) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Configuration@Video@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_application) {
+    if (void* p = _application) {
         // 0x18004da00 is ~Application immediately followed by MemFree(this) —
         // a scalar deleting destructor. Split into its two halves here. The
         // exported ??1Application@0@ writes the two adjacent zeroes in the
@@ -885,31 +896,31 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Application@0@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_configuration) {
+    if (void* p = _configuration) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Configuration@System@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_factory) {
+    if (void* p = _factory) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Factory@Object@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_internalFactory) {
+    if (void* p = _internalFactory) {
         RT_EXPORT_ONCE(VoidThisFn, "??1InternalFactory@Object@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_externalFactory) {
+    if (void* p = _externalFactory) {
         RT_EXPORT_ONCE(VoidThisFn, "??1ExternalFactory@Object@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_modification) {
+    if (void* p = _modification) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Modification@IO@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_persistence) {
+    if (void* p = _persistence) {
         RT_EXPORT_ONCE(VoidThisFn, "??1Persistence@IO@@QEAA@XZ")(p);
         MemFree(p);
     }
-    if (void* p = self->_fileSystem) {
+    if (void* p = _fileSystem) {
         RT_EXPORT_ONCE(VoidThisFn, "??1FileSystem@IO@@QEAA@XZ")(p);
         MemFree(p);
     }
@@ -919,13 +930,17 @@ extern "C" void RtEngine_Engine_Shutdown(Engine* self) {
     // leaves the pointer dangling, exactly as retail does, so the shadow below
     // must not assert on it.
     RT_EXPORT_ONCE(VoidThisFn, "?Shutdown@MemoryAllocator@System@@QEAAXXZ")(
-        &self->_allocator);
+        &_allocator);
 
     // 0x1800db88b: the tail jump.
     RtEngineLifecyclePlatformCoUninit();
 
     g_shutdownSteps = steps;
 
+}
+
+extern "C" void RtEngine_Engine_Shutdown(EngineT* self) {
+    self->Engine::Engine::Shutdown();
 }
 
 // ============================================================================

@@ -26,7 +26,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 
 // ============================================================================
 // Application::Application::Get()                       retail 0x18000a2f0
@@ -43,11 +45,15 @@ using RtApplication::Application;
 // exported slot through its own RT_DATA_SLOT call instead of depending on
 // that file's internal linkage).
 // ============================================================================
-Application* RtApp_Get() {
-    Application** slot =
-        RT_DATA_SLOT(Application**, "?_singleton@Application@1@0PEAV11@EA");
-    Application* ours = slot ? *slot : nullptr;
+Application::Application* Application::Application::Get() {
+    App** slot =
+        RT_DATA_SLOT(App**, "?_singleton@Application@1@0PEAV11@EA");
+    App* ours = slot ? *slot : nullptr;
     return ours;
+}
+
+App* RtApp_Get() {
+    return Application::Application::Get();
 }
 
 // ============================================================================
@@ -58,9 +64,13 @@ Application* RtApp_Get() {
 //   18009fb94: RET
 // `return this->_platformHandle;` (Application.h +0x08).
 // ============================================================================
-void* RtApp_GetInstance(const Application* self) {
-    void* ours = self->_platformHandle;
+void* Application::Application::GetInstance() const {
+    void* ours = _platformHandle;
     return ours;
+}
+
+void* RtApp_GetInstance(const App* self) {
+    return self->Application::GetInstance();
 }
 
 // ============================================================================
@@ -71,9 +81,13 @@ void* RtApp_GetInstance(const Application* self) {
 //   18009fba3: RET
 // `return this->_windowHandle;` (Application.h +0x00).
 // ============================================================================
-void* RtApp_GetWindow(const Application* self) {
-    void* ours = self->_windowHandle;
+void* Application::Application::GetWindow() const {
+    void* ours = _windowHandle;
     return ours;
+}
+
+void* RtApp_GetWindow(const App* self) {
+    return self->Application::GetWindow();
 }
 
 // ============================================================================
@@ -103,9 +117,13 @@ void* RtApp_GetWindow(const Application* self) {
 // 0x00 and `EnableCursor` stores a C++ bool), so this was not a live bug. It
 // is fixed anyway: faithful-first is the project rule, and "unreachable
 // today" is a property of our own current callers, not of the retail body.
-uint8_t RtApp_IsCursorEnabled(Application* self) {
-    const uint8_t ours = self->_cursorEnabled;
+uint8_t Application::Application::IsCursorEnabled() {
+    const uint8_t ours = _cursorEnabled;
     return ours;
+}
+
+uint8_t RtApp_IsCursorEnabled(App* self) {
+    return self->Application::IsCursorEnabled();
 }
 
 // ============================================================================
@@ -123,9 +141,13 @@ uint8_t RtApp_IsCursorEnabled(Application* self) {
 // different ordinals) and both are registered here; this is not an alias of
 // the other, it is its own port reading the same byte.
 // ============================================================================
-bool RtApp_PlatformIsPaused(const Application* self) {
-    const bool ours = (self->_running == 0);
+bool Application::Application::PlatformIsPaused() {
+    const bool ours = (_running == 0);
     return ours;
+}
+
+bool RtApp_PlatformIsPaused(const App* self) {
+    return const_cast<App*>(self)->Application::PlatformIsPaused();
 }
 
 // ============================================================================
@@ -141,5 +163,9 @@ bool RtApp_PlatformIsPaused(const Application* self) {
 // port of a real (if trivial) function; it belongs on the wave's checklist
 // and is registered exactly like the rest.
 // ============================================================================
-void RtApp_PlatformDestruct(Application* /*self*/) {
+void Application::Application::PlatformDestruct() {
+}
+
+void RtApp_PlatformDestruct(App* self) {
+    self->Application::PlatformDestruct();
 }

@@ -12,42 +12,44 @@
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 
 // application.cpp (no Win32)
-bool RtApp_IsPaused(const Application* self);
-void RtApp_Quit(Application* self);
+bool RtApp_IsPaused(const App* self);
+void RtApp_Quit(App* self);
 
 // application_win.cpp (Win32 platform seam)
-bool RtApp_PlatformUpdate(Application* self);
-void RtApp_SleepThread(Application* self, int ms);
-void RtApp_YieldToThreads(Application* self);
-void RtApp_EnableCursor(Application* self, bool enabled);
-bool RtApp_LaunchProcess(Application* self, const char* cmd, bool wait);
+bool RtApp_PlatformUpdate(App* self);
+void RtApp_SleepThread(App* self, int ms);
+void RtApp_YieldToThreads(App* self);
+void RtApp_EnableCursor(App* self, bool enabled);
+bool RtApp_LaunchProcess(App* self, const char* cmd, bool wait);
 
 // application_accessors.cpp (no Win32) -- Wave 12 lane A
-Application* RtApp_Get();
-void* RtApp_GetInstance(const Application* self);
-void* RtApp_GetWindow(const Application* self);
-uint8_t RtApp_IsCursorEnabled(Application* self);   // RAW BYTE, not a normalised bool -- see its banner
-bool RtApp_PlatformIsPaused(const Application* self);
-void RtApp_PlatformDestruct(Application* self);
+App* RtApp_Get();
+void* RtApp_GetInstance(const App* self);
+void* RtApp_GetWindow(const App* self);
+uint8_t RtApp_IsCursorEnabled(App* self);   // RAW BYTE, not a normalised bool -- see its banner
+bool RtApp_PlatformIsPaused(const App* self);
+void RtApp_PlatformDestruct(App* self);
 
 // application_thunks.cpp -- Wave 12 lane A
-bool RtApp_Update(Application* self);
-void RtApp_Shutdown(Application* self);
-bool RtApp_Startup(Application* self);
+bool RtApp_Update(App* self);
+void RtApp_Shutdown(App* self);
+bool RtApp_Startup(App* self);
 
-extern "C" void RtApp_PlatformConstruct(Application* self, void* platformHandle);
+extern "C" void RtApp_PlatformConstruct(App* self, void* platformHandle);
 
 // platform_startup_win.cpp (Win32 platform seam; lives beside PlatformStartup
 // because the two share the `kClassName` literal — see its banner)
-extern "C" void RtApp_PlatformShutdown(Application* self);
+extern "C" void RtApp_PlatformShutdown(App* self);
 
 // application_lifecycle.cpp (no Win32) — Wave 12 lane B
-extern "C" void          RtApp_Dtor(Application* self);
-extern "C" Application*  RtApp_CopyCtor(Application* self, const Application* other);
-extern "C" Application*  RtApp_Assign(Application* self, const Application* other);
+extern "C" void          RtApp_Dtor(App* self);
+extern "C" App*  RtApp_CopyCtor(App* self, const App* other);
+extern "C" App*  RtApp_Assign(App* self, const App* other);
 extern "C" void          RtApp_SetDestroyTree(void* self, rtsetavl::Node* n);
 extern "C" rtsetavl::Node* RtApp_SetCloneTree(void* self, const rtsetavl::Node* src);
 extern "C" void          RtApp_SetClear(rtsetavl::Set* set);

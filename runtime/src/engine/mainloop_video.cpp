@@ -191,6 +191,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
+#include "../../types/engine/UpdateLoop.h"   // ENDGAME B.3.7: slots 8/9 as virtual calls
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../collection/array_internal.h"
@@ -475,7 +476,7 @@ extern "C" void RtColl_ArraySetSizeFill_18004f620(void* a, int n, const void* fi
 // is the bug worth finding.
 //
 // ORACLE: shadow. Replay is invalid — see §5.
-extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
+void Engine::MainLoop::OnVideoError() {
 
     // ---- 1. the ten type ids -------------------------------------------------
     // THE ONE DELIBERATE REORDERING IN THIS FILE, DECLARED RATHER THAN HIDDEN.
@@ -524,13 +525,13 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     // see engine.cpp's identical banner on this same address/field. Stays a
     // by-address call.
     reinterpret_cast<void (*)(void*)>(
-        ResolveAddr(Module::Runtime, 0x180033880))(&self->_videoResources);
+        ResolveAddr(Module::Runtime, 0x180033880))(&_videoResources);
 
     // ENDGAME B.3.2 step 2 — `arr` is now the real `_videoResources` member
     // seen through its own hand-derived spec, `kSpec_VideoResource`
     // (NON-TRIVIAL: a real element assign and a destroy-range, not a byte
     // trait), rather than a raw `rtcoll::ArrayHdr*` alias.
-    auto* const arr = rtcoll::AsArray<&rtcoll::kSpec_VideoResource>(&self->_videoResources);
+    auto* const arr = rtcoll::AsArray<&rtcoll::kSpec_VideoResource>(&_videoResources);
 
     // ---- 3. collect the live resources of those ten classes ------------------
     const RtObject::ExternalFactory* const factory =
@@ -618,7 +619,7 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     }
 
     // ---- 6. tell the current loop ----------------------------------------------
-    CallVSlot(self->_currentLoop, 0x40);
+    _currentLoop->OnVideoError();      // slot 8 (+0x40), ENDGAME B.3.7
 
     // ---- 7. tear the video context down ----------------------------------------
     // NOTE the difference from ~MainLoop, which releases the same field with
@@ -628,13 +629,13 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     // Two members of one class releasing one field two different ways is
     // surprising enough to be worth the sentence; both are transcribed as
     // written.
-    void* const context = self->_context;
+    void* const context = _context;
     if (context != nullptr) {
         reinterpret_cast<void (*)(void*)>(
             ResolveAddr(Module::Runtime, 0x1800f16e0))(context);   // ~Context
         rtcoll::MemFree(context);
     }
-    self->_context = nullptr;
+    _context = nullptr;
 
     // ---- 8. free the id array ---------------------------------------------------
     // ENDGAME B.3.2 step 2 — the manual `rtcoll::ArrayDtorImpl(&types)` call is
@@ -656,6 +657,10 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
     // with a non-null `_data` whenever `_size > 0` is a property SetSizeCore
     // could violate and this body cannot fake, because it never writes those
     // three fields itself.
+}
+
+extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
+    self->Engine::MainLoop::OnVideoError();
 }
 
 // ============================================================================
@@ -706,18 +711,21 @@ extern "C" void RtEngine_MainLoop_OnVideoError(RtEngine::MainLoop* self) {
 //
 // ORACLE: shadow. Replay is invalid — running theirs after ours would create a
 // second Video::Context and re-Load every resource.
-extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
+void Engine::MainLoop::OnVideoRestart() {
 
     rtcoll::ArrayHdr* const arr =
-        reinterpret_cast<rtcoll::ArrayHdr*>(&self->_videoResources);
+        reinterpret_cast<rtcoll::ArrayHdr*>(&_videoResources);
     const int32_t sizeAtEntry = arr->_size;
 
     // ---- 1. recreate the context -----------------------------------------------
-    reinterpret_cast<void (*)(void*)>(
-        ResolveAddr(Module::Runtime, 0x1800dd500))(*MainLoopSlot());
+    // ENDGAME B.3.7: `?CreateVideoContext@MainLoop@Engine@@AEAAXXZ`
+    // (0x1800dd500) was reached BY ADDRESS; it is a member of the real class
+    // now. Retail loads RCX from the singleton, not from `this`, and so does
+    // this call.
+    static_cast<MainLoop*>(*MainLoopSlot())->CreateVideoContext();
 
     // ---- 2 + 3 -------------------------------------------------------------------
-    CallVSlot(self->_currentLoop, 0x48);
+    _currentLoop->OnVideoRestart();    // slot 9 (+0x48), ENDGAME B.3.7
 
     {
         using SaveLoadOnVideoRestartFn = void (*)(void*);
@@ -806,6 +814,10 @@ extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
     // value is a STALE number rather than a zero, so a port that "tidied up" by
     // clearing _capacity fails here and nowhere else. `contextOk` is not our
     // own write either — CreateVideoContext stores it.
+}
+
+extern "C" void RtEngine_MainLoop_OnVideoRestart(RtEngine::MainLoop* self) {
+    self->Engine::MainLoop::OnVideoRestart();
 }
 
 // ============================================================================
