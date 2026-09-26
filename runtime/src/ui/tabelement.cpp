@@ -22,34 +22,15 @@
 // runtime/src/ui/tabelement_addtab.cpp. `?SetActiveTab@` (0x18004c890) and
 // `?GetActiveTab@` (0x18004c880) are lane E's, in widgets_layout.cpp.
 //
-// ---------------------------------------------------------------------------
-// LAYOUT. sizeof == 0x108 (deleting dtor `MOV EDX,0x108`):
+// LAYOUT and the paired child list: runtime/types/ui/TabElement.h (sizeof
+// 0x108; RULE B6-8 moved this file's offsets there under the retail name).
 //
-//   +0xC0  _tabCount      int32  } one qword store of 0 in the ctor
-//   +0xC4  _gap           int32  }  the margin used everywhere as the inset
-//   +0xC8  _edgeLeft      Sprite (sheet +0xC8, index +0xD0)
-//   +0xD8  _edgeMiddle    Sprite
-//   +0xE8  _edgeRight     Sprite     the three that "erase" the active tab's
-//                                    bottom border into the page
-//   +0xF8  _activeTab     int32  } one qword store of 0
-//   +0xFC  _tabBarHeight  int32  }  computed by ComputeSize
-//   +0x100 _tabBarWidth   int32
-//
-// THE CHILD LIST IS PAIRED, and that is what makes every index below readable:
-//
-//   children[0]              the tab-strip backdrop
-//   children[1]              the page backdrop
-//   children[2]              the page frame
-//   children[3 + 2*i]        tab i's BUTTON
-//   children[4 + 2*i]        tab i's CONTAINER
-//
-// Retail addresses them by BYTE offset into `_children._data` with a stride of
-// 0x10 (two pointers) — 0x18 for the first button, 0x20 for the first
-// container — and picks the active pair with `(activeTab + 2) * 0x10` for the
-// container and `(activeTab * 2 + 3) * 8` for the button. Both spellings are
-// the same pairing seen from two directions, which is how it is known and not
-// guessed.
+// ENDGAME B.3.6 block C5: the six slot bodies and UpdateContainers MOVED into
+// the members of the real `UI::TabElement`; each registered door is a
+// one-line QUALIFIED delegation. The ctor / dtor stay doors (B4b-2).
 // ============================================================================
+
+#include <atomic>
 
 #include "widget_common.h"
 #include "../../types/ui/TabElement.h"
@@ -68,32 +49,283 @@ constexpr int kTabBarHeight = 0xFC;
 constexpr int kTabBarWidth  = 0x100;
 
 static_assert(kActiveTab == UI::TabElementOffsets::kActiveTab, "");
+static_assert(kTabCount     == offsetof(UI::TabElement, _tabCount), "");
+static_assert(kGap          == offsetof(UI::TabElement, _gap), "");
+static_assert(kEdgeLeft     == offsetof(UI::TabElement, _edgeLeft), "");
+static_assert(kEdgeMiddle   == offsetof(UI::TabElement, _edgeMiddle), "");
+static_assert(kEdgeRight    == offsetof(UI::TabElement, _edgeRight), "");
+static_assert(kTabBarHeight == offsetof(UI::TabElement, _tabBarHeight), "");
+static_assert(kTabBarWidth  == offsetof(UI::TabElement, _tabBarWidth), "");
 
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A");
+// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7TabElement@UI@@6B@"); }
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
+const uint8_t* TabTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@TabElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtTabElement() { return AtomicExport(g_vtable, "??_7TabElement@UI@@6B@"); }
 
-void** Kids(void* self) { return reinterpret_cast<void**>(PTR(self, kElChildren)); }
-void*  TabButton(void* self, int32_t i)    { return Kids(self)[3 + 2 * i]; }
-void*  TabContainer(void* self, int32_t i) { return Kids(self)[4 + 2 * i]; }
+int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
 
 }  // namespace
 
-extern "C" uint32_t RtUi_TabElement_Type(const void*) {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+namespace UI {
+
+// [1] 0x18004c700 / [2] 0x18004c6e0
+const char* TabElement::TypeName() const {
+    const char* v = nullptr; __builtin_memcpy(&v, TabTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" const char* RtUi_TabElement_TypeName(const void*) {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
+uint32_t TabElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
 }
 
-// ??0TabElement@UI@@QEAA@XZ   0x1800da390
+// ---------------------------------------------------------------------------
+// ?UpdateContainers@TabElement@UI@@AEAAXXZ   0x1800d9710
+//
+// Hide every container but the active one, and lay the active one out inside
+// the page frame. The "dirty walk if bit 0 flipped" guard is Element's.
+// ---------------------------------------------------------------------------
+void TabElement::UpdateContainers() {
+    const int32_t n = _tabCount;
+    for (int32_t i = 0; i < n; ++i) {
+        Element* c = _children.GetData()[GetContainerIndex(i)];
+        const uint32_t old = c->_flags;
+        if (i == _activeTab) {
+            c->_flags = old & ~kFlagHidden;
+            if ((old & kFlagHidden) != 0) DirtyWalk(c);
+            const int32_t gap = _gap;
+            Element* cc = _children.GetData()[GetContainerIndex(i)];
+            cc->ComputeLayout(gap + _layoutLeft,
+                              _tabBarHeight + gap * 2 + _layoutTop,
+                              _layoutRight  - gap,
+                              _layoutBottom - gap);                      // slot 5
+        } else {
+            c->_flags = old | kFlagHidden;
+            if ((((old | kFlagHidden) ^ old) & kFlagHidden) != 0) DirtyWalk(c);
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// [4] ?ComputeSize@TabElement@UI@@UEAAXXZ   0x1800d9ea0
+// ---------------------------------------------------------------------------
+void TabElement::ComputeSize() {
+    if ((_flags & kFlagNeedsSizeCalc) == 0) return;
+
+    _tabBarWidth  = _gap;
+    _tabBarHeight = 0;
+
+    int32_t maxW = 0, maxH = 0;
+
+    const int32_t n = _tabCount;
+    for (int32_t i = 0; i < n; ++i) {
+        Element* button = _children.GetData()[GetButtonIndex(i)];
+        if ((button->_flags & kFlagHidden) != 0) continue;
+
+        int32_t bw = 0, bh = 0;
+        InlineGetPaddedSize(button, &bw, &bh);
+        if (bh < _tabBarHeight) bh = _tabBarHeight;
+        _tabBarHeight = bh;
+        _tabBarWidth = _tabBarWidth + _gap + bw;
+
+        int32_t cw = 0, ch = 0;
+        InlineGetPaddedSize(_children.GetData()[GetContainerIndex(i)], &cw, &ch);
+        if (maxW <= cw) maxW = cw;
+        if (maxH <= ch) maxH = ch;
+    }
+
+    _flags &= ~kFlagNeedsSizeCalc;
+    _layoutHeight = _gap * 3 + _tabBarHeight + maxH;
+    _layoutWidth  = maxW + _gap * 2;
+}
+
+// ---------------------------------------------------------------------------
+// [5] ?ComputeLayout@TabElement@UI@@UEAAXHHHH@Z   0x1800d9b20
+// ---------------------------------------------------------------------------
+void TabElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (_border != nullptr)
+        reinterpret_cast<Element*>(_border)->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
+
+    ComputeSize();   // slot 4, VIRTUAL — `CALL [RAX+0x20]` in retail
+
+    int32_t w = _layoutWidth;
+    int32_t h = _layoutHeight;
+    const int32_t align = _alignment;
+
+    if (right  < w + x) x = right  - w;
+    if (bottom < h + y) y = bottom - h;
+
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t aw = (right  - _rightPad)  - px;
+    const int32_t ah = (bottom - _bottomPad) - py;
+
+    if ((_flags & kFlagStretchX) != 0) w = aw;
+    if ((_flags & kFlagStretchY) != 0) h = ah;
+
+    switch (align) {
+        case 1: case 4: case 7: px = ((aw >> 1) - (w >> 1)) + px; break;
+        case 2: case 5: case 8: px = (right - _rightPad) - w; break;
+        default: break;
+    }
+    if (align > 2) {
+        if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
+        else if (align < 9) py = (bottom - _bottomPad) - h;
+    }
+
+    const int32_t rx = px + w;
+    const int32_t by = py + h;
+    _layoutLeft   = px;
+    _layoutRight  = rx;
+    _layoutTop    = py;
+    _layoutBottom = by;
+
+    const int32_t barBottom = _tabBarHeight + _gap + py;
+
+    // The array is RE-READ before each call (slot 5, virtual).
+    _children.GetData()[0]->ComputeLayout(px, py, _tabBarWidth + px, barBottom);
+    _children.GetData()[1]->ComputeLayout(px, barBottom, rx, by);
+    {
+        const int32_t gap = _gap;
+        _children.GetData()[2]->ComputeLayout(gap + px, gap + barBottom, rx - gap, by - gap);
+    }
+
+    int32_t cursor = _gap + px;
+    const int32_t n = _tabCount;
+    for (int32_t i = 0; i < n; ++i) {
+        Element* button = _children.GetData()[GetButtonIndex(i)];
+        if ((button->_flags & kFlagHidden) != 0) continue;
+
+        int32_t bw = 0, bh = 0;
+        InlineGetPaddedSize(button, &bw, &bh);
+
+        button = _children.GetData()[GetButtonIndex(i)];
+        button->ComputeLayout(cursor, _gap + py, bw + cursor, _gap + bh + py);
+        cursor = cursor + _gap + bw;
+    }
+
+    {
+        Element* active = _children.GetData()[GetContainerIndex(_activeTab)];
+        const int32_t gap = _gap;
+        active->ComputeLayout(gap + px, barBottom + gap, rx - gap, by - gap);
+    }
+}
+
+// ---------------------------------------------------------------------------
+// [6] ?Draw@TabElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800d98b0
+//
+// The three edge sprites are drawn with the element's RAW colour — no
+// ComputeColor, no dim test. Retail passes `[RDI+0x38]` straight through.
+// ---------------------------------------------------------------------------
+void TabElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    void* const ctx = &context;
+    if (_border != nullptr)
+        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
+
+    _children.GetData()[0]->Draw(context, alpha);   // slot 6
+    _children.GetData()[1]->Draw(context, alpha);
+    _children.GetData()[2]->Draw(context, alpha);
+
+    const int32_t n = _tabCount;
+    for (int32_t i = 0; i < n; ++i) {
+        const Element* button = _children.GetData()[GetButtonIndex(i)];
+        if ((button->_flags & kFlagHidden) == 0)
+            button->Draw(context, alpha);
+    }
+
+    const Element* activeBtn = _children.GetData()[_activeTab * 2 + 3];
+    const int32_t bl = activeBtn->_layoutLeft;
+    const int32_t br = activeBtn->_layoutRight;
+    const int32_t y0 = activeBtn->_layoutBottom - 4;
+    const int32_t y1 = _children.GetData()[2]->_layoutTop + 4;
+    const uint32_t c = _color;
+
+    // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
+    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeLeft,
+                                         bl, y0, SpriteW(_edgeLeft) + bl, y1, c);
+
+    const int32_t rw = SpriteW(_edgeRight);
+    const int32_t lw = SpriteW(_edgeLeft);
+    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeMiddle, bl + lw, y0, br - rw, y1, c);
+
+    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_edgeRight,
+                                         br - SpriteW(_edgeRight), y0, br, y1, c);
+
+    _children.GetData()[GetContainerIndex(_activeTab)]->Draw(context, alpha);
+}
+
+// ---------------------------------------------------------------------------
+// [7] ?Update@TabElement@UI@@ ...   0x1800d9810
+// ---------------------------------------------------------------------------
+void TabElement::Update(const System::Time& time, UserInterface* ui,
+                        Object::InternalPtr<DialogInstance>* dialog,
+                        const UpdateState& state) {
+    // The base Update, QUALIFIED (this object's slot 7 is this very body), with
+    // the handle copied into a temporary whose ADDRESS is passed — retail's shape.
+    Object::InternalPtr<DialogInstance> slot = *dialog;
+    Element::Update(time, ui, &slot, state);
+
+    const int32_t before = _activeTab;
+    const int32_t n = _tabCount;
+    for (int32_t i = 0; i < n; ++i) {
+        const Element* button = _children.GetData()[GetButtonIndex(i)];
+        if ((button->_flags & kFlagHidden) == 0 &&
+            (button->_flags & kFlagWasActivated) != 0) {
+            _activeTab = i;
+            break;
+        }
+    }
+    if (before == _activeTab) return;
+    UpdateContainers();
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_TabElement_Type(const void* self) {
+    return reinterpret_cast<const UI::TabElement*>(self)->UI::TabElement::Type();
+}
+extern "C" const char* RtUi_TabElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::TabElement*>(self)->UI::TabElement::TypeName();
+}
+extern "C" void RtUi_TabElement_UpdateContainers(void* self) {
+    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::UpdateContainers();
+}
+extern "C" void RtUi_TabElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::ComputeSize();
+}
+extern "C" void RtUi_TabElement_ComputeLayout(void* self, int32_t x, int32_t y,
+                                              int32_t right, int32_t bottom) {
+    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::ComputeLayout(x, y, right, bottom);
+}
+extern "C" void RtUi_TabElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::TabElement*>(self)->UI::TabElement::Draw(
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_TabElement_Update(void* self, const void* time, void* ui,
+                                       void** dlgPtr, const void* state) {
+    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::Update(
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(state));
+}
+
+// ??0TabElement@UI@@QEAA@XZ   0x1800da390 — a DOOR (B4b-2), unchanged.
 extern "C" void* RtUi_TabElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
     ElementCtor(self);
-    PTR(self, 0x00) = Vtable();
+    PTR(self, 0x00) = VtTabElement();
     I32(self, kTabCount) = 0;
     I32(self, kGap)      = 0;
     const int edgeSprites[3] = { kEdgeLeft, kEdgeMiddle, kEdgeRight };
@@ -107,224 +339,10 @@ extern "C" void* RtUi_TabElement_Ctor(void* self) {   // returns this in RAX, as
     return self;
 }
 
-// ??1TabElement@UI@@UEAA@XZ   0x1800da360
+// ??1TabElement@UI@@UEAA@XZ   0x1800da360 — a DOOR (B4b-2), unchanged.
 extern "C" void RtUi_TabElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
+    PTR(self, 0x00) = VtTabElement();
     ElementDtor(self);
-}
-
-// ---------------------------------------------------------------------------
-// ?UpdateContainers@TabElement@UI@@AEAAXXZ   0x1800d9710
-//
-// Hide every container but the active one, and lay the active one out inside
-// the page frame. The "dirty walk if bit 0 flipped" guard is Element's.
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_TabElement_UpdateContainers(void* self) {
-    const int32_t n = I32(self, kTabCount);
-    for (int32_t i = 0; i < n; ++i) {
-        void* c = TabContainer(self, i);
-        const uint32_t old = U32(c, kElFlags);
-        if (i == I32(self, kActiveTab)) {
-            U32(c, kElFlags) = old & ~kFlagHidden;
-            if ((old & kFlagHidden) != 0) DirtyWalk(c);
-            const int32_t gap = I32(self, kGap);
-            void* cc = TabContainer(self, i);
-            reinterpret_cast<ComputeLayoutSlotFn>(VTable(cc)[kVtComputeLayout / 8])(
-                cc, gap + I32(self, kElLayoutLeft),
-                I32(self, kTabBarHeight) + gap * 2 + I32(self, kElLayoutTop),
-                I32(self, kElLayoutRight)  - gap,
-                I32(self, kElLayoutBottom) - gap);
-        } else {
-            U32(c, kElFlags) = old | kFlagHidden;
-            if ((((old | kFlagHidden) ^ old) & kFlagHidden) != 0) DirtyWalk(c);
-        }
-    }
-}
-
-// ---------------------------------------------------------------------------
-// slot 4 — ?ComputeSize@TabElement@UI@@UEAAXXZ   0x1800d9ea0
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_TabElement_ComputeSize(void* self) {
-    if ((U32(self, kElFlags) & kFlagNeedsSizeCalc) == 0) return;
-
-    I32(self, kTabBarWidth)  = I32(self, kGap);
-    I32(self, kTabBarHeight) = 0;
-
-    int32_t maxW = 0, maxH = 0;
-
-    const int32_t n = I32(self, kTabCount);
-    for (int32_t i = 0; i < n; ++i) {
-        void* button = TabButton(self, i);
-        if ((U32(button, kElFlags) & kFlagHidden) != 0) continue;
-
-        int32_t bw = 0, bh = 0;
-        InlineGetPaddedSize(button, &bw, &bh);
-        if (bh < I32(self, kTabBarHeight)) bh = I32(self, kTabBarHeight);
-        I32(self, kTabBarHeight) = bh;
-        I32(self, kTabBarWidth) = I32(self, kTabBarWidth) + I32(self, kGap) + bw;
-
-        int32_t cw = 0, ch = 0;
-        InlineGetPaddedSize(TabContainer(self, i), &cw, &ch);
-        if (maxW <= cw) maxW = cw;
-        if (maxH <= ch) maxH = ch;
-    }
-
-    U32(self, kElFlags) &= ~kFlagNeedsSizeCalc;
-    I32(self, kElLayoutHeight) = I32(self, kGap) * 3 + I32(self, kTabBarHeight) + maxH;
-    I32(self, kElLayoutWidth)  = maxW + I32(self, kGap) * 2;
-}
-
-// ---------------------------------------------------------------------------
-// slot 5 — ?ComputeLayout@TabElement@UI@@UEAAXHHHH@Z   0x1800d9b20
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_TabElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                              int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
-
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
-
-    int32_t w = I32(self, kElLayoutWidth);
-    int32_t h = I32(self, kElLayoutHeight);
-    const int32_t align = I32(self, kElAlignment);
-
-    if (right  < w + x) x = right  - w;
-    if (bottom < h + y) y = bottom - h;
-
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
-
-    if ((U32(self, kElFlags) & kFlagStretchX) != 0) w = aw;
-    if ((U32(self, kElFlags) & kFlagStretchY) != 0) h = ah;
-
-    switch (align) {
-        case 1: case 4: case 7: px = ((aw >> 1) - (w >> 1)) + px; break;
-        case 2: case 5: case 8: px = (right - I32(self, kElRightPad)) - w; break;
-        default: break;
-    }
-    if (align > 2) {
-        if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
-        else if (align < 9) py = (bottom - I32(self, kElBottomPad)) - h;
-    }
-
-    const int32_t rx = px + w;
-    const int32_t by = py + h;
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutRight)  = rx;
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutBottom) = by;
-
-    const int32_t barBottom = I32(self, kTabBarHeight) + I32(self, kGap) + py;
-
-    void** kids = Kids(self);
-    reinterpret_cast<ComputeLayoutSlotFn>(VTable(kids[0])[kVtComputeLayout / 8])(
-        kids[0], px, py, I32(self, kTabBarWidth) + px, barBottom);
-
-    kids = Kids(self);
-    reinterpret_cast<ComputeLayoutSlotFn>(VTable(kids[1])[kVtComputeLayout / 8])(
-        kids[1], px, barBottom, rx, by);
-
-    {
-        const int32_t gap = I32(self, kGap);
-        kids = Kids(self);
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(kids[2])[kVtComputeLayout / 8])(
-            kids[2], gap + px, gap + barBottom, rx - gap, by - gap);
-    }
-
-    int32_t cursor = I32(self, kGap) + px;
-    const int32_t n = I32(self, kTabCount);
-    for (int32_t i = 0; i < n; ++i) {
-        void* button = TabButton(self, i);
-        if ((U32(button, kElFlags) & kFlagHidden) != 0) continue;
-
-        int32_t bw = 0, bh = 0;
-        InlineGetPaddedSize(button, &bw, &bh);
-
-        button = TabButton(self, i);
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(button)[kVtComputeLayout / 8])(
-            button, cursor, I32(self, kGap) + py,
-            bw + cursor, I32(self, kGap) + bh + py);
-        cursor = cursor + I32(self, kGap) + bw;
-    }
-
-    {
-        void* active = TabContainer(self, I32(self, kActiveTab));
-        const int32_t gap = I32(self, kGap);
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(active)[kVtComputeLayout / 8])(
-            active, gap + px, barBottom + gap, rx - gap, by - gap);
-    }
-}
-
-// ---------------------------------------------------------------------------
-// slot 6 — ?Draw@TabElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800d98b0
-//
-// The three edge sprites are drawn with the element's RAW colour — no
-// ComputeColor, no dim test. Retail passes `[RDI+0x38]` straight through.
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_TabElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
-
-    void** kids = Kids(me);
-    reinterpret_cast<DrawSlotFn>(VTable(kids[0])[kVtDraw / 8])(kids[0], ctx, alpha);
-    kids = Kids(me);
-    reinterpret_cast<DrawSlotFn>(VTable(kids[1])[kVtDraw / 8])(kids[1], ctx, alpha);
-    kids = Kids(me);
-    reinterpret_cast<DrawSlotFn>(VTable(kids[2])[kVtDraw / 8])(kids[2], ctx, alpha);
-
-    const int32_t n = I32(me, kTabCount);
-    for (int32_t i = 0; i < n; ++i) {
-        void* button = TabButton(me, i);
-        if ((U32(button, kElFlags) & kFlagHidden) == 0)
-            reinterpret_cast<DrawSlotFn>(VTable(button)[kVtDraw / 8])(button, ctx, alpha);
-    }
-
-    void* activeBtn = Kids(me)[I32(me, kActiveTab) * 2 + 3];
-    const int32_t bl = I32(activeBtn, kElLayoutLeft);
-    const int32_t br = I32(activeBtn, kElLayoutRight);
-    const int32_t y0 = I32(activeBtn, kElLayoutBottom) - 4;
-    const int32_t y1 = I32(Kids(me)[2], kElLayoutTop) + 4;
-    const uint32_t c = U32(me, kElColor);
-
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kEdgeLeft),
-                                         bl, y0, SpriteWidth(me, kEdgeLeft) + bl, y1, c);
-
-    const int32_t rw = SpriteWidth(me, kEdgeRight);
-    const int32_t lw = SpriteWidth(me, kEdgeLeft);
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kEdgeMiddle),
-                                         bl + lw, y0, br - rw, y1, c);
-
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kEdgeRight),
-                                         br - SpriteWidth(me, kEdgeRight), y0, br, y1, c);
-
-    void* active = TabContainer(me, I32(me, kActiveTab));
-    reinterpret_cast<DrawSlotFn>(VTable(active)[kVtDraw / 8])(active, ctx, alpha);
-}
-
-// ---------------------------------------------------------------------------
-// slot 7 — ?Update@TabElement@UI@@ ...   0x1800d9810
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_TabElement_Update(void* self, const void* time, void* ui,
-                                       void** dlgPtr, const void* state) {
-    void* slot = *dlgPtr;
-    ElementUpdate(self, time, ui, &slot, state);
-
-    const int32_t before = I32(self, kActiveTab);
-    const int32_t n = I32(self, kTabCount);
-    for (int32_t i = 0; i < n; ++i) {
-        void* button = TabButton(self, i);
-        if ((U32(button, kElFlags) & kFlagHidden) == 0 &&
-            (U32(button, kElFlags) & kFlagWasActivated) != 0) {
-            I32(self, kActiveTab) = i;
-            break;
-        }
-    }
-    if (before == I32(self, kActiveTab)) return;
-    RtUi_TabElement_UpdateContainers(self);
 }
 
 // ============================================================================

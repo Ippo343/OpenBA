@@ -18,24 +18,16 @@
 // plus ??0TabDescription@UI@@QEAA@XZ 0x1800daa00 (out of line) and
 // ??1TabDescription@UI@@UEAA@XZ 0x1800da8e0.
 //
-// LAYOUT, sizeof 0xb8 (`MOV EDX,0xb8` at 0x18004c65f). ElementDescription
-// (0x68) plus:
-//     +0x68  ExternalPtr<UI::ElementDescription>   \  the three fixed
-//     +0x70  ExternalPtr<UI::ElementDescription>    } sub-elements
-//     +0x78  ExternalPtr<UI::ElementDescription>   /
-//     +0x80  ExternalPtr<UI::SpriteSheet>
-//     +0x88  System::String   \
-//     +0x90  System::String    }  three sprite names
-//     +0x98  System::String   /
-//     +0xa0  int32   _i a0   kScalarInt
-//     +0xa8  Array<{ExternalPtr<ElementDescription>, ExternalPtr<ElementDescription>}>
-//     +0xb0  _size, +0xb4 _capacity
+// LAYOUT: runtime/types/ui/TabDescription.h (sizeof 0xb8; RULE B6-8 moved
+// this file's offsets there under the retail name). +0xa0 IS NEVER WRITTEN
+// BY THE CONSTRUCTOR (0x1800daa9e -> 0x1800daaa5): it is serialized and
+// copied to the element's _gap, so a description that was never
+// deserialized hands the element whatever the allocator left. Retail's.
 //
-// *** +0xa0 IS NEVER WRITTEN BY THE CONSTRUCTOR. *** The ctor's stores run
-// ..., +0x98, then jump straight to +0xa8 (0x1800daa9e -> 0x1800daaa5). It is
-// serialized and it is copied to the element's +0xc4, so a description that was
-// never deserialized hands the element whatever the allocator left. Retail's;
-// not "fixed" here.
+// ENDGAME B.3.6 block C5: every slot body MOVED into the members of the real
+// `UI::TabDescription`; each registered door is a one-line QUALIFIED
+// delegation. CreateInstance's by-address UpdateContainers (0x1800d9710)
+// is now the member call. The ctor / dtor stay doors (B4b-2).
 //
 // TWO NEW COLLECTION HELPERS, both appended to
 // runtime/src/collection/array.cpp rather than written here (that file is the
@@ -53,6 +45,11 @@
 #include "../../types/ui/ElementDescription.h"
 #include "../../types/ui/Element.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/ui/TabDescription.h"
+#include "../../types/ui/TabElement.h"
+
+#include <atomic>
+#include <new>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -63,11 +60,6 @@ void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"
 void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
 void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
 void* VtTabDescription()     { return RT_DATA_SLOT(void*, "??_7TabDescription@UI@@6B@"); }
-const uint8_t* TabDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A");
-}
-
 template <typename Fn>
 Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
 
@@ -87,10 +79,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
 
 using MemFreeFn = void (*)(void*);
 
@@ -110,21 +98,20 @@ void ReleaseStringField(char** field) {
 // times in CreateInstance (three fixed children plus two per tab); `slot` is
 // the caller's InternalPtr local, and WHICH local matters — see the note in
 // CreateInstance.
-void AddChild(const void* dialog, void** slot, uint8_t* elem, void* childDesc) {
+void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
+    // UI::Dialog::CreateElement (block B's class) — a door, by address.
     using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
     void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, slot, childDesc);
 
-    uint8_t* child = *reinterpret_cast<uint8_t**>(made);
+    UI::Element* child = *reinterpret_cast<UI::Element**>(made);
     if (child != nullptr)
-        *reinterpret_cast<void**>(child + 0x98) = elem;
+        child->_parent = elem;
 
     using PushFn = void (*)(void* array, int n, const void* fill);
-    RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                   *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                   made);
+    RtAddr<PushFn>(0x180076900ull)(&elem->_children, elem->_children.GetSize() + 1, made);
 
-    for (uint8_t* n = elem; n != nullptr; n = *reinterpret_cast<uint8_t**>(n + 0x98))
-        *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
+    for (UI::Element* n = elem; n != nullptr; n = n->_parent)
+        n->_flags |= UI::kElementFlagNeedsSizeCalc;
 }
 
 }  // namespace
@@ -166,27 +153,6 @@ extern "C" void* RtUi_TabDescription_Ctor(void* selfv) {
     return p;                                                   // 1800daab3
 }
 
-extern "C" uint32_t RtUi_TabDescription_Type(const void*) {
-    const uint8_t* ti = TabDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-extern "C" const char* RtUi_TabDescription_TypeName(const void*) {
-    const uint8_t* ti = TabDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
-extern "C" int32_t RtUi_TabDescription_GetFileVersion(const void*) { return 0x104; }
-
-extern "C" void* RtUi_TabDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 18004c390
-    return RtUi_TabDescription_Ctor(selfv);
-}
-extern "C" void* RtUi_TabDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    return RtUi_TabDescription_Ctor(selfv);
-}
-extern "C" void RtUi_TabDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
-// ============================================================================
 // ??1TabDescription@UI@@UEAA@XZ   0x1800da8e0
 // ============================================================================
 // Restamp, destroy the tab Array (0x18004cc90 — frees the buffer and does NOT
@@ -214,18 +180,70 @@ extern "C" void RtUi_TabDescription_Dtor(void* selfv) {
 }
 
 // ============================================================================
-// ?Serialize@TabDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800da760
+// ============================================================================
+// The MEMBERS
+// ============================================================================
+namespace {
+// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_getSpriteIndex{nullptr};
+const uint8_t* TabTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@TabDescription@UI@@0VBaseTypeInfo@Object@@A"));
+}
+// ?GetSpriteIndexFromName@SpriteSheet@UI@@ — block D's class, a door.
+int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
+    using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
+    return reinterpret_cast<GetIdxFn>(AtomicExport(
+        g_getSpriteIndex,
+        "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"))(sheet, nameStr);
+}
+}  // namespace
+
+namespace UI {
+
+// [1] 0x18004c1f0 / [2] 0x18004c1d0 / [3] 0x1800da8d0
+const char* TabDescription::TypeName() const {
+    const char* v = nullptr; __builtin_memcpy(&v, TabTypeInfo() + 8, sizeof v); return v;
+}
+uint32_t TabDescription::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, TabTypeInfo(), sizeof v); return v;
+}
+int32_t TabDescription::GetFileVersion() const { return 0x104; }
+
+// [9] 0x18004c390 — the null-`this` test stays in the door.
+Object::External* TabDescription::Construct() {
+    return reinterpret_cast<Object::External*>(RtUi_TabDescription_Ctor(this));
+}
+// [6] 0x18004c370 — destroy in place through slot 0 (flag 0), re-run the ctor.
+Object::External* TabDescription::Reconstruct() {
+    DeletingDtor(0);
+    return reinterpret_cast<Object::External*>(RtUi_TabDescription_Ctor(this));
+}
+// [7] 0x18004c3a0
+void TabDescription::Destruct() { DeletingDtor(0); }
+
+// ============================================================================
+// [5] ?Serialize@TabDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800da760
 // ============================================================================
 // The scalar count is read into a LOCAL (`MOV EAX,[RDI+0xb0]` ->
 // `MOV [RSP+0x50],EAX`) and the local is what gets serialized and what the
 // read-path SetSize and the element loop then use — not `_tabs._size`, which
 // SetSize is in the middle of changing.
-extern "C" bool RtUi_TabDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+bool TabDescription::Serialize(void* streamArg) {
+    Stream* stream = static_cast<Stream*>(streamArg);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(p, stream);              // 1800da77a
+    // QUALIFIED: this object wears the LEAF's table, whose slot 5 is this body.
+    ElementDescription::Serialize(stream);                              // 1800da77a
 
     Serializer ser = { stream, nullptr };
 
@@ -234,39 +252,39 @@ extern "C" bool RtUi_TabDescription_Serialize(void* selfv, void* streamv) {
     const int which = (stream->mode == 0) ? 0x18 : 0x20;
     using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
     void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800da7aa
+    ser.readerWriter = rw;                                              // 1800da7aa
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x68, &ser);        // 1800da7b8
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x70, &ser);        // 1800da7c6
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x78, &ser);        // 1800da7d4
-    RtAddr<FieldSerFn>(0x180004590ull)(p + 0x80, &ser);        // 1800da7e5 ExternalPtr<SpriteSheet>
-    RtAddr<FieldSerFn>(0x1800c9930ull)(p + 0x88, &ser);        // 1800da7f6
-    RtAddr<FieldSerFn>(0x1800c9930ull)(p + 0x90, &ser);        // 1800da807
-    RtAddr<FieldSerFn>(0x1800c9930ull)(p + 0x98, &ser);        // 1800da818
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_stripBackdropDescription, &ser);   // 1800da7b8
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_pageBackdropDescription, &ser);    // 1800da7c6
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_pageFrameDescription, &ser);       // 1800da7d4
+    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);            // 1800da7e5 ExternalPtr<SpriteSheet>
+    RtAddr<FieldSerFn>(0x1800c9930ull)(&_edgeLeftName, &ser);           // 1800da7f6
+    RtAddr<FieldSerFn>(0x1800c9930ull)(&_edgeMiddleName, &ser);         // 1800da807
+    RtAddr<FieldSerFn>(0x1800c9930ull)(&_edgeRightName, &ser);          // 1800da818
 
     using ScalarFn = void (*)(void* rw, void* value, const char* name);
     void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0xa0, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_gap, nullptr);
 
-    int32_t n = *reinterpret_cast<int32_t*>(p + 0xb0);         // 1800da835
+    int32_t n = _tabsCount;                                             // 1800da835
     reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
 
-    if (ser.stream->mode == 0) {                               // 1800da85a (re-read)
+    if (ser.stream->mode == 0) {                                        // 1800da85a (re-read)
         using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x18004cdf0ull)(p + 0xa8, n);        // 1800da86b
+        RtAddr<SetSizeFn>(0x18004cdf0ull)(&_tabsData, n);               // 1800da86b
     }
 
     // The pair loop: BOTH halves of every element, through ONE array-data
     // pointer read BEFORE the loop (0x1800da870) — retail does not re-read it,
     // which is safe here only because SetSize has already finished.
-    uint8_t* tab = *reinterpret_cast<uint8_t**>(p + 0xa8);
-    for (int32_t i = 0; i < n; ++i, tab += 0x10) {             // 1800da87d / 1800da8a3
-        RtAddr<FieldSerFn>(0x180038f90ull)(tab,       &ser);   // 1800da889
-        RtAddr<FieldSerFn>(0x180038f90ull)(tab + 8,   &ser);   // 1800da897
+    uint8_t* tab = reinterpret_cast<uint8_t*>(_tabsData);
+    for (int32_t i = 0; i < n; ++i, tab += 0x10) {                      // 1800da87d / 1800da8a3
+        RtAddr<FieldSerFn>(0x180038f90ull)(tab,       &ser);            // 1800da889
+        RtAddr<FieldSerFn>(0x180038f90ull)(tab + 8,   &ser);            // 1800da897
     }
 
-    if (rw != nullptr) {                                       // 1800da8ad
+    if (rw != nullptr) {                                                // 1800da8ad
         using DeleteFn = void (*)(void* rw, int flag);
         reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
     }
@@ -274,10 +292,10 @@ extern "C" bool RtUi_TabDescription_Serialize(void* selfv, void* streamv) {
 }
 
 // ============================================================================
-// ?CreateInstance@TabDescription@UI@@...   retail 0x1800da410
+// [8] ?CreateInstance@TabDescription@UI@@...   retail 0x1800da410
 // ============================================================================
 // TabElement is 0x108 bytes (`MOV EDX,0x108` at 0x1800da454) and its ctor is
-// CALLED out of line (0x1800da390, already ported by ui_factory_wave28.cpp).
+// CALLED out of line (0x1800da390, tabelement.cpp's door).
 //
 // SIX child creations: the three fixed sub-elements from +0x68/+0x70/+0x78,
 // then per tab the pair at tabs[i][0] and tabs[i][8].
@@ -291,75 +309,104 @@ extern "C" bool RtUi_TabDescription_Serialize(void* selfv, void* streamv) {
 //
 // Then three sprite lookups with the SAME dword-written/qword-read slot the
 // Image and Slider appliers have, and finally +0xc0/+0xc4 from the description's
-// +0xb0/+0xa0 — note the CROSS: count goes to +0xc0 and the never-initialised
-// +0xa0 goes to +0xc4.
-extern "C" void** RtUi_TabDescription_CreateInstance(const void* selfv, void** ret,
-                                                     const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
+// +0xb0/+0xa0 — note the CROSS: count goes to _tabCount and the never-initialised
+// +0xa0 goes to _gap.
+Object::InternalPtr<Element>* TabDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x108, 8);  // 1800da454 (inlined)
+    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x108, 8);          // 1800da454 (inlined)
 
-    uint8_t* elem = nullptr;
-    if (raw != nullptr) {                                      // 1800da481
+    TabElement* elem = nullptr;
+    if (raw != nullptr) {                                               // 1800da481
         using TabElementCtorFn = void* (*)(void*);
-        elem = static_cast<uint8_t*>(
-            RtAddr<TabElementCtorFn>(0x1800da390ull)(raw));    // 1800da486
+        elem = static_cast<TabElement*>(
+            RtAddr<TabElementCtorFn>(0x1800da390ull)(raw));             // 1800da486
     }
 
-    void* slotA = elem;                                        // [RSP+0x70]
-    void* slotB = nullptr;                                     // [RSP+0x78]
+    void* slotA = elem;                                                 // [RSP+0x70]
+    void* slotB = nullptr;                                              // [RSP+0x78]
 
+    // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
+    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
     using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slotA);  // 1800da4a0
+    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slotA);           // 1800da4a0
 
-    AddChild(dialog, &slotA, elem, *reinterpret_cast<void* const*>(self + 0x68));  // 1800da4b1
-    AddChild(dialog, &slotA, elem, *reinterpret_cast<void* const*>(self + 0x70));  // 1800da502
-    AddChild(dialog, &slotA, elem, *reinterpret_cast<void* const*>(self + 0x78));  // 1800da552
+    AddChild(dialog, &slotA, elem, _stripBackdropDescription);          // 1800da4b1
+    AddChild(dialog, &slotA, elem, _pageBackdropDescription);           // 1800da502
+    AddChild(dialog, &slotA, elem, _pageFrameDescription);              // 1800da552
 
-    const int32_t tabs = *reinterpret_cast<const int32_t*>(self + 0xb0);
-    for (int32_t i = 0; i < tabs; ++i) {                        // 1800da596 / 1800da658
-        void* const* row =
-            *reinterpret_cast<void* const* const*>(self + 0xa8) + i * 2;  // 1800da5a8
-        AddChild(dialog, &slotA, elem, row[0]);                // 1800da5bb
+    const int32_t tabs = _tabsCount;
+    for (int32_t i = 0; i < tabs; ++i) {                                // 1800da596 / 1800da658
+        void* const* row = _tabsData + i * 2;                           // 1800da5a8
+        AddChild(dialog, &slotA, elem, row[0]);                         // 1800da5bb
         // THE OTHER SLOT — see the banner.
-        void* const* row2 =
-            *reinterpret_cast<void* const* const*>(self + 0xa8) + i * 2;  // 1800da5f8 (re-read)
-        AddChild(dialog, &slotB, elem, row2[1]);               // 1800da60c
+        void* const* row2 = _tabsData + i * 2;                          // 1800da5f8 (re-read)
+        AddChild(dialog, &slotB, elem, row2[1]);                        // 1800da60c
     }
 
     // The three {sheet, index} pairs. ONE stack slot, written 4 bytes wide and
     // read 8 — the same deliberate width mismatch imagedescription.cpp records.
-    uint64_t idxSlot;                                          // [RSP+0x30]
-    static const int kNameOff[3] = { 0x88, 0x90, 0x98 };
-    static const int kElemOff[3] = { 0xc8, 0xd8, 0xe8 };
+    uint64_t idxSlot;                                                   // [RSP+0x30]
+    char* const* const names[3] = { &_edgeLeftName, &_edgeMiddleName, &_edgeRightName };
+    ::Sprite* const sprites[3] = { &elem->_edgeLeft, &elem->_edgeMiddle, &elem->_edgeRight };
     for (int i = 0; i < 3; ++i) {
-        void* sheet = *reinterpret_cast<void* const*>(self + 0x80);  // RE-READ each time
+        void* sheet = _spriteSheet;                                     // RE-READ each time
         if (sheet != nullptr) {
-            using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
-            const int32_t idx = RT_EXPORT_ONCE(
-                GetIdxFn,
-                "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z")(
-                    sheet, self + kNameOff[i]);
-            __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // DWORD store
+            const int32_t idx = GetSpriteIndexFromName(sheet, names[i]);
+            __builtin_memcpy(&idxSlot, &idx, sizeof idx);               // DWORD store
         } else {
             const int32_t minusOne = -1;
             __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);
         }
-        *reinterpret_cast<void**>(elem + kElemOff[i])        = sheet;
-        *reinterpret_cast<uint64_t*>(elem + kElemOff[i] + 8) = idxSlot;  // QWORD store
+        uint8_t* s = reinterpret_cast<uint8_t*>(sprites[i]);
+        *reinterpret_cast<void**>(s)        = sheet;
+        *reinterpret_cast<uint64_t*>(s + 8) = idxSlot;                  // QWORD store
     }
 
-    *reinterpret_cast<int32_t*>(elem + 0xc0) =
-        *reinterpret_cast<const int32_t*>(self + 0xb0);        // 1800da71e
-    *reinterpret_cast<int32_t*>(elem + 0xc4) =
-        *reinterpret_cast<const int32_t*>(self + 0xa0);        // 1800da72a
+    elem->_tabCount = _tabsCount;                                       // 1800da71e
+    elem->_gap      = _gap;                                             // 1800da72a
 
-    using UpdateContainersFn = void (*)(void*);
-    RtAddr<UpdateContainersFn>(0x1800d9710ull)(elem);          // 1800da733
+    elem->UpdateContainers();                                           // 1800da733 (was by address)
 
-    *ret = elem;                                               // 1800da738
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800da738
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_TabDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::TabDescription*>(self)->UI::TabDescription::Type();
+}
+extern "C" const char* RtUi_TabDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::TabDescription*>(self)->UI::TabDescription::TypeName();
+}
+extern "C" int32_t RtUi_TabDescription_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::TabDescription*>(self)
+        ->UI::TabDescription::GetFileVersion();
+}
+extern "C" void* RtUi_TabDescription_Construct(void* self) {
+    if (self == nullptr) return nullptr;                                // 18004c390 (retail null test)
+    return reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Construct();
+}
+extern "C" void* RtUi_TabDescription_Reconstruct(void* self) {
+    return reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Reconstruct();
+}
+extern "C" void RtUi_TabDescription_Destruct(void* self) {
+    reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Destruct();
+}
+extern "C" bool RtUi_TabDescription_Serialize(void* self, void* stream) {
+    return reinterpret_cast<UI::TabDescription*>(self)->UI::TabDescription::Serialize(stream);
+}
+extern "C" void** RtUi_TabDescription_CreateInstance(const void* self, void** ret,
+                                                     const void* dialog) {
+    return reinterpret_cast<void**>(
+        reinterpret_cast<const UI::TabDescription*>(self)
+            ->UI::TabDescription::CreateInstance(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
+                static_cast<const UI::Dialog*>(dialog)));
 }
 
 int RtUiTabDescriptionRegister() {

@@ -41,6 +41,8 @@
 #include "runtime/types/ui/SliderElement.h"
 #include "runtime/types/ui/RibbonDescription.h"
 #include "runtime/types/ui/RibbonElement.h"
+#include "runtime/types/ui/TabDescription.h"
+#include "runtime/types/ui/TabElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -67,6 +69,7 @@ enum Cls : int {
     kSpinnerD, kSpinnerE,
     kSliderD, kSliderE,
     kRibbonD, kRibbonE,
+    kTabD, kTabE,
 };
 const void* g_self = nullptr;
 int         g_cls  = kNone;
@@ -477,4 +480,42 @@ UNIT_TEST(ui_c5_ribbon_slots) {
     FactoryScope scope;
     RibbonElementProbe e{};
     CheckElementSlots(&e, kRibbonE, kOwn456);      // Update inherited from Element
+}
+
+// ===========================================================================
+// Tab — the Element OVERRIDES slot 7 Update
+// ===========================================================================
+C5_DESCRIPTION_MARKERS(TabDescription, kTabD)
+C5_ELEMENT_MARKERS(TabElement, kTabE)
+C5_ELEMENT_UPDATE_MARKER(TabElement, kTabE)
+
+namespace {
+struct TabDescriptionProbe final : UI::TabDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct TabElementProbe final : UI::TabElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+}  // namespace
+
+UNIT_TEST(ui_c5_tab_layout) {
+    CheckShape<UI::TabDescription, UI::ElementDescription>(0xb8);   // 0x18004c640
+    CheckShape<UI::TabElement, UI::Element>(0x108);                 // 0x18004ca90
+    CHECK_EQ(offsetof(UI::TabDescription, _stripBackdropDescription), sizeof(UI::ElementDescription));
+    CHECK_EQ(offsetof(UI::TabDescription, _gap), (size_t)0xa0);
+    CHECK_EQ(offsetof(UI::TabDescription, _tabsCount), (size_t)0xb0);
+    CHECK_EQ(offsetof(UI::TabElement, _tabCount), sizeof(UI::Element));
+    CHECK_EQ(offsetof(UI::TabElement, _activeTab), (size_t)UI::TabElementOffsets::kActiveTab);
+}
+
+UNIT_TEST(ui_c5_tab_slots) {
+    TabDescriptionProbe d;
+    CheckDescriptionSlots(&d, kTabD);
+    CheckCreateInstanceRetslot(&d);
+
+    FactoryScope scope;
+    TabElementProbe e{};
+    CheckElementSlots(&e, kTabE, kOwn4567);         // Update overridden
+    CheckUpdateTakesHandleAddress(&e, kTabE);
+    e._activeTab = 3; CHECK_EQ(e.GetActiveTab(), 3);   // 0x18004c880
 }
