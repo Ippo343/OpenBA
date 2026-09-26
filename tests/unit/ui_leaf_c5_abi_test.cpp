@@ -43,6 +43,8 @@
 #include "runtime/types/ui/RibbonElement.h"
 #include "runtime/types/ui/TabDescription.h"
 #include "runtime/types/ui/TabElement.h"
+#include "runtime/types/ui/DocumentTextDescription.h"
+#include "runtime/types/ui/DocumentTextElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -70,6 +72,7 @@ enum Cls : int {
     kSliderD, kSliderE,
     kRibbonD, kRibbonE,
     kTabD, kTabE,
+    kDocTextD, kDocTextE,
 };
 const void* g_self = nullptr;
 int         g_cls  = kNone;
@@ -518,4 +521,49 @@ UNIT_TEST(ui_c5_tab_slots) {
     CheckElementSlots(&e, kTabE, kOwn4567);         // Update overridden
     CheckUpdateTakesHandleAddress(&e, kTabE);
     e._activeTab = 3; CHECK_EQ(e.GetActiveTab(), 3);   // 0x18004c880
+}
+
+// ===========================================================================
+// DocumentText — the Element OVERRIDES slot 7 Update
+// ===========================================================================
+C5_DESCRIPTION_MARKERS(DocumentTextDescription, kDocTextD)
+C5_ELEMENT_MARKERS(DocumentTextElement, kDocTextE)
+C5_ELEMENT_UPDATE_MARKER(DocumentTextElement, kDocTextE)
+
+namespace {
+struct DocumentTextDescriptionProbe final : UI::DocumentTextDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct DocumentTextElementProbe final : UI::DocumentTextElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+}  // namespace
+
+UNIT_TEST(ui_c5_documenttext_layout) {
+    CheckShape<UI::DocumentTextDescription, UI::ElementDescription>(0xe8);   // 0x18003bd90
+    CheckShape<UI::DocumentTextElement, UI::Element>(0x1c8);                 // 0x18003c66f
+    CHECK_EQ(offsetof(UI::DocumentTextDescription, _documentStringTable),
+             sizeof(UI::ElementDescription));
+    CHECK_EQ(offsetof(UI::DocumentTextDescription, _linkColor), (size_t)0x98);
+    CHECK_EQ(offsetof(UI::DocumentTextDescription, _resourceList), (size_t)0xe0);
+    CHECK_EQ(offsetof(UI::DocumentTextElement, _text), sizeof(UI::Element));
+    CHECK_EQ(offsetof(UI::DocumentTextElement, _linksData),
+             (size_t)UI::DocumentTextElementOffsets::kLinkArrayData);
+    CHECK_EQ(offsetof(UI::DocumentTextElement, _sourceText),
+             (size_t)UI::DocumentTextElementOffsets::kContentString);
+    CHECK_EQ(offsetof(UI::DocumentTextElement, _openLink), (size_t)0x198);
+    CHECK_EQ(offsetof(UI::DocumentTextElement, _columnMaxY), (size_t)0x1c4);
+    CHECK_EQ(sizeof(UI::DocumentTextElement::DocumentItem), (size_t)0x24);
+    CHECK_EQ(sizeof(UI::DocumentTextElement::Link), (size_t)0x18);
+}
+
+UNIT_TEST(ui_c5_documenttext_slots) {
+    DocumentTextDescriptionProbe d;
+    CheckDescriptionSlots(&d, kDocTextD);
+    CheckCreateInstanceRetslot(&d);
+
+    FactoryScope scope;
+    DocumentTextElementProbe e{};
+    CheckElementSlots(&e, kDocTextE, kOwn4567);     // Update overridden
+    CheckUpdateTakesHandleAddress(&e, kDocTextE);
 }
