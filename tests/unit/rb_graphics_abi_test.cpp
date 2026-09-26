@@ -27,6 +27,7 @@
 #include "runtime/types/graphics/Animation.h"
 #include "runtime/types/graphics/Mesh.h"
 #include "runtime/types/graphics/SunLight.h"
+#include "runtime/types/graphics/Material.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -39,6 +40,7 @@ extern const void* const g_rbPiVtGroup[]  __asm__("_ZTVN8Graphics16ParticleInsta
 extern const void* const g_rbPaVtGroup[]  __asm__("_ZTVN8Graphics8ParticleE");
 extern const void* const g_rbMiVtGroup[]  __asm__("_ZTVN8Graphics12MeshInstanceE");
 extern const void* const g_rbSlVtGroup[]  __asm__("_ZTVN8Graphics8SunLightE");
+extern const void* const g_rbMatVtGroup[] __asm__("_ZTVN8Graphics16MaterialInstanceE");
 
 namespace {
 const void* GeoVt() { return &g_rbGeoVtGroup[2]; }
@@ -278,6 +280,31 @@ UNIT_TEST(rb_meshinstance_and_sunlight_are_concrete_with_the_exe_slot0) {
     Graphics::SunLight::DoorBody::Release(reinterpret_cast<Graphics::SunLight*>(raw));
     CHECK_EQ(g_n, 4);
     for (int i = 0; i < 4; ++i) CHECK(g_log[i].vptr == static_cast<const void*>(kFakeMinted));
+}
+
+UNIT_TEST(rb_materialinstance_ctor_is_retail_0x180103980_and_concrete) {
+    // InitFields is inline (the REAL body); the virtuals and ~MaterialInstance
+    // are graphics_material_abi_test.cpp's markers.
+    alignas(8) unsigned char buf[sizeof(Graphics::MaterialInstance)];
+    std::memset(buf, 0xCD, sizeof buf);
+    Graphics::MaterialInstance* m = ::new (static_cast<void*>(buf)) Graphics::MaterialInstance();
+    CHECK(VptrOf(m) == &g_rbMatVtGroup[2]);
+    CHECK_EQ(D(m, 0x20), 0u);
+    CHECK_EQ((int)By(m, 0x24), 0);
+    CHECK_EQ((int)By(m, 0x25), 0);
+    CHECK_EQ((int)By(m, 0x26), 0xCD);           // never written
+    for (size_t off = 0x28; off < 0x60; off += 8) CHECK_EQ(Q(m, off), (uint64_t)0);
+    alignas(8) unsigned char raw[sizeof(Graphics::MaterialInstance)];
+    std::memset(raw, 0xCD, sizeof raw);
+    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+    Graphics::MaterialInstance::DoorBody::Init(reinterpret_cast<Graphics::MaterialInstance*>(raw));
+    CHECK(std::memcmp(buf + 0x20, raw + 0x20, sizeof raw - 0x20) == 0);
+    m->DeletingDtor(0);
+
+    void* mem = Object::detail::InternalMemAlloc(sizeof(Graphics::MaterialInstance), 8);
+    Graphics::MaterialInstance* h = ::new (mem) Graphics::MaterialInstance();
+    using Slot0 = Object::Base* (*)(void*, unsigned);
+    CHECK(static_cast<void*>(reinterpret_cast<Slot0>(const_cast<void*>(g_rbMatVtGroup[2]))(h, 1u)) == mem);
 }
 
 UNIT_TEST(rb_graphics_bases_shape) {

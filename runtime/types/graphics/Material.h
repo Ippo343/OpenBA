@@ -19,6 +19,7 @@
 
 #include "../collection/Collection.h"     // Collection::Array
 #include "../object/External.h"           // Object::External, Object::ExternalPtr<T>
+#include "../object/Internal.h"           // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
                                           // (ENDGAME B.3.5 block G — the real
                                           // classes at the bottom of this file
                                           // derive from / hold these)
@@ -364,7 +365,16 @@ static_assert(sizeof(Object::ExternalPtr<Video::VideoProgram>) == 8,
 // ============================================================================
 class MaterialInstance : public Object::External {
 public:
-    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [0] 0x180002d60
+    // [0] CONCRETE (ENDGAME B.3.8 block RB, B38_RULES D1/D2): the exe
+    // instantiates the class itself (its table copy 0x14015c400; ModDialog,
+    // FrustumOutlineDescription and two more stampers), whose slot 0 is the
+    // exe scalar deleting dtor 0x1400121a0 (~MaterialInstance; MemFree on
+    // flags & 1). The DLL's 0x180002d60 stays the mint's RT_DELDTOR row.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        this->~MaterialInstance();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;                 // [1] 0x180002810
     uint32_t    Type() const override;                     // [2] 0x1800027f0
@@ -425,9 +435,34 @@ public:
     static Object::Base* CreateNewObject();                  // 0x180002900
     static Object::Base* CreateInPlaceObject(void* place);    // 0x1800029d0
 
+    // ??0MaterialInstance@Graphics@@QEAA@XZ 0x180103980 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete.
+    // External() and the stamps are the compiler's; the field stores are ONE
+    // body with the door `RtGraphics_MaterialInstance_Ctor` (renderer.cpp).
+    MaterialInstance() { InitFields(); }
+
+    struct DoorBody { static void Init(MaterialInstance* m) { m->InitFields(); } };
+
 protected:
-    MaterialInstance() = default;   // NOT retail's 0x180103980 — see the banner
-    ~MaterialInstance();            // 0x180103a00, empty for Material's reason
+    // ??1MaterialInstance@Graphics@@UEAA@XZ 0x180103a00: restamp, the three
+    // retail ~Array calls (+0x50, +0x40, +0x30), ~External. The body is
+    // `ReleaseFields` (renderer.cpp); the restamp and ~External are the
+    // compiler's. Its registered door `RtGraphics_MaterialInstance_Dtor` is in
+    // runtime/src/object/deleting_dtor_leaves.cpp (coordinator-owned, not
+    // edited by RB) and spells the same three calls.
+    ~MaterialInstance();
+
+private:
+    void InitFields() {
+        _shaderClass = 0;                                 // +0x20
+        _hasRenderTexture = 0;                            // +0x24
+        _hasRenderedTexture = 0;                          // +0x25
+        *reinterpret_cast<void**>(&_material) = nullptr;  // +0x28 (raw: the door runs this on raw storage)
+        _parameters._data = nullptr; _parameters._size = 0; _parameters._capacity = 0;   // +0x30
+        _constants._data  = nullptr; _constants._size  = 0; _constants._capacity  = 0;   // +0x40
+        _textures._data   = nullptr; _textures._size   = 0; _textures._capacity   = 0;   // +0x50
+    }
+    void ReleaseFields();   // renderer.cpp
 
 public:
     // ---- the 0x40 bytes MaterialInstance adds ------------------------------

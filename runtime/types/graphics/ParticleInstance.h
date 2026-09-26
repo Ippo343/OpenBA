@@ -159,7 +159,9 @@ protected:
     //     LEA RAX,[??_7ParticleInstance] ; MOV [RCX],RAX ; CALL 0x1801040b0
     //     (RemoveState) ; JMP 0x1800a41c0 (~Geometry)
     // The restamp and the ~Geometry tail are the compiler's; the body is the
-    // call. No door exists for it (unported until ENDGAME B.3.8 block RB).
+    // call. Its registered door `RtGraphics_ParticleInstance_Dtor` lives in
+    // runtime/src/object/deleting_dtor_leaves.cpp (coordinator-owned, not
+    // edited by RB) and spells the same call; the two share no code yet.
     ~ParticleInstance() { RemoveState(); }
 
 private:

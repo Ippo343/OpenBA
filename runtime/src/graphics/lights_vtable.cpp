@@ -580,10 +580,12 @@ extern "C" void RtGraphics_AmbientLight_AddDrawItems(void* self, const void* sce
 
 namespace Graphics {
 
-// `Graphics::Light` has no destructor of its own in retail (no `??1Light`
-// export; the linker folded it onto ~Geometry). ENDGAME B.3.8 block RB defines
-// it EMPTY so the real `~SunLight()` chain links: the compiler emits Light's
-// restamp and then ~Geometry, which is retail's tail call.
+// `??1Light@Graphics@@UEAA@XZ` 0x180058d20 is a bare tail into ~Geometry with
+// NO restamp of its own (its door is `RtGraphics_Light_Dtor` in
+// runtime/src/object/deleting_dtor_leaves.cpp, the coordinator's file).
+// ENDGAME B.3.8 block RB defines the C++ destructor EMPTY so the real
+// `~SunLight()` chain links; the compiler adds a Light restamp retail does not
+// make, between two restamps, with nothing dispatching in between.
 Light::~Light() {}
 
 void AmbientLight::Update(const System::Time& time) { (void)time; }

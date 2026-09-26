@@ -20,6 +20,7 @@
 #include "unit.h"
 
 #include "runtime/types/video/ImageBuffer.h"
+#include "runtime/types/graphics/FrameCopyImageBuffer.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -28,6 +29,8 @@
 #include <type_traits>
 
 extern const void* const g_rbIbVtGroup[] __asm__("_ZTVN5Video11ImageBufferE");
+extern const void* const g_rbGiVtGroup[] __asm__("_ZTVN8Graphics20GeneratedImageBufferE");
+extern const void* const g_rbFcVtGroup[] __asm__("_ZTVN8Graphics20FrameCopyImageBufferE");
 
 namespace {
 const void* IbVt() { return &g_rbIbVtGroup[2]; }
@@ -57,6 +60,39 @@ void ImageBuffer::InitFields() {
 }
 void ImageBuffer::ReleaseFields() { ++g_rel; g_relVptr = VptrOf(this); }
 }  // namespace Video
+
+namespace {
+int g_fcInit = 0, g_fcRel = 0;
+const void* g_fcInitVptr = nullptr;
+const void* g_fcRelVptr = nullptr;
+int32_t g_genSeen = -1;
+}  // namespace
+
+namespace Graphics {
+const char* GeneratedImageBuffer::TypeName() const { return "GeneratedImageBuffer"; }
+uint32_t    GeneratedImageBuffer::Type() const { return 0; }
+int32_t     GeneratedImageBuffer::GetFileVersion() const { return 7; }
+bool        GeneratedImageBuffer::Serialize(void*) { return true; }
+
+const char*       FrameCopyImageBuffer::TypeName() const { return "FrameCopyImageBuffer"; }
+uint32_t          FrameCopyImageBuffer::Type() const { return 0; }
+int32_t           FrameCopyImageBuffer::GetFileVersion() const { return 0x1007; }
+bool              FrameCopyImageBuffer::Serialize(void*) { return true; }
+Object::External* FrameCopyImageBuffer::Reconstruct() { return this; }
+void              FrameCopyImageBuffer::Destruct() {}
+Object::External* FrameCopyImageBuffer::Construct() { return this; }
+bool FrameCopyImageBuffer::Create(ImageType, Usage, Format, uint32_t, int32_t, int32_t,
+                                  FilterMode, AddressMode, AddressMode, AddressMode, LevelArray*) {
+    return false;
+}
+void FrameCopyImageBuffer::Generate(void*, int32_t) const {}
+void FrameCopyImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
+void FrameCopyImageBuffer::InitFields() {
+    ++g_fcInit; g_fcInitVptr = VptrOf(this); g_genSeen = _generation;
+    _backBufferImage = nullptr; _sourceTarget = nullptr; _destTarget = nullptr;
+}
+void FrameCopyImageBuffer::ReleaseFields() { ++g_fcRel; g_fcRelVptr = VptrOf(this); }
+}  // namespace Graphics
 
 namespace {
 
@@ -108,6 +144,48 @@ UNIT_TEST(rb_imagebuffer_shape) {
     CHECK(!std::is_abstract<Video::ImageBuffer>::value);
     CHECK(!std::has_virtual_destructor<Video::ImageBuffer>::value);
     CHECK_EQ(sizeof(Video::ImageBuffer), (size_t)0x68);
+}
+
+// ===========================================================================
+// PART D — FrameCopyImageBuffer (exe table copy 0x14015e370): the chain is
+// ImageBuffer() -> GeneratedImageBuffer() (`_generation = 0`, REAL inline
+// body of 0x1800a3e70) -> FrameCopy's shared body under FrameCopy's table;
+// slot 0 is the exe scalar deleting dtor 0x140019d50, and teardown runs
+// FrameCopy's body under its own table, then ImageBuffer's under its own.
+// ===========================================================================
+UNIT_TEST(rb_framecopyimagebuffer_chain_and_concrete_slot0) {
+    g_init = g_rel = g_fcInit = g_fcRel = 0;
+    g_genSeen = -1;
+    void* mem = Object::detail::InternalMemAlloc(sizeof(Graphics::FrameCopyImageBuffer), 8);
+    std::memset(mem, 0xCD, sizeof(Graphics::FrameCopyImageBuffer));
+    Graphics::FrameCopyImageBuffer* f = ::new (mem) Graphics::FrameCopyImageBuffer();
+    CHECK_EQ(g_init, 1);
+    CHECK(g_initVptr == IbVt());                       // ImageBuffer's body first
+    CHECK_EQ(g_fcInit, 1);
+    CHECK(g_fcInitVptr == &g_rbFcVtGroup[2]);          // FrameCopy's body last
+    CHECK_EQ(g_genSeen, 0);                            // GeneratedImageBuffer() ran between
+    CHECK(VptrOf(f) == &g_rbFcVtGroup[2]);
+    using Slot0 = Object::Base* (*)(void*, unsigned);
+    Slot0 s0 = reinterpret_cast<Slot0>(const_cast<void*>(g_rbFcVtGroup[2]));
+    CHECK(static_cast<void*>(s0(f, 1u)) == mem);
+    CHECK_EQ(g_fcRel, 1);
+    CHECK(g_fcRelVptr == &g_rbFcVtGroup[2]);
+    CHECK_EQ(g_rel, 1);
+    CHECK(g_relVptr == IbVt());
+    CHECK(!std::is_abstract<Graphics::FrameCopyImageBuffer>::value);
+    CHECK(std::is_abstract<Graphics::GeneratedImageBuffer>::value);
+
+    // The doors reach the same bodies under a minted table.
+    alignas(8) unsigned char raw[sizeof(Graphics::FrameCopyImageBuffer)] = {};
+    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+    g_fcInit = g_fcRel = 0;
+    Graphics::GeneratedImageBuffer::DoorBody::Init(reinterpret_cast<Graphics::GeneratedImageBuffer*>(raw));
+    Graphics::FrameCopyImageBuffer::DoorBody::Init(reinterpret_cast<Graphics::FrameCopyImageBuffer*>(raw));
+    Graphics::FrameCopyImageBuffer::DoorBody::Release(reinterpret_cast<Graphics::FrameCopyImageBuffer*>(raw));
+    CHECK_EQ(g_fcInit, 1);
+    CHECK_EQ(g_fcRel, 1);
+    CHECK(g_fcInitVptr == static_cast<const void*>(kFakeMinted));
+    CHECK_EQ(g_genSeen, 0);
 }
 
 }  // namespace
