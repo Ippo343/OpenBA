@@ -13,6 +13,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/HerbalistWork.h"
 #include "Work/herbalistwork_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -96,7 +97,6 @@ static HW_CitizenAI_RegisterWork_t     s_fn_CitizenAI_RegisterWork = nullptr;
 static HW_CitizenAI_LongTermPlan_t     s_fn_CitizenAI_LongTermPlan = nullptr;
 static HW_FindComp_Storage_t           s_fn_FindComp_Storage = nullptr;
 static HW_StorageQueryCount_t          s_fn_StorageQueryCount = nullptr;
-static HW_Work_Serialize_t             s_fn_Work_Serialize = nullptr;
 static HW_BST_Serialize_t              s_fn_BST_Serialize = nullptr;
 static HW_ValidateEntity_t             s_fn_ValidateEntity = nullptr;
 static HW_MemAlloc_t                   s_fn_MemAlloc = nullptr;
@@ -130,9 +130,6 @@ static float* s_fGrowthThreshold = nullptr; // DAT_14017214c = 1.0f
 // These were previously 0x1401612e0 / 0x140161340, neither of which is a vtable:
 // both are INTERIOR addresses of the FireWork (0x1401612a0) and FishingWork
 // (0x140161320) vtables, and Ghidra reports ZERO xrefs to either.
-static void** s_vtable_HerbalistWork = nullptr;  // 0x1401615a0
-static void** s_vtable_AutoPickupWork = nullptr;  // 0x140160fa0 (from dtor body)
-static void** s_vtable_Work = nullptr;             // 0x140161a80 (from dtor body)
 
 static bool s_herbalist_funcs_resolved = false;
 
@@ -179,8 +176,6 @@ bool HerbalistWork_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x140006270));
     s_fn_StorageQueryCount = reinterpret_cast<HW_StorageQueryCount_t>(
         ResolveAddr(Module::Exe, 0x14012cf10));
-    s_fn_Work_Serialize = reinterpret_cast<HW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize = reinterpret_cast<HW_BST_Serialize_t>(
         ResolveAddr(Module::Exe, 0x1400296b0));  // BST serialize (verified from original disasm)
     s_fn_ValidateEntity = reinterpret_cast<HW_ValidateEntity_t>(
@@ -224,12 +219,6 @@ bool HerbalistWork_ResolveFuncs() {
     s_fGrowthThreshold = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x14017214c));
 
     // Vtable pointers for dtor
-    s_vtable_HerbalistWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x1401615a0));
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140160fa0));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
@@ -242,7 +231,6 @@ bool HerbalistWork_ResolveFuncs() {
               s_fn_PlayAnimation_Ctor && s_fn_CitizenAI_RegisterWork &&
               s_fn_CitizenAI_LongTermPlan && s_fn_FindComp_Storage &&
               s_fn_StorageQueryCount &&
-              s_fn_Work_Serialize &&
               s_fn_ValidateEntity && s_fn_BSTRemove &&
               s_fn_BSTFindRemove && s_fn_CancelAllWork &&
               s_fn_FindSubEntity && s_fn_TreeNodeCleanup &&
@@ -275,7 +263,6 @@ bool HerbalistWork_ResolveFuncs() {
         if (!s_fn_CitizenAI_LongTermPlan) printf("  MISSING: CitizenAI_LongTermPlan\n");
         if (!s_fn_FindComp_Storage) printf("  MISSING: FindComp_Storage\n");
         if (!s_fn_StorageQueryCount) printf("  MISSING: StorageQueryCount\n");
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_ValidateEntity) printf("  MISSING: ValidateEntity\n");
         if (!s_fn_BSTRemove) printf("  MISSING: BSTRemove\n");
         if (!s_fn_BSTFindRemove) printf("  MISSING: BSTFindRemove\n");
@@ -393,9 +380,9 @@ static void AssignWorkToEntity(HerbalistWork* self, void* citizenIBP, int priori
 //       - Create PerformWork action to harvest
 // 7. If no work found, handle failure (idle animation or replan)
 //
-int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HerbalistWork::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Save citizen ref for later use
     uintptr_t citizenRef = *(uintptr_t*)entityIBP;
@@ -628,7 +615,7 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
                     1);
 
                 *(uint32_t*)(selfAddr + 0x58) = 0;
-                AssignWorkToEntity(self, citizenIBP, (int)selfQ[4]);
+                AssignWorkToEntity(this, citizenIBP, (int)selfQ[4]);
                 return 2;
             }
         }
@@ -665,11 +652,11 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
         uintptr_t citizenEnt2 = *(uintptr_t*)citizenIBP;
 
         // Call vtable slot +0x50 (GetWorkEntity)
-        uintptr_t vtable = *(uintptr_t*)self;
+        uintptr_t vtable = *(uintptr_t*)this;
         typedef uintptr_t* (*GetWorkEntity_t)(HerbalistWork*, void*);
         auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
         uintptr_t workEntIBP[2] = {0};
-        uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+        uintptr_t* wResult = getWorkEntity(this, workEntIBP);
         uintptr_t workEnt = *wResult;
 
         *(uint32_t*)(citizenEnt2 + 0x54) |= 4;
@@ -680,7 +667,7 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
             *(uint32_t*)(citizenEnt2 + 0x88) |= 0x20000;
         }
 
-        uintptr_t citizenAISub = (uintptr_t)self + 0x48;
+        uintptr_t citizenAISub = (uintptr_t)this + 0x48;
         s_fn_CitizenAI_RegisterWork((void*)citizenAISub, workEntIBP, citizenIBP);
 
         // Increment fail counter
@@ -696,8 +683,8 @@ int HerbalistWork_Slot4_Impl(HerbalistWork* self, void* entityIBP, uint64_t /*pa
 // Thunk: sub rsp,0x28; add rcx,0x48; call CitizenAI_impl_5520; xor al,al; add rsp,0x28; ret
 // Calls BSTFindRemove on the BST at self+0x48, returns false.
 // ============================================================
-bool HerbalistWork_Slot6_Impl(HerbalistWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int HerbalistWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return false;
 }
 
@@ -707,8 +694,8 @@ bool HerbalistWork_Slot6_Impl(HerbalistWork* self, void* param2) {
 // Thunk: add rcx,0x48; jmp CitizenAI_impl_5520
 // Calls BSTFindRemove on the BST at self+0x48.
 // ============================================================
-int HerbalistWork_Slot7_Impl(HerbalistWork* self, void* param2) {
-    s_fn_BSTFindRemove((void*)((uintptr_t)self + 0x48), param2);
+int HerbalistWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_BSTFindRemove((void*)((uintptr_t)this + 0x48), param2);
     return 0;
 }
 
@@ -718,8 +705,8 @@ int HerbalistWork_Slot7_Impl(HerbalistWork* self, void* param2) {
 // Loops through tree at +0x48 while count (+0x50) > 0.
 // For each rightmost node, cancels the work item via engine call.
 // ============================================================
-int HerbalistWork_Slot8_Impl(HerbalistWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int HerbalistWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -750,9 +737,9 @@ int HerbalistWork_Slot8_Impl(HerbalistWork* self) {
 // collects invalid ones, removes them from tree.
 // Returns true if tree becomes empty, false otherwise.
 // ============================================================
-bool HerbalistWork_Slot9_Impl(HerbalistWork* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    void** bstRootPtr = (void**)((uintptr_t)self + 0x48);
+int HerbalistWork::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
     void* root = *bstRootPtr;
     uintptr_t* removeArr = nullptr;
@@ -864,8 +851,8 @@ bool HerbalistWork_Slot9_Impl(HerbalistWork* self, void* param2) {
 // HerbalistWork::Slot10 / GetWorkEntity
 // Returns entity from this->_field10's sub-object at +0x48.
 // ============================================================
-void* HerbalistWork_Slot10_Impl(HerbalistWork* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* HerbalistWork::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // CheckPtr on self+0x10
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
@@ -888,11 +875,11 @@ void* HerbalistWork_Slot10_Impl(HerbalistWork* self, void* outPtr) {
 // HerbalistWork::Serialize
 // Work::Serialize + Serializer(version=0) + BST serialize + int field
 // ============================================================
-void HerbalistWork_Serialize_Impl(HerbalistWork* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void HerbalistWork::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create first serializer (version block, version=0)
     alignas(8) uint8_t serializer1[24] = {0};
@@ -918,11 +905,9 @@ void HerbalistWork_Serialize_Impl(HerbalistWork* self, void* stream) {
 // Sets vtables down chain, frees tree nodes at +0x48, then calls
 // AutoPickupWork -> Work -> Internal dtor chain.
 // ============================================================
-void HerbalistWork_DtorBody(HerbalistWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set vtable to HerbalistWork
-    *(void**)selfAddr = s_vtable_HerbalistWork;
+// HerbalistWork dtor (retail 0x1400eec40, called by slot 0 0x14002a640). The stamps and the `~Internal` call are the compiler's chain.
+HerbalistWork::~HerbalistWork() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free BST nodes at +0x48
     void* bstRoot = *(void**)(selfAddr + 0x48);
@@ -941,10 +926,6 @@ void HerbalistWork_DtorBody(HerbalistWork* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to AutoPickupWork, then Work, then call Internal dtor
-    *(void**)selfAddr = s_vtable_AutoPickupWork;
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
@@ -952,71 +933,57 @@ void HerbalistWork_DtorBody(HerbalistWork* self) {
 // HerbalistWork::ScalarDtor (0x14002A640)
 // Calls dtor body, then conditional free based on flags.
 // ============================================================
-void* HerbalistWork_ScalarDtor_Impl(HerbalistWork* self, uint32_t flags) {
-    HerbalistWork_DtorBody(self);
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-    return self;
+// [0] 0x14002a640: ~HerbalistWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* HerbalistWork::DeletingDtor(unsigned flags) {
+    this->~HerbalistWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
+
+// [11] 0x140029860 (shared by 13 tables): `XOR EAX,EAX; CMP [RCX+0x50],EAX; SETG AL`
+// — "is anyone assigned". The old table pointed at Work_Slot11_HasActiveTasks.
+int HerbalistWork::GetPriority() {
+    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
+}
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The three stamps are the compiler's. HerbalistWork_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+HerbalistWork::HerbalistWork() : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(0) {
+    HerbalistWork_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — AutoPickupWork family (factory cascade).
-// Vtable @ 0x1401615a0 (13 slots), size 0x60, parent "AutoPickupWork".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// Slot map (this file's actual function names):
-//   slot0  ScalarDtor : HerbalistWork_ScalarDtor_Impl
-//   slot3  Serialize  : HerbalistWork_Serialize_Impl
-//   slot4  Execute    : HerbalistWork_Slot4_Impl
-//   slot6  OnComplete : HerbalistWork_Slot6_Impl
-//   slot7  OnCancel   : HerbalistWork_Slot7_Impl
-//   slot8  Cleanup    : HerbalistWork_Slot8_Impl
-//   slot9  Validate   : HerbalistWork_Slot9_Impl
-//   slot10 GetTarget  : HerbalistWork_Slot10_Impl
-//   slot11 GetPriority: FLAG — NO HerbalistWork_Slot11_Impl in this file
-//   Ctor       : FLAG — NO HerbalistWork_Ctor_Impl in this file -> factory null
-//   ResolveFuncs: HerbalistWork_ResolveFuncs()
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_HerbalistWork_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over HerbalistWork_Factory / _CreateInPlace (both
+// Work_GenericCtor), plus three vtable-pointer statics for the dtor's stamps.
+
+// create 0x14002a5e0: MemAlloc(sizeof, 8), then the ctor.
+void* HerbalistWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HerbalistWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HerbalistWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* HerbalistWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HerbalistWork());
+}
+
+DEFINE_EXE_VTABLE(HerbalistWork, "_ZTV13HerbalistWork")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t HerbalistWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("HerbalistWork");
-    return c;
-}
-
-static void* g_HerbalistWork_Vtable[13] = {
-    (void*)&HerbalistWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                     // +0x08 slot1 (null)
-    (void*)&HerbalistWork_GetTypeId,        // +0x10 GetTypeId
-    (void*)&HerbalistWork_Serialize_Impl,   // +0x18 Serialize
-    (void*)&HerbalistWork_Slot4_Impl,       // +0x20 Execute
-    (void*)&Work_Slot5,                     // +0x28 slot5 (returns 0)
-    (void*)&HerbalistWork_Slot6_Impl,       // +0x30 OnComplete
-    (void*)&HerbalistWork_Slot7_Impl,       // +0x38 OnCancel
-    (void*)&HerbalistWork_Slot8_Impl,       // +0x40 Cleanup
-    (void*)&HerbalistWork_Slot9_Impl,       // +0x48 Validate
-    (void*)&HerbalistWork_Slot10_Impl,      // +0x50 GetTarget
-    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
-    (void*)&Work_Slot12,                    // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x1401615a0 is still read back BY ADDRESS — HerbalistComponent's CreateWork
+// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
+// so the exe address serves the COMPILER's table.
 extern "C" void RegisterHerbalistWorkVtable() {
-    RegisterExeAddr(0x1401615a0, (uintptr_t)g_HerbalistWork_Vtable);
+    RegisterExeAddr(HerbalistWorkAddr::Vtable, reinterpret_cast<uintptr_t>(HerbalistWork::Vtable()));   // 0x1401615a0
 }
-extern "C" void* HerbalistWork_CreateInPlace(void* mem) {
-    HerbalistWork_ResolveFuncs();
-    return Work_GenericCtor(mem, 0x60, g_HerbalistWork_Vtable);
-}
-extern "C" void* HerbalistWork_Factory(void) {
-    HerbalistWork_ResolveFuncs();
-    void* p = Work_Alloc(0x60);
-    return p ? Work_GenericCtor(p, 0x60, g_HerbalistWork_Vtable) : nullptr;
-}
-REGISTER_TYPE(HerbalistWork, "AutoPickupWork", &HerbalistWork_Factory, &HerbalistWork_CreateInPlace);
+DEFINE_EXE_TYPE(HerbalistWork, "AutoPickupWork")
