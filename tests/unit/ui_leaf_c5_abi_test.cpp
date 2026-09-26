@@ -33,6 +33,8 @@
 #include "runtime/types/ui/ElementDescription.h"
 #include "runtime/types/ui/GraphDescription.h"
 #include "runtime/types/ui/GraphElement.h"
+#include "runtime/types/ui/ProgressDescription.h"
+#include "runtime/types/ui/ProgressElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -55,6 +57,7 @@ namespace {
 enum Cls : int {
     kNone = 0,
     kGraphD, kGraphE,
+    kProgressD, kProgressE,
 };
 const void* g_self = nullptr;
 int         g_cls  = kNone;
@@ -316,4 +319,43 @@ UNIT_TEST(ui_c5_graph_slots) {
     e.SetYRange(2.5f);  CHECK(e._yRange == 2.5f);
     e.SetXDivisions(9); CHECK_EQ(e._xDivisions, 9);
     e.SetYDivisions(3); CHECK_EQ(e._xDivisions, 3); CHECK_EQ(e._yDivisions, 4);
+}
+
+// ===========================================================================
+// Progress
+// ===========================================================================
+C5_DESCRIPTION_MARKERS(ProgressDescription, kProgressD)
+C5_ELEMENT_MARKERS(ProgressElement, kProgressE)
+
+namespace {
+struct ProgressDescriptionProbe final : UI::ProgressDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct ProgressElementProbe final : UI::ProgressElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+}  // namespace
+
+UNIT_TEST(ui_c5_progress_layout) {
+    CheckShape<UI::ProgressDescription, UI::ElementDescription>(0xb0);   // 0x180077c80
+    CheckShape<UI::ProgressElement, UI::Element>(0x130);                 // 0x180078150
+    CHECK_EQ(offsetof(UI::ProgressDescription, _unknown68), sizeof(UI::ElementDescription));
+    CHECK_EQ(offsetof(UI::ProgressDescription, _spriteSheet), (size_t)0x70);
+    CHECK_EQ(offsetof(UI::ProgressDescription, _childDescription), (size_t)0xa8);
+    CHECK_EQ(offsetof(UI::ProgressElement, _fillLeft), sizeof(UI::Element));
+    CHECK_EQ(offsetof(UI::ProgressElement, _backgroundColor), (size_t)0x120);
+    CHECK_EQ(sizeof(UI::ProgressElement), sizeof(RtUI::ProgressElement));
+}
+
+UNIT_TEST(ui_c5_progress_slots) {
+    ProgressDescriptionProbe d;
+    CheckDescriptionSlots(&d, kProgressD);
+    CheckCreateInstanceRetslot(&d);
+
+    FactoryScope scope;
+    ProgressElementProbe e{};
+    CheckElementSlots(&e, kProgressE, kOwn456);   // Update inherited from Element
+    e.SetMaximumValue(2.0f);        CHECK(e._maxValue == 2.0f);        // 0x180077ec0
+    e.SetCurrentValue(0.5f);        CHECK(e._currentValue == 0.5f);    // 0x180077ed0
+    e.SetBackgroundColor(0xAABBCCDDu); CHECK_EQ(e._backgroundColor, 0xAABBCCDDu);  // 0x180077ee0
 }

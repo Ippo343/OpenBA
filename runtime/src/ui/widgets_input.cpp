@@ -132,7 +132,7 @@ using UI::NumberEditElement;
 using UI::NumberElement;
 using UI::EditElement;
 using UI::RadioElement;
-using UI::ProgressElement;
+using RtUI::ProgressElement;   // B.3.6 C5: the Wave 7 POD moved to RtUI (B4b-1); UI::ProgressElement is the class
 using UI::kElementFlagNeedsSizeCalc;
 
 // ----------------------------------------------------------------------------
