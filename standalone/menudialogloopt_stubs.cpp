@@ -60,6 +60,7 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes
 #include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
 #include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
+#include "save/SaveLoad.h"      // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 #include <new>
 #include <cstring>
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
@@ -484,8 +485,9 @@ bool Stub_Update(UpdateLoop* self, void* time) {
     {
         void* menuSaveLoad = *reinterpret_cast<void**>(
             reinterpret_cast<uintptr_t>(self) + 0xb70);
-        if (menuSaveLoad && fn_SaveLoad_Update)
-            fn_SaveLoad_Update(menuSaveLoad, time);
+        if (menuSaveLoad)
+            reinterpret_cast<Save::SaveLoad*>(menuSaveLoad)->Update(  // B.3.7 bridge
+                *reinterpret_cast<const System::Time*>(time));
     }
 
     // Auto-start driver (env-var gated): once the menu has settled, inject the

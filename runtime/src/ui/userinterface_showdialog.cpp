@@ -96,6 +96,7 @@
 #include "rt_port.h"
 #include "ui/UserInterface.h"
 #include "ui/DialogInstance.h"
+#include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K5): Engine::MainLoop::Frame
 
 // ENDGAME B.3.6 block E: the three UserInterface doors this body used to reach
 // by name are members or doors of the same class now. The ctor and the dtor
@@ -157,7 +158,6 @@ typedef void  (*fn_MemFreeS_t)(void* p);
 std::atomic<void*> g_memAllocSlot{nullptr};
 std::atomic<void*> g_memFreeSlot{nullptr};
 std::atomic<void*> g_setSizeSlot{nullptr};
-std::atomic<void*> g_frameSlot{nullptr};
 std::atomic<void*> g_mlSingletonSlot{nullptr};
 std::atomic<void*> g_sptSlot{nullptr};
 
@@ -190,7 +190,6 @@ void MemFreeS(void* p) {
 }
 
 typedef void  (*fn_SetSize_t)(void* arr, int newCount, const void* fill);
-typedef bool  (*fn_Frame_t)(void*, bool);
 
 // EVERY callee of this body except one has a NAME door. That was checked
 // against the shipped export directory with pefile rather than assumed:
@@ -208,9 +207,10 @@ typedef bool  (*fn_Frame_t)(void*, bool);
 //                ...), which consults the port registry first -- so this door is
 //                already satisfied today, unlike a fresh one.
 // (The old `Resolved R()` function-local static — a lazily initialised cache of
-// nine doors — is gone: RULE B6-5. The survivors are the four accessors below.)
+// nine doors — is gone: RULE B6-5. The survivors are the three accessors below;
+// ENDGAME B.3.7 callers (K5): the fourth, the `MainLoop::Frame` name door, is a
+// member call on the real class now.)
 fn_SetSize_t  SetSizeDoor()   { return (fn_SetSize_t)AtomicByAddr(g_setSizeSlot, kAddDialogsSetSize); }
-fn_Frame_t    FrameDoor()     { return (fn_Frame_t)AtomicByName(g_frameSlot, "?Frame@MainLoop@Engine@@QEAA_N_N@Z"); }
 void**        MainLoopSlot()  { return (void**)AtomicByName(g_mlSingletonSlot, "?_singleton@MainLoop@Engine@@1PEAV12@EA"); }
 const double* SecondsPerTick(){ return (const double*)AtomicByName(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"); }
 
@@ -401,7 +401,6 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
     //    Frame() returning true (quit). The dialog pointer is reloaded from the
     //    caller's InternalPtr on every iteration.
     {
-        auto frame = FrameDoor();
         for (;;) {
             void* want = *dialogPtr;
             void* node = *reinterpret_cast<void**>(n + kUI_Dialogs);
@@ -412,7 +411,7 @@ int32_t UI::UserInterface::ShowDialog(Object::InternalPtr<DialogInstance>* dialo
             }
             if (!present) break;
             void* cur = *MainLoopSlot();
-            if (frame(cur, true)) break;
+            if (reinterpret_cast< ::Engine::MainLoop*>(cur)->Frame(true)) break;  // B.3.7 bridge
         }
     }
 
