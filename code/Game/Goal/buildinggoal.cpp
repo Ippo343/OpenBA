@@ -129,10 +129,10 @@ bool BuildingGoal::Serialize(void* stream) {
 // ============================================================
 // BuildingGoal::Reconstruct [6] 0x140025e30 / Destruct [7] 0x140001640
 // ============================================================
-// PORT GAP (retail 0x140025e30) — B38 D3.2: retail first runs DeletingDtor(0)
-// (`CALL [RAX]` with EDX=0), then the ctor on `this`; the tree's slot 6 built
-// over the live object without destroying it. The tree's body is kept here.
+// retail 0x140025e30: vtable[0](this, 0) (DeletingDtor(0): destroy in place),
+// then the ctor on `this`.
 Object::External* BuildingGoal::Reconstruct() {
+    DeletingDtor(0);
     return ::new (static_cast<void*>(this)) BuildingGoal();
 }
 void BuildingGoal::Destruct() { DeletingDtor(0); }
