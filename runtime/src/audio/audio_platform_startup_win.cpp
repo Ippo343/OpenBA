@@ -43,9 +43,9 @@
 //   +0xa90  IXAudio2MasteringVoice* (`LEA RSI,[RBX+0xa90]` at 0x1800de63a)
 // `Engine::Startup` allocates the object as 0x1298 bytes (engine_lifecycle.cpp,
 // the 0x1800dbdd4 block), which is the only other extent fact in evidence.
-// runtime/types/audio/Audio.h has no `Device` struct and this lane does not
-// invent one — an unproven layout that LOOKS authoritative is worse than raw
-// offsets with the instruction beside them.
+// ENDGAME B.3.7 block B4: both are fields of `Audio::Device` now
+// (runtime/types/audio/Device.h, `_xaudio2` / `_masteringVoice`, asserted at
+// these offsets there); the body below is the member.
 //
 // IT ALWAYS RETURNS TRUE
 // ----------------------
@@ -64,6 +64,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/audio/Device.h"
 
 namespace {
 
@@ -75,13 +76,6 @@ const GUID kClsidXAudio2 =
 //   581fcf8b e79f 8345 8ac6 e2adc465c8bb
 const GUID kIidIXAudio2 =
     { 0x8BCF1F58, 0x9FE7, 0x4583, { 0x8A, 0xC6, 0xE2, 0xAD, 0xC4, 0x65, 0xC8, 0xBB } };
-
-constexpr size_t kOffXAudio2       = 0xa88;
-constexpr size_t kOffMasteringVoice = 0xa90;
-
-inline void** SlotAt(void* self, size_t off) {
-    return reinterpret_cast<void**>(static_cast<uint8_t*>(self) + off);
-}
 
 inline void* const* VtblOf(void* obj) {
     return *reinterpret_cast<void* const* const*>(obj);
@@ -133,10 +127,11 @@ namespace {
 // ============================================================================
 // ?PlatformStartup@Device@Audio@@AEAA_NXZ              retail 0x1800de600
 // ============================================================================
-extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
+namespace Audio {
 
-    void** xaSlot = SlotAt(self, kOffXAudio2);
-    void** mvSlot = SlotAt(self, kOffMasteringVoice);
+bool Device::PlatformStartup() {
+    void** xaSlot = &_xaudio2;
+    void** mvSlot = &_masteringVoice;
 
     const long hr = RtAudio_CreateXAudio2(xaSlot);          // 0x1800de617
     if (hr != 0) {                                          // 0x1800de61c, EQUALITY test
@@ -162,6 +157,12 @@ extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
     }
 
     return true;                                            // 0x1800de67c MOV AL,1
+}
+
+}  // namespace Audio
+
+extern "C" bool RtAudio_Device_PlatformStartup(void* self) {
+    return reinterpret_cast<Audio::Device*>(self)->Audio::Device::PlatformStartup();   // B.3.7 bridge
 }
 
 int RtAudioPlatformStartupRegister() {
