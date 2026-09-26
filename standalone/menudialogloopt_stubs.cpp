@@ -269,6 +269,24 @@ MenuDialogLoopT::~MenuDialogLoopT() {
         *reinterpret_cast<uint64_t*>(arr + 8) = 0;          // _size, _capacity
     }
     AudioScene()->~Scene();
+
+    // STANDALONE DIVERGENCE (the one thing retail's 0x14001a310 does not do):
+    // hand ~UpdateLoop a -1 bit so it does NOT run ExternalFactory::Clean for
+    // the menu's bit. The menu is the first loop GameMain builds, so it owns
+    // bit 0, the bit every standalone boot-time FindOrLoad is tagged with
+    // (Dialog/SpriteSheet.rsc and its White sprite, the two splash .rsc files)
+    // and MenuDialogLoopT::Startup's lazy loads carry the menu's bit too (the
+    // six cursors, the nine UI SoundEffects: KeyMap+0x28..+0xc0). Retail loads
+    // all of those in PlacementTool_Ctor from the INNER LoaderLoop's Load
+    // (0x140001120), which then drops that loop's bit (_loadBit = -1) so they
+    // stay resident for the life of the process. Our InnerLoaderLoop::Load does
+    // not build the PlacementTool (PORT GAP), so a faithful Clean here would
+    // evict resources whose raw pointers KeyMap still holds, and the game's
+    // Hand cursor / fade sprite would dangle. Dropping the bit keeps them
+    // resident exactly as the old skipped dtor did; the rest of the teardown
+    // (UI, filename, arrays, Audio::Scene) is retail's. Remove when Inner Load
+    // loads the PlacementTool resources under its own dropped bit.
+    _loadBit = -1;
 }
 
 Engine::UpdateLoop* MenuDialogLoopT::DeletingDtor(unsigned flags) {
