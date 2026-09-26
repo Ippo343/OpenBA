@@ -26,197 +26,209 @@
 //   int   @ +0x6c
 // ToolKit fields: merchants (ships / goods / prices).
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (TradeDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015ad60) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/TradeDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "system/String.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include <cstring>
 #include <cstdint>
 #include <new>
 
-extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);
+namespace {
+// The retail ctor stores raw IEEE bit patterns; this keeps them exact.
+inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+}  // namespace
 
-static const uintptr_t kTradeDescriptionVtable = 0x14015ad60;
-
-static inline int TD_SerStreamErr(void* serBuf) {
+namespace {
+// serializer+0x00 is the IO::Stream; stream+0x08 is its error/direction word
+// (0 == ok on the read leg). The tree's check before it allocates an array.
+inline int SerStreamErr(IO::Serializer& ser) {
     return *reinterpret_cast<int*>(
-        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(serBuf)) + 8);
+        reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(&ser)) + 8);
 }
+}  // namespace
 
-// Allocate + zero a count*stride array into (basePtr, countAt). Returns the buffer.
-static void* TD_AllocArray(void* self, uint8_t* basePtr, int n, uint64_t stride) {
+extern "C" void Desc_LoadExternalArray(void* serializer, int count, void* arrayBase);  // componentdescription.cpp
+
+namespace {
+// Allocate + zero a count*stride array into *basePtr. Returns the buffer.
+void* TD_AllocArray(void* basePtr, int n, uint64_t stride) {
     void* buf = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)n * stride, 8);
     *(void**)basePtr = buf;
     if (buf) for (uint64_t b = 0; b < (uint64_t)n * stride; ++b) ((uint8_t*)buf)[b] = 0;
-    (void)self;
     return buf;
 }
+}  // namespace
 
-static void TradeDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kTradeDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    for (int off = 0x20; off < 0x68; off += 8) *(uint64_t*)(s + off) = 0;
-    *(uint32_t*)(s + 0x68) = 0x3eaa7efau; // float ~0.333
-    *(int32_t*) (s + 0x6c) = 3;
-}
+// ctor (inlined into create 0x14000dbd0 / createInPlace 0x14000dc10):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+TradeDescription::TradeDescription()
+    : Description(),
+      _ref20(nullptr),
+      _ref28(nullptr),
+      _ref30(nullptr),
+      _pairs(nullptr),
+      _pairCount(0),
+      _pairCap(0),
+      _merchants(nullptr),
+      _merchantCount(0),
+      _merchantCap(0),
+      _prices(nullptr),
+      _priceCount(0),
+      _priceCap(0),
+      _f68(FloatBits(0x3eaa7efa)),
+      _i6c(3) {}
 
-void TradeDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.4 bridge
-
-    fn_ExternalPtr_BuildSerialize(s + 0x30, serializer);   // ExternalPtr +0x30
-
-    // merchant array @ +0x48 (count @ +0x50, element stride 0x48)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x50), nullptr);   // B.3.4 bridge
-    int merchN = *(int32_t*)(s + 0x50);
-    if (TD_SerStreamErr(serializer) == 0 && merchN > 0) TD_AllocArray(self, s + 0x48, merchN, 0x48);
-    if (merchN > 0) {
-        uint8_t* m = *(uint8_t**)(s + 0x48);
-        for (int i = 0; i < merchN && m; ++i, m += 0x48) {
-            fn_ExternalPtr_BuildSerialize(m + 0x00, serializer);  // ExternalPtr
-            reinterpret_cast<System::String*>(m + 0x08)->Serialize(serializer);          // B.3.1 bridge: String
-            // ext-ref array @ m+0x20 (count @ m+0x28, stride 8)
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(m + 0x28), nullptr);   // B.3.4 bridge
-            int extN = *(int32_t*)(m + 0x28);
-            if (TD_SerStreamErr(serializer) == 0 && extN > 0) TD_AllocArray(self, m + 0x20, extN, 8);
-            Desc_LoadExternalArray(serializer, extN, *(void**)(m + 0x20));
-            // int array @ m+0x30 (count @ m+0x38, stride 4) per-elem enum vcall +0x98
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(m + 0x38), nullptr);   // B.3.4 bridge
-            int intN = *(int32_t*)(m + 0x38);
-            if (TD_SerStreamErr(serializer) == 0 && intN > 0) TD_AllocArray(self, m + 0x30, intN, 4);
-            uint8_t* ia = *(uint8_t**)(m + 0x30);
-            for (int j = 0; j < intN && ia; ++j, ia += 4)
-                reinterpret_cast<IO::Serializer*>(serializer)
-                    ->Serialize(*reinterpret_cast<unsigned int*>(ia), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(m + 0x40), nullptr);    // int @+0x40   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)
-                ->Serialize(*reinterpret_cast<unsigned int*>(m + 0x10), nullptr);  // enum @+0x10   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)
-                ->Serialize(*reinterpret_cast<unsigned int*>(m + 0x14), nullptr);  // enum @+0x14   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)
-                ->Serialize(*reinterpret_cast<unsigned int*>(m + 0x18), nullptr);  // enum @+0x18   // B.3.4 bridge
-        }
-    }
-
-    // price array @ +0x58 (count @ +0x60, element stride 0x14)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
-    int priceN = *(int32_t*)(s + 0x60);
-    if (TD_SerStreamErr(serializer) == 0 && priceN > 0) TD_AllocArray(self, s + 0x58, priceN, 0x14);
-    if (priceN > 0) {
-        uint8_t* p = *(uint8_t**)(s + 0x58);
-        for (int i = 0; i < priceN && p; ++i, p += 0x14) {
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x00), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(p + 0x04), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(p + 0x08), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x0c), nullptr);   // B.3.4 bridge
-            reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(p + 0x10), nullptr);   // B.3.4 bridge
-        }
-    }
-
-    fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
-    fn_ExternalPtr_BuildSerialize(s + 0x28, serializer);   // ExternalPtr +0x28
-
-    // string-pair array @ +0x38 (count @ +0x40, element stride 0x18)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    int spN = *(int32_t*)(s + 0x40);
-    if (TD_SerStreamErr(serializer) == 0 && spN > 0) TD_AllocArray(self, s + 0x38, spN, 0x18);
-    if (spN > 0) {
-        uint8_t* sp = *(uint8_t**)(s + 0x38);
-        for (int i = 0; i < spN && sp; ++i, sp += 0x18) {
-            reinterpret_cast<IO::Serializer*>(serializer)
-                ->Serialize(*reinterpret_cast<unsigned int*>(sp + 0x00), nullptr); // enum @+0x00   // B.3.4 bridge
-            reinterpret_cast<System::String*>(sp + 0x08)->Serialize(serializer);         // B.3.1 bridge: String @+0x08
-            reinterpret_cast<System::String*>(sp + 0x10)->Serialize(serializer);         // B.3.1 bridge: String @+0x10
-        }
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x68), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x6c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-}
-
-void* TradeDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kTradeDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
+// dtor (slot 0 0x14000dc50 minus the stamps): frees the merchant (and its inner arrays/Strings), string-pair and price arrays.
+// The compiler then chains ~Description -> ~External.
+TradeDescription::~TradeDescription() {
     if (fn_MemFreeStatic) {
-        // merchant array (free its inner arrays + strings first)
-        int merchN = *(int32_t*)(s + 0x54);
-        uint8_t* m = *(uint8_t**)(s + 0x48);
+        // merchant array (free its inner arrays + strings first; the tree walks
+        // the CAPACITY field, which the load path never sets)
+        int merchN = _merchantCap;
+        uint8_t* m = static_cast<uint8_t*>(_merchants);
         if (m) {
             for (int i = 0; i < merchN; ++i, m += 0x48) {
                 if (*(void**)(m + 0x20)) fn_MemFreeStatic(*(void**)(m + 0x20));
                 if (*(void**)(m + 0x30)) fn_MemFreeStatic(*(void**)(m + 0x30));
                 reinterpret_cast<System::String*>(m + 0x08)->~String();  // B.3.1 bridge
             }
-            fn_MemFreeStatic(*(void**)(s + 0x48));
+            fn_MemFreeStatic(_merchants);
         }
         // string-pair array (free strings first)
-        int spN = *(int32_t*)(s + 0x44);
-        uint8_t* sp = *(uint8_t**)(s + 0x38);
+        int spN = _pairCap;
+        uint8_t* sp = static_cast<uint8_t*>(_pairs);
         if (sp) {
             for (int i = 0; i < spN; ++i, sp += 0x18) {
-                reinterpret_cast<System::String*>(sp + 0x08)->~String(); reinterpret_cast<System::String*>(sp + 0x10)->~String();  // B.3.1 bridge
+                reinterpret_cast<System::String*>(sp + 0x08)->~String();  // B.3.1 bridge
+                reinterpret_cast<System::String*>(sp + 0x10)->~String();  // B.3.1 bridge
             }
-            fn_MemFreeStatic(*(void**)(s + 0x38));
+            fn_MemFreeStatic(_pairs);
         }
-        if (*(void**)(s + 0x58)) fn_MemFreeStatic(*(void**)(s + 0x58));
+        if (_prices) fn_MemFreeStatic(_prices);
     }
-    *(void**)(s + 0x48) = nullptr;
-    *(void**)(s + 0x38) = nullptr;
-    *(void**)(s + 0x58) = nullptr;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    _merchants = nullptr;
+    _pairs = nullptr;
+    _prices = nullptr;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t TradeDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TradeDescription");
-    return cached;
+// [0] 0x14000dc50: ~TradeDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* TradeDescription::DeletingDtor(unsigned flags) {
+    this->~TradeDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static int   TradeDescription_Stub_Return7(void* /*self*/) { return 7; } // GetVersion
-static int   TradeDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* TradeDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* TradeDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* TradeDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "TradeComponent"); }
-
-static void* g_TradeDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&TradeDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&TradeDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&TradeDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&TradeDescription_Stub_Return7),    // +0x18 GetVersion=7
-    reinterpret_cast<void*>(&TradeDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&TradeDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&TradeDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&TradeDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&TradeDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&TradeDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&TradeDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterTradeDescriptionVtable() {
-    RegisterExeAddr(kTradeDescriptionVtable, reinterpret_cast<uintptr_t>(g_TradeDescription_Vtable));
+// [5] 0x14005c7f0: stream order as retail.
+bool TradeDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_BuildSerialize || !fn_MemAlloc || !g_pMemAllocSingleton) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 1);   // B.3.8 bridge (External::Serialize takes void*)
+    fn_ExternalPtr_BuildSerialize(&_ref30, &ser);   // ExternalPtr +0x30
+    
+    // merchant array @ +0x48 (count @ +0x50, element stride 0x48)
+    ser.Serialize(_merchantCount, nullptr);
+    int merchN = _merchantCount;
+    if (SerStreamErr(ser) == 0 && merchN > 0) TD_AllocArray(&_merchants, merchN, 0x48);
+    if (merchN > 0) {
+        uint8_t* m = static_cast<uint8_t*>(_merchants);
+        for (int i = 0; i < merchN && m; ++i, m += 0x48) {
+            fn_ExternalPtr_BuildSerialize(m + 0x00, &ser);                      // ExternalPtr
+            reinterpret_cast<System::String*>(m + 0x08)->Serialize(&ser);      // B.3.1 bridge: String
+            // ext-ref array @ m+0x20 (count @ m+0x28, stride 8)
+            ser.Serialize(*reinterpret_cast<int*>(m + 0x28), nullptr);
+            int extN = *(int32_t*)(m + 0x28);
+            if (SerStreamErr(ser) == 0 && extN > 0) TD_AllocArray(m + 0x20, extN, 8);
+            Desc_LoadExternalArray(&ser, extN, *(void**)(m + 0x20));
+            // int array @ m+0x30 (count @ m+0x38, stride 4) per-elem enum vcall +0x98
+            ser.Serialize(*reinterpret_cast<int*>(m + 0x38), nullptr);
+            int intN = *(int32_t*)(m + 0x38);
+            if (SerStreamErr(ser) == 0 && intN > 0) TD_AllocArray(m + 0x30, intN, 4);
+            uint8_t* ia = *(uint8_t**)(m + 0x30);
+            for (int j = 0; j < intN && ia; ++j, ia += 4)
+                ser.Serialize(*reinterpret_cast<unsigned int*>(ia), nullptr);
+            ser.Serialize(*reinterpret_cast<int*>(m + 0x40), nullptr);           // int @+0x40
+            ser.Serialize(*reinterpret_cast<unsigned int*>(m + 0x10), nullptr);  // enum @+0x10
+            ser.Serialize(*reinterpret_cast<unsigned int*>(m + 0x14), nullptr);  // enum @+0x14
+            ser.Serialize(*reinterpret_cast<unsigned int*>(m + 0x18), nullptr);  // enum @+0x18
+        }
+    }
+    
+    // price array @ +0x58 (count @ +0x60, element stride 0x14)
+    ser.Serialize(_priceCount, nullptr);
+    int priceN = _priceCount;
+    if (SerStreamErr(ser) == 0 && priceN > 0) TD_AllocArray(&_prices, priceN, 0x14);
+    if (priceN > 0) {
+        uint8_t* p = static_cast<uint8_t*>(_prices);
+        for (int i = 0; i < priceN && p; ++i, p += 0x14) {
+            ser.Serialize(*reinterpret_cast<int*>(p + 0x00), nullptr);
+            ser.Serialize(*reinterpret_cast<float*>(p + 0x04), nullptr);
+            ser.Serialize(*reinterpret_cast<float*>(p + 0x08), nullptr);
+            ser.Serialize(*reinterpret_cast<int*>(p + 0x0c), nullptr);
+            ser.Serialize(*reinterpret_cast<int*>(p + 0x10), nullptr);
+        }
+    }
+    
+    fn_ExternalPtr_BuildSerialize(&_ref20, &ser);   // ExternalPtr +0x20
+    fn_ExternalPtr_BuildSerialize(&_ref28, &ser);   // ExternalPtr +0x28
+    
+    // string-pair array @ +0x38 (count @ +0x40, element stride 0x18)
+    ser.Serialize(_pairCount, nullptr);
+    int spN = _pairCount;
+    if (SerStreamErr(ser) == 0 && spN > 0) TD_AllocArray(&_pairs, spN, 0x18);
+    if (spN > 0) {
+        uint8_t* sp = static_cast<uint8_t*>(_pairs);
+        for (int i = 0; i < spN && sp; ++i, sp += 0x18) {
+            ser.Serialize(*reinterpret_cast<unsigned int*>(sp + 0x00), nullptr);   // enum @+0x00
+            reinterpret_cast<System::String*>(sp + 0x08)->Serialize(&ser);        // B.3.1 bridge: String @+0x08
+            reinterpret_cast<System::String*>(sp + 0x10)->Serialize(&ser);        // B.3.1 bridge: String @+0x10
+        }
+    }
+    ser.Serialize(_f68, nullptr);
+    ser.Serialize(_i6c, nullptr);
+    return true;
 }
-extern "C" void* TradeDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x70, 8);
+
+// [6] 0x14000dc20: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* TradeDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) TradeDescription();
+}
+
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void TradeDescription::Destruct() { DeletingDtor(0); }
+
+// [8] 0x14000dc40: TradeComponent's type id through the hidden return slot.
+Object::Type* TradeDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("TradeComponent");
+    return ret;
+}
+
+// [9] 0x14000dc10: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* TradeDescription::Construct() {
+    return new (static_cast<void*>(this)) TradeDescription();
+}
+
+// create 0x14000dbd0: MemAlloc(0x70, 8), then the (inlined) ctor.
+void* TradeDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TradeDescription), 8);
     if (!p) return nullptr;
-    TradeDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) TradeDescription());
 }
-static void* TradeDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    TradeDescription_Init(memory);
-    return memory;
+// createInPlace 0x14000dc10.
+void* TradeDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TradeDescription());
 }
-REGISTER_TYPE(TradeDescription, "Description",
-              &TradeDescription_Factory, &TradeDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(TradeDescription, "_ZTV16TradeDescription")
+DEFINE_EXE_TYPE(TradeDescription, "Description")

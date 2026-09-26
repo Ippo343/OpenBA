@@ -22,16 +22,21 @@
 // Tail: meshRef ExternalPtr (+0x30) via fn_ExternalPtr_Serialize3, then bool (+0x38).
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (PickingDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401640c0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/PickingDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
 namespace {
-constexpr uintptr_t kVtable = 0x1401640c0;
-
+// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
 void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
@@ -42,74 +47,24 @@ void* AllocArray(void* header, int count, int stride) {
     *(void**)h = buf;
     return buf;
 }
-} // namespace
+}  // namespace
 
-extern "C" void* PickingDescription_Ctor_Impl(void* mem);
+// ctor (inlined into create 0x140036e00 / createInPlace 0x140036e70):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+PickingDescription::PickingDescription()
+    : Description(),
+      _groups(nullptr),
+      _groupCount(0),
+      _groupCap(0),
+      _meshRef(nullptr),
+      _enabled(false) {}
 
-extern "C" void* PickingDescription_Ctor_Impl(void* mem) {
-    if (!mem) return nullptr;
-    if (fn_External_External) fn_External_External(mem);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)mem = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    *(uint64_t*)(s + 0x20) = 0;   // groupArray
-    *(uint64_t*)(s + 0x28) = 0;   // groupCount + cap
-    *(uint64_t*)(s + 0x30) = 0;   // meshRef
-    *(uint8_t*)(s + 0x38)  = 0;   // enabled
-    return mem;
-}
-
-// Serialize (vtable +0x28, exe 0x140128d00)
-extern "C" void PickingDescription_Serialize(void* self, void* stream) {
-    if (!fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) {
-        return;
-    }
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);            // B.3.4 bridge  (groupCount)
-    int count = *(int32_t*)(s + 0x28);
-
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    uint8_t* e;
-    if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(s + 0x20, count, 0x10));
-        for (int i = 0; i < count; ++i) {
-            *(uint64_t*)(e + i * 0x10)     = 0;             // refArray
-            *(uint64_t*)(e + i * 0x10 + 8) = 0;             // refCount + cap
-        }
-    } else {
-        e = *(uint8_t**)(s + 0x20);
-    }
-
-    for (int i = 0; i < count; ++i, e += 0x10) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 8), nullptr);            // B.3.4 bridge  (refCount, elem+8)
-        int refCount = *(int32_t*)(e + 8);
-        if (loading) {
-            uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(e, refCount, 8));
-            for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
-        }
-        fn_Array_Serialize_External_GraphicsMesh(ser, refCount, *(void**)e);
-    }
-
-    fn_ExternalPtr_Serialize3(s + 0x30, ser);              // meshRef (+0x30)
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);           // B.3.4 bridge  (enabled, +0x38)
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
-}
-
-// Dtor (vtable +0x00, exe 0x140036f40)
-extern "C" void* PickingDescription_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)self = s_vtable;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uint8_t* e = *(uint8_t**)(s + 0x20);
-    int count = *(int32_t*)(s + 0x28);
+// dtor (slot 0 0x140036f40 minus the stamps): frees every group's ref array, then the group array.
+// The compiler then chains ~Description -> ~External.
+PickingDescription::~PickingDescription() {
+    uint8_t* e = static_cast<uint8_t*>(_groups);
+    int count = _groupCount;
     if (e && fn_MemFreeStatic) {
         for (int i = 0; i < count; ++i) {
             void* ref = *(void**)(e + i * 0x10);
@@ -117,71 +72,83 @@ extern "C" void* PickingDescription_Dtor(void* self, uint32_t flags) {
         }
         fn_MemFreeStatic(e);
     }
-    *(uint64_t*)(s + 0x20) = 0;
-    *(uint64_t*)(s + 0x28) = 0;
-
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+    _groups = nullptr;
+    _groupCount = 0;
+    _groupCap = 0;
 }
 
-// Cleanup (vtable +0x30, exe 0x140036ed0)
-extern "C" void PickingDescription_Cleanup(void* self) {
-    typedef void* (*fn_dtor_t)(void*, uint32_t);
-    fn_dtor_t dtor = *(fn_dtor_t*)(*(uintptr_t*)self);
-    if (dtor) dtor(self, 0);
-    PickingDescription_Ctor_Impl(self);
+// [0] 0x140036f40: ~PickingDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* PickingDescription::DeletingDtor(unsigned flags) {
+    this->~PickingDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Slot8 (vtable +0x40, exe 0x140036f30)
-extern "C" void* PickingDescription_Slot8(void* self) {
-    if (!self) return nullptr;
-    PickingDescription_Ctor_Impl(self);
-    return self;
+// [5] 0x140128d00: stream order as retail.
+bool PickingDescription::Serialize(void* stream) {
+    if (!fn_Array_Serialize_External_GraphicsMesh || !fn_ExternalPtr_Serialize3) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_groupCount, nullptr);   // groupCount
+    int count = _groupCount;
+    
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
+    uint8_t* e;
+    if (loading) {
+        e = reinterpret_cast<uint8_t*>(AllocArray(&_groups, count, 0x10));
+        for (int i = 0; i < count; ++i) {
+            *(uint64_t*)(e + i * 0x10)     = 0;             // refArray
+            *(uint64_t*)(e + i * 0x10 + 8) = 0;             // refCount + cap
+        }
+    } else {
+        e = static_cast<uint8_t*>(_groups);
+    }
+    
+    for (int i = 0; i < count; ++i, e += 0x10) {
+        ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // refCount (elem+8)
+        int refCount = *(int32_t*)(e + 8);
+        if (loading) {
+            uint8_t* r = reinterpret_cast<uint8_t*>(AllocArray(e, refCount, 8));
+            for (int j = 0; j < refCount; ++j) *(uint64_t*)(r + j * 8) = 0;
+        }
+        fn_Array_Serialize_External_GraphicsMesh(&ser, refCount, *(void**)e);
+    }
+    fn_ExternalPtr_Serialize3(&_meshRef, &ser);
+    ser.Serialize(_enabled, nullptr);
+    return true;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t PickingDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PickingDescription");
-    return cached;
-}
-static int  PickingDescription_Ver(void*)        { return 4; }
-static int  PickingDescription_Ret0(void*)       { return 0; }
-static void* PickingDescription_RetNull(void*, ...) { return nullptr; }
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* PickingDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "PickingComponent"); }
-
-static void* g_PickingDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&PickingDescription_Dtor),       // +0x00
-    reinterpret_cast<void*>(&PickingDescription_RetNull),    // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&PickingDescription_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&PickingDescription_Ver),        // +0x18 GetVersion (4)
-    reinterpret_cast<void*>(&PickingDescription_Ret0),       // +0x20 Compile
-    reinterpret_cast<void*>(&PickingDescription_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&PickingDescription_Cleanup),    // +0x30 Cleanup
-    reinterpret_cast<void*>(&PickingDescription_Ret0),       // +0x38 GetDesc
-    reinterpret_cast<void*>(&PickingDescription_GetComponentTypeId),      // +0x40 Slot8
-    reinterpret_cast<void*>(&PickingDescription_RetNull),    // +0x48 guard
-    reinterpret_cast<void*>(&PickingDescription_RetNull),    // +0x50 guard
-};
-
-extern "C" void RegisterPickingDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_PickingDescription_Vtable));
+// [6] 0x140036ed0: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* PickingDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) PickingDescription();
 }
 
-extern "C" void* PickingDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8);
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void PickingDescription::Destruct() { DeletingDtor(0); }
+
+// [8] 0x140036f30: PickingComponent's type id through the hidden return slot.
+Object::Type* PickingDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("PickingComponent");
+    return ret;
+}
+
+// [9] 0x140036e70: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* PickingDescription::Construct() {
+    return new (static_cast<void*>(this)) PickingDescription();
+}
+
+// create 0x140036e00: MemAlloc(0x40, 8), then the (inlined) ctor.
+void* PickingDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PickingDescription), 8);
     if (!p) return nullptr;
-    return PickingDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) PickingDescription());
 }
-extern "C" void* PickingDescription_CreateInPlace(void* mem) {
-    return PickingDescription_Ctor_Impl(mem);
+// createInPlace 0x140036e70.
+void* PickingDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PickingDescription());
 }
 
-REGISTER_TYPE(PickingDescription, "Description",
-              &PickingDescription_Factory, &PickingDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(PickingDescription, "_ZTV18PickingDescription")
+DEFINE_EXE_TYPE(PickingDescription, "Description")

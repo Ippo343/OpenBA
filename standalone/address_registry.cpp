@@ -77,92 +77,14 @@ extern "C" {
     void RegisterTerrainGeneratorVtable();
 
     // M5 5c Foundation C — entity description types (template sub-descriptions).
-    void RegisterComponentDescriptionVtable();
-    void RegisterBuildDescriptionVtable();
-    void RegisterWorkDescriptionVtable();
-    void RegisterWorkPlaceDescriptionVtable();
-    void RegisterResidenceDescriptionVtable();
-    void RegisterZoneDescriptionVtable();
-    void RegisterMapDescriptionVtable();
-    void RegisterCreatePlacedDescriptionVtable();
-    void RegisterCreateDragDescriptionVtable();
-    void RegisterCharacterDescriptionVtable();
-    void RegisterCitizenDescriptionVtable();
-    void RegisterCitizenAIDescriptionVtable();
-    void RegisterStateMachineDescriptionVtable();
-    void RegisterNaturalResourceDescriptionVtable();
-    void RegisterAbsorbResourceDescriptionVtable();
-    void RegisterUIDescriptionVtable();
-    void RegisterToolbarDescriptionVtable();
-    void RegisterStatusIconDescriptionVtable();
-    void RegisterAmbientEmitterDescriptionVtable();
-    void RegisterInteractDescriptionVtable();
-    void RegisterClearAreaDescriptionVtable();
-    void RegisterDestroyDescriptionVtable();
-    void RegisterStorageDescriptionVtable();
-    void RegisterStorageLocationDescriptionVtable();
-    void RegisterStorageDisplayDescriptionVtable();
-    void RegisterModelDescriptionVtable();
-    void RegisterPickingDescriptionVtable();
-    void RegisterHighlightDescriptionVtable();
-    void RegisterDecalDescriptionVtable();
-    void RegisterParticleDescriptionVtable();
+    void RegisterToolbarDescriptionStringArrayResize();   // FUN_140028860 (the table row went with ToolbarDescription's real class, B.3.8 K1)
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
-    void RegisterHerdDescriptionVtable();
-    void RegisterPopulationDescriptionVtable();
-    void RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
-    void RegisterAmbientEnvironmentDescriptionVtable();
-    void RegisterAttendanceDescriptionVtable();
-    void RegisterAutoPickupDescriptionVtable();
-    void RegisterBoatDescriptionVtable();
     void RegisterCaptureBoxDescriptionVtable();
-    void RegisterCemeteryDescriptionVtable();
-    void RegisterClearResourceDescriptionVtable();
-    void RegisterConsumeProduceDescriptionVtable();
-    void RegisterCreateBridgeDescriptionVtable();
-    void RegisterCreateFencedDescriptionVtable();
-    void RegisterCreatePathDescriptionVtable();
-    void RegisterCreateRemovalDescriptionVtable();
-    void RegisterCreateRoadDescriptionVtable();
-    void RegisterCropFieldDescriptionVtable();
-    void RegisterDiseaseDescriptionVtable();
-    void RegisterEnvironmentDescriptionVtable();
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
-    void RegisterFireDescriptionVtable();
-    void RegisterFishingDescriptionVtable();
-    void RegisterFloorDescriptionVtable();
-    void RegisterForesterDescriptionVtable();
-    void RegisterFruitDescriptionVtable();
     void RegisterFrustumOutlineDescriptionVtable();
-    void RegisterGrowthDescriptionVtable();
-    void RegisterHappinessDescriptionVtable();
-    void RegisterHealerDescriptionVtable();
-    void RegisterHerbalistDescriptionVtable();
-    void RegisterHuntDescriptionVtable();
-    void RegisterImmigrationDescriptionVtable();
-    void RegisterLivestockDescriptionVtable();
-    void RegisterMarketDescriptionVtable();
-    void RegisterMarketLocationDescriptionVtable();
-    void RegisterMineDescriptionVtable();
-    void RegisterMultiObjectDescriptionVtable();
-    void RegisterNomadDescriptionVtable();
-    void RegisterOrchardDescriptionVtable();
-    void RegisterPastureDescriptionVtable();
-    void RegisterQuarryDescriptionVtable();
-    void RegisterRadiusDescriptionVtable();
-    void RegisterRawMaterialDescriptionVtable();
-    void RegisterSelectDescriptionVtable();
-    void RegisterSpawnDescriptionVtable();
-    void RegisterTerraformDescriptionVtable();
-    void RegisterTombstoneDescriptionVtable();
-    void RegisterTornadoDescriptionVtable();
-    void RegisterTrackerDescriptionVtable();
-    void RegisterTradeDescriptionVtable();
-    void RegisterValueDescriptionVtable();
     void RegisterWellDescriptionVtable();
-    void RegisterWildAnimalDescriptionVtable();
     void RegisterAnimAudioEventVtable();
     void RegisterAmbientExternalPtrSerialize();
     void RegisterProfessionVtable();
@@ -344,12 +266,8 @@ struct ComponentEntity;
 ComponentEntity* ComponentEntity_CtorFromDescription(ComponentEntity* self, void* descriptionPtr);
 void EntityList_RegisterEntity_Impl(void* entityList, void* entityIBP, int category);
 
-// Economy brick M-B — standalone ComponentEntity vtable (primary 0x14015fa78 +
-// embedded base vtable 0x14015faa0 = &array[5]). Body/rationale in
-// code/Game/Entity/componententity.cpp. Without it every entity has vtable NULL
-// and the first virtual dispatch (DeletePtr's dtor call on the produce/removal
-// path, EntityList Serialize) faults.
-extern "C" void* g_ComponentEntity_StandaloneVtable[12];
+// B.3.8 D9 #2: the Action base table 0x14015faa0 (code/Game/Action/action.cpp).
+extern "C" void RegisterActionVtable();
 // M-B (cont.) — removal-side grid occupancy un-mark (impl_4750 standalone body,
 // code/Game/Component/mapcomponent.cpp).
 extern "C" void MapComponent_DetachOccupancy_4750(void* self);
@@ -889,14 +807,12 @@ static void RegisterCodeFunctions() {
     RegisterExeAddr(0x1400c3720, reinterpret_cast<uintptr_t>(&ComponentEntity_CtorFromDescription));
     RegisterExeAddr(0x1400c48a0, reinterpret_cast<uintptr_t>(&EntityList_RegisterEntity_Impl));
 
-    // Economy brick M-B — ComponentEntity vtable materialization. Entities are
-    // constructed with *(void**)self = ResolveAddr(0x14015fa78); registering the
-    // static vtable array gives every standalone entity a REAL vtable (scalar
-    // dtor / Serialize / base dtor), which the entity-removal + item-spawn
-    // lifecycle (DeletePtr, dirty-list Serialize) virtual-calls. 0x14015faa0 is
-    // the embedded base-class vtable at slot 5 of the same .rdata block.
-    RegisterExeAddr(0x14015fa78, reinterpret_cast<uintptr_t>(&g_ComponentEntity_StandaloneVtable[0]));
-    RegisterExeAddr(0x14015faa0, reinterpret_cast<uintptr_t>(&g_ComponentEntity_StandaloneVtable[5]));
+    // B.3.8 D9 #2: ComponentEntity is a real class (its compiler table, stamped
+    // by its own ctors; nothing reads 0x14015fa78 back, so that row is gone).
+    // 0x14015faa0 is Action's base table, served by Action::Vtable(); it used
+    // to be `&g_ComponentEntity_StandaloneVtable[5]`, which answered
+    // ComponentEntity's type id.
+    RegisterActionVtable();
 
     // M-B (cont.) — CreateNaturalResource_impl_4750 = the removal-side occupancy
     // UN-mark (dee0 clear), tail-called from the ported MapComponent_OnCreate
@@ -1807,91 +1723,13 @@ static void RegisterVtablesAndTypeIds() {
     // resolves a real factory + Serialize instead of NullFactory. The matching
     // REGISTER_TYPE entries live next to the reimpls in code/Game/Component/
     // <type>.cpp; their NullFactory stubs were removed from factory_registrations_bulk.
-    RegisterComponentDescriptionVtable();
-    RegisterBuildDescriptionVtable();
-    RegisterWorkDescriptionVtable();
-    RegisterWorkPlaceDescriptionVtable();
-    RegisterResidenceDescriptionVtable();
-    RegisterZoneDescriptionVtable();
-    RegisterMapDescriptionVtable();
-    RegisterCreatePlacedDescriptionVtable();
-    RegisterCreateDragDescriptionVtable();
-    RegisterCharacterDescriptionVtable();
-    RegisterCitizenDescriptionVtable();
-    RegisterCitizenAIDescriptionVtable();
-    RegisterStateMachineDescriptionVtable();
-    RegisterNaturalResourceDescriptionVtable();
-    RegisterAbsorbResourceDescriptionVtable();
-    RegisterUIDescriptionVtable();
-    RegisterToolbarDescriptionVtable();
-    RegisterStatusIconDescriptionVtable();
-    RegisterAmbientEmitterDescriptionVtable();
-    RegisterInteractDescriptionVtable();
-    RegisterClearAreaDescriptionVtable();
-    RegisterDestroyDescriptionVtable();
-    RegisterStorageDescriptionVtable();
-    RegisterStorageLocationDescriptionVtable();
-    RegisterStorageDisplayDescriptionVtable();
-    RegisterModelDescriptionVtable();
-    RegisterPickingDescriptionVtable();
-    RegisterHighlightDescriptionVtable();
-    RegisterDecalDescriptionVtable();
-    RegisterParticleDescriptionVtable();
+    RegisterToolbarDescriptionStringArrayResize();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
-    RegisterHerdDescriptionVtable();
-    RegisterPopulationDescriptionVtable();
-    RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
-    RegisterAmbientEnvironmentDescriptionVtable();
-    RegisterAttendanceDescriptionVtable();
-    RegisterAutoPickupDescriptionVtable();
-    RegisterBoatDescriptionVtable();
     RegisterCaptureBoxDescriptionVtable();
-    RegisterCemeteryDescriptionVtable();
-    RegisterClearResourceDescriptionVtable();
-    RegisterConsumeProduceDescriptionVtable();
-    RegisterCreateBridgeDescriptionVtable();
-    RegisterCreateFencedDescriptionVtable();
-    RegisterCreatePathDescriptionVtable();
-    RegisterCreateRemovalDescriptionVtable();
-    RegisterCreateRoadDescriptionVtable();
-    RegisterCropFieldDescriptionVtable();
-    RegisterDiseaseDescriptionVtable();
-    RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
-    RegisterFireDescriptionVtable();
-    RegisterFishingDescriptionVtable();
-    RegisterFloorDescriptionVtable();
-    RegisterForesterDescriptionVtable();
-    RegisterFruitDescriptionVtable();
     RegisterFrustumOutlineDescriptionVtable();
-    RegisterGrowthDescriptionVtable();
-    RegisterHappinessDescriptionVtable();
-    RegisterHealerDescriptionVtable();
-    RegisterHerbalistDescriptionVtable();
-    RegisterHuntDescriptionVtable();
-    RegisterImmigrationDescriptionVtable();
-    RegisterLivestockDescriptionVtable();
-    RegisterMarketDescriptionVtable();
-    RegisterMarketLocationDescriptionVtable();
-    RegisterMineDescriptionVtable();
-    RegisterMultiObjectDescriptionVtable();
-    RegisterNomadDescriptionVtable();
-    RegisterOrchardDescriptionVtable();
-    RegisterPastureDescriptionVtable();
-    RegisterQuarryDescriptionVtable();
-    RegisterRadiusDescriptionVtable();
-    RegisterRawMaterialDescriptionVtable();
-    RegisterSelectDescriptionVtable();
-    RegisterSpawnDescriptionVtable();
-    RegisterTerraformDescriptionVtable();
-    RegisterTombstoneDescriptionVtable();
-    RegisterTornadoDescriptionVtable();
-    RegisterTrackerDescriptionVtable();
-    RegisterTradeDescriptionVtable();
-    RegisterValueDescriptionVtable();
     RegisterWellDescriptionVtable();
-    RegisterWildAnimalDescriptionVtable();
 
     // M5 5c citizens — AnimAudioEvent (Graphics::AnimationEvent subclass) is part of
     // the Character animation closure; without a real factory the citizen template

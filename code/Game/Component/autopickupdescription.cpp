@@ -8,82 +8,72 @@
 // Serialize (vtable +0x28, 0x140044b60), stream order:
 //   bool @ +0x20
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (AutoPickupDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x140158e70) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
-#include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "Component/AutoPickupDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kAutoPickupDescriptionVtable = 0x140158e70;
+// ctor (inlined into create 0x140003420 / createInPlace 0x140003480):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+AutoPickupDescription::AutoPickupDescription()
+    : Description(),
+      _enabled(true) {}
 
-static void AutoPickupDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kAutoPickupDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint8_t*)(s + 0x20) = 1;   // bool
+// [0] 0x140003530: ~AutoPickupDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* AutoPickupDescription::DeletingDtor(unsigned flags) {
+    this->~AutoPickupDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void AutoPickupDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // bool +0x20   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+// [5] 0x140044b60: stream order as retail.
+bool AutoPickupDescription::Serialize(void* stream) {
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_enabled, nullptr);
+    return true;
 }
 
-void* AutoPickupDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kAutoPickupDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x1400034d0: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* AutoPickupDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) AutoPickupDescription();
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void AutoPickupDescription::Destruct() { DeletingDtor(0); }
 
-static uint32_t AutoPickupDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("AutoPickupDescription");
-    return cached;
+// [8] 0x140003520: AutoPickupComponent's type id through the hidden return slot.
+Object::Type* AutoPickupDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("AutoPickupComponent");
+    return ret;
 }
-static int   AutoPickupDescription_Stub_Return1(void* /*self*/) { return 1; } // GetVersion
-static int   AutoPickupDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* AutoPickupDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* AutoPickupDescription_CreateInPlace(void* memory);
 
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* AutoPickupDescription_GetComponentTypeId(void*, void* out) { return ::Object::WriteComponentTypeId(out, "AutoPickupComponent"); }
-
-static void* g_AutoPickupDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&AutoPickupDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&AutoPickupDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&AutoPickupDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&AutoPickupDescription_Stub_Return1),    // +0x18 GetVersion=1
-    reinterpret_cast<void*>(&AutoPickupDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&AutoPickupDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&AutoPickupDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&AutoPickupDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&AutoPickupDescription_GetComponentTypeId), // +0x40
-    reinterpret_cast<void*>(&AutoPickupDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&AutoPickupDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterAutoPickupDescriptionVtable() {
-    RegisterExeAddr(kAutoPickupDescriptionVtable, reinterpret_cast<uintptr_t>(g_AutoPickupDescription_Vtable));
+// [9] 0x140003480: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* AutoPickupDescription::Construct() {
+    return new (static_cast<void*>(this)) AutoPickupDescription();
 }
-extern "C" void* AutoPickupDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x28, 8);
+
+// create 0x140003420: MemAlloc(0x28, 8), then the (inlined) ctor.
+void* AutoPickupDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AutoPickupDescription), 8);
     if (!p) return nullptr;
-    AutoPickupDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) AutoPickupDescription());
 }
-static void* AutoPickupDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    AutoPickupDescription_Init(memory);
-    return memory;
+// createInPlace 0x140003480.
+void* AutoPickupDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AutoPickupDescription());
 }
-REGISTER_TYPE(AutoPickupDescription, "Description",
-              &AutoPickupDescription_Factory, &AutoPickupDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(AutoPickupDescription, "_ZTV21AutoPickupDescription")
+DEFINE_EXE_TYPE(AutoPickupDescription, "Description")

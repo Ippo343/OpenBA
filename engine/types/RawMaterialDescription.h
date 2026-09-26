@@ -71,44 +71,8 @@ namespace RawMaterialFlags {
     // Custom flags continue upward (modding).
 }
 
-struct RawMaterialDescription {
-    // Object::External base (0x20 bytes)
-    void*    vtable;           // +0x00: -> 0x1401641f0
-    uint8_t  _extBase[0x18];   // +0x08: Object::External inherited fields
-
-    // RawMaterialDescription own fields
-    void*    _spriteSheet;     // +0x20: SpriteSheet* — .rsc: _spriteSheet
-                               //   Used as arg1 to fn_Sprite_Ctor (BuildUI, BuildReqUI)
-    void*    _stringTable;     // +0x28: StringTable* — .rsc: _stringTable
-                               //   Used as arg1 to fn_UIString_Ctor
-    uint8_t  _name[8];         // +0x30: System::String — .rsc: _name (e.g., "Log")
-                               //   Full-size sprite name; BuildUI uses for fn_Sprite_Ctor arg2
-    uint8_t  _nameSmall[8];    // +0x38: System::String — .rsc: _nameSmall (e.g., "LogSmall")
-                               //   Small sprite name; BuildRequirementUI uses for fn_Sprite_Ctor arg2
-    int32_t  _lowCreateCount;  // +0x40: .rsc default = 1 (ctor), e.g., 2 for wood
-    int32_t  _highCreateCount; // +0x44: .rsc default = 1 (ctor), e.g., 3 for wood
-    int32_t  _weight;          // +0x48: .rsc default = 1 (ctor), e.g., 11 for wood
-                               //   Used by StorageComponent_QueryCount (0x14012cf10)
-    int32_t  _createChance;    // +0x4C: .rsc default = 0 (not set by ctor), e.g., 1
-    float    _carryScale;      // +0x50: .rsc default = 0.33f (0x3ea8f5c3)
-    uint32_t _pad54;           // +0x54: zeroed (from 8-byte write at +0x50)
-    uint8_t  _unknown58;       // +0x58: bool? default = 0 (false)
-    uint8_t  _pad59[3];        // +0x59: padding
-    uint32_t _flags;           // +0x5C: RawMaterialFlags bitfield — .rsc: _flags
-                               //   Tested via bitwise AND in FUN_14004a550, FUN_14004a780,
-                               //   CitizenAI_State_GatherResources, etc.
-};
-
-static_assert(sizeof(RawMaterialDescription) == 0x60, "RawMaterialDescription size mismatch");
-static_assert(offsetof(RawMaterialDescription, vtable) == 0x00, "");
-static_assert(offsetof(RawMaterialDescription, _spriteSheet) == 0x20, "");
-static_assert(offsetof(RawMaterialDescription, _stringTable) == 0x28, "");
-static_assert(offsetof(RawMaterialDescription, _name) == 0x30, "");
-static_assert(offsetof(RawMaterialDescription, _nameSmall) == 0x38, "");
-static_assert(offsetof(RawMaterialDescription, _lowCreateCount) == 0x40, "");
-static_assert(offsetof(RawMaterialDescription, _highCreateCount) == 0x44, "");
-static_assert(offsetof(RawMaterialDescription, _weight) == 0x48, "");
-static_assert(offsetof(RawMaterialDescription, _createChance) == 0x4C, "");
-static_assert(offsetof(RawMaterialDescription, _carryScale) == 0x50, "");
-static_assert(offsetof(RawMaterialDescription, _unknown58) == 0x58, "");
-static_assert(offsetof(RawMaterialDescription, _flags) == 0x5C, "");
+// ENDGAME B.3.8 K1: `RawMaterialDescription` is a real class now (B8-4, one
+// definition per name) — code/Game/Component/RawMaterialDescription.h, with the
+// field names this POD gave (+0x54 `_pad54` is `_i54`: the ctor zeroes it and
+// Serialize writes it as an int). The address and flag namespaces above stay.
+#include "Component/RawMaterialDescription.h"
