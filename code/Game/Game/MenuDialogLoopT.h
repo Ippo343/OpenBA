@@ -60,7 +60,7 @@ public:
     static const void* Vtable();
 
 protected:
-    ~MenuDialogLoopT() {}
+    ~MenuDialogLoopT();   // 0x14001a310 (menudialogloopt_stubs.cpp)
 
 public:
     System::Random _random;              // +0x168  ??0Random@System@@

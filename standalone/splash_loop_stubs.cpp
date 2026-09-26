@@ -163,9 +163,10 @@ GameLoadDialogLoopT::GameLoadDialogLoopT(const System::String& filename,
 
 Engine::UpdateLoop* GameLoadDialogLoopT::DeletingDtor(unsigned flags) {
     printf("[SplashDLT::Destroy] self=%p flags=%u\n", (void*)this, flags);
-    // Skip the real cleanup chain (DialogLoaderLoopT::~DialogLoaderLoopT unwinds
-    // UI::UserInterface, String, Audio::Scene, Random — all leak on this run but
-    // the process exits immediately after MainLoop::Run returns).
+    // Retail 0x140001010: CALL ??1DialogLoaderLoopT@Engine@@ (import
+    // 0x140152b88), then MemFree on &1 (System::Random has no destructor). The
+    // compiler's chain: ~UserInterface, ~String, ~LoaderLoop -> ~UpdateLoop.
+    this->~GameLoadDialogLoopT();
     if (flags & 1) {
         fn_MemFreeStatic(this);
     }

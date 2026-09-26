@@ -135,8 +135,10 @@ void LoaderLoopShutdownWait() {
 
 Engine::UpdateLoop* InnerLoaderLoop::DeletingDtor(unsigned flags) {
     printf("[InnerLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
-    // Skip the LoaderLoop::~LoaderLoop chain (UpdateLoop dtor + ExternalList free).
-    // Acceptable leak — process exits immediately after Run returns.
+    // Retail 0x140001150: CALL ??1LoaderLoop@Engine@@ (import 0x140152ba8),
+    // then MemFree on &1. The compiler's chain runs ~LoaderLoop -> ~UpdateLoop
+    // (the _loadBit hand-back + ExternalFactory::Clean + the list cleanup).
+    this->~InnerLoaderLoop();
     if (flags & 1) {
         fn_MemFreeStatic(this);
     }
@@ -238,6 +240,8 @@ bool InnerLoaderLoop::AllowsModChanges() {
 
 Engine::UpdateLoop* GameLoaderLoop::DeletingDtor(unsigned flags) {
     printf("[OuterLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
+    // Retail 0x140001190: the same shape as the inner loop's slot 0.
+    this->~GameLoaderLoop();
     if (flags & 1) {
         fn_MemFreeStatic(this);
     }

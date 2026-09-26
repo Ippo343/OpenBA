@@ -60,6 +60,7 @@ void DlgCtrlRoute_Arm();                  // standalone/dlgctrl_route.cpp
 #include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
 #include "graphics/Scene.h"     // ENDGAME B.3.7: MenuDLT::Shutdown (carry-over 11)
 #include "save/SaveLoad.h"      // -Iruntime/types: ENDGAME B.3.7 callers (K5)
+#include "audio/Audio.h"        // ENDGAME B.3.8 LOOP: ~MenuDialogLoopT runs ~Audio::Scene
 #include <new>
 #include <cstring>
 #include <initializer_list>   // ENDGAME B.3.7: MenuDLT::Shutdown field list
@@ -255,11 +256,25 @@ MenuDialogLoopT::MenuDialogLoopT(const System::String& filename)
         *reinterpret_cast<uint64_t*>(s + off) = 0;
 }
 
+// 0x14001a310 (read from the disassembly): MemFree the data of the three
+// arrays +0xbf0, +0xbe0, +0xbd0 (in that order) and zero each {data, size|cap},
+// then ??1Scene@Audio@@ on +0xb30 (import 0x140151fb0), then the tail JMP to
+// ??1DialogLoopT@Engine@@ (import 0x140152378) — the compiler's base chain
+// (~UserInterface, ~String, ~UpdateLoop). The elements the arrays point at were
+// deleted by Shutdown (0x14009b280), as in retail.
+MenuDialogLoopT::~MenuDialogLoopT() {
+    for (uint8_t* arr : {_sceneIdArray, _instanceArray, _particleArray}) {
+        fn_MemFreeStatic(*reinterpret_cast<void**>(arr));   // MemFree(null) returns
+        *reinterpret_cast<uint64_t*>(arr)     = 0;          // _data
+        *reinterpret_cast<uint64_t*>(arr + 8) = 0;          // _size, _capacity
+    }
+    AudioScene()->~Scene();
+}
+
 Engine::UpdateLoop* MenuDialogLoopT::DeletingDtor(unsigned flags) {
     printf("[MenuDLT::Destroy] self=%p flags=%d\n", (void*)this, (int)flags);
-    // Skip the real cleanup chain for now (Audio::Scene dtor, Engine::DialogLoopT dtor,
-    // UI::UserInterface dtor, String dtor). Those will leak on this run but are safe to
-    // skip because the process exits immediately after MainLoop::Run returns.
+    // Retail 0x14001a2e0: ~MenuDialogLoopT (0x14001a310, below), MemFree on &1.
+    this->~MenuDialogLoopT();
     if (flags & 1) {
         fn_MemFreeStatic(this);
     }
