@@ -101,29 +101,10 @@ void WaitForEngineLoader() {
     printf("[EngineLoader] loader thread finished\n");
 }
 
-// Retail's LoaderLoop::Shutdown (Runtime 0x1800dc280), which BOTH exe tables
-// reach at +0x10 (0x140158870 and 0x1401588d0 hold thunk 0x14003a8dc ->
-// IAT 0x140152bb8 = ?Shutdown@LoaderLoop@Engine@@):
-//     mov  0x1801fe7e0(%rip),%rcx   ; _loader._thread.hFinished
-//     or   $-1,%edx                 ; INFINITE
-//     jmp  *WaitForSingleObject
-// It is UNCONDITIONAL, and it is retail's only join of the loader thread ahead
-// of teardown: MainLoop::Run calls the current loop's Shutdown on the way out,
-// and ~Engine (0x1800dbec0) then nulls MemoryAllocator::_singleton and deletes
-// the allocator critical section with no wait of its own. A loader thread still
-// inside External::Load at that point faults in MemAlloc on
-// EnterCriticalSection(null + 0x640) -- the open allocator defect's stack
-// (B34B_RULES 6.3, window W2). These two stubs used to print and return, so a
-// LoaderLoop that was quit mid-load, or run with BANISHED_SYNC_ENGINE_LOADER=0,
-// handed ~Engine a live loader. hFinished is created signalled (thread_win.cpp:
-// manual-reset, initially TRUE), so this cannot block when Loader::Load was
-// never kicked (BANISHED_SKIP_ENGINE_LOADER).
-void LoaderLoopShutdownWait() {
-    // Standalone-only guard: retail's _loader is a DLL static that always
-    // exists; ours is a resolved address that the Startup stubs already test.
-    if (!g_pLoader) return;
-    reinterpret_cast<System::Thread*>(g_pLoader)->WaitForFinish();   // B.3.4 bridge
-}
+// Slot 2 Shutdown is INHERITED (ENDGAME B.3.8 LOOP): Engine::LoaderLoop::Shutdown
+// (Runtime 0x1800dc280) is retail's unconditional join of the loader thread
+// (WaitForSingleObject on _loader's hFinished) ahead of teardown -- the body the
+// old `LoaderLoopShutdownWait` stubs re-implemented.
 
 } // namespace
 
@@ -164,11 +145,6 @@ void InnerLoaderLoop::Startup() {
     }
 }
 
-void InnerLoaderLoop::Shutdown() {
-    printf("[InnerLL::Shutdown] self=%p\n", (void*)this);
-    LoaderLoopShutdownWait();
-}
-
 bool InnerLoaderLoop::Update(const System::Time& time) {
     StallDebug::Tick("InnerLL::Update");
     // Inner_Load is a noop in standalone (PlacementTool init is done lazily
@@ -193,10 +169,6 @@ void InnerLoaderLoop::Draw(float alpha) {
     }
 }
 
-void InnerLoaderLoop::DrawFailed() {
-    printf("[InnerLL::DrawFailed] self=%p\n", (void*)this);
-}
-
 void InnerLoaderLoop::Load() {
     printf("[InnerLL::Load] self=%p (skipping PlacementTool init)\n", (void*)this);
     // Real impl @ 0x140001120: PlacementTool_Ctor(KeyMap, _resourceList);
@@ -205,31 +177,9 @@ void InnerLoaderLoop::Load() {
     _loadBit = -1;
 }
 
-void InnerLoaderLoop::SaveRestore(bool save, Save::SavedState* state) {
-    printf("[InnerLL::SaveRestore] self=%p save=%d state=%p\n",
-           (void*)this, save, (void*)state);
-}
-
-void InnerLoaderLoop::OnVideoError() {
-    printf("[InnerLL::OnVideoError] self=%p\n", (void*)this);
-}
-
-void InnerLoaderLoop::OnVideoRestart() {
-    printf("[InnerLL::OnVideoRestart] self=%p\n", (void*)this);
-}
-
 const char* InnerLoaderLoop::GetResourceFilename() {
     // Original (FUN_140001110) returns LEA-loaded "Game/Global".
     return "Game/Global";
-}
-
-bool InnerLoaderLoop::AllowsModChanges() {
-    // Exe slot 11 (vtable 0x140158870 +0x58) is the import thunk 0x14003a8f4 ->
-    // the ONE Runtime export ?AllowsModChanges@UpdateLoop@Engine@@ (0x180031790,
-    // `XOR AL,AL ; RET`): FALSE. There is no LoaderLoop override; only
-    // MenuDialogLoopT (exe 0x14001a2c0) returns true. See GUL_AllowsModChanges
-    // (gameupdateloop_stubs.cpp) for what Engine::Loader::Load does with it.
-    return false;
 }
 
 // ============================================================
@@ -266,11 +216,6 @@ void GameLoaderLoop::Startup() {
     }
 }
 
-void GameLoaderLoop::Shutdown() {
-    printf("[OuterLL::Shutdown] self=%p\n", (void*)this);
-    LoaderLoopShutdownWait();
-}
-
 bool GameLoaderLoop::Update(const System::Time& time) {
     StallDebug::Tick("OuterLL::Update");
     // Outer_Load is a noop, transition immediately to InnerLL.
@@ -292,38 +237,9 @@ void GameLoaderLoop::Draw(float alpha) {
     }
 }
 
-void GameLoaderLoop::DrawFailed() {
-    printf("[OuterLL::DrawFailed] self=%p\n", (void*)this);
-}
-
 void GameLoaderLoop::Load() {
     printf("[OuterLL::Load] self=%p\n", (void*)this);
     _loadBit = -1;
-}
-
-void GameLoaderLoop::SaveRestore(bool save, Save::SavedState* state) {
-    printf("[OuterLL::SaveRestore] self=%p save=%d state=%p\n",
-           (void*)this, save, (void*)state);
-}
-
-void GameLoaderLoop::OnVideoError() {
-    printf("[OuterLL::OnVideoError] self=%p\n", (void*)this);
-}
-
-void GameLoaderLoop::OnVideoRestart() {
-    printf("[OuterLL::OnVideoRestart] self=%p\n", (void*)this);
-}
-
-const char* GameLoaderLoop::GetResourceFilename() {
-    // Original thunks straight to Runtime LoaderLoop::GetResourceFilename
-    // (returns nullptr in the base — stub matches "no resource group").
-    return nullptr;
-}
-
-bool GameLoaderLoop::AllowsModChanges() {
-    // Vtable 0x1401588d0 +0x58 = the same thunk 0x14003a8f4 as the inner loop:
-    // the Runtime base, FALSE (see InnerLoaderLoop::AllowsModChanges).
-    return false;
 }
 
 // B38_RULES D5: `X::Vtable()` is the COMPILER's table. The retail addresses

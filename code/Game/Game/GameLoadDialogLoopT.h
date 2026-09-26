@@ -43,13 +43,7 @@ public:
     void Shutdown() override;                                    // [2] 0x140098f90 `RET 0`
     bool Update(const System::Time& time) override;              // [3] 0x140098da0
     void Draw(float interpolation) override;                     // [4] (base in retail)
-    void DrawFailed() override;                                  // [5] (base in retail)
-    void Load() override;                                        // [6] (base in retail)
-    void SaveRestore(bool saving, Save::SavedState* state) override;   // [7] (base in retail)
-    void OnVideoError() override;                                // [8] (base in retail)
-    void OnVideoRestart() override;                              // [9] (base in retail)
     const char* GetResourceFilename() override;                  // [10] (base in retail)
-    bool AllowsModChanges() override;                            // [11] (base in retail)
     Object::InternalPtr<UI::DialogInstance>* CreateLoopDialog(   // [12] 0x140099070
         Object::InternalPtr<UI::DialogInstance>* ret) override;
 

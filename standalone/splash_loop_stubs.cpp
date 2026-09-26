@@ -551,56 +551,10 @@ void GameLoadDialogLoopT::Draw(float alpha) {
     }
 }
 
-void GameLoadDialogLoopT::DrawFailed() {
-    printf("[SplashDLT::DrawFailed] self=%p\n", (void*)this);
-}
-
-void GameLoadDialogLoopT::Load() {
-    printf("[SplashDLT::Load] self=%p m_dialogExternal(before)=%p\n",
-           (void*)this, _dialogExternal);
-    {
-        // Same bracket pattern as Startup. Load gets called when our
-        // Startup synchronously drives `next->Load` on the next
-        // splash loop, so this captures the *second* splash's load too.
-        char label[96];
-        std::snprintf(label, sizeof(label),
-                      "DialogLoaderLoopT::Load (Stub_Load) self=%p",
-                      (void*)this);
-        TraceExeBegin(label);
-        // QUALIFIED. This IS slot 6, so an unqualified `Load()` would call
-        // itself forever.
-        Engine::DialogLoaderLoopT::Load();
-        TraceExeEnd(label);
-        printf("[SplashDLT::Load] m_dialogExternal(after)=%p\n", _dialogExternal);
-    }
-}
-
-void GameLoadDialogLoopT::SaveRestore(bool save, Save::SavedState* state) {
-    printf("[SplashDLT::SaveRestore] self=%p save=%d state=%p\n",
-           (void*)this, save, (void*)state);
-}
-
-void GameLoadDialogLoopT::OnVideoError() {
-    printf("[SplashDLT::OnVideoError] self=%p\n", (void*)this);
-}
-
-void GameLoadDialogLoopT::OnVideoRestart() {
-    printf("[SplashDLT::OnVideoRestart] self=%p\n", (void*)this);
-}
-
 const char* GameLoadDialogLoopT::GetResourceFilename() {
     // Original thunks to Runtime DialogLoaderLoopT::GetResourceFilename which
     // returns "Game/Loader" (see runtime ?GetResourceFilename@DialogLoaderLoopT).
     return "Game/Loader";
-}
-
-bool GameLoadDialogLoopT::AllowsModChanges() {
-    // Exe slot 11 (vtable 0x140158800 +0x58) is the import thunk 0x14003a8f4 ->
-    // the ONE Runtime export ?AllowsModChanges@UpdateLoop@Engine@@ (0x180031790,
-    // `XOR AL,AL ; RET`): FALSE. There is no DialogLoaderLoopT override; only
-    // MenuDialogLoopT (exe 0x14001a2c0) returns true. See GUL_AllowsModChanges
-    // (gameupdateloop_stubs.cpp) for what Engine::Loader::Load does with it.
-    return false;
 }
 
 extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr);

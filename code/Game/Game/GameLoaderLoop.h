@@ -31,16 +31,9 @@ public:
 
     Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x140001190
     void Startup() override;                                     // [1] (base in retail)
-    void Shutdown() override;                                    // [2] (base in retail)
     bool Update(const System::Time& time) override;              // [3] (base in retail)
     void Draw(float interpolation) override;                     // [4] (base in retail)
-    void DrawFailed() override;                                  // [5] (base in retail)
     void Load() override;                                        // [6] (base in retail)
-    void SaveRestore(bool saving, Save::SavedState* state) override;   // [7] (base in retail)
-    void OnVideoError() override;                                // [8] (base in retail)
-    void OnVideoRestart() override;                              // [9] (base in retail)
-    const char* GetResourceFilename() override;                  // [10] (base in retail)
-    bool AllowsModChanges() override;                            // [11] (base in retail)
 
     static const void* Vtable();
 

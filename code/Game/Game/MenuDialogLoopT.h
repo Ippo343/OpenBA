@@ -43,9 +43,7 @@ public:
     void Shutdown() override;                                    // [2] 0x14009b280
     bool Update(const System::Time& time) override;              // [3] 0x14009b6e0
     void Draw(float interpolation) override;                     // [4] 0x14009b440
-    void DrawFailed() override;                                  // [5] (base in retail)
     void Load() override;                                        // [6] 0x14009a930
-    void SaveRestore(bool saving, Save::SavedState* state) override;   // [7] (base in retail)
     void OnVideoError() override;                                // [8] 0x14009a8d0
     void OnVideoRestart() override;                              // [9] 0x14009a8b0
     const char* GetResourceFilename() override;                  // [10] 0x14001a2d0 "Game/Menu"

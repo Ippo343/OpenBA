@@ -733,21 +733,6 @@ void MenuDialogLoopT::Draw(float alpha) {
     }
 }
 
-void MenuDialogLoopT::DrawFailed() {
-    // Fired by Engine::MainLoop::Draw when BeginFrame (vtable+0x08 of
-    // Video::Context+0x2160) returns false — i.e. the window is occluded,
-    // minimized, or the DX11 swap chain is in a Reset-needed state. After
-    // this returns, MainLoop::Draw calls Video::Context::Reset which is
-    // the recovery path. Log the first few + every 100th so we can tell
-    // whether Reset is succeeding (Draw resumes) or stuck.
-    static int n = 0;
-    ++n;
-    if (n <= 5 || (n % 100) == 0) {
-        printf("[MenuDLT::DrawFailed] self=%p count=%d\n", (void*)this, n);
-        fflush(stdout);
-    }
-}
-
 void MenuDialogLoopT::Load() {
     // Original MenuDLT::Load (exe 0x14009A930) tail-calls Engine::DialogLoopT::Load
     // first to populate self+0x30 (_dialogExternal) from _dialogFilename
@@ -779,10 +764,6 @@ void MenuDialogLoopT::Load() {
     // safe to run on the Engine::Loader thread (no scene-graph mutation).
     // Playback is started later from Startup (main thread).
     MenuDialogLoopT_LoadMusic(this);
-}
-
-void MenuDialogLoopT::SaveRestore(bool save, Save::SavedState* state) {
-    printf("[MenuDLT::SaveRestore] self=%p save=%d state=%p\n", (void*)this, save, (void*)state);
 }
 
 void MenuDialogLoopT::OnVideoError() {
