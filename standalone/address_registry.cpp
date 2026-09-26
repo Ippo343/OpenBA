@@ -230,7 +230,6 @@ extern "C" {
 
     // Factory cascade — Tool family (Object::Internal -> Tool / DragTool /
     // ToolSetting; shared base in code/Game/Player/tool_base_standalone.cpp).
-    void RegisterBridgeToolVtable();
     void RegisterDragPlacementToolVtable();
     void RegisterEditToolVtable();
     void RegisterFencedToolVtable();
@@ -1989,7 +1988,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTutorialStepVtable();
 
     // Factory cascade — Tool family (shared base tool_base_standalone.cpp).
-    RegisterBridgeToolVtable();
     RegisterDragPlacementToolVtable();
     RegisterEditToolVtable();
     RegisterFencedToolVtable();
