@@ -209,7 +209,7 @@ static_assert(offsetof(RtVideo::Device, activeInterface) == 0xF8,
               "Video::Device ctor 0x1800f7160: MOV dword [RSI+0xf8],0xffffffff");
 static_assert(offsetof(RtVideo::Configuration, refreshNumerator) == 0x38,
               "Video::Configuration ctor 0x1800f6f10: MOV dword [RCX+0x38],0x3c");
-static_assert(offsetof(RtInput::Configuration, mouseDisplay) == 0x0A,
+static_assert(offsetof(RtInput::Configuration, _mouseDisplay) == 0x0A,
               "Input::Configuration ctor 0x1800e0de0: MOV byte [RCX+0xa],0");
 static_assert(RtInput::kKeyboardOffset == 0x6C0, "Input::Device ctor loop 2 base");
 static_assert(RtInput::kMouseOffset == 0x1098, "Input::Device ctor loop 3 base");

@@ -94,8 +94,8 @@
 #include "../../types/io/Persistence.h"
 #include "../system/string.h"
 
-using RtInput::Binding;
-using RtInput::BindingNode;
+using Input::Binding;
+using Input::BindingNode;
 
 // ENDGAME B.3.1 step 2: `?Format@String@System@@SA?AV12@PEBDZZ` (0x1800c9730)
 // is a static member of `System::String` now, declared in
@@ -233,7 +233,9 @@ BindingNode* NextNode(BindingNode* n) {
 // flatten into a two-way one by accident: -2 "not stored" and -1 "stored as
 // unbound" produce DIFFERENT results, and only the second clears the binding.
 // ============================================================================
-void RtInput_KeyMap_Load(void* selfPtr) {
+namespace Input {
+
+void KeyMap::Load() {
 
     // Retail hoists the singleton once, before the traversal
     // (0x1800A71AA), and re-reads the map root on every lookup.
@@ -242,7 +244,7 @@ void RtInput_KeyMap_Load(void* selfPtr) {
 
     // KeyMap::_root is at +0x08 (Input.h, pinned by every ported KeyMap point
     // function). Retail loads `[RCX+8]` at 0x1800A71B1.
-    auto* root = *reinterpret_cast<BindingNode**>(static_cast<uint8_t*>(selfPtr) + 0x08);
+    BindingNode* root = _root;
 
     int written = 0;
     for (BindingNode* n = FirstNode(root); n != nullptr; n = NextNode(n)) {
@@ -284,6 +286,14 @@ void RtInput_KeyMap_Load(void* selfPtr) {
     // The effectiveness control. A run with no saved bindings in the registry
     // reaches every line of this function and changes nothing, so `calls=`
     // alone would report the body as exercised when it has not been.
+    (void)written;
+}
+
+}  // namespace Input
+
+// The registered door (ENDGAME B.3.7 B5): name and address, one QUALIFIED call.
+void RtInput_KeyMap_Load(void* selfPtr) {
+    reinterpret_cast<Input::KeyMap*>(selfPtr)->Input::KeyMap::Load();
 }
 
 int RtInputKeyMapLoadRegister() {
