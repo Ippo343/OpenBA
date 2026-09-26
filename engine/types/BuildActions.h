@@ -17,59 +17,14 @@
 #include "Work/BuildRoad.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 #include "Work/BuildStructure.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 #include "Work/ClearArea.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
+#include "Work/ConsumeProduce.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 
 // BuildRoad — the real class code/Game/Work/BuildRoad.h (ENDGAME B.3.8).
 // BuildStructure — the real class code/Game/Work/BuildStructure.h (ENDGAME B.3.8).
 
 // ClearArea — the real class code/Game/Work/ClearArea.h (ENDGAME B.3.8).
-
-// ============================================================
-// ConsumeProduce — consume/produce work cycle. Size = 0x78.
-// Ctor: 0x1400e9340, Vtable: 0x140161220, Factory: 0x14002a150
-// Inherits: Object::Internal -> Work (0x48) -> ConsumeProduce
-// BaseDtor: 0x1400e9190
-// ============================================================
-namespace ConsumeProduceActionAddr {
-    constexpr uintptr_t Ctor         = 0x1400e9340;
-    constexpr uintptr_t Factory      = 0x14002a150;
-    constexpr uintptr_t Vtable       = 0x140161220;
-    constexpr uintptr_t ScalarDtor   = 0x14002a190;
-    constexpr uintptr_t BaseDtor     = 0x1400e9190;
-    constexpr uintptr_t Serialize    = 0x1400e9020;
-}
-
-struct ConsumeProduceAction {
-    // --- Work base (0x48 bytes) ---
-    void*    vtable;             // +0x00: -> 0x140161220
-    uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr
-    void*    field_18;           // +0x18: entity ptr
-    int32_t  field_20;           // +0x20: -1
-    int32_t  field_24;           // +0x24: 0
-    int32_t  field_28;           // +0x28: -1
-    int32_t  field_2c;           // +0x2C: 0
-    void*    field_30;           // +0x30: zeroed
-    void*    field_38;           // +0x38: zeroed
-    int32_t  field_40;           // +0x40: 0
-    uint8_t  _pad44[4];          // +0x44: padding
-
-    // --- ConsumeProduce fields ---
-    uint8_t  field_48;           // +0x48: bool (serialized)
-    uint8_t  _pad49[3];          // +0x49: padding
-    int32_t  field_4c;           // +0x4C: int (serialized)
-    int32_t  field_50;           // +0x50: Type (zeroed, serialized)
-    int32_t  field_54;           // +0x54: int (serialized)
-    void*    field_58;           // +0x58: InternalBasePtr DynArray data ptr (zeroed)
-    int32_t  field_60;           // +0x60: DynArray count (zeroed)
-    int32_t  field_64;           // +0x64: DynArray capacity (zeroed)
-    void*    field_68;           // +0x68: int DynArray data ptr (zeroed)
-    int32_t  field_70;           // +0x70: DynArray count (zeroed)
-    int32_t  field_74;           // +0x74: DynArray capacity (zeroed)
-};
-
-static_assert(sizeof(ConsumeProduceAction) == 0x78, "ConsumeProduceAction size mismatch");
-static_assert(offsetof(ConsumeProduceAction, vtable) == 0x00, "");
-static_assert(offsetof(ConsumeProduceAction, field_58) == 0x58, "");
+// ConsumeProduce (the POD was ConsumeProduceAction) — the real class
+// code/Game/Work/ConsumeProduce.h (ENDGAME B.3.8).
 
 // ============================================================
 // GatherRawMaterials — raw material gathering work. Size = 0x78.

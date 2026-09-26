@@ -16,8 +16,8 @@
 //   GetTarget (vtable slot 10, 0x1400e8fb0)
 //
 
+#include "Work/ConsumeProduce.h"
 #include "Work/consumeproduce_funcs.h"
-#include "BuildActions.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch C
@@ -37,13 +37,10 @@
 // ============================================================
 
 // Object::Internal::Internal(this) -- via IAT at 0x140152768
-static void* (*s_fn_ObjectInternal_Ctor)(void* self) = nullptr;
 
 // Object::Internal::~Internal(this) -- via IAT at 0x140152770
-static void (*s_fn_ObjectInternal_Dtor)(void* self) = nullptr;
 
 // Work::Serialize(this, stream) -- base class serialize at 0x1400f7400
-static void (*s_fn_Work_Serialize)(void* self, void* stream) = nullptr;
 
 // Object::Type::Serialize(type*, serializer) -- via IAT at 0x1401516b0
 static void (*s_fn_Type_Serialize)(void* type, void* serializer) = nullptr;
@@ -67,8 +64,6 @@ static void* (*s_fn_FindPositionComponent)(void* entity, void* outIBP) = nullptr
 static uint32_t* s_typeId_1401c7158 = nullptr;
 
 // Cached vtable addresses
-static void* s_vtable_Work = nullptr;
-static void* s_vtable_ConsumeProduce = nullptr;
 
 // FUN_14012c3f0 -- ModelComponent::SetActiveState(component, stateIndex, enabled)
 // Toggles visibility state bits on a model/mesh component.
@@ -106,16 +101,6 @@ static bool s_resolved = false;
 bool ConsumeProduce_ResolveFuncs() {
     if (s_resolved) return true;
 
-    // Object::Internal ctor/dtor via IAT
-    uintptr_t iatCtor = ResolveAddr(Module::Exe, 0x140152768);
-    uintptr_t iatDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatCtor) s_fn_ObjectInternal_Ctor = *reinterpret_cast<void*(**)(void*)>(iatCtor);
-    if (iatDtor) s_fn_ObjectInternal_Dtor = *reinterpret_cast<void(**)(void*)>(iatDtor);
-
-    // Work::Serialize
-    s_fn_Work_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
-
     // Object::Type::Serialize -- via IAT at 0x1401516b0
     uintptr_t iatTypeSer = ResolveAddr(Module::Exe, 0x1401516b0);
     if (iatTypeSer) s_fn_Type_Serialize = *reinterpret_cast<void(**)(void*, void*)>(iatTypeSer);
@@ -136,10 +121,6 @@ bool ConsumeProduce_ResolveFuncs() {
     s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
 
-    // Vtables
-    s_vtable_Work = (void*)ResolveAddr(Module::Exe, 0x140161a80);
-    s_vtable_ConsumeProduce = (void*)ResolveAddr(Module::Exe, ConsumeProduceActionAddr::Vtable);
-
     // Execute-specific helpers
     s_fn_ModelComp_SetActiveState = reinterpret_cast<s_fn_ModelComp_SetActiveState_t>(
         ResolveAddr(Module::Exe, 0x14012c3f0));
@@ -156,12 +137,10 @@ bool ConsumeProduce_ResolveFuncs() {
     s_fn_SetupWorkChain = reinterpret_cast<s_fn_SetupWorkChain_t>(
         ResolveAddr(Module::Exe, 0x1400bef70));
 
-    bool ok = s_fn_ObjectInternal_Ctor && s_fn_ObjectInternal_Dtor &&
-              s_fn_Work_Serialize && s_fn_Type_Serialize &&
+    bool ok = s_fn_Type_Serialize &&
               s_fn_Work_ValidateTask && s_fn_TaskListCleanup &&
               s_fn_FindPositionComponent &&
               s_typeId_1401c7158 &&
-              s_vtable_Work && s_vtable_ConsumeProduce &&
               s_fn_ModelComp_SetActiveState && s_fn_CheckProduceThreshold &&
               s_fn_ResetProductionState && s_fn_Map_RecalcZones &&
               s_fn_SetupWorkChain &&
@@ -182,16 +161,12 @@ bool ConsumeProduce_ResolveFuncs() {
               g_TypeId_WorkComponent;
 
 #ifdef _DEBUG
-    printf("[ConsumeProduce] ResolveFuncs: ObjCtor=%p ObjDtor=%p WorkSer=%p\n",
-           (void*)s_fn_ObjectInternal_Ctor, (void*)s_fn_ObjectInternal_Dtor,
-           (void*)s_fn_Work_Serialize);
-    printf("[ConsumeProduce]   TypeSer=%p\n",
+    printf("[ConsumeProduce] ResolveFuncs: TypeSer=%p\n",
            (void*)s_fn_Type_Serialize);
     printf("[ConsumeProduce]   ValidateTask=%p TaskClean=%p\n",
            (void*)s_fn_Work_ValidateTask, (void*)s_fn_TaskListCleanup);
-    printf("[ConsumeProduce]   FindPos=%p typeId=%p vtWork=%p vtCP=%p\n",
-           (void*)s_fn_FindPositionComponent, (void*)s_typeId_1401c7158,
-           s_vtable_Work, s_vtable_ConsumeProduce);
+    printf("[ConsumeProduce]   FindPos=%p typeId=%p\n",
+           (void*)s_fn_FindPositionComponent, (void*)s_typeId_1401c7158);
     printf("[ConsumeProduce]   SetActiveState=%p CheckThresh=%p ResetProd=%p\n",
            (void*)s_fn_ModelComp_SetActiveState, (void*)s_fn_CheckProduceThreshold,
            (void*)s_fn_ResetProductionState);
@@ -208,38 +183,19 @@ bool ConsumeProduce_ResolveFuncs() {
 // Constructor (0x1400e9340)
 // Object::Internal::Internal() -> Work fields -> ConsumeProduce vtable + fields
 // ============================================================
-void* ConsumeProduce_Ctor_Impl(ConsumeProduceAction* self) {
-    // Initialize Internal base
-    s_fn_ObjectInternal_Ctor(self);
-
-    // Set Work vtable (intermediate step, matches original)
-    self->vtable = s_vtable_Work;
-
-    // Initialize Work base fields
-    self->field_10 = nullptr;
-    self->field_18 = nullptr;
-    self->field_20 = -1;
-    self->field_24 = 0;
-    self->field_28 = -1;
-    self->field_2c = 0;
-    self->field_30 = nullptr;
-    self->field_38 = nullptr;
-    self->field_40 = 0;
-
-    // Set ConsumeProduce vtable
-    self->vtable = s_vtable_ConsumeProduce;
-
-    // ConsumeProduce-specific fields
-    // Note: field_48 (bool) and field_4c/field_54 (ints) are NOT initialized by ctor
-    self->field_50 = 0;        // Type
-    self->field_58 = nullptr;  // IBP DynArray data ptr
-    self->field_60 = 0;        // IBP DynArray count
-    self->field_64 = 0;        // IBP DynArray capacity
-    self->field_68 = nullptr;  // int DynArray data ptr
-    self->field_70 = 0;        // int DynArray count
-    self->field_74 = 0;        // int DynArray capacity
-
-    return self;
+// The Work base init and the two stamps are the compiler's. field_48 (bool) and
+// field_4c/field_54 (ints) are NOT initialized by retail's ctor. ResolveFuncs wires
+// the file's helper pointers for the members (the old factory resolved them first).
+ConsumeProduce::ConsumeProduce()
+    : Work(),
+      field_50(0),         // Type
+      field_58(nullptr),   // IBP DynArray data ptr
+      field_60(0),         // IBP DynArray count
+      field_64(0),         // IBP DynArray capacity
+      field_68(nullptr),   // int DynArray data ptr
+      field_70(0),         // int DynArray count
+      field_74(0) {        // int DynArray capacity
+    ConsumeProduce_ResolveFuncs();
 }
 
 // ============================================================
@@ -247,44 +203,36 @@ void* ConsumeProduce_Ctor_Impl(ConsumeProduceAction* self) {
 // Calls BaseDtor (0x1400e9190) which frees arrays and resets vtable chain,
 // then optionally frees memory.
 // ============================================================
-void* ConsumeProduce_ScalarDtor_Impl(ConsumeProduceAction* self, uint32_t flags) {
-    // BaseDtor body (0x1400e9190):
-    // Set ConsumeProduce vtable (for correct virtual dispatch during destruction)
-    self->vtable = s_vtable_ConsumeProduce;
+// [0] 0x14002a190: ~ConsumeProduce, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* ConsumeProduce::DeletingDtor(unsigned flags) {
+    this->~ConsumeProduce();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
+// BaseDtor 0x1400e9190. The stamps (ConsumeProduce, then Work) and the `~Internal`
+// tail call are the compiler's.
+ConsumeProduce::~ConsumeProduce() {
     // Free the int DynArray at +0x68 (original uses 8-byte writes to zero count+capacity)
-    fn_MemFreeStatic(self->field_68);
-    self->field_68 = nullptr;
-    self->field_70 = 0;
-    self->field_74 = 0;
+    fn_MemFreeStatic(field_68);
+    field_68 = nullptr;
+    field_70 = 0;
+    field_74 = 0;
 
     // Free the IBP DynArray at +0x58 (original uses 8-byte writes to zero count+capacity)
-    fn_MemFreeStatic(self->field_58);
-    self->field_58 = nullptr;
-    self->field_60 = 0;
-    self->field_64 = 0;
-
-    // Set Work vtable (base class destructor phase)
-    self->vtable = s_vtable_Work;
-
-    // Call Object::Internal::~Internal (tail-called in original via jmp)
-    s_fn_ObjectInternal_Dtor(self);
-
-    // Free memory if requested (from ScalarDtor wrapper)
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+    fn_MemFreeStatic(field_58);
+    field_58 = nullptr;
+    field_60 = 0;
+    field_64 = 0;
 }
 
 // ============================================================
 // Serialize (0x1400e9020)
 // Work::Serialize + Serializer(version=0) + IBP array + int array + fields
 // ============================================================
-void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
-    // Call base Work::Serialize
-    s_fn_Work_Serialize(self, stream);
+void ConsumeProduce::Persist(void* stream) {
+    // Work::Persist (0x1400f7400, a direct call in retail — QUALIFIED here)
+    Work::Persist(stream);
 
     // Create IO::Serializer with version 0
     alignas(8) uint8_t serializerBuf[24];
@@ -298,22 +246,22 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     // Use a local copy like the original does (original serializes into a stack local,
     // not directly into self->field_60). This avoids issues if ResizeIBPArray
     // modifies field_60 as a side-effect.
-    int ibpCount = self->field_60;
+    int ibpCount = field_60;
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&ibpCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the IBP array to match deserialized count.
     // B.3.2 bridge: FUN_1400032e0 == Collection::Array<Ptr8>::SetSize
     // (ImmigrationComp_DynArrayResize in immigrationcomponent.cpp).
     if (isLoading) {
-        GameColl::AsArray<GameColl::Ptr8>((void*)&self->field_58).SetSize(ibpCount);
+        GameColl::AsArray<GameColl::Ptr8>((void*)&field_58).SetSize(ibpCount);
     }
 
     // Serialize each InternalBasePtr in the array
-    uintptr_t* ibpArray = (uintptr_t*)self->field_58;
+    uintptr_t* ibpArray = (uintptr_t*)field_58;
 #ifdef _DEBUG
     if (ibpCount > 0 && ibpArray == nullptr) {
-        printf("[ConsumeProduce::Serialize] BUG: ibpCount=%d but ibpArray=NULL! self=%p isLoading=%d field_58=%p field_60=%d\n",
-               ibpCount, (void*)self, (int)isLoading, (void*)self->field_58, self->field_60);
+        printf("[ConsumeProduce::Serialize] BUG: ibpCount=%d but ibpArray=NULL! this=%p isLoading=%d field_58=%p field_60=%d\n",
+               ibpCount, (void*)this, (int)isLoading, (void*)field_58, field_60);
     }
 #endif
     for (int i = 0; i < ibpCount; i++) {
@@ -345,7 +293,7 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     }
 
     // --- Serialize int array count (+0x70) ---
-    int intCount = self->field_70;
+    int intCount = field_70;
     reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&intCount), nullptr);   // B.3.4 bridge
 
     // If loading, resize the int array.
@@ -354,18 +302,18 @@ void ConsumeProduce_Serialize_Impl(ConsumeProduceAction* self, void* stream) {
     // left as the allocation found it, like retail. Safe: the resize runs only when
     // loading and the bulk int read below writes all intCount elements from the stream.
     if (isLoading) {
-        GameColl::AsArray<GameColl::I32NoInit>((void*)&self->field_68).SetSize(intCount);
+        GameColl::AsArray<GameColl::I32NoInit>((void*)&field_68).SetSize(intCount);
     }
 
     // Bulk-serialize the int array
     // Original: IO::Serializer::Serialize(serializer, count, intArrayPtr, name)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(intCount, reinterpret_cast<int*>(self->field_68), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(intCount, reinterpret_cast<int*>(field_68), nullptr);   // B.3.4 bridge
 
     // --- Serialize ConsumeProduce fields ---
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&self->field_48), nullptr);   // bool at +0x48   (B.3.4 bridge)
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_4c), nullptr);    // int at +0x4C   (B.3.4 bridge)
-    s_fn_Type_Serialize(&self->field_50, serializerBuf);            // Type at +0x50
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->field_54), nullptr);    // int at +0x54   (B.3.4 bridge)
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<bool*>(&field_48), nullptr);   // bool at +0x48   (B.3.4 bridge)
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_4c), nullptr);    // int at +0x4C   (B.3.4 bridge)
+    s_fn_Type_Serialize(&field_50, serializerBuf);            // Type at +0x50
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&field_54), nullptr);    // int at +0x54   (B.3.4 bridge)
 
     reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
 }
@@ -424,12 +372,12 @@ static void* FindComponentOnEntity(uintptr_t entity, uint32_t typeId) {
 }
 
 // Finalize action: call vtable +0x50, set citizen state flags, store citizen ref.
-static int FinalizeAction(ConsumeProduceAction* self, void* entityIBP, void* actionIBP, int priority, int slotIndex) {
+static int FinalizeAction(ConsumeProduce* self, void* entityIBP, void* actionIBP, int priority, int slotIndex) {
     uintptr_t citizenEntity = *(uintptr_t*)entityIBP;
 
     // Call vtable slot +0x50 (Shared method)
     uintptr_t vtable = *(uintptr_t*)self;
-    typedef uint64_t* (*VtSlot50_t)(ConsumeProduceAction*, void*);
+    typedef uint64_t* (*VtSlot50_t)(ConsumeProduce*, void*);
     VtSlot50_t vtShared = *(VtSlot50_t*)(vtable + 0x50);
     uint64_t* result = vtShared(self, actionIBP);
 
@@ -455,12 +403,12 @@ static int FinalizeAction(ConsumeProduceAction* self, void* entityIBP, void* act
 //
 // Main production work logic. Returns 1 (retry) or 2 (action pushed).
 // ============================================================
-int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
+int ConsumeProduce::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
     uintptr_t gameWorld = (uintptr_t)*g_pGameWorldSingleton;
     int* mapGrid = *(int**)(gameWorld + 0xf8);
     void** worldEntityList = *(void***)(gameWorld + 0xf0);
 
-    void* entityFieldPtr = (void*)((uintptr_t)self + 0x10);  // self->field_10 as IBP
+    void* entityFieldPtr = (void*)((uintptr_t)this + 0x10);  // self->field_10 as IBP
 
     // --- Find PositionComponent on work entity ---
     uintptr_t posIBP = 0;
@@ -524,7 +472,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
     s_fn_ModelComp_SetActiveState((void*)meshCompIBP, 2, resourcesDepleted ? '\x01' : '\0');
 
     // --- Find ConsumeProduceComponent (type 0x1401c7350) for produce check ---
-    entity = *(uintptr_t*)((uintptr_t)self + 0x10);
+    entity = *(uintptr_t*)((uintptr_t)this + 0x10);
     void* smComp2 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
 
     uintptr_t smComp2IBP = 0;
@@ -556,8 +504,8 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
         // --- Pick random empty output slot ---
         void* randomPtr = *(void**)(gameWorld + 0xd8);
-        uint32_t startSlot = reinterpret_cast<System::Random*>(randomPtr)->Rand((uint32_t)self->field_60);   // B.3.4b bridge
-        int totalSlots = self->field_60;
+        uint32_t startSlot = reinterpret_cast<System::Random*>(randomPtr)->Rand((uint32_t)field_60);   // B.3.4b bridge
+        int totalSlots = field_60;
         uint32_t slot = startSlot;
 
         if (totalSlots < 1) {
@@ -566,7 +514,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
         // Find an empty slot (field_58[slot] == 0)
         int attempts = 0;
-        while (*(uintptr_t*)((uintptr_t)self->field_58 + (uintptr_t)slot * 8) != 0) {
+        while (*(uintptr_t*)((uintptr_t)field_58 + (uintptr_t)slot * 8) != 0) {
             slot++;
             if ((int)slot >= totalSlots) {
                 slot = 0;
@@ -582,7 +530,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         }
 
         // --- Find StorageComponent on work entity ---
-        entity = *(uintptr_t*)((uintptr_t)self + 0x10);
+        entity = *(uintptr_t*)((uintptr_t)this + 0x10);
         void* storageComp = FindComponentOnEntity(entity, *g_TypeId_StorageComponent_FC);
 
         uintptr_t storageCompIBP = 0;
@@ -710,13 +658,13 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                 uintptr_t foundEntity = 0;
                 fn_FindStorageForResource(
                     worldEntityList, &foundEntity,
-                    *(uint32_t*)((uintptr_t)self + 0x28), matEntity,
-                    available, '\x01', searchPos, (void*)((uintptr_t)self + 0x10));
+                    *(uint32_t*)((uintptr_t)this + 0x28), matEntity,
+                    available, '\x01', searchPos, (void*)((uintptr_t)this + 0x10));
 
                 if (foundEntity != 0) {
                     // Check passability
                     uint64_t passable = fn_Map_CheckPassable(mapGrid, 0xe1f, (uint32_t)citizenCell,
-                                                             *(uint32_t*)((uintptr_t)self + 0x28));
+                                                             *(uint32_t*)((uintptr_t)this + 0x28));
                     if ((char)passable == '\0') {
                         return 1;
                     }
@@ -742,7 +690,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                         int slotResult = fn_Storage_FindSlot(
                             (void*)unkCompIBP, slotMapSize * slotCellY + slotCellX,
-                            (float*)&terrainPos, *(uint32_t*)((uintptr_t)self + 0x28));
+                            (float*)&terrainPos, *(uint32_t*)((uintptr_t)this + 0x28));
                         if (slotResult >= 0) {
                             // Set up pathfinding and create work action
                             uintptr_t destEntity = foundEntity;
@@ -750,12 +698,12 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                             fn_Pathfinding_FindPath(
                                 &worldEntityList, &destEntityRef,
-                                *(int*)((uintptr_t)self + 0x20), &destEntity,
+                                *(int*)((uintptr_t)this + 0x20), &destEntity,
                                 searchPos, &entityRef, (float*)&terrainPos,
                                 (int64_t)matEntity, available, slot, 0, '\x01', 0, 0);
 
-                            int priority = *(int*)((uintptr_t)self + 0x20);
-                            return FinalizeAction(self, entityIBP, &destEntityRef, priority, slot);
+                            int priority = *(int*)((uintptr_t)this + 0x20);
+                            return FinalizeAction(this, entityIBP, &destEntityRef, priority, slot);
                         }
                     }
                 }
@@ -810,7 +758,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
                 fn_FindStorageForResource(
                     worldEntityList, (void*)&foundStorage,
                     mapSize * by + bx, matEntity2, 1, '\0', searchPos2,
-                    (void*)((uintptr_t)self + 0x10));
+                    (void*)((uintptr_t)this + 0x10));
 
                 if (foundStorage != 0) {
                     // Found storage -- check if it has the material available
@@ -856,12 +804,12 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                                         fn_Pathfinding_FindPath(
                                             &foundStorage, &pathCitizen,
-                                            *(int*)((uintptr_t)self + 0x20), &pathSrc,
+                                            *(int*)((uintptr_t)this + 0x20), &pathSrc,
                                             (float*)&fetchPos, &fetchDest, searchPos2,
                                             (int64_t)matEntity2, -1, slot, 1, '\0', 0, 0);
 
-                                        int priority2 = *(int*)((uintptr_t)self + 0x20);
-                                        return FinalizeAction(self, entityIBP, &fetchDest, priority2, slot);
+                                        int priority2 = *(int*)((uintptr_t)this + 0x20);
+                                        return FinalizeAction(this, entityIBP, &fetchDest, priority2, slot);
                                     }
                                 }
                                 break;
@@ -880,7 +828,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
         // which is the next heap block's boundary tag (+1 then +2 in its high dword, the
         // "free-list link with wrong high bits" teardown crash in the 800x10 stress run,
         // caught 2026-09-04 by a hardware watchpoint: Execute wrote 1, OnComplete wrote 2).
-        int totalPositions = (int)self->field_70;  // number of output positions (= int array count)
+        int totalPositions = (int)field_70;  // number of output positions (= int array count)
         uint32_t firstFreePos = 0xffffffff;
         int firstFreeIndex = -1;
         uint32_t freeCount = 0;
@@ -900,7 +848,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
             int posCell = py * mapSize + px;
 
             // Check if position has status 2 but no structure
-            int* statusArray = (int*)self->field_68;
+            int* statusArray = (int*)field_68;
             uintptr_t structBase = *(uintptr_t*)((uintptr_t)mapGrid + 0x80);
             if (statusArray[posIdx] == 2 &&
                 *(uintptr_t*)(structBase + 8 + (int64_t)posCell * 0x30) == 0) {
@@ -918,13 +866,13 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
         // If all positions are free, mark as not producing
         if (freeCount == (uint32_t)totalPositions) {
-            *(uint8_t*)((uintptr_t)self + 0x48) = 0;  // field_48 = false
+            *(uint8_t*)((uintptr_t)this + 0x48) = 0;  // field_48 = false
         }
 
         // If no free position found, mark as producing
         if ((int)firstFreePos < 0) {
-            *(uint8_t*)((uintptr_t)self + 0x48) = 1;  // field_48 = true
-        } else if (*(char*)((uintptr_t)self + 0x48) == '\0' && allInputsAvailable) {
+            *(uint8_t*)((uintptr_t)this + 0x48) = 1;  // field_48 = true
+        } else if (*(char*)((uintptr_t)this + 0x48) == '\0' && allInputsAvailable) {
             goto setup_produce_action;
         }
 
@@ -947,7 +895,7 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
             uintptr_t structEntity = *(uintptr_t*)(structBase2 + 8 + (int64_t)checkCell * 0x30);
 
             if (structEntity != 0) {
-                if (structEntity != *(uintptr_t*)((uintptr_t)self + 0x10)) {
+                if (structEntity != *(uintptr_t*)((uintptr_t)this + 0x10)) {
                     // Found a different entity at this position -- check for StorageLocation
                     void* locComp = FindComponentOnEntity(structEntity, *g_TypeId_WorkComponent);
                     uintptr_t locCompIBP = 0;
@@ -1015,12 +963,12 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                 // Check if enough consume cycles have passed
                 char canFinish = '\0';
-                if (*(int*)(cpDescAddr + 0x40) <= self->field_4c) {
+                if (*(int*)(cpDescAddr + 0x40) <= field_4c) {
                     canFinish = '\x01';
-                    self->field_4c -= *(int*)(cpDescAddr + 0x40);
+                    field_4c -= *(int*)(cpDescAddr + 0x40);
 
                     // Increment produce counter on ConsumeProduceComponent
-                    entity = *(uintptr_t*)((uintptr_t)self + 0x10);
+                    entity = *(uintptr_t*)((uintptr_t)this + 0x10);
                     void* smComp3 = FindComponentOnEntity(entity, *g_TypeId_ConsumeProduceComponent_FC);
                     uintptr_t smComp3IBP = 0;
                     new (&smComp3IBP) ::Object::InternalBasePtr(
@@ -1030,31 +978,31 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 
                 // Create work action chain
                 uintptr_t citizenRef4 = *(uintptr_t*)entityIBP;
-                uintptr_t workEntityRef = *(uintptr_t*)((uintptr_t)self + 0x10);
-                int actionPriority = (int)*(int64_t*)((uintptr_t)self + 0x50);
+                uintptr_t workEntityRef = *(uintptr_t*)((uintptr_t)this + 0x10);
+                int actionPriority = (int)*(int64_t*)((uintptr_t)this + 0x50);
 
                 s_fn_SetupWorkChain(
                     &citizenRef4,
-                    *(int*)((uintptr_t)self + 0x20),
+                    *(int*)((uintptr_t)this + 0x20),
                     &workEntityRef,
                     producePos,
                     produceHeading[0],
-                    *(uintptr_t*)(*(uintptr_t*)((uintptr_t)self + 0x10) + 0x28),
+                    *(uintptr_t*)(*(uintptr_t*)((uintptr_t)this + 0x10) + 0x28),
                     *(uint64_t*)(productData + 0x10 + productStride * 8),
                     (uint32_t)canFinish,
                     (int*)&actionPriority,
-                    *(uint32_t*)((uintptr_t)self + 0x54),
+                    *(uint32_t*)((uintptr_t)this + 0x54),
                     firstFreeIndex,
                     *(float*)(cpDescAddr + 0x44),
                     (canFinish ? 0x8000 : 0) | ((firstFreePos | 0x100) << 8) | slot);
 
                 // Update status array for the position
                 if (canFinish != '\0') {
-                    ((int*)self->field_68)[(int)firstFreePos] = 1;
+                    ((int*)field_68)[(int)firstFreePos] = 1;
                 }
 
-                int priority3 = *(int*)((uintptr_t)self + 0x20);
-                return FinalizeAction(self, entityIBP, &actionPriority, priority3, slot);
+                int priority3 = *(int*)((uintptr_t)this + 0x20);
+                return FinalizeAction(this, entityIBP, &actionPriority, priority3, slot);
             }
         }
         return 1;
@@ -1106,30 +1054,31 @@ int ConsumeProduce_Execute_Impl(ConsumeProduceAction* self, void* entityIBP) {
 // param4 encodes: bits [6:0] = slot index, bit 15 = update int array,
 //   bits [14:8] = int array index, bit 16 = increment field_4c
 // ============================================================
-int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* /*param2*/, void* /*param3*/, uint32_t param4) {
+int ConsumeProduce::OnComplete(void* /*param2*/, void* /*param3*/, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
     // Clear the citizen assignment: store null IBP into slot
     uintptr_t nullIBP = 0;
     new (&nullIBP) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
 
     uint32_t slotIdx = param4 & 0x7F;
-    uintptr_t* ibpArray = (uintptr_t*)self->field_58;
+    uintptr_t* ibpArray = (uintptr_t*)field_58;
     ibpArray[slotIdx] = nullIBP;
 
     // If bit 15 set, mark the int array slot as state 2 (completed)
     if ((param4 >> 15) & 1) {
-        int* intArray = (int*)self->field_68;
+        int* intArray = (int*)field_68;
         uint32_t intIdx = (param4 >> 8) & 0x7F;
         // TEARDOWN_WILD_WRITE.md: retail (0x1400e77c0) stores this 2 unbounded, and a
         // 4-mod-8 store of a 2 past a small int array is exactly the teardown damage.
         // Report an index past the array's own count BEFORE the faithful store below,
         // with everything needed to say how the index and the array came apart.
-        if ((int)intIdx >= self->field_70 || slotIdx >= (uint32_t)self->field_60) {
+        if ((int)intIdx >= field_70 || slotIdx >= (uint32_t)field_60) {
             std::fprintf(stderr,
                 "[WILDWRITE] ConsumeProduce::OnComplete OUT OF RANGE: work=%p entity=%p "
                 "workId=%d param4=0x%x -> posIdx=%u (count %d, cap %d, array %p) "
                 "slotIdx=%u (count %d)\n",
-                (void*)self, self->field_10, self->field_20, param4, intIdx,
-                self->field_70, self->field_74, (void*)intArray, slotIdx, self->field_60);
+                (void*)this, field_10, field_20, param4, intIdx,
+                field_70, field_74, (void*)intArray, slotIdx, field_60);
             RedzoneAlloc_PrintBacktrace("ConsumeProduce::OnComplete");
         }
         intArray[intIdx] = 2;
@@ -1137,7 +1086,7 @@ int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* /*param2*/,
 
     // If bit 16 set, increment the produce counter
     if (param4 & 0x10000) {
-        self->field_4c += 1;
+        field_4c += 1;
     }
 
     return 0;
@@ -1147,15 +1096,16 @@ int ConsumeProduce_OnComplete_Impl(ConsumeProduceAction* self, void* /*param2*/,
 // OnCancel (0x1400e7780) -- vtable slot 7
 // Delegates to OnComplete with bit 16 cleared (no produce increment).
 // ============================================================
-int ConsumeProduce_OnCancel_Impl(ConsumeProduceAction* self, void* param2, void* param3, uint32_t param4) {
+int ConsumeProduce::OnCancel(void* param2, void* param3, int arg3) {
+    const uint32_t param4 = static_cast<uint32_t>(arg3);
     // Copy params, clear bit 16, call OnComplete (slot 6)
     // In original: reads vtable slot +0x30 (OnComplete) and calls it
     uint32_t modifiedParam4 = param4 & 0xFFFEFFFF;  // clear bit 16
 
     typedef int (*OnComplete_t)(void* self, void* p2, void* p3, uint32_t p4);
-    void* vtable = self->vtable;
+    void* vtable = *reinterpret_cast<void**>(this);
     OnComplete_t onComplete = *(OnComplete_t*)((uintptr_t)vtable + 0x30);
-    onComplete(self, param2, param3, modifiedParam4);
+    onComplete(this, param2, param3, modifiedParam4);
     return 0;
 }
 
@@ -1163,11 +1113,11 @@ int ConsumeProduce_OnCancel_Impl(ConsumeProduceAction* self, void* param2, void*
 // Cleanup (0x1400e8f30) -- vtable slot 8
 // Iterates assigned citizens in the IBP array, clears their task state.
 // ============================================================
-int ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self) {
-    int count = self->field_60;
+int ConsumeProduce::Cleanup() {
+    int count = field_60;
     if (count <= 0) return 0;
 
-    uintptr_t* ibpArray = (uintptr_t*)self->field_58;
+    uintptr_t* ibpArray = (uintptr_t*)field_58;
 
     for (int i = 0; i < count; i++) {
         uintptr_t entityIBP = ibpArray[i];
@@ -1190,14 +1140,14 @@ int ConsumeProduce_Cleanup_Impl(ConsumeProduceAction* self) {
 // Checks if all assigned citizen tasks are still valid.
 // Returns: 1 = all valid, 0 = some invalid (with cleanup).
 // ============================================================
-int ConsumeProduce_Validate_Impl(ConsumeProduceAction* self, void* param2) {
-    int count = self->field_60;
+int ConsumeProduce::Validate(void* param2) {
+    int count = field_60;
     if (count <= 0) {
         // No assigned citizens -- return valid
         return 1;
     }
 
-    uintptr_t* ibpArray = (uintptr_t*)self->field_58;
+    uintptr_t* ibpArray = (uintptr_t*)field_58;
     bool allValid = true;
     int validCount = 0;
     int* tempTypes = nullptr;  // dynamic array of type IDs per valid citizen
@@ -1210,7 +1160,7 @@ int ConsumeProduce_Validate_Impl(ConsumeProduceAction* self, void* param2) {
         // Validate task for this citizen
         uintptr_t taskResult = 0;
         uintptr_t ibpBuf = entityIBP;
-        uint8_t valid = s_fn_Work_ValidateTask(self, param2, &ibpBuf, (void**)&taskResult);
+        uint8_t valid = s_fn_Work_ValidateTask(this, param2, &ibpBuf, (void**)&taskResult);
 
         if (valid == 0) {
             // Task invalid -- clear citizen from slot
@@ -1258,8 +1208,8 @@ int ConsumeProduce_Validate_Impl(ConsumeProduceAction* self, void* param2) {
 
     // If some citizens were invalidated, update the int array state
     if (!allValid) {
-        int* intArray = (int*)self->field_68;
-        int intCount = self->field_70;
+        int* intArray = (int*)field_68;
+        int intCount = field_70;
         for (int k = 0; k < intCount; k++) {
             // Check if this slot's type is still present in valid citizens
             bool found = false;
@@ -1287,12 +1237,12 @@ int ConsumeProduce_Validate_Impl(ConsumeProduceAction* self, void* param2) {
 // Returns the target position from the entity's position component.
 // Hidden return ptr ABI: RCX=self, RDX=retbuf
 // ============================================================
-void* ConsumeProduce_GetTarget_Impl(ConsumeProduceAction* self, void* retbuf) {
+void* ConsumeProduce::GetTarget(void* retbuf) {
     // CheckPtr on the entity IBP at +0x10
 
     // Find the position/work component (type 0x1401c80e0) on the entity
     uintptr_t componentIBP = 0;
-    s_fn_FindPositionComponent(self->field_10, &componentIBP);
+    s_fn_FindPositionComponent(field_10, &componentIBP);
 
     // CheckPtr on the found component
 
@@ -1303,57 +1253,45 @@ void* ConsumeProduce_GetTarget_Impl(ConsumeProduceAction* self, void* retbuf) {
     return retbuf;
 }
 
-// ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161220 (13 slots), size 0x78, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// FLAG: slot11 GetPriority (+0x58) is NOT implemented in this file (no
-// ConsumeProduce_GetPriority_Impl exists). Left as a clearly-marked nullptr.
-// ============================================================
-#include "work_base_standalone.h"
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ConsumeProduce_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("ConsumeProduce");
-    return c;
-}
-
 // Slot11 (+0x58) — retail 0x14002a0f0 is `return 0 < *(int*)(self + 0x60)` (the shared
 // body ClearStorage also uses: tree count at +0x60, not the +0x50 the generic
 // Work_Slot11_HasActiveTasks reads). Was pinned to 0 by Work_SlotRet0 (2026-09-05).
-static int ConsumeProduce_Slot11_HasActiveTasks(void* self) {
-    return *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(self) + 0x60) > 0 ? 1 : 0;
+int ConsumeProduce::GetPriority() {
+    return field_60 > 0 ? 1 : 0;
 }
 
-static void* g_ConsumeProduce_Vtable[13] = {
-    (void*)&ConsumeProduce_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                      // +0x08 slot1 (null)
-    (void*)&ConsumeProduce_GetTypeId,        // +0x10 GetTypeId
-    (void*)&ConsumeProduce_Serialize_Impl,   // +0x18 Serialize
-    (void*)&ConsumeProduce_Execute_Impl,     // +0x20 Execute
-    (void*)&Work_Slot5,                      // +0x28 slot5 (returns 0)
-    (void*)&ConsumeProduce_OnComplete_Impl,  // +0x30 OnComplete
-    (void*)&ConsumeProduce_OnCancel_Impl,    // +0x38 OnCancel
-    (void*)&ConsumeProduce_Cleanup_Impl,     // +0x40 Cleanup
-    (void*)&ConsumeProduce_Validate_Impl,    // +0x48 Validate
-    (void*)&ConsumeProduce_GetTarget_Impl,   // +0x50 GetTarget
-    (void*)&ConsumeProduce_Slot11_HasActiveTasks, // +0x58 HasActiveTasks (0x14002a0f0: +0x60 > 0)
-    (void*)&Work_Slot12,                     // +0x60 slot12 (void nop)
-};
+// Slot12 (+0x60) — retail 0x1400e9010, this class's own `RET 0` (every other Work
+// table shares 0x140006b10). The same behaviour; declared so the table matches.
+void ConsumeProduce::Slot12() {}
 
+// ============================================================
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
+// ============================================================
+// Before: a hand-built 13-slot `g_ConsumeProduce_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over ConsumeProduce_Factory / _CreateInPlace.
+
+// create 0x14002a150: MemAlloc(sizeof, 8), then the ctor.
+void* ConsumeProduce::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ConsumeProduce), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ConsumeProduce());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* ConsumeProduce::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ConsumeProduce());
+}
+
+DEFINE_EXE_VTABLE(ConsumeProduce, "_ZTV14ConsumeProduce")
+
+#include "Object/factory_registration.h"
+#include "address_registry.h"
+
+// B38 D5: 0x140161220 is still read back BY ADDRESS — ConsumeProduceComponent's
+// CreateWork (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and
+// stamps it — so the exe address serves the COMPILER's table.
 extern "C" void RegisterConsumeProduceVtable() {
-    RegisterExeAddr(0x140161220, (uintptr_t)g_ConsumeProduce_Vtable);
+    RegisterExeAddr(ConsumeProduceAddr::Vtable, reinterpret_cast<uintptr_t>(ConsumeProduce::Vtable()));   // 0x140161220
 }
-extern "C" void* ConsumeProduce_CreateInPlace(void* mem) {
-    ConsumeProduce_ResolveFuncs();
-    return ConsumeProduce_Ctor_Impl((ConsumeProduceAction*)mem);
-}
-extern "C" void* ConsumeProduce_Factory(void) {
-    ConsumeProduce_ResolveFuncs();
-    void* p = Work_Alloc(0x78);
-    return p ? ConsumeProduce_Ctor_Impl((ConsumeProduceAction*)p) : nullptr;
-}
-REGISTER_TYPE(ConsumeProduce, "Work", &ConsumeProduce_Factory, &ConsumeProduce_CreateInPlace);
+DEFINE_EXE_TYPE(ConsumeProduce, "Work")

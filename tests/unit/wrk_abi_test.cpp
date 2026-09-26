@@ -27,6 +27,7 @@
 #include "Work/BuildStructure.h"
 #include "Work/ClearArea.h"
 #include "Work/ClearStorage.h"
+#include "Work/ConsumeProduce.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -159,6 +160,18 @@ UNIT_TEST(wrk_leaf_clearstorage) {
     CHECK_EQ(offsetof(ClearStorage, _field50), (size_t)0x50);
     CHECK_EQ(offsetof(ClearStorage, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(ClearStorage, _field60), (size_t)0x60);
+}
+
+UNIT_TEST(wrk_leaf_consumeproduce) {
+    WRK_LEAF_SHAPE(ConsumeProduce, Work, 0x78);
+    CHECK_EQ(offsetof(ConsumeProduce, field_48), (size_t)0x48);
+    CHECK_EQ(offsetof(ConsumeProduce, field_4c), (size_t)0x4c);
+    CHECK_EQ(offsetof(ConsumeProduce, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(ConsumeProduce, field_58), (size_t)0x58);
+    CHECK_EQ(offsetof(ConsumeProduce, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(ConsumeProduce, field_68), (size_t)0x68);
+    CHECK_EQ(offsetof(ConsumeProduce, field_70), (size_t)0x70);
+    CHECK_EQ(offsetof(ConsumeProduce, field_74), (size_t)0x74);
 }
 
 // ===========================================================================
