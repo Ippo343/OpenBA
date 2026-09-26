@@ -2,29 +2,31 @@
 // runtime/src/ui/pageelement.cpp — UI::PageElement
 // ============================================================================
 //
-// `??_7PageElement@UI@@6B@` (retail 0x180157080). Only four slots are its own;
-// 4/5/6 are `UI::GroupElement`'s bodies (0x180117f00 / 0x180118050 /
-// 0x1801181c0), which belong to the elem_A batch and are not duplicated here:
+// `??_7PageElement@UI@@6B@` (retail 0x180157080). Only three slots are its
+// own; 4/5/6 are `UI::GroupElement`'s bodies (0x180117f00 / 0x180118050 /
+// 0x1801181c0) in groupelement.cpp, which the class simply does not override:
 //
-//   0  vector deleting dtor  0x180047540  -> deleting_dtor.cpp row (this batch)
+//   0  vector deleting dtor  0x180047540  -> deleting_dtor.cpp row
 //   1  TypeName              0x180047270  here
 //   2  Type                  0x180047250  here
-//   4..6                     GroupElement's, elem_A
+//   4..6                     GroupElement's
 //
-// plus ??0PageElement (0x1800d5260) and ??1PageElement (0x1800d5220).
+// plus ??0PageElement (0x1800d5260) and ??1PageElement (0x1800d5220), both
+// DOORS (B4b-2). `GetActivePage` is inline in PageElement.h; `SetActivePage`
+// is widgets_layout.cpp's door (fragment pass).
 //
 // THE DOUBLE VTABLE STAMP IS REAL AND IS REPRODUCED. Both the ctor and the
 // dtor write `??_7GroupElement@UI@@6B@` and `??_7PageElement@UI@@6B@` into
 // +0x00 back to back (ctor: Group then Page; dtor: Page then Group). That is
-// MSVC emitting the base's stamp and the derived's over it, four instructions
-// in the shipped bytes; collapsing them would be a divergence for no gain,
-// exactly as runtime/src/ui/dialog_ctor_dtor.cpp keeps Dialog's two.
+// MSVC emitting the base's stamp and the derived's over it.
 //
-// sizeof == 0xC8 (the deleting destructor's `MOV EDX,0xc8`): UI::Element's
-// 0xC0 plus one int32 `_activePage` at +0xC0, which is what
-// runtime/types/ui/PageElement.h already records from ?GetActivePage@
-// (0x1800d5100).
+// LAYOUT: runtime/types/ui/PageElement.h — sizeof 0xC8, `_activePage` at +0xC0.
+//
+// ENDGAME B.3.6 block C2: slots 1/2 are MEMBERS of `UI::PageElement`; the
+// registered doors are one-line QUALIFIED delegations.
 // ============================================================================
+
+#include <atomic>
 
 #include "widget_common.h"
 #include "../../types/ui/PageElement.h"
@@ -33,37 +35,55 @@ using namespace rtui;
 
 namespace {
 
-constexpr int kActivePage = 0xC0;
-static_assert(kActivePage == UI::PageElementOffsets::kActivePage, "");
-
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A");
+// RULE B6-5: a namespace-scope atomic cache for the member bodies.
+std::atomic<void*> g_pageElementTypeInfo{nullptr};
+const uint8_t* PageElementTypeInfo() {
+    void* p = g_pageElementTypeInfo.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached("?_typeInfo@PageElement@UI@@0VBaseTypeInfo@Object@@A", &scratch);
+        if (p != nullptr) g_pageElementTypeInfo.store(p, std::memory_order_release);
+    }
+    return static_cast<const uint8_t*>(p);
 }
+
+// Door-only.
 void* Vtable()      { return RT_DATA_SLOT(void*, "??_7PageElement@UI@@6B@"); }
 void* VtableGroup() { return RT_DATA_SLOT(void*, "??_7GroupElement@UI@@6B@"); }
 
 }  // namespace
 
-extern "C" uint32_t RtUi_PageElement_Type(const void*) {
-    const uint8_t* ti = TypeInfo();
+namespace UI {
+
+uint32_t PageElement::Type() const {                            // 0x180047250
+    const uint8_t* ti = PageElementTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_PageElement_TypeName(const void*) {
-    const uint8_t* ti = TypeInfo();
+// The key function: GCC emits `vtable for UI::PageElement` here.
+const char* PageElement::TypeName() const {                     // 0x180047270
+    const uint8_t* ti = PageElementTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 
-// ??0PageElement@UI@@QEAA@XZ   0x1800d5260
+}  // namespace UI
+
+extern "C" uint32_t RtUi_PageElement_Type(const void* self) {
+    return reinterpret_cast<const UI::PageElement*>(self)->UI::PageElement::Type();       // B.3.6 bridge
+}
+extern "C" const char* RtUi_PageElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::PageElement*>(self)->UI::PageElement::TypeName();   // B.3.6 bridge
+}
+
+// ??0PageElement@UI@@QEAA@XZ   0x1800d5260   — a CTOR DOOR (B4b-2)
 extern "C" void* RtUi_PageElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
     ElementCtor(self);
     PTR(self, 0x00) = VtableGroup();
     PTR(self, 0x00) = Vtable();
-    I32(self, kActivePage) = 0;
+    I32(self, UI::PageElementOffsets::kActivePage) = 0;
     return self;
 }
 
-// ??1PageElement@UI@@UEAA@XZ   0x1800d5220
+// ??1PageElement@UI@@UEAA@XZ   0x1800d5220   — a DTOR DOOR (B4b-2)
 extern "C" void RtUi_PageElement_Dtor(void* self) {
     PTR(self, 0x00) = Vtable();
     PTR(self, 0x00) = VtableGroup();

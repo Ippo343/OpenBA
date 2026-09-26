@@ -1,0 +1,130 @@
+#pragma once
+// ============================================================================
+// runtime/types/ui/ImageDescription.h — UI::ImageDescription, the REAL C++ class
+// ============================================================================
+//
+// ENDGAME B.3 step 6, block C2. Before this header the layout lived only as
+// raw `+0x..` reads in runtime/src/ui/imagedescription.cpp (RULE B6-8); they
+// are MOVED here under the class.
+//
+// PARENT `UI::ElementDescription` — READ, not inferred (B36_SLOTS.md section 3):
+//     ?_ParentTypeName@ImageDescription@UI@@CAPEBDXZ  @0x180035ca0 -> "ElementDescription"
+// RULE B5-15 / B6-7 — the two literals, RECORDED, NOT USED:
+//     ?_TypeName@ImageDescription@UI@@CAPEBDXZ        @0x180035c90 -> "ImageDescription"
+//     ?_ParentTypeName@ImageDescription@UI@@CAPEBDXZ  @0x180035ca0 -> "ElementDescription"
+//
+// `??_7ImageDescription@UI@@6B@` @ 0x180156110, TEN slots:
+//   [0] 0x1800361f0  (unexported) vector deleting dtor — RT_DELDTOR row, kept
+//   [1] 0x180035cd0  TypeName
+//   [2] 0x180035cb0  Type
+//   [3] 0x1801184a0  GetFileVersion  (`return 0x204`)
+//   [4] 0x1800066e0  Object::External::Compile  INHERITED — NOT declared (B6-1.5)
+//   [5] 0x1801184b0  Serialize
+//   [6] 0x180035f60  Reconstruct
+//   [7] 0x1800360c0  Destruct
+//   [8] 0x180118910  CreateInstance(const Dialog*) -> InternalPtr<Element>  RETSLOT (B6-2)
+//   [9] 0x180036010  Construct — INTRODUCED here (`virtual`, B6-1.1)
+// ONE SUBCLASS (RULE B6-9): `AnimatedImageDescription` ("ImageDescription").
+//
+// THE NON-VIRTUAL `CreateInstance` IS EXPORTED. The tree called 0x180118570
+// "UNEXPORTED, address-only"; B36_SLOTS.md section 6 lists it as
+// `?CreateInstance@ImageDescription@UI@@QEBAXV?$InternalPtr@VImageElement@UI@@@Object@@@Z`.
+// It is "stamp this description onto that image": both this class's and
+// AnimatedImageDescription's slot 8 call it, and both slot-8 overrides HIDE it
+// (qualify it from the subclass). The handle is by value in the source, so
+// retail passes the ADDRESS of the caller's copy (`MOV RAX,[RDX]` at
+// 0x18011857f, RULE B6-11) — declared as that pointer.
+//
+// ---------------------------------------------------------------------------
+// LAYOUT — 0x80 bytes (`MOV EDX,0x80` at 0x18003620f), ElementDescription
+// (0x68) plus four fields. The inlined ctor (0x18003608c..0x18003609e; the
+// same stores sit in ??0AnimatedImageDescription at 0x1800cb763..0x1800cb775,
+// read this pass) writes qword 0 at +0x68, qword 0 at +0x70 and ONE qword -1
+// at +0x78 covering +0x78 AND +0x7c.
+//   +0x68  _spriteSheet  ExternalPtr<UI::SpriteSheet> — serialized by
+//                        0x180004590; the applier hands it to
+//                        `SpriteSheet::GetSpriteIndexFromName` and copies it
+//                        to `ImageElement::_sprite`.
+//   +0x70  _spriteName   System::String — serialized by 0x1800c9930; the name
+//                        the applier looks up; ~ImageDescription releases it.
+//   +0x78  _width        one kScalarInt; the applier copies it to
+//                        `ImageElement::_width` (+0xd4) — that member's name.
+//   +0x7c  _height       one kScalarInt; copied to `ImageElement::_height`.
+// `void*` / `char*` for the two handles, the same bytes and the spelling
+// Dialog.h uses for the same pair.
+//
+// ABSTRACT (slot 0 `= 0`); NO out-of-line default ctor in retail
+// (`??0ImageDescription` 0x1801182d0 is the factory's door; Construct and
+// Reconstruct inline the stores).
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include <type_traits>
+
+#include "ElementDescription.h"
+
+namespace UI {
+
+class Dialog;
+class Element;
+class ImageElement;
+
+class ImageDescription : public ElementDescription {
+public:
+    // ---- the ten slots, in measured order ---------------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800361f0
+    const char* TypeName() const override;                        // [1] 0x180035cd0
+    uint32_t    Type() const override;                            // [2] 0x180035cb0
+    int32_t     GetFileVersion() const override;                  // [3] 0x1801184a0
+    // [4] Compile — Object::External's, inherited.
+    bool        Serialize(void* stream) override;                 // [5] 0x1801184b0  (IO::Stream&)
+    Object::External* Reconstruct() override;                     // [6] 0x180035f60
+    void        Destruct() override;                              // [7] 0x1800360c0
+    Object::InternalPtr<Element>* CreateInstance(
+        Object::InternalPtr<Element>* ret,
+        const Dialog* dialog) const override;                     // [8] 0x180118910  RETSLOT
+    virtual Object::External* Construct();                        // [9] 0x180036010  INTRODUCED
+
+    // ---- non-virtual ------------------------------------------------------
+    // 0x180118570 — the applier (see the banner). Ported (imagedescription.cpp).
+    void CreateInstance(Object::InternalPtr<ImageElement>* element) const;
+
+    // ---- exported, NOT PORTED as members ----------------------------------
+    ImageDescription(const ImageDescription& src);                // 0x1800360d0  not ported
+    ImageDescription& operator=(const ImageDescription& src);     // 0x180036140  not ported
+    static uint32_t TypeId();                                     // 0x180035cc0  not ported
+    static Object::Base* CreateNewObject();                       // 0x180035dc0  factory door
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x180035eb0  factory door
+
+protected:
+    // NOT retail's `??0ImageDescription@UI@@QEAA@XZ` (0x1801182d0, a door).
+    ImageDescription() = default;
+    // `??1ImageDescription@UI@@UEAA@XZ` (0x180118370). NON-VIRTUAL, NOT defined
+    // in the real build; the retail body is the door `RtUi_ImageDescription_Dtor`.
+    ~ImageDescription();
+
+private:
+    static const char* _TypeName();                               // 0x180035c90 -> "ImageDescription"
+    static const char* _ParentTypeName();                         // 0x180035ca0 -> "ElementDescription"
+    static Object::BaseTypeInfo _typeInfo;                        // minted
+
+public:
+    void*    _spriteSheet;    // +0x68  ExternalPtr<UI::SpriteSheet> (one raw pointer)
+    char*    _spriteName;     // +0x70  System::String's one pointer
+    int32_t  _width;          // +0x78  ctor -1 (one qword store with +0x7c)
+    int32_t  _height;         // +0x7c  ctor -1
+};
+
+static_assert(sizeof(ImageDescription) == 0x80,
+              "UI::ImageDescription is 0x80 bytes (MOV EDX,0x80 at 0x18003620f)");
+static_assert(alignof(ImageDescription) == 8, "UI::ImageDescription aligns to 8");
+static_assert(!std::has_virtual_destructor<ImageDescription>::value, "ENDGAME decision 2");
+static_assert(offsetof(ImageDescription, _spriteSheet) == sizeof(ElementDescription),
+              "ImageDescription's own fields begin at the end of ElementDescription");
+static_assert(offsetof(ImageDescription, _spriteSheet) == 0x68, "");
+static_assert(offsetof(ImageDescription, _spriteName)  == 0x70, "");
+static_assert(offsetof(ImageDescription, _width)       == 0x78, "");
+static_assert(offsetof(ImageDescription, _height)      == 0x7c, "");
+
+}  // namespace UI

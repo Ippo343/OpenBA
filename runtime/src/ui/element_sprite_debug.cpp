@@ -42,11 +42,14 @@ static void PrintSpriteFromPtr(const char* label, const uint8_t* spriteData) {
 // spriteData points to a 0x10-byte Sprite struct passed by value (on stack).
 void Debug_ImageElement_SetSprite(void* self, void* spriteData) {
 #ifdef _DEBUG
-    ImageElement* elem = reinterpret_cast<ImageElement*>(self);
+    // B.3.6 block C2: the bare `ImageElement` struct is now the class
+    // `UI::ImageElement`, whose UI::Sprite member carries these three fields.
+    UI::ImageElement* elem = reinterpret_cast<UI::ImageElement*>(self);   // B.3.6 bridge
     const uint8_t* newSprite = reinterpret_cast<const uint8_t*>(spriteData);
 
     printf("[ImageElement::SetSprite] this=%p\n", self);
-    PrintSprite("  OLD", elem->spriteSheet, elem->spriteIndex, elem->spriteFlags);
+    PrintSprite("  OLD", elem->_sprite.spriteSheet, elem->_sprite.spriteIndex,
+                static_cast<uint32_t>(elem->_sprite.pad0C));
     PrintSpriteFromPtr("  NEW", newSprite);
 
     // Check dirty flag state before call

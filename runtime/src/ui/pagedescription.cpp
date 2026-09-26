@@ -4,7 +4,7 @@
 //
 // Vtable batch 2. Like UI::RadioDescription, this class DERIVES FROM
 // UI::GroupDescription: its dtor tail-jumps to ~GroupDescription and its
-// Serialize opens with GroupDescription::Serialize, both already ported in
+// Serialize opens with GroupDescription::Serialize, both in
 // runtime/src/ui/groupdescription.cpp.
 //
 // ??_7PageDescription@UI@@6B@ (retail 0x1801570e0), ten slots:
@@ -19,81 +19,69 @@
 //   8  CreateInstance     0x1800d52b0  here
 //   9  Construct          0x180047080  here
 // plus ??0PageDescription@UI@@QEAA@XZ 0x1800d54e0 (out of line) and
-// ??1PageDescription@UI@@UEAA@XZ 0x1800d54b0.
+// ??1PageDescription@UI@@UEAA@XZ 0x1800d54b0 — both DOORS (B4b-2).
 //
-// LAYOUT, sizeof 0x80 (`MOV EDX,0x80` at 0x1800471d2). GroupDescription (0x78)
-// plus ONE field:
-//     +0x78  int32  _activePage   ctor 0, one kScalarInt, and the argument of
-//                                 the second SetActivePage call at the tail of
-//                                 CreateInstance. THIS ONE HAS A NAME because a
-//                                 second body says what it is --
-//                                 ?SetActivePage@PageElement@UI@@, ported in
-//                                 runtime/src/ui/widgets_layout.cpp; the sibling
-//                                 classes' fields do not and are left as offsets.
+// LAYOUT: runtime/types/ui/PageDescription.h — GroupDescription (0x78) plus
+// `_activePage` (+0x78); sizeof 0x80.
 //
-// NO NON-SLOT HELPER IS PORTED HERE. ?SetActivePage@PageElement@UI@@ was, and
-// was dropped at the merge -- see the note above CreateInstance.
+// ENDGAME B.3.6 block C2: every slot body is a MEMBER of `UI::PageDescription`;
+// the registered doors are one-line QUALIFIED delegations. Serialize's base
+// call (by address 0x180117d00 before) is the qualified member
+// `GroupDescription::Serialize`.
 // ============================================================================
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 
-#include "../../funcs/rt_port.h"
-#include "../../types/ui/ElementDescription.h"
-#include "../../types/ui/Element.h"
-#include "../../types/io/Serializer.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "description_common.h"
+#include "../../types/ui/PageDescription.h"
+#include "../../types/ui/PageElement.h"
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtGroupDescription()   { return RT_DATA_SLOT(void*, "??_7GroupDescription@UI@@6B@"); }
-void* VtPageDescription()    { return RT_DATA_SLOT(void*, "??_7PageDescription@UI@@6B@"); }
-void* VtGroupElement()       { return RT_DATA_SLOT(void*, "??_7GroupElement@UI@@6B@"); }
-void* VtPageElement()        { return RT_DATA_SLOT(void*, "??_7PageElement@UI@@6B@"); }
+using namespace rtdesc;
+
+// RULE B6-5: namespace-scope atomic door caches for the member bodies.
+void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+std::atomic<void*> g_vtGroupElement{nullptr};
+std::atomic<void*> g_vtPageElement{nullptr};
+std::atomic<void*> g_pageDescriptionTypeInfo{nullptr};
+std::atomic<void*> g_setActivePage{nullptr};
+
+void* AtVtGroupElement() { return AtomicResolve(g_vtGroupElement, "??_7GroupElement@UI@@6B@"); }
+void* AtVtPageElement()  { return AtomicResolve(g_vtPageElement, "??_7PageElement@UI@@6B@"); }
 const uint8_t* PageDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(AtomicResolve(
+        g_pageDescriptionTypeInfo,
+        "?_typeInfo@PageDescription@UI@@0VBaseTypeInfo@Object@@A"));
+}
+// ?SetActivePage@PageElement@UI@@QEAAXH@Z (0x1800d5110) — the member is
+// declared in PageElement.h, but its body is widgets_layout.cpp's registered
+// door (fragment pass), so a member call would not link: reached by name.
+void CallSetActivePage(UI::PageElement* elem, int32_t page) {
+    using SetActivePageFn = void (*)(void*, int32_t);
+    reinterpret_cast<SetActivePageFn>(AtomicResolve(
+        g_setActivePage, "?SetActivePage@PageElement@UI@@QEAAXH@Z"))(elem, page);
 }
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;              // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;   // +0x10
-};
-struct Serializer {
-    Stream* stream;            // +0x00
-    void*   readerWriter;      // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
-
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
-
-// The dirty-chain walk this file needs in three places: OR the needs-size-calc
-// bit into an element and every ancestor. Retail writes it out each time.
-void MarkChainDirty(uint8_t* e) {
-    for (uint8_t* n = e; n != nullptr; n = *reinterpret_cast<uint8_t**>(n + 0x98))
-        *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
-}
+// Door-only (the ctor/dtor doors are not members).
+void* VtGroupDescription() { return RT_DATA_SLOT(void*, "??_7GroupDescription@UI@@6B@"); }
+void* VtPageDescription()  { return RT_DATA_SLOT(void*, "??_7PageDescription@UI@@6B@"); }
 
 }  // namespace
 
 // ============================================================================
-// ??0PageDescription@UI@@QEAA@XZ   retail 0x1800d54e0
+// ??0PageDescription@UI@@QEAA@XZ   retail 0x1800d54e0   — a CTOR DOOR (B4b-2)
 // ============================================================================
 extern "C" void* RtUi_PageDescription_Ctor(void* selfv) {
     uint8_t* p = static_cast<uint8_t*>(selfv);
@@ -125,141 +113,163 @@ extern "C" void* RtUi_PageDescription_Ctor(void* selfv) {
     return p;                                                   // 1800d5572
 }
 
-extern "C" uint32_t RtUi_PageDescription_Type(const void*) {
+// ============================================================================
+// The member bodies
+// ============================================================================
+namespace UI {
+
+uint32_t PageDescription::Type() const {                       // 0x180046ec0
     const uint8_t* ti = PageDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_PageDescription_TypeName(const void*) {
+// The key function: GCC emits `vtable for UI::PageDescription` here.
+const char* PageDescription::TypeName() const {                // 0x180046ee0
     const uint8_t* ti = PageDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
-extern "C" int32_t RtUi_PageDescription_GetFileVersion(const void*) { return 0x1104; }
+int32_t PageDescription::GetFileVersion() const { return 0x1104; }   // 0x1800d54a0
 
-extern "C" void* RtUi_PageDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180047080
-    return RtUi_PageDescription_Ctor(selfv);
+// 0x180047080: the null test is the DOOR's; then the out-of-line ctor (a door).
+Object::External* PageDescription::Construct() {
+    return static_cast<Object::External*>(RtUi_PageDescription_Ctor(this));
 }
-extern "C" void* RtUi_PageDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    return RtUi_PageDescription_Ctor(selfv);
+// 0x180047060: slot 0 with flag 0 (destroy WITHOUT freeing, through the
+// object's own — minted — table), then the ctor again. No null test.
+Object::External* PageDescription::Reconstruct() {
+    DeletingDtor(0);
+    return static_cast<Object::External*>(RtUi_PageDescription_Ctor(this));
 }
-extern "C" void RtUi_PageDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
-// ??1PageDescription@UI@@UEAA@XZ  0x1800d54b0 — restamp, then TAIL JMP to
-// ~GroupDescription. Nothing of its own to release.
-extern "C" void RtUi_PageDescription_Dtor(void* selfv) {
-    *reinterpret_cast<void**>(selfv) = VtPageDescription();    // 1800d54c2
-    using DtorFn = void (*)(void*);
-    RtAddr<DtorFn>(0x180117c00ull)(selfv);                     // 1800d54d0 JMP
-}
+void PageDescription::Destruct() { DeletingDtor(0); }          // 0x180047090
 
 // ============================================================================
 // ?Serialize@PageDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d5410
 // ============================================================================
 // GroupDescription::Serialize (NOT ElementDescription's — using the
-// grandparent would drop every child), then one kScalarInt over +0x78 through
-// a SECOND ReaderWriter opened on the same stream.
-extern "C" bool RtUi_PageDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+// grandparent would drop every child), QUALIFIED (this object wears the
+// leaf's table, whose slot 5 is this function), then one kScalarInt over
+// `_activePage` through a SECOND ReaderWriter opened on the same stream.
+bool PageDescription::Serialize(void* streamv) {
+    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180117d00ull)(p, stream);              // 1800d542a
+    GroupDescription::Serialize(stream);                       // 1800d542a
 
-    Serializer ser = { stream, nullptr };
+    rtdesc::Serializer ser = { stream, nullptr };
+    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 1800d545a
 
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800d545a
+    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &_activePage);
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x78, nullptr);
-
-    if (rw != nullptr) {                                       // 1800d547d
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
-    }
+    rtdesc::DestroyReaderWriter(rw);                           // 1800d547d
     return true;
 }
 
 // ============================================================================
-// ?SetActivePage@PageElement@UI@@QEAAXH@Z (0x1800d5110) IS NOT HERE.
+// ?CreateInstance@PageDescription@UI@@...   retail 0x1800d52b0   (slot 8)
 // ============================================================================
-// It was ported in this file and dropped at the merge (2026-09-12):
-// runtime/src/ui/widgets_layout.cpp has owned it since Wave 7 lane E. The grep
-// that missed it looked for a RegisterRuntimeAddr on 0x1800d5110, and that file
-// registers it by NAME only -- which is exactly the shape the duplicate-export
-// scan catches. CreateInstance below calls it by that name.
-// ============================================================================
-
-// ============================================================================
-// ?CreateInstance@PageDescription@UI@@...   retail 0x1800d52b0
-// ============================================================================
-// RCX = this, RDX = hidden return slot, R8 = Dialog*.
+// RCX = this, RDX = hidden return slot, R8 = Dialog* (RULE B6-2).
 //
 // PageElement is 0xc8 bytes (`MOV EDX,0xc8` at 0x1800d52f8); construction
 // stamps GroupElement then PageElement and zeroes ONE dword at +0xc0.
+//
+// `ElementDescription::CreateInstance` (0x180115ad0), `??0Element` and
+// `Dialog::CreateElement` are reached through their registered doors (their
+// members are not defined in the real build yet — fragment pass / block B).
 //
 // THE TAIL CALLS SetActivePage TWICE, WITH -1 FIRST. The first call forces the
 // field away from whatever the child loop left and hides every page; the second
 // applies the description's own value. Collapsing them to one call with the
 // final value would skip the hide pass whenever the field already equalled it,
 // because SetActivePage's own first guard returns early on equality.
-extern "C" void** RtUi_PageDescription_CreateInstance(const void* selfv, void** ret,
-                                                      const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
+Object::InternalPtr<Element>* PageDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    void* raw = rtdesc::MemAlloc(0xc8, 8);                     // 1800d52f8 (inlined)
 
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xc8, 8);   // 1800d52f8 (inlined)
-
-    uint8_t* elem = nullptr;
+    PageElement* elem = nullptr;
     if (raw != nullptr) {                                      // 1800d5323
-        using ElementCtorFn = void* (*)(void*);
-        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);            // 1800d5328
-        uint8_t* e = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e) = VtGroupElement();       // 1800d532e
-        *reinterpret_cast<void**>(e) = VtPageElement();        // 1800d5338
-        *reinterpret_cast<int32_t*>(e + 0xc0) = 0;             // 1800d5344  DWORD
-        elem = e;
+        rtdesc::ElementCtor(raw);                              // 1800d5328
+        *static_cast<void**>(raw) = AtVtGroupElement();        // 1800d532e
+        *static_cast<void**>(raw) = AtVtPageElement();         // 1800d5338
+        elem = reinterpret_cast<PageElement*>(raw);            // B.3.6 bridge
+        elem->_activePage = 0;                                 // 1800d5344  DWORD
     }
 
     void* slot = elem;                                         // 1800d5350
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 1800d535d
+    rtdesc::ElementDescriptionApply(this, &slot);              // 1800d535d
 
-    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0x70);
+    const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 1800d5362 / 1800d53c9
-        void* const* descArray = *reinterpret_cast<void* const* const*>(self + 0x68);
-        void*        desc      = descArray[i];                 // 1800d5377
+        void* desc = _children._data[i];                       // 1800d5377
 
-        using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-        void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, &slot, desc);
+        void** made = rtdesc::DialogCreateElement(dialog, &slot, desc);
 
-        uint8_t* child = *reinterpret_cast<uint8_t**>(made);   // 1800d5388
+        Element* child = *reinterpret_cast<Element**>(made);   // 1800d5388
         if (child != nullptr)
-            *reinterpret_cast<void**>(child + 0x98) = elem;    // 1800d5390
+            child->_parent = elem;                             // 1800d5390
 
         using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                       *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                       made);                  // 1800d53a9
+        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+                                               elem->_children._size + 1,
+                                               made);          // 1800d53a9
 
-        MarkChainDirty(elem);                                  // 1800d53b1..1800d53c5
+        for (Element* n = elem; n != nullptr; n = n->_parent)  // 1800d53b1..1800d53c5
+            n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
-    using SetActivePageFn = void (*)(void*, int32_t);
-    SetActivePageFn setActivePage =
-        RT_EXPORT_ONCE(SetActivePageFn, "?SetActivePage@PageElement@UI@@QEAAXH@Z");
-    setActivePage(elem, -1);                                   // 1800d53d4
-    setActivePage(elem,
-                  *reinterpret_cast<const int32_t*>(self + 0x78));  // 1800d53df
+    CallSetActivePage(elem, -1);                               // 1800d53d4
+    CallSetActivePage(elem, _activePage);                      // 1800d53df
 
-    *ret = elem;                                               // 1800d53e4
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d53e4
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — each a one-line QUALIFIED delegation.
+// ============================================================================
+extern "C" uint32_t RtUi_PageDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::PageDescription*>(self)           // B.3.6 bridge
+        ->UI::PageDescription::Type();
+}
+extern "C" const char* RtUi_PageDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::PageDescription*>(self)           // B.3.6 bridge
+        ->UI::PageDescription::TypeName();
+}
+extern "C" int32_t RtUi_PageDescription_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::PageDescription*>(self)           // B.3.6 bridge
+        ->UI::PageDescription::GetFileVersion();
+}
+extern "C" void* RtUi_PageDescription_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                      // 180047080
+    return reinterpret_cast<UI::PageDescription*>(selfv)                // B.3.6 bridge
+        ->UI::PageDescription::Construct();
+}
+extern "C" void* RtUi_PageDescription_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::PageDescription*>(selfv)                // B.3.6 bridge
+        ->UI::PageDescription::Reconstruct();
+}
+extern "C" void RtUi_PageDescription_Destruct(void* selfv) {
+    reinterpret_cast<UI::PageDescription*>(selfv)                       // B.3.6 bridge
+        ->UI::PageDescription::Destruct();
+}
+extern "C" bool RtUi_PageDescription_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<UI::PageDescription*>(selfv)                // B.3.6 bridge
+        ->UI::PageDescription::Serialize(streamv);
+}
+extern "C" void** RtUi_PageDescription_CreateInstance(const void* selfv, void** ret,
+                                                      const void* dialog) {
+    return reinterpret_cast<void**>(
+        reinterpret_cast<const UI::PageDescription*>(selfv)             // B.3.6 bridge
+            ->UI::PageDescription::CreateInstance(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
+                static_cast<const UI::Dialog*>(dialog)));
+}
+
+// ??1PageDescription@UI@@UEAA@XZ  0x1800d54b0 — a DTOR DOOR: restamp, then
+// TAIL JMP to ~GroupDescription. Nothing of its own to release.
+extern "C" void RtUi_PageDescription_Dtor(void* selfv) {
+    *reinterpret_cast<void**>(selfv) = VtPageDescription();    // 1800d54c2
+    using DtorFn = void (*)(void*);
+    RtAddr<DtorFn>(0x180117c00ull)(selfv);                     // 1800d54d0 JMP
 }
 
 int RtUiPageDescriptionRegister() {

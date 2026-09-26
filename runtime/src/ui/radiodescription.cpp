@@ -4,16 +4,14 @@
 //
 // Vtable batch 2. THIS CLASS DERIVES FROM UI::GroupDescription, and that is the
 // one thing about it that is not shaped like its siblings: three of its bodies
-// are one line of its own plus a call into GroupDescription's already-ported
-// copy (runtime/src/ui/groupdescription.cpp).
+// are one line of its own plus a call into GroupDescription's copy
+// (runtime/src/ui/groupdescription.cpp).
 //
 // ??_7RadioDescription@UI@@6B@ (retail 0x180157420), ten slots:
 //   0  deleting dtor      0x180047930  deleting_dtor.cpp row (sizeof 0x80)
 //   1  TypeName           0x180047670  here
 //   2  Type               0x180047650  here
-//   3  GetFileVersion     0x1800d5b10  here  (returns 0x1104 — per class; the
-//                                      siblings return 0x204 / 0x304, so this
-//                                      one is emphatically NOT shareable)
+//   3  GetFileVersion     0x1800d5b10  here  (returns 0x1104 — per class)
 //   4  External::Compile  0x1800066e0  already ported
 //   5  Serialize          0x1800d5a80  here
 //   6  Reconstruct        0x1800477f0  here
@@ -22,82 +20,71 @@
 //   9  Construct          0x180047810  here
 // plus ??0RadioDescription@UI@@QEAA@XZ 0x1800d5b50 (OUT OF LINE — both
 // Construct and Reconstruct tail-jump to it) and
-// ??1RadioDescription@UI@@UEAA@XZ 0x1800d5b20.
+// ??1RadioDescription@UI@@UEAA@XZ 0x1800d5b20 — both DOORS (B4b-2).
 //
-// LAYOUT, sizeof 0x80 (`MOV EDX,0x80` at 0x180047962). GroupDescription (0x78)
-// plus ONE field:
-//     +0x78  int32  _i78    ctor -1, one kScalarInt in Serialize, and in
-//                           CreateInstance the index of the checked box.
+// LAYOUT: runtime/types/ui/RadioDescription.h — GroupDescription (0x78) plus
+// `_activeRadio` (+0x78, ctor -1); sizeof 0x80.
 //
-// EVERY HELPER THIS CLASS CALLS WAS ALREADY PORTED (grepped before writing):
-//   0x180117c00 ~GroupDescription, 0x180117d00 GroupDescription::Serialize
-//       (groupdescription.cpp)
+// ENDGAME B.3.6 block C2: every slot body is a MEMBER of `UI::RadioDescription`;
+// the registered doors are one-line QUALIFIED delegations. Serialize's base
+// call (by address 0x180117d00 before) is the qualified member
+// `GroupDescription::Serialize`.
+//
+// DOORS THIS CLASS STILL REACHES BY ADDRESS, each because its member is not
+// defined in the real build yet:
 //   0x180115ad0 ElementDescription::CreateInstance, 0x180112ed0
-//       Dialog::CreateElement (dialog.cpp)
-//   0x180115e50 ??0Element (element.cpp)
+//       Dialog::CreateElement (dialog.cpp, fragment pass / block B)
+//   0x180115e50 ??0Element (element.cpp, a ctor door)
 //   0x180076900 Array<InternalPtr>::SetSize (array.cpp)
-//   0x1800d5750 RadioElement::FindCheckBoxes (widgets_input.cpp)
-// so this file adds no helper of its own.
+//   0x1800d5750 RadioElement::FindCheckBoxes (private; widgets_input.cpp)
 // ============================================================================
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 
-#include "../../funcs/rt_port.h"
-#include "../../types/ui/ElementDescription.h"
-#include "../../types/ui/Element.h"
-#include "../../types/io/Serializer.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "description_common.h"
+#include "../../types/ui/RadioDescription.h"
+#include "../../types/ui/RadioElement.h"
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtGroupDescription()   { return RT_DATA_SLOT(void*, "??_7GroupDescription@UI@@6B@"); }
-void* VtRadioDescription()   { return RT_DATA_SLOT(void*, "??_7RadioDescription@UI@@6B@"); }
-void* VtGroupElement()       { return RT_DATA_SLOT(void*, "??_7GroupElement@UI@@6B@"); }
-void* VtRadioElement()       { return RT_DATA_SLOT(void*, "??_7RadioElement@UI@@6B@"); }
+using namespace rtdesc;
+
+// RULE B6-5: namespace-scope atomic door caches for the member bodies.
+void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+std::atomic<void*> g_vtGroupElement{nullptr};
+std::atomic<void*> g_vtRadioElement{nullptr};
+std::atomic<void*> g_radioDescriptionTypeInfo{nullptr};
+
+void* AtVtGroupElement() { return AtomicResolve(g_vtGroupElement, "??_7GroupElement@UI@@6B@"); }
+void* AtVtRadioElement() { return AtomicResolve(g_vtRadioElement, "??_7RadioElement@UI@@6B@"); }
 const uint8_t* RadioDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(AtomicResolve(
+        g_radioDescriptionTypeInfo,
+        "?_typeInfo@RadioDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
-
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;              // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;   // +0x10
-};
-struct Serializer {
-    Stream* stream;            // +0x00
-    void*   readerWriter;      // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
-
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
+// Door-only (the ctor/dtor doors are not members).
+void* VtGroupDescription() { return RT_DATA_SLOT(void*, "??_7GroupDescription@UI@@6B@"); }
+void* VtRadioDescription() { return RT_DATA_SLOT(void*, "??_7RadioDescription@UI@@6B@"); }
 
 }  // namespace
 
 // ============================================================================
-// ??0RadioDescription@UI@@QEAA@XZ   retail 0x1800d5b50
+// ??0RadioDescription@UI@@QEAA@XZ   retail 0x1800d5b50   — a CTOR DOOR (B4b-2)
 // ============================================================================
 // The whole GroupDescription constructor INLINED (the shipped body does not
-// call it), then the RadioDescription vtable and the one new field. Written out
-// here rather than delegating to groupdescription.cpp's ConstructBody for the
-// reason that file's banner gives about its own inlined copy: the sequence is
-// the evidence, and the two copies are only equal until one of them is not.
+// call it), then the RadioDescription vtable and the one new field.
 extern "C" void* RtUi_RadioDescription_Ctor(void* selfv) {
     uint8_t* p = static_cast<uint8_t*>(selfv);
     void**   v = reinterpret_cast<void**>(p);
@@ -126,172 +113,192 @@ extern "C" void* RtUi_RadioDescription_Ctor(void* selfv) {
     return p;                                                   // 1800d5be6
 }
 
-extern "C" uint32_t RtUi_RadioDescription_Type(const void*) {
+// ============================================================================
+// The member bodies
+// ============================================================================
+namespace UI {
+
+uint32_t RadioDescription::Type() const {                      // 0x180047650
     const uint8_t* ti = RadioDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_RadioDescription_TypeName(const void*) {
+// The key function: GCC emits `vtable for UI::RadioDescription` here.
+const char* RadioDescription::TypeName() const {               // 0x180047670
     const uint8_t* ti = RadioDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 // 0x1800d5b10: `MOV EAX,0x1104 ; RET`.
-extern "C" int32_t RtUi_RadioDescription_GetFileVersion(const void*) { return 0x1104; }
+int32_t RadioDescription::GetFileVersion() const { return 0x1104; }
 
-extern "C" void* RtUi_RadioDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180047810
-    return RtUi_RadioDescription_Ctor(selfv);
+// 0x180047810: the null test is the DOOR's; then the out-of-line ctor.
+Object::External* RadioDescription::Construct() {
+    return static_cast<Object::External*>(RtUi_RadioDescription_Ctor(this));
 }
-extern "C" void* RtUi_RadioDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                       // 1800477fe
-    return RtUi_RadioDescription_Ctor(selfv);                  // 180047808
+// 0x1800477f0: slot 0 with flag 0 through the object's own table, then the
+// ctor (tail jump at 0x180047808). No null test.
+Object::External* RadioDescription::Reconstruct() {
+    DeletingDtor(0);                                           // 1800477fe
+    return static_cast<Object::External*>(RtUi_RadioDescription_Ctor(this));
 }
-extern "C" void RtUi_RadioDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
-// ============================================================================
-// ??1RadioDescription@UI@@UEAA@XZ   0x1800d5b20
-// ============================================================================
-// Four instructions: restamp this class's vtable, then a TAIL JMP to
-// ~GroupDescription (0x180117c00). It owns nothing of its own — +0x78 is an
-// int — so there is nothing else to release.
-extern "C" void RtUi_RadioDescription_Dtor(void* selfv) {
-    *reinterpret_cast<void**>(selfv) = VtRadioDescription();   // 1800d5b32
-    using DtorFn = void (*)(void*);
-    RtAddr<DtorFn>(0x180117c00ull)(selfv);                     // 1800d5b40 JMP
-}
+void RadioDescription::Destruct() { DeletingDtor(0); }         // 0x180047820
 
 // ============================================================================
 // ?Serialize@RadioDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d5a80
 // ============================================================================
-//   GroupDescription::Serialize(this, stream)     0x180117d00, ported
+//   GroupDescription::Serialize(this, stream)     0x180117d00, QUALIFIED
 //   rw = encoding factory, read side or write side by stream->mode, version 0
-//   rw->vt[0xa0](rw, &_i78, 0)   kScalarInt
+//   rw->vt[0xa0](rw, &_activeRadio, 0)   kScalarInt
 //   if (rw) rw->vt[0](rw, 1)
 //
-// THE BASE CALL IS THE CLASS'S OWN Serialize, NOT ElementDescription's. Every
-// other file in this batch opens with 0x180116b00; this one opens with
-// 0x180117d00, which itself calls 0x180116b00 and then writes the child array.
-// Using the grandparent here would silently drop every child.
-//
-// It ALSO opens a SECOND ReaderWriter over the same stream, after
-// GroupDescription::Serialize has already opened and closed its own. That is
-// retail: the pair is per-body, not per-object.
-extern "C" bool RtUi_RadioDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+// THE BASE CALL IS THE PARENT'S Serialize, NOT ElementDescription's — using the
+// grandparent here would silently drop every child. It ALSO opens a SECOND
+// ReaderWriter over the same stream, after GroupDescription::Serialize has
+// already opened and closed its own. That is retail.
+bool RadioDescription::Serialize(void* streamv) {
+    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180117d00ull)(p, stream);              // 1800d5a9a
+    GroupDescription::Serialize(stream);                       // 1800d5a9a
 
-    Serializer ser = { stream, nullptr };                      // [RSP+0x28], [RSP+0x30]
+    rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
+    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 1800d5aca
 
-    void*  factory = stream->encodingFactory;
-    void** fvt     = VTableOf(factory);
-    const int which = (stream->mode == 0) ? 0x18 : 0x20;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int version);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 1800d5aca
+    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &_activeRadio);
 
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x78, nullptr);
-
-    if (rw != nullptr) {                                       // 1800d5aed
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(rvt[rt::io::rw_vtbl::kDtor / 8])(rw, 1);
-    }
+    rtdesc::DestroyReaderWriter(rw);                           // 1800d5aed
     return true;
 }
 
 // ============================================================================
-// ?CreateInstance@RadioDescription@UI@@...   retail 0x1800d58d0
+// ?CreateInstance@RadioDescription@UI@@...   retail 0x1800d58d0   (slot 8)
 // ============================================================================
 // RCX = this, RDX = the hidden InternalPtr<Element> return slot, R8 = Dialog*.
 //
 // RadioElement is 0xd8 bytes (`MOV EDX,0xd8` at 0x1800d5916) and its
 // construction stamps TWO vtables in a row — GroupElement (0x1800d594c) and
-// then RadioElement (0x1800d5956) — before zeroing its own three fields:
-//     +0xc0 Array<CheckBoxElement*>.data, +0xc8 .size/.cap, +0xd0 int32 = -1
+// then RadioElement (0x1800d5956) — before zeroing its own fields:
+//     +0xc0 _checkBoxes._data, +0xc8 ._size/._capacity, +0xd0 _activeIndex = -1
 //
-// The child loop is GroupDescription's, transcribed here rather than shared:
-// the shipped body has its own copy and the two differ in which element the
-// children are parented to.
-//
-// THE TAIL IS THIS CLASS'S WHOLE POINT and it is easy to get subtly wrong:
-//   FindCheckBoxes(elem, &elem)                        0x1800d5750, ported
-//   if (desc->_i78 != elem->+0xd0) {
-//       elem->+0xd0 = desc->_i78;
-//       for (i = 0; i < elem->_checkBoxes.size; ++i)
-//           if (i != elem->+0xd0) checkBoxes[i]->+0xd8 = 0;   // UNCHECK
+// THE TAIL IS THIS CLASS'S WHOLE POINT:
+//   FindCheckBoxes(elem, &elem)                        0x1800d5750
+//   if (_activeRadio != elem->_activeIndex) {
+//       elem->_activeIndex = _activeRadio;
+//       for (i = 0; i < elem->_checkBoxes._size; ++i)
+//           if (i != elem->_activeIndex) checkBoxes[i]->+0xd8 = 0;   // UNCHECK
 //   }
-// The guard compares against the element's CURRENT value and skips the whole
-// loop when they already agree, and the inner test re-reads `elem->+0xd0`
-// (0x1800d5a30) rather than the register it was just written from. Both are
-// retail's and both are kept: the second one means the loop reads a field the
-// first line of the body wrote, not a stale copy.
-extern "C" void** RtUi_RadioDescription_CreateInstance(const void* selfv, void** ret,
-                                                       const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
+// The inner test re-reads `elem->_activeIndex` (0x1800d5a30) rather than the
+// register it was just written from. Kept.
+Object::InternalPtr<Element>* RadioDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    void* raw = rtdesc::MemAlloc(0xd8, 8);                     // 1800d5916 (inlined)
 
-    using MemAllocFn = void* (*)(uint64_t size, int align);
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd8, 8);   // 1800d5916 (inlined)
-
-    uint8_t* elem = nullptr;
+    RadioElement* elem = nullptr;
     if (raw != nullptr) {                                      // 1800d5941
-        using ElementCtorFn = void* (*)(void*);
-        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);            // 1800d5946 ??0Element
+        rtdesc::ElementCtor(raw);                              // 1800d5946 ??0Element
+        *static_cast<void**>(raw) = AtVtGroupElement();        // 1800d594c
+        *static_cast<void**>(raw) = AtVtRadioElement();        // 1800d5956
         uint8_t* e = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e) = VtGroupElement();       // 1800d594c
-        *reinterpret_cast<void**>(e) = VtRadioElement();       // 1800d5956
-        *reinterpret_cast<uint64_t*>(e + 0xc0) = 0;            // 1800d5962
-        *reinterpret_cast<uint64_t*>(e + 0xc8) = 0;            // 1800d5969
-        *reinterpret_cast<int32_t*>(e + 0xd0)  = -1;           // 1800d5970  DWORD
-        elem = e;
+        *reinterpret_cast<uint64_t*>(e + 0xc0) = 0;            // 1800d5962  _checkBoxes._data
+        *reinterpret_cast<uint64_t*>(e + 0xc8) = 0;            // 1800d5969  _size + _capacity
+        elem = reinterpret_cast<RadioElement*>(raw);           // B.3.6 bridge
+        elem->_activeIndex = -1;                               // 1800d5970  DWORD
     }
 
     void* slot = elem;                                         // 1800d5980
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 1800d598d
+    rtdesc::ElementDescriptionApply(this, &slot);              // 1800d598d
 
-    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0x70);
+    const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 1800d5994 / 1800d59f9
-        void* const* descArray = *reinterpret_cast<void* const* const*>(self + 0x68);
-        void*        desc      = descArray[i];                 // 1800d59a7
+        void* desc = _children._data[i];                       // 1800d59a7
 
-        using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-        void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, &slot, desc);
+        void** made = rtdesc::DialogCreateElement(dialog, &slot, desc);
 
-        uint8_t* child = *reinterpret_cast<uint8_t**>(made);   // 1800d59b8
+        Element* child = *reinterpret_cast<Element**>(made);   // 1800d59b8
         if (child != nullptr)
-            *reinterpret_cast<void**>(child + 0x98) = elem;    // 1800d59c0
+            child->_parent = elem;                             // 1800d59c0
 
         using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                       *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                       made);                  // 1800d59d9
+        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+                                               elem->_children._size + 1,
+                                               made);          // 1800d59d9
 
-        for (uint8_t* n = elem; n != nullptr;                   // 1800d59e1..1800d59f5
-             n = *reinterpret_cast<uint8_t**>(n + 0x98)) {
-            *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
-        }
+        for (Element* n = elem; n != nullptr; n = n->_parent)  // 1800d59e1..1800d59f5
+            n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
-    void* self2 = elem;                                        // 1800d59fe  (a SECOND slot)
+    // The PRIVATE `FindCheckBoxes(InternalPtr<Element>)` (0x1800d5750) — a
+    // widgets_input.cpp door (fragment pass); retail passes the address of a
+    // SECOND stack slot holding the element (RULE B6-11).
+    void* self2 = elem;                                        // 1800d59fe
     using FindCheckBoxesFn = void (*)(void* elem, void** root);
-    RtAddr<FindCheckBoxesFn>(0x1800d5750ull)(elem, &self2);    // 1800d5a0b
+    rtdesc::RtAddr<FindCheckBoxesFn>(0x1800d5750ull)(elem, &self2);   // 1800d5a0b
 
-    const int32_t want = *reinterpret_cast<const int32_t*>(self + 0x78);
-    if (want != *reinterpret_cast<int32_t*>(elem + 0xd0)) {    // 1800d5a13
-        *reinterpret_cast<int32_t*>(elem + 0xd0) = want;       // 1800d5a1b
-        const int32_t boxes = *reinterpret_cast<int32_t*>(elem + 0xc8);
+    const int32_t want = _activeRadio;
+    if (want != elem->_activeIndex) {                          // 1800d5a13
+        elem->_activeIndex = want;                             // 1800d5a1b
+        const int32_t boxes = elem->_checkBoxes._size;
         for (int32_t i = 0; i < boxes; ++i) {                  // 1800d5a21 / 1800d5a50
-            if (i == *reinterpret_cast<int32_t*>(elem + 0xd0)) continue;  // 1800d5a30 RE-READ
-            uint8_t* const* arr = *reinterpret_cast<uint8_t* const* const*>(elem + 0xc0);
-            arr[i][0xd8] = 0;                                  // 1800d5a43
+            if (i == elem->_activeIndex) continue;             // 1800d5a30 RE-READ
+            uint8_t* box = reinterpret_cast<uint8_t*>(elem->_checkBoxes._data[i]);
+            box[0xd8] = 0;                                     // 1800d5a43  the CHECKBOX's byte
         }
     }
 
-    *ret = elem;                                               // 1800d5a58
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 1800d5a58
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — each a one-line QUALIFIED delegation.
+// ============================================================================
+extern "C" uint32_t RtUi_RadioDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::RadioDescription*>(self)          // B.3.6 bridge
+        ->UI::RadioDescription::Type();
+}
+extern "C" const char* RtUi_RadioDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::RadioDescription*>(self)          // B.3.6 bridge
+        ->UI::RadioDescription::TypeName();
+}
+extern "C" int32_t RtUi_RadioDescription_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::RadioDescription*>(self)          // B.3.6 bridge
+        ->UI::RadioDescription::GetFileVersion();
+}
+extern "C" void* RtUi_RadioDescription_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                      // 180047810
+    return reinterpret_cast<UI::RadioDescription*>(selfv)               // B.3.6 bridge
+        ->UI::RadioDescription::Construct();
+}
+extern "C" void* RtUi_RadioDescription_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::RadioDescription*>(selfv)               // B.3.6 bridge
+        ->UI::RadioDescription::Reconstruct();
+}
+extern "C" void RtUi_RadioDescription_Destruct(void* selfv) {
+    reinterpret_cast<UI::RadioDescription*>(selfv)                      // B.3.6 bridge
+        ->UI::RadioDescription::Destruct();
+}
+extern "C" bool RtUi_RadioDescription_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<UI::RadioDescription*>(selfv)               // B.3.6 bridge
+        ->UI::RadioDescription::Serialize(streamv);
+}
+extern "C" void** RtUi_RadioDescription_CreateInstance(const void* selfv, void** ret,
+                                                       const void* dialog) {
+    return reinterpret_cast<void**>(
+        reinterpret_cast<const UI::RadioDescription*>(selfv)            // B.3.6 bridge
+            ->UI::RadioDescription::CreateInstance(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
+                static_cast<const UI::Dialog*>(dialog)));
+}
+
+// ============================================================================
+// ??1RadioDescription@UI@@UEAA@XZ   0x1800d5b20   — a DTOR DOOR (B4b-2)
+// ============================================================================
+// Four instructions: restamp this class's vtable, then a TAIL JMP to
+// ~GroupDescription (0x180117c00). It owns nothing of its own.
+extern "C" void RtUi_RadioDescription_Dtor(void* selfv) {
+    *reinterpret_cast<void**>(selfv) = VtRadioDescription();   // 1800d5b32
+    using DtorFn = void (*)(void*);
+    RtAddr<DtorFn>(0x180117c00ull)(selfv);                     // 1800d5b40 JMP
 }
 
 int RtUiRadioDescriptionRegister() {
