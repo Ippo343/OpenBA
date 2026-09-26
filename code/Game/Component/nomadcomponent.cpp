@@ -512,26 +512,63 @@ void NomadComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid NomadComponent
-// (size 0x78, +0x20 capability flags 0x82, Object::Internal base + shared stub
-// vtable, zeroed body). Size from NomadComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — NomadComponent as a REAL class (NomadComponent.h).
+//
+// Before: CONTROLLER_LIVE_FACTORY_STATES + CONTROLLER_INSTALL_SERIALIZE (a 48-slot
+// table re-filled at every create), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<NomadCtrlTag> table stamped into raw bytes at +0x58.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
+#include "Component/NomadComponent.h"
 
-// Immigrants wave 2026-09-05: the nomad walk-in/loiter/walk-out state machine
-// (nomadcomponent_states.cpp) replaces the inert factory. Node at +0x58 (CreateState
-// 0x140009060 = LEA RAX,[RCX+0x58]), default state 0 (0x140003730 = XOR EAX,EAX).
-// Opt-in BANISHED_LIVE_IMMIGRATION with the town-hall side; off => inert as before.
-// Slot 3 (stream Serialize) stays wired unconditionally, save/load wave 2026-08-28.
-extern "C" void** NomadCtrl_NodeVtable();
-extern "C" void   NomadCtrl_PopulateTable();
-CONTROLLER_LIVE_FACTORY_STATES(NomadComponent, 0x78, 0x82, 0x58, 0,
-                               NomadCtrl_NodeVtable, NomadCtrl_PopulateTable)
-CONTROLLER_INSTALL_SERIALIZE(NomadComponent, NomadComponent_Shutdown)
-REGISTER_TYPE(NomadComponent, "ControllerComponent",
-              &NomadComponent_Factory_Ser, &NomadComponent_CreateInPlace_Ser);
+// The nomad walk-in/loiter/walk-out state machine (nomadcomponent_states.cpp).
+// Node at +0x58 (slot 17 0x140009060), default state 0 (slot 16 0x140003730). The
+// state table is built ONCE at static-init time, as retail's static initializer
+// does (B38 D6/D7).
+extern "C" void NomadCtrl_PopulateTable();
+static const bool s_nomadStateTableBuilt = (NomadCtrl_PopulateTable(), true);
+
+// 0x14004fdb0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// +0x28..+0x50 = 0; `_controller(this)` is the member's back-pointer at +0x70;
+// then `_flags |= 2` (0x82).
+NomadComponent::NomadComponent()
+    : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr), field48(nullptr),
+      field50(0), _pad54{}, _controller(this) {
+    OrFlagsInCtor(0x2);
+}
+
+// [0] 0x140009230: ~NomadComponent (0x14004fd50), MemFree on &1.
+Object::Base* NomadComponent::DeletingDtor(unsigned flags) {
+    this->~NomadComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x14004fd50: restamp + ~Internal, no own work.
+NomadComponent::~NomadComponent() = default;
+
+// create 0x140009020: MemAlloc(0x78, 8), then the ctor.
+void* NomadComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(NomadComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) NomadComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* NomadComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) NomadComponent());
+}
+
+// [3] 0x14004fc40.
+void NomadComponent::Persist(void* stream) { NomadComponent_Shutdown(this, stream); }
+
+// [7] 0x14004fd20 — PORT GAP (NomadComponent.h): the tree's slot 7 was the inert
+// stub, kept. NomadComponent_OnCreate above is an unverified port that was never
+// installed; transcribing retail's 42-byte body is its own titled commit.
+void NomadComponent::OnRemove() {}
+
+DEFINE_EXE_VTABLE(NomadComponent, "_ZTV14NomadComponent")
+DEFINE_EXE_TYPE(NomadComponent, "ControllerComponent")

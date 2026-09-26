@@ -534,17 +534,18 @@ void BuildComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-#include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
-#include "Component/controller_state_table.h"
-// Phase 3 / Keystone D step 3 — live ControllerComponent with the REAL state-type
-// table + dispatcher node virtuals. Embedded state node at +0x28 (CreateState
-// 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState (0x14002f2f0) returns 1. When
-// BANISHED_LIVE_BUILDCTRL is set the entity's StateMachineComponent links this node
-// and ticks it through the dispatcher vtable below.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — BuildComponent as a REAL class (BuildComponent.h).
 //
+// Before: CONTROLLER_LIVE_FACTORY_STATES (a 48-slot table re-filled at every
+// create, slots 3/6/7/15 re-installed from PopulateStateTable), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<BuildCtrlTag> table stamped into raw bytes at +0x28.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
+#include "Object/factory_registration.h"
+#include "Component/BuildComponent.h"
+#include "Component/controller_state_table.h"
 // Build state graph (recovered from BuildDescription_Setup -> helper_9090 ->
 // sub_f500/sub_f620, 0x140109090): three states 1 (default), 8, 2.
 //   state 1: enter=helper_8290, setup=sub_81e0   ; transitions -> {8, 3}
@@ -552,11 +553,7 @@ void BuildComponent_InitFuncs() {
 //                                                 ; transitions -> {2 (helper_75e0), 3}
 //   state 2: (no handlers)                        ; transitions -> {3}
 // (state-id 3 is a transition target only — not a registered state of this table;
-//  it is resolved up the SM node chain.) Handler addresses are exe code unmapped in
-// standalone, so they are populated as null (graceful no-op); the table structure
-// (ids + transitions) is real, so Step returns real indices and the SM advances
-// through the real state graph. Porting the real handlers is the next layer.
-namespace { struct BuildCtrlTag {}; }
+//  it is resolved up the SM node chain.)
 using BuildCtrlDispatch = ::ControllerLive::Dispatcher<BuildCtrlTag>;
 
 // Ported state handlers (buildcomponent_state1.cpp / buildcomponent_state8.cpp).
@@ -567,53 +564,14 @@ extern "C" char BuildComponent_State8Update(void* buildComp, void* sm);      // 
 extern "C" char BuildComponent_State8OneShot(void* buildComp, void* sm);     // sub_7600 (slot +0x20, exit-transition)
 extern "C" char BuildComponent_State8To2Action(void* buildComp);             // sub_75e0 (slot +0x28, 8->2 action)
 
-// ============================================================
-// BuildComponent message-receive handler — port of BuildComponent_Slot15
-// (0x140108710), the real vtable_BuildComponent slot +0x78 ("OnMessage").
-//
-// This is THE build-labor +0x48 progress credit. The build action chain
-// (FUN_1400c0690 / BuildStructure_SetupBuildActions) pushes a SendComponentMessage
-// targeting the BuildComponent (type-id c7008) with message-code 0. When the
-// citizen's PerformWork(3s) completes and the executor advances to that node,
-// SendComponentMessage::AbstractImpl (sendcomponentmessage.cpp) scans the entity's
-// components, matches this BuildComponent by GetTypeId, and calls its vtable+0x78.
-// The handler credits ONE unit of labor into BuildComponent+0x48; State8Update
-// ramps the build meshes as +0x48 climbs toward target (matComp[0x30] * bc[0x4c])
-// and requests 8->2 completion once it is reached.
-//
-// In standalone the live-factory (CONTROLLER_LIVE_FACTORY_STATES) fills the whole
-// vtable with inert no-op stubs and only overrides GetTypeId/GetDefaultState/
-// CreateState — leaving +0x78 a no-op, so the credit never fired. We install this
-// real handler into slot 15 (+0x78) from InstallLive (BuildComponent_InstallMsgSlot).
-//   Slot15 ABI (verified vs disasm): (self /*RCX*/, int msgCode /*RDX*/, trailing
-//   args unused). SendComponentMessage passes msgCode = sendMsg+0x34 (= 0 here).
-static void BuildComponent_MsgReceive(void* self, int msgCode,
-                                      void* /*srcEntityRef*/,
-                                      uint32_t /*p1*/, uint32_t /*p2*/) {
-    if (msgCode == 0) {
-        int* prog = reinterpret_cast<int*>(reinterpret_cast<uint8_t*>(self) + 0x48);
-        *prog += 1;
-    }
-}
-
-// Installs the real +0x78 message-receive handler into the live-factory vtable.
-// Defined AFTER the CONTROLLER_LIVE_FACTORY_STATES macro (which declares the
-// BuildComponent_LiveVtable array). Called from InstallLive via PopulateStateTable
-// on EVERY instance creation, because InitInertTyped re-stubs the shared vtable each
-// time, so real slots must be re-installed after that re-fill.
-static void BuildComponent_InstallMsgSlot();
-
 // Table field->node-slot mapping (see controller_state_table.h + buildcomponent_state8.cpp):
 //   enterHandler (arg2) -> slot +0x18 Enter        (on state entry)
 //   trans38Handler(arg4) -> slot +0x38 DrawAlt     (PER-FRAME; altDraw=1 every frame)
 //   updateHandler(arg5) -> slot +0x20 Update       (only when a transition is pending)
 //   transition handler   -> slot +0x28 OnState     (the 8->2 action)
-// TableRegisterState(t, id, enterH, trans30H, trans38H, updateH):
+// TableRegisterState(t, id, enterH, trans30H, trans38H, updateH). Built ONCE at
+// static-init time, as retail's static initializer does (B38 D6/D7).
 static void BuildComponent_PopulateStateTable() {
-    // (Re)install the +0x78 message-receive credit handler every InstallLive:
-    // InitInertTyped re-fills the shared LiveVtable with inert stubs on each instance
-    // creation, so this must run before (and independent of) the idempotent table guard.
-    BuildComponent_InstallMsgSlot();
     using namespace ::ControllerLive;
     StateTable& t = BuildCtrlDispatch::table;
     if (t.count != 0) return;  // idempotent
@@ -632,80 +590,74 @@ static void BuildComponent_PopulateStateTable() {
     TableRegisterState(t, 2, nullptr, nullptr, nullptr, nullptr);
     TableAddTransition(t, 3, nullptr);
 }
-static void** BuildComponent_NodeVtable() { return BuildCtrlDispatch::Vtable(); }
+static const bool s_buildStateTableBuilt = (BuildComponent_PopulateStateTable(), true);
 
-CONTROLLER_LIVE_FACTORY_STATES(BuildComponent, 0x78, 0x83, 0x28, 1,
-                               BuildComponent_NodeVtable,
-                               BuildComponent_PopulateStateTable)
-REGISTER_TYPE(BuildComponent, "ControllerComponent",
-              &BuildComponent_Factory, &BuildComponent_CreateInPlace);
-
-// Real vtable slot +0x78 = index 15 (15*8). BuildComponent_LiveVtable is the static
-// array declared by CONTROLLER_LIVE_FACTORY_STATES above; visible from here on.
-static void BuildComponent_OnRemoveVSlot(void* s) {
-    if (s) BuildComponent_OnCreate(reinterpret_cast<BuildComponent*>(s));
+// 0x140108fc0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48 = 0, +0x50 = 0 (byte),
+// +0x58..+0x70 = 0; then `_flags |= 0x83`.
+// PORT GAP (B38 D3.2): retail's ctor stores +0x4c = 1 (the cost multiplier); the
+// tree's factory zeroed it, and that is kept here — the retail value is its own
+// titled commit.
+BuildComponent::BuildComponent()
+    : _controller(this), buildState(0), buildProgress(0), buildFlag(0), _pad51{},
+      field58(nullptr), field60(nullptr), field68(nullptr), field70(nullptr) {
+    OrFlagsInCtor(0x83);
 }
 
-// Slot 6 (+0x30) — the real OnAdded broadcast, retail 0x140108d40. See the header block
-// above BuildComponent_DrawReimpl for the slot proof.
-//
-// DEFAULT-ON via the default-on table (graduated 2026-07-27); the env var is a kill-switch (=0).
-// Wiring it un-dormants the whole body for EVERY build site at registration time rather
-// than lazily at state-8 entry:
-//   * Stage 1/2 fill the mesh (+0x58/+0x60) and picking (+0x68/+0x70) lists from the
-//     site's own ModelComponent and from each MultiObjectComponent child. Measured: the
-//     bridge master collects all of its segments, and the lazy BC8_EnsureMeshList
-//     fallback drops to 0 calls — the two paths are cleanly idempotent.
-//   * Stage 3 HIDES each collected model: for a model whose modelVariant (+0x166) is
-//     >= 0 it calls the model's own vtable +0x38, stamps +0x166 = -1, and re-adds the
-//     entity's draw children via +0x60. That is retail's "this model is now
-//     build-controlled" transition — the finished mesh is replaced by nothing until
-//     State8Enter/State8Update sets a construction frame, which is why a placed
-//     foundation carries no building mesh until construction starts (faithful). For a
-//     PRE-BUILT building that would be permanent, and retail's answer is not to
-//     special-case it here: the spawner sets the instant-build bit (gw+0xd0 bit 0) across
-//     SetModel + RegisterEntity, which makes the thunk above return before Stage 3 —
-//     see StartTown_SpawnStructures.
-//   * Stage 4 writes +0x4c from MultiObjectComponent+0x58 (clamped to keep the
-//     default 1 — see the comment at the write). NOT a behaviour change on its own:
-//     State1Enter reads the same finder AFTER registration, so every site that enters
-//     state 1 gets that multiplier with this slot dormant too (measured: a bridge site
-//     reports mult=15/21 with the flag off).
-// Ordering caveat, checked and clear: at RegisterEntity time the MultiObjectComponent
-// child array IS filled — the bridge master's OnAdded fires after all its segments are
-// created and appended, so Stage 2 collects every one.
-static void BuildComponent_OnAddedVSlot(void* s) {
-    if (!s) return;
-    BuildComponent_OnAddedThunk(s);
+// [0] 0x14002f4d0: ~BuildComponent (0x140108f30), MemFree on &1.
+Object::Base* BuildComponent::DeletingDtor(unsigned flags) {
+    this->~BuildComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-// Slot 3 = Shutdown/Serialize (0x140108d80). The body has been ported in this file
-// since the original wave (BuildComponent_Shutdown, above) but nothing ever wrote it
-// into the live vtable, so a loaded save's BuildComponent kept the FillTypedVtable
-// base-Component serialize only — buildState/buildProgress/buildFlag (+0x48/+0x4c/
-// +0x50) and both entity-IBP arrays (+0x60/+0x70) never round-tripped, resetting every
-// construction site to its ctor default on the first post-load tick. Wired
-// here, inside InstallLive (save/load wave 2026-08-27) — like the two OnAdded/OnRemove
-// slots below it rides BANISHED_LIVE_BUILDCTRL, which is DEFAULT-ON (the default-on table),
-// so on the default path this is effectively unconditional; the two slots below stay
-// individually opt-in on their OWN env vars regardless.
-static void BuildComponent_ShutdownVSlot(void* self, void* stream) {
-    BuildComponent_Shutdown(reinterpret_cast<BuildComponent*>(self), stream);
-}
-static void BuildComponent_InstallMsgSlot() {
-    BuildComponent_LiveVtable[15] = reinterpret_cast<void*>(&BuildComponent_MsgReceive);
-    BuildComponent_LiveVtable[3] = reinterpret_cast<void*>(&BuildComponent_ShutdownVSlot);
-    BuildComponent_LiveVtable[6] = reinterpret_cast<void*>(&BuildComponent_OnAddedVSlot);
+// 0x140108f30: MemFree(+0x68) and MemFree(+0x58), zeroing both lists — PORT GAP
+// (B38 D2): the tree's slot 0 never freed them; the retail body is its own titled commit.
+BuildComponent::~BuildComponent() = default;
 
-    // Slot 7 (+0x38) is the removed-from-world broadcast, NOT OnCreate — 0x140108cb0 is
-    // misnamed in Ghidra exactly like CitizenComponent's 0x140113ca0 was. It removes the
-    // site from the town's pending-build registry (townMgr+0xd0), and BuildComponent's
-    // capability flags (0x83) have bit 1 set, so the MarkForRemoval broadcast already
-    // reaches the slot — it has just been landing on the inert stub.
-    //
-    // buildcomponent_state8.cpp removes the site on COMPLETION, so the hole only opens
-    // for a site torn down before state 8: a cancelled/demolished foundation leaves a
-    // dangling entry that BuilderPool_Tick then walks. Same bug class as the citizen
-    // list. (Was opt-in until 2026-09-13; graduated with the rest of ENDGAME C.2.)
-    BuildComponent_LiveVtable[7] = reinterpret_cast<void*>(&BuildComponent_OnRemoveVSlot);
-
+// create 0x14002f2b0: MemAlloc(0x78, 8), then the ctor.
+void* BuildComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BuildComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) BuildComponent());
 }
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* BuildComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) BuildComponent());
+}
+
+// [3] 0x140108d80 — buildState/buildProgress/buildFlag (+0x48/+0x4c/+0x50) and both
+// entity-IBP lists round-trip (save/load wave 2026-08-27).
+void BuildComponent::Persist(void* stream) { BuildComponent_Shutdown(this, stream); }
+
+// [6] 0x140108d40 — the real OnAdded broadcast. It fills the mesh (+0x58/+0x60) and
+// picking (+0x68/+0x70) lists from the site's own ModelComponent and from each
+// MultiObjectComponent child, HIDES each collected model (retail's "this model is now
+// build-controlled" transition — a placed foundation carries no building mesh until
+// State8Enter/State8Update sets a construction frame; the spawner's instant-build bit
+// makes the thunk return before that stage for pre-built buildings), and writes
+// +0x4c from MultiObjectComponent+0x58. The body is also reached by address (the
+// door at 0x140108d40, buildcomponent.cpp's own s_fn_Draw_Original), so it stays a
+// free function.
+void BuildComponent::OnAdded() { BuildComponent_OnAddedThunk(this); }
+
+// [7] 0x140108cb0 — the removed-from-world broadcast (NOT OnCreate: misnamed in
+// Ghidra exactly like CitizenComponent's 0x140113ca0). It removes the site from the
+// town's pending-build registry (townMgr+0xd0); the 0x83 capability flags have bit 1
+// set, so the MarkForRemoval broadcast reaches it.
+void BuildComponent::OnRemove() { BuildComponent_OnCreate(this); }
+
+// [15] 0x140108710 — THE build-labor +0x48 progress credit. The build action chain
+// (FUN_1400c0690 / BuildStructure_SetupBuildActions) pushes a SendComponentMessage
+// targeting the BuildComponent (type-id c7008) with message-code 0. When the
+// citizen's PerformWork(3s) completes, SendComponentMessage::AbstractImpl
+// (sendcomponentmessage.cpp) calls this slot, which credits ONE unit of labour into
+// +0x48; State8Update ramps the build meshes as +0x48 climbs toward target
+// (matComp[0x30] * bc[0x4c]) and requests 8->2 completion once it is reached.
+void BuildComponent::OnMessage(int message, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
+    if (message == 0) buildState += 1;
+}
+
+DEFINE_EXE_VTABLE(BuildComponent, "_ZTV14BuildComponent")
+DEFINE_EXE_TYPE(BuildComponent, "ControllerComponent")

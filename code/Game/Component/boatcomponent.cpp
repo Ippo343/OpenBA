@@ -230,72 +230,62 @@ void BoatComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 MI-A — BoatComponent as a REAL class (BoatComponent.h).
+//
+// Before: a 48-slot hand-built `BoatComponent_LiveVtable` filled at every
+// create (FillTypedVtable + InstallController), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<BoatCtrlTag> table stamped into raw bytes at +0x78.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/BoatComponent.h"
 
 // ── Controller state machine (boatcomponent_states.cpp) ──────────────────────────
 // BoatComponent is a state-machine component in exactly TradeComponent's shape, and the
 // geometry is read off its retail vtable 0x140158f40 rather than guessed:
 //   slot 16 = 0x140003730 (`XOR EAX,EAX; RET`)  => the machine starts in state 0
-//   slot 17 = 0x140003720 (`LEA RAX,[RCX+0x78]`) => node at +0x78, back-pointer at +0x90
-// The ctor (0x140046800) confirms both: it writes node vtable 0x140158ef0 to +0x78 and
-// `this` to +0x90 (= node+0x18).
-extern "C" void** BoatCtrl_NodeVtable();
-extern "C" void   BoatCtrl_PopulateTable();
+//   slot 17 = 0x140003720 (`LEA RAX,[RCX+0x78]`) => member at +0x78, back-pointer at +0x90
+// The state table is built ONCE at static-init time, as retail's static initializer
+// does (B38 D6/D7).
+extern "C" void BoatCtrl_PopulateTable();
+static const bool s_boatStateTableBuilt = (BoatCtrl_PopulateTable(), true);
 
-static uint32_t BoatComponent_LiveGetTypeId2(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("BoatComponent");
-    return cached;
-}
-static void* BoatComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+// 0x140046800. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// +0x28..+0x70 = 0; `_controller(this)` is the member's back-pointer at +0x90. No
+// flag OR (0x80).
+// PORT GAP (B38 D3.2): retail's ctor stores +0x70 = -1; the tree's factory zeroed
+// it, and that is kept here — the retail value is its own titled commit.
+BoatComponent::BoatComponent()
+    : data28(0), data30(0), data38(0), data40(0), data48(0), _pad4C{}, data50(0), data58(0),
+      _pad5C{}, data60(0), data68(0), data70(0), _pad74{}, _controller(this) {}
 
-static int   BoatComponent_GetDefaultState(void*) { return 0; }
-static void* BoatComponent_CreateState(void* self) {
-    return reinterpret_cast<uint8_t*>(self) + 0x78;
+// [0] 0x140003970: ~BoatComponent (0x140046770), MemFree on &1.
+Object::Base* BoatComponent::DeletingDtor(unsigned flags) {
+    this->~BoatComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void* BoatComponent_LiveGetTypeInfo(void*) {
-    static void* cached = nullptr;
-    if (!cached) cached = ::Object::GetTypeInfoByName("BoatComponent");
-    return cached;
-}
+// 0x140046770: MemFree(+0x60), +0x60 = +0x68 = 0 — PORT GAP (B38 D2): the tree's
+// slot 0 never freed the route array; the retail body is its own titled commit.
+BoatComponent::~BoatComponent() = default;
 
-static void BoatComponent_ShutdownVSlot(void* self, void* stream) {
-    BoatComponent_Shutdown(reinterpret_cast<BoatComponent*>(self), stream);
+// create 0x1400036e0: MemAlloc(0x98, 8), then the ctor.
+void* BoatComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BoatComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) BoatComponent());
 }
-
-// Wire the node ON THE INSTANCE, after MakeInertTyped/InitInertTyped — FillTypedVtable
-// rewrites the vtable slots and would erase anything written earlier.
-// See reference_live_vtable_slot_must_be_wired_in_installlive.
-static void BoatComponent_InstallController(void* mem) {
-    // Slot 3 (stream Shutdown/Serialize, retail 0x1400465d0).
-    BoatComponent_LiveVtable[3] = reinterpret_cast<void*>(&BoatComponent_ShutdownVSlot);
-    BoatComponent_LiveVtable[1]  = reinterpret_cast<void*>(&BoatComponent_LiveGetTypeInfo);
-    BoatComponent_LiveVtable[16] = reinterpret_cast<void*>(&BoatComponent_GetDefaultState);
-    BoatComponent_LiveVtable[17] = reinterpret_cast<void*>(&BoatComponent_CreateState);
-    BoatCtrl_PopulateTable();
-    if (!mem) return;
-    uint8_t* p = reinterpret_cast<uint8_t*>(mem);
-    *reinterpret_cast<void**>(p + 0x78) = reinterpret_cast<void*>(BoatCtrl_NodeVtable());
-    *reinterpret_cast<void**>(p + 0x90) = mem;   // node+0x18 = owning component
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* BoatComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) BoatComponent());
 }
 
-extern "C" void* BoatComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x98, 0x80,
-        BoatComponent_LiveVtable,
-        reinterpret_cast<void*>(&BoatComponent_LiveGetTypeId2));
-    BoatComponent_InstallController(p);
-    return p;
-}
+// [3] 0x1400465d0 (the body resolves its own helpers first).
+void BoatComponent::Persist(void* stream) { BoatComponent_Shutdown(this, stream); }
 
-static void* BoatComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x98, 0x80,
-        BoatComponent_LiveVtable,
-        reinterpret_cast<void*>(&BoatComponent_LiveGetTypeId2));
-    BoatComponent_InstallController(mem);
-    return mem;
-}
-
-REGISTER_TYPE(BoatComponent, "ControllerComponent",
-              &BoatComponent_Factory, &BoatComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(BoatComponent, "_ZTV13BoatComponent")
+DEFINE_EXE_TYPE(BoatComponent, "ControllerComponent")

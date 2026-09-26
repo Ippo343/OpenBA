@@ -706,10 +706,10 @@ extern "C" void Imm_RequestStateTransition_9ac0(void* sm, int stateId) {
 // ============================================================
 // Dispatcher + table (replicates ImmigrationDescription_helper_e6c0, 0x14004e6c0)
 // ============================================================
-namespace { struct ImmigrationCtrlTag {}; }
+// ENDGAME B.3.8 MI-A: the tag lives with the class (its controller member is
+// ControllerLive::TableController<ImmigrationCtrlTag>, ImmigrationComponent.h).
+#include "Component/ImmigrationComponent.h"
 using ImmigrationDispatch = ::ControllerLive::Dispatcher<ImmigrationCtrlTag>;
-
-extern "C" void** ImmigrationCtrl_NodeVtable() { return ImmigrationDispatch::Vtable(); }
 
 extern "C" void ImmigrationCtrl_PopulateTable() {
     using namespace ::ControllerLive;

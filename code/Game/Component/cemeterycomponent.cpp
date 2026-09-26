@@ -171,7 +171,7 @@ static void CemeteryComponent_PushPlot(CemeteryComponent* self, int cell) {
     fprintf(stderr, "[CemeteryPlots] " fmt "\n", ##__VA_ARGS__); fflush(stderr); } } while (0)
 void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
     CemeteryComponent_InitFuncs();
-    CEM_TRACE("enter comp=%p owner=%p", (void*)self, self->owner);
+    CEM_TRACE("enter comp=%p owner=%p", (void*)self, self->_entity);
     if (!s_fn_FindMapComp || !s_fn_FindMultiComp || !s_g_pGameState || !*s_g_pGameState) {
         CEM_TRACE("BAIL deps: findMap=%p findMulti=%p gs=%p",
                   (void*)s_fn_FindMapComp, (void*)s_fn_FindMultiComp,
@@ -179,7 +179,7 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
         return;
     }
 
-    const uintptr_t entity = reinterpret_cast<uintptr_t>(self->owner);
+    const uintptr_t entity = reinterpret_cast<uintptr_t>(self->_entity);
 
     void* mapIbp = nullptr;
     s_fn_FindMapComp(entity, &mapIbp);
@@ -262,7 +262,7 @@ void CemeteryComponent_BuildPlotGrid(CemeteryComponent* self) {
 void CemeteryComponent_OnRemove(CemeteryComponent* self) {
     uint8_t ptrBuf[8];
     if (fn_InternalBasePtr_Ctor)
-        new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self->owner));   // B.3.3 bridge
+        new (ptrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self->_entity));   // B.3.3 bridge
 
     if (s_g_pGameState && *s_g_pGameState && s_fn_ListAdd) {
         void* gameState = *s_g_pGameState;
@@ -448,20 +448,25 @@ extern "C" char CemeteryComponent_EnterDemolish(void* comp, void* /*sm*/) {
     return 0;
 }
 
-// ===== Standalone factory =====
-// The WellComponent pattern: same slot 16 (GetDefaultState -> 2, shared fn 0x1400026c0)
-// and slot 17 (CreateState -> self+0x28, shared fn 0x140004080), and a two-state retail
-// table. Size 0x58 / flags 0x83 keep the values the inert factory used.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — CemeteryComponent as a REAL class (CemeteryComponent.h).
+//
+// Before: a 48-slot hand-built `CemeteryComponent_LiveVtable` filled at every
+// create (FillTypedVtable + FinishLiveVtable), `Inert_ScalarDtor` in slot 0 (only `~Internal`), the
+// ControllerLive::Dispatcher<CemeteryCtrlTag> table stamped into raw bytes at +0x28.
+// After: the compiler's 18-slot vtable, a real constructor and destructor
+// chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/CemeteryComponent.h"
 #include "Component/controller_state_table.h"
 
-namespace { struct CemeteryCtrlTag {}; }
 using CemeteryCtrlDispatch = ::ControllerLive::Dispatcher<CemeteryCtrlTag>;
 
 // The retail table, transcribed from 0x1400477a0 call for call. Its RegisterState
 // instantiation (0x140004250) zero-fills the trans30/trans38/update columns, so every
 // handler but Enter is null -- verified in the callee, not assumed from the call site.
+// Built ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
 static void CemeteryComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = CemeteryCtrlDispatch::table;
@@ -475,74 +480,54 @@ static void CemeteryComponent_PopulateStateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);
 }
+static const bool s_cemeteryStateTableBuilt = (CemeteryComponent_PopulateStateTable(), true);
 
-static uint32_t CemeteryComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CemeteryComponent");
-    return cached;
+// 0x1400476f0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48 = +0x50 = 0; then
+// `_flags |= 0x83`.
+CemeteryComponent::CemeteryComponent()
+    : _controller(this), plots(nullptr), plotCount(0), plotCapacity(0) {
+    OrFlagsInCtor(0x83);
 }
-static void* CemeteryComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-static void CemeteryComponent_ShutdownVSlot(void* s, void* stream) {   // vtable index 3
-    // Slot 3 is the FIRST call into this class on a load-from-save:
-    // PersistObject creates the object and dispatches vt[0x18] before Startup
-    // or any tick. Until the resolver runs every s_fn_* is null and the fully
-    // null-guarded body consumes ZERO bytes, so the record is short by however
-    // much this component would have written, and the stream desyncs several
-    // records LATER with no crash at the defect itself.
-    // Same defect as ParticleComponent (2026-09-04) and StateMachineComponent
-    // (2026-08-28). Rule, from uicomponent_serialize.cpp: resolve
-    // unconditionally at the top of every call.
+// [0] 0x140004220: ~CemeteryComponent (0x140047680), MemFree on &1.
+Object::Base* CemeteryComponent::DeletingDtor(unsigned flags) {
+    this->~CemeteryComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x140047680: MemFree(+0x48), +0x48 = +0x50 = 0 — PORT GAP (B38 D2): the tree's
+// slot 0 never freed the plot list; the retail body is its own titled commit.
+CemeteryComponent::~CemeteryComponent() = default;
+
+// create 0x140004040: MemAlloc(0x58, 8), then the ctor.
+void* CemeteryComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CemeteryComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CemeteryComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* CemeteryComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CemeteryComponent());
+}
+
+// [3] 0x1400475c0. Slot 3 is the FIRST call into this class on a load-from-save:
+// PersistObject creates the object and dispatches vt[0x18] before Startup or any
+// tick. Until the resolver runs every s_fn_* is null and the fully null-guarded
+// body consumes ZERO bytes, so the stream desyncs several records later. Rule, from
+// uicomponent_serialize.cpp: resolve unconditionally at the top of every call.
+void CemeteryComponent::Persist(void* stream) {
     CemeteryComponent_InitFuncs();
-    CemeteryComponent_Shutdown(reinterpret_cast<CemeteryComponent*>(s), stream);
-}
-static void CemeteryComponent_DrawVSlot(void* s) {                     // vtable index 6
-    CemeteryComponent_BuildPlotGrid(reinterpret_cast<CemeteryComponent*>(s));
-}
-static void CemeteryComponent_OnRemoveVSlot(void* s) {                 // vtable index 7
-    CemeteryComponent_OnRemove(reinterpret_cast<CemeteryComponent*>(s));
-}
-static int   CemeteryComponent_GetDefaultState(void*) { return 2; }    // 0x1400026c0
-static void* CemeteryComponent_CreateState(void* self) {               // 0x140004080
-    return reinterpret_cast<uint8_t*>(self) + 0x28;
+    CemeteryComponent_Shutdown(this, stream);
 }
 
-static void CemeteryComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
-    // does not care whether this component's live feature is enabled. Wired
-    // UNCONDITIONALLY -- behind a gate, a disabled flag left the class falling
-    // through to base-only Component_Serialize, which skips this body's bytes
-    // and desyncs the stream for EVERY object after it.
-    // See reference_vtable_slot3_serialize_never_installed.
-    CemeteryComponent_LiveVtable[3]  = reinterpret_cast<void*>(&CemeteryComponent_ShutdownVSlot);
-    CemeteryComponent_LiveVtable[6]  = reinterpret_cast<void*>(&CemeteryComponent_DrawVSlot);
-    CemeteryComponent_LiveVtable[7]  = reinterpret_cast<void*>(&CemeteryComponent_OnRemoveVSlot);
-    CemeteryComponent_LiveVtable[16] = reinterpret_cast<void*>(&CemeteryComponent_GetDefaultState);
-    CemeteryComponent_LiveVtable[17] = reinterpret_cast<void*>(&CemeteryComponent_CreateState);
-    CemeteryComponent_PopulateStateTable();
-    if (mem) {
-        // Embedded state node at +0x28: dispatcher vtable + the node+0x18
-        // back-pointer the tail-called handlers read as their `this`.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
-            reinterpret_cast<void*>(CemeteryCtrlDispatch::Vtable());
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
-    }
-}
+// [6] 0x140047200 — build the grave-plot grid from the footprint.
+void CemeteryComponent::OnAdded() { CemeteryComponent_BuildPlotGrid(this); }
 
-extern "C" void* CemeteryComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0x83,
-        CemeteryComponent_LiveVtable,
-        reinterpret_cast<void*>(&CemeteryComponent_LiveGetTypeId));
-    CemeteryComponent_FinishLiveVtable(p);
-    return p;
-}
-static void* CemeteryComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0x83,
-        CemeteryComponent_LiveVtable,
-        reinterpret_cast<void*>(&CemeteryComponent_LiveGetTypeId));
-    CemeteryComponent_FinishLiveVtable(mem);
-    return mem;
-}
+// [7] 0x1400471c0.
+void CemeteryComponent::OnRemove() { CemeteryComponent_OnRemove(this); }
 
-REGISTER_TYPE(CemeteryComponent, "ControllerComponent",
-              &CemeteryComponent_Factory, &CemeteryComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(CemeteryComponent, "_ZTV17CemeteryComponent")
+DEFINE_EXE_TYPE(CemeteryComponent, "ControllerComponent")

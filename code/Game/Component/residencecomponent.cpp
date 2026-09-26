@@ -170,7 +170,7 @@ void ResidenceComponent_Serialize(ResidenceComponent* self) {
         !s_fn_ResizeResidentArray)
         return;
 
-    void* obj = self->_unk18;
+    void* obj = self->_description;
     if (!obj) return;
 
     bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_ResidenceDescription);
@@ -207,7 +207,7 @@ void ResidenceComponent_OnCreate(ResidenceComponent* self) {
         return;
 
     // Build an InternalBasePtr on the stack with the owner entity
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->owner;
+    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
 
     // Get the world manager from game state
     uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
@@ -473,8 +473,9 @@ void ResidenceComponent_InitFuncs() {
 // tick every frame — the retail flow; the old StartTown_RegisterTownResidences
 // manual append is removed to avoid double-registration.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include "Component/controller_state_table.h"
+#include "Component/ResidenceComponent.h"
+#include <atomic>
 
 // residence_heattick.cpp — state-2 per-frame handler (0x140129970 port).
 extern "C" char ResidenceComponent_HeatTick(void* comp, void* sm, void* dt);
@@ -521,9 +522,9 @@ static char ResidenceComponent_EnterDemolish(void* comp, void* /*sm*/) {
     return 0;
 }
 
-namespace { struct ResidenceCtrlTag {}; }
 using ResidenceCtrlDispatch = ::ControllerLive::Dispatcher<ResidenceCtrlTag>;
 
+// Built ONCE at static-init time, as retail's static initializer does (B38 D6/D7).
 static void ResidenceComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = ResidenceCtrlDispatch::table;
@@ -538,83 +539,70 @@ static void ResidenceComponent_PopulateStateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);
 }
+static const bool s_residenceStateTableBuilt = (ResidenceComponent_PopulateStateTable(), true);
 
-// Per-type GetTypeId (vtable +0x10) — required by the spawn-pool component find-loops.
-static uint32_t ResidenceComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ResidenceComponent");
-    return cached;
+// ============================================================================
+// ENDGAME B.3.8 MI-A — ResidenceComponent as a REAL class (ResidenceComponent.h).
+//
+// Before: a 48-slot hand-built `ResidenceComponent_LiveVtable` filled at every
+// create (FillTypedVtable + FinishLiveVtable), `Inert_ScalarDtor` in slot 0 (only
+// `~Internal`), the ControllerLive::Dispatcher<ResidenceCtrlTag> table stamped into
+// raw bytes at +0x28. After: the compiler's 18-slot vtable, a real constructor and
+// destructor chain, the controller a member object (B38_RULES D1, D2, D6).
+// ============================================================================
+
+// 0x14012a2a0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; +0x48 = +0x50 = +0x58 = 0; then
+// `_flags |= 0x82`.
+ResidenceComponent::ResidenceComponent()
+    : _controller(this), heatRemaining(0), residentSlots(nullptr), residentSlotCount(0), _pad5c{} {
+    OrFlagsInCtor(0x82);
 }
 
-// Per-type vtable (filled from the shared stub table on first use, then patched).
-static void* ResidenceComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-// Slot adapters: the inert vtable stores raw void* slots; these forward to the typed
-// reimpls with the correct signatures.
-static void ResidenceComponent_SerializeVSlot(void* s) {   // vtable +0x20 (index 4)
-    ResidenceComponent_Serialize(reinterpret_cast<ResidenceComponent*>(s));
+// [0] 0x140037610: ~ResidenceComponent (0x14012a230), MemFree on &1.
+Object::Base* ResidenceComponent::DeletingDtor(unsigned flags) {
+    this->~ResidenceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void ResidenceComponent_OnCreateVSlot(void* s) {    // vtable +0x38 (index 7)
-    // See the note on ResidenceComponent_EnterDemolish — this is the other route into
-    // the townMgr+0x20 erase, dispatched by FUN_1400c2ea0 at entity removal.
-    static int n = 0;
-    if (n < 12) { ++n;
-        fprintf(stderr, "[Residence] ERASE via SLOT-7 removal hook: comp=%p\n", s);
+// 0x14012a230: 0x1400175d0 on +0x50 (free the resident arrays) — PORT GAP (B38 D2):
+// the tree's slot 0 never freed them; the retail body is its own titled commit.
+ResidenceComponent::~ResidenceComponent() = default;
+
+// create 0x140037440: MemAlloc(0x60, 8), then the ctor.
+void* ResidenceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ResidenceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ResidenceComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* ResidenceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ResidenceComponent());
+}
+
+// [3] 0x14012a170 — the resident array (+0x50/+0x58) and the heat timer round-trip
+// (save/load wave 2026-08-28).
+void ResidenceComponent::Persist(void* stream) { ResidenceComponent_Shutdown(this, stream); }
+
+// [4] 0x14012a120 — resize the resident array at +0x50 from the description
+// capacity (desc+0x20); dispatched at spawn by the ComponentEntity StartupComponents
+// pass (FUN_1400c30a0), gated on entity flag 0x80 + comp flag bit 7 (0x82 has it).
+void ResidenceComponent::Startup() { ResidenceComponent_Serialize(this); }
+
+// [7] 0x14012a0e0 — helper_9ef0 (re-assign resident workplaces / evict) + remove the
+// owner entity from the townMgr+0x20 residence list, dispatched by FUN_1400c2ea0 at
+// entity removal. See the note on ResidenceComponent_EnterDemolish — this is the
+// other route into the townMgr+0x20 erase, so it says which one fired.
+static std::atomic<int> s_residenceSlot7Logged{0};
+void ResidenceComponent::OnRemove() {
+    if (s_residenceSlot7Logged.fetch_add(1, std::memory_order_relaxed) < 12) {
+        fprintf(stderr, "[Residence] ERASE via SLOT-7 removal hook: comp=%p\n", static_cast<void*>(this));
         fflush(stderr);
     }
-    ResidenceComponent_OnCreate(reinterpret_cast<ResidenceComponent*>(s));
-}
-static int ResidenceComponent_GetDefaultState(void*) { return 2; }  // 0x1400026c0
-static void* ResidenceComponent_CreateState(void* self) {           // 0x140004080
-    return reinterpret_cast<uint8_t*>(self) + 0x28;
+    ResidenceComponent_OnCreate(this);
 }
 
-// Graduate the live slots + install the real state-node dispatcher. Idempotent
-// (called from every Factory/CreateInPlace, like CONTROLLER_LIVE_FACTORY_STATES).
-static void ResidenceComponent_ShutdownVSlot(void* self, void* stream) {
-    ResidenceComponent_Shutdown(reinterpret_cast<ResidenceComponent*>(self), stream);
-}
-static void ResidenceComponent_FinishLiveVtable(void* mem) {
-    // Slot 3 (stream Serialize, retail 0x14012a170) wired UNCONDITIONALLY, same
-    // rationale as StorageComponent: serialize round-trip is not an opt-in
-    // feature. Ported since the residence wave but never written into the live
-    // vtable — a loaded save's residence kept the base-Component serialize and
-    // the resident array (+0x50/+0x58) stayed null, crashing the first post-load
-    // HasSufficientResources (reads rows+8 == address 0x8). Save/load wave 2026-08-28.
-    ResidenceComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&ResidenceComponent_ShutdownVSlot);
-    ResidenceComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&ResidenceComponent_SerializeVSlot);
-    ResidenceComponent_LiveVtable[7] =
-        reinterpret_cast<void*>(&ResidenceComponent_OnCreateVSlot);
-    ResidenceComponent_LiveVtable[16] =
-        reinterpret_cast<void*>(&ResidenceComponent_GetDefaultState);
-    ResidenceComponent_LiveVtable[17] =
-        reinterpret_cast<void*>(&ResidenceComponent_CreateState);
-    ResidenceComponent_PopulateStateTable();
-    if (mem) {
-        // Embedded node at +0x28: dispatcher vtable + the node+0x18 back-pointer
-        // (= comp+0x40 selfPtr, set by the real ctor) the tail-call handlers need.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28) =
-            reinterpret_cast<void*>(ResidenceCtrlDispatch::Vtable());
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x28 + 0x18) = mem;
-    }
-}
-
-extern "C" void* ResidenceComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x60, 0x82,
-        ResidenceComponent_LiveVtable,
-        reinterpret_cast<void*>(&ResidenceComponent_LiveGetTypeId));
-    ResidenceComponent_FinishLiveVtable(p);
-    return p;
-}
-static void* ResidenceComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x60, 0x82,
-        ResidenceComponent_LiveVtable,
-        reinterpret_cast<void*>(&ResidenceComponent_LiveGetTypeId));
-    ResidenceComponent_FinishLiveVtable(mem);
-    return mem;
-}
-
-REGISTER_TYPE(ResidenceComponent, "ControllerComponent",
-              &ResidenceComponent_Factory, &ResidenceComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(ResidenceComponent, "_ZTV18ResidenceComponent")
+DEFINE_EXE_TYPE(ResidenceComponent, "ControllerComponent")

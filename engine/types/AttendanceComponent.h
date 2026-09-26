@@ -22,28 +22,7 @@ namespace AttendanceComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x140158c90;
 }
 
-struct AttendanceComponent {
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    // Own data
-    void*    field28;           // +0x28: zeroed
-    void*    field30;           // +0x30: zeroed
-
-    // Controller sub-object at +0x38
-    void*    controllerVtable;  // +0x38
-    void*    controllerData0;   // +0x40
-    void*    controllerData1;   // +0x48
-    void*    selfPtr;           // +0x50
-};
-
-static_assert(sizeof(AttendanceComponent) == 0x58, "AttendanceComponent size mismatch");
-static_assert(offsetof(AttendanceComponent, vtable) == 0x00, "");
-static_assert(offsetof(AttendanceComponent, flags) == 0x20, "");
-static_assert(offsetof(AttendanceComponent, field28) == 0x28, "");
-static_assert(offsetof(AttendanceComponent, controllerVtable) == 0x38, "");
-static_assert(offsetof(AttendanceComponent, selfPtr) == 0x50, "");
+// ENDGAME B.3.8 MI-A: the POD is gone — `AttendanceComponent` is a real class now
+// (code/Game/Component/AttendanceComponent.h, compiler vtable, controller member). This forwarder
+// keeps the old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/AttendanceComponent.h"
