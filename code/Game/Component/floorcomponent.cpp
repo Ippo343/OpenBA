@@ -144,7 +144,7 @@ void FloorComponent_Draw(FloorComponent* self) {
         return;
     }
 
-    void* obj = self->_unk18;
+    void* obj = self->_description;
     bool isDerived = s_fn_IsDerivedFrom_d(obj, descTid);
     void* building = isDerived ? obj : nullptr;
 
@@ -465,76 +465,62 @@ void FloorComponent_InitFuncs() {
 // deck mesh into the map's Picking::Scene and bump each covered cell's floor counter
 // (+0x2d), which is what makes the height query in mapquery.cpp stand a citizen ON the
 // deck instead of on the terrain beneath it.
+//
+// ENDGAME B.3.8 VIS — FloorComponent is a REAL class now (FloorComponent.h): the
+// 48-slot FloorComponent_LiveVtable, its per-create fill and InitBody patch are
+// gone; the compiler's 16-slot vtable carries the slots above.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/FloorComponent.h"
 
-static uint32_t FloorComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0 || cached == 0xFFFFFFFFu) cached = ::Object::GetTypeIdByName("FloorComponent");
-    return cached;
+// 0x14011f600: Component() is the CALL 0x1401188b0; the 0x140163360 stamp is
+// the compiler's; +0x28 = 0, +0x2c = -1 (0x14011f62f), flags |= 0x43.
+// PORT GAP (retail 0x14011f636) — B38 D1: retail ORs 0x43 into Component's
+// 0x80 (=> 0xc3); the tree's factory STORED 0x43 (bit 7 clear). The tree's
+// value is kept here; the retail OR is its own titled commit.
+FloorComponent::FloorComponent() : floorFlag(0), _pad29{}, floorId(-1) {
+    _flags = 0x43;
 }
-static void* FloorComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-static void FloorComponent_SerVSlot(void* s, void* stream) {
-    FloorComponent_Shutdown(reinterpret_cast<FloorComponent*>(s), stream);
-}
-static void FloorComponent_OnAddedVSlot(void* s) {
-    FloorComponent_Draw(reinterpret_cast<FloorComponent*>(s));
-}
-static void FloorComponent_OnRemoveVSlot(void* s) {
-    FloorComponent_OnCreate(reinterpret_cast<FloorComponent*>(s));
-}
-// FloorComponent_Slot12 (0x14011f520): `if (msg != 1) return;` followed by a verbatim
-// inline copy of f390 — so delegate rather than duplicate the body.
-static void FloorComponent_Slot12VSlot(void* s, int msgId) {
+// [3] 0x14011f560 — floorFlag round-trips a save.
+void FloorComponent::Persist(void* stream) { FloorComponent_Shutdown(this, stream); }
+// [6] 0x14011f340
+void FloorComponent::OnAdded() { FloorComponent_Draw(this); }
+// [7] 0x14011f2a0
+void FloorComponent::OnRemove() { FloorComponent_OnCreate(this); }
+// [12] 0x14011f520: `if (msg != 1) return;` followed by a verbatim inline copy
+// of f390 — so delegate rather than duplicate the body.
+void FloorComponent::OnEvent(int msgId) {
     if (msgId != 1) return;
-    FloorComponent_SubF390(s);
+    FloorComponent_SubF390(this);
 }
 
 // FloorComponent slot 11 (+0x58, 0x14011f540): the LOAD-TIME re-place. Retail's body is
 // `if (floorFlag == 0) return;` followed by a verbatim inline copy of f390 — so delegate
 // rather than duplicate, exactly as slot 12 does.
-static void FloorComponent_Slot11VSlot(void* s) {
-    FloorComponent* fc = reinterpret_cast<FloorComponent*>(s);
-    // Logged BEFORE the floorFlag test so the trace discriminates "hook never
-    // dispatched" from "dispatched but floorFlag was lost in the serializer".
-    if (fc->floorFlag == 0) return;
-    FloorComponent_SubF390(s);
+void FloorComponent::Slot11() {
+    if (floorFlag == 0) return;
+    FloorComponent_SubF390(this);
 }
 
-static void FloorComponent_FinishVtable() {
-    // Slot 3 is unconditional: serializer wiring is not a feature flag (a base-only
-    // slot 3 silently resets floorFlag across a save/load).
-    FloorComponent_LiveVtable[3] = reinterpret_cast<void*>(&FloorComponent_SerVSlot);
-    FloorComponent_LiveVtable[6]  = reinterpret_cast<void*>(&FloorComponent_OnAddedVSlot);
-    FloorComponent_LiveVtable[7]  = reinterpret_cast<void*>(&FloorComponent_OnRemoveVSlot);
-    FloorComponent_LiveVtable[11] = reinterpret_cast<void*>(&FloorComponent_Slot11VSlot);
-    FloorComponent_LiveVtable[12] = reinterpret_cast<void*>(&FloorComponent_Slot12VSlot);
+// [0] 0x1400347f0: ~FloorComponent (0x14011f5c0: restamp + ~Internal), MemFree on &1.
+Object::Base* FloorComponent::DeletingDtor(unsigned flags) {
+    this->~FloorComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void FloorComponent_InitBody(void* p) {
-    if (!p) return;
-    FloorComponent* fc = reinterpret_cast<FloorComponent*>(p);
-    fc->floorFlag = 0;
-    fc->floorId   = -1;   // FloorComponent_Ctor 0x14011f62f
+// create 0x140034600: MemAlloc(0x30, 8), then the ctor.
+void* FloorComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FloorComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) FloorComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* FloorComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) FloorComponent());
 }
 
-extern "C" void* FloorComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(
-        0x30, 0x43, FloorComponent_LiveVtable,
-        reinterpret_cast<void*>(&FloorComponent_LiveGetTypeId));
-    FloorComponent_FinishVtable();
-    FloorComponent_InitBody(p);
-    return p;
-}
-static void* FloorComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(
-        mem, 0x30, 0x43, FloorComponent_LiveVtable,
-        reinterpret_cast<void*>(&FloorComponent_LiveGetTypeId));
-    FloorComponent_FinishVtable();
-    FloorComponent_InitBody(mem);
-    return mem;
-}
-
-REGISTER_TYPE(FloorComponent, "Component",
-              &FloorComponent_Factory, &FloorComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(FloorComponent, "_ZTV14FloorComponent")
+DEFINE_EXE_TYPE(FloorComponent, "Component")

@@ -24,24 +24,7 @@ namespace RawMaterialComponentAddr {
     constexpr uintptr_t Vtable  = 0x140164170;
 }
 
-struct RawMaterialComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    // RawMaterialComponent own fields
-    void*    field28;      // +0x28: not initialized by ctor (set by Startup/Serialize)
-    void*    field30;      // +0x30: zeroed
-    void*    field38;      // +0x38: zeroed
-};
-
-static_assert(sizeof(RawMaterialComponent) == 0x40, "RawMaterialComponent size mismatch");
-static_assert(offsetof(RawMaterialComponent, vtable) == 0x00, "");
-static_assert(offsetof(RawMaterialComponent, flags) == 0x20, "");
-static_assert(offsetof(RawMaterialComponent, field28) == 0x28, "");
-static_assert(offsetof(RawMaterialComponent, field30) == 0x30, "");
-static_assert(offsetof(RawMaterialComponent, field38) == 0x38, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `RawMaterialComponent` is a real class now
+// (code/Game/Component/RawMaterialComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/RawMaterialComponent.h"

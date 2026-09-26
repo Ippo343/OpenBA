@@ -23,22 +23,7 @@ namespace StorageDisplayComponentAddr {
     constexpr uintptr_t Vtable  = 0x14015a780;
 }
 
-struct StorageDisplayComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
-
-    // StorageDisplayComponent own fields
-    void*    displayData0; // +0x28: zeroed (ptr or data)
-    void*    displayData1; // +0x30: zeroed (ptr or data)
-};
-
-static_assert(sizeof(StorageDisplayComponent) == 0x38, "StorageDisplayComponent size mismatch");
-static_assert(offsetof(StorageDisplayComponent, vtable) == 0x00, "");
-static_assert(offsetof(StorageDisplayComponent, flags) == 0x20, "");
-static_assert(offsetof(StorageDisplayComponent, displayData0) == 0x28, "");
-static_assert(offsetof(StorageDisplayComponent, displayData1) == 0x30, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `StorageDisplayComponent` is a real class now
+// (code/Game/Component/StorageDisplayComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/StorageDisplayComponent.h"

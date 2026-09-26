@@ -396,11 +396,16 @@ void DecalComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x38 (DecalComponent_Factory MemAlloc), flags 0xc3 (Ctor 0x14011b8f0:
-// Component base sets +0x20=0x80, leaf OR 0xc3 => 0xc3).
+// ============================================================================
+// ENDGAME B.3.8 VIS — DecalComponent as a REAL class (DecalComponent.h).
+//
+// Before: a 48-slot DecalComponent_LiveVtable filled per create, Inert_ScalarDtor
+// in slot 0 (only ~Internal), the ctor scalars patched in after the zero-fill.
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES
+// D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/DecalComponent.h"
 
 // Building ground-decal rendering (BANISHED_LIVE_DECAL, default OFF — like
 // BANISHED_LIVE_STORAGEDISPLAY). A building's DecalDescription (e.g. StorageYard's
@@ -421,12 +426,19 @@ void DecalComponent_InitFuncs() {
 //     material leaves decalId == -1), then un-buckets once placed (clears bit 0x4 + c3470)
 //     — build-once. Once AddDecal returns a slot index, decalId >= 0 and it is skipped.
 // Default (env off) => nothing wired => the default sa-run stays byte-identical.
-static uint32_t DecalComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("DecalComponent");
-    return cached;
+// 0x14011b8f0: Component() is the CALL 0x1401188b0; the 0x140162fd0 stamp is
+// the compiler's; then
+//     c7 43 28 00000000   mov [rbx+0x28], 0        decalState = 0
+//     c7 43 2c ffffffff   mov [rbx+0x2c], -1       decalId    = -1
+//     c7 43 30 0000803f   mov [rbx+0x30], 1.0f     decalScale = 1.0
+// and flags |= 0xc3. decalId -1 matters: 0 means "I own terrain decal slot 0",
+// and decalId is NOT in the save stream (slot 3 serializes only decalScale and
+// decalState), so a stream-restored decal with 0 would TerrainDecalRemove(sys, 0)
+// at world teardown. See reference_ctor_scalars_in_startup_are_unset_after_load.
+DecalComponent::DecalComponent()
+    : decalState(0), decalId(-1), decalScale(1.0f), _pad34{} {
+    OrFlagsInCtor(0xc3);
 }
-static void* DecalComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
 // Bucket (or un-bucket) this decal's owning entity into the update tree via the draw flag
 // (component +0x20 bit 0x4), so the EntityList tree walk dispatches the component's +0x40
@@ -445,27 +457,31 @@ static void DecalComponent_SetDrawFlag(void* s, bool on) {
     }
 }
 
-// index 4 — Startup(self): bucket the owner so the tree walk drives the build-once.
-static void DecalComponent_StartupVSlot(void* s) {
-    DecalComponent_SetDrawFlag(s, true);
-}
-// index 6 — Draw(self): build + submit the terrain decal.
-static void DecalComponent_DrawVSlot(void* s) {
-    DecalComponent_Draw(reinterpret_cast<DecalComponent*>(s));
-}
-// index 7 — OnCreate(self): release the decal slot (already reimplemented).
-static void DecalComponent_OnCreateVSlot(void* s) {
-    DecalComponent_OnCreate(reinterpret_cast<DecalComponent*>(s));
-}
+// [3] 0x14011b820 — decalScale/decalState round-trip here.
+void DecalComponent::Persist(void* stream) { DecalComponent_Shutdown(this, stream); }
+// [4] TREE DIVERGENCE (retail 0x14011b7d0): bucket the owner so the tree walk
+// drives the build-once.
+void DecalComponent::Startup() { DecalComponent_SetDrawFlag(this, true); }
+// [6] 0x14011b560 — Draw: build + submit the terrain decal.
+void DecalComponent::OnAdded() { DecalComponent_Draw(this); }
+// [7] 0x14011b510 — OnCreate: release the decal slot.
+void DecalComponent::OnRemove() { DecalComponent_OnCreate(this); }
 // index 8 (+0x40) — per-frame draw-tick, dispatched by the EntityList tree walk once the
 // owner is bucketed. Build-once: attempt the build until placed (Draw self-guards if the
 // scene/material aren't ready), then un-bucket so the tree stops ticking this component
 // (the placed decal is thereafter rendered by GeomDraw_CollectDraw, not the update tree).
-static void DecalComponent_TickVSlot(void* s, void* /*time*/) {
-    DecalComponent* cc = reinterpret_cast<DecalComponent*>(s);
-    if (cc->decalId < 0) DecalComponent_Draw(cc);   // retry the build until the material is ready
-    if (cc->decalId >= 0) DecalComponent_SetDrawFlag(s, false);   // placed → un-bucket
+// TREE DIVERGENCE: retail's slot 8 is Component's `RET`.
+void DecalComponent::Tick(void* /*time*/) {
+    if (decalId < 0) DecalComponent_Draw(this);                  // retry the build until the material is ready
+    if (decalId >= 0) DecalComponent_SetDrawFlag(this, false);   // placed -> un-bucket
 }
+// [11] 0x14011b810. PORT GAP (retail 0x14011b810, 7 B) — B38 D9: never ported;
+// the tree's table left it inert; kept inert here.
+void DecalComponent::Slot11() {}
+// [12] 0x14011b760. PORT GAP (retail 0x14011b760, the msg-1 "building completed"
+// ramp) — B38 D9: the tree drives that ramp explicitly through
+// DecalComponent_MarkOwnerBuilt below; the slot stays inert here.
+void DecalComponent::OnEvent(int) {}
 // Retail DecalComponent Slot12(msg=1) — "the building completed": set decalScale
 // (+0x30) to 1.0 and re-add the decal so the half-built translucent footprint becomes
 // the fully-opaque finished one. Our DecalComponent is inert (no message slot), so this
@@ -485,7 +501,7 @@ extern "C" void DecalComponent_EnterBuiltState(void* s) {
 // Find the owner entity's DecalComponent and run the completion ramp on it.
 extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
     if (!entity) return;
-    uint32_t tid = DecalComponent_LiveGetTypeId(nullptr);
+    uint32_t tid = DecalComponent::TypeId();
     if (!tid) return;
     uintptr_t e = reinterpret_cast<uintptr_t>(entity);
     int count = *reinterpret_cast<int32_t*>(e + 0x38);
@@ -502,60 +518,25 @@ extern "C" void DecalComponent_MarkOwnerBuilt(void* entity) {
     }
 }
 
-static void DecalComponent_ShutdownVSlot(void* self, void* stream) {
-    DecalComponent_Shutdown(reinterpret_cast<DecalComponent*>(self), stream);
+// [0] 0x1400338d0: ~DecalComponent (0x14011b8b0: restamp + ~Internal), MemFree on &1.
+Object::Base* DecalComponent::DeletingDtor(unsigned flags) {
+    this->~DecalComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void DecalComponent_FinishLiveVtable() {
-    // Slot 3 (stream Shutdown/Serialize, retail 0x14011b820) wired UNCONDITIONALLY,
-    // save/load wave 2026-08-28 — previously the class fell through to base-only
-    // Component_SerializeReimpl and decalScale/decalState silently reset on load.
-    DecalComponent_LiveVtable[3] = reinterpret_cast<void*>(&DecalComponent_ShutdownVSlot);
-    DecalComponent_LiveVtable[4] = reinterpret_cast<void*>(&DecalComponent_StartupVSlot);
-    DecalComponent_LiveVtable[6] = reinterpret_cast<void*>(&DecalComponent_DrawVSlot);
-    DecalComponent_LiveVtable[7] = reinterpret_cast<void*>(&DecalComponent_OnCreateVSlot);
-    DecalComponent_LiveVtable[8] = reinterpret_cast<void*>(&DecalComponent_TickVSlot);
+// create 0x1400337c0: MemAlloc(0x38, 8), then the ctor.
+void* DecalComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(DecalComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) DecalComponent());
 }
-// Retail ctor-body scalar defaults (DecalComponent_Ctor, exe 0x14011b8f0):
-//     c7 43 28 00000000   mov [rbx+0x28], 0        decalState = 0
-//     c7 43 2c ffffffff   mov [rbx+0x2c], -1       decalId    = -1
-//     c7 43 30 0000803f   mov [rbx+0x30], 1.0f     decalScale = 1.0
-// MakeInertTyped hands back a ZEROED body, so without this decalId is 0 --
-// i.e. "I own terrain decal slot 0" -- on every component the real ctor did not
-// build. decalId is NOT in the save stream (slot 3 serializes only decalScale
-// and decalState), so a stream-restored decal keeps that bogus 0 forever and
-// DecalComponent::OnCreate then calls TerrainDecalRemove(sys, 0) during world
-// teardown, faulting on a decal system whose slot array (+0x1F0) was never
-// allocated because nothing was ever placed. See
-// reference_ctor_scalars_in_startup_are_unset_after_load.
-//
-// decalScale is restored from the stream on a load, but a NEW decal built by the
-// factory needs the 1.0 default or it draws at zero size -- seed both, as retail
-// does, rather than only the one that crashed.
-static void DecalComponent_ApplyCtorDefaults(void* mem) {
-    if (!mem) return;
-    uint8_t* b = reinterpret_cast<uint8_t*>(mem);
-    *reinterpret_cast<uint32_t*>(b + 0x28) = 0;            // decalState
-    *reinterpret_cast<int32_t*>(b + 0x2c)  = -1;           // decalId
-    *reinterpret_cast<float*>(b + 0x30)    = 1.0f;         // decalScale
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* DecalComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DecalComponent());
 }
 
-extern "C" void* DecalComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0xc3,
-        DecalComponent_LiveVtable,
-        reinterpret_cast<void*>(&DecalComponent_LiveGetTypeId));
-    DecalComponent_ApplyCtorDefaults(p);
-    DecalComponent_FinishLiveVtable();
-    return p;
-}
-static void* DecalComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0xc3,
-        DecalComponent_LiveVtable,
-        reinterpret_cast<void*>(&DecalComponent_LiveGetTypeId));
-    DecalComponent_ApplyCtorDefaults(mem);
-    DecalComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(DecalComponent, "Component",
-              &DecalComponent_Factory, &DecalComponent_CreateInPlace);
-
+DEFINE_EXE_VTABLE(DecalComponent, "_ZTV14DecalComponent")
+DEFINE_EXE_TYPE(DecalComponent, "Component")
