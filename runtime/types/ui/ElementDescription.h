@@ -220,13 +220,14 @@ constexpr const char* kVtblElementDescription = "??_7ElementDescription@UI@@6B@"
 // member — `DescriptionsBatch1.h` / `GroupDescription.h` embed the
 // `RtUI::ElementDescription` POD above, which is why the POD stays (B4b-1) —
 // and every live one is built by the `??0ElementDescription` DOOR
-// (dialog.cpp) and wears the MINTED table. Hence the protected `= default`
-// ctor, the protected empty non-virtual dtor, and qualified delegation in
-// every door.
+// (dialog.cpp) and wears the MINTED table. Hence qualified delegation in
+// every door. ENDGAME B.3.8 block RB gave the class its REAL protected ctor
+// and non-virtual dtor, each ONE body with its door (`InitFields` /
+// `ReleaseFields`), for the two exe subclasses of step 8.
 //
 // WHERE THE BODIES ARE. `Serialize` moved into the member
 // (elementdescription_serialize.cpp). `TypeName`, `Type`, `GetFileVersion`,
-// the empty dtor and the non-virtual `CreateInstance(InternalPtr<Element>*)`
+// `InitFields`/`ReleaseFields` and the non-virtual `CreateInstance(InternalPtr<Element>*)`
 // are members defined in `runtime/src/ui/dialog.cpp` (fragment pass F2); the
 // registered doors there delegate QUALIFIED. The ctor/dtor doors stay doors
 // (B4b-2). Defining `TypeName` (the key function) emits this class's vtable
@@ -286,17 +287,31 @@ public:
     static Object::Base* CreateNewObject();                       // 0x180035100  not ported
     static Object::Base* CreateInPlaceObject(void* place);        // 0x180035110  not ported
 
+    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
+    // D1): `RtUiElementDescription_Ctor` / `_Dtor` (dialog.cpp) stamp the
+    // MINTED tables and run the External halves themselves, for the
+    // still-unconverted subclasses, then call these. Nothing else may.
+    struct DoorBody {
+        static void Init(ElementDescription* d)    { d->InitFields(); }
+        static void Release(ElementDescription* d) { d->ReleaseFields(); }
+    };
+
 protected:
-    // NOT retail's `??0ElementDescription@UI@@QEAA@XZ` (0x180115a40, the door
-    // `RtUiElementDescription_Ctor` in dialog.cpp).
-    ElementDescription() = default;
-    // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). NON-VIRTUAL, defined
-    // EMPTY in dialog.cpp beside `TypeName` (fragment pass F2), as every other
-    // converted base's is. The retail body is the door
-    // `RtUiElementDescription_Dtor` in dialog.cpp.
-    ~ElementDescription();
+    // `??0ElementDescription@UI@@QEAA@XZ` (0x180115a40) — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1): the compiler stamps Base ->
+    // External -> ElementDescription where retail's three inlined stores are
+    // and runs External() (retail inlines its three zero stores); the body is
+    // ONE body with the door `RtUiElementDescription_Ctor`.
+    ElementDescription() { InitFields(); }
+    // `??1ElementDescription@UI@@UEAA@XZ` (0x180116100). NON-VIRTUAL; the
+    // compiler restamps on entry and chains ~External (retail's tail JMP).
+    // ONE body with the door `RtUiElementDescription_Dtor`.
+    ~ElementDescription() { ReleaseFields(); }
 
 private:
+    void InitFields();      // +0x20..+0x67 stores of 0x180115a40 (dialog.cpp)
+    void ReleaseFields();   // the +0x60 String release of 0x180116100 (dialog.cpp)
+
     static const char* _TypeName();                               // 0x1800350b0 -> "ElementDescription"
     static const char* _ParentTypeName();                         // 0x1800350c0 -> "Object::External"
     static Object::BaseTypeInfo _typeInfo;                        // 0x1801faaf8 (minted)

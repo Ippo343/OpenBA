@@ -347,8 +347,9 @@ UNIT_TEST(ui_dialog_family_layout) {
     CHECK((std::is_base_of<UI::DialogInstance, UI::ToolTipDialog>::value));
     CHECK((!std::is_base_of<Object::External, UI::DialogInstance>::value));
 
-    // All six ABSTRACT (RULE B6-3).
-    CHECK(std::is_abstract<UI::DialogInstance>::value);
+    // ABSTRACT (RULE B6-3) — except DialogInstance, CONCRETE since ENDGAME
+    // B.3.8 block RB: the exe instantiates it (its table copy 0x14015f5a0).
+    CHECK(!std::is_abstract<UI::DialogInstance>::value);
     CHECK(std::is_abstract<UI::DialogController>::value);
     CHECK(std::is_abstract<UI::DialogControllerConfig>::value);
     CHECK(std::is_abstract<UI::Dialog>::value);
@@ -403,7 +404,8 @@ void DialogInstance::OnElementEvent(Object::InternalPtr<Element>* e, int32_t, in
     Note(this, 108); g_lastArg = e;
 }
 void DialogInstance::OnSerializeSettings(void*) { Note(this, 109); }
-DialogInstance::~DialogInstance() {}
+// ~DialogInstance is inline since ENDGAME B.3.8 block RB (its InitFields /
+// ReleaseFields markers are in rb_ui_abi_test.cpp).
 
 const char* DialogController::TypeName() const { Note(this, 201); return "DialogController"; }
 uint32_t    DialogController::Type() const { Note(this, 202); return 0u; }

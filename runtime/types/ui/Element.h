@@ -295,11 +295,11 @@ enum ElementFlag : uint32_t {
 // by the `??0Element` DOOR (element.cpp, `RtUi_Element_Ctor`) and wears the
 // MINTED table, which is why every door below delegates with a QUALIFIED call.
 //
-// NO REAL CONSTRUCTOR (B4b-2): the protected `= default` one exists only so a
-// probe subclass (tests/unit/ui_element_abi_test.cpp) and the two exe-side
-// subclasses of step 8 can derive. The destructor is protected, NON-virtual
-// (decision 2) and empty; `??1Element` stays the registered door
-// `RtUi_Element_Dtor`.
+// REAL CONSTRUCTOR AND DESTRUCTOR since ENDGAME B.3.8 block RB (B38_RULES D1,
+// RULE B8-1): protected, sharing ONE body each with the `??0Element` /
+// `??1Element` doors (`InitFields` / `ReleaseFields`), for the two exe-side
+// subclasses of step 8 (VIS). The destructor is NON-virtual (decision 2). The
+// exe never instantiates `UI::Element` itself, so slot 0 stays pure.
 //
 // TWO SLOTS THAT PASS OR RETURN A CLASS, AND WHY BOTH TAKE A POINTER:
 //   * slot 11 `GetBorder` returns `InternalPtr<Element>` BY VALUE through a
@@ -481,14 +481,31 @@ public:
     static uint32_t TypeId();                                     // 0x180035430  not ported
     static Object::Base* CreateNewObject();                       // 0x180035450  not ported
 
+    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
+    // D1): `RtUi_Element_Ctor` / `RtUi_Element_Dtor` (element.cpp) run the
+    // Internal ctor / dtor and stamp the MINTED table themselves, for the
+    // still-unconverted subclasses, then call these. Nothing else may.
+    struct DoorBody {
+        static void Init(Element* e)    { e->InitFields(); }
+        static void Release(Element* e) { e->ReleaseFields(); }
+    };
+
 protected:
-    // NOT retail's `??0Element@UI@@QEAA@XZ` (0x180115e50) — see the banner.
-    Element() = default;
-    // `??1Element@UI@@UEAA@XZ` (0x1801161a0). NON-VIRTUAL, defined EMPTY in
-    // element.cpp; the retail body is the registered door `RtUi_Element_Dtor`.
-    ~Element();
+    // `??0Element@UI@@QEAA@XZ` (0x180115e50) — the REAL constructor (ENDGAME
+    // B.3.8 block RB, RULE B8-1): the compiler stamps Base -> Internal ->
+    // Element where retail's `CALL ??0Internal` and `??_7Element` store are;
+    // the body is ONE body with the door `RtUi_Element_Ctor`.
+    Element() { InitFields(); }
+    // `??1Element@UI@@UEAA@XZ` (0x1801161a0). NON-VIRTUAL; the compiler
+    // restamps on entry and chains ~Array (a no-op on the header the body
+    // zeroes) and ~Internal (retail's tail JMP) after it. ONE body with the
+    // door `RtUi_Element_Dtor`.
+    ~Element() { ReleaseFields(); }
 
 private:
+    void InitFields();      // 0x180115e50 minus ??0Internal + vptr store (element.cpp)
+    void ReleaseFields();   // 0x1801161a0 minus restamp + ~Internal tail (element.cpp)
+
     static const char* _TypeName();                               // 0x180035400 -> "Element"
     static const char* _ParentTypeName();                         // 0x180035410 -> "Object::Internal"
     static Object::BaseTypeInfo _typeInfo;                        // 0x1801fab30 (minted)
