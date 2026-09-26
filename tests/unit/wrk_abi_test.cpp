@@ -28,6 +28,7 @@
 #include "Work/ClearArea.h"
 #include "Work/ClearStorage.h"
 #include "Work/ConsumeProduce.h"
+#include "Work/FireWork.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -172,6 +173,13 @@ UNIT_TEST(wrk_leaf_consumeproduce) {
     CHECK_EQ(offsetof(ConsumeProduce, field_68), (size_t)0x68);
     CHECK_EQ(offsetof(ConsumeProduce, field_70), (size_t)0x70);
     CHECK_EQ(offsetof(ConsumeProduce, field_74), (size_t)0x74);
+}
+
+UNIT_TEST(wrk_leaf_firework) {
+    WRK_LEAF_SHAPE(FireWork, Work, 0x60);
+    CHECK_EQ(offsetof(FireWork, _field48), (size_t)0x48);
+    CHECK_EQ(offsetof(FireWork, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(FireWork, _field58), (size_t)0x58);
 }
 
 // ===========================================================================
