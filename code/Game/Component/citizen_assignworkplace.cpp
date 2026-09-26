@@ -39,6 +39,7 @@
 #include <cstdint>
 #include <cstdlib>   // qsort
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 
 // ============================================================
 // Roster array record: storage+0x50 points at an array of these, indexed by
@@ -74,11 +75,6 @@ typedef void  (*fn_Audio2c60_t)(int64_t emData, uint32_t arg);      // 0x140042c
 // Runtime dispatch-slot signatures (Ghidra drops trailing args on indirect slot CALLs;
 // verified from the disassembly register setup).
 typedef char (*fn_Vec3Eq_t)(const void* a, const void* b);                             // slot a70
-typedef void (*fn_MoveEmitter_t)(void* scene, uint32_t id, const void* from, const void* to); // slot a00
-typedef void (*fn_SetVol_t)(void* scene, uint32_t id, const void* pos, float vol);     // slot a08
-typedef void (*fn_StopEffect_t)(void* scene, uint32_t id);                             // slot a10
-typedef int  (*fn_GetCount_t)(void* scene, uint32_t id);                               // slot a18
-typedef void (*fn_RemoveEmitter_t)(void* scene, uint32_t id, const void* pos);         // slot a20
 typedef void (*fn_GrowArray_t)(int64_t* arrayStruct, int newCount, void* elemIBP);     // 0x140003110
 
 fn_FindComp_t      s_fn_FindCompStorage = nullptr;  // 0x140008090 Entity_FindComponent_Storage
@@ -94,11 +90,6 @@ fn_Audio2c60_t     s_fn_42c60          = nullptr;    // 0x140042c60
 fn_GrowArray_t     s_fn_3110           = nullptr;    // 0x140003110
 
 fn_Vec3Eq_t        s_slot_Vec3Eq       = nullptr;    // 0x140152a70
-fn_MoveEmitter_t   s_slot_MoveEmitter  = nullptr;    // 0x140152a00
-fn_SetVol_t        s_slot_SetVol       = nullptr;    // 0x140152a08
-fn_StopEffect_t    s_slot_StopEffect   = nullptr;    // 0x140152a10
-fn_GetCount_t      s_slot_GetCount     = nullptr;    // 0x140152a18
-fn_RemoveEmitter_t s_slot_RemoveEmitter= nullptr;    // 0x140152a20
 
 const float* s_p_uvScale = nullptr;                  // g_fUVScale @ 0x14017214c
 
@@ -130,11 +121,6 @@ void EnsureFns() {
     s_fn_3110  = R<fn_GrowArray_t>(0x140003110);
 
     s_slot_Vec3Eq        = reinterpret_cast<fn_Vec3Eq_t>(RSlot(0x140152a70));
-    s_slot_MoveEmitter   = reinterpret_cast<fn_MoveEmitter_t>(RSlot(0x140152a00));
-    s_slot_SetVol        = reinterpret_cast<fn_SetVol_t>(RSlot(0x140152a08));
-    s_slot_StopEffect    = reinterpret_cast<fn_StopEffect_t>(RSlot(0x140152a10));
-    s_slot_GetCount      = reinterpret_cast<fn_GetCount_t>(RSlot(0x140152a18));
-    s_slot_RemoveEmitter = reinterpret_cast<fn_RemoveEmitter_t>(RSlot(0x140152a20));
 
     s_p_uvScale = R<const float*>(0x14017214c);
 }
@@ -265,9 +251,10 @@ extern "C" void CitizenComponent_helper_a550(int64_t storageComp, int slotIndex,
                 int64_t desc = *reinterpret_cast<int64_t*>(emData + 0x38);
                 uint32_t id = *reinterpret_cast<uint32_t*>(desc + 0x10);
                 const void* pos = reinterpret_cast<const void*>(emData + 0x28);
-                if (s_slot_RemoveEmitter) s_slot_RemoveEmitter(scene, id, pos);
-                int remaining = s_slot_GetCount ? s_slot_GetCount(scene, id) : 0;
-                if (remaining == 0 && s_slot_StopEffect) s_slot_StopEffect(scene, id);
+                reinterpret_cast<Audio::Scene*>(scene)->RemoveEmitter(
+                    id, *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
+                int remaining = reinterpret_cast<Audio::Scene*>(scene)->GetEmitterCount(id);   // B.3.7 bridge
+                if (remaining == 0) reinterpret_cast<Audio::Scene*>(scene)->StopEffect3D(id);   // B.3.7 bridge
                 *reinterpret_cast<uint32_t*>(desc + 0x10) = 0;
             }
         }
@@ -316,12 +303,15 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
             const void* emPos = reinterpret_cast<const void*>(emData + 0x28);
             char same = s_slot_Vec3Eq ? s_slot_Vec3Eq(pos, emPos) : 1;
             if (!same) {
-                if (scene && s_slot_MoveEmitter) {
+                if (scene) {
                     int nEm = *reinterpret_cast<int*>(emData + 0x40);
                     int64_t emArr = *reinterpret_cast<int64_t*>(emData + 0x38);
                     for (int i = 0; i < nEm; ++i) {
                         uint32_t id = *reinterpret_cast<uint32_t*>(emArr + static_cast<int64_t>(i) * 0x10);
-                        if (id != 0) s_slot_MoveEmitter(scene, id, emPos, pos);
+                        if (id != 0)
+                            reinterpret_cast<Audio::Scene*>(scene)->MoveEmitter(
+                                id, *reinterpret_cast<const Vector3*>(emPos),
+                                *reinterpret_cast<const Vector3*>(pos));   // B.3.7 bridge
                     }
                 }
                 *reinterpret_cast<float*>(emData + 0x28) = pos[0];
@@ -336,9 +326,10 @@ extern "C" void CitizenComponent_helper_a710(int64_t storageComp, int slotIndex,
                 float uv = s_p_uvScale ? *s_p_uvScale : 1.0f;
                 if (*reinterpret_cast<float*>(desc + 0x14) != uv) {
                     *reinterpret_cast<uint32_t*>(desc + 0x14) = 0x3f800000;  // 1.0f
-                    if (scene && s_slot_SetVol)
-                        s_slot_SetVol(scene, *reinterpret_cast<uint32_t*>(desc + 0x10),
-                                      reinterpret_cast<const void*>(emData + 0x28), uv);
+                    if (scene)
+                        reinterpret_cast<Audio::Scene*>(scene)->SetEmitterVolume(
+                            *reinterpret_cast<uint32_t*>(desc + 0x10),
+                            *reinterpret_cast<const Vector3*>(emData + 0x28), uv);   // B.3.7 bridge
                 }
             }
         }
