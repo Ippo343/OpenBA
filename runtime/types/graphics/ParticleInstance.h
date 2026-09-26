@@ -147,8 +147,27 @@ public:
     // redirect at the class-static conversion, the END of B.3, not in step 5.
     static void IncrementInstanceIndex();
 
+    // The ctor door's way onto the shared body (ENDGAME B.3.8 block RB).
+    struct DoorBody { static void Init(ParticleInstance* p) { p->InitFields(); } };
+
 protected:
-    ~ParticleInstance();     // 0x1801041f0  exported, not ported, no caller
+    // ??0ParticleInstance@Graphics@@QEAA@XZ  0x180104130 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1): Geometry() and the stamp are the
+    // compiler's; the three stores are ONE body with `RtGraphics_ParticleInstance_Ctor`.
+    ParticleInstance() { InitFields(); }
+    // ??1ParticleInstance@Graphics@@UEAA@XZ  0x1801041f0, retail whole:
+    //     LEA RAX,[??_7ParticleInstance] ; MOV [RCX],RAX ; CALL 0x1801040b0
+    //     (RemoveState) ; JMP 0x1800a41c0 (~Geometry)
+    // The restamp and the ~Geometry tail are the compiler's; the body is the
+    // call. No door exists for it (unported until ENDGAME B.3.8 block RB).
+    ~ParticleInstance() { RemoveState(); }
+
+private:
+    void InitFields() {
+        _resource  = nullptr;   // +0xc0
+        _boundsPtr = nullptr;   // +0xc8
+        _index     = -1;        // +0xd0  (+0xd4 not written)
+    }
 
 public:
     RtGraphics::ParticleResource*     _resource;   // +0xc0  null until attached

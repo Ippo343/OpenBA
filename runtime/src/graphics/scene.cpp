@@ -574,6 +574,22 @@ void DetachBody(::Graphics::Geometry* self, ::Graphics::Geometry* child) {
 extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
 
     self->_vtable            = RtGeometryVtable();
+    // ENDGAME B.3.8 block RB (RULE B8-1): the 46 field stores are ONE body
+    // with the real constructor `Graphics::Geometry()` — `InitFields`, below.
+    ::Graphics::Geometry::DoorBody::Init(reinterpret_cast<::Graphics::Geometry*>(self));   // B.3.8 bridge
+
+    return self;   // retail returns `this` in RAX
+}
+
+// ============================================================================
+// Graphics::Geometry::InitFields — ??0Geometry 0x1800a4270 after the vptr
+// store (ENDGAME B.3.8 block RB, RULE B8-1). Shared by `Geometry()`
+// (Geometry.h) and the door above. MOVED VERBATIM, through the field-identical
+// `RtGraphics::Geometry` POD view (cross-asserted in Geometry.h), in retail's
+// order; +0x14 and +0xbc stay unwritten.
+// ============================================================================
+void Graphics::Geometry::InitFields() {
+    Geometry* const self = reinterpret_cast<Geometry*>(this);   // B.3.8 bridge (the POD view)
     self->_attachParent      = nullptr;
     self->_attachNode        = -1;
     self->_attached._data    = nullptr;
@@ -622,8 +638,6 @@ extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
     self->_prevTransform.translation.x = 0.0f;
     self->_prevTransform.translation.y = 0.0f;
     self->_prevTransform.translation.z = 0.0f;
-
-    return self;   // retail returns `this` in RAX
 }
 
 // ============================================================================
@@ -663,10 +677,22 @@ extern "C" Geometry* RtGraphics_Geometry_Ctor(Geometry* self) {
 extern "C" void RtGraphics_Geometry_Dtor(Geometry* self) {
 
     self->_vtable = RtGeometryVtable();
-    while (self->_attached.GetSize() > 0)
-        DetachBody(reinterpret_cast<::Graphics::Geometry*>(self),                  // B.3.5 bridge
-                   reinterpret_cast<::Graphics::Geometry*>(self->_attached[0]));
-    self->_attached.~Array();          // retail 0x18001bf50, ~Geometry's tail call
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with the real destructor
+    // `Graphics::Geometry::~Geometry()` — `ReleaseFields`, below.
+    ::Graphics::Geometry::DoorBody::Release(reinterpret_cast<::Graphics::Geometry*>(self));   // B.3.8 bridge
+}
+
+// ============================================================================
+// Graphics::Geometry::ReleaseFields — ??1Geometry 0x1800a41c0 after the
+// restamp: detach every child (always element 0), then free the attach array
+// (retail 0x18001bf50, the ~Array tail call). ~Array's own body is spelled as
+// `ClearCallback` so that the real destructor's implicit ~Array after it is a
+// no-op on the zeroed header rather than a second lifetime end.
+// ============================================================================
+void Graphics::Geometry::ReleaseFields() {
+    while (_attached.GetSize() > 0)
+        DetachBody(this, _attached[0]);
+    decltype(_attached)::ClearCallback(reinterpret_cast<rtcoll::ArrayHdr*>(&_attached));
 
 }
 
