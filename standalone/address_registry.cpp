@@ -239,7 +239,6 @@ extern "C" {
     void RegisterPlacementToolVtable();
     void RegisterRemovalToolVtable();
     void RegisterRoadToolVtable();
-    void RegisterRotationSettingVtable();
 }
 
 // ============================================================
@@ -1999,7 +1998,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterPlacementToolVtable();
     RegisterRemovalToolVtable();
     RegisterRoadToolVtable();
-    RegisterRotationSettingVtable();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until
     // registered). The single-ExternalPtr variants are stream-identical to the
