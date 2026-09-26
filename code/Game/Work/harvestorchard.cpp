@@ -19,6 +19,7 @@
 //   Serialize (0x1400EDEA0), ScalarDtor body (0x1400EDF60)
 //
 
+#include "Work/HarvestOrchard.h"
 #include "Work/harvestorchard_funcs.h"
 #include "engine_funcs.h"
 #include "math/Math.h"
@@ -73,13 +74,11 @@ typedef void  (*HO_BST_Serialize_t)(void* treeRoot, void* serializer);
 typedef uint8_t (*HO_ValidateTask_t)(uintptr_t self, uintptr_t param2, void* ibp, void** outTask);
 typedef void  (*HO_TaskCancel_t)(void* taskList);
 typedef void* (*HO_FindPosComp_t)(uintptr_t entity, void* outIBP);
-typedef void  (*HO_Work_Serialize_t)(void* self, void* stream);
 // 0x14000a590 (Array<uint8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
 // GameColl::AsArray<GameColl::U8> member call, so its resolved-pointer stand-in
 // is gone.
 typedef void  (*HO_BST_RecursiveFree_t)(void* treeRoot, void* node);
-typedef void  (*HO_ObjectInternal_Dtor_t)(void* self);
 typedef void* (*HO_MemAlloc_t)(int64_t size, int align);
 
 static HO_AutoPickup_CheckAssignments_t s_fn_AutoPickup_CheckAssignments = nullptr;
@@ -100,9 +99,7 @@ static HO_BST_Serialize_t s_fn_BST_Serialize = nullptr;
 static HO_ValidateTask_t s_fn_ValidateTask = nullptr;
 static HO_TaskCancel_t s_fn_TaskCancel = nullptr;
 static HO_FindPosComp_t s_fn_FindPosComp = nullptr;
-static HO_Work_Serialize_t s_fn_Work_Serialize = nullptr;
 static HO_BST_RecursiveFree_t s_fn_BST_RecursiveFree = nullptr;
-static HO_ObjectInternal_Dtor_t s_fn_ObjectInternal_Dtor = nullptr;
 static HO_MemAlloc_t s_fn_MemAlloc = nullptr;
 static void* HO_MemAllocViaSingleton(int64_t size, int align) {
     return (fn_MemAlloc && g_pMemAllocSingleton) ? fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)size, align) : nullptr;
@@ -116,9 +113,6 @@ static uint32_t* s_typeId_DescComp = nullptr;      // DAT_1401c4288
 static float* s_fHalfCellOffset = nullptr;
 
 // Vtable pointers
-static void** s_vtable_HarvestOrchard = nullptr;
-static void** s_vtable_AutoPickupWork = nullptr;
-static void** s_vtable_Work = nullptr;
 
 static bool s_ho_funcs_resolved = false;
 
@@ -166,19 +160,8 @@ bool HarvestOrchard_ResolveFuncs() {
         ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_FindPosComp = reinterpret_cast<HO_FindPosComp_t>(
         ResolveAddr(Module::Exe, 0x140002e10));
-    s_fn_Work_Serialize = reinterpret_cast<HO_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_RecursiveFree = reinterpret_cast<HO_BST_RecursiveFree_t>(
         ResolveAddr(Module::Exe, 0x14000e320));
-    // Level-1 caller-bug fix: 0x14014e3a4 is MID-FUNCTION (inside Tool_StaticInit
-    // 0x14014e390) — a bad code address. The "ObjectInternal_Dtor" is the base
-    // Object::Internal::~Internal tail-called at the end of the HarvestOrchard dtor body
-    // (0x1400edf60). It is reached via the dispatch slot 0x140152770, exactly as the
-    // sibling HarvestArea resolves it (harvestarea.cpp). Resolve through the slot, not a
-    // code address.
-    uintptr_t iatInternalDtor = ResolveAddr(Module::Exe, 0x140152770);
-    if (iatInternalDtor)
-        s_fn_ObjectInternal_Dtor = *reinterpret_cast<HO_ObjectInternal_Dtor_t*>(iatInternalDtor);
 
     // Dispatch slot 0x140152780 is MISLABELED "MemAlloc" (it is Vector2::Max, see
     // reg_player_screenrect.cpp) and is deliberately left unregistered, so the old
@@ -198,7 +181,6 @@ bool HarvestOrchard_ResolveFuncs() {
     s_fHalfCellOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
 
     // Vtable pointers
-    s_vtable_HarvestOrchard = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161520));
     // ⚠ These two were 0x140161380 / 0x140161300, which are NOT vtables: the bytes there
     // read {0x140006b10, "ForesterWork\0"} and {0x140006b10, "FishingWork\0"} — the RTTI
     // type descriptors that sit 0x20 in front of those classes' real vtables. An adjacency
@@ -207,8 +189,6 @@ bool HarvestOrchard_ResolveFuncs() {
     // dtor chain. The real base vtables are 0x140160fa0 / 0x140161a80 — the values
     // AutoPickupWork.h has carried all along, byte-verified against retail Work_Ctor25
     // (0x1400f730a: LEA RAX,[0x140161a80]).
-    s_vtable_AutoPickupWork = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140160fa0));
-    s_vtable_Work = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140161a80));
 
     bool ok = s_fn_AutoPickup_CheckAssignments && s_fn_FindComp_MatDesc &&
               s_fn_FindComp_MeshInstance && s_fn_FindComp_OrchardDesc &&
@@ -219,11 +199,10 @@ bool HarvestOrchard_ResolveFuncs() {
               s_fn_FindComp_RawMaterial && s_fn_OrchardHarvest_Ctor &&
               s_fn_BST_Insert && s_fn_BST_Remove && s_fn_BST_Serialize &&
               s_fn_ValidateTask && s_fn_TaskCancel && s_fn_FindPosComp &&
-              s_fn_Work_Serialize && s_fn_BST_RecursiveFree &&
+              s_fn_BST_RecursiveFree &&
               fn_InternalBasePtr_Ctor &&
               fn_IsDerivedFrom && g_pGameWorldSingleton &&
-              s_typeId_OrchardDesc && s_typeId_DescComp && s_fHalfCellOffset &&
-              s_vtable_HarvestOrchard && s_vtable_AutoPickupWork && s_vtable_Work;
+              s_typeId_OrchardDesc && s_typeId_DescComp && s_fHalfCellOffset;
 
     s_ho_funcs_resolved = ok;
 
@@ -253,7 +232,6 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(s_fn_ValidateTask, "ValidateTask");
         HO_MISS(s_fn_TaskCancel, "TaskCancel");
         HO_MISS(s_fn_FindPosComp, "FindPosComp");
-        HO_MISS(s_fn_Work_Serialize, "Work_Serialize");
         HO_MISS(s_fn_BST_RecursiveFree, "BST_RecursiveFree");
         HO_MISS(fn_InternalBasePtr_Ctor, "fn_InternalBasePtr_Ctor");
         HO_MISS(fn_IsDerivedFrom, "fn_IsDerivedFrom");
@@ -261,9 +239,6 @@ bool HarvestOrchard_ResolveFuncs() {
         HO_MISS(s_typeId_OrchardDesc, "typeId_OrchardDesc (0x1401c46e8)");
         HO_MISS(s_typeId_DescComp, "typeId_DescComp (0x1401c4288)");
         HO_MISS(s_fHalfCellOffset, "fHalfCellOffset (0x140172114)");
-        HO_MISS(s_vtable_HarvestOrchard, "vtable_HarvestOrchard (0x140161520)");
-        HO_MISS(s_vtable_AutoPickupWork, "vtable_AutoPickupWork (0x140160fa0)");
-        HO_MISS(s_vtable_Work, "vtable_Work (0x140161a80)");
         #undef HO_MISS
     }
 #endif
@@ -302,9 +277,9 @@ static void* BST_Find(void* root, int key) {
 // - Passes raw material ref and material count to action constructor
 // - Orchard cell data at +0x50 with stride 0x28 (not +0x58 with stride 0x20)
 //
-int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HarvestOrchard::Execute(void* entityIBP, void* /*context*/, uint64_t /*arg3*/) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     uintptr_t citizenRef = *(uintptr_t*)entityIBP;
     void* citizenIBP = entityIBP;
@@ -511,11 +486,11 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
                                 int priority = (int)selfQ[4];
                                 uintptr_t citizenEnt = *(uintptr_t*)citizenIBP;
 
-                                uintptr_t vtable = *(uintptr_t*)self;
+                                uintptr_t vtable = *(uintptr_t*)this;
                                 typedef uintptr_t* (*GetWorkEntity_t)(HarvestOrchard*, void*);
                                 auto getWorkEntity = *(GetWorkEntity_t*)(vtable + 0x50);
                                 uintptr_t workEntIBP[2] = {0};
-                                uintptr_t* wResult = getWorkEntity(self, workEntIBP);
+                                uintptr_t* wResult = getWorkEntity(this, workEntIBP);
                                 uintptr_t workEnt = *wResult;
 
                                 *(uint32_t*)(citizenEnt + 0x54) |= 4;
@@ -571,9 +546,9 @@ int HarvestOrchard_Slot4_Impl(HarvestOrchard* self, void* entityIBP, uint64_t /*
 // distinct picked slot, `picked` stuck at 1/12, and state 11 could never reach its
 // `picked >= live` latch. The [OrchardGrow] harness corroborated it — exactly one of
 // twelve trees was repeatedly zeroed and re-ripened.
-int HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HarvestOrchard::OnComplete(void* /*param2*/, void* /*param3*/, int param4) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Search BST for key and remove if found
     int* node = (int*)selfQ[9];
@@ -599,9 +574,9 @@ int HarvestOrchard_Slot6_Impl(HarvestOrchard* self, void* /*param2*/, void* /*pa
 // The mirror of Slot6: same BST walk, but it DOES restore the validity byte, on both
 // the found and not-found exits (0x1400ed84d and 0x1400ed865). Cancelling a pick
 // returns that tree to the pool.
-int HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* /*param2*/, void* /*param3*/, int param4) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HarvestOrchard::OnCancel(void* /*param2*/, void* /*param3*/, int param4) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     // Search BST for key and remove if found
     int* node = (int*)selfQ[9];
@@ -626,8 +601,8 @@ int HarvestOrchard_Slot7_Impl(HarvestOrchard* self, void* /*param2*/, void* /*pa
 // ============================================================
 // HarvestOrchard::Slot8 -- CancelAll
 // ============================================================
-int HarvestOrchard_Slot8_Impl(HarvestOrchard* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int HarvestOrchard::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -652,9 +627,9 @@ int HarvestOrchard_Slot8_Impl(HarvestOrchard* self) {
 // ============================================================
 // Identical structure to HarvestArea::Slot9.
 // Hook DISABLED (bug class 2: MOV RAX,RSP in prologue).
-int HarvestOrchard_Slot9_Impl(HarvestOrchard* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    uintptr_t* selfQ = (uintptr_t*)self;
+int HarvestOrchard::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    uintptr_t* selfQ = (uintptr_t*)this;
 
     int* collectArray = nullptr;
     int* currentArray = nullptr;
@@ -769,8 +744,8 @@ cleanup:
 // ============================================================
 // HarvestOrchard::Slot10 -- GetWorkEntity
 // ============================================================
-void* HarvestOrchard_Slot10_Impl(HarvestOrchard* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* HarvestOrchard::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     uintptr_t entity = *(uintptr_t*)(selfAddr + 0x10);
 
@@ -786,10 +761,10 @@ void* HarvestOrchard_Slot10_Impl(HarvestOrchard* self, void* outPtr) {
 // ============================================================
 // HarvestOrchard::Serialize
 // ============================================================
-void HarvestOrchard_Serialize_Impl(HarvestOrchard* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void HarvestOrchard::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
-    s_fn_Work_Serialize(self, stream);
+    Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
     alignas(8) uint8_t serializerBuf[24];
     ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
@@ -834,10 +809,17 @@ void HarvestOrchard_Serialize_Impl(HarvestOrchard* self, void* stream) {
 // ============================================================
 // HarvestOrchard::ScalarDtor body
 // ============================================================
-void* HarvestOrchard_ScalarDtor_Impl(HarvestOrchard* self, uint32_t flags) {
-    uintptr_t selfAddr = (uintptr_t)self;
+// [0] slot 0: ~HarvestOrchard, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* HarvestOrchard::DeletingDtor(unsigned flags) {
+    this->~HarvestOrchard();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    *(void**)selfAddr = s_vtable_HarvestOrchard;
+// The HarvestOrchard / AutoPickupWork / Work stamps and the `~Internal` call are the
+// compiler's chain.
+HarvestOrchard::~HarvestOrchard() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     fn_MemFreeStatic(*(void**)(selfAddr + 0x58));
     *(uintptr_t*)(selfAddr + 0x58) = 0;
@@ -851,77 +833,53 @@ void* HarvestOrchard_ScalarDtor_Impl(HarvestOrchard* self, uint32_t flags) {
     }
     *(uintptr_t*)(selfAddr + 0x48) = 0;
     *(uint32_t*)(selfAddr + 0x50) = 0;
-
-    *(void**)selfAddr = s_vtable_AutoPickupWork;
-    *(void**)selfAddr = s_vtable_Work;
-    s_fn_ObjectInternal_Dtor((void*)selfAddr);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
 }
 
 
+
+// [11] 0x140029860 (shared by 13 tables): `+0x50 > 0` — "is anyone assigned". The
+// old table pointed at Work_Slot11_HasActiveTasks, the same body.
+int HarvestOrchard::GetPriority() {
+    return static_cast<int32_t>(_field50) > 0 ? 1 : 0;
+}
+
+// Ctor — the bytes the tree's factory built (Work_GenericCtor): the Work base init,
+// the leaf fields zeroed. The three stamps are the compiler's. HarvestOrchard_ResolveFuncs
+// wires the file's helper pointers (the old factory did the same).
+HarvestOrchard::HarvestOrchard()
+    : AutoPickupWork(), _field48(nullptr), _field50(0), _field58(nullptr), _field60(nullptr) {
+    HarvestOrchard_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — AutoPickupWork family (factory cascade).
-// Vtable @ 0x140161520 (13 slots), size 0x68, parent "AutoPickupWork".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// Slot map (this file's actual function names):
-//   slot0  ScalarDtor : HarvestOrchard_ScalarDtor_Impl
-//   slot3  Serialize  : HarvestOrchard_Serialize_Impl
-//   slot4  Execute    : HarvestOrchard_Slot4_Impl
-//   slot6  OnComplete : HarvestOrchard_Slot6_Impl
-//   slot7  OnCancel   : HarvestOrchard_Slot7_Impl
-//   slot8  Cleanup    : HarvestOrchard_Slot8_Impl
-//   slot9  Validate   : HarvestOrchard_Slot9_Impl
-//   slot10 GetTarget  : HarvestOrchard_Slot10_Impl
-//   slot11 GetPriority: FLAG — NO HarvestOrchard_Slot11_Impl in this file
-//   Ctor       : FLAG — NO HarvestOrchard_Ctor_Impl in this file -> factory null
-//   ResolveFuncs: HarvestOrchard_ResolveFuncs()
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_HarvestOrchard_Vtable` (slot 1 null, slot 2 a lazily
+// cached id) and REGISTER_TYPE over HarvestOrchard_Factory / _CreateInPlace (both
+// Work_GenericCtor + the orchard diagnostic's construction count). Nothing outside this
+// block reads 0x140161520 back (the from-entity ctor that stamped it is the real ctor
+// now), so its registration goes with the table.
+
+// create 0x14002a520: MemAlloc(sizeof, 8), then the ctor.
+void* HarvestOrchard::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(HarvestOrchard), 8);
+    if (!p) return nullptr;
+    Object::Base* r = new (p) HarvestOrchard();
+    OrchardDiag_NoteHarvestConstructed();
+    return r;
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* HarvestOrchard::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    Object::Base* r = new (storage) HarvestOrchard();
+    OrchardDiag_NoteHarvestConstructed();
+    return r;
+}
+
+DEFINE_EXE_VTABLE(HarvestOrchard, "_ZTV14HarvestOrchard")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t HarvestOrchard_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("HarvestOrchard");
-    return c;
-}
-
-static void* g_HarvestOrchard_Vtable[13] = {
-    (void*)&HarvestOrchard_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                      // +0x08 slot1 (null)
-    (void*)&HarvestOrchard_GetTypeId,        // +0x10 GetTypeId
-    (void*)&HarvestOrchard_Serialize_Impl,   // +0x18 Serialize
-    (void*)&HarvestOrchard_Slot4_Impl,       // +0x20 Execute
-    (void*)&Work_Slot5,                      // +0x28 slot5 (returns 0)
-    (void*)&HarvestOrchard_Slot6_Impl,       // +0x30 OnComplete
-    (void*)&HarvestOrchard_Slot7_Impl,       // +0x38 OnCancel
-    (void*)&HarvestOrchard_Slot8_Impl,       // +0x40 Cleanup
-    (void*)&HarvestOrchard_Slot9_Impl,       // +0x48 Validate
-    (void*)&HarvestOrchard_Slot10_Impl,      // +0x50 GetTarget
-    (void*)&Work_Slot11_HasActiveTasks,  // +0x58 slot11 (exe 0x140029860: self->+0x50 > 0 = "someone is working this"; was pinned to 0 by Work_SlotRet0)
-    (void*)&Work_Slot12,                     // +0x60 slot12 (void nop)
-};
-
-extern "C" void RegisterHarvestOrchardVtable() {
-    RegisterExeAddr(0x140161520, (uintptr_t)g_HarvestOrchard_Vtable);
-}
-extern "C" void* HarvestOrchard_CreateInPlace(void* mem) {
-    HarvestOrchard_ResolveFuncs();
-    void* r = Work_GenericCtor(mem, 0x68, g_HarvestOrchard_Vtable);
-    if (r) OrchardDiag_NoteHarvestConstructed();
-    return r;
-}
-extern "C" void* HarvestOrchard_Factory(void) {
-    HarvestOrchard_ResolveFuncs();
-    void* p = Work_Alloc(0x68);
-    void* r = p ? Work_GenericCtor(p, 0x68, g_HarvestOrchard_Vtable) : nullptr;
-    if (r) OrchardDiag_NoteHarvestConstructed();
-    return r;
-}
-REGISTER_TYPE(HarvestOrchard, "AutoPickupWork", &HarvestOrchard_Factory, &HarvestOrchard_CreateInPlace);
+DEFINE_EXE_TYPE(HarvestOrchard, "AutoPickupWork")

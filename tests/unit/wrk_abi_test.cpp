@@ -33,6 +33,7 @@
 #include "Work/ForesterWork.h"
 #include "Work/GatherRawMaterials.h"
 #include "Work/HarvestArea.h"
+#include "Work/HarvestOrchard.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -222,6 +223,14 @@ UNIT_TEST(wrk_leaf_harvestarea) {
     CHECK_EQ(offsetof(HarvestArea, _field50), (size_t)0x50);
     CHECK_EQ(offsetof(HarvestArea, _field58), (size_t)0x58);
     CHECK_EQ(offsetof(HarvestArea, _field60), (size_t)0x60);
+}
+
+UNIT_TEST(wrk_leaf_harvestorchard) {
+    WRK_LEAF_SHAPE(HarvestOrchard, AutoPickupWork, 0x68);
+    CHECK_EQ(offsetof(HarvestOrchard, _field48), (size_t)0x48);
+    CHECK_EQ(offsetof(HarvestOrchard, _field50), (size_t)0x50);
+    CHECK_EQ(offsetof(HarvestOrchard, _field58), (size_t)0x58);
+    CHECK_EQ(offsetof(HarvestOrchard, _field60), (size_t)0x60);
 }
 
 // ===========================================================================

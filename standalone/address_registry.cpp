@@ -206,7 +206,6 @@ extern "C" {
     void RegisterTradeWorkVtable();
     void RegisterForesterWorkVtable();
     void RegisterHarvestAreaVtable();
-    void RegisterHarvestOrchardVtable();
     void RegisterHerbalistWorkVtable();
     void RegisterHuntWorkVtable();
     void RegisterPastureWorkVtable();
@@ -1966,7 +1965,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTradeWorkVtable();
     RegisterForesterWorkVtable();
     RegisterHarvestAreaVtable();
-    RegisterHarvestOrchardVtable();
     RegisterHerbalistWorkVtable();
     RegisterHuntWorkVtable();
     RegisterPastureWorkVtable();
