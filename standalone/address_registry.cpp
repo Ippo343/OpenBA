@@ -1721,6 +1721,18 @@ static void* NoiseUIImgBuf_VtblStub_ReturnNull(void* /*self*/, ...) {
     return nullptr;
 }
 
+// ENDGAME B.3.8 DLG, D9 #12: slot [0] is retail 0x1400129d0, a SCALAR DELETING
+// dtor: `~ImageBuffer` (import [0x140151a78]), then MemFree(this) when flags & 1,
+// and return this. This table used to hold the complete dtor `??1` itself, so a
+// deleting call (Game_ImageCaptureDtor, the ExternalPtr release) never freed the
+// 0x68-byte MemAlloc block. Every builder of this copy allocates with MemAlloc.
+static fn_ImgBuf_Dtor_StandaloneVt_t s_NoiseUIImgBuf_CompleteDtor = nullptr;
+static void* NoiseUIImgBuf_ScalarDeletingDtor(void* self, unsigned flags) {
+    s_NoiseUIImgBuf_CompleteDtor(self);
+    if (flags & 1) fn_MemFreeStatic(self);
+    return self;
+}
+
 extern "C" void RegisterNoiseUIImageBufferVtable() {
     // Resolve slot [0] = ImageBuffer destructor.
     fn_ImgBuf_Dtor_StandaloneVt_t fnDtor =
@@ -1736,7 +1748,9 @@ extern "C" void RegisterNoiseUIImageBufferVtable() {
         reinterpret_cast<fn_ImgBuf_Create_StandaloneVt_t>(
             ResolveExport("?Create@ImageBuffer@Video@@UEAA_NW4ImageType@12@W4Usage@12@W4Format@12@IHHW4FilterMode@12@W4AddressMode@12@44PEAV?$Array@V?$Array@E@Collection@@@Collection@@@Z"));
 
-    g_NoiseUI_ImageBufferVtable_Standalone[0] = reinterpret_cast<void*>(fnDtor);
+    s_NoiseUIImgBuf_CompleteDtor = fnDtor;
+    g_NoiseUI_ImageBufferVtable_Standalone[0] =
+        fnDtor ? reinterpret_cast<void*>(&NoiseUIImgBuf_ScalarDeletingDtor) : nullptr;
     g_NoiseUI_ImageBufferVtable_Standalone[1] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
     g_NoiseUI_ImageBufferVtable_Standalone[2] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
     g_NoiseUI_ImageBufferVtable_Standalone[3] = reinterpret_cast<void*>(&NoiseUIImgBuf_VtblStub_ReturnNull);
