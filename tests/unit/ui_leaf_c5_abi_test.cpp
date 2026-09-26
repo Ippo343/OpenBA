@@ -37,6 +37,8 @@
 #include "runtime/types/ui/ProgressElement.h"
 #include "runtime/types/ui/SpinnerDescription.h"
 #include "runtime/types/ui/SpinnerElement.h"
+#include "runtime/types/ui/SliderDescription.h"
+#include "runtime/types/ui/SliderElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -61,6 +63,7 @@ enum Cls : int {
     kGraphD, kGraphE,
     kProgressD, kProgressE,
     kSpinnerD, kSpinnerE,
+    kSliderD, kSliderE,
 };
 const void* g_self = nullptr;
 int         g_cls  = kNone;
@@ -397,4 +400,44 @@ UNIT_TEST(ui_c5_spinner_slots) {
     CheckElementSlots(&e, kSpinnerE, kOwn4567);    // Update overridden
     CheckUpdateTakesHandleAddress(&e, kSpinnerE);
     e.SetIncrement(5); CHECK_EQ(e._increment, 5);   // 0x1800d7d30
+}
+
+// ===========================================================================
+// Slider — the Element OVERRIDES slot 7 Update
+// ===========================================================================
+C5_DESCRIPTION_MARKERS(SliderDescription, kSliderD)
+C5_ELEMENT_MARKERS(SliderElement, kSliderE)
+C5_ELEMENT_UPDATE_MARKER(SliderElement, kSliderE)
+
+namespace {
+struct SliderDescriptionProbe final : UI::SliderDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct SliderElementProbe final : UI::SliderElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+}  // namespace
+
+UNIT_TEST(ui_c5_slider_layout) {
+    CheckShape<UI::SliderDescription, UI::ElementDescription>(0xb8);   // 0x180049c60
+    CheckShape<UI::SliderElement, UI::Element>(0x130);                 // 0x18004a180
+    CHECK_EQ(offsetof(UI::SliderDescription, _childDescription), sizeof(UI::ElementDescription));
+    CHECK_EQ(offsetof(UI::SliderDescription, _steps), (size_t)0xb0);
+    CHECK_EQ(offsetof(UI::SliderElement, _trackStart), sizeof(UI::Element));
+    CHECK_EQ(offsetof(UI::SliderElement, _value), (size_t)UI::SliderElementOffsets::kValue);
+}
+
+UNIT_TEST(ui_c5_slider_slots) {
+    SliderDescriptionProbe d;
+    CheckDescriptionSlots(&d, kSliderD);
+    CheckCreateInstanceRetslot(&d);
+
+    FactoryScope scope;
+    SliderElementProbe e{};
+    CheckElementSlots(&e, kSliderE, kOwn4567);     // Update overridden
+    CheckUpdateTakesHandleAddress(&e, kSliderE);
+    e.SetMinimumValue(-1.0f); CHECK(e._minimum == -1.0f);   // 0x180049ea0
+    e.SetMaximumValue(3.0f);  CHECK(e._maximum == 3.0f);    // 0x180049eb0
+    e.SetCurrentValue(0.5f);  CHECK(e._value == 0.5f);      // 0x180049ec0
+    CHECK(e.GetCurrentValue() == 0.5f);                     // 0x180049ed0
 }
