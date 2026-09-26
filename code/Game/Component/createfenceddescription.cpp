@@ -27,117 +27,89 @@
 //
 // Field knowledge harvested from engine/reimpl/createfenceddescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (CreateFencedDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401591a0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/CreateFencedDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kCreateFencedDescriptionVtable = 0x1401591a0;
-
-// The enum field, through the UINT door. `serializer + 8` was never an
-// "encoding": it is the READERWRITER (`IO::Serializer::_readerWriter`), and
-// vtable +0x98 is rw_vtbl::kScalarUInt. `extra` landed in R8, the register
-// retail's own `XOR R8D,R8D` fills with the ignored `const char* name`; the
-// sole call site passes 0, so `nullptr` is wire- AND register-identical.
-// The parameter is kept so the call site is untouched.
-static inline void FencedEncodingVCall3(void* serializer, void* field, int extra) {
-    (void)extra;
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<unsigned int*>(field), nullptr);   // B.3.4 bridge  (0x98 = uint door)
+// ctor (inlined into create 0x1400048e0 / createInPlace 0x140004920):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+CreateFencedDescription::CreateFencedDescription()
+    : Description(),
+      _u20(0),
+      _i58(0),
+      _i5c(0),
+      _i60(0),
+      _i64(0),
+      _b68(false),
+      _ref70(nullptr) {
+    for (void*& r : _refs) r = nullptr;
 }
 
-static void CreateFencedDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kCreateFencedDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint32_t*)(s + 0x20) = 0;   // enum
-    for (int off = 0x28; off <= 0x50; off += 8) *(uint64_t*)(s + off) = 0; // ExtPtr[6]
-    *(uint32_t*)(s + 0x58) = 0;
-    *(uint32_t*)(s + 0x5c) = 0;
-    *(uint32_t*)(s + 0x60) = 0;
-    *(uint32_t*)(s + 0x64) = 0;
-    *(uint8_t*) (s + 0x68) = 0;   // bool
-    *(uint64_t*)(s + 0x70) = 0;   // ExternalPtr
+// [0] 0x140004960: ~CreateFencedDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* CreateFencedDescription::DeletingDtor(unsigned flags) {
+    this->~CreateFencedDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void CreateFencedDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalRefArray_Serialize || !fn_ExternalPtr_BuildSerialize) {
-        return;
-    }
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    FencedEncodingVCall3(serializer, s + 0x20, 0);                  // enum +0x20
-    fn_ExternalRefArray_Serialize(serializer, 6, s + 0x28, nullptr);// ExtPtr[6] +0x28
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x58), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x5c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x60), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x64), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x68), nullptr);   // B.3.4 bridge
-    fn_ExternalPtr_BuildSerialize(s + 0x70, serializer);          // ExtPtr +0x70
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x1400478f0: stream order as retail.
+bool CreateFencedDescription::Serialize(void* stream) {
+    if (!fn_ExternalRefArray_Serialize || !fn_ExternalPtr_BuildSerialize) return true;   // standalone: unwired doors
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_u20, nullptr);
+    fn_ExternalRefArray_Serialize(&ser, 6, _refs, nullptr);   // ExtPtr[6] +0x28 (0x1400049c0)
+    ser.Serialize(_i58, nullptr);
+    ser.Serialize(_i5c, nullptr);
+    ser.Serialize(_i60, nullptr);
+    ser.Serialize(_i64, nullptr);
+    ser.Serialize(_b68, nullptr);
+    fn_ExternalPtr_BuildSerialize(&_ref70, &ser);
+    return true;
 }
 
-void* CreateFencedDescription_Dtor(void* self, uint32_t flags) {
-    uintptr_t vt = ResolveAddr(Module::Exe, kCreateFencedDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140004930 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* CreateFencedDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void CreateFencedDescription::Destruct() {}
+
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* CreateFencedDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
 }
 
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t CreateFencedDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("CreateFencedDescription");
-    return cached;
+// [9] 0x140004920: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* CreateFencedDescription::Construct() {
+    return new (static_cast<void*>(this)) CreateFencedDescription();
 }
 
-static int   CreateFencedDescription_VtblStub_Return3(void* /*self*/) { return 3; } // GetVersion
-static int   CreateFencedDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* CreateFencedDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* CreateFencedDescription_CreateInPlace(void* memory);
-
-static void* g_CreateFencedDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&CreateFencedDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&CreateFencedDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&CreateFencedDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&CreateFencedDescription_VtblStub_Return3),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&CreateFencedDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&CreateFencedDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&CreateFencedDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&CreateFencedDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&CreateFencedDescription_VtblStub_ReturnNull),// +0x40 Slot8
-    reinterpret_cast<void*>(&CreateFencedDescription_CreateInPlace),      // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&CreateFencedDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterCreateFencedDescriptionVtable() {
-    RegisterExeAddr(kCreateFencedDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_CreateFencedDescription_Vtable));
-}
-
-extern "C" void* CreateFencedDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x78, 8);
+// create 0x1400048e0: MemAlloc(0x78, 8), then the (inlined) ctor.
+void* CreateFencedDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(CreateFencedDescription), 8);
     if (!p) return nullptr;
-    CreateFencedDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) CreateFencedDescription());
+}
+// createInPlace 0x140004920.
+void* CreateFencedDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CreateFencedDescription());
 }
 
-static void* CreateFencedDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    CreateFencedDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(CreateFencedDescription, "Description",
-              &CreateFencedDescription_Factory, &CreateFencedDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(CreateFencedDescription, "_ZTV23CreateFencedDescription")
+DEFINE_EXE_TYPE(CreateFencedDescription, "Description")

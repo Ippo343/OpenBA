@@ -79,9 +79,6 @@ extern "C" {
     // M5 5c Foundation C — entity description types (template sub-descriptions).
     void RegisterComponentDescriptionVtable();
     void RegisterBuildDescriptionVtable();
-    void RegisterWorkDescriptionVtable();
-    void RegisterCreatePlacedDescriptionVtable();
-    void RegisterCreateDragDescriptionVtable();
     void RegisterUIDescriptionVtable();
     void RegisterToolbarDescriptionVtable();
     void RegisterAmbientEmitterDescriptionVtable();
@@ -100,10 +97,6 @@ extern "C" {
     void RegisterAmbientEnvironmentDescriptionVtable();
     void RegisterCaptureBoxDescriptionVtable();
     void RegisterConsumeProduceDescriptionVtable();
-    void RegisterCreateBridgeDescriptionVtable();
-    void RegisterCreateFencedDescriptionVtable();
-    void RegisterCreateRemovalDescriptionVtable();
-    void RegisterCreateRoadDescriptionVtable();
     void RegisterEnvironmentDescriptionVtable();
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
@@ -111,8 +104,6 @@ extern "C" {
     void RegisterFrustumOutlineDescriptionVtable();
     void RegisterImmigrationDescriptionVtable();
     void RegisterRawMaterialDescriptionVtable();
-    void RegisterSelectDescriptionVtable();
-    void RegisterSpawnDescriptionVtable();
     void RegisterTradeDescriptionVtable();
     void RegisterWellDescriptionVtable();
     void RegisterAnimAudioEventVtable();
@@ -1770,9 +1761,6 @@ static void RegisterVtablesAndTypeIds() {
     // <type>.cpp; their NullFactory stubs were removed from factory_registrations_bulk.
     RegisterComponentDescriptionVtable();
     RegisterBuildDescriptionVtable();
-    RegisterWorkDescriptionVtable();
-    RegisterCreatePlacedDescriptionVtable();
-    RegisterCreateDragDescriptionVtable();
     RegisterUIDescriptionVtable();
     RegisterToolbarDescriptionVtable();
     RegisterAmbientEmitterDescriptionVtable();
@@ -1791,18 +1779,12 @@ static void RegisterVtablesAndTypeIds() {
     RegisterAmbientEnvironmentDescriptionVtable();
     RegisterCaptureBoxDescriptionVtable();
     RegisterConsumeProduceDescriptionVtable();
-    RegisterCreateBridgeDescriptionVtable();
-    RegisterCreateFencedDescriptionVtable();
-    RegisterCreateRemovalDescriptionVtable();
-    RegisterCreateRoadDescriptionVtable();
     RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireComponentVtable();
     RegisterFrustumOutlineDescriptionVtable();
     RegisterImmigrationDescriptionVtable();
     RegisterRawMaterialDescriptionVtable();
-    RegisterSelectDescriptionVtable();
-    RegisterSpawnDescriptionVtable();
     RegisterTradeDescriptionVtable();
     RegisterWellDescriptionVtable();
 

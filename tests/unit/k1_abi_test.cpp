@@ -71,6 +71,15 @@
 #include "Component/StatusIconDescription.h"
 #include "Component/RadiusDescription.h"
 #include "Component/ValueDescription.h"
+#include "Component/SpawnDescription.h"
+#include "Component/WorkDescription.h"
+#include "Component/SelectDescription.h"
+#include "Component/CreateRoadDescription.h"
+#include "Component/CreateBridgeDescription.h"
+#include "Component/CreateDragDescription.h"
+#include "Component/CreateFencedDescription.h"
+#include "Component/CreatePlacedDescription.h"
+#include "Component/CreateRemovalDescription.h"
 
 namespace {
 
@@ -166,6 +175,18 @@ UNIT_TEST(k1_array_and_string_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<StatusIconDescription>(0x38), 0);
     CHECK_EQ(CheckDescriptionLeaf<RadiusDescription>(0x30), 0);
     CHECK_EQ(CheckDescriptionLeaf<ValueDescription>(0x50), 0);
+}
+
+UNIT_TEST(k1_tool_and_work_description_leaves) {
+    CHECK_EQ(CheckDescriptionLeaf<SpawnDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<WorkDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<SelectDescription>(0x48), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CreateRoadDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CreateBridgeDescription>(0x60), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CreateDragDescription>(0x40), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CreateFencedDescription>(0x78), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CreatePlacedDescription>(0x58), 0);
+    CHECK_EQ(CheckDescriptionLeaf<CreateRemovalDescription>(0x48), 0);
 }
 
 }  // namespace
