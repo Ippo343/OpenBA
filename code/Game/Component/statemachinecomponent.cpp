@@ -32,131 +32,36 @@
 // Locally resolved function pointers
 // ============================================================
 
-// StateMachine_Tick(stateMachine*, Time, bool processTransitions, bool processActions)
-// Located at 0x1400a9660 in Application-x64.exe
-typedef void (*fn_StateMachine_Tick_t)(void* stateMachine, int64_t deltaTime, char param3, char param4);
-static fn_StateMachine_Tick_t s_fn_Tick = nullptr;
+// StateMachine::Tick (0x1400a9660) is StateMachine_TickReimpl below — the address
+// is registered to it (reg_component_economy.cpp), so the members call it
+// directly instead of through a lazily resolved pointer (B38 D7 / B6-5).
+void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4);
 
-// Component_Serialize(this, Stream*) -- Component base serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
-// System::Time::Time(retval, float) -- construct Time from float
-// Already in engine_funcs as fn_Time_Ctor_Float
-
-// Object::Internal::~Internal -- already in engine_funcs as fn_ObjectInternal_Dtor
-
-// ControllerComponent type ID at 0x1401c73c0 (filled at runtime by RegisterType)
+// ControllerComponent type ID at 0x1401c73c0 (filled at runtime by RegisterType).
+// Read only by the two reference ports below that no slot installs
+// (StateMachineComponent_Serialize, StateMachineComponent_OnUpdate2).
 static uint32_t* s_TypeId_ControllerComponent = nullptr;
-
-// StateMachineComponent vtable address (for dtor vtable restoration)
-static void* s_vtable_SMC = nullptr;
-// Purecall vtable for controller sub-object (0x14015f070)
-static void* s_vtable_purecall = nullptr;
-// Component base vtable (0x140162920)
-static void* s_vtable_ComponentBase = nullptr;
-// StateMachineComponent type ID at 0x1401c7d98
-static uint32_t* s_TypeId_SMC = nullptr;
-
 static bool s_resolved = false;
 
 // ============================================================
-// Resolve helpers (call once from Install)
+// Resolve helpers — for the two uninstalled reference ports only.
 // ============================================================
-// Defined below the factory macro (it writes into the macro-generated LiveVtable).
-static void StateMachineComponent_InstallTreeTickSlot();
-
 void StateMachineComponent_ResolveHelpers() {
-    // Idempotent and self-guarded; sits ahead of the s_resolved early-out so the slot is
-    // installed on the very first entry from ANY of the four call sites.
-    StateMachineComponent_InstallTreeTickSlot();
     if (s_resolved) return;
-
-    s_fn_Tick = reinterpret_cast<fn_StateMachine_Tick_t>(
-        ResolveAddr(Module::Exe, 0x1400a9660));
-
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     s_TypeId_ControllerComponent = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c73c0));
-
-    s_TypeId_SMC = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x1401c7d98));
-
-    s_vtable_SMC = reinterpret_cast<void*>(
-        ResolveAddr(Module::Exe, 0x140164520));
-
-    s_vtable_purecall = reinterpret_cast<void*>(
-        ResolveAddr(Module::Exe, 0x14015f070));
-
-    s_vtable_ComponentBase = reinterpret_cast<void*>(
-        ResolveAddr(Module::Exe, 0x140162920));
-
     s_resolved = true;
-
-#ifdef _DEBUG
-    printf("[SMC] Helpers resolved: Tick=%p CompSerialize=%p "
-           "TypeCtrl=%p TypeSMC=%p\n",
-           (void*)s_fn_Tick, (void*)s_fn_Component_Serialize,
-           (void*)s_TypeId_ControllerComponent, (void*)s_TypeId_SMC);
-#endif
-}
-
-// ============================================================
-// ScalarDtor (vtable slot [0], 0x1400384a0)
-// ============================================================
-void* StateMachineComponent_ScalarDtor(StateMachineComponent* self, uint32_t flags) {
-    // Restore vtables in destruction order: SMC -> purecall -> Component base
-    self->vtable = s_vtable_SMC;
-
-    uint8_t* base = reinterpret_cast<uint8_t*>(self);
-    // Controller sub-object at +0x28 gets purecall vtable
-    *reinterpret_cast<void**>(base + 0x28) = s_vtable_purecall;
-    // Then set to Component base vtable
-    self->vtable = s_vtable_ComponentBase;
-
-    // Call Object::Internal::~Internal
-    if (fn_ObjectInternal_Dtor) {
-        fn_ObjectInternal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
-}
-
-// ============================================================
-// Startup/GetType (vtable slot [2], 0x1400382b0)
-// ============================================================
-uint32_t StateMachineComponent_Startup(StateMachineComponent* /*self*/) {
-    // Returns the registered type ID for StateMachineComponent.
-    // This is filled at runtime by RegisterType.
-    if (s_TypeId_SMC)
-        return *s_TypeId_SMC;
-    return 0;
 }
 
 // ============================================================
 // Shutdown (vtable slot [3], 0x14012b940)
 // ============================================================
 void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream) {
-    // Resolve BEFORE the null-guards below. On the load-from-save path this is
-    // the FIRST StateMachineComponent call in the process — without this, every
-    // s_fn_* was still null, the guards skipped all reads, and the stream
-    // desynced right after the SM payload (the save side had resolved long
-    // before via the tick path and wrote base+4 bytes). Save/load wave 2026-08-28.
-    StateMachineComponent_ResolveHelpers();
-
-    // Call Component base serialize first
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
+    // Component::Persist first (0x1401189b0, a direct call in retail too). It
+    // used to go through a lazily resolved pointer whose null state desynced the
+    // stream on the load path (save/load wave 2026-08-28); the qualified member
+    // call has no such state.
+    self->Component::Persist(stream);
 
     // Create IO::Serializer with version 0
     alignas(8) uint8_t serializer[24]; // IO::Serializer is 24 bytes (stack local)
@@ -184,6 +89,7 @@ void StateMachineComponent_Shutdown(StateMachineComponent* self, void* stream) {
 // because its linker runs at component creation, when +0x52 is factory-zero).
 // ============================================================
 void StateMachineComponent_Serialize(StateMachineComponent* self) {
+    StateMachineComponent_ResolveHelpers();
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
     // Controller sub-object pointer (linked list tail tracker)
     uint8_t* controllerNode = base + 0x28; // starts at controller sub-object
@@ -269,7 +175,6 @@ void StateMachineComponent_Serialize(StateMachineComponent* self) {
 // Draw (vtable slot [6], 0x14012b660)
 // ============================================================
 void StateMachineComponent_Draw(StateMachineComponent* self) {
-    if (!s_fn_Tick) return;
 
     // Construct Time(0.0) on stack
     int64_t zeroTime = 0;
@@ -278,27 +183,25 @@ void StateMachineComponent_Draw(StateMachineComponent* self) {
     }
 
     // StateMachine_Tick(&controllerSelf, zeroTime, false, false)
-    s_fn_Tick(&self->controllerSelf, zeroTime, 0, 0);
+    StateMachine_TickReimpl(&self->controllerSelf, zeroTime, 0, 0);
 }
 
 // ============================================================
 // OnRemove (vtable slot [8], 0x14012b640)
 // ============================================================
 void StateMachineComponent_OnRemove(StateMachineComponent* self, int64_t deltaTime) {
-    if (!s_fn_Tick) return;
 
     // StateMachine_Tick(&controllerSelf, deltaTime, false, true)
-    s_fn_Tick(&self->controllerSelf, deltaTime, 0, 1);
+    StateMachine_TickReimpl(&self->controllerSelf, deltaTime, 0, 1);
 }
 
 // ============================================================
 // Update (vtable slot [9], 0x14012b620)
 // ============================================================
 void StateMachineComponent_Update(StateMachineComponent* self, int64_t deltaTime) {
-    if (!s_fn_Tick) return;
 
     // StateMachine_Tick(&controllerSelf, deltaTime, true, true)
-    s_fn_Tick(&self->controllerSelf, deltaTime, 1, 1);
+    StateMachine_TickReimpl(&self->controllerSelf, deltaTime, 1, 1);
 }
 
 // ============================================================
@@ -307,6 +210,7 @@ void StateMachineComponent_Update(StateMachineComponent* self, int64_t deltaTime
 // the state machine linked list to dispatch a virtual call.
 // ============================================================
 void StateMachineComponent_OnUpdate2(StateMachineComponent* self) {
+    StateMachineComponent_ResolveHelpers();
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
     uint8_t* controllerNode = base + 0x28;
 
@@ -490,11 +394,20 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) 
     } while (*(char*)((uintptr_t)sm + 10) >= 0);
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x58 (StateMachineComponent_Factory MemAlloc), flags 0xcd (Ctor
-// 0x14012ba30: Component base sets +0x20=0x80, leaf OR 0xcd => 0xcd).
+// ============================================================================
+// ENDGAME B.3.8 VIS — StateMachineComponent as a REAL class
+// (StateMachineComponent.h).
+//
+// Before: a 48-slot StateMachineComponent_LiveVtable filled per create (slot 8
+// patched in on the first SM call of the process), Inert_ScalarDtor in slot 0,
+// the root node's vptr a 16-entry all-zero stub table stamped by BodyInit.
+// After: the compiler's 16-slot vtable, a real ctor/dtor chain (B38_RULES D1,
+// D2) and the root node as a real member (D6) whose 9 slots answer 0 like the
+// stub did. The LAZY body-init shape below is kept (the ctor leaves +0x48 null
+// and the state quad 0 exactly as the old zero-filling factory did; see the ctor).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/StateMachineComponent.h"
 #include <cstdlib>
 #include <cstring>
 
@@ -521,14 +434,6 @@ void StateMachine_TickReimpl(void* smP, int64_t time, char param3, char param4) 
 // the autostart sim. Default (env off) => fully inert => byte-unchanged run.
 // ------------------------------------------------------------------
 
-// Safe-stub secondary controller-node vtable. The real one (0x1401644d0) points
-// at exe code that is unmapped in standalone; the guard means Tick never derefs
-// this in the current build, but a stub whose Step (slot 0) returns 0 (>=0, so
-// Tick's `while (c<0)` parent-walk is skipped) keeps a future empty-chain tick
-// safe too (vs. the real Step's crashing -1 on an empty state-type table).
-static int64_t SM_StubSecondaryVirtual(void*) { return 0; }
-static void* s_smStubSecondaryVtable[16];
-
 // Recipe step 2 (body-init), routed to slot +0x20 (StartupComponents dispatch).
 // Faithful field init from the ctor 0x14012ba30 (idempotent). Component base +
 // flags(0xcd) are already set by the inert factory; this adds the SM-specific
@@ -537,18 +442,10 @@ static void StateMachineComponent_BodyInit(StateMachineComponent* self) {
     if (!self) return;
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
 
-    // Fill the stub secondary vtable once.
-    if (s_smStubSecondaryVtable[0] == nullptr) {
-        for (int i = 0; i < 16; ++i)
-            s_smStubSecondaryVtable[i] =
-                reinterpret_cast<void*>(&SM_StubSecondaryVirtual);
-    }
-
-    // +0x28 controller sub-object vtable, +0x30/+0x38 zeroed children,
-    // +0x40 ownerComponent = self, +0x48 controllerSelf = self+0x28,
+    // +0x28 root node: its vptr is the member's compiler table, stamped by the
+    // ctor (the old stamp of a stub table here is gone); +0x30/+0x38 zeroed
+    // children, +0x40 ownerComponent = self, +0x48 controllerSelf = self+0x28,
     // +0x50 stateFlags = 0xFF00FFFF.
-    *reinterpret_cast<void**>(base + 0x28) =
-        reinterpret_cast<void*>(s_smStubSecondaryVtable);
     *reinterpret_cast<uint64_t*>(base + 0x30) = 0;
     *reinterpret_cast<uint64_t*>(base + 0x38) = 0;
     *reinterpret_cast<void**>(base + 0x40) = self;
@@ -756,10 +653,6 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
     if (!self) return;
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
 
-    // Resolve s_fn_Tick (StateMachine::Tick @0x1400a9660 -> our reimpl). Do it here
-    // (idempotent). Without it s_fn_Tick stays null and Update is a silent no-op.
-    StateMachineComponent_ResolveHelpers();
-
     // Belt-and-suspenders body-init if StartupComponents did not dispatch +0x20.
     if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
         StateMachineComponent_BodyInit(self);
@@ -800,11 +693,9 @@ static void StateMachineComponent_UpdateAdapter(StateMachineComponent* self,
 // 2026-07-20 stockpile regression turned on, so it does not go live independently.
 static void StateMachineComponent_StartupSlot(StateMachineComponent* self) {
     if (!self) return;
-    StateMachineComponent_InstallTreeTickSlot();
     StateMachineComponent_BodyInit(self);
     if (
         *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x38) == nullptr) {
-        StateMachineComponent_ResolveHelpers();
         StateMachineComponent_LinkControllers_Standalone(self);
     }
 }
@@ -823,7 +714,6 @@ static void StateMachineComponent_StartupSlot(StateMachineComponent* self) {
 static void StateMachineComponent_OnAddedSlot(StateMachineComponent* self) {
     if (!self) return;
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
-    StateMachineComponent_ResolveHelpers();
     if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
         StateMachineComponent_BodyInit(self);
     if (*reinterpret_cast<void**>(base + 0x38) == nullptr)
@@ -832,64 +722,6 @@ static void StateMachineComponent_OnAddedSlot(StateMachineComponent* self) {
     // parent-walk through the bare root's Step(-1).
     if (*reinterpret_cast<void**>(base + 0x38) == nullptr) return;
     StateMachineComponent_Draw(self);   // Tick(sm, Time(0.0f), 0, 0)
-}
-
-// COMPONENT_LIVE_FACTORY_SOA(StateMachineComponent, 0x58, 0xcd,
-//                            "BANISHED_LIVE_STATEMACHINE",
-//                            StateMachineComponent_UpdateAdapter,
-//                            StateMachineComponent_StartupSlot,
-//                            "BANISHED_LIVE_SM_ONADDED",
-//                            StateMachineComponent_OnAddedSlot)
-// hand-expanded (save/load wave 2026-08-27) to ALSO wire slot 3 (Shutdown/Serialize,
-// 0x14012b940) UNCONDITIONALLY — StateMachineComponent_Shutdown has been ported in this
-// file since the state-machine wave but nothing ever wrote it into the live vtable, so a
-// loaded save's building state machine kept the FillTypedVtable base-Component serialize
-// only: the 4 stateFlags bytes at +0x50..+0x53 never round-tripped and every building's
-// state machine reset to its ctor default on the first post-load tick. Unlike the
-// Startup/Update/OnAdded slots above (each still gated on its own env var, unchanged),
-// serialize round-trip is not an opt-in feature.
-static uint32_t StateMachineComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StateMachineComponent");
-    return cached;
-}
-static void* StateMachineComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void StateMachineComponent_UpdateVSlot(void* s, void* t) {
-    StateMachineComponent_UpdateAdapter(reinterpret_cast<StateMachineComponent*>(s),
-                                        reinterpret_cast<int64_t*>(t));
-}
-static void StateMachineComponent_StartupVSlot(void* s) {
-    StateMachineComponent_StartupSlot(reinterpret_cast<StateMachineComponent*>(s));
-}
-static void StateMachineComponent_OnAddedVSlotImpl(void* s) {
-    StateMachineComponent_OnAddedSlot(reinterpret_cast<StateMachineComponent*>(s));
-}
-static void StateMachineComponent_ShutdownVSlot(void* self, void* stream) {
-    StateMachineComponent_Shutdown(reinterpret_cast<StateMachineComponent*>(self), stream);
-}
-static void StateMachineComponent_FinishLiveVtable() {
-    StateMachineComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&StateMachineComponent_StartupVSlot);
-    StateMachineComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&StateMachineComponent_UpdateVSlot);
-        StateMachineComponent_LiveVtable[6] =
-            reinterpret_cast<void*>(&StateMachineComponent_OnAddedVSlotImpl);
-    StateMachineComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&StateMachineComponent_ShutdownVSlot);
-}
-extern "C" void* StateMachineComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0xcd,
-        StateMachineComponent_LiveVtable,
-        reinterpret_cast<void*>(&StateMachineComponent_LiveGetTypeId));
-    StateMachineComponent_FinishLiveVtable();
-    return p;
-}
-static void* StateMachineComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0xcd,
-        StateMachineComponent_LiveVtable,
-        reinterpret_cast<void*>(&StateMachineComponent_LiveGetTypeId));
-    StateMachineComponent_FinishLiveVtable();
-    return mem;
 }
 
 // ------------------------------------------------------------------
@@ -920,7 +752,6 @@ static void StateMachineComponent_TreeTickVSlot(void* s, void* t) {
     StateMachineComponent* self = reinterpret_cast<StateMachineComponent*>(s);
     if (!self) return;
     uint8_t* base = reinterpret_cast<uint8_t*>(self);
-    StateMachineComponent_ResolveHelpers();
     if (*reinterpret_cast<void**>(base + 0x48) == nullptr)
         StateMachineComponent_BodyInit(self);
     // Same guard as the Update adapter: an unlinked chain would drive Tick's parent-walk
@@ -929,16 +760,74 @@ static void StateMachineComponent_TreeTickVSlot(void* s, void* t) {
     StateMachineComponent_OnRemove(self, reinterpret_cast<int64_t>(t));   // Tick(...,0,1)
 }
 
-static void StateMachineComponent_InstallTreeTickSlot() {
-    static bool s_done = false;
-    if (s_done) return;
-    s_done = true;
-    StateMachineComponent_LiveVtable[8] =
-        reinterpret_cast<void*>(&StateMachineComponent_TreeTickVSlot);
-    std::fprintf(stderr, "[SMC] tree-tick slot 8 LIVE — trans30 handlers now dispatch "
-                         "(retail 0x14012b640, Tick useAlt=0)\n");
-    std::fflush(stderr);
+// ============================================================================
+// The members.
+// ============================================================================
+
+// 0x14012ba30: Component() is the CALL 0x1401188b0; the 0x140164520 stamp and
+// the member's 0x14015f070 / 0x1401644d0 stamps are the compiler's; the member
+// gets +0x30 = +0x38 = 0 and +0x40 = this (retail); flags |= 0xcd.
+// PORT GAP (retail 0x14012ba86 / 0x14012ba8a) — B38 D1: retail also writes
+// +0x48 = this+0x28 and +0x50 = 0xff00ffff here. The tree's factory zero-filled
+// both, and BodyInit (slot 4, or lazily from the first tick) writes them — with
+// the stream-restore rule that an all-zero state quad means "fresh". That lazy
+// shape is kept unchanged; moving the two stores into the ctor is its own
+// titled commit.
+StateMachineComponent::StateMachineComponent()
+    : _controller(this), controllerSelf(nullptr), stateFlags(0), _pad54{} {
+    OrFlagsInCtor(0xcd);
 }
 
-REGISTER_TYPE(StateMachineComponent, "Component",
-              &StateMachineComponent_Factory, &StateMachineComponent_CreateInPlace);
+// [3] 0x14012b940 — the four state bytes +0x50..+0x53.
+void StateMachineComponent::Persist(void* stream) { StateMachineComponent_Shutdown(this, stream); }
+// [4] 0x14012b6a0 — body-init + the controller linker.
+void StateMachineComponent::Startup() { StateMachineComponent_StartupSlot(this); }
+// [6] 0x14012b660 — the register-time Tick(sm, Time(0.0f), 0, 0).
+void StateMachineComponent::OnAdded() { StateMachineComponent_OnAddedSlot(this); }
+// [8] 0x14012b640 — Tick(sm, time, 0, 1), dispatched by EntityList::TreeNodeHandler.
+// (Before this class it was patched into the shared table on the first SM call
+// of the process; a compiler table carries it from the start.)
+void StateMachineComponent::Tick(void* time) { StateMachineComponent_TreeTickVSlot(this, time); }
+// [9] 0x14012b620 — Tick(sm, time, 1, 1), the EntityList bucket round-robin.
+void StateMachineComponent::Update(void* time) {
+    StateMachineComponent_UpdateAdapter(this, static_cast<int64_t*>(time));
+}
+// [11] 0x14012b7d0. PORT GAP (retail 0x14012b7d0) — B38 D9: the body is ported
+// above (StateMachineComponent_OnUpdate2) but the tree's table never installed
+// it; the inert stub is kept here.
+void StateMachineComponent::Slot11() {}
+
+// The root node's 9 slots (member table 0x1401644d0). PORT GAP, see the header:
+// every slot answers 0, as the tree's stub table did.
+int  StateMachineComponent::RootController::FindState(int) { return 0; }
+int  StateMachineComponent::RootController::FindTransition(int, int*) { return 0; }
+char StateMachineComponent::RootController::PostEvent(void*, int, int) { return 0; }
+char StateMachineComponent::RootController::Enter(void*, int) { return 0; }
+char StateMachineComponent::RootController::Update(void*, int) { return 0; }
+void StateMachineComponent::RootController::OnTransition(void*, int, int) {}
+char StateMachineComponent::RootController::Tick(void*, void*, int) { return 0; }
+char StateMachineComponent::RootController::TickAlt(void*, void*, int) { return 0; }
+char StateMachineComponent::RootController::HasStates() { return 0; }
+
+// [0] 0x1400384a0: ~StateMachineComponent (0x14012b9e0: restamps + ~Internal; the member has no dtor slot), MemFree on &1.
+Object::Base* StateMachineComponent::DeletingDtor(unsigned flags) {
+    this->~StateMachineComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400382d0: MemAlloc(0x58, 8), then the ctor.
+void* StateMachineComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StateMachineComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StateMachineComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* StateMachineComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StateMachineComponent());
+}
+
+DEFINE_EXE_VTABLE(StateMachineComponent, "_ZTV21StateMachineComponent")
+DEFINE_EXE_TYPE(StateMachineComponent, "Component")

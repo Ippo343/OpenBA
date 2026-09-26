@@ -23,28 +23,7 @@ namespace ModelComponentAddr {
     constexpr uintptr_t Vtable = 0x140163ba0;
 }
 
-struct ModelComponent {
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    // Graphics::MeshInstance sub-object (0x120 bytes)
-    uint8_t  meshInstance[0x120]; // +0x28..+0x147
-
-    // Math::Transform sub-object (0x1C bytes)
-    uint8_t  transform[0x1C];    // +0x148..+0x163
-
-    // Trailing fields
-    uint8_t  _pad164[8];         // +0x164: zeroed (qword)
-    int32_t  modelId;            // +0x16C: initialized to -1
-};
-
-static_assert(sizeof(ModelComponent) == 0x170, "ModelComponent size mismatch");
-static_assert(offsetof(ModelComponent, vtable) == 0x00, "");
-static_assert(offsetof(ModelComponent, flags) == 0x20, "");
-static_assert(offsetof(ModelComponent, meshInstance) == 0x28, "");
-static_assert(offsetof(ModelComponent, transform) == 0x148, "");
-static_assert(offsetof(ModelComponent, modelId) == 0x16C, "");
+// ENDGAME B.3.8 VIS: the POD is gone — `ModelComponent` is a real class now
+// (code/Game/Component/ModelComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/ModelComponent.h"

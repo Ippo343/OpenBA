@@ -32,7 +32,7 @@
 #include "address_registry.h"
 #include <cstdint>
 
-struct TerraformComponent;
+class TerraformComponent;
 
 extern void TerraformComponent_Shutdown(TerraformComponent* self, void* stream);   // 0x140057500
 extern void TerraformComponent_OnRemove(TerraformComponent* self);                 // 0x140057350

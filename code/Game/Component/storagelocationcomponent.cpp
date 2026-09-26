@@ -97,7 +97,7 @@ void StorageLocationComponent_OnCreate(StorageLocationComponent* self) {
 
     if (!s_fn_RegisterEntity || !s_pGameState) return;
 
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->owner;
+    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
 
     uintptr_t gameState = (uintptr_t)*s_pGameState;
     uintptr_t worldMgr = *(uintptr_t*)(gameState + 0xf0);
@@ -119,17 +119,14 @@ void StorageLocationComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ===== ENDGAME B.3.8 MI-B — StorageLocationComponent as a REAL class =====
+// (StorageLocationComponent.h). Before: CONTROLLER_LIVE_FACTORY_STATES +
+// CONTROLLER_INSTALL_SERIALIZE (48-slot table filled per create, Inert_ScalarDtor
+// in slot 0, Dispatcher<StorageCtrlTag> stamped into raw bytes at +0x28). After: the
+// compiler's 18-slot vtable, a real ctor/dtor chain, the controller a member object
+// (B38_RULES D1, D2, D6).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-#include "Component/controller_live_base.h"
 #include "Component/controller_state_table.h"
-// Phase 3 / Keystone D step 3 — live ControllerComponent with the REAL state-type
-// table + dispatcher node virtuals. Embedded state node at +0x28 (CreateState
-// 0x140004080 = LEA RAX,[RCX+0x28]); GetDefaultState (0x1400026c0) returns 2. When
-// BANISHED_LIVE_STORAGECTRL is set the entity's StateMachineComponent links this
-// node and ticks it through the dispatcher vtable below.
-//
 // Storage state graph (recovered from StorageLocationDescription_SetupCrossRefs ->
 // sub_9040/sub_9150, 0x14014fc70): two states 2 (default), 3.
 //   state 2: enter=helper_d230  ; transitions -> {3}
@@ -140,8 +137,7 @@ void StorageLocationComponent_InitFuncs() {
 // in its table (returns -1), so Tick walks up to BuildComponent's node (Step(1)->0):
 // the real multi-controller parent-walk.
 //
-// BOTH enter handlers are now REAL (2026-07-27). They were left null on the belief
-// that they were "exe code unmapped in standalone"; they are not — both are ported:
+// BOTH enter handlers are REAL (2026-07-27):
 //   * state 2 enter = helper_d230 (0x14012d230) = TownRegistry_RegisterStorageLocation,
 //     the townMgr+0x00 APPEND. Verified to be the state-2 enter and NOTHING else: the
 //     function's only xrefs are .pdata plus SetupCrossRefs and its inlined twin
@@ -153,7 +149,6 @@ void StorageLocationComponent_InitFuncs() {
 // Both take the component (the enter dispatcher passes node+0x18 = the owning
 // component) and read the entity from comp+0x10, which is exactly the argument
 // TownRegistry_RegisterStorageLocation already expects.
-namespace { struct StorageCtrlTag {}; }
 using StorageCtrlDispatch = ::ControllerLive::Dispatcher<StorageCtrlTag>;
 
 extern "C" void TownRegistry_RegisterStorageLocation(void* storageLocationComp);
@@ -192,6 +187,7 @@ static char StorageLoc_State3Enter(void* data, void* /*sm*/) {
     return 0;
 }
 
+// Built ONCE at static-init time, as retail's SetupCrossRefs does (B38 D6/D7).
 static void StorageLocationComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = StorageCtrlDispatch::table;
@@ -205,13 +201,37 @@ static void StorageLocationComponent_PopulateStateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);
 }
-static void** StorageLocationComponent_NodeVtable() { return StorageCtrlDispatch::Vtable(); }
+static const bool s_storageStateTableBuilt = (StorageLocationComponent_PopulateStateTable(), true);
 
-CONTROLLER_LIVE_FACTORY_STATES(StorageLocationComponent, 0x48, 0x82, 0x28, 2,
-                               StorageLocationComponent_NodeVtable,
-                               StorageLocationComponent_PopulateStateTable)
-CONTROLLER_INSTALL_SERIALIZE(StorageLocationComponent,
-                             StorageLocationComponent_Shutdown)
-REGISTER_TYPE(StorageLocationComponent, "ControllerComponent",
-              &StorageLocationComponent_Factory_Ser,
-              &StorageLocationComponent_CreateInPlace_Ser);
+// 0x14012d360. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer; then `_flags |= 2` (0x82).
+StorageLocationComponent::StorageLocationComponent() : _controller(this) {
+    OrFlagsInCtor(0x2);
+}
+
+// [0] 0x140038fc0: restamps + ~Internal (the compiler chain), MemFree on &1.
+Object::Base* StorageLocationComponent::DeletingDtor(unsigned flags) {
+    this->~StorageLocationComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140038df0: MemAlloc(0x48, 8), then the ctor.
+void* StorageLocationComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StorageLocationComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) StorageLocationComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* StorageLocationComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StorageLocationComponent());
+}
+
+// [3] 0x14012d2a0. Slot 3 is the FIRST call into this class on a load-from-save, so
+// the body resolves unconditionally at its top (EnsureHelpers).
+void StorageLocationComponent::Persist(void* stream) { StorageLocationComponent_Shutdown(this, stream); }
+
+DEFINE_EXE_VTABLE(StorageLocationComponent, "_ZTV24StorageLocationComponent")
+DEFINE_EXE_TYPE(StorageLocationComponent, "ControllerComponent")

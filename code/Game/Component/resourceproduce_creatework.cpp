@@ -28,41 +28,29 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Work/FishingWork.h"      // ENDGAME B.3.8 MI-B: the real Work classes
+#include "Work/HuntWork.h"
+#include "Work/HerbalistWork.h"
+#include "Work/ForesterWork.h"
+#include "Work/MarketWork.h"
+#include "Work/ConsumeProduce.h"
+#include <new>
 
-// Each Work reimpl resolves its own engine-function pointers in a *_ResolveFuncs()
-// that only the FACTORY path calls. CreateWork allocates and constructs directly —
-// exactly as retail does — so it must call the resolver itself, or the work goes out
-// with null helper pointers and dies the first time the scheduler asks it anything.
-// That is precisely how this first crashed: HerbalistWork::Slot10 (GetTarget) called
-// a null s_fn_FindSubEntity from inside the work-scheduler insert. The VEH dump read
-// it as "VCALL-of-0", but RAX == RCX == the entity is the signature of a null static
-// function pointer, not of a vtable dispatch.
-bool FishingWork_ResolveFuncs();
-bool HuntWork_ResolveFuncs();
-bool HerbalistWork_ResolveFuncs();
-bool ForesterWork_ResolveFuncs();
-bool MarketWork_ResolveFuncs();
-
-// Work vtables are installed by the Work reimpls and published through the address
-// registry, so read them back the same way every other cross-module reference does
-// rather than reaching for the file-static arrays.
+// ENDGAME B.3.8 MI-B: each work is now built as its REAL class (code/Game/Work/<X>.h):
+// `new (mem) X()` runs the base init and the leaf's field zeroing, calls the work's
+// *_ResolveFuncs (the reason the hand builds had to call it themselves: a work posted
+// with null helper pointers died the first time the scheduler asked it anything), and
+// the compiler stamps the class's own table; then Work::InitFromEntity is the body of
+// the entity-seeded base ctor 0x1400f72e0 (Work_Ctor25). Same bytes as the hand build,
+// with no read-back of the Work vtable addresses (0x140161320/620/5a0/3a0/710/220).
 namespace {
 
-constexpr uintptr_t kFishingWorkVtable   = 0x140161320;
-constexpr uintptr_t kHuntWorkVtable      = 0x140161620;
-constexpr uintptr_t kHerbalistWorkVtable = 0x1401615a0;
-constexpr uintptr_t kForesterWorkVtable  = 0x1401613a0;
-constexpr uintptr_t kMarketWorkVtable     = 0x140161710;
-constexpr uintptr_t kConsumeProduceWorkVtable = 0x140161220;
-
-typedef void* (*fn_WorkCtor25_t)(void* self, void* pEntityIBP);   // 0x1400f72e0
 // 0x140002ed0 Entity_FindComponent_Position — the finder FishingWork_Ctor actually
 // uses. (It is a known misnomer: it resolves the InteractComponent, not a "position"
 // component. Kept faithful to retail's choice rather than "corrected".)
 typedef void  (*fn_FindComp_t)(uintptr_t entity, uintptr_t* out);
 typedef int   (*fn_ChildSum_t)(uintptr_t posComp, int kind);      // 0x140123070
 
-fn_WorkCtor25_t    s_workCtor25 = nullptr;
 fn_FindComp_t      s_findPos    = nullptr;
 fn_ChildSum_t      s_childSum   = nullptr;
 // 0x140003ea0 Entity_FindComponent_StateMachine — only ForesterComponent's slot 18
@@ -72,7 +60,6 @@ bool               s_resolved   = false;
 
 void Resolve() {
     if (s_resolved) return;
-    s_workCtor25 = reinterpret_cast<fn_WorkCtor25_t>(ResolveAddr(Module::Exe, 0x1400f72e0));
     s_findPos    = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140002ed0));
     s_childSum   = reinterpret_cast<fn_ChildSum_t>(ResolveAddr(Module::Exe, 0x140123070));
     s_findSM     = reinterpret_cast<fn_FindComp_t>(ResolveAddr(Module::Exe, 0x140003ea0));
@@ -102,23 +89,17 @@ uintptr_t* WrapIBP(uintptr_t* out, void* obj) {
 // nowhere to stand.
 extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
-    FishingWork_ResolveFuncs();
     void* mem = AllocWork(0x70);
     if (!mem) return WrapIBP(out, nullptr);
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(self) + 0x10);
 
-    if (s_workCtor25) s_workCtor25(mem, &entity);
-    if (uintptr_t vt = ResolveAddr(Module::Exe, kFishingWorkVtable))
-        *reinterpret_cast<uintptr_t*>(mem) = vt;
+    // +0x48..+0x68 zeroed by the ctor (citizenRefs / spotStates / retryCount).
+    new (mem) FishingWork();
+    static_cast<FishingWork*>(mem)->InitFromEntity(&entity);
 
     uintptr_t w = reinterpret_cast<uintptr_t>(mem);
-    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x50) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x58) = 0;
-    *reinterpret_cast<uint64_t*>(w + 0x60) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x68) = 0;
 
     if (s_findPos && s_childSum) {
         uintptr_t posIbp = 0;
@@ -151,20 +132,15 @@ extern "C" uintptr_t* FishingComponent_CreateWork(void* self, uintptr_t* out) {
 // compiler artefact of the two-level ctor); only the final store is observable.
 extern "C" uintptr_t* HuntComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
-    HuntWork_ResolveFuncs();
     void* mem = AllocWork(0x58);
     if (!mem) return WrapIBP(out, nullptr);
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(self) + 0x10);
 
-    if (s_workCtor25) s_workCtor25(mem, &entity);
-    if (uintptr_t vt = ResolveAddr(Module::Exe, kHuntWorkVtable))
-        *reinterpret_cast<uintptr_t*>(mem) = vt;
-
-    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
-    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
+    // The ctor zeroes the leaf fields (+0x48 onward) as retail's tail does.
+    new (mem) HuntWork();
+    static_cast<HuntWork*>(mem)->InitFromEntity(&entity);
 
     return WrapIBP(out, mem);
 }
@@ -173,21 +149,15 @@ extern "C" uintptr_t* HuntComponent_CreateWork(void* self, uintptr_t* out) {
 // This is the Gatherer's Hut work (GathererShelter.rsc carries HerbalistDescription).
 extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
-    HerbalistWork_ResolveFuncs();
     void* mem = AllocWork(0x60);
     if (!mem) return WrapIBP(out, nullptr);
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(self) + 0x10);
 
-    if (s_workCtor25) s_workCtor25(mem, &entity);
-    if (uintptr_t vt = ResolveAddr(Module::Exe, kHerbalistWorkVtable))
-        *reinterpret_cast<uintptr_t*>(mem) = vt;
-
-    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
-    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x58) = 0;
+    // The ctor zeroes the leaf fields (+0x48 onward) as retail's tail does.
+    new (mem) HerbalistWork();
+    static_cast<HerbalistWork*>(mem)->InitFromEntity(&entity);
 
     return WrapIBP(out, mem);
 }
@@ -215,7 +185,6 @@ extern "C" uintptr_t* HerbalistComponent_CreateWork(void* self, uintptr_t* out) 
 // retail's "no pending transition" check.
 extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
-    ForesterWork_ResolveFuncs();
 
     const uintptr_t comp = reinterpret_cast<uintptr_t>(self);
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(comp + 0x10);
@@ -233,14 +202,9 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
     void* mem = AllocWork(0x60);
     if (!mem) return WrapIBP(out, nullptr);
 
-    if (s_workCtor25) s_workCtor25(mem, &entity);
-    if (uintptr_t vt = ResolveAddr(Module::Exe, kForesterWorkVtable))
-        *reinterpret_cast<uintptr_t*>(mem) = vt;
-
-    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
-    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x58) = 0;
+    // The ctor zeroes +0x48/+0x50/+0x58 and runs ForesterWork_ResolveFuncs.
+    new (mem) ForesterWork();
+    static_cast<ForesterWork*>(mem)->InitFromEntity(&entity);
 
     return WrapIBP(out, mem);
 }
@@ -262,23 +226,15 @@ extern "C" uintptr_t* ForesterComponent_CreateWork(void* self, uintptr_t* out) {
 // offers a job".
 extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out) {
     Resolve();
-    // CreateWork allocates and constructs DIRECTLY, bypassing the factory path that
-    // would otherwise call this — see the note at the top of the file. Skipping it is
-    // how the Herbalist path shipped a work with null static function pointers.
-    MarketWork_ResolveFuncs();
     void* mem = AllocWork(0x58);
     if (!mem) return WrapIBP(out, nullptr);
 
     uintptr_t entity = *reinterpret_cast<uintptr_t*>(
         reinterpret_cast<uintptr_t>(self) + 0x10);
 
-    if (s_workCtor25) s_workCtor25(mem, &entity);
-    if (uintptr_t vt = ResolveAddr(Module::Exe, kMarketWorkVtable))
-        *reinterpret_cast<uintptr_t*>(mem) = vt;
-
-    uintptr_t w = reinterpret_cast<uintptr_t>(mem);
-    *reinterpret_cast<uint64_t*>(w + 0x48) = 0;
-    *reinterpret_cast<uint32_t*>(w + 0x50) = 0;
+    // The ctor zeroes +0x48/+0x50 and runs MarketWork_ResolveFuncs.
+    new (mem) MarketWork();
+    static_cast<MarketWork*>(mem)->InitFromEntity(&entity);
 
     return WrapIBP(out, mem);
 }
@@ -329,9 +285,11 @@ extern "C" void* ConsumeProduceAction_Ctor(void* mem, uintptr_t* entityIbp,
     if (!mem) return nullptr;
     const uintptr_t w = reinterpret_cast<uintptr_t>(mem);
 
-    if (s_workCtor25) s_workCtor25(mem, entityIbp);
-    if (uintptr_t vt = ResolveAddr(Module::Exe, kConsumeProduceWorkVtable))
-        *reinterpret_cast<uintptr_t*>(mem) = vt;
+    // The REAL ConsumeProduce (Work/ConsumeProduce.h): base init, its field zeroing
+    // and ConsumeProduce_ResolveFuncs; then Work_Ctor25's body; then the 4-arg ctor's
+    // own seeding below (the same stores the hand build wrote).
+    new (mem) ConsumeProduce();
+    static_cast<ConsumeProduce*>(mem)->InitFromEntity(entityIbp);
 
     *reinterpret_cast<uint8_t*>(w + 0x48)  = 0;
     *reinterpret_cast<uint32_t*>(w + 0x4c) = 0;

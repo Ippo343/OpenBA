@@ -281,63 +281,62 @@ void WorkComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x38 (WorkComponent_Factory MemAlloc), flags 0x83 (Ctor 0x14012e820:
-// Component base sets +0x20=0x80, leaf OR 0x3 => 0x83).
+// ============================================================================
+// ENDGAME B.3.8 VIS — WorkComponent as a REAL class (WorkComponent.h).
+//
+// Before: a 48-slot WorkComponent_LiveVtable filled per create, Inert_ScalarDtor in
+// slot 0 (only ~Internal), the ctor values patched in after the zero-fill.
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/WorkComponent.h"
 
-// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-static uint32_t WorkComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("WorkComponent");
-    return cached;
-}
-
-static void* WorkComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
-static void WorkComponent_SerVSlot(void* s, void* stream) {
-    WorkComponent_Shutdown(reinterpret_cast<WorkComponent*>(s), stream);
-}
-static void WorkComponent_OnRemoveVSlot(void* s) {
-    WorkComponent_OnRemove_CancelWork(reinterpret_cast<WorkComponent*>(s));
+// 0x14012e820. These seeds are load-bearing for the slot-7 hook: workId 0 is a
+// VALID work id, so an unseeded component would ask the goals tree to cancel
+// work 0 — someone else's task — instead of no-oping. -1 is retail's "I have
+// posted no work" sentinel, and 0x80000000 is the same sentinel for workFlags
+// (PostWork 0x14012ec60 tests `*(int*)(self+0x2c) == -0x80000000`).
+WorkComponent::WorkComponent()
+    : workId(-1), workFlags(0x80000000u), workState(0), _pad34{} {
+    OrFlagsInCtor(0x3);
 }
 
-static void WorkComponent_FinishVtable() {
-    // Slot 3 unconditional — serializer wiring is not a feature flag.
-    WorkComponent_LiveVtable[3] = reinterpret_cast<void*>(&WorkComponent_SerVSlot);
-        WorkComponent_LiveVtable[7] = reinterpret_cast<void*>(&WorkComponent_OnRemoveVSlot);
+// [3] 0x14012e710
+void WorkComponent::Persist(void* stream) { WorkComponent_Shutdown(this, stream); }
+
+// [6] 0x14012e6f0. PORT GAP (retail 0x14012e6f0) — B38 D9: the body is ported
+// above (WorkComponent_Draw, capacity -> +0x30) but the tree's table never
+// installed it; the inert stub is kept here. Installing it is its own titled
+// commit.
+void WorkComponent::OnAdded() {}
+
+// [7] 0x14012e6c0 — cancel the work this component posted, on removal.
+void WorkComponent::OnRemove() { WorkComponent_OnRemove_CancelWork(this); }
+
+// [13] 0x14012e6b0 / [14] 0x14012e6a0 — the class's own trivial bodies.
+uint32_t WorkComponent::CommandMask(int) { return 0; }
+void WorkComponent::Command(int) {}
+
+// [0] 0x140039fb0: ~WorkComponent (0x14012e7e0: restamp + ~Internal), MemFree on &1.
+Object::Base* WorkComponent::DeletingDtor(unsigned flags) {
+    this->~WorkComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Retail ctor 0x14012e820 seeds these; our factory previously left them zeroed.
-// This is load-bearing for the slot-7 hook: workId 0 is a VALID work id, so an
-// unseeded component would ask the goals tree to cancel work 0 — someone else's
-// task — instead of no-oping. -1 is retail's "I have posted no work" sentinel,
-// and 0x80000000 is the same sentinel for workFlags (PostWork 0x14012ec60 tests
-// it explicitly: `*(int*)(self+0x2c) == -0x80000000`).
-static void WorkComponent_InitBody(void* p) {
-    if (!p) return;
-    WorkComponent* wc = reinterpret_cast<WorkComponent*>(p);
-    wc->workId    = -1;
-    wc->workFlags = 0x80000000u;
-    wc->workState = 0;
+// create 0x140039e70: MemAlloc(0x38, 8), then the ctor.
+void* WorkComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(WorkComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) WorkComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* WorkComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) WorkComponent());
 }
 
-extern "C" void* WorkComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(
-        0x38, 0x83, WorkComponent_LiveVtable,
-        reinterpret_cast<void*>(&WorkComponent_LiveGetTypeId));
-    WorkComponent_FinishVtable();
-    WorkComponent_InitBody(p);
-    return p;
-}
-static void* WorkComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(
-        mem, 0x38, 0x83, WorkComponent_LiveVtable,
-        reinterpret_cast<void*>(&WorkComponent_LiveGetTypeId));
-    WorkComponent_FinishVtable();
-    WorkComponent_InitBody(mem);
-    return mem;
-}
-REGISTER_TYPE(WorkComponent, "Component",
-              &WorkComponent_Factory, &WorkComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(WorkComponent, "_ZTV13WorkComponent")
+DEFINE_EXE_TYPE(WorkComponent, "Component")

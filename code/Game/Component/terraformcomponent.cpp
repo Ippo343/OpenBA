@@ -557,60 +557,62 @@ extern "C" void TerraformComponent_Slot12(void* selfV, int msgId) {
     TerraformComponent_FootprintPass(self);
 }
 
-// ============================================================
-// Live vtable
-// ============================================================
-// Slots wired (all three bodies live in this file and were previously unreachable —
-// the factory handed out the shared inert stub vtable, so nothing ran at all):
+// ============================================================================
+// ENDGAME B.3.8 VIS — TerraformComponent as a REAL class (TerraformComponent.h).
+//
+// Before: a 48-slot TerraformComponent_LiveVtable re-filled at every create
+// (InitInertTyped + InstallLive), Inert_ScalarDtor in slot 0. After: the
+// compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES D1, D2).
 //   [3]  Shutdown/Serialize  0x140057500 — persists the undo record
 //   [7]  OnRemove            0x140057350 — replays the undo record
 //   [12] Message             0x140057310 — applies the deformation on msg 4
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/TerraformComponent.h"
 
-static uint32_t TerraformComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TerraformComponent");
-    return cached;
+// 0x140057620: Component() is the CALL 0x1401188b0; the 0x14015a880 stamp is
+// the compiler's; +0x28/+0x30/+0x38/+0x40 = 0; flags |= 3 (0x83).
+TerraformComponent::TerraformComponent()
+    : heightRecord(nullptr), heightCount(0), heightCap(0),
+      tileRecord(nullptr), tileCount(0), tileCap(0) {
+    OrFlagsInCtor(0x3);
 }
-static void* TerraformComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
 
-static void TerraformComponent_ShutdownVSlot(void* s, void* stream) {
+// [3] 0x140057500 — the body resolves its helpers first (slot 3 is the first
+// call into the class on a load-from-save).
+void TerraformComponent::Persist(void* stream) {
     TerraformComponent_InitFuncs();
-    TerraformComponent_Shutdown(reinterpret_cast<TerraformComponent*>(s), stream);
+    TerraformComponent_Shutdown(this, stream);
 }
-static void TerraformComponent_OnRemoveVSlot(void* s) {
+// [6] 0x1400574f0 — the class's own `RET` body.
+void TerraformComponent::OnAdded() {}
+// [7] 0x140057350
+void TerraformComponent::OnRemove() {
     TerraformComponent_InitFuncs();
-    TerraformComponent_OnRemove(reinterpret_cast<TerraformComponent*>(s));
+    TerraformComponent_OnRemove(this);
+}
+// [12] 0x140057310
+void TerraformComponent::OnEvent(int eventId) { TerraformComponent_Slot12(this, eventId); }
+
+// [0] 0x14000ce90: ~TerraformComponent (0x1400575b0; its array frees are a PORT GAP, see the header), MemFree on &1.
+Object::Base* TerraformComponent::DeletingDtor(unsigned flags) {
+    this->~TerraformComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-// Re-run per instance: InitInertTyped re-stubs the shared vtable on every spawn, so the
-// live slots must be (re)written here rather than at static-init time.
-static void TerraformComponent_InstallLive() {
-    // Slot 3 is the STREAM SERIALIZER, not a gameplay slot: the save encoding
-    // does not care whether this component's live feature is enabled. Wired
-    // UNCONDITIONALLY, ahead of the gate -- behind it, a disabled flag left the
-    // class falling through to base-only Component_Serialize, which skips this
-    // body's bytes and desyncs the stream for EVERY object after it.
-    // See reference_vtable_slot3_serialize_never_installed.
-    TerraformComponent_LiveVtable[3]  = reinterpret_cast<void*>(&TerraformComponent_ShutdownVSlot);
-    TerraformComponent_LiveVtable[7]  = reinterpret_cast<void*>(&TerraformComponent_OnRemoveVSlot);
-    TerraformComponent_LiveVtable[12] = reinterpret_cast<void*>(&TerraformComponent_Slot12);
+// create 0x14000cc90: MemAlloc(0x48, 8), then the ctor.
+void* TerraformComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TerraformComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) TerraformComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* TerraformComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) TerraformComponent());
 }
 
-extern "C" void* TerraformComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x83,
-        TerraformComponent_LiveVtable,
-        reinterpret_cast<void*>(&TerraformComponent_LiveGetTypeId));
-    TerraformComponent_InstallLive();
-    return p;
-}
-static void* TerraformComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x83,
-        TerraformComponent_LiveVtable,
-        reinterpret_cast<void*>(&TerraformComponent_LiveGetTypeId));
-    TerraformComponent_InstallLive();
-    return mem;
-}
-REGISTER_TYPE(TerraformComponent, "Component",
-              &TerraformComponent_Factory, &TerraformComponent_CreateInPlace);
+DEFINE_EXE_VTABLE(TerraformComponent, "_ZTV18TerraformComponent")
+DEFINE_EXE_TYPE(TerraformComponent, "Component")

@@ -132,15 +132,57 @@ void AutoPickupComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// Inert-but-valid AutoPickupComponent so Object::Factory::CreateObject(typeId)
-// resolves during ComponentEntity_CtorFromDescription instead of NullFactory.
-// size 0x40 (AutoPickupComponent_Factory MemAlloc), flags 0x80 (Ctor 0x140044ae0:
-// Component base sets +0x20=0x80, leaf BTS bit7 => 0x80).
+// ============================================================================
+// ENDGAME B.3.8 VIS — AutoPickupComponent as a REAL class (AutoPickupComponent.h).
+//
+// Before: COMPONENT_INERT_FACTORY_SER — a 48-slot table filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal).
+// After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2); slot bodies are the ones the old table installed.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/AutoPickupComponent.h"
 
-// slot 3 wired unconditionally, save/load wave 2026-08-28 (fields previously reset silently on load).
-COMPONENT_INERT_FACTORY_SER(AutoPickupComponent, 0x40, 0x80, AutoPickupComponent_Shutdown)
-REGISTER_TYPE(AutoPickupComponent, "Component",
-              &AutoPickupComponent_Factory, &AutoPickupComponent_CreateInPlace);
+// 0x140044ae0: Component() is the CALL 0x1401188b0; the 0x140158df0 stamp is
+// the compiler's; +0x30 = +0x38 = 0; flags |= 0x80. PORT GAP (retail
+// 0x140044ae0) — B38 D1: retail writes isEnabled (+0x28) = 1; the tree's
+// zero-fill is kept here and the retail value is its own titled commit.
+AutoPickupComponent::AutoPickupComponent()
+    : isEnabled(0), _pad29{}, field30(nullptr), field38(nullptr) {
+    OrFlagsInCtor(0x80);
+}
+
+// [3] 0x1400449d0 — isEnabled bool + the int array.
+void AutoPickupComponent::Persist(void* stream) { AutoPickupComponent_Shutdown(this, stream); }
+
+// [4] 0x140044990. PORT GAP (retail 0x140044990) — B38 D9: the body is ported
+// above (AutoPickupComponent_Serialize: isEnabled from the description) but the
+// tree's table never installed it; the inert stub is kept here.
+void AutoPickupComponent::Startup() {}
+// [13] 0x140044970 / [14] 0x140044930. PORT GAP — B38 D9: never ported; the
+// tree's table left them inert (13 answered 0); kept inert here.
+uint32_t AutoPickupComponent::CommandMask(int) { return 0; }
+void AutoPickupComponent::Command(int) {}
+
+// [0] 0x140003590: ~AutoPickupComponent (0x140044a80; its array free is a PORT GAP, see the header), MemFree on &1.
+Object::Base* AutoPickupComponent::DeletingDtor(unsigned flags) {
+    this->~AutoPickupComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400033c0: MemAlloc(0x40, 8), then the ctor.
+void* AutoPickupComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AutoPickupComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AutoPickupComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* AutoPickupComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AutoPickupComponent());
+}
+
+DEFINE_EXE_VTABLE(AutoPickupComponent, "_ZTV19AutoPickupComponent")
+DEFINE_EXE_TYPE(AutoPickupComponent, "Component")

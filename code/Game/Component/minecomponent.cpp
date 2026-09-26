@@ -54,11 +54,45 @@ void MineComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ============================================================================
+// ENDGAME B.3.8 VIS — MineComponent as a REAL class (MineComponent.h).
+//
+// Before: COMPONENT_INERT_FACTORY_SER — a 48-slot table filled per create,
+// Inert_ScalarDtor in slot 0 (only ~Internal). After: the compiler's 16-slot
+// vtable and a real ctor/dtor chain (B38_RULES D1, D2).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
-// Slot 3 must be wired: retail's body is Component::Serialize plus one empty
-// Serializer scope, which is 16 real bytes in the save encoding.
-COMPONENT_INERT_FACTORY_SER(MineComponent, 0x28, 0x80, MineComponent_Shutdown)
-REGISTER_TYPE(MineComponent, "Component",
-              &MineComponent_Factory, &MineComponent_CreateInPlace);
+#include "Component/MineComponent.h"
+
+// 0x14004f2e0: Component() is the CALL 0x1401188b0; the 0x140159ed0 stamp is
+// the compiler's; no own store.
+MineComponent::MineComponent() {}
+
+// [0] 0x140008fa0: ~MineComponent (0x14004f2a0: restamp + ~Internal), MemFree on &1.
+Object::Base* MineComponent::DeletingDtor(unsigned flags) {
+    this->~MineComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [3] 0x14004f260 — Component::Persist + one empty Serializer scope.
+void MineComponent::Persist(void* stream) { MineComponent_Shutdown(this, stream); }
+// [6] 0x14004f250 / [7] 0x14004f240 — the class's own `RET` bodies.
+void MineComponent::OnAdded() {}
+void MineComponent::OnRemove() {}
+
+// create 0x140008dd0: MemAlloc(0x28, 8), then the ctor.
+void* MineComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MineComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) MineComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* MineComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) MineComponent());
+}
+
+DEFINE_EXE_VTABLE(MineComponent, "_ZTV13MineComponent")
+DEFINE_EXE_TYPE(MineComponent, "Component")

@@ -62,6 +62,7 @@
 // silently omitted — it is required work, not an optional extra.
 
 #include "Component/controller_state_table.h"
+#include "Component/OrchardComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"   // Object::GetTypeIdByName
@@ -70,10 +71,9 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "system/Value.h"   // ENDGAME B.3.4b System caller batch
 
-namespace { struct OrchardCtrlTag {}; }
+// OrchardCtrlTag lives in OrchardComponent.h (the member type needs it).
 using OrchardDispatch = ::ControllerLive::Dispatcher<OrchardCtrlTag>;
 
-extern "C" void** OrchardCtrl_NodeVtable() { return OrchardDispatch::Vtable(); }
 
 // OrchardComponent_ValidateRefs — retail 0x140051830, already ported.
 extern void OrchardComponent_ValidateRefs(void* selfV);
@@ -1058,7 +1058,7 @@ extern "C" char Orchard_State20PerFrame(void* selfV, void* sm, void* /*time*/) {
 
 // Replica of OrchardDescription_helper_20f0 (0x1400520f0), in registration order.
 // State ids are literal; the names in comments are inferred from the bodies.
-extern "C" void OrchardCtrl_PopulateTable() {
+static void OrchardCtrl_PopulateTable() {
     using namespace ::ControllerLive;
     StateTable& t = OrchardDispatch::table;
     if (t.count != 0) return;                       // idempotent, as pasture's is
@@ -1146,3 +1146,7 @@ extern "C" void OrchardCtrl_PopulateTable() {
     // registers NO body for it in this table — it is a transition target only, so it
     // is deliberately absent here too rather than added as an empty state.
 }
+
+// Built ONCE at static-init time, as retail's OrchardDescription_helper_20f0 does
+// (B38 D6/D7). Before, every OrchardComponent factory call re-ran it from both threads.
+static const bool s_orchardStateTableBuilt = (OrchardCtrl_PopulateTable(), true);

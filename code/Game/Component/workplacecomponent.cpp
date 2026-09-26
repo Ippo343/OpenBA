@@ -908,7 +908,7 @@ void WorkPlaceComponent_Shutdown(WorkPlaceComponent* self, void* stream) {
     int version = reinterpret_cast<IO::Serializer*>(serializer)->GetVersion();   // B.3.4 bridge
     if (version < 1) {
         // Legacy path: read from description component via IsDerivedFrom
-        void* obj = self->_unk18;
+        void* obj = self->_description;
         if (s_fn_IsDerivedFrom_dispatch && s_TypeId_WorkPlaceDesc) {
             bool derived = s_fn_IsDerivedFrom_dispatch(obj, *s_TypeId_WorkPlaceDesc);
             void* descComp = derived ? obj : nullptr;
@@ -1004,57 +1004,26 @@ void WorkPlaceComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
+// ===== ENDGAME B.3.8 MI-B — WorkPlaceComponent as a REAL class =====
+// (WorkPlaceComponent.h). Before: COMPONENT_INERT_FACTORY expanded by hand (48-slot
+// table filled per create, slots 3/7/16/17 patched per create, Inert_ScalarDtor in
+// slot 0, Dispatcher<WPCCtrlTag> stamped into raw bytes at +0x28 plus the ctor
+// defaults +0x40/+0x50 written by the factory). After: the compiler's 18-slot vtable,
+// a real ctor/dtor chain, the controller a member object (B38_RULES D1, D2, D6).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
 #include "Component/controller_state_table.h"
-
-// COMPONENT_INERT_FACTORY(WorkPlaceComponent, 0x68, 0x82), expanded by hand so the
-// per-type vtable's +0x38 slot (index 7 — the slot FUN_1400c2ea0 dispatches at entity
-// removal) routes to the ported removal hook above instead of a stub. Without it a
-// demolished/upgraded building stays in the town profession BST and the next
-// CitizenBehavior_BuildPathGraph derefs the freed entity. Mirrors the MapComponent and
-// PickingComponent hand-expansions.
-static uint32_t WorkPlaceComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("WorkPlaceComponent");
-    return cached;
-}
-static void* WorkPlaceComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static void WorkPlaceComponent_DetachVSlot(void* s) {
-    if (s) WorkPlaceComponent_OnCreate(reinterpret_cast<WorkPlaceComponent*>(s));
-}
-// Slot 3 = Shutdown/Serialize (0x14012f120). The body has been ported in this file
-// since the original wave (WorkPlaceComponent_Shutdown, above) but nothing ever wrote
-// it into the vtable, so a loaded save's WorkPlaceComponent kept the FillTypedVtable
-// base-Component serialize only — the worker roster (+0x58/+0x60), isAccepting
-// (+0x50) and profession-key IBP (+0x48) never round-tripped. Wired unconditionally,
-// same as slot 7 above (save/load wave 2026-08-27).
-static void WorkPlaceComponent_ShutdownVSlot(void* self, void* stream) {
-    WorkPlaceComponent_Shutdown(reinterpret_cast<WorkPlaceComponent*>(self), stream);
-}
-static void WorkPlaceComponent_FinishVtable() {
-    WorkPlaceComponent_InertVtable[7] =
-        reinterpret_cast<void*>(&WorkPlaceComponent_DetachVSlot);
-    WorkPlaceComponent_InertVtable[3] =
-        reinterpret_cast<void*>(&WorkPlaceComponent_ShutdownVSlot);
-}
 
 // ── LIVE controller ──
 // Retail wiring, Ghidra-verified against vtable 0x140164d30 + ctor 0x14012f2e0 + the
 // state-table builder WorkPlaceDescription_helper_f3a0 (0x14012f3a0):
 //   * GetDefaultState (slot 16, 0x140003730) returns 0.
-//   * CreateState (slot 17, 0x140004080) returns the embedded node at +0x28; the ctor
-//     seats the node back-pointer +0x40 = self and defaults accepting +0x50 = 1.
+//   * GetController (slot 17, 0x140004080) returns the embedded member at +0x28; the
+//     ctor seats the member back-pointer +0x40 = self and defaults accepting +0x50 = 1.
 //   * States: 0 enter=ee40(->f520 "enter construction": become a Builder workplace,
 //     re-key pending work via f8400, register in the Builder bucket, publish capacity,
 //     SetAccepting) transitions {1,3}; 2 enter=edf0 ("built": leave Builder, re-key to
 //     the natural profession, register under it) transitions {3}; 3 enter=ed60
 //     ("demolish": release workers + BST-erase) transitions {6,4,5}.
-// Promoting this retires the two stand-in hooks that collapsed the missing controller
-// into call sites: BuildComponent_State8Finalize's explicit edf0 call, and the
-// registration half of the StartTown_SpawnStructures workplace block (both now gated
-// on WorkPlaceComponent_ControllerLive()).
 
 // destroycomponent_workerrelease.cpp — faithful f520 port (0x14012f520).
 extern "C" void WorkPlaceComponent_EnterBuilderProfession(int64_t wpc);
@@ -1088,13 +1057,13 @@ static char WPC_EnterDemolishState(void* comp, void* /*sm*/) {       // ed60
     // OnCreate body is the same pair in erase-first order; the halves touch disjoint
     // state (+0x48/BST vs the +0x58 roster), so the order is immaterial.
     WPC_TraceEnter("state-3 (demolish/ed60)", comp);
-    WorkPlaceComponent_OnCreate(reinterpret_cast<WorkPlaceComponent*>(comp));
+    WorkPlaceComponent_OnCreate(reinterpret_cast<WorkPlaceComponent*>(comp));   // B.3.8 bridge
     return 0;
 }
 
-namespace { struct WPCCtrlTag {}; }
 using WPCCtrlDispatch = ::ControllerLive::Dispatcher<WPCCtrlTag>;
 
+// Built ONCE at static-init time, as retail's state-table builder does (B38 D6/D7).
 static void WorkPlaceComponent_PopulateStateTable() {
     using namespace ::ControllerLive;
     StateTable& t = WPCCtrlDispatch::table;
@@ -1112,27 +1081,18 @@ static void WorkPlaceComponent_PopulateStateTable() {
     TableAddTransition(t, 4, nullptr);
     TableAddTransition(t, 5, nullptr);
 }
-
-static int WorkPlaceComponent_GetDefaultState(void*) { return 0; }   // 0x140003730
-static void* WorkPlaceComponent_CreateState(void* self) {            // 0x140004080
-    return reinterpret_cast<uint8_t*>(self) + 0x28;
-}
+static const bool s_wpcStateTableBuilt = (WorkPlaceComponent_PopulateStateTable(), true);
 
 
 // ── WPC construction census (UNCONDITIONAL, diagnostic only) ────────────────
-// Every WorkPlaceComponent in the standalone exe is built by the two entry points
-// at the bottom of this file (Factory / CreateInPlace) — there is no other path:
-// ComponentEntity_CtorFromDescription (componententity.cpp:597) and the save-load
-// path (:351) both go through Object::Factory::CreateObject -> the REGISTER_TYPE
-// factoryFn, no code anywhere calls the retail ctor 0x14012f2e0 (unregistered and
-// unmapped), and nothing else inserts into an entity's component array.
+// Every WorkPlaceComponent in the standalone exe is built by the ctor below (the
+// factory entries CreateNewObject / CreateInPlaceObject are its only callers):
+// ComponentEntity_CtorFromDescription and the save-load path both go through
+// Object::Factory::CreateObject -> the registration's factory, and nothing else
+// inserts into an entity's component array.
 //
 // Recording every construction makes that claim FALSIFIABLE at runtime instead of
-// only by reading code: the sweep in standalone/trade_probe.cpp asks
-// WorkPlaceComponent_WasFactoryBuilt() per swept object, so a workplace that our
-// factory never produced shows up by name. It also removes the throttle that made
-// "3 lines logged" indistinguishable from "3 to 24 constructions" — the ambiguity
-// that sent this investigation looking for a construction path that doesn't exist.
+// only by reading code: WorkPlaceComponent_WasFactoryBuilt() answers per object.
 static const int kWpcCensusCap = 256;
 static void* s_wpcCensus[kWpcCensusCap];
 static int   s_wpcCensusCount = 0;
@@ -1150,72 +1110,63 @@ extern "C" bool WorkPlaceComponent_CensusComplete() {
     return s_wpcCensusCount <= kWpcCensusCap;
 }
 
-static void WorkPlaceComponent_FinishLiveVtable(void* mem) {
-    WorkPlaceComponent_FinishVtable();   // slot-7 teardown patch stays unconditional
-
-    if (mem) {
-        if (s_wpcCensusCount < kWpcCensusCap) s_wpcCensus[s_wpcCensusCount] = mem;
-        ++s_wpcCensusCount;
-        if (s_wpcCensusCount == kWpcCensusCap + 1)
-            std::fprintf(stderr, "[WPCCensus] census FULL (>%d) — WasFactoryBuilt can now "
-                         "false-negative; raise kWpcCensusCap\n", kWpcCensusCap);
-    }
-
-    // Retail ctor-body default, independent of the controller node (see above).
-    if (mem) {
-        // +0x40 = self and +0x50 = 1 are BOTH plain ctor-body defaults in retail
-        // (Ghidra 0x14012f2e0, verified 2026-07-30) and are set here together. Only
-        // +0x50 has a known reader on the default path (FindAvailableBuilding's
-        // accepting gate, town_workplace_registry.cpp:317); +0x40 is the controller
-        // node's back-pointer and has no reader while +0x28 stays null, so it is
-        // included for faithfulness and to stop "+0x40..+0x5F all zero" reading as
-        // evidence of an un-run constructor. If run B regresses, +0x50 is the
-        // behavioural half — split them before bisecting anything else.
-        *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x40) = mem;
-        reinterpret_cast<uint8_t*>(mem)[0x50] = 1;
-    }
-    // Unthrottled: a run constructs a few dozen of these at most, and the throttle
-    // is what made the previous run unreadable.
-    // the write is unconditional.
-    if (mem)
-        std::fprintf(stderr, "[WPCCensus] #%d wpc=%p ctor-defaults (+0x40=%p +0x50=%d)\n",
-                     s_wpcCensusCount, mem,
-                     *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(mem) + 0x40),
-                     (int)reinterpret_cast<uint8_t*>(mem)[0x50]);
+static void WorkPlaceComponent_RecordCensus(WorkPlaceComponent* wpc) {
+    if (s_wpcCensusCount < kWpcCensusCap) s_wpcCensus[s_wpcCensusCount] = wpc;
+    ++s_wpcCensusCount;
+    if (s_wpcCensusCount == kWpcCensusCap + 1)
+        std::fprintf(stderr, "[WPCCensus] census FULL (>%d) — WasFactoryBuilt can now "
+                     "false-negative; raise kWpcCensusCap\n", kWpcCensusCap);
+    std::fprintf(stderr, "[WPCCensus] #%d wpc=%p ctor-defaults (+0x40=%p +0x50=%d)\n",
+                 s_wpcCensusCount, static_cast<void*>(wpc),
+                 static_cast<void*>(wpc->_controller._owner), (int)wpc->isAccepting);
     std::fflush(stderr);
-
-    WorkPlaceComponent_InertVtable[16] =
-        reinterpret_cast<void*>(&WorkPlaceComponent_GetDefaultState);
-    WorkPlaceComponent_InertVtable[17] =
-        reinterpret_cast<void*>(&WorkPlaceComponent_CreateState);
-    WorkPlaceComponent_PopulateStateTable();
-    if (mem) {
-        // Embedded controller node (0x14012f2e0): node vtable at +0x28, parent/child
-        // zeroed, back-pointer +0x40 = self. The accepting byte +0x50 is NOT part of
-        // this — it is a plain ctor default and now lives above, outside the gate.
-        uint8_t* b = reinterpret_cast<uint8_t*>(mem);
-        *reinterpret_cast<void**>(b + 0x28) =
-            reinterpret_cast<void*>(WPCCtrlDispatch::Vtable());
-        *reinterpret_cast<uint64_t*>(b + 0x30) = 0;
-        *reinterpret_cast<uint64_t*>(b + 0x38) = 0;
-        *reinterpret_cast<void**>(b + 0x40) = mem;
-        b[0x50] = 1;   // controller path keeps its own write (idempotent with the above)
-    }
 }
 
-extern "C" void* WorkPlaceComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x68, 0x82,
-        WorkPlaceComponent_InertVtable,
-        reinterpret_cast<void*>(&WorkPlaceComponent_InertGetTypeId));
-    WorkPlaceComponent_FinishLiveVtable(p);
-    return p;
+// 0x14012f2e0. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer (+0x40); +0x48 = 0; +0x50 = 1
+// (accepting: FindAvailableBuilding's gate reads it); +0x58 = +0x60 = 0; then
+// `_flags |= 2` (0x82).
+WorkPlaceComponent::WorkPlaceComponent()
+    : _controller(this), workerData(nullptr), isAccepting(1), _pad51{},
+      field58(nullptr), field60(nullptr) {
+    OrFlagsInCtor(0x2);
+    WorkPlaceComponent_RecordCensus(this);
 }
-static void* WorkPlaceComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x68, 0x82,
-        WorkPlaceComponent_InertVtable,
-        reinterpret_cast<void*>(&WorkPlaceComponent_InertGetTypeId));
-    WorkPlaceComponent_FinishLiveVtable(mem);
-    return mem;
+
+// [0] 0x14003a220: ~WorkPlaceComponent (0x14012f270), MemFree on &1.
+Object::Base* WorkPlaceComponent::DeletingDtor(unsigned flags) {
+    this->~WorkPlaceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-REGISTER_TYPE(WorkPlaceComponent, "ControllerComponent",
-              &WorkPlaceComponent_Factory, &WorkPlaceComponent_CreateInPlace);
+// 0x14012f270: MemFree(+0x58), +0x58 = +0x60 = 0, then the restamps and ~Internal
+// (the compiler chain).
+WorkPlaceComponent::~WorkPlaceComponent() {
+    Object::detail::InternalMemFree(field58);
+    field58 = nullptr;
+    field60 = nullptr;
+}
+
+// create 0x14003a030: MemAlloc(0x68, 8), then the ctor.
+void* WorkPlaceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(WorkPlaceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) WorkPlaceComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* WorkPlaceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) WorkPlaceComponent());
+}
+
+// [3] 0x14012f120 — the worker roster (+0x58/+0x60), isAccepting (+0x50) and the
+// profession-key IBP (+0x48). The body resolves its helpers at its top.
+void WorkPlaceComponent::Persist(void* stream) { WorkPlaceComponent_Shutdown(this, stream); }
+// [7] 0x14012f090 — the slot FUN_1400c2ea0 dispatches at entity removal (Ghidra's
+// "OnCreate"): without it a demolished/upgraded building stays in the town
+// profession BST and the next CitizenBehavior_BuildPathGraph derefs the freed entity.
+void WorkPlaceComponent::OnRemove() { WorkPlaceComponent_OnCreate(this); }
+
+DEFINE_EXE_VTABLE(WorkPlaceComponent, "_ZTV18WorkPlaceComponent")
+DEFINE_EXE_TYPE(WorkPlaceComponent, "ControllerComponent")
