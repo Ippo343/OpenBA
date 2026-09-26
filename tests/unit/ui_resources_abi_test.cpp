@@ -31,6 +31,7 @@
 #include "unit.h"
 
 #include "runtime/types/ui/CharacterSet.h"
+#include "runtime/types/ui/Cursor.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -164,6 +165,41 @@ UNIT_TEST(ui_characterset_qualified_call_does_not_reenter_the_door) {
     *reinterpret_cast<const void* const**>(raw) = real;
 }
 
+// ---------------------------------------------------------------------------
+// UI::Cursor
+// ---------------------------------------------------------------------------
+struct CursorProbe final : UI::Cursor {
+    Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
+};
+
+UNIT_TEST(ui_cursor_layout) {
+    CHECK_EQ((int)sizeof(UI::Cursor), 0x30);
+    CHECK_EQ((int)alignof(UI::Cursor), 8);
+    CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotX),    0x20);
+    CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotY),    0x24);
+    CHECK_EQ((int)offsetof(UI::Cursor, _spriteSheet), 0x28);
+    CHECK_EQ((int)offsetof(UI::Cursor, _hotSpotX), (int)sizeof(Object::External));
+    CHECK((std::is_base_of<Object::External, UI::Cursor>::value));
+    CHECK(std::is_abstract<UI::Cursor>::value);
+
+    // The three getters read exactly the bytes retail's do (0x18003b250/260/270).
+    CursorProbe probe;
+    uint8_t* bytes = reinterpret_cast<uint8_t*>(static_cast<UI::Cursor*>(&probe));
+    *reinterpret_cast<int32_t*>(bytes + 0x20) = 7;
+    *reinterpret_cast<int32_t*>(bytes + 0x24) = -3;
+    *reinterpret_cast<void**>(bytes + 0x28) = bytes;
+    CHECK_EQ(probe.GetHotSpotX(), 7);
+    CHECK_EQ(probe.GetHotSpotY(), -3);
+    CHECK(static_cast<void*>(probe.GetSpriteSheet().Get()) == static_cast<void*>(bytes));
+}
+
+UNIT_TEST(ui_cursor_slot_order_is_retails) {
+    CursorProbe probe;
+    void* raw = static_cast<void*>(&probe);
+    CheckNineSlots(raw);
+    CheckCompileInherited(raw);
+}
+
 }  // namespace
 
 // ############################################################################
@@ -179,5 +215,14 @@ Object::External* CharacterSet::Reconstruct() { Note(this, kReconstruct / 8); re
 void        CharacterSet::Destruct() { Note(this, kDestruct / 8); }
 Object::External* CharacterSet::Construct() { Note(this, kConstruct / 8); return this; }
 CharacterSet::~CharacterSet() {}
+
+const char* Cursor::TypeName() const { Note(this, kTypeName / 8); return "Cursor"; }
+uint32_t    Cursor::Type() const { Note(this, kType / 8); return 0u; }
+int32_t     Cursor::GetFileVersion() const { Note(this, kGetFileVersion / 8); return 1; }
+bool        Cursor::Serialize(void*) { Note(this, kSerialize / 8); return true; }
+Object::External* Cursor::Reconstruct() { Note(this, kReconstruct / 8); return this; }
+void        Cursor::Destruct() { Note(this, kDestruct / 8); }
+Object::External* Cursor::Construct() { Note(this, kConstruct / 8); return this; }
+Cursor::~Cursor() {}
 
 }  // namespace UI
