@@ -962,8 +962,8 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         break;
     }
     case kButton_Quit:
-        printf("[MainMenuDialog::OnCommand] Quit: fn_App_Quit=%p g_pAppSingleton=%p *g=%p\n",
-               (void*)fn_App_Quit, (void*)g_pAppSingleton,
+        printf("[MainMenuDialog::OnCommand] Quit: g_pAppSingleton=%p *g=%p\n",
+               (void*)g_pAppSingleton,
                g_pAppSingleton ? *g_pAppSingleton : nullptr);
         if (g_pAppSingleton && *g_pAppSingleton) {
             printf("[MainMenuDialog::OnCommand] -> App::Quit\n");

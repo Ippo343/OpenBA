@@ -19,6 +19,7 @@
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K1)
+#include "input/Input.h"   // ENDGAME B.3.7 callers (K3)
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: video/Device.h FIRST. It pulls no Volume.h itself, but the
 // house rule (a runtime type header ahead of anything that reaches <windows.h> through
@@ -841,12 +842,12 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
     // Enable/disable mouse clipping based on checkbox
     bool mouseClip = *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
     void* inputDevice = g_pInputDeviceSingleton ? *g_pInputDeviceSingleton : nullptr;
-    if (fn_InputDevice_EnableMouseClipping && inputDevice)
-        fn_InputDevice_EnableMouseClipping(inputDevice, mouseClip);
+    if (inputDevice)
+        reinterpret_cast<Input::Device*>(inputDevice)->EnableMouseClipping(static_cast<uint8_t>(mouseClip));  // B.3.7 bridge
 
     // Save input configuration
-    if (fn_InputConfig_Save && inputCfg)
-        fn_InputConfig_Save(inputCfg);
+    if (inputCfg)
+        reinterpret_cast<Input::Configuration*>(inputCfg)->Save();  // B.3.7 bridge
 }
 
 // ============================================================
@@ -1201,15 +1202,14 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
         fn_RegisterDefaultInputBindings();
 
     // Reload input configuration
-    if (g_pInputConfigSingleton && *g_pInputConfigSingleton && fn_InputConfig_Load)
-        fn_InputConfig_Load(*g_pInputConfigSingleton);
+    if (g_pInputConfigSingleton && *g_pInputConfigSingleton)
+        reinterpret_cast<Input::Configuration*>(*g_pInputConfigSingleton)->Load();  // B.3.7 bridge
 
     // Restore mouse clipping from input config byte at +0x08
     if (g_pInputDeviceSingleton && *g_pInputDeviceSingleton &&
-        g_pInputConfigSingleton && *g_pInputConfigSingleton &&
-        fn_InputDevice_EnableMouseClipping) {
+        g_pInputConfigSingleton && *g_pInputConfigSingleton) {
         bool clipEnabled = *(bool*)((uintptr_t)*g_pInputConfigSingleton + 0x08);
-        fn_InputDevice_EnableMouseClipping(*g_pInputDeviceSingleton, clipEnabled);
+        reinterpret_cast<Input::Device*>(*g_pInputDeviceSingleton)->EnableMouseClipping(static_cast<uint8_t>(clipEnabled));  // B.3.7 bridge
     }
 
     // Reload persistence settings again (for audio config)
@@ -1439,8 +1439,8 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
             ::new (&btnChild) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(self->inputList)->Child(row * 3 + 1 + slot));  // B.3.6 bridge
 
             // Get current device and key for this input binding
-            int device = fn_KeyMap_GetDeviceForId(keyMap, inputId, slot);
-            int key = fn_KeyMap_GetInputForId(keyMap, inputId, slot);
+            int device = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetDeviceForId(inputId, slot);  // B.3.7 bridge
+            int key = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetInputForId(inputId, slot);  // B.3.7 bridge
 
             // Set the button's key name text
             SetInputBindButtonText((void*)&btnChild, device, key);
@@ -1529,14 +1529,14 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     int capturedKey = *(int*)((uintptr_t)(void*)dialogPtr + 0xC0);
 
     // Check if the new binding conflicts with an existing one
-    int conflictId = fn_KeyMap_GetIdForDeviceInput(keyMap, capturedDevice, capturedKey);
+    int conflictId = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetIdForDeviceInput(capturedDevice, capturedKey);  // B.3.7 bridge
 
     // Delete the input bind dialog
     reinterpret_cast< ::Object::InternalBasePtr*>((void*)&dialogPtr)->DeletePtr();   // B.3.3 bridge
 
     if (result == 2) {
         // User chose "clear" — unbind this slot
-        fn_KeyMap_ClearInput2(keyMap, inputId, slot);
+        reinterpret_cast<Input::KeyMap*>(keyMap)->ClearInput(static_cast<int32_t>(inputId), static_cast<int32_t>(slot));  // B.3.7 bridge
         // Update button text to "Unbound"
         uint64_t elemVal = *(uint64_t*)element;
         SetInputBindButtonText((void*)&elemVal, -1, 0);
@@ -1633,7 +1633,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
 
         if (confirmResult >= 1 && confirmResult <= 2) {
             // User confirmed (OK or Yes) — clear the old conflicting binding
-            fn_KeyMap_ClearInput3(keyMap, conflictId, capturedDevice, capturedKey);
+            reinterpret_cast<Input::KeyMap*>(keyMap)->ClearInput(static_cast<int32_t>(conflictId), static_cast<int32_t>(capturedDevice), static_cast<int32_t>(capturedKey));  // B.3.7 bridge
             goto set_binding;
         }
         // User cancelled — don't change anything
@@ -1644,8 +1644,8 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     goto cleanup;
 
 set_binding:
-    fn_KeyMap_SetInput(keyMap, inputId, slot, capturedDevice, capturedKey);
-    fn_InputDevice_ResetState(*g_pInputDeviceSingleton);
+    reinterpret_cast<Input::KeyMap*>(keyMap)->SetInput(inputId, slot, capturedDevice, capturedKey);  // B.3.7 bridge
+    reinterpret_cast<Input::Device*>(*g_pInputDeviceSingleton)->ResetState();  // B.3.7 bridge
 
     // Refresh the entire input bind list
     OptionsDialog_PopulateInputBindList(self);

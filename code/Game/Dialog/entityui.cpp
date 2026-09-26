@@ -17,6 +17,7 @@
 #include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/PageElement.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "input/Input.h"  // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
 // EntityTrackingSet_Remove (0x14002c690)
@@ -518,13 +519,13 @@ void EntityUI_Slot8(EntityUI* self) {
     void* dialogElem = *(void**)((uintptr_t)dialogInst + 0x10);
 
     // Read mouse axes and scale by dialog scale factor (+0xDC on element)
-    short axisX = fn_KeyMap_GetValue(keyMap, 0, 0);
+    short axisX = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
     int mouseX = (int)((float)(int)axisX * *(float*)((uintptr_t)dialogElem + 0xDC));
 
     // Re-read element since CheckPtr pattern accesses +0x18 again
     dialogInst = *(void**)(s + 0x18);
     dialogElem = *(void**)((uintptr_t)dialogInst + 0x10);
-    short axisY = fn_KeyMap_GetValue(keyMap, 0, 1);
+    short axisY = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
     int mouseY = (int)((float)(int)axisY * *(float*)((uintptr_t)dialogElem + 0xDC));
 
     // Get ToolUI controller from dialog
@@ -554,7 +555,7 @@ void EntityUI_Slot8(EntityUI* self) {
     }
 
     // Check key 5 press (left mouse button / select)
-    if (!fn_KeyMap_Pressed(keyMap, 0, 5))
+    if (!reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5))  // B.3.7 bridge
         return;
 
     // Get dialog at mouse position
