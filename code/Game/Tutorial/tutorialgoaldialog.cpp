@@ -1,231 +1,129 @@
 // code/Game/Tutorial/tutorialgoaldialog.cpp
-// Clean reimplementation of TutorialGoalDialog vtable methods.
+// TutorialGoalDialog — a tutorial goal met while a named dialog is open.
 //
-// TutorialGoalDialog (0x40 bytes), vtable at 0x140160870.
-// Extends Object::External (NOT DialogInstance).
+// TutorialGoalDialog (0x40 bytes), table 0x140160870, TutorialGoal ->
+// Object::External (NOT a DialogInstance). ENDGAME B.3.8 block GOAL: a real
+// class (Tutorial/TutorialGoalDialog.h); the hand-built 48-slot table in
+// tutorial_dialog_vtables.cpp is gone.
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialgoaldialog_funcs.h"
+#include "Tutorial/TutorialGoalDialog.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "system/String.h"
 #include "system/Filename.h"
-#include <cstdint>
-#include <cstdio>
+#include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include <cstdint>
 #include <new>
 
 // ============================================================
-// Local function pointers (resolved once)
+// Construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
+// ctor (inlined in create 0x140027440, Construct 0x1400274b0 and Reconstruct
+// 0x140027520): External(), the TutorialGoal and TutorialGoalDialog stamps
+// (the compiler's), then +0x20 = +0x28 = 0, +0x30 = -1, +0x38 = 0.
+TutorialGoalDialog::TutorialGoalDialog()
+    : dialogName(0), targetName(0), targetStamp(-1), _pad34{}, targetDescription(nullptr) {}
 
-static bool s_resolved = false;
+// The dtor inside [0] 0x140027590: ~String on +0x28, then +0x20; the compiler
+// re-stamps TutorialGoal and runs ~External (the tree ran a guarded ~Internal).
+TutorialGoalDialog::~TutorialGoalDialog() {
+    reinterpret_cast<System::String*>(&targetName)->~String();   // B.3.1 bridge
+    reinterpret_cast<System::String*>(&dialogName)->~String();   // B.3.1 bridge
+}
 
-static void EnsureResolved() {
-    if (s_resolved) return;
-    s_resolved = true;
-
-    // External lifecycle — fn_External_Dtor and fn_External_External are in engine_funcs
-    if (!fn_External_Dtor)
-        fn_External_Dtor = (fn_External_Dtor_t)ResolveAddr(Module::Runtime, 0x1800bc950);
-    if (!fn_External_External)
-        fn_External_External = (fn_External_External_t)ResolveAddr(Module::Runtime, 0x1800bc9c0);
+// [0] 0x140027590: ~TutorialGoalDialog, MemFree on &1.
+Object::Base* TutorialGoalDialog::DeletingDtor(unsigned flags) {
+    this->~TutorialGoalDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
-// Vtable addresses (resolved once)
+// TutorialGoalDialog::Serialize (vtable +0x28, 0x1400defd0)
 // ============================================================
-static void* s_vtable = nullptr;
-static void* s_baseVtable = nullptr;
+// 1. TutorialGoal::Serialize (its empty Serializer scope, inlined in retail)
+// 2. a Serializer over the stream: String +0x20, String +0x28; on load the
+//    ExternalRef at +0x28 is resolved by name.
+bool TutorialGoalDialog::Serialize(void* stream) {
+    TutorialGoal::Serialize(stream);   // QUALIFIED: the base body
 
-static void EnsureVtables() {
-    if (!s_vtable) {
-        s_vtable = (void*)ResolveAddr(Module::Exe, 0x140160870);
-        s_baseVtable = (void*)ResolveAddr(Module::Exe, 0x1401607a0);
-    }
-}
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-// ============================================================
-// Slot0: ScalarDtor (0x140027590)
-// ============================================================
-void* TutorialGoalDialog_ScalarDtor(void* self, uint32_t flags) {
-    EnsureResolved();
-    EnsureVtables();
-    uintptr_t s = (uintptr_t)self;
-
-    // Set vtable to TutorialGoalDialog
-    *(void**)self = s_vtable;
-
-    // Destroy string at +0x28 (target entity name)
-    reinterpret_cast<System::String*>(s + 0x28)->~String();
-
-    // Destroy string at +0x20 (dialog name)
-    reinterpret_cast<System::String*>(s + 0x20)->~String();
-
-    // Set vtable to External base
-    *(void**)self = s_baseVtable;
-
-    // Call Object::External::~External
-    fn_External_Dtor(self);
-
-    // Conditional free if flags & 1
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
-}
-
-// ============================================================
-// Slot5: Shutdown/Serialize (0x1400defd0)
-// ============================================================
-uint64_t TutorialGoalDialog_Shutdown(void* self, void* stream) {
-    EnsureResolved();
-    uintptr_t s = (uintptr_t)self;
-
-    // First serializer block: version check (create + immediately destroy)
-    alignas(8) uint8_t serializer1[24];
-    ::new (static_cast<void*>(serializer1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer1)->~Serializer();   // B.3.4 bridge
-
-    // Second serializer block: actual serialization
-    alignas(8) uint8_t serializer2[16];
-    ::new (static_cast<void*>(serializer2)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // Serialize dialog name string at +0x20
-    reinterpret_cast<System::String*>(s + 0x20)->Serialize(serializer2);
+    reinterpret_cast<System::String*>(&dialogName)->Serialize(ser);   // B.3.1 bridge
 
     // Filename temp retail's compiler emitted for this scope; only ever
     // constructed and destroyed.
     System::Filename tempFilename;
     (void)tempFilename;
 
-    // Serialize target entity string at +0x28
-    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer2);
+    reinterpret_cast<System::String*>(&targetName)->Serialize(ser);   // B.3.1 bridge
 
-    // If loading (serializer mode at +0x08 == 0), resolve external by name
-    int serializerMode = static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer2)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    if (serializerMode == 0) {
-        ResolveExternalByName_Impl((void*)(s + 0x28));
+    // On load (direction 0): resolve the ExternalRef at +0x28 by name.
+    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+        ResolveExternalByName_Impl(&targetName);
     }
 
-    // Cleanup
-    reinterpret_cast<IO::Serializer*>(serializer2)->~Serializer();   // B.3.4 bridge
-
-    return 1;
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// Slot6: OnEvent/Cleanup (0x140027520)
+// Reconstruct [6] 0x140027520 / Destruct [7] 0x140001640 / Construct [9] 0x1400274b0
 // ============================================================
-void* TutorialGoalDialog_OnEvent(void* self, uint64_t p2, uint64_t p3, uint64_t p4) {
-    EnsureResolved();
-    EnsureVtables();
-    uintptr_t s = (uintptr_t)self;
-
-    // Call virtual destructor (vtable slot 0) with flags=0 (destruct without free)
-    typedef void* (*fn_VDtor_t)(void* self, uint32_t flags);
-    void** vtbl = *(void***)self;
-    fn_VDtor_t vdtor = (fn_VDtor_t)vtbl[0];
-    vdtor(self, 0);
-
-    // Re-construct: call External base constructor
-    fn_External_External(self);
-
-    // Set intermediate External base vtable (immediately overwritten)
-    *(void**)self = s_baseVtable;
-
-    // Set final TutorialGoalDialog vtable
-    *(void**)self = s_vtable;
-
-    // Zero all subclass fields
-    *(uint64_t*)(s + 0x20) = 0;   // dialog name string
-    *(uint64_t*)(s + 0x28) = 0;   // target entity string
-    *(uint32_t*)(s + 0x30) = 0xFFFFFFFF;  // target index = -1
-    *(uint64_t*)(s + 0x38) = 0;   // target pointer
-
-    return self;
+// Reconstruct: vtable[0](this, 0), then the ctor on `this`.
+Object::External* TutorialGoalDialog::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialGoalDialog();
+}
+void TutorialGoalDialog::Destruct() { DeletingDtor(0); }
+Object::External* TutorialGoalDialog::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialGoalDialog();
 }
 
 // ============================================================
-// Slot7: Delegator (0x140001640)
+// TutorialGoalDialog::IsComplete (vtable +0x40, 0x1400deee0)
 // ============================================================
-void TutorialGoalDialog_Slot7(void* self) {
-    typedef void* (*fn_VDtor_t)(void* self, uint32_t flags);
-    void** vtbl = *(void***)self;
-    fn_VDtor_t vdtor = (fn_VDtor_t)vtbl[0];
-    vdtor(self, 0);
-}
-
-// ============================================================
-// Slot8: OnInit (0x1400deee0)
-// ============================================================
-uint64_t TutorialGoalDialog_OnInit(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Find dialog by string name at +0x20
+// Finds the open dialog by name (+0x20). Met when it is open and either no
+// target description is named, or the dialog's data source is that
+// description (directly, or through a ComponentEntity's +0x28 Description).
+bool TutorialGoalDialog::IsComplete(void* /*time*/, void* /*instance*/) {
     uint64_t dialogPtr = 0;
-    FindDialogByName_Impl(&dialogPtr, (void*)(s + 0x20));
+    FindDialogByName_Impl(&dialogPtr, &dialogName);
+    if (dialogPtr == 0) return false;   // dialog not open
 
-    if (dialogPtr == 0) {
-        return 0;  // dialog not found
-    }
-
-    // Get dialog's user data at dialogInstance+0x30
-    void* userData = *(void**)(dialogPtr + 0x30);
+    // The dialog instance's data source (DialogInstance +0x30).
+    void* userData = *reinterpret_cast<void**>(dialogPtr + 0x30);
     void* description = nullptr;
-
     if (userData != nullptr) {
-        // Check if it's a BuildingDescription type
         if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentDescription_FC)) {
             description = userData;
-        } else {
-            // Check if it's a ComponentEntity
-            if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentEntity)) {
-                // Get Description from ComponentEntity at +0x28
-                description = *(void**)((uintptr_t)userData + 0x28);
-            }
+        } else if (fn_IsDerivedFrom(userData, *g_TypeId_ComponentEntity)) {
+            description = *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(userData) + 0x28);
         }
     }
 
-    // Resolve the target External name at +0x28
-    ResolveExternalByName_Impl((void*)(s + 0x28));
-
-    // If self->data38 is set, compare with found description
-    void* target = *(void**)(s + 0x38);
-
-    if (target != nullptr) {
-        if (target != description) {
-            return 0;  // mismatch
-        }
-    }
-
-    return 1;  // match
+    ResolveExternalByName_Impl(&targetName);
+    if (targetDescription != nullptr && targetDescription != description) return false;
+    return true;
 }
 
-// ============================================================
-// Slot9: OnDestroy (0x1400274b0)
-// ============================================================
-void* TutorialGoalDialog_OnDestroy(void* self) {
-    EnsureResolved();
-    EnsureVtables();
-
-    if (self != nullptr) {
-        // Reinit External base
-        fn_External_External(self);
-
-        // Set final vtable
-        *(void**)self = s_vtable;
-
-        uintptr_t s = (uintptr_t)self;
-
-        // Zero all subclass fields
-        *(uint64_t*)(s + 0x20) = 0;   // dialog name
-        *(uint64_t*)(s + 0x28) = 0;   // target entity name
-        *(uint32_t*)(s + 0x30) = 0xFFFFFFFF;  // target index = -1
-        *(uint64_t*)(s + 0x38) = 0;   // target pointer
-    }
-
-    return self;
+// create 0x140027440: MemAlloc(0x40, 8), then the (inlined) ctor.
+void* TutorialGoalDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialGoalDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialGoalDialog());
 }
+// createInPlace 0x1400274b0.
+void* TutorialGoalDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialGoalDialog());
+}
+
+DEFINE_EXE_VTABLE(TutorialGoalDialog, "_ZTV18TutorialGoalDialog")
+// DEFINE_EXE_TYPE(TutorialGoalDialog, "TutorialGoal") stays where its
+// REGISTER_TYPE was — tutorial_dialog_vtables.cpp — so the registration order
+// is unchanged (B38_RULES B8-7).

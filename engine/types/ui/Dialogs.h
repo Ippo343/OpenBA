@@ -203,20 +203,8 @@ namespace TutorialSetupDialogAddr {
 // --- ToolbarDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/ToolbarDialog.h"
 
-// --- TutorialGoalDialog (0x40) ---
-// NOT DialogInstance-based. Extends Object::External (base ~0x20).
-// Factory inits: +0x20=0, +0x28=0, +0x30(u32)=0xFFFFFFFF, +0x38=0
-struct TutorialGoalDialog {
-    void*    vtable;            // +0x00
-    uint8_t  externalBase[0x18];// +0x08: Object::External base data
-    uint64_t data20;           // +0x20: zeroed
-    uint64_t data28;           // +0x28: zeroed
-    int32_t  data30;           // +0x30: initialized to -1
-    uint8_t  _pad34[4];        // +0x34: gap
-    uint64_t data38;           // +0x38: zeroed
-};
-static_assert(sizeof(TutorialGoalDialog) == 0x40, "TutorialGoalDialog size mismatch");
-static_assert(offsetof(TutorialGoalDialog, data30) == 0x30, "");
+// --- TutorialGoalDialog --- ENDGAME B.3.8 GOAL: a real class now (B8-4 forwarder)
+#include "Tutorial/TutorialGoalDialog.h"
 
 // --- TutorialHighlightDialog (0xF0) ---
 // Ctor inits: +0xB8=0, +0xC0=0, +0xC8=0, +0xD0=0, +0xD8(u32)=0, +0xE0=0, +0xE8=0

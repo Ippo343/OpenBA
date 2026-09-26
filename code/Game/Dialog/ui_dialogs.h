@@ -6,16 +6,6 @@
 #include <cstdint>
 
 // ============================================================
-// TutorialGoalDialog
-// ============================================================
-
-// Slot3 (vtable +0x18, exe 0x1400df080): Returns 1 (type constant).
-int TutorialGoalDialog_Slot3(void* self);
-
-// Slot7 (vtable +0x38, exe 0x140001640): Delegator — calls vtable[0] with flags=0.
-void TutorialGoalDialog_Slot7(void* self);
-
-// ============================================================
 // TutorialHighlightDialog
 // ============================================================
 

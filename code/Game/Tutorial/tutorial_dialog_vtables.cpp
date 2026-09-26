@@ -57,7 +57,7 @@
 
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/ui_panels.h"
-#include "Tutorial/tutorialgoaldialog_funcs.h"
+#include "Tutorial/TutorialGoalDialog.h"
 #include "Object/factory_registration.h"
 #include "Object/internal_factory_audit.h"   // ObjAudit::IsRegistered (see TutDlg_UnregisterInternal)
 #include "engine_funcs.h"
@@ -230,99 +230,6 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 }  // namespace tut_ui
 
 // ===========================================================================
-// TutorialGoalDialog  (parent "TutorialGoal", 0x40)
-// ===========================================================================
-namespace tut_goaldlg {
-
-void* g_vt[kSlots];
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialGoalDialog");
-    return c;
-}
-const char* TypeName(void*) { return "TutorialGoalDialog"; }
-
-// NOTE slot 0 is deliberately NOT TutorialGoalDialog_ScalarDtor. That body
-// stores the retail vtable, destroys both inline Strings, stores the
-// TutorialGoal base vtable and then calls Object::External::~External. With
-// 0x140160870 / 0x1401607A0 now registered the vtable stores are correct, but
-// the External base was never constructed by our factory (we alloc+zero, we do
-// not run External::External), so ~External would unwind fields that were never
-// initialised. Keep the safe teardown; the strings are the only leak and they
-// are empty on a zero-initialised object.
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    TutDlg_UnregisterInternal(self);   // see the note above � MUST run before the free
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-
-int  Slot3(void* self) { return TutorialGoalDialog_Slot3(self); }
-
-// Slot5 — the .rsc deserializer. This is the slot that matters most: with the
-// stub in place it consumed ZERO bytes where the stream holds a String, a
-// Filename and an int, so every TutorialGoalDialog in Tutorial.rsc loaded blank
-// AND desynced the stream cursor for whatever followed it.
-uint64_t Slot5(void* self, void* stream) {
-    if (!self || !stream) return 0;
-    return TutorialGoalDialog_Shutdown(self, stream);
-}
-void* Slot6(void* self, uint64_t a, uint64_t b, uint64_t c) {
-    if (!self) return self;
-    return TutorialGoalDialog_OnEvent(self, a, b, c);
-}
-void Slot7(void* self) { if (self) TutorialGoalDialog_Slot7(self); }
-uint64_t Slot8(void* self) {
-    if (!self) return 0;
-    // _OnInit derefs *g_TypeId_ComponentDescription_FC / *g_TypeId_ComponentEntity
-    // unguarded. Those two exe .rdata globals are unregistered in standalone
-    // (null pointer, not a zero value), so this is our-standalone-differs, not
-    // a faithful crash — skip rather than fault. See CLAUDE.md.
-    if (!g_TypeId_ComponentDescription_FC || !g_TypeId_ComponentEntity) return 0;
-    return TutorialGoalDialog_OnInit(self);
-}
-void* Slot9(void* self) { return TutorialGoalDialog_OnDestroy(self); }
-
-struct Init {
-    Init() {
-        FillNops(g_vt);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[1] = reinterpret_cast<void*>(&TypeName);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[3] = reinterpret_cast<void*>(&Slot3);
-        g_vt[5] = reinterpret_cast<void*>(&Slot5);
-        g_vt[6] = reinterpret_cast<void*>(&Slot6);
-        g_vt[7] = reinterpret_cast<void*>(&Slot7);
-        g_vt[8] = reinterpret_cast<void*>(&Slot8);
-        g_vt[9] = reinterpret_cast<void*>(&Slot9);
-    }
-} g_init;
-
-void Zero(void* p) { for (size_t o = 0; o < 0x40; o += 8) *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    // Retail ctor seeds +0x30 with -1 (see TutorialGoalDialog_OnDestroy). A zero
-    // there is a legal index, so the sentinel is load-bearing.
-    *reinterpret_cast<uint32_t*>(static_cast<char*>(p) + 0x30) = 0xFFFFFFFFu;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    *reinterpret_cast<uint32_t*>(static_cast<char*>(m) + 0x30) = 0xFFFFFFFFu;
-    return m;
-}
-
-}  // namespace tut_goaldlg
-
-// ===========================================================================
 // TutorialSetupDialog  (parent "TutorialSetup", 0x78)
 // ===========================================================================
 namespace tut_setupdlg {
@@ -490,7 +397,6 @@ void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void
 // tutorial_wave.cpp and registered in standalone/reg_tutorial_wave.cpp.
 // ---------------------------------------------------------------------------
 extern "C" void* GetTutorialUIVtable()              { return tut_ui::g_vt; }
-extern "C" void* GetTutorialGoalDialogVtable()      { return tut_goaldlg::g_vt; }
 extern "C" void* GetTutorialSetupDialogVtable()     { return tut_setupdlg::g_vt; }
 extern "C" void* GetTutorialHighlightDialogVtable() { return tut_highlight::g_vt; }
 
@@ -557,8 +463,6 @@ extern "C" void* TutWave_TutorialSetupDialogCtor(void* self) {
 
 extern "C" void* TutorialUI_SAFactory(void)                    { return tut_ui::Factory(); }
 extern "C" void* TutorialUI_SAInPlace(void* m)                 { return tut_ui::InPlace(m); }
-extern "C" void* TutorialGoalDialog_SAFactory(void)            { return tut_goaldlg::Factory(); }
-extern "C" void* TutorialGoalDialog_SAInPlace(void* m)         { return tut_goaldlg::InPlace(m); }
 extern "C" void* TutorialSetupDialog_SAFactory(void)           { return tut_setupdlg::Factory(); }
 extern "C" void* TutorialSetupDialog_SAInPlace(void* m)        { return tut_setupdlg::InPlace(m); }
 extern "C" void* TutorialHighlightDialog_SAFactory(void)       { return tut_highlight::Factory(); }
@@ -568,8 +472,9 @@ extern "C" void* TutorialHighlightDialog_SAInPlace(void* m)    { return tut_high
 // file. Delete those four lines in the same integration commit.
 REGISTER_TYPE(TutorialUI, "UI::DialogController",
               &TutorialUI_SAFactory, &TutorialUI_SAInPlace);
-REGISTER_TYPE(TutorialGoalDialog, "TutorialGoal",
-              &TutorialGoalDialog_SAFactory, &TutorialGoalDialog_SAInPlace);
+// ENDGAME B.3.8 block GOAL: a real class (Tutorial/TutorialGoalDialog.h); its
+// registration stays HERE, where the REGISTER_TYPE was (B8-7).
+DEFINE_EXE_TYPE(TutorialGoalDialog, "TutorialGoal")
 REGISTER_TYPE(TutorialSetupDialog, "TutorialSetup",
               &TutorialSetupDialog_SAFactory, &TutorialSetupDialog_SAInPlace);
 REGISTER_TYPE(TutorialHighlightDialog, "UI::DialogInstance",

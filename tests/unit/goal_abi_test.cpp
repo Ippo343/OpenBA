@@ -304,3 +304,15 @@ UNIT_TEST(tutorial_and_step_are_retail_9_slots) {
     CHECK_EQ(sizeof(TutorialStep), (size_t)0x70);
     CHECK_EQ(offsetof(TutorialStep, goalCount), (size_t)0x68);
 }
+
+// ===========================================================================
+// TutorialGoalDialog : TutorialGoal — 10 slots, 0x40
+// ===========================================================================
+#include "Tutorial/TutorialGoalDialog.h"
+
+UNIT_TEST(tutorialgoaldialog_is_retail_10_slots_and_0x40) {
+    CheckTutorialGoalLeaf<TutorialGoalDialog>();
+    CHECK_EQ(sizeof(TutorialGoalDialog), (size_t)0x40);
+    CHECK_EQ(offsetof(TutorialGoalDialog, targetStamp), (size_t)0x30);
+    CHECK_EQ(offsetof(TutorialGoalDialog, targetDescription), (size_t)0x38);
+}
