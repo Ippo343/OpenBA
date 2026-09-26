@@ -12,6 +12,12 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/StatusBarUI.h
 //                  Dialog\StatusBarUI.cpp
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_panels.h"
 #include "Dialog/citizen_icon_helpers.h"
 #include "engine_funcs.h"
@@ -45,7 +51,7 @@ static void* FindElement(void* dialogController, const char* name) {
     void* dialog = *(void**)(s + 0x18);
 
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elem = *(void**)retBuf;
     return elem;
 }
@@ -83,7 +89,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
 
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &fmtStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(fmtStr));  // B.3.6 bridge
         self->numberCustom[i] = *(void**)retBuf;
     }
 
@@ -98,8 +104,8 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     // Set element IDs 100-105 and hide initially (flag 0x10000 off)
     void** statusIcons = &self->imageStatusHome;
     for (int i = 0; i < 6; i++) {
-        fn_Element_SetElementId(statusIcons[i], 100 + i);
-        fn_Element_SetFlagsOnOff(statusIcons[i], 0x10000, 0);
+        reinterpret_cast<UI::Element*>(statusIcons[i])->SetElementId(100 + i);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(statusIcons[i])->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
     }
 
     // --- Status numbers (numberStatus*) ---
@@ -122,7 +128,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         System::String nameStr("groupHearts");
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
 
         // NOTE: retail type-checks the group against a UI type-info whose decompiled
         // label ("g_TypeId_HelpButtonElem" = ButtonElement) is wrong for these ribbon
@@ -138,7 +144,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         System::String nameStr("groupStars");
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
 
         void* typedGroup = *(void**)retBuf;
         uint8_t groupPtr[16];
@@ -151,7 +157,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
         System::String nameStr("labelTitleParam");
         void* dialog = *(void**)(s + 0x18);
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
 
         // Same wrong-label situation as the hearts/stars groups above: retail checks
         // against the LabelElement type-info, not ButtonElement — accept directly.
@@ -310,9 +316,9 @@ found_happiness:
         uint32_t showFlag = hasStatus ? 1 : 0;
 
         // imageStatus is at pNum - 0x30 (6 pointers before numberStatus)
-        fn_Element_SetFlagsOnOff(*(void**)(pNum - 0x30), hideFlag, showFlag);
+        reinterpret_cast<UI::Element*>(*(void**)(pNum - 0x30))->SetFlagsOnOff(hideFlag, showFlag);  // B.3.6 bridge
 
-        fn_Element_SetFlagsOnOff(*(void**)pNum, hideFlag, showFlag);
+        reinterpret_cast<UI::Element*>(*(void**)pNum)->SetFlagsOnOff(hideFlag, showFlag);  // B.3.6 bridge
 
         // Set count text as parameter 0
         System::String countStr = System::String::Format("%i", (uint64_t)*pCounts);
@@ -358,9 +364,10 @@ found_happiness:
         // StringTable::GetIndexFromName in standalone).
         if (seasonElem && *(uint64_t*)((uintptr_t)seasonElem + 0xD8) != 0) {
             uint8_t uiStr[16];
-            uint64_t* pResult = (uint64_t*)fn_UIString_Ctor(uiStr,
-                                  *(uint64_t*)((uintptr_t)seasonElem + 0xD8),
-                                  &monthKey);
+            uint64_t* pResult = reinterpret_cast<uint64_t*>(::new (uiStr) UI::String(  // B.3.6 bridge
+                                  Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(
+                                      *(uint64_t*)((uintptr_t)seasonElem + 0xD8))),
+                                  monthKey));
             // Copy UIString result to local for SetText (16 bytes: text + string table ref)
             uint64_t localUIStr[2];
             localUIStr[0] = pResult[0];
@@ -396,9 +403,7 @@ found_happiness:
     int weatherCount = 5;
     int weatherIdx = 0;
     do {
-        fn_Element_SetFlagsOnOff(*(void**)pWeather,
-                                  (uint32_t)(weatherIdx != weatherType),
-                                  (uint32_t)(weatherIdx == weatherType));
+        reinterpret_cast<UI::Element*>(*(void**)pWeather)->SetFlagsOnOff((uint32_t)(weatherIdx != weatherType), (uint32_t)(weatherIdx == weatherType));  // B.3.6 bridge
         weatherIdx++;
         pWeather += 8;
         weatherCount--;
@@ -695,11 +700,9 @@ void EnsureGlobals() {
 // Every function/global the Draw+Startup+event paths dereference unguarded must
 // be live, or a null-deref faults (no SEH under MinGW).
 bool Ready() {
-    if (!(fn_DialogInstance_FindElement && fn_FindElement &&
-          fn_Element_Child && fn_Element_ChildCount && fn_Element_SetElementId &&
-          fn_Element_SetFlagsOnOff && fn_TextElement_SetParameter &&
+    if (!(fn_TextElement_SetParameter &&
           fn_TextElement_SetText && fn_NumberElement_SetValueInt &&
-          fn_UIString_Ctor && fn_IsDerivedFrom &&
+          fn_IsDerivedFrom &&
           fn_InternalBasePtr_Ctor &&
           fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
         return false;

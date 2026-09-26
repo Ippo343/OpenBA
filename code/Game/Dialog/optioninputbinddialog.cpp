@@ -12,6 +12,10 @@
 // The dialog captures a single keypress or mouse button click and stores
 // the result. The parent OptionsDialog reads +0xC0 and +0xC4 after close.
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -25,7 +29,7 @@
 static void* FindDialogElem(void* dialogInst, const char* name) {
     System::String nameStr(name);
     uint64_t result = 0;
-    fn_DialogInstance_FindElement(dialogInst, &result, &nameStr);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
     return (void*)result;
 }
 
@@ -43,10 +47,10 @@ void OptionInputBindDialog_Startup(OptionInputBindDialog* self) {
     void* yesBtn    = FindDialogElem(self, "buttonYes");
     void* noBtn     = FindDialogElem(self, "buttonNo");
 
-    if (cancelBtn) fn_Element_SetElementId(cancelBtn, 0);
-    if (okBtn)     fn_Element_SetElementId(okBtn, 1);
-    if (yesBtn)    fn_Element_SetElementId(yesBtn, 2);
-    if (noBtn)     fn_Element_SetElementId(noBtn, 3);
+    if (cancelBtn) reinterpret_cast<UI::Element*>(cancelBtn)->SetElementId(0);  // B.3.6 bridge
+    if (okBtn)     reinterpret_cast<UI::Element*>(okBtn)->SetElementId(1);  // B.3.6 bridge
+    if (yesBtn)    reinterpret_cast<UI::Element*>(yesBtn)->SetElementId(2);  // B.3.6 bridge
+    if (noBtn)     reinterpret_cast<UI::Element*>(noBtn)->SetElementId(3);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -110,7 +114,7 @@ void OptionInputBindDialog_OnOk(OptionInputBindDialog* self) {
     uint64_t basePtr = 0;
     new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
-    fn_UI_CloseDialog(ui, &basePtr);
+    reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&basePtr));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -124,7 +128,7 @@ void OptionInputBindDialog_OnCancel(OptionInputBindDialog* self) {
     uint64_t basePtr = 0;
     new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
-    fn_UI_CloseDialog(ui, &basePtr);
+    reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&basePtr));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -138,7 +142,7 @@ void OptionInputBindDialog_OnButton2(OptionInputBindDialog* self) {
     uint64_t basePtr = 0;
     new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
-    fn_UI_CloseDialog(ui, &basePtr);
+    reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&basePtr));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -152,7 +156,7 @@ void OptionInputBindDialog_OnButton3(OptionInputBindDialog* self) {
     uint64_t basePtr = 0;
     new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* ui = *(void**)(s + 0x10);
-    fn_UI_CloseDialog(ui, &basePtr);
+    reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&basePtr));  // B.3.6 bridge
 }
 
 // ============================================================

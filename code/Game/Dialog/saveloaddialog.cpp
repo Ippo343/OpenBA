@@ -31,6 +31,15 @@
 //   +0x150 buttonCancel (InternalBasePtr)
 //   +0x158 buttonDelete (InternalBasePtr)
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
@@ -63,7 +72,7 @@ extern uintptr_t ThumbVtable_StampSpriteSheet(void* obj);
 static uint64_t FindDialogElem(void* dialogInst, const char* name) {
     System::String nameStr(name);
     uint64_t result = 0;
-    fn_DialogInstance_FindElement(dialogInst, &result, &nameStr);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
     return result;
 }
 
@@ -73,7 +82,7 @@ static uint64_t FindDialogElem(void* dialogInst, const char* name) {
 static uint64_t FindChildElem(void* parentElem, const char* name) {
     System::String nameStr(name);
     uint64_t resultPtr = 0;
-    fn_FindElement(parentElem, &resultPtr, &nameStr);
+    ::new (&resultPtr) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
     void* rawElem = (void*)resultPtr;
     // Wrap in InternalBasePtr
     uint64_t basePtr = 0;
@@ -178,13 +187,15 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
 
         // Clone template element from dialog
         uint8_t templateBuf[16] = {};
-        fn_Dialog_GetTemplate(*(void**)(s + 0x18), templateBuf, 0);
+        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18))->GetTemplate(0));  // B.3.6 bridge
         void* templateObj = *(void**)templateBuf;
 
         // Clone via vtable[8]: templateObj->Clone(&cloneBuf, dialog)
-        typedef void* (*fn_Clone_t)(void* self, void* retbuf, void* dialog);
+        // (= UI::ElementDescription slot 8 CreateInstance, RETSLOT per B6-2)
         uint8_t cloneBuf[16] = {};
-        ((fn_Clone_t)(*(void***)templateObj)[8])(templateObj, cloneBuf, *(void**)(s + 0x18));
+        reinterpret_cast<const UI::ElementDescription*>(templateObj)->CreateInstance(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18)));
         void* clonedElem = *(void**)cloneBuf;
 
         // Add cloned element to table at index i
@@ -202,13 +213,13 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         entry[5] = FindChildElem((void*)clonedElem, "selectSave");      // +0x28: Element (toggled by Update for selection)
 
         // Set imageSaveIcon flags: disable mouse-over highlight (0x10000)
-        fn_Element_SetFlagsOnOff((void*)entry[2], 0x10000, 0);
+        reinterpret_cast<UI::Element*>((void*)entry[2])->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
 
         // Set imageSaveIcon element ID for selection tracking (ID = i + 4)
-        fn_Element_SetElementId((void*)entry[2], i + 4);
+        reinterpret_cast<UI::Element*>((void*)entry[2])->SetElementId(i + 4);  // B.3.6 bridge
 
         // Check if SaveInfo has a valid Sprite (thumbnail)
-        bool hasSpriteThumb = fn_Sprite_IsValid(saveInfo);
+        bool hasSpriteThumb = reinterpret_cast<const UI::Sprite*>(saveInfo)->IsValid();  // B.3.6 bridge
 
         if (hasSpriteThumb) {
             // --- Direct sprite from save info ---
@@ -219,7 +230,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             fn_ImageElement_SetSprite((void*)entry[2], sprite);
 
             // Hide imageCorrupt overlay
-            fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
+            reinterpret_cast<UI::Element*>((void*)entry[4])->SetFlagsOnOff(1, 0);  // B.3.6 bridge
         } else {
             // --- Build sprite from raw image data ---
             // Allocate MaterialInstance (0x60 bytes)
@@ -301,8 +312,8 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                             ->Height();   // B.3.5 bridge
             imgWidth = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
                            ->Width();     // B.3.5 bridge
-            fn_SpriteSheet_AddSpriteInfo(sheetFinal, &nameStr1, &nameStr2,
-                                          0, 0, imgWidth, imgHeight);
+            reinterpret_cast<UI::SpriteSheet*>(sheetFinal)->AddSpriteInfo(  // B.3.6 bridge
+                nameStr1, nameStr2, 0, 0, imgWidth, imgHeight);
 
             // Set sprite info with UV coordinates
             imageBuffer = *(void**)((uintptr_t)saveInfo + 0x18);
@@ -310,12 +321,12 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                         ->Height();   // B.3.5 bridge
             int w = reinterpret_cast<const Video::ImageBuffer*>(imageBuffer)
                         ->Width();    // B.3.5 bridge
-            fn_SpriteSheet_SetSpriteInfo(sheetFinal, 0, w, h,
-                                          0.0f, 0.0f, uvScale, uvScale);
+            reinterpret_cast<UI::SpriteSheet*>(sheetFinal)->SetSpriteInfo(  // B.3.6 bridge
+                0, w, h, 0.0f, 0.0f, uvScale, uvScale);
 
             // Create Sprite from SpriteSheet
             uint8_t spriteBuf[16] = {};
-            fn_Sprite_Ctor_ByIndex(spriteBuf, sheetFinal, 0);
+            ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(sheetFinal)), 0);  // B.3.6 bridge
 
             fn_ImageElement_SetSprite((void*)entry[2], spriteBuf);
 
@@ -324,12 +335,10 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             // Check save validity: status at saveInfo+0x44
             if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
                 // Valid save: hide imageCorrupt overlay
-                fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
+                reinterpret_cast<UI::Element*>((void*)entry[4])->SetFlagsOnOff(1, 0);  // B.3.6 bridge
             } else {
                 // Invalid/corrupt: dim the icon
-                typedef void (*fn_SetColor_t)(void* self, uint32_t color);
-                void** vtable = *(void***)(void*)entry[2];
-                ((fn_SetColor_t)vtable[10])((void*)entry[2], 0xff808080);
+                reinterpret_cast<UI::Element*>((void*)entry[2])->SetColor(0xff808080);  // B.3.6 bridge
             }
         }
 
@@ -345,9 +354,9 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                 System::String corruptKey("Corrupt");
                 uintptr_t keyMapObj = (uintptr_t)*g_pKeyMapSingleton;
                 uint8_t uiStr[16] = {};
-                fn_UIString_Ctor(uiStr, *(uint64_t*)(keyMapObj + 0xD8), &corruptKey);
+                ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(keyMapObj + 0xD8))), corruptKey);  // B.3.6 bridge
                 System::String sysStr;
-                fn_UIString_ToSystemString(uiStr, &sysStr);
+                ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
                 fn_TextElement_SetParameter((void*)entry[1], 0, &sysStr);
             }
 
@@ -373,12 +382,13 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
     for (int i = saveCount; i < totalSlots; i++) {
         // Clone template element
         uint8_t templateBuf[16] = {};
-        fn_Dialog_GetTemplate(*(void**)(s + 0x18), templateBuf, 0);
+        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18))->GetTemplate(0));  // B.3.6 bridge
         void* templateObj = *(void**)templateBuf;
 
-        typedef void* (*fn_Clone_t)(void* self, void* retbuf, void* dialog);
         uint8_t cloneBuf[16] = {};
-        ((fn_Clone_t)(*(void***)templateObj)[8])(templateObj, cloneBuf, *(void**)(s + 0x18));
+        reinterpret_cast<const UI::ElementDescription*>(templateObj)->CreateInstance(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18)));
         void* clonedElem = *(void**)cloneBuf;
 
         // Add to table
@@ -396,21 +406,17 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         entry[5] = FindChildElem((void*)clonedElem, "selectSave");
 
         // Hide imageCorrupt and selectSave overlays for empty slots
-        fn_Element_SetFlagsOnOff((void*)entry[4], 1, 0);
-        fn_Element_SetFlagsOnOff((void*)entry[5], 1, 0);
+        reinterpret_cast<UI::Element*>((void*)entry[4])->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>((void*)entry[5])->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
         // Dim border (SetColor via vtable[10] = 0x80ffffff)
         {
-            typedef void (*fn_SetColor_t)(void* self, uint32_t color);
-            void** vtable = *(void***)(void*)entry[3];
-            ((fn_SetColor_t)vtable[10])((void*)entry[3], 0x80ffffff);
+            reinterpret_cast<UI::Element*>((void*)entry[3])->SetColor(0x80ffffff);  // B.3.6 bridge
         }
 
         // Dim icon (SetColor via vtable[10] = 0x20ffffff)
         {
-            typedef void (*fn_SetColor_t)(void* self, uint32_t color);
-            void** vtable = *(void***)(void*)entry[2];
-            ((fn_SetColor_t)vtable[10])((void*)entry[2], 0x20ffffff);
+            reinterpret_cast<UI::Element*>((void*)entry[2])->SetColor(0x20ffffff);  // B.3.6 bridge
         }
     }
 }
@@ -445,10 +451,10 @@ void SaveLoadDialog_Startup(SaveLoadDialog* self) {
     *(uint64_t*)(s + 0x108) = FindDialogElem(self, "tableSaveList");
 
     // --- Set button element IDs ---
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x140), 1);   // buttonSave
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x148), 2);   // buttonLoad
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x150), 0);   // buttonCancel
-    fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x158), 3);   // buttonDelete
+    reinterpret_cast<UI::Element*>((void*)*(uint64_t*)(s + 0x140))->SetElementId(1);   // B.3.6 bridge; buttonSave
+    reinterpret_cast<UI::Element*>((void*)*(uint64_t*)(s + 0x148))->SetElementId(2);   // B.3.6 bridge; buttonLoad
+    reinterpret_cast<UI::Element*>((void*)*(uint64_t*)(s + 0x150))->SetElementId(0);   // B.3.6 bridge; buttonCancel
+    reinterpret_cast<UI::Element*>((void*)*(uint64_t*)(s + 0x158))->SetElementId(3);   // B.3.6 bridge; buttonDelete
 
     // --- Set cancel button close-on-click flag ---
     *(uint32_t*)(*(uintptr_t*)(s + 0x150) + 0xC0) = 8;
@@ -500,16 +506,16 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
     uint32_t isLoadMode = (uint32_t)(mode == 0);
     uint32_t isSaveMode = (uint32_t)(mode != 0);
     void* labelLoad = (void*)*(uint64_t*)(s + 0xF8);
-    if (labelLoad) fn_Element_SetFlagsOnOff(labelLoad, isLoadMode, 0);
+    if (labelLoad) reinterpret_cast<UI::Element*>(labelLoad)->SetFlagsOnOff(isLoadMode, 0);  // B.3.6 bridge
     void* labelSave = (void*)*(uint64_t*)(s + 0x100);
-    if (labelSave) fn_Element_SetFlagsOnOff(labelSave, isSaveMode, 0);
+    if (labelSave) reinterpret_cast<UI::Element*>(labelSave)->SetFlagsOnOff(isSaveMode, 0);  // B.3.6 bridge
 
     // buttonSave (+0x140): visible in save mode
     void* buttonSave = (void*)*(uint64_t*)(s + 0x140);
-    if (buttonSave) fn_Element_SetFlagsOnOff(buttonSave, isSaveMode, 0);
+    if (buttonSave) reinterpret_cast<UI::Element*>(buttonSave)->SetFlagsOnOff(isSaveMode, 0);  // B.3.6 bridge
     // buttonLoad (+0x148): visible in load mode
     void* buttonLoad = (void*)*(uint64_t*)(s + 0x148);
-    if (buttonLoad) fn_Element_SetFlagsOnOff(buttonLoad, isLoadMode, 0);
+    if (buttonLoad) reinterpret_cast<UI::Element*>(buttonLoad)->SetFlagsOnOff(isLoadMode, 0);  // B.3.6 bridge
 
     int operation = fn_SaveLoad_GetOperation(saveLoad);
 
@@ -540,9 +546,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
         {
             void* loadBtn = (void*)*(uint64_t*)(s + 0x148);
             if (loadBtn) {
-                void** vtable = *(void***)loadBtn;
-                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-                ((fn_SetEnabled_t)vtable[8])(loadBtn, loadEnabled ? 1 : 0);
+                reinterpret_cast<UI::Element*>(loadBtn)->Enable(loadEnabled ? 1 : 0);  // B.3.6 bridge
             }
         }
 
@@ -550,9 +554,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
         {
             void* saveBtn = (void*)*(uint64_t*)(s + 0x140);
             if (saveBtn) {
-                void** vtable = *(void***)saveBtn;
-                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-                ((fn_SetEnabled_t)vtable[8])(saveBtn, 1);
+                reinterpret_cast<UI::Element*>(saveBtn)->Enable(1);  // B.3.6 bridge
             }
         }
 
@@ -560,9 +562,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
         {
             void* cancelBtn = (void*)*(uint64_t*)(s + 0x150);
             if (cancelBtn) {
-                void** vtable = *(void***)cancelBtn;
-                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-                ((fn_SetEnabled_t)vtable[8])(cancelBtn, 1);
+                reinterpret_cast<UI::Element*>(cancelBtn)->Enable(1);  // B.3.6 bridge
             }
         }
 
@@ -575,9 +575,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
         {
             void* deleteBtn = (void*)*(uint64_t*)(s + 0x158);
             if (deleteBtn) {
-                void** vtable = *(void***)deleteBtn;
-                typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-                ((fn_SetEnabled_t)vtable[8])(deleteBtn, (uint64_t)(selectedIdx >= 0));
+                reinterpret_cast<UI::Element*>(deleteBtn)->Enable((uint64_t)(selectedIdx >= 0));  // B.3.6 bridge
             }
         }
 
@@ -591,11 +589,11 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
 
             // entry+0x28: selectSave — shown when selected, hidden otherwise
             void* selectElem = (void*)*(uint64_t*)(entryBase + 0x28);
-            if (selectElem) fn_Element_SetFlagsOnOff(selectElem, notSelected ? 1 : 0, notSelected ? 0 : 1);
+            if (selectElem) reinterpret_cast<UI::Element*>(selectElem)->SetFlagsOnOff(notSelected ? 1 : 0, notSelected ? 0 : 1);  // B.3.6 bridge
 
             // entry+0x18: borderSave — shown when NOT selected, hidden when selected
             void* borderElem = (void*)*(uint64_t*)(entryBase + 0x18);
-            if (borderElem) fn_Element_SetFlagsOnOff(borderElem, notSelected ? 0 : 1, notSelected ? 1 : 0);
+            if (borderElem) reinterpret_cast<UI::Element*>(borderElem)->SetFlagsOnOff(notSelected ? 0 : 1, notSelected ? 1 : 0);  // B.3.6 bridge
         }
         return;
     }
@@ -613,33 +611,25 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
     {
         void* loadBtn = (void*)*(uint64_t*)(s + 0x148);
         if (loadBtn) {
-            void** vtable = *(void***)loadBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(loadBtn, 0);
+            reinterpret_cast<UI::Element*>(loadBtn)->Enable(0);  // B.3.6 bridge
         }
     }
     {
         void* saveBtn = (void*)*(uint64_t*)(s + 0x140);
         if (saveBtn) {
-            void** vtable = *(void***)saveBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(saveBtn, 0);
+            reinterpret_cast<UI::Element*>(saveBtn)->Enable(0);  // B.3.6 bridge
         }
     }
     {
         void* cancelBtn = (void*)*(uint64_t*)(s + 0x150);
         if (cancelBtn) {
-            void** vtable = *(void***)cancelBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(cancelBtn, 0);
+            reinterpret_cast<UI::Element*>(cancelBtn)->Enable(0);  // B.3.6 bridge
         }
     }
     {
         void* deleteBtn = (void*)*(uint64_t*)(s + 0x158);
         if (deleteBtn) {
-            void** vtable = *(void***)deleteBtn;
-            typedef void (*fn_SetEnabled_t)(void*, uint64_t);
-            ((fn_SetEnabled_t)vtable[8])(deleteBtn, 0);
+            reinterpret_cast<UI::Element*>(deleteBtn)->Enable(0);  // B.3.6 bridge
         }
     }
 
@@ -650,19 +640,19 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
     void* textSaving = (void*)*(uint64_t*)(s + 0x128);
     if (operation == 1) {
         // Listing: show textPleaseWait, hide textLoading, hide textSaving
-        if (textPleaseWait) fn_Element_SetFlagsOnOff(textPleaseWait, 0, 1);
-        if (textLoading) fn_Element_SetFlagsOnOff(textLoading, 1, 0);
-        if (textSaving) fn_Element_SetFlagsOnOff(textSaving, 1, 0);
+        if (textPleaseWait) reinterpret_cast<UI::Element*>(textPleaseWait)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+        if (textLoading) reinterpret_cast<UI::Element*>(textLoading)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textSaving) reinterpret_cast<UI::Element*>(textSaving)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     } else if (operation == 2) {
         // Saving: hide textPleaseWait, show textLoading, hide textSaving
-        if (textPleaseWait) fn_Element_SetFlagsOnOff(textPleaseWait, 1, 0);
-        if (textLoading) fn_Element_SetFlagsOnOff(textLoading, 0, 1);
-        if (textSaving) fn_Element_SetFlagsOnOff(textSaving, 1, 0);
+        if (textPleaseWait) reinterpret_cast<UI::Element*>(textPleaseWait)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textLoading) reinterpret_cast<UI::Element*>(textLoading)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+        if (textSaving) reinterpret_cast<UI::Element*>(textSaving)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     } else if (operation == 4) {
         // Deleting: hide textPleaseWait, hide textLoading, show textSaving
-        if (textPleaseWait) fn_Element_SetFlagsOnOff(textPleaseWait, 1, 0);
-        if (textLoading) fn_Element_SetFlagsOnOff(textLoading, 1, 0);
-        if (textSaving) fn_Element_SetFlagsOnOff(textSaving, 0, 1);
+        if (textPleaseWait) reinterpret_cast<UI::Element*>(textPleaseWait)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textLoading) reinterpret_cast<UI::Element*>(textLoading)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        if (textSaving) reinterpret_cast<UI::Element*>(textSaving)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
     }
 }
 
@@ -746,7 +736,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         uint64_t basePtr = 0;
         new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)s));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
-        fn_UI_CloseDialog(ui, &basePtr);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&basePtr));  // B.3.6 bridge
         *(uint8_t*)(s + 0xB9) = 0;
         return;
     }
@@ -757,7 +747,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         uint64_t basePtr = 0;
         new (&basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)s));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
-        fn_UI_CloseDialog(ui, &basePtr);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&basePtr));  // B.3.6 bridge
 
         // --- Step 1: Allocate and construct the inner GameUpdateLoop (0x160 bytes) ---
         // GameUpdateLoop_Ctor reimplemented inline (was FUN_140098060).
@@ -887,7 +877,7 @@ static int SaveLoad_ModalShowDialog(void* ui, void* dlgPtr, const char* what) {
            "and blocks until a human clicks; set BANISHED_MODAL_ANSWER=2 to run unattended\n",
            what ? what : "?");
     fflush(stdout);
-    int r = fn_UI_ShowDialog(ui, dlgPtr);
+    int r = reinterpret_cast<UI::UserInterface*>(ui)->ShowDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));  // B.3.6 bridge
     printf("[SaveLoadDialog] modal \"%s\" answered %d\n", what ? what : "?", r);
     fflush(stdout);
     return r;
@@ -1116,7 +1106,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
         // Find TextElement within dialog (uses g_TypeId_TextElement)
         uint64_t textElemPtr = 0;
-        fn_DialogInstance_FindElementType((void*)warnDlgPtr, &textElemPtr, *g_TypeId_TextElement);
+        ::new (&textElemPtr) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)warnDlgPtr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
 
         // Check IsDerivedFrom TextElement
         void* rawElem = *(void**)&textElemPtr;
@@ -1191,7 +1181,7 @@ static void SaveLoadDialog_SelectEntry(SaveLoadDialog* self, int index) {
     // FUN_1400b6790: if index changed, play sound 4 first
     int oldIndex = *(int*)(s + 0xC0);
     if (oldIndex != index) {
-        fn_UI_Play(*(void**)(s + 0x10), 4);
+        reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->Play(4);  // B.3.6 bridge
     }
     *(int*)(s + 0xC0) = index;
 }
@@ -1214,7 +1204,7 @@ void SaveLoadDialog_OnEvent(SaveLoadDialog* self, void* element, int eventType, 
             void* ui = *(void**)(s + 0x10);
             uint64_t basePtr[2];
             new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            fn_UI_CloseDialog(ui, basePtr);
+            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
             return;
         }
         if (eventData == 2) {
@@ -1316,7 +1306,7 @@ extern "C" void* SaveLoadDialog_Ctor_8270(void* self, void* ui, void* extRes,
     *(uint32_t*)(s + 0xB9) = 0;          // saveFlag/loadFlag/refreshFlag/deleteFlag
     *(uint32_t*)(s + 0xC0) = 0;          // selectedIndex
     *(uint32_t*)(s + 0xC8) = 0;          // spinner rotation
-    if (fn_Sprite_DefaultCtor) fn_Sprite_DefaultCtor((void*)(s + 0xD0));
+    ::new ((void*)(s + 0xD0)) UI::Sprite();
     *(void**)(s + 0xE0) = enginePtr;
     *(void**)(s + 0xE8) = gameWorldPtr;
     for (uintptr_t off = 0xF0; off <= 0x158; off += 8)

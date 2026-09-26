@@ -9,6 +9,12 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/OptionsDialog.h
 //                  Dialog\OptionsDialog.cpp
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: video/Device.h FIRST. It pulls no Volume.h itself, but the
 // house rule (a runtime type header ahead of anything that reaches <windows.h> through
@@ -104,7 +110,8 @@ enum OptionsElementId {
     do {                                                    \
         System::String _nameStr(name);                     \
         uint64_t _retval = 0;                              \
-        fn_DialogInstance_FindElement(self, &_retval, &_nameStr); \
+        ::new (&_retval) Object::InternalPtr<UI::Element>(  /* B.3.6 bridge */ \
+            reinterpret_cast<UI::DialogInstance*>(self)->FindElement(_nameStr));  \
         (outField) = (void*)_retval;                       \
     } while (0)
 
@@ -152,11 +159,11 @@ extern "C" void ApplyKeyMapToUI_Impl(void* keyMap, void* userInterface) {
     *(uint64_t*)(ui + 0xB8) = *(uint64_t*)(km + 0x60);   // ButtonDown
     *(uint64_t*)(ui + 0xC0) = *(uint64_t*)(km + 0x68);   // ButtonUp
     *(uint64_t*)(ui + 0xC8) = *(uint64_t*)(km + 0x58);   // Alert
-    if (fn_UI_SetFullscreenFadeSprite) {
+    {
         uint8_t sprite[16];
         *(uint64_t*)&sprite[0] = *(uint64_t*)(km + 0xA8);
         *(uint64_t*)&sprite[8] = *(uint64_t*)(km + 0xB0);
-        fn_UI_SetFullscreenFadeSprite(userInterface, sprite);
+        reinterpret_cast<UI::UserInterface*>(userInterface)->SetFullscreenFadeSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
     }
     if (g_pGameSettingsPtr && *g_pGameSettingsPtr)
         *(float*)(ui + 0xDC) = (float)(*g_pGameSettingsPtr)[0] / 100.0f;
@@ -191,7 +198,7 @@ static void GetInputKeyName(void* retval, int deviceType, int keyIndex) {
 
     // Construct UI::String from the KeyMap container's string table at +0xD0
     uint64_t stringTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xD0);
-    fn_UIString_Ctor(retval, stringTable, &tempStr);
+    ::new (retval) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), tempStr);  // B.3.6 bridge
 }
 
 // Helper: set the key name text on a button element (replaces FUN_140073490)
@@ -200,7 +207,7 @@ static void SetInputBindButtonText(void* elementPtr, int deviceType, uint32_t ke
     // Find "textInputKey" in the element
     System::String nameStr("textInputKey");
     uint64_t found = 0;
-    fn_FindElement(*(void**)elementPtr, &found, &nameStr);
+    ::new (&found) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)elementPtr)->FindElement(nameStr));  // B.3.6 bridge
 
     if (!found) return;
 
@@ -348,18 +355,18 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
     // Item 0: "None" (filter -1)
     {
         System::String textStr;
-        fn_StringTable_GetText(stringTable, &textStr, 0);
+        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &textStr, (void*)(intptr_t)-1);
     }
 
     // Item 1: "Bilinear" (filter 0)
     {
         System::String textStr;
-        fn_StringTable_GetText(stringTable, &textStr, 1);
+        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(1));  // B.3.6 bridge
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &textStr, (void*)(intptr_t)0);
     }
 
@@ -368,19 +375,19 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
     if (anisoLevels > 0) {
         // First level: "Anisotropic 1x"
         System::String textStr;
-        fn_StringTable_GetText(stringTable, &textStr, 2);
+        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(2));  // B.3.6 bridge
         System::String fmtStr = System::String::Format("%s 1x", textStr._data);
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &fmtStr, (void*)(intptr_t)1);
     }
     // Higher levels: "Anisotropic 2x", "Anisotropic 4x", etc.
     for (int level = 2; level <= anisoLevels; level += 2) {
         System::String textStr;
-        fn_StringTable_GetText(stringTable, &textStr, 2);
+        ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(2));  // B.3.6 bridge
         System::String fmtStr = System::String::Format("%s %ix", textStr._data, level);
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &fmtStr, (void*)(intptr_t)level);
     }
 
@@ -419,18 +426,18 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
         if (i == 0) {
             // "None"
             System::String textStr;
-            if (stringTable) fn_StringTable_GetText(stringTable, &textStr, 0);
+            if (stringTable) ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
             uint8_t spriteBuf[16] = {};
-            fn_Sprite_DefaultCtor(spriteBuf);
+            ::new (spriteBuf) UI::Sprite();
             addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, &textStr,
                                                (void*)(intptr_t)0);
         } else {
             // "Nx multisample" — e.g. "2x Multisample"
             System::String textStr;
-            if (stringTable) fn_StringTable_GetText(stringTable, &textStr, 1);
+            if (stringTable) ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(1));  // B.3.6 bridge
             System::String fmtStr = System::String::Format("%ix %s", i + 1, textStr._data);
             uint8_t spriteBuf[16] = {};
-            fn_Sprite_DefaultCtor(spriteBuf);
+            ::new (spriteBuf) UI::Sprite();
             addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, &fmtStr,
                                                (void*)(intptr_t)i);
         }
@@ -483,7 +490,7 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
 
         System::String fmtStr = System::String::Format("%i", rate);
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboRefresh, spriteBuf, &fmtStr, (void*)(intptr_t)i);
 
         if ((uint32_t)num == self->savedRefreshNum && (uint32_t)den == self->savedRefreshDen)
@@ -526,7 +533,7 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
 
         System::String fmtStr = System::String::Format("%ix%i", w, h);
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboResolution, spriteBuf, &fmtStr, (void*)(intptr_t)i);
 
         if (w == self->savedWidth && h == self->savedHeight)
@@ -557,7 +564,7 @@ static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
         // Adapter name is a System::String at the start of each 0x38-byte entry
         void* adapterName = (void*)(adapterArray + (intptr_t)i * 0x38);
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboAdapter, spriteBuf, adapterName, (void*)(intptr_t)i);
     }
 
@@ -586,7 +593,7 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
         void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
                              ->GetInterface(i);   // B.3.5 bridge
         uint8_t spriteBuf[16] = {};
-        fn_Sprite_DefaultCtor(spriteBuf);
+        ::new (spriteBuf) UI::Sprite();
         fn_ComboElement_AddItem(self->comboRenderer, spriteBuf, gfxIface, (void*)(intptr_t)i);
     }
 
@@ -640,9 +647,9 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         FIND_ELEMENT(buttonOk,     "buttonOk");
         FIND_ELEMENT(buttonCancel, "buttonCancel");
         FIND_ELEMENT(buttonApply,  "buttonApply");
-        fn_Element_SetElementId(buttonOk,     kButton_Ok);
-        fn_Element_SetElementId(buttonCancel, kButton_Cancel);
-        fn_Element_SetElementId(buttonApply,  kButton_Apply);
+        reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(kButton_Ok);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(buttonCancel)->SetElementId(kButton_Cancel);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(buttonApply)->SetElementId(kButton_Apply);  // B.3.6 bridge
         if (buttonCancel) *(uint32_t*)((uintptr_t)buttonCancel + 0xC0) = 8;
     }
 
@@ -652,10 +659,10 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         FIND_ELEMENT(self->sliderMusic,  "sliderMusic");
         FIND_ELEMENT(self->sliderAmbient,"sliderAmbient");
         FIND_ELEMENT(self->sliderEffect, "sliderEffect");
-        fn_Element_SetElementId(self->sliderUI,     kSlider_UI);
-        fn_Element_SetElementId(self->sliderMusic,  kSlider_Music);
-        fn_Element_SetElementId(self->sliderAmbient,kSlider_Ambient);
-        fn_Element_SetElementId(self->sliderEffect, kSlider_Effect);
+        reinterpret_cast<UI::Element*>(self->sliderUI)->SetElementId(kSlider_UI);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->sliderMusic)->SetElementId(kSlider_Music);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->sliderAmbient)->SetElementId(kSlider_Ambient);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->sliderEffect)->SetElementId(kSlider_Effect);  // B.3.6 bridge
         void* audioSliders[4] = { self->sliderUI, self->sliderMusic,
                                    self->sliderAmbient, self->sliderEffect };
         for (int i = 0; i < 4; i++) {
@@ -672,12 +679,12 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         FIND_ELEMENT(self->comboAntialias, "comboAntialias");
         FIND_ELEMENT(self->comboFilter,    "comboFilter");
         FIND_ELEMENT(self->comboRefresh,   "comboRefresh");
-        fn_Element_SetElementId(self->comboRenderer,   kCombo_Renderer);
-        fn_Element_SetElementId(self->comboAdapter,    kCombo_Adapter);
-        fn_Element_SetElementId(self->comboResolution, kCombo_Resolution);
-        fn_Element_SetElementId(self->comboRefresh,    kCombo_Refresh);
-        fn_Element_SetElementId(self->comboAntialias,  kCombo_Antialias);
-        fn_Element_SetElementId(self->comboFilter,     kCombo_Filter);
+        reinterpret_cast<UI::Element*>(self->comboRenderer)->SetElementId(kCombo_Renderer);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->comboAdapter)->SetElementId(kCombo_Adapter);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->comboResolution)->SetElementId(kCombo_Resolution);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->comboRefresh)->SetElementId(kCombo_Refresh);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->comboAntialias)->SetElementId(kCombo_Antialias);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(self->comboFilter)->SetElementId(kCombo_Filter);  // B.3.6 bridge
         if (vidCfg) {
             self->savedRenderer   = *(uint32_t*)((uintptr_t)vidCfg + 0x04);
             self->savedAdapter    = *(uint32_t*)((uintptr_t)vidCfg + 0x08);
@@ -732,9 +739,9 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         if (stringTable && self->comboAutosave) {
             for (int i = 0; i < 9; i++) {
                 System::String textStr;
-                fn_StringTable_GetText(stringTable, &textStr, i);
+                ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(i));  // B.3.6 bridge
                 uint8_t spriteBuf[16] = {};
-                fn_Sprite_DefaultCtor(spriteBuf);
+                ::new (spriteBuf) UI::Sprite();
                 fn_ComboElement_AddItem(self->comboAutosave, spriteBuf, &textStr,
                                         (void*)(intptr_t)i);
             }
@@ -831,7 +838,7 @@ static void OptionsDialog_ApplyInputSettings(OptionsDialog* self) {
 
     // Enable cursor in UI
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    if (fn_UI_EnableCursor) fn_UI_EnableCursor(userInterface, true);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->EnableCursor(true);  // B.3.6 bridge
 
     // Enable/disable mouse clipping based on checkbox
     bool mouseClip = *(uint8_t*)((uintptr_t)*(void**)&self->checkMouseClip + 0xD8);
@@ -1177,7 +1184,7 @@ void OptionsDialog_OnOk(OptionsDialog* self) {
     uint8_t ibpBuf[8];
     new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    fn_UI_CloseDialog(userInterface, ibpBuf);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibpBuf));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -1222,7 +1229,7 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
     uint8_t ibpBuf[8];
     new (ibpBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
     void* userInterface = *(void**)((uintptr_t)self + 0x10);
-    fn_UI_CloseDialog(userInterface, ibpBuf);
+    reinterpret_cast<UI::UserInterface*>(userInterface)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibpBuf));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -1397,7 +1404,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
     if (!keyMap) return;
 
     void* inputList = self->inputList;
-    int childCount = fn_Element_ChildCount(inputList);
+    int childCount = reinterpret_cast<const UI::Element*>(inputList)->ChildCount();  // B.3.6 bridge
 
     int numRows = childCount / 3;
     if (numRows <= 0) return;
@@ -1408,13 +1415,13 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
     for (int row = 0; row < numRows; row++, inputId++) {
         // Get the 3 children for this row
         uint64_t rowChild = 0;
-        fn_Element_Child(self->inputList, &rowChild, row * 3);
+        ::new (&rowChild) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(self->inputList)->Child(row * 3));  // B.3.6 bridge
 
         // Find "textInputName" in the row container and set label
         {
             System::String nameStr("textInputName");
             uint64_t textElem = 0;
-            fn_FindElement((void*)rowChild, &textElem, &nameStr);
+            ::new (&textElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>((void*)rowChild)->FindElement(nameStr));  // B.3.6 bridge
 
             if (textElem) {
                 void* textObj = (void*)textElem;
@@ -1422,7 +1429,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
                     // Get input name from KeyMap container's name table at +0xC8
                     uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
                     uint8_t uiStr[16];
-                    fn_UIString_Ctor_Index(uiStr, nameTable, inputId);
+                    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(nameTable)), inputId);  // B.3.6 bridge
                     fn_TextElement_SetText(textObj, uiStr);
                 }
             }
@@ -1431,7 +1438,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
         // Set bind button texts and element IDs for slots 0 and 1
         for (int slot = 0; slot < 2; slot++) {
             uint64_t btnChild = 0;
-            fn_Element_Child(self->inputList, &btnChild, row * 3 + 1 + slot);
+            ::new (&btnChild) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(self->inputList)->Child(row * 3 + 1 + slot));  // B.3.6 bridge
 
             // Get current device and key for this input binding
             int device = fn_KeyMap_GetDeviceForId(keyMap, inputId, slot);
@@ -1441,7 +1448,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
             SetInputBindButtonText((void*)&btnChild, device, key);
 
             // Assign element ID
-            fn_Element_SetElementId((void*)btnChild, elemId + slot);
+            reinterpret_cast<UI::Element*>((void*)btnChild)->SetElementId(elemId + slot);  // B.3.6 bridge
         }
 
         elemId += 2;
@@ -1499,16 +1506,16 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     // Get input name from KeyMap container's name table at +0xC8
     uint8_t inputNameUI[16];
     uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
-    fn_UIString_Ctor_Index(inputNameUI, nameTable, inputId);
+    ::new (inputNameUI) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(nameTable)), inputId);  // B.3.6 bridge
 
     // Convert to System::String
     System::String inputNameStr;
-    fn_UIString_ToSystemString(inputNameUI, &inputNameStr);
+    ::new (&inputNameStr) System::String(reinterpret_cast<const UI::String*>(inputNameUI)->operator System::String());  // B.3.6 bridge
 
     // Find TextElement in dialog and set parameter 0
     if (g_TypeId_TextElement) {
         uint64_t textElem = 0;
-        fn_DialogInstance_FindElementType((void*)dialogPtr, &textElem, *g_TypeId_TextElement);
+        ::new (&textElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialogPtr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
         if (textElem) {
             fn_TextElement_SetParameter((void*)textElem, 0, &inputNameStr);
         }
@@ -1517,7 +1524,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
     // Show dialog modally — get result
     void* userInterface = *(void**)((uintptr_t)&self->base + 0x10);
     uint64_t showPtr = dialogPtr;
-    int result = fn_UI_ShowDialog(userInterface, &showPtr);
+    int result = reinterpret_cast<UI::UserInterface*>(userInterface)->ShowDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&showPtr));  // B.3.6 bridge
 
     // Read captured key data from dialog before deleting
     int capturedDevice = *(int*)((uintptr_t)(void*)dialogPtr + 0xC4);
@@ -1575,13 +1582,13 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         uint8_t newKeyUI[16];
         GetInputKeyName(newKeyUI, capturedDevice, capturedKey);
         System::String newKeyStr;
-        fn_UIString_ToSystemString(newKeyUI, &newKeyStr);
+        ::new (&newKeyStr) System::String(reinterpret_cast<const UI::String*>(newKeyUI)->operator System::String());  // B.3.6 bridge
 
         // Get the name of the existing binding that conflicts
         uint8_t conflictNameUI[16];
-        fn_UIString_Ctor_Index(conflictNameUI, nameTable, conflictId);
+        ::new (conflictNameUI) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(nameTable)), conflictId);  // B.3.6 bridge
         System::String conflictNameStr;
-        fn_UIString_ToSystemString(conflictNameUI, &conflictNameStr);
+        ::new (&conflictNameStr) System::String(reinterpret_cast<const UI::String*>(conflictNameUI)->operator System::String());  // B.3.6 bridge
 
         // Check if the conflicting binding is the same as the current one
         // (in which case no confirmation is needed)
@@ -1602,19 +1609,19 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
             // param 0 = new key name, param 1 = conflicting binding name, param 2 = current input name
             if (g_TypeId_TextElement) {
                 uint64_t textElem2 = 0;
-                fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem2, *g_TypeId_TextElement);
+                ::new (&textElem2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
                 if (textElem2) {
                     fn_TextElement_SetParameter((void*)textElem2, 0, &newKeyStr);
                 }
 
                 uint64_t textElem3 = 0;
-                fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem3, *g_TypeId_TextElement);
+                ::new (&textElem3) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
                 if (textElem3) {
                     fn_TextElement_SetParameter((void*)textElem3, 1, &conflictNameStr);
                 }
 
                 uint64_t textElem4 = 0;
-                fn_DialogInstance_FindElementType((void*)dialog2Ptr, &textElem4, *g_TypeId_TextElement);
+                ::new (&textElem4) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
                 if (textElem4) {
                     fn_TextElement_SetParameter((void*)textElem4, 2, &inputNameStr);
                 }
@@ -1622,7 +1629,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
 
             // Show confirmation dialog
             uint64_t show2Ptr = dialog2Ptr;
-            confirmResult = fn_UI_ShowDialog(userInterface, &show2Ptr);
+            confirmResult = reinterpret_cast<UI::UserInterface*>(userInterface)->ShowDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&show2Ptr));  // B.3.6 bridge
             reinterpret_cast< ::Object::InternalBasePtr*>((void*)&dialog2Ptr)->DeletePtr();   // B.3.3 bridge
         }
 
