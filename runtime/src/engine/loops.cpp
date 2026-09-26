@@ -138,20 +138,11 @@ using RtEngine::Loader;
 
 namespace {
 
-// ============================================================================
-// The mangled names, spelled once as STRING LITERALS.
-// ============================================================================
-// tools/runtime_census.py greps for the literal inside RegisterRuntimeExport,
-// so a named constant used at the registration site is invisible to it and has
-// twice produced a false progress report
-// (reference_census_cannot_see_nonliteral_registrations.md). These constants
-// therefore exist ONLY for the raw DLL door lookups inside diff guards; every
-// RegisterRuntimeExport call at the bottom of this file repeats the literal.
-const char* const kUpdateLoopCtor    = "??0UpdateLoop@Engine@@QEAA@XZ";
-const char* const kIsRunning         = "?IsRunning@UpdateLoop@Engine@@QEBA_NXZ";
-const char* const kLoaderLoopCtor    = "??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z";
-const char* const kDialogLoopTCtor   = "??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z";
-const char* const kDialogLoaderCtor  = "??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z";
+// The five mangled-name constants that stood here (kUpdateLoopCtor, kIsRunning,
+// kLoaderLoopCtor, kDialogLoopTCtor, kDialogLoaderCtor) lost their last reader
+// with the diff guards; B.3.7 close removed them. Every RegisterRuntimeExport
+// call at the bottom of this file spells its literal in full (tools/
+// runtime_census.py greps the literal at the registration site).
 
 // ============================================================================
 // Dependencies — each resolved ONCE and cached.

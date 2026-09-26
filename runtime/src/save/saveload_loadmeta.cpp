@@ -242,14 +242,6 @@ using RwDeleteFn     = void (*)(ReaderWriter*, unsigned int);                // 
 using LoadMetaDataFn = void (*)(SaveLoad*, const char**, void**,
                                 int*, int*, int*, ModArray*);
 
-// The exported name, spelled ONCE and reused by the port, the oracle and the
-// registration below. tools/runtime_census.py can only see it where it is a
-// STRING LITERAL at the RegisterRuntimeExport call site, so the registration at
-// the bottom of this file repeats it in full rather than referring to this
-// constant (reference_census_cannot_see_nonliteral_registrations).
-constexpr const char* kLoadMetaData =
-    "?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z";
-
 template <typename Fn>
 inline Fn VSlot(const void* obj, int byteOffset) {
     const void* const* vtbl = *reinterpret_cast<const void* const* const*>(obj);
