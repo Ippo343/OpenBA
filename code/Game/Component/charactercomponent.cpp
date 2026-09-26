@@ -341,13 +341,12 @@ extern "C" void CharacterComponent_Serialize(void* self, void* stream);
 
 // 0x140109d20. Component() is the CALL 0x1401188b0; the 0x140162370 stamp is
 // the compiler's; flags |= 0x8f.
-// PORT GAP (retail 0x140109d59 / 0x140109d74): retail writes +0x40 = -1 (char
-// index) and +0x60 = -1 (action-stack top) here; the tree's factory zero-filled
-// them and Startup (CharacterComponent_BodyInit) writes them. Kept as the tree's;
-// the retail values are their own titled commit.
+// +0x40 = -1 (char index, 0x140109d59) and +0x60 = -1 (action-stack top,
+// 0x140109d74) are the ctor's own stores; Startup (CharacterComponent_BodyInit)
+// still re-writes both, as it did when the inert factory zero-filled them.
 CharacterComponent::CharacterComponent()
     : data28(0), _pad29{}, data2C(0), data30(0), data34(0), data38(0), _pad3C{},
-      data40(0), _pad44{}, data48(0), data50(0), data58(0), data60(0), _pad64{},
+      data40(-1), _pad44{}, data48(0), data50(0), data58(0), data60(-1), _pad64{},
       data68(0), data70(0), data78(0) {
     OrFlagsInCtor(0x8f);
 }

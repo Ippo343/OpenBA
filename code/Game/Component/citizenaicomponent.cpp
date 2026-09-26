@@ -854,12 +854,11 @@ extern "C" void CitizenAIComponent_Serialize(void* self, void* stream);
 
 // 0x14010fb70. Component() is the CALL 0x1401188b0; the 0x140162470 stamp is
 // the compiler's; flags |= 0x89. The sixteen System::Time() at +0x40 are zero.
-// PORT GAP (retail 0x14010fba0/0x14010fba7): retail writes +0x28 = 0xc and
-// +0x2c = -1 here; the tree's factory zero-filled them and Startup
-// (CitizenAIComponent_BodyInit) writes them. Kept as the tree's; the retail
-// values are their own titled commit.
+// +0x28 = 0xc (aiState, 0x14010fba0) and +0x2c = -1 (pending state, 0x14010fba7)
+// are the ctor's own stores; Startup (CitizenAIComponent_BodyInit) still
+// re-writes them, as it did when the inert factory zero-filled them.
 CitizenAIComponent::CitizenAIComponent()
-    : aiState(0), targetId(0), data30(0), _pad32{}, data38(0), timers{},
+    : aiState(0xc), targetId(-1), data30(0), _pad32{}, data38(0), timers{},
       dataC0(0), dataC8(0) {
     OrFlagsInCtor(0x89);
 }

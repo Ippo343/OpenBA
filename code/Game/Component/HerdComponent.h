@@ -35,9 +35,7 @@ public:
 
     Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140034ea0
     void Persist(void* stream) override;                          // [3] 0x140121f90
-    // Retail slot 4 is Component's `RET`. The tree finishes the ctor's +0x4c = -1
-    // here (HerdComponent_Startup); kept until the ctor carries it (own commit).
-    void Startup() override;                                      // [4] (tree)
+    // [4] inherited: Component's `RET` 0x140118a50 (the ctor writes +0x4c = -1).
     void OnAdded() override;                                      // [6] 0x140121f40
     void OnRemove() override;                                     // [7] 0x140121e20 PORT GAP
     void Update(void* time) override;                             // [9] 0x140121bf0
@@ -49,7 +47,7 @@ public:
     uint64_t data40;       // +0x40 member array count / capacity
     uint8_t  data48;       // +0x48 phase (0 grazing, 1 migrating)
     uint8_t  _pad49[3];    // +0x49
-    int32_t  data4C;       // +0x4C tile (retail ctor -1)
+    int32_t  data4C;       // +0x4C tile (ctor -1)
     uint64_t data50;       // +0x50 System::Time timer
     uint64_t data58;       // +0x58
 

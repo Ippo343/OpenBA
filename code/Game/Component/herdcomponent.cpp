@@ -1056,12 +1056,12 @@ extern "C" void HerdComponent_Serialize(void* self, void* stream);
 // 0x140122150. Component() is the CALL 0x1401188b0; the 0x140163680 stamp is
 // the compiler's; +0x28, +0x38, +0x40, +0x48 (byte), +0x50, +0x58 = 0; flags |=
 // 0x0b (0x8b). Retail leaves +0x30 unwritten (zeroed here, as the tree did).
-// PORT GAP (retail 0x14012218c): retail writes +0x4c = -1 here; the tree writes
-// it from the Startup slot (HerdComponent_Startup). Kept as the tree's; moving it
-// into the ctor is its own titled commit.
+// +0x4c = -1 is the ctor's own store (0x14012218c). The tree used to write it from
+// the Startup slot (HerdComponent_Startup) because the inert factory could not
+// express it; retail's slot 4 is Component's `RET`, which the class now inherits.
 HerdComponent::HerdComponent()
     : data28(0), data30(0), data38(0), data40(0), data48(0), _pad49{},
-      data4C(0), data50(0), data58(0) {
+      data4C(-1), data50(0), data58(0) {
     OrFlagsInCtor(0x0b);
 }
 
@@ -1074,7 +1074,6 @@ Object::Base* HerdComponent::DeletingDtor(unsigned flags) {
 }
 
 void HerdComponent::Persist(void* stream) { HerdComponent_Serialize(this, stream); }   // [3] 0x140121f90
-void HerdComponent::Startup() { HerdComponent_Startup(this); }   // [4] tree: the ctor's +0x4c = -1 tail
 void HerdComponent::OnAdded() { HerdComponent_OnAdd(this); }     // [6] 0x140121f40
 
 // [7] 0x140121e20. PORT GAP (retail 0x140121e20) — B38 D9: the body is ported

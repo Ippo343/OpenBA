@@ -795,13 +795,11 @@ void GrowthComponent_InitFuncs() {
 extern "C" void GrowthComponent_Serialize2(void* self, void* stream);
 
 // 0x1401208f0. Component() is the CALL 0x1401188b0; the 0x140163590 stamp is
-// the compiler's; +0x28..+0x40 = 0; flags |= 0xcb.
-// PORT GAP (retail 0x1401208f0): retail also writes +0x48 = +0x4c = 1.0f; the
-// tree's factory zero-filled them (Startup seeds growthScale). Kept as the tree's
-// here; the retail values are their own titled commit.
+// the compiler's; +0x28..+0x40 = 0; +0x48 (the smoothed displayed scale) =
+// +0x4c (growthScale) = 1.0f (0x14012092d / 0x140120934); flags |= 0xcb.
 GrowthComponent::GrowthComponent()
     : field28(nullptr), field30(nullptr), field38(nullptr), field40(nullptr),
-      growthRate(0.0f), growthScale(0.0f) {
+      growthRate(1.0f), growthScale(1.0f) {
     OrFlagsInCtor(0xcb);
 }
 
