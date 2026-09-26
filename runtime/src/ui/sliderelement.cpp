@@ -18,31 +18,21 @@
 // UI non-slot callee list; Update tail-calls it by address. Nor
 // ?GetSliderBounds@ (0x1800d7270) or ?SetParameter@ (0x1800d6ca0).
 //
-// ---------------------------------------------------------------------------
-// LAYOUT. sizeof == 0x130 (deleting dtor `MOV EDX,0x130`), every field from
-// the ctor at 0x1800d7570:
+// LAYOUT: runtime/types/ui/SliderElement.h (sizeof 0x130, every field a
+// store in the ctor at 0x1800d7570).
 //
-//   +0xC0 / +0xD0 / +0xE0   _track{Start,Middle,End}   the groove, 3-slice
-//   +0xF0                   _thumb        UI::Sprite
-//   +0x100                  _thumbHot     UI::Sprite (used while _hovered)
-//   +0x110  _trackOffsetY   int32, ctor 0   } one qword store of 0
-//   +0x114  _thumbMargin    int32, ctor 0   }
-//   +0x118  _minimum        float, ctor 0.0f   ?SetMinimumValue@ 0x180049ea0
-//   +0x11C  _maximum        float, ctor 1.0f   ?SetMaximumValue@ 0x180049eb0
-//   +0x120  _steps          int32, ctor 10   (a page click moves range/steps)
-//   +0x124  _hovered        bool,  ctor 0
-//   +0x128  _value          float, ctor 0.25f  ?SetCurrentValue@ 0x180049ec0
-//   +0x12C  _dragAnchor     float
-//
-// runtime/types/ui/SliderElement.h said "exactly an Element with no extra
-// state, as far as this lane's evidence goes". That was an honest statement of
-// a 2026-09-07 lane's evidence and it is now superseded; the header says so.
+// ENDGAME B.3.6 block C5: the six slot bodies MOVED into the members of the
+// real `UI::SliderElement`; each registered door is a one-line QUALIFIED
+// delegation. The ctor / dtor stay doors (B4b-2).
 //
 // ~SliderElement destroys nothing and does NOT restamp the vtable — five
 // instructions at 0x180049ee0, a bare tail jump to ~Element.
 // ============================================================================
 
+#include <atomic>
+
 #include "widget_common.h"
+#include "../../types/ui/SliderElement.h"
 
 using namespace rtui;
 
@@ -60,13 +50,15 @@ constexpr int kMaximum     = 0x11C;
 constexpr int kSteps       = 0x120;
 constexpr int kHovered     = 0x124;
 constexpr int kValue       = 0x128;
-constexpr int kDragAnchor  = 0x12C;
-
-constexpr int kUsPressed  = 0x01;
-constexpr int kUsReleased = 0x04;
-constexpr int kUsDeltaX   = 0x0c;
-constexpr int kUsMouseX   = 0x18;
-constexpr int kUsMouseY   = 0x1c;
+static_assert(kTrackStart  == offsetof(UI::SliderElement, _trackStart), "");
+static_assert(kThumbHot    == offsetof(UI::SliderElement, _thumbHot), "");
+static_assert(kTrackOffY   == offsetof(UI::SliderElement, _trackOffsetY), "");
+static_assert(kThumbMargin == offsetof(UI::SliderElement, _thumbMargin), "");
+static_assert(kMinimum     == offsetof(UI::SliderElement, _minimum), "");
+static_assert(kMaximum     == offsetof(UI::SliderElement, _maximum), "");
+static_assert(kSteps       == offsetof(UI::SliderElement, _steps), "");
+static_assert(kHovered     == offsetof(UI::SliderElement, _hovered), "");
+static_assert(kValue       == offsetof(UI::SliderElement, _value), "");
 
 constexpr int kUiEvents     = 0x48;
 constexpr int kUiEventCount = 0x50;
@@ -84,56 +76,310 @@ struct WidgetEvent {
 };
 static_assert(sizeof(WidgetEvent) == 0x30, "");
 
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A");
+// RULE B6-5: namespace-scope atomics, never a function-local first-call cache.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7SliderElement@UI@@6B@"); }
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
+const uint8_t* SliderTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@SliderElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtSliderElement() { return AtomicExport(g_vtable, "??_7SliderElement@UI@@6B@"); }
 
+// ?UpdateNumber@SliderElement@UI@@AEAAXXZ (0x1800d6c20) — its body is
+// element_bodies_b5.cpp's door (fragment pass); reached by address.
 using UpdateNumberFn = void (*)(void* self);
+
+int32_t SpriteW(const ::Sprite& s) { return SpriteWidth(&s, 0); }
+int32_t SpriteH(const ::Sprite& s) { return SpriteHeight(&s, 0); }
 
 // The thumb travel, computed identically by ComputeLayout, Draw and Update:
 //   span = (_layoutRight - 2*(thumbW/2 + _thumbMargin)) - _layoutLeft
 //   pos  = span * ((_value - _minimum) / (_maximum - _minimum))      (0 if flat)
-int32_t ThumbOffset(void* self, int32_t thumbW) {
-    const float range = F32(self, kMaximum) - F32(self, kMinimum);
+int32_t ThumbOffset(const UI::SliderElement& s, int32_t thumbW) {
+    const float range = s._maximum - s._minimum;
     if (range == 0.0f) return 0;
-    const int32_t span = (I32(self, kElLayoutRight)
-                          + ((thumbW >> 1) + I32(self, kThumbMargin)) * -2)
-                         - I32(self, kElLayoutLeft);
+    const int32_t span = (s._layoutRight + ((thumbW >> 1) + s._thumbMargin) * -2)
+                         - s._layoutLeft;
     return static_cast<int32_t>(static_cast<float>(span)
-                                * ((F32(self, kValue) - F32(self, kMinimum)) / range));
+                                * ((s._value - s._minimum) / range));
 }
 
-void QueueEvent(void* self, void* ui, void** dlgPtr, const void* state) {
+void QueueEvent(UI::SliderElement* self, void* ui,
+                Object::InternalPtr<UI::DialogInstance>* dialog,
+                const UI::Element::UpdateState& state) {
     WidgetEvent ev;
-    ev.dialog    = *dlgPtr;
+    ev.dialog    = dialog->Get();
     ev.element   = self;
     ev.kind      = 0x17;
-    ev.elementId = I32(self, kElElementId);
-    ev.mouseX    = I32c(state, kUsMouseX);
-    ev.mouseY    = I32c(state, kUsMouseY);
+    ev.elementId = self->_elementId;
+    ev.mouseX    = state.mouseX;
+    ev.mouseY    = state.mouseY;
     ev.value     = 0;
     ev.tail      = 0;
+    // UserInterface's event array (block E's class): raw offsets, by address.
     RtAddr<ArraySetSizeFillFn>(0x180033690ull)(
         B(ui, kUiEvents), I32(ui, kUiEventCount) + 1, &ev);
 }
 
 }  // namespace
 
-extern "C" uint32_t RtUi_SliderElement_Type(const void*) {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+namespace UI {
+
+// [1] 0x180049d20 / [2] 0x180049d00
+const char* SliderElement::TypeName() const {
+    const char* v = nullptr; __builtin_memcpy(&v, SliderTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" const char* RtUi_SliderElement_TypeName(const void*) {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
+uint32_t SliderElement::Type() const {
+    uint32_t v = 0; __builtin_memcpy(&v, SliderTypeInfo(), sizeof v); return v;
 }
 
-// ??0SliderElement@UI@@QEAA@XZ   0x1800d7570
+// [4] 0x1800d7380
+void SliderElement::ComputeSize() {
+    if ((_flags & kFlagNeedsSizeCalc) == 0) return;
+
+    const int32_t trackW = SpriteW(_trackStart) + SpriteW(_trackMiddle) + SpriteW(_trackEnd);
+    int32_t width = SpriteW(_thumb);
+
+    int32_t height = 0;
+    if (_children.GetSize() > 0) {
+        Element* child = _children.GetData()[0];
+        if (child != nullptr) {
+            int32_t cw = 0;
+            InlineGetPaddedSize(child, &cw, &height);
+        }
+    }
+
+    if (width < trackW) width = trackW;
+    _layoutWidth = width;
+
+    int32_t spriteH = SpriteH(_trackStart);
+    const int32_t thumbH = SpriteH(_thumb);
+    if (spriteH < thumbH) spriteH = thumbH;
+    if (height  < spriteH) height = spriteH;
+
+    _flags &= ~kFlagNeedsSizeCalc;
+    _layoutHeight = height;
+}
+
+// [5] 0x1800d6fc0
+void SliderElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (_border != nullptr)
+        reinterpret_cast<Element*>(_border)->ComputeLayout(x, y, right, bottom);   // B.3.6 bridge — slot 5
+
+    ComputeSize();   // slot 4, VIRTUAL — `CALL [RAX+0x20]` in retail
+
+    int32_t h = _layoutHeight;
+    const int32_t align = _alignment;
+    if (right  < _layoutWidth + x) x = right - _layoutWidth;
+    if (bottom < h + y) y = bottom - h;
+
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t ah = (bottom - _bottomPad) - py;
+    const int32_t aw = (right  - _rightPad)  - px;
+
+    if ((_flags & kFlagStretchY) != 0) h = ah;
+
+    switch (align) {
+        case 2: case 5: case 8:
+            px = (right - _rightPad) - aw;
+            break;
+        default: break;
+    }
+    if (align > 2) {
+        if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
+        else if (align < 9) py = (bottom - _bottomPad) - h;
+    }
+
+    _layoutTop    = py;
+    _layoutLeft   = px;
+    _layoutRight  = aw + px;
+    _layoutBottom = py + h;
+
+    Element* child = _children.GetData()[0];
+    if (child == nullptr) return;
+
+    int32_t cw = 0, ch = 0;
+    InlineGetPaddedSize(child, &cw, &ch);
+
+    int32_t pos = _layoutLeft + _thumbMargin + ThumbOffset(*this, SpriteW(_thumb));
+
+    int32_t q = SpriteW(_thumb) + pos;
+    if (q + cw < _layoutRight) q = _thumbMargin + q;
+    else                       q = pos - cw;
+
+    _children.GetData()[0]->ComputeLayout(q, _trackOffsetY + _layoutTop,
+                                          q + cw, _layoutBottom);   // slot 5
+}
+
+// [6] 0x1800d6d40
+void SliderElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    void* const ctx = &context;
+    if (_border != nullptr)
+        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
+
+    const uint32_t raw = _color;
+    if ((_flags & kFlagDimColor) != 0) alpha >>= 1;
+    const uint32_t c = ModulateColor(raw, alpha);
+
+    const int32_t left   = _layoutLeft;
+    const int32_t rightX = _layoutRight;
+    const int32_t top    = _layoutTop;
+    const int32_t ty     = top + _trackOffsetY;
+
+    // UI::SpriteContext::AddSprite (block D's class) — by address, doors stay.
+    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackStart, left, ty, c);
+
+    const int32_t midH = SpriteH(_trackMiddle);
+    const int32_t endW = SpriteW(_trackEnd);
+    const int32_t sttW = SpriteW(_trackStart);
+    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, &_trackMiddle,
+                                         left + sttW, ty,
+                                         rightX - endW, ty + midH, c);
+
+    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &_trackEnd,
+                                         rightX - SpriteW(_trackEnd), ty, c);
+
+    // The thumb's TRAVEL is measured with the idle sprite's width even when
+    // the hot sprite is the one drawn (0x1800d6f3d reads +0xF0 before the
+    // hover swap at 0x1800d6f5f). Reproduced.
+    const int32_t pos = ThumbOffset(*this, SpriteW(_thumb));
+    const ::Sprite& thumb = (_hovered != 0) ? _thumbHot : _thumb;
+    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, &thumb, _thumbMargin + pos + left, top, c);
+
+    const Element* child = _children.GetData()[0];
+    if (child != nullptr)
+        child->Draw(context, alpha);   // slot 6
+}
+
+// ---------------------------------------------------------------------------
+// [7] ?Update@SliderElement@UI@@ ...   0x1800d67e0
+// ---------------------------------------------------------------------------
+void SliderElement::Update(const System::Time& time, UserInterface* ui,
+                           Object::InternalPtr<DialogInstance>* dialog,
+                           const UpdateState& state) {
+    // The base Update, QUALIFIED (this object's slot 7 is this very body), with
+    // the handle copied into a temporary whose ADDRESS is passed — retail's shape.
+    Object::InternalPtr<DialogInstance> slot = *dialog;
+    Element::Update(time, ui, &slot, state);
+
+    const int32_t thumbW = SpriteW(_thumb);
+    const int32_t thumbH = SpriteH(_thumb);
+    const float   range  = _maximum - _minimum;
+
+    const int32_t pos = _layoutLeft + _thumbMargin + ThumbOffset(*this, thumbW);
+
+    const int32_t mx = state.mouseX;
+    const int32_t my = state.mouseY;
+    const bool live  = state.buttonPressed != 0 && (_flags & kFlagInteractive) != 0;
+
+    if (mx < pos || pos + thumbW < mx ||
+        my < _layoutTop || _layoutTop + thumbH < my) {
+        _hovered = 0;
+        if (live) {
+            bool moved = true;
+            if (pos + thumbW < mx) {
+                _value = range / static_cast<float>(_steps) + _value;
+            } else if (mx < pos) {
+                _value = _value - range / static_cast<float>(_steps);
+            } else {
+                moved = false;   // inside the thumb band horizontally: no page
+            }
+            if (moved) {
+                QueueEvent(this, ui, dialog, state);
+                RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
+            }
+        }
+    } else {
+        _hovered = 1;
+        if (live) {
+            _dragAnchor = _value;
+            SetFlags(this, _flags | kFlagDragging);
+            RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
+        }
+    }
+
+    const bool isNear = !(mx < _layoutLeft   - 0x20 ||
+                          _layoutRight + 0x20 < mx  ||
+                          my < _layoutTop    - 0x20 ||
+                          _layoutBottom + 0x20 < my);
+
+    const uint32_t flags = _flags;
+    if ((flags & kFlagDragging) != 0 && !isNear) {
+        _value = _dragAnchor;
+        RtAddr<UpdateNumberFn>(0x1800d6c20ull)(this);
+        return;
+    }
+
+    bool doDrag = true;
+    if ((flags & kFlagDragging) != 0 && state.b04 != 0) {       // +0x04: the release
+        SetFlags(this, flags & ~kFlagDragging);
+        if (isNear) RtAddr<PlayFn>(0x1801223d0ull)(ui, 5);
+        else        doDrag = false;
+    }
+
+    if (doDrag && isNear && (_flags & kFlagDragging) != 0) {
+        const int32_t w = SpriteW(_thumb);
+        const int32_t span = (_layoutRight + ((w >> 1) + _thumbMargin) * -2) - _layoutLeft;
+        const float v = _dragAnchor
+            - (static_cast<float>(state.dragDx) / static_cast<float>(span))
+              * (_maximum - _minimum);
+        if (v != _value) {
+            _value = v;
+            QueueEvent(this, ui, dialog, state);
+        }
+    }
+
+    if (_value < _minimum) _value = _minimum;
+    if (_maximum < _value) _value = _maximum;
+
+    RtAddr<UpdateNumberFn>(0x1800d6c20ull)(this);
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, QUALIFIED delegations.
+// ============================================================================
+extern "C" uint32_t RtUi_SliderElement_Type(const void* self) {
+    return reinterpret_cast<const UI::SliderElement*>(self)->UI::SliderElement::Type();
+}
+extern "C" const char* RtUi_SliderElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::SliderElement*>(self)->UI::SliderElement::TypeName();
+}
+extern "C" void RtUi_SliderElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::ComputeSize();
+}
+extern "C" void RtUi_SliderElement_ComputeLayout(void* self, int32_t x, int32_t y,
+                                                 int32_t right, int32_t bottom) {
+    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::ComputeLayout(
+        x, y, right, bottom);
+}
+extern "C" void RtUi_SliderElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::SliderElement*>(self)->UI::SliderElement::Draw(
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_SliderElement_Update(void* self, const void* time, void* ui,
+                                          void** dlgPtr, const void* state) {
+    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::Update(
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
+        *static_cast<const UI::Element::UpdateState*>(state));
+}
+
+// ??0SliderElement@UI@@QEAA@XZ   0x1800d7570 — a DOOR (B4b-2), unchanged.
 extern "C" void* RtUi_SliderElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
     ElementCtor(self);
-    PTR(self, 0x00) = Vtable();
+    PTR(self, 0x00) = VtSliderElement();
     const int sprites[5] = { kTrackStart, kTrackMiddle, kTrackEnd, kThumb, kThumbHot };
     for (int off : sprites) {
         PTR(self, off + kSpriteSheet) = nullptr;
@@ -149,222 +395,9 @@ extern "C" void* RtUi_SliderElement_Ctor(void* self) {   // returns this in RAX,
     return self;
 }
 
-// ??1SliderElement@UI@@UEAA@XZ   0x180049ee0 — tail jump, no restamp.
+// ??1SliderElement@UI@@UEAA@XZ   0x180049ee0 — tail jump, no restamp. A DOOR.
 extern "C" void RtUi_SliderElement_Dtor(void* self) {
     ElementDtor(self);
-}
-
-// slot 4 — 0x1800d7380
-extern "C" void RtUi_SliderElement_ComputeSize(void* self) {
-    if ((U32(self, kElFlags) & kFlagNeedsSizeCalc) == 0) return;
-
-    const int32_t trackW = SpriteWidth(self, kTrackStart)
-                         + SpriteWidth(self, kTrackMiddle)
-                         + SpriteWidth(self, kTrackEnd);
-    int32_t width = SpriteWidth(self, kThumb);
-
-    int32_t height = 0;
-    if (I32(self, kElChildCount) > 0) {
-        void* child = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
-        if (child != nullptr) {
-            int32_t cw = 0;
-            InlineGetPaddedSize(child, &cw, &height);
-        }
-    }
-
-    if (width < trackW) width = trackW;
-    I32(self, kElLayoutWidth) = width;
-
-    int32_t spriteH = SpriteHeight(self, kTrackStart);
-    const int32_t thumbH = SpriteHeight(self, kThumb);
-    if (spriteH < thumbH) spriteH = thumbH;
-    if (height  < spriteH) height = spriteH;
-
-    U32(self, kElFlags) &= ~kFlagNeedsSizeCalc;
-    I32(self, kElLayoutHeight) = height;
-}
-
-// slot 5 — 0x1800d6fc0
-extern "C" void RtUi_SliderElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                                 int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
-
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
-
-    int32_t h = I32(self, kElLayoutHeight);
-    const int32_t align = I32(self, kElAlignment);
-    if (right  < I32(self, kElLayoutWidth) + x) x = right - I32(self, kElLayoutWidth);
-    if (bottom < h + y) y = bottom - h;
-
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-
-    if ((U32(self, kElFlags) & kFlagStretchY) != 0) h = ah;
-
-    switch (align) {
-        case 2: case 5: case 8:
-            px = (right - I32(self, kElRightPad)) - aw;
-            break;
-        default: break;
-    }
-    if (align > 2) {
-        if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
-        else if (align < 9) py = (bottom - I32(self, kElBottomPad)) - h;
-    }
-
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutRight)  = aw + px;
-    I32(self, kElLayoutBottom) = py + h;
-
-    void* child = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
-    if (child == nullptr) return;
-
-    int32_t cw = 0, ch = 0;
-    InlineGetPaddedSize(child, &cw, &ch);
-
-    int32_t pos = I32(self, kElLayoutLeft) + I32(self, kThumbMargin)
-                + ThumbOffset(self, SpriteWidth(self, kThumb));
-
-    int32_t q = SpriteWidth(self, kThumb) + pos;
-    if (q + cw < I32(self, kElLayoutRight)) q = I32(self, kThumbMargin) + q;
-    else                                    q = pos - cw;
-
-    child = reinterpret_cast<void**>(PTR(self, kElChildren))[0];
-    reinterpret_cast<ComputeLayoutSlotFn>(VTable(child)[kVtComputeLayout / 8])(
-        child, q, I32(self, kTrackOffY) + I32(self, kElLayoutTop),
-        q + cw, I32(self, kElLayoutBottom));
-}
-
-// slot 6 — 0x1800d6d40
-extern "C" void RtUi_SliderElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
-
-    const uint32_t raw = U32(me, kElColor);
-    if ((U32(me, kElFlags) & kFlagDimColor) != 0) alpha >>= 1;
-    const uint32_t c = ModulateColor(raw, alpha);
-
-    const int32_t left   = I32(me, kElLayoutLeft);
-    const int32_t rightX = I32(me, kElLayoutRight);
-    const int32_t top    = I32(me, kElLayoutTop);
-    const int32_t ty     = top + I32(me, kTrackOffY);
-
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, B(me, kTrackStart), left, ty, c);
-
-    const int32_t midH = SpriteHeight(me, kTrackMiddle);
-    const int32_t endW = SpriteWidth(me, kTrackEnd);
-    const int32_t sttW = SpriteWidth(me, kTrackStart);
-    RtAddr<AddSprite5Fn>(0x18011d3c0ull)(ctx, B(me, kTrackMiddle),
-                                         left + sttW, ty,
-                                         rightX - endW, ty + midH, c);
-
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, B(me, kTrackEnd),
-                                         rightX - SpriteWidth(me, kTrackEnd), ty, c);
-
-    // The thumb's TRAVEL is measured with the idle sprite's width even when
-    // the hot sprite is the one drawn (0x1800d6f3d reads +0xF0 before the
-    // hover swap at 0x1800d6f5f). Reproduced.
-    const int32_t pos = ThumbOffset(me, SpriteWidth(me, kThumb));
-    const int thumbOff = (U8(me, kHovered) != 0) ? kThumbHot : kThumb;
-    RtAddr<AddSprite3Fn>(0x18011cf00ull)(ctx, B(me, thumbOff),
-                                         I32(me, kThumbMargin) + pos + left, top, c);
-
-    void* child = reinterpret_cast<void**>(PTR(me, kElChildren))[0];
-    if (child != nullptr)
-        reinterpret_cast<DrawSlotFn>(VTable(child)[kVtDraw / 8])(child, ctx, alpha);
-}
-
-// ---------------------------------------------------------------------------
-// slot 7 — ?Update@SliderElement@UI@@ ...   0x1800d67e0
-// ---------------------------------------------------------------------------
-extern "C" void RtUi_SliderElement_Update(void* self, const void* time, void* ui,
-                                          void** dlgPtr, const void* state) {
-    void* slot = *dlgPtr;
-    ElementUpdate(self, time, ui, &slot, state);
-
-    const int32_t thumbW = SpriteWidth(self, kThumb);
-    const int32_t thumbH = SpriteHeight(self, kThumb);
-    const float   range  = F32(self, kMaximum) - F32(self, kMinimum);
-
-    const int32_t pos = I32(self, kElLayoutLeft) + I32(self, kThumbMargin)
-                      + ThumbOffset(self, thumbW);
-
-    const int32_t mx = I32c(state, kUsMouseX);
-    const int32_t my = I32c(state, kUsMouseY);
-    const bool live  = U8c(state, kUsPressed) != 0
-                       && (U32(self, kElFlags) & kFlagInteractive) != 0;
-
-    if (mx < pos || pos + thumbW < mx ||
-        my < I32(self, kElLayoutTop) || I32(self, kElLayoutTop) + thumbH < my) {
-        U8(self, kHovered) = 0;
-        if (live) {
-            bool moved = true;
-            if (pos + thumbW < mx) {
-                F32(self, kValue) = range / static_cast<float>(I32(self, kSteps))
-                                    + F32(self, kValue);
-            } else if (mx < pos) {
-                F32(self, kValue) = F32(self, kValue)
-                                    - range / static_cast<float>(I32(self, kSteps));
-            } else {
-                moved = false;   // inside the thumb band horizontally: no page
-            }
-            if (moved) {
-                QueueEvent(self, ui, dlgPtr, state);
-                RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
-            }
-        }
-    } else {
-        U8(self, kHovered) = 1;
-        if (live) {
-            F32(self, kDragAnchor) = F32(self, kValue);
-            SetFlags(self, U32(self, kElFlags) | kFlagDragging);
-            RtAddr<PlayFn>(0x1801223d0ull)(ui, 4);
-        }
-    }
-
-    const bool isNear = !(mx < I32(self, kElLayoutLeft)   - 0x20 ||
-                          I32(self, kElLayoutRight) + 0x20 < mx  ||
-                          my < I32(self, kElLayoutTop)    - 0x20 ||
-                          I32(self, kElLayoutBottom) + 0x20 < my);
-
-    const uint32_t flags = U32(self, kElFlags);
-    if ((flags & kFlagDragging) != 0 && !isNear) {
-        F32(self, kValue) = F32(self, kDragAnchor);
-        RtAddr<UpdateNumberFn>(0x1800d6c20ull)(self);
-        return;
-    }
-
-    bool doDrag = true;
-    if ((flags & kFlagDragging) != 0 && U8c(state, kUsReleased) != 0) {
-        SetFlags(self, flags & ~kFlagDragging);
-        if (isNear) RtAddr<PlayFn>(0x1801223d0ull)(ui, 5);
-        else        doDrag = false;
-    }
-
-    if (doDrag && isNear && (U32(self, kElFlags) & kFlagDragging) != 0) {
-        const int32_t w = SpriteWidth(self, kThumb);
-        const int32_t span = (I32(self, kElLayoutRight)
-                              + ((w >> 1) + I32(self, kThumbMargin)) * -2)
-                             - I32(self, kElLayoutLeft);
-        const float v = F32(self, kDragAnchor)
-            - (static_cast<float>(I32c(state, kUsDeltaX)) / static_cast<float>(span))
-              * (F32(self, kMaximum) - F32(self, kMinimum));
-        if (v != F32(self, kValue)) {
-            F32(self, kValue) = v;
-            QueueEvent(self, ui, dlgPtr, state);
-        }
-    }
-
-    if (F32(self, kValue) < F32(self, kMinimum)) F32(self, kValue) = F32(self, kMinimum);
-    if (F32(self, kMaximum) < F32(self, kValue)) F32(self, kValue) = F32(self, kMaximum);
-
-    RtAddr<UpdateNumberFn>(0x1800d6c20ull)(self);
 }
 
 // ============================================================================

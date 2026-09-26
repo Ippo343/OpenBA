@@ -89,6 +89,9 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/DocumentTextElement.h"
+#include "../../types/system/String.h"
+
+#include <atomic>
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — resolve.h drags in <windows.h> and PLAN.md §4.1 keeps it out of
@@ -130,13 +133,24 @@ inline void Store16(void* dst, uint16_t v) { __builtin_memcpy(dst, &v, sizeof v)
 inline int32_t& RefCount(char* s) { return *reinterpret_cast<int32_t*>(s - 4); }
 inline int32_t  Length(const char* s) { return *reinterpret_cast<const int32_t*>(s - 8); }
 
+// RULE B6-5: the pipeline runs inside members, and UI is built on the loader
+// thread, so every export resolved here lives in a namespace-scope atomic.
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+std::atomic<void*> g_memFree{nullptr};
+std::atomic<void*> g_captureTypeInfo{nullptr};
+
 using MemFreeFn = void (*)(void*);
 void MemFree(void* p) {
-    RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
-}
-using MemAllocFn = void* (*)(uint64_t size, int align);
-void* MemAlloc(uint64_t size, int align) {
-    return RtAddr<MemAllocFn>(0x1800c7a50ull)(size, align);
+    reinterpret_cast<MemFreeFn>(
+        AtomicExport(g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
 }
 
 // Retail's String release, open-coded at fourteen sites in this file and
@@ -228,20 +242,14 @@ inline bool IsWhitespace(uint8_t c) {
 // ^d search compares against. Retail reads the global at 0x1801fa3f8 directly,
 // which is that static's id field (name pointer 0x1801567d0 == "SpriteCapture").
 uint32_t SpriteCaptureTypeId() {
-    const uint8_t* ti = RT_DATA_SLOT(const uint8_t*,
-                                     "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A");
+    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
+        g_captureTypeInfo, "?_typeInfo@SpriteCapture@UI@@0VBaseTypeInfo@Object@@A"));
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 
 }  // namespace
 
-// forward declarations — GetNextItem calls LayoutRow, FindNextWhiteSpace,
-// BeginLink, EndLink and itself.
-extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* selfv);
-extern "C" int32_t RtUi_DocumentTextElement_FindNextWhiteSpace(void* selfv);
-extern "C" void    RtUi_DocumentTextElement_BeginLink(void* selfv, char* const* name);
-extern "C" void    RtUi_DocumentTextElement_EndLink(void* selfv);
-extern "C" bool    RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* out);
+namespace UI {
 
 // ============================================================================
 // ?FindNextWhiteSpace@DocumentTextElement@UI@@AEAAHXZ   retail 0x1800cefd0
@@ -253,13 +261,12 @@ extern "C" bool    RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentIte
 // The two counters are deliberate: RAX is the 64-bit index into the text and
 // EDX the 32-bit value returned. They start equal and step together, so one
 // int is enough here; the pair exists only because the load is indexed.
-extern "C" int32_t RtUi_DocumentTextElement_FindNextWhiteSpace(void* selfv) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-    int32_t pos = I32(self, O::kTextPos);                      // 1800cefd0
-    const int32_t len = I32(self, O::kTextLength);             // 1800cefd7
+int32_t DocumentTextElement::FindNextWhiteSpace() {
+    int32_t pos = _textPos;                      // 1800cefd0
+    const int32_t len = _textLength;             // 1800cefd7
     if (pos >= len) return pos;                                // 1800cefe4
 
-    const char* text = static_cast<const char*>(PTR(self, O::kContentString));  // 1800cefe6
+    const char* text = static_cast<const char*>(_sourceText);  // 1800cefe6
     for (;;) {
         const uint8_t c = static_cast<uint8_t>(text[pos]);     // 1800cf000
         if (IsWhitespace(c)) break;                            // 1800cf005..1800cf00f
@@ -283,33 +290,29 @@ extern "C" int32_t RtUi_DocumentTextElement_FindNextWhiteSpace(void* selfv) {
 // The reset is built as a temporary and assigned, not stored field by field:
 // 0x18003c760 is the Link assignment operator and it owns the release of the
 // old String. The temporary is then destroyed in the usual way.
-extern "C" void RtUi_DocumentTextElement_EndLink(void* selfv) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
+void DocumentTextElement::EndLink() {
 
-    const int32_t first = I32(self, O::kLinkFirstItem);        // 1800cde12
+    const int32_t first = _openLink.firstItem;        // 1800cde12
     if (first < 0) return;                                     // 1800cde1a
 
-    const int32_t items = I32(self, O::kItemCount);            // 1800cde1c
-    I32(self, O::kLinkLastItem) = items;                       // 1800cde22
+    const int32_t items = _itemsCount;            // 1800cde1c
+    _openLink.lastItem = items;                       // 1800cde22
     if (first < items) {                                       // 1800cde28
-        void* array = self + O::kLinkArrayData;
+        void* array = &_linksData;
         RtAddr<LinkArrayPushFn>(0x18003e1a0ull)(
-            array, I32(array, 0x08) + 1, self + O::kLinkText); // 1800cde3f
+            array, I32(array, 0x08) + 1, &_openLink); // 1800cde3f
     }
 
     // The empty Link: {char* = 0, int = -1, int = -1, bool = false}. Retail
     // writes it as one qword zero, one qword -1 (covering BOTH indices) and one
     // zero byte, which is why the two indices cannot be initialised separately
     // here without changing the store widths for no gain.
-    struct Link { char* text; int32_t first; int32_t last; uint8_t flag; uint8_t pad[7]; };
-    static_assert(sizeof(Link) == 0x18, "UI::DocumentTextElement::Link is 0x18 bytes");
     Link empty;
     empty.text = nullptr;                                      // 1800cde44
-    Store64(&empty.first, -1);                                 // 1800cde4d  ONE QWORD
-    empty.flag = 0;                                            // 1800cde56
+    Store64(&empty.firstItem, -1);                             // 1800cde4d  ONE QWORD
+    empty.armed = 0;                                           // 1800cde56
 
-    using LinkAssignFn = void* (*)(void* dst, const void* src);
-    RtAddr<LinkAssignFn>(0x18003c760ull)(self + O::kLinkText, &empty);   // 1800cde67
+    _openLink = empty;                                         // 1800cde67  Link::operator= (was by address)
 
     ReleaseString(&empty.text);                                // 1800cde6d..1800cde95
 }
@@ -323,16 +326,16 @@ extern "C" void RtUi_DocumentTextElement_EndLink(void* selfv) {
 //
 // The -1 is stored BEFORE the start index (0x1800cdf18 then 0x1800cdf22), and
 // the two are separate dwords rather than one qword because the values differ.
-extern "C" void RtUi_DocumentTextElement_BeginLink(void* selfv, char* const* name) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
+void DocumentTextElement::BeginLink(const System::String& target) {
+    char* const* name = reinterpret_cast<char* const*>(&target);   // one char*, retail's layout
 
-    RtUi_DocumentTextElement_EndLink(self);                    // 1800cdec0
+    EndLink();                    // 1800cdec0
 
-    AssignString(&STR(self, O::kLinkText), *name);             // 1800cdec5..1800cdf0f
+    AssignString(&_openLink.text, *name);             // 1800cdec5..1800cdf0f
 
-    const int32_t items = I32(self, O::kItemCount);            // 1800cdf12
-    I32(self, O::kLinkLastItem)  = -1;                         // 1800cdf18
-    I32(self, O::kLinkFirstItem) = items;                      // 1800cdf22
+    const int32_t items = _itemsCount;            // 1800cdf12
+    _openLink.lastItem  = -1;                         // 1800cdf18
+    _openLink.firstItem = items;                      // 1800cdf22
 }
 
 // ============================================================================
@@ -357,22 +360,21 @@ extern "C" void RtUi_DocumentTextElement_BeginLink(void* selfv, char* const* nam
 //     odd negatives, so they are written differently here.
 //   * The byte at item+0x20 selects the source of the item's baseline: a text
 //     item (0) asks its FONT, anything else uses its own height.
-extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* selfv) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
+int32_t DocumentTextElement::LayoutRow() {
 
-    int32_t i         = I32(self, O::kRowFirstItem);           // 1800cdbca
+    int32_t i         = _rowFirstItem;           // 1800cdbca
     int32_t rowWidth  = 0;                                     // 1800cdbd1
     int32_t rowHeight = 0;                                     // 1800cdbd7
 
-    if (i == I32(self, O::kItemCount)) {                       // 1800cdbda
-        void* font = reinterpret_cast<void* const*>(PTR(self, O::kFontArray))
-                         [I32(self, O::kFontIndex)];
+    if (i == _itemsCount) {                       // 1800cdbda
+        void* font = reinterpret_cast<void* const*>(_fontsData)
+                         [_fontIndex];
         rowHeight = I32(font, O::kFontLineHeight);             // 1800cdbf4
     }
 
     {
-        const int32_t count = I32(self, O::kItemCount);        // 1800cdbf8
-        DocumentItem* items = static_cast<DocumentItem*>(PTR(self, O::kItemArrayData));
+        const int32_t count = _itemsCount;        // 1800cdbf8
+        DocumentItem* items = static_cast<DocumentItem*>(_itemsData);
         for (int32_t k = i; k < count; ++k) {                  // 1800cdbff / 1800cdc32
             rowWidth += items[k].width;                        // 1800cdc20
             if (items[k].height > rowHeight)                   // 1800cdc24
@@ -381,34 +383,34 @@ extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* selfv) {
     }
 
     int32_t penX;
-    const int32_t hAlign = I32(self, O::kHAlign);              // 1800cdc34
+    const int32_t hAlign = _hAlign;              // 1800cdc34
     if (hAlign == 0) {
-        penX = I32(self, O::kPenX);                            // 1800cdc3e
+        penX = _penX;                            // 1800cdc3e
     } else if (hAlign == 1) {
-        penX = I32(self, O::kRightEdge) - rowWidth;            // 1800cdc4b
+        penX = _rightEdge - rowWidth;            // 1800cdc4b
     } else {
         // (right + left)/2 - rowWidth/2, both truncating toward zero.
-        penX = (I32(self, O::kRightEdge) + I32(self, O::kPenX)) / 2
+        penX = (_rightEdge + _penX) / 2
              - rowWidth / 2;                                   // 1800cdc56..1800cdc71
     }
 
-    while (i < I32(self, O::kItemCount)) {                     // 1800cdc73 / 1800cdd85
+    while (i < _itemsCount) {                     // 1800cdc73 / 1800cdd85
         const size_t off = static_cast<size_t>(i) * O::kItemStride;
 
         DocumentItem* item =
-            reinterpret_cast<DocumentItem*>(B(PTR(self, O::kItemArrayData), 0) + off);
+            reinterpret_cast<DocumentItem*>(B(_itemsData, 0) + off);
         item->x = penX;                                        // 1800cdc97
 
         // The array pointer is loaded a SECOND time here (0x1800cdc9b) before
         // the width is read. Same value today; transcribed, not folded.
-        item = reinterpret_cast<DocumentItem*>(B(PTR(self, O::kItemArrayData), 0) + off);
+        item = reinterpret_cast<DocumentItem*>(B(_itemsData, 0) + off);
         penX += item->width;                                   // 1800cdca9
 
-        const int32_t vAlign = I32(self, O::kVAlign);          // 1800cdca2
-        const int32_t penY   = I32(self, O::kPenY);
+        const int32_t vAlign = _vAlign;          // 1800cdca2
+        const int32_t penY   = _penY;
         if (vAlign == 2) {                                     // 1800cdcae  baseline
             if (item->kind == 0) {                             // 1800cdcb3
-                void* font = reinterpret_cast<void* const*>(PTR(self, O::kFontArray))
+                void* font = reinterpret_cast<void* const*>(_fontsData)
                                  [item->index];
                 item->y = penY - I32(font, O::kFontBaseline) + rowHeight;   // 1800cdcd8
             } else {
@@ -416,7 +418,7 @@ extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* selfv) {
             }
         } else if (vAlign == 0) {                              // 1800cdcfb  top
             if (item->kind == 0) {                             // 1800cdcff
-                void* font = reinterpret_cast<void* const*>(PTR(self, O::kFontArray))
+                void* font = reinterpret_cast<void* const*>(_fontsData)
                                  [item->index];
                 item->y = I32(font, O::kFontLineHeight)
                         - I32(font, O::kFontBaseline) + penY;  // 1800cdd25
@@ -426,7 +428,7 @@ extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* selfv) {
         } else {                                               // centre
             int32_t dy;
             if (item->kind == 0) {                             // 1800cdd3a
-                void* font = reinterpret_cast<void* const*>(PTR(self, O::kFontArray))
+                void* font = reinterpret_cast<void* const*>(_fontsData)
                                  [item->index];
                 // BARE arithmetic shift, not a division — see the banner.
                 dy = (I32(font, O::kFontLineHeight)
@@ -450,12 +452,12 @@ extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* selfv) {
 // here because ten transcriptions of the same eight instructions would be ten
 // chances to mistype one of them, not because retail called anything.
 namespace {
-void FlushRow(uint8_t* self) {
-    I32(self, O::kPenY) += RtUi_DocumentTextElement_LayoutRow(self);
-    I32(self, O::kRowFirstItem) = I32(self, O::kItemCount);
-    I32(self, O::kPenX) += I32(self, O::kHangIndent);
-    I32(self, O::kHangIndent) = 0;
-    I32(self, O::kRowPenX) = I32(self, O::kPenX);
+void FlushRow(DocumentTextElement* self) {
+    self->_penY += self->LayoutRow();
+    self->_rowFirstItem = self->_itemsCount;
+    self->_penX += self->_hangIndent;
+    self->_hangIndent = 0;
+    self->_rowPenX = self->_penX;
 }
 }  // namespace
 
@@ -465,32 +467,32 @@ void FlushRow(uint8_t* self) {
 // Returns false at end of text, otherwise fills `out` with one item. Escapes
 // that only mutate state do not produce an item: they loop back and keep
 // parsing, which is what the `continue`s below are.
-extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* out) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
-    char** const textSlot = &STR(self, O::kContentString);
+bool DocumentTextElement::GetNextItem(DocumentItem& item) {
+    DocumentItem* const out = &item;
+    char** const textSlot = &_sourceText;
 
-    int32_t len = I32(self, O::kTextLength);                   // 1800cdf60
+    int32_t len = _textLength;                   // 1800cdf60
 
     // ---- leading whitespace, skipped before anything else ------------------
-    if (I32(self, O::kTextPos) < len) {                        // 1800cdf71
+    if (_textPos < len) {                        // 1800cdf71
         const char* text = *textSlot;                          // 1800cdf7a
         for (;;) {
-            const int32_t pos = I32(self, O::kTextPos);        // 1800cdf81
+            const int32_t pos = _textPos;        // 1800cdf81
             if (!IsWhitespace(static_cast<uint8_t>(text[pos]))) break;   // 1800cdf90
-            I32(self, O::kTextPos) = pos + 1;                  // 1800cdfa2
+            _textPos = pos + 1;                  // 1800cdfa2
             if (pos + 1 >= len) break;                         // 1800cdfa8
         }
     }
-    if (I32(self, O::kTextPos) >= len) return false;           // 1800cdfb4 / 1800cdfb9
+    if (_textPos >= len) return false;           // 1800cdfb4 / 1800cdfb9
 
     for (;;) {
         // ---- one token: either an escape or a word -------------------------
-        if ((*textSlot)[I32(self, O::kTextPos)] != 0x5e) {     // 1800cdfcf
+        if ((*textSlot)[_textPos] != 0x5e) {     // 1800cdfcf
             // ================================================================
             // A WORD. Everything up to the next whitespace or '^'.
             // ================================================================
-            const int32_t start = I32(self, O::kTextPos);      // 1800cee57
-            const int32_t textLen = I32(self, O::kTextLength); // 1800cee61
+            const int32_t start = _textPos;      // 1800cee57
+            const int32_t textLen = _textLength; // 1800cee61
             int32_t end = start;
             if (start < textLen) {                             // 1800cee6b
                 const char* text = *textSlot;                  // 1800cee70
@@ -515,8 +517,8 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
             RtAddr<ConcatCStrFn>(0x1800c92d0ull)(&measured, &word, " ");   // 1800ceeb7
             ReleaseString(&word);                              // 1800ceebd..1800ceeea
 
-            void* font = reinterpret_cast<void* const*>(PTR(self, O::kFontArray))
-                             [I32(self, O::kFontIndex)];       // 1800ceeea
+            void* font = reinterpret_cast<void* const*>(_fontsData)
+                             [_fontIndex];       // 1800ceeea
 
             Store64(&out->width, 0);                           // 1800cef02  ONE QWORD
 
@@ -524,14 +526,14 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
             out->width = RtAddr<ComputeLineLayoutFn>(0x180116c70ull)(
                 font, measured, measuredLen, 0, 0, -1, 0, nullptr);        // 1800cef34
             out->height = I32(font, O::kFontLineHeight);       // 1800cef40
-            out->first  = I32(self, O::kTextPos);              // 1800cef46
+            out->first  = _textPos;              // 1800cef46
             out->last   = end - 1;                             // 1800cef4f
-            out->color  = reinterpret_cast<const int32_t*>(PTR(self, O::kColorArray))
-                              [I32(self, O::kColorIndex)];     // 1800cef63
-            out->index  = I32(self, O::kFontIndex);            // 1800cef6f
+            out->color  = reinterpret_cast<const int32_t*>(_colorsData)
+                              [_colorIndex];     // 1800cef63
+            out->index  = _fontIndex;            // 1800cef6f
             Store16(&out->kind, 0);                            // 1800cef72  ONE WORD
 
-            I32(self, O::kTextPos) = end;                      // 1800cef78
+            _textPos = end;                      // 1800cef78
             ReleaseString(&measured);                          // 1800cef7e..1800cefaf
             return true;                                       // 1800cefaf
         }
@@ -544,139 +546,139 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
         // whitespace skip and the end-of-text test at the BOTTOM of this loop —
         // and never back to the top. `break` here is that jump.
         do {
-            int32_t pos = I32(self, O::kTextPos) + 1;          // 1800cdfe0
-            I32(self, O::kTextPos) = pos;
+            int32_t pos = _textPos + 1;          // 1800cdfe0
+            _textPos = pos;
             if (pos == len) return false;                      // 1800cdfec
             char* text = *textSlot;                            // 1800cdfee
             const char sel = text[pos];                        // 1800cdff4
 
             if (sel == 'n') {                                  // 1800cdff4
-                I32(self, O::kTextPos) = pos + 1;              // 1800cdffd
-                FlushRow(self);                                // 1800ce006..1800ce035
+                _textPos = pos + 1;              // 1800cdffd
+                FlushRow(this);                                // 1800ce006..1800ce035
             } else if (sel == 'p') {                           // 1800ce040
-                I32(self, O::kTextPos) = pos + 1;              // 1800ce049
-                FlushRow(self);                                // 1800ce052..1800ce081
-                FlushRow(self);                                // 1800ce08a..1800ce0b9
+                _textPos = pos + 1;              // 1800ce049
+                FlushRow(this);                                // 1800ce052..1800ce081
+                FlushRow(this);                                // 1800ce08a..1800ce0b9
             } else if (sel == 't') {                           // 1800ce0c4 -> 1800cee2b
                 out->kind   = 3;                               // 1800cee2f
-                out->width  = I32(self, O::kTabWidth);         // 1800cee3a
+                out->width  = _tabWidth;         // 1800cee3a
                 out->height = 0;                               // 1800cee3e
-                ++I32(self, O::kTextPos);                      // 1800cee42
+                ++_textPos;                      // 1800cee42
                 return true;
             } else if (sel == 's') {                           // 1800ce0ce -> 1800cee18
                 out->kind = 3;                                 // 1800cee1c
-                ++I32(self, O::kTextPos);                      // 1800cee20
+                ++_textPos;                      // 1800cee20
                 return true;
             } else if (sel == 'f' || sel == 'c') {             // 1800ce0d8 / 1800ce119
                 // ^f<digit> font slot, ^c<digit> colour slot. A non-digit is
                 // SWALLOWED, not rejected: the cursor still steps past it.
-                const int field = (sel == 'f') ? O::kFontIndex : O::kColorIndex;
+                int32_t& field = (sel == 'f') ? _fontIndex : _colorIndex;
                 ++pos;
-                I32(self, O::kTextPos) = pos;                  // 1800ce0e0
+                _textPos = pos;                  // 1800ce0e0
                 if (pos == len) return false;                  // 1800ce0e6
                 const char d = text[pos];                      // 1800ce0f2
                 if (d >= '0' && d <= '9')                      // 1800ce0f6 / 1800ce0fc
-                    I32(self, field) = d - '0';                // 1800ce105
-                I32(self, O::kTextPos) = pos + 1;              // 1800ce10e
+                    field = d - '0';                          // 1800ce105
+                _textPos = pos + 1;              // 1800ce10e
             } else if (sel == 'j' || sel == 'v') {             // 1800ce15a / 1800ce204
                 // ^j{l,r,c} horizontal, ^v{t,c,b} vertical. Both close the
                 // current row FIRST if it has anything in it, because an
                 // alignment change cannot apply retroactively.
                 ++pos;
-                I32(self, O::kTextPos) = pos;                  // 1800ce167
+                _textPos = pos;                  // 1800ce167
                 if (pos == len) return false;                  // 1800ce16d
-                if (I32(self, O::kRowFirstItem) != I32(self, O::kItemCount))
-                    FlushRow(self);                            // 1800ce187..1800ce1b6
+                if (_rowFirstItem != _itemsCount)
+                    FlushRow(this);                            // 1800ce187..1800ce1b6
                 text = *textSlot;                              // 1800ce1bc  re-read
-                pos  = I32(self, O::kTextPos);
+                pos  = _textPos;
                 const char m = text[pos];
                 if (sel == 'j') {
-                    if      (m == 'l') I32(self, O::kHAlign) = 0;   // 1800ce1cc
-                    else if (m == 'r') I32(self, O::kHAlign) = 1;   // 1800ce1da
-                    else if (m == 'c') I32(self, O::kHAlign) = 2;   // 1800ce1ec
+                    if      (m == 'l') _hAlign = 0;   // 1800ce1cc
+                    else if (m == 'r') _hAlign = 1;   // 1800ce1da
+                    else if (m == 'c') _hAlign = 2;   // 1800ce1ec
                 } else {
-                    if      (m == 't') I32(self, O::kVAlign) = 0;   // 1800ce276
-                    else if (m == 'c') I32(self, O::kVAlign) = 1;   // 1800ce284
-                    else if (m == 'b') I32(self, O::kVAlign) = 2;   // 1800ce296
+                    if      (m == 't') _vAlign = 0;   // 1800ce276
+                    else if (m == 'c') _vAlign = 1;   // 1800ce284
+                    else if (m == 'b') _vAlign = 2;   // 1800ce296
                 }
-                I32(self, O::kTextPos) = pos + 1;              // 1800ce1f9 / 1800ce2a3
+                _textPos = pos + 1;              // 1800ce1f9 / 1800ce2a3
             } else if (sel == 'm') {                           // 1800ce2ae
                 ++pos;
-                I32(self, O::kTextPos) = pos;                  // 1800ce2bb
+                _textPos = pos;                  // 1800ce2bb
                 if (pos == len) return false;                  // 1800ce2c1
-                if (I32(self, O::kRowFirstItem) != I32(self, O::kItemCount))
-                    FlushRow(self);                            // 1800ce2db..1800ce30a
+                if (_rowFirstItem != _itemsCount)
+                    FlushRow(this);                            // 1800ce2db..1800ce30a
                 text = *textSlot;                              // 1800ce310  re-read
-                pos  = I32(self, O::kTextPos);
+                pos  = _textPos;
                 const char m = text[pos];
 
                 if (m == 'b') {                                // 1800ce31a  column begin
-                    I32(self, O::kTextPos) = pos + 1;          // 1800ce322
-                    const int32_t y = I32(self, O::kPenY);
-                    I32(self, O::kColumnTop)  = y;             // 1800ce32e
-                    I32(self, O::kColumnMaxY) = y;             // 1800ce334
+                    _textPos = pos + 1;          // 1800ce322
+                    const int32_t y = _penY;
+                    _columnTop  = y;             // 1800ce32e
+                    _columnMaxY = y;             // 1800ce334
                 } else if (m == 'c') {                         // 1800ce33f  next column
-                    I32(self, O::kTextPos) = pos + 1;          // 1800ce347
-                    const int32_t y = I32(self, O::kPenY);
-                    if (y > I32(self, O::kColumnMaxY))         // 1800ce353
-                        I32(self, O::kColumnMaxY) = y;         // 1800ce35b
-                    I32(self, O::kRowPenX) = I32(self, O::kPenX);   // 1800ce367
-                    I32(self, O::kPenY) = I32(self, O::kColumnTop); // 1800ce373
+                    _textPos = pos + 1;          // 1800ce347
+                    const int32_t y = _penY;
+                    if (y > _columnMaxY)         // 1800ce353
+                        _columnMaxY = y;         // 1800ce35b
+                    _rowPenX = _penX;   // 1800ce367
+                    _penY = _columnTop; // 1800ce373
                 } else if (m == 'e') {                         // 1800ce37e  columns end
-                    I32(self, O::kTextPos) = pos + 1;          // 1800ce386
-                    const int32_t y = I32(self, O::kPenY);
-                    if (y > I32(self, O::kColumnMaxY))         // 1800ce392
-                        I32(self, O::kColumnMaxY) = y;         // 1800ce39a
-                    I32(self, O::kPenY) = I32(self, O::kColumnMaxY); // 1800ce3a6
-                    I32(self, O::kRowPenX) = I32(self, O::kPenX);   // 1800ce3b2
+                    _textPos = pos + 1;          // 1800ce386
+                    const int32_t y = _penY;
+                    if (y > _columnMaxY)         // 1800ce392
+                        _columnMaxY = y;         // 1800ce39a
+                    _penY = _columnMaxY; // 1800ce3a6
+                    _rowPenX = _penX;   // 1800ce3b2
                 } else if (m == 'l' || m == 'r') {             // 1800ce3bd / 1800ce453
                     // ^ml<int> / ^mr<int>: a decimal run up to the next
                     // whitespace. A MISSING run (the delimiter is already
                     // here) abandons the escape without touching anything.
                     const int32_t first = pos + 1;
-                    I32(self, O::kTextPos) = first;            // 1800ce3ca
-                    const int32_t ws = RtUi_DocumentTextElement_FindNextWhiteSpace(self);
+                    _textPos = first;            // 1800ce3ca
+                    const int32_t ws = FindNextWhiteSpace();
                     if (ws <= first) break;                    // 1800ce3dc
 
                     char* number = nullptr;
                     SubString(textSlot, &number, first, ws - 1);   // 1800ce3f5
-                    I32(self, O::kTextPos) = ws;               // 1800ce3fb
+                    _textPos = ws;               // 1800ce3fb
                     int32_t v = ToInteger(number);             // 1800ce406
                     if (m == 'l') {
                         if (v < 0) v = 0;                      // 1800ce412  CMOVS
-                        I32(self, O::kPenX) = v;               // 1800ce415
+                        _penX = v;               // 1800ce415
                     } else {
-                        if (v < 0) v = I32(self, O::kWrapWidth);   // 1800ce4a5
-                        I32(self, O::kRightEdge) = v;          // 1800ce4ab
+                        if (v < 0) v = _wrapWidth;   // 1800ce4a5
+                        _rightEdge = v;          // 1800ce4ab
                     }
                     ReleaseString(&number);
                 }
                 // any other selector: fall through and keep parsing
             } else if (sel == 'l') {                           // 1800ce4e7
                 ++pos;
-                I32(self, O::kTextPos) = pos;                  // 1800ce4f3
+                _textPos = pos;                  // 1800ce4f3
                 if (pos == len) return false;                  // 1800ce4f9
                 const char m = text[pos];                      // 1800ce505
 
                 if (m == 'b' || m == 'e') {                    // indent / outdent
-                    if (I32(self, O::kRowFirstItem) != I32(self, O::kItemCount))
-                        FlushRow(self);                        // 1800ce51c..1800ce54b
-                    const int32_t step = I32(self, O::kTabWidth);
-                    if (m == 'b') I32(self, O::kPenX) += step; // 1800ce557
-                    else          I32(self, O::kPenX) -= step; // 1800ce5ba
-                    ++I32(self, O::kTextPos);                  // 1800ce55d / 1800ce5c0
+                    if (_rowFirstItem != _itemsCount)
+                        FlushRow(this);                        // 1800ce51c..1800ce54b
+                    const int32_t step = _tabWidth;
+                    if (m == 'b') _penX += step; // 1800ce557
+                    else          _penX -= step; // 1800ce5ba
+                    ++_textPos;                  // 1800ce55d / 1800ce5c0
                 } else if (m == 'i') {                         // 1800ce5cb -> 1800cec38
                     // ^li — the list bullet: the sprite the frame table holds
                     // for the CURRENT FONT SLOT. It is emitted as a HANGING
                     // item: its width is recorded as the hang indent and
                     // SUBTRACTED from the pen, so it sits left of the margin.
-                    if (I32(self, O::kRowFirstItem) != I32(self, O::kItemCount))
-                        FlushRow(self);                        // 1800cec49..1800cec78
-                    ++I32(self, O::kTextPos);                  // 1800cec7e
+                    if (_rowFirstItem != _itemsCount)
+                        FlushRow(this);                        // 1800cec49..1800cec78
+                    ++_textPos;                  // 1800cec7e
 
                     const uint8_t* entry =
-                        B(PTR(self, O::kFrameTable), 0)
-                        + static_cast<size_t>(I32(self, O::kFontIndex)) * 0x10;  // 1800cec84
+                        B(_frameTableData, 0)
+                        + static_cast<size_t>(_fontIndex) * 0x10;  // 1800cec84
                     const int32_t sprite = I32(entry, 0x08);
 
                     int32_t w = 0, h = 0;
@@ -688,11 +690,11 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                         h = I32(s, O::kSpriteHeight);          // 1800cecd0
                     }
 
-                    I32(self, O::kHangIndent) = w;             // 1800cecd4
-                    I32(self, O::kPenX) -= w;                  // 1800cecdb
+                    _hangIndent = w;             // 1800cecd4
+                    _penX -= w;                  // 1800cecdb
 
-                    out->color  = reinterpret_cast<const int32_t*>(PTR(self, O::kColorArray))
-                                      [I32(self, O::kColorIndex)];   // 1800cecf7
+                    out->color  = reinterpret_cast<const int32_t*>(_colorsData)
+                                      [_colorIndex];   // 1800cecf7
                     out->height = h;                           // 1800cecfb
                     out->width  = w;                           // 1800cecff
                     out->index  = 0;                           // 1800ced03
@@ -700,8 +702,8 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                     // The sprite index is re-read from the table rather than
                     // reused from `sprite` above (0x1800ced0c).
                     out->first  = *reinterpret_cast<const int32_t*>(
-                        B(PTR(self, O::kFrameTable), 0)
-                        + static_cast<size_t>(I32(self, O::kFontIndex)) * 0x10 + 8);
+                        B(_frameTableData, 0)
+                        + static_cast<size_t>(_fontIndex) * 0x10 + 8);
                     return true;                               // 1800ced25
                 } else if (m == 'o') {
                     // ========================================================
@@ -712,88 +714,88 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                     // the open link string, because the nested parse may
                     // legitimately open and close links of its own.
                     // ========================================================
-                    if (I32(self, O::kRowFirstItem) != I32(self, O::kItemCount))
-                        FlushRow(self);                        // 1800ce5f0..1800ce61f
+                    if (_rowFirstItem != _itemsCount)
+                        FlushRow(this);                        // 1800ce5f0..1800ce61f
 
-                    void* font = reinterpret_cast<void* const*>(PTR(self, O::kFontArray))
-                                     [I32(self, O::kFontIndex)];
+                    void* font = reinterpret_cast<void* const*>(_fontsData)
+                                     [_fontIndex];
                     // A QUARTER of the line height, truncating toward zero:
                     // `CDQ ; AND EDX,3 ; ADD ; SAR 2`, which is C's `/ 4`.
-                    I32(self, O::kPenY) += I32(font, O::kFontLineHeight) / 4;  // 1800ce643
+                    _penY += I32(font, O::kFontLineHeight) / 4;  // 1800ce643
 
-                    const int32_t savedY     = I32(self, O::kPenY);            // 1800ce649
-                    ++I32(self, O::kTextPos);                                  // 1800ce652
-                    const int32_t savedPos   = I32(self, O::kTextPos);         // 1800ce658
-                    const int32_t savedPenX  = I32(self, O::kPenX);
-                    const int32_t savedHang  = I32(self, O::kHangIndent);
-                    const int32_t savedRight = I32(self, O::kRightEdge);
-                    const int32_t saved184   = I32(self, O::kInt184);
-                    const int32_t savedRowX  = I32(self, O::kRowPenX);
-                    const int32_t savedRow   = I32(self, O::kRowFirstItem);
+                    const int32_t savedY     = _penY;            // 1800ce649
+                    ++_textPos;                                  // 1800ce652
+                    const int32_t savedPos   = _textPos;         // 1800ce658
+                    const int32_t savedPenX  = _penX;
+                    const int32_t savedHang  = _hangIndent;
+                    const int32_t savedRight = _rightEdge;
+                    const int32_t saved184   = _unknown184;
+                    const int32_t savedRowX  = _rowPenX;
+                    const int32_t savedRow   = _rowFirstItem;
 
                     char* savedLink = nullptr;                                 // 1800ce694
-                    if (STR(self, O::kLinkText) != nullptr) {                  // 1800ce69f
-                        savedLink = STR(self, O::kLinkText);
+                    if (_openLink.text != nullptr) {                  // 1800ce69f
+                        savedLink = _openLink.text;
                         ++RefCount(savedLink);                                 // 1800ce6ab
                     }
-                    const int32_t savedLinkFirst = I32(self, O::kLinkFirstItem);
-                    const int32_t savedLinkLast  = I32(self, O::kLinkLastItem);
-                    const uint8_t savedLinkByte  = U8 (self, O::kLinkByte1A8);
-                    const int32_t savedFont      = I32(self, O::kFontIndex);
-                    const int32_t savedColor     = I32(self, O::kColorIndex);
-                    const int32_t savedHAlign    = I32(self, O::kHAlign);
-                    const int32_t savedVAlign    = I32(self, O::kVAlign);
-                    const int32_t savedColTop    = I32(self, O::kColumnTop);
+                    const int32_t savedLinkFirst = _openLink.firstItem;
+                    const int32_t savedLinkLast  = _openLink.lastItem;
+                    const uint8_t savedLinkByte  = _openLink.armed;
+                    const int32_t savedFont      = _fontIndex;
+                    const int32_t savedColor     = _colorIndex;
+                    const int32_t savedHAlign    = _hAlign;
+                    const int32_t savedVAlign    = _vAlign;
+                    const int32_t savedColTop    = _columnTop;
 
                     DocumentItem probe;
                     const bool got =
-                        RtUi_DocumentTextElement_GetNextItem(self, &probe);    // 1800ce707
+                        GetNextItem(probe);    // 1800ce707
 
-                    I32(self, O::kTextPos)       = savedPos;                   // 1800ce712
-                    I32(self, O::kPenX)          = savedPenX;
-                    I32(self, O::kHangIndent)    = savedHang;
-                    I32(self, O::kRightEdge)     = savedRight;
-                    I32(self, O::kInt184)        = saved184;
-                    I32(self, O::kRowPenX)       = savedRowX;
-                    I32(self, O::kPenY)          = savedY;
-                    I32(self, O::kRowFirstItem)  = savedRow;
-                    AssignString(&STR(self, O::kLinkText), savedLink);         // 1800ce757
-                    I32(self, O::kLinkFirstItem) = savedLinkFirst;             // 1800ce7a5
-                    I32(self, O::kLinkLastItem)  = savedLinkLast;
-                    U8 (self, O::kLinkByte1A8)   = savedLinkByte;
-                    I32(self, O::kFontIndex)     = savedFont;
-                    I32(self, O::kColorIndex)    = savedColor;
-                    I32(self, O::kHAlign)        = savedHAlign;
-                    I32(self, O::kVAlign)        = savedVAlign;
-                    I32(self, O::kColumnTop)     = savedColTop;
+                    _textPos       = savedPos;                   // 1800ce712
+                    _penX          = savedPenX;
+                    _hangIndent    = savedHang;
+                    _rightEdge     = savedRight;
+                    _unknown184        = saved184;
+                    _rowPenX       = savedRowX;
+                    _penY          = savedY;
+                    _rowFirstItem  = savedRow;
+                    AssignString(&_openLink.text, savedLink);         // 1800ce757
+                    _openLink.firstItem = savedLinkFirst;             // 1800ce7a5
+                    _openLink.lastItem  = savedLinkLast;
+                    _openLink.armed   = savedLinkByte;
+                    _fontIndex     = savedFont;
+                    _colorIndex    = savedColor;
+                    _hAlign        = savedHAlign;
+                    _vAlign        = savedVAlign;
+                    _columnTop     = savedColTop;
 
                     if (got) {                                                 // 1800ce7ee
-                        I32(self, O::kHangIndent) = probe.width;               // 1800ce7f5
-                        I32(self, O::kPenX) -= probe.width;                    // 1800ce7fb
+                        _hangIndent = probe.width;               // 1800ce7f5
+                        _penX -= probe.width;                    // 1800ce7fb
                     }
                     ReleaseString(&savedLink);                                 // 1800ce801..
                 }
                 // any other selector: fall through and keep parsing
             } else if (sel == 'a') {                            // 1800ce82a
                 ++pos;
-                I32(self, O::kTextPos) = pos;                   // 1800ce836
+                _textPos = pos;                   // 1800ce836
                 if (pos == len) return false;                   // 1800ce83c
                 const char m = text[pos];                       // 1800ce848
 
                 if (m == 'b') {                                 // link begin
                     const int32_t first = pos + 1;
-                    I32(self, O::kTextPos) = first;             // 1800ce851
-                    const int32_t ws = RtUi_DocumentTextElement_FindNextWhiteSpace(self);
+                    _textPos = first;             // 1800ce851
+                    const int32_t ws = FindNextWhiteSpace();
                     if (ws <= first) break;                     // 1800ce863
 
                     char* target = nullptr;
                     SubString(textSlot, &target, first, ws - 1);    // 1800ce87c
-                    I32(self, O::kTextPos) = ws;                // 1800ce882
-                    RtUi_DocumentTextElement_BeginLink(self, &target);  // 1800ce890
+                    _textPos = ws;                // 1800ce882
+                    BeginLink(*reinterpret_cast<const System::String*>(&target));   // B.3.6 bridge  // 1800ce890
                     ReleaseString(&target);
                 } else if (m == 'e') {                          // 1800ce8cc  link end
-                    RtUi_DocumentTextElement_EndLink(self);     // 1800ce8d9
-                    ++I32(self, O::kTextPos);                   // 1800ce8de
+                    EndLink();     // 1800ce8d9
+                    ++_textPos;                   // 1800ce8de
                 }
                 // any other selector: fall through and keep parsing
             } else if (sel == 'd') {
@@ -808,9 +810,9 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                 // mismatch is the only case that pays for the string compare.
                 // ================================================================
                 const int32_t first = pos + 1;
-                I32(self, O::kTextPos) = first;                 // 1800ce8f6
+                _textPos = first;                 // 1800ce8f6
                 if (first == len) return false;                 // 1800ce8fc
-                const int32_t ws = RtUi_DocumentTextElement_FindNextWhiteSpace(self);
+                const int32_t ws = FindNextWhiteSpace();
                 if (ws <= first) break;                         // 1800ce911
 
                 char* sub = nullptr;
@@ -823,18 +825,18 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                 }
                 RtAddr<AdjustDelimitersFn>(0x1800c6970ull)(&wanted);   // 1800ce94c
                 ReleaseString(&sub);                            // 1800ce952..1800ce97f
-                I32(self, O::kTextPos) = ws;                    // 1800ce97f
+                _textPos = ws;                    // 1800ce97f
 
                 int32_t index = 0;                              // 1800ce985
                 void*   found = nullptr;
                 bool    match = false;
-                const void* list = PTR(self, O::kResourceList);
+                const void* list = _resourceList;
                 if (I32(list, 0x28) > 0) {                      // 1800ce98e
                     size_t off = 0;                             // 1800ce99a
                     for (;;) {
                         // The list pointer is RE-READ every iteration.
                         void* obj = *reinterpret_cast<void* const*>(
-                            B(PTR(PTR(self, O::kResourceList), 0x20), 0) + off);   // 1800ce9ab
+                            B(PTR(_resourceList, 0x20), 0) + off);   // 1800ce9ab
 
                         const bool isCapture = RtAddr<IsDerivedFromFn>(0x1800c0390ull)(
                             obj, SpriteCaptureTypeId());        // 1800ce9b8
@@ -864,13 +866,13 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                         if (match) break;                       // 1800cea78
                         ++index;                                // 1800cea7c
                         off += 8;                               // 1800cea82
-                        if (index >= I32(PTR(self, O::kResourceList), 0x28)) break;  // 1800cea91
+                        if (index >= I32(_resourceList, 0x28)) break;  // 1800cea91
                     }
                 }
 
                 if (match) {                                    // 1800cea9c (index >= 0 always)
-                    out->color  = reinterpret_cast<const int32_t*>(PTR(self, O::kColorArray))
-                                      [I32(self, O::kColorIndex)];   // 1800ced3f
+                    out->color  = reinterpret_cast<const int32_t*>(_colorsData)
+                                      [_colorIndex];   // 1800ced3f
                     out->height = I32(found, O::kCaptureHeight);     // 1800ced49
                     out->width  = I32(found, O::kCaptureWidth);      // 1800ced4f
                     out->index  = index;                             // 1800ced52
@@ -886,23 +888,23 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                 // name all abandon the escape silently and keep parsing.
                 // ================================================================
                 ++pos;
-                I32(self, O::kTextPos) = pos;                   // 1800ceaeb
+                _textPos = pos;                   // 1800ceaeb
                 if (pos == len) return false;                   // 1800ceaf1
                 const char d = text[pos];                       // 1800ceafd
                 if (d < '0' || d > '9') break;                  // 1800ceb01 / 1800ceb0b
                 const int32_t slot = d - '0';                   // 1800ceb15
 
                 const int32_t first = pos + 1;
-                I32(self, O::kTextPos) = first;                 // 1800ceb1b
+                _textPos = first;                 // 1800ceb1b
                 if (first == len) return false;                 // 1800ceb21
-                const int32_t ws = RtUi_DocumentTextElement_FindNextWhiteSpace(self);
+                const int32_t ws = FindNextWhiteSpace();
                 if (ws <= first) break;                         // 1800ceb35
 
                 char* name = nullptr;
                 SubString(textSlot, &name, first, ws - 1);      // 1800ceb4c
-                I32(self, O::kTextPos) = ws;                    // 1800ceb55
+                _textPos = ws;                    // 1800ceb55
 
-                void* sheet = reinterpret_cast<void* const*>(PTR(self, O::kSheetArray))[slot];
+                void* sheet = reinterpret_cast<void* const*>(_sheetsData)[slot];
                 int32_t sprite = -1;
                 if (sheet != nullptr) {                         // 1800ceb69
                     sprite = RtAddr<GetSpriteIndexFn>(0x1800031f0ull)(sheet, &name);
@@ -911,8 +913,8 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
                     const uint8_t* data = static_cast<const uint8_t*>(
                         PTR(sheet, O::kSheetSpriteData));       // 1800cedb6
                     const uint8_t* s = data + static_cast<size_t>(sprite) * O::kSpriteStride;
-                    out->color  = reinterpret_cast<const int32_t*>(PTR(self, O::kColorArray))
-                                      [I32(self, O::kColorIndex)];   // 1800cedab
+                    out->color  = reinterpret_cast<const int32_t*>(_colorsData)
+                                      [_colorIndex];   // 1800cedab
                     out->height = I32(s, O::kSpriteHeight);     // 1800cedbe
                     out->width  = I32(s, O::kSpriteWidth);      // 1800cedca
                     out->index  = slot;                         // 1800cedce
@@ -928,17 +930,17 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
         } while (false);
 
         // ---- back to the top: whitespace, then end-of-text -----------------
-        len = I32(self, O::kTextLength);                        // 1800cebc0
-        if (I32(self, O::kTextPos) < len) {                     // 1800cebc7
+        len = _textLength;                        // 1800cebc0
+        if (_textPos < len) {                     // 1800cebc7
             const char* text = *textSlot;                       // 1800cebd0
             for (;;) {
-                const int32_t p = I32(self, O::kTextPos);       // 1800cebe0
+                const int32_t p = _textPos;       // 1800cebe0
                 if (!IsWhitespace(static_cast<uint8_t>(text[p]))) break;   // 1800cebef
-                I32(self, O::kTextPos) = p + 1;                 // 1800cec01
+                _textPos = p + 1;                 // 1800cec01
                 if (p + 1 >= len) break;                        // 1800cec07
             }
         }
-        if (I32(self, O::kTextPos) >= len) return false;        // 1800cec1a
+        if (_textPos >= len) return false;        // 1800cec1a
     }
 }
 
@@ -958,72 +960,65 @@ extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* selfv, DocumentItem* 
 // the item's text out of the document and releases it one instruction block
 // later without reading it. It allocates and frees; removing it would be a
 // divergence in allocator traffic, and it is one call, so it stays.
-extern "C" void RtUi_DocumentTextElement_GenerateItems(void* selfv) {
-    uint8_t* self = reinterpret_cast<uint8_t*>(selfv);
+void DocumentTextElement::GenerateItems() {
 
-    if (PTR(self, O::kUiStringValue) != nullptr &&              // 1800cf087
-        I32(self, O::kUiStringValue + 8) >= 0) {                // 1800cf090
+    if (*reinterpret_cast<void* const*>(&_text) != nullptr &&  // 1800cf087  table
+        *reinterpret_cast<const int32_t*>(
+            reinterpret_cast<const uint8_t*>(&_text) + 8) >= 0) {   // 1800cf090  index
         char* resolved = nullptr;
         using UiStringToStringFn = char** (*)(void* uiString, char** ret);
-        RtAddr<UiStringToStringFn>(0x180035020ull)(self + O::kUiStringValue, &resolved);
-        AssignString(&STR(self, O::kContentString), resolved);  // 1800cf0a4..1800cf0f7
+        RtAddr<UiStringToStringFn>(0x180035020ull)(&_text, &resolved);
+        AssignString(&_sourceText, resolved);  // 1800cf0a4..1800cf0f7
         ReleaseString(&resolved);                               // 1800cf0fa..1800cf133
     }
 
     {
-        const char* s = STR(self, O::kContentString);           // 1800cf133
-        I32(self, O::kTextLength) = s ? Length(s) : 0;          // 1800cf13f / 1800cf147
+        const char* s = _sourceText;           // 1800cf133
+        _textLength = s ? Length(s) : 0;          // 1800cf13f / 1800cf147
     }
     // ONE QWORD each: kTextPos+kPenX, kRowPenX+kPenY, kFontIndex+kColorIndex,
     // and kVAlign+kColumnTop where kVAlign takes 2 and kColumnTop takes 0.
-    Store64(B(self, O::kTextPos),   0);                        // 1800cf14d
-    I32(self, O::kRightEdge) = I32(self, O::kWrapWidth);        // 1800cf15a
-    Store64(B(self, O::kRowPenX),   0);                        // 1800cf160
-    I32(self, O::kRowFirstItem) = 0;                            // 1800cf167
-    I32(self, O::kHangIndent)   = 0;                            // 1800cf16e
-    Store64(B(self, O::kFontIndex), 0);                        // 1800cf175
-    I32(self, O::kHAlign) = 0;                                  // 1800cf17c
-    Store64(B(self, O::kVAlign),    2);                        // 1800cf183
+    Store64(&_textPos,   0);                        // 1800cf14d
+    _rightEdge = _wrapWidth;        // 1800cf15a
+    Store64(&_rowPenX,   0);                        // 1800cf160
+    _rowFirstItem = 0;                            // 1800cf167
+    _hangIndent   = 0;                            // 1800cf16e
+    Store64(&_fontIndex, 0);                        // 1800cf175
+    _hAlign = 0;                                  // 1800cf17c
+    Store64(&_vAlign,    2);                        // 1800cf183
 
     DocumentItem item;
-    while (RtUi_DocumentTextElement_GetNextItem(self, &item)) { // 1800cf196 / 1800cf2af
+    while (GetNextItem(item)) { // 1800cf196 / 1800cf2af
         const int32_t w = item.width;                           // 1800cf1a9
-        if (I32(self, O::kRowPenX) + w > I32(self, O::kRightEdge))   // 1800cf1af
-            FlushRow(self);                                     // 1800cf1ba..1800cf1ea
-        I32(self, O::kRowPenX) += w;                            // 1800cf1f0
+        if (_rowPenX + w > _rightEdge)   // 1800cf1af
+            FlushRow(this);                                     // 1800cf1ba..1800cf1ea
+        _rowPenX += w;                            // 1800cf1f0
 
         RtAddr<ItemArrayPushFn>(0x18003df80ull)(
-            self + O::kItemArrayData, I32(self, O::kItemCount) + 1, &item);  // 1800cf20a
+            &_itemsData, _itemsCount + 1, &item);  // 1800cf20a
 
         if (item.kind == 0) {                                   // 1800cf20f
             char* dead = nullptr;
-            SubString(&STR(self, O::kContentString), &dead, item.first, item.last);
+            SubString(&_sourceText, &dead, item.first, item.last);
             ReleaseString(&dead);                               // 1800cf238..1800cf2a7
         }
     }
 
-    I32(self, O::kPenY) += RtUi_DocumentTextElement_LayoutRow(self);   // 1800cf2c4
-    const int32_t height = I32(self, O::kPenY);                 // 1800cf2ca
-    I32(self, O::kRowFirstItem) = I32(self, O::kItemCount);     // 1800cf2d6
-    I32(self, O::kPenX) += I32(self, O::kHangIndent);           // 1800cf2e2
-    I32(self, O::kHangIndent) = 0;                              // 1800cf2e8
-    I32(self, O::kRowPenX) = I32(self, O::kPenX);               // 1800cf2f5
-    I32(self, O::kElementHeight) = height;                      // 1800cf2fb
+    _penY += LayoutRow();   // 1800cf2c4
+    const int32_t height = _penY;                 // 1800cf2ca
+    _rowFirstItem = _itemsCount;     // 1800cf2d6
+    _penX += _hangIndent;           // 1800cf2e2
+    _hangIndent = 0;                              // 1800cf2e8
+    _rowPenX = _penX;               // 1800cf2f5
+    _layoutHeight = height;                      // 1800cf2fb
 }
 
 
 // ============================================================================
-// Registration. Both doors for every row: the mangled name (which is what the
-// minted BaseTypeInfo and a minted vtable ask for first) and the address (which
-// is what a ported caller's ResolveAddr literal asks for). Unconditional — no
-// kill switch, no env gate.
-// ============================================================================
-// ============================================================================
 // UI::DocumentTextElement::Link::operator=   0x18003c760   (batch D1)
 // ============================================================================
 // The compiler-generated copy assignment for the 0x18-byte Link record
-// {System::String* @+0x00, int32 @+0x08, int32 @+0x0c, bool @+0x10}. EndLink
-// above already calls it by address; this is that body.
+// {System::String* @+0x00, int32 @+0x08, int32 @+0x0c, bool @+0x10}.
 //
 //   180013c76a  RAX = self->text
 //   180013c773  if (RAX != src->text) {            <-- the self-assign test
@@ -1038,17 +1033,45 @@ extern "C" void RtUi_DocumentTextElement_GenerateItems(void* selfv) {
 //
 // The String half is `AssignString` verbatim (test, release, adopt), which is
 // why it is called rather than re-inlined: the two must not drift.
-extern "C" void* RtUi_DocumentTextElement_LinkAssign(void* dstv, const void* srcv) {
-    uint8_t*       d = reinterpret_cast<uint8_t*>(dstv);
-    const uint8_t* s = reinterpret_cast<const uint8_t*>(srcv);
+DocumentTextElement::Link& DocumentTextElement::Link::operator=(const Link& src) {
+    AssignString(&text, src.text);                             // 18003c76a..18003c7a8
+    firstItem = src.firstItem;                                 // 18003c7a9
+    lastItem  = src.lastItem;                                  // 18003c7af
+    armed     = src.armed;                                     // 18003c7b5
+    return *this;                                              // 18003c7bc  MOV RAX,RBX
+}
 
-    AssignString(reinterpret_cast<char**>(d),
-                 *reinterpret_cast<char* const*>(s));          // 18003c76a..18003c7a8
+}  // namespace UI
 
-    I32(d, 0x08) = I32(s, 0x08);                               // 18003c7a9
-    I32(d, 0x0c) = I32(s, 0x0c);                               // 18003c7af
-    U8 (d, 0x10) = *reinterpret_cast<const uint8_t*>(s + 0x10);// 18003c7b5
-    return d;                                                  // 18003c7bc  MOV RAX,RBX
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// delegation to the member (non-virtual, so no qualification is load-bearing;
+// spelled qualified for uniformity).
+// ============================================================================
+using UI::DocumentTextElement;
+
+extern "C" int32_t RtUi_DocumentTextElement_FindNextWhiteSpace(void* self) {
+    return reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::FindNextWhiteSpace();
+}
+extern "C" void RtUi_DocumentTextElement_EndLink(void* self) {
+    reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::EndLink();
+}
+extern "C" void RtUi_DocumentTextElement_BeginLink(void* self, char* const* name) {
+    reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::BeginLink(
+        *reinterpret_cast<const System::String*>(name));   // B.3.6 bridge
+}
+extern "C" int32_t RtUi_DocumentTextElement_LayoutRow(void* self) {
+    return reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::LayoutRow();
+}
+extern "C" bool RtUi_DocumentTextElement_GetNextItem(void* self, DocumentItem* out) {
+    return reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::GetNextItem(*out);
+}
+extern "C" void RtUi_DocumentTextElement_GenerateItems(void* self) {
+    reinterpret_cast<DocumentTextElement*>(self)->DocumentTextElement::GenerateItems();
+}
+extern "C" void* RtUi_DocumentTextElement_LinkAssign(void* dst, const void* src) {
+    return &(reinterpret_cast<DocumentTextElement::Link*>(dst)->operator=(
+        *reinterpret_cast<const DocumentTextElement::Link*>(src)));
 }
 
 int RtUiDocumentTextRegister() {

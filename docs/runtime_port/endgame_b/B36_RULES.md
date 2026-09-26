@@ -525,6 +525,32 @@ Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry
 > `LayoutDescription::Entry` name offsets permuted (+0x08 own name, +0x10/+0x18 relative-to; the
 > body was right); `ListElement` +0xc0 is a `UI::Sprite _highlight`.
 
+> **FROM THE LEAF BLOCKS C2, C3, C5 (2026-09-25).** C3 closed §2.3's `EditElement` item: 0xf8,
+> with `_active` +0xe0 (`IsActive` 0x18003fc80), `_caret` +0xe4, `_blinkOn` +0xe8, `_blinkAccumulator`
+> (qword) +0xf0 from `??0EditElement` 0x1800d0f10; `NumberEditElement` is `EditElement` + `_min`/
+> `_max` at +0xf8/+0xfc. `LabelElement`'s own fields (+0x100..+0x12c) from `??0LabelElement`
+> 0x1800d2620; its bare struct moved to `RtUI::LabelElement` with the TextElement names corrected.
+> `TextElement::_text` is a `UI::String` at +0xd8. `NumberElement.h`'s banner said NumberElement
+> extends TextElement — the literal says `"Element"` and the ctor calls `??0Element`. `??0NumberDescription`
+> exists (0x180118b60). `DescriptionsBatch1.h`'s "opaque 0xa8 TextDescription prefix" is 0x90.
+> C2: `ImageElement.h` WAS a bare struct (B36_RULES §4 had it right, the C2 prompt did not);
+> `ImageDescription`'s applier 0x180118570 is EXPORTED (`?CreateInstance@ImageDescription@UI@@QEBAXV?$InternalPtr@VImageElement@UI@@@Object@@@Z`);
+> `_activePage`/`_activeRadio`, `_width`/`_height`/`_rotation`, `_framesPerSecond` named from the
+> accessors. C5: `GraphElement::SetYDivisions` writes +0xe4, the SAME field as `SetXDivisions` — a
+> retail slip, transcribed; the DocumentText applier 0x1800cf520 is exported; `documenttextelement.cpp`'s
+> "+0x120 is Array<UI::Sprite>" is a `SpriteSheet*[]`. **Toolchain facts every later pass needs:**
+> `description_common.h` and `element_common.h` both define `enum class Module` and cannot be
+> included in one TU; inside an `Element` member an unqualified `ComputeColor(...)` binds to the
+> undefined `Element::ComputeColor` (a link error) — write `rtuielem::ComputeColor`; a leaf
+> Description dtor must NOT be defined while `~ElementDescription` is undefined (F2 defines it);
+> mingw-w64 GCC emits typeinfo as a COMDAT per TU, so a leaf's `TypeName` can be defined while the
+> base's is still a door. The `VideoDevice` `RT_DATA_SLOT` in `widget_common.h`/`element_common.h`
+> reached through `InlineGetPaddedSize` is a B6-5 leftover for the closing pass. Gate note: the
+> cutover manifest prints `GATE WARN … stale in COSMETIC fields only` when a by-name door count
+> moved (C1's `ClipRegionDescription` ctor resolving two vtables through its own atomics); the
+> gate stays OK; refresh `standalone/cutover_manifest.inc` with `python tools/cutover_manifest.py
+> --inc` at the close.
+
 ## 11–12. (reserved for the fragment passes and caller rounds)
 
 ## 13. NOT VERIFIED — read this before citing anything above

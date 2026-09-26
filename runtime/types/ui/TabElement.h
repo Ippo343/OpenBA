@@ -35,3 +35,111 @@ constexpr int kChildrenData  = offsetof(UI::Element, _children);
 constexpr int kChildrenCount = kChildrenData + 8; // Collection::Array<T>::_size
 
 } } // namespace UI::TabElementOffsets
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block C5) — `UI::TabElement`, the REAL C++ class
+// ############################################################################
+//
+// PARENT, read (B36_SLOTS.md section 3), recorded not used (RULE B6-7):
+//     ?_TypeName@TabElement@UI@@CAPEBDXZ       @0x18004c6c0 -> "TabElement"
+//     ?_ParentTypeName@TabElement@UI@@CAPEBDXZ @0x18004c6d0 -> "Element"
+//
+// `??_7TabElement@UI@@6B@` @ 0x180157790, TWELVE slots; sizeof 0x108 (`MOV
+// EDX,0x108` in the slot-0 vector deleting dtor 0x18004ca90):
+//   [0] 0x18004ca90 deleting dtor (RT_DELDTOR row)  [1] 0x18004c700 TypeName
+//   [2] 0x18004c6e0 Type        [3] Element::Persist (inherited)
+//   [4] 0x1800d9ea0 ComputeSize [5] 0x1800d9b20 ComputeLayout
+//   [6] 0x1800d98b0 Draw        [7] 0x1800d9810 Update — OVERRIDDEN
+//   [8..11] Element's (inherited)
+//
+// RULE B6-8 — the layout tabelement.cpp held as raw offsets, MOVED here. Every
+// field is a store in `??0TabElement@UI@@QEAA@XZ` (0x1800da390, tabelement.cpp's
+// door) and a read in the slot bodies; +0x104 is written by nothing.
+//
+// THE CHILD LIST IS PAIRED: children[0] the tab-strip backdrop, [1] the page
+// backdrop, [2] the page frame, then tab i's BUTTON at [3 + 2i] and CONTAINER at
+// [4 + 2i]. Retail's own two private helpers say so, one instruction each, read
+// as disassembly this block: `?GetButtonIndex@` 0x1800da120 is
+// `LEA EAX,[0x3 + RDX*0x2]` and `?GetContainerIndex@` 0x1800da110 is
+// `LEA EAX,[0x4 + RDX*0x2]`.
+//
+// ABSTRACT (slot 0 `= 0`), NO real ctor (the `??0TabElement` door builds every
+// live one; it wears the MINTED table).
+// ############################################################################
+#include "Sprite.h"
+
+namespace UI {
+
+class TabElement : public Element {
+public:
+    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x18004ca90
+    const char* TypeName() const override;                        // [1] 0x18004c700
+    uint32_t    Type() const override;                            // [2] 0x18004c6e0
+    void ComputeSize() override;                                  // [4] 0x1800d9ea0
+    void ComputeLayout(int32_t x, int32_t y,
+                       int32_t w, int32_t h) override;            // [5] 0x1800d9b20
+    void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x1800d98b0
+    // [7] 0x1800d9810 — the handle arrives as the ADDRESS of the caller's
+    // temporary (Element.h's banner), hence the pointer.
+    void Update(const System::Time& time, UserInterface* ui,
+                Object::InternalPtr<DialogInstance>* dialog,
+                const UpdateState& state) override;
+
+    // ---- non-virtual members ----------------------------------------------
+    // 0x1800da130, body in tabelement_addtab.cpp. RETSLOT: returns
+    // InternalPtr<Element> by value (the door keeps retail's (this, ret, ...)
+    // shape); the two ExternalPtrs are trivially copyable 8-byte values and
+    // arrive in registers, as in retail.
+    Object::InternalPtr<Element> AddTab(Object::ExternalPtr<ElementDescription> button,
+                                        Object::ExternalPtr<ElementDescription> content);
+    int32_t GetActiveTab() const { return _activeTab; }           // 0x18004c880 MOV EAX,[RCX+0xf8]
+    // Body in widgets_layout.cpp (door TabElement_SetActiveTab, fragment pass).
+    void SetActiveTab(int32_t tab);                               // 0x18004c890
+
+    TabElement(const TabElement& src);                            // 0x18004c8b0  not ported
+    TabElement& operator=(const TabElement& src);                 // 0x18004c980  not ported
+    static uint32_t TypeId();                                     // not ported
+    static Object::Base* CreateNewObject();                       // factory door
+    static Object::Base* CreateInPlaceObject(void* place);        // factory door
+
+    // Private in retail (`AEAA`); public here only because the registered door
+    // in tabelement.cpp and widgets_layout.cpp's forwarder reach it.
+    void UpdateContainers();                                      // 0x1800d9710 (tabelement.cpp)
+
+protected:
+    TabElement() = default;   // NOT ??0TabElement (0x1800da390, a door)
+    ~TabElement();            // ??1TabElement 0x1800da360 — the door; declared only
+
+private:
+    int32_t GetContainerIndex(int32_t tab) const { return 4 + tab * 2; }  // 0x1800da110
+    int32_t GetButtonIndex(int32_t tab) const    { return 3 + tab * 2; }  // 0x1800da120
+
+    static const char* _TypeName();                               // 0x18004c6c0 -> "TabElement"
+    static const char* _ParentTypeName();                         // 0x18004c6d0 -> "Element"
+    static Object::BaseTypeInfo _typeInfo;                        // minted
+
+public:
+    int32_t  _tabCount;       // +0xc0   ctor 0 (one qword store with +0xc4); AddTab ++
+    int32_t  _gap;            // +0xc4   the inset used everywhere
+    ::Sprite _edgeLeft;       // +0xc8   } the three that "erase" the active tab's
+    ::Sprite _edgeMiddle;     // +0xd8   } bottom border into the page
+    ::Sprite _edgeRight;      // +0xe8   }
+    int32_t  _activeTab;      // +0xf8   ctor 0 (one qword store with +0xfc)
+    int32_t  _tabBarHeight;   // +0xfc   computed by ComputeSize
+    int32_t  _tabBarWidth;    // +0x100  computed by ComputeSize
+    uint32_t _pad104;         // +0x104  written by nothing
+};
+
+static_assert(sizeof(TabElement) == 0x108,
+              "UI::TabElement is 0x108 (MOV EDX,0x108 in 0x18004ca90)");
+static_assert(alignof(TabElement) == 8, "UI::TabElement aligns to 8");
+static_assert(offsetof(TabElement, _tabCount)     == sizeof(Element), "");
+static_assert(offsetof(TabElement, _gap)          == 0xc4, "");
+static_assert(offsetof(TabElement, _edgeLeft)     == 0xc8, "");
+static_assert(offsetof(TabElement, _edgeMiddle)   == 0xd8, "");
+static_assert(offsetof(TabElement, _edgeRight)    == 0xe8, "");
+static_assert(offsetof(TabElement, _activeTab)    == TabElementOffsets::kActiveTab, "");
+static_assert(offsetof(TabElement, _tabBarHeight) == 0xfc, "");
+static_assert(offsetof(TabElement, _tabBarWidth)  == 0x100, "");
+
+}  // namespace UI

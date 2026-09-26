@@ -21,23 +21,17 @@
 // runtime/src/ui/widgets_layout.cpp (Waves 7/9); the series record layout is in
 // runtime/types/ui/GraphElement.h. This file adds only the vtable rows.
 //
-// LAYOUT — 0x100 bytes (`MOV EDX,0x100` at 0x1800408e2). Every field below is
-// a store in the constructor at 0x1800d1880 or a read in Draw:
-//
-//   +0xc0 int32   requested width     (ctor 100)
-//   +0xc4 int32   requested height    (ctor 100)
-//   +0xc8 int32   tick overhang, in pixels, outside the frame (ctor 4)
-//   +0xcc int32   ctor -1; not read by any of the three slots here
-//   +0xd0 Sprite  the 1x1 line sprite: sheet +0xd0, index +0xd8 (ctor -1)
-//   +0xe0 float   the value that maps to full height (ctor 1.0)
-//   +0xe4 int32   vertical grid divisions   (ctor 12)
-//   +0xe8 int32   horizontal grid divisions (ctor 4)
-//   +0xf0 Array<GraphSeries> — GraphElement.h
+// ENDGAME B.3.6 block C5: the five slot bodies MOVED into the members of the
+// real `UI::GraphElement` (runtime/types/ui/GraphElement.h, which now names the
+// fields this banner used to list as offsets); each registered door is a
+// one-line QUALIFIED delegation. The ctor / copy-ctor / dtor stay doors (B4b-2).
 //
 // `??0GraphElement@UI@@QEAA@XZ` (0x1800d1880) is NOT here: it is already
 // ported and registered, table-driven, by runtime/src/ui/factory_ui1.cpp
 // (the factory roster). One address, one owner.
 // ============================================================================
+#include <atomic>
+
 #include "element_common.h"
 #include "../../types/ui/GraphElement.h"
 
@@ -45,26 +39,27 @@ using namespace rtuielem;
 
 namespace {
 
-constexpr int kReqWidth  = 0xc0;
-constexpr int kReqHeight = 0xc4;
-constexpr int kTickSize  = 0xc8;
-constexpr int kLineSprite = 0xd0;
-constexpr int kMaxValue  = 0xe0;
-constexpr int kDivsX     = 0xe4;
-constexpr int kDivsY     = 0xe8;
 constexpr int kSeries    = UI::GraphElementOffsets::kGraphsData;    // 0xf0
 constexpr int kSeriesCnt = UI::GraphElementOffsets::kGraphsCount;   // 0xf8
 
 static_assert(kSeries == 0xf0 && kSeriesCnt == 0xf8,
               "GraphElement.h must still pin the series Array at +0xf0");
 
-RTELEM_TYPE_SLOTS(GraphElement)
+// The two exported DATA slots, in namespace-scope atomics (RULE B6-5: the
+// members below may run on the loader thread).
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
+const uint8_t* GraphElementTypeInfo() {
+    return static_cast<const uint8_t*>(
+        AtomicExport(g_typeInfo, "?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* VtGraphElement() { return AtomicExport(g_vtable, "??_7GraphElement@UI@@6B@"); }
 
-// UI::SpriteContext::AddLine(ctx, const Sprite&, x0, y0, x1, y1, color)
+// UI::SpriteContext::AddLine(ctx, const Sprite&, x0, y0, x1, y1, color) — block
+// D's class, reached by address (its door stays a door).
 using AddLineFn = void (*)(void* ctx, const void* sprite,
                            int x0, int y0, int x1, int y1, uint32_t color);
 
-using ElementCtorFn     = void* (*)(void* self);
 using ElementCopyCtorFn = void* (*)(void* self, const void* other);
 using ElementDtorFn     = void  (*)(void* self);
 using SeriesArrayFn     = void* (*)(void* array);                 // ~Array<GraphSeries>
@@ -76,30 +71,33 @@ constexpr float kOne  = 1.0f;
 
 }  // namespace
 
-RTELEM_TYPE_BODIES(GraphElement)
+namespace UI {
+
+// [1] 0x180040460 / [2] 0x180040440 — the BaseTypeInfo's +0x08 name and +0x00 id.
+const char* GraphElement::TypeName() const { return TypeNameOf(GraphElementTypeInfo()); }
+uint32_t    GraphElement::Type() const     { return TypeIdOf(GraphElementTypeInfo()); }
 
 // ============================================================================
-// ?ComputeSize@GraphElement@UI@@UEAAXXZ   0x1800d1810
+// [4] ?ComputeSize@GraphElement@UI@@UEAAXXZ   0x1800d1810
 // ============================================================================
 // A graph is exactly the size it was told to be. Note the store ORDER: the flag
 // clear sits BETWEEN the two size stores (0x1800d1826), not after them.
-extern "C" void RtUi_GraphElement_ComputeSize(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
-    if (((U32(self, kElemFlags) >> 27) & 1u) == 0) return;
-    I32(self, kElemLayoutWidth) = I32(self, kReqWidth);
-    U32(self, kElemFlags) &= ~kFlagNeedsSizeCalc;
-    I32(self, kElemLayoutHeight) = I32(self, kReqHeight);
+void GraphElement::ComputeSize() {
+    if (((_flags >> 27) & 1u) == 0) return;
+    _layoutWidth = _width;
+    _flags &= ~kFlagNeedsSizeCalc;
+    _layoutHeight = _height;
 }
 
 // ============================================================================
-// ?ComputeLayout@GraphElement@UI@@UEAAXHHHH@Z   0x1800d16b0
+// [5] ?ComputeLayout@GraphElement@UI@@UEAAXHHHH@Z   0x1800d16b0
 // ============================================================================
-extern "C" void RtUi_GraphElement_ComputeLayout(void* self, int x, int y, int w, int h) {
-    ElementComputeAlignedRect(self, x, y, w, h);
+void GraphElement::ComputeLayout(int32_t x, int32_t y, int32_t w, int32_t h) {
+    ElementComputeAlignedRect(this, x, y, w, h);
 }
 
 // ============================================================================
-// ?Draw@GraphElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800d1360
+// [6] ?Draw@GraphElement@UI@@UEBAXAEAVSpriteContext@2@E@Z   0x1800d1360
 // ============================================================================
 // Frame, grid, series — all of it `SpriteContext::AddLine` (0x18011cbe0) with
 // the one line sprite at +0xd0.
@@ -119,90 +117,112 @@ extern "C" void RtUi_GraphElement_ComputeLayout(void* self, int x, int y, int w,
 //     `bottom + tick`) and the Y grid lines extend LEFT of it (from
 //     `left - tick`), i.e. the ticks hang outside the box on two sides only.
 //
-// The series scale `(1.0f / _maxValue) * _layoutHeight` is computed ONCE,
+// The series scale `(1.0f / _yRange) * _layoutHeight` is computed ONCE,
 // before the loop, and each point is `bottom - (int)(value * scale)`.
-extern "C" void RtUi_GraphElement_Draw(const void* selfv, void* ctx, uint8_t alpha) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+void GraphElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    void* const ctx = &context;
 
-    void* border = Pc(self, kElemBorder);
-    if (border != nullptr)
-        VSlot<DrawFn>(border, kSlotDraw)(border, ctx, alpha);
+    if (_border != nullptr)
+        reinterpret_cast<const Element*>(_border)->Draw(context, alpha);   // B.3.6 bridge — slot 6
 
-    const uint32_t base = U32c(self, kElemColor);
-    alpha = DimAlpha(self, alpha);
-    const uint32_t c = ComputeColor(base, alpha);
+    const uint32_t base = _color;
+    alpha = DimAlpha(this, alpha);
+    const uint32_t c = rtuielem::ComputeColor(base, alpha);   // NOT the (unported) member
 
-    const void* sprite = self + kLineSprite;
+    const void* sprite = &_lineSprite;
     const auto line = RtAddr<AddLineFn>(0x18011cbe0ull);
 
-    const int L = I32c(self, kElemLayoutLeft);
-    const int T = I32c(self, kElemLayoutTop);
-    const int R = I32c(self, kElemLayoutRight);
-    const int B = I32c(self, kElemLayoutBottom);
+    const int L = _layoutLeft;
+    const int T = _layoutTop;
+    const int R = _layoutRight;
+    const int B = _layoutBottom;
 
     line(ctx, sprite, L, T, L, B, c);
     line(ctx, sprite, L, T, R, T, c);
     line(ctx, sprite, L, B, R, B, c);
     line(ctx, sprite, R, T, R, B, c);
 
-    // ---- horizontal grid, `_divsY + 1` lines, ticks to the LEFT -----------
+    // ---- horizontal grid, `_yDivisions + 1` lines, ticks to the LEFT -------
     {
         const int y0 = T;
-        const int divs = I32c(self, kDivsY);
+        const int divs = _yDivisions;
         const int y1 = B;
         float run = static_cast<float>(y0);
         if (divs >= 0) {
-            for (int i = 0; i <= I32c(self, kDivsY); ++i) {
+            for (int i = 0; i <= _yDivisions; ++i) {
                 const int yy = static_cast<int>(run + kHalf);
-                line(ctx, sprite, L - I32c(self, kTickSize), yy, R, yy, c);
+                line(ctx, sprite, L - _tickSize, yy, R, yy, c);
                 run += static_cast<float>(y1 - y0) / static_cast<float>(divs);
             }
         }
     }
 
-    // ---- vertical grid, `_divsX + 1` lines, ticks BELOW --------------------
+    // ---- vertical grid, `_xDivisions + 1` lines, ticks BELOW ---------------
     {
         const int x0 = L;
-        const int divs = I32c(self, kDivsX);
+        const int divs = _xDivisions;
         const int x1 = R;
         float run = static_cast<float>(x0);
         if (divs >= 0) {
-            for (int i = 0; i <= I32c(self, kDivsX); ++i) {
+            for (int i = 0; i <= _xDivisions; ++i) {
                 const int xx = static_cast<int>(run + kHalf);
-                line(ctx, sprite, xx, B, xx, I32c(self, kTickSize) + B, c);
+                line(ctx, sprite, xx, B, xx, _tickSize + B, c);
                 run += static_cast<float>(x1 - x0) / static_cast<float>(divs);
             }
         }
     }
 
     // ---- the series --------------------------------------------------------
-    const float scale = (kOne / *reinterpret_cast<const float*>(self + kMaxValue)) *
-                        static_cast<float>(I32c(self, kElemLayoutHeight));
+    const float scale = (kOne / _yRange) * static_cast<float>(_layoutHeight);
 
-    const int32_t seriesCount = I32c(self, kSeriesCnt);
+    const int32_t seriesCount = _seriesCount;
     for (int32_t s = 0; s < seriesCount; ++s) {
-        const uint8_t* rec = static_cast<const uint8_t*>(Pc(self, kSeries)) +
-                             static_cast<int64_t>(s) * UI::GraphElementOffsets::kSeriesStride;
-        const int width = I32c(self, kElemLayoutWidth);
+        const uint8_t* rec = static_cast<const uint8_t*>(_seriesData) +
+                             static_cast<int64_t>(s) * GraphElementOffsets::kSeriesStride;
+        const int width = _layoutWidth;
         const int segments = *reinterpret_cast<const int32_t*>(rec + 0x10) - 1;
         float xf = static_cast<float>(L);
         for (int64_t p = 0; p < segments; ++p) {
-            const int32_t* pts = static_cast<const int32_t*>(
-                *reinterpret_cast<void* const*>(rec + 0x08));
+            const int32_t* pts = static_cast<const int32_t*>(*reinterpret_cast<void* const*>(
+                rec + GraphElementOffsets::kSeriesPointsArray));
             const float xn = xf + static_cast<float>(width) / static_cast<float>(segments);
             line(ctx, sprite,
                  static_cast<int>(xf),
                  B - static_cast<int>(static_cast<float>(pts[p]) * scale),
                  static_cast<int>(xn),
                  B - static_cast<int>(static_cast<float>(pts[p + 1]) * scale),
-                 *reinterpret_cast<const uint32_t*>(rec + 0x00));
+                 *reinterpret_cast<const uint32_t*>(rec + GraphElementOffsets::kSeriesColour));
             xf = xn;
         }
     }
 }
 
+}  // namespace UI
+
 // ============================================================================
-// Constructors / destructor
+// The DOORS — registered names and addresses unchanged, each a QUALIFIED
+// one-line delegation: a live GraphElement wears the MINTED table, whose slots
+// resolve back to these very doors.
+// ============================================================================
+extern "C" uint32_t RtUi_GraphElement_Type(const void* self) {
+    return reinterpret_cast<const UI::GraphElement*>(self)->UI::GraphElement::Type();
+}
+extern "C" const char* RtUi_GraphElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::GraphElement*>(self)->UI::GraphElement::TypeName();
+}
+extern "C" void RtUi_GraphElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::ComputeSize();
+}
+extern "C" void RtUi_GraphElement_ComputeLayout(void* self, int x, int y, int w, int h) {
+    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::ComputeLayout(x, y, w, h);
+}
+extern "C" void RtUi_GraphElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::GraphElement*>(self)->UI::GraphElement::Draw(
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+
+// ============================================================================
+// Constructors / destructor — DOORS (B4b-2), bodies unchanged.
 // ============================================================================
 
 extern "C" void* RtUi_GraphElement_CopyCtor(void* selfv, const void* otherv) {

@@ -70,3 +70,111 @@ constexpr int kSeriesColour      = 0x00;
 constexpr int kSeriesPointsArray = 0x08;
 
 } } // namespace UI::GraphElementOffsets
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block C5) — `UI::GraphElement`, the REAL C++ class
+// ############################################################################
+//
+// PARENT, read (B36_SLOTS.md section 3):
+//     ?_TypeName@GraphElement@UI@@CAPEBDXZ       @0x180040420 -> "GraphElement"
+//     ?_ParentTypeName@GraphElement@UI@@CAPEBDXZ @0x180040430 -> "Element"
+// Recorded, not used (RULE B6-7: no DEFINE_TYPE in step 6; slots 1/2 read the
+// minted `?_typeInfo@GraphElement@UI@@0VBaseTypeInfo@Object@@A`).
+//
+// `??_7GraphElement@UI@@6B@` @ 0x1801569d0, TWELVE slots; sizeof 0x100
+// (`MOV EDX,0x100` in the slot-0 vector deleting dtor 0x1800408b0):
+//   [0] 0x1800408b0 deleting dtor (RT_DELDTOR row)  [1] 0x180040460 TypeName
+//   [2] 0x180040440 Type          [3] Element::Persist (inherited)
+//   [4] 0x1800d1810 ComputeSize   [5] 0x1800d16b0 ComputeLayout
+//   [6] 0x1800d1360 Draw          [7..11] Element's (inherited)
+//
+// ABSTRACT (slot 0 `= 0`), NO real ctor: every live one is built by the
+// `??0GraphElement@UI@@QEAA@XZ` door (0x1800d1880, factory_ui1.cpp) and wears
+// the MINTED table. LAYOUT, every field a store in that ctor
+// (factory_ui1_tables.inc `kGraphElement`, 0x1800d18a6..0x1800d1906) or a
+// read in Draw; the names are the bodies' meanings, not recovered names.
+//
+// A RETAIL SLIP, read as disassembly this block: `?SetYDivisions@` (0x180040600)
+// is `MOV [RCX+0xe4],EDX ; RET` — the SAME field `?SetXDivisions@`
+// (0x1800405f0) writes. Draw reads +0xe4 for the vertical grid and +0xe8 for
+// the horizontal one, so +0xe8 only ever holds the ctor's 4 (or a copy).
+// Transcribed as retail has it.
+// ############################################################################
+#include <cstddef>
+#include "Element.h"
+#include "Sprite.h"
+
+namespace UI {
+
+class GraphElement : public Element {
+public:
+    // ---- the twelve slots, in retail order --------------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;      // [0] 0x1800408b0
+    const char* TypeName() const override;                        // [1] 0x180040460
+    uint32_t    Type() const override;                            // [2] 0x180040440
+    // [3] Persist — Element's
+    void ComputeSize() override;                                  // [4] 0x1800d1810
+    void ComputeLayout(int32_t x, int32_t y,
+                       int32_t w, int32_t h) override;            // [5] 0x1800d16b0
+    void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x1800d1360
+    // [7] Update .. [11] GetBorder — Element's
+
+    // ---- non-virtual members ----------------------------------------------
+    // Bodies in runtime/src/ui/widgets_layout.cpp (another block's file; the
+    // registered door is the definition until the fragment pass moves it).
+    void RemoveGraphs();                                          // 0x180040610
+    void AddGraph(uint32_t colour);                               // 0x180040620
+    void AddGraphPoint(int32_t graph, int32_t value);             // 0x180040690
+    // One instruction each, read as disassembly (see the banner for the slip).
+    void SetYRange(float range)      { _yRange = range; }         // 0x1800405e0 MOVSS [RCX+0xe0],XMM1
+    void SetXDivisions(int32_t n)    { _xDivisions = n; }         // 0x1800405f0 MOV [RCX+0xe4],EDX
+    void SetYDivisions(int32_t n)    { _xDivisions = n; }         // 0x180040600 MOV [RCX+0xe4],EDX (sic)
+
+    GraphElement(const GraphElement& src);    // 0x1800406d0  door RtUi_GraphElement_CopyCtor
+    GraphElement& operator=(const GraphElement& src);             // 0x1800407a0  not ported
+    static uint32_t TypeId();                                     // not ported
+    static Object::Base* CreateNewObject();                       // 0x180040550  factory door
+    static Object::Base* CreateInPlaceObject(void* place);        // 0x1800405d0  factory door
+
+protected:
+    GraphElement() = default;   // NOT ??0GraphElement (0x1800d1880, a door)
+    ~GraphElement();            // ??1GraphElement 0x1800d1840 — the door; declared only
+
+private:
+    static const char* _TypeName();                               // 0x180040420 -> "GraphElement"
+    static const char* _ParentTypeName();                         // 0x180040430 -> "Element"
+    static Object::BaseTypeInfo _typeInfo;                        // minted
+
+public:
+    int32_t  _width;          // +0xc0  ctor 100; ComputeSize -> _layoutWidth
+    int32_t  _height;         // +0xc4  ctor 100; ComputeSize -> _layoutHeight
+    int32_t  _tickSize;       // +0xc8  ctor 4; grid overhang outside the frame
+    int32_t  _unknownCC;      // +0xcc  ctor -1; CreateInstance copies it; no slot reads it
+    ::Sprite _lineSprite;     // +0xd0  the 1x1 line sprite (index +0xd8, ctor -1)
+    float    _yRange;         // +0xe0  ctor 1.0f; the value drawn at full height
+    int32_t  _xDivisions;     // +0xe4  ctor 12; vertical grid lines
+    int32_t  _yDivisions;     // +0xe8  ctor 4;  horizontal grid lines
+    uint32_t _padEC;          // +0xec  written by nothing
+    // +0xf0 Collection::Array<GraphSeries> (GraphElementOffsets above), kept
+    // as its raw 16-byte header: the array's destroy and grow are addressed
+    // helpers (0x1800416d0 / kSpec_GraphSeries), not a C++ ~Array.
+    void*    _seriesData;     // +0xf0
+    int32_t  _seriesCount;    // +0xf8
+    int32_t  _seriesCapacity; // +0xfc
+};
+
+static_assert(sizeof(GraphElement) == 0x100,
+              "UI::GraphElement is 0x100 (MOV EDX,0x100 in 0x1800408b0)");
+static_assert(alignof(GraphElement) == 8, "UI::GraphElement aligns to 8");
+static_assert(offsetof(GraphElement, _width)       == 0xc0, "");
+static_assert(offsetof(GraphElement, _height)      == 0xc4, "");
+static_assert(offsetof(GraphElement, _tickSize)    == 0xc8, "");
+static_assert(offsetof(GraphElement, _unknownCC)   == 0xcc, "");
+static_assert(offsetof(GraphElement, _lineSprite)  == 0xd0, "");
+static_assert(offsetof(GraphElement, _yRange)      == 0xe0, "");
+static_assert(offsetof(GraphElement, _xDivisions)  == 0xe4, "");
+static_assert(offsetof(GraphElement, _yDivisions)  == 0xe8, "");
+static_assert(offsetof(GraphElement, _seriesData)  == GraphElementOffsets::kGraphsData, "");
+static_assert(offsetof(GraphElement, _seriesCount) == GraphElementOffsets::kGraphsCount, "");
+
+}  // namespace UI
