@@ -36,6 +36,8 @@
 #include "Game/TerrainGenerator.h"
 #include "Game/Toolbar.h"
 #include "Game/Weather.h"
+#include "Game/WorldGeometry.h"
+#include "Game/WeatherParticleGeometry.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -242,6 +244,33 @@ UNIT_TEST(loop_externals_shape_and_slots) {
     CheckExternalShape<TerrainGenerator>();
     CheckExternalShape<Toolbar>();
     CheckExternalShape<Weather>();
+}
+
+// ===========================================================================
+// THE UNREFLECTED EXE Graphics::Geometry SUBCLASSES (0x14015f110, 0x140160240)
+// ===========================================================================
+template <typename T>
+void CheckGeometryShape() {
+    CHECK((std::is_base_of<Graphics::Geometry, T>::value));
+    CHECK(!std::is_abstract<T>::value);
+    CHECK(std::is_final<T>::value);
+    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK_EQ(alignof(T), (size_t)8);
+    CHECK_EQ(SlotOffset(&T::DeletingDtor), S(0));
+    CHECK_EQ(SlotOffset(&T::Update),       S(1));
+    CHECK_EQ(SlotOffset(&T::Draw),         S(2));
+    CHECK_EQ(SlotOffset(&T::AddDrawItems), S(3));
+    CHECK_EQ(SlotOffset(&Graphics::Geometry::Clean), S(8));   // the tables stop at 9
+}
+
+UNIT_TEST(loop_geometry_subclasses) {
+    CHECK_EQ(sizeof(WorldGeometry), (size_t)0x230);            // MemAlloc(0x230)
+    CHECK_EQ(sizeof(WeatherParticleGeometry), (size_t)0xf0);   // MemAlloc(0xf0)
+    CHECK_EQ(offsetof(WorldGeometry, _heightImage), (size_t)0x148);
+    CHECK_EQ(offsetof(WorldGeometry, _arrays), (size_t)0x1a0);
+    CHECK_EQ(offsetof(WeatherParticleGeometry, _particles), (size_t)0xe0);
+    CheckGeometryShape<WorldGeometry>();
+    CheckGeometryShape<WeatherParticleGeometry>();
 }
 
 }  // namespace

@@ -3,22 +3,28 @@
 // Real implementations of the 9 vtable slots at exe 0x14015f110 ("derived
 // Graphics::Geometry" / TerrainGenerator). Decompiled from the original exe.
 //
+// ENDGAME B.3.8 block LOOP: these are the members of the REAL class
+// `WorldGeometry` (code/Game/Game/WorldGeometry.h) now, with a compiler vtable.
+// Gone: the hand-built 9-slot `g_Geometry_Vtable_Standalone` (serialize_arrays.cpp)
+// and the five GeomDraw_* forwarders for slots 4..8 — the class inherits
+// Graphics::Geometry's, which is exactly what they called.
+//
 // Vtable layout (verified via Ghidra read of 0x14015f110):
-//   +0x00  GeomDraw_Dtor               (exe 0x14001ECC0)  — see below
-//   +0x08  GeomDraw_ChunkUpdate        (exe 0x1400AED40 → JMP 0x1400AAD50)
-//   +0x10  GeomDraw_ItemDraw           (exe 0x1400AEA10)  per-item GPU draw
-//   +0x18  GeomDraw_CollectDraw        (exe 0x1400AE490)  frustum cull + AddDrawItem
+//   +0x00  DeletingDtor                (exe 0x14001ECC0)  — see below
+//   +0x08  Update (chunk rebuild)      (exe 0x1400AED40 → JMP 0x1400AAD50)
+//   +0x10  Draw (per item)             (exe 0x1400AEA10)  per-item GPU draw
+//   +0x18  AddDrawItems                (exe 0x1400AE490)  frustum cull + AddDrawItem
 //   +0x20  inherited UpdateAttached    (Runtime export)
 //   +0x28  inherited GetSubTransform   (Runtime export, hidden retval)
 //   +0x30  inherited GetInstanceTransform (Runtime export, hidden retval)
 //   +0x38  inherited SetSharedInstanceData (Runtime export)
 //   +0x40  inherited Clean             (Runtime export)
 //
-// The 9-slot vtable in serialize_arrays.cpp points at the functions defined here.
 
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "Game/WorldGeometry.h"
 #include "graphics/Geometry.h"
 #include "graphics/Camera.h"     // Graphics::Camera, Graphics::Renderer
 #include "graphics/Material.h"   // Graphics::MaterialInstance
@@ -29,6 +35,8 @@
 #include "math/Math.h"
 #include "resolve.h"
 #include "perf_experimental.h"
+#include "Object/exe_type.h"   // DEFINE_EXE_VTABLE
+#include <atomic>
 #include <cstdint>
 #include <new>
 #include <cstdio>
@@ -48,19 +56,26 @@
 namespace {
 constexpr float kChunkZMin   = -16.0f;  // exe 0x14017228c
 constexpr float kChunkZRange =  32.0f;  // exe 0x1401721d0
+
+// One-shot log latches (namespace scope, atomic: B6-5).
+std::atomic<bool> s_collectLogged{false};
+std::atomic<bool> s_frustumWarned{false};
+std::atomic<bool> s_itemDrawLogged{false};
 }  // namespace
 
+DEFINE_EXE_VTABLE(WorldGeometry, "_ZTV13WorldGeometry")
+
 // ============================================================
-// Slot +0x00 — destructor stub
+// Slot +0x00 — destructor
 // ============================================================
 //
-// Original dtor (exe 0x14001ECC0) walks all the SoA arrays at +0x140..+0x228,
-// calls MemFree on each, then tail-calls operator delete via slot 0x140152b68
-// when the low bit of the flags arg is set. For now we keep the lightweight
-// stub: the menu Geometry lives until process exit, leaking is fine. Full
-// dtor body is in TODOs for a follow-up session.
-extern "C" void* GeomDraw_Dtor(void* self, uint32_t /*flags*/) {
-    return self;
+// PORT GAP (B38 D9 #12): the original dtor (exe 0x14001ECC0) walks all the SoA
+// arrays at +0x140..+0x228, calls MemFree on each, runs the base dtor, then
+// MemFree(this) when the low bit of the flags arg is set. The tree's slot has
+// always been this empty body (no base dtor, no free); kept here unchanged until
+// the titled D9 #12 commit.
+Graphics::Geometry* WorldGeometry::DeletingDtor(unsigned /*flags*/) {
+    return this;
 }
 
 // ============================================================
@@ -77,28 +92,28 @@ extern "C" void* GeomDraw_Dtor(void* self, uint32_t /*flags*/) {
 // resolution machinery.
 extern "C" void Reimpl_GeometryChunkUpdate(void* self);
 
-extern "C" void GeomDraw_ChunkUpdate(void* self) {
-    Reimpl_GeometryChunkUpdate(self);
+void WorldGeometry::Update(const System::Time& /*time*/) {
+    Reimpl_GeometryChunkUpdate(this);
 }
 
 // ============================================================
 // Slot +0x18 — collect-phase Draw (frustum cull + queue draw items)
 // ============================================================
 //
-// Decompiled from exe 0x1400AE490 (~300 instructions). Takes (self, unused, renderer)
-// where `unused` is a Time* that the original ignores. Walks the heightmap
+// Decompiled from exe 0x1400AE490 (~300 instructions). Takes (self, scene, renderer);
+// the original ignores the scene. Walks the heightmap
 // chunk grid, frustum-culls each chunk, and calls Renderer::AddDrawItem for
 // each visible chunk + the SoA arrays at +0x1C0/+0x1D0/+0x1F0/+0x200.
-extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* renderer) {
-    if (!self || !renderer) return;
+void WorldGeometry::AddDrawItems(const Graphics::Scene& /*scene*/,
+                                 Graphics::Renderer& rendererRef) const {
+    void* self = const_cast<WorldGeometry*>(this);   // bridge: the body reads offsets
+    void* renderer = &rendererRef;
 
-    static int s_calls = 0;
-    if (s_calls == 0) {
+    if (!s_collectLogged.exchange(true)) {
         printf("[GeomDraw_CollectDraw] first call self=%p renderer=%p\n",
                self, renderer);
         fflush(stdout);
     }
-    ++s_calls;
 
     // Cascade: every Runtime primitive needed must be wired. ENDGAME B.3.5 batch K1:
     // the five Video/Graphics terms (GetCullCamera, Geometry::GetTransform,
@@ -106,13 +121,11 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
     // aggregate with their call sites; the two Volume::Frustum terms stay, because
     // `Volume::Frustum` is not a Video/Graphics class and its doors are untouched.
     if (!fn_Frustum_MulTransform3 || !fn_Frustum_Contains) {
-        static bool s_warned = false;
-        if (!s_warned) {
+        if (!s_frustumWarned.exchange(true)) {
             printf("[Geometry::CollectDraw] Volume::Frustum primitives unwired — "
                    "terrain will not render. Frustum=%p\n",
                    (void*)fn_Frustum_Contains);
             fflush(stdout);
-            s_warned = true;
         }
         return;
     }
@@ -307,21 +320,22 @@ extern "C" void GeomDraw_CollectDraw(void* self, void* /*unused*/, void* rendere
 // ============================================================
 //
 // Decompiled from exe 0x1400AEA10 (~170 instructions). Signature:
-//   (self, Context*, unused, unused, float param5, uint param6)
-// where param5 is the interpolation alpha (Scalar) and param6 is the per-item
+//   (self, Context&, Camera& (unused), material (unused), float opacity, int a, ...)
+// where opacity (param5) is the interpolation alpha (Scalar) and a (param6) is the per-item
 // key (the 2nd ushort key passed to AddDrawItem above, packed with extra bits
 // in 0xE000 to choose draw mode).
-extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
-                                  void* /*p4*/, float param5, uint32_t param6) {
-    if (!self || !context) return;
+void WorldGeometry::Draw(Video::Context& contextRef, const Graphics::Camera& /*camera*/,
+                         Graphics::ExternalPtrHandle /*material*/,
+                         float param5, int a, int /*b*/, int /*c*/) const {
+    void* self = const_cast<WorldGeometry*>(this);   // bridge: the body reads offsets
+    void* context = &contextRef;
+    const uint32_t param6 = static_cast<uint32_t>(a);
 
-    static int s_calls = 0;
-    if (s_calls == 0) {
+    if (!s_itemDrawLogged.exchange(true)) {
         printf("[GeomDraw_ItemDraw] first call self=%p ctx=%p alpha=%f key=0x%x\n",
                self, context, param5, param6);
         fflush(stdout);
     }
-    ++s_calls;
 
     auto* selfBytes = reinterpret_cast<uint8_t*>(self);
 
@@ -524,65 +538,4 @@ extern "C" void GeomDraw_ItemDraw(void* self, void* context, void* /*p3*/,
     //   DrawIndexed(ctx, 0, iVar7=start, iVar8=scale, iVar9=0, iVar10=primCount, 1)
     reinterpret_cast<Video::Context*>(context)
         ->DrawIndexed(0, start, scale, 0, primCount, 1);   // B.3.5 bridge
-}
-
-// ============================================================
-// Slots +0x20..+0x40 — inherited Graphics::Geometry base methods
-// ============================================================
-//
-// Each is a thin trampoline that forwards to the corresponding Runtime DLL
-// export. The original exe used `FF 25 imm32` IAT thunks; in standalone we
-// need real C functions in our PE that the vtable can dispatch through. These
-// preserve the calling convention exactly (RCX=this, RDX=hidden_retval where
-// applicable, R8/R9/stack=remaining args) since the ABI is identical for
-// "trampoline that tail-calls another fn with same signature".
-
-// ENDGAME B.3.5 batch K1. All five call the MEMBER, and all five spell it
-// QUALIFIED — `->Graphics::Geometry::X(...)` — which is NOT a stylistic choice.
-// Slots 4..8 are VIRTUAL on `Graphics::Geometry`, and these five functions ARE the
-// five slots of this file's hand-built derived vtable. An unqualified
-// `geom->UpdateAttached()` would dispatch back through that table into this same
-// function and recurse until the stack is gone. The qualified form is the non-virtual
-// call to Geometry's own body, which is exactly the address the removed
-// `fn_Geometry_*` globals held (`?UpdateAttached@Geometry@Graphics@@UEAAXXZ` and
-// siblings). The old `if (fn_...)` tests were readiness tests on those pointers and
-// go with them; the members always exist.
-
-// +0x20 — Graphics::Geometry::UpdateAttached (no args, no return)
-extern "C" void GeomDraw_UpdateAttached(void* self) {
-    reinterpret_cast<Graphics::Geometry*>(self)
-        ->Graphics::Geometry::UpdateAttached();   // B.3.5 bridge
-}
-
-// +0x28 — Graphics::Geometry::GetSubTransform (member fn, hidden retval)
-//
-// Signature in retail AND in C++: `Math::Transform* GetSubTransform(Math::Transform*
-// ret, int node) const` — the hidden return slot is spelled OUT, in retail's order
-// (`this`, then the caller's storage), per B5-12 and its COORDINATOR AMENDMENT: a
-// by-value C++ return is WRONG for a VIRTUAL here, because GCC's ms_abi passes the
-// hidden pointer FIRST and MSVC (and every minted row) passes `this` first.
-extern "C" void* GeomDraw_GetSubTransform(void* self, void* retval, int idx) {
-    return reinterpret_cast<const Graphics::Geometry*>(self)
-        ->Graphics::Geometry::GetSubTransform(
-            static_cast<Math::Transform*>(retval), idx);   // B.3.5 bridge
-}
-
-// +0x30 — Graphics::Geometry::GetInstanceTransform (member fn, hidden retval)
-extern "C" void* GeomDraw_GetInstanceTransform(void* self, void* retval, int idx, float t) {
-    return reinterpret_cast<const Graphics::Geometry*>(self)
-        ->Graphics::Geometry::GetInstanceTransform(
-            static_cast<Math::Matrix*>(retval), idx, t);   // B.3.5 bridge
-}
-
-// +0x38 — Graphics::Geometry::SetSharedInstanceData (returns int)
-extern "C" int GeomDraw_SetSharedInstanceData(void* self, void* context, int idx, float t) {
-    return reinterpret_cast<const Graphics::Geometry*>(self)
-        ->Graphics::Geometry::SetSharedInstanceData(
-            *reinterpret_cast<Video::Context*>(context), idx, t);   // B.3.5 bridge
-}
-
-// +0x40 — Graphics::Geometry::Clean (returns bool)
-extern "C" bool GeomDraw_Clean(void* self) {
-    return reinterpret_cast<Graphics::Geometry*>(self)
-        ->Graphics::Geometry::Clean();   // B.3.5 bridge
 }
