@@ -27,18 +27,21 @@
 //   8  CreateInstance      0x180117dc0  here
 //   9  Construct           0x180046980  here
 //
-// plus ??1GroupDescription@UI@@UEAA@XZ (0x180117c00) and
-// ??3GroupDescription@UI@@SAXPEAX@Z (0x1800466f0), the class operator delete.
+// plus ??1GroupDescription@UI@@UEAA@XZ (0x180117c00).
 //
 // NOT HERE, and deliberately: `?CreateNewObject@GroupDescription@UI@@`
 // (0x180046750) and `?CreateInPlaceObject@` (0x180046840) are ALREADY ported
 // and registered, table-driven, by runtime/src/ui/factory_ui1.cpp (the
 // kGroupDescription row in factory_ui1_tables.inc, whose 19 stores are the same
-// inlined constructor `Construct` below transcribes). Adding a second copy here
-// would give the same two addresses two owners.
+// inlined constructor `Construct` below transcribes).
 //
 // Layout: runtime/types/ui/GroupDescription.h. `ElementDescription` + one
 // `Array<ExternalPtr<ElementDescription>>` at +0x68; sizeof 0x78.
+//
+// ENDGAME B.3.6 block C2: every slot body is a MEMBER of `UI::GroupDescription`;
+// the registered doors are one-line QUALIFIED delegations (a live description
+// wears the MINTED table, whose slots resolve back to these doors — B34_BRIEFS
+// A.1). The destructor stays a door (B4b-2).
 //
 // ----------------------------------------------------------------------------
 // THE CONSTRUCTOR IS INLINED EVERYWHERE AND THERE IS NO OUT-OF-LINE ??0.
@@ -48,100 +51,81 @@
 // `ConstructBody` below is that sequence written once, transcribed from
 // 0x180046996..0x180046a06. Two details Ghidra's C loses:
 //   * `+0x40` is written as ONE QWORD holding 3 (`MOV qword [RCX+0x40],3` at
-//     0x1800469e0), so it covers `_elementType` AND `_flags` (+0x44). Writing
-//     the two fields separately is byte-equivalent and is what is done here.
+//     0x1800469e0), so it covers `_elementType` AND `_flags` (+0x44).
 //   * `+0x38` and `+0x3c` are two SEPARATE DWORDS (0 and -1), because the
 //     values differ. Not one qword.
 // The three dead base-vtable stamps (Base, then External over it unread, then
 // ElementDescription) are reproduced: they are four instructions in the shipped
-// bytes and collapsing them would be a divergence for no gain, exactly as
-// runtime/src/ui/dialog_ctor_dtor.cpp keeps Dialog's two.
+// bytes and collapsing them would be a divergence for no gain.
 // ============================================================================
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <new>
 
-#include "../../funcs/rt_port.h"
+#include "description_common.h"
 #include "../../types/ui/GroupDescription.h"
-#include "../../types/ui/Element.h"
-
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// — resolve.h drags in <windows.h> and PLAN.md §4.1 keeps it out of
-// runtime/src/. This declaration must stay byte-identical to resolve.h's; the
-// linker checks the two.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/ui/GroupElement.h"
 
 namespace {
 
-using RtUI::GroupDescription;
+using namespace rtdesc;
 
-// ---- the four exported vtables and the type-info static --------------------
-// RT_DATA_SLOT caches a HIT only, so a lookup that runs before the mint has
-// published the symbol is retried rather than frozen as null.
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtGroupDescription()   { return RT_DATA_SLOT(void*, RtUI::kVtblGroupDescription); }
-void* VtGroupElement()       { return RT_DATA_SLOT(void*, RtUI::kVtblGroupElement); }
-const uint8_t* GroupDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A");
+// ---------------------------------------------------------------------------
+// RULE B6-5 door caches. UI is constructed on the LOADER thread while the main
+// thread draws, so a member body keeps no function-local first-call cache
+// (`RT_DATA_SLOT` / `RT_EXPORT_ONCE`'s shape): it resolves through a
+// namespace-scope atomic slot. Never caches a null; a miss is retried.
+// ---------------------------------------------------------------------------
+void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
 
-template <typename Fn>
-Fn RtAddr(uintptr_t ghidra) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra)); }
+std::atomic<void*> g_vtBase{nullptr};
+std::atomic<void*> g_vtExternal{nullptr};
+std::atomic<void*> g_vtElementDescription{nullptr};
+std::atomic<void*> g_vtGroupDescription{nullptr};
+std::atomic<void*> g_vtGroupElement{nullptr};
+std::atomic<void*> g_groupDescriptionTypeInfo{nullptr};
 
-// ---- the IO::Serializer pair, the same shape every ported Serialize builds --
-// [RSP+0x28] = the Stream*, [RSP+0x30] = the ReaderWriter the encoding factory
-// returns, and `LEA RDX,[RSP+0x28]` is what every callee receives. Keeping the
-// PAIR on the stack is load-bearing: a first draft of
-// runtime/src/graphics/wave24_lane_gfxmat.cpp passed the address of a lone
-// Stream* and every callee then read its reader from whatever slot happened to
-// sit next to it.
-struct Stream {
-    uint8_t _head00[0x08];
-    int32_t mode;              // +0x08  0 == reading
-    int32_t _pad0c;
-    void*   encodingFactory;   // +0x10
-};
-struct Serializer {
-    Stream* stream;            // +0x00
-    void*   readerWriter;      // +0x08
-};
-static_assert(offsetof(Stream, mode) == 0x08, "IO::Stream mode @ +0x08");
-static_assert(offsetof(Stream, encodingFactory) == 0x10, "IO::Stream factory @ +0x10");
-static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +0x08");
+void* AtVtBase()     { return AtomicResolve(g_vtBase, "??_7Base@Object@@6B@"); }
+void* AtVtExternal() { return AtomicResolve(g_vtExternal, "??_7External@Object@@6B@"); }
+void* AtVtElementDescription() {
+    return AtomicResolve(g_vtElementDescription, "??_7ElementDescription@UI@@6B@");
+}
+void* AtVtGroupDescription() { return AtomicResolve(g_vtGroupDescription, RtUI::kVtblGroupDescription); }
+void* AtVtGroupElement()     { return AtomicResolve(g_vtGroupElement, RtUI::kVtblGroupElement); }
+const uint8_t* GroupDescriptionTypeInfo() {
+    return static_cast<const uint8_t*>(AtomicResolve(
+        g_groupDescriptionTypeInfo,
+        "?_typeInfo@GroupDescription@UI@@0VBaseTypeInfo@Object@@A"));
+}
 
-// RETAIL vtable offsets. The profile build's Encoding/ReaderWriter tables
-// disagree and must NOT be used to check these: its NAMES win, its OFFSETS do
-// not (the documented retail-vs-profile trap; SerializeInt is +0xa0 retail,
-// +0xb8 profile).
-constexpr int kEncCreateReader = 0x18;   // 0x180117d42  CALL [RAX+0x18]
-constexpr int kEncCreateWriter = 0x20;   // 0x180117d47  CALL [RAX+0x20]
-constexpr int kRwScalarInt     = 0xa0;   // 0x180117d66  CALL [RAX+0xa0]
-constexpr int kRwDeletingDtor  = 0x00;   // 0x180117da9  CALL [RAX]
-
-void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
-
-}  // namespace
+// Door-only (the dtor door is not a member).
+void* VtGroupDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblGroupDescription); }
 
 // ============================================================================
-// The inlined constructor, transcribed once.
+// The inlined constructor, transcribed once (0x180046996..0x180046a06).
 // ============================================================================
-namespace {
-void ConstructBody(GroupDescription* self) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+void ConstructBody(void* selfv) {
+    uint8_t* p = static_cast<uint8_t*>(selfv);
     void**   v = reinterpret_cast<void**>(p);
 
-    *v = VtBase();                                              // 180046996
-    *v = VtExternal();                                          // 1800469a0
+    *v = AtVtBase();                                            // 180046996
+    *v = AtVtExternal();                                        // 1800469a0
     // `LEA RAX,[RCX+8]` then `MOV [RAX],RDX` -- retail writes +0x08 through an
     // intermediate pointer (the SEH frame's visible temporary) and +0x10/+0x18
     // directly. Byte-identical; the temporary costs nothing to drop.
     *reinterpret_cast<uint64_t*>(p + 0x08) = 0;                 // 1800469b5
     *reinterpret_cast<uint64_t*>(p + 0x10) = 0;                 // 1800469b8
     *reinterpret_cast<uint64_t*>(p + 0x18) = 0;                 // 1800469bc
-    *v = VtElementDescription();                                // 1800469c0
+    *v = AtVtElementDescription();                              // 1800469c0
     *reinterpret_cast<uint64_t*>(p + 0x20) = 0;                 // 1800469ca
     *reinterpret_cast<uint64_t*>(p + 0x28) = 0;                 // 1800469ce
     *reinterpret_cast<uint64_t*>(p + 0x30) = 0;                 // 1800469d2
@@ -152,109 +136,61 @@ void ConstructBody(GroupDescription* self) {
     *reinterpret_cast<uint64_t*>(p + 0x50) = 0;                 // 1800469ec
     *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800469f0
     *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800469f4
-    *v = VtGroupDescription();                                  // 1800469f8
+    *v = AtVtGroupDescription();                                // 1800469f8
     *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 180046a02
     *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 180046a06  _size+_capacity
 }
+
 }  // namespace
 
 // ============================================================================
-// The trivial slots
+// The member bodies
 // ============================================================================
+namespace UI {
+
 // `Type` returns the FIRST DWORD of the BaseTypeInfo static and `TypeName` the
 // pointer at +0x08 — retail reads them as two separate globals
 // (`?_typeInfo@GroupDescription@UI@@` and the label Ghidra prints as
-// `PTR_s_GroupDescription_1801faba8`, which is that static + 8), which is the
-// same two fields runtime/types/object/TypeInfo.h pins.
-extern "C" uint32_t RtUi_GroupDescription_Type(const void*) {
+// `PTR_s_GroupDescription_1801faba8`, which is that static + 8), the same two
+// fields runtime/types/object/TypeInfo.h pins.
+uint32_t GroupDescription::Type() const {
     const uint8_t* ti = GroupDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_GroupDescription_TypeName(const void*) {
+// The key function: GCC emits `vtable for UI::GroupDescription` here. Nothing
+// stamps it; every live object wears the minted table.
+const char* GroupDescription::TypeName() const {
     const uint8_t* ti = GroupDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 // 0x180117cf0: `MOV EAX,0x104 ; RET`. 0x104 == 260, the dialog resource file
-// version this class understands; it is NOT ElementDescription's (that one
-// returns a different constant from its own body).
-extern "C" int32_t RtUi_GroupDescription_GetFileVersion(const void*) { return 0x104; }
+// version this class understands.
+int32_t GroupDescription::GetFileVersion() const { return 0x104; }
 
 // ============================================================================
 // Construct / Reconstruct / Destruct
 // ============================================================================
-// `Construct` is the ctor with a null test; `Reconstruct` is `slot0(this, 0)`
-// — the DELETING DESTRUCTOR with flag 0, i.e. destroy WITHOUT freeing — and
-// then the ctor again, with NO null test (retail derefs `this` to reach the
-// vtable before it could test it, so a null here faults in retail too and a
-// guard would skip the behaviour rather than restore it).
-extern "C" void* RtUi_GroupDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180046991
-    ConstructBody(static_cast<GroupDescription*>(selfv));
-    return selfv;
+// `Construct` is the ctor with a null test (the test is the DOOR's — a member
+// cannot test `this`); `Reconstruct` is `slot0(this, 0)` — the DELETING
+// DESTRUCTOR with flag 0, i.e. destroy WITHOUT freeing, through the object's
+// own (minted) table — and then the ctor again, with NO null test (retail
+// derefs `this` to reach the vtable before it could test it).
+Object::External* GroupDescription::Construct() {
+    ConstructBody(this);
+    return this;
 }
-
-namespace {
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
+Object::External* GroupDescription::Reconstruct() {
+    DeletingDtor(0);                                           // 1800468f7
+    ConstructBody(this);
+    return this;
 }
-}  // namespace
-
-extern "C" void* RtUi_GroupDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                       // 1800468f7
-    ConstructBody(static_cast<GroupDescription*>(selfv));
-    return selfv;
-}
-// 0x180046a20 is a TAIL JUMP into slot 0 with flag 0 (`JMP [RAX]`), which is
-// why Ghidra prints the "could not recover jumptable" warning. Behaviourally a
-// call plus return.
-extern "C" void RtUi_GroupDescription_Destruct(void* selfv) {
-    CallSlot0(selfv, 0);
-}
-
-// ============================================================================
-// ??1GroupDescription@UI@@UEAA@XZ   0x180117c00
-// ============================================================================
-// Re-stamp own vtable, destroy the child array, re-stamp the BASE vtable, then
-// release `ElementDescription::_textName` at +0x60 and TAIL-JUMP to
-// `??1External@Object@@` (0x1800bc950 — `JMP`, not `CALL`, at 0x180117c66).
-//
-// THE STRING RELEASE KEEPS RETAIL'S ASYMMETRY, which is the same one
-// dialog_ctor_dtor.cpp documents for `??1Dialog@UI@@`: when the refcount
-// reaches zero retail rewrites THE FIELD to `data - 8` and frees THAT (so the
-// field is left holding a freed pointer); when it does not reach zero it NULLS
-// the field. Normalising the two arms would be a divergence.
-extern "C" void RtUi_GroupDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtGroupDescription();                                 // 180117c1d
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180039440ull)(p + 0x68);             // 180117c24  Array::~Array (J1)
-
-    *v = VtElementDescription();                               // 180117c31
-
-    char*& s = *reinterpret_cast<char**>(p + 0x60);
-    if (s != nullptr) {                                        // 180117c38
-        --*reinterpret_cast<int32_t*>(s - 4);                  // 180117c3d
-        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {         // 180117c40
-            s = s - 8;                                         // 180117c46  the FIELD moves
-            using MemFreeFn = void (*)(void*);
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s);
-        } else {
-            s = nullptr;                                       // 180117c56
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 180117c66 JMP
-}
+// 0x180046a20 is a TAIL JUMP into slot 0 with flag 0 (`JMP [RAX]`).
+void GroupDescription::Destruct() { DeletingDtor(0); }
 
 // ============================================================================
 // ?Serialize@GroupDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x180117d00
 // ============================================================================
-//   ElementDescription::Serialize(this, stream)            0x180116b00, ported
+//   ElementDescription::Serialize(this, stream)            0x180116b00
 //   pair = { stream, nullptr }
 //   rw   = stream->mode == 0 ? factory->vt[0x18](factory,&pair,0)
 //                            : factory->vt[0x20](factory,&pair,0)
@@ -266,120 +202,172 @@ extern "C" void RtUi_GroupDescription_Dtor(void* selfv) {
 //   if (rw) rw->vt[0](rw, 1)
 //   return true
 //
+// The base call is QUALIFIED: this object wears the leaf's table, whose slot 5
+// is this very function.
+//
 // THE MODE IS RE-READ FROM THE PAIR'S COPY, not from the argument: the
 // disassembly is `MOV RAX,[RSP+0x28] ; CMP dword [RAX+8],0` at
-// 0x180117d6c..0x180117d71, one deref deeper than the first test at 0x180117d3c
-// which reads `[RBX+8]` directly. The two are the same Stream today; the
-// re-read is transcribed rather than folded because folding it would assert
-// they must be.
-extern "C" bool RtUi_GroupDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+// 0x180117d6c..0x180117d71, one deref deeper than the first test at
+// 0x180117d3c. Transcribed rather than folded.
+bool GroupDescription::Serialize(void* streamv) {
+    rtdesc::Stream* stream = static_cast<rtdesc::Stream*>(streamv);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(p, stream);              // 180117d1a
+    ElementDescription::Serialize(stream);                     // 180117d1a
 
-    Serializer ser = { stream, nullptr };                      // [RSP+0x28], [RSP+0x30]
+    rtdesc::Serializer ser = { stream, nullptr };              // [RSP+0x28], [RSP+0x30]
+    void* rw = rtdesc::MakeReaderWriter(stream, &ser);         // 180117d4a
 
-    void* factory = stream->encodingFactory;
-    void** fvt    = VTableOf(factory);
-    const int which = (stream->mode == 0) ? kEncCreateReader : kEncCreateWriter;
-    using MakeRwFn = void* (*)(void* factory, Serializer* ser, int zero);
-    void* rw = reinterpret_cast<MakeRwFn>(fvt[which / 8])(factory, &ser, 0);
-    ser.readerWriter = rw;                                     // 180117d4a
-
-    int32_t n = *reinterpret_cast<int32_t*>(p + 0x70);         // 180117d4f
-    using ScalarFn = void (*)(void* rw, void* value, const char* name);
-    reinterpret_cast<ScalarFn>(VTableOf(rw)[kRwScalarInt / 8])(rw, &n, nullptr);
+    int32_t n = _children._size;                               // 180117d4f
+    rtdesc::RwScalar(rw, rtdesc::kRwScalarInt, &n);            // 180117d66
 
     if (ser.stream->mode == 0) {                               // 180117d6c (re-read)
         using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x1800492d0ull)(p + 0x68, n);        // 180117d7f
+        rtdesc::RtAddr<SetSizeFn>(0x1800492d0ull)(&_children, n);   // 180117d7f
     }
 
-    using ElemSerFn = void (*)(Serializer* ser, int count, void* data);
-    RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, *reinterpret_cast<void**>(p + 0x68));
+    using ElemSerFn = void (*)(rtdesc::Serializer* ser, int count, void* data);
+    rtdesc::RtAddr<ElemSerFn>(0x1800493d0ull)(&ser, n, _children._data);
 
-    if (rw != nullptr) {                                       // 180117d9c
-        using DeleteFn = void (*)(void* rw, int flag);
-        reinterpret_cast<DeleteFn>(VTableOf(rw)[kRwDeletingDtor / 8])(rw, 1);
-    }
+    rtdesc::DestroyReaderWriter(rw);                           // 180117d9c
     return true;                                               // MOV AL,1
 }
 
 // ============================================================================
 // ?CreateInstance@GroupDescription@UI@@UEBA?AV?$InternalPtr@VElement@UI@@@Object@@PEBVDialog@2@@Z
-// retail 0x180117dc0
+// retail 0x180117dc0   (slot 8, RULE B6-2)
 // ============================================================================
-// *** THE HIDDEN RETURN SLOT. *** This returns `Object::InternalPtr<UI::Element>`
-// BY VALUE, so the Microsoft x64 ABI inserts a slot pointer as the FIRST
-// argument after `this`: RCX = this, RDX = the return slot, R8 = the Dialog*.
-// Ghidra prints it as `CreateInstance(GroupDescription*, Dialog*)` and DROPS
-// the third register entirely — the exact shape of the hidden-retslot trap this
-// project has paid for before. The disassembly is unambiguous: `MOV R15,R8`
-// (the Dialog, used only as CreateElement's `this`), `MOV R14,RDX` (written
-// through at 0x180117ed1), `MOV RSI,RCX`.
+// RCX = this, RDX = the hidden return slot, R8 = the Dialog*. Ghidra prints
+// `CreateInstance(GroupDescription*, Dialog*)` and DROPS the third register;
+// the disassembly is unambiguous: `MOV R15,R8` (the Dialog, used only as
+// CreateElement's `this`), `MOV R14,RDX` (written through at 0x180117ed1),
+// `MOV RSI,RCX`.
 //
 // ONE STACK SLOT DOES TWO JOBS, and it must stay one variable here. Retail's
 // [RSP+0x50] holds the new GroupElement when it is handed to
 // `ElementDescription::CreateInstance` (which applies the description to it),
 // and is then REUSED as `Dialog::CreateElement`'s return slot inside the loop.
-// Splitting it into two locals would be tidier and would stop being retail.
+//
+// `ElementDescription::CreateInstance` (0x180115ad0) is reached through its
+// registered door: its member is declared in ElementDescription.h but its body
+// is still dialog.cpp's door (fragment pass), so a member call would not link.
+// `??0Element` and `Dialog::CreateElement` are doors for the same reason.
 //
 // The parent-chain walk at the end of each iteration is retail's: set
-// `kElementFlagNeedsSizeCalc` (0x08000000) on the group and on every ancestor
-// through `Element::_parent` (+0x98), until the chain ends.
-extern "C" void** RtUi_GroupDescription_CreateInstance(const void* selfv,
-                                                       void** ret,
-                                                       const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
-    using MemAllocFn = void* (*)(uint64_t size, int align);
+// `kElementFlagNeedsSizeCalc` on the group and on every ancestor through
+// `Element::_parent`, until the chain ends.
+Object::InternalPtr<Element>* GroupDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     // The locked wrapper, which is the Enter/Allocate/Leave triple retail
-    // inlines at 0x180117deb..0x180117e25 (reference: the identical
-    // identification in runtime/src/io/encoding.cpp and dialog_factory.cpp).
-    void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xc0, 8);
+    // inlines at 0x180117deb..0x180117e25.
+    void* raw = rtdesc::MemAlloc(0xc0, 8);
 
-    uint8_t* elem = nullptr;
+    GroupElement* elem = nullptr;
     if (raw != nullptr) {                                      // 180117e32
-        using ElementCtorFn = void* (*)(void*);
-        RtAddr<ElementCtorFn>(0x180115e50ull)(raw);            // 180117e3a ??0Element
-        *reinterpret_cast<void**>(raw) = VtGroupElement();     // 180117e47
-        elem = static_cast<uint8_t*>(raw);
+        rtdesc::ElementCtor(raw);                              // 180117e3a ??0Element
+        *static_cast<void**>(raw) = AtVtGroupElement();        // 180117e47
+        elem = reinterpret_cast<GroupElement*>(raw);           // B.3.6 bridge
     }
 
     void* slot = elem;                                         // 180117e4f [RSP+0x50]
+    rtdesc::ElementDescriptionApply(this, &slot);              // 180117e5c
 
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 180117e5c
-
-    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0x70);
+    const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 180117e61 / 180117ec9
-        void* const* descArray = *reinterpret_cast<void* const* const*>(self + 0x68);
-        void*  desc      = descArray[i];                       // 180117e77
+        void* desc = _children._data[i];                       // 180117e77
 
-        using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
-        void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, &slot, desc);
+        void** made = rtdesc::DialogCreateElement(dialog, &slot, desc);
 
-        uint8_t* child = *reinterpret_cast<uint8_t**>(made);   // 180117e88
+        Element* child = *reinterpret_cast<Element**>(made);   // 180117e88
         if (child != nullptr)
-            *reinterpret_cast<void**>(child + 0x98) = elem;    // 180117e90  Element::_parent
+            child->_parent = elem;                             // 180117e90  Element::_parent
 
         // Array<Element*>::SetSize(&elem->_children, size + 1, made) — the
         // three-argument (fill) form, ported as array.cpp's kSpec_Fill8Z.
         using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                       *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                       made);                  // 180117ea9
+        rtdesc::RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+                                               elem->_children._size + 1,
+                                               made);          // 180117ea9
 
-        for (uint8_t* n = elem; n != nullptr;                   // 180117eb1..180117ec5
-             n = *reinterpret_cast<uint8_t**>(n + 0x98)) {
-            *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
-        }
+        for (Element* n = elem; n != nullptr; n = n->_parent)  // 180117eb1..180117ec5
+            n->_flags |= kElementFlagNeedsSizeCalc;
     }
 
-    *ret = elem;                                               // 180117ed1
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 180117ed1
     return ret;                                                // MOV RAX,R14
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+extern "C" uint32_t RtUi_GroupDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::GroupDescription*>(self)          // B.3.6 bridge
+        ->UI::GroupDescription::Type();
+}
+extern "C" const char* RtUi_GroupDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::GroupDescription*>(self)          // B.3.6 bridge
+        ->UI::GroupDescription::TypeName();
+}
+extern "C" int32_t RtUi_GroupDescription_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::GroupDescription*>(self)          // B.3.6 bridge
+        ->UI::GroupDescription::GetFileVersion();
+}
+// Retail's null test (180046991) stays in the door.
+extern "C" void* RtUi_GroupDescription_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                      // 180046991
+    return reinterpret_cast<UI::GroupDescription*>(selfv)               // B.3.6 bridge
+        ->UI::GroupDescription::Construct();
+}
+extern "C" void* RtUi_GroupDescription_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::GroupDescription*>(selfv)               // B.3.6 bridge
+        ->UI::GroupDescription::Reconstruct();
+}
+extern "C" void RtUi_GroupDescription_Destruct(void* selfv) {
+    reinterpret_cast<UI::GroupDescription*>(selfv)                      // B.3.6 bridge
+        ->UI::GroupDescription::Destruct();
+}
+extern "C" bool RtUi_GroupDescription_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<UI::GroupDescription*>(selfv)               // B.3.6 bridge
+        ->UI::GroupDescription::Serialize(streamv);
+}
+// Slot 8: RCX = this, RDX = the caller's slot, R8 = Dialog*; slot back in RAX.
+extern "C" void** RtUi_GroupDescription_CreateInstance(const void* selfv,
+                                                       void** ret,
+                                                       const void* dialog) {
+    return reinterpret_cast<void**>(
+        reinterpret_cast<const UI::GroupDescription*>(selfv)            // B.3.6 bridge
+            ->UI::GroupDescription::CreateInstance(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
+                static_cast<const UI::Dialog*>(dialog)));
+}
+
+// ============================================================================
+// ??1GroupDescription@UI@@UEAA@XZ   0x180117c00   — a DTOR DOOR (B4b-2), kept
+// ============================================================================
+// Re-stamp own vtable, destroy the child array, re-stamp the BASE vtable, then
+// release `ElementDescription::_textName` at +0x60 and TAIL-JUMP to
+// `??1External@Object@@` (0x1800bc950 — `JMP`, not `CALL`, at 0x180117c66).
+//
+// THE STRING RELEASE KEEPS RETAIL'S ASYMMETRY (description_common.h fragment
+// 3): when the refcount reaches zero retail rewrites THE FIELD to `data - 8`
+// and frees THAT; otherwise it NULLS the field.
+extern "C" void RtUi_GroupDescription_Dtor(void* selfv) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
+    void**   v = reinterpret_cast<void**>(p);
+
+    *v = VtGroupDescription();                                 // 180117c1d
+
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x180039440ull)(p + 0x68);             // 180117c24  Array::~Array (J1)
+
+    *v = VtElementDescription();                               // 180117c31
+
+    ReleaseStringField(p, 0x60);                               // 180117c38..180117c56
+
+    using ExtDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 180117c66 JMP
 }
 
 // ============================================================================
