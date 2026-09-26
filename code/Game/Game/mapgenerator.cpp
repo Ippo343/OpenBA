@@ -2,8 +2,14 @@
 // Clean reimplementation of MapGenerator game logic.
 //
 // MapGenerator (0x178 bytes) — world map generation parameters.
-// Extends Object::External (0x20 base).
-// Vtable at 0x14015ed80.
+// Extends Object::External (0x20 base). Vtable at 0x14015ed80.
+//
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/MapGenerator.h,
+// field layout and retail slot map there) with a compiler-generated vtable.
+// Gone: the 11-slot `g_MapGenerator_Vtable_Standalone` (two over-read guards
+// past retail's 9), its trampolines and stubs, the lazy vtable resolve in the
+// old Init, the lazily-resolved dtor-body pointers (a non-atomic first-call
+// cache, B6-5) and the C entry points.
 //
 // MapGenerator defines all procedural world generation settings:
 // terrain parameters, resource lists (trees, stones, ores, herbs, animals),
@@ -11,178 +17,158 @@
 //
 // Decompiled from Application-x64.exe.
 
-#include "Game/mapgenerator_funcs.h"
+#include "Game/MapGenerator.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <cstdint>
 #include <cstring>
 #include <cstdio>
 #include <cstdlib>
 #include <new>
 
-// ============================================================
-// Locally resolved function pointers (not in shared engine_funcs.h)
-// ============================================================
-
-// FUN_14001aea0 — MapGenerator destructor body (cleans up all fields before External::~External)
-typedef void (*fn_MapGenerator_DtorBody_t)(void* self);
-static fn_MapGenerator_DtorBody_t s_fn_DtorBody = nullptr;
-
-// FUN_14001b030 — destroy dynamic array of 0x18-byte ExternalRef elements
-typedef void (*fn_DestroyRefArray_t)(void* arrayHeader);
-static fn_DestroyRefArray_t s_fn_DestroyRefArray = nullptr;
-
-// FUN_14001b0a0 — destroy dynamic array of 0x30-byte complex elements
-typedef void (*fn_DestroyRefArray30_t)(void* arrayHeader);
-static fn_DestroyRefArray30_t s_fn_DestroyRefArray30 = nullptr;
-
-// The original Serialize function — called directly since it has complex
-// array resize/ExternalRef resolution helpers that are internal to the exe.
-typedef void (*fn_MapGenerator_Serialize_t)(void* self, void* stream);
-
-static bool s_funcsResolved = false;
-
-static void EnsureFuncsResolved() {
-    if (s_funcsResolved) return;
-    s_fn_DtorBody = reinterpret_cast<fn_MapGenerator_DtorBody_t>(
-        ResolveAddr(Module::Exe, MapGeneratorAddr::DtorBody));
-    s_fn_DestroyRefArray = reinterpret_cast<fn_DestroyRefArray_t>(
-        ResolveAddr(Module::Exe, 0x14001b030));
-    s_fn_DestroyRefArray30 = reinterpret_cast<fn_DestroyRefArray30_t>(
-        ResolveAddr(Module::Exe, 0x14001b0a0));
-    s_funcsResolved = true;
-}
+// FUN_14001b030 / FUN_14001b0a0 — destroy the 0x18-byte ExternalRef and the
+// 0x30-byte InitialStructure pools (game_leaf_helpers.cpp; registered at those
+// addresses in reg_game_leaf.cpp). Called directly by ~MapGenerator.
+void Game_DestroyStringArray18(void* arrayHeader);
+void Game_DestroyStringArray30(void* arrayHeader);
 
 // ============================================================
-// MapGenerator::Dtor (vtable +0x00) — Scalar deleting destructor
+// MapGenerator::MapGenerator (0x1400a3030)
 // ============================================================
-// Original: 0x14001ae70
-// Calls the destructor body (FUN_14001aea0) which cleans up all
-// MapGenerator-specific fields (strings, arrays, ExternalRefs),
-// then calls Object::External::~External.
-// Conditionally frees memory if flags & 1.
-void* MapGenerator_Dtor(MapGenerator* self, uint32_t flags) {
-    EnsureFuncsResolved();
-
-    // The dtor body destroys all MapGenerator fields in reverse order:
-    // - String dtors for descRef3, descRef2, descRef1 (+0x158, +0x138, +0x118)
-    // - Array dtors for refArray7..refArray1 (+0xD0..+0x70)
-    // - MemFree for boolIntArray (+0x60)
-    // - String dtors for templateRef, _field30, _field28 (+0x48, +0x30, +0x28)
-    // - External::~External for base class
-    if (s_fn_DtorBody) {
-        s_fn_DtorBody(self);
-    }
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
-}
-
-// ============================================================
-// MapGenerator::Cleanup (vtable +0x30, Slot6) — Reset to defaults
-// ============================================================
-// Original: 0x14001ae30
-// Calls vtable Dtor with flags=0 (destroy without freeing),
-// then re-initializes all fields via Init (jump to constructor).
-void MapGenerator_Cleanup(MapGenerator* self) {
-    // Call Dtor with flags=0 (don't free memory) via vtable
-    typedef void* (*fn_VtableDtor_t)(void* self, uint32_t flags);
-    fn_VtableDtor_t dtor = *(fn_VtableDtor_t*)(*(uintptr_t*)self);
-    dtor(self, 0);
-
-    // Re-construct in place
-    MapGenerator_Init(self);
-}
-
-// ============================================================
-// MapGenerator::Init — Initialize all fields to defaults
-// ============================================================
-// Mirrors MapGenerator_Ctor (0x1400a3030).
-// Calls Object::External::External for base init, then sets
-// all MapGenerator-specific fields to their default values.
-void MapGenerator_Init(MapGenerator* self) {
-    // Initialize External base class
-    fn_External_External(self);
-
-    // Set MapGenerator vtable
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, MapGeneratorAddr::Vtable);
-    self->vtable = s_vtable;
-
+// External() and the 0x14015ed80 stamp are the compiler's; then the defaults.
+MapGenerator::MapGenerator() {
     // ExternalPtr at +0x20
-    self->_field20 = nullptr;
+    _field20 = nullptr;
 
     // Strings at +0x28, +0x30 (zeroed = empty string)
-    self->_field28 = nullptr;
-    self->_field30 = nullptr;
+    _field28 = nullptr;
+    _field30 = nullptr;
 
     // Generation parameters
-    self->enabled = 1;          // bool, default true
-    self->subdivisions = 8;     // grid subdivision count
-    self->scale = 2.0f;         // terrain scale
+    enabled = 1;          // bool, default true
+    subdivisions = 8;     // grid subdivision count
+    scale = 2.0f;         // terrain scale
 
     // ExternalRef at +0x48 (String + factoryGen + resolvedPtr)
-    self->templateRef.strPtr = nullptr;
-    self->templateRef.factoryGen = -1;  // 0xFFFFFFFF = unresolved
-    self->templateRef.resolved = nullptr;
+    templateRef.strPtr = nullptr;
+    templateRef.factoryGen = -1;  // 0xFFFFFFFF = unresolved
+    templateRef.resolved = nullptr;
 
     // BoolInt array at +0x60
-    self->boolIntArray = nullptr;
-    self->boolIntCount = 0;
+    boolIntArray = nullptr;
+    boolIntCount = 0;
 
     // Dynamic arrays at +0x70 through +0xD8 (all zeroed)
-    memset(&self->refArray1, 0, sizeof(DynArrayHeader));  // +0x70
-    memset(&self->refArray2, 0, sizeof(DynArrayHeader));  // +0x80
-    memset(&self->refArray3, 0, sizeof(DynArrayHeader));  // +0x90
-    memset(&self->refArray4, 0, sizeof(DynArrayHeader));  // +0xA0
-    memset(&self->refArray5, 0, sizeof(DynArrayHeader));  // +0xB0
-    memset(&self->refArray6, 0, sizeof(DynArrayHeader));  // +0xC0
-    memset(&self->refArray7, 0, sizeof(DynArrayHeader));  // +0xD0
+    memset(&refArray1, 0, sizeof(DynArrayHeader));  // +0x70
+    memset(&refArray2, 0, sizeof(DynArrayHeader));  // +0x80
+    memset(&refArray3, 0, sizeof(DynArrayHeader));  // +0x90
+    memset(&refArray4, 0, sizeof(DynArrayHeader));  // +0xA0
+    memset(&refArray5, 0, sizeof(DynArrayHeader));  // +0xB0
+    memset(&refArray6, 0, sizeof(DynArrayHeader));  // +0xC0
+    memset(&refArray7, 0, sizeof(DynArrayHeader));  // +0xD0
 
     // Scalar generation parameters (+0xE0 through +0x114)
-    self->paramE0 = 0;
-    self->paramE4 = 0;
-    self->paramE8 = 0;
-    self->paramEC = 0.0f;
-    self->paramF0 = 0.0f;
-    self->paramF4 = 0.0f;
-    self->paramF8 = 0;
-    self->paramFC = 0;
-    self->param100 = 0;
-    self->param104 = 0;
-    self->param108 = 0;
-    self->param10C = 0;
-    self->param110 = 0;
-    self->param114 = 0;
+    paramE0 = 0;
+    paramE4 = 0;
+    paramE8 = 0;
+    paramEC = 0.0f;
+    paramF0 = 0.0f;
+    paramF4 = 0.0f;
+    paramF8 = 0;
+    paramFC = 0;
+    param100 = 0;
+    param104 = 0;
+    param108 = 0;
+    param10C = 0;
+    param110 = 0;
+    param114 = 0;
 
     // ExternalRef at +0x118 (terrain description)
-    self->descRef1.strPtr = nullptr;
-    self->descRef1.factoryGen = -1;
-    self->descRef1.resolved = nullptr;
+    descRef1.strPtr = nullptr;
+    descRef1.factoryGen = -1;
+    descRef1.resolved = nullptr;
 
     // Terrain amplitude
-    self->terrainAmplitude = 6.0f;
+    terrainAmplitude = 6.0f;
 
     // ExternalRef at +0x138 (climate description)
-    self->descRef2.strPtr = nullptr;
-    self->descRef2.factoryGen = -1;
-    self->descRef2.resolved = nullptr;
+    descRef2.strPtr = nullptr;
+    descRef2.factoryGen = -1;
+    descRef2.resolved = nullptr;
 
     // Chunk size
-    self->chunkSize = 16;
+    chunkSize = 16;
 
     // ExternalRef at +0x158 (vegetation description)
-    self->descRef3.strPtr = nullptr;
-    self->descRef3.factoryGen = -1;
-    self->descRef3.resolved = nullptr;
-
-    return;
+    descRef3.strPtr = nullptr;
+    descRef3.factoryGen = -1;
+    descRef3.resolved = nullptr;
 }
+
+// ============================================================
+// MapGenerator::~MapGenerator (body 0x14001aea0) / DeletingDtor (slot 0)
+// ============================================================
+// Retail body (0x14001aea0, verified against the disassembly's CALL list —
+// three String dtors, 5x b030, 1x b0a0, 1x b030, MemFree, three String dtors,
+// then a tail JMP to External::~External, which is the compiler's chain here).
+// Field order is load-bearing (reverse construction order), so it is kept
+// literal rather than folded into a loop. Moved here from
+// unreg_lane1_mapgenerator_dtorbody.cpp, whose registered door now delegates.
+MapGenerator::~MapGenerator() {
+    // Three trailing description-file references.
+    reinterpret_cast<System::String*>(&descRef3.strPtr)->~String();   // B.3.1 bridge: the COW pointers
+    reinterpret_cast<System::String*>(&descRef2.strPtr)->~String();
+    reinterpret_cast<System::String*>(&descRef1.strPtr)->~String();
+
+    // Seven resource/biome arrays, high offset first.
+    Game_DestroyStringArray18(&refArray7);
+    Game_DestroyStringArray18(&refArray6);
+    Game_DestroyStringArray18(&refArray5);
+    Game_DestroyStringArray18(&refArray4);
+    Game_DestroyStringArray18(&refArray3);
+    Game_DestroyStringArray30(&refArray2);   // 0x30-byte elements
+    Game_DestroyStringArray18(&refArray1);
+
+    // The plain bool/int buffer at +0x60 (header is {data, count} — retail
+    // zeroes both qwords, so +0x68 goes with it).
+    if (boolIntArray) Object::detail::InternalMemFree(boolIntArray);
+    boolIntArray = nullptr;
+    boolIntCount = 0;
+
+    // templateRef / _field30 / _field28.
+    reinterpret_cast<System::String*>(&templateRef.strPtr)->~String();
+    reinterpret_cast<System::String*>(&_field30)->~String();
+    reinterpret_cast<System::String*>(&_field28)->~String();
+}
+
+// Original: 0x14001ae70 — the body above, External::~External, MemFree if flags & 1.
+Object::Base* MapGenerator::DeletingDtor(unsigned flags) {
+    this->~MapGenerator();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [4] PORT GAP (B38 D3.1): retail's slot is the imported Object::External::Compile;
+// the old table held a `return 0` stub. Kept until the family's titled commit.
+Object::External::CompileResult MapGenerator::Compile(const System::Filename&) { return 0; }
+
+// ============================================================
+// MapGenerator::Reconstruct (vtable +0x30, Slot6) — Reset to defaults
+// ============================================================
+// Original: 0x14001ae30. Destroys the object (slot 0, flags 0: no free) then
+// re-constructs in place.
+Object::External* MapGenerator::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) MapGenerator();
+}
+
+// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
+// table held a `return 0` stub. Kept until the family's titled commit.
+void MapGenerator::Destruct() {}
 
 // ============================================================
 // MapGenerator::Serialize (vtable +0x28, Slot5)
@@ -376,12 +362,11 @@ void MG_ReadRefPool(void* serializer, void* header, void* countField) {
 }
 } // namespace
 
-void MapGenerator_Serialize(MapGenerator* self, void* stream) {
-    EnsureFuncsResolved();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+bool MapGenerator::Serialize(void* stream) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     alignas(8) uint8_t serializer[24];
     if (!fn_ExternalPtr_Serialize2) {
-        return;  // missing the ExternalPtr exe door — can't proceed
+        return true;  // missing the ExternalPtr exe door — can't proceed
     }
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
@@ -392,7 +377,7 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     reinterpret_cast<System::String*>(s + 0x30)->Serialize(serializer);       // +0x30 _description
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge  +0x38 _exposed
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge  +0x3c _startAreaSize (townSize)
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->scale, nullptr);   // B.3.4 bridge (cast dropped: self->scale is float)  +0x40 _citizenRadius
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(scale, nullptr);   // B.3.4 bridge (cast dropped: scale is float)  +0x40 _citizenRadius
     reinterpret_cast<System::String*>(s + 0x48)->Serialize(serializer);       // +0x48 _citizen template ref
 
     // --- _citizens: InitialFamily[] (stride 8: bool _educated@0, int _maxChildCount@4) ---
@@ -455,112 +440,46 @@ void MapGenerator_Serialize(MapGenerator* self, void* stream) {
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<float*>(s + 0x170), nullptr);   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
-    return;
+    return true;   // retail returns AL=1
 }
 
 // ============================================================
-// MapGenerator::Slot8 (vtable +0x40) — Reinitialize
+// MapGenerator::Construct (vtable +0x40)
 // ============================================================
-// Original: 0x14001ae20
-// If self is null, returns null. Otherwise reinitializes via Init
-// (tail-calls to the constructor).
-void* MapGenerator_Slot8(MapGenerator* self) {
-    if (self == nullptr) {
-        return nullptr;
-    }
-    MapGenerator_Init(self);
-    return self;
+// Original: 0x14001ae20 — placement-new of the class on `this` (MSVC's
+// placement new null-checks `this`, as the old slot did).
+Object::External* MapGenerator::Construct() {
+    return ::new (static_cast<void*>(this)) MapGenerator();
 }
 
 // ============================================================
-// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
+// Reflection: create / createInPlace, the registration
 // ============================================================
-// MapGenerator is an exe-defined Object::External subclass (name "MapGenerator",
-// parent "Object::External", typeId ~CRC32 = 0xe3a3ae93, size 0x178). Loaded as
-// each element of Game/StartCondition/StartConditions.rsc (and the per-start
-// MapGenerator .rsc files: Easy/Medium/Hard). Without this block
-// ExternalFactory::FindOrLoad's per-element load hits a NullFactory and crashes
-// in Runtime IsDerivedFrom.
-//
-// Vtable @ 0x14015ed80 (9 Object::External slots; verified via read_memory):
-//   +0x00 Dtor       0x14001ae70 -> MapGenerator_Dtor       (reimpl)
-//   +0x08 GetTypeInfo 0x14001add0 -> ReturnNull stub        (mov rax,[0x1401c59c0]; ret; null safe on load)
-//   +0x10 GetTypeId  0x14001adc0 -> MapGenerator_GetTypeId  (mov eax,[0x1401c59b8]; returns ~CRC32 typeId)
-//   +0x18 GetVersion 0x1400a3020 -> Return8 stub            (exe body = `mov eax,8; ret` — file format v8)
-//   +0x20 Compile    0x14003a912 -> Return0 stub            (shared External::Compile thunk; unused on load)
-//   +0x28 Serialize  0x1400a2980 -> MapGenerator_Serialize  (reimpl)
-//   +0x30 Cleanup    0x14001ae30 -> MapGenerator_Cleanup    (reimpl)
-//   +0x38 GetDesc    0x140001640 -> Return0 stub            (shared base forwarder; unused on load)
-//   +0x40 Slot8      0x14001ae20 -> MapGenerator_Slot8      (reimpl)
-//
-// IMPORTANT: GetVersion MUST return 8 (verified: exe body is `mov eax,8; ret`).
-// Object::External::Load gates the element Serialize on
-// `fileVersion == obj->GetVersion()`; a wrong constant silently drops the
+// MapGenerator is loaded as each element of Game/StartCondition/StartConditions.rsc
+// (and the per-start MapGenerator .rsc files: Easy/Medium/Hard). Without the
+// reflected type ExternalFactory::FindOrLoad's per-element load hits a
+// NullFactory and crashes in Runtime IsDerivedFrom. GetFileVersion MUST return
+// 8: Object::External::Load gates the element Serialize on
+// `fileVersion == obj->GetFileVersion()`; a wrong constant silently drops the
 // element and the start-condition combo comes up empty.
-
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-// GetTypeId (+0x10): runtime CRC32 typeId for "MapGenerator".
-static uint32_t MapGenerator_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MapGenerator");
-    return cached;
-}
-
-// Adapter trampolines so vtable slots match the raw (void*, ...) shape.
-static void* MapGenerator_Dtor_Trampoline(void* self, uint32_t flags) {
-    return MapGenerator_Dtor(reinterpret_cast<MapGenerator*>(self), flags);
-}
-static void MapGenerator_Serialize_Trampoline(void* self, void* stream) {
-    MapGenerator_Serialize(reinterpret_cast<MapGenerator*>(self), stream);
-}
-static void MapGenerator_Cleanup_Trampoline(void* self) {
-    MapGenerator_Cleanup(reinterpret_cast<MapGenerator*>(self));
-}
-static void* MapGenerator_Slot8_Trampoline(void* self) {
-    return MapGenerator_Slot8(reinterpret_cast<MapGenerator*>(self));
-}
-
-// Safe const-return stubs for non-reimplemented slots (mirror exe behavior).
-static int   MapGenerator_VtblStub_Return8(void* /*self*/) { return 8; } // GetVersion
-static int   MapGenerator_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* MapGenerator_VtblStub_ReturnNull(void* /*self*/, ...) { return nullptr; }
-
-static void* g_MapGenerator_Vtable_Standalone[11] = {
-    reinterpret_cast<void*>(&MapGenerator_Dtor_Trampoline),     // +0x00 Dtor
-    reinterpret_cast<void*>(&MapGenerator_VtblStub_ReturnNull), // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&MapGenerator_GetTypeId),           // +0x10 GetTypeId
-    reinterpret_cast<void*>(&MapGenerator_VtblStub_Return8),    // +0x18 GetVersion (mov eax,8)
-    reinterpret_cast<void*>(&MapGenerator_VtblStub_Return0),    // +0x20 Compile (unused on load)
-    reinterpret_cast<void*>(&MapGenerator_Serialize_Trampoline),// +0x28 Serialize
-    reinterpret_cast<void*>(&MapGenerator_Cleanup_Trampoline),  // +0x30 Cleanup
-    reinterpret_cast<void*>(&MapGenerator_VtblStub_Return0),    // +0x38 GetDesc forwarder (unused on load)
-    reinterpret_cast<void*>(&MapGenerator_Slot8_Trampoline),    // +0x40 Slot8
-    reinterpret_cast<void*>(&MapGenerator_VtblStub_ReturnNull), // +0x48 (over-read guard)
-    reinterpret_cast<void*>(&MapGenerator_VtblStub_ReturnNull), // +0x50 (over-read guard)
-};
-
-extern "C" void RegisterMapGeneratorVtable() {
-    RegisterExeAddr(MapGeneratorAddr::Vtable,
-                    reinterpret_cast<uintptr_t>(g_MapGenerator_Vtable_Standalone));
-}
-
-extern "C" void* MapGenerator_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(MapGenerator), 8);
+void* MapGenerator::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MapGenerator), 8);
     if (!p) return nullptr;
-    MapGenerator_Init(reinterpret_cast<MapGenerator*>(p));
-    return p;
+    return static_cast<Object::Base*>(::new (p) MapGenerator());
 }
-
-extern "C" void* MapGenerator_CreateInPlace(void* memory) {
+void* MapGenerator::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
-    MapGenerator_Init(reinterpret_cast<MapGenerator*>(memory));
-    return memory;
+    return static_cast<Object::Base*>(::new (memory) MapGenerator());
 }
 
-REGISTER_TYPE(MapGenerator, "Object::External",
-              &MapGenerator_Factory, &MapGenerator_CreateInPlace);
+DEFINE_EXE_VTABLE(MapGenerator, "_ZTV12MapGenerator")
 
+// B38_RULES D5: nothing in the tree reads 0x14015ed80 back (swept by hex and
+// owner); this row is reader-less and serves the compiler table only so the
+// coordinator-owned call in address_registry.cpp keeps linking. The closing
+// pass deletes it with the call.
+extern "C" void RegisterMapGeneratorVtable() {
+    RegisterExeAddr(0x14015ed80, reinterpret_cast<uintptr_t>(MapGenerator::Vtable()));
+}
+
+DEFINE_EXE_TYPE(MapGenerator, "Object::External")

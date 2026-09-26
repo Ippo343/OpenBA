@@ -9,139 +9,98 @@
 // Fields include ExternalPtrs at +0x20/+0x28, System::Strings at +0x30/+0x38/+0x40,
 // and numeric fields (int, bools, floats) from +0x48 to +0x58.
 //
+// Profession is an Object::External type referenced by CitizenDescription (the
+// citizen-template closure FindOrLoads Profession\*.rsc).
+//
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/Profession.h, field
+// layout and retail slot map there) with a compiler-generated vtable. Gone: the
+// hand-built 9-slot `g_Prof_Vtable`, its stubs, the lazy vtable resolve in the
+// old Init, the lazily-resolved ExternalPtr doors (a non-atomic first-call cache
+// on the loader thread, B6-5) and the C entry points.
+//
 // Decompiled from Application-x64.exe.
 
-#include "Game/profession_funcs.h"
+#include "Game/Profession.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
+#include "object/Internal.h" // Object::detail::InternalMemAlloc / InternalMemFree
 #include <cstdint>
 #include <cstdio>
 #include <new>
 
-// ============================================================
-// Local function pointers resolved at init time
-// ============================================================
-
-// FUN_14000bf40(ExternalPtr*, Serializer*) -- ExternalPtr serialize variant
-static void (*s_fn_ExternalPtr_Serialize2)(void* field, void* serializer) = nullptr;
-// FUN_14000bd30(ExternalPtr*, Serializer*) -- ExternalPtr serialize
-static void (*s_fn_ExternalPtr_Serialize)(void* field, void* serializer) = nullptr;
-
-static bool s_funcsInited = false;
+// FUN_14000bf40 / FUN_14000bd30 -- the two ExternalPtr serialize variants.
+// Both addresses are registered to this one body (address_registry.cpp); it is
+// called directly (the old lazily-resolved pointers resolved to it).
+extern "C" void Reimpl_ExternalPtr_Serialize_StringTable(void* refField, void* serializer);
 
 // ============================================================
-// Profession_InitFuncs -- resolve local pointers
+// Profession::Profession (0x1400a9030)
 // ============================================================
-void Profession_InitFuncs() {
-    if (s_funcsInited) return;
-    s_funcsInited = true;
-
-    // ExternalPtr serialize helpers (direct exe functions)
-    s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x14000bf40));
-    s_fn_ExternalPtr_Serialize = reinterpret_cast<void(*)(void*, void*)>(
-        ResolveAddr(Module::Exe, 0x14000bd30));
-
-    // Standalone fallbacks: the exe doors above resolve to NULL when the original
-    // exe isn't mapped (standalone). The ExternalPtr variants are stream-identical
-    // to fn_ExternalPtr_BuildSerialize.
-    if (!s_fn_ExternalPtr_Serialize2) s_fn_ExternalPtr_Serialize2 = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
-    if (!s_fn_ExternalPtr_Serialize)  s_fn_ExternalPtr_Serialize  = reinterpret_cast<void(*)(void*, void*)>((uintptr_t)fn_ExternalPtr_BuildSerialize);
-
-#ifdef _DEBUG
-    printf("[Profession] InitFuncs: ExtPtrSer=%p ExtPtrSer2=%p\n",
-           (void*)s_fn_ExternalPtr_Serialize, (void*)s_fn_ExternalPtr_Serialize2);
-#endif
-}
-
-// ============================================================
-// Profession::Init -- Initialize all fields to defaults
-// ============================================================
-// Mirrors Profession_Ctor at 0x1400a9030.
-// Calls Object::External::External for base init, then sets
-// Profession-specific fields to their default values.
-void Profession_Init(Profession* self) {
-    // Initialize External base class
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set Profession vtable
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, ProfessionAddr::Vtable);
-    self->vtable = s_vtable;
-
+// External() and the 0x14015efa0 stamp are the compiler's; then the defaults.
+Profession::Profession() {
     // ExternalPtr fields
-    self->externalPtr1 = nullptr;
-    self->externalPtr2 = nullptr;
+    externalPtr1 = nullptr;
+    externalPtr2 = nullptr;
 
     // String fields (zero = empty COW string)
-    self->stringName = 0;
-    self->stringDesc = 0;
-    self->stringTool = 0;
+    stringName = 0;
+    stringDesc = 0;
+    stringTool = 0;
 
     // Numeric fields
-    self->field48 = 0;
-    self->field4C = 0;
-    self->field4D = 0;
-    self->isAvailable = 1;
-    self->priority = 100;
-    self->skillMult1 = 1.0f;
-    self->skillMult2 = 1.0f;
+    field48 = 0;
+    field4C = 0;
+    field4D = 0;
+    isAvailable = 1;
+    priority = 100;
+    skillMult1 = 1.0f;
+    skillMult2 = 1.0f;
 }
 
 // ============================================================
-// Profession::Dtor (vtable +0x00) -- Scalar deleting destructor
+// Profession::~Profession / DeletingDtor (vtable +0x00)
 // ============================================================
 // Original: 0x14001e6f0
-// Destroys 3 strings at +0x40, +0x38, +0x30 (in reverse order),
-// then calls External::~External for base cleanup.
-// Conditionally frees memory if flags & 1.
-void* Profession_Dtor(Profession* self, uint32_t flags) {
-    // Destroy strings in reverse order (matching original)
+// Destroys 3 strings at +0x40, +0x38, +0x30 (in reverse order); External::
+// ~External is the compiler's chain; MemFree if flags & 1.
+Profession::~Profession() {
     // B.3.1 bridge: Profession's String fields are still POD members.
-    reinterpret_cast<System::String*>(&self->stringTool)->~String();  // +0x40
-    reinterpret_cast<System::String*>(&self->stringDesc)->~String();  // +0x38
-    reinterpret_cast<System::String*>(&self->stringName)->~String();  // +0x30
-
-    // Call External::~External for base cleanup
-    if (fn_External_Dtor) {
-        fn_External_Dtor(self);
-    }
-
-    // Conditional free
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+    reinterpret_cast<System::String*>(&stringTool)->~String();  // +0x40
+    reinterpret_cast<System::String*>(&stringDesc)->~String();  // +0x38
+    reinterpret_cast<System::String*>(&stringName)->~String();  // +0x30
 }
 
-// ============================================================
-// Profession::Cleanup (vtable +0x30, Slot6) -- Reset to defaults
-// ============================================================
-// Original: 0x14001e580
-// Calls Dtor via vtable with flags=0, then re-constructs via Init.
-void Profession_Cleanup(Profession* self) {
-    // Call Dtor with flags=0 (don't free memory)
-    typedef void* (*fn_VtableDtor_t)(void* self, uint32_t flags);
-    fn_VtableDtor_t dtor = *(fn_VtableDtor_t*)(*(uintptr_t*)self);
-    dtor(self, 0);
-
-    // Re-construct in place
-    Profession_Init(self);
+Object::Base* Profession::DeletingDtor(unsigned flags) {
+    this->~Profession();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
+// [4] PORT GAP (B38 D3.1): retail's slot is the imported Object::External::Compile;
+// the old table held a `return 0` stub. Kept until the family's titled commit.
+Object::External::CompileResult Profession::Compile(const System::Filename&) { return 0; }
+
 // ============================================================
-// Profession::Slot8 (vtable +0x40) -- Reset/reinit with null check
+// Profession::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
 // ============================================================
-// Original: 0x14001e570
-// If self is null, returns null. Otherwise re-inits to defaults.
-void* Profession_Slot8(Profession* self) {
-    if (!self) return nullptr;
-    Profession_Init(self);
-    return self;
+// Original: 0x14001e580. Destroys (slot 0, flags 0) then re-constructs in place.
+Object::External* Profession::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) Profession();
+}
+
+// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
+// table held a `return 0` stub. Kept until the family's titled commit.
+void Profession::Destruct() {}
+
+// ============================================================
+// Profession::Construct (vtable +0x40)
+// ============================================================
+// Original: 0x14001e570 — placement-new of the class on `this`.
+Object::External* Profession::Construct() {
+    return ::new (static_cast<void*>(this)) Profession();
 }
 
 // ============================================================
@@ -149,91 +108,58 @@ void* Profession_Slot8(Profession* self) {
 // ============================================================
 // Original: 0x1400a8f10
 // Creates a Serializer(stream, version=0), then serializes each field.
-void Profession_Serialize(Profession* self, void* stream) {
-    Profession_InitFuncs();   // idempotent; ensures the ExternalPtr doors are resolved
-
+bool Profession::Serialize(void* stream) {
     // Stack-allocated serializer (24 bytes)
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
     // Serialize ExternalPtr fields
-    if (s_fn_ExternalPtr_Serialize2) {
-        s_fn_ExternalPtr_Serialize2((void*)&self->externalPtr1, serializer);  // +0x20
-    }
-    if (s_fn_ExternalPtr_Serialize) {
-        s_fn_ExternalPtr_Serialize((void*)&self->externalPtr2, serializer);   // +0x28
-    }
+    Reimpl_ExternalPtr_Serialize_StringTable(&externalPtr1, serializer);  // +0x20 (0x14000bf40)
+    Reimpl_ExternalPtr_Serialize_StringTable(&externalPtr2, serializer);  // +0x28 (0x14000bd30)
 
     // Serialize String fields
-    reinterpret_cast<System::String*>(&self->stringName)->Serialize(serializer);  // +0x30
-    reinterpret_cast<System::String*>(&self->stringDesc)->Serialize(serializer);  // +0x38
-    reinterpret_cast<System::String*>(&self->stringTool)->Serialize(serializer);  // +0x40
+    reinterpret_cast<System::String*>(&stringName)->Serialize(serializer);  // +0x30
+    reinterpret_cast<System::String*>(&stringDesc)->Serialize(serializer);  // +0x38
+    reinterpret_cast<System::String*>(&stringTool)->Serialize(serializer);  // +0x40
 
     // Serialize numeric fields
     // field48 declared int32_t == int door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->field48, nullptr);     // +0x48   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(field48, nullptr);     // +0x48   // B.3.4 bridge
     // field4C/field4D declared uint8_t, not exactly bool: cast kept
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4C), nullptr);    // +0x4C   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->field4D), nullptr);    // +0x4D   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&field4C), nullptr);    // +0x4C   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&field4D), nullptr);    // +0x4D   // B.3.4 bridge
     // skillMult1/2 declared float == float door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult1, nullptr); // +0x54   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->skillMult2, nullptr); // +0x58   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(skillMult1, nullptr); // +0x54   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(skillMult2, nullptr); // +0x58   // B.3.4 bridge
     // priority declared int32_t == int door type: cast dropped
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(self->priority, nullptr);     // +0x50   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(priority, nullptr);     // +0x50   // B.3.4 bridge
     // isAvailable declared uint8_t, not exactly bool: cast kept
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&self->isAvailable), nullptr); // +0x4E   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(&isAvailable), nullptr); // +0x4E   // B.3.4 bridge
 
     reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// Standalone factory scaffolding
+// Reflection: create / createInPlace, the registration
 // ============================================================
-// Profession is an Object::External type referenced by CitizenDescription (the
-// citizen-template closure FindOrLoads Profession\*.rsc). In standalone it was a
-// NullFactory stub → crash. Real factory + the reimpl'd Serialize above (now with
-// engine-global fallbacks) make it loadable. vtable @ 0x14015efa0 (9 slots,
-// +0x00..+0x40; GetVersion=3, Serialize +0x28, CreateInPlace +0x40).
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t Profession_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("Profession");
-    return cached;
-}
-static int   Prof_Return3(void* /*self*/)  { return 3; }   // GetVersion = 3
-static int   Prof_Return0(void* /*self*/)  { return 0; }
-static void* Prof_ReturnNull(void*, ...)   { return nullptr; }
-
-static void* g_Prof_Vtable[9] = {
-    reinterpret_cast<void*>(&Profession_Dtor),       // +0x00 dtor
-    reinterpret_cast<void*>(&Prof_ReturnNull),       // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&Profession_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&Prof_Return3),          // +0x18 GetVersion=3
-    reinterpret_cast<void*>(&Prof_Return0),          // +0x20 Compile thunk
-    reinterpret_cast<void*>(&Profession_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&Profession_Cleanup),    // +0x30 Cleanup
-    reinterpret_cast<void*>(&Prof_Return0),          // +0x38 GetDesc forwarder
-    reinterpret_cast<void*>(&Profession_Slot8),      // +0x40 CreateInPlace
-};
-
-extern "C" void RegisterProfessionVtable() {
-    RegisterExeAddr(ProfessionAddr::Vtable, reinterpret_cast<uintptr_t>(g_Prof_Vtable));
-}
-
-extern "C" void* Profession_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x60, 8);
+void* Profession::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(Profession), 8);
     if (!p) return nullptr;
-    Profession_Init(reinterpret_cast<Profession*>(p));
-    return p;
+    return static_cast<Object::Base*>(::new (p) Profession());
 }
-extern "C" void* Profession_CreateInPlace(void* mem) {
-    if (!mem) return nullptr;
-    Profession_Init(reinterpret_cast<Profession*>(mem));
-    return mem;
+void* Profession::CreateInPlaceObject(void* memory) {
+    if (!memory) return nullptr;
+    return static_cast<Object::Base*>(::new (memory) Profession());
 }
 
-REGISTER_TYPE(Profession, "Object::External",
-              &Profession_Factory, &Profession_CreateInPlace);
+DEFINE_EXE_VTABLE(Profession, "_ZTV10Profession")
+
+// B38_RULES D5: nothing in the tree reads 0x14015efa0 back (swept by hex and
+// owner); this row is reader-less and serves the compiler table only so the
+// coordinator-owned call keeps linking. The closing pass deletes it with the call.
+extern "C" void RegisterProfessionVtable() {
+    RegisterExeAddr(0x14015efa0, reinterpret_cast<uintptr_t>(Profession::Vtable()));
+}
+
+DEFINE_EXE_TYPE(Profession, "Object::External")

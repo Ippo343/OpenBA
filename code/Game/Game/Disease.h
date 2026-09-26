@@ -1,0 +1,60 @@
+#pragma once
+// ============================================================================
+// code/Game/Game/Disease.h — ENDGAME B.3.8 block LOOP (B38_RULES D4, sec. 2.2)
+//
+// `Disease`, one disease resource definition (an element of
+// Game/Disease/Diseases.rsc), a real `Object::External` subclass.
+//
+// RETAIL (Application-x64.exe, B38_SLOTS.md sec. 6):
+//   reflected "Disease", parent "Object::External", table 0x14015e190, 9 slots,
+//   sizeof 0x48. create 0x14008fd0: MemAlloc(0x48, 8); ??0External; the field
+//   defaults below.
+//   [0] 0x140018f60 scalar deleting dtor (shared with ClimateGenerator:
+//       ~String(+0x28), ~External, MemFree on &1)
+//   [1] 0x140018fc0 TypeName   [2] 0x140018fb0 Type
+//   [3] 0x140093390 GetFileVersion `MOV EAX,2`
+//   [4] IMPORT Object::External::Compile
+//   [5] 0x1400932d0 Serialize (MOV AL,1)
+//   [6] 0x1400190a0 Reconstruct   [7] 0x140001640 Destruct (DeletingDtor(0))
+//   [8] 0x140019040 Construct (placement-new of the class)
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "object/External.h"
+#include "Object/exe_type.h"
+
+class Disease final : public Object::External {
+    DECLARE_EXE_TYPE(Disease)
+
+public:
+    Disease();                                                    // create 0x14008fd0's init
+
+    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140018f60
+    int32_t GetFileVersion() const override { return 2; }         // [3] 0x140093390
+    CompileResult Compile(const System::Filename& path) override; // [4] PORT GAP (tree stub; retail inherits)
+    bool Serialize(void* stream) override;                        // [5] 0x1400932d0
+    Object::External* Reconstruct() override;                     // [6] 0x1400190a0 PORT GAP
+    void Destruct() override;                                     // [7] 0x140001640 PORT GAP
+    virtual Object::External* Construct();                        // [8] 0x140019040
+
+protected:
+    ~Disease();
+
+public:
+    void*   _stringTable;   // +0x20  ExternalPtr<StringTable> (weak)
+    void*   _name;          // +0x28  System::String (COW pointer)
+    float   _field30;       // +0x30  1.0f
+    float   _field34;       // +0x34  0.0f
+    float   _field38;       // +0x38  1.0f
+    float   _field3C;       // +0x3c  10.0f
+    float   _field40;       // +0x40  0.0f
+    uint8_t _pad44[4];      // +0x44
+};
+
+static_assert(sizeof(Disease) == 0x48, "Disease is 0x48 (create 0x14008fd0 MemAlloc(0x48))");
+static_assert(alignof(Disease) == 8, "qword-aligned");
+static_assert(offsetof(Disease, _stringTable) == 0x20, "+0x20");
+static_assert(offsetof(Disease, _name)        == 0x28, "+0x28");
+static_assert(offsetof(Disease, _field30)     == 0x30, "+0x30");
+static_assert(offsetof(Disease, _field40)     == 0x40, "+0x40");

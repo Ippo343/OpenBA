@@ -25,6 +25,17 @@
 #include "Game/GameLoadDialogLoopT.h"
 #include "Game/MenuDialogLoopT.h"
 #include "Game/GameUpdateLoop.h"
+#include "Game/ClimateGenerator.h"
+#include "Game/Disease.h"
+#include "Game/MapGenerator.h"
+#include "Game/MenuScene.h"
+#include "Game/MusicList.h"
+#include "Game/NameDatabase.h"
+#include "Game/Profession.h"
+#include "Game/ProfessionList.h"
+#include "Game/TerrainGenerator.h"
+#include "Game/Toolbar.h"
+#include "Game/Weather.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -177,6 +188,60 @@ UNIT_TEST(loop_splash_slot12_is_retslot_first) {
                         Ret* (GameLoadDialogLoopT::*)(Ret*)>::value));
     CHECK((std::is_same<decltype(&MenuDialogLoopT::CreateLoopDialog),
                         Ret* (MenuDialogLoopT::*)(Ret*)>::value));
+}
+
+// ===========================================================================
+// THE ELEVEN REFLECTED WORLD EXTERNALS (Object::External, 9 retail slots)
+// ===========================================================================
+UNIT_TEST(loop_externals_sizes_match_retail) {
+    CHECK_EQ(sizeof(ClimateGenerator), (size_t)0x110);
+    CHECK_EQ(sizeof(Disease),          (size_t)0x48);
+    CHECK_EQ(sizeof(MapGenerator),     (size_t)0x178);
+    CHECK_EQ(sizeof(MenuScene),        (size_t)0x208);
+    CHECK_EQ(sizeof(MusicList),        (size_t)0x30);
+    CHECK_EQ(sizeof(NameDatabase),     (size_t)0x60);
+    CHECK_EQ(sizeof(Profession),       (size_t)0x60);
+    CHECK_EQ(sizeof(ProfessionList),   (size_t)0x50);
+    CHECK_EQ(sizeof(TerrainGenerator), (size_t)0x90);
+    CHECK_EQ(sizeof(Toolbar),          (size_t)0x68);
+    CHECK_EQ(sizeof(Weather),          (size_t)0x80);
+    CHECK_EQ(offsetof(MapGenerator, descRef3),     (size_t)0x158);
+    CHECK_EQ(offsetof(MenuScene, transform),       (size_t)0x88);
+    CHECK_EQ(offsetof(MenuScene, _field1E8),       (size_t)0x1e8);
+    CHECK_EQ(offsetof(TerrainGenerator, _field80), (size_t)0x80);
+    CHECK_EQ(offsetof(Weather, sunPitch),          (size_t)0x7c);
+}
+
+template <typename T>
+void CheckExternalShape() {
+    CHECK((std::is_base_of<Object::External, T>::value));
+    CHECK(!std::is_abstract<T>::value);
+    CHECK(std::is_final<T>::value);
+    CHECK(!std::has_virtual_destructor<T>::value);
+    CHECK_EQ(alignof(T), (size_t)8);
+    CHECK_EQ(SlotOffset(&T::DeletingDtor),   S(0));
+    CHECK_EQ(SlotOffset(&T::TypeName),       S(1));
+    CHECK_EQ(SlotOffset(&T::Type),           S(2));
+    CHECK_EQ(SlotOffset(&T::GetFileVersion), S(3));
+    CHECK_EQ(SlotOffset(&T::Compile),        S(4));
+    CHECK_EQ(SlotOffset(&T::Serialize),      S(5));
+    CHECK_EQ(SlotOffset(&T::Reconstruct),    S(6));
+    CHECK_EQ(SlotOffset(&T::Destruct),       S(7));
+    CHECK_EQ(SlotOffset(&T::Construct),      S(8));   // the class's own new virtual
+}
+
+UNIT_TEST(loop_externals_shape_and_slots) {
+    CheckExternalShape<ClimateGenerator>();
+    CheckExternalShape<Disease>();
+    CheckExternalShape<MapGenerator>();
+    CheckExternalShape<MenuScene>();
+    CheckExternalShape<MusicList>();
+    CheckExternalShape<NameDatabase>();
+    CheckExternalShape<Profession>();
+    CheckExternalShape<ProfessionList>();
+    CheckExternalShape<TerrainGenerator>();
+    CheckExternalShape<Toolbar>();
+    CheckExternalShape<Weather>();
 }
 
 }  // namespace

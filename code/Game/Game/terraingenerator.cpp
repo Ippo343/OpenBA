@@ -2,8 +2,14 @@
 // Clean reimplementation of TerrainGenerator game logic.
 //
 // TerrainGenerator (0x90 bytes) -- terrain height/noise generation parameters.
-// Extends Object::External (0x20 base).
-// Vtable at 0x14015f170.
+// Extends Object::External (0x20 base). Vtable at 0x14015f170.
+//
+// ENDGAME B.3.8 block LOOP: a REAL class (code/Game/Game/TerrainGenerator.h,
+// field layout and retail slot map there) with a compiler-generated vtable.
+// Gone: the 11-slot `g_TerrainGenerator_Vtable_Standalone` (two over-read
+// guards past retail's 9), its trampolines and stubs, the lazy vtable resolve
+// in the old Init, the lazily-resolved door pointers + EnsureInit (a non-atomic
+// first-call cache reached on the LOADER thread, B6-5) and the C entry points.
 //
 // Contains ExternalPtr, 3 noise layer filename strings (each with a -1 sentinel int),
 // and a dynamic array of terrain data entries (0x44 bytes each).
@@ -32,7 +38,8 @@
 //
 // Decompiled from Application-x64.exe.
 
-#include "Game/terraingenerator_funcs.h"
+#include "Game/TerrainGenerator.h"
+#include "object/Internal.h"   // Object::detail::InternalMemAlloc / InternalMemFree
 #include "engine_funcs.h"
 #include "system/Filename.h"
 #include "resolve.h"
@@ -43,22 +50,11 @@
 #include <cstring>
 #include <new>
 
-// ============================================================
-// Local function pointers (resolved once)
-// ============================================================
-
-// FUN_14001fd10 -- resolve filename string to ExternalPtr
-// Called after deserializing a filename string when version==0.
-// Signature: void (String* fieldAtStringOffset)
-static void (*s_fn_ResolveFilenameString)(void* stringField) = nullptr;
-
-// FUN_1400206b0 -- resize terrain data array at +0x80
-// Signature: void (void* arrayFieldAt80, int newCount)
-static void (*s_fn_TerrainDataResize)(void* arrayField, int newCount) = nullptr;
-
-// FUN_140020870 -- serialize terrain data array elements
-// Signature: void (void* serializer, uint32_t count, void* arrayPtr)
-static void (*s_fn_TerrainDataSerialize)(void* serializer, uint32_t count, void* arrayPtr) = nullptr;
+// FUN_14001fd10 -- resolve a deserialized noise-layer filename String to its
+// External. Registered at that address to this body (standalone/reg_game_leaf.cpp);
+// called directly now, as are the two array helpers below (0x1400206b0 /
+// 0x140020870), whose registered bodies live in this file.
+void Game_TerrainResolveMaterial(void* refTriple);   // game_leaf_helpers.cpp
 
 // ============================================================
 // Standalone reimplementations of the +0x80 terrain-data-array helpers.
@@ -123,44 +119,9 @@ static void Reimpl_TerrainDataSerialize(void* serializer, uint32_t count, void* 
 }
 
 // ============================================================
-// TerrainGenerator_InitFuncs -- resolve local function pointers
-// ============================================================
-void TerrainGenerator_InitFuncs() {
-    // FUN_14001fd10 -- resolve filename string
-    s_fn_ResolveFilenameString = reinterpret_cast<void(*)(void*)>(
-        ResolveAddr(Module::Exe, 0x14001fd10));
-
-    // FUN_1400206b0 -- terrain data array resize (standalone fallback to reimpl)
-    s_fn_TerrainDataResize = reinterpret_cast<void(*)(void*, int)>(
-        ResolveAddr(Module::Exe, 0x1400206b0));
-    if (!s_fn_TerrainDataResize) s_fn_TerrainDataResize = &Reimpl_TerrainDataResize;
-
-    // FUN_140020870 -- terrain data array serialize (standalone fallback to reimpl)
-    s_fn_TerrainDataSerialize = reinterpret_cast<void(*)(void*, uint32_t, void*)>(
-        ResolveAddr(Module::Exe, 0x140020870));
-    if (!s_fn_TerrainDataSerialize) s_fn_TerrainDataSerialize = &Reimpl_TerrainDataSerialize;
-
-}
-
-// ============================================================
-// Lazy init guard
-// ============================================================
-static bool s_inited = false;
-static void EnsureInit() {
-    if (!s_inited) {
-        TerrainGenerator_InitFuncs();
-        s_inited = true;
-    }
-}
-
-// ============================================================
 // Helper: Get serializer version
 // ============================================================
-// The Serializer struct (24 bytes) has an encoding sub-object at +0x00.
-// encoding+0x08 = version (int). Returns the version stored in the serializer.
 static inline int GetSerializerVersion(void* serializer) {
-    // serializer[0] = pointer to encoding object
-    // encoding+8 = version
     return static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection());   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
 }
 
@@ -168,7 +129,7 @@ static inline int GetSerializerVersion(void* serializer) {
 // Helper: Serialize a filename string with version-0 resolution
 // ============================================================
 // Pattern from TerrainGenerator Slot5: Filename ctor, String::Serialize,
-// if version==0 resolve filename, Filename dtor.
+// if version==0 resolve filename (FUN_14001fd10), Filename dtor.
 static void SerializeFilenameString(void* self_offset, void* serializer) {
     System::Filename filenameObj;   // retail's scope temp; only ctor + dtor
     (void)filenameObj;
@@ -176,261 +137,162 @@ static void SerializeFilenameString(void* self_offset, void* serializer) {
     reinterpret_cast<System::String*>(self_offset)->Serialize(serializer);
 
     if (GetSerializerVersion(serializer) == 0) {
-        if (s_fn_ResolveFilenameString)
-            s_fn_ResolveFilenameString(self_offset);
+        Game_TerrainResolveMaterial(self_offset);
     }
 }
 
 // ============================================================
-// TerrainGenerator::Dtor (vtable +0x00) -- Scalar deleting destructor
+// TerrainGenerator::TerrainGenerator (0x1400b1810)
 // ============================================================
-// Original: 0x140020600
-// Calls internal cleanup helper FUN_140020630 then conditionally frees.
-// FUN_140020630 frees the terrain data array at +0x80, destroys 4 Strings
-// at +0x68, +0x50, +0x38, +0x28, then calls External::~External.
-void* TerrainGenerator_Dtor(TerrainGenerator* self, uint32_t flags) {
-    EnsureInit();
-    // Free terrain data array at +0x80.
-    // ENDGAME B.3.2 step 2: this is `~Array` for the +0x80 SizeRow array —
-    // MemFree the block, then zero data and the count/capacity qword, which is
-    // exactly the three stores the hand-written version made (trivial element,
-    // so no destroy step). B.3.2 bridge: +0x80/+0x88 are still two void* fields.
-    reinterpret_cast<TerrainSizeRowArray*>(&self->_field80)->~Array();
+// External() and the 0x14015f170 stamp are the compiler's; then the defaults.
+TerrainGenerator::TerrainGenerator() {
+    _field20 = nullptr;          // ExternalPtr
+    _field28 = nullptr;          // String
+    _field30 = 1;                // enabled
+
+    // Noise layer 1: String, sentinel, ptr
+    _field38 = nullptr;
+    _field40 = -1;
+    _field48 = nullptr;
+    // Noise layer 2
+    _field50 = nullptr;
+    _field58 = -1;
+    _field60 = nullptr;
+    // Noise layer 3
+    _field68 = nullptr;
+    _field70 = -1;
+    _field78 = nullptr;
+
+    // Terrain data array at +0x80, count/info at +0x88
+    _field80 = nullptr;
+    _field88 = nullptr;
+}
+
+// ============================================================
+// TerrainGenerator::~TerrainGenerator / DeletingDtor (vtable +0x00)
+// ============================================================
+// Original: 0x140020600 -> body FUN_140020630: frees the terrain data array
+// at +0x80, destroys the 4 Strings at +0x68, +0x50, +0x38, +0x28; then
+// External::~External (the compiler's chain) and MemFree if flags & 1.
+TerrainGenerator::~TerrainGenerator() {
+    // ENDGAME B.3.2 step 2: `~Array` for the +0x80 SizeRow array — MemFree the
+    // block, then zero data and the count/capacity qword (trivial element, so
+    // no destroy step). B.3.2 bridge: +0x80/+0x88 are still two void* fields.
+    reinterpret_cast<TerrainSizeRowArray*>(&_field80)->~Array();
 
     // Destroy strings in reverse order: +0x68, +0x50, +0x38, +0x28
-    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x68)->~String();
-    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x50)->~String();
-    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x38)->~String();
-    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->~String();
-
-    // Call External base destructor
-    fn_External_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
+    reinterpret_cast<System::String*>(&_field68)->~String();   // B.3.1 bridge: the COW pointers
+    reinterpret_cast<System::String*>(&_field50)->~String();
+    reinterpret_cast<System::String*>(&_field38)->~String();
+    reinterpret_cast<System::String*>(&_field28)->~String();
 }
 
-// ============================================================
-// TerrainGenerator::Cleanup (vtable +0x30, Slot6) -- Reset to defaults
-// ============================================================
-// Original: 0x1400205e0
-// Destroys the object (without freeing) then re-constructs in place.
-void TerrainGenerator_Cleanup(TerrainGenerator* self) {
-    // Call Dtor with flags=0 (don't free memory)
-    typedef void* (*fn_VtableDtor_t)(void* self, uint32_t flags);
-    fn_VtableDtor_t dtor = *(fn_VtableDtor_t*)(*(uintptr_t*)self);
-    dtor(self, 0);
-
-    // Re-construct in place
-    TerrainGenerator_Init(self);
+Object::Base* TerrainGenerator::DeletingDtor(unsigned flags) {
+    this->~TerrainGenerator();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
+
+// [4] PORT GAP (B38 D3.1): retail's slot is the imported Object::External::Compile;
+// the old table held a `return 0` stub. Kept until the family's titled commit.
+Object::External::CompileResult TerrainGenerator::Compile(const System::Filename&) { return 0; }
+
+// ============================================================
+// TerrainGenerator::Reconstruct (vtable +0x30, Slot6)
+// ============================================================
+// Original: 0x1400205e0. Destroys the object (slot 0, flags 0: no free) then
+// re-constructs in place.
+Object::External* TerrainGenerator::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TerrainGenerator();
+}
+
+// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
+// table held a `return 0` stub. Kept until the family's titled commit.
+void TerrainGenerator::Destruct() {}
 
 // ============================================================
 // TerrainGenerator::Serialize (vtable +0x28, Slot5)
 // ============================================================
-// Original: 0x1400b1690
-// Complex serialization: ExternalPtr, 3 filename strings with version-0
-// resolution, and a dynamic terrain data array.
-void TerrainGenerator_Serialize(TerrainGenerator* self, void* stream) {
-    EnsureInit();
-    // Create Serializer on stack (24 bytes)
+// Original: 0x1400b1690. ExternalPtr, String, bool, 3 filename strings with
+// version-0 resolution, and the dynamic terrain data array. Returns AL=1.
+bool TerrainGenerator::Serialize(void* stream) {
     alignas(8) uint8_t serializer[24];
     ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer& s = *reinterpret_cast<IO::Serializer*>(serializer);   // B.3.4 bridge
 
     // Serialize ExternalPtr at +0x20
     if (fn_ExternalPtr_Serialize2)
-        fn_ExternalPtr_Serialize2(reinterpret_cast<uint8_t*>(self) + 0x20, serializer);
+        fn_ExternalPtr_Serialize2(&_field20, serializer);
 
     // Serialize String at +0x28
-    reinterpret_cast<System::String*>(reinterpret_cast<uint8_t*>(self) + 0x28)->Serialize(serializer);
+    reinterpret_cast<System::String*>(&_field28)->Serialize(serializer);
 
-    // Serialize bool at +0x30
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(reinterpret_cast<uint8_t*>(self) + 0x30), nullptr);   // B.3.4 bridge (cast kept: _field30 is uint8_t, not bool)
+    // Serialize bool at +0x30 — declared uint8_t, not exactly bool: cast kept
+    s.Serialize(*reinterpret_cast<bool*>(&_field30), nullptr);
 
-    // Serialize 3 filename strings with version-0 resolution pattern:
-    // +0x38, +0x50, +0x68
-    SerializeFilenameString(reinterpret_cast<uint8_t*>(self) + 0x38, serializer);
-    SerializeFilenameString(reinterpret_cast<uint8_t*>(self) + 0x50, serializer);
-    SerializeFilenameString(reinterpret_cast<uint8_t*>(self) + 0x68, serializer);
+    // 3 filename strings with the version-0 resolution: +0x38, +0x50, +0x68
+    SerializeFilenameString(&_field38, serializer);
+    SerializeFilenameString(&_field50, serializer);
+    SerializeFilenameString(&_field68, serializer);
 
-    // Serialize terrain data array count
-    // Read current count from +0x88 into a local, serialize it,
-    // then if version==0 resize the array, then serialize array contents.
-    uint32_t count = *reinterpret_cast<uint32_t*>(reinterpret_cast<uint8_t*>(self) + 0x88);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);   // B.3.4 bridge (cast kept: count is uint32_t, not int)
+    // Terrain data array count: read the current count from +0x88, serialize
+    // it, resize when reading (FUN_1400206b0), then the rows (FUN_140020870).
+    uint32_t count = *reinterpret_cast<uint32_t*>(&_field88);
+    s.Serialize(*reinterpret_cast<int*>(&count), nullptr);   // cast kept: count is uint32_t, not int
 
-    if (GetSerializerVersion(serializer) == 0) {
-        // Resize terrain data array to deserialized count
-        if (s_fn_TerrainDataResize)
-            s_fn_TerrainDataResize(reinterpret_cast<uint8_t*>(self) + 0x80, count);
-    }
+    if (GetSerializerVersion(serializer) == 0)
+        Reimpl_TerrainDataResize(&_field80, count);
 
-    // Serialize terrain data array contents
-    if (s_fn_TerrainDataSerialize) {
-        void* arrayPtr = *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(self) + 0x80);
-        s_fn_TerrainDataSerialize(serializer, count, arrayPtr);
-    }
+    Reimpl_TerrainDataSerialize(serializer, count, _field80);
 
-    // Destroy serializer
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    s.~Serializer();
+    return true;
 }
 
 // ============================================================
-// TerrainGenerator::Slot8 (vtable +0x40)
+// TerrainGenerator::Construct (vtable +0x40)
 // ============================================================
-// Original: 0x1400205d0
-// Null-check: if self is null, return null.
-// Otherwise, call External ctor, set vtable, set defaults, return self.
-void* TerrainGenerator_Slot8(TerrainGenerator* self) {
-    if (!self) return nullptr;
-
-    TerrainGenerator_Init(self);
-    return self;
+// Original: 0x1400205d0 — placement-new of the class on `this` (MSVC's
+// placement new null-checks `this`, as the old slot did).
+Object::External* TerrainGenerator::Construct() {
+    return ::new (static_cast<void*>(this)) TerrainGenerator();
 }
 
 // ============================================================
-// TerrainGenerator::Init -- Initialize all fields to defaults
+// Reflection: create / createInPlace, the registration
 // ============================================================
-// Mirrors TerrainGenerator_Ctor at 0x1400b1810.
-// Calls Object::External::External for base init, then sets
-// TerrainGenerator-specific fields to their default values.
-void TerrainGenerator_Init(TerrainGenerator* self) {
-    // Initialize External base class
-    fn_External_External(self);
-
-    // Set TerrainGenerator vtable
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, TerrainGeneratorAddr::Vtable);
-    self->vtable = s_vtable;
-
-    // ExternalPtr at +0x20
-    self->_field20 = nullptr;
-    // String at +0x28
-    self->_field28 = nullptr;
-
-    // Bool enabled at +0x30
-    self->_field30 = 1;
-
-    // Noise layer 1: String at +0x38, sentinel at +0x40, ptr at +0x48
-    self->_field38 = nullptr;
-    self->_field40 = -1;
-    self->_field48 = nullptr;
-
-    // Noise layer 2: String at +0x50, sentinel at +0x58, ptr at +0x60
-    self->_field50 = nullptr;
-    self->_field58 = -1;
-    self->_field60 = nullptr;
-
-    // Noise layer 3: String at +0x68, sentinel at +0x70, ptr at +0x78
-    self->_field68 = nullptr;
-    self->_field70 = -1;
-    self->_field78 = nullptr;
-
-    // Terrain data array at +0x80, count/info at +0x88
-    self->_field80 = nullptr;
-    self->_field88 = nullptr;
-}
-
-// ============================================================
-// STANDALONE_EXE: Factory + Vtable + REGISTER_TYPE
-// ============================================================
-// TerrainGenerator is an exe-defined Object::External subclass (name
-// "TerrainGenerator", parent "Object::External", typeId ~CRC32 = 0x562a2462,
-// size 0x90). Loaded as each element of Game/Terrain/TerrainList.rsc
-// (Valleys/Mountains .rsc). Without this block ExternalFactory::FindOrLoad's
-// per-element load hits a NullFactory and crashes in Runtime IsDerivedFrom.
-//
-// Vtable @ 0x14015f170 (9 Object::External slots; verified via read_memory):
-//   +0x00 Dtor       0x140020600 -> TerrainGenerator_Dtor      (reimpl)
-//   +0x08 GetTypeInfo 0x140020580 -> ReturnNull stub           (mov rax,[0x1401c5b48]; ret; null safe on load)
-//   +0x10 GetTypeId  0x140020570 -> TerrainGenerator_GetTypeId (mov eax,[0x1401c5b40]; returns ~CRC32 typeId)
-//   +0x18 GetVersion 0x1400b1800 -> Return4 stub               (exe body = `mov eax,4; ret` — file format v4)
-//   +0x20 Compile    0x14003a912 -> Return0 stub               (shared External::Compile thunk; unused on load)
-//   +0x28 Serialize  0x1400b1690 -> TerrainGenerator_Serialize (reimpl)
-//   +0x30 Cleanup    0x1400205e0 -> TerrainGenerator_Cleanup   (reimpl)
-//   +0x38 GetDesc    0x140001640 -> Return0 stub               (shared base forwarder; unused on load)
-//   +0x40 Slot8      0x1400205d0 -> TerrainGenerator_Slot8     (reimpl)
-//
-// IMPORTANT: GetVersion MUST return 4 (verified: exe body is `mov eax,4; ret`).
-// Object::External::Load gates the element Serialize on
-// `fileVersion == obj->GetVersion()`; a wrong constant silently drops the
-// element and the terrain combo comes up empty.
-
-
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-// GetTypeId (+0x10): runtime CRC32 typeId for "TerrainGenerator".
-static uint32_t TerrainGenerator_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("TerrainGenerator");
-    return cached;
-}
-
-// Adapter trampolines so vtable slots match the raw (void*, ...) shape.
-static void* TerrainGenerator_Dtor_Trampoline(void* self, uint32_t flags) {
-    return TerrainGenerator_Dtor(reinterpret_cast<TerrainGenerator*>(self), flags);
-}
-static void TerrainGenerator_Serialize_Trampoline(void* self, void* stream) {
-    TerrainGenerator_Serialize(reinterpret_cast<TerrainGenerator*>(self), stream);
-}
-static void TerrainGenerator_Cleanup_Trampoline(void* self) {
-    TerrainGenerator_Cleanup(reinterpret_cast<TerrainGenerator*>(self));
-}
-static void* TerrainGenerator_Slot8_Trampoline(void* self) {
-    return TerrainGenerator_Slot8(reinterpret_cast<TerrainGenerator*>(self));
-}
-
-// Safe const-return stubs for non-reimplemented slots (mirror exe behavior).
-static int   TerrainGenerator_VtblStub_Return4(void* /*self*/) { return 4; } // GetVersion
-static int   TerrainGenerator_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* TerrainGenerator_VtblStub_ReturnNull(void* /*self*/, ...) { return nullptr; }
-
-static void* g_TerrainGenerator_Vtable_Standalone[11] = {
-    reinterpret_cast<void*>(&TerrainGenerator_Dtor_Trampoline),     // +0x00 Dtor
-    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_ReturnNull), // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&TerrainGenerator_GetTypeId),           // +0x10 GetTypeId
-    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_Return4),    // +0x18 GetVersion (mov eax,4)
-    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_Return0),    // +0x20 Compile (unused on load)
-    reinterpret_cast<void*>(&TerrainGenerator_Serialize_Trampoline),// +0x28 Serialize
-    reinterpret_cast<void*>(&TerrainGenerator_Cleanup_Trampoline),  // +0x30 Cleanup
-    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_Return0),    // +0x38 GetDesc forwarder (unused on load)
-    reinterpret_cast<void*>(&TerrainGenerator_Slot8_Trampoline),    // +0x40 Slot8
-    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_ReturnNull), // +0x48 (over-read guard)
-    reinterpret_cast<void*>(&TerrainGenerator_VtblStub_ReturnNull), // +0x50 (over-read guard)
-};
-
-extern "C" void RegisterTerrainGeneratorVtable() {
-    RegisterExeAddr(TerrainGeneratorAddr::Vtable,
-                    reinterpret_cast<uintptr_t>(g_TerrainGenerator_Vtable_Standalone));
-}
-
-extern "C" void* TerrainGenerator_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, sizeof(TerrainGenerator), 8);
+// TerrainGenerator is loaded as each element of Game/Terrain/TerrainList.rsc
+// (Valleys/Mountains .rsc). Without the reflected type ExternalFactory::
+// FindOrLoad's per-element load hits a NullFactory and crashes in Runtime
+// IsDerivedFrom. GetFileVersion MUST return 4: Object::External::Load gates
+// the element Serialize on `fileVersion == obj->GetFileVersion()`.
+void* TerrainGenerator::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TerrainGenerator), 8);
     if (!p) return nullptr;
-    TerrainGenerator_Init(reinterpret_cast<TerrainGenerator*>(p));
-    return p;
+    return static_cast<Object::Base*>(::new (p) TerrainGenerator());
 }
-
-extern "C" void* TerrainGenerator_CreateInPlace(void* memory) {
+void* TerrainGenerator::CreateInPlaceObject(void* memory) {
     if (!memory) return nullptr;
-    TerrainGenerator_Init(reinterpret_cast<TerrainGenerator*>(memory));
-    return memory;
+    return static_cast<Object::Base*>(::new (memory) TerrainGenerator());
 }
 
-REGISTER_TYPE(TerrainGenerator, "Object::External",
-              &TerrainGenerator_Factory, &TerrainGenerator_CreateInPlace);
+DEFINE_EXE_VTABLE(TerrainGenerator, "_ZTV16TerrainGenerator")
 
-// Register the two terrain-data-array helpers to our existing faithful reimpls
-// (FUN_1400206b0 resize / FUN_140020870 serialize). These already serve as a
-// runtime fallback in TerrainGenerator_InitFuncs when ResolveAddr returns 0;
-// registering the exe addresses makes the ResolveAddr call sites resolve them
-// directly (and closes the Game-module gap for these two addresses).
+// B38_RULES D5: nothing in the tree reads 0x14015f170 back (swept by hex and
+// owner); this row is reader-less and serves the compiler table only so the
+// coordinator-owned call in address_registry.cpp keeps linking. The closing
+// pass deletes it with the call.
+extern "C" void RegisterTerrainGeneratorVtable() {
+    RegisterExeAddr(0x14015f170, reinterpret_cast<uintptr_t>(TerrainGenerator::Vtable()));
+}
+
+// Register the two terrain-data-array helpers to the faithful reimpls above
+// (FUN_1400206b0 resize / FUN_140020870 serialize), so the ResolveAddr call
+// sites resolve them.
 void RegisterGameTerrainReimpls() {
     RegisterExeAddr(0x1400206b0, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataResize));
     RegisterExeAddr(0x140020870, reinterpret_cast<uintptr_t>(&Reimpl_TerrainDataSerialize));
 }
 
+DEFINE_EXE_TYPE(TerrainGenerator, "Object::External")

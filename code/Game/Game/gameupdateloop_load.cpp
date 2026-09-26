@@ -134,10 +134,6 @@ extern "C" void EventLog_OnAchievementAwarded(int achievementId);
 // professionlist.cpp). gw+0xb0 carries the default profession (+0x30) + profRef2
 // (+0x38) the citizen-economy finders key on.
 
-// Standalone ProfessionList factory (professionlist.cpp) — allocates the 0x50
-// External object + Init (vtable + zeroed fields), NO FindOrLoad/Serialize.
-extern "C" void* ProfessionList_Factory(void);
-
 static void LoadProfessionList_Step2(uint8_t* p) {
 
     if (!g_pExternalFactorySingleton || !*g_pExternalFactorySingleton) {
