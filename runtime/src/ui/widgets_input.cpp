@@ -1313,7 +1313,7 @@ void RtUi_ComboElement_UpdateText(ComboElement* self) {
 
     // children[4], then: EXACT type match short-circuits the search entirely
     // (0x1801121bb `CMP EAX,R12D` against the virtual Type(), slot 2).
-    Element* start = self->base._children._data[4];
+    Element* start = self->_children._data[4];
     void* found = nullptr;
     {
         using TypeFn = uint32_t (*)(const Element*);

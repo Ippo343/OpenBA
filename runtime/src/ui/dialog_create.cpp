@@ -364,33 +364,9 @@ RtObject::Factory* FactorySingleton() {
 // record with the same id (WAVE7_LANE_B.md §6c). Ported as written.
 // ============================================================================
 void RtUiDialogInstance_StartTimer(void* self, int32_t id, int64_t time) {
-    DialogInstance* const d = static_cast<DialogInstance*>(self);
-
-    // 0x1801137d2: `CMP dword ptr [RCX+0x70],R10D` / `JLE` — a SIGNED test on
-    // _timers._size, so a negative size skips the loop rather than wrapping.
-    for (int32_t i = 0; i < d->_timers._size; ++i) {
-        uint8_t* const rec = reinterpret_cast<uint8_t*>(d->_timers._data) +
-                             static_cast<size_t>(i) * sizeof(DialogTimer);
-        // The data pointer is RE-READ from the object on every iteration
-        // (0x1801137e0 and 0x1801137ef both `MOV …,[R11+0x68]`). Kept.
-        if (F<int32_t>(rec, offsetof(DialogTimer, _id)) == id) {
-            F<int64_t>(rec, offsetof(DialogTimer, _remaining)) = time;
-            uint8_t* const rec2 = reinterpret_cast<uint8_t*>(d->_timers._data) +
-                                  static_cast<size_t>(i) * sizeof(DialogTimer);
-            F<int64_t>(rec2, offsetof(DialogTimer, _period)) = time;
-            // NO `break`, NO `return` — see the header block.
-        }
-    }
-
-    // The fill record is built on the stack with THREE stores; +0x14..0x17 is
-    // never written and the 0x18-byte byte-copy in the grow helper carries
-    // whatever the stack held. `tmp` is deliberately left uninitialised there
-    // for the same reason.
-    DialogTimer tmp;
-    tmp._remaining = time;
-    tmp._period    = time;
-    tmp._id        = id;
-    d->_timers.SetSize(d->_timers.GetSize() + 1, tmp);   // retail 0x180076250
+    // B.3.6: the body is UI::DialogInstance::StartTimer (bottom of file).
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::StartTimer(id, time);
 }
 
 // ============================================================================
@@ -416,63 +392,15 @@ void RtUiDialogInstance_StartTimer(void* self, int32_t id, int64_t time) {
 // ============================================================================
 void RtUiDialogInstance_AddControllerTab(void* self, uint32_t typeId, void* dataSource,
                                          void* config, void** containerPtr) {
-    // ---- Object::Factory's AVL find, transcribed from 0x1801133c1 ----------
-    // Descend LEFT on `id < key` (`CMP EDX,R9D / JC`), stop on equal
-    // (`CMP R9D,EDX / JNC`), otherwise RIGHT. Identical to the walk
-    // runtime/src/object/type_system.cpp already ports as `FindNode`; spelled
-    // out here because retail inlined it and the port reproduces the inlining.
-    RtObject::Factory* const factory = FactorySingleton();
-    RtObject::TypeNode* node = factory ? factory->root : nullptr;
-    RtObject::TypeNode* found = nullptr;
-    while (node) {
-        const uint32_t key = node->key;
-        if (typeId < key)      node = node->left;
-        else if (key >= typeId) { found = node; break; }
-        else                    node = node->right;
-    }
-
-    // 0x1801133f7 `MOV RCX,[RAX+0x10]` with RAX possibly zero. TypeNode+0x10 is
-    // `value.info`, the BaseTypeInfo*. FAITHFUL: no guard (CLAUDE.md).
-    RtObject::BaseTypeInfo* const info =
-        *reinterpret_cast<RtObject::BaseTypeInfo* const*>(B(found, 0x10));
-
-    // 0x1801133fb `CALL qword ptr [RCX+0x20]` — the call goes through
-    // info+0x20 (`factoryFn`), and RCX is left holding `info`. The callee is
-    // `?CreateNewObject@…@SAPEAVBase@Object@@XZ`, a STATIC that ignores it; the
-    // argument is passed anyway so the register state matches retail exactly.
-    void* const created =
-        reinterpret_cast<void* (*)(void*)>(info->factoryFn)(info);
-
-    // 0x1801133fe: the type id comes from the FIRST DWORD of
-    // ?_typeInfo@DialogController@UI@@, not from a literal.
-    const bool isController = IsDerivedFrom(created, TypeIdDialogController());
-
-    // 0x18011341e `CMOVNZ RDI,RBX` with RDI still zero — so a NON-DialogController
-    // leaves the target null and the four stores below write through null.
-    DialogController* const c =
-        static_cast<DialogController*>(isController ? created : nullptr);
-
-    // Retail loads the container BEFORE the CMOV (0x180113416/0x18011341b), so
-    // the deref of `containerPtr` happens on both arms. Kept in that order.
-    void* const container = *containerPtr;
-
-    c->_config     = config;       // +0x10  0x180113422
-    c->_dataSource = dataSource;   // +0x28  0x180113426
-    c->_dialog     = self;         // +0x18  0x18011342a
-    c->_container  = container;    // +0x20  0x18011342e
-
-    // 0x18011343d `CALL qword ptr [RAX+0x20]` where RAX = *(void**)c — a REAL
-    // vtable dispatch this time (slot 4), with `this` and nothing else.
-    void* const* const vt = *reinterpret_cast<void* const* const*>(c);
-    reinterpret_cast<void (*)(void*)>(vt[4])(c);
-
-    // 0x180113440: append to _controllers through the stride-8 grow helper.
-    // The fill is the ADDRESS OF A STACK SLOT holding the pointer, not the
-    // pointer — `LEA R8,[RSP+0x40]` where [RSP+0x40] was stored at 0x180113438.
-    DialogInstance* const d = static_cast<DialogInstance*>(self);
-    // retail 0x180076370 — SetSize(size+1, &fill); see the file banner for why
-    // this is the trait-derived Array<DialogController*> instantiation.
-    d->_controllers.SetSize(d->_controllers.GetSize() + 1, c);
+    // B.3.6: the body is UI::DialogInstance::AddController (4-arg, bottom of
+    // file). The InternalPtr arrives BY ADDRESS; it is dereferenced here, on
+    // both of retail's arms, exactly where 0x18011341b dereferences it.
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::AddController(
+            typeId, static_cast<Object::Base*>(dataSource),
+            Object::ExternalPtr<UI::DialogControllerConfig>(
+                static_cast<UI::DialogControllerConfig*>(config)),
+            Object::InternalPtr<UI::Element>(static_cast<UI::Element*>(*containerPtr)));
 }
 
 // ============================================================================
@@ -507,125 +435,15 @@ void RtUiDialogInstance_AddControllerTab(void* self, uint32_t typeId, void* data
 // ============================================================================
 void RtUiDialogInstance_AddController6(void* self, uint32_t typeId, void* dataSource,
                                        void* config, void* desc, const void* nameString) {
-    void* createdElement = nullptr;   // RDI
-
-    if (desc) {
-        DialogInstance* const d = static_cast<DialogInstance*>(self);
-        void* insertion = d->_root;   // RDI starts at this->_root (0x1801134b4)
-
-        // ---- phase 1a: does the ROOT's own name match? ----------------------
-        // `name` is `const String&`, so `nameString` IS the String object and
-        // its single member is the refcounted `char*`. Length lives at ptr-8.
-        const char* const want = *reinterpret_cast<const char* const*>(nameString);
-        bool useRoot = false;
-        if (want && *reinterpret_cast<const int32_t*>(want - 8) != 0) {
-            // 0x1801134cb `MOV RCX,[RDI+0x10]` — UNGUARDED on `insertion`.
-            // `insertion` is `this->_root`, which the ctor already dereferences
-            // unguarded at +0x90, so retail's assumption holds by construction.
-            // No guard added: it would not restore the behaviour, it would skip
-            // it (CLAUDE.md).
-            const char* const have =
-                *reinterpret_cast<const char* const*>(B(insertion, EL::kName));
-            const int32_t haveLen =
-                have ? *reinterpret_cast<const int32_t*>(have - 8) : 0;
-            if (haveLen == *reinterpret_cast<const int32_t*>(want - 8)) {
-                // Retail re-tests `have` and its length here (0x1801134e2 and
-                // 0x1801134e7) before calling StrCompare. Both re-tests jump to
-                // the SAME "use it" label, so an empty-but-equal-length name
-                // matches without a compare. Transcribed as written.
-                if (!have) useRoot = true;
-                else if (*reinterpret_cast<const int32_t*>(have - 8) == 0) useRoot = true;
-                else if (System::String::StrCompare(have, want) == 0) useRoot = true;
-            }
-        }
-
-        // ---- phase 1b: otherwise scan the root's DIRECT children ------------
-        if (!useRoot) {
-            // 0x1801134f5 `MOV R14D,[RDI+0xa8]` — unguarded, same argument.
-            const int32_t n =
-                *reinterpret_cast<const int32_t*>(B(insertion, EL::kChildrenSize));
-            void* hit = nullptr;
-            if (n > 0) {
-                void** kids = *reinterpret_cast<void***>(B(insertion, EL::kChildrenData));
-                for (int32_t i = 0; i < n; ++i) {
-                    void* const child = kids[i];
-                    if (child) {
-                        void* out = nullptr;
-                        ElementFindElement(child, &out, nameString);
-                        if (out) { hit = out; break; }
-                    }
-                }
-            }
-            // 0x180113538: a miss zeroes RDI through a 32-bit `MOV EDI,ESI`,
-            // which zero-extends and clears the whole register. Ghidra prints
-            // that as a plain assignment; the disassembly is what says it kills
-            // the upper half (reference_ghidra_c_output_vs_disassembly.md).
-            insertion = hit;
-        }
-
-        // ---- the GroupElement gate -----------------------------------------
-        // `CMOVNZ RBX,RDI` with RBX pre-loaded from the zero register: a
-        // non-GroupElement (or a miss) leaves the insertion point NULL and the
-        // stores below run through null, exactly as retail does.
-        void* const target =
-            IsDerivedFrom(insertion, TypeIdGroupElement()) ? insertion : nullptr;
-
-        // ---- phase 2: build the element -------------------------------------
-        // A default-constructed UI::Dialog on OUR stack, byte-for-byte what
-        // retail inlines. `alignas(16)` because the inlined ctor zeroes +0x20
-        // with a MOVDQA, i.e. retail's temporary is 16-byte aligned.
-        alignas(16) uint8_t tmpDialog[0x90];
-        DialogCtor(tmpDialog);
-
-        void* newEl = nullptr;
-        {
-            // 0x1801135db: RCX is the ExternalPtr's TARGET, RDX the hidden
-            // return slot, R8 the Dialog*. Slot +0x40 == index 8.
-            void* const* const vt = *reinterpret_cast<void* const* const*>(desc);
-            void** const ret = reinterpret_cast<void** (*)(void*, void**, void*)>(vt[8])(
-                desc, &newEl, tmpDialog);
-            newEl = *ret;   // 0x1801135ef `MOV RDI,qword ptr [RAX]`
-        }
-        createdElement = newEl;
-
-        if (newEl) F<void*>(newEl, EL::kParent) = target;   // 0x1801135fc
-
-        // 0x180113603: unguarded on `target`. The fill is the ADDRESS of the
-        // slot holding the pointer (0x1801135f2 stored it there first).
-        //
-        // ENDGAME B.3.2 step 2 — `target->_children` (Element.h, +0xa0) is a
-        // real `Collection::Array<Element*>` member, and 0x180076900 is
-        // `kSpec_Fill8Z`, trait-equivalent for `Element*` (see the file
-        // banner). This file deliberately does not include Element.h (the
-        // comment above the `EL` namespace), so the conversion bridges at the
-        // use site with the same byte offset rather than retyping `target`.
-        rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(B(target, EL::kChildrenData))
-            ->SetSizeFill(
-                *reinterpret_cast<int32_t*>(B(target, EL::kChildrenSize)) + 1,
-                &newEl);
-
-        // 0x180113620: a DO-WHILE — the flag is set on `target` itself before
-        // the null test, so a null target faults here rather than skipping.
-        void* walk = target;
-        do {
-            F<uint32_t>(walk, EL::kFlags) |= kElementNeedsSizeCalc;
-            walk = F<void*>(walk, EL::kParent);
-        } while (walk);
-
-        DialogDtor(tmpDialog);
-    }
-
-    // ---- phase 3 ------------------------------------------------------------
-    // 0x1801136e5: `TEST R12D,R12D` — id 0 means "element only, no controller".
-    // The InternalPtr is handed on BY ADDRESS, which is what the 4-arg overload
-    // dereferences.
-    if (typeId != 0) {
-        void* slot = createdElement;
-        using Fn = void (*)(void*, uint32_t, void*, void*, void**);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1801133b0));
-        fn(self, typeId, dataSource, config, &slot);
-    }
+    // B.3.6: the body is UI::DialogInstance::AddController (5-arg, bottom of file).
+    reinterpret_cast<UI::DialogInstance*>(self)             // B.3.6 bridge
+        ->UI::DialogInstance::AddController(
+            typeId, static_cast<Object::Base*>(dataSource),
+            Object::ExternalPtr<UI::DialogControllerConfig>(
+                static_cast<UI::DialogControllerConfig*>(config)),
+            Object::ExternalPtr<UI::ElementDescription>(
+                static_cast<UI::ElementDescription*>(desc)),
+            *static_cast<const System::String*>(nameString));
 }
 
 // ============================================================================
@@ -668,7 +486,7 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     d->_ui         = ui;                          // +0x10
     d->_dialog     = const_cast<void*>(dialog);   // +0x18
     d->_flags      = dlg->_defaultFlags;          // +0x20  from _dialog->+0x40
-    d->_flags2     = 0;                           // +0x24
+    d->_result     = 0;                           // +0x24
     d->_parent     = nullptr;                     // +0x28  written 0 then...
     d->_parent     = *parentPtr;                  // +0x28  ...the real value
     d->_dataSource = dataSource;                  // +0x30
@@ -763,20 +581,192 @@ void* RtUiDialogInstance_Ctor(void* self, void* ui, const void* dialog,
     //     either place fails loudly rather than silently.
     for (int32_t i = 0; i < dlg->_controllerCount; ++i) {
         const RtUI::DialogControllerConfigEntry& e = dlg->_controllerConfigs[i];
-        using Fn = void (*)(void*, uint32_t, void*, void* /*arg4: config*/,
-                            void* /*arg5: description*/, const void*);
-        static Fn fn = nullptr;
-        if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180113470));
-        fn(self, e._typeId, d->_dataSource,
-           e._config,        // entry+0x10 -> R9  -> ExternalPtr<DialogControllerConfig>
-           e._elementDesc,   // entry+0x08 -> a5  -> ExternalPtr<ElementDescription>
-           &e._name);        // entry+0x18 -> a6  -> const String&
+        // B.3.6: was `ResolveAddr(Module::Runtime, 0x180113470)` — this
+        // block's own non-virtual member now, called directly. `self` is still
+        // the POD this door builds, hence the bridge.
+        reinterpret_cast<UI::DialogInstance*>(self)->AddController(   // B.3.6 bridge
+            e._typeId, static_cast<Object::Base*>(d->_dataSource),
+            Object::ExternalPtr<UI::DialogControllerConfig>(
+                static_cast<UI::DialogControllerConfig*>(e._config)),       // entry+0x10 -> R9
+            Object::ExternalPtr<UI::ElementDescription>(
+                static_cast<UI::ElementDescription*>(e._elementDesc)),      // entry+0x08 -> a5
+            *reinterpret_cast<const System::String*>(&e._name));  // B.3.6 bridge  entry+0x18 -> a6
     }
 
     return self;   // 0x180114a37 `MOV RAX,RSI`
 }
 
 }  // namespace
+
+// ############################################################################
+// ENDGAME B.3.6 block B — StartTimer and the two AddController overloads are
+// UI::DialogInstance members now. Bodies unchanged except `self->x` became `x`
+// and the calls onto THIS block's classes became member calls:
+//   controller vtable +0x20 (slot 4)     -> c->OnCreated()      (VIRTUAL)
+//   ResolveAddr(Module::Runtime, 0x1801133b0) -> AddController(...) (4-arg)
+// Element / Factory / SpriteSheet / Dialog-temporary calls stay as they were
+// (other blocks' classes, or ctor/dtor doors). Evidence: the doors' banners.
+// ############################################################################
+namespace UI {
+
+// ?StartTimer@DialogInstance@UI@@QEAAXHVTime@System@@@Z   0x1801137c0
+// THE FALL-THROUGH IS THE SHIPPED BEHAVIOUR: a matching entry is rewritten
+// and ANOTHER record with the same id is appended anyway.
+void DialogInstance::StartTimer(int32_t id, int64_t time) {
+    for (int32_t i = 0; i < _timers._size; ++i) {
+        // _data is RE-READ from the object on every iteration. Kept.
+        uint8_t* const rec = reinterpret_cast<uint8_t*>(_timers._data) +
+                             static_cast<size_t>(i) * sizeof(DialogTimer);
+        if (F<int32_t>(rec, offsetof(DialogTimer, _id)) == id) {
+            F<int64_t>(rec, offsetof(DialogTimer, _remaining)) = time;
+            uint8_t* const rec2 = reinterpret_cast<uint8_t*>(_timers._data) +
+                                  static_cast<size_t>(i) * sizeof(DialogTimer);
+            F<int64_t>(rec2, offsetof(DialogTimer, _period)) = time;
+            // NO `break`, NO `return`.
+        }
+    }
+    // +0x14..0x17 is never written; `tmp` is deliberately left uninitialised
+    // there for the same reason as the door's banner gives.
+    DialogTimer tmp;
+    tmp._remaining = time;
+    tmp._period    = time;
+    tmp._id        = id;
+    _timers.SetSize(_timers.GetSize() + 1, tmp);   // retail 0x180076250
+}
+
+// ?AddController@…@V?$InternalPtr@VElement@UI@@@4@@Z   0x1801133b0
+// THE TWO UNGUARDED NULL DEREFERENCES ARE RETAIL'S (a null factory node; a
+// non-controller leaves `c` null and the four stores write through it).
+void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
+                                   Object::ExternalPtr<DialogControllerConfig> config,
+                                   Object::InternalPtr<Element> container) {
+    // Object::Factory's AVL find, inlined by retail (0x1801133c1).
+    RtObject::Factory* const factory = FactorySingleton();
+    RtObject::TypeNode* node = factory ? factory->root : nullptr;
+    RtObject::TypeNode* found = nullptr;
+    while (node) {
+        const uint32_t key = node->key;
+        if (typeId < key)      node = node->left;
+        else if (key >= typeId) { found = node; break; }
+        else                    node = node->right;
+    }
+
+    // 0x1801133f7 `MOV RCX,[RAX+0x10]` with RAX possibly zero. FAITHFUL.
+    RtObject::BaseTypeInfo* const info =
+        *reinterpret_cast<RtObject::BaseTypeInfo* const*>(B(found, 0x10));
+
+    // info+0x20 (`factoryFn`), RCX left holding `info`.
+    void* const created =
+        reinterpret_cast<void* (*)(void*)>(info->factoryFn)(info);
+
+    const bool isController = ::IsDerivedFrom(created, TypeIdDialogController());
+
+    // 0x18011341e `CMOVNZ RDI,RBX` — a non-controller leaves the target NULL.
+    DialogController* const c =
+        static_cast<DialogController*>(isController ? created : nullptr);
+
+    c->_config     = config;                    // +0x10  0x180113422
+    c->_dataSource = dataSource;                // +0x28  0x180113426
+    c->_dialog     = this;                      // +0x18  0x18011342a
+    c->_container  = static_cast<void*>(container.Get());   // +0x20  0x18011342e
+
+    c->OnCreated();                             // 0x18011343d — controller slot 4
+
+    _controllers.SetSize(_controllers.GetSize() + 1, c);   // retail 0x180076370
+}
+
+// ?AddController@…@V?$ExternalPtr@VElementDescription@UI@@@4@AEBVString@System@@@Z
+//                                                          0x180113470
+void DialogInstance::AddController(uint32_t typeId, Object::Base* dataSource,
+                                   Object::ExternalPtr<DialogControllerConfig> config,
+                                   Object::ExternalPtr<ElementDescription> description,
+                                   const System::String& name) {
+    void* const desc = static_cast<void*>(description.Get());
+    void* createdElement = nullptr;   // RDI
+
+    if (desc) {
+        void* insertion = _root;      // RDI starts at this->_root (0x1801134b4)
+
+        // ---- phase 1a: does the ROOT's own name match? --------------------
+        const char* const want = *reinterpret_cast<const char* const*>(&name);
+        bool useRoot = false;
+        if (want && *reinterpret_cast<const int32_t*>(want - 8) != 0) {
+            // 0x1801134cb `MOV RCX,[RDI+0x10]` — UNGUARDED on `insertion`.
+            const char* const have =
+                *reinterpret_cast<const char* const*>(B(insertion, EL::kName));
+            const int32_t haveLen =
+                have ? *reinterpret_cast<const int32_t*>(have - 8) : 0;
+            if (haveLen == *reinterpret_cast<const int32_t*>(want - 8)) {
+                if (!have) useRoot = true;
+                else if (*reinterpret_cast<const int32_t*>(have - 8) == 0) useRoot = true;
+                else if (System::String::StrCompare(have, want) == 0) useRoot = true;
+            }
+        }
+
+        // ---- phase 1b: otherwise scan the root's DIRECT children ----------
+        if (!useRoot) {
+            const int32_t n =
+                *reinterpret_cast<const int32_t*>(B(insertion, EL::kChildrenSize));
+            void* hit = nullptr;
+            if (n > 0) {
+                void** kids = *reinterpret_cast<void***>(B(insertion, EL::kChildrenData));
+                for (int32_t i = 0; i < n; ++i) {
+                    void* const child = kids[i];
+                    if (child) {
+                        void* out = nullptr;
+                        ElementFindElement(child, &out, &name);
+                        if (out) { hit = out; break; }
+                    }
+                }
+            }
+            insertion = hit;          // 0x180113538: a miss zeroes RDI
+        }
+
+        // ---- the GroupElement gate ---------------------------------------
+        void* const target =
+            ::IsDerivedFrom(insertion, TypeIdGroupElement()) ? insertion : nullptr;
+
+        // ---- phase 2: build the element through a UI::Dialog temporary ----
+        alignas(16) uint8_t tmpDialog[0x90];
+        DialogCtor(tmpDialog);
+
+        void* newEl = nullptr;
+        {
+            // The description's slot 8 (CreateInstance, RETSLOT) — block A's
+            // class, still reached through its table.
+            void* const* const vt = *reinterpret_cast<void* const* const*>(desc);
+            void** const ret = reinterpret_cast<void** (*)(void*, void**, void*)>(vt[8])(
+                desc, &newEl, tmpDialog);
+            newEl = *ret;             // 0x1801135ef `MOV RDI,qword ptr [RAX]`
+        }
+        createdElement = newEl;
+
+        if (newEl) F<void*>(newEl, EL::kParent) = target;   // 0x1801135fc
+
+        // 0x180113603: unguarded on `target`; Element::_children through the
+        // kSpec_Fill8Z row (see the door's banner).
+        rtcoll::AsArray<&rtcoll::kSpec_Fill8Z>(B(target, EL::kChildrenData))
+            ->SetSizeFill(
+                *reinterpret_cast<int32_t*>(B(target, EL::kChildrenSize)) + 1,
+                &newEl);
+
+        // 0x180113620: a DO-WHILE — a null target faults here.
+        void* walk = target;
+        do {
+            F<uint32_t>(walk, EL::kFlags) |= kElementNeedsSizeCalc;
+            walk = F<void*>(walk, EL::kParent);
+        } while (walk);
+
+        DialogDtor(tmpDialog);
+    }
+
+    // ---- phase 3: id 0 means "element only, no controller" ---------------
+    if (typeId != 0)
+        AddController(typeId, dataSource, config,
+                      Object::InternalPtr<Element>(static_cast<Element*>(createdElement)));
+}
+
+}  // namespace UI
 
 // ============================================================================
 // Registration.

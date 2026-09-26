@@ -19,6 +19,8 @@
 #include <cstdint>
 #include <cstddef>
 
+#include "../ui/Sprite.h"   // UI::Sprite, held by value below
+
 namespace RtSave {
 
 // ============================================================================
@@ -56,12 +58,12 @@ enum Operation : int32_t {
 // reference_unresolved_lookup_leaves_a_valid_looking_zero.md records (index 0
 // is a real sprite; empty is -1). The trailing dword is written by neither.
 // ============================================================================
-struct Sprite {
-    void*   sheet;     // +0x00  UI::SpriteSheet* (an ExternalPtr's raw slot)
-    int32_t index;     // +0x08  -1 == empty
-    int32_t pad0c;     // +0x0c  never written by SetSaveSprite or the ctor
-};
-static_assert(offsetof(Sprite, index) == 0x08, "Sprite.index @ 0x08");
+// ENDGAME B.3.6 block D (RULE B6-4.2): ONE definition of UI::Sprite, the real
+// value type in runtime/types/ui/Sprite.h (fields `spriteSheet`@0,
+// `spriteIndex`@8, `pad0C`@0xc — the same bytes this POD described as
+// sheet/index/pad0c).
+using Sprite = UI::Sprite;
+static_assert(offsetof(Sprite, spriteIndex) == 0x08, "Sprite.index @ 0x08");
 static_assert(sizeof(Sprite) == 0x10, "sizeof(UI::Sprite) == 0x10");
 
 // ============================================================================

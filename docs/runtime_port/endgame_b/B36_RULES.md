@@ -439,7 +439,93 @@ Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry
 `runtime/src/object/deleting_dtor*.cpp`, `standalone/reg_mint_promoted.cpp`,
 `runtime/src/save/{saveload,saveload_draw}.cpp` (cross-namespace CALLERS: round 1).
 
-## 10–12. (reserved: coordinator's dated corrections from the blocks go here, as in B35_RULES)
+## 10. Coordinator's dated corrections from the blocks
+
+> **RULE B6-11 (block A, 2026-09-25) — an `InternalPtr<T>` ARGUMENT is passed by HIDDEN POINTER.**
+> A retail signature that takes `Object::InternalPtr<T>` BY VALUE receives the ADDRESS of the
+> caller's temporary in the argument register: `Element::Update`'s caller at 0x1801162c6 is
+> `MOV RAX,[R12] / LEA R9,[RBP+0x50] / MOV [RBP+0x50],RAX / CALL [RAX+0x38]`. GCC would pass the
+> trivially-copyable 8-byte class in the register itself. Every such parameter — virtual or not —
+> is declared `Object::InternalPtr<T>* p` in retail order (`Element::Update`, `DialogInstance::
+> OnElementEvent` slot 8 / `DialogController` slot 9 / `ComboDialog` slot 8, `UserInterface::
+> AddDialog`, `CloseDialog`, `BringDialogToFront`, `IsDialogOpen`, `ShowDialog`, `BeginToolTip`,
+> `EndToolTip`, `BeginDragDrop`, `PostEvent`, `Dialog::CreateElement`'s `ExternalPtr`…) and pinned
+> by a raw retail-order call in the unit test. This is the argument-side twin of B5-12's amendment
+> (return-side: GCC puts the retslot BEFORE `this`). `ExternalPtr<T>` arguments were measured as
+> bare register pointers in step 5 (`EdgeMesh::SetMaterials`); re-read the prologue per member
+> rather than assuming either way.
+
+> **CORRECTION to B6-4.1 (block A) and B6-4.3 (block B), 2026-09-25 — an ABSTRACT class cannot be
+> an alias target for an EMBEDDED POD.** Seven leaf element headers embed `Element base;` by value
+> and 60 `engine/types/ui/{Dialogs,Panels}.h` structs embed `DialogInstance base;` /
+> `DialogController base;`; a member of abstract type is ill-formed. So the old `UI::Element`
+> struct moved to `RtUI::Element` (cross-asserted field for field against the class), and the
+> engine headers became one-line aliases of the `RtUI::DialogInstance` / `RtUI::DialogController`
+> PODs, not of the classes. The alias-onto-the-class shape stays right for PODs nobody embeds.
+
+> **CLOSED (block A): §13 item 3 — `Element::UpdateState` is 0x30.** `??4UpdateState` (0x180035880)
+> copies six qwords; the ctor (0x180115600) leaves +0x0a/+0x0b, +0x14 and +0x21..+0x2f unwritten.
+> **CLOSED (block D): §13 item 2 — `sizeof(SpriteContext)` is 0x88** (block D commit `c11f740b`).
+
+> **FOUND (block A):** `ElementDescription` +0x40 is the ALIGNMENT, not an element type: the ctor
+> seeds it with 3 and `CreateInstance` (0x180115ad0) copies it into `Element::_alignment` (+0x30).
+> The header records this; the field is not renamed this step. **Name-hiding:** the non-virtual
+> `ElementDescription::CreateInstance(InternalPtr<Element>)` is hidden by every leaf's slot-8
+> override — qualify it from a leaf body.
+
+> **FOUND (block B):** `ToolTipDialog`'s 8 bytes past `DialogInstance` are two dwords at +0xb8/+0xbc
+> (copied by `??0ToolTipDialog(const&)` 0x18004d180, written by nothing else read). The ported
+> `ComboDialog::OnUpdate` called the root's `Contains` with `this` only; retail 0x180111c50 passes
+> `(mx, my, _ui)` — fixed as a faithful correction. `Dialog::GetController` returns
+> `Dialog::ElementController`, aliased to the 0x20 config entry from the export shapes (inferred).
+> `combodialog` +0x10 is `_ui`, +0xb8 is `_list` (old comments said otherwise). `DialogTimer`'s
+> `_remaining`/`_period` names are swapped per dialog.cpp's own notes; unrenamed.
+
+> **CORRECTION to B6-4.5 and §2.4 (block D, 2026-09-25) — `SpriteContext` is NOT trivially
+> copyable.** Retail exports a deep copy constructor (`??0SpriteContext@UI@@QEAA@AEBV01@@Z`
+> 0x1800321c0, last store at +0x80) and a destructor (0x18011d250) that frees +0x10, +0x40, +0x58
+> and +0x68 — four `Collection::Array` members. So the class is concrete (a stack object in
+> `saveload_draw.cpp:734`) with a public trivial default ctor but no `is_trivially_copyable`
+> assert; `sizeof == 0x88` (ctor stores through +0x70, `Begin` writes +0x80, copy ctor ends at
+> +0x80). +0x50 is `RtUI::FontLayout _layout`; `_clipRegion` (+0x78) is `const Video::Viewport*`.
+> `SpriteContext.h`'s old `FontGlyph` was the entry type of `Font::Layout` (removed;
+> `FontLayoutEntry::_codepoint` is `_glyph`); `Font` +0x54 is `_baseLine`; `Font`'s 16-byte glyph
+> row is retail's `UI::Font::Kerning` (`GetKern` 0x180031dd0 returns a pointer to it). The old
+> banner's "AddSpriteDraw/Flush/Begin are not exported" was wrong — all three are exports.
+> Block D's aliases: `::Sprite`, `::UIString`, `::SpriteSheet`, `::SpriteInfo`, `::StringTable`,
+> `::StringTableTextEntry`, `::UiStringTable`, `RtSave::Sprite` → the `UI::` classes;
+> `runtime/src/save/saveload.cpp` and `saveload_update.cpp` needed an 11-line member rename
+> (`.sheet/.index` → `.spriteSheet/.spriteIndex`).
+
+> **B6-11 SETTLED PER TYPE (block E, 2026-09-25, from the prologues of eleven `UserInterface`
+> members).** `InternalPtr<T>` by value → HIDDEN POINTER (`AddDialog` `MOV RCX,[RDX]`,
+> `BringDialogToFront`, `CloseDialog`, `IsDialogOpen`, `ShowDialog`, `EndToolTip`, `BeginToolTip`,
+> `BeginDragDrop`, `PostEvent` all dereference the argument register). `ExternalPtr<T>` by value →
+> BARE POINTER in the register (`SetCursor` stores RDX at +0xd0 then reads `[RDX+0x20]`; `SetSound`
+> stores R8), confirming step 5. Any 16-byte class by value → HIDDEN POINTER (`UI::Sprite` in
+> `SetFullscreenFadeSprite`: `MOV RAX,[RDX]`; `Video::Viewport` in `BeginSpriteCapture`:
+> `MOV EAX,[R8]`). So: 8-byte trivially-copyable-in-MSVC's-eyes classes (`ExternalPtr`) travel in
+> the register; `InternalPtr` (8 bytes but with a non-trivial copy in retail) and every ≥16-byte
+> class travel by hidden pointer. `UI::String` by value (`TextElement::SetText`'s `VString@2@`) is
+> therefore a hidden pointer too.
+
+> **CORRECTION to B6-4.5 (block E): `UserInterface` is NOT trivially copyable** — three
+> `Collection::Array<T>` members have a user-declared destructor (`Camera.h` records the same for
+> `RendererDrawGroup`). The header asserts `!is_trivially_copyable` and says why; the class is
+> concrete with a protected `= default` ctor and the two `RtEngine::` loop PODs as friends; the
+> old POD already held the retail name with identical fields, so it simply became the class (no
+> `RtUI::UserInterface`). Its alignof is 8 (the old banner's "4" was `ShowDialog`'s allocation
+> alignment). `UI::DialogInstance::EndHover` is defined in `userinterface_hover.cpp` (block E).
+> Block C1: `mingw-w64` GCC emits typeinfo as a COMDAT in every TU that uses it, so a leaf's
+> `TypeName` can be defined while the base's `TypeName` is still a door — block A's key-function
+> worry does not bite on this toolchain. `?CreateInstance@ButtonDescription@UI@@QEBAX…` (0x1801108d0)
+> and `?UpdateText@ComboElement@UI@@` (0x180112180) are EXPORTED (old banners said otherwise);
+> `??0CheckDescription` (0x1801115e0), `??0ComboDescription` (0x180112320), `??0ClipRegionDescription`
+> (0x1800cc140) exist and are unregistered. Block C4: `layoutdescription.cpp`'s banner had the
+> `LayoutDescription::Entry` name offsets permuted (+0x08 own name, +0x10/+0x18 relative-to; the
+> body was right); `ListElement` +0xc0 is a `UI::Sprite _highlight`.
+
+## 11–12. (reserved for the fragment passes and caller rounds)
 
 ## 13. NOT VERIFIED — read this before citing anything above
 

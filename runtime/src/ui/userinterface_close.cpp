@@ -146,13 +146,15 @@
 #include "../../funcs/rt_port.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
+#include "../../types/ui/DialogInstance.h"
+// ENDGAME B.3.6 block E: element_common.h carries the file-scope `Module` /
+// `ResolveAddr` declaration this file used to spell (the address door lives in
+// standalone/, and pulling its header into a runtime/src file would invert the
+// dependency the whole tree is arranged around), and the RULE B6-5 atomic
+// door caches `rtuielem::AtomicExport` / `AtomicAddr`.
+#include "element_common.h"
 
-// Same file-scope declaration userinterface.cpp, dialog.cpp and
-// userinterface_frame.cpp use: the address door lives in standalone/, and
-// pulling its header into a runtime/src file would invert the dependency the
-// whole tree is arranged around.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include <atomic>
 
 extern "C" void RtUi_UserInterface_CloseDialog(UI::UserInterface* self, void** dlgPtr);
 
@@ -160,8 +162,16 @@ namespace {
 
 using UI::UserInterface;
 
+// RULE B6-5: namespace-scope atomic slots (the member body runs on UI objects
+// the loader thread constructs), not RT_DATA_SLOT / RT_EXPORT_ONCE statics.
+std::atomic<void*> g_sptSlot{nullptr};
+std::atomic<void*> g_memFreeSlot{nullptr};
+std::atomic<void*> g_eventsSetSizeSlot{nullptr};
+std::atomic<void*> g_dynArrayPushSlot{nullptr};
+
 inline const double* TimerSecondsPerTick() {
-    return RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
+    return static_cast<const double*>(
+        rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
 }
 
 // ---- the callees ------------------------------------------------------------
@@ -285,7 +295,7 @@ void UnlinkFromParent(uint8_t* dlg, RtSink& out) {
         // byte-for-byte the body of the exported static `MemFree`, which is why
         // calling it reproduces the lock discipline exactly with no windows.h in
         // a runtime/src file. Lane UI1 §1b decompiled and compared the two.
-        FreeFn mfree = RT_EXPORT_ONCE(FreeFn, kMemFree);
+        FreeFn mfree = reinterpret_cast<FreeFn>(rtuielem::AtomicExport(g_memFreeSlot, kMemFree));
         if (out.Call("MemFree(unlinked node)", (const void*)mfree,
                      reinterpret_cast<int64_t>(n)))
             mfree(n);
@@ -318,7 +328,7 @@ void PushRemovedUnlessPresent(UserInterface* self, void** dlgPtr, const void* sr
         if (found) return;
     }
 
-    PushFn push = reinterpret_cast<PushFn>(ResolveAddr(Module::Runtime, kDynArrayPushAddr));
+    PushFn push = reinterpret_cast<PushFn>(rtuielem::AtomicAddr(g_dynArrayPushSlot, kDynArrayPushAddr));
     if (out.Call("DynArrayPush(_removedDialogs)", (const void*)push,
                  reinterpret_cast<int64_t>(S + 0x18),
                  *reinterpret_cast<int32_t*>(S + 0x20) + 1,
@@ -329,8 +339,16 @@ void PushRemovedUnlessPresent(UserInterface* self, void** dlgPtr, const void* sr
 // ---------------------------------------------------------------------------
 // The body, written against the live sink (rt_sink.h).
 // ---------------------------------------------------------------------------
-void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
-    uint8_t* const S   = reinterpret_cast<uint8_t*>(self);
+} // namespace
+
+// ENDGAME B.3.6 block E: the body is the member. `dialog` is the ADDRESS of the
+// caller's InternalPtr temporary (RULE B6-11; 0x180120f3d `MOV RDI,RDX` then
+// `MOV RBX,[RDX]`), spelled `dlgPtr` below as the port always spelled it.
+void UI::UserInterface::CloseDialog(Object::InternalPtr<DialogInstance>* dialog) {
+    RtSink out;                                                 // the live sink
+    UserInterface* const self = this;
+    void** const dlgPtr = reinterpret_cast<void**>(dialog);
+    uint8_t* const S   = reinterpret_cast<uint8_t*>(this);
     uint8_t* const dlg = *reinterpret_cast<uint8_t**>(dlgPtr);   // RBX at 0x180120f43
 
     // ---- Block A, 0x180120f46..0x180120f74 -------------------------------
@@ -341,9 +359,9 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
     while (*reinterpret_cast<int32_t*>(dlg + 0x48) > 0) {
         void*  head  = *reinterpret_cast<void**>(dlg + 0x38);
         void*  child = *reinterpret_cast<void**>(head);
-        void*  tmp   = child;                                     // the by-value InternalPtr
-        RtUi_UserInterface_CloseDialog(
-            *reinterpret_cast<UserInterface**>(dlg + 0x10), &tmp);
+        Object::InternalPtr<DialogInstance> tmp(                  // the by-value InternalPtr
+            static_cast<DialogInstance*>(child));
+        (*reinterpret_cast<UserInterface**>(dlg + 0x10))->CloseDialog(&tmp);
     }
 
     // ---- Block B, 0x180120f76..0x180120fb1 -------------------------------
@@ -357,8 +375,8 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
             static_cast<uint8_t*>(tip) + 0x30);
         (void)deadLoad;
 
-        void* tmp = tip;
-        RtUi_UserInterface_CloseDialog(self, &tmp);               // 0x180120fa6
+        Object::InternalPtr<DialogInstance> tmp(static_cast<DialogInstance*>(tip));
+        CloseDialog(&tmp);                                        // 0x180120fa6
         out.Ptr(S + 0x40, nullptr, "_toolTipDialog = 0 (tooltip arm)");
         out.Ptr(S + 0x38, nullptr, "_toolTipOwner = 0 (tooltip arm)");
     }
@@ -382,11 +400,10 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
 
     if (node) {
         // ---- Block E, 0x180120ff8..0x180121051 ---------------------------
+        // DialogInstance vtable slot 5 (+0x28) `OnClosed` — VIRTUAL, so an exe
+        // dialog's hand-built slot 5 is what runs.
         void*  d    = node->value;
-        void** vtbl = *reinterpret_cast<void***>(d);
-        if (out.Call("DialogInstance::OnClosed (vtable +0x28, slot 5)", vtbl[5],
-                     reinterpret_cast<int64_t>(d)))
-            reinterpret_cast<VoidFn>(vtbl[5])(d);
+        reinterpret_cast<DialogInstance*>(d)->OnClosed();         // B.3.6 bridge
 
         // If this dialog owns the in-flight drag, queue a cancel event and end it.
         void* drag = *reinterpret_cast<void**>(S + 0x60);
@@ -402,17 +419,14 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
             ev.dragData = *reinterpret_cast<void**>(S + 0x78);             // 0x180121034
 
             SetSizeFn setSize = reinterpret_cast<SetSizeFn>(
-                ResolveAddr(Module::Runtime, kEventsSetSizeAddr));
+                rtuielem::AtomicAddr(g_eventsSetSizeSlot, kEventsSetSizeAddr));
             if (out.Call("Array<UI::Event>::SetSize (drag cancel, id 0xd)",
                          (const void*)setSize,
                          reinterpret_cast<int64_t>(S + 0x48),
                          *reinterpret_cast<int32_t*>(S + 0x50) + 1))
                 setSize(S + 0x48, *reinterpret_cast<int32_t*>(S + 0x50) + 1, &ev);
 
-            VoidFn endDrag = RT_EXPORT_ONCE(VoidFn, kEndDragDrop);
-            if (out.Call("EndDragDrop", (const void*)endDrag,
-                         reinterpret_cast<int64_t>(self)))
-                endDrag(self);
+            EndDragDrop();
         }
 
         // ---- Block F, 0x180121054..0x18012110b -----------------------------
@@ -421,10 +435,7 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
         UnlinkFromParent(*reinterpret_cast<uint8_t**>(node), out);
 
         // ---- 0x18012110d..0x180121165 --------------------------------------
-        VoidFn updEvents = RT_EXPORT_ONCE(VoidFn, kUpdateEvents);
-        if (out.Call("UpdateEvents", (const void*)updEvents,
-                     reinterpret_cast<int64_t>(self)))
-            updEvents(self);
+        UpdateEvents();
 
         // FACT 2: the source is the NODE, not the caller's InternalPtr.
         PushRemovedUnlessPresent(self, dlgPtr, node, out);
@@ -484,11 +495,9 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
     int64_t off = static_cast<int64_t>(i) * 8;                         // RBX, MOVSXD
 
     {
+        // DialogInstance vtable slot 5 (+0x28) `OnClosed` — VIRTUAL.
         void*  d    = *reinterpret_cast<void**>(base + off);
-        void** vtbl = *reinterpret_cast<void***>(d);
-        if (out.Call("DialogInstance::OnClosed (vtable +0x28, slot 5)", vtbl[5],
-                     reinterpret_cast<int64_t>(d)))
-            reinterpret_cast<VoidFn>(vtbl[5])(d);
+        reinterpret_cast<DialogInstance*>(d)->OnClosed();         // B.3.6 bridge
     }
 
     // The array base is RE-LOADED after the virtual (0x180121246): OnClosed can
@@ -496,10 +505,7 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
     uint8_t* base2 = *reinterpret_cast<uint8_t**>(S + 0x28);
     UnlinkFromParent(*reinterpret_cast<uint8_t**>(base2 + off), out);
 
-    VoidFn updEvents = RT_EXPORT_ONCE(VoidFn, kUpdateEvents);
-    if (out.Call("UpdateEvents", (const void*)updEvents,
-                 reinterpret_cast<int64_t>(self)))
-        updEvents(self);                                               // 0x180121314
+    UpdateEvents();                                                    // 0x180121314
 
     // 0x180121319 — note this compares against +0x40 and clears BOTH, where
     // block B compared against +0x38. Not a typo in either place.
@@ -532,8 +538,6 @@ void CloseDialogBody(UserInterface* self, void** dlgPtr, RtSink& out) {
     // the epilogue at 0x1801213a7.
 }
 
-} // namespace
-
 extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPtr) {
     // THE PROBE GATE. `g_entries` is printed by a static destructor, so it only
     // reaches the log when the process EXITS CLEANLY — and the only unattended
@@ -549,8 +553,8 @@ extern "C" void RtUi_UserInterface_CloseDialog(UserInterface* self, void** dlgPt
         std::fflush(stderr);
     }
 
-    RtSink live;
-    CloseDialogBody(self, dlgPtr, live);
+    self->UI::UserInterface::CloseDialog(
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr));
 }
 
 // ---------------------------------------------------------------------------

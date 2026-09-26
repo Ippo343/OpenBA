@@ -133,6 +133,7 @@
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/DialogController.h"
 
 namespace RtUi {
 
@@ -190,83 +191,104 @@ inline const uint8_t* DialogControllerTypeInfo() {
 
 }  // namespace
 
-// ---------------------------------------------------------------------------
+}  // namespace RtUi
+
+// ============================================================================
+// ENDGAME B.3.6 block B — the NINE bodies are members of UI::DialogController
+// now (runtime/types/ui/DialogController.h). Each registered door below keeps
+// its attendance counter and delegates with a QUALIFIED call: the live objects
+// wear hand-built/minted tables whose slots resolve back to these doors, so an
+// unqualified call would dispatch into itself.
+// ============================================================================
+namespace UI {
+
 // slot 2 — ?Type@DialogController@UI@@UEBAIXZ            0x18003b6b0
 //     MOV EAX,dword ptr [0x1801f9e48] / RET
-// ---------------------------------------------------------------------------
-extern "C" uint32_t RtUiDialogController_Type(const void* /*self*/) {
-    ++RtUi::g_counts.type;
+uint32_t DialogController::Type() const {
     return *reinterpret_cast<const uint32_t*>(
-        DialogControllerTypeInfo() + kBaseTypeInfoTypeId);
+        RtUi::DialogControllerTypeInfo() + RtUi::kBaseTypeInfoTypeId);
 }
 
-// ---------------------------------------------------------------------------
 // slot 1 — ?TypeName@DialogController@UI@@UEBAPEBDXZ     0x18003b6d0
 //     MOV RAX,qword ptr [0x1801f9e50] / RET      (= _typeInfo + 0x08)
-// ---------------------------------------------------------------------------
-extern "C" const char* RtUiDialogController_TypeName(const void* /*self*/) {
-    ++RtUi::g_counts.typeName;
+const char* DialogController::TypeName() const {
     return *reinterpret_cast<const char* const*>(
-        DialogControllerTypeInfo() + kBaseTypeInfoName);
+        RtUi::DialogControllerTypeInfo() + RtUi::kBaseTypeInfoName);
 }
 
-// ---------------------------------------------------------------------------
-// The seven empty base virtuals. Each is `RET 0` and nothing else; see the
-// banner for the byte evidence and for why the argument lists are opaque.
-// ---------------------------------------------------------------------------
+// The seven empty base virtuals. Each is `RET 0` in retail and nothing else;
+// see the banner for the byte evidence.
+void DialogController::OnCreated() {}                                  // [4]  0x1800cd2b0
+void DialogController::OnOpened() {}                                   // [5]  0x1800cd2a0
+void DialogController::OnClosed() {}                                   // [6]  0x1800cd290
+void DialogController::OnUpdateLayout() {}                             // [7]  0x1800cd280
+void DialogController::OnUpdate(const System::Time& /*time*/) {}       // [8]  0x1800cd270
+void DialogController::OnElementEvent(Object::InternalPtr<Element>* /*element*/,
+                                      int32_t, int32_t, int32_t, int32_t, int32_t,
+                                      void* /*userData*/) {}           // [9]  0x1800cd260
+// [10] 0x1800cd250 — `IO::Stream&`, never read. This is the slot
+// dialog_settings.cpp dispatches per controller on the write path and OnOpened
+// on the read path; that both call sites exist and this default does nothing
+// is exactly why each controller's settings record can be EMPTY and still framed.
+void DialogController::OnSerializeSettings(void* /*stream*/) {}
 
-// slot  4 — ?OnCreated@DialogController@UI@@UEAAXXZ             0x1800cd2b0
-extern "C" void RtUiDialogController_OnCreated(void* /*self*/) {
+// ??1DialogController@UI@@UEAA@XZ 0x1800cd2f0 — EMPTY on purpose: the door
+// `RtUiDialogController_Dtor` (dialog.cpp) stamps the minted table and chains
+// to ~Internal by name for the minted objects that are the only live ones; a
+// real destructor chain would stamp GCC's tables instead.
+DialogController::~DialogController() {}
+
+}  // namespace UI
+
+namespace {
+inline UI::DialogController* AsController(void* self) {
+    return reinterpret_cast<UI::DialogController*>(self);   // B.3.6 bridge
+}
+inline const UI::DialogController* AsController(const void* self) {
+    return reinterpret_cast<const UI::DialogController*>(self);   // B.3.6 bridge
+}
+}  // namespace
+
+extern "C" uint32_t RtUiDialogController_Type(const void* self) {
+    ++RtUi::g_counts.type;
+    return AsController(self)->UI::DialogController::Type();
+}
+extern "C" const char* RtUiDialogController_TypeName(const void* self) {
+    ++RtUi::g_counts.typeName;
+    return AsController(self)->UI::DialogController::TypeName();
+}
+extern "C" void RtUiDialogController_OnCreated(void* self) {
     ++RtUi::g_counts.onCreated;
+    AsController(self)->UI::DialogController::OnCreated();
 }
-
-// slot  5 — ?OnOpened@DialogController@UI@@UEAAXXZ              0x1800cd2a0
-extern "C" void RtUiDialogController_OnOpened(void* /*self*/) {
+extern "C" void RtUiDialogController_OnOpened(void* self) {
     ++RtUi::g_counts.onOpened;
+    AsController(self)->UI::DialogController::OnOpened();
 }
-
-// slot  6 — ?OnClosed@DialogController@UI@@UEAAXXZ              0x1800cd290
-extern "C" void RtUiDialogController_OnClosed(void* /*self*/) {
+extern "C" void RtUiDialogController_OnClosed(void* self) {
     ++RtUi::g_counts.onClosed;
+    AsController(self)->UI::DialogController::OnClosed();
 }
-
-// slot  7 — ?OnUpdateLayout@DialogController@UI@@UEAAXXZ        0x1800cd280
-extern "C" void RtUiDialogController_OnUpdateLayout(void* /*self*/) {
+extern "C" void RtUiDialogController_OnUpdateLayout(void* self) {
     ++RtUi::g_counts.onUpdateLayout;
+    AsController(self)->UI::DialogController::OnUpdateLayout();
 }
-
-// slot  8 — ?OnUpdate@DialogController@UI@@UEAAXAEBVTime@System@@@Z  0x1800cd270
-//     `const System::Time&` — one reference argument, never read.
-extern "C" void RtUiDialogController_OnUpdate(void* /*self*/,
-                                              const void* /*time*/) {
+extern "C" void RtUiDialogController_OnUpdate(void* self, const void* time) {
     ++RtUi::g_counts.onUpdate;
+    AsController(self)->UI::DialogController::OnUpdate(
+        *static_cast<const System::Time*>(time));
 }
-
-// slot  9 — ?OnElementEvent@DialogController@UI@@UEAAX
-//               V?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z   0x1800cd260
-//     InternalPtr<Element> by value, five ints, one void*. None read.
-extern "C" void RtUiDialogController_OnElementEvent(void* /*self*/,
-                                                    void* /*element*/,
-                                                    int /*a*/, int /*b*/,
-                                                    int /*c*/, int /*d*/,
-                                                    int /*e*/,
-                                                    void* /*userData*/) {
+extern "C" void RtUiDialogController_OnElementEvent(void* self, void* element,
+                                                    int a, int b, int c, int d,
+                                                    int e, void* userData) {
     ++RtUi::g_counts.onElementEvent;
+    AsController(self)->UI::DialogController::OnElementEvent(
+        static_cast<Object::InternalPtr<UI::Element>*>(element), a, b, c, d, e, userData);
 }
-
-// slot 10 — ?OnSerializeSettings@DialogController@UI@@UEAAXAEAVStream@IO@@@Z
-//                                                                 0x1800cd250
-//     `IO::Stream&` — one reference argument, never read. This is the slot
-//     runtime/src/ui/dialog_settings.cpp dispatches per controller (+0x50) on
-//     the write path and OnOpened dispatches on the read path; that both call
-//     sites exist and this default does nothing is exactly why each controller's
-//     settings record can be EMPTY and still framed.
-extern "C" void RtUiDialogController_OnSerializeSettings(void* /*self*/,
-                                                          void* /*stream*/) {
+extern "C" void RtUiDialogController_OnSerializeSettings(void* self, void* stream) {
     ++RtUi::g_counts.onSerializeSettings;
+    AsController(self)->UI::DialogController::OnSerializeSettings(stream);
 }
-
-}  // namespace RtUi
 
 // ============================================================================
 // Registration

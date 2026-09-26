@@ -51,6 +51,11 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/Value.h"
+#include "../../types/ui/UserInterface.h"
+// ENDGAME B.3.6 block E: the RULE B6-5 atomic door caches.
+#include "element_common.h"
+
+#include <atomic>
 
 namespace {
 
@@ -86,6 +91,11 @@ StandAloneSummary g_standAloneSummary;
 
 constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
 
+// RULE B6-5: namespace-scope atomic slots for the doors other namespaces own.
+std::atomic<void*> g_randomCtorSlot{nullptr};
+std::atomic<void*> g_sptSlot{nullptr};
+std::atomic<void*> g_sceneUpdateSlot{nullptr};
+
 }  // namespace
 
 // ============================================================================
@@ -118,31 +128,36 @@ constexpr uintptr_t kUI_AudioScene = 0x90;   // UserInterface::_audioScene
 // and the sixth a 0.0f volume -- 0x1801203a7 and 0x1801203b8 write exactly
 // those, and the export's own signature (`AEBVVector3@Math@@M`) names both.
 // ============================================================================
-extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui) {
+void UI::UserInterface::UpdateStandAloneUI(const System::Time& timeRef, void* ui) {
     ++g_updEntries;
+    const void* const time = &timeRef;                                 // one int64 tick count
 
     // 0x180120329 -- note the argument SWAP: retail is a static taking
     // (time, ui) and Update is a member taking (this=ui, time).
-    RT_EXPORT_ONCE(UiUpdateFn,
-        "?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z")(ui, time);
+    static_cast<UserInterface*>(ui)->Update(timeRef);
 
     // 0x180120336..0x180120386 -- the inlined System::Random default ctor.
     ::Random rng;   // runtime/types/system/Value.h -- global namespace, unlike RtSystem::String
-    RT_EXPORT_ONCE(RandomCtorFn, "??0Random@System@@QEAA@XZ")(&rng);
+    reinterpret_cast<RandomCtorFn>(
+        rtuielem::AtomicExport(g_randomCtorSlot, "??0Random@System@@QEAA@XZ"))(&rng);
 
     void* const scene = *reinterpret_cast<void* const*>(
         reinterpret_cast<const uint8_t*>(ui) + kUI_AudioScene);       // 0x180120388
     if (scene) {                                                       // 0x18012038f
         ++g_updWithScene;
         const float listener[3] = { 0.0f, 0.0f, 0.0f };                // 0x1801203a7
-        const double* const spt = RT_EXPORT_ONCE(const double*,
-                                                 "?_secondsPerTick@Timer@System@@0NA");
+        const double* const spt = static_cast<const double*>(
+            rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
         const int64_t elapsed = static_cast<int64_t>(0.0 / *spt);      // 0x1801203b0
-        RT_EXPORT_ONCE(SceneUpdateFn,
-            "?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z")
+        reinterpret_cast<SceneUpdateFn>(rtuielem::AtomicExport(g_sceneUpdateSlot,
+            "?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"))
             (scene, *reinterpret_cast<const int64_t*>(time), elapsed,
              &rng, listener, 0.0f);                                    // 0x1801203d0
     }
+}
+
+extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui) {
+    UI::UserInterface::UpdateStandAloneUI(*static_cast<const System::Time*>(time), ui);
 }
 
 // ============================================================================
@@ -166,10 +181,13 @@ extern "C" void RtUi_UserInterface_UpdateStandAloneUI(const void* time, void* ui
 // disassembled with objdump instead. A lane that trusted the MCP error and
 // recorded "no such function" would have been wrong.
 // ============================================================================
-extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui) {
+void UI::UserInterface::DrawStandAloneUI(Video::Context& context, void* ui) {
     ++g_drawEntries;
-    RT_EXPORT_ONCE(UiDrawFn,
-        "?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z")(ui, videoContext);
+    static_cast<UserInterface*>(ui)->Draw(context);                    // the tail JMP
+}
+
+extern "C" void RtUi_UserInterface_DrawStandAloneUI(void* videoContext, void* ui) {
+    UI::UserInterface::DrawStandAloneUI(*static_cast<Video::Context*>(videoContext), ui);
 }
 
 // ============================================================================

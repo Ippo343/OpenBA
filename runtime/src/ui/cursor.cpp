@@ -48,6 +48,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
+#include "../../types/ui/Cursor.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -101,60 +102,53 @@ void InlineCtorStores(uint8_t* p) {
 
 }  // namespace
 
-// 0x18003af60: `MOV EAX,[0x1801f9e10] ; RET`.
-extern "C" uint32_t RtUi_Cursor_Type(const void*) {
+// ############################################################################
+// UI::Cursor's member bodies (ENDGAME B.3.6 block D) — after the anonymous
+// namespace, inside `namespace UI` (B34_BRIEFS A.2).
+// ############################################################################
+namespace UI {
+
+// [2] 0x18003af60: `MOV EAX,[0x1801f9e10] ; RET`.
+uint32_t Cursor::Type() const {
     const uint8_t* ti = CursorTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-// 0x18003af80: `MOV RAX,[0x1801f9e18] ; RET` — the same node at +8.
-extern "C" const char* RtUi_Cursor_TypeName(const void*) {
+// [1] 0x18003af80: `MOV RAX,[0x1801f9e18] ; RET` — the same node at +8.
+const char* Cursor::TypeName() const {
     const uint8_t* ti = CursorTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
-// 0x1800cd1b0: `MOV EAX,0x1 ; RET`.
-extern "C" int32_t RtUi_Cursor_GetFileVersion(const void*) { return 1; }
+// [3] 0x1800cd1b0: `MOV EAX,0x1 ; RET`.
+int32_t Cursor::GetFileVersion() const { return 1; }
 
-// 0x18003b1e0
-extern "C" void* RtUi_Cursor_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                 // 18003b1f1 TEST/JZ
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                         // 18003b22e
+// [8] 0x18003b1e0 — retail's null test (18003b1f1 TEST/JZ) is in the DOOR.
+Object::External* Cursor::Construct() {
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                          // 18003b22e
 }
-// 0x18003b180: slot0(this, 0), then the same inlined constructor, open-coded.
-extern "C" void* RtUi_Cursor_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                  // 18003b197
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                         // 18003b1d6
+// [6] 0x18003b180: slot0(this, 0), then the same inlined constructor, open-coded.
+Object::External* Cursor::Reconstruct() {
+    CallSlot0(this, 0);                                   // 18003b197
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                          // 18003b1d6
 }
-// 0x18003b240: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-extern "C" void RtUi_Cursor_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+// [7] 0x18003b240: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
+void Cursor::Destruct() { CallSlot0(this, 0); }
 
 // ============================================================================
-// ??1Cursor@UI@@UEAA@XZ   0x1800cd1c0 — restamp, then tail-jump the base.
-// ============================================================================
-extern "C" void RtUi_Cursor_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    *reinterpret_cast<void**>(p) = VtCursor();            // 1800cd1d9
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cd1e0 JMP
-}
-
-// ============================================================================
-// ?Serialize@Cursor@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cd110
+// [5] ?Serialize@Cursor@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cd110
 // ============================================================================
 //   rw = encoding factory, read (+0x18) or write (+0x20) side by stream->mode
-//   ExternalPtr<UI::SpriteSheet>::Serialize(&this->+0x28, &ser)   0x180004590
-//   rw->vt[0xa0](rw, &this->+0x20, 0)
-//   rw->vt[0xa0](rw, &this->+0x24, 0)
+//   ExternalPtr<UI::SpriteSheet>::Serialize(&this->_spriteSheet, &ser)  0x180004590
+//   rw->vt[0xa0](rw, &this->_hotSpotX, 0)
+//   rw->vt[0xa0](rw, &this->_hotSpotY, 0)
 //   if (rw) rw->vt[0](rw, 1)
 //   return true
 //
 // THE SHEET COMES FIRST and the two ints after it — the reverse of the order
 // the fields sit in. Sequence, not layout, is what a stream records, and this
 // is the one place the difference is visible.
-extern "C" bool RtUi_Cursor_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
+bool Cursor::Serialize(void* streamv) {
     Stream*  stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };                 // [RSP+0x28], [RSP+0x30]
@@ -167,12 +161,12 @@ extern "C" bool RtUi_Cursor_Serialize(void* selfv, void* streamv) {
     ser.readerWriter = rw;                                // 1800cd14d
 
     using PtrSerFn = void (*)(void* extPtr, Serializer* ser);
-    RtAddr<PtrSerFn>(0x180004590ull)(p + 0x28, &ser);     // 1800cd15b
+    RtAddr<PtrSerFn>(0x180004590ull)(&_spriteSheet, &ser);  // 1800cd15b
 
     using ScalarFn = void (*)(void* rw, void* value, const char* name);
     void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x20, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, p + 0x24, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_hotSpotX, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &_hotSpotY, nullptr);
 
     if (rw != nullptr) {                                  // 1800cd190
         using DeleteFn = void (*)(void* rw, int flag);
@@ -181,6 +175,48 @@ extern "C" bool RtUi_Cursor_Serialize(void* selfv, void* streamv) {
     return true;                                          // 1800cd19f MOV AL,1
 }
 
+// ~Cursor: NON-VIRTUAL and EMPTY; the registered dtor door does retail's work.
+Cursor::~Cursor() {}
+
+}  // namespace UI
+
+// ============================================================================
+// THE DOORS — qualified delegation (a live Cursor wears the MINTED table).
+// ============================================================================
+extern "C" uint32_t RtUi_Cursor_Type(const void* selfv) {
+    return reinterpret_cast<const UI::Cursor*>(selfv)->UI::Cursor::Type();          // B.3.6 bridge
+}
+extern "C" const char* RtUi_Cursor_TypeName(const void* selfv) {
+    return reinterpret_cast<const UI::Cursor*>(selfv)->UI::Cursor::TypeName();      // B.3.6 bridge
+}
+extern "C" int32_t RtUi_Cursor_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const UI::Cursor*>(selfv)->UI::Cursor::GetFileVersion(); // B.3.6 bridge
+}
+extern "C" void* RtUi_Cursor_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                 // 18003b1f1 TEST/JZ
+    return reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Construct();           // B.3.6 bridge
+}
+extern "C" void* RtUi_Cursor_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Reconstruct();         // B.3.6 bridge
+}
+extern "C" void RtUi_Cursor_Destruct(void* selfv) {
+    reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Destruct();                   // B.3.6 bridge
+}
+extern "C" bool RtUi_Cursor_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<UI::Cursor*>(selfv)->UI::Cursor::Serialize(streamv);    // B.3.6 bridge
+}
+
+// ============================================================================
+// ??1Cursor@UI@@UEAA@XZ   0x1800cd1c0 — restamp, then tail-jump the base. The
+// dtor DOOR keeps its body; the member destructor is empty (Cursor.h).
+// ============================================================================
+extern "C" void RtUi_Cursor_Dtor(void* selfv) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
+    *reinterpret_cast<void**>(p) = VtCursor();            // 1800cd1d9
+
+    using ExtDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cd1e0 JMP
+}
 int RtUiCursorRegister() {
     int n = 0;
     RegisterRuntimeExport("?Type@Cursor@UI@@UEBAIXZ", (void*)&RtUi_Cursor_Type);   ++n;

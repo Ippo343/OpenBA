@@ -137,12 +137,14 @@
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/video/Context.h"
 #include "../../types/graphics/Camera.h"
+#include "../../types/ui/SpriteCapture.h"
+#include "../../types/ui/Element.h"
+// ENDGAME B.3.6 block E: element_common.h carries the same file-scope
+// `Module` / `ResolveAddr` declaration every other runtime/src file uses (the
+// address door lives in standalone/), and the RULE B6-5 atomic door caches.
+#include "element_common.h"
 
-// Same file-scope declaration every other runtime/src file uses: the address
-// door lives in standalone/, and pulling its header in here would invert the
-// dependency the tree is arranged around.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include <atomic>
 
 namespace {
 
@@ -154,14 +156,27 @@ using UI::SpriteDraw;
 // Through RT_DATA_SLOT, which never caches a null: a slot resolved before the
 // mint must be able to retry rather than freeze the DLL's answer for the
 // process (reference_resolveexport_phantom_names.md).
+//
+// ENDGAME B.3.6 (RULE B6-5): namespace-scope atomic slots, not RT_DATA_SLOT /
+// RT_EXPORT_ONCE function-local statics — the member body runs on UI objects
+// the loader thread constructs.
+std::atomic<void*> g_videoDeviceSlot{nullptr};
+std::atomic<void*> g_inputDeviceSlot{nullptr};
+std::atomic<void*> g_inputConfigSlot{nullptr};
+std::atomic<void*> g_cameraCtorSlot{nullptr};
+std::atomic<void*> g_memFreeSlot{nullptr};
+std::atomic<void*> g_spriteDrawSetSize0Slot{nullptr};
 inline void** VideoDeviceSingleton() {          // 0x1801fe7a8
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_videoDeviceSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
 }
 inline void** InputDeviceSingleton() {          // 0x1801fe770
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
 }
 inline void** InputConfigSingleton() {          // 0x1801fe768
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_inputConfigSlot, "?_singleton@Configuration@Input@@0PEAV12@EA"));
 }
 
 // ---- the callees ------------------------------------------------------------
@@ -232,8 +247,13 @@ constexpr int32_t kSpriteEntryHeight = 0x20;
 // the SpriteContext, the Camera, the Frustum and the SpriteDraw records do NOT:
 // those are this frame's own stack, they are ours in both modes, and recording
 // them would be recording a prediction about memory retail never shares.
-void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
-    uint8_t* const S = reinterpret_cast<uint8_t*>(self);
+} // namespace
+
+// ENDGAME B.3.6 block E: the body is the member.
+void UI::UserInterface::Draw(Video::Context& context) {
+    RtSink out;                                                 // the live sink
+    void* const ctx = &context;
+    uint8_t* const S = reinterpret_cast<uint8_t*>(this);
     uint8_t* const C = reinterpret_cast<uint8_t*>(ctx);
 
     // ---- 0x180121907: UI-space screen size -------------------------------
@@ -294,7 +314,10 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
     // 0x00..0xd4 and `SetFrustum` fills the projection.
     RtGraphics::Camera cam;
 
-    CameraCtorFn camCtor = RT_EXPORT_ONCE(CameraCtorFn, kCameraCtor);
+    // `Graphics::Camera`'s ctor STAYS A DOOR (B4b-2, B35_RULES leave list), so
+    // it is reached by name through an atomic slot (RULE B6-5).
+    CameraCtorFn camCtor = reinterpret_cast<CameraCtorFn>(
+        rtuielem::AtomicExport(g_cameraCtorSlot, kCameraCtor));
     if (out.Call("Graphics::Camera::Camera(frustum, identity, false)",
                  (const void*)camCtor))
         camCtor(&cam, &fr, &t3, false);
@@ -352,13 +375,12 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
                                                     // (0x180121ce3..0x180121cef)
 
     // ---- 0x180121d0e: Begin ------------------------------------------------
-    BeginFn begin = RT_EXPORT_ONCE(BeginFn, kBegin);
-    if (out.Call("SpriteContext::Begin", (const void*)begin))
-        begin(sc, *reinterpret_cast<float*>(S + 0xdc),
-              *reinterpret_cast<void**>(S + 0x110), S + 0x118);
-
-    FlushFn     flush     = RT_EXPORT_ONCE(FlushFn, kFlush);
-    AddSpriteFn addSprite = RT_EXPORT_ONCE(AddSpriteFn, kAddSprite);
+    // ENDGAME B.3.6: `SpriteContext::Begin` / `Flush` / `AddSpriteDraw` are
+    // members of the real class (block D); the three RT_EXPORT_ONCE doors that
+    // used to sit here are direct calls now.
+    sc->Begin(*reinterpret_cast<float*>(S + 0xdc),
+              *reinterpret_cast<UI::SpriteCapture**>(S + 0x110),
+              reinterpret_cast<Video::Viewport*>(S + 0x118));
 
     // A local lambda for retail's repeated "switch the batch key" preamble,
     // which appears FIVE times verbatim (0x180121e96, 0x180121f79, 0x180122084,
@@ -367,9 +389,7 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
     auto selectSheet = [&](void* sheet) {
         if (sc->_currentSheet != sheet) {
             if (sc->_currentSheet != nullptr) {
-                if (out.Call("SpriteContext::Flush (batch key change)",
-                             (const void*)flush))
-                    flush(sc);
+                sc->Flush();                            // batch key change
             }
             sc->_currentSheet = sheet;
         }
@@ -495,9 +515,7 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
                         sd.rotation    = 0.0f;
                         sd.color       = tint;
                         sd.isLine      = 0;
-                        if (out.Call("AddSpriteDraw (dialog backdrop)",
-                                     (const void*)addSprite))
-                            addSprite(sc, &sd);
+                        sc->AddSpriteDraw(sd);          // dialog backdrop
                     }
                 }
 
@@ -520,12 +538,10 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
 
                 sc->_deferring = 1;
                 {
+                    // Element vtable slot 6 (+0x30) `Draw(SpriteContext&, alpha)`
+                    // — VIRTUAL, dispatched through the root's own table.
                     void* const root = *reinterpret_cast<void**>(d + 0x50);
-                    void** const vt  = *reinterpret_cast<void***>(root);
-                    ElemDrawFn elemDraw = reinterpret_cast<ElemDrawFn>(vt[6]);
-                    if (out.Call("Element::Draw (dialog root, vtable slot 6)",
-                                 (const void*)elemDraw, 0xff))
-                        elemDraw(root, sc, 0xff);
+                    reinterpret_cast<UI::Element*>(root)->Draw(*sc, 0xff);   // B.3.6 bridge
                 }
 
                 // The element pushed its geometry into `_deferred` while
@@ -537,16 +553,12 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
                         selectSheet(rec->sheet);
                         rec = sc->_deferred._data + i;   // re-load: Flush may
                                                          // have moved the buffer
-                        if (out.Call("AddSpriteDraw (deferred drain)",
-                                     (const void*)addSprite))
-                            addSprite(sc, rec);
+                        sc->AddSpriteDraw(*rec);        // deferred drain
                     }
-                    if (out.Call("SpriteContext::Flush (end of dialog)",
-                                 (const void*)flush))
-                        flush(sc);
+                    sc->Flush();                        // end of dialog
 
                     SetSize0Fn clearDeferred = reinterpret_cast<SetSize0Fn>(
-                        ResolveAddr(Module::Runtime, kSpriteDrawSetSize0Addr));
+                        rtuielem::AtomicAddr(g_spriteDrawSetSize0Slot, kSpriteDrawSetSize0Addr));
                     if (out.Call("Array<SpriteDraw>::SetSize(0) (clear _deferred)",
                                  (const void*)clearDeferred) && clearDeferred)
                         clearDeferred(&sc->_deferred);
@@ -587,9 +599,7 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
                 sd.rotation    = 0.0f;
                 sd.color       = color;
                 sd.isLine      = 0;
-                if (out.Call("AddSpriteDraw (fullscreen fade)",
-                             (const void*)addSprite))
-                    addSprite(sc, &sd);
+                sc->AddSpriteDraw(sd);                  // fullscreen fade
             }
         }
     }
@@ -631,20 +641,16 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
                 sd.rotation    = 0.0f;
                 sd.color       = 0xffffffffu;
                 sd.isLine      = 0;
-                if (out.Call("AddSpriteDraw (mouse cursor)", (const void*)addSprite))
-                    addSprite(sc, &sd);
+                sc->AddSpriteDraw(sd);                  // mouse cursor
             }
         }
     }
 
     // ---- 0x1801221cf: the tail ---------------------------------------------
-    if (out.Call("SpriteContext::Flush (final)", (const void*)flush))
-        flush(sc);
+    sc->Flush();                                        // final
 
-    if (void* const capture = sc->_spriteCapture) {
-        EndSpritesFn endSprites = RT_EXPORT_ONCE(EndSpritesFn, kEndSprites);
-        if (out.Call("SpriteCapture::EndAddingSprites", (const void*)endSprites))
-            endSprites(capture);
+    if (UI::SpriteCapture* const capture = sc->_spriteCapture) {
+        capture->EndAddingSprites();                    // a member of the real class (block D)
     }
 
     // ---- 0x1801221e6: restore the context scissor to the whole target ------
@@ -674,8 +680,8 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
     //
     // The order is retail's: +0x68, +0x58, +0x40, +0x10. Each clears the
     // pointer and the size/capacity qword that follows it.
-    FreeFn memFree = RT_EXPORT_ONCE(FreeFn, kMemFree);
-    static const size_t kFreeSlots[4] = { 0x68, 0x58, 0x40, 0x10 };
+    FreeFn memFree = reinterpret_cast<FreeFn>(rtuielem::AtomicExport(g_memFreeSlot, kMemFree));
+    constexpr size_t kFreeSlots[4] = { 0x68, 0x58, 0x40, 0x10 };
     for (size_t k = 0; k < 4; ++k) {
         uint8_t* const slot = scStorage + kFreeSlots[k];
         if (void* const p = *reinterpret_cast<void**>(slot)) {
@@ -687,11 +693,8 @@ void DrawBody(UserInterface* self, void* ctx, RtSink& out) {
     }
 }
 
-} // namespace
-
 extern "C" void RtUi_UserInterface_Draw(UserInterface* self, void* ctx) {
-    RtSink live;
-    DrawBody(self, ctx, live);
+    self->UI::UserInterface::Draw(*static_cast<Video::Context*>(ctx));
 }
 
 // ---------------------------------------------------------------------------

@@ -38,6 +38,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/CharacterSet.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -96,71 +97,48 @@ void InlineCtorStores(uint8_t* p) {
 
 }  // namespace
 
-// 0x180037430: `MOV EAX,[0x1801f9cf8] ; RET` — the first dword of the class's
-// own BaseTypeInfo node.
-extern "C" uint32_t RtUi_CharacterSet_Type(const void*) {
+// ############################################################################
+// UI::CharacterSet's member bodies (ENDGAME B.3.6 block D). Their own
+// `namespace UI { }` block after the anonymous namespace has closed, because a
+// member definition must appear in a namespace ENCLOSING the class (B34_BRIEFS
+// A.2); the anonymous helpers above are reachable from here, same TU.
+// ############################################################################
+namespace UI {
+
+// [2] 0x180037430: `MOV EAX,[0x1801f9cf8] ; RET` — the first dword of the
+// class's own BaseTypeInfo node.
+uint32_t CharacterSet::Type() const {
     const uint8_t* ti = CharacterSetTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-// 0x180037450: `MOV RAX,[0x1801f9d00] ; RET` — the same node at +8.
-extern "C" const char* RtUi_CharacterSet_TypeName(const void*) {
+// [1] 0x180037450: `MOV RAX,[0x1801f9d00] ; RET` — the same node at +8.
+const char* CharacterSet::TypeName() const {
     const uint8_t* ti = CharacterSetTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
-// 0x1800cb830: `MOV EAX,0x1 ; RET`. Version 1 — the plainest in the family;
-// the *Description classes run 0x104..0x10204.
-extern "C" int32_t RtUi_CharacterSet_GetFileVersion(const void*) { return 1; }
+// [3] 0x1800cb830: `MOV EAX,0x1 ; RET`. Version 1 — the plainest in the family;
+// the *Description classes run 0x104..0x10204. A LITERAL, never derived.
+int32_t CharacterSet::GetFileVersion() const { return 1; }
 
-// 0x1800376b0
-extern "C" void* RtUi_CharacterSet_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                    // 1800376c1 TEST/JZ
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                            // 1800376fe MOV RAX,RCX
+// [8] 0x1800376b0 — retail's own null test (1800376c1 TEST/JZ) lives in the
+// DOOR, which is where retail put it; `this` is non-null by construction here.
+Object::External* CharacterSet::Construct() {
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                             // 1800376fe MOV RAX,RCX
 }
-// 0x180037650: slot0(this, 0), then the same inlined constructor. NOT a tail
-// jump — the stores are open-coded here too.
-extern "C" void* RtUi_CharacterSet_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                     // 180037667
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                            // 1800376a6
+// [6] 0x180037650: slot0(this, 0), then the same inlined constructor. NOT a
+// tail jump — the stores are open-coded here too. Slot 0 is dispatched
+// VIRTUALLY on purpose: a subclass's deleting destructor is what has to run.
+Object::External* CharacterSet::Reconstruct() {
+    CallSlot0(this, 0);                                      // 180037667
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                             // 1800376a6
 }
-// 0x180037710: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-extern "C" void RtUi_CharacterSet_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+// [7] 0x180037710: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
+void CharacterSet::Destruct() { CallSlot0(this, 0); }
 
 // ============================================================================
-// ??1CharacterSet@UI@@UEAA@XZ   0x1800cb840
-// ============================================================================
-// Restamp, release the String at +0x20, tail-jump ??1External@Object@@
-// (0x1800bc950 — `JMP`, not `CALL`, at 0x1800cb892).
-//
-// The String release is System::String's own refcount protocol, read at
-// 0x1800cb860..0x1800cb88a and identical to ~GroupDescription's: the count
-// lives at `s[-4]` and the allocation starts at `s[-8]`, and on the
-// still-referenced path retail NULLS THE FIELD rather than leaving it —
-// so the object never sees a pointer whose count it no longer holds.
-extern "C" void RtUi_CharacterSet_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-
-    *reinterpret_cast<void**>(p) = VtCharacterSet();         // 1800cb85d
-
-    char*& s = *reinterpret_cast<char**>(p + 0x20);
-    if (s != nullptr) {                                      // 1800cb864
-        --*reinterpret_cast<int32_t*>(s - 4);                // 1800cb869
-        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {       // 1800cb86c
-            s = s - 8;                                       // 1800cb872  the FIELD moves
-            using MemFreeFn = void (*)(void*);
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s);
-        } else {
-            s = nullptr;                                     // 1800cb882
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800cb892 JMP
-}
-
-// ============================================================================
-// ?Serialize@CharacterSet@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cb7b0
+// [5] ?Serialize@CharacterSet@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800cb7b0
 // ============================================================================
 // The shortest Serialize in the UI family: make the reader/writer from the
 // stream's encoding factory, hand the one String to System::String::Serialize
@@ -169,8 +147,7 @@ extern "C" void RtUi_CharacterSet_Dtor(void* selfv) {
 // The read/write side is chosen by `stream->mode == 0` exactly as everywhere
 // else in this family: factory vtable +0x18 for the reader, +0x20 for the
 // writer (0x1800cb7e5 / 0x1800cb7ea).
-extern "C" bool RtUi_CharacterSet_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
+bool CharacterSet::Serialize(void* streamv) {
     Stream*  stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };                    // [RSP+0x28], [RSP+0x30]
@@ -183,7 +160,7 @@ extern "C" bool RtUi_CharacterSet_Serialize(void* selfv, void* streamv) {
     ser.readerWriter = rw;                                   // 1800cb7ed
 
     using StrSerFn = void (*)(void* str, Serializer* ser);
-    RtAddr<StrSerFn>(0x1800c9930ull)(p + 0x20, &ser);        // 1800cb7fb
+    RtAddr<StrSerFn>(0x1800c9930ull)(&_string20, &ser);      // 1800cb7fb
 
     if (rw != nullptr) {                                     // 1800cb806
         using DeleteFn = void (*)(void* rw, int flag);
@@ -192,6 +169,80 @@ extern "C" bool RtUi_CharacterSet_Serialize(void* selfv, void* streamv) {
     return true;                                             // 1800cb815 MOV AL,1
 }
 
+// ~CharacterSet: NON-VIRTUAL and EMPTY — the registered dtor door below does
+// retail's release for the minted objects (see CharacterSet.h's banner).
+CharacterSet::~CharacterSet() {}
+
+}  // namespace UI
+
+// ============================================================================
+// THE DOORS. Each keeps its registered name and address and delegates with a
+// QUALIFIED non-virtual call: a live CharacterSet wears the MINTED table, whose
+// slots resolve back to these very doors (B34_BRIEFS A.1).
+// ============================================================================
+extern "C" uint32_t RtUi_CharacterSet_Type(const void* selfv) {
+    return reinterpret_cast<const UI::CharacterSet*>(selfv)              // B.3.6 bridge
+               ->UI::CharacterSet::Type();
+}
+extern "C" const char* RtUi_CharacterSet_TypeName(const void* selfv) {
+    return reinterpret_cast<const UI::CharacterSet*>(selfv)              // B.3.6 bridge
+               ->UI::CharacterSet::TypeName();
+}
+extern "C" int32_t RtUi_CharacterSet_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const UI::CharacterSet*>(selfv)              // B.3.6 bridge
+               ->UI::CharacterSet::GetFileVersion();
+}
+extern "C" void* RtUi_CharacterSet_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                    // 1800376c1 TEST/JZ
+    return reinterpret_cast<UI::CharacterSet*>(selfv)                    // B.3.6 bridge
+               ->UI::CharacterSet::Construct();
+}
+extern "C" void* RtUi_CharacterSet_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::CharacterSet*>(selfv)                    // B.3.6 bridge
+               ->UI::CharacterSet::Reconstruct();
+}
+extern "C" void RtUi_CharacterSet_Destruct(void* selfv) {
+    reinterpret_cast<UI::CharacterSet*>(selfv)                           // B.3.6 bridge
+        ->UI::CharacterSet::Destruct();
+}
+extern "C" bool RtUi_CharacterSet_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<UI::CharacterSet*>(selfv)                    // B.3.6 bridge
+               ->UI::CharacterSet::Serialize(streamv);
+}
+
+// ============================================================================
+// ??1CharacterSet@UI@@UEAA@XZ   0x1800cb840 — the dtor DOOR keeps its body
+// ============================================================================
+// Restamp, release the String at +0x20, tail-jump ??1External@Object@@
+// (0x1800bc950 — `JMP`, not `CALL`, at 0x1800cb892). The member destructor is
+// empty (see CharacterSet.h): a real destructor chain would stamp GCC's tables
+// into a minted object and release +0x20 twice.
+//
+// The String release is System::String's own refcount protocol, read at
+// 0x1800cb860..0x1800cb88a and identical to ~GroupDescription's: the count
+// lives at `s[-4]` and the allocation starts at `s[-8]`, and on the
+// still-referenced path retail NULLS THE FIELD rather than leaving it —
+// so the object never sees a pointer whose count it no longer holds.
+extern "C" void RtUi_CharacterSet_Dtor(void* selfv) {
+    UI::CharacterSet* self = reinterpret_cast<UI::CharacterSet*>(selfv);   // B.3.6 bridge
+
+    *reinterpret_cast<void**>(self) = VtCharacterSet();      // 1800cb85d
+
+    char*& s = self->_string20.data;
+    if (s != nullptr) {                                      // 1800cb864
+        --*reinterpret_cast<int32_t*>(s - 4);                // 1800cb869
+        if (*reinterpret_cast<int32_t*>(s - 4) == 0) {       // 1800cb86c
+            s = s - 8;                                       // 1800cb872  the FIELD moves
+            using MemFreeFn = void (*)(void*);
+            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(s);
+        } else {
+            s = nullptr;                                     // 1800cb882
+        }
+    }
+
+    using ExtDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);   // 1800cb892 JMP
+}
 int RtUiCharacterSetRegister() {
     int n = 0;
     RegisterRuntimeExport("?Type@CharacterSet@UI@@UEBAIXZ",

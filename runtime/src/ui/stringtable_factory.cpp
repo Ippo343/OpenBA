@@ -180,17 +180,24 @@ void* StringTableVTable() { return RT_DATA_SLOT(void*, "??_7StringTable@UI@@6B@"
 
 // The eight stores, in retail's order. Shared by all three entry points for the
 // reason the banner gives.
-void ConstructBody(UiStringTable* self) {
+//
+// IT IS NOT A CALL TO A BASE CONSTRUCTOR: retail open-codes the chain as three
+// vptr stamps plus the zero stores, and the stamps name the MINTED tables,
+// which is exactly right for the objects that reach this body (they wear the
+// minted table). A member constructor here would stamp GCC's tables into a
+// minted object — which is why UI::StringTable has no real ctor (B6-3).
+void ConstructBody(UI::StringTable* self) {
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();          // 18011d8a1  dead store, kept
     *vp = ExternalVTable();      // 18011d8ab  dead store, kept
-    self->external_08 = nullptr; // 18011d8c0
-    self->external_10 = nullptr; // 18011d8c3
-    self->external_18 = nullptr; // 18011d8c7
+    self->_path.data      = nullptr;   // 18011d8c0  Object::External +0x08
+    self->_refs._data     = nullptr;   // 18011d8c3  Object::External +0x10
+    self->_refs._size     = 0;         // 18011d8c7  +0x18, one qword with
+    self->_refs._capacity = 0;         //            capacity
     *vp = StringTableVTable();   // 18011d8cb
-    self->data     = nullptr;    // 18011d8d5
-    self->size     = 0;          // 18011d8d9 — one 8-byte store covers BOTH
-    self->capacity = 0;          //             _size and _capacity
+    self->_data     = nullptr;   // 18011d8d5
+    self->_size     = 0;         // 18011d8d9 — one 8-byte store covers BOTH
+    self->_capacity = 0;         //             _size and _capacity
 }
 
 void StringTableFactoryReport() {
@@ -212,7 +219,7 @@ FactoryReport g_factoryReport;
 // ============================================================================
 extern "C" void* RtUiStringTable_Ctor(void* self) {
     ++g_ctorEntries;
-    ConstructBody(static_cast<UiStringTable*>(self));
+    ConstructBody(reinterpret_cast<UI::StringTable*>(self));   // B.3.6 bridge
     return self;                                  // 18011d8dd MOV RAX,RCX
 }
 
@@ -345,9 +352,12 @@ const uint8_t* StringTableTypeInfo() {
 uint64_t g_typeEntries = 0, g_typeNameEntries = 0, g_fileVersionEntries = 0;
 }  // namespace
 
+// ENDGAME B.3.6 block D: the three bodies are UI::StringTable's members; the
+// doors keep their attendance counters and delegate with a qualified call.
+namespace UI {
+
 // ---- ??_7StringTable@UI@@6B@ slot 2 ----------------------------------------
-extern "C" uint32_t RtUiStringTable_Type(const void* /*self*/) {
-    ++g_typeEntries;
+uint32_t StringTable::Type() const {
     const uint8_t* node = StringTableTypeInfo();
     uint32_t v = 0;
     if (node) std::memcpy(&v, node + kTiTypeIdOffset, sizeof v);
@@ -355,8 +365,7 @@ extern "C" uint32_t RtUiStringTable_Type(const void* /*self*/) {
 }
 
 // ---- ??_7StringTable@UI@@6B@ slot 1 ----------------------------------------
-extern "C" const char* RtUiStringTable_TypeName(const void* /*self*/) {
-    ++g_typeNameEntries;
+const char* StringTable::TypeName() const {
     const uint8_t* node = StringTableTypeInfo();
     const char* v = nullptr;
     if (node) std::memcpy(&v, node + kTiNameOffset, sizeof v);
@@ -364,9 +373,25 @@ extern "C" const char* RtUiStringTable_TypeName(const void* /*self*/) {
 }
 
 // ---- ??_7StringTable@UI@@6B@ slot 3 ----------------------------------------
-extern "C" int32_t RtUiStringTable_GetFileVersion(const void* /*self*/) {
-    ++g_fileVersionEntries;
+int32_t StringTable::GetFileVersion() const {
     return 1;                                       // 18011d930 MOV EAX,1
+}
+
+}  // namespace UI
+
+extern "C" uint32_t RtUiStringTable_Type(const void* self) {
+    ++g_typeEntries;
+    return reinterpret_cast<const UI::StringTable*>(self)->UI::StringTable::Type();  // B.3.6 bridge
+}
+extern "C" const char* RtUiStringTable_TypeName(const void* self) {
+    ++g_typeNameEntries;
+    return reinterpret_cast<const UI::StringTable*>(self)                       // B.3.6 bridge
+               ->UI::StringTable::TypeName();
+}
+extern "C" int32_t RtUiStringTable_GetFileVersion(const void* self) {
+    ++g_fileVersionEntries;
+    return reinterpret_cast<const UI::StringTable*>(self)                       // B.3.6 bridge
+               ->UI::StringTable::GetFileVersion();
 }
 
 // THE `if (node)` IN THE TWO ACCESSORS IS NOT A FAITHFULNESS BREAK, and it is
@@ -443,28 +468,44 @@ using StSlot0Fn = void* (*)(void* self, int flag);
 uint64_t g_constructEntries = 0, g_destructEntries = 0, g_reconstructEntries = 0;
 }  // namespace
 
+namespace UI {
+
 // ---- slot 8 ----------------------------------------------------------------
-extern "C" void* RtUiStringTable_Construct(void* self) {
-    ++g_constructEntries;
-    if (self == nullptr) return nullptr;            // 180002411 / 180002457
-    ConstructBody(static_cast<UiStringTable*>(self));
-    return self;                                    // 180002452 MOV RAX,RCX
+// Retail's null test (180002411 / 180002457) is in the DOOR.
+Object::External* StringTable::Construct() {
+    ConstructBody(this);
+    return this;                                    // 180002452 MOV RAX,RCX
 }
 
 // ---- slot 7 ----------------------------------------------------------------
-extern "C" void RtUiStringTable_Destruct(void* self) {
-    ++g_destructEntries;
-    StSlot0Fn* vt = *reinterpret_cast<StSlot0Fn**>(self);   // 180002460 MOV RAX,[RCX]
-    vt[0](self, 0);                                         // 180002465 JMP [RAX], EDX=0
+// Slot 0 dispatched VIRTUALLY on purpose: the most-derived deleting dtor runs.
+void StringTable::Destruct() {
+    StSlot0Fn* vt = *reinterpret_cast<StSlot0Fn**>(this);   // 180002460 MOV RAX,[RCX]
+    vt[0](this, 0);                                         // 180002465 JMP [RAX], EDX=0
 }
 
 // ---- slot 6 ----------------------------------------------------------------
+Object::External* StringTable::Reconstruct() {
+    StSlot0Fn* vt = *reinterpret_cast<StSlot0Fn**>(this);   // 1800023a2
+    vt[0](this, 0);                                         // 1800023a7 CALL [RAX], EDX=0
+    ConstructBody(this);
+    return this;                                            // 1800023ea MOV RAX,RBX
+}
+
+}  // namespace UI
+
+extern "C" void* RtUiStringTable_Construct(void* self) {
+    ++g_constructEntries;
+    if (self == nullptr) return nullptr;            // 180002411 / 180002457
+    return reinterpret_cast<UI::StringTable*>(self)->UI::StringTable::Construct();  // B.3.6 bridge
+}
+extern "C" void RtUiStringTable_Destruct(void* self) {
+    ++g_destructEntries;
+    reinterpret_cast<UI::StringTable*>(self)->UI::StringTable::Destruct();          // B.3.6 bridge
+}
 extern "C" void* RtUiStringTable_Reconstruct(void* self) {
     ++g_reconstructEntries;
-    StSlot0Fn* vt = *reinterpret_cast<StSlot0Fn**>(self);   // 1800023a2
-    vt[0](self, 0);                                         // 1800023a7 CALL [RAX], EDX=0
-    ConstructBody(static_cast<UiStringTable*>(self));
-    return self;                                            // 1800023ea MOV RAX,RBX
+    return reinterpret_cast<UI::StringTable*>(self)->UI::StringTable::Reconstruct();  // B.3.6 bridge
 }
 
 int RtUiStringTableLifecycleRegister() {
@@ -698,9 +739,9 @@ extern "C" void* RtUiStringTable_ScalarDelete(void* self, int flag) {
 }
 
 // ---- slot 5 ----------------------------------------------------------------
-extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
-    ++g_serEntries;
-    UiStringTable* self = static_cast<UiStringTable*>(selfV);
+namespace UI {
+
+bool StringTable::Serialize(void* streamV) {
     uint8_t*       stream = static_cast<uint8_t*>(streamV);
 
     SerializerPair ser;
@@ -712,7 +753,7 @@ extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
     const size_t  slot = (dir == 0) ? 0x18 : 0x20;                   // 18011d96f
     ser.impl = reinterpret_cast<SerFactoryFn>(VSlotOf(enc, slot))(enc, &ser, 0);
 
-    int32_t count = self->size;                              // 18011d987
+    int32_t count = _size;                                   // 18011d987
     reinterpret_cast<SerU32Fn>(VSlotOf(ser.impl, 0xa0))(
         ser.impl, reinterpret_cast<uint32_t*>(&count), nullptr);     // 18011d99e
 
@@ -720,16 +761,15 @@ extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
     // 18011d9a4 reloads [RSP+0x28] and 18011d9a9 tests [RAX+0x8] again.
     if (*reinterpret_cast<const int32_t*>(stream + 0x8) == 0) {      // 18011d9a9
         ++g_serRead;
-        // ENDGAME B.3.2 step 2 — `self->data`/`size`/`capacity` are the
-        // {data,size,capacity} triple `Collection::Array<StringTableTextEntry>`
-        // would use, contiguous and asserted at StringTable.h's offsets, and
-        // `kSpec_StringPair10` is NON-TRIVIAL, so the call bridges through it
-        // rather than retyping `UiStringTable`.
-        rtcoll::AsArray<&rtcoll::kSpec_StringPair10>(&self->data)
+        // ENDGAME B.3.2 step 2 — `_data`/`_size`/`_capacity` are the
+        // {data,size,capacity} triple `Collection::Array<TextEntry>` would use,
+        // contiguous and asserted at StringTable.h's offsets, and
+        // `kSpec_StringPair10` is NON-TRIVIAL, so the call bridges through it.
+        rtcoll::AsArray<&rtcoll::kSpec_StringPair10>(&_data)
             ->SetSize(count);                                 // 18011d9b7, retail 0x180078c90
     }
 
-    uint8_t* e = reinterpret_cast<uint8_t*>(self->data);     // 18011d9bc
+    uint8_t* e = reinterpret_cast<uint8_t*>(_data);          // 18011d9bc
     StrSerFn strSer = reinterpret_cast<StrSerFn>(
         ResolveAddr(Module::Runtime, 0x1800c9930));          // String::Serialize
     for (int32_t i = 0; i < count; ++i, e += 0x10) {         // bound is the LOCAL
@@ -744,6 +784,18 @@ extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
         ++g_serNullImpl;
     }
     return true;                                             // 18011da08
+}
+
+// ~StringTable: NON-VIRTUAL and EMPTY; `RtUiStringTable_Dtor`
+// (stringtable_lifecycle.cpp) is the registered door that does retail's work.
+StringTable::~StringTable() {}
+
+}  // namespace UI
+
+extern "C" bool RtUiStringTable_Serialize(void* selfV, void* streamV) {
+    ++g_serEntries;
+    return reinterpret_cast<UI::StringTable*>(selfV)                             // B.3.6 bridge
+               ->UI::StringTable::Serialize(streamV);
 }
 
 int RtUiStringTableSlotsRegister() {

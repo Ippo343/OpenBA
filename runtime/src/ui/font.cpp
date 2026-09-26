@@ -75,6 +75,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/io/Serializer.h"
 #include "../../types/ui/Font.h"
+#include "../../types/system/String.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -263,42 +264,53 @@ int32_t MeasureLiteral(const uint8_t* self, const char* text, int32_t bytes) {
 // 0x1800319a0: `MOV EAX,[0x1801fab68] ; RET` — the first dword of the class's
 // own BaseTypeInfo node. 0x1801fab68 IS `?_typeInfo@Font@UI@@0VBaseTypeInfo@
 // Object@@A`, so this reads it through the name rather than the address.
-extern "C" uint32_t RtUi_Font_Type(const void*) {
+// ENDGAME B.3.6 block D: every body below is a UI::Font member; the doors
+// that keep the registered names/addresses follow the members and delegate
+// with a QUALIFIED call (a live Font wears the MINTED table).
+namespace UI {
+
+uint32_t Font::Type() const {
     const uint8_t* ti = FontTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 // 0x1800319c0: `MOV RAX,[0x1801fab70] ; RET` — the same node at +8.
-extern "C" const char* RtUi_Font_TypeName(const void*) {
+const char* Font::TypeName() const {
     const uint8_t* ti = FontTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 // 0x1801176b0: `MOV EAX,0x8 ; RET`. Eight — a plain integer, unlike the
 // *Description family's packed 0x104 / 0x204 / 0x10204.
-extern "C" int32_t RtUi_Font_GetFileVersion(const void*) { return 8; }
+int32_t Font::GetFileVersion() const { return 8; }
 // 0x1801176c0: `MOV EAX,0x1 ; RET`. The Filename& in RDX is never read. See
 // the banner: W4CompileResult comes back in EAX, there is no hidden slot.
-extern "C" uint32_t RtUi_Font_Compile(void*, const void*) { return 1; }
+Object::External::CompileResult Font::Compile(const System::Filename&) { return 1; }
 
 // ============================================================================
 // Construct / Reconstruct / Destruct
 // ============================================================================
 // 0x180031ce0: `TEST RCX,RCX ; JZ ret0`, then the inlined constructor, then
 // `MOV RAX,RCX`. The null arm returns 0 (`XOR EDX,EDX ; MOV EAX,EDX`).
-extern "C" void* RtUi_Font_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                            // 180031cf1
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                                    // 180031d67
+// Retail's null test (180031cf1) is in the DOOR.
+Object::External* Font::Construct() {
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                                     // 180031d67
 }
 // 0x180031c40: slot0(this, 0) — the deleting destructor with the free bit
 // CLEAR, i.e. destroy in place — and then the same inlined constructor. NOT a
 // tail jump: there is no out-of-line ctor to jump to.
-extern "C" void* RtUi_Font_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                             // 180031c57
-    InlineCtorStores(reinterpret_cast<uint8_t*>(selfv));
-    return selfv;                                                    // 180031ccf
+Object::External* Font::Reconstruct() {
+    CallSlot0(this, 0);                                              // 180031c57
+    InlineCtorStores(reinterpret_cast<uint8_t*>(this));
+    return this;                                                     // 180031ccf
 }
 // 0x180031d80: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
-extern "C" void RtUi_Font_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+void Font::Destruct() { CallSlot0(this, 0); }
+
+// ~Font: NON-VIRTUAL and EMPTY; the registered dtor door below does retail's
+// four String releases, two ~Array calls and the chain to ~External.
+Font::~Font() {}
+
+}  // namespace UI
 
 // ============================================================================
 // ??1Font@UI@@UEAA@XZ   0x1801175a0
@@ -355,8 +367,13 @@ extern "C" void RtUi_Font_Dtor(void* selfv) {
 //            RECOMPUTED by measuring "..." and " " with the font's own glyph
 //            metrics. That is what gives ComputeLineLayout its ellipsis
 //            reserve for an old file.
-extern "C" bool RtUi_Font_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
+namespace UI {
+
+// The body reads its own fields at the file format's offsets (+0x20, +0x50,
+// +0x80 ...) through `p`, in FORMAT order, which is not declaration order;
+// every offset is asserted against a named member in Font.h.
+bool Font::Serialize(void* streamv) {
+    uint8_t* p      = reinterpret_cast<uint8_t*>(this);
     Stream*  stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };                            // [RBP-0x28], [RBP-0x20]
@@ -482,6 +499,8 @@ extern "C" bool RtUi_Font_Serialize(void* selfv, void* streamv) {
     return true;                                                     // 180117b3e MOV AL,1
 }
 
+}  // namespace UI
+
 // ============================================================================
 // ?ComputeLineLayout@Font@UI@@QEBAHPEBDHHHHHPEAULayout@12@@Z   0x180116c70
 // ============================================================================
@@ -503,14 +522,16 @@ extern "C" bool RtUi_Font_Serialize(void* selfv, void* streamv) {
 // and DISCARDS the recursive return value (0x180116e2f) — the value it hands
 // back is recomputed from the pen at 0x180116e34. Not an oversight to
 // "simplify": the recursive call is there for its SIDE EFFECT on `layout`.
-extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* text,
-                                               int32_t count, int32_t startX,
-                                               int32_t baseY, int32_t maxWidth,
-                                               int32_t line, void* layoutv) {
+namespace UI {
+
+int32_t Font::ComputeLineLayout(const char* text, int32_t count, int32_t startX,
+                                int32_t baseY, int32_t maxWidth, int32_t line,
+                                Layout* layoutArg) const {
     if (count == 0) return 0;                                        // 180116c8f
 
-    const uint8_t* self   = reinterpret_cast<const uint8_t*>(selfv);
-    uint8_t*       layout = reinterpret_cast<uint8_t*>(layoutv);
+    // The Layout is written through its raw offsets (+0x08 entries, +0x10 its
+    // size), as retail's append does; RtUI::FontLayout asserts both.
+    uint8_t*       layout = reinterpret_cast<uint8_t*>(layoutArg);
 
     int32_t       penX       = startX;   // EDI
     int32_t       kern       = 0;        // ESI
@@ -523,33 +544,33 @@ extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* te
             int32_t cp = 0;
             byteIdx += DecodeUtf8(text + byteIdx, end, &cp);         // 180116ceb
 
-            if (cp >= 0 && cp < *reinterpret_cast<const int32_t*>(self + 0x38)) {
+            if (cp >= 0 && cp < _charToGlyph._size) {
                 const int32_t glyph =
                     reinterpret_cast<const int32_t*>(
-                        *reinterpret_cast<void* const*>(self + 0x30))[cp];
+                        _charToGlyph._data)[cp];
                 if (glyph != 0xffff && glyph != -1 && glyph >= 0) {  // 180116d1e..d35
                     const uint8_t* sheet =
-                        *reinterpret_cast<const uint8_t* const*>(self + 0x60);
+                        reinterpret_cast<const uint8_t*>(_spriteSheet.Get());
                     if (glyph < *reinterpret_cast<const int32_t*>(sheet + 0x28)) {
                         const uint8_t* sprites =
                             *reinterpret_cast<const uint8_t* const*>(sheet + 0x20);
                         const uint8_t* e =
-                            *reinterpret_cast<const uint8_t* const*>(self + 0x40) +
+                            reinterpret_cast<const uint8_t*>(_glyphs._data) +
                             static_cast<size_t>(glyph) * 0x10;       // 180116d52
                         const int32_t spriteTop = *reinterpret_cast<const int32_t*>(
                             sprites + static_cast<size_t>(glyph) * 0x38 + 0x20);
 
                         if (maxWidth > 0) {                          // 180116d6c
                             const int32_t reach =
-                                *reinterpret_cast<const int32_t*>(self + 0x58) -
+                                _ellipsisWidth -
                                 startSaved + *reinterpret_cast<const int32_t*>(e) +
                                 kern + penX;                         // 180116d6e..d79
                             if (reach >= maxWidth) {                 // 180116d7d
                                 // 180116df0 — elide: lay out "..." from here.
-                                RtUi_Font_ComputeLineLayout(self, kEllipsisText, 3,
+                                ComputeLineLayout(kEllipsisText, 3,
                                                             kern + penX, baseY, -1,
-                                                            line, layout);
-                                return *reinterpret_cast<const int32_t*>(self + 0x58) -
+                                                            line, reinterpret_cast<Layout*>(layout));
+                                return _ellipsisWidth -
                                        startSaved + kern + penX;     // 180116e34
                             }
                         }
@@ -591,6 +612,8 @@ extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* te
     return penX + (kern - startSaved);                               // 180116e45
 }
 
+}  // namespace UI
+
 // ============================================================================
 // ?ComputeCharacterPosition@Font@UI@@QEBAHAEBVString@System@@H@Z  0x180116ee0
 // ============================================================================
@@ -602,11 +625,10 @@ extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* te
 //
 // The String's data pointer is read ONCE, before the loop (`MOV R15,[RDX]` at
 // 0x180116eea), unlike ComputeStringLayout which re-reads it every iteration.
-extern "C" int32_t RtUi_Font_ComputeCharacterPosition(const void* selfv,
-                                                      const void* strRefv,
-                                                      int32_t count) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-    const char* const data = *reinterpret_cast<const char* const*>(strRefv);  // 180116eea
+namespace UI {
+
+int32_t Font::ComputeCharacterPosition(const System::String& text, int32_t count) const {
+    const char* const data = text._data;                              // 180116eea
 
     if (count == 0) return 0;                                        // 180116ef8
 
@@ -620,16 +642,16 @@ extern "C" int32_t RtUi_Font_ComputeCharacterPosition(const void* selfv,
             int32_t cp = 0;
             byteIdx += DecodeUtf8(data + byteIdx, end, &cp);         // 180116f4b
 
-            if (cp >= 0 && cp < *reinterpret_cast<const int32_t*>(self + 0x38)) {
+            if (cp >= 0 && cp < _charToGlyph._size) {
                 const int32_t glyph =
                     reinterpret_cast<const int32_t*>(
-                        *reinterpret_cast<void* const*>(self + 0x30))[cp];
+                        _charToGlyph._data)[cp];
                 if (glyph != 0xffff && glyph != -1 && glyph >= 0) {  // 180116f6b..f79
                     const uint8_t* sheet =
-                        *reinterpret_cast<const uint8_t* const*>(self + 0x60);
+                        reinterpret_cast<const uint8_t*>(_spriteSheet.Get());
                     if (glyph < *reinterpret_cast<const int32_t*>(sheet + 0x28)) {
                         const uint8_t* e =
-                            *reinterpret_cast<const uint8_t* const*>(self + 0x40) +
+                            reinterpret_cast<const uint8_t*>(_glyphs._data) +
                             static_cast<size_t>(glyph) * 0x10;       // 180116f87
                         total += *reinterpret_cast<const int32_t*>(e + 8) +
                                  *reinterpret_cast<const int32_t*>(e) + kern;
@@ -642,6 +664,8 @@ extern "C" int32_t RtUi_Font_ComputeCharacterPosition(const void* selfv,
 
     return kern + total;                                             // 180116fab
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?ComputeStringLayout@Font@UI@@   0x180116fd0
@@ -670,14 +694,19 @@ extern "C" int32_t RtUi_Font_ComputeCharacterPosition(const void* selfv,
 // one instruction each time, the width just measured; [RSP+0xe0] and
 // [RSP+0xf0] (the two out-parameter homes) hold the pen x and the carried
 // kern once R15/RDI have the real pointers. They are separate locals here.
-extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* strRefv,
-                                              bool multiline, int32_t wrapWidth,
-                                              int32_t maxWidth, int32_t justify,
-                                              int32_t* outWidth, int32_t* outHeight,
-                                              void* layoutv) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-    const char* const* strRef = reinterpret_cast<const char* const*>(strRefv);
-    uint8_t* layout = reinterpret_cast<uint8_t*>(layoutv);
+namespace UI {
+
+void Font::ComputeStringLayout(const System::String& text, bool multiline,
+                               int32_t wrapWidth, int32_t maxWidth, Justify justify,
+                               int32_t& outWidthRef, int32_t& outHeightRef,
+                               Layout* layoutArg) const {
+    // Retail keeps the String's data pointer's HOME and re-reads it every
+    // iteration (0x1801170f0); `strRef` is that home. The two out-references
+    // and the Layout are written through pointers exactly as retail does.
+    const char* const* strRef = &text._data;
+    int32_t* outWidth  = &outWidthRef;
+    int32_t* outHeight = &outHeightRef;
+    uint8_t* layout = reinterpret_cast<uint8_t*>(layoutArg);
 
     if (layout != nullptr) {                                         // 180117003
         using I32SetSizeFn = void (*)(void* array, int32_t n);
@@ -694,10 +723,10 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
         const char* data = *strRef;                                  // 18011703f
         const int32_t len =
             (data != nullptr) ? *reinterpret_cast<const int32_t*>(data - 8) : 0;
-        *outWidth = RtUi_Font_ComputeLineLayout(self, data, len, /*startX*/ 0,
+        *outWidth = ComputeLineLayout(data, len, /*startX*/ 0,
                                                 /*baseY*/ 0, maxWidth,
-                                                /*line*/ 0, layout);  // 18011706e
-        *outHeight = *reinterpret_cast<const int32_t*>(self + 0x50);  // 180117076
+                                                /*line*/ 0, reinterpret_cast<Layout*>(layout));  // 18011706e
+        *outHeight = _lineHeight;  // 180117076
         return;
     }
 
@@ -705,7 +734,7 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
     const char* data0 = *strRef;                                     // 18011708c
     const int32_t len =
         (data0 != nullptr) ? *reinterpret_cast<const int32_t*>(data0 - 8) : 0;
-    const int32_t lineHeight = *reinterpret_cast<const int32_t*>(self + 0x50);
+    const int32_t lineHeight = _lineHeight;
 
     int32_t pendingKern = 0;    // [RSP+0xf0]
     int32_t lineStart   = 0;    // [RSP+0xc0]
@@ -735,9 +764,8 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
         }
 
         if (cp == 0x0a) {                                            // 18011712d  '\n'
-            const int32_t w = RtUi_Font_ComputeLineLayout(
-                self, *strRef + lineStart, byteIdx - lineStart, tabX,
-                y, -1, lineIndex, layout);                           // 180117171
+            const int32_t w = ComputeLineLayout(*strRef + lineStart, byteIdx - lineStart, tabX,
+                y, -1, lineIndex, reinterpret_cast<Layout*>(layout));                           // 180117171
             if (w > *outWidth) *outWidth = w;                        // 18011717d
             appendLineWidth(w);                                      // 18011719b
 
@@ -748,9 +776,8 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
             tabX        = 0;                                         // 1801171c5
             ++lineIndex;                                             // 1801171c7
         } else if (cp == 0x09) {                                     // 1801171d3  '\t'
-            const int32_t w = RtUi_Font_ComputeLineLayout(
-                self, *strRef + lineStart, byteIdx - lineStart, tabX,
-                y, -1, lineIndex, layout);                           // 180117217
+            const int32_t w = ComputeLineLayout(*strRef + lineStart, byteIdx - lineStart, tabX,
+                y, -1, lineIndex, reinterpret_cast<Layout*>(layout));                           // 180117217
             if (w > *outWidth) *outWidth = w;                        // 180117223
             appendLineWidth(w);                                      // 180117241
 
@@ -778,16 +805,16 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
         // ---- 1801172c9: the glyph accumulate, reached by ALL THREE arms.
         // A newline or a tab runs it too; they simply have no glyph, so the
         // codepoint table lookup normally falls through. Faithful.
-        if (cp < *reinterpret_cast<const int32_t*>(self + 0x38)) {   // 1801172d1
+        if (cp < _charToGlyph._size) {   // 1801172d1
             const int32_t glyph =
                 reinterpret_cast<const int32_t*>(
-                    *reinterpret_cast<void* const*>(self + 0x30))[cp];
+                    _charToGlyph._data)[cp];
             if (glyph != 0xffff && glyph != -1 && glyph >= 0) {      // 1801172e3..fa
                 const uint8_t* sheet =
-                    *reinterpret_cast<const uint8_t* const*>(self + 0x60);
+                    reinterpret_cast<const uint8_t*>(_spriteSheet.Get());
                 if (glyph < *reinterpret_cast<const int32_t*>(sheet + 0x28)) {
                     const uint8_t* e =
-                        *reinterpret_cast<const uint8_t* const*>(self + 0x40) +
+                        reinterpret_cast<const uint8_t*>(_glyphs._data) +
                         static_cast<size_t>(glyph) * 0x10;           // 180117310
                     const int32_t advance =
                         *reinterpret_cast<const int32_t*>(e + 8) +
@@ -801,15 +828,13 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
                         // ---- wrap 180117346 ----------------------
                         int32_t w;
                         if (lastSpace >= 0) {                        // 180117379
-                            w = RtUi_Font_ComputeLineLayout(
-                                self, *strRef + lineStart, lastSpace - lineStart,
-                                tabX, y, -1, lineIndex, layout);     // 180117381
+                            w = ComputeLineLayout(*strRef + lineStart, lastSpace - lineStart,
+                                tabX, y, -1, lineIndex, reinterpret_cast<Layout*>(layout));     // 180117381
                             byteIdx   = lastSpace + 1;               // 180117386
                             lineStart = byteIdx;                     // 18011738b
                         } else {
-                            w = RtUi_Font_ComputeLineLayout(
-                                self, *strRef + lineStart, byteIdx - lineStart - 1,
-                                tabX, y, -1, lineIndex, layout);     // 18011739d
+                            w = ComputeLineLayout(*strRef + lineStart, byteIdx - lineStart - 1,
+                                tabX, y, -1, lineIndex, reinterpret_cast<Layout*>(layout));     // 18011739d
                             lineStart = byteIdx - 1;                 // 1801173a8
                             byteIdx   = byteIdx - 2;                 // 1801173a5
                         }
@@ -833,9 +858,8 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
 
     // ---- the trailing partial line, 180117425 ---------------------
     if (len - lineStart > 0) {                                       // 18011742d
-        const int32_t w = RtUi_Font_ComputeLineLayout(
-            self, *strRef + lineStart, len - lineStart, /*startX*/ 0,
-            y, -1, lineIndex, layout);                               // 180117455
+        const int32_t w = ComputeLineLayout(*strRef + lineStart, len - lineStart, /*startX*/ 0,
+            y, -1, lineIndex, reinterpret_cast<Layout*>(layout));                               // 180117455
         if (w > *outWidth) *outWidth = w;                            // 180117461
         appendLineWidth(w);                                          // 18011747f
         y += lineHeight;                                             // 180117484
@@ -865,6 +889,8 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
     *reinterpret_cast<int32_t*>(layout + 0x04) = *outHeight;         // 1801174f5
 }
 
+}  // namespace UI
+
 // ============================================================================
 // Registration. Both doors for every row: the mangled name (which is what the
 // minted BaseTypeInfo and the minted vtable ask for first) and the address
@@ -874,6 +900,63 @@ extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* str
 // The deleting destructor 0x180032130 is deliberately absent: that table is
 // owned by runtime/src/object/deleting_dtor*.cpp.
 // ============================================================================
+// ============================================================================
+// THE DOORS. Each keeps its registered name and address and delegates with a
+// QUALIFIED non-virtual call. `?AW4CompileResult` is an EAX-returned enum and
+// none of the three metric exports is a retslot (the banner).
+// ============================================================================
+extern "C" uint32_t RtUi_Font_Type(const void* selfv) {
+    return reinterpret_cast<const UI::Font*>(selfv)->UI::Font::Type();               // B.3.6 bridge
+}
+extern "C" const char* RtUi_Font_TypeName(const void* selfv) {
+    return reinterpret_cast<const UI::Font*>(selfv)->UI::Font::TypeName();           // B.3.6 bridge
+}
+extern "C" int32_t RtUi_Font_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const UI::Font*>(selfv)->UI::Font::GetFileVersion();     // B.3.6 bridge
+}
+extern "C" uint32_t RtUi_Font_Compile(void* selfv, const void* filename) {
+    return reinterpret_cast<UI::Font*>(selfv)                                        // B.3.6 bridge
+               ->UI::Font::Compile(*static_cast<const System::Filename*>(filename));
+}
+extern "C" void* RtUi_Font_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                            // 180031cf1
+    return reinterpret_cast<UI::Font*>(selfv)->UI::Font::Construct();                // B.3.6 bridge
+}
+extern "C" void* RtUi_Font_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::Font*>(selfv)->UI::Font::Reconstruct();              // B.3.6 bridge
+}
+extern "C" void RtUi_Font_Destruct(void* selfv) {
+    reinterpret_cast<UI::Font*>(selfv)->UI::Font::Destruct();                        // B.3.6 bridge
+}
+extern "C" bool RtUi_Font_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<UI::Font*>(selfv)->UI::Font::Serialize(streamv);         // B.3.6 bridge
+}
+extern "C" int32_t RtUi_Font_ComputeLineLayout(const void* selfv, const char* text,
+                                               int32_t count, int32_t startX,
+                                               int32_t baseY, int32_t maxWidth,
+                                               int32_t line, void* layoutv) {
+    return reinterpret_cast<const UI::Font*>(selfv)                                  // B.3.6 bridge
+        ->UI::Font::ComputeLineLayout(text, count, startX, baseY, maxWidth, line,
+                                      static_cast<UI::Font::Layout*>(layoutv));
+}
+extern "C" int32_t RtUi_Font_ComputeCharacterPosition(const void* selfv,
+                                                      const void* strRefv,
+                                                      int32_t count) {
+    return reinterpret_cast<const UI::Font*>(selfv)                                  // B.3.6 bridge
+        ->UI::Font::ComputeCharacterPosition(*static_cast<const System::String*>(strRefv), count);
+}
+extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* strRefv,
+                                              bool multiline, int32_t wrapWidth,
+                                              int32_t maxWidth, int32_t justify,
+                                              int32_t* outWidth, int32_t* outHeight,
+                                              void* layoutv) {
+    reinterpret_cast<const UI::Font*>(selfv)                                         // B.3.6 bridge
+        ->UI::Font::ComputeStringLayout(*static_cast<const System::String*>(strRefv),
+                                        multiline, wrapWidth, maxWidth, justify,
+                                        *outWidth, *outHeight,
+                                        static_cast<UI::Font::Layout*>(layoutv));
+}
+
 int RtUiFontRegister() {
     int n = 0;
 

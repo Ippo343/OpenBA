@@ -39,39 +39,50 @@
 //
 // Update's own two children are _children[0] (drawn first, the backdrop) and
 // _children[1] (the content, and the one ComputeSize measures).
+//
+// ENDGAME B.3.6 block C4: the layout above moved to runtime/types/ui/
+// ListElement.h (the real class). Every slot body below is a MEMBER; each
+// registered door is a one-line QUALIFIED delegation; ctor/dtor stay DOORS.
+// The ribbon's own fields (UI::RibbonElement, block C5) and the dialog's slot
+// 8 (UI::DialogInstance, block B) stay raw here — fragment list.
+// RULE B6-5: the vtable and type-info record are cached in namespace-scope
+// std::atomic slots.
 // ============================================================================
 
+#include <atomic>
+
 #include "widget_common.h"
+#include "../../types/ui/ListElement.h"
 
 using namespace rtui;
 
 namespace {
 
-constexpr int kHoverColor    = 0xD0;
-constexpr int kSelectColor   = 0xD4;
-constexpr int kSelectedIndex = 0xD8;
-constexpr int kHoverIndex    = 0xDC;
-constexpr int kItems         = 0xE0;
-constexpr int kGrid          = 0xF0;
-constexpr int kClip          = 0xF8;
-
-// The RibbonElement-shaped fields Update reads through _grid.
+// The RibbonElement-shaped fields Update reads through _ribbon (block C5's).
 constexpr int kGridVertical = 0xC0;   // byte
 constexpr int kGridSpacing  = 0xC4;   // int32
 constexpr int kGridExtents  = 0xC8;   // Array<int32>::_data
 
-// UpdateState (the 5th argument), offsets named by the bodies that read them.
-constexpr int kUsPressed = 0x01;      // byte: a click began this frame
-constexpr int kUsMouseX  = 0x18;
-constexpr int kUsMouseY  = 0x1c;
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_vtable{nullptr};
 
-const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A");
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
-void* Vtable() { return RT_DATA_SLOT(void*, "??_7ListElement@UI@@6B@"); }
+const uint8_t* TypeInfo() {
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@ListElement@UI@@0VBaseTypeInfo@Object@@A"));
+}
+void* Vtable() { return AtomicExport(g_vtable, "??_7ListElement@UI@@6B@"); }
 
-// `?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z` 0x1800d3f70
+// `?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z` 0x1800d3f70 —
+// declared on the class, body still element_bodies_b5.cpp's door.
 using DrawHighlightFn = void (*)(const void* self, void* ctx, int32_t index, uint32_t color);
 
 // `?OnElementEvent@DialogInstance@UI@@` — the DialogInstance vtable's slot 8
@@ -83,113 +94,83 @@ using OnElementEventFn = void (*)(void* dlg, void** elem, int32_t kind, int32_t 
 
 }  // namespace
 
-extern "C" uint32_t RtUi_ListElement_Type(const void*) {
+// ============================================================================
+// The member bodies (ENDGAME B.3.6 block C4)
+// ============================================================================
+namespace UI {
+
+uint32_t ListElement::Type() const {
     const uint8_t* ti = TypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_ListElement_TypeName(const void*) {
+const char* ListElement::TypeName() const {
     const uint8_t* ti = TypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
 
-// ??0ListElement@UI@@QEAA@XZ   0x1800d4570
-extern "C" void* RtUi_ListElement_Ctor(void* self) {   // returns this in RAX, as every MSVC ctor does
-    ElementCtor(self);
-    PTR(self, 0x00) = Vtable();
-    PTR(self, 0xC0) = nullptr;
-    I32(self, 0xC8) = -1;
-    U32(self, kHoverColor)    = 0xff808080u;   // the low half of the qword
-    U32(self, kSelectColor)   = 0xffffffffu;
-    I32(self, kSelectedIndex) = -1;
-    I32(self, kHoverIndex)    = -1;
-    PTR(self, kItems)     = nullptr;
-    PTR(self, kItems + 8) = nullptr;
-    PTR(self, kGrid) = nullptr;
-    PTR(self, kClip) = nullptr;
-    return self;
-}
-
-// ??1ListElement@UI@@UEAA@XZ   0x1800d4530
-extern "C" void RtUi_ListElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    RtAddr<ArrayDtorFn>(0x180024aa0ull)(B(self, kItems));   // already ours
-    ElementDtor(self);
-}
-
 // slot 4 — 0x1800d4380
-extern "C" void RtUi_ListElement_ComputeSize(void* self) {
-    if ((U32(self, kElFlags) & kFlagNeedsSizeCalc) == 0) return;
-    void* content = reinterpret_cast<void**>(PTR(self, kElChildren))[1];
-    RtAddr<GetPaddedSizeFn>(0x180115f10ull)(
-        content,
-        reinterpret_cast<int32_t*>(B(self, kElLayoutWidth)),
-        reinterpret_cast<int32_t*>(B(self, kElLayoutHeight)));
-    U32(self, kElFlags) &= ~kFlagNeedsSizeCalc;
+void ListElement::ComputeSize() {
+    if ((_flags & kFlagNeedsSizeCalc) == 0) return;
+    Element* content = _children[1];
+    RtAddr<GetPaddedSizeFn>(0x180115f10ull)(content, &_layoutWidth, &_layoutHeight);
+    _flags &= ~kFlagNeedsSizeCalc;
 }
 
 // slot 5 — 0x1800d4210
-extern "C" void RtUi_ListElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                               int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
+void ListElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (Element* border = static_cast<Element*>(_border))
+        border->ComputeLayout(x, y, right, bottom);
 
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
+    ComputeSize();                                            // slot 4, virtual
 
-    const int32_t align = I32(self, kElAlignment);
-    if (right  < I32(self, kElLayoutWidth)  + x) x = right  - I32(self, kElLayoutWidth);
-    if (bottom < I32(self, kElLayoutHeight) + y) y = bottom - I32(self, kElLayoutHeight);
+    const int32_t align = _alignment;
+    if (right  < _layoutWidth  + x) x = right  - _layoutWidth;
+    if (bottom < _layoutHeight + y) y = bottom - _layoutHeight;
 
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t aw = (right  - _rightPad)  - px;
+    const int32_t ah = (bottom - _bottomPad) - py;
 
     switch (align) {
         case 2: case 5: case 8:
-            px = (right - I32(self, kElRightPad)) - aw;
+            px = (right - _rightPad) - aw;
             break;
         default:
             break;
     }
     if (align > 2 && align > 5 && align < 9)
-        py = (bottom - I32(self, kElBottomPad)) - ah;
+        py = (bottom - _bottomPad) - ah;
 
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutRight)  = aw + px;
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutBottom) = ah + py;
+    _layoutLeft   = px;
+    _layoutRight  = aw + px;
+    _layoutTop    = py;
+    _layoutBottom = ah + py;
 
-    int32_t n = I32(self, kElChildCount);
+    int32_t n = _children.GetSize();
     for (int32_t i = 0; i < n; ++i) {
-        void* child = reinterpret_cast<void**>(PTR(self, kElChildren))[i];
-        if (child != nullptr && (U32(child, kElFlags) & kFlagHidden) == 0) {
-            reinterpret_cast<ComputeLayoutSlotFn>(VTable(child)[kVtComputeLayout / 8])(
-                child, I32(self, kElLayoutLeft), I32(self, kElLayoutTop),
-                I32(self, kElLayoutRight), I32(self, kElLayoutBottom));
-        }
-        n = I32(self, kElChildCount);
+        Element* child = _children[i];
+        if (child != nullptr && (child->_flags & kFlagHidden) == 0)
+            child->ComputeLayout(_layoutLeft, _layoutTop, _layoutRight, _layoutBottom);
+        n = _children.GetSize();
     }
 }
 
 // slot 6 — 0x1800d3eb0
-extern "C" void RtUi_ListElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
+void ListElement::Draw(SpriteContext& context, uint8_t alpha) const {
+    if (Element* border = static_cast<Element*>(_border))
+        border->Draw(context, alpha);
 
-    void* back = reinterpret_cast<void**>(PTR(me, kElChildren))[0];
-    if (back != nullptr && (U32(back, kElFlags) & kFlagHidden) == 0)
-        reinterpret_cast<DrawSlotFn>(VTable(back)[kVtDraw / 8])(back, ctx, alpha);
+    Element* back = _children[0];
+    if (back != nullptr && (back->_flags & kFlagHidden) == 0)
+        back->Draw(context, alpha);
 
-    RtAddr<DrawHighlightFn>(0x1800d3f70ull)(me, ctx, I32(me, kHoverIndex),
-                                            U32(me, kHoverColor));
-    RtAddr<DrawHighlightFn>(0x1800d3f70ull)(me, ctx, I32(me, kSelectedIndex),
-                                            U32(me, kSelectColor));
+    RtAddr<DrawHighlightFn>(0x1800d3f70ull)(this, &context, _hoverIndex, _hoverColor);
+    RtAddr<DrawHighlightFn>(0x1800d3f70ull)(this, &context, _selectedIndex, _selectColor);
 
-    void* content = reinterpret_cast<void**>(PTR(me, kElChildren))[1];
-    if (content != nullptr && (U32(content, kElFlags) & kFlagHidden) == 0)
-        reinterpret_cast<DrawSlotFn>(VTable(content)[kVtDraw / 8])(content, ctx, alpha);
+    Element* content = _children[1];
+    if (content != nullptr && (content->_flags & kFlagHidden) == 0)
+        content->Draw(context, alpha);
 }
 
 // ---------------------------------------------------------------------------
@@ -200,21 +181,24 @@ extern "C" void RtUi_ListElement_Draw(const void* self, void* ctx, uint8_t alpha
 // InternalPtr<DialogInstance> copy that Element::Update is handed (0x1800d3c40),
 // and later `this` as an InternalPtr<Element> for the event (0x1800d3e37).
 // ---------------------------------------------------------------------------
-extern "C" void RtUi_ListElement_Update(void* self, const void* time, void* ui,
-                                        void** dlgPtr, const void* state) {
-    void* slot = *dlgPtr;                                 // 1800d3c2a / 3c40
-    ElementUpdate(self, time, ui, &slot, state);          // 1800d3c4a
+void ListElement::Update(const System::Time& time, UserInterface* ui,
+                         Object::InternalPtr<DialogInstance>* dialog,
+                         const UpdateState& state) {
+    void* slot = *reinterpret_cast<void* const*>(dialog);      // 1800d3c2a / 3c40
+    UI::Element::Update(time, ui,
+                        reinterpret_cast<Object::InternalPtr<DialogInstance>*>(&slot),
+                        state);                                // 1800d3c4a (qualified)
 
-    I32(self, kHoverIndex) = -1;                          // 1800d3c56
-    if ((U32(self, kElFlags) & kFlagInteractive) == 0) return;   // TEST ...,0x20000
+    _hoverIndex = -1;                                          // 1800d3c56
+    if ((_flags & kFlagInteractive) == 0) return;              // TEST ...,0x20000
 
-    const int32_t mouseX = I32c(state, kUsMouseX);
-    const int32_t mouseY = I32c(state, kUsMouseY);
+    const int32_t mouseX = state.mouseX;
+    const int32_t mouseY = state.mouseY;
 
-    for (int32_t i = 0; i < I32(PTR(self, kGrid), kElChildCount); ++i) {
-        if (i < 0) continue;                              // TEST EBX,EBX / JS
+    for (int32_t i = 0; i < _ribbon->_children.GetSize(); ++i) {
+        if (i < 0) continue;                                   // TEST EBX,EBX / JS
 
-        void* grid = PTR(self, kGrid);
+        Element* grid = _ribbon;
 
         // The running offset of row i: the sum of the previous rows' extents
         // plus one spacing each. Retail unrolls this by four; the rolled form
@@ -224,24 +208,24 @@ extern "C" void RtUi_ListElement_Update(void* self, const void* time, void* ui,
             off += reinterpret_cast<int32_t*>(PTR(grid, kGridExtents))[k]
                    + I32(grid, kGridSpacing);
 
-        int32_t x0 = I32(grid, kElLayoutLeft);
-        int32_t y0 = I32(grid, kElLayoutTop);
+        int32_t x0 = grid->_layoutLeft;
+        int32_t y0 = grid->_layoutTop;
         int32_t x1, y1;
         if (U8(grid, kGridVertical) == 0) {
-            y1 = I32(grid, kElLayoutBottom);
+            y1 = grid->_layoutBottom;
             x0 = x0 + off;
             x1 = reinterpret_cast<int32_t*>(PTR(grid, kGridExtents))[i] + x0;
         } else {
-            x1 = I32(grid, kElLayoutRight);
+            x1 = grid->_layoutRight;
             y0 = y0 + off;
             y1 = reinterpret_cast<int32_t*>(PTR(grid, kGridExtents))[i] + y0;
         }
 
-        void* clip = PTR(self, kClip);
-        int32_t cl = I32(clip, kElLayoutLeft);
-        int32_t cr = I32(clip, kElLayoutRight);
-        int32_t ct = I32(clip, kElLayoutTop);
-        int32_t cb = I32(clip, kElLayoutBottom);
+        Element* clip = _clip;
+        int32_t cl = clip->_layoutLeft;
+        int32_t cr = clip->_layoutRight;
+        int32_t ct = clip->_layoutTop;
+        int32_t cb = clip->_layoutBottom;
 
         if (cl <= x1 && x0 <= cr && ct <= y1 && y0 <= cb) {
             if (cb < y1) y1 = cb + 1;
@@ -259,17 +243,77 @@ extern "C" void RtUi_ListElement_Update(void* self, const void* time, void* ui,
                 x0 = cl;
             }
             if (x0 <= mouseX && mouseX <= x1 && ct <= mouseY && mouseY <= cb) {
-                I32(self, kHoverIndex) = i;
-                if (U8c(state, kUsPressed) != 0) {
-                    I32(self, kSelectedIndex) = i;
-                    slot = self;                                   // 1800d3e37
-                    void* dlg = *dlgPtr;                           // 1800d3e2a
+                _hoverIndex = i;
+                if (state.buttonPressed != 0) {
+                    _selectedIndex = i;
+                    slot = this;                                   // 1800d3e37
+                    void* dlg = *reinterpret_cast<void* const*>(dialog);   // 1800d3e2a
+                    // UI::DialogInstance slot 8 (block B): hand-inlined, as before.
                     reinterpret_cast<OnElementEventFn>(VTable(dlg)[0x40 / 8])(
-                        dlg, &slot, 0x14, I32(self, kElElementId), i, 0, 0, 0);
+                        dlg, &slot, 0x14, _elementId, i, 0, 0, 0);
                 }
             }
         }
     }
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+using UI::ListElement;
+
+extern "C" uint32_t RtUi_ListElement_Type(const ListElement* self) {
+    return self->UI::ListElement::Type();
+}
+extern "C" const char* RtUi_ListElement_TypeName(const ListElement* self) {
+    return self->UI::ListElement::TypeName();
+}
+extern "C" void RtUi_ListElement_ComputeSize(ListElement* self) {
+    self->UI::ListElement::ComputeSize();
+}
+extern "C" void RtUi_ListElement_ComputeLayout(ListElement* self, int32_t x, int32_t y,
+                                               int32_t right, int32_t bottom) {
+    self->UI::ListElement::ComputeLayout(x, y, right, bottom);
+}
+extern "C" void RtUi_ListElement_Draw(const ListElement* self, void* ctx, uint8_t alpha) {
+    self->UI::ListElement::Draw(*static_cast<UI::SpriteContext*>(ctx), alpha);
+}
+extern "C" void RtUi_ListElement_Update(ListElement* self, const void* time, void* ui,
+                                        void** dlgPtr, const UI::Element::UpdateState* state) {
+    self->UI::ListElement::Update(
+        *static_cast<const System::Time*>(time), static_cast<UI::UserInterface*>(ui),
+        reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dlgPtr),   // B.3.6 bridge
+        *state);
+}
+
+// ??0ListElement@UI@@QEAA@XZ   0x1800d4570 — a DOOR (B4b-2)
+extern "C" void* RtUi_ListElement_Ctor(void* selfv) {   // returns this in RAX, as every MSVC ctor does
+    ElementCtor(selfv);
+    PTR(selfv, 0x00) = Vtable();
+    ListElement* self = reinterpret_cast<ListElement*>(selfv);   // B.3.6 bridge
+    self->_highlight.spriteSheet = nullptr;
+    self->_highlight.spriteIndex = -1;
+    self->_hoverColor    = 0xff808080u;   // one qword store, low half ...
+    self->_selectColor   = 0xffffffffu;   // ... high half
+    self->_selectedIndex = -1;
+    self->_hoverIndex    = -1;
+    self->_userData._data     = nullptr;
+    self->_userData._size     = 0;
+    self->_userData._capacity = 0;
+    self->_ribbon = nullptr;
+    self->_clip   = nullptr;
+    return selfv;
+}
+
+// ??1ListElement@UI@@UEAA@XZ   0x1800d4530 — a DOOR (B4b-2)
+extern "C" void RtUi_ListElement_Dtor(void* selfv) {
+    PTR(selfv, 0x00) = Vtable();
+    RtAddr<ArrayDtorFn>(0x180024aa0ull)(
+        &reinterpret_cast<ListElement*>(selfv)->_userData);   // B.3.6 bridge; already ours
+    ElementDtor(selfv);
 }
 
 // ============================================================================

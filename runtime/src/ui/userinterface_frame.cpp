@@ -143,12 +143,15 @@
 #include "../../funcs/rt_port.h"
 #include "../../funcs/rt_sink.h"
 #include "../../types/ui/UserInterface.h"
+#include "../../types/ui/DialogInstance.h"
+#include "../../types/ui/Element.h"
+// ENDGAME B.3.6 block E: element_common.h carries the same file-scope
+// `Module` / `ResolveAddr` declaration userinterface.cpp and dialog.cpp use
+// (the address door lives in standalone/), and the RULE B6-5 atomic door
+// caches.
+#include "element_common.h"
 
-// Same file-scope declaration userinterface.cpp and dialog.cpp use: the address
-// door lives in standalone/, and pulling its header into a runtime/src file
-// would invert the dependency the whole tree is arranged around.
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include <atomic>
 
 namespace {
 
@@ -157,20 +160,33 @@ using UI::UserInterface;
 inline uint8_t* B(void* p, size_t off) { return static_cast<uint8_t*>(p) + off; }
 
 // ---- data slots -------------------------------------------------------------
-// Through RT_DATA_SLOT, which never caches a null, for the reason
-// userinterface.cpp gives: a slot resolved before the mint must be able to
-// retry rather than freeze the DLL's answer for the process.
+// Never caches a null, for the reason userinterface.cpp gives: a slot resolved
+// before the mint must be able to retry rather than freeze the DLL's answer
+// for the process. ENDGAME B.3.6 (RULE B6-5): namespace-scope atomics rather
+// than RT_DATA_SLOT / RT_EXPORT_ONCE function-local statics — `Update` runs on
+// UI objects the loader thread constructs, every frame.
+std::atomic<void*> g_sptSlot{nullptr};
+std::atomic<void*> g_videoDeviceSlot{nullptr};
+std::atomic<void*> g_inputDeviceSlot{nullptr};
+std::atomic<void*> g_inputConfigSlot{nullptr};
+std::atomic<void*> g_memAllocSlot{nullptr};
+std::atomic<void*> g_memFreeSlot{nullptr};
+std::atomic<void*> g_eventsSetSizeSlot{nullptr};
 inline const double* TimerSecondsPerTick() {
-    return RT_DATA_SLOT(const double*, "?_secondsPerTick@Timer@System@@0NA");
+    return static_cast<const double*>(
+        rtuielem::AtomicExport(g_sptSlot, "?_secondsPerTick@Timer@System@@0NA"));
 }
 inline void** VideoDeviceSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_videoDeviceSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
 }
 inline void** InputDeviceSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
 }
 inline void** InputConfigSingleton() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+    return static_cast<void**>(
+        rtuielem::AtomicExport(g_inputConfigSlot, "?_singleton@Configuration@Input@@0PEAV12@EA"));
 }
 
 // ---- the callees ------------------------------------------------------------
@@ -280,16 +296,19 @@ static_assert(sizeof(Node) == 0x18, "MemAlloc(0x18, 8) in the drain");
 // is self-consistent; reads of locations it never writes stay plain loads. The
 // distinction matters here in exactly one place — `_fadeAmount`, which is read
 // back inside the fade arm after being written.
-int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
-    uint8_t* const S = reinterpret_cast<uint8_t*>(self);
+} // namespace
+
+// ENDGAME B.3.6 block E: the body is the member (the main-loop hot path).
+int32_t UI::UserInterface::Update(const System::Time& timeRef) {
+    RtSink out;                                                 // the live sink
+    const void* const time = &timeRef;                          // one int64 tick count
+    uint8_t* const S = reinterpret_cast<uint8_t*>(this);
 
     // 0x1801213ef — _mouseCaptured = 0, BEFORE anything else.
     out.U8(S + 0xd9, 0, "_mouseCaptured = 0 (entry)");
 
     // 0x1801213f6
-    CleanFn clean = RT_EXPORT_ONCE(CleanFn, kCleanRemoved);
-    if (out.Call("CleanRemovedDialogs #1", (const void*)clean))
-        clean(self);
+    CleanRemovedDialogs();                                      // #1
 
     // ---- drain _addDialogs back-to-front into the list ---------------------
     // Retail walks i = _size-1 down to 0 (0x1801213fb: MOVSXD R14, size-1, and
@@ -301,8 +320,8 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
 
         Node* node = nullptr;
         if (out.Call("MemAlloc(0x18, 8) — list node", (const void*)kMemAlloc, 0x18, 8)) {
-            node = static_cast<Node*>(
-                RT_EXPORT_ONCE(AllocFn, kMemAlloc)(0x18, 8));
+            node = static_cast<Node*>(reinterpret_cast<AllocFn>(
+                rtuielem::AtomicExport(g_memAllocSlot, kMemAlloc))(0x18, 8));
             if (node) {
                 node->value = nullptr;          // retail zeroes then stores
                 node->value = addData[i];
@@ -342,10 +361,9 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
                 (void)*static_cast<void* volatile*>(
                     static_cast<void*>(static_cast<uint8_t*>(toolTip) + 0x30));
 
-                void* tmp = toolTip;   // the by-value InternalPtr copy
-                CloseFn close = RT_EXPORT_ONCE(CloseFn, kCloseDialog);
-                if (out.Call("CloseDialog(tooltip)", (const void*)close))
-                    close(self, &tmp);
+                // the by-value InternalPtr copy, passed by address (B6-11)
+                Object::InternalPtr<DialogInstance> tmp(static_cast<DialogInstance*>(toolTip));
+                CloseDialog(&tmp);
                 out.Ptr(S + 0x40, nullptr, "_toolTipDialog = 0");
                 out.Ptr(S + 0x38, nullptr, "_toolTipOwner = 0");
             }
@@ -354,16 +372,14 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
 
     // 0x1801214d3 — the "a dialog opened" sound, gated on the PRE-drain count.
     if (addCount > 0) {
-        PlayFn play = RT_EXPORT_ONCE(PlayFn, kPlay);
-        if (out.Call("Play(0)", (const void*)play, 0))
-            play(self, 0);
+        Play(0);
     }
 
     // 0x1801214e3 — free the array and clear BOTH size and capacity with one
     // QWORD store (0x180121525: MOV qword[RSI+0x30], 0).
     void* const addData = *reinterpret_cast<void**>(S + 0x28);
     if (addData) {
-        FreeFn mfree = RT_EXPORT_ONCE(FreeFn, kMemFree);
+        FreeFn mfree = reinterpret_cast<FreeFn>(rtuielem::AtomicExport(g_memFreeSlot, kMemFree));
         if (out.Call("MemFree(_addDialogs._data)", (const void*)mfree))
             mfree(addData);
     }
@@ -403,17 +419,14 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
     }
 
     // 0x1801215de / 0x1801215e9
-    EventsFn updEvents = RT_EXPORT_ONCE(EventsFn, kUpdateEvents);
-    if (out.Call("UpdateEvents", (const void*)updEvents))
-        updEvents(self);
-    if (out.Call("CleanRemovedDialogs #2", (const void*)clean))
-        clean(self);
+    UpdateEvents();
+    CleanRemovedDialogs();                                      // #2
 
     // ---- layout every dialog, head -> tail --------------------------------
-    LayoutFn layout = RT_EXPORT_ONCE(LayoutFn, kComputeLayout);
+    // `DialogInstance::ComputeLayout` (0x180113d90) — non-virtual member of the
+    // real class (block B).
     for (Node* n = *reinterpret_cast<Node**>(S + 0x00); n; n = n->next) {
-        if (out.Call("DialogInstance::ComputeLayout", (const void*)layout, 0, 0, w, h))
-            layout(n->value, 0, 0, w, h);
+        reinterpret_cast<DialogInstance*>(n->value)->ComputeLayout(0, 0, w, h);  // B.3.6 bridge
     }
 
     // 0x18012161e — a fade in progress swallows the whole input half AND the
@@ -467,12 +480,15 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
     // ---- pump every dialog, tail (frontmost) -> head -----------------------
     Node* n = *reinterpret_cast<Node**>(S + 0x08);
     if (n) {
-        DlgUpdFn dlgUpd = RT_EXPORT_ONCE(DlgUpdFn, kDlgUpdate);
         for (;;) {
             uint8_t* const dlg = static_cast<uint8_t*>(n->value);
             if (*reinterpret_cast<void**>(dlg + 0x28) == nullptr) {
-                if (out.Call("DialogInstance::Update", (const void*)dlgUpd))
-                    dlgUpd(dlg, time, self, &st);
+                // `DialogInstance::Update(const Time&, UserInterface*,
+                // Element::UpdateState&)` (0x180113980) — non-virtual member of
+                // the real class (block B), which spells the state as its
+                // address; it WRITES BACK into `st`.
+                reinterpret_cast<DialogInstance*>(dlg)->Update(            // B.3.6 bridge
+                    timeRef, this, reinterpret_cast<uint8_t*>(&st));
             }
             if ((*reinterpret_cast<uint32_t*>(dlg + 0x20) >> 1) & 1u) break;
             n = n->prev;
@@ -486,7 +502,7 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
     // ---- end drag-drop ----------------------------------------------------
     if (!leftDown && *reinterpret_cast<void**>(S + 0x60) != nullptr) {
         SetSizeFn setSize = reinterpret_cast<SetSizeFn>(
-            ResolveAddr(Module::Runtime, kEventsSetSizeAddr));
+            rtuielem::AtomicAddr(g_eventsSetSizeSlot, kEventsSetSizeAddr));
 
         for (int32_t id = 0xd; id <= 0xe; ++id) {
             EventRecord rec;
@@ -508,10 +524,8 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
         out.Ptr(S + 0x60, nullptr, "_dragDropDialog = 0");
         void* const dragEl = *reinterpret_cast<void**>(S + 0x68);
         if (dragEl) {
-            DeleteFn del = *reinterpret_cast<DeleteFn*>(*reinterpret_cast<void**>(dragEl));
-            if (out.Call("_dragDropElement vtbl[0] deleting dtor",
-                         (const void*)del, 1))
-                del(dragEl, 1);
+            // Element vtable slot 0 `DeletingDtor(1)` — VIRTUAL.
+            reinterpret_cast<UI::Element*>(dragEl)->DeletingDtor(1);   // B.3.6 bridge
             out.Ptr(S + 0x68, nullptr, "_dragDropElement = 0 (inside the guard)");
         }
         out.Ptr(S + 0x68, nullptr, "_dragDropElement = 0 (again, unguarded)");
@@ -520,22 +534,15 @@ int32_t UpdateBody(UserInterface* self, const void* time, RtSink& out) {
         out.Ptr(S + 0x80, nullptr, "_dragDropUserData = 0");
     }
 
-    if (out.Call("CleanRemovedDialogs #3", (const void*)clean))
-        clean(self);
+    CleanRemovedDialogs();                                      // #3
 
     out.U8(S + 0xd9, st.mouseCaptured, "_mouseCaptured = UpdateState+0x20");
 
-    CursorFn cursor = RT_EXPORT_ONCE(CursorFn, kCursorIndex);
-    if (!out.Call("GetMouseCursorIndex", (const void*)cursor, mx, my))
-        return 0;               // predict mode: the return is not compared
-    return cursor(self, mx, my);
+    return GetMouseCursorIndex(mx, my);
 }
 
-} // namespace
-
 extern "C" int32_t RtUi_UserInterface_Update(UserInterface* self, const void* time) {
-    RtSink live;
-    return UpdateBody(self, time, live);
+    return self->UI::UserInterface::Update(*static_cast<const System::Time*>(time));
 }
 
 // ---------------------------------------------------------------------------
