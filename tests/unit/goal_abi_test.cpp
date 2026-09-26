@@ -238,3 +238,34 @@ UNIT_TEST(tutorialsetup_family_is_retail) {
     CHECK_EQ(sizeof(TutorialSetupRestrictPlayer), (size_t)0x68);
     CHECK_EQ(offsetof(TutorialSetupRestrictPlayer, cameraRefCached), (size_t)0x60);
 }
+
+// ===========================================================================
+// TutorialImage (concrete, 10 slots) and its leaves (10 slots)
+// ===========================================================================
+#include "Tutorial/TutorialImage.h"
+#include "Tutorial/TutorialImageHotKey.h"
+#include "Tutorial/TutorialImageInputKey.h"
+#include "Tutorial/TutorialImageToolbarIcon.h"
+
+namespace {
+template <typename T>
+void CheckTutorialImageSlots() {
+    CheckExternalSlots<T>();
+    CHECK_EQ(SlotOffset(&T::Construct),     (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&T::CreateElement), (uintptr_t)0x48);
+    CheckShape<T, TutorialImage>(false);
+}
+}  // namespace
+
+UNIT_TEST(tutorialimage_family_is_retail) {
+    CheckTutorialImageSlots<TutorialImage>();
+    CheckTutorialImageSlots<TutorialImageHotKey>();
+    CheckTutorialImageSlots<TutorialImageInputKey>();
+    CheckTutorialImageSlots<TutorialImageToolbarIcon>();
+    CHECK_EQ(sizeof(TutorialImage),            (size_t)0x30);
+    CHECK_EQ(sizeof(TutorialImageHotKey),      (size_t)0x48);
+    CHECK_EQ(sizeof(TutorialImageInputKey),    (size_t)0x38);
+    CHECK_EQ(sizeof(TutorialImageToolbarIcon), (size_t)0x48);
+    CHECK_EQ(offsetof(TutorialImage, imageWidth), (size_t)0x28);
+    CHECK_EQ(offsetof(TutorialImageToolbarIcon, _toolbarRef), (size_t)0x40);
+}

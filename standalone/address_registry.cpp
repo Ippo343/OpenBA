@@ -124,10 +124,6 @@ extern "C" {
     // Factory cascade — External-resource family (Object::External, 9-slot
     // vtables w/ GetFileVersion @ +0x18; MusicList pattern). Tutorial types.
     void RegisterTutorialVtable();
-    void RegisterTutorialImageVtable();
-    void RegisterTutorialImageHotKeyVtable();
-    void RegisterTutorialImageInputKeyVtable();
-    void RegisterTutorialImageToolbarIconVtable();
     void RegisterTutorialStepVtable();
 
     // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
@@ -1786,10 +1782,6 @@ static void RegisterVtablesAndTypeIds() {
 
     // Factory cascade — External-resource family (MusicList pattern). Tutorial types.
     RegisterTutorialVtable();
-    RegisterTutorialImageVtable();
-    RegisterTutorialImageHotKeyVtable();
-    RegisterTutorialImageInputKeyVtable();
-    RegisterTutorialImageToolbarIconVtable();
     RegisterTutorialStepVtable();
 
     // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
