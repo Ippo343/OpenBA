@@ -27,6 +27,11 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/RadioElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -80,7 +85,7 @@ static void ToolbarDialog_CloseSubDialog_Impl(void* self) {
         *(int32_t*)(s + 0xF0) = -1;
         // Reset radio selection
         void* radioElem = *(void**)(s + 0xB8);
-        fn_RadioElement_SetActiveRadio(radioElem, -1);
+        reinterpret_cast<UI::RadioElement*>(radioElem)->SetActiveRadio(-1);  // B.3.6 bridge
     }
 }
 
@@ -1256,7 +1261,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
         // Add element as child of table at current buttonIndex
         void* elemPtr = newElement;
-        fn_TableElement_SetChild2(tableElement, &elemPtr, buttonIndex);
+        reinterpret_cast<UI::TableElement*>(tableElement)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&elemPtr), buttonIndex);  // B.3.6 bridge
 
         // Set element name from toolbar item's resource path.
         // `GetPath` returns by value through a hidden return slot and the callee
@@ -1400,7 +1405,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 #ifdef _DEBUG
                     Debug_ImageElement_SetSprite((void*)imageRef, sprCopy);
 #else
-                    fn_ImageElement_SetSprite((void*)imageRef, sprCopy);
+                    reinterpret_cast<UI::ImageElement*>((void*)imageRef)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprCopy));  // B.3.6 bridge
 #endif
                 }
 
@@ -1413,7 +1418,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     }
 
     // --- Step 8: Wire up radio button behavior ---
-    fn_RadioElement_FindCheckBoxes(*(void**)(s + 0xB8));
+    reinterpret_cast<UI::RadioElement*>(*(void**)(s + 0xB8))->FindCheckBoxes();  // B.3.6 bridge
 
     // --- Step 9: Populate speed values array {1, 2, 5, 10, 20, 50} ---
     *(int32_t*)(s + 0xF4) = 0; // currentSpeedIndex = 0
@@ -1589,7 +1594,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 
             // TextElement::SetParameter(textRef, 0, &fmtStr)
             if (textRef != 0) {
-                fn_TextElement_SetParameter((void*)textRef, 0, &fmtStr);
+                reinterpret_cast<UI::TextElement*>((void*)textRef)->SetParameter(0, fmtStr);  // B.3.6 bridge
             }
         }
     }

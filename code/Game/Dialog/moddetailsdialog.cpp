@@ -16,6 +16,9 @@
 //   +0x70: conflict array pointer (Filename*[])
 //   +0x78: conflict count (int)
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DocumentTextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -177,19 +180,19 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     // overload that used to be here dereferences its String* (READ of 0).
     uint8_t sprite[16];
     ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(void**)(s + 0xB8))), 0);  // B.3.6 bridge
-    fn_ImageElement_SetSprite(imageIcon, sprite);
+    reinterpret_cast<UI::ImageElement*>(imageIcon)->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
 
     // --- Set text parameters ---
     // Name (mod+0x00 = String)
-    fn_TextElement_SetParameter(textName, 0, (void*)m);
+    reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, *reinterpret_cast<const System::String*>((void*)m));  // B.3.6 bridge
 
     // Author (mod+0x08 = String)
-    fn_TextElement_SetParameter(textAuthor, 0, (void*)(m + 0x08));
+    reinterpret_cast<UI::TextElement*>(textAuthor)->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x08)));  // B.3.6 bridge
 
     // Path (mod+0x58 = String, dereference to char*)
     {
         System::String pathStr(*(const char**)(m + 0x58));
-        fn_TextElement_SetParameter(textPath, 0, &pathStr);
+        reinterpret_cast<UI::TextElement*>(textPath)->SetParameter(0, pathStr);  // B.3.6 bridge
     }
 
     // Version: "%i (%s)" with version number and version string
@@ -198,11 +201,11 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
         fn_Configuration_GetVersionString(&versionStr, *(uint32_t*)(m + 0x18), false);
         System::String formatted = System::String::Format("%i (%s)", (uint64_t)*(uint32_t*)(m + 0x1c),
                          versionStr._data);
-        fn_TextElement_SetParameter(textVersion, 0, &formatted);
+        reinterpret_cast<UI::TextElement*>(textVersion)->SetParameter(0, formatted);  // B.3.6 bridge
     }
 
     // Description (mod+0x10 = String)
-    fn_TextElement_SetParameter(textDescription, 0, (void*)(m + 0x10));
+    reinterpret_cast<UI::TextElement*>(textDescription)->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x10)));  // B.3.6 bridge
 
     // --- Build conflict list markup ---
     int conflictCount = *(int*)(m + 0x78);
@@ -245,7 +248,7 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
         reinterpret_cast<UI::Element*>(textConflictList)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     } else {
         // Set conflict list text (DocumentTextElement)
-        fn_DocumentTextElement_SetText(textConflictList, &conflictResult);
+        reinterpret_cast<UI::DocumentTextElement*>(textConflictList)->SetText(conflictResult);  // B.3.6 bridge
     }
 
     // --- Build resource list ---
@@ -329,7 +332,7 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     {
         char* data = (char*)*(void**)resArray;
         System::String resultStr(data ? data : "");
-        fn_DocumentTextElement_SetText(textResourceList, &resultStr);
+        reinterpret_cast<UI::DocumentTextElement*>(textResourceList)->SetText(resultStr);  // B.3.6 bridge
     }
 
     // Free resource array buffer

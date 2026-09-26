@@ -31,6 +31,11 @@
 //   +0x150 buttonCancel (InternalBasePtr)
 //   +0x158 buttonDelete (InternalBasePtr)
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/PageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -176,7 +181,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
 
     // Set table size: (totalSlots/3 + 1) rows, 3 columns
     void* tableElem = *(void**)(s + 0x108);
-    fn_TableElement_SetSize(tableElem, totalSlots / 3 + 1, 3);
+    reinterpret_cast<UI::TableElement*>(tableElem)->SetSize(totalSlots / 3 + 1, 3);  // B.3.6 bridge
 
     float uvScale = g_fUVScale ? *g_fUVScale : 1.0f;
     void* saveLoad = *g_pSaveLoadSingleton;
@@ -199,7 +204,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         void* clonedElem = *(void**)cloneBuf;
 
         // Add cloned element to table at index i
-        fn_TableElement_SetChild2(*(void**)(s + 0x108), &clonedElem, i);
+        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0x108))->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&clonedElem), i);  // B.3.6 bridge
 
         // Initialize entry struct (8 fields, all zero initially)
         uint64_t entry[8] = {};
@@ -227,7 +232,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             uint8_t sprite[16];
             memcpy(sprite, saveInfo, 16);
 
-            fn_ImageElement_SetSprite((void*)entry[2], sprite);
+            reinterpret_cast<UI::ImageElement*>((void*)entry[2])->SetSprite(reinterpret_cast<const UI::Sprite*>(sprite));  // B.3.6 bridge
 
             // Hide imageCorrupt overlay
             reinterpret_cast<UI::Element*>((void*)entry[4])->SetFlagsOnOff(1, 0);  // B.3.6 bridge
@@ -328,7 +333,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
             uint8_t spriteBuf[16] = {};
             ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(sheetFinal)), 0);  // B.3.6 bridge
 
-            fn_ImageElement_SetSprite((void*)entry[2], spriteBuf);
+            reinterpret_cast<UI::ImageElement*>((void*)entry[2])->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
             entry[7] = (uint64_t)sheetFinal;
 
@@ -348,7 +353,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                 // Valid save: show formatted date string
                 System::String dateStr;
                 fn_DateTime_AsString((void*)((uintptr_t)saveInfo + 0x30), &dateStr);
-                fn_TextElement_SetParameter((void*)entry[1], 0, &dateStr);
+                reinterpret_cast<UI::TextElement*>((void*)entry[1])->SetParameter(0, dateStr);  // B.3.6 bridge
             } else {
                 // Corrupt save: show "Corrupt" text from string table
                 System::String corruptKey("Corrupt");
@@ -357,12 +362,11 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
                 ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(keyMapObj + 0xD8))), corruptKey);  // B.3.6 bridge
                 System::String sysStr;
                 ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
-                fn_TextElement_SetParameter((void*)entry[1], 0, &sysStr);
+                reinterpret_cast<UI::TextElement*>((void*)entry[1])->SetParameter(0, sysStr);  // B.3.6 bridge
             }
 
             // Set save name: saveInfo+0x10 is the name String
-            fn_TextElement_SetParameter((void*)entry[0], 0,
-                                         (void*)((uintptr_t)saveInfo + 0x10));
+            reinterpret_cast<UI::TextElement*>((void*)entry[0])->SetParameter(0, *reinterpret_cast<const System::String*>((void*)((uintptr_t)saveInfo + 0x10)));  // B.3.6 bridge
         }
 
         // Push entry into array at +0x110.
@@ -392,7 +396,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
         void* clonedElem = *(void**)cloneBuf;
 
         // Add to table
-        fn_TableElement_SetChild2(*(void**)(s + 0x108), &clonedElem, i);
+        reinterpret_cast<UI::TableElement*>(*(void**)(s + 0x108))->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(&clonedElem), i);  // B.3.6 bridge
 
         // Initialize empty entry struct
         uint64_t entry[8] = {};
@@ -528,7 +532,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
     if (operation == 0 && !anyFlagsSet) {
         // --- IDLE STATE: show main page, update buttons and entry list ---
         void* pageElem = (void*)*(uint64_t*)(s + 0xF0);
-        if (pageElem) fn_PageElement_SetActivePage(pageElem, 1);
+        if (pageElem) reinterpret_cast<UI::PageElement*>(pageElem)->SetActivePage(1);  // B.3.6 bridge
 
         // Enable/disable buttonLoad based on selected save validity
         int selectedIdx = *(int*)(s + 0xC0);
@@ -601,11 +605,11 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
     // --- OPERATION IN PROGRESS: show loading page ---
     // Rotate loading spinner image
     void* spinnerImg = (void*)*(uint64_t*)(s + 0x138);
-    if (spinnerImg) fn_ImageElement_SetRotation(spinnerImg, *(float*)(s + 0xC8));
+    if (spinnerImg) reinterpret_cast<UI::ImageElement*>(spinnerImg)->SetRotation(*(float*)(s + 0xC8));  // B.3.6 bridge
 
     // Switch to loading page (page 0)
     void* pageElemOp = (void*)*(uint64_t*)(s + 0xF0);
-    if (pageElemOp) fn_PageElement_SetActivePage(pageElemOp, 0);
+    if (pageElemOp) reinterpret_cast<UI::PageElement*>(pageElemOp)->SetActivePage(0);  // B.3.6 bridge
 
     // Disable all four buttons
     {
@@ -1117,8 +1121,8 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         new (&textPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(textElem));   // B.3.3 bridge
 
         // SetParameter(0) = mod name, SetParameter(1) = mod name (again, as per decompilation)
-        fn_TextElement_SetParameter((void*)textPtr, 0, modNameStr);
-        fn_TextElement_SetParameter((void*)textPtr, 1, (void*)((uintptr_t)modNameStr + 8));
+        reinterpret_cast<UI::TextElement*>((void*)textPtr)->SetParameter(0, *reinterpret_cast<const System::String*>(modNameStr));  // B.3.6 bridge
+        reinterpret_cast<UI::TextElement*>((void*)textPtr)->SetParameter(1, *reinterpret_cast<const System::String*>((void*)((uintptr_t)modNameStr + 8)));  // B.3.6 bridge
 
         // SetParameter(2) = formatted version string "%i (%s)"
         // saveInfo+0x14 = isBeta (uint, sub-field), saveInfo+0x18 = version int
@@ -1130,7 +1134,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         System::String verStrBuf;
         fn_Configuration_GetVersionString(&verStrBuf, isBeta, (bool)(isBeta != 0));
         System::String fmtBuf = System::String::Format("%i (%s)", (unsigned)modVer, verStrBuf._data);
-        fn_TextElement_SetParameter((void*)textPtr, 2, &fmtBuf);
+        reinterpret_cast<UI::TextElement*>((void*)textPtr)->SetParameter(2, fmtBuf);  // B.3.6 bridge
 
         // Show the warning dialog and check if user confirmed.
         // Retail (0x1400b61e0) copies the dialog InternalPtr into a scratch slot,

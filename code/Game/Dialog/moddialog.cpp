@@ -33,6 +33,9 @@
 // ENDGAME B.3.5 batch K1: the runtime type headers come FIRST — they reach
 // runtime/types/volume/Volume.h, whose global-scope `struct Rectangle` is hidden by
 // <wingdi.h>'s `Rectangle()` once <windows.h> has been seen through resolve.h.
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -166,11 +169,11 @@ static void ModDialog_RefreshDisplay_Impl(ModDialog* self) {
 conflict_done:
 
         // Set text parameters: name, author, description
-        fn_TextElement_SetParameter(*(void**)(entry + 0x00), 0, (void*)m);  // mod->m_name
+        reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x00))->SetParameter(0, *reinterpret_cast<const System::String*>((void*)m));  // B.3.6 bridge; mod->m_name
 
-        fn_TextElement_SetParameter(*(void**)(entry + 0x08), 0, (void*)(m + 0x08));  // mod->m_author
+        reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x08))->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x08)));  // B.3.6 bridge; mod->m_author
 
-        fn_TextElement_SetParameter(*(void**)(entry + 0x18), 0, (void*)(m + 0x10));  // mod->m_description
+        reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x18))->SetParameter(0, *reinterpret_cast<const System::String*>((void*)(m + 0x10)));  // B.3.6 bridge; mod->m_description
 
         // Format version string: "versionMinor (versionString)"
         {
@@ -183,7 +186,7 @@ conflict_done:
 
             System::String formatted = System::String::Format("%i (%s)", (uint64_t)versionMinor, buildStr._data);
 
-            fn_TextElement_SetParameter(*(void**)(entry + 0x10), 0, &formatted);
+            reinterpret_cast<UI::TextElement*>(*(void**)(entry + 0x10))->SetParameter(0, formatted);  // B.3.6 bridge
         }
 
         // Set enabled checkbox state: entry+0x28 = checkLoaded, element +0xD8 = enabled byte
@@ -485,7 +488,7 @@ void ModDialog_Slot4(ModDialog* self) {
             uint8_t spriteBuf[16];
             ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(sprSheet)), 0);  // B.3.6 bridge
             void* imageIconElem = *(void**)imageIconBuf;
-            fn_ImageElement_SetSprite(imageIconElem, spriteBuf);
+            reinterpret_cast<UI::ImageElement*>(imageIconElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
         }
 
         // Push entry into self->m_entries (array at +0xB8, count at +0xC0)

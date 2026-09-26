@@ -1,3 +1,6 @@
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/EditElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -140,14 +143,14 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         // B.3.1 bridge: raw exe-struct SystemString field, not owned here.
         System::String nameBuf(*reinterpret_cast<System::String*>((uintptr_t)gameWorld + 0x28));
         void* editName = *(void**)(s + 0xB8);
-        if (editName) fn_EditElement_SetText_SysStr(editName, &nameBuf);
+        if (editName) reinterpret_cast<UI::EditElement*>(editName)->SetText(nameBuf);  // B.3.6 bridge
     }
 
     // Set seed on numberSeed
     {
         int seed = *(int*)(gw + 0x30);
         void* numberSeed = *(void**)(s + 0xC0);
-        if (numberSeed) fn_NumberElement_SetValueInt(numberSeed, seed);
+        if (numberSeed) reinterpret_cast<UI::NumberElement*>(numberSeed)->SetValue(static_cast<int32_t>(seed));  // B.3.6 bridge
     }
 
     // Set the text fields. Retail uses TWO different UI::String constructors here
@@ -170,7 +173,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         if (desc && textElem) {
             uint8_t uiStr[16] = {0};
             ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
-            fn_TextElement_SetText(textElem, uiStr);
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -181,7 +184,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         if (desc && textElem) {
             uint8_t uiStr[16] = {0};
             ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
-            fn_TextElement_SetText(textElem, uiStr);
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -195,7 +198,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
             uint8_t uiStr[16] = {0};
             memcpy(uiStr, (void*)(elem + 0xd8), 8);       // ExternalPtr<StringTable>
             *(uint32_t*)(uiStr + 8) = terrainSize;         // int index
-            fn_TextElement_SetText(textElem, uiStr);
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -206,7 +209,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
         if (desc && textElem) {
             uint8_t uiStr[16] = {0};
             ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(desc + 0x20))), *reinterpret_cast<const System::String*>((void*)(desc + 0x28)));  // B.3.6 bridge
-            fn_TextElement_SetText(textElem, uiStr);
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 
@@ -220,7 +223,7 @@ void MapParamsDialog_Startup(MapParamsDialog* self) {
             uint8_t uiStr[16] = {0};
             memcpy(uiStr, (void*)(elem + 0xd8), 8);
             *(uint32_t*)(uiStr + 8) = disasterEnabled;
-            fn_TextElement_SetText(textElem, uiStr);
+            reinterpret_cast<UI::TextElement*>(textElem)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
         }
     }
 }
@@ -323,7 +326,7 @@ void MapParamsDialog_OnEvent(MapParamsDialog* self, void* element, int eventType
                     nameBuf += "e";
                 }
             }
-            fn_EditElement_SetText_SysStr(editName, &nameBuf);
+            reinterpret_cast<UI::EditElement*>(editName)->SetText(nameBuf);  // B.3.6 bridge
         }
     }
 }
