@@ -81,18 +81,14 @@ extern "C" {
     void RegisterBuildDescriptionVtable();
     void RegisterUIDescriptionVtable();
     void RegisterToolbarDescriptionVtable();
-    void RegisterParticleDescriptionVtable();
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
     // wave 2 (economy / farming / services / tools)
     void RegisterCaptureBoxDescriptionVtable();
-    void RegisterConsumeProduceDescriptionVtable();
     void RegisterEnvironmentDescriptionVtable();
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
     void RegisterFireComponentVtable();
     void RegisterFrustumOutlineDescriptionVtable();
-    void RegisterImmigrationDescriptionVtable();
-    void RegisterRawMaterialDescriptionVtable();
     void RegisterTradeDescriptionVtable();
     void RegisterWellDescriptionVtable();
     void RegisterAnimAudioEventVtable();
@@ -1752,17 +1748,13 @@ static void RegisterVtablesAndTypeIds() {
     RegisterBuildDescriptionVtable();
     RegisterUIDescriptionVtable();
     RegisterToolbarDescriptionVtable();
-    RegisterParticleDescriptionVtable();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
     // wave 2 (economy / farming / services / tools)
     RegisterCaptureBoxDescriptionVtable();
-    RegisterConsumeProduceDescriptionVtable();
     RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
     RegisterFireComponentVtable();
     RegisterFrustumOutlineDescriptionVtable();
-    RegisterImmigrationDescriptionVtable();
-    RegisterRawMaterialDescriptionVtable();
     RegisterTradeDescriptionVtable();
     RegisterWellDescriptionVtable();
 

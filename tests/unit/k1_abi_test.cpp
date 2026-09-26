@@ -91,6 +91,11 @@
 #include "Component/DecalDescription.h"
 #include "Component/ModelDescription.h"
 #include "Component/StorageDescription.h"
+#include "Component/ParticleDescription.h"
+#include "Component/ImmigrationDescription.h"
+#include "Component/ConsumeProduceDescription.h"
+#include "RawMaterialDescription.h"          // engine/types forwarder (B8-4)
+#include "DiseaseComponent.h"                // engine/types: its DiseaseDescription forwards
 
 namespace {
 
@@ -216,6 +221,18 @@ UNIT_TEST(k1_render_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<DecalDescription>(0x50), 0);
     CHECK_EQ(CheckDescriptionLeaf<ModelDescription>(0x40), 0);
     CHECK_EQ(CheckDescriptionLeaf<StorageDescription>(0x40), 0);
+}
+
+UNIT_TEST(k1_production_description_leaves) {
+    CHECK_EQ(CheckDescriptionLeaf<ParticleDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ImmigrationDescription>(0x68), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ConsumeProduceDescription>(0x58), 0);
+    CHECK_EQ(CheckDescriptionLeaf<RawMaterialDescription>(0x60), 0);
+    // The two engine/types PODs are forwarders: their old field names still
+    // address the retail offsets (the unconverted readers' spelling).
+    CHECK_EQ(offsetof(RawMaterialDescription, _weight), (size_t)0x48);
+    CHECK_EQ(offsetof(RawMaterialDescription, _flags), (size_t)0x5c);
+    CHECK_EQ(offsetof(DiseaseDescription, spreadRadius), (size_t)0x40);
 }
 
 }  // namespace
