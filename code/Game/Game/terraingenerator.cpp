@@ -193,10 +193,6 @@ Object::Base* TerrainGenerator::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [4] PORT GAP (B38 D3.1): retail's slot is the imported Object::External::Compile;
-// the old table held a `return 0` stub. Kept until the family's titled commit.
-Object::External::CompileResult TerrainGenerator::Compile(const System::Filename&) { return 0; }
-
 // ============================================================
 // TerrainGenerator::Reconstruct (vtable +0x30, Slot6)
 // ============================================================
@@ -207,9 +203,9 @@ Object::External* TerrainGenerator::Reconstruct() {
     return ::new (static_cast<void*>(this)) TerrainGenerator();
 }
 
-// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
-// table held a `return 0` stub. Kept until the family's titled commit.
-void TerrainGenerator::Destruct() {}
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void TerrainGenerator::Destruct() { DeletingDtor(0); }
 
 // ============================================================
 // TerrainGenerator::Serialize (vtable +0x28, Slot5)

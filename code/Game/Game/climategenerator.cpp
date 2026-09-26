@@ -70,10 +70,6 @@ Object::Base* ClimateGenerator::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [4] PORT GAP (B38 D3.1): retail's slot is the imported Object::External::Compile;
-// the old table held a `return 0` stub. Kept until the family's titled commit.
-Object::External::CompileResult ClimateGenerator::Compile(const System::Filename&) { return 0; }
-
 // ============================================================
 // ClimateGenerator::Reconstruct (vtable +0x30, Slot6) -- Reset to defaults
 // ============================================================
@@ -84,9 +80,9 @@ Object::External* ClimateGenerator::Reconstruct() {
     return ::new (static_cast<void*>(this)) ClimateGenerator();
 }
 
-// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
-// table held a `return 0` stub. Kept until the family's titled commit.
-void ClimateGenerator::Destruct() {}
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void ClimateGenerator::Destruct() { DeletingDtor(0); }
 
 // ============================================================
 // ClimateGenerator::Serialize (vtable +0x28, Slot5)

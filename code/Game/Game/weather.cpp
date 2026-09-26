@@ -80,9 +80,9 @@ Object::External* Weather::Reconstruct() {
     return ::new (static_cast<void*>(this)) Weather();
 }
 
-// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
-// table's slot was null. Kept until the family's titled commit.
-void Weather::Destruct() {}
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void Weather::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140024ff0 — the in-place ctor (placement-new of the class on `this`).
 Object::External* Weather::Construct() {

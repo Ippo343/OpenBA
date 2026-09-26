@@ -38,7 +38,7 @@ public:
     CompileResult Compile(const System::Filename&) override { return 1; }   // [4] 0x1400a3620
     bool Serialize(void* stream) override;                        // [5] 0x1400a3630
     Object::External* Reconstruct() override;                     // [6] 0x14001b810
-    void Destruct() override;                                     // [7] 0x140001640 PORT GAP
+    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
     virtual Object::External* Construct();                        // [8] 0x14001b800
 
 protected:

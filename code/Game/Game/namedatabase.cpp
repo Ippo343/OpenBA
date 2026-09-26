@@ -140,9 +140,9 @@ Object::External* NameDatabase::Reconstruct() {
     return ::new (static_cast<void*>(this)) NameDatabase();
 }
 
-// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
-// table held a `return 0` stub. Kept until the family's titled commit.
-void NameDatabase::Destruct() {}
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void NameDatabase::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14001c6d0 — placement-new of the class on `this`.
 Object::External* NameDatabase::Construct() {

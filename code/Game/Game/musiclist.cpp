@@ -260,9 +260,9 @@ Object::External* MusicList::Reconstruct() {
     return ::new (static_cast<void*>(this)) MusicList();
 }
 
-// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
-// table's slot was null. Kept until the family's titled commit.
-void MusicList::Destruct() {}
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void MusicList::Destruct() { DeletingDtor(0); }
 
 // ============================================================
 // MusicList::Construct (vtable +0x40, exe 0x14001c2c0) — in-place init

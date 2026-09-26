@@ -37,7 +37,7 @@ public:
     // [4] Compile: inherited (retail's slot is the import; the old table's was null)
     bool Serialize(void* stream) override;                        // [5] 0x1400d2010
     Object::External* Reconstruct() override;                     // [6] 0x140024bf0
-    void Destruct() override;                                     // [7] 0x140001640 PORT GAP
+    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
     virtual Object::External* Construct();                        // [8] 0x140024be0
 
 protected:

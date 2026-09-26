@@ -130,9 +130,9 @@ Object::External* Toolbar::Reconstruct() {
     return ::new (static_cast<void*>(this)) Toolbar();
 }
 
-// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
-// table's slot was null. Kept until the family's titled commit.
-void Toolbar::Destruct() {}
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void Toolbar::Destruct() { DeletingDtor(0); }
 
 // ============================================================
 // Toolbar::Construct (vtable +0x40)

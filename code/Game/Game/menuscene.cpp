@@ -191,9 +191,9 @@ Object::External* MenuScene::Reconstruct() {
     return ::new (static_cast<void*>(this)) MenuScene();
 }
 
-// [7] 0x140001640 — PORT GAP (B38 D3.2): retail runs DeletingDtor(0); the old
-// table held a `return 0` stub. Kept until the family's titled commit.
-void MenuScene::Destruct() {}
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void MenuScene::Destruct() { DeletingDtor(0); }
 
 // ============================================================
 // MenuScene::Serialize (vtable +0x28, Slot5)

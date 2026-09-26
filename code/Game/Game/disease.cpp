@@ -55,10 +55,6 @@ Object::Base* Disease::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [4] PORT GAP (B38 D3.1): retail's slot is the imported Object::External::Compile;
-// the old table held a `return 0` stub. Kept until the family's titled commit.
-Object::External::CompileResult Disease::Compile(const System::Filename&) { return 0; }
-
 // [5] 0x1400932d0 — returns AL=1.
 bool Disease::Serialize(void* stream) {
     alignas(8) uint8_t serializer[24];
@@ -76,11 +72,16 @@ bool Disease::Serialize(void* stream) {
     return true;
 }
 
-// [6] 0x1400190a0 / [7] 0x140001640 — PORT GAP (B38 D3.2): retail destroys and
-// reconstructs in place / runs DeletingDtor(0); the old table held `return 0`
-// stubs. Kept until the family's titled commit.
-Object::External* Disease::Reconstruct() { return nullptr; }
-void              Disease::Destruct() {}
+// [6] 0x1400190a0 — slot 0 with flags 0 (destroy, no free), then the ctor
+// again in place (retail inlines the ctor: External(), stamp, the defaults).
+Object::External* Disease::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) Disease();
+}
+
+// [7] 0x140001640 — the shared body `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`:
+// slot 0 with flags 0 (destroy, no free).
+void Disease::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140019040 — placement-new of the class on `this` (the old table's
 // CreateInPlace, the same behaviour).

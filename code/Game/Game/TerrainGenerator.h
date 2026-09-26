@@ -29,10 +29,10 @@ public:
 
     Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x140020600
     int32_t GetFileVersion() const override { return 4; }         // [3] 0x1400b1800
-    CompileResult Compile(const System::Filename& path) override; // [4] PORT GAP (tree stub; retail inherits)
+    // [4] Compile: inherited (retail's slot is the Object::External import)
     bool Serialize(void* stream) override;                        // [5] 0x1400b1690
     Object::External* Reconstruct() override;                     // [6] 0x1400205e0
-    void Destruct() override;                                     // [7] 0x140001640 PORT GAP
+    void Destruct() override;                                     // [7] 0x140001640 DeletingDtor(0)
     virtual Object::External* Construct();                        // [8] 0x1400205d0
 
 protected:
