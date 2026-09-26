@@ -27,147 +27,132 @@
 //
 // Field knowledge harvested from engine/reimpl/environmentdescription.cpp.
 // Decompiled from Application-x64.exe (READ-ONLY recon).
+//
+// ENDGAME B.3.8 K1: a REAL class (EnvironmentDescription.h) with a
+// compiler-generated 9-slot vtable. The hand-built 11-slot table (slot 8 holding
+// createInPlace, two guard slots past retail's end) and its
+// RegisterExeAddr(0x14015e1f0) row are gone: nothing in the tree reads that
+// address back (B38_RULES D5).
 
+#include "Component/EnvironmentDescription.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
+#include "io/Serializer.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "Object/factory_registration.h"
+#include <cstring>
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kEnvironmentDescriptionVtable = 0x14015e1f0;
+namespace {
+// The retail ctor stores raw IEEE bit patterns; this keeps them exact.
+inline float FloatBits(uint32_t bits) { float f; std::memcpy(&f, &bits, sizeof f); return f; }
+}  // namespace
 
-static void EnvironmentDescription_InitWeatherDefaults(uint8_t* s) {
-    uint32_t* w = (uint32_t*)(s + 0x38);
-    for (int i = 0; i < 12; ++i) {
-        w[0] = 0xff595965;  // Color ambient sky
-        w[1] = 0xffcbcbbc;  // Color ambient ground
-        w[2] = 0xffbfbff2;  // Color ambient fog
-        w[3] = 0x42b40000;  // float fog start = 90.0f
-        w[4] = 0x43610000;  // float fog end = 225.0f
-        w[5] = 0x3f733333;  // float sun intensity = 0.95f
-        w[6] = 0x42f00000;  // float sun angle = 120.0f
-        w[7] = 0x42820000;  // float sun spread = 65.0f
-        w += 8;             // advance 0x20 bytes
+// ctor 0x1400941c0 (called by create 0x140019120 / createInPlace 0x140019160):
+// `??0External@Object@@`, the stamp (the compiler's), then the defaults. The 12
+// monthly entries all start from the same lighting.
+EnvironmentDescription::EnvironmentDescription()
+    : Object::External(),
+      _environmentRef(nullptr),
+      _weatherArray(nullptr),
+      _weatherCount(0),
+      _weatherCap(0) {
+    for (WeatherEntry& w : _months) {
+        w.skyColor     = 0xff595965;
+        w.groundColor  = 0xffcbcbbc;
+        w.fogColor     = 0xffbfbff2;
+        w.fogStart     = 90.0f;
+        w.fogEnd       = 225.0f;
+        w.sunIntensity = FloatBits(0x3f733333);   // 0.95f
+        w.sunAngle     = 120.0f;
+        w.sunSpread    = 65.0f;
     }
 }
 
-static void EnvironmentDescription_Init(void* self) {
-    fn_External_External(self);
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kEnvironmentDescriptionVtable);
-    *(void**)self = s_vtable;
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x20) = 0;   // ExternalPtr
-    *(uint64_t*)(s + 0x28) = 0;   // array base
-    *(uint64_t*)(s + 0x30) = 0;   // count (+cap)
-    EnvironmentDescription_InitWeatherDefaults(s);
+// dtor (slot 0 0x140019190 minus the stamps): free the dynamic weather array.
+// The compiler then runs ~External.
+EnvironmentDescription::~EnvironmentDescription() {
+    if (fn_MemFreeStatic && _weatherArray) fn_MemFreeStatic(_weatherArray);
+    _weatherArray = nullptr;
+    _weatherCount = 0;
+    _weatherCap = 0;
 }
 
-void EnvironmentDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
+// [0] 0x140019190: ~EnvironmentDescription -> ~External, MemFree on &1.
+Object::Base* EnvironmentDescription::DeletingDtor(unsigned flags) {
+    this->~EnvironmentDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// [5] 0x140094040.
+bool EnvironmentDescription::Serialize(void* stream) {
+    // standalone: the two weather doors are unwired (see the banner).
     if (!fn_ExternalPtr_BuildSerialize || !fn_WeatherResize || !fn_WeatherExternalSerialize) {
-        return;
+        return true;
     }
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
 
-    fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
+    fn_ExternalPtr_BuildSerialize(&_environmentRef, &ser);   // ExternalPtr +0x20
 
-    uint32_t count = *(uint32_t*)(s + 0x30);
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(&count), nullptr);       // B.3.4 bridge  (int count +0x30)
+    // count through a local (the resize below owns +0x30)
+    uint32_t count = _weatherCount;
+    ser.Serialize(*reinterpret_cast<int*>(&count), nullptr);
 
     // On load: resize the dynamic weather-entry array.
-    if (static_cast<int>(reinterpret_cast<IO::Serializer*>(serializer)->GetDirection()) == 0) {   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-        fn_WeatherResize(s + 0x28, (int)count);
+    if (static_cast<int>(ser.GetDirection()) == 0) {   // IO::Serializer::GetDirection, retail 0x180006210
+        fn_WeatherResize(&_weatherArray, (int)count);
     }
 
-    uintptr_t* arrPtr = *(uintptr_t**)(s + 0x28);
+    uintptr_t* arrPtr = static_cast<uintptr_t*>(_weatherArray);
     for (uint32_t i = 0; i < count; ++i) {
-        fn_WeatherExternalSerialize(arrPtr, serializer);
-        fn_ExternalPtr_BuildSerialize(arrPtr + 1, serializer);
+        fn_WeatherExternalSerialize(arrPtr, &ser);
+        fn_ExternalPtr_BuildSerialize(arrPtr + 1, &ser);
         arrPtr += 2;   // 16-byte entries
     }
 
-    // 12 inline weather entries @ +0x38, each 0x20 bytes: 3 Colors + 5 floats (all 4-byte).
-    uintptr_t entry = (uintptr_t)s + 0x38;
-    for (int i = 0; i < 12; ++i) {
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x00), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x04), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x08), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x0c), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x10), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x14), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x18), nullptr);   // B.3.4 bridge
-        reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(entry + 0x1c), nullptr);   // B.3.4 bridge
-        entry += 0x20;
+    // 12 inline weather entries @ +0x38, each 0x20 bytes: 3 Colors + 5 floats,
+    // all through the 4-byte int door.
+    for (WeatherEntry& w : _months) {
+        ser.Serialize(*reinterpret_cast<int*>(&w.skyColor), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(&w.groundColor), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(&w.fogColor), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(&w.fogStart), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(&w.fogEnd), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(&w.sunIntensity), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(&w.sunAngle), nullptr);
+        ser.Serialize(*reinterpret_cast<int*>(&w.sunSpread), nullptr);
     }
-
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
-void* EnvironmentDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kEnvironmentDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    if (fn_MemFreeStatic && *(void**)(s + 0x28)) {
-        fn_MemFreeStatic(*(void**)(s + 0x28));   // dynamic weather array
-    }
-    *(uint64_t*)(s + 0x28) = 0;
-    *(uint64_t*)(s + 0x30) = 0;
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140019170: retail destroys and rebuilds in place: a virtual DeletingDtor(0),
+// then the ctor again on `this` (D9 #10).
+Object::External* EnvironmentDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) EnvironmentDescription();
 }
 
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void EnvironmentDescription::Destruct() { DeletingDtor(0); }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t EnvironmentDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("EnvironmentDescription");
-    return cached;
+// [8] 0x140019160: placement-new on `this` (folded with createInPlace). The
+// hand-built table already held createInPlace here.
+Object::External* EnvironmentDescription::Construct() {
+    return new (this) EnvironmentDescription();
 }
 
-static int   EnvironmentDescription_VtblStub_Return7(void* /*self*/) { return 7; } // GetVersion
-static int   EnvironmentDescription_VtblStub_Return0(void* /*self*/) { return 0; }
-static void* EnvironmentDescription_VtblStub_ReturnNull(void*, ...)  { return nullptr; }
-
-static void* EnvironmentDescription_CreateInPlace(void* memory);
-
-static void* g_EnvironmentDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&EnvironmentDescription_Dtor),               // +0x00 Dtor
-    reinterpret_cast<void*>(&EnvironmentDescription_VtblStub_ReturnNull),// +0x08 Slot1
-    reinterpret_cast<void*>(&EnvironmentDescription_GetTypeId),          // +0x10 GetTypeId
-    reinterpret_cast<void*>(&EnvironmentDescription_VtblStub_Return7),   // +0x18 GetVersion
-    reinterpret_cast<void*>(&EnvironmentDescription_VtblStub_Return0),   // +0x20 Compile
-    reinterpret_cast<void*>(&EnvironmentDescription_Serialize),          // +0x28 Serialize
-    reinterpret_cast<void*>(&EnvironmentDescription_VtblStub_Return0),   // +0x30 Cleanup
-    reinterpret_cast<void*>(&EnvironmentDescription_VtblStub_Return0),   // +0x38 GetDesc
-    reinterpret_cast<void*>(&EnvironmentDescription_CreateInPlace),      // +0x40 CreateInPlace (this type's CreateInPlace is at +0x40)
-    reinterpret_cast<void*>(&EnvironmentDescription_VtblStub_ReturnNull),// +0x48
-    reinterpret_cast<void*>(&EnvironmentDescription_VtblStub_ReturnNull),// +0x50 (guard)
-};
-
-extern "C" void RegisterEnvironmentDescriptionVtable() {
-    RegisterExeAddr(kEnvironmentDescriptionVtable,
-                    reinterpret_cast<uintptr_t>(g_EnvironmentDescription_Vtable));
-}
-
-extern "C" void* EnvironmentDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x1b8, 8);
+// create 0x140019120: MemAlloc(0x1b8, 8), then the ctor.
+void* EnvironmentDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EnvironmentDescription), 8);
     if (!p) return nullptr;
-    EnvironmentDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) EnvironmentDescription());
+}
+// createInPlace 0x140019160.
+void* EnvironmentDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) EnvironmentDescription());
 }
 
-static void* EnvironmentDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    EnvironmentDescription_Init(memory);
-    return memory;
-}
-
-REGISTER_TYPE(EnvironmentDescription, "Object::External",
-              &EnvironmentDescription_Factory, &EnvironmentDescription_CreateInPlace);
-
+DEFINE_EXE_VTABLE(EnvironmentDescription, "_ZTV22EnvironmentDescription")
+DEFINE_EXE_TYPE(EnvironmentDescription, "Object::External")

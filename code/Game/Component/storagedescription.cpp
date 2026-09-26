@@ -18,25 +18,21 @@
 //   elem+0x08 : int32          (serialized as int)
 //
 // Decompiled from Application-x64.exe (READ-ONLY Ghidra).
+//
+// ENDGAME B.3.8 K1: a REAL class (StorageDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x1401647a0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/StorageDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
-#include <cstring>
 #include <new>
 
 namespace {
-constexpr uintptr_t kVtable = 0x1401647a0;
-
-// The enum field, through the UINT door. `serializerBuf + 8` was the
-// READERWRITER (IO::Serializer::_readerWriter), not an Encoding, and its
-// vtable +0x98 is rw_vtbl::kScalarUInt.
-void SerializeEnum(uint8_t* serializerBuf, void* field) {
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<unsigned int*>(field), nullptr);   // B.3.4 bridge  (0x98 = uint door)
-}
-
-// Fresh-load alloc for a dyn-array header {ptr@0,count@8,cap@0xC}; returns buffer.
+// {data, count, cap} header: set count = cap = n and allocate n * stride (8-aligned).
 void* AllocArray(void* header, int count, int stride) {
     uint8_t* h = reinterpret_cast<uint8_t*>(header);
     *(int32_t*)(h + 8) = count;
@@ -47,153 +43,99 @@ void* AllocArray(void* header, int count, int stride) {
     *(void**)h = buf;
     return buf;
 }
-} // namespace
+}  // namespace
 
-extern "C" void StorageDescription_Serialize(void* self, void* stream);
-extern "C" void* StorageDescription_Ctor_Impl(void* mem);
+// ctor (inlined into create 0x140038bb0 / createInPlace 0x140038c20):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+StorageDescription::StorageDescription()
+    : Description(),
+      _flagA(false),
+      _flagB(false),
+      _pickupValue(0),
+      _rawMaterialFlags(0),
+      _volumes(nullptr),
+      _volumeCount(0),
+      _volumeCap(0) {}
 
-// ============================================================
-// Ctor (factory body): External base init + vtable + defaults
-// ============================================================
-extern "C" void* StorageDescription_Ctor_Impl(void* mem) {
-    if (!mem) return nullptr;
-    if (fn_External_External) fn_External_External(mem);
-
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)mem = s_vtable;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(mem);
-    *(uint16_t*)(s + 0x20) = 0;   // flagA, flagB
-    *(uint64_t*)(s + 0x24) = 0;   // pickupValue (+0x24), enum (+0x28), pad
-    *(uint64_t*)(s + 0x30) = 0;   // volumeArray
-    *(uint64_t*)(s + 0x38) = 0;   // volumeCount + cap
-    return mem;
+// dtor (slot 0 0x140038cf0 minus the stamps): frees the volume array.
+// The compiler then chains ~Description -> ~External.
+StorageDescription::~StorageDescription() {
+    if (fn_MemFreeStatic && _volumes) fn_MemFreeStatic(_volumes);
+    _volumes = nullptr;
+    _volumeCount = 0;
+    _volumeCap = 0;
 }
 
-// ============================================================
-// Serialize (vtable +0x28, exe 0x14012c9a0)
-// ============================================================
-extern "C" void StorageDescription_Serialize(void* self, void* stream) {
-    if (!fn_ExternalPtr_Serialize2) {
-        return;
-    }
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+// [0] 0x140038cf0: ~StorageDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* StorageDescription::DeletingDtor(unsigned flags) {
+    this->~StorageDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
 
-    SerializeEnum(ser, s + 0x28);                          // rawMaterialFlags (enum)
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x20), nullptr);   // B.3.4 bridge (flagA)
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x21), nullptr);   // B.3.4 bridge (flagB)
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge (pickupValue)
-
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x38), nullptr);   // B.3.4 bridge (volumeCount)
-    int count = *(int32_t*)(s + 0x38);
-
-    bool loading = (static_cast<int>(reinterpret_cast<IO::Serializer*>(ser)->GetDirection()) == 0);   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+// [5] 0x14012c9a0: stream order as retail.
+bool StorageDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_Serialize2) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_rawMaterialFlags, nullptr);   // rawMaterialFlags (enum, uint door)
+    ser.Serialize(_flagA, nullptr);
+    ser.Serialize(_flagB, nullptr);
+    ser.Serialize(_pickupValue, nullptr);
+    
+    ser.Serialize(_volumeCount, nullptr);   // volumeCount
+    int count = _volumeCount;
+    
+    bool loading = (static_cast<int>(ser.GetDirection()) == 0);   // IO::Serializer::GetDirection, retail 0x180006210
     uint8_t* e;
     if (loading) {
-        e = reinterpret_cast<uint8_t*>(AllocArray(s + 0x30, count, 0x10));
+        e = reinterpret_cast<uint8_t*>(AllocArray(&_volumes, count, 0x10));
         for (int i = 0; i < count; ++i) {
             *(uint64_t*)(e + i * 0x10)       = 0;          // External* ref
             *(uint64_t*)(e + i * 0x10 + 8)   = 0;          // int (+pad)
         }
     } else {
-        e = *(uint8_t**)(s + 0x30);
+        e = static_cast<uint8_t*>(_volumes);
     }
     for (int i = 0; i < count; ++i, e += 0x10) {
-        reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // B.3.4 bridge (int field, elem+8)
-        fn_ExternalPtr_Serialize2(e, ser);                 // External* ref (elem+0)
+        ser.Serialize(*reinterpret_cast<int*>(e + 8), nullptr);   // int field, elem+8
+        fn_ExternalPtr_Serialize2(e, &ser);                        // External* ref (elem+0)
     }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
-// ============================================================
-// Dtor (vtable +0x00, exe 0x140038cf0)
-// ============================================================
-extern "C" void* StorageDescription_Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    static void* s_vtable = nullptr;
-    if (!s_vtable) s_vtable = (void*)ResolveAddr(Module::Exe, kVtable);
-    *(void**)self = s_vtable;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_MemFreeStatic && *(void**)(s + 0x30)) fn_MemFreeStatic(*(void**)(s + 0x30));
-    *(uint64_t*)(s + 0x30) = 0;
-    *(uint64_t*)(s + 0x38) = 0;
-
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x140038c80: DeletingDtor(0) (destroy in place), then the ctor again on
+// `this`. The hand-built table's Cleanup trampoline already did this.
+Object::External* StorageDescription::Reconstruct() {
+    DeletingDtor(0);
+    return new (static_cast<void*>(this)) StorageDescription();
 }
 
-// ============================================================
-// Cleanup (vtable +0x30, exe 0x140038c80): dtor(flags=0) then re-init
-// ============================================================
-extern "C" void StorageDescription_Cleanup(void* self) {
-    typedef void* (*fn_dtor_t)(void*, uint32_t);
-    fn_dtor_t dtor = *(fn_dtor_t*)(*(uintptr_t*)self);
-    if (dtor) dtor(self, 0);
-    StorageDescription_Ctor_Impl(self);
+// [7] 0x140001640: retail's shared body, a virtual DeletingDtor(0) (D9 #10).
+void StorageDescription::Destruct() { DeletingDtor(0); }
+
+// [8] 0x140038ce0: StorageComponent's type id through the hidden return slot.
+Object::Type* StorageDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("StorageComponent");
+    return ret;
 }
 
-// ============================================================
-// Slot8 (vtable +0x40, exe 0x140038ce0): reinit-in-place
-// ============================================================
-extern "C" void* StorageDescription_Slot8(void* self) {
-    if (!self) return nullptr;
-    StorageDescription_Ctor_Impl(self);
-    return self;
+// [9] 0x140038c20: placement-new on `this`, the same body as createInPlace (D9 #10).
+Object::External* StorageDescription::Construct() {
+    return new (static_cast<void*>(this)) StorageDescription();
 }
 
-// ============================================================
-// STANDALONE scaffolding
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t StorageDescription_GetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("StorageDescription");
-    return cached;
-}
-static int  StorageDescription_Ver(void*)        { return 2; }   // file version 2
-static int  StorageDescription_Ret0(void*)       { return 0; }
-static void* StorageDescription_RetNull(void*, ...) { return nullptr; }
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* StorageDescription_GetComponentTypeId(void*, void* out) {
-    return ::Object::WriteComponentTypeId(out, "StorageComponent");
-}
-
-static void* g_StorageDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&StorageDescription_Dtor),       // +0x00 Dtor
-    reinterpret_cast<void*>(&StorageDescription_RetNull),    // +0x08 GetTypeInfo
-    reinterpret_cast<void*>(&StorageDescription_GetTypeId),  // +0x10 GetTypeId
-    reinterpret_cast<void*>(&StorageDescription_Ver),        // +0x18 GetVersion (2)
-    reinterpret_cast<void*>(&StorageDescription_Ret0),       // +0x20 Compile (shared, unused on load)
-    reinterpret_cast<void*>(&StorageDescription_Serialize),  // +0x28 Serialize
-    reinterpret_cast<void*>(&StorageDescription_Cleanup),    // +0x30 Cleanup
-    reinterpret_cast<void*>(&StorageDescription_Ret0),       // +0x38 GetDesc (shared, unused on load)
-    reinterpret_cast<void*>(&StorageDescription_GetComponentTypeId), // +0x40 GetComponentTypeId
-    reinterpret_cast<void*>(&StorageDescription_RetNull),    // +0x48 over-read guard
-    reinterpret_cast<void*>(&StorageDescription_RetNull),    // +0x50 over-read guard
-};
-
-extern "C" void RegisterStorageDescriptionVtable() {
-    RegisterExeAddr(kVtable, reinterpret_cast<uintptr_t>(g_StorageDescription_Vtable));
-}
-
-extern "C" void* StorageDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x40, 8);
+// create 0x140038bb0: MemAlloc(0x40, 8), then the (inlined) ctor.
+void* StorageDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StorageDescription), 8);
     if (!p) return nullptr;
-    return StorageDescription_Ctor_Impl(p);
+    return static_cast<Object::Base*>(new (p) StorageDescription());
 }
-extern "C" void* StorageDescription_CreateInPlace(void* mem) {
-    return StorageDescription_Ctor_Impl(mem);
+// createInPlace 0x140038c20.
+void* StorageDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StorageDescription());
 }
 
-REGISTER_TYPE(StorageDescription, "Description",
-              &StorageDescription_Factory, &StorageDescription_CreateInPlace);
+DEFINE_EXE_VTABLE(StorageDescription, "_ZTV18StorageDescription")
+DEFINE_EXE_TYPE(StorageDescription, "Description")

@@ -1,0 +1,177 @@
+#pragma once
+// ============================================================================
+// code/Game/Component/CitizenDescription.h — ENDGAME B.3.8 K1 (B38_RULES.md D1-D5, §2.2)
+//
+// RETAIL (Application-x64.exe, B38_SLOTS.md §6):
+//   reflected "CitizenDescription", parent "Description", ti 0x1401c7190
+//   create 0x140030170: MemAlloc(0x148, 8), `??0External@Object@@`, the
+//   Description stamp, the leaf stamp, the field defaults. createInPlace 0x1400301b0.
+//   table 0x140162600, 10 slots:
+//     [0] 0x1400301f0 scalar deleting dtor   [1] 0x140030160 TypeName   [2] 0x140030150 Type
+//     [3] 0x140114e00 GetFileVersion = 17   [4] External::Compile (import, inherited)
+//     [5] 0x140114900 Serialize (`MOV AL,1`)
+//     [6] 0x1400301c0 Reconstruct   [7] 0x140001640 Destruct (shared)
+//     [8] 0x1400301e0 GetComponentType: CitizenComponent's TypeId
+//     [9] 0x1400301b0 Construct (folded with createInPlace)
+//   slot 0: the tree's hand-built slot 0 never ran ~External; the compiler chain now does (B38 D2, behaviour)
+//   sizeof 0x148.
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Component/Description.h"
+#include "Object/exe_type.h"
+
+class CitizenDescription final : public Description {
+    DECLARE_EXE_TYPE(CitizenDescription)
+
+public:
+    CitizenDescription();
+
+    Object::Base*     DeletingDtor(unsigned flags) override;               // [0] 0x1400301f0
+    int32_t           GetFileVersion() const override { return 17; }    // [3] 0x140114e00
+    bool              Serialize(void* stream) override;                    // [5] 0x140114900
+    Object::External* Reconstruct() override;                              // [6] 0x1400301c0
+    void              Destruct() override;                                 // [7] 0x140001640
+    Object::Type*     GetComponentType(Object::Type* ret) const override;  // [8] 0x1400301e0
+    virtual Object::External* Construct();                                 // [9] 0x1400301b0
+
+    // ---- fields (PUBLIC: the components read them at raw offsets today) ----
+    void* _professions[3];                      // +0x20 ExternalRef<Profession> x3 (0x140018020 serialize)
+    float _f38;                                 // +0x38
+    float _f3c;                                 // +0x3c
+    float _f40;                                 // +0x40
+    float _f44;                                 // +0x44
+    float _f48;                                 // +0x48
+    float _f4c;                                 // +0x4c
+    float _f50;                                 // +0x50
+    float _f54;                                 // +0x54
+    float _f58;                                 // +0x58
+    float _f5c;                                 // +0x5c
+    float _f60;                                 // +0x60
+    float _f64;                                 // +0x64
+    float _f68;                                 // +0x68
+    float _f6c;                                 // +0x6c
+    float _f70;                                 // +0x70
+    float _f74;                                 // +0x74
+    float _f78;                                 // +0x78
+    float _f7c;                                 // +0x7c
+    float _f80;                                 // +0x80
+    float _f84;                                 // +0x84
+    float _f88;                                 // +0x88
+    float _f8c;                                 // +0x8c
+    float _f90;                                 // +0x90
+    float _f94;                                 // +0x94
+    float _f98;                                 // +0x98
+    float _f9c;                                 // +0x9c
+    float _fa0;                                 // +0xa0
+    float _fa4;                                 // +0xa4
+    int32_t _ia8;                               // +0xa8
+    int32_t _iac;                               // +0xac
+    int32_t _ib0;                               // +0xb0
+    float _fb4;                                 // +0xb4
+    float _fb8;                                 // +0xb8
+    int32_t _ibc;                               // +0xbc
+    float _fc0;                                 // +0xc0
+    float _fc4;                                 // +0xc4
+    float _fc8;                                 // +0xc8
+    float _fcc;                                 // +0xcc
+    float _fd0;                                 // +0xd0
+    float _fd4;                                 // +0xd4
+    float _fd8;                                 // +0xd8
+    float _f3dc[3];                             // +0xdc float[3], bulk-serialized; each 10.0
+    float _fe8;                                 // +0xe8
+    float _fec;                                 // +0xec
+    float _ff0;                                 // +0xf0
+    float _ff4;                                 // +0xf4
+    int32_t _if8;                               // +0xf8
+    int32_t _ifc;                               // +0xfc
+    int32_t _i100;                              // +0x100
+    int32_t _i104;                              // +0x104
+    int32_t _i108;                              // +0x108
+    float _f10c;                                // +0x10c
+    int32_t _i110;                              // +0x110
+    float _f114;                                // +0x114
+    int32_t _i118;                              // +0x118
+    float _f11c;                                // +0x11c
+    float _f120;                                // +0x120
+    float _f124;                                // +0x124
+    float _f128;                                // +0x128
+    float _f12c;                                // +0x12c
+    float _f130;                                // +0x130
+    uint8_t _pad134[4];                         // +0x134 never written by the ctor
+    void* _refs;                                // +0x138 Array<External*> data (entries are non-owning)
+    int32_t _refCount;                          // +0x140 Array count
+    int32_t _refCap;                            // +0x144 Array capacity
+
+protected:
+    ~CitizenDescription();
+};
+
+static_assert(sizeof(CitizenDescription) == 0x148, "CitizenDescription is 0x148 (create 0x140030170 MemAlloc(0x148))");
+static_assert(alignof(CitizenDescription) == 8, "CitizenDescription alignment");
+static_assert(offsetof(CitizenDescription, _professions) == 0x20, "CitizenDescription::_professions @ +0x20");
+static_assert(offsetof(CitizenDescription, _f38) == 0x38, "CitizenDescription::_f38 @ +0x38");
+static_assert(offsetof(CitizenDescription, _f3c) == 0x3c, "CitizenDescription::_f3c @ +0x3c");
+static_assert(offsetof(CitizenDescription, _f40) == 0x40, "CitizenDescription::_f40 @ +0x40");
+static_assert(offsetof(CitizenDescription, _f44) == 0x44, "CitizenDescription::_f44 @ +0x44");
+static_assert(offsetof(CitizenDescription, _f48) == 0x48, "CitizenDescription::_f48 @ +0x48");
+static_assert(offsetof(CitizenDescription, _f4c) == 0x4c, "CitizenDescription::_f4c @ +0x4c");
+static_assert(offsetof(CitizenDescription, _f50) == 0x50, "CitizenDescription::_f50 @ +0x50");
+static_assert(offsetof(CitizenDescription, _f54) == 0x54, "CitizenDescription::_f54 @ +0x54");
+static_assert(offsetof(CitizenDescription, _f58) == 0x58, "CitizenDescription::_f58 @ +0x58");
+static_assert(offsetof(CitizenDescription, _f5c) == 0x5c, "CitizenDescription::_f5c @ +0x5c");
+static_assert(offsetof(CitizenDescription, _f60) == 0x60, "CitizenDescription::_f60 @ +0x60");
+static_assert(offsetof(CitizenDescription, _f64) == 0x64, "CitizenDescription::_f64 @ +0x64");
+static_assert(offsetof(CitizenDescription, _f68) == 0x68, "CitizenDescription::_f68 @ +0x68");
+static_assert(offsetof(CitizenDescription, _f6c) == 0x6c, "CitizenDescription::_f6c @ +0x6c");
+static_assert(offsetof(CitizenDescription, _f70) == 0x70, "CitizenDescription::_f70 @ +0x70");
+static_assert(offsetof(CitizenDescription, _f74) == 0x74, "CitizenDescription::_f74 @ +0x74");
+static_assert(offsetof(CitizenDescription, _f78) == 0x78, "CitizenDescription::_f78 @ +0x78");
+static_assert(offsetof(CitizenDescription, _f7c) == 0x7c, "CitizenDescription::_f7c @ +0x7c");
+static_assert(offsetof(CitizenDescription, _f80) == 0x80, "CitizenDescription::_f80 @ +0x80");
+static_assert(offsetof(CitizenDescription, _f84) == 0x84, "CitizenDescription::_f84 @ +0x84");
+static_assert(offsetof(CitizenDescription, _f88) == 0x88, "CitizenDescription::_f88 @ +0x88");
+static_assert(offsetof(CitizenDescription, _f8c) == 0x8c, "CitizenDescription::_f8c @ +0x8c");
+static_assert(offsetof(CitizenDescription, _f90) == 0x90, "CitizenDescription::_f90 @ +0x90");
+static_assert(offsetof(CitizenDescription, _f94) == 0x94, "CitizenDescription::_f94 @ +0x94");
+static_assert(offsetof(CitizenDescription, _f98) == 0x98, "CitizenDescription::_f98 @ +0x98");
+static_assert(offsetof(CitizenDescription, _f9c) == 0x9c, "CitizenDescription::_f9c @ +0x9c");
+static_assert(offsetof(CitizenDescription, _fa0) == 0xa0, "CitizenDescription::_fa0 @ +0xa0");
+static_assert(offsetof(CitizenDescription, _fa4) == 0xa4, "CitizenDescription::_fa4 @ +0xa4");
+static_assert(offsetof(CitizenDescription, _ia8) == 0xa8, "CitizenDescription::_ia8 @ +0xa8");
+static_assert(offsetof(CitizenDescription, _iac) == 0xac, "CitizenDescription::_iac @ +0xac");
+static_assert(offsetof(CitizenDescription, _ib0) == 0xb0, "CitizenDescription::_ib0 @ +0xb0");
+static_assert(offsetof(CitizenDescription, _fb4) == 0xb4, "CitizenDescription::_fb4 @ +0xb4");
+static_assert(offsetof(CitizenDescription, _fb8) == 0xb8, "CitizenDescription::_fb8 @ +0xb8");
+static_assert(offsetof(CitizenDescription, _ibc) == 0xbc, "CitizenDescription::_ibc @ +0xbc");
+static_assert(offsetof(CitizenDescription, _fc0) == 0xc0, "CitizenDescription::_fc0 @ +0xc0");
+static_assert(offsetof(CitizenDescription, _fc4) == 0xc4, "CitizenDescription::_fc4 @ +0xc4");
+static_assert(offsetof(CitizenDescription, _fc8) == 0xc8, "CitizenDescription::_fc8 @ +0xc8");
+static_assert(offsetof(CitizenDescription, _fcc) == 0xcc, "CitizenDescription::_fcc @ +0xcc");
+static_assert(offsetof(CitizenDescription, _fd0) == 0xd0, "CitizenDescription::_fd0 @ +0xd0");
+static_assert(offsetof(CitizenDescription, _fd4) == 0xd4, "CitizenDescription::_fd4 @ +0xd4");
+static_assert(offsetof(CitizenDescription, _fd8) == 0xd8, "CitizenDescription::_fd8 @ +0xd8");
+static_assert(offsetof(CitizenDescription, _f3dc) == 0xdc, "CitizenDescription::_f3dc @ +0xdc");
+static_assert(offsetof(CitizenDescription, _fe8) == 0xe8, "CitizenDescription::_fe8 @ +0xe8");
+static_assert(offsetof(CitizenDescription, _fec) == 0xec, "CitizenDescription::_fec @ +0xec");
+static_assert(offsetof(CitizenDescription, _ff0) == 0xf0, "CitizenDescription::_ff0 @ +0xf0");
+static_assert(offsetof(CitizenDescription, _ff4) == 0xf4, "CitizenDescription::_ff4 @ +0xf4");
+static_assert(offsetof(CitizenDescription, _if8) == 0xf8, "CitizenDescription::_if8 @ +0xf8");
+static_assert(offsetof(CitizenDescription, _ifc) == 0xfc, "CitizenDescription::_ifc @ +0xfc");
+static_assert(offsetof(CitizenDescription, _i100) == 0x100, "CitizenDescription::_i100 @ +0x100");
+static_assert(offsetof(CitizenDescription, _i104) == 0x104, "CitizenDescription::_i104 @ +0x104");
+static_assert(offsetof(CitizenDescription, _i108) == 0x108, "CitizenDescription::_i108 @ +0x108");
+static_assert(offsetof(CitizenDescription, _f10c) == 0x10c, "CitizenDescription::_f10c @ +0x10c");
+static_assert(offsetof(CitizenDescription, _i110) == 0x110, "CitizenDescription::_i110 @ +0x110");
+static_assert(offsetof(CitizenDescription, _f114) == 0x114, "CitizenDescription::_f114 @ +0x114");
+static_assert(offsetof(CitizenDescription, _i118) == 0x118, "CitizenDescription::_i118 @ +0x118");
+static_assert(offsetof(CitizenDescription, _f11c) == 0x11c, "CitizenDescription::_f11c @ +0x11c");
+static_assert(offsetof(CitizenDescription, _f120) == 0x120, "CitizenDescription::_f120 @ +0x120");
+static_assert(offsetof(CitizenDescription, _f124) == 0x124, "CitizenDescription::_f124 @ +0x124");
+static_assert(offsetof(CitizenDescription, _f128) == 0x128, "CitizenDescription::_f128 @ +0x128");
+static_assert(offsetof(CitizenDescription, _f12c) == 0x12c, "CitizenDescription::_f12c @ +0x12c");
+static_assert(offsetof(CitizenDescription, _f130) == 0x130, "CitizenDescription::_f130 @ +0x130");
+static_assert(offsetof(CitizenDescription, _refs) == 0x138, "CitizenDescription::_refs @ +0x138");
+static_assert(offsetof(CitizenDescription, _refCount) == 0x140, "CitizenDescription::_refCount @ +0x140");
+static_assert(offsetof(CitizenDescription, _refCap) == 0x144, "CitizenDescription::_refCap @ +0x144");
