@@ -1337,7 +1337,7 @@ namespace uistub_ToolUI {
     // reads (+0x41/+0x4D, both 0 unless Slot9 armed a drag). Guard the KeyMap
     // exref + the Runtime fns the drag path dereferences unconditionally.
     void Slot8(void* self, void* /*time*/) {
-        if (!self || !g_pKeyMapObjectExref || !*g_pKeyMapObjectExref
+        if (!self || !g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref
             || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
         ToolUI_Slot8(reinterpret_cast<ToolUI*>(self));
     }

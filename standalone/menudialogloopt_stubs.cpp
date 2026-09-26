@@ -643,8 +643,7 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     bool trace = (draws <= 3) || (draws % 200) == 0;
 
     // Use MainLoop singleton's m_context — populated by MainLoop ctor and
-    // unchanged for the run. (g_pEngineSingleton was captured at boot when
-    // the slot was still null, so it can't be read directly.)
+    // unchanged for the run.
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
     void* context = mainLoop
         ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(mainLoop) + 0x10)

@@ -77,8 +77,8 @@ inline float clampf(float v, float lo, float hi) {
 
 // KeyMap accessors (the triple-deref exref pattern, same as inputbindings.cpp).
 inline void* CamKeyMap() {
-    if (!g_pKeyMapObjectExref || !*g_pKeyMapObjectExref) return nullptr;
-    void* l2 = *(void**)*g_pKeyMapObjectExref;
+    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) return nullptr;
+    void* l2 = *(void**)*g_pInputConfigSingletonExref;
     if (!l2) return nullptr;
     return *(void**)l2;
 }

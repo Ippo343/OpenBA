@@ -128,7 +128,7 @@ void FencedTool_Shutdown2(FencedTool* self) {
 // Helper: get KeyMap from external reference
 // ============================================================
 static inline void* GetKeyMap() {
-    return ***(void****)g_pKeyMapObjectExref;
+    return ***(void****)g_pInputConfigSingletonExref;
 }
 
 // ============================================================
@@ -642,7 +642,7 @@ void FencedTool_Draw_Impl(FencedTool* self, void* context, char param3) {
     } else {
         // Get cell under cursor
         if (s_fn_GetCursorCell) {
-            startCell = s_fn_GetCursorCell((uint64_t)***(void****)g_pKeyMapObjectExref);
+            startCell = s_fn_GetCursorCell((uint64_t)***(void****)g_pInputConfigSingletonExref);
             endCell = startCell;
         } else {
             return;

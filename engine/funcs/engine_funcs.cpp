@@ -47,24 +47,6 @@ double*  g_Timer_secondsPerTick       = nullptr;
 // Engine function pointers
 // ============================================================
 
-// Input::Device::Update @ 0x1800e1490
-fn_InputDevice_Update_t fn_InputDevice_Update = nullptr;
-
-// Audio::Device::Update — need to find address (TBD, resolve by name for now)
-fn_AudioDevice_Update_t fn_AudioDevice_Update = nullptr;
-
-// Audio::Device::FreeChannelPlatform — TBD
-fn_AudioDevice_FreeChannel_t fn_AudioDevice_FreeChannel = nullptr;
-
-// Application::Application::PlatformUpdate — TBD
-fn_App_PlatformUpdate_t fn_App_PlatformUpdate = nullptr;
-
-// Engine::Loader::Load
-fn_Loader_Load_t fn_Loader_Load = nullptr;
-
-// Application::Application::SleepThread
-fn_App_SleepThread_t fn_App_SleepThread = nullptr;
-
 // PostDraw/PostUpdate callback array push helpers
 fn_DynArrayPush_t fn_PostDrawPush = nullptr;
 fn_DynArrayPush_t fn_PostUpdatePush = nullptr;
@@ -92,7 +74,6 @@ static bool IsDerivedFrom_NullSafe(void* self, uint32_t typeId) {
     return s_fn_IsDerivedFrom_real ? s_fn_IsDerivedFrom_real(self, typeId) : false;
 }
 uint32_t* g_TypeId_Dialog = nullptr;
-fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources = nullptr;
 fn_ListCleanup_t fn_ListCleanup = nullptr;
 
 // Map::Find (AVL tree lookup)
@@ -111,8 +92,6 @@ void** g_pPersistenceSingleton = nullptr;
 fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor = nullptr;
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
 fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
-fn_KeyMap_GetInputForId_t fn_KeyMap_GetInputForId = nullptr;
-fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId = nullptr;
 
 // ============================================================
 // UI Widget Functions (Phase A1)
@@ -194,8 +173,7 @@ fn_DragTool_Shutdown_t fn_DragTool_Shutdown = nullptr;
 // ============================================================
 void** g_pGameWorldSingleton = nullptr;
 void** g_pKeyMapSingleton = nullptr;
-void** g_pKeyMapObjectExref = nullptr;
-void** g_pEngineSingleton = nullptr;
+void** g_pInputConfigSingletonExref = nullptr;
 
 // ============================================================
 // Common Exe Functions (Phase A4) — type ID globals for reimplemented FindComponent
@@ -243,33 +221,15 @@ fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
 fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
 
 fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor = nullptr;
-fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation = nullptr;
 void** g_pSaveLoadSingleton = nullptr;
-fn_SaveLoad_SetSaveSprite_t fn_SaveLoad_SetSaveSprite = nullptr;
-fn_SaveLoad_SetMinOperationTime_t fn_SaveLoad_SetMinOperationTime = nullptr;
-fn_SaveLoad_SetOperation_t fn_SaveLoad_SetOperation = nullptr;
-fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount = nullptr;
-fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo = nullptr;
-fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState = nullptr;
 fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
 // fn_SaveLoadDialog_PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
-fn_Input_Device_Released_t fn_Input_Device_Released = nullptr;
 void** g_pInputDeviceSingleton = nullptr;
-fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause = nullptr;
-fn_Audio_Scene_Update_t fn_Audio_Scene_Update = nullptr;
-// fn_ScenarioDialog_LoadSelected — REMOVED, now reimplemented in scenariodialog.cpp
-fn_SaveLoad_Update_t fn_SaveLoad_Update = nullptr;
 void** g_pFileSystemSingleton2 = nullptr;
 fn_LoadScenarioFromSave_t fn_LoadScenarioFromSave = nullptr;
 uintptr_t g_ModUpdateDialog_Vtable = 0;  // PTR_FUN_14015c6c0
 fn_SelectResourceUI_PopulateCombo_t fn_SelectResourceUI_PopulateCombo = nullptr;
-fn_GoalList_GetGoal_t fn_GoalList_GetGoal = nullptr;
-fn_GoalInstance_IsMet_t fn_GoalInstance_IsMet = nullptr;
-fn_GoalInstance_HasFailed_t fn_GoalInstance_HasFailed = nullptr;
 void*** g_ppAchievementManager = nullptr;
-fn_AchievementManager_IsAchievementAwarded_t fn_AchievementManager_IsAchievementAwarded = nullptr;
-// FollowDialog helpers
-fn_KeyMap_Pressed_t fn_KeyMap_Pressed = nullptr;
 // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7
 
 // UpgradeUI helpers
@@ -306,16 +266,6 @@ fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4 = nullptr;
 // fn_HelpUI_Slot4 — now inline as HelpUI_Slot4 in helpui.cpp
 // fn_HelpUI_Slot9 — now inline as HelpUI_Slot9 in helpui.cpp
 
-// ============================================================
-// Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
-// ============================================================
-fn_GoalList_GetGoalCount_t fn_GoalList_GetGoalCount = nullptr;
-fn_Goal_GetText_t fn_Goal_GetText = nullptr;
-fn_Achievement_GetTitle_t fn_Achievement_GetTitle = nullptr;
-fn_Achievement_GetDescription_t fn_Achievement_GetDescription = nullptr;
-fn_Achievement_GetSpriteName_t fn_Achievement_GetSpriteName = nullptr;
-fn_AchievementManager_GetAchievementCount_t fn_AchievementManager_GetAchievementCount = nullptr;
-fn_AchievementManager_GetAchievement_t fn_AchievementManager_GetAchievement = nullptr;
 // fn_GoalDialog_ArrayPush — now inline as GoalDialog_ArrayPush_Impl in goaldialog.cpp
 // fn_EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
 // fn_ScenarioDialog_ArrayPush — now inline as ScenarioDialog_ArrayPush_Impl in scenariodialog.cpp
@@ -349,14 +299,11 @@ fn_FindDialogByName_t fn_FindDialogByName = nullptr;
 fn_External_External_t fn_External_External = nullptr;
 fn_External_Dtor_t fn_External_Dtor = nullptr;
 
-// Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
-fn_KeyMap_GetValue_t fn_KeyMap_GetValue = nullptr;
 fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
 float* g_pAgeMultiplier = nullptr;
 float* g_pNotifyTimerDuration = nullptr;
 fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
 // fn_Dialog_GetReference removed — see engine_funcs.h (Wave 7 lane B)
-fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect = nullptr;
 uint32_t* g_TypeId_StringTable = nullptr;
 uint32_t* g_TypeId_HelpFirstElem = nullptr;
 uint32_t* g_TypeId_HelpComboElem = nullptr;
@@ -383,13 +330,6 @@ uint32_t* g_TypeId_TerrainGenerator = nullptr;
 // fn_OptionsDialog_OnInputBindClick — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
 
 fn_InternalBasePtr_DeletePtr_t fn_InternalBasePtr_DeletePtr = nullptr;
-fn_KeyMap_SetInput_t fn_KeyMap_SetInput = nullptr;
-fn_KeyMap_ClearInput2_t fn_KeyMap_ClearInput2 = nullptr;
-fn_KeyMap_ClearInput3_t fn_KeyMap_ClearInput3 = nullptr;
-fn_KeyMap_GetIdForDeviceInput_t fn_KeyMap_GetIdForDeviceInput = nullptr;
-fn_KeyMap_RegisterInput_t fn_KeyMap_RegisterInput = nullptr;
-fn_KeyMap_ClearAll_t fn_KeyMap_ClearAll = nullptr;
-fn_KeyMap_Load_t fn_KeyMap_Load = nullptr;
 fn_OptionInputBindDialog_Ctor_t fn_OptionInputBindDialog_Ctor = nullptr;
 fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
@@ -408,9 +348,6 @@ fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround = nullptr;
 
 // fn_UIDesc_AddControllers removed — reimplemented as UIDesc_AddControllers_Impl()
 uint32_t* g_TypeId_UIDescription = nullptr;
-
-// DragTool support
-fn_KeyMap_Released_t fn_KeyMap_Released = nullptr;
 
 // Player/Tool module — shared engine APIs
 fn_SceneAddObject_t fn_SceneAddObject = nullptr;
@@ -448,8 +385,6 @@ void** g_FollowDialog_Vtable = nullptr;
 // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
 // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
 
-// MainMenuDialog support
-fn_App_Quit_t fn_App_Quit = nullptr;
 fn_Configuration_CurrentVersion_t fn_Configuration_CurrentVersion = nullptr;
 fn_Configuration_CurrentBuildId_t fn_Configuration_CurrentBuildId = nullptr;
 fn_DialogInstance_Ctor_t fn_DialogInstance_Ctor = nullptr;
@@ -593,14 +528,6 @@ fn_Graphics_MeshInstance_Ctor_t  fn_Graphics_MeshInstance_Ctor  = nullptr;
 fn_Volume_Frustum_Ctor_t         fn_Volume_Frustum_Ctor         = nullptr;
 fn_Graphics_Camera_Ctor_t        fn_Graphics_Camera_Ctor        = nullptr;
 
-fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter = nullptr;
-fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume = nullptr;
-fn_Audio_Scene_FindEffect3D_t fn_Audio_Scene_FindEffect3D = nullptr;
-fn_Audio_Scene_PlayEffect3D_t fn_Audio_Scene_PlayEffect3D = nullptr;
-fn_Audio_Scene_AddEmitter_t fn_Audio_Scene_AddEmitter = nullptr;
-fn_Audio_Scene_RemoveEmitter_t fn_Audio_Scene_RemoveEmitter = nullptr;
-fn_Audio_Scene_GetEmitterCount_t fn_Audio_Scene_GetEmitterCount = nullptr;
-fn_Audio_Scene_StopEffect3D_t fn_Audio_Scene_StopEffect3D = nullptr;
 fn_DebugUI_OnDaySliderChanged_t fn_DebugUI_OnDaySliderChanged = nullptr;
 fn_DebugUI_WriteLightingColors_t fn_DebugUI_WriteLightingColors = nullptr;
 fn_Game_GetMonthFromTime_t fn_Game_GetMonthFromTime = nullptr;
@@ -638,18 +565,10 @@ void** g_GameLoaderLoop_Vtable = nullptr;
 // fn_SetDialogLoaderNextLoop — REPLACED with inline SetDialogLoaderNextLoop() in engine_funcs.h
 // fn_GetLoadingSoundString — REPLACED with inline GetLoadingSoundString() in engine_funcs.h
 fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor = nullptr;
-fn_DialogLoopT_Update_t fn_DialogLoopT_Update = nullptr;
-fn_DialogLoopT_Startup_t fn_DialogLoopT_Startup = nullptr;
-fn_DialogLoaderLoopT_Startup_t fn_DialogLoaderLoopT_Startup = nullptr;
-fn_DialogLoaderLoopT_Load_t fn_DialogLoaderLoopT_Load = nullptr;
-fn_DialogLoopT_Load_t fn_DialogLoopT_Load = nullptr;
 fn_AudioScene_Ctor_t fn_AudioScene_Ctor = nullptr;
 // fn_MenuDialogLoopT_Ctor — REMOVED, now reimplemented as inline MenuDialogLoopT_Ctor() in engine_funcs.h
 void** g_MenuDialogLoopT_Vtable = nullptr;
 
-// --- SpriteCaptureUI helpers ---
-fn_Input_Device_GetValue_t fn_Input_Device_GetValue = nullptr;
-fn_Input_Device_Pressed_t  fn_Input_Device_Pressed  = nullptr;
 void** g_pFileSystemSingleton = nullptr;
 
 // ============================================================
@@ -670,19 +589,7 @@ HANDLE* g_pLoaderCompletionEvent = nullptr;
 // previous address here was stale and unused by any resolve call).
 void** g_pAppSingleton = nullptr;
 
-// ============================================================
-// Stage 3: OptionsDialog Runtime exports
-// ============================================================
-fn_AudioConfig_Save_t fn_AudioConfig_Save = nullptr;
-fn_AudioConfig_Startup_t fn_AudioConfig_Startup = nullptr;
-fn_InputConfig_Save_t fn_InputConfig_Save = nullptr;
-fn_InputConfig_Load_t fn_InputConfig_Load = nullptr;
 void** g_pInputConfigSingleton = nullptr;
-fn_InputDevice_EnableMouseClipping_t fn_InputDevice_EnableMouseClipping = nullptr;
-fn_InputDevice_ResetState_t fn_InputDevice_ResetState = nullptr;
-fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError = nullptr;
-fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart = nullptr;
-fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop = nullptr;
 fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor = nullptr;
 void** g_pMainLoopSingleton = nullptr;
 fn_SaveGameSettings_t fn_SaveGameSettings = nullptr;
@@ -719,9 +626,6 @@ fn_TSD_FindByString_t fn_TSD_FindByString = nullptr;
 fn_SetFollowBuilding_t fn_SetFollowBuilding = nullptr;
 fn_SetEditMode_t fn_SetEditMode = nullptr;
 
-// Phase G Wave 1: SaveLoadDialog + EventNotifyDialog
-fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod = nullptr;
-fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName = nullptr;
 fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
 
 // Phase H: Sub-dependency blockers
@@ -778,13 +682,7 @@ fn_CitizenComponent_CheckWorkplaceValid_t fn_CitizenComponent_CheckWorkplaceVali
 fn_FindStorageLocationComp_t fn_FindStorageLocationComp = nullptr;
 fn_FindWorkplaceComp_t fn_FindWorkplaceComp = nullptr;
 
-// Achievement Goal support
-fn_Goal_BaseDtor_t fn_Goal_BaseDtor = nullptr;
 fn_Goal_BaseCtor_t fn_Goal_BaseCtor = nullptr;
-fn_Goal_BaseSerialize_t fn_Goal_BaseSerialize = nullptr;
-fn_GoalInstance_BaseDtor_t fn_GoalInstance_BaseDtor = nullptr;
-fn_GoalInstance_Persist_t fn_GoalInstance_Persist = nullptr;
-fn_IsRunning_t fn_IsRunning = nullptr;
 fn_ExternalPtr_SerializeTutorial_t fn_ExternalPtr_SerializeTutorial = nullptr;
 fn_BuildingTypeArray_Dtor_t fn_BuildingTypeArray_Dtor = nullptr;
 fn_FindUIElementByPath_t fn_FindUIElementByPath = nullptr;
@@ -1010,30 +908,6 @@ bool EngineFuncsInit() {
 
     // --- Function pointers (resolve by mangled name, fall back to RVA) ---
 
-    // Input::Device::Update(Time const&)
-    fn_InputDevice_Update = reinterpret_cast<fn_InputDevice_Update_t>(
-        ResolveExport("?Update@Device@Input@@QEAAXAEBVTime@System@@@Z"));
-
-    // Audio::Device::Update — resolve by name
-    fn_AudioDevice_Update = reinterpret_cast<fn_AudioDevice_Update_t>(
-        ResolveExport("?Update@Device@Audio@@QEAAXAEBVTime@System@@@Z"));
-
-    // Audio::Device::FreeChannelPlatform — resolve by name
-    fn_AudioDevice_FreeChannel = reinterpret_cast<fn_AudioDevice_FreeChannel_t>(
-        ResolveExport("?FreeChannelPlatform@Device@Audio@@AEAAXH@Z"));
-
-    // Application::Application::PlatformUpdate — private, returns bool
-    fn_App_PlatformUpdate = reinterpret_cast<fn_App_PlatformUpdate_t>(
-        ResolveExport("?PlatformUpdate@Application@1@AEAA_NXZ"));
-
-    // Engine::Loader::Load(UpdateLoop*) — resolve by name
-    fn_Loader_Load = reinterpret_cast<fn_Loader_Load_t>(
-        ResolveExport("?Load@Loader@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
-
-    // Application::Application::SleepThread(int ms) — resolve by name
-    fn_App_SleepThread = reinterpret_cast<fn_App_SleepThread_t>(
-        ResolveExport("?SleepThread@Application@1@QEAAXH@Z"));
-
     // PostDraw/PostUpdate callback array push (16-byte element template instantiations)
     fn_PostDrawPush = reinterpret_cast<fn_DynArrayPush_t>(
         ResolveAddr(Module::Runtime, 0x18004f790));
@@ -1073,9 +947,6 @@ bool EngineFuncsInit() {
     // UI::Dialog type info (?_typeInfo@Dialog@UI@@) — dialog resources
     g_TypeId_Dialog = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Runtime, 0x1801faa88));
-
-    fn_UpdateLoop_LoadResources = reinterpret_cast<fn_UpdateLoop_LoadResources_t>(
-        ResolveExport("?LoadResources@UpdateLoop@Engine@@QEAAXXZ"));
 
     fn_ListCleanup = reinterpret_cast<fn_ListCleanup_t>(
         ResolveAddr(Module::Runtime, 0x180010ab0));
@@ -1118,14 +989,6 @@ bool EngineFuncsInit() {
     // Object::InternalBasePtr::InternalBasePtr(Internal*)
     fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
         ResolveExport("??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z"));
-
-    // Input::KeyMap::GetInputForId
-    fn_KeyMap_GetInputForId = reinterpret_cast<fn_KeyMap_GetInputForId_t>(
-        ResolveExport("?GetInputForId@KeyMap@Input@@QEBAHHH@Z"));
-
-    // Input::KeyMap::GetDeviceForId
-    fn_KeyMap_GetDeviceForId = reinterpret_cast<fn_KeyMap_GetDeviceForId_t>(
-        ResolveExport("?GetDeviceForId@KeyMap@Input@@QEBAHHH@Z"));
 
     // ================================================================
     // Phase A1: UI Widget Functions (Runtime DLL exports)
@@ -1255,13 +1118,8 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401c3dd8));
     g_pKeyMapSingleton = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x1401c3de8));
-    g_pKeyMapObjectExref = reinterpret_cast<void**>(
+    g_pInputConfigSingletonExref = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140151738));
-    // Engine singleton: exe exref at 0x140151440 → pointer to Runtime var. Dereference once.
-    {
-        void** exref = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151440));
-        g_pEngineSingleton = exref ? reinterpret_cast<void**>(*exref) : nullptr;
-    }
 
     // ================================================================
     // Phase A4: FindComponent type IDs (resolved from exe .rdata)
@@ -1333,9 +1191,6 @@ bool EngineFuncsInit() {
     fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
 
-    fn_SaveLoad_GetOperation = reinterpret_cast<fn_SaveLoad_GetOperation_t>(
-        ResolveExport("?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ"));
-
     // SaveLoad singleton: exe exref at 0x140151610 -> pointer to _singleton in Runtime
     {
         void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151610));
@@ -1352,34 +1207,10 @@ bool EngineFuncsInit() {
         }
     }
 
-    fn_SaveLoad_SetSaveSprite = reinterpret_cast<fn_SaveLoad_SetSaveSprite_t>(
-        ResolveExport("?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z"));
-
-    fn_SaveLoad_SetMinOperationTime = reinterpret_cast<fn_SaveLoad_SetMinOperationTime_t>(
-        ResolveExport("?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z"));
-
-    fn_SaveLoad_SetOperation = reinterpret_cast<fn_SaveLoad_SetOperation_t>(
-        ResolveExport("?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z"));
-    if (!fn_SaveLoad_SetOperation) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151658));
-        if (d && *d) fn_SaveLoad_SetOperation = reinterpret_cast<fn_SaveLoad_SetOperation_t>(*d);
-    }
-
-    fn_SaveLoad_GetSaveCount = reinterpret_cast<fn_SaveLoad_GetSaveCount_t>(
-        ResolveExport("?GetSaveCount@SaveLoad@Save@@QEBAHXZ"));
-
-    fn_SaveLoad_GetSaveInfo = reinterpret_cast<fn_SaveLoad_GetSaveInfo_t>(
-        ResolveExport("?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z"));
-    fn_SaveLoad_GetSaveState = reinterpret_cast<fn_SaveLoad_GetSaveState_t>(
-        ResolveExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ"));
-
     fn_DateTime_AsString = reinterpret_cast<fn_DateTime_AsString_t>(
         ResolveExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ"));
 
     // SaveLoadDialog::PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
-
-    fn_Input_Device_Released = reinterpret_cast<fn_Input_Device_Released_t>(
-        ResolveExport("?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
 
     // Input::Device singleton: exe exref at 0x140151b80 -> pointer to _singleton in Runtime
     {
@@ -1396,29 +1227,6 @@ bool EngineFuncsInit() {
         }
     }
 
-    // Audio::Scene::Pause — resolved from exe dispatch table (indirect pointer)
-    fn_Audio_Scene_Pause = reinterpret_cast<fn_Audio_Scene_Pause_t>(
-        ResolveExport("?Pause@Scene@Audio@@QEAAXH_N@Z"));
-    if (!fn_Audio_Scene_Pause) {
-        uintptr_t dispatchAddr = ResolveAddr(Module::Exe, 0x140152030);
-        if (dispatchAddr)
-            fn_Audio_Scene_Pause = *reinterpret_cast<fn_Audio_Scene_Pause_t*>(dispatchAddr);
-    }
-
-    // Audio::Scene::Update — Runtime 0x1800df6c0. Per-frame channel advance
-    // (music/ambient/3D). Resolve by mangled export, fall back to direct Runtime
-    // address (the exe dispatch slot 0x140152078 holds the same export).
-    fn_Audio_Scene_Update = reinterpret_cast<fn_Audio_Scene_Update_t>(
-        ResolveExport("?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"));
-
-    // ScenarioDialog helper — fn_ScenarioDialog_LoadSelected REMOVED, now reimplemented
-    // New helpers for reimplemented ScenarioDialog_LoadSelected:
-    fn_SaveLoad_Update = reinterpret_cast<fn_SaveLoad_Update_t>(
-        ResolveExport("?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z"));
-    if (!fn_SaveLoad_Update) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151d20));
-        if (d && *d) fn_SaveLoad_Update = reinterpret_cast<fn_SaveLoad_Update_t>(*d);
-    }
     // Persistence::GetSavePath and FileSystem::GetDataDirectory resolved here
     // until ENDGAME B.3.4a closing 2d; both were 0-CALL and are gone, resolver,
     // slot fallback and all.
@@ -1444,33 +1252,9 @@ bool EngineFuncsInit() {
     fn_SelectResourceUI_PopulateCombo = reinterpret_cast<fn_SelectResourceUI_PopulateCombo_t>(
         ResolveAddr(Module::Exe, 0x140078830));
 
-    // Achievement::GoalList / GoalInstance (Runtime DLL exports)
-    fn_GoalList_GetGoal = reinterpret_cast<fn_GoalList_GetGoal_t>(
-        ResolveExport("?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z"));
-
-    fn_GoalInstance_IsMet = reinterpret_cast<fn_GoalInstance_IsMet_t>(
-        ResolveExport("?IsMet@GoalInstance@Achievement@@QEBA_NXZ"));
-
-    fn_GoalInstance_HasFailed = reinterpret_cast<fn_GoalInstance_HasFailed_t>(
-        ResolveExport("?HasFailed@GoalInstance@Achievement@@QEBA_NXZ"));
-
     // AchievementManager singleton (double-indirect .rdata dispatch at 0x1401514f0)
     g_ppAchievementManager = reinterpret_cast<void***>(
         ResolveAddr(Module::Exe, 0x1401514f0));
-
-    fn_AchievementManager_IsAchievementAwarded =
-        reinterpret_cast<fn_AchievementManager_IsAchievementAwarded_t>(
-            ResolveExport("?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z"));
-
-    // fn_FindComponent_Character — inline in engine_funcs.h (uses g_TypeId_ModelComponent_FC)
-    // Input::KeyMap::Pressed — from exe dispatch table at 0x140151758
-    fn_KeyMap_Pressed = reinterpret_cast<fn_KeyMap_Pressed_t>(
-        ResolveExport("?Pressed@KeyMap@Input@@QEBA_NHH@Z"));
-    if (!fn_KeyMap_Pressed) {
-        uintptr_t dispatchAddr = ResolveAddr(Module::Exe, 0x140151758);
-        if (dispatchAddr)
-            fn_KeyMap_Pressed = *reinterpret_cast<fn_KeyMap_Pressed_t*>(dispatchAddr);
-    }
 
     // fn_FollowDialog_Close — inlined in followdialog.cpp Slot7 (FUN_140068f00)
 
@@ -1522,33 +1306,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x14005F3D0));
     // HelpUI_Slot4 and HelpUI_Slot9 now inline in helpui.cpp
 
-    // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
-    fn_GoalList_GetGoalCount = reinterpret_cast<fn_GoalList_GetGoalCount_t>(
-        ResolveExport("?GetGoalCount@GoalList@Achievement@@QEBAHXZ"));
-    fn_Goal_GetText = reinterpret_cast<fn_Goal_GetText_t>(
-        ResolveExport("?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ"));
-    fn_Achievement_GetTitle = reinterpret_cast<fn_Achievement_GetTitle_t>(
-        ResolveExport("?GetTitle@Achievement@1@QEBA?AVString@System@@XZ"));
-    if (!fn_Achievement_GetTitle) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151598));
-        if (d && *d) fn_Achievement_GetTitle = reinterpret_cast<fn_Achievement_GetTitle_t>(*d);
-    }
-    fn_Achievement_GetDescription = reinterpret_cast<fn_Achievement_GetDescription_t>(
-        ResolveExport("?GetDescription@Achievement@1@QEBA?AVString@System@@XZ"));
-    if (!fn_Achievement_GetDescription) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151590));
-        if (d && *d) fn_Achievement_GetDescription = reinterpret_cast<fn_Achievement_GetDescription_t>(*d);
-    }
-    fn_Achievement_GetSpriteName = reinterpret_cast<fn_Achievement_GetSpriteName_t>(
-        ResolveExport("?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ"));
-    if (!fn_Achievement_GetSpriteName) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401515a0));
-        if (d && *d) fn_Achievement_GetSpriteName = reinterpret_cast<fn_Achievement_GetSpriteName_t>(*d);
-    }
-    fn_AchievementManager_GetAchievementCount = reinterpret_cast<fn_AchievementManager_GetAchievementCount_t>(
-        ResolveExport("?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ"));
-    fn_AchievementManager_GetAchievement = reinterpret_cast<fn_AchievementManager_GetAchievement_t>(
-        ResolveExport("?GetAchievement@AchievementManager@Achievement@@QEBA?AV?$ExternalPtr@VAchievement@1@@Object@@H@Z"));
     // GoalDialog_ArrayPush, EventNotifyDialog_ArrayPush, ScenarioDialog_ArrayPush
     // now inline in their respective .cpp files
     fn_ExternalList_GetResourceCount = reinterpret_cast<fn_ExternalList_GetResourceCount_t>(
@@ -1651,14 +1408,6 @@ bool EngineFuncsInit() {
         }
     }
 
-    // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
-    fn_KeyMap_GetValue = reinterpret_cast<fn_KeyMap_GetValue_t>(
-        ResolveExport("?GetValue@KeyMap@Input@@QEBAFHH@Z"));
-    // The DLL exports the CONST spelling (`QEBA`) only; we asked for `QEAA`,
-    // which does not exist, so this resolved NULL and ran on an address
-    // fallback (Wave 7 lane C, deleted by Wave 9 lane F). Const-ness has no
-    // ABI, so the call has always been correct — the name was a phantom the
-    // fallback hid.
     fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x1400fd3b0));
     // fn_FindComponent_Residence — inline in engine_funcs.h (uses g_TypeId_StorageComponent_FC, same as Storage)
@@ -1672,17 +1421,6 @@ bool EngineFuncsInit() {
     // mangled name was not an export and the pointer had no callers. The real
     // function is ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VExternal@Object@@@Object@@H@Z
     // (0x1800388d0) and it takes an int index. See engine_funcs.h.
-    // Wave 8 lane C (docs/runtime_port/WAVE8_LANE_C.md): the name below used to
-    // read "...QEAIV?$Ext...VTime@System@@@Z" -- QEAI where every other member
-    // spells QEAA, and missing the AEBV reference qualifier on the trailing
-    // Time param. That string does not exist in the shipped DLL (one of only
-    // 3 phantoms left in the whole tree, tools/export_name_audit.py) and
-    // always resolved NULL; a fallback (0x1800def60) is what every call
-    // actually reached, so this was never a functional gap. Fixed to the
-    // real, correctly-spelled export; the fallback is GONE (Wave 9 lane F).
-    fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
-        ResolveExport("?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z"));
-
     // HelpUI_ArrayResize now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
     // --- OptionsDialog support — Runtime DLL exports ---
@@ -1792,10 +1530,6 @@ bool EngineFuncsInit() {
     // fn_ProfessionUI_HandleSpinner — reimplemented in professionui.cpp
     // fn_ProfessionUI_HandleButton — reimplemented in professionui.cpp
 
-    // --- MainMenuDialog support ---
-    fn_App_Quit = reinterpret_cast<fn_App_Quit_t>(
-        ResolveExport("?Quit@Application@1@QEAAXXZ"));
-
     fn_Configuration_CurrentVersion = reinterpret_cast<fn_Configuration_CurrentVersion_t>(
         ResolveExport("?CurrentVersion@Configuration@System@@SA?AVString@2@XZ"));
 
@@ -1849,13 +1583,6 @@ bool EngineFuncsInit() {
     // fn_UIDesc_AddControllers — REIMPLEMENTED as UIDesc_AddControllers_Impl()
     g_TypeId_UIDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7f90));
-
-    // --- DragTool support ---
-    // KeyMap::Released — dispatch table at 0x1401528f0
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401528f0));
-        if (dispatch) fn_KeyMap_Released = reinterpret_cast<fn_KeyMap_Released_t>(*dispatch);
-    }
 
     // --- Player/Tool module: shared engine APIs ---
     // Graphics::Scene::AddObject — IAT dispatch slot 0x140151370
@@ -2304,23 +2031,6 @@ bool EngineFuncsInit() {
     // `fn_Graphics_Camera_SetFrustum` are GONE — zero callers tree-wide. The three
     // ctor doors in this block stay.
 
-    fn_Audio_Scene_MoveEmitter = reinterpret_cast<fn_Audio_Scene_MoveEmitter_t>(
-        ResolveExport("?MoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@0@Z"));
-    fn_Audio_Scene_SetEmitterVolume = reinterpret_cast<fn_Audio_Scene_SetEmitterVolume_t>(
-        ResolveExport("?SetEmitterVolume@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z"));
-    // Audio::Scene 3D emitter API (ambient environment + building emitters).
-    fn_Audio_Scene_FindEffect3D = reinterpret_cast<fn_Audio_Scene_FindEffect3D_t>(
-        ResolveExport("?FindEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@@Z"));
-    fn_Audio_Scene_PlayEffect3D = reinterpret_cast<fn_Audio_Scene_PlayEffect3D_t>(
-        ResolveExport("?PlayEffect3D@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@AEBVVector3@Math@@@Z"));
-    fn_Audio_Scene_AddEmitter = reinterpret_cast<fn_Audio_Scene_AddEmitter_t>(
-        ResolveExport("?AddEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@M@Z"));
-    fn_Audio_Scene_RemoveEmitter = reinterpret_cast<fn_Audio_Scene_RemoveEmitter_t>(
-        ResolveExport("?RemoveEmitter@Scene@Audio@@QEAAXIAEBVVector3@Math@@@Z"));
-    fn_Audio_Scene_GetEmitterCount = reinterpret_cast<fn_Audio_Scene_GetEmitterCount_t>(
-        ResolveExport("?GetEmitterCount@Scene@Audio@@QEBAHI@Z"));
-    fn_Audio_Scene_StopEffect3D = reinterpret_cast<fn_Audio_Scene_StopEffect3D_t>(
-        ResolveExport("?StopEffect3D@Scene@Audio@@QEAAXI@Z"));
     fn_DebugUI_OnDaySliderChanged = reinterpret_cast<fn_DebugUI_OnDaySliderChanged_t>(
         ResolveAddr(Module::Exe, 0x1400607E0));
     fn_DebugUI_WriteLightingColors = reinterpret_cast<fn_DebugUI_WriteLightingColors_t>(
@@ -2386,16 +2096,6 @@ bool EngineFuncsInit() {
     // Now resolve its inner dependencies:
     fn_DialogLoopT_Ctor = reinterpret_cast<fn_DialogLoopT_Ctor_t>(
         ResolveExport("??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z"));
-    fn_DialogLoopT_Update = reinterpret_cast<fn_DialogLoopT_Update_t>(
-        ResolveExport("?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z"));
-    fn_DialogLoopT_Startup = reinterpret_cast<fn_DialogLoopT_Startup_t>(
-        ResolveExport("?Startup@DialogLoopT@Engine@@UEAAXXZ"));
-    fn_DialogLoopT_Load = reinterpret_cast<fn_DialogLoopT_Load_t>(
-        ResolveExport("?Load@DialogLoopT@Engine@@UEAAXXZ"));
-    fn_DialogLoaderLoopT_Startup = reinterpret_cast<fn_DialogLoaderLoopT_Startup_t>(
-        ResolveExport("?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ"));
-    fn_DialogLoaderLoopT_Load = reinterpret_cast<fn_DialogLoaderLoopT_Load_t>(
-        ResolveExport("?Load@DialogLoaderLoopT@Engine@@UEAAXXZ"));
     fn_AudioScene_Ctor = reinterpret_cast<fn_AudioScene_Ctor_t>(
         ResolveExport("??0Scene@Audio@@QEAA@XZ"));
     g_MenuDialogLoopT_Vtable = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x14015ed00));
@@ -2423,12 +2123,6 @@ bool EngineFuncsInit() {
     printf("  _systemInitialTick    @ %p = %lld\n", (void*)g_Timer_systemInitialTick,
            g_Timer_systemInitialTick ? *g_Timer_systemInitialTick : -1);
     printf("[EngineFuncs] Functions:\n");
-    printf("  Input::Device::Update     = %p\n", (void*)fn_InputDevice_Update);
-    printf("  Audio::Device::Update     = %p\n", (void*)fn_AudioDevice_Update);
-    printf("  Audio::FreeChannel        = %p\n", (void*)fn_AudioDevice_FreeChannel);
-    printf("  App::PlatformUpdate       = %p\n", (void*)fn_App_PlatformUpdate);
-    printf("  Loader::Load              = %p\n", (void*)fn_Loader_Load);
-    printf("  App::SleepThread          = %p\n", (void*)fn_App_SleepThread);
     printf("  PostDrawPush              = %p\n", (void*)fn_PostDrawPush);
     printf("  PostUpdatePush            = %p\n", (void*)fn_PostUpdatePush);
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
@@ -2440,7 +2134,6 @@ bool EngineFuncsInit() {
     printf("  IsDerivedFrom             = %p\n", (void*)fn_IsDerivedFrom);
     printf("  Dialog TypeId             = %p -> 0x%x\n", (void*)g_TypeId_Dialog,
            g_TypeId_Dialog ? *g_TypeId_Dialog : 0);
-    printf("  UpdateLoop::LoadResources = %p\n", (void*)fn_UpdateLoop_LoadResources);
     printf("  ListCleanup               = %p\n", (void*)fn_ListCleanup);
     printf("  Map::Find                 = %p\n", (void*)fn_Map_Find);
     printf("  Map::Insert               = %p\n", (void*)fn_Map_Insert);
@@ -2451,8 +2144,6 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] UI infrastructure:\n");
     printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
-    printf("  KeyMap::GetInputForId     = %p\n", (void*)fn_KeyMap_GetInputForId);
-    printf("  KeyMap::GetDeviceForId    = %p\n", (void*)fn_KeyMap_GetDeviceForId);
     printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
     printf("[EngineFuncs] Phase A2 — Type IDs:\n");
     printf("  ComponentDescription      = %p -> 0x%x\n", (void*)g_TypeId_ComponentDescription_FC,
@@ -2466,10 +2157,8 @@ bool EngineFuncsInit() {
            g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr);
     printf("  KeyMap (container)        = %p -> %p\n", (void*)g_pKeyMapSingleton,
            g_pKeyMapSingleton ? *g_pKeyMapSingleton : nullptr);
-    printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pKeyMapObjectExref,
-           g_pKeyMapObjectExref ? *g_pKeyMapObjectExref : nullptr);
-    printf("  EngineSingleton           = %p -> %p\n", (void*)g_pEngineSingleton,
-           g_pEngineSingleton ? *g_pEngineSingleton : nullptr);
+    printf("  KeyMap (object exref)     = %p -> %p\n", (void*)g_pInputConfigSingletonExref,
+           g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
     printf("[EngineFuncs] Phase A4 -- FindComponent type IDs (C++ reimpl):\n");
     printf("  MapComponent              = %p -> 0x%x\n", (void*)g_TypeId_MapComponent_FC,
            g_TypeId_MapComponent_FC ? *g_TypeId_MapComponent_FC : 0);
@@ -2488,13 +2177,6 @@ bool EngineFuncsInit() {
            g_pAppSingleton ? *g_pAppSingleton : nullptr);
 #endif
 
-    // --- SpriteCaptureUI support ---
-    fn_Input_Device_GetValue = reinterpret_cast<fn_Input_Device_GetValue_t>(
-        ResolveExport("?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z"));
-
-    fn_Input_Device_Pressed = reinterpret_cast<fn_Input_Device_Pressed_t>(
-        ResolveExport("?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
-
     // FileSystem singleton: exe exref at 0x140151d18 -> pointer to _singleton in Runtime
     {
         void*** exref = reinterpret_cast<void***>(ResolveAddr(Module::Exe, 0x140151d18));
@@ -2504,19 +2186,7 @@ bool EngineFuncsInit() {
 
     // --- Stage 3: OptionsDialog Runtime exports ---
 
-    // Audio::Configuration
-    fn_AudioConfig_Save = reinterpret_cast<fn_AudioConfig_Save_t>(
-        ResolveExport("?Save@Configuration@Audio@@QEAAXXZ"));
-    fn_AudioConfig_Startup = reinterpret_cast<fn_AudioConfig_Startup_t>(
-        ResolveExport("?Startup@Configuration@Audio@@QEAA_NXZ"));
-
     // Video::Configuration
-
-    // Input::Configuration
-    fn_InputConfig_Save = reinterpret_cast<fn_InputConfig_Save_t>(
-        ResolveExport("?Save@Configuration@Input@@QEAAXXZ"));
-    fn_InputConfig_Load = reinterpret_cast<fn_InputConfig_Load_t>(
-        ResolveExport("?Load@Configuration@Input@@QEAAXXZ"));
 
     // Input::Configuration::_singleton
     {
@@ -2529,24 +2199,7 @@ bool EngineFuncsInit() {
     // IO::Persistence WriteSettings / ReadSettings resolved here until
     // ENDGAME B.3.4a closing 2d; both were 0-CALL.
 
-    // Input::Device
-    fn_InputDevice_EnableMouseClipping = reinterpret_cast<fn_InputDevice_EnableMouseClipping_t>(
-        ResolveExport("?EnableMouseClipping@Device@Input@@QEAAX_N@Z"));
-    fn_InputDevice_ResetState = reinterpret_cast<fn_InputDevice_ResetState_t>(
-        ResolveExport("?ResetState@Device@Input@@QEAAXXZ"));
-
     // Video::Device
-
-    // Engine::MainLoop. NO FALLBACK: the one here read 0x1800dcc00, which is
-    // not a function entry at all but an address INSIDE OnVideoError's own body
-    // (0x1800dc5e0..0x1800dcd12) -- a Wave 8 lane A defect, corrected to
-    // 0x1800ddd30 and then deleted by Wave 9 lane F.
-    fn_MainLoop_OnVideoError = reinterpret_cast<fn_MainLoop_OnVideoError_t>(
-        ResolveExport("?OnVideoError@MainLoop@Engine@@QEAAXXZ"));
-    fn_MainLoop_OnVideoRestart = reinterpret_cast<fn_MainLoop_OnVideoRestart_t>(
-        ResolveExport("?OnVideoRestart@MainLoop@Engine@@QEAAXXZ"));
-    fn_MainLoop_SetNextLoop = reinterpret_cast<fn_MainLoop_SetNextLoop_t>(
-        ResolveExport("?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z"));
 
     // Object::BaseTypeInfo
     fn_BaseTypeInfo_Ctor = reinterpret_cast<fn_BaseTypeInfo_Ctor_t>(
@@ -2576,26 +2229,6 @@ bool EngineFuncsInit() {
 
     fn_InternalBasePtr_DeletePtr = reinterpret_cast<fn_InternalBasePtr_DeletePtr_t>(
         ResolveExport("?DeletePtr@InternalBasePtr@Object@@QEAAXXZ"));
-
-    // KeyMap input management — Runtime DLL exports
-    fn_KeyMap_SetInput = reinterpret_cast<fn_KeyMap_SetInput_t>(
-        ResolveExport("?SetInput@KeyMap@Input@@QEAAXHHHH@Z"));
-    fn_KeyMap_ClearInput2 = reinterpret_cast<fn_KeyMap_ClearInput2_t>(
-        ResolveExport("?ClearInput@KeyMap@Input@@QEAAXHH@Z"));
-    fn_KeyMap_ClearInput3 = reinterpret_cast<fn_KeyMap_ClearInput3_t>(
-        ResolveExport("?ClearInput@KeyMap@Input@@QEAAXHHH@Z"));
-    fn_KeyMap_GetIdForDeviceInput = reinterpret_cast<fn_KeyMap_GetIdForDeviceInput_t>(
-        ResolveExport("?GetIdForDeviceInput@KeyMap@Input@@QEBAHHH@Z"));
-
-    // KeyMap default-binding setup — used by Game_RegisterDefaultInputBindings
-    // (clean reimpl of FUN_1400992f0). Mangled names verified against
-    // Runtime-x64.dll exports in Ghidra.
-    fn_KeyMap_RegisterInput = reinterpret_cast<fn_KeyMap_RegisterInput_t>(
-        ResolveExport("?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z"));
-    fn_KeyMap_ClearAll = reinterpret_cast<fn_KeyMap_ClearAll_t>(
-        ResolveExport("?ClearAll@KeyMap@Input@@QEAAXXZ"));
-    fn_KeyMap_Load = reinterpret_cast<fn_KeyMap_Load_t>(
-        ResolveExport("?Load@KeyMap@Input@@QEAAXXZ"));
 
     // Dialog constructors — exe functions
     fn_OptionInputBindDialog_Ctor = reinterpret_cast<fn_OptionInputBindDialog_Ctor_t>(
@@ -2657,40 +2290,6 @@ bool EngineFuncsInit() {
     fn_SetEditMode = reinterpret_cast<fn_SetEditMode_t>(
         ResolveAddr(Module::Exe, 0x140102b60));
 
-    // Phase G Wave 1: SaveLoadDialog DoLoad/DoSave/DoDelete + EventNotifyDialog NavigateToEvent
-    // Save::SaveLoad::CheckMod — Runtime DLL export.
-    // FIXED (Wave 8 lane E): the mangled name here was a PHANTOM — it does
-    // not exist in the shipped DLL (confirmed with pefile against
-    // C:\GOG Games\Banished\Runtime-x64.dll). ResolveExport on a phantom
-    // returns NULL in silence, so this primary path had never once produced
-    // a pointer; only the exe-dispatch-slot fallback below (registered under
-    // the CORRECT name by standalone/address_registry.cpp) kept this call
-    // site alive. The real export is CONST and takes (int,int), not
-    // (int,unsigned) — see docs/runtime_port/WAVE5_LANE_C.md §1 and
-    // WAVE8_LANE_E.md. Now ported (runtime/src/save/saveload.cpp,
-    // RtSave_SaveLoad_CheckMod) and registered under this real name AND by
-    // address (0x1800c1090), so the fallback below is now genuinely a
-    // fallback rather than the only working path.
-    fn_SaveLoad_CheckMod = reinterpret_cast<fn_SaveLoad_CheckMod_t>(
-        ResolveExport("?CheckMod@SaveLoad@Save@@QEBAHHH@Z"));
-    if (!fn_SaveLoad_CheckMod) {
-        // Fallback: resolve via exe dispatch table
-        fn_SaveLoad_CheckMod = *reinterpret_cast<fn_SaveLoad_CheckMod_t*>(
-            ResolveAddr(Module::Exe, 0x140152738));
-    }
-    // Save::SaveLoad::SetSaveName — Runtime DLL export.
-    // FIXED (Wave 8 lane E): same phantom-name defect as CheckMod above — the
-    // mangled name here spelled the String argument BY VALUE
-    // (`V?$String@D@System@@`), which the shipped DLL does not export; the
-    // real export takes it by const reference (`AEBVString@System@@`). Now
-    // ported (RtSave_SaveLoad_SetSaveName) and registered under the real name
-    // AND by address (0x1800c3bb0).
-    fn_SaveLoad_SetSaveName = reinterpret_cast<fn_SaveLoad_SetSaveName_t>(
-        ResolveExport("?SetSaveName@SaveLoad@Save@@QEAAXAEBVString@System@@H@Z"));
-    if (!fn_SaveLoad_SetSaveName) {
-        fn_SaveLoad_SetSaveName = *reinterpret_cast<fn_SaveLoad_SetSaveName_t*>(
-            ResolveAddr(Module::Exe, 0x140151650));
-    }
     // FUN_14009f3e0 — terrain/scene pick from 2D map position (exe-only)
     fn_MapGetTerrainPos = reinterpret_cast<fn_MapGetTerrainPos_t>(
         ResolveAddr(Module::Exe, 0x14009f3e0));
@@ -2815,35 +2414,11 @@ bool EngineFuncsInit() {
     printf("[EngineFuncs] Phase I+J: All work class + BuildStructure helpers resolved\n");
 #endif
 
-    // --- Achievement Goal support ---
-    fn_Goal_BaseDtor = reinterpret_cast<fn_Goal_BaseDtor_t>(
-        ResolveExport("??1Goal@Achievement@@UEAA@XZ"));
-
     fn_Goal_BaseCtor = reinterpret_cast<fn_Goal_BaseCtor_t>(
         ResolveExport("??0Goal@Achievement@@QEAA@XZ"));
 
-    // Goal::Serialize via dispatch slot 0x140152840
-    {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152840));
-        if (slot && *slot)
-            fn_Goal_BaseSerialize = reinterpret_cast<fn_Goal_BaseSerialize_t>(*slot);
-    }
-
-    fn_GoalInstance_BaseDtor = reinterpret_cast<fn_GoalInstance_BaseDtor_t>(
-        ResolveExport("??1GoalInstance@Achievement@@UEAA@XZ"));
-
-    fn_GoalInstance_Persist = reinterpret_cast<fn_GoalInstance_Persist_t>(
-        ResolveExport("?Persist@GoalInstance@Achievement@@UEAAXAEAVStream@IO@@@Z"));
-
     // InternalBasePtr::Serialize was resolved here until ENDGAME B.3.4a
     // closing 2d; it was 0-CALL.
-
-    // IsRunning via dispatch slot 0x140152850
-    {
-        void** slot = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152850));
-        if (slot && *slot)
-            fn_IsRunning = reinterpret_cast<fn_IsRunning_t>(*slot);
-    }
 
     // FinishTutorialGoal helper: External serialize for tutorial ref
     // BuildingGoal helper
@@ -2854,12 +2429,7 @@ bool EngineFuncsInit() {
 
 #ifdef _DEBUG
     printf("[EngineFuncs] Achievement Goal support resolved\n");
-    printf("  Goal::~Goal         = %p\n", (void*)fn_Goal_BaseDtor);
     printf("  Goal::Goal()        = %p\n", (void*)fn_Goal_BaseCtor);
-    printf("  Goal::Serialize     = %p\n", (void*)fn_Goal_BaseSerialize);
-    printf("  GoalInst::~GoalInst = %p\n", (void*)fn_GoalInstance_BaseDtor);
-    printf("  GoalInst::Persist   = %p\n", (void*)fn_GoalInstance_Persist);
-    printf("  IsRunning           = %p\n", (void*)fn_IsRunning);
 #endif
 
     // --- Phase K: Tutorial Goal helpers ---
@@ -3197,14 +2767,6 @@ bool EngineFuncsInit() {
     printf("  Frustum_Contains         = %p\n", (void*)fn_Frustum_Contains);
     printf("  Frustum_MulTransform3    = %p\n", (void*)fn_Frustum_MulTransform3);
 #endif
-
-    // Only Input::Device::Update and Timer globals are critical for first reimpl
-    if (!fn_InputDevice_Update) {
-#ifdef _DEBUG
-        printf("[EngineFuncs] WARNING: Failed to resolve Input::Device::Update\n");
-#endif
-        return false;
-    }
 
     return true;
 }

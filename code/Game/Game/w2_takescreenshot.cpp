@@ -177,7 +177,7 @@ bool ResolveFuncs() {
            // B.3.5: `fn_ImageBuffer_CopyFromTexture`'s readiness term went with its
            // door in batch K1, and the closing pass took the global and this
            // printf's `copyFromTex=%p` with it.
-           g_pVideoDeviceSingleton && g_pEngineSingleton;
+           g_pVideoDeviceSingleton && g_pMainLoopSingleton;
 
     if (!s_ok) {
         printf("[TakeScreenshot] primitives unresolved — screenshot disabled\n"
@@ -189,7 +189,7 @@ bool ResolveFuncs() {
                     (void*)s_StrDtor, (void*)s_Filename_Ctor, (void*)s_Filename_CtorStr,
                     (void*)s_Filename_Assign, (void*)s_Filename_Dtor,
                     (void*)s_pFileSystemSingleton,
-                    (void*)g_pVideoDeviceSingleton, (void*)g_pEngineSingleton);
+                    (void*)g_pVideoDeviceSingleton, (void*)g_pMainLoopSingleton);
         std::fflush(stdout);
     }
     return s_ok;
@@ -217,7 +217,7 @@ extern "C" void GameUpdateLoop_TakeScreenshot(void* self) {
     }
 
     void* device   = *g_pVideoDeviceSingleton;                      // Video::Device*
-    void* mainLoop = *g_pEngineSingleton;                           // Engine::MainLoop*
+    void* mainLoop = *g_pMainLoopSingleton;                           // Engine::MainLoop*
     void* videoCtx = mainLoop ? *reinterpret_cast<void**>(
                          reinterpret_cast<uintptr_t>(mainLoop) + 0x10) : nullptr;
     void* fileSys  = *s_pFileSystemSingleton;

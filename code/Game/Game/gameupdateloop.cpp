@@ -427,21 +427,11 @@ static void EnsureInit() {
 
     TRACE("[GameUpdateLoop] Resolving function pointers...\n");
 
-    // [GUARD-M5] g_pEngineSingleton is resolved in engine_funcs via exref slot
-    // 0x140151440, which is unregistered in standalone (→ null). GameUpdateLoop::Draw
-    // reads engine+0x10 (video context), +0x68 (frame time), +0x30 (shadow mode).
-    // In standalone the object carrying those fields is the MainLoop itself — the
-    // working menu Draw stub sources the video context from *(MainLoop + 0x10)
-    // (menudialogloopt_stubs.cpp). NOTE the EngineInstance at MainLoop+0x78 is a
-    // DIFFERENT object (audio @ +0x6d0); its +0x10 is not the context. So point
-    // g_pEngineSingleton at the MainLoop slot: *g_pEngineSingleton == MainLoop.
-    if (!g_pEngineSingleton && g_pMainLoopSingleton && *g_pMainLoopSingleton) {
-        g_pEngineSingleton = g_pMainLoopSingleton;
-        fprintf(stderr, "[GUL] g_pEngineSingleton := MainLoop singleton (%p -> ctx=%p)\n",
-                (void*)*g_pEngineSingleton,
-                *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(*g_pEngineSingleton) + 0x10));
-        fflush(stderr);
-    }
+    // GameUpdateLoop::Draw reads MainLoop+0x10 (video context), +0x68 (frame time)
+    // through g_pMainLoopSingleton (= &Engine::MainLoop::_singleton). The exe's exref
+    // 0x140151440 names that same symbol; the old second global for it,
+    // g_pMainLoopSingleton, was folded into g_pMainLoopSingleton by B.3.7 close.
+    // NOTE the Engine::Engine at MainLoop+0x78 is a DIFFERENT object.
 
     // Exe globals (indirect — .rdata dispatch table pointers into Runtime .data)
     g_pp_rootOnlyUpdates = reinterpret_cast<bool**>(ResolveAddr(Module::Exe, 0x140151f30));
@@ -596,7 +586,6 @@ static void EnsureInit() {
     CHECK_FN(fn_PlayerController_CalcTransform);
     CHECK_FN(fn_QuickSave);
     CHECK_FN(fn_CalcWindFactor);
-    CHECK_FN(fn_MainLoop_SetNextLoop);
     CHECK_FN(fn_Time_Ctor_Seconds);
 
     CHECK_FN(fn_ExternalList_Find);
@@ -1430,7 +1419,7 @@ post_simulation:
     // Original asm at 0x1400966c1: triple deref from slot, dispatch call at 0x140151758
     // Match proven working pattern from dragtool/pathtool — no null guards (original has none).
     {
-        void* keyMap = ***(void****)g_pKeyMapObjectExref;
+        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
 
         if (reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x21)) {  // B.3.7 bridge
             self->m_quickSavePressed = 1;
@@ -1626,7 +1615,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 2: Set time on video context
     TRACE("[GameUpdateLoop::Draw] setting video context time...\n");
     {
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         int64_t engineFrameTime = *(int64_t*)((uintptr_t)engine + 0x68);
 
@@ -1641,7 +1630,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     TRACE("[GameUpdateLoop::Draw] checking image capture terrain...\n");
     {
         uint8_t* imageCapture = (uint8_t*)self->m_imageCapture;
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         // fn_ImageCapture_DrawCheck (exe FUN_1400a5140) is our clean port
         // Minimap_PaintTerrain in standalone (see Startup fallback above). It fires
@@ -1673,7 +1662,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 5: Weather draw update
     TRACE("[GameUpdateLoop::Draw] calling Weather::DrawUpdate...\n");
     {
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         if (fn_Weather_DrawUpdate) fn_Weather_DrawUpdate(self->m_weather, videoCtx); // [GUARD-M5]
         // Native time-of-day sun/lighting. The original Weather::DrawUpdate
@@ -1740,7 +1729,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
         uint32_t shadowMode = 0;
         // The shadow-mode source field. The ORIGINAL GameUpdateLoop::Draw (exe 0x140096010)
         // sets renderer+0x3c from *(*g_pVideoConfigSingleton + 0x30) — the shadow-QUALITY
-        // setting (index, 0=off, >0=on), NOT engine+0x30 (in standalone g_pEngineSingleton ==
+        // setting (index, 0=off, >0=on), NOT engine+0x30 (g_pMainLoopSingleton ==
         // MainLoop, so engine+0x30 is garbage). Shadows are DEFAULT-ON: mirror the
         // original and read VideoConfig+0x30 so SunLight::DrawShadowMap engages (verified
         // crash-free; terrain + buildings cast/receive). The day cycle is driven by
@@ -1768,7 +1757,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 7: Graphics::Renderer::Draw
     TRACE("[GameUpdateLoop::Draw] calling Renderer::Draw...\n");
     {
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         reinterpret_cast<Graphics::Renderer*>(self->m_renderer)->Draw(
             *reinterpret_cast<Video::Context*>(videoCtx), alpha,
@@ -1785,7 +1774,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 8: SaveLoad::Draw if active
     if (self->m_saveLoad != nullptr) {
         TRACE("[GameUpdateLoop::Draw] calling SaveLoad::Draw...\n");
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         // Save::SaveLoad::Draw — the ExternalPtr<Material> is a bare register value (B7-5).
         reinterpret_cast<Save::SaveLoad*>(self->m_saveLoad)->Draw(   // B.3.7 bridge
@@ -1844,7 +1833,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 10: Set camera matrices on video context for UI
     TRACE("[GameUpdateLoop::Draw] setting camera matrices...\n");
     {
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         uintptr_t pc = (uintptr_t)self->m_playerController;
 
@@ -1879,7 +1868,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     TRACE("[GameUpdateLoop::Draw] calling EntityUI toolbar draw...\n");
     {
         uintptr_t entityUI = (uintptr_t)self->m_entityUI;
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
 
         // Check if UI has input focus or pauses game -> pass as flag
@@ -1902,7 +1891,7 @@ void GameUpdateLoop_Draw(GameUpdateLoop* self, float alpha) {
     // Step 12: UI::UserInterface::Draw
     TRACE("[GameUpdateLoop::Draw] calling UI::UserInterface::Draw...\n");
     {
-        void* engine = *g_pEngineSingleton;
+        void* engine = *g_pMainLoopSingleton;
         void* videoCtx = *(void**)((uintptr_t)engine + 0x10);
         reinterpret_cast<UI::UserInterface*>(self->m_userInterface)->Draw(*reinterpret_cast<Video::Context*>(videoCtx));  // B.3.6 bridge
     }

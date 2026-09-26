@@ -49,8 +49,8 @@ namespace {
 
 // KeyMap via the triple-deref exref (same pattern as camera_input.cpp::CamKeyMap).
 inline void* ToolKeyMap() {
-    if (!g_pKeyMapObjectExref || !*g_pKeyMapObjectExref) return nullptr;
-    void* l2 = *(void**)*g_pKeyMapObjectExref;
+    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) return nullptr;
+    void* l2 = *(void**)*g_pInputConfigSingletonExref;
     if (!l2) return nullptr;
     return *(void**)l2;
 }

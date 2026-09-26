@@ -242,9 +242,9 @@ static_assert(sizeof(MainLoopCallback) == 0x10, "MainLoopCallback is 0x10 bytes"
 // caller batch has to edit this header.
 //
 // `?_singleton@MainLoop@Engine@@1PEAV12@EA` (0x1801fe750) STAYS a data slot
-// until the end of B.3 (carry-over 5). NOTE `g_pEngineSingleton` in
-// engine/funcs/engine_funcs is bound to THIS symbol, not to Engine::_singleton
-// (a misnamed global; B37_RULES sec. 6.3 defect 3).
+// until the end of B.3 (carry-over 5). engine/funcs/engine_funcs reads it as
+// `g_pMainLoopSingleton` (the misnamed second global `g_pEngineSingleton`,
+// B37_RULES sec. 6.3 defect 3, was folded into it at the B.3.7 close).
 //
 // Every by-value `System::Time` RETURN below is a retslot export in retail;
 // none of the four has a caller, so they are declared and left undefined.

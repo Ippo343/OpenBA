@@ -214,10 +214,11 @@ void GameContainer_EnsureLists() {
             reinterpret_cast<Achievement::AchievementManager*>(mgr)->SetAchievements(  // B.3.7 bridge
                 Object::ExternalPtr<Object::ExternalList>(reinterpret_cast<Object::ExternalList*>(achievementList)));
             s_achievementsSet = true;
+            // Called outside the printf argument list: the perf build strips printf arguments.
+            const int count =
+                reinterpret_cast<Achievement::AchievementManager*>(mgr)->GetAchievementCount();  // B.3.7 bridge
             fprintf(stderr, "[GameContainer] AchievementManager::SetAchievements(mgr=%p, list=%p) "
-                            "-> count=%d\n", mgr, achievementList,
-                    fn_AchievementManager_GetAchievementCount
-                        ? fn_AchievementManager_GetAchievementCount(mgr) : -1);
+                            "-> count=%d\n", mgr, achievementList, count);
         } else {
             fprintf(stderr, "[GameContainer] SetAchievements SKIPPED (mgr=%p list=%p)\n",
                     mgr, achievementList);

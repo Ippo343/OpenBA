@@ -99,9 +99,8 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
         s_pSingleton = reinterpret_cast<void**>(
             ResolveExport("?_singleton@SaveLoad@Save@@0PEAV12@EA"));
         fprintf(stderr, "[SaveTest] armed (trigger frame %d): singleton export=%p "
-                        "g_pSaveLoadSingleton=%p GetOperation=%p\n",
-                trigger, (void*)s_pSingleton, (void*)g_pSaveLoadSingleton,
-                (void*)fn_SaveLoad_GetOperation);
+                        "g_pSaveLoadSingleton=%p\n",
+                trigger, (void*)s_pSingleton, (void*)g_pSaveLoadSingleton);
         fflush(stderr);
     }
     if (!s_pSingleton || !*s_pSingleton) return;

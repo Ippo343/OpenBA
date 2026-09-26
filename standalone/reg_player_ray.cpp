@@ -10,7 +10,7 @@
 //   0x1400aa530 TerrainMarch  -> {Vector2::Normalize slot 0x1401526b0 (reg),
 //                                 QuarryComponent_helper_aa20 0x1400aaa20 (reg),
 //                                 g_fUVScale, DAT_1401722c0 sign mask}
-//   0x1401005a0 GetMouseRay   -> {KeyMap exref (g_pKeyMapObjectExref), VideoDevice
+//   0x1401005a0 GetMouseRay   -> {KeyMap exref (g_pInputConfigSingletonExref), VideoDevice
 //                                 singleton (g_pVideoDeviceSingleton), fn_KeyMap_GetValue,
 //                                 fn_Camera_GetFrustum, + 4 Runtime exports resolved
 //                                 locally and registered as dispatch slots below}

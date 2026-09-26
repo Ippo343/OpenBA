@@ -247,8 +247,8 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
 
     // 8. Get actual KeyMap object (triple deref from exref)
     void* keymap = nullptr;
-    if (g_pKeyMapObjectExref && *g_pKeyMapObjectExref) {
-        void* step2 = *(void**)*g_pKeyMapObjectExref;
+    if (g_pInputConfigSingletonExref && *g_pInputConfigSingletonExref) {
+        void* step2 = *(void**)*g_pInputConfigSingletonExref;
         if (step2) keymap = *(void**)step2;
     }
 

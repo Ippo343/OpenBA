@@ -198,7 +198,7 @@ static void EnsureInternalDtor() {
 // Helper: get KeyMap object from external reference (triple deref)
 // ============================================================
 static inline void* GetKeyMap() {
-    return ***(void****)g_pKeyMapObjectExref;
+    return ***(void****)g_pInputConfigSingletonExref;
 }
 
 // ============================================================

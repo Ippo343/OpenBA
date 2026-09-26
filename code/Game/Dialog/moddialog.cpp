@@ -726,7 +726,7 @@ static void ModDialog_Apply_Impl(ModDialog* self) {
 
                 // Call vtable[7] on Engine singleton sub-object at +0x20
                 // to prepare the game for reload (dispatch slot 0x140151440)
-                void* engine = g_pEngineSingleton ? *g_pEngineSingleton : nullptr;
+                void* engine = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
                 if (engine) {
                     uintptr_t inner = *(uintptr_t*)((uintptr_t)engine + 0x20);
                     if (inner) {

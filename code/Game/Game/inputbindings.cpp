@@ -2,7 +2,7 @@
 // Clean reimpl of FUN_1400992f0 (Application-x64.exe).
 //
 // Original sequence:
-//   KeyMap* km = ***(KeyMap****)g_pKeyMapObjectExref;
+//   KeyMap* km = ***(KeyMap****)g_pInputConfigSingletonExref;
 //   Input::KeyMap::ClearAll(km);
 //   Input::KeyMap::RegisterInput(km, 0,  2, 0,    "MouseX",       false);
 //   ... (50 RegisterInput calls covering mouse axes, hotkeys, camera, toolbar)
@@ -109,15 +109,15 @@ void RegisterDefaultInputBindings() {
     // Resolve the actual KeyMap via the same triple-deref pattern the
     // original exe uses. See CLAUDE.md note about External reference
     // indirection levels.
-    if (!g_pKeyMapObjectExref || !*g_pKeyMapObjectExref) {
-        printf("[InputBindings] FATAL: g_pKeyMapObjectExref not initialized "
+    if (!g_pInputConfigSingletonExref || !*g_pInputConfigSingletonExref) {
+        printf("[InputBindings] FATAL: g_pInputConfigSingletonExref not initialized "
                "(slot=%p, *slot=%p)\n",
-               (void*)g_pKeyMapObjectExref,
-               g_pKeyMapObjectExref ? *g_pKeyMapObjectExref : nullptr);
+               (void*)g_pInputConfigSingletonExref,
+               g_pInputConfigSingletonExref ? *g_pInputConfigSingletonExref : nullptr);
         return;
     }
 
-    void* level2 = *(void**)*g_pKeyMapObjectExref;
+    void* level2 = *(void**)*g_pInputConfigSingletonExref;
     if (!level2) {
         printf("[InputBindings] FATAL: KeyMap exref level-2 ptr is NULL\n");
         return;
