@@ -899,7 +899,10 @@ void Engine::Engine::Shutdown() {
         MemFree(p);
     }
     if (void* p = _audioConfiguration) {
-        RT_EXPORT_ONCE(VoidThisFn, "??1Configuration@Audio@@QEAA@XZ")(p);
+        // ~Configuration is a REAL non-virtual member (audio.cpp: the null store
+        // to _singleton); ??1Configuration@Audio@@ is its door. B.3.7 close.
+        reinterpret_cast< ::Audio::Configuration*>(p)
+            ->Audio::Configuration::~Configuration();  // B.3.7 bridge
         MemFree(p);
     }
     if (void* p = _videoDevice) {

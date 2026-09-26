@@ -51,7 +51,7 @@
 
 // Defined in standalone/address_registry.cpp. Publishes the live KeyMap*
 // into the fake exref chain at slot 0x140151738 so that triple-deref reads
-// (g_pKeyMapObjectExref) reach the real KeyMap inside Input::Configuration.
+// (g_pInputConfigSingletonExref) reach the real KeyMap inside Input::Configuration.
 extern "C" void SetStandaloneKeyMap(void* keyMap);
 
 // Defined in standalone/menudialogloopt_stubs.cpp. Loads
@@ -582,7 +582,7 @@ int RunGameMain(HINSTANCE hInstance, const char* cmdLine) {
                 }
 
                 // Wire the live Input::KeyMap into our fake exref chain so
-                // triple-deref reads of g_pKeyMapObjectExref reach the real
+                // triple-deref reads of g_pInputConfigSingletonExref reach the real
                 // KeyMap. Engine::Startup constructed Input::Configuration at
                 // engine[0x6d8]; its first field is the KeyMap pointer
                 // (Input::Configuration::GetKeyMap is `return *(KeyMap**)this`).

@@ -109,7 +109,7 @@ void DragTool_CloseToolDialog_ff980(uint64_t* param_1) {
 // Caller (dragtool.cpp): g_fn_PlayTickSound((uint64_t)DIALOG_IBP())
 //   — param_1 is the IBP value (object base on which +0x48 holds the timer).
 //
-// Closure: fn_Time_Ctor_Float, fn_Audio_Scene_PlayEffect (engine_funcs exports);
+// Closure: fn_Time_Ctor_Float (engine_funcs export), Audio::Scene::PlayEffect (member);
 // g_pGameWorldSingleton, g_pKeyMapSingleton (singleton globals). No exe sub-calls.
 void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
     if (*reinterpret_cast<int64_t*>(param_1 + 0x48) < 1) {
@@ -143,7 +143,7 @@ void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
 // Caller (dragtool.cpp): g_fn_PlayPlaceSound(0). param_1 is unused (only seeds
 // the unused first slot of the Time stack buffer in the original).
 //
-// Closure: fn_Time_Ctor_Float, fn_Audio_Scene_PlayEffect; g_pGameWorldSingleton,
+// Closure: fn_Time_Ctor_Float, Audio::Scene::PlayEffect (member); g_pGameWorldSingleton,
 // g_pKeyMapSingleton. No exe sub-calls.
 void DragTool_PlayPlaceSound_1000f0(uint64_t /*unused*/) {
     uint64_t timeBuf[4] = {0};
@@ -165,7 +165,7 @@ void DragTool_PlayPlaceSound_1000f0(uint64_t /*unused*/) {
 //
 // Caller (dragtool.cpp): g_fn_PlayErrorSound(0).
 //
-// Closure: fn_Time_Ctor_Float, fn_Audio_Scene_PlayEffect; g_pGameWorldSingleton,
+// Closure: fn_Time_Ctor_Float, Audio::Scene::PlayEffect (member); g_pGameWorldSingleton,
 // g_pKeyMapSingleton. No exe sub-calls.
 void DragTool_PlayErrorSound_100140(uint64_t /*unused*/) {
     uint64_t timeBuf[4] = {0};

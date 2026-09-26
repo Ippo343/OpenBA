@@ -18,4 +18,18 @@ confirm against the retail DLL before porting one.
 
 ## Ported here
 
-_nothing yet_
+(This section said "_nothing yet_" until the ENDGAME B.3.7 close; the
+status paragraph at the end of this file says what the files hold.)
+
+- `closure_batch2b.cpp`
+- `pickingmesh.cpp`
+- `rt_factories_picking.cpp`
+- `rt_factories_picking.inc`
+- `rt_picking_port.cpp`
+- `scene.cpp`
+- `scene_grid.cpp`
+- `scene_grid.h`
+
+## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
+
+`Picking::PickingMesh` (External, 9 slots, 0x48) and the non-polymorphic `Picking::Scene` (0x60) are REAL C++ classes in `runtime/types/picking/`; bodies in `pickingmesh.cpp`, `scene.cpp` and `scene_grid.cpp`, whose 19 `rtpickgrid::` free functions remain the grid internals, registered by address. The `Scene` ctor/dtor doors stay for the exe's by-value holder. Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.

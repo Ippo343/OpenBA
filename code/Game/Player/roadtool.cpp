@@ -241,7 +241,7 @@ uint64_t RoadTool_OnKey_Impl(RoadTool* self, char key) {
     DragTool_OnKey(reinterpret_cast<DragTool*>(self), key);
 
     // Read KeyMap::GetValue(0, 0x16) for the modifier flag
-    uint64_t keyMap = (uint64_t)***(void****)g_pKeyMapObjectExref;
+    uint64_t keyMap = (uint64_t)***(void****)g_pInputConfigSingletonExref;
     short val = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0x16);  // B.3.7 bridge
     self->modifierFlag = (val == 0) ? 1 : 0;
 

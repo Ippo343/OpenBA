@@ -209,7 +209,7 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 //   direction (param_3) = cameraTransform.Rotate( Frustum.GetScreenDirection(u, v) )
 // where u = mouseX / screenWidth, v = mouseY / screenHeight.
 // Returns true when the mouse is inside the display, false otherwise.
-//   KeyMap   = ***g_pKeyMapObjectExref (triple-deref)
+//   KeyMap   = ***g_pInputConfigSingletonExref (triple-deref)
 //   display  = *g_pVideoDeviceSingleton ; +4 = width, +8 = height
 //   camera   = *(g_pGameWorldSingleton + 0xe0) ; +0x34 = Graphics::Camera,
 //              +0x98..+0xc4 = 48-byte Transform3 (camera world matrix)
@@ -217,13 +217,13 @@ extern "C" uint8_t PlayerRay_TerrainMarch_aa530(uintptr_t param_1, float* param_
 extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOrigin, float* outDir) {
     EnsureRayExports();
 
-    if (!g_pKeyMapObjectExref || !g_pVideoDeviceSingleton) return 0;
+    if (!g_pInputConfigSingletonExref || !g_pVideoDeviceSingleton) return 0;
 
     // KeyMap = triple-deref of the exref (matches the working dialog pattern
-    // ***(void****)g_pKeyMapObjectExref: slot -> slot value -> exref -> object).
+    // ***(void****)g_pInputConfigSingletonExref: slot -> slot value -> exref -> object).
     void* keyMap = nullptr;
     {
-        void**** p = reinterpret_cast<void****>(g_pKeyMapObjectExref);
+        void**** p = reinterpret_cast<void****>(g_pInputConfigSingletonExref);
         if (p && *p && **p && ***p) keyMap = ***p;
     }
     void* display = *g_pVideoDeviceSingleton;        // Video::Device instance

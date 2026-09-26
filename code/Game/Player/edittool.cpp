@@ -666,7 +666,7 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
             printf("[SelDiag] OnKey#%d param2=%d CamRay=%p MapHit=%p AtCell=%p "
                    "keyExref=%p\n", calls, param2,
                    (void*)s_fn_CameraRay, (void*)s_fn_MapHitTest,
-                   (void*)s_fn_EntityAtCell, (void*)g_pKeyMapObjectExref);
+                   (void*)s_fn_EntityAtCell, (void*)g_pInputConfigSingletonExref);
             fflush(stdout);
         }
     }
@@ -681,8 +681,8 @@ uint64_t EditTool_OnKey_Impl(EditTool* self, char param2) {
     }
 
     // Get KeyMap via triple deref of external reference
-    if (!g_pKeyMapObjectExref) return 1;
-    uintptr_t keyMapExref = (uintptr_t)*g_pKeyMapObjectExref;
+    if (!g_pInputConfigSingletonExref) return 1;
+    uintptr_t keyMapExref = (uintptr_t)*g_pInputConfigSingletonExref;
     uintptr_t keyMapPtr = *(uintptr_t*)keyMapExref;
     uintptr_t keyMap = *(uintptr_t*)keyMapPtr;
 

@@ -413,7 +413,7 @@ void ToolUI_Slot8(ToolUI* self) {
 
     // Pending drag: check mouse movement threshold
     if (*(char*)(s + 0x4D) != 0) {
-        void* keyMap = ***(void****)g_pKeyMapObjectExref;
+        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
 
         // Get mouse X, scaled by dialog scale factor
         void* dialogElem = *(void**)((*(uintptr_t*)(s + 0x18)) + 0x10);
@@ -453,7 +453,7 @@ void ToolUI_Slot8(ToolUI* self) {
 
     // Active drag: move dialog to follow mouse
     if (*(char*)(s + 0x41) != 0 && *(char*)(s + 0x40) != 0) {
-        void* keyMap = ***(void****)g_pKeyMapObjectExref;
+        void* keyMap = ***(void****)g_pInputConfigSingletonExref;
 
         if (!*(uintptr_t*)(s + 0x18)) { /* dialog instance null, skip drag */ }
         else {

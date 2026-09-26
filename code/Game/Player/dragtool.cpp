@@ -189,12 +189,12 @@ static void ResolveDragToolFuncs() {
 // ============================================================
 // Helper: get KeyMap from external reference
 // ============================================================
-// g_pKeyMapObjectExref needs double deref: slot -> ptr -> KeyMap
+// g_pInputConfigSingletonExref needs double deref: slot -> ptr -> KeyMap
 // (Ghidra shows: MOV RAX,[0x140151738]; MOV R8,[RAX]; MOV R14,[R8])
 static inline void* GetKeyMap() {
     // Triple deref: slot → External ptr → wrapped ptr → KeyMap object
     // Original asm: MOV RAX,[slot]; MOV R8,[RAX]; MOV R14,[R8]
-    return ***(void****)g_pKeyMapObjectExref;
+    return ***(void****)g_pInputConfigSingletonExref;
 }
 
 // ============================================================

@@ -57,22 +57,6 @@ extern double* g_Timer_secondsPerTick;
 // Engine function pointers
 // ============================================================
 
-// Input::Device::Update(this, Time const&)
-typedef void (*fn_InputDevice_Update_t)(void* self, void* time);
-extern fn_InputDevice_Update_t fn_InputDevice_Update;
-
-// Audio::Device::Update(this, Time const&)
-typedef void (*fn_AudioDevice_Update_t)(void* self, void* time);
-extern fn_AudioDevice_Update_t fn_AudioDevice_Update;
-
-// Audio::Device::FreeChannelPlatform(this, int channel)
-typedef void (*fn_AudioDevice_FreeChannel_t)(void* self, int channel);
-extern fn_AudioDevice_FreeChannel_t fn_AudioDevice_FreeChannel;
-
-// Application::Application::PlatformUpdate(this) -> bool
-typedef bool (*fn_App_PlatformUpdate_t)(void* self);
-extern fn_App_PlatformUpdate_t fn_App_PlatformUpdate;
-
 // ENDGAME B.3.5 caller batch (b35-K2), THE GLOBAL DOOR SWEEP: the whole
 // Video::Context LIFECYCLE GROUP is GONE from this header — `fn_VideoCtx_Ctor`,
 // `fn_VideoCtx_Dtor`, `fn_VideoCtx_Delete`, `fn_VideoCtx_ClearResources` and
@@ -84,14 +68,6 @@ extern fn_App_PlatformUpdate_t fn_App_PlatformUpdate;
 // the only remaining mentions are COMMENTS in runtime/src/video/context.cpp and
 // context_lifecycle.cpp, and B.3.2's rules say a comment is not a caller. The
 // registered doors in runtime/src/video/ are untouched.
-
-// Engine::Loader::Load(this, UpdateLoop*)
-typedef void (*fn_Loader_Load_t)(void* loader, void* updateLoop);
-extern fn_Loader_Load_t fn_Loader_Load;
-
-// Application::Application::SleepThread(this, int ms)
-typedef void (*fn_App_SleepThread_t)(void* self, int ms);
-extern fn_App_SleepThread_t fn_App_SleepThread;
 
 // Generic dynamic array push (FUN_18007a0d0) — used for dialog pending lists.
 // The generic `fn_DynArrayPush` itself went with the B.3.2 closing pass (zero
@@ -213,10 +189,6 @@ extern fn_IsDerivedFrom_t fn_IsDerivedFrom;
 // g_pExternalTypeId until the ENDGAME B.3.6 closing pass (rename only).
 extern uint32_t* g_TypeId_Dialog;
 
-// UpdateLoop::LoadResources(this) — base class resource loading
-typedef void (*fn_UpdateLoop_LoadResources_t)(void* self);
-extern fn_UpdateLoop_LoadResources_t fn_UpdateLoop_LoadResources;
-
 // Internal list cleanup (used by UpdateLoop dtor)
 typedef void (*fn_ListCleanup_t)(void* listBase);
 extern fn_ListCleanup_t fn_ListCleanup;
@@ -314,14 +286,6 @@ extern fn_MemFreeStatic_t fn_MemFreeStatic;
 // Object::InternalBasePtr::InternalBasePtr(this, Internal*) — stores ptr
 typedef void* (*fn_InternalBasePtr_Ctor_t)(void* self, void* internal);
 extern fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor;
-
-// Input::KeyMap::GetInputForId(this, id, slot) -> int
-typedef int (*fn_KeyMap_GetInputForId_t)(void* self, int id, int slot);
-extern fn_KeyMap_GetInputForId_t fn_KeyMap_GetInputForId;
-
-// Input::KeyMap::GetDeviceForId(this, id, slot) -> int
-typedef int (*fn_KeyMap_GetDeviceForId_t)(void* self, int id, int slot);
-extern fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId;
 
 // ============================================================
 // UI Widget Functions (Phase A1 — Runtime DLL exports)
@@ -430,16 +394,14 @@ extern void** g_pGameWorldSingleton;  // DAT_1401c3dd8
 
 // Input::KeyMap singleton — used by HotKeyToolTipUI
 extern void** g_pKeyMapSingleton;     // DAT_1401c3de8 (container/manager object, NOT the KeyMap)
-extern void** g_pKeyMapObjectExref;   // exref at 0x140151738 — triple deref to get actual Input::KeyMap:
-                                      //   ***(void****)g_pKeyMapObjectExref
-                                      //   (slot → External ptr → wrapped ptr → KeyMap)
-                                      // Use this for fn_KeyMap_GetValue/fn_KeyMap_Pressed calls
+// Exe import slot 0x140151738 = ?_singleton@Configuration@Input@@0PEAV12@EA
+// (B37_RULES 6.3 defect 3: this global was named g_pInputConfigSingletonExref until the
+// B.3.7 close). Triple deref yields the Input::KeyMap*:
+//   slot -> &Configuration::_singleton -> Configuration* -> +0x00 _keyMap.
+// Standalone registers the slot with a two-link chain ending in the KeyMap
+// (standalone/address_registry.cpp, g_StandaloneKeyMapMid).
+extern void** g_pInputConfigSingletonExref;
 
-// Engine/UpdateLoop singleton — exref at 0x140151440 (double-indirect)
-// Sub-fields: +0x10 = engine state (debug counters at +0x2150..+0x215C)
-//             +0x58 = total time (Time ticks), +0x68 = frame time (Time ticks)
-// Used by DebugUI::Slot8 for performance counter display
-extern void** g_pEngineSingleton;     // exref 0x140151440
 
 // ============================================================
 // Common Exe Functions (Phase A4 — Reimplemented in clean C++)
@@ -754,44 +716,8 @@ extern fn_OrchardGetGrowth_t fn_OrchardGetGrowth;
 typedef void (*fn_SaveLoad_Dtor_t)(void* saveLoad);
 extern fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor;
 
-// SaveLoad::GetOperation(this) -> int (enum Operation)
-// ?GetOperation@SaveLoad@Save@@QEBA?AW4Operation@12@XZ (0x1800c3c80, ordinal 2826)
-typedef int (*fn_SaveLoad_GetOperation_t)(void* saveLoad);
-extern fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation;
-
 // SaveLoad singleton — accessed via exe exref at 0x140151610 (double-indirect)
 extern void** g_pSaveLoadSingleton;
-
-// SaveLoad::SetSaveSprite(this, Sprite) — set the sprite used for save screenshots
-// ?SetSaveSprite@SaveLoad@Save@@QEAAXVSprite@UI@@@Z
-typedef void (*fn_SaveLoad_SetSaveSprite_t)(void* saveLoad, void* sprite);
-extern fn_SaveLoad_SetSaveSprite_t fn_SaveLoad_SetSaveSprite;
-
-// SaveLoad::SetMinOperationTime(this, &Time) — set minimum time for save/load operation display
-// ?SetMinOperationTime@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
-typedef void (*fn_SaveLoad_SetMinOperationTime_t)(void* saveLoad, void* time);
-extern fn_SaveLoad_SetMinOperationTime_t fn_SaveLoad_SetMinOperationTime;
-
-// SaveLoad::SetOperation(this, Operation, int) — start a save/load/delete operation
-// ?SetOperation@SaveLoad@Save@@QEAAXW4Operation@12@H@Z
-typedef void (*fn_SaveLoad_SetOperation_t)(void* saveLoad, int operation, int param);
-extern fn_SaveLoad_SetOperation_t fn_SaveLoad_SetOperation;
-
-// SaveLoad::GetSaveCount(this) -> int — number of save files
-// ?GetSaveCount@SaveLoad@Save@@QEBAHXZ
-typedef int (*fn_SaveLoad_GetSaveCount_t)(void* saveLoad);
-extern fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount;
-
-// SaveLoad::GetSaveInfo(this, index) -> SaveInfo* — get info for save file at index
-// ?GetSaveInfo@SaveLoad@Save@@QEBAAEBUSaveInfo@12@H@Z
-typedef void* (*fn_SaveLoad_GetSaveInfo_t)(void* saveLoad, int index);
-extern fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo;
-
-// SaveLoad::GetSaveState(this) -> SavedState* — returns save state ptr at this+0x40
-// Used by GameUpdateLoop ctor to set the save file to load.
-// ?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ (0x1800c3b50, ordinal 2891)
-typedef void* (*fn_SaveLoad_GetSaveState_t)(void* saveLoad);
-extern fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState;
 
 // DateTime::AsString(this, retval) -> String — format date+time as string (non-trivial return)
 // ?AsString@DateTime@System@@QEBA?AVString@2@XZ
@@ -806,38 +732,11 @@ extern fn_DateTime_AsString_t fn_DateTime_AsString;
 struct SaveLoadDialog;
 void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
-// Input::Device::Released(this, InputDevice, 0, keyIndex) -> bool
-// ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z
-// InputDevice: 1=keyboard, 2=mouse
-typedef bool (*fn_Input_Device_Released_t)(void* device, int inputDevice, int param, int keyIndex);
-extern fn_Input_Device_Released_t fn_Input_Device_Released;
-
 // Input::Device singleton — accessed via exe exref at 0x140151b80 (double-indirect)
 extern void** g_pInputDeviceSingleton;
 
-// Audio::Scene::Pause(this, channel, pause) — unpauses audio scene channels
-// Resolved from exe dispatch table at 0x140152030
-typedef void (*fn_Audio_Scene_Pause_t)(void* scene, int channel, bool pause);
-extern fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause;
-
-// Audio::Scene::Update(this, Time, Time, Random&, Vector3 const&, float) -> bool
-// ?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z
-// Runtime 0x1800df6c0. Per-frame tick that advances the scene's audio channels
-// (music, ambient, 3D emitters). MenuDLT::Update (exe 0x14009b6e0) calls it with
-//   (scene@+0xb30, elapsedTime, Time(0), &Random@+0x168, &listenerVec3{0,0,0}, 0.0f)
-// when the app is not paused. The two Time args are 8-byte System::Time values
-// passed by register value; Random/Vector3 args are passed by pointer.
-typedef bool (*fn_Audio_Scene_Update_t)(void* scene, int64_t time1, int64_t time2,
-                                        void* rng, const void* listenerVec3, float f);
-extern fn_Audio_Scene_Update_t fn_Audio_Scene_Update;
-
 // ScenarioDialog helper: loads the selected scenario — NOW REIMPLEMENTED
 // fn_ScenarioDialog_LoadSelected replaced by inline code in scenariodialog.cpp
-
-// SaveLoad::Update(this, Time*) — advance save/load operation
-// ?Update@SaveLoad@Save@@QEAAXAEBVTime@System@@@Z
-typedef void (*fn_SaveLoad_Update_t)(void* saveLoad, void* time);
-extern fn_SaveLoad_Update_t fn_SaveLoad_Update;
 
 // IO::Persistence::GetSavePath and IO::FileSystem::GetDataDirectory — REMOVED,
 // ENDGAME B.3.4a closing 2d. Both doors ran out of callers once the caller
@@ -890,43 +789,16 @@ extern fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor;
 // `%p`s (minimap_upload.cpp and w2_takescreenshot.cpp), not calls.
 
 // ============================================================
-// Achievement::GoalList / GoalInstance (Runtime DLL exports)
+// Achievement::AchievementManager singleton storage
 // ============================================================
-
-// GoalList::GetGoal(this, retval, index) — member, non-trivial return ABI
-// RCX=GoalList, RDX=hidden_retval (InternalPtr<GoalInstance>), R8=index
-// ?GetGoal@GoalList@Achievement@@QEBA?AV?$InternalPtr@VGoalInstance@Achievement@@@Object@@H@Z
-// (0x180001710, ordinal 2683)
-typedef void (*fn_GoalList_GetGoal_t)(void* self, void* retval, int index);
-extern fn_GoalList_GetGoal_t fn_GoalList_GetGoal;
-
-// GoalInstance::IsMet(this) -> bool — checks if goal is met (bit 0 of +0x10)
-// ?IsMet@GoalInstance@Achievement@@QEBA_NXZ (0x18009eed0, ordinal 3141)
-typedef bool (*fn_GoalInstance_IsMet_t)(void* self);
-extern fn_GoalInstance_IsMet_t fn_GoalInstance_IsMet;
-
-// GoalInstance::HasFailed(this) -> bool — checks if goal has failed (bit 1 of +0x10)
-// ?HasFailed@GoalInstance@Achievement@@QEBA_NXZ (0x18009eec0, ordinal 3046)
-typedef bool (*fn_GoalInstance_HasFailed_t)(void* self);
-extern fn_GoalInstance_HasFailed_t fn_GoalInstance_HasFailed;
 
 // AchievementManager singleton — double-indirect via .rdata dispatch at 0x1401514f0
 // Usage: void* manager = **g_ppAchievementManager;
 extern void*** g_ppAchievementManager;
 
-// AchievementManager::IsAchievementAwarded(this, index) -> bool
-// ?IsAchievementAwarded@AchievementManager@Achievement@@QEBA_NH@Z (0x1800079c0, ordinal 3091)
-typedef bool (*fn_AchievementManager_IsAchievementAwarded_t)(void* self, int index);
-extern fn_AchievementManager_IsAchievementAwarded_t fn_AchievementManager_IsAchievementAwarded;
-
 // ============================================================
 // FollowDialog helpers
 // ============================================================
-
-// Input::KeyMap::Pressed(this, slot, keyId) -> bool
-// Resolved from exe dispatch table at 0x140151758
-typedef bool (*fn_KeyMap_Pressed_t)(void* self, int slot, int keyId);
-extern fn_KeyMap_Pressed_t fn_KeyMap_Pressed;
 
 // fn_FollowDialog_Close — now inline in followdialog.cpp Slot7 (Escape key handler)
 
@@ -1056,46 +928,6 @@ extern fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4;
 // ============================================================
 // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
 // ============================================================
-
-// GoalList::GetGoalCount(this) -> int — returns count at this+8
-// ?GetGoalCount@GoalList@Achievement@@QEBAHXZ (0x180001700, ordinal 2684)
-typedef int (*fn_GoalList_GetGoalCount_t)(void* self);
-extern fn_GoalList_GetGoalCount_t fn_GoalList_GetGoalCount;
-
-// Goal::GetText(this, retval) -> String — non-trivial return
-// RCX=this, RDX=retval(String*). Copies string at this+0x28 with refcount.
-// ?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ (0x180001ba0, ordinal 2958)
-typedef void (*fn_Goal_GetText_t)(void* self, void* retval);
-extern fn_Goal_GetText_t fn_Goal_GetText;
-
-// Achievement::GetTitle(this, retval) -> String — non-trivial return
-// RCX=this, RDX=retval(String*). Copies string at this+0x28 with refcount.
-// ?GetTitle@Achievement@1@QEBA?AVString@System@@XZ (0x1800013e0, ordinal 2973)
-typedef void (*fn_Achievement_GetTitle_t)(void* self, void* retval);
-extern fn_Achievement_GetTitle_t fn_Achievement_GetTitle;
-
-// Achievement::GetDescription(this, retval) -> String — non-trivial return
-// RCX=this, RDX=retval(String*). Returns description string.
-// ?GetDescription@Achievement@1@QEBA?AVString@System@@XZ (0x180001420, ordinal)
-typedef void (*fn_Achievement_GetDescription_t)(void* self, void* retval);
-extern fn_Achievement_GetDescription_t fn_Achievement_GetDescription;
-
-// Achievement::GetSpriteName(this, retval) -> String — non-trivial return
-// ?GetSpriteName@Achievement@1@QEBA?AVString@System@@XZ (0x1800013a0)
-typedef void (*fn_Achievement_GetSpriteName_t)(void* self, void* retval);
-extern fn_Achievement_GetSpriteName_t fn_Achievement_GetSpriteName;
-
-// AchievementManager::GetAchievementCount(this) -> int
-// ?GetAchievementCount@AchievementManager@Achievement@@QEBAHXZ (0x1800079b0, ordinal 2434)
-typedef int (*fn_AchievementManager_GetAchievementCount_t)(void* self);
-extern fn_AchievementManager_GetAchievementCount_t fn_AchievementManager_GetAchievementCount;
-
-// AchievementManager::GetAchievement(this, retval, index) -> ExternalPtr<Achievement>
-// Member, non-trivial return: RCX=this, RDX=retval, R8=index
-// ?GetAchievement@AchievementManager@Achievement@@QEBA?AV?$ExternalPtr@VAchievement@1@@Object@@H@Z
-// (0x18009e8a0, ordinal 2433)
-typedef void (*fn_AchievementManager_GetAchievement_t)(void* self, void* retval, int index);
-extern fn_AchievementManager_GetAchievement_t fn_AchievementManager_GetAchievement;
 
 // GoalDialog_ArrayPush — now inline as GoalDialog_ArrayPush_Impl in goaldialog.cpp
 // EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
@@ -1284,11 +1116,6 @@ extern fn_External_Dtor_t fn_External_Dtor;
 // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
 // ============================================================
 
-// Input::KeyMap::GetValue(this, slot, axis) -> short (axis value, e.g. mouse X/Y)
-// ?GetValue@KeyMap@Input@@QEBAFHH@Z (0x1800a7b60)
-typedef short (*fn_KeyMap_GetValue_t)(void* self, int slot, int axis);
-extern fn_KeyMap_GetValue_t fn_KeyMap_GetValue;
-
 // EditTool_SelectEntity (FUN_1400fd3b0 in exe)
 // Selects an entity in the edit tool, opens entity dialog if needed.
 // RCX=editTool*, RDX=entityInternalBasePtr*
@@ -1323,12 +1150,6 @@ extern fn_Time_Ctor_Float_t fn_Time_Ctor_Float;
 // address fallback), with no fallback branch to hide it. Deleted rather than
 // repaired because it had ZERO callers tree-wide; whoever needs it should
 // declare the real signature, index and all.
-
-// Audio::Scene::PlayEffect(scene, soundEffect, soundType, time) -> uint
-// ?PlayEffect@Scene@Audio@@QEAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@VTime@System@@@Z
-// (0x1800def60)
-typedef uint32_t (*fn_Audio_Scene_PlayEffect_t)(void* scene, uint64_t soundEffect, int soundType, void* timeParam);
-extern fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect;
 
 // EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
 
@@ -1441,11 +1262,6 @@ inline void fn_TrackerComponent_Rebuild(void* dstArray, void* srcArray) {
 // ============================================================
 // MainMenuDialog support functions
 // ============================================================
-
-// Application::Application::Quit(this) — sets quit flag
-// ?Quit@Application@1@QEAAXXZ (ordinal 3437)
-typedef void (*fn_App_Quit_t)(void* self);
-extern fn_App_Quit_t fn_App_Quit;
 
 // System::Configuration::CurrentVersion() -> String (static, hidden ret ptr in RCX)
 // ?CurrentVersion@Configuration@System@@SA?AVString@2@XZ
@@ -1720,12 +1536,6 @@ extern uint32_t* g_TypeId_UIDescription;
 // ============================================================
 // DragTool support functions
 // ============================================================
-
-// Input::KeyMap::Released(this, slot, keyId) -> bool
-// ?Released@KeyMap@Input@@QEBA_NHH@Z
-// Dispatch table at 0x1401528f0
-typedef bool (*fn_KeyMap_Released_t)(void* self, int slot, int keyId);
-extern fn_KeyMap_Released_t fn_KeyMap_Released;
 
 // REMOVED at Wave 8 integration: fn_AudioScene_PlayEffect.
 // It was a vestigial resolve under a WRONG NAME. Slot 0x140152830 is NOT any
@@ -2335,48 +2145,10 @@ extern fn_Graphics_Camera_Ctor_t fn_Graphics_Camera_Ctor;
 // (?SetFrustum@Camera@Graphics@@) is GONE — zero callers. `fn_Graphics_Camera_Ctor`
 // above it STAYS: a ctor door with ten live uses (B4b-2 / section 11).
 
-// Audio::Scene::MoveEmitter — moves an audio emitter from old to new position
-// RCX=Audio::Scene*, EDX=emitterId, R8=oldPos(Vector3*), R9=newPos(Vector3*)
-typedef void (*fn_Audio_Scene_MoveEmitter_t)(void* scene, uint32_t emitterId, void* oldPos, void* newPos);
-extern fn_Audio_Scene_MoveEmitter_t fn_Audio_Scene_MoveEmitter;
-
-// Audio::Scene::SetEmitterVolume — sets volume on an audio emitter
-// RCX=Audio::Scene*, EDX=emitterId, R8=pos(Vector3*), XMM3=volume(float)
-typedef void (*fn_Audio_Scene_SetEmitterVolume_t)(void* scene, uint32_t emitterId, void* pos, float volume);
-extern fn_Audio_Scene_SetEmitterVolume_t fn_Audio_Scene_SetEmitterVolume;
-
 // --- Audio::Scene 3D emitter API (ambient environment + building emitters) ---
 // These back the AmbientEnvironmentComponent / AmbientEmitterComponent audio
 // (biome wind/nature beds, per-building loops). All are Runtime-x64.dll exports;
 // resolved by mangled name so both DLL and standalone builds share the pointer.
-
-// Audio::Scene::FindEffect3D(ExternalPtr<SoundEffect>) -> uint handle (0 if none)
-// RCX=this, RDX=soundRef (8-byte ExternalPtr by value).
-typedef uint32_t (*fn_Audio_Scene_FindEffect3D_t)(void* scene, uint64_t soundRef);
-extern fn_Audio_Scene_FindEffect3D_t fn_Audio_Scene_FindEffect3D;
-
-// Audio::Scene::PlayEffect3D(ExternalPtr<SoundEffect>, SoundType, const Time&, const Vector3&) -> uint handle
-// RCX=this, RDX=soundRef, R8D=soundType(3), R9=Time*, [rsp+20h]=Vector3* pos.
-typedef uint32_t (*fn_Audio_Scene_PlayEffect3D_t)(void* scene, uint64_t soundRef, int soundType,
-                                                  const void* timePtr, const void* posVec3);
-extern fn_Audio_Scene_PlayEffect3D_t fn_Audio_Scene_PlayEffect3D;
-
-// Audio::Scene::AddEmitter(uint id, const Vector3&, float vol)
-// RCX=this, EDX=id, R8=Vector3*, XMM3=vol.
-typedef void (*fn_Audio_Scene_AddEmitter_t)(void* scene, uint32_t id, const void* posVec3, float vol);
-extern fn_Audio_Scene_AddEmitter_t fn_Audio_Scene_AddEmitter;
-
-// Audio::Scene::RemoveEmitter(uint id, const Vector3&)
-typedef void (*fn_Audio_Scene_RemoveEmitter_t)(void* scene, uint32_t id, const void* posVec3);
-extern fn_Audio_Scene_RemoveEmitter_t fn_Audio_Scene_RemoveEmitter;
-
-// Audio::Scene::GetEmitterCount(uint id) const -> int
-typedef int (*fn_Audio_Scene_GetEmitterCount_t)(void* scene, uint32_t id);
-extern fn_Audio_Scene_GetEmitterCount_t fn_Audio_Scene_GetEmitterCount;
-
-// Audio::Scene::StopEffect3D(uint id)
-typedef void (*fn_Audio_Scene_StopEffect3D_t)(void* scene, uint32_t id);
-extern fn_Audio_Scene_StopEffect3D_t fn_Audio_Scene_StopEffect3D;
 
 // DebugUI_OnDaySliderChanged (0x1400607E0) — handles day slider change, updates time/weather
 // RCX=self(DebugUI*)
@@ -2538,49 +2310,6 @@ extern void** g_GameLoaderLoop_Vtable;  // 0x1401588d0
 typedef void* (*fn_DialogLoopT_Ctor_t)(void* self, void* dialogFilename);
 extern fn_DialogLoopT_Ctor_t fn_DialogLoopT_Ctor;
 
-// Engine::DialogLoopT::Update(self, Time const&) — Runtime base virtual Update
-// ?Update@DialogLoopT@Engine@@UEAA_NAEBVTime@System@@@Z (Runtime 0x1800db270)
-// Body: calls UI::UserInterface::Update on the embedded UI at self+0x40, returns true.
-typedef bool (*fn_DialogLoopT_Update_t)(void* self, void* time);
-extern fn_DialogLoopT_Update_t fn_DialogLoopT_Update;
-
-// Engine::DialogLoopT::Startup(self) — Runtime base virtual Startup
-// ?Startup@DialogLoopT@Engine@@UEAAXXZ (Runtime 0x1800db2f0)
-// Calls vtable[12]/CreateDialog to construct the dialog instance, stores at
-// self+0x38 (m_dialogInstance), invokes the dialog's Slot4 (OnOpened/Setup),
-// then pushes the InternalPtr into the UI's pending-open dialog array (+0x68).
-typedef void (*fn_DialogLoopT_Startup_t)(void* self);
-extern fn_DialogLoopT_Startup_t fn_DialogLoopT_Startup;
-
-// Engine::DialogLoopT::Load(self) — Runtime base virtual Load (vtable +0x30)
-// ?Load@DialogLoopT@Engine@@UEAAXXZ (Runtime 0x1800db140)
-// Reads m_dialogFilename from self+0x28, calls Filename::AdjustDelimiters, then
-// ExternalFactory::FindOrLoad on the path. Stores the resulting External (or null
-// if IsDerivedFrom<Dialog::Description> fails) at self+0x30 (m_dialogExternal).
-// Subclass overrides (e.g., MenuDLT::Load) typically tail-call this then load
-// extra companion resources (audio rsc, scene rsc, particles).
-typedef void (*fn_DialogLoopT_Load_t)(void* self);
-extern fn_DialogLoopT_Load_t fn_DialogLoopT_Load;
-
-// Engine::DialogLoaderLoopT::Startup(self) — Runtime DialogLoaderLoopT virtual Startup
-// ?Startup@DialogLoaderLoopT@Engine@@UEAAXXZ (Runtime 0x1800db000)
-// Calls vtable[+0x60]/CreateDialog to build the dialog instance, stores at
-// self+0x58 (m_dialogInstance), invokes the dialog's Slot4 (Setup/OnOpened),
-// pushes IBP into the UI's pending-open dialog array at self+0x88, then calls
-// Loader::Load(LoaderLoop::_loader, m_nextLoop). Used by both the ShiningRock
-// splash and the Loading screen.
-typedef void (*fn_DialogLoaderLoopT_Startup_t)(void* self);
-extern fn_DialogLoaderLoopT_Startup_t fn_DialogLoaderLoopT_Startup;
-
-// Engine::DialogLoaderLoopT::Load(self) — Runtime base virtual Load (vtable +0x30)
-// ?Load@DialogLoaderLoopT@Engine@@UEAAXXZ (Runtime 0x1800dad50)
-// Reads m_dialogFilename @ +0x48, calls Filename::AdjustDelimiters, then
-// ExternalFactory::FindOrLoad. Stores resulting External (or null on type
-// mismatch) at +0x50 (m_dialogExternal). Same shape as DialogLoopT::Load
-// but with the DialogLoaderLoopT field offsets.
-typedef void (*fn_DialogLoaderLoopT_Load_t)(void* self);
-extern fn_DialogLoaderLoopT_Load_t fn_DialogLoaderLoopT_Load;
-
 // Audio::Scene::Scene() — Runtime default ctor (0x1800e0160)
 // ??0Scene@Audio@@QEAA@XZ — initializes 0x38-byte Audio::Scene sub-object.
 typedef void* (*fn_AudioScene_Ctor_t)(void* self);
@@ -2711,17 +2440,6 @@ extern float* g_fUVScale;  // DAT_14017214c
 // SpriteCaptureUI support functions
 // ============================================================
 
-// Input::Device::GetValue(this, InputDevice, slot, axis) -> short
-// ?GetValue@Device@Input@@QEBAFW4InputDevice@12@HH@Z (0x1800e1660, ordinal 3004)
-// InputDevice: 1=keyboard, 2=mouse. axis 0=X, 1=Y, 4=left button.
-typedef short (*fn_Input_Device_GetValue_t)(void* self, int device, int slot, int axis);
-extern fn_Input_Device_GetValue_t fn_Input_Device_GetValue;
-
-// Input::Device::Pressed(this, InputDevice, slot, key) -> bool
-// ?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z (0x1800e16c0, ordinal 3431)
-typedef bool (*fn_Input_Device_Pressed_t)(void* self, int device, int slot, int key);
-extern fn_Input_Device_Pressed_t fn_Input_Device_Pressed;
-
 // IO::FileSystem singleton — exref at 0x140151d18 (ordinal 0x161 _singleton)
 extern void** g_pFileSystemSingleton;
 
@@ -2734,30 +2452,10 @@ extern void** g_pFileSystemSingleton;
 
 // --- Audio::Configuration ---
 
-// Audio::Configuration::Save(this)
-// ?Save@Configuration@Audio@@QEAAXXZ
-typedef void (*fn_AudioConfig_Save_t)(void* self);
-extern fn_AudioConfig_Save_t fn_AudioConfig_Save;
-
-// Audio::Configuration::Startup(this) -> bool
-// ?Startup@Configuration@Audio@@QEAA_NXZ
-typedef bool (*fn_AudioConfig_Startup_t)(void* self);
-extern fn_AudioConfig_Startup_t fn_AudioConfig_Startup;
-
 // --- Video::Configuration --- EMPTY since ENDGAME B.3.5 (b35-close):
 // `Configuration::Save` is a member of the real `Video::Configuration`.
 
 // --- Input::Configuration ---
-
-// Input::Configuration::Save(this)
-// ?Save@Configuration@Input@@QEAAXXZ
-typedef void (*fn_InputConfig_Save_t)(void* self);
-extern fn_InputConfig_Save_t fn_InputConfig_Save;
-
-// Input::Configuration::Load(this)
-// ?Load@Configuration@Input@@QEAAXXZ
-typedef void (*fn_InputConfig_Load_t)(void* self);
-extern fn_InputConfig_Load_t fn_InputConfig_Load;
 
 // Input::Configuration::_singleton
 extern void** g_pInputConfigSingleton;
@@ -2767,16 +2465,6 @@ extern void** g_pInputConfigSingleton;
 
 // --- Input::Device ---
 
-// Input::Device::EnableMouseClipping(this, bool)
-// ?EnableMouseClipping@Device@Input@@QEAAX_N@Z
-typedef void (*fn_InputDevice_EnableMouseClipping_t)(void* self, bool enable);
-extern fn_InputDevice_EnableMouseClipping_t fn_InputDevice_EnableMouseClipping;
-
-// Input::Device::ResetState(this)
-// ?ResetState@Device@Input@@QEAAXXZ
-typedef void (*fn_InputDevice_ResetState_t)(void* self);
-extern fn_InputDevice_ResetState_t fn_InputDevice_ResetState;
-
 // --- Video::Device --- EMPTY since ENDGAME B.3.5 (b35-close): every door this
 // section held (`Startup`, `Shutdown`, `ApplyChangedSettings`, `RecreateDynamic`,
 // `ReleaseDynamic`, `ValidateConfiguration`, `GetMultisampleModeCount`,
@@ -2785,21 +2473,6 @@ extern fn_InputDevice_ResetState_t fn_InputDevice_ResetState;
 // static-storage read, not a door (B35_RULES section 9).
 
 // --- Engine::MainLoop ---
-
-// Engine::MainLoop::OnVideoError(this)
-// ?OnVideoError@MainLoop@Engine@@QEAAXXZ
-typedef void (*fn_MainLoop_OnVideoError_t)(void* self);
-extern fn_MainLoop_OnVideoError_t fn_MainLoop_OnVideoError;
-
-// Engine::MainLoop::OnVideoRestart(this)
-// ?OnVideoRestart@MainLoop@Engine@@QEAAXXZ
-typedef void (*fn_MainLoop_OnVideoRestart_t)(void* self);
-extern fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart;
-
-// Engine::MainLoop::SetNextLoop(this, UpdateLoop*)
-// ?SetNextLoop@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z  (Runtime 0x1800dd7a0)
-typedef void (*fn_MainLoop_SetNextLoop_t)(void* self, void* loop);
-extern fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop;
 
 // Object::BaseTypeInfo::BaseTypeInfo(this, name, parent, fileExtension, factory, inPlace)
 // ??0BaseTypeInfo@Object@@QEAA@PEBD00P6APEAVBase@1@XZP6APEAV21@PEAX@Z@Z  (Runtime 0x180006320)
@@ -2880,43 +2553,6 @@ extern fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings;
 // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ
 typedef void (*fn_InternalBasePtr_DeletePtr_t)(void* self);
 extern fn_InternalBasePtr_DeletePtr_t fn_InternalBasePtr_DeletePtr;
-
-// Input::KeyMap::SetInput(this, id, slot, device, key)
-// ?SetInput@KeyMap@Input@@QEAAXHHHH@Z
-typedef void (*fn_KeyMap_SetInput_t)(void* self, int id, int slot, int device, int key);
-extern fn_KeyMap_SetInput_t fn_KeyMap_SetInput;
-
-// Input::KeyMap::ClearInput(this, id, slot) — 2-param overload
-// ?ClearInput@KeyMap@Input@@QEAAXHH@Z
-typedef void (*fn_KeyMap_ClearInput2_t)(void* self, int id, int slot);
-extern fn_KeyMap_ClearInput2_t fn_KeyMap_ClearInput2;
-
-// Input::KeyMap::ClearInput(this, id, device, key) — 3-param overload
-// ?ClearInput@KeyMap@Input@@QEAAXHHH@Z
-typedef void (*fn_KeyMap_ClearInput3_t)(void* self, int id, int device, int key);
-extern fn_KeyMap_ClearInput3_t fn_KeyMap_ClearInput3;
-
-// Input::KeyMap::GetIdForDeviceInput(this, device, key) -> int
-// ?GetIdForDeviceInput@KeyMap@Input@@QEBAHH H@Z
-typedef int (*fn_KeyMap_GetIdForDeviceInput_t)(void* self, int device, int key);
-extern fn_KeyMap_GetIdForDeviceInput_t fn_KeyMap_GetIdForDeviceInput;
-
-// Input::KeyMap::RegisterInput(this, id, deviceType, keyCode, name, flag)
-// ?RegisterInput@KeyMap@Input@@QEAAXHHHPEBD_N@Z (Runtime 0x1800a7e70)
-// name is const char* (PEBD), NOT a String object.
-typedef void (*fn_KeyMap_RegisterInput_t)(void* self, int id, int deviceType,
-                                           int keyCode, const char* name, bool flag);
-extern fn_KeyMap_RegisterInput_t fn_KeyMap_RegisterInput;
-
-// Input::KeyMap::ClearAll(this)
-// ?ClearAll@KeyMap@Input@@QEAAXXZ (Runtime 0x1800a7d20)
-typedef void (*fn_KeyMap_ClearAll_t)(void* self);
-extern fn_KeyMap_ClearAll_t fn_KeyMap_ClearAll;
-
-// Input::KeyMap::Load(this) — loads saved bindings from Persistence over current map
-// ?Load@KeyMap@Input@@QEAAXXZ (Runtime 0x1800a7190)
-typedef void (*fn_KeyMap_Load_t)(void* self);
-extern fn_KeyMap_Load_t fn_KeyMap_Load;
 
 // OptionInputBindDialog ctor (0x140071d30) — creates 0xC8-byte dialog
 // Params: (mem, userInterface, externalResource, internalBasePtrNull)
@@ -3080,18 +2716,6 @@ extern fn_SetEditMode_t fn_SetEditMode;
 // ============================================================
 // Phase G Wave 1: SaveLoadDialog DoLoad/DoSave/DoDelete + EventNotifyDialog NavigateToEvent
 // ============================================================
-
-// Save::SaveLoad::CheckMod(saveLoad, saveIndex, modIndex) — returns mod status code:
-//   0 = ok, 2 = out of date, 3 = version mismatch, 4 = changed, other = missing.
-// _singleton at 0x140152738 (Runtime export).
-typedef int (*fn_SaveLoad_CheckMod_t)(void* saveLoad, int saveIndex, int modIndex);
-extern fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod;
-
-// Save::SaveLoad::SetSaveName(saveLoad, String* name, int mode) — sets save name.
-// mode=2 sets in save-name slot. Called before SetOperation(4,...).
-// _singleton at 0x140151650 (Runtime export).
-typedef void (*fn_SaveLoad_SetSaveName_t)(void* saveLoad, void* nameStr, int mode);
-extern fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName;
 
 // FUN_14009f3e0(mapGrid, outPos3, inXY2, flag, outTri) — terrain/scene pick from 2D position.
 // Casts a ray from a 2D map position and returns the 3D terrain-intersection point.
@@ -4215,43 +3839,14 @@ extern fn_FindWorkplaceComp_t fn_FindWorkplaceComp;
 // Achievement Goal support (code/Game/Goal/)
 // ============================================================
 
-// Achievement::Goal::~Goal (Runtime 0x18009edb0, ordinal 600)
-// ??1Goal@Achievement@@UEAA@XZ — destroys Goal base (string dtor + External dtor)
-// NOT "?~Goal@..." (this line said that until 2026-09-06) and NOT the QEAA
-// spelling: a destructor mangles as ??1, and Goal is polymorphic so it is
-// UEAA. Both wrong spellings were live in code/Game/Goal/ and resolved to
-// null silently — see the note at code/Game/Goal/statgoal.cpp.
-typedef void (*fn_Goal_BaseDtor_t)(void* self);
-extern fn_Goal_BaseDtor_t fn_Goal_BaseDtor;
-
 // Achievement::Goal::Goal() (Runtime 0x18009ed50, ordinal 207)
 // ??0Goal@Achievement@@QEAA@XZ — default ctor, zeroes base fields (a ctor
 // mangles as ??0; this line said "?Goal@..." until 2026-09-06)
 typedef void (*fn_Goal_BaseCtor_t)(void* self);
 extern fn_Goal_BaseCtor_t fn_Goal_BaseCtor;
 
-// Achievement::Goal::Serialize — called via dispatch slot 0x140152840
-// Signature: void Goal::Serialize(this, Stream*)
-typedef void (*fn_Goal_BaseSerialize_t)(void* self, void* stream);
-extern fn_Goal_BaseSerialize_t fn_Goal_BaseSerialize;
-
-// Achievement::GoalInstance::~GoalInstance (Runtime 0x18009ef40, ordinal 601)
-// ??1GoalInstance@Achievement@@UEAA@XZ
-typedef void (*fn_GoalInstance_BaseDtor_t)(void* self);
-extern fn_GoalInstance_BaseDtor_t fn_GoalInstance_BaseDtor;
-
-// Achievement::GoalInstance::Persist (Runtime 0x18009ef70)
-// Signature: void GoalInstance::Persist(this, Stream*)
-typedef void (*fn_GoalInstance_Persist_t)(void* self, void* stream);
-extern fn_GoalInstance_Persist_t fn_GoalInstance_Persist;
-
 // Object::InternalBasePtr::Serialize — REMOVED, ENDGAME B.3.4a closing 2d
 // (0 CALLs; every site is now a member call on a real InternalBasePtr).
-
-// UpdateLoop/Game IsRunning — dispatch slot 0x140152850
-// Used by PopulationGoal::Slot8 to check if game is active
-typedef bool (*fn_IsRunning_t)(void* self);
-extern fn_IsRunning_t fn_IsRunning;
 
 // System::MemoryAllocator::MemFree — static wrapper (0x18001d170 in Runtime)
 // Already have fn_MemFreeStatic, but need the one used by Goal dtors

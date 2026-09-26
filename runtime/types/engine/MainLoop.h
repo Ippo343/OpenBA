@@ -128,9 +128,10 @@ struct UpdateLoop;   // defined by lane A in runtime/types/engine/UpdateLoop.h
 // (`RtEngine::Engine` is an ALIAS of the real class since B.3.7: Engine.h.)
 
 // Retail addresses in Runtime-x64.dll (Ghidra space, image base 0x180000000).
-// Ordinals are from the shipped export directory, read with pefile; entries
-// with no ordinal are DLL-internal (not exported) and must be reached with
-// ResolveAddr(Module::Runtime, addr).
+// Ordinals are from the shipped export directory, read with pefile. An entry
+// with no ordinal comment is NOT thereby internal: every function constant in
+// this namespace is an export (rt_export_addrs.inc, re-checked at the B.3.7
+// close) -- only the two device-slot OFFSETS below are not addresses at all.
 namespace MainLoopAddr {
     constexpr uintptr_t Singleton           = 0x1801fe750;  // ord 4813 (DATA)
 
@@ -154,7 +155,9 @@ namespace MainLoopAddr {
     constexpr uintptr_t RemovePostDraw      = 0x1800dcf90;
     constexpr uintptr_t RemovePostUpdate    = 0x1800dceb0;
 
-    // Internal, NOT exported.
+    // Filed as "Internal, NOT exported" until the B.3.7 close. ALL FIVE are
+    // exports: Update ord 4496, Frame ord 2377, Draw ord 2251, and the private
+    // (AEAA) CreateVideoContext / ReleaseVideoContext (rt_export_addrs.inc).
     //
     // *** CORRECTED 2026-09-12, WAVE 27 lane LOOPS: `Draw` DOES NOT BELONG UNDER
     // *** THIS HEADING. `?Draw@MainLoop@Engine@@QEAAXM@Z` is export ORDINAL 2251
@@ -242,9 +245,9 @@ static_assert(sizeof(MainLoopCallback) == 0x10, "MainLoopCallback is 0x10 bytes"
 // caller batch has to edit this header.
 //
 // `?_singleton@MainLoop@Engine@@1PEAV12@EA` (0x1801fe750) STAYS a data slot
-// until the end of B.3 (carry-over 5). NOTE `g_pEngineSingleton` in
-// engine/funcs/engine_funcs is bound to THIS symbol, not to Engine::_singleton
-// (a misnamed global; B37_RULES sec. 6.3 defect 3).
+// until the end of B.3 (carry-over 5). engine/funcs/engine_funcs reads it as
+// `g_pMainLoopSingleton` (the misnamed second global `g_pEngineSingleton`,
+// B37_RULES sec. 6.3 defect 3, was folded into it at the B.3.7 close).
 //
 // Every by-value `System::Time` RETURN below is a retslot export in retail;
 // none of the four has a caller, so they are declared and left undefined.

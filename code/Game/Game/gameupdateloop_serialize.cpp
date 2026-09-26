@@ -85,7 +85,6 @@ typedef void  (*fn_SerializeRefTable_t)(void* extFactory, void* stream);
 typedef void  (*fn_ResetPersist_t)(void* intFactory, void* stream);
 typedef void  (*fn_ClearPersist_t)(void* intFactory);
 
-typedef void  (*fn_AudioScene_Serialize_t)(void* scene, void* serializer);
 typedef void* (*fn_CMS_Ctor_t)(void* self);
 typedef void  (*fn_CMS_Dtor_t)(void* self);
 typedef bool  (*fn_CMS_Open_t)(void* self);
@@ -99,7 +98,6 @@ static fn_SerializeRefTable_t   s_fn_SerializeRefTable = nullptr;
 static fn_ResetPersist_t        s_fn_ResetPersist = nullptr;
 static fn_ClearPersist_t        s_fn_ClearPersist = nullptr;
 
-static fn_AudioScene_Serialize_t s_fn_AudioScene_Serialize = nullptr;
 static fn_CMS_Ctor_t            s_fn_CMS_Ctor = nullptr;
 static fn_CMS_Dtor_t            s_fn_CMS_Dtor = nullptr;
 static fn_CMS_Open_t            s_fn_CMS_Open = nullptr;
@@ -156,8 +154,6 @@ void EnsureResolved() {
     s_fn_ClearPersist = reinterpret_cast<fn_ClearPersist_t>(
         ResolveExport("?ClearPersistState@InternalFactory@Object@@QEAAXXZ"));
 
-    s_fn_AudioScene_Serialize = reinterpret_cast<fn_AudioScene_Serialize_t>(
-        ResolveExport("?Serialize@Scene@Audio@@QEAAXAEAVSerializer@IO@@@Z"));
     s_fn_CMS_Ctor = reinterpret_cast<fn_CMS_Ctor_t>(
         ResolveExport("??0CompressedMemoryStream@IO@@QEAA@XZ"));
     s_fn_CMS_Dtor = reinterpret_cast<fn_CMS_Dtor_t>(
@@ -197,11 +193,11 @@ void EnsureResolved() {
     s_fn_AvlFixup_5920 = reinterpret_cast<fn_AvlFixup_5920_t>(R(0x140025920));
 
     fprintf(stderr, "[GUL::Serialize] resolved: refMode=%p refTable=%p persist=%p/%p "
-            "audio=%p cms=%p/%p "
+            "cms=%p/%p "
             "subs: cit=%p grid=%p goals=%p citPost=%p envPtr=%p\n",
             (void*)s_fn_EnableRefMode, (void*)s_fn_SerializeRefTable,
             (void*)s_fn_ResetPersist, (void*)s_fn_ClearPersist,
-            (void*)s_fn_AudioScene_Serialize, (void*)s_fn_CMS_Ctor,
+            (void*)s_fn_CMS_Ctor,
             (void*)s_fn_CMS_Open, (void*)s_fn_CitList_8f760,
             (void*)s_fn_Grid_9f100, (void*)s_fn_Goals_f9240,
             (void*)s_fn_CitPost_8f580, (void*)s_fn_EnvPtrSer_192a0);

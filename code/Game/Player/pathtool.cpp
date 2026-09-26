@@ -101,7 +101,7 @@ static void ResolvePathToolFuncs() {
 // Helper: get KeyMap from external reference
 // ============================================================
 static inline uint64_t GetKeyMap() {
-    return (uint64_t)***(void****)g_pKeyMapObjectExref;
+    return (uint64_t)***(void****)g_pInputConfigSingletonExref;
 }
 
 // ============================================================

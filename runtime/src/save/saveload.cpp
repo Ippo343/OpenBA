@@ -671,7 +671,7 @@ void Save::SaveLoad::SetMinOperationTime(const System::Time& time) {
 }
 
 void RtSave_SaveLoad_SetMinOperationTime(SaveLoad* self, const int64_t* time) {
-    self->Save::SaveLoad::SetMinOperationTime(*reinterpret_cast<const System::Time*>(time));
+    self->Save::SaveLoad::SetMinOperationTime(*reinterpret_cast<const System::Time*>(time));   // B.3.7 bridge
 }
 
 // ============================================================================
@@ -912,7 +912,7 @@ void Save::SaveLoad::Update(const System::Time& delta) {
 }
 
 void RtSave_SaveLoad_Update(SaveLoad* self, const int64_t* delta) {
-    self->Save::SaveLoad::Update(*reinterpret_cast<const System::Time*>(delta));
+    self->Save::SaveLoad::Update(*reinterpret_cast<const System::Time*>(delta));   // B.3.7 bridge
 }
 
 // ============================================================================

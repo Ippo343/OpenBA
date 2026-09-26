@@ -431,7 +431,7 @@ extern "C" void ModDialog_CloseAndReload(void* self) {
     void* savedState = fn_MemAlloc(g_pMemAllocSingleton, 0x10, 4);
     if (savedState && fn_SavedState_Ctor) statePtr = fn_SavedState_Ctor(savedState);
 
-    void* engine = g_pEngineSingleton ? *g_pEngineSingleton : nullptr;
+    void* engine = g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr;
     if (engine) {
         uintptr_t inner = *reinterpret_cast<uintptr_t*>(
             reinterpret_cast<uintptr_t>(engine) + 0x20);

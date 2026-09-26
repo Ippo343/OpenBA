@@ -270,7 +270,6 @@ typedef void  (*fn_vec3Dot_t)(void* thisVec, void* retScalar, void* other); // [
 typedef void* (*fn_vec3Ctor_t)(void* self, float x, float y, float z); // [0x140152a30]
 typedef void  (*fn_transformAssign_t)(void* dst, void* src);          // [0x140151280]
 typedef void  (*fn_transformCtor_t)(void* self, void* src);          // [0x140151418]
-typedef void  (*fn_pickSetXform_t)(void* scene, uint32_t id, void* xform); // [0x1401529a8]
 typedef void* (*fn_scalarMax_t)(void* thisScalar, void* retScalar, void* other); // [0x140151e78]
 
 // PERF (2026-09-04): bit-identical inline copies of the trivial Runtime math exports
@@ -314,7 +313,12 @@ static fn_vec3Dot_t         s_slot_dot      = nullptr;
 static fn_vec3Ctor_t        s_slot_vec3     = nullptr;
 static fn_transformAssign_t s_slot_xfAssign = nullptr;
 static fn_transformCtor_t   s_slot_xfCtor   = nullptr;
-static fn_pickSetXform_t    s_slot_pickXf   = nullptr;
+// PerfX's deferred pick push (perf-only, PICK_CULL) replays through this: the
+// member Picking::Scene::SetTransform, which the exe slot 0x1401529a8 used to
+// be resolved for (the slot's registered target is the same member's door).
+static void PickSetXfMember(void* scene, uint32_t id, void* xform) {
+    reinterpret_cast<Picking::Scene*>(scene)->SetTransform(id, *static_cast<const Math::Transform*>(xform));   // B.3.7 bridge
+}
 static fn_scalarMax_t       s_slot_max      = nullptr;
 
 // Picking::Scene::AddMesh (Runtime 0x1801252e0) registers a pick mesh and returns its
@@ -361,7 +365,6 @@ static void EnsureTailInit() {
     s_slot_vec3     = reinterpret_cast<fn_vec3Ctor_t>(ResolveSlot(0x140152a30));
     s_slot_xfAssign = reinterpret_cast<fn_transformAssign_t>(ResolveSlot(0x140151280));
     s_slot_xfCtor   = reinterpret_cast<fn_transformCtor_t>(ResolveSlot(0x140151418));
-    s_slot_pickXf   = reinterpret_cast<fn_pickSetXform_t>(ResolveSlot(0x1401529a8));
     s_slot_max      = reinterpret_cast<fn_scalarMax_t>(ResolveSlot(0x140151e78));
     // Picking-registration closure (port of Entity_impl_8f50 = PickingComponent OnAdded).
     s_slot_isDerived = reinterpret_cast<fn_isDerived_t>(ResolveSlot(0x140152a98));
@@ -679,7 +682,7 @@ extern "C" void CharacterComponent_MoveTick_1094c0(uint8_t* self, void* time) {
             // its pick-scene transform is deferred; PerfX replays it if the sim pauses.
             if (!PerfX::PickCullSkip(reinterpret_cast<void*>(model), pickScene, pickId,
                                      reinterpret_cast<PerfX::PickXfCtor_t>(s_slot_xfCtor),
-                                     reinterpret_cast<PerfX::PickSetXf_t>(s_slot_pickXf))) {
+                                     &PickSetXfMember)) {
                 reinterpret_cast<Picking::Scene*>(pickScene)->SetTransform(pickId, *reinterpret_cast<const Math::Transform*>(localXform));   // B.3.7 bridge
             }
         }

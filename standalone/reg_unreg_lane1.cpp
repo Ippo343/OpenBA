@@ -21,10 +21,9 @@
 //     (engine_funcs.cpp), and each already falls back to ResolveExport() with
 //     the IDENTICAL mangled name — the fallback is its own proof of the name.
 //   - 0x140151610 / 0x140151d18: same, name-matched ResolveExport fallbacks.
-//   - 0x140151440: no fallback, but engine_funcs.cpp:4374 independently
-//     resolves ?_singleton@MainLoop@Engine@@1PEAV12@EA into
-//     g_pMainLoopSingleton, and gameupdateloop.cpp:457 already assigns that to
-//     g_pEngineSingleton — so the object identity is confirmed twice over.
+//   - 0x140151440: ?_singleton@MainLoop@Engine@@1PEAV12@EA, the same symbol
+//     engine_funcs resolves by name into g_pMainLoopSingleton (the second
+//     global for it, g_pEngineSingleton, was folded away at the B.3.7 close).
 //   - 0x1401514f0: one reader, used purely as a data exref; both consumers of
 //     g_ppAchievementManager call fn_AchievementManager_*.
 // None of the eleven has a second reader under a conflicting name.
@@ -182,16 +181,10 @@ extern "C" void RegisterUnregLane1Batch() {
     RegisterDispatchSlot(0x140151d18,
         (uintptr_t)ResolveExport("?_singleton@FileSystem@IO@@0PEAV12@EA"));
 
-    // 0x140151440 — Engine::MainLoop::_singleton -> g_pEngineSingleton.
-    // engine_funcs.cpp:2322 has NO fallback, so g_pEngineSingleton was null
-    // through all of boot. gameupdateloop.cpp:457 patches it up later
-    // (`g_pEngineSingleton = g_pMainLoopSingleton`, which engine_funcs.cpp:4374
-    // resolves from the very same export) — but only once GameUpdateLoop runs.
-    // Everything that reads it earlier saw null: particlecomponent.cpp:546
-    // (the fixed-timestep source), debugui.cpp:860, moddialog.cpp:707,
-    // mod_dialog_vtables.cpp:436. Registering makes it correct from
-    // EngineFuncsInit; the value is identical to the late fixup, so the
-    // GameUpdateLoop path simply stops firing.
+    // 0x140151440 — Engine::MainLoop::_singleton. The exe's exref for the
+    // symbol engine_funcs binds by name into g_pMainLoopSingleton; the tree
+    // no longer reads it through this slot (B.3.7 close folded the second
+    // global, g_pEngineSingleton), the row keeps the slot table faithful.
     RegisterDispatchSlot(0x140151440,
         (uintptr_t)ResolveExport("?_singleton@MainLoop@Engine@@1PEAV12@EA"));
 

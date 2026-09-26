@@ -38,9 +38,11 @@ live in `runtime/src/collection/set_avl_e24.cpp`, not here: they are
 element-type-agnostic within the 0x18-byte instantiation and MSVC folds one copy
 per matching node header, so they are not Input's to own.
 
-**Not ported:** `?Update@Device@Input@@` and its three helpers — see
-`docs/runtime_port/WAVE9_LANE_INPUT.md` §6 for the measured blocker (the two
-pollers need a `GetDeviceState` recorder before they have an oracle; the COM
-surface is exactly two `IDirectInputDevice8` slots). Also `?Suspend@`,
-`?GetIdList@`, `?GetNormalizedValue@` and the KeyMap ctor/dtor/assign exports,
-none of which our tree calls.
+`?Update@Device@Input@@` and its helpers, once listed here as not ported, are in
+`input_device_update.cpp` (MainLoop::Run calls the member every frame). Members
+still declared and not ported carry a `// not ported` marker in
+`runtime/types/input/Input.h` / `Device.h`.
+
+## Status (ENDGAME B.3.7 closing pass, 2026-09-26)
+
+`Input::KeyMap` (0x18; `Binding` 0x18 / `BindingNode` 0x38), `Input::Device` (exactly 0x1200) and `Input::Configuration` (0x10) are REAL non-polymorphic C++ classes in `runtime/types/input/{Input,Device}.h`; every tree caller calls the members (the `fn_KeyMap_*` / `fn_Input_Device_*` globals are deleted, and the drag tool's `KeyMap::Released` path, bound to an unregistered slot before, is live). `~Configuration` and `~KeyMap` are declared, not defined: they stay doors. `KeyMap`'s two split fields stand in for a `Collection::Set` until that template has a byte-key compare policy (B37_RULES 12). Rules and history: `docs/runtime_port/endgame_b/B37_RULES.md`; numbers: `docs/runtime_port/endgame_b/b37_session/CLOSE_NUMBERS.md`.

@@ -3,7 +3,7 @@
 // Default input-binding registration helper.
 //
 // Original: FUN_1400992f0 in Application-x64.exe.
-// Walks the global KeyMap (via g_pKeyMapObjectExref triple deref), clears
+// Walks the global KeyMap (via g_pInputConfigSingletonExref triple deref), clears
 // existing bindings, registers all 50 default bindings (mouse axes, hotkeys,
 // camera presets, toolbar slots), then loads any saved overrides via
 // Input::KeyMap::Load.
@@ -22,7 +22,7 @@ namespace Game {
 // Populates the global Input::KeyMap with the 50 default Banished bindings,
 // then calls Input::KeyMap::Load to merge any user-saved overrides.
 //
-// No-op (with a printf) if g_pKeyMapObjectExref or any of fn_KeyMap_* is
+// No-op (with a printf) if g_pInputConfigSingletonExref or any of fn_KeyMap_* is
 // unresolved — never crashes if engine fns aren't ready.
 void RegisterDefaultInputBindings();
 

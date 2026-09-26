@@ -512,7 +512,7 @@ void EntityUI_Slot8(EntityUI* self) {
     uintptr_t s = (uintptr_t)self;
 
     // Get KeyMap singleton (triple deref from exref: slot → External → KeyMap)
-    void* keyMap = ***(void****)g_pKeyMapObjectExref;
+    void* keyMap = ***(void****)g_pInputConfigSingletonExref;
 
     // Get dialog element from +0x18 -> +0x10 (dialog root element)
     void* dialogInst = *(void**)(s + 0x18);

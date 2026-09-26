@@ -500,8 +500,8 @@ extern "C" void ParticleComponent_Place(ParticleComponent* self, int index) {
 
     // Prewarm: tick the emitter forward by t0 (elem+0x18) in engine fixed steps
     int64_t t0 = *(int64_t*)(elem + 0x18);
-    if (t0 > 0 && g_pEngineSingleton && *g_pEngineSingleton && vt && vt[1]) {
-        int64_t step = *(int64_t*)((uintptr_t)*g_pEngineSingleton + 0x48);
+    if (t0 > 0 && g_pMainLoopSingleton && *g_pMainLoopSingleton && vt && vt[1]) {
+        int64_t step = *(int64_t*)((uintptr_t)*g_pMainLoopSingleton + 0x48);
         if (step > 0) {
             typedef void (*fn_geoUpdate_t)(void*, void*);
             for (int64_t acc = step; ; acc += step) {

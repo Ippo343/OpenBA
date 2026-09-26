@@ -827,12 +827,12 @@ static void Game_InfectRandomCitizen_Impl() {
 void DebugUI_Slot8(DebugUI* self) {
     uintptr_t s = (uintptr_t)self;
 
-    // Engine singleton access: slot → *slot → *(result + 0x10)
-    // g_pEngineSingleton = *exref (already one deref done at init time)
-    // So: *g_pEngineSingleton = **exref = engine object, then +0x10 = engineState
+    // MainLoop singleton access: slot → *slot → *(result + 0x10)
+    // g_pMainLoopSingleton = &Engine::MainLoop::_singleton (retail: *exref 0x140151440)
+    // So: *g_pMainLoopSingleton = the MainLoop, then +0x10 = its video context
     // Disasm: MOV RAX,[slot] / MOV RDX,[RAX] / MOV RSI,[RDX+0x10]
-    if (!g_pEngineSingleton) return;
-    uintptr_t engineObj = (uintptr_t)*g_pEngineSingleton;
+    if (!g_pMainLoopSingleton) return;
+    uintptr_t engineObj = (uintptr_t)*g_pMainLoopSingleton;
     if (!engineObj) return;
     uintptr_t engineState = *(uintptr_t*)(engineObj + 0x10);
     if (!engineState) return;
@@ -851,7 +851,7 @@ void DebugUI_Slot8(DebugUI* self) {
     if (numVertices) reinterpret_cast<UI::NumberElement*>(numVertices)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2154)));  // B.3.6 bridge
 
     // Read frame time and total time from engine object (NOT engineState)
-    // Original: *(*(g_pEngineSingleton_exref) + 0x68) and + 0x58
+    // Original: *(*(exref 0x140151440) + 0x68) and + 0x58
     int64_t frameTimeTicks = *(int64_t*)(engineObj + 0x68);
     int64_t totalTimeTicks = *(int64_t*)(engineObj + 0x58);
     float frameSeconds = reinterpret_cast<const System::Time*>(&frameTimeTicks)->AsSeconds();   // B.3.4 bridge
@@ -1527,9 +1527,8 @@ void DebugUI_Slot4(DebugUI* self) {
 //   g_TypeId_Element                     -> "Internal"
 //   g_TypeId_CitizenComponent_FC(0x1401c7158) -> "CitizenComponent" (name now correct)
 //     (via GetTypeIdByName, matching the proven CitizenUI heal)
-// g_pEngineSingleton (used by Slot8) is null in standalone; Slot8 already opens
-// with `if (!g_pEngineSingleton) return;`, so the perf counters simply stay
-// blank there — no crash, no gating needed.
+// Slot8 reads the MainLoop through g_pMainLoopSingleton (the exe's exref
+// 0x140151440 names the same symbol) and opens with a null check on it.
 
 // ============================================================
 // Address-registry entry points (Lane 3 wave — see

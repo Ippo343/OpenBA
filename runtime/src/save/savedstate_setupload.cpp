@@ -115,9 +115,6 @@ using MemFreeFn  = void  (*)(void*);
 // cannot end up with two spellings of an ABI whose drift mode is a wild write.
 using RtSaveDetail::SetupLoadFn;
 
-const char* const kSetupLoadMangled =
-    "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ";
-
 // The 12-byte row SetupLoad walks at Persistence+0x60, count at +0x68.
 // Named for what THIS function uses it for; +0x4 is never read here and is not
 // claimed to be padding.

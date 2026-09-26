@@ -4,7 +4,7 @@
 // ============================================================================
 //
 //   ?EnableMouseClipping@Device@Input@@QEAAX_N@Z   retail 0x1800E1780  ord 2296
-//   (its only callee)  Device::PlatformUpdate      retail 0x1800E2130  NOT exported
+//   (its only callee)  Device::PlatformUpdate      retail 0x1800E2130  ord 3411 (PRIVATE, AEAA -- exported)
 //
 // The Win32 half of Input::Device, behind PLAN.md §4.1 decision 1's platform
 // seam: <windows.h> must not appear in input.cpp, which is why this is its own
@@ -77,9 +77,10 @@
 namespace Input {
 
 // ---------------------------------------------------------------------------
-// Input::Device::PlatformUpdate — retail 0x1800E2130. NOT exported, so it gets
-// no RegisterRuntimeExport of its own; it exists because EnableMouseClipping
-// calls it, exactly as retail's does.
+// Input::Device::PlatformUpdate — retail 0x1800E2130, EXPORTED as the private
+// `?PlatformUpdate@Device@Input@@AEAAXXZ` (ordinal 3411; the registration at the
+// bottom of this file says so -- this banner said "NOT exported" until the B.3.7
+// close). It exists because EnableMouseClipping calls it, exactly as retail's does.
 //
 // Retail, instruction for instruction:
 //
