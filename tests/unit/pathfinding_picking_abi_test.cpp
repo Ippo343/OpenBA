@@ -265,10 +265,6 @@ struct PickingMeshProbe final : Picking::PickingMesh {
     Object::Base* DeletingDtor(unsigned) override { Note(this, 0); return this; }
 };
 
-// A Scene the test may build: the default ctor is protected (B5-4).
-struct SceneProbe : Picking::Scene {
-    SceneProbe() : Picking::Scene() {}
-};
 
 // B7-5 pin: `Object::ExternalPtr<T>` BY VALUE travels as the bare pointer in
 // the next integer register — what `Scene::AddMesh`'s door hands the member,
@@ -339,8 +335,10 @@ UNIT_TEST(picking_scene_layout_and_value_shape) {
     CHECK_EQ((int)alignof(Picking::Scene), 8);
     CHECK(!std::is_polymorphic<Picking::Scene>::value);
     CHECK(!std::is_abstract<Picking::Scene>::value);
-    // Protected default ctor: only the ctor DOOR builds one (B4b-2).
+    // No C++ default ctor: only the ctor DOOR builds one (B4b-2, B37_RULES
+    // 2.4 addendum); the dtor is the implicit, public one (retail's body).
     CHECK(!std::is_default_constructible<Picking::Scene>::value);
+    CHECK(std::is_destructible<Picking::Scene>::value);
     // B7-8: retail's copy ctor is deep; the class is never trivially copyable.
     CHECK(!std::is_trivially_copyable<Picking::Scene>::value);
     CHECK_EQ((int)offsetof(Picking::Scene, _cellHeads),  0x08);
@@ -357,16 +355,16 @@ UNIT_TEST(picking_scene_layout_and_value_shape) {
 
 // GetUserData (0x1800722d0) is one load from entries[id]+0x30.
 UNIT_TEST(picking_scene_getuserdata_reads_entry_plus_0x30) {
-    SceneProbe scene;
-    std::memset(static_cast<void*>(static_cast<Picking::Scene*>(&scene)), 0, sizeof(Picking::Scene));
+    // Raw storage, as the exe holders are: the class has no C++ default ctor.
+    alignas(8) uint8_t storage[sizeof(Picking::Scene)] = {};
+    Picking::Scene& scene = *reinterpret_cast<Picking::Scene*>(storage);
     alignas(8) uint8_t entries[3 * 0x48] = {};
     int marker = 0;
     *reinterpret_cast<void**>(entries + 2 * 0x48 + 0x30) = &marker;
     scene._entries._data = reinterpret_cast<Picking::Scene::Entry*>(entries);
     scene._entries._size = 3;
     CHECK(scene.GetUserData(2) == static_cast<void*>(&marker));
-    scene._entries._data = nullptr;        // the stack buffer is not the Array's to free
-    scene._entries._size = 0;
+    // Never destroyed: the storage is plain bytes, like an exe holder's.
 }
 
 // B7-5: ExternalPtr<PickingMesh> by value is one register — raw-call a

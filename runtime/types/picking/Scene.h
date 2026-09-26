@@ -18,15 +18,17 @@
 // next to the field (docs/runtime_port/WAVE5_LANE_D.md is the original
 // write-up). Nothing here is inferred from the profile build.
 //
-// HELD BY VALUE (RULE B5-4, B37_RULES 2.4): the exe's Game object (built by
-// 0x14009ee70, `code/Game/Game/gameupdateloop_load.cpp`) embeds one at +0x8
+// HELD BY VALUE (B37_RULES 2.4 and its addendum): the exe's Game object (built
+// by 0x14009ee70, `code/Game/Game/gameupdateloop_load.cpp`) embeds one at +0x8
 // and GameUpdateLoop allocates another (`MemAlloc(0x60,8)` at 0x140097093); both
-// are raw bytes in this tree, constructed through the ctor DOOR
-// (`??0Scene@Picking@@QEAA@XZ`, runtime/src/picking/scene.cpp). So the class is
-// CONCRETE, its default constructor is `protected` and `= default` — NOT
-// retail's constructor, which is `InitGrid(this, 16.0f)` and stays the door
-// (B4b-2: a C++ ctor would run a second time over what the door seeded). There
-// is no C++ holder to befriend.
+// holders are unconverted exe PODs that construct in place through the ctor
+// DOOR (`??0Scene@Picking@@QEAA@XZ`, runtime/src/picking/scene.cpp). By the
+// B4b-3 ruling a POD holding a POD does not trigger B5-4's `= default` +
+// `friend`, so the class is CONCRETE with PUBLIC members and NO C++ default
+// constructor at all: retail's constructor is `InitGrid(this, 16.0f)` and stays
+// the door (B4b-2: a C++ ctor would run a second time over what the door
+// seeded). The protected-ctor + `friend` shape arrives with a C++ holder in
+// step 8.
 //
 // THE DESTRUCTOR IS THE IMPLICIT ONE, and that is retail's: `??1Scene@Picking@@
 // QEAA@XZ` (0x180125890) is four `~Array` calls, +0x48, +0x30, +0x18, +0x08 —
@@ -262,11 +264,10 @@ public:
     // ctor calls with 16.0f. Body in runtime/src/picking/closure_batch2b.cpp.
     Scene* InitGrid(float cellSize);
 
-protected:
-    // RULE B5-4: NOT retail's ctor (that is the door, see banner).
-    Scene() = default;
+    // NO default constructor is declared (banner): the user-declared copy
+    // constructor above suppresses the implicit one, so nothing in C++ can
+    // build a Scene except through the ctor door.
 
-public:
     // ========================================================================
     // THE 0x60 BYTES. A uniform 2D spatial hash over components [0] and [1] of
     // a Vector3 — the XY plane, NOT XZ. Two independent witnesses: Intersect
