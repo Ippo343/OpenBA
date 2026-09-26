@@ -16,27 +16,7 @@
 #include <cstdint>
 #include <new>
 
-// ============================================================================
-// Description (the abstract base; its members live with the pilot leaf until
-// block K1 gives it its own file — B38_FILEMAP.md)
-// ============================================================================
-
-// [0] 0x140031c70: stamp 0x1401629a0, `~External`, MemFree on &1.
-Object::Base* Description::DeletingDtor(unsigned flags) {
-    this->~Description();
-    if (flags & 1) Object::detail::InternalMemFree(this);
-    return this;
-}
-// [1]/[2] over Description's BaseTypeInfo; the abstract registration stays in
-// factory_registrations_bulk.cpp (B38 D4). Every leaf overrides both.
-const char* Description::TypeName() const { return "Description"; }          // 0x140031c60
-uint32_t    Description::Type() const {                                      // 0x140031c50
-    return ::Object::GetTypeIdByName("Description");
-}
-
-// ============================================================================
-// WellDescription
-// ============================================================================
+// Description's own members (the abstract base) live in description.cpp.
 
 // [0] 0x14000fdf0: ~WellDescription (0x14005d1c0) -> ~Description -> ~External,
 // then MemFree on &1. Retail's chain; the old table's slot 0 did the same by hand.
