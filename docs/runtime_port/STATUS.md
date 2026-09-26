@@ -20,6 +20,98 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.6 CLOSED (2026-09-26):** `UI` is real C++ classes under retail's names — 68 polymorphic
+  classes (28 `*Description`, 28 `*Element`, the six-class Dialog family, `CharacterSet`, `Cursor`,
+  `Font`, `SpriteCapture`, `SpriteSheet`, `StringTable`) plus the value types `UserInterface`
+  (0x128), `SpriteContext` (0x88), `Sprite` and `String` (0x10 each) in `runtime/types/ui/` (list
+  with parent, slot count and sizeof in `endgame_b/b36_session/CLOSE_NUMBERS.md` section 6: 68 of
+  68 agree with the retail slot dump) — bodies moved onto members, callers converted, dead doors
+  deleted. 110 commits (83 non-merge), main `dc647869` -> `0caf01c3` + the close docs; 312 source
+  files, +31.1k / -18.3k lines. Rule sheet `endgame_b/B36_RULES.md` (B6-1..11 and the dated
+  corrections in sections 10 and 14, the run log in 11, what stays in 12), retail slot / literal /
+  ctor-chain dump `B36_SLOTS.md`, file ownership `B36_FILEMAP.md`, session kit
+  `endgame_b/b36_session/` (BLOCK_BRIEF, CALLER_BATCH_BRIEF, EXE_SUBCLASSES, POD_TREE_AUDIT, the
+  Ghidra dump script `ghidra/UiAppendix.java`, CLOSE_NUMBERS). Plan for step 7:
+  `endgame_b/NEXT_SESSION.md`, map `endgame_b/STEP7_INVENTORY.md`.
+  **Shape.** One question pass from the retail DLL (hierarchy from the 136 `_TypeName` /
+  `_ParentTypeName` literals, all 68 vtables terminated on the next `??_7`/`??_R` symbol, 68
+  `sizeof` from the slot-0 deleting dtors, the 76 by-value-returning exports, every ctor's stamp
+  chain) plus a parallel file map, into a committed rule sheet; wave 1 blocks A (`Element` +
+  `ElementDescription` bases), B (Dialog family), D (`Sprite`, `String`, the resources,
+  `SpriteContext`); wave 2 the 27 leaf Description/Element pairs in five clusters C1-C5 (intermediate
+  leaves first) and E (`UserInterface`); two fragment passes F2 (dialog side) and F1 (widget side);
+  caller batches K1 (townhall/trade), K2 (the exe dialogs), K3 (the panel UIs), K4 (everything
+  outside `code/Game/Dialog`), then round 2 (K1r2, K3r2) after the fragment passes defined the last
+  members; one closing owner. Every merge gated by the coordinator: 17 gates + the close, each
+  0 problems (table in `B36_RULES.md` section 11).
+  **Numbers** (`CLOSE_NUMBERS.md`, every unit stated there). `engine_funcs`: 155 globals bound a
+  `@UI@@` symbol BY INITIALISER (132 door pointers + 23 type-info globals; the inventory's
+  name-anchored 118 missed exe-slot and duplicate bindings); 126 deleted whole, 7 door pointers
+  left (six ctor/dtor doors + one `Save` door whose name carries `@UI@@` in a parameter) and 22
+  type-info globals. Door calls through `engine_funcs` in `code/Game` 1,472 -> 65 (61 code-only,
+  all ctor/dtor); `ResolveExport("…@UI@@…")` sites 185 -> 41 (registry rows, `_typeInfo`/`??_7`
+  reads, ctor/dtor doors); `RT_EXPORT_ONCE` 79 -> 11; `RT_DATA_SLOT` 147 -> 70; exe import slots
+  onto UI 59 -> 29; exact hand-inlined vtable calls in `code/Game/Dialog` 14 -> 9 (diagnostic slot
+  reads, not calls). 2,083 `// B.3.6 bridge` casts (code 1,492, runtime 559). Census UI
+  1625 total / 134 called / 78 ported (was 329 / 214: `called` counts what still resolves by name
+  or address; member calls resolve nothing). Unit tests 358 -> 462, 0 failures. B.4 cast metric
+  (lines): **36,225** (code 25,282 · runtime 6,885 · standalone 2,907 · engine 609 · dx11 168 ·
+  tests 374), UP 1,400 from 34,825 while adding the 2,083 bridges; `engine` fell 147 and `runtime`
+  124. Doors still registered: 809 `@UI@@` names (590 one-line qualified delegations, 67 ctors,
+  69 dtors, 74 factory statics, 7 new/delete, 2 literals) + the 68 mint, 68 `_typeInfo` and 67+1
+  `RT_DELDTOR` rows (end of B.3). Step-close routes: merged-tree gate 0 problems (462 tests, 0 new warnings,
+  newgame/tutorial/loadgame clean, typetable == baseline, resave 3/3); Mods route with both `.pkm`
+  mounted exit 0, front-end Quit, Options (id 4 -> Quit), Achievements (id 8 -> Quit) exit 0, all
+  `[RtResolve] 0 misses`, 0 `[RtMint] TRAP`; the new-game run reaches TEN FEWER
+  `NOT IMPLEMENTED` exe import-slot stubs than the baseline (UI doors now called as members) and
+  no new one; `make sa-stress` exit 0, clean quit (800 citizens x3, speed 10, 6000 frames: update
+  1.97 ms/frame vs baseline 1.92, p95 2.79 vs 2.40 — recorded, not chased, per the B rule; draw
+  1.19 vs 1.38); true release compile from a clean obj dir exit 0 (1,148 files, 7.8 MB exe),
+  `make clean`, clean rebuild of debug/perf/unit, then the full gate again on the clean-built exe: 0
+  problems, 0 new warnings. NOT a finding: injecting front-end menu id 10 (Goals) faults in
+  `GoalDialog` on a null game world — `buttonGoal` exists only in the pause-menu `.rsc`, so retail
+  cannot reach that path from the front end (menu-driver skill corrected); the GoalDialog route is
+  owed from a scenario game's pause menu.
+  **Found on the way, all retail-backed.** (1) **An `InternalPtr<T>` ARGUMENT by value arrives
+  by HIDDEN POINTER** (B6-11; `Element::Update`'s caller `LEA R9,[RBP+0x50]`), as does `UI::String`,
+  `UI::Sprite` and every >=16-byte class; `ExternalPtr<T>` by value is a bare register pointer.
+  `Element::AddChild` was the one declaration that missed it (0x180115df0 dereferences RDX) —
+  fixed at the close. (2) An ABSTRACT class cannot be an alias target for an EMBEDDED POD: the
+  `Element` POD moved to `RtUI::Element`, the engine dialog headers became aliases of the `RtUI`
+  PODs, not the classes. (3) `SpriteContext` and `UserInterface` are NOT trivially copyable
+  (`Array<T>` members with a deep copy ctor / destructor exported); `SpriteContext` is 0x88,
+  `Element::UpdateState` 0x30, `EditElement` 0xf8, `LabelElement` fields +0x100..+0x12c; 42 layouts
+  that block 0 had only sized were pinned from their ctors. (4) `ElementDescription` +0x40 is the
+  ALIGNMENT seed, not an element type; `NumberElement` extends `Element` (the header said
+  `TextElement`); `ImageDescription`'s applier, `ButtonDescription::CreateInstance`,
+  `ComboElement::UpdateText` and the three `SpriteContext` members are EXPORTED (old banners said
+  not); `??0CheckDescription`/`ComboDescription`/`ClipRegionDescription`/`NumberDescription` exist.
+  (5) Retail slips transcribed faithfully: `GraphElement::SetYDivisions` writes the SAME field as
+  `SetXDivisions` (+0xe4); the ported `ComboDialog::OnUpdate` passed `this` only where retail
+  passes `(mx, my, _ui)` — a port bug, fixed. (6) `ToolTipDialog`'s parent literal is
+  `"UI::DialogInstance"` (same namespace, still qualified: B6-7 — copy, never derive). (7) Six
+  `g_TypeId_*` globals were bound to a DIFFERENT class than their name (`SliderElement` held
+  SpinnerElement's id, `SpinnerElement` NumberElement's, `ObjectInternal` Element's,
+  `UIElementBase` ButtonElement's, `ToolbarElement` CheckElement's, `g_pExternalTypeId` Dialog's);
+  renamed to the bound class. (8) `element_common.h`'s `AtomicExport` froze pre-init resolves that
+  `RtResolveCached` refuses to cache; fixed to the same shape. (9) mingw-w64 emits typeinfo as a
+  COMDAT per TU, so a leaf's `TypeName` can be defined while the base's is a door; and
+  `description_common.h` / `element_common.h` both define `enum class Module` (one per TU).
+  (10) Loader-thread construction of UI forbids static-init / lazy caches in members (B6-5):
+  `rtuielem::AtomicExport/AtomicAddr` slots instead.
+  **Deliberately NOT converted (reasons in `B36_RULES.md` section 12):** no UI class has a C++
+  constructor; dtors that would re-run retail teardown stay doors; the 68/68/68 mint, `_typeInfo`,
+  `RT_DELDTOR` rows; the exe-phase subclasses (20 `DialogInstance`, 38 `DialogController`, 4
+  `DialogControllerConfig`, 2 `Element`, 2 `ElementDescription`) keep their ctor doors and
+  hand-built tables, with QUALIFIED calls inside their slot bodies (step 8); four `RtUI::` PODs
+  still embed `RtUI::Element` (`Edit`, `Number`, `Progress`, `Spinner`); the four minted-table
+  slot-copy sites; `TextDescription::CreateInstance` stays a door (reached by address from slot 8);
+  103 exported UI members declared and defined nowhere (`DialogInstance` 22, `Dialog` 13,
+  `UserInterface` 13, `Element` 10 …). **Largest carry-over, found only at the close:** 76 live
+  by-address calls to NON-ctor UI members inside `runtime/src/ui` through the file-local
+  `RtAddr<Fn>(0x18…)` helper (`SpriteContext::AddSprite` x27, `Dialog::CreateElement` x8,
+  `UserInterface::Play` x7) — a binding spelling the inventory never grepped (B36_RULES 14.1);
+  plus the pre-existing carry-overs in `NEXT_SESSION.md` section 1.
 - **B.3.5 CLOSED (2026-09-19):** `Video` and `Graphics` are real classes under retail's names —
   27 in `Video`, 32 in `Graphics` (`runtime/types/video/`, `runtime/types/graphics/`; list in
   `endgame_b/b35_session/CLOSE_NUMBERS.md` section 7) — with their bodies moved onto members,

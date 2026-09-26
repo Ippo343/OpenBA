@@ -27,7 +27,11 @@ A numeric value > 1 overrides the menu settle-frame count (default 60). A direct
 
 ## Front-end buttons
 `BANISHED_AUTOMENU_BUTTON=<id>` clicks one main-menu button and stops there:
-Quit=6, Mods=7, Achievements=8, Goals=10.
+New=0, Load=2, Options=4, Quit=6, Mods=7, Achievements=8. Id 10 (Goals) is NOT a front-end
+button: `buttonGoal` exists only in the pause-menu `.rsc` (and hides itself when the game has no
+scenario). Injecting id 10 at the front end dispatches `MainMenuDialog::OnCommand` -> `OpenGoal`
+with no game world and `GoalDialog` faults on the null world read (`goaldialog.cpp`, a faithful
+read; seen 2026-09-26 at the B.3.6 close). Drive Goals from the pause menu of a scenario game.
 
 `BANISHED_AUTOMENU_CLICKS=<tok>,<tok>,...` then delivers follow-up clicks, one settle
 interval apart:

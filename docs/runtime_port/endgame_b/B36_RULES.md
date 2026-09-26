@@ -581,7 +581,35 @@ atomics (B6-5); (3) stale banners, `Element::AddChild` to the B6-11 hidden-point
 the COSMETIC warning is gone; (5) the six misnamed type-info globals renamed; (6)
 `b36_session/CLOSE_NUMBERS.md`; (7) this section.
 
-(coordinator: paste the per-merge gate table here)
+**Coordinator's gate table (2026-09-25/26, `b36_session`-style gate = `b34_session/gate.sh`:
+debug + release + perf build, warning diff vs a clean-rebuild baseline, unit, `dispatch_slot_map
+--check`, cutover manifest, `rt_mint_gen --check`, new-game / tutorial / Load Game routes, pointer-free
+type table vs baseline, resave x3). Every gate: 0 problems, 0 new warnings, typetable == baseline,
+`[RtResolve] 0 misses`, 0 `[RtMint] TRAP`, resave 3/3 PASS.**
+
+| merge | unit tests | result |
+|---|---:|---|
+| baseline (`dc647869`) | 358 | 0 problems |
+| A (Element bases) | 367 | 0 problems |
+| B (Dialog family) | 375 | 0 problems |
+| D (Sprite/String/resources/SpriteContext) | 399 | 0 problems |
+| C4 | 409 | 0 problems |
+| C1 | 425 | 0 problems |
+| E (UserInterface) | 431 | 0 problems |
+| C2 + C3 | 448 | 0 problems |
+| C5 | 462 | 0 problems |
+| F2 | 462 | 0 problems |
+| K1 | 462 | 0 problems |
+| F1 | 462 | 0 problems |
+| K3 | 462 | 0 problems |
+| K2 | 462 | 0 problems |
+| K4 | 462 | 0 problems |
+| K1r2 | 462 | 0 problems |
+| K3r2 | 462 | 0 problems |
+| close (b36-close, commits 1-7) | 462 | see STATUS.md B.3.6 block |
+
+The cutover manifest printed a COSMETIC `stale` warning from C1 to the close (by-name door counts
+moved); commit 4 of the close refreshed `standalone/cutover_manifest.inc` and the warning is gone.
 
 ## 12. Deliberately left
 
@@ -625,7 +653,12 @@ slot copies of §3.3 (`tool_base_toolui.cpp`, `frustumoutlineelement.cpp`, `thum
 7. `TextDescription::CreateInstance` stays a door (`element_bodies_b5.cpp`), reached by address from
    slot 8 and `LabelDescription`.
 
-## 13. NOT VERIFIED — read this before citing anything above
+## 13. NOT VERIFIED at block 0 — status at the close (2026-09-26)
+
+Items 1 (42 layouts: every block pinned its own from the ctors, §10), 2 (`SpriteContext` 0x88,
+block D), 3 (`UpdateState` 0x30, block A) and 5 (re-measured in `b36_session/CLOSE_NUMBERS.md`) are
+CLOSED. Items 4, 6 and 7 describe block 0 only; the blocks built, gated and ran (§11). The original
+text is kept below as written at block 0.
 
 Read from RETAIL BYTES this pass: all 68 vtables' slot lists; all 68 `sizeof`; all 136
 `_TypeName`/`_ParentTypeName` literals; the five Object parent vtables; every function
