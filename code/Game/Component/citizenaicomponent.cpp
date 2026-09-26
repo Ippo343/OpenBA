@@ -20,6 +20,7 @@
 // Decompiled from Application-x64.exe using Ghidra.
 
 #include "Component/citizenaicomponent_funcs.h"
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 #include "options.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -697,9 +698,8 @@ void CitizenAIComponent_InitFuncs() {
 // guaranteed to match the spawned component's id without touching any global.
 static void* CitizenAI_FindSiblingCitizen(void* ownerEntity) {
     if (!ownerEntity) return nullptr;
-    static uint32_t s_want = 0;
-    if (s_want == 0) s_want = ::Object::GetTypeIdByName("CitizenComponent");
-    uint32_t want = s_want;
+    // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
+    uint32_t want = CitizenComponent::TypeId();
     if (want == 0 || want == 0xFFFFFFFF) return nullptr;  // type id not yet assigned
     uint8_t* e = reinterpret_cast<uint8_t*>(ownerEntity);
     int count = *reinterpret_cast<int*>(e + 0x38);

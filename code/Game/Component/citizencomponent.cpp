@@ -1943,7 +1943,7 @@ void CitizenComp_helper_1b90(int64_t selfV) {
     // pattern CitizenComp_FindSiblingByName uses — instead of filling the shared global,
     // which would un-dormant ~30 unrelated readers.
     uint32_t tidCitizen = (s_TypeId_AIComp && *s_TypeId_AIComp) ? *s_TypeId_AIComp
-                                                                : ::Object::GetTypeIdByName("CitizenComponent");
+                                                                : CitizenComponent::TypeId();
     void* aiComp = FindCompByTypeId(childIBP, tidCitizen);
     int64_t aiIBP = 0;
     new (&aiIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(aiComp));   // B.3.3 bridge
