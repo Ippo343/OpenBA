@@ -129,6 +129,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 #include "../common.h"
 #include "../system/MemoryAllocator.h"
 
@@ -163,7 +164,96 @@ namespace EngineAddr {
     constexpr uintptr_t MemoryAllocatorInit = 0x1800c7690;
 }
 
-struct Engine {
+}  // namespace RtEngine
+
+// ############################################################################
+// Engine::Engine -- THE REAL CLASS (ENDGAME B.3 step 7, block B1)
+// ############################################################################
+//
+// NON-POLYMORPHIC (proved above: the ctor's first store is a zero, and +0x000
+// is the embedded MemoryAllocator). The Wave 8 POD was field-identical and is
+// held only through pointers inside the runtime tree, so the POD BECOMES the
+// class (B7-6) and `RtEngine::Engine` is an alias of it.
+//
+// SIZE 0x6f8 IS NOW PINNED, NOT INFERRED (closes B37_RULES sec. 13 item 3).
+// `??4Engine@0@QEAAAEAV00@AEBV00@@Z` (0x18000c7d0) is a flat copy of the whole
+// object: its aligned path moves 13 x 0x80 + 0x78 = 0x6f8 bytes with MOVAPS and
+// its unaligned path is `MOV R8D,0x6f8; CALL memcpy` (0x18000c898). Independent
+// bound: the exe's GameMain (0x140041ef0) holds the Engine BY VALUE at
+// [RSP+0x60] in a 0x760-byte frame whose next locals are its home slots, so the
+// object cannot exceed 0x700.
+//
+// HELD BY VALUE, BUILT THROUGH THE DOOR (B5-4): the exe keeps it on GameMain's
+// stack and calls the imported `??0Engine@0@QEAA@PEAX@Z`. The tree's GameMain
+// (code/Game/Game/game_main.cpp) holds raw storage and calls the same door, so
+// the class is CONCRETE with a PROTECTED defaulted constructor (not retail's:
+// that stays the registered DOOR `RtEngine_Engine_Ctor`, engine_lifecycle.cpp).
+//
+// `?_singleton@Engine@1@0PEAV11@EA` (0x1801fe748) STAYS a data slot until the
+// end of B.3 (carry-over 5). The subsystem fields keep the POD's `void*`
+// spelling; the sixteen exported accessors below give each its retail type.
+// ############################################################################
+
+namespace System      { class Configuration; class Time; }
+namespace IO          { class FileSystem; class Persistence; class Modification; }
+namespace Object      { class Factory; class InternalFactory; class ExternalFactory; }
+namespace Video       { class Configuration; class Device; }
+namespace Audio       { class Configuration; class Device; }
+namespace Input       { class Configuration; class Device; }
+namespace Achievement { class AchievementManager; }
+namespace Application { class Application; }
+
+namespace Engine {
+
+class Engine {
+public:
+    // ---- lifetime: DOORS (engine_lifecycle.cpp), declared, undefined -------
+    explicit Engine(void* platformHandle);                        // 0x1800dbf00  door RtEngine_Engine_Ctor
+    ~Engine();                                                    // 0x1800dbec0  door RtEngine_Engine_Dtor
+
+    // ---- PORTED --------------------------------------------------------------
+    uint32_t Startup(const char* commandLine, uint32_t minRangeMB,
+                     uint32_t maxTotalMB, bool noConfigure);      // 0x1800db8a0  engine_lifecycle.cpp
+    void Shutdown();                                              // 0x1800db4f0  engine_lifecycle.cpp
+    bool PlatformConfigure(bool configure, void* platformHandle); // 0x1800a1670  engine_platform.cpp
+    bool PlatformStartup();                                       // 0x1800a2100  application/platform_startup_win.cpp
+
+    // ---- the sixteen exported accessors 0x18000c8b0..0x18000c9a0: each is
+    // `MOV RAX,[RCX+off]; RET` (GetMemoryAllocator is `MOV RAX,RCX`).
+    // Faithful inline bodies, NOT REGISTERED (nothing resolves them).
+    rt::system::MemoryAllocator* GetMemoryAllocator() { return &_allocator; }  // 0x18000c8b0
+    IO::FileSystem*   GetFileSystem()   { return static_cast<IO::FileSystem*>(_fileSystem); }    // 0x18000c8c0
+    IO::Persistence*  GetPersistence()  { return static_cast<IO::Persistence*>(_persistence); }  // 0x18000c8d0
+    IO::Modification* GetModification() { return static_cast<IO::Modification*>(_modification); } // 0x18000c8e0
+    System::Configuration* GetConfiguration() { return static_cast<System::Configuration*>(_configuration); } // 0x18000c8f0
+    ::Application::Application* GetApplication() { return static_cast< ::Application::Application*>(_application); } // 0x18000c900
+    Object::InternalFactory* GetInternalFactory() { return static_cast<Object::InternalFactory*>(_internalFactory); } // 0x18000c910
+    Object::Factory*  GetFactory()      { return static_cast<Object::Factory*>(_factory); }        // 0x18000c920
+    Object::ExternalFactory* GetExternalFactory() { return static_cast<Object::ExternalFactory*>(_externalFactory); } // 0x18000c930
+    Video::Configuration* GetVideoConfiguration() { return static_cast<Video::Configuration*>(_videoConfiguration); } // 0x18000c940
+    Video::Device*    GetVideoDevice()  { return static_cast<Video::Device*>(_videoDevice); }      // 0x18000c950
+    Audio::Configuration* GetAudioConfiguration() { return static_cast<Audio::Configuration*>(_audioConfiguration); } // 0x18000c960
+    Audio::Device*    GetAudioDevice()  { return static_cast<Audio::Device*>(_audioDevice); }      // 0x18000c970
+    Input::Configuration* GetInputConfiguration() { return static_cast<Input::Configuration*>(_inputConfiguration); } // 0x18000c980
+    Input::Device*    GetInputDevice()  { return static_cast<Input::Device*>(_inputDevice); }      // 0x18000c990
+    Achievement::AchievementManager* GetAchievementManager() { return static_cast<Achievement::AchievementManager*>(_achievementManager); } // 0x18000c9a0
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    static Engine* Get();                                         // 0x18000c7c0
+    bool Update(const System::Time& time);                        // 0x1800db4a0
+    void NotifyBeginLoad();                                       // 0x1800db480
+    void NotifyEndLoad();                                         // 0x1800db460
+    void PlatformUpdate();                                        // 0x1800a20e0
+    void PlatformShutdown();                                      // 0x1800a20f0
+    Engine& operator=(const Engine& other);                       // 0x18000c7d0  (the 0x6f8 copy)
+
+protected:
+    // RULE B5-4: NOT retail's ctor (that is the door). The exe's GameMain holds
+    // the object by value in raw storage and constructs it through the door.
+    Engine() = default;
+
+public:
+    // ---- the 0x6f8 bytes, evidence per field in the table at the top -------
     // The allocator subobject. NOT a pointer: `GetMemoryAllocator` returns
     // `this`, so `&engine->_allocator == (void*)engine`.
     rt::system::MemoryAllocator _allocator;  // +0x000 .. +0x66f
@@ -172,7 +262,7 @@ struct Engine {
     void*   _persistence;                    // +0x678  IO::Persistence*
     void*   _modification;                   // +0x680  IO::Modification*
     void*   _configuration;                  // +0x688  System::Configuration*
-    void*   _application;                    // +0x690  Engine::Application*
+    void*   _application;                    // +0x690  Application::Application*
     void*   _platformHandle;                 // +0x698  ctor arg; HINSTANCE on Win32
     void*   _factory;                        // +0x6a0  Object::Factory*
     void*   _internalFactory;                // +0x6a8  Object::InternalFactory*
@@ -193,15 +283,15 @@ struct Engine {
     // PlatformConfigure launcher dialog AND makes Shutdown skip the
     // Persistence shutdown at +0x678.
     uint8_t _noConfigure;                    // +0x6f1
-    // +0x6f2: never written by any retail Engine function. The class size is
-    // the ONE thing here that is inferred rather than read: no retail site
-    // allocates an Engine (the exe's game_main.cpp does), so 0x6f8 is just
-    // 0x6f2 rounded up to the struct's 8-byte alignment. Treat it as a lower
-    // bound if a later wave finds a field past +0x6f1.
+    // +0x6f2: never written by any retail Engine function; inside the 0x6f8
+    // that operator= copies.
     uint8_t _pad6f2[6];                      // +0x6f2
 };
 
-static_assert(sizeof(Engine) == 0x6f8, "Engine is 0x6f8 bytes (inferred, see note)");
+static_assert(sizeof(Engine) == 0x6f8, "Engine is 0x6f8 bytes (??4Engine@0@ 0x18000c7d0 copies 0x6f8)");
+static_assert(alignof(Engine) == 8, "qword-aligned");
+static_assert(!std::is_polymorphic<Engine>::value,
+              "Engine::Engine has no vtable: +0x000 is the MemoryAllocator");
 static_assert(offsetof(Engine, _allocator)          == 0x000, "Engine::_allocator");
 static_assert(offsetof(Engine, _fileSystem)         == 0x670, "Engine::_fileSystem");
 static_assert(offsetof(Engine, _persistence)        == 0x678, "Engine::_persistence");
@@ -222,4 +312,7 @@ static_assert(offsetof(Engine, _achievementManager) == 0x6e8, "Engine::_achievem
 static_assert(offsetof(Engine, _startupComplete)    == 0x6f0, "Engine::_startupComplete");
 static_assert(offsetof(Engine, _noConfigure)        == 0x6f1, "Engine::_noConfigure");
 
-}  // namespace RtEngine
+}  // namespace Engine
+
+// B7-6: one definition per layout.
+namespace RtEngine { using Engine = ::Engine::Engine; }

@@ -208,9 +208,11 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 // The engine layouts live in `namespace RtEngine` (see the header banners): the
 // exe tree's engine/types/{MainLoop,UpdateLoop}.h define GLOBAL structs of the
 // same names and `engine/types` precedes `runtime/types` on the include path.
-using RtEngine::Engine;
-using RtEngine::MainLoop;
-using RtEngine::UpdateLoop;
+//
+// ENDGAME B.3.7: `Engine::MainLoop` and `Engine::Engine` are real classes and
+// `namespace Engine` exists at global scope, so a global `using RtEngine::Engine`
+// is ill-formed; the Engine class is spelled `::Engine::Engine` below.
+using RtEngine::MainLoop;       // == Engine::MainLoop (alias, MainLoop.h)
 namespace MainLoopAddr = RtEngine::MainLoopAddr;
 
 namespace {
@@ -285,10 +287,12 @@ int64_t SecondsToTicksInline(float seconds) {
 // offset. (A tautological `self->_nextLoop == loop` after our own assignment
 // would prove nothing; the static_assert in MainLoop.h already covers the
 // compile-time half.)
-extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, UpdateLoop* loop) {
+void Engine::MainLoop::SetNextLoop(UpdateLoop* loop) {
+    _nextLoop = loop;
+}
 
-    self->_nextLoop = loop;
-
+extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, void* loop) {
+    self->Engine::MainLoop::SetNextLoop(static_cast<Engine::UpdateLoop*>(loop));
 }
 
 // ============================================================================
@@ -405,46 +409,31 @@ extern "C" void RtEngine_MainLoop_SetNextLoop(MainLoop* self, UpdateLoop* loop) 
 // genuinely differs from retail here: the member does not exist in our process
 // at all once the DLL is gone.
 // ============================================================================
-namespace {
-
-using VideoCallbackFn = void (*)(void*);
-
-void CallVideoCallback(const char* mangled, VideoCallbackFn fn, const char* what,
-                       bool* once) {
-    void* singleton = *MainLoopSingletonSlot();   // MOV RCX,[0x1801fe750]
-    if (fn == nullptr) {
-        if (!*once) {
-            *once = true;
-            std::fprintf(stderr,
-                "[RtPort] Video::Device %s callback fired but %s is not "
-                "available (no port, and the Runtime DLL is absent). The "
-                "device-lost sweep ran; the engine-side Video::Context "
-                "resources were NOT rebuilt.\n", what, mangled);
-        }
-        return;
-    }
-    fn(singleton);                                // JMP <member>
+//
+// ENDGAME B.3.7: BOTH MEMBERS ARE PORTED (mainloop_video.cpp) AND ARE MEMBERS OF
+// THE REAL CLASS, so the "member missing" branch this thunk used to carry (log
+// once and return) can no longer be taken and is gone. The two static thunks
+// are now retail's `OnVideoError_` / `OnVideoRestart_` statics themselves:
+// `MOV RCX,[_singleton]; JMP <member>`, a direct member call as retail's
+// same-image JMP is. The `extern "C"` names stay because the MainLoop ctor
+// installs THEM into the Device (dx11/src/contextdata.cpp calls them).
+void Engine::MainLoop::OnVideoError_() {
+    (*MainLoopSingletonSlot())->OnVideoError();        // MOV RCX,[0x1801fe750]; JMP
 }
 
-}  // namespace
+void Engine::MainLoop::OnVideoRestart_() {
+    (*MainLoopSingletonSlot())->OnVideoRestart();      // MOV RCX,[0x1801fe750]; JMP
+}
 
 extern "C" void RtEngine_MainLoop_OnVideoError_static() {
-    static bool warned = false;
-    CallVideoCallback("?OnVideoError@MainLoop@Engine@@QEAAXXZ",
-                      RT_EXPORT_ONCE(VideoCallbackFn,
-                                     "?OnVideoError@MainLoop@Engine@@QEAAXXZ"),
-                      "device-lost", &warned);
+    Engine::MainLoop::OnVideoError_();
 }
 
 extern "C" void RtEngine_MainLoop_OnVideoRestart_static() {
-    static bool warned = false;
-    CallVideoCallback("?OnVideoRestart@MainLoop@Engine@@QEAAXXZ",
-                      RT_EXPORT_ONCE(VideoCallbackFn,
-                                     "?OnVideoRestart@MainLoop@Engine@@QEAAXXZ"),
-                      "device-restored", &warned);
+    Engine::MainLoop::OnVideoRestart_();
 }
 
-extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
+extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, ::Engine::Engine* engine) {
 
     self->_videoResources._data     = nullptr;
     self->_videoResources._size     = 0;
@@ -553,7 +542,11 @@ extern "C" MainLoop* RtEngine_MainLoop_Ctor(MainLoop* self, Engine* engine) {
     // 75 `?Set@String@System@@` calls and 104 `MemFree`s building the shader
     // constant-name table. That is a lane, not a slot. See
     // docs/runtime_port/WAVE9_LANE_VID2.md §"Not ported".
-    RT_EXPORT_ONCE(VoidThisFn, "?CreateVideoContext@MainLoop@Engine@@AEAAXXZ")(self);
+    //
+    // ENDGAME B.3.7: `CreateVideoContext` is PORTED (video/context_ctor.cpp)
+    // and a member of the real class, so the name door above is now a direct
+    // member call.
+    self->CreateVideoContext();
 
 
     return self;

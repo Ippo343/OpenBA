@@ -100,7 +100,9 @@ long long RtEnginePlatformShowLauncherDialog();
 bool RtEnginePlatformLauncherFlagNoMods();
 bool RtEnginePlatformLauncherFlagReset();
 
-using RtEngine::Engine;
+// ENDGAME B.3.7: `Engine::Engine` is the real class; a global
+// `using RtEngine::Engine;` is ill-formed next to `namespace Engine`.
+using EngineT = ::Engine::Engine;
 // ENDGAME B.3.1 step 2: `System::String` is the real class and the two shims
 // this file used (`RtSystem_String_Set` 0x1800c95d0 and the release idiom) are
 // its `Set` and its destructor.
@@ -146,8 +148,8 @@ void** InputConfigSingletonSlot() {
 void** PersistenceSingletonSlot() {
     return RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
 }
-Engine** EngineSingletonSlot() {
-    return RT_DATA_SLOT(Engine**, "?_singleton@Engine@1@0PEAV11@EA");
+EngineT** EngineSingletonSlot() {
+    return RT_DATA_SLOT(EngineT**, "?_singleton@Engine@1@0PEAV11@EA");
 }
 
 // `GetCommandLineString(cfg, &ret, &key)` — THREE arguments. The hidden return
@@ -184,8 +186,8 @@ bool CommandLineHasKey(void* cfg, const char* keyText) {
 // 0x1800a1875-0x1800a18ba. Note it re-reads the ENGINE SINGLETON rather than
 // using `this` — transcribed as written, not "simplified" to self.
 void DisableAllModifications() {
-    Engine** eslot = EngineSingletonSlot();
-    Engine* engine = eslot ? *eslot : nullptr;
+    EngineT** eslot = EngineSingletonSlot();
+    EngineT* engine = eslot ? *eslot : nullptr;
     if (engine == nullptr) return;
     uint8_t* modification = static_cast<uint8_t*>(engine->_modification);
     if (modification == nullptr) return;
@@ -202,7 +204,7 @@ void DisableAllModifications() {
 // 0x1800a1939-0x1800a1a92. Destroy and re-create the three Configuration
 // singletons with their compiled-in defaults. Every constant below is read off
 // the instruction stream, not reconstructed from a header.
-void ResetConfigurations(Engine* self) {
+void ResetConfigurations(EngineT* self) {
     // Persistence's settings map is cleared by an UNEXPORTED recursive helper
     // (0x18000f7d0 -> 0x18000f890 / 0x18000fa90 / 0x180009c30). By address, so
     // a later collection lane that ports it is picked up automatically; at
@@ -298,8 +300,7 @@ unsigned g_shownDlg     = 0;   // Half B
 // ============================================================================
 // ?PlatformConfigure@Engine@1@QEAA_N_NPEAX@Z   retail 0x1800a1670
 // ============================================================================
-extern "C" bool RtEngine_Engine_PlatformConfigure(Engine* self, bool configure,
-                                                 void* platformHandle) {
+bool Engine::Engine::PlatformConfigure(bool configure, void* platformHandle) {
     (void)platformHandle;   // see §3: R8 is never read by retail.
     ++g_calls;
 
@@ -309,9 +310,9 @@ extern "C" bool RtEngine_Engine_PlatformConfigure(Engine* self, bool configure,
     // here (`TEST RCX,RCX ; JZ`), not because we added a null check.
     if (!configure) {
         ++g_deconfigure;
-        void* vc = self->_videoConfiguration;
+        void* vc = _videoConfiguration;
         if (vc == nullptr) return true;
-        *static_cast<uint8_t*>(vc) = (self->_startupComplete == 0) ? 1 : 0;
+        *static_cast<uint8_t*>(vc) = (_startupComplete == 0) ? 1 : 0;
         return true;
     }
 
@@ -321,8 +322,8 @@ extern "C" bool RtEngine_Engine_PlatformConfigure(Engine* self, bool configure,
     // caller is Engine::Startup, which constructed it eight steps earlier, and
     // a guard here would skip the behaviour rather than restore it.
     bool skipDialog = false;
-    if (*static_cast<uint8_t*>(self->_videoConfiguration) == 0) {
-        const bool forced = CommandLineHasValue(self->_configuration, "launcher")
+    if (*static_cast<uint8_t*>(_videoConfiguration) == 0) {
+        const bool forced = CommandLineHasValue(_configuration, "launcher")
                          || RtEnginePlatformShiftHeld();
         skipDialog = !forced;
     }
@@ -330,11 +331,11 @@ extern "C" bool RtEngine_Engine_PlatformConfigure(Engine* self, bool configure,
     if (skipDialog) {
         // 0x1800a1787: arm the bit, persist, and tell the caller to proceed.
         ++g_skippedDlg;
-        *static_cast<uint8_t*>(self->_videoConfiguration) = 1;
-        reinterpret_cast<Video::Configuration*>(self->_videoConfiguration)
+        *static_cast<uint8_t*>(_videoConfiguration) = 1;
+        reinterpret_cast<Video::Configuration*>(_videoConfiguration)
             ->Save();                                        // B.3.5 bridge
         RT_EXPORT_ONCE(VoidThisFn, "?WriteSettings@Persistence@IO@@QEBAXXZ")(
-            self->_persistence);
+            _persistence);
         return true;
     }
 
@@ -356,23 +357,28 @@ extern "C" bool RtEngine_Engine_PlatformConfigure(Engine* self, bool configure,
 
     const long long result = RtEnginePlatformShowLauncherDialog();
 
-    *static_cast<uint8_t*>(self->_videoConfiguration) = 1;
-    reinterpret_cast<Video::Configuration*>(self->_videoConfiguration)
+    *static_cast<uint8_t*>(_videoConfiguration) = 1;
+    reinterpret_cast<Video::Configuration*>(_videoConfiguration)
         ->Save();                                            // B.3.5 bridge
     RT_EXPORT_ONCE(VoidThisFn, "?WriteSettings@Persistence@IO@@QEBAXXZ")(
-        self->_persistence);
+        _persistence);
 
     // 0x1800a17ff / 0x1800a18bf. The `||` short-circuit is retail's: the
     // command line is consulted ONLY when the checkbox byte is zero.
     if (RtEnginePlatformLauncherFlagNoMods()
-            || CommandLineHasKey(self->_configuration, "nomods"))
+            || CommandLineHasKey(_configuration, "nomods"))
         DisableAllModifications();
 
     if (RtEnginePlatformLauncherFlagReset()
-            || CommandLineHasKey(self->_configuration, "reset"))
-        ResetConfigurations(self);
+            || CommandLineHasKey(_configuration, "reset"))
+        ResetConfigurations(this);
 
     return result == 1;   // 0x1800a1a97: IDOK from the launcher template
+}
+
+extern "C" bool RtEngine_Engine_PlatformConfigure(EngineT* self, bool configure,
+                                                 void* platformHandle) {
+    return self->Engine::Engine::PlatformConfigure(configure, platformHandle);
 }
 
 extern "C" void RtEnginePlatformSummary() {

@@ -33,6 +33,13 @@
 // There is also NO VTABLE: the ctor's first store into `this` is a zero (the
 // Array data pointer), not a vtable stamp — so `MainLoop` is not polymorphic.
 
+// ENDGAME B.3.7 (block B1): the REAL class is `Engine::MainLoop`
+// (runtime/types/engine/MainLoop.h). This exe-side mirror STAYS a POD with its `m_`
+// spellings until the caller round renames the users outside block B1's file
+// set (code/Game/{Dialog,Game,Goal,Tutorial}, standalone/autostart.cpp,
+// engine/funcs/engine_funcs.h); it then becomes `using MainLoop = Engine::MainLoop;` (B7-6: MainLoop is concrete and non-polymorphic). Every offset here is
+// pinned against the class by tests/unit/engine_loop_abi_test.cpp.
+
 #include <cstdint>
 #include <cstddef>
 #include "common.h"

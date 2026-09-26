@@ -241,7 +241,10 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
+#include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
+#include "../../types/application/Application.h"   // ENDGAME B.3.7: _quitRequested
 #include "mainloop_internal.h"
+#include <atomic>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -317,13 +320,18 @@ constexpr uint32_t kChanCallbackArg    = 0x10;   // qword, 2nd arg of the callba
 constexpr uint32_t kChanCallbackTag    = 0x18;   // dword, 3rd arg
 constexpr uint32_t kChanCallback       = 0x20;   // qword, the stored completion fn
 
-// Engine subsystem offsets, the same three `Run` uses (mainloop_run.cpp).
-constexpr uint32_t kEngineInputDevice  = 0x6e0;
-constexpr uint32_t kEngineAudioDevice  = 0x6d0;
-constexpr uint32_t kEngineApplication  = 0x690;
+// ENDGAME B.3.7: the three Engine subsystem offsets (+0x6e0 Input::Device,
+// +0x6d0 Audio::Device, +0x690 Application) and Application+0x28 are read as
+// the named fields of the real classes now; the static_asserts pin that the
+// names are the bytes this body used to read.
+static_assert(offsetof(Engine::Engine, _inputDevice) == 0x6e0, "Frame reads +0x6e0");
+static_assert(offsetof(Engine::Engine, _audioDevice) == 0x6d0, "Frame reads +0x6d0");
+static_assert(offsetof(Engine::Engine, _application) == 0x690, "Frame reads +0x690");
+static_assert(offsetof(Application::Application, _quitRequested) == 0x28, "Frame tests +0x28");
 
-// Application +0x28 — the byte Frame tests before posting WM_QUIT.
-constexpr uint32_t kApplicationQuitFlag = 0x28;
+// System::Timer::_secondsPerTick (0x1801fe728, unexported address door), in a
+// namespace-scope atomic slot (B6-5) instead of a function-local static.
+std::atomic<void*> g_secondsPerTick{nullptr};
 
 // Video::Context — the four floats and the dirty bit Frame's tail writes.
 constexpr uint32_t kContextTimeVec4    = 0x3c8;
@@ -336,7 +344,6 @@ typedef void (*InputDeviceUpdateFn)(void* device, const void* time);
 typedef void (*FreeChannelPlatformFn)(void* device, int channel);
 // ?Draw@MainLoop@Engine@@QEAAXM@Z — `M` is float, so the second parameter is
 // XMM1 under the MS x64 ABI. See §2d: dropping it was this file's first bug.
-typedef void (*MainLoopDrawFn)(MainLoop* self, float alpha);
 typedef void (*ChannelCompleteFn)(void* chan, void* arg, uint32_t tag);
 
 inline uint8_t* Bytes(void* p) { return reinterpret_cast<uint8_t*>(p); }
@@ -348,31 +355,31 @@ inline T Field(void* base, uint32_t off) {
 
 }  // namespace
 
-extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time);
-
 // ?Frame@MainLoop@Engine@@QEAA_N_N@Z   retail 0x1800dd100  ord 2377
 //
 // `skipUpdate` is retail's `_N` parameter (DL, widened with MOVZX at
 // 0x1800dd115 and only ever tested as a byte).  `Run` passes false.
-extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
+bool Engine::MainLoop::Frame(bool skipUpdate) {
 
     // Ported already -> BY ADDRESS, so the port registry is consulted first and
     // our body is used rather than the DLL's.  NOT ported -> BY NAME where a
     // name exists, so the miss at cutover prints [RtUnresolved] and is counted
     // instead of being a silent null; BY ADDRESS only where there is no name.
-    static auto* secondsPerTick = reinterpret_cast<double*>(
-        ResolveAddr(Module::Runtime, 0x1801fe728));
+    const double* secondsPerTick = static_cast<const double*>(
+        rtengine::AtomicResolve(g_secondsPerTick, [] {
+            return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1801fe728));
+        }));
 
     // --- 0x1800dd119..0x1800dd14a : advance the accumulator -----------------
     const int64_t now = rtmainloop::CurrentTimeTicksViaGlobals();
-    const int64_t elapsed = now - self->_startTicks;   // uses the PREVIOUS value (§3)
-    self->_startTicks   = now;
-    self->_accumulator += elapsed;
+    const int64_t elapsed = now - _startTicks;   // uses the PREVIOUS value (§3)
+    _startTicks   = now;
+    _accumulator += elapsed;
 
     // --- 0x1800dd14e..0x1800dd169 : clamp, self-loop and all (§2b) ----------
-    const int64_t maxAccum = self->_maxAccumulator;
-    if (self->_accumulator > maxAccum) {
-        int64_t clamped = self->_deltaTime;
+    const int64_t maxAccum = _maxAccumulator;
+    if (_accumulator > maxAccum) {
+        int64_t clamped = _deltaTime;
         // Retail's `L: CMP RAX,RCX / JG L`. Neither operand changes inside it,
         // so this is retail's hang, reproduced rather than removed. It is
         // unreachable with the ctor's 1/60 and 1/15.
@@ -385,27 +392,27 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
         while (clamped > maxAccum) {
             __asm__ __volatile__("" ::: "memory");
         }
-        self->_accumulator = clamped;
+        _accumulator = clamped;
     }
 
-    self->_quit = 0;                                   // 0x1800dd16d
+    _quit = 0;                                   // 0x1800dd16d
 
     // --- 0x1800dd1a0..0x1800dd2f0 : the fixed-timestep loop -----------------
     // The test is at the TOP (0x1800dd175 `JL` past the whole body) and again
     // at the BOTTOM (0x1800dd2f0 `JGE` back), so this is a `while`, not a
     // `do/while`: a frame whose accumulator has not reached one step does no
     // updates at all and falls straight through to the tail.
-    while (self->_accumulator >= self->_deltaTime) {
-        uint8_t* engine = Bytes(self->_engine);
-        const void* deltaTime = &self->_deltaTime;     // retail's `LEA RDX,[RDI+0x48]`
+    while (_accumulator >= _deltaTime) {
+        ::Engine::Engine* engine = _engine;
+        const void* deltaTime = &_deltaTime;     // retail's `LEA RDX,[RDI+0x48]`
 
         // Input::Device::Update — NOT ported, by NAME (already-open door).
         RT_EXPORT_ONCE(InputDeviceUpdateFn,
                        "?Update@Device@Input@@QEAAXAEBVTime@System@@@Z")(
-            *reinterpret_cast<void**>(engine + kEngineInputDevice), deltaTime);
+            engine->_inputDevice, deltaTime);
 
         // --- the 64-channel audio sweep (§4) --------------------------------
-        void* audioDevice = *reinterpret_cast<void**>(engine + kEngineAudioDevice);
+        void* audioDevice = engine->_audioDevice;
         for (int i = 0; i < kAudioChannelCount; ++i) {
             uint8_t* chan = Bytes(audioDevice) + static_cast<uint32_t>(i) * kAudioChannelStride;
             if ((Field<uint32_t>(chan, kChanFlags) & 2u) == 0)
@@ -433,8 +440,7 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
         }
 
         // --- 0x1800dd204..0x1800dd219 : the application quit request --------
-        void* application = *reinterpret_cast<void**>(engine + kEngineApplication);
-        if (Field<uint8_t>(application, kApplicationQuitFlag) != 0)
+        if (engine->GetApplication()->_quitRequested != 0)
             PostQuitMessage(0);
 
         // --- 0x1800dd219..0x1800dd282 : the message pump --------------------
@@ -448,7 +454,7 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
                 TranslateMessage(&msg);
                 DispatchMessageW(&msg);
                 if (msg.message == kWmQuit) {
-                    self->_quit = 1;                   // 0x1800dd27e
+                    _quit = 1;                   // 0x1800dd27e
                     break;
                 }
                 if (!PeekMessageW(&msg, nullptr, 0, 0, 1))
@@ -461,22 +467,22 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
         // internal call at 0x1800dd28e, so this is a direct C++ call to the
         // sibling port, exactly where and how retail calls it.
         if (!skipUpdate) {
-            if (!RtEngine_MainLoop_Update(self, &self->_deltaTime))
-                self->_quit = 1;                       // 0x1800dd297
+            if (!Update(*reinterpret_cast<const System::Time*>(&_deltaTime)))
+                _quit = 1;                       // 0x1800dd297
         }
 
         // --- 0x1800dd29b..0x1800dd2d8 : the post-update callbacks (§2a) -----
         // Trip count from _postUpdate._size; FUNCTION from _postUpdate._data;
         // CONTEXT from _postDraw._data. Transcribed, not tidied. See §2a.
         {
-            uint8_t* self8 = Bytes(self);
+            uint8_t* self8 = Bytes(this);
             for (int32_t i = 0; i < *reinterpret_cast<int32_t*>(self8 + 0x98); ++i) {
                 const uint32_t byteOff = static_cast<uint32_t>(i) * 0x10u;
                 uint8_t* ctxArray  = *reinterpret_cast<uint8_t**>(self8 + 0x80);  // _postDraw._data
                 uint8_t* funcArray = *reinterpret_cast<uint8_t**>(self8 + 0x90);  // _postUpdate._data
                 void* context = *reinterpret_cast<void**>(ctxArray + byteOff + 8);
                 auto  fn = *reinterpret_cast<void (**)(const void*, void*)>(funcArray + byteOff);
-                fn(&self->_deltaTime, context);
+                fn(&_deltaTime, context);
             }
         }
 
@@ -484,8 +490,8 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
         // Retail re-reads _deltaTime from memory for each of the three uses
         // (0x1800dd2d8, 0x1800dd2e0, 0x1800dd2e8) rather than caching it, which
         // matters because the callbacks above are free to have changed it.
-        self->_accumulator -= self->_deltaTime;
-        self->_totalTime   += self->_deltaTime;
+        _accumulator -= _deltaTime;
+        _totalTime   += _deltaTime;
     }
 
     // SELF-CHECK, not an oracle (§6): the post-condition this body's own loop
@@ -496,11 +502,11 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
     // Reached both by falling out of the loop and by the top test skipping it
     // entirely (0x1800dd175 jumps straight here).
     const double spt = *secondsPerTick;
-    void* context = self->_context;
+    void* context = _context;
 
-    const float d = static_cast<float>(static_cast<double>(self->_deltaTime)   * spt);
-    const float a = static_cast<float>(static_cast<double>(self->_accumulator) * spt);
-    const float T = static_cast<float>(static_cast<double>(self->_totalTime)   * spt);
+    const float d = static_cast<float>(static_cast<double>(_deltaTime)   * spt);
+    const float a = static_cast<float>(static_cast<double>(_accumulator) * spt);
+    const float T = static_cast<float>(static_cast<double>(_totalTime)   * spt);
 
     // Retail's order, NOT `T + a` — see §2c.
     const float alpha = a / d;                 // DIVSS   (0x1800dd352)
@@ -518,11 +524,15 @@ extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
     // MainLoop::Draw — NOT ported. By NAME (it is exported), so the cutover
     // miss is diagnosable rather than a silent null (§5). The float is `alpha`,
     // in XMM1 (§2d) — omitting it was this file's first and worst bug.
-    RT_EXPORT_ONCE(MainLoopDrawFn, "?Draw@MainLoop@Engine@@QEAAXM@Z")(self, alpha);
+    Draw(alpha);   // ENDGAME B.3.7: a member call (was the ord-2251 name door)
 
     SwitchToThread();                          // 0x1800dd398
 
-    return self->_quit != 0;                   // MOVZX EAX,BYTE PTR [RDI+0x19]
+    return _quit != 0;                   // MOVZX EAX,BYTE PTR [RDI+0x19]
+}
+
+extern "C" bool RtEngine_MainLoop_Frame(MainLoop* self, bool skipUpdate) {
+    return self->Engine::MainLoop::Frame(skipUpdate);
 }
 
 // ============================================================================

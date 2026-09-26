@@ -92,6 +92,7 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/video/Context.h"
+#include "../../types/engine/MainLoop.h"   // ENDGAME B.3.7: Engine::MainLoop::CreateVideoContext
 // ENDGAME B.3.5 block VC — the three headers the converted call sites need:
 // `Video::{Index,Vertex}Buffer` and their `*Data` companions, `Video::ImageBuffer`
 // and `Video::{Device,ImageBuffer,ConstantBuffer}Data`'s slot names.
@@ -456,24 +457,32 @@ extern "C" void* RtVideo_Context_Ctor(Video::Context* self, void* device,
 // the allocator may well hand back the same address; nothing here may assume
 // otherwise.
 // ============================================================================
-extern "C" void RtEngine_MainLoop_CreateVideoContext(void* self) {
-    if (void* old = Field<void*>(self, 0x10)) {
+// ENDGAME B.3.7 (block B1): the body is the member `Engine::MainLoop::
+// CreateVideoContext` (`AEAA`, public here because the door is a free
+// function); `MainLoop::+0x10` is the named field `_context`.
+void Engine::MainLoop::CreateVideoContext() {
+    if (void* old = _context) {
         RtVideo_Context_Dtor(static_cast<Video::Context*>(old));
         Video_Context_OperatorDelete(old);   // was RT_EXPORT_ONCE("??3Context@Video@@SAXPEAX@Z")
-        Field<void*>(self, 0x10) = nullptr;
+        _context = nullptr;
     }
 
     // Retail inlines `Enter ; Allocate(alloc, 0x2168, 8) ; Leave`, which is
     // MemAlloc(0x2168, 8) — see the banner.
     void* block = MemAlloc(sizeof(Video::Context), 8);
     if (!block) {
-        Field<void*>(self, 0x10) = nullptr;
+        _context = nullptr;
         return;
     }
     void* device = *DeviceSingletonSlot();
-    Field<void*>(self, 0x10) = RtVideo_Context_Ctor(static_cast<Video::Context*>(block),
-                                                    device, 0x800000, 0x400000,
-                                                    0x100000, nullptr);
+    _context = RtVideo_Context_Ctor(static_cast<Video::Context*>(block),
+                                    device, 0x800000, 0x400000,
+                                    0x100000, nullptr);
+}
+
+extern "C" void RtEngine_MainLoop_CreateVideoContext(void* self) {
+    reinterpret_cast<Engine::MainLoop*>(self)                         // B.3.7 bridge
+        ->Engine::MainLoop::CreateVideoContext();
 }
 
 // ============================================================================

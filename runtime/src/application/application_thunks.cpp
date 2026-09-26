@@ -34,16 +34,18 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 
 // application_win.cpp / platform_startup_win.cpp — already-ported siblings.
 // PlatformUpdate has ordinary C++ linkage (application_win.cpp:79); only
 // PlatformStartup is declared extern "C" at its definition
 // (platform_startup_win.cpp:317) — match each exactly or the linker cannot
 // find them.
-bool RtApp_PlatformUpdate(Application* self);
-extern "C" bool RtApp_PlatformStartup(Application* self);
-extern "C" void RtApp_PlatformShutdown(Application* self);
+bool RtApp_PlatformUpdate(App* self);
+extern "C" bool RtApp_PlatformStartup(App* self);
+extern "C" void RtApp_PlatformShutdown(App* self);
 
 // ============================================================================
 // Application::Application::Update()    retail 0x18009f4f0   jmp -> PlatformUpdate
@@ -54,8 +56,12 @@ extern "C" void RtApp_PlatformShutdown(Application* self);
 // message loop) — so this wrapper does not call the DLL a second time; it
 // records that the delegation happened and forwards.
 // ============================================================================
-bool RtApp_Update(Application* self) {
-    return RtApp_PlatformUpdate(self);
+bool Application::Application::Update() {
+    return PlatformUpdate();
+}
+
+bool RtApp_Update(App* self) {
+    return self->Application::Update();
 }
 
 // ============================================================================
@@ -68,8 +74,12 @@ bool RtApp_Update(Application* self) {
 // equal=true without ever consulting the DLL, so its `divergences=0` proves
 // nothing and only its `calls=` is meaningful.
 // ============================================================================
-void RtApp_Shutdown(Application* self) {
-    RtApp_PlatformShutdown(self);
+void Application::Application::Shutdown() {
+    PlatformShutdown();
+}
+
+void RtApp_Shutdown(App* self) {
+    self->Application::Shutdown();
 }
 
 // ============================================================================
@@ -79,6 +89,10 @@ void RtApp_Shutdown(Application* self) {
 // Same shape as Update: PlatformStartup carries its own RT_DIFF site
 // (platform_startup_win.cpp), so this wrapper forwards without diffing again.
 // ============================================================================
-bool RtApp_Startup(Application* self) {
-    return RtApp_PlatformStartup(self);
+bool Application::Application::Startup() {
+    return PlatformStartup();
+}
+
+bool RtApp_Startup(App* self) {
+    return self->Application::Startup();
 }

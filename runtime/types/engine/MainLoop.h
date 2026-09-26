@@ -107,7 +107,11 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "../common.h"
+#include <type_traits>
+// ENDGAME B.3.7: NOT "../common.h" -- nothing here uses it, and its GLOBAL
+// `struct ImageBuffer;` forward declarations clash with the video tree's global
+// `using RtVideo::ImageBuffer;` (runtime/types/video/ImageBuffer.h) in
+// video/context_ctor.cpp, which now defines MainLoop::CreateVideoContext.
 #include "../collection/Collection.h"
 
 // Everything below lives in `RtEngine`, matching runtime/types/engine/UpdateLoop.h
@@ -121,7 +125,7 @@
 namespace RtEngine {
 
 struct UpdateLoop;   // defined by lane A in runtime/types/engine/UpdateLoop.h
-struct Engine;       // defined by lane B in runtime/types/engine/Engine.h
+// (`RtEngine::Engine` is an ALIAS of the real class since B.3.7: Engine.h.)
 
 // Retail addresses in Runtime-x64.dll (Ghidra space, image base 0x180000000).
 // Ordinals are from the shipped export directory, read with pefile; entries
@@ -220,9 +224,92 @@ struct MainLoopCallback {
 };
 static_assert(sizeof(MainLoopCallback) == 0x10, "MainLoopCallback is 0x10 bytes");
 
-struct MainLoop {
+}  // namespace RtEngine
+
+// ############################################################################
+// Engine::MainLoop -- THE REAL CLASS (ENDGAME B.3 step 7, block B1)
+// ############################################################################
+//
+// NON-POLYMORPHIC and CONCRETE (B37_RULES sec. 1 item 5: the ctor's first store
+// is a zero, `??1MainLoop@Engine@@QEAA@XZ` is `QEAA`). The Wave 8 POD that used
+// to be spelled here was field-identical and nothing embeds it, so the POD
+// BECOMES the class (B7-6) and `RtEngine::MainLoop` is an alias of it.
+//
+// HEAP-ONLY, BUILT THROUGH THE DOOR (B6-10): the exe's GameMain allocates
+// 0xa0 bytes (`MemAlloc(0xa0,8)` 0x140041f77) and calls the imported
+// `??0MainLoop@Engine@@QEAA@PEAV11@@Z`; that ctor and `??1` stay the registered
+// DOORS in runtime/src/engine/engine.cpp, and are declared here only so no
+// caller batch has to edit this header.
+//
+// `?_singleton@MainLoop@Engine@@1PEAV12@EA` (0x1801fe750) STAYS a data slot
+// until the end of B.3 (carry-over 5). NOTE `g_pEngineSingleton` in
+// engine/funcs/engine_funcs is bound to THIS symbol, not to Engine::_singleton
+// (a misnamed global; B37_RULES sec. 6.3 defect 3).
+//
+// Every by-value `System::Time` RETURN below is a retslot export in retail;
+// none of the four has a caller, so they are declared and left undefined.
+// ############################################################################
+
+namespace System { class Time; }
+namespace Video  { class Context; }
+
+namespace Engine {
+
+class UpdateLoop;   // runtime/types/engine/UpdateLoop.h (this block)
+class Engine;       // runtime/types/engine/Engine.h     (this block)
+
+class MainLoop {
+public:
+    using PostUpdateFunc = void (*)(const System::Time& time, void* userData);
+    using PostDrawFunc   = void (*)(Video::Context& context, void* userData);
+
+    // ---- lifetime: DOORS (engine.cpp), declared, deliberately undefined ----
+    explicit MainLoop(Engine* engine);                             // 0x1800dd6b0  door RtEngine_MainLoop_Ctor
+    ~MainLoop();                                                   // 0x1800dd640  door RtEngine_MainLoop_Dtor
+
+    // ---- PORTED --------------------------------------------------------------
+    void Run(UpdateLoop* loop);                                    // 0x1800dd3c0  mainloop_run.cpp
+    bool Update(const System::Time& time);                         // 0x1800dd070  mainloop_run.cpp
+    bool Frame(bool skipUpdate);                                   // 0x1800dd100  mainloop_frame.cpp
+    void Draw(float interpolation);                                // 0x1800dcd40  loops.cpp
+    void SetNextLoop(UpdateLoop* loop);                            // 0x1800dd7a0  engine.cpp
+    void OnVideoError();                                           // 0x1800dc5e0  mainloop_video.cpp
+    void OnVideoRestart();                                         // 0x1800dc3b0  mainloop_video.cpp
+    // The two static thunks the ctor installs into Video::Device +0x50/+0x58:
+    // `MOV RCX,[_singleton]; JMP <member>`. engine.cpp.
+    static void OnVideoError_();                                   // 0x1800dcd20
+    static void OnVideoRestart_();                                 // 0x1800dc5c0
+    // AEAA (private) in retail; public here because the registered door is a
+    // free function that has to call it (access control is not ABI).
+    void CreateVideoContext();                                     // 0x1800dd500  video/context_ctor.cpp
+
+    // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
+    Video::Context& GetContext() { return *static_cast<Video::Context*>(_context); }  // 0x1800314d0  MOV RAX,[RCX+0x10]
+    UpdateLoop* GetCurrentLoop() { return _currentLoop; }          // 0x1800314e0  MOV RAX,[RCX+0x20]
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    static MainLoop* Get();                                        // 0x180031570
+    bool IsRunning(const UpdateLoop* loop) const;                  // 0x1800314b0
+    System::Time GetDeltaTime() const;                             // 0x1800314f0  retslot
+    System::Time GetFrameTime() const;                             // 0x180031500  retslot
+    System::Time GetFrameStartTime() const;                        // 0x180031510  retslot
+    System::Time GetFrameUpdateTime() const;                       // 0x180031520  retslot
+    void MarkFrameUpdateTime();                                    // 0x180031530
+    void AddPostUpdate(PostUpdateFunc func, void* userData);       // 0x1800dcf60
+    void RemovePostUpdate(PostUpdateFunc func, void* userData);    // 0x1800dceb0
+    void AddPostDraw(PostDrawFunc func, void* userData);           // 0x1800dd040
+    void RemovePostDraw(PostDrawFunc func, void* userData);        // 0x1800dcf90
+    void ReleaseVideoContext();                                    // 0x1800dd5e0  AEAA
+    MainLoop(const MainLoop& other);                               // 0x180031580
+    MainLoop& operator=(const MainLoop& other);                    // 0x180031680
+    static void* operator new(size_t bytes);                       // 0x1800313d0
+    static void* operator new(size_t bytes, void* at);             // 0x180031440
+    static void  operator delete(void* p);                         // 0x180031450
+
+    // ---- the 0xa0 bytes, evidence per field in the table at the top ---------
+    // PUBLIC: the doors and the unconverted readers reach them.
     // Video resources captured on device loss and restored on device restart.
-    Collection::Array<VideoResourceEntry> _videoResources;  // +0x00
+    Collection::Array<RtEngine::VideoResourceEntry> _videoResources;  // +0x00
 
     void*    _context;            // +0x10  Video::Context*, owned; 0x2168 bytes
     uint8_t  _contextDirty;       // +0x18  loop switch asks for a fresh context
@@ -235,27 +322,15 @@ struct MainLoop {
 
     // All times are QPC ticks converted through System::Timer's
     // (qpc - base) * mul / div, NOT raw QPC counts.
-    // Run converts QPC once, before the frame loop, and stores it here
-    // (0x1800dd404).
     //
-    // *** ANSWERED, Wave 25 lane BODY. *** Lane B left open "whether
-    // MainLoop::Frame also rewrites it per frame". IT DOES — every call,
-    // unconditionally, at 0x1800dd146, and it uses the PREVIOUS value as the
-    // delta base:
-    //       now  = CurrentTimeTicks()
-    //       R8   = now - _startTicks        ; elapsed since the last Frame
-    //       _startTicks   = now             ; 0x1800dd146
-    //       _accumulator += R8              ; 0x1800dd14a
-    // So this field means "the tick at which the LAST FRAME was sampled", not
-    // "the tick Run started". Run's single pre-loop store is the seed for the
-    // first frame's delta, not a start timestamp anything later reads as one.
-    // Re-derive: objdump -d -M intel --start-address=0x1800dd100
-    //            --stop-address=0x1800dd3ac Runtime-x64.dll
+    // `_startTicks` means "the tick at which the LAST FRAME was sampled": Frame
+    // rewrites it every call (0x1800dd146) and uses the previous value as the
+    // delta base; Run's single pre-loop store (0x1800dd404) only seeds it.
     int64_t  _startTicks;         // +0x30
     int64_t  _accumulator;        // +0x38  fixed-step carry
     int64_t  _totalTime;          // +0x40
     int64_t  _deltaTime;          // +0x48  SecondsToTicks((float)1/60)
-    int64_t  _maxAccumulator;     // +0x50  SecondsToTicks((float)1/15) — 4 steps
+    int64_t  _maxAccumulator;     // +0x50  SecondsToTicks((float)1/15) -- 4 steps
     int64_t  _frameTime;          // +0x58  _frameEndTicks - _frameStartTicks
     int64_t  _frameStartTicks;    // +0x60
     int64_t  _frameUpdateTime;    // +0x68
@@ -263,11 +338,14 @@ struct MainLoop {
 
     Engine*  _engine;             // +0x78  ctor arg; NOT owned
 
-    Collection::Array<MainLoopCallback> _postDraw;    // +0x80
-    Collection::Array<MainLoopCallback> _postUpdate;  // +0x90
+    Collection::Array<RtEngine::MainLoopCallback> _postDraw;    // +0x80
+    Collection::Array<RtEngine::MainLoopCallback> _postUpdate;  // +0x90
 };
 
-static_assert(sizeof(MainLoop) == 0xa0, "MainLoop is 0xa0 bytes");
+static_assert(sizeof(MainLoop) == 0xa0, "MainLoop is 0xa0 bytes (exe MemAlloc(0xa0,8) 0x140041f77)");
+static_assert(alignof(MainLoop) == 8, "qword-aligned");
+static_assert(!std::is_polymorphic<MainLoop>::value,
+              "Engine::MainLoop has no vtable: the ctor's first store is a zero");
 static_assert(offsetof(MainLoop, _videoResources)  == 0x00, "MainLoop::_videoResources");
 static_assert(offsetof(MainLoop, _context)         == 0x10, "MainLoop::_context");
 static_assert(offsetof(MainLoop, _contextDirty)    == 0x18, "MainLoop::_contextDirty");
@@ -287,4 +365,8 @@ static_assert(offsetof(MainLoop, _engine)          == 0x78, "MainLoop::_engine")
 static_assert(offsetof(MainLoop, _postDraw)        == 0x80, "MainLoop::_postDraw");
 static_assert(offsetof(MainLoop, _postUpdate)      == 0x90, "MainLoop::_postUpdate");
 
-}  // namespace RtEngine
+}  // namespace Engine
+
+// B7-6: one definition per layout. Every `RtEngine::MainLoop` spelling in the
+// runtime tree now names the class.
+namespace RtEngine { using MainLoop = ::Engine::MainLoop; }

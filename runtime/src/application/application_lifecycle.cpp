@@ -116,7 +116,9 @@
 #include "../../types/application/Application.h"
 #include "../collection/set_avl.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 using rtsetavl::Node;
 using rtsetavl::Set;
 
@@ -130,19 +132,19 @@ extern "C" Node* RtApp_SetAllocNode(void* unused, const void* src, Node* parent)
 // in all three bodies below; the offset is asserted against the header rather
 // than repeated as a literal.
 // ---------------------------------------------------------------------------
-static_assert(offsetof(Application, _messageCallbackRoot) + offsetof(Set, root)
+static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, root)
                   == 0x18, "Application's Set::root must land at +0x18");
-static_assert(offsetof(Application, _messageCallbackRoot) + offsetof(Set, count)
+static_assert(offsetof(App, _messageCallbackRoot) + offsetof(Set, count)
                   == 0x20, "Application's Set::count must land at +0x20");
-static_assert(offsetof(Application, _messageCallbackCount) == 0x20,
+static_assert(offsetof(App, _messageCallbackCount) == 0x20,
               "...and the header's own name for that dword must be the same field");
 
 namespace {
 
-inline Set* SetOf(Application* a) {
+inline Set* SetOf(App* a) {
     return reinterpret_cast<Set*>(reinterpret_cast<uint8_t*>(a) + 0x18);
 }
-inline const Set* SetOf(const Application* a) {
+inline const Set* SetOf(const App* a) {
     return reinterpret_cast<const Set*>(reinterpret_cast<const uint8_t*>(a) + 0x18);
 }
 
@@ -287,7 +289,7 @@ extern "C" void RtApp_SetClear(Set* set) {
 // (runtime/src/engine/engine_lifecycle.cpp:977), so `calls=` is non-zero on any
 // run that shuts down cleanly.
 // ============================================================================
-extern "C" void RtApp_Dtor(Application* self) {
+extern "C" void RtApp_Dtor(App* self) {
 
     Set* set = SetOf(self);                       // 0x18009f538
     Node* root = set->root;                       // 0x18009f541
@@ -326,7 +328,7 @@ extern "C" void RtApp_Dtor(Application* self) {
 // ORACLE: the probe. Two runs allocate two different trees, so a whole-object
 // memcmp cannot be the test — see the banner.
 // ============================================================================
-extern "C" Application* RtApp_CopyCtor(Application* self, const Application* other) {
+extern "C" App* RtApp_CopyCtor(App* self, const App* other) {
 
     self->_windowHandle   = other->_windowHandle;    // 0x18000a0f1/0x18000a0f4
     self->_platformHandle = other->_platformHandle;  // 0x18000a0f7/0x18000a0fb
@@ -369,15 +371,16 @@ extern "C" Application* RtApp_CopyCtor(Application* self, const Application* oth
 //
 // ORACLE: the probe, same reason as the copy constructor.
 // ============================================================================
-extern "C" Application* RtApp_Assign(Application* self, const Application* other) {
+Application::Application& Application::Application::operator=(const Application& otherRef) {
+    const Application* other = &otherRef;
 
-    self->_windowHandle   = other->_windowHandle;    // 0x18000a175/0x18000a180
-    self->_platformHandle = other->_platformHandle;  // 0x18000a183/0x18000a18a
-    self->_cursorEnabled       = other->_cursorEnabled;        // 0x18000a18e/0x18000a195
-    self->_running        = other->_running;         // 0x18000a198/0x18000a19c
+    _windowHandle   = other->_windowHandle;    // 0x18000a175/0x18000a180
+    _platformHandle = other->_platformHandle;  // 0x18000a183/0x18000a18a
+    _cursorEnabled       = other->_cursorEnabled;        // 0x18000a18e/0x18000a195
+    _running        = other->_running;         // 0x18000a198/0x18000a19c
 
     const Set* src = SetOf(other);                   // 0x18000a178  LEA R14
-    Set*       dst = SetOf(self);                    // 0x18000a17c  LEA RBX
+    Set*       dst = SetOf(this);                    // 0x18000a17c  LEA RBX
 
     if (src != dst) {                                // 0x18000a19f/0x18000a1a2
         if (dst->root)                               // 0x18000a1a4/0x18000a1a8
@@ -387,9 +390,13 @@ extern "C" Application* RtApp_Assign(Application* self, const Application* other
         dst->count = src->count;                     // 0x18000a1c5/0x18000a1c9
     }
 
-    self->_quitRequested = other->_quitRequested;    // 0x18000a1cc/0x18000a1da
+    _quitRequested = other->_quitRequested;    // 0x18000a1cc/0x18000a1da
 
-    return self;                                     // 0x18000a1dd
+    return *this;                                    // 0x18000a1dd
+}
+
+extern "C" App* RtApp_Assign(App* self, const App* other) {
+    return &self->Application::operator=(*other);
 }
 
 // ---------------------------------------------------------------------------

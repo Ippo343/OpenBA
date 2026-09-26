@@ -135,7 +135,9 @@
 #include "../../types/input/Input.h"
 #include "../collection/set_avl.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7 (block B1, outside its file set -- the minimum): the global
+// `using RtApplication::Application;` is ill-formed next to `namespace
+// Application`; the class is spelled `Application::Application` below.
 using rtsetavl::Node;
 using rtsetavl::Set;
 
@@ -154,15 +156,15 @@ constexpr int kComUnacquire = 0x40;   // IDirectInputDevice8::Unacquire,    inde
 // The Set lives at Application+0x18 — the identical door message_callbacks.cpp
 // uses, and its two static_asserts already enforce that root/count land at
 // +0x18/+0x20.
-inline Set* CallbackSet(Application* app) {
+inline Set* CallbackSet(Application::Application* app) {
     return reinterpret_cast<Set*>(reinterpret_cast<uint8_t*>(app) + 0x18);
 }
 
 // `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678, through the port-aware
 // DATA door so a minted run and a DLL run both land on whatever storage the
 // ported ctor published into (platform_startup_win.cpp:112 uses the same door).
-Application** AppSingletonSlot() {
-    return RT_DATA_SLOT(Application**, "?_singleton@Application@1@0PEAV11@EA");
+Application::Application** AppSingletonSlot() {
+    return RT_DATA_SLOT(Application::Application**, "?_singleton@Application@1@0PEAV11@EA");
 }
 
 // ---- attendance ------------------------------------------------------------
@@ -203,7 +205,7 @@ ShutdownSummary g_summary;
 // which the descent itself cannot report (retail's returns void and a miss is
 // silent) — the extra return value is THIS PORT'S instrumentation, not a
 // behavioural change: the observable effect on the tree is identical.
-bool EraseCallback(Application* app, unsigned message) {
+bool EraseCallback(Application::Application* app, unsigned message) {
     Set* set = CallbackSet(app);
     // Read the node out BEFORE the call so a hit can be recognised without
     // duplicating retail's descent logic in two places.
@@ -211,7 +213,7 @@ bool EraseCallback(Application* app, unsigned message) {
         const unsigned key = *reinterpret_cast<const unsigned*>(n);
         if (message < key)      n = n->left;
         else if (key >= message) {
-            using UnregFn = void (*)(Application*, unsigned);
+            using UnregFn = void (*)(Application::Application*, unsigned);
             UnregFn fn = RT_EXPORT_ONCE(UnregFn,
                 "?UnregisterMessageCallback@Application@1@QEAAXI@Z");
             if (fn) { fn(app, message); return true; }
@@ -223,7 +225,7 @@ bool EraseCallback(Application* app, unsigned message) {
 }
 
 // Post-condition probe: is `message` still in the tree? Pure read, no mutation.
-bool CallbackPresent(Application* app, unsigned message) {
+bool CallbackPresent(Application::Application* app, unsigned message) {
     Set* set = CallbackSet(app);
     for (Node* n = set->root; n; ) {
         const unsigned key = *reinterpret_cast<const unsigned*>(n);
@@ -255,8 +257,8 @@ extern "C" void RtInput_Device_PlatformShutdown(void* self) {
     ++g_entries;
 
     // ---- the three message-callback erases ---------------------------------
-    Application** slot = AppSingletonSlot();
-    Application*  app  = slot ? *slot : nullptr;
+    Application::Application** slot = AppSingletonSlot();
+    Application::Application*  app  = slot ? *slot : nullptr;
     if (app == nullptr) {
         // Retail derefs [0x1801fc678] unguarded. It is NOT guarded here to be
         // safe — it is guarded because our standalone can reach shutdown on a

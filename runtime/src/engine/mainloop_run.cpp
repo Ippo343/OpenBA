@@ -153,7 +153,11 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
+#include "../../types/engine/UpdateLoop.h"         // ENDGAME B.3.7: the loop classes
+#include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
+#include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformUpdate
 #include "mainloop_internal.h"
+#include <atomic>
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -172,11 +176,16 @@ namespace {
 // UpdateLoop vtable slots — see §1. The object is opaque here on purpose: this
 // file needs the vtable pointer at +0x00 and nothing else about it, and
 // RtEngine::UpdateLoop is a different lane's type.
-typedef void* (*LoopDtorFn)(void* self, unsigned flags);   // slot 0
-typedef void  (*LoopVoidFn)(void* self);                   // slots 1, 2
-typedef bool  (*LoopUpdateFn)(void* self, const void* t);  // slot 3
+// ENDGAME B.3.7: the hand-inlined `LoopVtable(loop)[N]` slot calls this file
+// used to carry (slots 0 DeletingDtor, 1 Startup, 2 Shutdown, 3 Update) are
+// ordinary virtual calls on `Engine::UpdateLoop` now; its slot order is
+// retail's (runtime/types/engine/UpdateLoop.h), so each compiles to the same
+// `CALL [vptr+N*8]`.
 
-inline void** LoopVtable(void* loop) { return *reinterpret_cast<void***>(loop); }
+// Audio::Device::Update (0x1800de520) -- block B4's class, still reached BY
+// ADDRESS (B4 converts it), now through a namespace-scope atomic slot rather
+// than a function-local static (B6-5).
+std::atomic<void*> g_audioDeviceUpdate{nullptr};
 
 // Retail's inlined CurrentTimeTicks now has ONE definition, in
 // mainloop_frame.cpp, reached through mainloop_internal.h. It used to live here
@@ -206,33 +215,29 @@ inline int64_t CurrentTimeTicksViaGlobals() {
 //   1800dd08e  CMP  [RBX+0x28],0 / JNE 1800dd0a7   ; !running: queued? -> switch
 //   1800dd095  return false                        ; !running, nothing queued
 //   1800dd0a0  CMP  [RBX+0x28],0 / JE  1800dd0eb   ; running: nothing queued -> true
-extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time) {
+bool Engine::MainLoop::Update(const System::Time& time) {
 
-    void* current = self->_currentLoop;
-    const bool running =
-        reinterpret_cast<LoopUpdateFn>(LoopVtable(current)[3])(current, time);
+    const bool running = _currentLoop->Update(time);                // slot 3
 
-    if (!running && self->_nextLoop == nullptr) {
+    if (!running && _nextLoop == nullptr) {
         return false;                                    // 0x1800dd095
     }
-    if (running && self->_nextLoop == nullptr) {
+    if (running && _nextLoop == nullptr) {
         return true;                                     // 0x1800dd0eb
     }
 
     // --- the transition, 0x1800dd0a7..0x1800dd0e7 ---------------------------
-    void* old = self->_currentLoop;
-    reinterpret_cast<LoopVoidFn>(LoopVtable(old)[2])(old);          // Shutdown
+    _currentLoop->Shutdown();                                       // slot 2
 
     // Retail re-reads _currentLoop and null-tests it before the deleting dtor
     // even though it just called through it. Reproduced: the Shutdown above is
     // a virtual call into game code that is free to have nulled it.
-    void* toDelete = self->_currentLoop;
-    if (toDelete)
-        reinterpret_cast<LoopDtorFn>(LoopVtable(toDelete)[0])(toDelete, 1);  // delete
+    if (UpdateLoop* toDelete = _currentLoop)
+        toDelete->DeletingDtor(1);                                  // slot 0, delete
 
-    void* next = self->_nextLoop;
-    self->_nextLoop = nullptr;                           // 0x1800dd0c8
-    self->_currentLoop = reinterpret_cast<RtEngine::UpdateLoop*>(next);
+    UpdateLoop* next = _nextLoop;
+    _nextLoop = nullptr;                                 // 0x1800dd0c8
+    _currentLoop = next;
 
     // THE SHADOW'S POST-CONDITION IS SAMPLED **HERE**, NOT AT THE END, AND THE
     // FIRST VERSION OF THIS GOT IT WRONG. It asserted `_nextLoop == nullptr`
@@ -247,15 +252,13 @@ extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time) {
     // Sampling here checks what the transition step itself actually guarantees.
     // Recorded rather than quietly relaxed, because a shadow that is loosened
     // until it stops complaining verifies nothing.
-    const bool clearedOk =
-        (self->_nextLoop == nullptr) &&
-        (self->_currentLoop == reinterpret_cast<RtEngine::UpdateLoop*>(next));
+    const bool clearedOk = (_nextLoop == nullptr) && (_currentLoop == next);
+    (void)clearedOk;
 
-    reinterpret_cast<LoopVoidFn>(LoopVtable(next)[1])(next);         // Startup
+    next->Startup();                                                // slot 1
 
-    void* now = self->_currentLoop;
-    reinterpret_cast<LoopUpdateFn>(LoopVtable(now)[3])(now, time);   // Update
-    self->_contextDirty = 1;                             // 0x1800dd0e7
+    _currentLoop->Update(time);                                     // slot 3, fresh read
+    _contextDirty = 1;                                   // 0x1800dd0e7
 
     // SELF-CONSISTENCY SHADOW, not an oracle (§4). These are post-conditions
     // this body itself establishes; a green row here means the transition was
@@ -263,8 +266,12 @@ extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time) {
     return true;
 }
 
+extern "C" bool RtEngine_MainLoop_Update(MainLoop* self, const void* time) {
+    return self->Engine::MainLoop::Update(*static_cast<const System::Time*>(time));
+}
+
 // ?Run@MainLoop@Engine@@QEAAXPEAVUpdateLoop@2@@Z   retail 0x1800dd3c0  ord 3601
-extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
+void Engine::MainLoop::Run(UpdateLoop* loop) {
 
     // The three subsystem pointers hang off Engine, which Run reaches through
     // _engine (+0x78). The offsets are Run's own: +0x6e0 Input::Device,
@@ -273,52 +280,50 @@ extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
     //   1800dd422  MOV RCX,[RBX+0x6d0]
     //   1800dd432  MOV RCX,[RBX+0x690]
     typedef void (*DeviceUpdateFn)(void* device, const void* time);
-    typedef bool (*PlatformUpdateFn)(void* app);
-    typedef bool (*FrameFn)(MainLoop* self, bool arg);
 
-    // Ported already -> BY ADDRESS, so the port registry is consulted first
-    // and our implementation is used rather than the DLL's (§3).
-    static auto audioUpdate = reinterpret_cast<DeviceUpdateFn>(
-        ResolveAddr(Module::Runtime, 0x1800de520));
-    static auto platformUpdate = reinterpret_cast<PlatformUpdateFn>(
-        ResolveAddr(Module::Runtime, 0x18009fdf0));
+    // Audio::Device::Update: ported already -> BY ADDRESS, so the port registry
+    // is consulted first and our implementation is used rather than the DLL's
+    // (§3). Block B4's class; B4 converts this call.
+    DeviceUpdateFn audioUpdate = reinterpret_cast<DeviceUpdateFn>(
+        rtengine::AtomicResolve(g_audioDeviceUpdate, [] {
+            return reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x1800de520));
+        }));
 
-    self->_currentLoop = reinterpret_cast<RtEngine::UpdateLoop*>(loop);  // +0x20
-    self->_startTicks  = CurrentTimeTicksViaGlobals();                   // +0x30
+    _currentLoop = loop;                                                 // +0x20
+    _startTicks  = CurrentTimeTicksViaGlobals();                         // +0x30
 
-    reinterpret_cast<LoopVoidFn>(LoopVtable(loop)[1])(loop);             // Startup
+    loop->Startup();                                                     // slot 1
 
-    uint8_t* engine = reinterpret_cast<uint8_t*>(self->_engine);
-    const void* deltaTime = &self->_deltaTime;              // the `Time&` retail passes
+    ::Engine::Engine* engine = _engine;
+    const void* deltaTime = &_deltaTime;                    // the `Time&` retail passes
 
     // Input::Device::Update — NOT ported. By NAME, so the miss at cutover
     // prints [RtUnresolved] and is counted, instead of being a silent null.
     RT_EXPORT_ONCE(DeviceUpdateFn, "?Update@Device@Input@@QEAAXAEBVTime@System@@@Z")(
-        *reinterpret_cast<void**>(engine + 0x6e0), deltaTime);
+        engine->_inputDevice, deltaTime);                                // +0x6e0
 
-    audioUpdate(*reinterpret_cast<void**>(engine + 0x6d0), deltaTime);
-    platformUpdate(*reinterpret_cast<void**>(engine + 0x690));
+    audioUpdate(engine->_audioDevice, deltaTime);                        // +0x6d0
+    // Application::PlatformUpdate (0x18009fdf0, AEAA): was reached BY ADDRESS
+    // (`ResolveAddr(Module::Runtime, 0x18009fdf0)` in a function-local static);
+    // ENDGAME B.3.7: a member call on the real class. Result discarded, as retail's.
+    engine->GetApplication()->PlatformUpdate();                          // +0x690
 
-    RtEngine_MainLoop_Update(self, deltaTime);
+    Update(*reinterpret_cast<const System::Time*>(&_deltaTime));   // LEA RDX,[RBX+0x48]
 
     // MainLoop::Frame — **PORTED, Wave 25 lane BODY** (mainloop_frame.cpp).
-    // The call stays a NAME resolve rather than becoming a direct C++ call:
-    // `RtResolveCached` consults the port registry first, so this already lands
-    // on our body, and converting the door would delete the row from the
-    // census's `called` column as a side effect of a cosmetic edit
-    // (reference_converting_a_door_is_not_satisfying_it.md). Retail reaches
-    // Frame by rel32 here, so a direct call would also be faithful; it is not
-    // worth moving a denominator to get it.
+    // ENDGAME B.3.7: a direct member call, as retail's rel32 CALL is. (The
+    // name door this replaced was kept for a census column; B.3 converts every
+    // runtime-internal door onto the class it belongs to.)
     //
     // The loop condition is tested BEFORE the first iteration (0x1800dd44a
     // JNE past the whole body) and again at the bottom (0x1800dd4be JE back to
     // the top), so this is a `while`, not a `do/while` — a `do/while` would run
     // one frame after a loop that asked to quit during its Startup.
-    while (self->_quit == 0) {
-        self->_frameStartTicks = CurrentTimeTicksViaGlobals();           // +0x60
-        RT_EXPORT_ONCE(FrameFn, "?Frame@MainLoop@Engine@@QEAA_N_N@Z")(self, false);
-        self->_frameEndTicks = CurrentTimeTicksViaGlobals();             // +0x70
-        self->_frameTime = self->_frameEndTicks - self->_frameStartTicks;  // +0x58
+    while (_quit == 0) {
+        _frameStartTicks = CurrentTimeTicksViaGlobals();                 // +0x60
+        Frame(false);
+        _frameEndTicks = CurrentTimeTicksViaGlobals();                   // +0x70
+        _frameTime = _frameEndTicks - _frameStartTicks;                  // +0x58
 
         // NOT RETAIL. The frozen-exe heartbeat: one interlocked increment, and
         // this is THE place for it -- every loop type (loader, splash, menu
@@ -331,15 +336,17 @@ extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
 
     // Teardown, 0x1800dd4c0..0x1800dd4dd. Both reads of _currentLoop are fresh,
     // as retail's are.
-    void* cur = self->_currentLoop;
-    reinterpret_cast<LoopVoidFn>(LoopVtable(cur)[2])(cur);               // Shutdown
+    _currentLoop->Shutdown();                                            // slot 2
 
-    void* toDelete = self->_currentLoop;
-    if (toDelete)
-        reinterpret_cast<LoopDtorFn>(LoopVtable(toDelete)[0])(toDelete, 1);
+    if (UpdateLoop* toDelete = _currentLoop)
+        toDelete->DeletingDtor(1);                                       // slot 0
 
     // No oracle is possible here (§4); the site is registered so that its call
     // count is still visible in the diff report.
+}
+
+extern "C" void RtEngine_MainLoop_Run(MainLoop* self, void* loop) {
+    self->Engine::MainLoop::Run(static_cast<Engine::UpdateLoop*>(loop));
 }
 
 // ============================================================================

@@ -11,8 +11,14 @@
 // rather than inventing the rest.
 //
 // NOT A POLYMORPHIC CLASS. The ctor (`Application`, 0x18009f590, found via the
-// xrefs to the `_singleton` data export rather than by name — it has no
-// mangled export of its own) is:
+// xrefs to the `_singleton` data export rather than by name) is:
+//
+// CORRECTED (ENDGAME B.3.7, B37_RULES sec. 6.1 / B7-11): "it has no mangled
+// export of its own" was WRONG. The ctor IS exported, as
+// `??0Application@0@QEAA@PEAX@Z`, and the class has 27 named exports, every one
+// spelled with MSVC's back-reference (`@Application@1@`, `@Application@0@`)
+// because the class shares its namespace's name. A grep for `@Application@@`
+// finds none of them.
 //
 //   MOV qword ptr [RSP+0x8],RCX
 //   ...
@@ -44,8 +50,36 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
-namespace RtApplication {
+// ############################################################################
+// Application::Application -- THE REAL CLASS (ENDGAME B.3 step 7, block B1)
+// ############################################################################
+//
+// Retail's class is `Application` inside namespace `Application` (the mangled
+// `?M@Application@1@`). NON-POLYMORPHIC (no `??_7`, the ctor's stores below),
+// 0x30 bytes, heap-only: `Engine::Startup` allocates it (`MemAlloc(0x30)`
+// 0x1800dbbb3) and runs the ctor INLINED, which this tree ports as the door
+// `Ctor_Application` (runtime/src/engine/singleton_ctors.cpp) -- that door
+// STAYS (B37_RULES sec. 2.4, B7-10), as do the dtor, copy-ctor and the
+// unexported scalar deleting dtor (closure_batch2b.cpp). The Wave 8 POD that
+// used to live here was field-identical, so the POD BECOMES the class (B7-6)
+// and `RtApplication::Application` is an alias of it.
+//
+// `?_singleton@Application@1@0PEAV11@EA` (0x1801fc678) STAYS a data slot read
+// through RT_DATA_SLOT until the end of B.3 (carry-over 5).
+//
+// ORDER (B7-10): Engine::Startup builds the Application BEFORE Video, and
+// `PlatformStartup` (the window) runs before any `RegisterMessageCallback`
+// (Input registers three callbacks, the Video device two). Nothing here moves
+// that order.
+//
+// PORTABILITY: no <windows.h> (PLAN.md sec. 4.1 decision 1). HWND / HINSTANCE /
+// WPARAM / LPARAM are spelled `void*` / `uint64_t` / `int64_t`; the _win.cpp
+// files cast at the Win32 boundary.
+// ############################################################################
+
+namespace Application {
 
 // ============================================================================
 // WAVE 12 LANE B — THE CLASS EXTENT IS SETTLED. IT IS 0x30 BYTES.
@@ -81,7 +115,60 @@ namespace RtApplication {
 // Application keep whatever the destination held. PLAN §6 step 8: say what is
 // not known rather than guess.
 // ============================================================================
-struct Application {
+class Application {
+public:
+    // A registered Win32 message callback:
+    // `int (*)(HWND, unsigned, WPARAM, LPARAM)`; non-zero means "handled".
+    using MessageCallback = int (*)(void* hwnd, uint32_t message,
+                                    uint64_t wParam, int64_t lParam);
+
+    // ---- the 27 exports (B37_SLOTS.md sec. 6), ALL PORTED -----------------
+    static Application* Get();                                      // 0x18000a2f0  application_accessors.cpp
+    bool Startup();                                                 // 0x18009f510  application_thunks.cpp
+    void Shutdown();                                                // 0x18009f500  application_thunks.cpp
+    bool Update();                                                  // 0x18009f4f0  application_thunks.cpp
+    void Quit();                                                    // 0x18009f4d0  application.cpp
+    bool IsPaused();                                                // 0x18009f4e0  application.cpp
+    bool LaunchProcess(const char* command, bool wait);             // 0x18009f5e0  application_win.cpp
+    void EnableCursor(bool enabled);                                // 0x18009f800  application_win.cpp
+    // Retail's return is `_N` but the body is `MOVZX EAX,byte [RCX+0x10]; RET`:
+    // the RAW byte reaches AL. Declared `uint8_t` (the same AL return) so C++
+    // does not normalise it (application_accessors.cpp's banner, Wave 12).
+    uint8_t IsCursorEnabled();                                      // 0x18000a0c0  application_accessors.cpp
+    void SleepThread(int32_t milliseconds);                         // 0x18009f850  application_win.cpp
+    void YieldToThreads();                                          // 0x18009f920  application_win.cpp
+    void RegisterMessageCallback(uint32_t message, MessageCallback callback); // 0x18009fa60  message_callbacks.cpp
+    void UnregisterMessageCallback(uint32_t message);               // 0x18009fa20  message_callbacks.cpp
+    void* GetInstance() const;                                      // 0x18009fb90  HINSTANCE
+    void* GetWindow() const;                                        // 0x18009fba0  HWND
+    Application& operator=(const Application& other);               // 0x18000a160  application_lifecycle.cpp
+
+    // `CA` (private static) and `AEAA` (private) in retail. PUBLIC here: each
+    // registered door is a free function that has to call its member, and
+    // access control is not ABI (reference_aeaa_is_private_not_unexported.md).
+    static int64_t WindowProc(void* hwnd, uint32_t message,
+                              uint64_t wParam, int64_t lParam);     // 0x18009f930  platform_startup_win.cpp
+    void PlatformConstruct(void* platformHandle);                   // 0x18009fbe0  application_win.cpp
+    void PlatformDestruct();                                        // 0x18009fc00  application_accessors.cpp
+    bool PlatformStartup();                                         // 0x18009fc10  platform_startup_win.cpp
+    void PlatformShutdown();                                        // 0x18009fd70  platform_startup_win.cpp
+    bool PlatformUpdate();                                          // 0x18009fdf0  application_win.cpp
+    bool PlatformIsPaused();                                        // 0x18009fe80  application_accessors.cpp
+
+    // ---- lifetime: DOORS, declared, deliberately undefined -----------------
+    // B6-10 / B7-10: the ctor is INLINED by retail's Engine::Startup and ported
+    // as the door `Ctor_Application`; the dtor and copy-ctor doors are
+    // `RtApp_Dtor` / `RtApp_CopyCtor` (application_lifecycle.cpp). Declaring
+    // them keeps C++ from generating a member-wise copy or destructor for a
+    // class that owns an AVL tree.
+    explicit Application(void* platformHandle);                     // 0x18009f590  door Ctor_Application
+    Application(const Application& other);                          // 0x18000a0d0  door RtApp_CopyCtor
+    ~Application();                                                 // 0x18009f520  door RtApp_Dtor
+
+    // ---- the 0x30 bytes, at retail's offsets ------------------------------
+    // PUBLIC: the unconverted callers (input_platform_shutdown_win.cpp, the
+    // exe's Application readers) reach them through a cast.
+
     // +0x00  THE MAIN WINDOW HANDLE. Named by Wave 9 lane VID2:
     // `?PlatformStartup@Device@Video@@AEAA_NXZ` opens with
     //     MOV RAX,[0x1801fc678] ; MOV RDX,[RAX] ; MOV [RCX+0x90],RDX
@@ -143,6 +230,9 @@ struct Application {
     int32_t _unknown24;            // +0x24  unproven.
     uint8_t _quitRequested;        // +0x28  Quit() sets 1; PlatformUpdate() reads it.
 };
+static_assert(!std::is_polymorphic<Application>::value,
+              "Application::Application has no vtable: the ctor's first stores are zeros");
+static_assert(alignof(Application) == 8, "qword-aligned");
 static_assert(offsetof(Application, _windowHandle)         == 0x00, "Application._windowHandle @ 0x00");
 static_assert(offsetof(Application, _platformHandle)       == 0x08, "Application._platformHandle @ 0x08");
 static_assert(offsetof(Application, _cursorEnabled)        == 0x10, "Application._cursorEnabled @ 0x10");
@@ -155,4 +245,12 @@ static_assert(offsetof(Application, _quitRequested)        == 0x28, "Application
 static_assert(sizeof(Application) == 0x30,
               "Application is 0x30 bytes -- Engine::Startup 0x1800dbbb3 allocates 0x30");
 
-}  // namespace RtApplication
+}  // namespace Application
+
+// B7-6: one definition per layout. `RtApplication::Application` keeps compiling
+// for the files that still spell it (runtime/src/input/
+// input_platform_shutdown_win.cpp, block B5's) until they rebase. NOTE: a
+// GLOBAL `using RtApplication::Application;` is ill-formed now that
+// `namespace Application` exists at global scope -- spell the class
+// `Application::Application` instead.
+namespace RtApplication { using Application = ::Application::Application; }

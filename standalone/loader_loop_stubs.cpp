@@ -35,6 +35,8 @@
 #include "LoaderLoop.h"
 #include "options.h"
 #include "system/Thread.h"   // ENDGAME B.3.4b System callers: System::Thread
+#include "engine/UpdateLoop.h"   // -Iruntime/types: ENDGAME B.3.7 Engine loop classes
+#include "engine/MainLoop.h"     // -Iruntime/types: ENDGAME B.3.7 Engine::MainLoop
 #include <cstdio>
 #include <cstdint>
 #include <cstdlib>
@@ -134,18 +136,21 @@ void Inner_Destroy(UpdateLoop* self, unsigned flags) {
 void Inner_Startup(UpdateLoop* self) {
     StallDebug::Phase phase("InnerLL::Startup");
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
-    printf("[InnerLL::Startup] self=%p next=%p loader=%p fn=%p\n",
-           (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
+    printf("[InnerLL::Startup] self=%p next=%p loader=%p\n",
+           (void*)self, (void*)ll->m_nextLoop, g_pLoader);
     if (SkipEngineLoader()) {
         printf("[InnerLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
                "Engine::Loader::Load (background loader pegs a core, but boot "
                "depends on Game/Global; expect a crash).\n");
-    } else if (fn_Loader_Load && g_pLoader) {
-        fn_Loader_Load(g_pLoader, ll->m_nextLoop);
+    } else if (g_pLoader) {
+        // ENDGAME B.3.7: `Engine::Loader::Load` is a (non-virtual) member of
+        // the real class; the `fn_Loader_Load` name door is no longer needed.
+        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(                  // B.3.7 bridge
+            reinterpret_cast<Engine::UpdateLoop*>(ll->m_nextLoop));
         printf("[InnerLL::Startup] Loader::Load returned\n");
         WaitForEngineLoader();
     } else {
-        printf("[InnerLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
+        printf("[InnerLL::Startup] WARN: skipping Loader::Load (g_pLoader null)\n");
     }
 }
 
@@ -165,8 +170,9 @@ bool Inner_Update(UpdateLoop* self, void* time) {
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
     printf("[InnerLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
            (void*)self, time, (void*)next, mainLoop);
-    if (next && fn_MainLoop_SetNextLoop && mainLoop) {
-        fn_MainLoop_SetNextLoop(mainLoop, next);
+    if (next && mainLoop) {
+        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(          // B.3.7 bridge
+            reinterpret_cast<Engine::UpdateLoop*>(next));
     }
     self->m_loadBit = -1;
     return false;
@@ -251,17 +257,20 @@ void Outer_Destroy(UpdateLoop* self, unsigned flags) {
 void Outer_Startup(UpdateLoop* self) {
     StallDebug::Phase phase("OuterLL::Startup");
     LoaderLoop* ll = reinterpret_cast<LoaderLoop*>(self);
-    printf("[OuterLL::Startup] self=%p next=%p loader=%p fn=%p\n",
-           (void*)self, (void*)ll->m_nextLoop, g_pLoader, (void*)fn_Loader_Load);
+    printf("[OuterLL::Startup] self=%p next=%p loader=%p\n",
+           (void*)self, (void*)ll->m_nextLoop, g_pLoader);
     if (SkipEngineLoader()) {
         printf("[OuterLL::Startup] BANISHED_SKIP_ENGINE_LOADER set — skipping "
                "Engine::Loader::Load (see InnerLL note; expect a crash).\n");
-    } else if (fn_Loader_Load && g_pLoader) {
-        fn_Loader_Load(g_pLoader, ll->m_nextLoop);
+    } else if (g_pLoader) {
+        // ENDGAME B.3.7: `Engine::Loader::Load` is a (non-virtual) member of
+        // the real class; the `fn_Loader_Load` name door is no longer needed.
+        reinterpret_cast<Engine::Loader*>(g_pLoader)->Load(                  // B.3.7 bridge
+            reinterpret_cast<Engine::UpdateLoop*>(ll->m_nextLoop));
         printf("[OuterLL::Startup] Loader::Load returned\n");
         WaitForEngineLoader();
     } else {
-        printf("[OuterLL::Startup] WARN: skipping Loader::Load (fn or g_pLoader null)\n");
+        printf("[OuterLL::Startup] WARN: skipping Loader::Load (g_pLoader null)\n");
     }
 }
 
@@ -278,8 +287,9 @@ bool Outer_Update(UpdateLoop* self, void* time) {
     void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
     printf("[OuterLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
            (void*)self, time, (void*)next, mainLoop);
-    if (next && fn_MainLoop_SetNextLoop && mainLoop) {
-        fn_MainLoop_SetNextLoop(mainLoop, next);
+    if (next && mainLoop) {
+        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(          // B.3.7 bridge
+            reinterpret_cast<Engine::UpdateLoop*>(next));
     }
     self->m_loadBit = -1;
     return false;

@@ -24,7 +24,9 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/application/Application.h"
 
-using RtApplication::Application;
+// ENDGAME B.3.7: `Application::Application` is the real class; a global
+// `using RtApplication::Application;` is ill-formed next to the namespace.
+using App = Application::Application;
 
 // ============================================================================
 // Application::Application::IsPaused() const   retail 0x18009f4e0   ord 3150
@@ -33,9 +35,13 @@ using RtApplication::Application;
 // `return this[0x11] == 0`. A plain byte read, no state mutated.
 // Oracle: FULL DIFF.
 // ============================================================================
-bool RtApp_IsPaused(const Application* self) {
-    const bool ours = (self->_running == 0);
+bool Application::Application::IsPaused() {
+    const bool ours = (_running == 0);
     return ours;
+}
+
+bool RtApp_IsPaused(const App* self) {
+    return const_cast<App*>(self)->Application::IsPaused();
 }
 
 // ============================================================================
@@ -57,6 +63,10 @@ bool RtApp_IsPaused(const Application* self) {
 // struct's alignment is 8, so the copy was always a full-object copy and always
 // in bounds. Only the reasoning was wrong.
 // ============================================================================
-void RtApp_Quit(Application* self) {
-    self->_quitRequested = 1;
+void Application::Application::Quit() {
+    _quitRequested = 1;
+}
+
+void RtApp_Quit(App* self) {
+    self->Application::Quit();
 }

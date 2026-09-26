@@ -46,6 +46,7 @@
 
 #include <cstdint>
 #include <cstddef>
+#include <type_traits>
 
 #include "../system/Thread.h"
 #include "../system/String.h"
@@ -236,3 +237,307 @@ static_assert(offsetof(DialogLoaderLoopT, _dialogInstance) == 0x58, "DialogLoade
 static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoaderLoopT::_ui @ +0x60");
 
 }  // namespace RtEngine
+
+// ############################################################################
+// THE REAL CLASSES (ENDGAME B.3 step 7, block B1)
+// ############################################################################
+//
+// `Engine::UpdateLoop`, `Engine::LoaderLoop`, `Engine::DialogLoopT`,
+// `Engine::DialogLoaderLoopT` and `Engine::Loader` under retail's names. The
+// `RtEngine::` PODs above STAY, field-identical and cross-asserted below
+// (B37_RULES B7-6): `UI::UserInterface` names the two dialog PODs as friends,
+// `tests/unit/ui_userinterface_abi_test.cpp` pins them, the exe-side headers in
+// engine/types mirror them, and the ctor / dtor DOORS in
+// runtime/src/engine/loops.cpp stamp vtables through them. An abstract class
+// cannot be the alias target of a POD that is embedded or stamped (B36_RULES
+// section 10 correction).
+//
+// THE FOUR LOOPS ARE THEIR OWN ROOT (RULE B7-1). No `Object::Base`: slot 1 is
+// `Startup`, not `TypeName`; there is no `_typeInfo`, no type-name literal and
+// no `DEFINE_TYPE`. Slot tables, read from retail `.rdata` (B37_SLOTS.md sec. 1):
+//
+//   slot  UpdateLoop 0x180155ba0      LoaderLoop 0x180157940  DialogLoopT 0x1801579a0  DialogLoaderLoopT 0x1801578d0
+//   [ 0]  0x180031900 deleting        0x18004d4f0 deleting    0x18004d8b0 deleting     0x18004d670 deleting
+//   [ 1]  _purecall Startup           0x1800dc260             0x1800db2f0              0x1800db000
+//   [ 2]  _purecall Shutdown          0x1800dc280             0x1800db2c0              0x1800dafc0
+//   [ 3]  _purecall Update            0x1800dc2a0             0x1800db270              0x1800daf20
+//   [ 4]  _purecall Draw              0x1800dc310             0x1800db210              0x1800dae20
+//   [ 5]  0x180031740 DrawFailed      (UL)                    (UL)                     (UL)
+//   [ 6]  _purecall Load              0x1800dc350             0x1800db140              0x1800dad50
+//   [ 7]  0x180031750 SaveRestore     (UL)                    (UL)                     (UL)
+//   [ 8]  0x180031760 OnVideoError    0x1800dc360             (UL)                     (LL) 0x1800dc360
+//   [ 9]  0x180031770 OnVideoRestart  (UL)                    (UL)                     (UL)
+//   [10]  0x180031780 GetResourceFilename (UL)                (UL)                     (UL)
+//   [11]  0x180031790 AllowsModChanges (UL)                   (UL)                     (UL)
+//   [12]  --                          --                      _purecall (new)          _purecall (new)
+//
+// ABSTRACT-BY-POLICY, NO REAL CONSTRUCTOR (RULE B7-13 / B6-3). The exe builds
+// five hand-made tables on these bases (GameUpdateLoop, MenuDialogLoopT, the
+// splash loop, two LoaderLoop subclasses: b37_session/EXE_SUBCLASSES.md), all
+// through the ctor DOORS, and every live loop wears one of those tables. So
+// slot 0 is `DeletingDtor(unsigned) = 0` on all four (the `RT_DELDTOR` rows are
+// not retired), `LoaderLoop` (concrete in retail) is abstract here too, and a
+// call from an exe slot body to a member that is VIRTUAL on the base is
+// QUALIFIED (`->Engine::DialogLoopT::Load()`), or it would dispatch back
+// through the exe table into itself.
+//
+// NO VIRTUAL DESTRUCTOR (ENDGAME B.2): GCC spends two slots on one, which would
+// push `Startup` off slot 1. The destructors here are protected, non-virtual and
+// defaulted; the registered `??1` DOORS do the teardown on the minted/exe-table
+// objects that are the only live ones.
+//
+// THREADS (RULE B7-7): `Loader::Run` runs on the LOADER thread and dispatches
+// the loop's slot 6 `Load` there, so every `Load` body and everything it calls
+// keeps no function-local first-call cache (B6-5).
+// ############################################################################
+
+namespace System { class Time; class String; }
+namespace Save   { class SavedState; }
+namespace UI     { class DialogInstance; }
+
+namespace Engine {
+
+// ============================================================================
+// Engine::UpdateLoop -- 0x28, 12 slots, ABSTRACT (pure at 1, 2, 3, 4, 6)
+// ============================================================================
+class UpdateLoop {
+public:
+    // [0] 0x180031900 (unexported vector deleting dtor) -- pure on purpose.
+    virtual UpdateLoop* DeletingDtor(unsigned flags) = 0;
+    virtual void Startup() = 0;                                    // [1] _purecall
+    virtual void Shutdown() = 0;                                   // [2] _purecall
+    virtual bool Update(const System::Time& time) = 0;             // [3] _purecall
+    virtual void Draw(float interpolation) = 0;                    // [4] _purecall
+    virtual void DrawFailed();                                     // [5] 0x180031740  RET
+    virtual void Load() = 0;                                       // [6] _purecall
+    virtual void SaveRestore(bool saving, Save::SavedState* state);// [7] 0x180031750  RET
+    virtual void OnVideoError();                                   // [8] 0x180031760  RET
+    virtual void OnVideoRestart();                                 // [9] 0x180031770  RET
+    virtual const char* GetResourceFilename();                     // [10] 0x180031780 -> nullptr
+    virtual bool AllowsModChanges();                               // [11] 0x180031790 -> false
+
+    // ---- PORTED non-virtual members ----------------------------------------
+    bool IsRunning() const;                                        // 0x1800dd7b0
+    void LoadResources();                                          // 0x1800dd7d0  LOADER THREAD
+
+    // ---- exported one-line accessors: faithful inline bodies, NOT REGISTERED
+    // (nothing resolves them by name or address).
+    void SetLoadProgress(int32_t progress) { _loadProgress = progress; }  // 0x1800317a0  MOV [RCX+0x24],EDX
+    int32_t GetLoadProgress() const { return _loadProgress; }            // 0x1800317b0  MOV EAX,[RCX+0x24]
+    int32_t GetLoadBit() const { return _loadBit; }                      // 0x1800317c0  MOV EAX,[RCX+0x20]
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    UpdateLoop(const UpdateLoop& other);                           // 0x1800317d0
+    UpdateLoop& operator=(const UpdateLoop& other);                // 0x180031840
+
+protected:
+    // NOT retail's ctor: `??0UpdateLoop@Engine@@QEAA@XZ` 0x1800ddd30 is the DOOR
+    // `RtEngine_UpdateLoop_Ctor`, `??1` 0x1800dddb0 the DOOR
+    // `RtEngine_UpdateLoop_Dtor` (B6-3).
+    UpdateLoop() = default;
+    ~UpdateLoop() = default;
+
+public:
+    // ---- the 0x20 bytes after the vptr, evidence in the POD above ----------
+    void*   _resourceList;   // +0x08  Object::ExternalList* (LoadResources)
+    void*   _internalListA;  // +0x10  \ the pair ~UpdateLoop releases through
+    void*   _internalListB;  // +0x18  / 0x180010ab0
+    int32_t _loadBit;        // +0x20  ?GetLoadBit@
+    int32_t _loadProgress;   // +0x24  ?GetLoadProgress@
+};
+
+// ============================================================================
+// Engine::Loader -- 0x38, a System::Thread subclass, 2 slots, NO deleting dtor
+// ============================================================================
+// `??_7Loader@Engine@@6B@` 0x180157a08: [0] 0x1800dbfc0 Run, [1] 0x18000c590
+// `System::Thread::OnCompleted` (inherited). RULE B7-1.4: slot 0 is `Run`,
+// there is no deleting-dtor slot, and `??1Loader@Engine@@QEAA@XZ` (0x18004d330)
+// is a non-virtual `QEAA` export. The only instance is the static
+// `?_loader@LoaderLoop@Engine@@1VLoader@2@A` (0x1801fe7b8), built by
+// `ConstructLoader` (standalone/rt_data_mint.cpp) through the Thread ctor door,
+// never as a C++ object (B4b-2), and read through its RT_DATA_SLOT
+// (carry-over 5).
+class Loader : public System::Thread {
+public:
+    void Run() override;                                           // [0] 0x1800dbfc0  LOADER THREAD
+    void Load(UpdateLoop* loop);                                   // 0x1800dc050      main thread
+
+protected:
+    // `??0Loader@Engine@@QEAA@XZ` 0x1800dc0f0 / `??1Loader@Engine@@QEAA@XZ`
+    // 0x18004d330: neither is ported; the one object is built by ConstructLoader.
+    Loader() = default;
+    ~Loader() = default;
+
+public:
+    UpdateLoop* _loop;   // +0x30  the loop being loaded (Load's store, Run's read)
+};
+
+// ============================================================================
+// Engine::LoaderLoop -- 0x48, 12 slots; concrete in retail, ABSTRACT-BY-POLICY
+// ============================================================================
+class LoaderLoop : public UpdateLoop {
+public:
+    // [0] 0x18004d4f0 -- pure on purpose (B7-13).
+    UpdateLoop* DeletingDtor(unsigned flags) override = 0;
+    void Startup() override;                                       // [1] 0x1800dc260
+    void Shutdown() override;                                      // [2] 0x1800dc280
+    bool Update(const System::Time& time) override;                // [3] 0x1800dc2a0
+    void Draw(float interpolation) override;                       // [4] 0x1800dc310
+    void Load() override;                                          // [6] 0x1800dc350  RET
+    void OnVideoError() override;                                  // [8] 0x1800dc360
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    void Exit();                                                   // 0x1800dc130
+    bool IsFinished() const;                                       // 0x1800dc150
+    LoaderLoop(const LoaderLoop& other);                           // 0x18004d3a0
+    LoaderLoop& operator=(const LoaderLoop& other);                // 0x18004d430
+
+    // `?_loader@LoaderLoop@Engine@@1VLoader@2@A` (0x1801fe7b8, a protected
+    // static in retail) STAYS a data slot until the end of B.3 (carry-over 5):
+    // loops.cpp reads it through `RT_DATA_SLOT`, never as a C++ static member.
+
+protected:
+    // `??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z`
+    // 0x1800dc1e0 and `??1` 0x1800dc170 are DOORS (loops.cpp).
+    LoaderLoop() = default;
+    ~LoaderLoop() = default;
+
+public:
+    UpdateLoop* _nextLoop;      // +0x28  handed to MainLoop when the load is done
+    int64_t     _elapsedTicks;  // +0x30  System::Time ticks
+    int64_t     _delayTicks;    // +0x38  the ctor's `Time const&` argument
+    uint8_t     _autoAdvance;   // +0x40  ctor: 1; never written again
+    uint8_t     _pad41[7];      // +0x41  NEVER written by the ctor
+};
+
+// ============================================================================
+// Engine::DialogLoopT -- 0x168, 13 slots, ABSTRACT (pure slot 12)
+// ============================================================================
+class DialogLoopT : public UpdateLoop {
+public:
+    // [0] 0x18004d8b0 -- pure on purpose (B7-13).
+    UpdateLoop* DeletingDtor(unsigned flags) override = 0;
+    void Startup() override;                                       // [1] 0x1800db2f0
+    void Shutdown() override;                                      // [2] 0x1800db2c0
+    bool Update(const System::Time& time) override;                // [3] 0x1800db270
+    void Draw(float interpolation) override;                       // [4] 0x1800db210
+    void Load() override;                                          // [6] 0x1800db140
+    // [12] _purecall, NEW here. No attested name (B7-1.2); the exe fills it
+    // with a dialog-creating body. It returns `Object::InternalPtr<
+    // UI::DialogInstance>` BY VALUE through a VIRTUAL slot, so it is declared
+    // retslot-first (B6-2): `this` in RCX, the hidden return slot in RDX, the
+    // slot's address back in RAX. NAMED `CreateLoopDialog`, not the tree's old
+    // descriptive `kSlot_CreateDialog`: `CreateDialog` is a <windows.h>
+    // function-like macro (CreateDialogA), and the exe-side stub files include
+    // both headers.
+    virtual Object::InternalPtr<UI::DialogInstance>* CreateLoopDialog(
+        Object::InternalPtr<UI::DialogInstance>* ret) = 0;
+
+    // ?GetUserInterface@DialogLoopT@Engine@@QEAAAEAVUserInterface@UI@@XZ
+    // 0x18004d7c0: `LEA RAX,[RCX+0x40]; RET`. Faithful inline body, NOT
+    // REGISTERED (nothing resolves it).
+    UI::UserInterface& GetUserInterface() { return _ui; }
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    DialogLoopT(const DialogLoopT& other);                         // 0x18004d7d0
+
+protected:
+    // `??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z` 0x1800db3f0 and
+    // `??1` 0x1800db340 are DOORS (loops.cpp). UserInterface's default ctor is
+    // protected (it friends the POD), so this defaulted ctor is defined as
+    // deleted, which is the point: nothing constructs a loop in C++.
+    DialogLoopT() = default;
+    ~DialogLoopT() = default;
+
+public:
+    System::String    _dialogFilename;  // +0x028  the ctor's argument, refcounted
+    void*             _dialogExternal;  // +0x030  Object::External* (Load)
+    void*             _dialogInstance;  // +0x038  InternalPtr<UI::DialogInstance> (Startup)
+    UI::UserInterface _ui;              // +0x040  0x128 bytes, GetUserInterface
+};
+
+// ============================================================================
+// Engine::DialogLoaderLoopT -- 0x188, 13 slots, ABSTRACT (pure slot 12)
+// ============================================================================
+// Inherits `LoaderLoop::OnVideoError` (slot 8, 0x1800dc360), B7-1.3.
+class DialogLoaderLoopT : public LoaderLoop {
+public:
+    // [0] 0x18004d670 -- pure on purpose (B7-13).
+    UpdateLoop* DeletingDtor(unsigned flags) override = 0;
+    void Startup() override;                                       // [1] 0x1800db000
+    void Shutdown() override;                                      // [2] 0x1800dafc0
+    bool Update(const System::Time& time) override;                // [3] 0x1800daf20
+    void Draw(float interpolation) override;                       // [4] 0x1800dae20
+    void Load() override;                                          // [6] 0x1800dad50
+    // [12] _purecall, NEW here: same shape as DialogLoopT's.
+    virtual Object::InternalPtr<UI::DialogInstance>* CreateLoopDialog(
+        Object::InternalPtr<UI::DialogInstance>* ret) = 0;
+
+    // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
+    DialogLoaderLoopT(const DialogLoaderLoopT& other);             // 0x18004d570
+
+protected:
+    // `??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z`
+    // 0x1800db0d0 and `??1` 0x1800db060 are DOORS (loops.cpp).
+    DialogLoaderLoopT() = default;
+    ~DialogLoaderLoopT() = default;
+
+public:
+    System::String    _dialogFilename;  // +0x048
+    void*             _dialogExternal;  // +0x050
+    void*             _dialogInstance;  // +0x058
+    UI::UserInterface _ui;              // +0x060
+};
+
+// ---- sizes, alignment, shape ------------------------------------------------
+static_assert(sizeof(UpdateLoop) == 0x28, "Engine::UpdateLoop is 0x28 (slot 0 MOV EDX,0x28)");
+static_assert(sizeof(Loader) == 0x38, "Engine::Loader is 0x38 (ctor's last store +0x30)");
+static_assert(sizeof(LoaderLoop) == 0x48, "Engine::LoaderLoop is 0x48 (slot 0 MOV EDX,0x48)");
+static_assert(sizeof(DialogLoopT) == 0x168, "Engine::DialogLoopT is 0x168 (slot 0 MOV EDX,0x168)");
+static_assert(sizeof(DialogLoaderLoopT) == 0x188, "Engine::DialogLoaderLoopT is 0x188 (slot 0 MOV EDX,0x188)");
+static_assert(alignof(UpdateLoop) == 8 && alignof(Loader) == 8 && alignof(LoaderLoop) == 8 &&
+              alignof(DialogLoopT) == 8 && alignof(DialogLoaderLoopT) == 8,
+              "qword-aligned (the vptr)");
+static_assert(std::is_polymorphic<UpdateLoop>::value && std::is_abstract<UpdateLoop>::value,
+              "UpdateLoop is abstract: retail slots 1,2,3,4,6 are _purecall");
+static_assert(std::is_abstract<LoaderLoop>::value, "B7-13: abstract-by-policy");
+static_assert(std::is_abstract<DialogLoopT>::value && std::is_abstract<DialogLoaderLoopT>::value,
+              "slot 12 is _purecall in retail");
+static_assert(!std::is_abstract<Loader>::value && std::is_polymorphic<Loader>::value,
+              "Loader overrides Thread's one pure slot (Run)");
+
+// ---- the class/POD cross-asserts (B7-6). The vptr (+0x00) has none: the POD
+// spells it as a field, the class lets the compiler own it.
+#define B37_LOOP_PIN(C, f, off)                                                        \
+    static_assert(offsetof(C, f) == off, "Engine::" #C "::" #f " @ " #off);           \
+    static_assert(offsetof(C, f) == offsetof(RtEngine::C, f), "alias " #C "::" #f);
+static_assert(sizeof(UpdateLoop) == sizeof(RtEngine::UpdateLoop), "UpdateLoop class == POD");
+B37_LOOP_PIN(UpdateLoop, _resourceList,  0x08)
+B37_LOOP_PIN(UpdateLoop, _internalListA, 0x10)
+B37_LOOP_PIN(UpdateLoop, _internalListB, 0x18)
+B37_LOOP_PIN(UpdateLoop, _loadBit,       0x20)
+B37_LOOP_PIN(UpdateLoop, _loadProgress,  0x24)
+static_assert(sizeof(Loader) == sizeof(RtEngine::Loader), "Loader class == POD");
+B37_LOOP_PIN(Loader, _loop, 0x30)
+static_assert(offsetof(Loader, _runFlags) == offsetof(RtSystem::Thread, runFlags),
+              "Loader's Thread base is the POD's _thread member");
+static_assert(sizeof(LoaderLoop) == sizeof(RtEngine::LoaderLoop), "LoaderLoop class == POD");
+B37_LOOP_PIN(LoaderLoop, _nextLoop,     0x28)
+B37_LOOP_PIN(LoaderLoop, _elapsedTicks, 0x30)
+B37_LOOP_PIN(LoaderLoop, _delayTicks,   0x38)
+B37_LOOP_PIN(LoaderLoop, _autoAdvance,  0x40)
+static_assert(sizeof(DialogLoopT) == sizeof(RtEngine::DialogLoopT), "DialogLoopT class == POD");
+B37_LOOP_PIN(DialogLoopT, _dialogFilename, 0x28)
+B37_LOOP_PIN(DialogLoopT, _dialogExternal, 0x30)
+B37_LOOP_PIN(DialogLoopT, _dialogInstance, 0x38)
+B37_LOOP_PIN(DialogLoopT, _ui,             0x40)
+static_assert(sizeof(DialogLoaderLoopT) == sizeof(RtEngine::DialogLoaderLoopT), "DialogLoaderLoopT class == POD");
+B37_LOOP_PIN(DialogLoaderLoopT, _dialogFilename, 0x48)
+B37_LOOP_PIN(DialogLoaderLoopT, _dialogExternal, 0x50)
+B37_LOOP_PIN(DialogLoaderLoopT, _dialogInstance, 0x58)
+B37_LOOP_PIN(DialogLoaderLoopT, _ui,             0x60)
+#undef B37_LOOP_PIN
+static_assert(sizeof(System::String) == sizeof(RtSystem::String),
+              "_dialogFilename is the real String; the POD spells the same 8 bytes");
+
+}  // namespace Engine
