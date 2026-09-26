@@ -20,6 +20,7 @@
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K1)
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
@@ -64,7 +65,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
     void* tableElem = (void*)tableResult;
 
     // Get achievement count
-    int achievementCount = fn_AchievementManager_GetAchievementCount(manager);
+    int achievementCount = reinterpret_cast<const Achievement::AchievementManager*>(manager)->GetAchievementCount();  // B.3.7 bridge
 
     // Get dialog template for cloning rows
     void* dialog = *(void**)(s + 0x18);
@@ -122,12 +123,12 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
 
         // Get achievement object at index i
         uint8_t achievBuf[8] = {0};
-        fn_AchievementManager_GetAchievement(manager, achievBuf, i);
+        ::new (achievBuf) Object::ExternalPtr<Achievement::Achievement>(reinterpret_cast<const Achievement::AchievementManager*>(manager)->GetAchievement(i));  // B.3.7 bridge
         void* achievement = *(void**)achievBuf;
 
         // Set sprite on imageIcon from achievement sprite sheet + sprite name
         System::String spriteName;
-        fn_Achievement_GetSpriteName(achievement, &spriteName);
+        ::new (&spriteName) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetSpriteName());  // B.3.7 bridge
         uint64_t spriteSheet = *(uint64_t*)((uintptr_t)achievement + 0x38);
         uint8_t spriteBuf[16];
         ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), spriteName);  // B.3.6 bridge
@@ -138,7 +139,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
 
         // Set title text
         System::String titleText;
-        fn_Achievement_GetTitle(achievement, &titleText);
+        ::new (&titleText) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetTitle());  // B.3.7 bridge
         uint8_t titleStrBuf[16];
         ::new (titleStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), titleText);  // B.3.6 bridge
         reinterpret_cast<UI::TextElement*>(textTitle)->SetText(reinterpret_cast<const UI::String*>(titleStrBuf));  // B.3.6 bridge
@@ -146,7 +147,7 @@ void AchievementDialog_Slot4(AchievementDialog* self) {
         // Set description text
         uint8_t descStrBuf[16];
         System::String descText;
-        fn_Achievement_GetDescription(achievement, &descText);
+        ::new (&descText) System::String(reinterpret_cast<const Achievement::Achievement*>(achievement)->GetDescription());  // B.3.7 bridge
         ::new (descStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)achievement + 0x20))), descText);  // B.3.6 bridge
         reinterpret_cast<UI::TextElement*>(textDesc)->SetText(reinterpret_cast<const UI::String*>(descStrBuf));  // B.3.6 bridge
 
@@ -210,7 +211,7 @@ void AchievementDialog_Slot6(AchievementDialog* self) {
     for (int i = 0; i < count; i++) {
         uintptr_t entryOff = (uintptr_t)i * 0x20;
 
-        bool awarded = fn_AchievementManager_IsAchievementAwarded(manager, i);
+        bool awarded = reinterpret_cast<const Achievement::AchievementManager*>(manager)->IsAchievementAwarded(i);  // B.3.7 bridge
         if (awarded) awardedCount++;
 
         uint32_t primaryColor   = awarded ? 0xFFE0E0E0u : 0xFF303030u;

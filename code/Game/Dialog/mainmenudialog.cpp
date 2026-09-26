@@ -18,6 +18,7 @@
 #include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Cursor.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
+#include "application/Application.h"   // ENDGAME B.3.7 callers (K1)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -750,7 +751,7 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
         break;
 
     case kButton_Quit:
-        fn_App_Quit(*g_pAppSingleton);
+        reinterpret_cast<Application::Application*>(*g_pAppSingleton)->Quit();  // B.3.7 bridge
         break;
 
     case kButton_Mod:
@@ -964,9 +965,9 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         printf("[MainMenuDialog::OnCommand] Quit: fn_App_Quit=%p g_pAppSingleton=%p *g=%p\n",
                (void*)fn_App_Quit, (void*)g_pAppSingleton,
                g_pAppSingleton ? *g_pAppSingleton : nullptr);
-        if (fn_App_Quit && g_pAppSingleton && *g_pAppSingleton) {
+        if (g_pAppSingleton && *g_pAppSingleton) {
             printf("[MainMenuDialog::OnCommand] -> App::Quit\n");
-            fn_App_Quit(*g_pAppSingleton);
+            reinterpret_cast<Application::Application*>(*g_pAppSingleton)->Quit();  // B.3.7 bridge
         } else {
             printf("[MainMenuDialog::OnCommand] WARN: App::Quit not resolved — falling back to PostQuitMessage\n");
             // Last resort — close the window so the user isn't stuck

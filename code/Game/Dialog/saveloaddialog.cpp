@@ -38,6 +38,7 @@
 #include "ui/ElementDescription.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "save/SaveLoad.h"   // ENDGAME B.3.7 callers (K1)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -188,7 +189,7 @@ void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self) {
 
     // --- Phase 3: Populate save file entries ---
     for (int i = 0; i < saveCount; i++) {
-        void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, i);
+        void* saveInfo = const_cast<Save::SaveLoad::SaveInfo*>(&reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(i));  // B.3.7 bridge
 
         // Clone template element from dialog
         uint8_t templateBuf[16] = {};
@@ -473,17 +474,17 @@ void SaveLoadDialog_Startup(SaveLoadDialog* self) {
     *(uint32_t*)(spriteCopy + 4)  = *(uint32_t*)(keyMapObj + 0xBC);
     *(uint32_t*)(spriteCopy + 8)  = *(uint32_t*)(keyMapObj + 0xC0);
     *(uint32_t*)(spriteCopy + 12) = *(uint32_t*)(keyMapObj + 0xC4);
-    fn_SaveLoad_SetSaveSprite(*g_pSaveLoadSingleton, spriteCopy);
+    reinterpret_cast<Save::SaveLoad*>(*g_pSaveLoadSingleton)->SetSaveSprite(reinterpret_cast<const UI::Sprite*>(spriteCopy));  // B.3.7 bridge
 
     // --- Set minimum operation time (0.75f seconds) ---
     uint8_t timeVal[8];
     fn_Time_Ctor_Float(timeVal, 0.75f);
-    fn_SaveLoad_SetMinOperationTime(*g_pSaveLoadSingleton, timeVal);
+    reinterpret_cast<Save::SaveLoad*>(*g_pSaveLoadSingleton)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(timeVal));  // B.3.7 bridge
 
     // --- Start operation: 1 (list/scan), param = -2 or -3 based on mode ---
     uint8_t mode = *(uint8_t*)(s + 0xB8);
     int opParam = -2 - (int)(mode != 0);
-    fn_SaveLoad_SetOperation(*g_pSaveLoadSingleton, 1, opParam);
+    reinterpret_cast<Save::SaveLoad*>(*g_pSaveLoadSingleton)->SetOperation(static_cast<Save::SaveLoad::Operation>(1), opParam);  // B.3.7 bridge
 }
 
 // ============================================================
@@ -521,7 +522,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
     void* buttonLoad = (void*)*(uint64_t*)(s + 0x148);
     if (buttonLoad) reinterpret_cast<UI::Element*>(buttonLoad)->SetFlagsOnOff(isLoadMode, 0);  // B.3.6 bridge
 
-    int operation = fn_SaveLoad_GetOperation(saveLoad);
+    int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
 
     // Check if any operation is in progress or any deferred flag is set
     bool anyFlagsSet = (*(uint8_t*)(s + 0xBB) != 0) ||
@@ -539,7 +540,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
         int saveCount = *(int*)(s + 0xC4);
         bool loadEnabled = false;
         if (saveCount >= 1 && selectedIdx >= 0) {
-            void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+            void* saveInfo = const_cast<Save::SaveLoad::SaveInfo*>(&reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(selectedIdx));  // B.3.7 bridge
             // saveInfo+0x44 == 2 means valid save
             if (*(int*)((uintptr_t)saveInfo + 0x44) == 2) {
                 loadEnabled = true;
@@ -572,7 +573,7 @@ void SaveLoadDialog_Update(SaveLoadDialog* self) {
 
         // Check selected save for delete eligibility
         if (selectedIdx >= 0) {
-            fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+            reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(selectedIdx);  // B.3.7 bridge
         }
 
         // buttonDelete: SetEnabled via vtable[8]
@@ -703,14 +704,14 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
     void* saveLoad = *g_pSaveLoadSingleton;
 
     // Phase 1: accumulate spinner rotation while I/O is in progress
-    int operation = fn_SaveLoad_GetOperation(saveLoad);
+    int operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
     if (operation != 0) {
         float elapsed = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4 bridge
         *(float*)(s + 0xC8) += elapsed * 180.0f;
     }
 
     // Re-check — may have just completed this frame
-    operation = fn_SaveLoad_GetOperation(saveLoad);
+    operation = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
     if (operation != 0) return;
 
     // Phase 2: I/O complete, process one deferred flag (priority order matches original)
@@ -719,13 +720,13 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
     if (*(uint8_t*)(s + 0xBC) != 0) {
         *(uint16_t*)(s + 0xBB) = 1;   // sets +0xBB=1 (refresh), +0xBC=0 (clear delete)
         uint8_t mode = *(uint8_t*)(s + 0xB8);
-        fn_SaveLoad_SetOperation(saveLoad, 1, -2 - (int)(mode != 0));
+        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(1), -2 - (int)(mode != 0));  // B.3.7 bridge
         return;
     }
 
     // refreshFlag (+0xBB): populate file list
     if (*(uint8_t*)(s + 0xBB) != 0) {
-        int count = fn_SaveLoad_GetSaveCount(saveLoad);
+        int count = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveCount();  // B.3.7 bridge
         *(int*)(s + 0xC4) = count;
         if (count <= *(int*)(s + 0xC0)) {
             *(int*)(s + 0xC0) = count - 1;
@@ -759,7 +760,7 @@ void SaveLoadDialog_Load(SaveLoadDialog* self, void* time, void** loaderLoopOut,
         void* gameLoop = fn_MemAlloc(g_pMemAllocSingleton, 0x160, 8);
         void* pGameLoop = nullptr;
         if (gameLoop) {
-            void* savedState = fn_SaveLoad_GetSaveState(saveLoad);
+            void* savedState = reinterpret_cast<Save::SaveLoad*>(saveLoad)->GetSaveState();  // B.3.7 bridge
 
             fn_UpdateLoop_Ctor(gameLoop);
             *(void**)gameLoop = (void*)g_GameUpdateLoop_Vtable;
@@ -944,7 +945,7 @@ static void SaveLoadDialog_DoDelete(SaveLoadDialog* self) {
     if (result == 2) {
         *(uint8_t*)(s + 0xBC) = 1;
         void* saveLoad = *g_pSaveLoadSingleton;
-        fn_SaveLoad_SetOperation(saveLoad, 5, *(int*)(s + 0xC0));
+        reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(5), *(int*)(s + 0xC0));  // B.3.7 bridge
     }
 }
 
@@ -965,11 +966,11 @@ static void SaveLoadDialog_DoSave(SaveLoadDialog* self) {
     // Set minimum operation time (1.5f seconds — DAT_140172160)
     uint8_t minTime[8] = {};
     fn_Time_Ctor_Float(minTime, 1.5f);
-    fn_SaveLoad_SetMinOperationTime(saveLoad, minTime);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(minTime));  // B.3.7 bridge
 
     // Check if the selected save slot already contains data
     int selectedIdx = *(int*)(s + 0xC0);
-    void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+    void* saveInfo = const_cast<Save::SaveLoad::SaveInfo*>(&reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(selectedIdx));  // B.3.7 bridge
     int validState = *(int*)((uintptr_t)saveInfo + 0x40);
     if (validState >= 0) {
         // Slot is occupied — ask user to confirm overwrite
@@ -985,10 +986,10 @@ static void SaveLoadDialog_DoSave(SaveLoadDialog* self) {
     void* nameSource = *(void**)(s + 0xE8);
     System::String saveName(
         *reinterpret_cast<const System::String*>((uintptr_t)nameSource + 0x28));  // B.3.1 bridge
-    fn_SaveLoad_SetSaveName(saveLoad, &saveName, 2);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetSaveName(saveName, 2);  // B.3.7 bridge
 
     // Start save operation (4 = save, with selected slot index)
-    fn_SaveLoad_SetOperation(saveLoad, 4, selectedIdx);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(4), selectedIdx);  // B.3.7 bridge
 }
 
 // ============================================================
@@ -1012,7 +1013,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     // Set minimum operation time (1.5f seconds)
     uint8_t minTime[8] = {};
     fn_Time_Ctor_Float(minTime, 1.5f);
-    fn_SaveLoad_SetMinOperationTime(saveLoad, minTime);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetMinOperationTime(*reinterpret_cast<const System::Time*>(minTime));  // B.3.7 bridge
 
     // If game world is active, ask user to confirm leaving the current game
     if (*g_pGameWorldSingleton != nullptr) {
@@ -1022,7 +1023,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
     // Iterate through mods in the selected save and warn about any incompatibilities
     int selectedIdx = *(int*)(s + 0xC0);
-    void* saveInfo = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+    void* saveInfo = const_cast<Save::SaveLoad::SaveInfo*>(&reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(selectedIdx));  // B.3.7 bridge
     int modCount = *(int*)((uintptr_t)saveInfo + 0x50);
     printf("[SaveLoadDialog::DoLoad] selectedIdx=%d saveInfo=%p save-mod-count=%d gameWorld=%p\n",
            selectedIdx, saveInfo, modCount,
@@ -1044,9 +1045,9 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
     }
 
     for (int i = 0; i < modCount; i++) {
-        int modStatus = fn_SaveLoad_CheckMod(saveLoad, selectedIdx, i);
+        int modStatus = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->CheckMod(selectedIdx, i);  // B.3.7 bridge
         {
-            void* si = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+            void* si = const_cast<Save::SaveLoad::SaveInfo*>(&reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(selectedIdx));  // B.3.7 bridge
             void* nameBase = *(void**)((uintptr_t)si + 0x48);
             const char* nm = nameBase
                 ? *(const char* const*)((uintptr_t)nameBase + (uintptr_t)i * 0x20)
@@ -1071,7 +1072,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         // (Wave 5 lane C, which ported CheckMod; this comment previously said
         // only "entry+0 = String", which is right for printing and wrong for
         // the comparison.)
-        void* saveInfo2 = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+        void* saveInfo2 = const_cast<Save::SaveLoad::SaveInfo*>(&reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(selectedIdx));  // B.3.7 bridge
         void* modNameBase = *(void**)((uintptr_t)saveInfo2 + 0x48);
         void* modNameStr = (void*)((uintptr_t)modNameBase + (uintptr_t)i * 0x20);  // String at stride 0x20
 
@@ -1127,7 +1128,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
         // SetParameter(2) = formatted version string "%i (%s)"
         // saveInfo+0x14 = isBeta (uint, sub-field), saveInfo+0x18 = version int
         // Configuration::GetVersionString returns a const String*
-        void* saveInfo3 = fn_SaveLoad_GetSaveInfo(saveLoad, selectedIdx);
+        void* saveInfo3 = const_cast<Save::SaveLoad::SaveInfo*>(&reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetSaveInfo(selectedIdx));  // B.3.7 bridge
         void* modEntry = (void*)((uintptr_t)*(void**)((uintptr_t)saveInfo3 + 0x48) + (uintptr_t)i * 0x20);
         uint32_t isBeta   = *(uint32_t*)((uintptr_t)modEntry + 0x14);
         uint32_t modVer   = *(uint32_t*)((uintptr_t)modEntry + 0x18);
@@ -1162,7 +1163,7 @@ static void SaveLoadDialog_DoLoad(SaveLoadDialog* self) {
 
     // All checks passed — trigger load operation
     *(uint8_t*)(s + 0xBA) = 1;
-    fn_SaveLoad_SetOperation(saveLoad, 2, selectedIdx);
+    reinterpret_cast<Save::SaveLoad*>(saveLoad)->SetOperation(static_cast<Save::SaveLoad::Operation>(2), selectedIdx);  // B.3.7 bridge
 }
 
 // ============================================================
