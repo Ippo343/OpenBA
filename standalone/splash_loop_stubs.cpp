@@ -35,7 +35,6 @@
 #include "chunked_scene_loader.h"
 #include "stall_debug.h"
 #include "boot_window.h"
-#include "Game/dialogloaderloop.h"
 #include "Game/uifade.h"
 #include "Game/GameLoadDialogLoopT.h"   // ENDGAME B.3.8 LOOP
 #include "Object/exe_type.h"         // DEFINE_EXE_VTABLE
@@ -521,14 +520,15 @@ bool GameLoadDialogLoopT::Update(const System::Time& time) {
 void GameLoadDialogLoopT::Draw(float alpha) {
     StallDebug::Tick("SplashDLT::Draw");
     (void)alpha;  // frame-blend interpolation, not the fade alpha
-    // Mirror Runtime DialogLoaderLoopT::Draw (0x1800DAE20). Shared body lives in
-    // code/Game/Game/dialogloaderloop.cpp.
+    // STANDALONE DIVERGENCE: retail's slot 4 is the base DialogLoaderLoopT::Draw
+    // (0x1800dae20), called below unchanged; the override only adds the boot
+    // window reveal (and a fade-alpha trace) around it.
     static int draws = 0;
     ++draws;
     bool trace = (draws <= 3);
 
     if (trace) {
-        printf("[SplashDLT::Draw] self=%p frameAlpha=%f -> DialogLoaderLoopT_Draw_Impl\n",
+        printf("[SplashDLT::Draw] self=%p frameAlpha=%f -> DialogLoaderLoopT::Draw\n",
                (void*)this, alpha);
     }
 
@@ -539,7 +539,10 @@ void GameLoadDialogLoopT::Draw(float alpha) {
         UIFade::LogState("SplashDLT::Draw", &_ui);
     }
 
-    DialogLoaderLoopT_Draw_Impl(reinterpret_cast< ::DialogLoaderLoopT*>(this));   // B.3.8 bridge
+    // Retail's slot 4 IS this base body (import ?Draw@DialogLoaderLoopT@):
+    // clear to black, publish the load timer to the shader constants, draw the
+    // UI. QUALIFIED, or it would dispatch back into this override.
+    Engine::DialogLoaderLoopT::Draw(alpha);
 
     // Reveal the engine window once a real frame is actually in the swap chain.
     // MainLoop presents AFTER Draw returns, so draw #1 has not been presented
@@ -549,12 +552,6 @@ void GameLoadDialogLoopT::Draw(float alpha) {
     if (draws >= 2 && BootWindow::IsPending()) {
         BootWindow::ShowNow("first splash frame presented");
     }
-}
-
-const char* GameLoadDialogLoopT::GetResourceFilename() {
-    // Original thunks to Runtime DialogLoaderLoopT::GetResourceFilename which
-    // returns "Game/Loader" (see runtime ?GetResourceFilename@DialogLoaderLoopT).
-    return "Game/Loader";
 }
 
 extern "C" void* LoaderDialog_FromSplashDLT(void* loop, void* retInternalBasePtr);

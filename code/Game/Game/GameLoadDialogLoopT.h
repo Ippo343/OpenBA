@@ -22,9 +22,8 @@
 //     +0x188 = +0x18c = 0xff000000; +0x190 = 0; ??0Random@System@@ on +0x194;
 //     +0xb58 = 0; +0x40 (_autoAdvance) = 0.
 //
-// Slots the tree still overrides although retail inherits the base body are
-// marked `(base in retail)`: the old hand-built table's stubs, moved here
-// unchanged; the titled behaviour commit after this one makes them inherited.
+// Slots 5-11 are INHERITED from the Engine:: bases, as retail's table holds
+// their imports; slot 4 is overridden only as the divergence noted there.
 // ============================================================================
 
 #include <cstdint>
@@ -42,8 +41,9 @@ public:
     void Startup() override;                                     // [1] 0x140098fa0
     void Shutdown() override;                                    // [2] 0x140098f90 `RET 0`
     bool Update(const System::Time& time) override;              // [3] 0x140098da0
-    void Draw(float interpolation) override;                     // [4] (base in retail)
-    const char* GetResourceFilename() override;                  // [10] (base in retail)
+    // [4] retail: DialogLoaderLoopT::Draw. Overridden only to wrap that base body
+    // with the boot-window reveal — STANDALONE DIVERGENCE (splash_loop_stubs.cpp).
+    void Draw(float interpolation) override;
     Object::InternalPtr<UI::DialogInstance>* CreateLoopDialog(   // [12] 0x140099070
         Object::InternalPtr<UI::DialogInstance>* ret) override;
 
