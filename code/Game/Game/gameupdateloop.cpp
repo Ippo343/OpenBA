@@ -54,6 +54,7 @@
 #include "achievement/AchievementManager.h"   // ENDGAME B.3.7 callers (K2)
 #include "save/SaveLoad.h"                    // ENDGAME B.3.7 callers (K2)
 #include "engine/MainLoop.h"                  // ENDGAME B.3.7 callers (K2)
+#include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 
 // Toolbar HUD standalone bring-up (code/Game/Dialog/toolbar_vtable_standalone.cpp):
 // builds the ToolbarDialog vtable + fills the toolbar type-id globals. Called only
@@ -169,28 +170,6 @@ static fn_EntityUI_Update_t fn_EntityUI_Update = nullptr;
 // RCX=playerController, RDX=outTransform -> returns Transform*
 typedef void* (*fn_PlayerController_CalcTransform_t)(void* self, void* outTransform);
 static fn_PlayerController_CalcTransform_t fn_PlayerController_CalcTransform = nullptr;
-
-// Audio::Scene::Update (Runtime)
-// RCX=scene, RDX=time, R8=scaledTime, R9=random, stack=listenerPos, stack=windFactor
-// NB: engine_funcs.h declares a project-wide fn_Audio_Scene_Update (used by the
-// menu loop) with the verified signature (..., AEBVVector3, float); the two resolve
-// the same Runtime export (?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@
-// AEBVVector3@Math@@M@Z — the trailing M IS a float).
-//
-// The 6th param used to be uint32_t here, with a comment claiming the two were
-// "ABI-identical (6th arg is a 4-byte stack slot either way)". That is only true
-// of the SLOT, not the VALUE: handing a float to a uint32_t parameter CONVERTS it
-// (40.5f -> 40), and the callee then reinterprets those 4 bytes as a float, which
-// is 5.6e-44. It stayed invisible only because fn_CalcWindFactor was unregistered
-// and this whole call was skipped.
-typedef void (*fn_GUL_AudioSceneUpdate_t)(void* scene, int64_t time, int64_t scaledTime,
-                                        void* random, void* listenerPos, float windFactor);
-static fn_GUL_AudioSceneUpdate_t fn_GUL_AudioSceneUpdate = nullptr;
-
-// Audio::Scene::StopAll (Runtime)
-// RCX=scene
-typedef void (*fn_Audio_Scene_StopAll_t)(void* scene);
-static fn_Audio_Scene_StopAll_t fn_Audio_Scene_StopAll = nullptr;
 
 // Graphics::Scene::Clean(this) — moved to engine_funcs.{h,cpp}; reuse the
 // project-wide extern so MenuDLT can also call it.
@@ -570,10 +549,6 @@ static void EnsureInit() {
     // member call now, so neither the alias nor a mangled name can be wrong again.
     fn_Graphics_Renderer_Dtor = reinterpret_cast<fn_Graphics_Renderer_Dtor_t>(
         ResolveExport("??1Renderer@Graphics@@QEAA@XZ"));
-    fn_GUL_AudioSceneUpdate = reinterpret_cast<fn_GUL_AudioSceneUpdate_t>(
-        ResolveExport("?Update@Scene@Audio@@QEAA_NVTime@System@@0AEAVRandom@4@AEBVVector3@Math@@M@Z"));
-    fn_Audio_Scene_StopAll = reinterpret_cast<fn_Audio_Scene_StopAll_t>(
-        ResolveExport("?StopAll@Scene@Audio@@QEAAXXZ"));
     // B.3.5: the Context::SetTime / Context::SetCamera resolves went with their caches.
     // fn_Vector3_Normalize — removed 2026-07-31, see the note at its former declaration.
     // fn_MainLoop_SetNextLoop — resolved by EngineFuncsInit()
@@ -624,8 +599,6 @@ static void EnsureInit() {
     CHECK_FN(fn_PlayerController_CalcTransform);
     CHECK_FN(fn_QuickSave);
     CHECK_FN(fn_CalcWindFactor);
-    CHECK_FN(fn_GUL_AudioSceneUpdate);
-    CHECK_FN(fn_Audio_Scene_StopAll);
     CHECK_FN(fn_MainLoop_SetNextLoop);
     CHECK_FN(fn_Time_Ctor_Seconds);
     CHECK_FN(fn_App_IsPaused);
@@ -1426,7 +1399,7 @@ post_simulation:
             speedMul = *(int32_t*)(entityUI + 0x34);
         }
 
-        if (fn_GUL_AudioSceneUpdate && fn_Time_Ctor_Seconds && fn_CalcWindFactor) {
+        if (fn_Time_Ctor_Seconds && fn_CalcWindFactor) {
             float seconds = reinterpret_cast<const System::Time*>(time)->AsSeconds();   // B.3.4b bridge
             int64_t scaledTime[1];
             fn_Time_Ctor_Seconds(scaledTime, seconds * (float)speedMul * (*g_fAudioTimeScale));
@@ -1443,8 +1416,13 @@ post_simulation:
                     std::fflush(stderr);
                 }
             }
-            fn_GUL_AudioSceneUpdate(self->m_audioScene, *(int64_t*)time, scaledTime[0],
-                                  self->m_random, listenerPos, windFactor);
+            // windFactor is the FLOAT the mangled name's trailing `M` says; an
+            // earlier uint32_t cache typedef converted it (40.5f -> 40).
+            System::Time audioNow;    audioNow._ticks    = *(int64_t*)time;
+            System::Time audioScaled; audioScaled._ticks = scaledTime[0];
+            reinterpret_cast<Audio::Scene*>(self->m_audioScene)->Update(
+                audioNow, audioScaled, *reinterpret_cast<System::Random*>(self->m_random),
+                *reinterpret_cast<const Vector3*>(listenerPos), windFactor);   // B.3.7 bridge
         } else {
             TRACE("[GameUpdateLoop::Update] SKIP Audio::Scene::Update (NULL fptr)\n");
         }
@@ -2376,7 +2354,7 @@ void GameUpdateLoop_Shutdown(GameUpdateLoop* self) {
 
     // Stop all audio
     TRACE("[GameUpdateLoop::Shutdown] stopping all audio...\n");
-    fn_Audio_Scene_StopAll(self->m_audioScene);
+    reinterpret_cast<Audio::Scene*>(self->m_audioScene)->StopAll();   // B.3.7 bridge
 
     // Citizen housing reassignment loop
     TRACE("[GameUpdateLoop::Shutdown] reassigning citizen housing...\n");

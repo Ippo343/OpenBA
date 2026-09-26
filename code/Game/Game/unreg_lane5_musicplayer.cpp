@@ -98,6 +98,7 @@
 #include <cstring>
 #include <vector>
 #include "system/Value.h"      // ENDGAME B.3.4b System caller batch (Random/Time/Color)
+#include "audio/Audio.h"       // ENDGAME B.3.7 callers (K4)
 
 namespace {
 
@@ -112,20 +113,6 @@ constexpr float kMonthsPerYear     = 12.0f;     // DAT_1401721b8
 // (autostart new game, standalone_error.log:2565-2566). The lazy EnsureTrackList Find
 // resolved, all 15 tracks parsed, the month/mood filter selected one and
 // Audio::Scene::PlayEffect returned a live handle.
-
-// Audio::Scene::IsEffectPlaying(this, uint handle) -> bool
-// ?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z (Runtime ordinal 3118). Not in
-// engine_funcs.h and this lane must not edit it, so resolve it locally.
-typedef bool (*fn_IsEffectPlaying_t)(void* scene, uint32_t handle);
-fn_IsEffectPlaying_t s_fn_IsEffectPlaying = nullptr;
-
-void ResolveOnce() {
-    static bool done = false;
-    if (done) return;
-    done = true;
-    s_fn_IsEffectPlaying = reinterpret_cast<fn_IsEffectPlaying_t>(
-        ResolveExport("?IsEffectPlaying@Scene@Audio@@QEBA_NI@Z"));
-}
 
 // CitizenDescription type id (DWORD_1401c7190). Prefer the exe .rdata global;
 // fall back to the REGISTER_TYPE name lookup the citizenai_* files use, since
@@ -179,15 +166,15 @@ void EnsureTrackList(uint8_t* mp) {
 extern "C" void MusicPlayer_Update(void* musicPlayer) {
     if (!musicPlayer) return;
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
-    ResolveOnce();
 
     uint8_t* mp = reinterpret_cast<uint8_t*>(musicPlayer);
     uint8_t* gw = reinterpret_cast<uint8_t*>(*g_pGameWorldSingleton);
     void*    audioScene = *reinterpret_cast<void**>(gw + 0x78);
 
     // --- Early-out: a track is still playing on our handle. -----------------
-    if (!s_fn_IsEffectPlaying || !audioScene) return;
-    if (s_fn_IsEffectPlaying(audioScene, *reinterpret_cast<uint32_t*>(mp + 0x00))) return;
+    if (!audioScene) return;
+    if (reinterpret_cast<Audio::Scene*>(audioScene)->IsEffectPlaying(
+            *reinterpret_cast<uint32_t*>(mp + 0x00))) return;   // B.3.7 bridge
 
     EnsureTrackList(mp);
     uint8_t* trackList = *reinterpret_cast<uint8_t**>(mp + 0x08);
@@ -265,11 +252,12 @@ extern "C" void MusicPlayer_Update(void* musicPlayer) {
         if (pick < 0)  return;
     }
 
-    if (!fn_Audio_Scene_PlayEffect) return;
     // Retail passes a zero-initialised System::Time by reference (SoundType 2).
     uint64_t zeroTime = 0;
-    uint32_t handle = fn_Audio_Scene_PlayEffect(audioScene, matches[static_cast<size_t>(pick)],
-                                                2, &zeroTime);
+    uint32_t handle = reinterpret_cast<Audio::Scene*>(audioScene)->PlayEffect(
+        reinterpret_cast<Audio::SoundEffect*>(matches[static_cast<size_t>(pick)]),
+        static_cast<Audio::Scene::SoundType>(2),
+        *reinterpret_cast<const System::Time*>(&zeroTime));   // B.3.7 bridge
     // PROOF-OF-PLAY (lane D): the one line that says the music channel was actually
     // handed a track. Every track change logs; a run that never prints this has not
     // played music, whatever the rest of the trace says.

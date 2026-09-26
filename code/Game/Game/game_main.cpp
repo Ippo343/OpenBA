@@ -33,6 +33,7 @@
 #include "engine/Engine.h"                    // ENDGAME B.3.7 callers (K2)
 #include "engine/MainLoop.h"                  // ENDGAME B.3.7 callers (K2)
 #include "engine/UpdateLoop.h"                // ENDGAME B.3.7 callers (K2)
+#include "audio/Audio.h"                      // ENDGAME B.3.7 callers (K4)
 // ENDGAME B.3.5 Video/Graphics caller batch: Video::Device and
 // Video::Configuration are real classes. Device.h pulls no Volume.h, so it is
 // safe after <windows.h> here.
@@ -305,11 +306,10 @@ static void ShutdownEngineStaged(void* engineP) {
         *reinterpret_cast<void**>(ad + 0xa88) = nullptr;
     }
 
-    // 6. Audio::Configuration::Save
+    // 6. Audio::Configuration::Save. ENDGAME B.3.7: the ResolveFn readiness
+    // probe goes with the door — Save is a real member.
     if (void* cfg = load_ptr(0x6c8)) {
-        if (auto save = ResolveFn<void(*)(void*)>(
-                "?Save@Configuration@Audio@@QEAAXXZ"))
-            save(cfg);
+        reinterpret_cast<Audio::Configuration*>(cfg)->Save();   // B.3.7 bridge
     }
 
     // 7. Video::Device::PlatformShutdown + FreeLibrary on the three plugin
