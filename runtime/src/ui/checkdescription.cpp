@@ -15,83 +15,208 @@
 //   9  Construct          0x1800488a0  here
 // plus ??1CheckDescription@UI@@UEAA@XZ (0x180111620).
 //
-// DERIVES FROM UI::ButtonDescription, and the derivation is load-bearing in
-// three places, all of them reaching runtime/src/ui/buttondescription.cpp:
-//   Construct/Reconstruct call ??0ButtonDescription (0x180110b10);
-//   Serialize calls ButtonDescription::Serialize (0x1801113e0);
-//   CreateInstance calls the shared applier 0x1801108d0.
+// ENDGAME B.3.6 block C1: the bodies are MEMBERS of `UI::CheckDescription`
+// (runtime/types/ui/CheckDescription.h); the doors are one-line QUALIFIED
+// delegations.
 //
-// THERE IS NO OUT-OF-LINE ??0CheckDescription. The DLL exports none and the
-// kCheckDescription row in runtime/src/ui/factory_ui1_tables.inc has a null
-// ctor with `??0ButtonDescription@UI@@QEAA@XZ` as its BASE ctor plus two
-// stores of its own — exactly the two stores `Construct` open-codes below.
+// DERIVES FROM UI::ButtonDescription, and the derivation is load-bearing in
+// three places, all of them now MEMBER calls into
+// runtime/src/ui/buttondescription.cpp's class — QUALIFIED, because this
+// class's own slot-8 override hides the non-virtual applier and slot 5 would
+// dispatch back here:
+//   Construct/Reconstruct call ??0ButtonDescription (0x180110b10, a door);
+//   Serialize calls ButtonDescription::Serialize (0x1801113e0);
+//   CreateInstance calls ButtonDescription::CreateInstance (0x1801108d0).
+//
+// `??0CheckDescription@UI@@QEAA@XZ` IS exported (0x1801115e0, B36_SLOTS.md
+// section 6) — the old banner here said it was not. Nothing registers it; the
+// kCheckDescription row in runtime/src/ui/factory_ui1_tables.inc has
+// `??0ButtonDescription@UI@@QEAA@XZ` as its BASE ctor plus two stores of its
+// own — exactly the two stores `Construct` open-codes below.
 //
 // GetFileVersion is 0x1104, read from this class's own body (0x180111920). Its
 // base returns 0x104. The constant is per class and was read per class.
 //
-// Layout: runtime/types/ui/DescriptionsBatch1.h. sizeof 0xa8.
+// Layout: runtime/types/ui/CheckDescription.h over DescriptionsBatch1.h.
+// sizeof 0xa8.
 // ============================================================================
+#include <atomic>
+#include <new>
+
 #include "description_common.h"
-#include "../../types/ui/DescriptionsBatch1.h"
+#include "../../types/ui/CheckDescription.h"
+#include "../../types/ui/CheckElement.h"
 
 namespace {
 
 using namespace rtdesc;
 
-void* VtCheckDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblCheckDescription); }
-void* VtButtonDescription(){ return RT_DATA_SLOT(void*, RtUI::kVtblButtonDescription); }
-void* VtButtonElement()    { return RT_DATA_SLOT(void*, RtUI::kVtblButtonElement); }
-void* VtCheckElement()     { return RT_DATA_SLOT(void*, RtUI::kVtblCheckElement); }
+// RULE B6-5: namespace-scope atomic door caches, never a function-local static
+// inside a member (see buttondescription.cpp).
+void* AtomicResolve(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+std::atomic<void*> g_vtCheckDescription{nullptr};
+std::atomic<void*> g_vtButtonElement{nullptr};
+std::atomic<void*> g_vtCheckElement{nullptr};
+std::atomic<void*> g_checkTypeInfo{nullptr};
+std::atomic<void*> g_buttonCtor{nullptr};
+
+void* VtCheckDescription() { return AtomicResolve(g_vtCheckDescription, RtUI::kVtblCheckDescription); }
+void* VtButtonElement()    { return AtomicResolve(g_vtButtonElement, RtUI::kVtblButtonElement); }
+void* VtCheckElement()     { return AtomicResolve(g_vtCheckElement, RtUI::kVtblCheckElement); }
 const uint8_t* CheckTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(AtomicResolve(
+        g_checkTypeInfo, "?_typeInfo@CheckDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 
 void* ButtonCtor(void* self) {
     using CtorFn = void* (*)(void*);
-    return RT_EXPORT_ONCE(CtorFn, "??0ButtonDescription@UI@@QEAA@XZ")(self);
+    return reinterpret_cast<CtorFn>(AtomicResolve(
+        g_buttonCtor, "??0ButtonDescription@UI@@QEAA@XZ"))(self);
 }
 
-// The two stores CheckDescription adds on top of its base's constructor,
-// transcribed from 0x1800488c2..0x1800488cc (and identically from
-// 0x180048877..0x180048881 inside Reconstruct).
-void ConstructTail(uint8_t* p) {
-    *reinterpret_cast<void**>(p)        = VtCheckDescription();   // 1800488c9
-    *reinterpret_cast<uint64_t*>(p + 0xa0) = 0;                   // 1800488cc
-}
+// The dtor door only.
+void* VtButtonDescription() { return RT_DATA_SLOT(void*, RtUI::kVtblButtonDescription); }
 
 }  // namespace
 
-extern "C" uint32_t RtUi_CheckDescription_Type(const void*) {
+namespace UI {
+
+uint32_t CheckDescription::Type() const {
     const uint8_t* ti = CheckTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_CheckDescription_TypeName(const void*) {
+const char* CheckDescription::TypeName() const {
     const uint8_t* ti = CheckTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
-extern "C" int32_t RtUi_CheckDescription_GetFileVersion(const void*) { return 0x1104; }
+int32_t CheckDescription::GetFileVersion() const { return 0x1104; }
 
-// 0x1800488a0: null test, base ctor, own two stores, return this.
-extern "C" void* RtUi_CheckDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                  // 1800488ba
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    ButtonCtor(p);                                         // 1800488bc
-    ConstructTail(p);
-    return p;                                              // 1800488d7
+// 0x1800488a0: null test (the DOOR's), base ctor, own two stores, return this.
+// The two stores are transcribed from 0x1800488c2..0x1800488cc (and
+// identically from 0x180048877..0x180048881 inside Reconstruct); the vtable
+// stamp is retail's own store over the one ??0ButtonDescription just made.
+Object::External* CheckDescription::Construct() {
+    ButtonCtor(this);                                          // 1800488bc
+    *reinterpret_cast<void**>(this) = VtCheckDescription();    // 1800488c9
+    _checkDesc = nullptr;                                      // 1800488cc
+    return this;                                               // 1800488d7
 }
 // 0x180048850: slot 0 with flag 0, then the same construction, NO null test.
-extern "C" void* RtUi_CheckDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                   // 180048867
-    uint8_t* p = static_cast<uint8_t*>(selfv);
-    ButtonCtor(p);                                         // 180048871
-    ConstructTail(p);
-    return p;                                              // 18004888c
+Object::External* CheckDescription::Reconstruct() {
+    DeletingDtor(0);                                           // 180048867
+    ButtonCtor(this);                                          // 180048871
+    *reinterpret_cast<void**>(this) = VtCheckDescription();    // 18004887e
+    _checkDesc = nullptr;                                      // 180048881
+    return this;                                               // 18004888c
 }
-extern "C" void RtUi_CheckDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+void CheckDescription::Destruct() { DeletingDtor(0); }
 
 // ============================================================================
-// ??1CheckDescription@UI@@UEAA@XZ   0x180111620
+// ?Serialize@CheckDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x180111930
+// ============================================================================
+// Note the base call is ButtonDescription::Serialize (0x1801113e0), NOT
+// ElementDescription::Serialize — this is the one place in this batch where the
+// base serializer is a sibling class's rather than the root's.
+bool CheckDescription::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
+
+    ButtonDescription::Serialize(stream);                  // 18011194a
+
+    Serializer ser = { stream, nullptr };
+    void* rw = MakeReaderWriter(stream, &ser);
+
+    using FieldSerFn = void (*)(void*, Serializer*);
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_checkDesc, &ser); // 18011198b
+
+    DestroyReaderWriter(rw);                               // 1801119a3
+    return true;
+}
+
+// ============================================================================
+// ?CreateInstance@CheckDescription@UI@@...   retail 0x1801119c0   (slot 8)
+// ============================================================================
+// CheckElement is 0xe0 bytes, and its constructor is inlined here as the
+// BUTTON element's inline constructor followed by two more stores:
+//     ??0Element (0x180115e50)
+//     ButtonElement vtable, +0xc0 = -1 (dword), +0xc4 = 0 (dword)
+//     CheckElement vtable, +0xd8 = 0 (BYTE — `MOV byte`, not dword)
+// so the ButtonElement vtable is written and then overwritten. Kept.
+//
+// Then the shared ButtonDescription applier (0x1801108d0), then ONE more child
+// from `_checkDesc`, attached to the element retail still holds in RDI —
+// not re-read from the slot the way the applier's own loop does it. The slot
+// is the SAME stack local the applier received and CreateElement returns into.
+Object::InternalPtr<Element>* CheckDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
+    void* raw = MemAlloc(0xe0, 8);                         // 180111a02
+
+    CheckElement* elem = nullptr;
+    if (raw != nullptr) {                                  // 180111a2d
+        ElementCtor(raw);                                  // 180111a32
+        CheckElement* e = reinterpret_cast<CheckElement*>(raw);   // B.3.6 bridge
+        *reinterpret_cast<void**>(e) = VtButtonElement();  // 180111a3f
+        e->_keyIndex = -1;                                 // 180111a42
+        e->_state    = 0;                                  // 180111a4c
+        *reinterpret_cast<void**>(e) = VtCheckElement();   // 180111a5d
+        e->_checked  = 0;                                  // 180111a60 BYTE
+        elem = e;
+    }
+
+    Object::InternalPtr<ButtonElement> slot(elem);         // 180111a67
+    ButtonDescription::CreateInstance(&slot, dialog);      // 180111a77
+
+    void** made = DialogCreateElement(dialog, reinterpret_cast<void**>(&slot),
+                                      _checkDesc);         // 180111a8b
+    AttachAndPushChild(reinterpret_cast<uint8_t*>(elem), made);   // 180111a98 .. 180111ad4
+
+    new (static_cast<void*>(ret)) Object::InternalPtr<Element>(elem);   // 180111ad6
+    return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS
+// ============================================================================
+extern "C" uint32_t RtUi_CheckDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::CheckDescription*>(self)           // B.3.6 bridge
+        ->UI::CheckDescription::Type();
+}
+extern "C" const char* RtUi_CheckDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::CheckDescription*>(self)           // B.3.6 bridge
+        ->UI::CheckDescription::TypeName();
+}
+extern "C" int32_t RtUi_CheckDescription_GetFileVersion(const void* self) {
+    return reinterpret_cast<const UI::CheckDescription*>(self)           // B.3.6 bridge
+        ->UI::CheckDescription::GetFileVersion();
+}
+
+// 0x1800488a0: the retail null test stays in the door (1800488ba).
+extern "C" void* RtUi_CheckDescription_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;
+    return reinterpret_cast<UI::CheckDescription*>(selfv)                // B.3.6 bridge
+        ->UI::CheckDescription::Construct();
+}
+extern "C" void* RtUi_CheckDescription_Reconstruct(void* selfv) {
+    return reinterpret_cast<UI::CheckDescription*>(selfv)                // B.3.6 bridge
+        ->UI::CheckDescription::Reconstruct();
+}
+extern "C" void RtUi_CheckDescription_Destruct(void* selfv) {
+    reinterpret_cast<UI::CheckDescription*>(selfv)                       // B.3.6 bridge
+        ->UI::CheckDescription::Destruct();
+}
+
+// ============================================================================
+// ??1CheckDescription@UI@@UEAA@XZ   0x180111620   — a DTOR DOOR (B4b-2), kept
 // ============================================================================
 // THREE vtable stamps back to back — own, ButtonDescription's, then
 // ElementDescription's — with nothing between them, then the base's _textName.
@@ -110,71 +235,19 @@ extern "C" void RtUi_CheckDescription_Dtor(void* selfv) {
     RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 180111686 JMP
 }
 
-// ============================================================================
-// ?Serialize@CheckDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x180111930
-// ============================================================================
-// Note the base call is ButtonDescription::Serialize (0x1801113e0), NOT
-// ElementDescription::Serialize — this is the one place in this batch where the
-// base serializer is a sibling class's rather than the root's.
 extern "C" bool RtUi_CheckDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
-
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x1801113e0ull)(p, stream);          // 18011194a
-
-    Serializer ser = { stream, nullptr };
-    void* rw = MakeReaderWriter(stream, &ser);
-
-    using FieldSerFn = void (*)(void*, Serializer*);
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0xa0, &ser);    // 18011198b
-
-    DestroyReaderWriter(rw);                               // 1801119a3
-    return true;
+    return reinterpret_cast<UI::CheckDescription*>(selfv)                // B.3.6 bridge
+        ->UI::CheckDescription::Serialize(streamv);
 }
 
-// ============================================================================
-// ?CreateInstance@CheckDescription@UI@@...   retail 0x1801119c0
-// ============================================================================
-// CheckElement is 0xe0 bytes, and its constructor is inlined here as the
-// BUTTON element's inline constructor followed by two more stores:
-//     ??0Element (0x180115e50)
-//     ButtonElement vtable, +0xc0 = -1 (dword), +0xc4 = 0 (dword)
-//     CheckElement vtable, +0xd8 = 0 (BYTE — `MOV byte`, not dword)
-// so the ButtonElement vtable is written and then overwritten. Kept.
-//
-// Then the shared ButtonDescription applier (0x1801108d0), then ONE more child
-// from `self->_checkDesc`, attached to the element retail still holds in RDI —
-// not re-read from the slot the way the applier's own loop does it.
 extern "C" void** RtUi_CheckDescription_CreateInstance(const void* selfv,
                                                        void** ret,
                                                        const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
-    void* raw = MemAlloc(0xe0, 8);                         // 180111a02
-
-    uint8_t* elem = nullptr;
-    if (raw != nullptr) {                                  // 180111a2d
-        ElementCtor(raw);                                  // 180111a32
-        uint8_t* e = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e)          = VtButtonElement();  // 180111a3f
-        *reinterpret_cast<int32_t*>(e + 0xc0) = -1;                 // 180111a42
-        *reinterpret_cast<int32_t*>(e + 0xc4) = 0;                  // 180111a4c
-        *reinterpret_cast<void**>(e)          = VtCheckElement();   // 180111a5d
-        *reinterpret_cast<uint8_t*>(e + 0xd8) = 0;                  // 180111a60 BYTE
-        elem = e;
-    }
-
-    void* slot = elem;                                     // 180111a67
-    using ApplyFn = void (*)(const void*, void**, const void*);
-    RtAddr<ApplyFn>(0x1801108d0ull)(self, &slot, dialog);  // 180111a77
-
-    void** made = DialogCreateElement(dialog, &slot,
-                                      *reinterpret_cast<void* const*>(self + 0xa0)); // 180111a8b
-    AttachAndPushChild(elem, made);                        // 180111a98 .. 180111ad4
-
-    *ret = elem;                                           // 180111ad6
-    return ret;
+    return reinterpret_cast<void**>(
+        reinterpret_cast<const UI::CheckDescription*>(selfv)             // B.3.6 bridge
+            ->UI::CheckDescription::CreateInstance(
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),
+                static_cast<const UI::Dialog*>(dialog)));
 }
 
 int RtUiCheckDescriptionRegister() {

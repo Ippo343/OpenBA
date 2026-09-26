@@ -37,38 +37,67 @@
 // ui_factory_wave28.cpp) and ?IsDerivedFrom@Base@Object@@ (0x1800c0390, reached
 // by its export name).
 // ============================================================================
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/ui/ElementDescription.h"
-#include "../../types/ui/Element.h"
+#include "../../types/ui/ListDescription.h"
+#include "../../types/ui/ListElement.h"
 #include "../../types/io/Serializer.h"
+
+// ENDGAME B.3.6 block C4: the layout moved to runtime/types/ui/
+// ListDescription.h (the real class). Every slot body below is a MEMBER; each
+// registered door is a one-line QUALIFIED delegation. The ctor and dtor stay
+// DOORS (B4b-2). RULE B6-5: every export the members reach is cached in a
+// namespace-scope std::atomic slot, never in a function-local static.
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtListDescription()    { return RT_DATA_SLOT(void*, "??_7ListDescription@UI@@6B@"); }
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+std::atomic<void*> g_vtBase{nullptr};
+std::atomic<void*> g_vtExternal{nullptr};
+std::atomic<void*> g_vtElementDescription{nullptr};
+std::atomic<void*> g_vtListDescription{nullptr};
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_ribbonTypeInfo{nullptr};
+std::atomic<void*> g_clipTypeInfo{nullptr};
+std::atomic<void*> g_getSpriteIndex{nullptr};
+std::atomic<void*> g_isDerivedFrom{nullptr};
+std::atomic<void*> g_memFree{nullptr};
+std::atomic<void*> g_externalDtor{nullptr};
+
+void* VtBase()               { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
+void* VtExternal()           { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
+void* VtElementDescription() { return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
+void* VtListDescription()    { return AtomicExport(g_vtListDescription, "??_7ListDescription@UI@@6B@"); }
 const uint8_t* ListDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@ListDescription@UI@@0VBaseTypeInfo@Object@@A"));
 }
 // The two type ids the tail of CreateInstance tests against, by NAME (both are
 // exported private statics; the addresses 0x1801fa2e0 / 0x1801f9d68 are recorded
 // only so the pairing can be rechecked).
 uint32_t RibbonElementTypeId() {
-    const uint8_t* ti = RT_DATA_SLOT(const uint8_t*,
-                                     "?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A");
+    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
+        g_ribbonTypeInfo, "?_typeInfo@RibbonElement@UI@@0VBaseTypeInfo@Object@@A"));
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 uint32_t ClipRegionElementTypeId() {
-    const uint8_t* ti = RT_DATA_SLOT(const uint8_t*,
-                                     "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A");
+    const uint8_t* ti = static_cast<const uint8_t*>(AtomicExport(
+        g_clipTypeInfo, "?_typeInfo@ClipRegionElement@UI@@0VBaseTypeInfo@Object@@A"));
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
 
@@ -91,11 +120,6 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
-
 using MemFreeFn = void (*)(void*);
 
 void ReleaseStringField(char** field) {
@@ -103,32 +127,30 @@ void ReleaseStringField(char** field) {
     if (s == nullptr) return;
     if (--*reinterpret_cast<int32_t*>(s - 4) == 0) {
         *field = s - 8;
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(*field);
+        reinterpret_cast<MemFreeFn>(AtomicExport(
+            g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(*field);
     } else {
         *field = nullptr;
     }
 }
 
-void AddChild(const void* dialog, void** slot, uint8_t* elem, void* childDesc) {
+void AddChild(const void* dialog, void** slot, UI::Element* elem, void* childDesc) {
     using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
     void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, slot, childDesc);
 
-    uint8_t* child = *reinterpret_cast<uint8_t**>(made);
-    if (child != nullptr)
-        *reinterpret_cast<void**>(child + 0x98) = elem;
+    UI::Element* child = static_cast<UI::Element*>(*made);
+    if (child != nullptr) child->_parent = elem;
 
     using PushFn = void (*)(void* array, int n, const void* fill);
-    RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                   *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                   made);
+    RtAddr<PushFn>(0x180076900ull)(&elem->_children, elem->_children.GetSize() + 1, made);
 
-    for (uint8_t* n = elem; n != nullptr; n = *reinterpret_cast<uint8_t**>(n + 0x98))
-        *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
+    for (UI::Element* n = elem; n != nullptr; n = n->_parent)
+        n->_flags |= UI::kElementFlagNeedsSizeCalc;
 }
 
 }  // namespace
 
-// ??0ListDescription@UI@@QEAA@XZ  retail 0x1800d49b0
+// ??0ListDescription@UI@@QEAA@XZ  retail 0x1800d49b0 — a DOOR (B4b-2)
 extern "C" void* RtUi_ListDescription_Ctor(void* selfv) {
     uint8_t* p = static_cast<uint8_t*>(selfv);
     void**   v = reinterpret_cast<void**>(p);
@@ -150,58 +172,50 @@ extern "C" void* RtUi_ListDescription_Ctor(void* selfv) {
     *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800d4a1b
     *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800d4a1f
     *v = VtListDescription();                                   // 1800d4a23
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 1800d4a2d
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 1800d4a31
-    *reinterpret_cast<uint64_t*>(p + 0x78) = 0;                 // 1800d4a35
-    *reinterpret_cast<uint64_t*>(p + 0x80) = 0;                 // 1800d4a39
+
+    UI::ListDescription* self = reinterpret_cast<UI::ListDescription*>(p);   // B.3.6 bridge
+    self->_partDescs[0] = nullptr;                              // 1800d4a2d
+    self->_partDescs[1] = nullptr;                              // 1800d4a31
+    self->_spriteSheet  = nullptr;                              // 1800d4a35
+    self->_spriteName   = nullptr;                              // 1800d4a39
     // ONE QWORD of -0x7f7f80 covering BOTH +0x88 and +0x8c.
-    *reinterpret_cast<int64_t*>(p + 0x88) = -0x7f7f80;          // 1800d4a40
+    self->_hoverColor  = 0xff808080u;                           // 1800d4a40
+    self->_selectColor = 0xffffffffu;
     return p;                                                   // 1800d4a4b
 }
 
-extern "C" uint32_t RtUi_ListDescription_Type(const void*) {
+// ============================================================================
+// The member bodies (ENDGAME B.3.6 block C4)
+// ============================================================================
+namespace UI {
+
+uint32_t ListDescription::Type() const {
     const uint8_t* ti = ListDescriptionTypeInfo();
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
-extern "C" const char* RtUi_ListDescription_TypeName(const void*) {
+const char* ListDescription::TypeName() const {
     const uint8_t* ti = ListDescriptionTypeInfo();
     const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
 }
-extern "C" int32_t RtUi_ListDescription_GetFileVersion(const void*) { return 0x104; }
+int32_t ListDescription::GetFileVersion() const { return 0x104; }
 
-extern "C" void* RtUi_ListDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180044d40
-    return RtUi_ListDescription_Ctor(selfv);
+// 0x180044d40 — the null test stays in the door.
+Object::External* ListDescription::Construct() {
+    return static_cast<Object::External*>(RtUi_ListDescription_Ctor(this));
 }
-extern "C" void* RtUi_ListDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    return RtUi_ListDescription_Ctor(selfv);
+// 0x180044d20 — slot 0 (VIRTUAL, the minted row) with flag 0, then the ctor.
+Object::External* ListDescription::Reconstruct() {
+    DeletingDtor(0);
+    return static_cast<Object::External*>(RtUi_ListDescription_Ctor(this));
 }
-extern "C" void RtUi_ListDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
-// ??1ListDescription@UI@@UEAA@XZ  0x1800d4910 — the sprite-name String at
-// +0x80, then the base's _textName at +0x60 under the base vtable, then a tail
-// JMP. The three ExternalPtrs are not released.
-extern "C" void RtUi_ListDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-
-    *v = VtListDescription();                                  // 1800d4926
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x80));    // 1800d4930
-    *v = VtElementDescription();                               // 1800d4966
-    ReleaseStringField(reinterpret_cast<char**>(p + 0x60));    // 1800d4970
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d49a2 JMP
-}
+// 0x180044d50
+void ListDescription::Destruct() { DeletingDtor(0); }
 
 // ?Serialize@ListDescription@UI@@UEAA_NAEAVStream@IO@@@Z  0x1800d4810
-extern "C" bool RtUi_ListDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+bool ListDescription::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(p, stream);              // 1800d482a
+    UI::ElementDescription::Serialize(stream);                 // 1800d482a (qualified)
 
     Serializer ser = { stream, nullptr };
 
@@ -213,15 +227,15 @@ extern "C" bool RtUi_ListDescription_Serialize(void* selfv, void* streamv) {
     ser.readerWriter = rw;                                     // 1800d485a
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x68, &ser);        // 1800d4868
-    RtAddr<FieldSerFn>(0x180038f90ull)(p + 0x70, &ser);        // 1800d4876
-    RtAddr<FieldSerFn>(0x180004590ull)(p + 0x78, &ser);        // 1800d4884
-    RtAddr<FieldSerFn>(0x1800c9930ull)(p + 0x80, &ser);        // 1800d4895
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[0], &ser);  // 1800d4868
+    RtAddr<FieldSerFn>(0x180038f90ull)(&_partDescs[1], &ser);  // 1800d4876
+    RtAddr<FieldSerFn>(0x180004590ull)(&_spriteSheet, &ser);   // 1800d4884
+    RtAddr<FieldSerFn>(0x1800c9930ull)(&_spriteName, &ser);    // 1800d4895
 
     using ScalarFn = void (*)(void* rw, void* value, const char* name);
     void** rvt = VTableOf(rw);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, p + 0x88, nullptr);
-    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, p + 0x8c, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_hoverColor, nullptr);
+    reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(rw, &_selectColor, nullptr);
 
     if (rw != nullptr) {                                       // 1800d48d3
         using DeleteFn = void (*)(void* rw, int flag);
@@ -234,105 +248,146 @@ extern "C" bool RtUi_ListDescription_Serialize(void* selfv, void* streamv) {
 // ?CreateInstance@ListDescription@UI@@...   retail 0x1800d45f0
 // ============================================================================
 // ListElement is 0x100 bytes (`MOV EDX,0x100` at 0x1800d4634); its ctor is
-// CALLED out of line (0x1800d4570, already ported). TWO children, one sprite
-// lookup, and then the part that makes this class unusual:
+// CALLED out of line (0x1800d4570, the listelement.cpp door). TWO children,
+// one sprite lookup, and then the part that makes this class unusual:
 //
 // *** THE TAIL WALKS INTO THE CHILDREN IT JUST BUILT AND CACHES TWO POINTERS
 //     IT FINDS THERE, THROUGH FIVE UNGUARDED DEREFERENCES. ***
 //
-//   elem->+0xf0 = IsDerivedFrom(children[1]->children[0]->children[0],
-//                               RibbonElement)     ? that : nullptr
-//   elem->+0xf8 = IsDerivedFrom(children[1]->children[0],
-//                               ClipRegionElement) ? that : nullptr
+//   elem->_ribbon = IsDerivedFrom(children[1]->children[0]->children[0],
+//                                 RibbonElement)     ? that : nullptr
+//   elem->_clip   = IsDerivedFrom(children[1]->children[0],
+//                                 ClipRegionElement) ? that : nullptr
 //
-// (0x1800d4777..0x1800d47d5.) Every step reads `+0xa0` — the child Array's data
-// pointer — and indexes it WITHOUT checking the count, so this body relies
-// entirely on the two child descriptions producing exactly the shape the engine
-// ships in its own .rsc. Retail does not guard it and neither does this: a null
-// here means the description is not a list description, and the guard would
+// (0x1800d4777..0x1800d47d5.) Every step reads the child Array's data pointer
+// and indexes it WITHOUT checking the count, so this body relies entirely on
+// the two child descriptions producing exactly the shape the engine ships in
+// its own .rsc. Retail does not guard it and neither does this: a null here
+// means the description is not a list description, and the guard would
 // silently produce a List element with no ribbon and no clip region rather than
 // stopping at the real problem [[feedback_root_cause_not_null_guard]].
 //
 // Note the FIRST of the two chains is THREE levels deep and the SECOND is TWO;
 // they are not the same walk with an extra step appended, and the deeper one
 // runs first.
-extern "C" void** RtUi_ListDescription_CreateInstance(const void* selfv, void** ret,
-                                                      const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
+Object::InternalPtr<Element>* ListDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     using MemAllocFn = void* (*)(uint64_t size, int align);
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0x100, 8);  // 1800d4634 (inlined)
 
-    uint8_t* elem = nullptr;
+    ListElement* elem = nullptr;
     if (raw != nullptr) {                                      // 1800d4662
         using ListElementCtorFn = void* (*)(void*);
-        elem = static_cast<uint8_t*>(
+        elem = reinterpret_cast<ListElement*>(                 // B.3.6 bridge
             RtAddr<ListElementCtorFn>(0x1800d4570ull)(raw));   // 1800d4667
     }
 
     void* slot = elem;                                         // 1800d4674
     using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 1800d4681
+    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 1800d4681
 
-    AddChild(dialog, &slot, elem, *reinterpret_cast<void* const*>(self + 0x68));  // 1800d4692
-    AddChild(dialog, &slot, elem, *reinterpret_cast<void* const*>(self + 0x70));  // 1800d46e3
+    AddChild(dialog, &slot, elem, _partDescs[0]);              // 1800d4692
+    AddChild(dialog, &slot, elem, _partDescs[1]);              // 1800d46e3
 
     // The one {sheet, index} pair, with the batch's usual 4-byte write / 8-byte
     // read of the index slot.
     {
-        void* sheet = *reinterpret_cast<void* const*>(self + 0x78);
+        void* sheet = _spriteSheet;
         uint64_t idxSlot;                                      // [RSP+0x30]
         if (sheet != nullptr) {                                // 1800d472d
             using GetIdxFn = int32_t (*)(const void* sheet, const void* nameStr);
-            const int32_t idx = RT_EXPORT_ONCE(
-                GetIdxFn,
-                "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z")(
-                    sheet, self + 0x80);
+            const int32_t idx = reinterpret_cast<GetIdxFn>(AtomicExport(
+                g_getSpriteIndex,
+                "?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"))(
+                    sheet, &_spriteName);
             __builtin_memcpy(&idxSlot, &idx, sizeof idx);      // 1800d473e  DWORD store
         } else {
             const int32_t minusOne = -1;
             __builtin_memcpy(&idxSlot, &minusOne, sizeof minusOne);
         }
-        *reinterpret_cast<void**>(elem + 0xc0)    = sheet;     // 1800d474c
-        *reinterpret_cast<uint64_t*>(elem + 0xc8) = idxSlot;   // 1800d4758  QWORD store
+        elem->_highlight.spriteSheet = sheet;                  // 1800d474c
+        __builtin_memcpy(&elem->_highlight.spriteIndex, &idxSlot, 8);   // 1800d4758  QWORD store
     }
 
-    *reinterpret_cast<int32_t*>(elem + 0xd0) =
-        *reinterpret_cast<const int32_t*>(self + 0x88);        // 1800d4765
-    *reinterpret_cast<int32_t*>(elem + 0xd4) =
-        *reinterpret_cast<const int32_t*>(self + 0x8c);        // 1800d4771
+    elem->_hoverColor  = _hoverColor;                          // 1800d4765
+    elem->_selectColor = _selectColor;                         // 1800d4771
 
     using IsDerivedFromFn = bool (*)(const void* self, uint32_t typeId);
+    const IsDerivedFromFn isDerivedFrom = reinterpret_cast<IsDerivedFromFn>(
+        AtomicExport(g_isDerivedFrom, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
 
     {   // THREE levels down: children[1]->children[0]->children[0]
-        void* const* kids  = *reinterpret_cast<void* const* const*>(elem + 0xa0);  // 1800d4777
-        void* const  k1    = kids[1];                                              // 1800d477a
-        void* const* kk    = *reinterpret_cast<void* const* const*>(
-                                 static_cast<const uint8_t*>(k1) + 0xa0);          // 1800d477e
-        void* const  kk0   = kk[0];                                                // 1800d4785
-        void* const* kkk   = *reinterpret_cast<void* const* const*>(
-                                 static_cast<const uint8_t*>(kk0) + 0xa0);         // 1800d4788
-        void*        cand  = kkk[0];                                               // 1800d478f
-        const bool ok = RT_EXPORT_ONCE(IsDerivedFromFn,
-                                       "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(
-                            cand, RibbonElementTypeId());                          // 1800d479b
-        *reinterpret_cast<void**>(elem + 0xf0) = ok ? cand : nullptr;              // 1800d47a9
+        Element* const k1   = elem->_children[1];              // 1800d4777 / 1800d477a
+        Element* const kk0  = k1->_children[0];                // 1800d477e / 1800d4785
+        Element* const cand = kk0->_children[0];               // 1800d4788 / 1800d478f
+        const bool ok = isDerivedFrom(cand, RibbonElementTypeId());   // 1800d479b
+        elem->_ribbon = ok ? cand : nullptr;                   // 1800d47a9
     }
 
     {   // TWO levels down: children[1]->children[0]
-        void* const* kids = *reinterpret_cast<void* const* const*>(elem + 0xa0);   // 1800d47b0
-        void* const  k1   = kids[1];                                               // 1800d47b3
-        void* const* kk   = *reinterpret_cast<void* const* const*>(
-                                static_cast<const uint8_t*>(k1) + 0xa0);           // 1800d47b7
-        void*        cand = kk[0];                                                 // 1800d47be
-        const bool ok = RT_EXPORT_ONCE(IsDerivedFromFn,
-                                       "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(
-                            cand, ClipRegionElementTypeId());                      // 1800d47ca
-        *reinterpret_cast<void**>(elem + 0xf8) = ok ? cand : nullptr;              // 1800d47d5
+        Element* const k1   = elem->_children[1];              // 1800d47b0 / 1800d47b3
+        Element* const cand = k1->_children[0];                // 1800d47b7 / 1800d47be
+        const bool ok = isDerivedFrom(cand, ClipRegionElementTypeId());  // 1800d47ca
+        elem->_clip = ok ? cand : nullptr;                     // 1800d47d5
     }
 
-    *ret = elem;                                               // 1800d47dc
+    *reinterpret_cast<void**>(ret) = elem;                     // 1800d47dc
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+using UI::ListDescription;
+
+extern "C" uint32_t RtUi_ListDescription_Type(const ListDescription* self) {
+    return self->UI::ListDescription::Type();
+}
+extern "C" const char* RtUi_ListDescription_TypeName(const ListDescription* self) {
+    return self->UI::ListDescription::TypeName();
+}
+extern "C" int32_t RtUi_ListDescription_GetFileVersion(const ListDescription* self) {
+    return self->UI::ListDescription::GetFileVersion();
+}
+extern "C" void* RtUi_ListDescription_Construct(ListDescription* self) {
+    if (self == nullptr) return nullptr;                       // 180044d40
+    return self->UI::ListDescription::Construct();
+}
+extern "C" void* RtUi_ListDescription_Reconstruct(ListDescription* self) {
+    return self->UI::ListDescription::Reconstruct();
+}
+extern "C" void RtUi_ListDescription_Destruct(ListDescription* self) {
+    self->UI::ListDescription::Destruct();
+}
+extern "C" bool RtUi_ListDescription_Serialize(ListDescription* self, void* stream) {
+    return self->UI::ListDescription::Serialize(stream);
+}
+// RDX is the caller's slot; the member writes it and hands it back (B6-2).
+extern "C" void** RtUi_ListDescription_CreateInstance(const ListDescription* self, void** ret,
+                                                      const void* dialog) {
+    return reinterpret_cast<void**>(self->UI::ListDescription::CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
+        static_cast<const UI::Dialog*>(dialog)));
+}
+
+// ??1ListDescription@UI@@UEAA@XZ  0x1800d4910 — a DOOR (B4b-2). The sprite-name
+// String at +0x80, then the base's _textName at +0x60 under the base vtable,
+// then a tail JMP. The three ExternalPtrs are not released.
+extern "C" void RtUi_ListDescription_Dtor(void* selfv) {
+    ListDescription* self = reinterpret_cast<ListDescription*>(selfv);   // B.3.6 bridge
+    void** v = reinterpret_cast<void**>(selfv);
+
+    *v = VtListDescription();                                  // 1800d4926
+    ReleaseStringField(&self->_spriteName);                    // 1800d4930
+    *v = VtElementDescription();                               // 1800d4966
+    ReleaseStringField(&self->_textName);                      // 1800d4970
+
+    using ExtDtorFn = void (*)(void*);
+    reinterpret_cast<ExtDtorFn>(AtomicExport(
+        g_externalDtor, "??1External@Object@@UEAA@XZ"))(selfv);   // 1800d49a2 JMP
 }
 
 int RtUiListDescriptionRegister() {

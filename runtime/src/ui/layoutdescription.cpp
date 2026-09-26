@@ -27,13 +27,19 @@
 // (0x68) plus ONE array:
 //     +0x68  Array<Entry>.data, +0x70 _size, +0x74 _capacity
 //
-// Entry is 0x38 bytes and is the thing this class is about:
+// Entry is 0x38 bytes and is the thing this class is about
+// (runtime/types/ui/LayoutDescription.h names it field by field):
 //     +0x00  ExternalPtr<UI::ElementDescription>   the cell's content
-//     +0x08  System::String   \  the names of the two entries this one is
-//     +0x10  System::String   /  positioned RELATIVE TO (see CreateInstance)
-//     +0x18  System::String      this entry's OWN name
+//     +0x08  System::String      this entry's OWN name — what siblings look up
+//     +0x10  System::String   \  the names of the two entries this one is
+//     +0x18  System::String   /  positioned RELATIVE TO (X, then Y)
 //     +0x20  uint32  +0x24 uint32  +0x28 int32  +0x2c int32  +0x30 bool
 //     +0x31..+0x37 never written by anything
+// (B.3.6 block C4 correction: this banner used to put the OWN name at +0x18
+// and the two relative names at +0x08/+0x10. CreateInstance's own lookup —
+// `LEA R11,[R14+0x8]` at 0x1800d3645 for the candidates, `MOV RBX,[R14+R8+0x10]`
+// at 0x1800d361d for the wanted name, gated by `CMP dword [R14+R8+0x20],0` —
+// and the body below always said +0x08 / +0x10 / +0x18 as above.)
 //
 // FOUR COLLECTION HELPERS, all appended to the collection files rather than
 // written here (that is where the family lives, and the specs there carry the
@@ -48,13 +54,20 @@
 //
 // ??0LayoutElement@UI@@ is NOT called here: CreateInstance inlines the element
 // construction (??0Element, the LayoutElement vtable, two zeroed qwords).
+//
+// ENDGAME B.3.6 block C4: the layout moved to runtime/types/ui/
+// LayoutDescription.h / LayoutElement.h (the real classes). Every slot body
+// below is a MEMBER; each registered door is a one-line QUALIFIED delegation;
+// the dtor stays a DOOR (B4b-2). RULE B6-5: every export the members reach is
+// cached in a namespace-scope std::atomic slot, never in a function-local static.
 // ============================================================================
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/ui/ElementDescription.h"
-#include "../../types/ui/Element.h"
+#include "../../types/ui/LayoutDescription.h"
+#include "../../types/ui/LayoutElement.h"
 #include "../../types/io/Serializer.h"
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
@@ -62,14 +75,38 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-void* VtBase()               { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
-void* VtExternal()           { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
-void* VtElementDescription() { return RT_DATA_SLOT(void*, "??_7ElementDescription@UI@@6B@"); }
-void* VtLayoutDescription()  { return RT_DATA_SLOT(void*, "??_7LayoutDescription@UI@@6B@"); }
-void* VtLayoutElement()      { return RT_DATA_SLOT(void*, "??_7LayoutElement@UI@@6B@"); }
+void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+std::atomic<void*> g_vtBase{nullptr};
+std::atomic<void*> g_vtExternal{nullptr};
+std::atomic<void*> g_vtElementDescription{nullptr};
+std::atomic<void*> g_vtLayoutDescription{nullptr};
+std::atomic<void*> g_vtLayoutElement{nullptr};
+std::atomic<void*> g_typeInfo{nullptr};
+std::atomic<void*> g_memFree{nullptr};
+std::atomic<void*> g_externalDtor{nullptr};
+
+void* VtBase()               { return AtomicExport(g_vtBase, "??_7Base@Object@@6B@"); }
+void* VtExternal()           { return AtomicExport(g_vtExternal, "??_7External@Object@@6B@"); }
+void* VtElementDescription() { return AtomicExport(g_vtElementDescription, "??_7ElementDescription@UI@@6B@"); }
+void* VtLayoutDescription()  { return AtomicExport(g_vtLayoutDescription, "??_7LayoutDescription@UI@@6B@"); }
+void* VtLayoutElement()      { return AtomicExport(g_vtLayoutElement, "??_7LayoutElement@UI@@6B@"); }
 const uint8_t* LayoutDescriptionTypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(AtomicExport(
+        g_typeInfo, "?_typeInfo@LayoutDescription@UI@@0VBaseTypeInfo@Object@@A"));
+}
+using MemFreeFn = void (*)(void*);
+MemFreeFn MemFree() {
+    return reinterpret_cast<MemFreeFn>(AtomicExport(
+        g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"));
 }
 
 template <typename Fn>
@@ -91,14 +128,10 @@ static_assert(offsetof(Serializer, readerWriter) == 0x08, "IO::Serializer rw @ +
 
 void** VTableOf(void* o) { return *reinterpret_cast<void***>(o); }
 
-using Slot0Fn = void* (*)(void* self, unsigned flag);
-void CallSlot0(void* self, unsigned flag) {
-    reinterpret_cast<Slot0Fn>(VTableOf(self)[0])(self, flag);
-}
-
 // The inlined constructor, from 0x180043076..0x1800430ea (Construct's copy).
-void ConstructBody(uint8_t* p) {
-    void** v = reinterpret_cast<void**>(p);
+void ConstructBody(UI::LayoutDescription* self) {
+    uint8_t* p = reinterpret_cast<uint8_t*>(self);
+    void**   v = reinterpret_cast<void**>(p);
 
     *v = VtBase();                                              // 180043076
     *v = VtExternal();                                          // 180043080
@@ -117,8 +150,9 @@ void ConstructBody(uint8_t* p) {
     *reinterpret_cast<uint64_t*>(p + 0x58) = 0;                 // 1800430d0
     *reinterpret_cast<uint64_t*>(p + 0x60) = 0;                 // 1800430d4
     *v = VtLayoutDescription();                                 // 1800430d8
-    *reinterpret_cast<uint64_t*>(p + 0x68) = 0;                 // 1800430e2  _data
-    *reinterpret_cast<uint64_t*>(p + 0x70) = 0;                 // 1800430e6  _size + _cap
+    self->_entries._data     = nullptr;                         // 1800430e2
+    self->_entries._size     = 0;                               // 1800430e6  one qword
+    self->_entries._capacity = 0;
 }
 
 // Retail's String comparison, inlined at FOUR places in CreateInstance and
@@ -149,65 +183,16 @@ bool StringEquals(const char* have, const char* want) {
     return have[k] == want[k];
 }
 
+bool NamesNothing(const char* s) {
+    return s == nullptr || *reinterpret_cast<const int32_t*>(s - 8) == 0;
+}
+
 }  // namespace
-
-extern "C" uint32_t RtUi_LayoutDescription_Type(const void*) {
-    const uint8_t* ti = LayoutDescriptionTypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-extern "C" const char* RtUi_LayoutDescription_TypeName(const void*) {
-    const uint8_t* ti = LayoutDescriptionTypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
-extern "C" int32_t RtUi_LayoutDescription_GetFileVersion(const void*) { return 0x304; }
-
-extern "C" void* RtUi_LayoutDescription_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;                      // 180043071
-    ConstructBody(static_cast<uint8_t*>(selfv));
-    return selfv;                                              // 1800430ea
-}
-extern "C" void* RtUi_LayoutDescription_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);                                       // 180042fd7
-    ConstructBody(static_cast<uint8_t*>(selfv));
-    return selfv;                                              // 180043052
-}
-extern "C" void RtUi_LayoutDescription_Destruct(void* selfv) { CallSlot0(selfv, 0); }
-
-// ============================================================================
-// ??1LayoutDescription@UI@@UEAA@XZ   0x1800d3a10
-// ============================================================================
-// Restamp, destroy the entry Array through 0x180043a00 — the variant that DOES
-// visit the elements (three String releases each) — then the base's _textName
-// at +0x60 under the base vtable, then tail JMP.
-extern "C" void RtUi_LayoutDescription_Dtor(void* selfv) {
-    uint8_t* p = reinterpret_cast<uint8_t*>(selfv);
-    void**   v = reinterpret_cast<void**>(p);
-    using MemFreeFn = void (*)(void*);
-
-    *v = VtLayoutDescription();                                // 1800d3a26
-
-    using ArrayDtorFn = void* (*)(void*);
-    RtAddr<ArrayDtorFn>(0x180043a00ull)(p + 0x68);             // 1800d3a34
-
-    *v = VtElementDescription();                               // 1800d3a3a
-
-    char*& text = *reinterpret_cast<char**>(p + 0x60);
-    if (text != nullptr) {                                     // 1800d3a48
-        --*reinterpret_cast<int32_t*>(text - 4);
-        if (*reinterpret_cast<int32_t*>(text - 4) == 0) {
-            text = text - 8;
-            RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(text);
-        } else {
-            text = nullptr;                                    // 1800d3a66
-        }
-    }
-
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(p);   // 1800d3a76 JMP
-}
 
 // ============================================================================
 // The entry-array serializer, retail 0x180043f50 — UNEXPORTED, address-only.
+// Not a member: it is the `Array<Entry>` element serializer, not a
+// LayoutDescription method.
 // ============================================================================
 // `void SerializeEntries(Serializer* ser, int count, Entry* data)`
 // RCX = the {stream, readerWriter} PAIR, EDX = count, R8 = the elements.
@@ -224,47 +209,74 @@ extern "C" void RtUi_LayoutDescription_Dtor(void* selfv) {
 // hoisted, and the body returns immediately when count <= 0 (`TEST EDX,EDX;
 // JLE` is the first instruction, before the prologue).
 extern "C" void RtUi_LayoutDescription_SerializeEntries(void* serv, int32_t count,
-                                                        void* datav) {
+                                                        UI::LayoutDescription::Entry* e) {
     if (count <= 0) return;                                    // 180043f50
-    Serializer* ser  = static_cast<Serializer*>(serv);
-    uint8_t*    e    = static_cast<uint8_t*>(datav);
+    Serializer* ser = static_cast<Serializer*>(serv);
 
     using FieldSerFn = void (*)(void* field, Serializer* ser);
     using ScalarFn   = void (*)(void* rw, void* value, const char* name);
 
-    for (int32_t i = 0; i < count; ++i, e += 0x38) {
-        RtAddr<FieldSerFn>(0x180038f90ull)(e + 0x00, ser);     // 180043f77
-        RtAddr<FieldSerFn>(0x1800c9930ull)(e + 0x08, ser);     // 180043f83
-        RtAddr<FieldSerFn>(0x1800c9930ull)(e + 0x10, ser);     // 180043f8e
-        RtAddr<FieldSerFn>(0x1800c9930ull)(e + 0x18, ser);     // 180043f9a
+    for (int32_t i = 0; i < count; ++i, ++e) {
+        RtAddr<FieldSerFn>(0x180038f90ull)(&e->desc, ser);         // 180043f77
+        RtAddr<FieldSerFn>(0x1800c9930ull)(&e->name, ser);         // 180043f83
+        RtAddr<FieldSerFn>(0x1800c9930ull)(&e->relativeToX, ser);  // 180043f8e
+        RtAddr<FieldSerFn>(0x1800c9930ull)(&e->relativeToY, ser);  // 180043f9a
 
         void** rvt = VTableOf(ser->readerWriter);              // re-read each field
         reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(
-            ser->readerWriter, e + 0x20, nullptr);
+            ser->readerWriter, &e->horizontal, nullptr);
         rvt = VTableOf(ser->readerWriter);
         reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarUInt / 8])(
-            ser->readerWriter, e + 0x24, nullptr);
+            ser->readerWriter, &e->vertical, nullptr);
         rvt = VTableOf(ser->readerWriter);
         reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(
-            ser->readerWriter, e + 0x28, nullptr);
+            ser->readerWriter, &e->offsetX, nullptr);
         rvt = VTableOf(ser->readerWriter);
         reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(
-            ser->readerWriter, e + 0x2c, nullptr);
+            ser->readerWriter, &e->offsetY, nullptr);
         rvt = VTableOf(ser->readerWriter);
         reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarBool / 8])(
-            ser->readerWriter, e + 0x30, nullptr);
+            ser->readerWriter, &e->force, nullptr);
     }
 }
 
 // ============================================================================
+// The member bodies (ENDGAME B.3.6 block C4)
+// ============================================================================
+namespace UI {
+
+uint32_t LayoutDescription::Type() const {
+    const uint8_t* ti = LayoutDescriptionTypeInfo();
+    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
+}
+const char* LayoutDescription::TypeName() const {
+    const uint8_t* ti = LayoutDescriptionTypeInfo();
+    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
+}
+int32_t LayoutDescription::GetFileVersion() const { return 0x304; }
+
+// 0x180043060 — the null test stays in the door; the ctor is INLINED.
+Object::External* LayoutDescription::Construct() {
+    ConstructBody(this);
+    return this;                                               // 1800430ea
+}
+// 0x180042fc0 — slot 0 (VIRTUAL, the minted row) with flag 0, then the
+// inlined ctor.
+Object::External* LayoutDescription::Reconstruct() {
+    DeletingDtor(0);                                           // 180042fd7
+    ConstructBody(this);
+    return this;                                               // 180043052
+}
+// 0x180043100
+void LayoutDescription::Destruct() { DeletingDtor(0); }
+
+// ============================================================================
 // ?Serialize@LayoutDescription@UI@@UEAA_NAEAVStream@IO@@@Z   0x1800d3940
 // ============================================================================
-extern "C" bool RtUi_LayoutDescription_Serialize(void* selfv, void* streamv) {
-    uint8_t* p      = reinterpret_cast<uint8_t*>(selfv);
-    Stream*  stream = static_cast<Stream*>(streamv);
+bool LayoutDescription::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
 
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(p, stream);              // 1800d395a
+    UI::ElementDescription::Serialize(stream);                 // 1800d395a (qualified)
 
     Serializer ser = { stream, nullptr };
 
@@ -278,17 +290,16 @@ extern "C" bool RtUi_LayoutDescription_Serialize(void* selfv, void* streamv) {
     using ScalarFn = void (*)(void* rw, void* value, const char* name);
     void** rvt = VTableOf(rw);
 
-    int32_t n = *reinterpret_cast<int32_t*>(p + 0x70);         // 1800d398f
+    int32_t n = _entries._size;                                // 1800d398f
     reinterpret_cast<ScalarFn>(rvt[rt::io::rw_vtbl::kScalarInt / 8])(rw, &n, nullptr);
 
     if (ser.stream->mode == 0) {                               // 1800d39b1 (re-read)
         using SetSizeFn = void (*)(void* array, int n);
-        RtAddr<SetSizeFn>(0x180043d80ull)(p + 0x68, n);        // 1800d39bf
+        RtAddr<SetSizeFn>(0x180043d80ull)(&_entries, n);       // 1800d39bf
     }
 
     using EntriesSerFn = void (*)(Serializer* ser, int32_t count, void* data);
-    RtAddr<EntriesSerFn>(0x180043f50ull)(&ser, n,
-                                         *reinterpret_cast<void**>(p + 0x68));  // 1800d39d1
+    RtAddr<EntriesSerFn>(0x180043f50ull)(&ser, n, _entries._data);   // 1800d39d1
 
     if (rw != nullptr) {                                       // 1800d39df
         using DeleteFn = void (*)(void* rw, int flag);
@@ -308,15 +319,15 @@ extern "C" bool RtUi_LayoutDescription_Serialize(void* selfv, void* streamv) {
 //
 // *** THIS BODY IS A DEPENDENCY RESOLVER, AND THAT IS WHY IT IS SHAPED LIKE
 //     THIS. *** Every entry may name up to two OTHER entries it is positioned
-// relative to (the Strings at +0x08 and +0x10; the entry's own name is at
-// +0x18). An entry can only be instantiated once the entries it names already
-// have a slot in the element's info array, so the body runs:
+// relative to (`relativeToX` +0x10 and `relativeToY` +0x18; the entry's own
+// name is `name`, +0x08). An entry can only be instantiated once the entries it
+// names already have a record in the element, so the body runs:
 //
 //   `order` = Array<uint32> of one slot per entry, all initialised to -1
 //             (0x180023830, the three-argument fill form == kSpec_Fill4)
 //
-//   PASS 1 — every entry with NO dependency (both relative fields zero, or both
-//            name Strings empty) is placed immediately, in index order.
+//   PASS 1 — every entry with NO dependency (both gates zero, or both
+//            relative-name Strings empty) is placed immediately, in index order.
 //
 //   PASS 2 — repeat over all still-unplaced entries; an entry is placed when
 //            BOTH of its named dependencies resolve to an already-placed entry
@@ -328,116 +339,99 @@ extern "C" bool RtUi_LayoutDescription_Serialize(void* selfv, void* streamv) {
 // drawing wrong.
 //
 // `order[i]` doubles as the placed flag (-1 == not placed) and as the VALUE
-// stored into the resolved entry's info record: it receives the element's
-// current info count at the moment the entry is placed.
+// stored into the resolved entry's record: it receives the element's current
+// record count at the moment the entry is placed.
 //
-// THE LOOKUPS COMPARE STRINGS AGAINST EVERY *PLACED* ENTRY'S OWN NAME (+0x08 of
-// the entry record, i.e. the FIRST of the three Strings) and skip the entry
-// being resolved (`uVar19 != uVar17`). The sentinel handling is layered:
-//   -1  the field named nothing (its int at +0x20 / +0x24 is zero, or the name
+// THE LOOKUPS COMPARE STRINGS AGAINST EVERY *PLACED* ENTRY'S OWN NAME (`name`,
+// +0x08) and skip the entry being resolved (`uVar19 != uVar17`). The sentinel
+// handling is layered:
+//   -1  the field named nothing (its gate at +0x20 / +0x24 is zero, or the name
 //       String is empty)   -> not a blocker
 //   -2  the field named something that is not placed yet
 //       -> `-2 < x` is the test that lets -1 through and stops -2, which is why
 //          both sentinels exist and why they are not interchangeable.
-extern "C" void** RtUi_LayoutDescription_CreateInstance(const void* selfv, void** ret,
-                                                        const void* dialog) {
-    const uint8_t* self = reinterpret_cast<const uint8_t*>(selfv);
-
+Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
+        Object::InternalPtr<Element>* ret, const Dialog* dialog) const {
     using MemAllocFn = void* (*)(uint64_t size, int align);
     void* raw = RtAddr<MemAllocFn>(0x1800c7a50ull)(0xd0, 8);   // 1800d33ee (inlined)
 
-    uint8_t* elem = nullptr;
+    LayoutElement* elem = nullptr;
     if (raw != nullptr) {                                      // 1800d341c
         using ElementCtorFn = void* (*)(void*);
         RtAddr<ElementCtorFn>(0x180115e50ull)(raw);            // 1800d3421 ??0Element
-        uint8_t* e = static_cast<uint8_t*>(raw);
-        *reinterpret_cast<void**>(e) = VtLayoutElement();      // 1800d3427
-        *reinterpret_cast<uint64_t*>(e + 0xc0) = 0;            // 1800d3434
-        *reinterpret_cast<uint64_t*>(e + 0xc8) = 0;            // 1800d343b
-        elem = e;
+        *reinterpret_cast<void**>(raw) = VtLayoutElement();    // 1800d3427
+        elem = reinterpret_cast<LayoutElement*>(raw);          // B.3.6 bridge
+        elem->_childRecords._data     = nullptr;               // 1800d3434
+        elem->_childRecords._size     = 0;                     // 1800d343b (one qword)
+        elem->_childRecords._capacity = 0;
     }
 
     void* slot = elem;                                         // 1800d344e
     using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, &slot);   // 1800d3459
+    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 1800d3459
 
     // The order table: one uint32 per entry, all -1.
     struct { int32_t* data; int32_t size; int32_t capacity; } order = { nullptr, 0, 0 };
     {
         const int32_t minusOne = -1;                           // 1800d346a
         using FillSetSizeFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<FillSetSizeFn>(0x180023830ull)(
-            &order, *reinterpret_cast<const int32_t*>(self + 0x70), &minusOne);  // 1800d347d
+        RtAddr<FillSetSizeFn>(0x180023830ull)(&order, _entries._size, &minusOne);  // 1800d347d
     }
 
-    const uint8_t* const entriesBase = *reinterpret_cast<const uint8_t* const*>(self + 0x68);
+    const Entry* const entriesBase = _entries._data;
     int32_t placed = 0;                                        // [RBP+0x7f]
 
     // ---- one entry's placement, shared by both passes ----------------------
     // (0x1800d34e9..0x1800d359f and 0x1800d37cb..0x1800d3883 are the same
     // sequence with a different record source; written once.)
-    auto place = [&](int32_t index, const uint8_t* entry, int32_t relA, int32_t relB) {
-        order.data[index] = *reinterpret_cast<const int32_t*>(elem + 0xc8);  // 1800d34e9
-        ++placed;                                                            // 1800d34f4
+    auto place = [&](int32_t index, const Entry* entry, int32_t relA, int32_t relB) {
+        order.data[index] = elem->_childRecords._size;          // 1800d34e9
+        ++placed;                                              // 1800d34f4
 
-        void* childDesc =
-            *reinterpret_cast<void* const*>(entriesBase + index * 0x38);     // 1800d3500
+        void* childDesc = entriesBase[index].desc;             // 1800d3500
         using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);
         void** made = RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, &slot, childDesc);
 
-        uint8_t* child = *reinterpret_cast<uint8_t**>(made);   // 1800d3514
-        if (child != nullptr)
-            *reinterpret_cast<void**>(child + 0x98) = elem;    // 1800d351c
+        Element* child = static_cast<Element*>(*made);         // 1800d3514
+        if (child != nullptr) child->_parent = elem;           // 1800d351c
 
         using PushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<PushFn>(0x180076900ull)(elem + 0xa0,
-                                       *reinterpret_cast<int32_t*>(elem + 0xa8) + 1,
-                                       made);                  // 1800d3533
+        RtAddr<PushFn>(0x180076900ull)(&elem->_children,
+                                       elem->_children.GetSize() + 1, made);   // 1800d3533
 
-        for (uint8_t* n = elem; n != nullptr;                   // 1800d3540..1800d3554
-             n = *reinterpret_cast<uint8_t**>(n + 0x98))
-            *reinterpret_cast<uint32_t*>(n + 0x34) |= UI::kElementFlagNeedsSizeCalc;
+        for (Element* n = elem; n != nullptr; n = n->_parent)  // 1800d3540..1800d3554
+            n->_flags |= kElementFlagNeedsSizeCalc;
 
-        // The 0x44-byte info record. RETAIL WRITES ONLY ITS FIRST 0x24 BYTES
+        // The 0x44-byte record. RETAIL WRITES ONLY ITS FIRST 0x24 BYTES
         // (0x1800d3568..0x1800d3581) and the array assign copies all 0x44, so
-        // bytes 0x24..0x43 of every appended element are retail's stack
-        // residue. Reproduced with an uninitialised local: what is faithful is
-        // the WIDTH of the copy, not our residue.
-        uint8_t info[0x44];                                    // [RBP-0x49]
-        *reinterpret_cast<int32_t*>(info + 0x00) =
-            *reinterpret_cast<const int32_t*>(entry + 0x20);   // 1800d3568
-        *reinterpret_cast<int32_t*>(info + 0x04) =
-            *reinterpret_cast<const int32_t*>(entry + 0x24);   // 1800d356b
-        *reinterpret_cast<int32_t*>(info + 0x08) = relA;       // 1800d356e / 1800d385a
-        *reinterpret_cast<int32_t*>(info + 0x0c) = relB;       //            / 1800d385d
-        *reinterpret_cast<int32_t*>(info + 0x10) =
-            *reinterpret_cast<const int32_t*>(entry + 0x28);   // 1800d3576
-        *reinterpret_cast<int32_t*>(info + 0x14) =
-            *reinterpret_cast<const int32_t*>(entry + 0x2c);   // 1800d3579
-        info[0x18] = entry[0x30];                              // 1800d357d
-        *reinterpret_cast<uint64_t*>(info + 0x1c) = 0;         // 1800d3581  UNALIGNED QWORD
+        // bytes 0x24..0x43 of every appended record are retail's stack residue
+        // (as are +0x19..+0x1b). Reproduced with an uninitialised local: what is
+        // faithful is the WIDTH of the copy, not our residue.
+        LayoutElement::ChildRecord info;                       // [RBP-0x49]
+        info.alignX  = entry->horizontal;                      // 1800d3568
+        info.alignY  = entry->vertical;                        // 1800d356b
+        info.refX    = relA;                                   // 1800d356e / 1800d385a
+        info.refY    = relB;                                   //            / 1800d385d
+        info.offsetX = entry->offsetX;                         // 1800d3576
+        info.offsetY = entry->offsetY;                         // 1800d3579
+        info.force   = entry->force;                           // 1800d357d
+        const uint64_t zero = 0;
+        __builtin_memcpy(&info.sizeX, &zero, sizeof zero);     // 1800d3581  UNALIGNED QWORD
 
         using InfoPushFn = void (*)(void* array, int n, const void* fill);
-        RtAddr<InfoPushFn>(0x180043b40ull)(elem + 0xc0,
-                                           *reinterpret_cast<int32_t*>(elem + 0xc8) + 1,
-                                           info);              // 1800d359a
+        RtAddr<InfoPushFn>(0x180043b40ull)(&elem->_childRecords,
+                                           elem->_childRecords._size + 1,
+                                           &info);             // 1800d359a
     };
 
     // ---- PASS 1: the entries that depend on nothing ------------------------
     {
-        const int32_t count = *reinterpret_cast<const int32_t*>(self + 0x70);
+        const int32_t count = _entries._size;
         for (int32_t i = 0; i < count; ++i) {                  // 1800d348b / 1800d35b0
-            const uint8_t* e = *reinterpret_cast<const uint8_t* const*>(self + 0x68) +
-                               i * 0x38;                       // 1800d34b0
-            const int32_t relFlagA = *reinterpret_cast<const int32_t*>(e + 0x20);
-            const int32_t relFlagB = *reinterpret_cast<const int32_t*>(e + 0x24);
-            const char* nameA = *reinterpret_cast<const char* const*>(e + 0x10);
-            const char* nameB = *reinterpret_cast<const char* const*>(e + 0x18);
+            const Entry* e = _entries._data + i;               // 1800d34b0
 
-            const bool noFlags = (relFlagA == 0 && relFlagB == 0);            // 1800d34b7
-            const bool noNames =
-                (nameA == nullptr || *reinterpret_cast<const int32_t*>(nameA - 8) == 0) &&
-                (nameB == nullptr || *reinterpret_cast<const int32_t*>(nameB - 8) == 0);
+            const bool noFlags = (e->horizontal == 0 && e->vertical == 0);    // 1800d34b7
+            const bool noNames = NamesNothing(e->relativeToX) && NamesNothing(e->relativeToY);
             if (!(noFlags || noNames)) continue;               // 1800d35a2
 
             // -1, -1: this entry is positioned relative to nothing.
@@ -447,30 +441,25 @@ extern "C" void** RtUi_LayoutDescription_CreateInstance(const void* selfv, void*
 
     // ---- PASS 2: repeat until everything is placed -------------------------
     // NO PROGRESS CHECK — see the banner.
-    while (placed < *reinterpret_cast<const int32_t*>(self + 0x70)) {   // 1800d35c5 / 1800d38be
-        const int32_t count = *reinterpret_cast<const int32_t*>(self + 0x70);
+    while (placed < _entries._size) {                          // 1800d35c5 / 1800d38be
+        const int32_t count = _entries._size;
         for (int32_t i = 0; i < count; ++i) {                  // 1800d35d7 / 1800d38ad
             if (order.data[i] >= 0) continue;                  // 1800d35f4  already placed
 
-            const uint8_t* const entries =
-                *reinterpret_cast<const uint8_t* const*>(self + 0x68);
-            const uint8_t* e = entries + i * 0x38;
+            const Entry* const entries = _entries._data;
+            const Entry* e = entries + i;
 
             // --- the FIRST named dependency -------------------------------
             int32_t relA = -2;                                 // 1800d3603
             {
-                const char* want = *reinterpret_cast<const char* const*>(e + 0x10);
-                if (*reinterpret_cast<const int32_t*>(e + 0x20) == 0 ||
-                    want == nullptr ||
-                    *reinterpret_cast<const int32_t*>(want - 8) == 0) {
+                const char* want = e->relativeToX;
+                if (e->horizontal == 0 || NamesNothing(want)) {
                     relA = -1;                                 // 1800d36d3  names nothing
                 } else {
                     for (int32_t j = 0; j < count; ++j) {      // 1800d3650 / 1800d36c3
                         if (order.data[j] < 0) continue;       // not placed yet
                         if (j == i) continue;                  // 1800d3657
-                        const char* have =
-                            *reinterpret_cast<const char* const*>(entries + j * 0x38 + 0x08);
-                        if (StringEquals(have, want)) {        // 1800d366d..1800d36b8
+                        if (StringEquals(entries[j].name, want)) {   // 1800d366d..1800d36b8
                             relA = order.data[j];              // 1800d36ca
                             break;
                         }
@@ -481,10 +470,8 @@ extern "C" void** RtUi_LayoutDescription_CreateInstance(const void* selfv, void*
             // --- the SECOND named dependency ------------------------------
             int32_t relB;
             {
-                const char* want = *reinterpret_cast<const char* const*>(e + 0x18);
-                if (*reinterpret_cast<const int32_t*>(e + 0x24) == 0 ||
-                    want == nullptr ||
-                    *reinterpret_cast<const int32_t*>(want - 8) == 0) {
+                const char* want = e->relativeToY;
+                if (e->vertical == 0 || NamesNothing(want)) {
                     relB = -1;                                 // 1800d37a6  names nothing
                 } else {
                     relB = -2;                                 // 1800d37af (the local's
@@ -492,9 +479,7 @@ extern "C" void** RtUi_LayoutDescription_CreateInstance(const void* selfv, void*
                     for (int32_t j = 0; j < count; ++j) {      // 1800d3720 / 1800d3795
                         if (order.data[j] < 0) continue;
                         if (j == i) continue;                  // 1800d3727
-                        const char* have =
-                            *reinterpret_cast<const char* const*>(entries + j * 0x38 + 0x08);
-                        if (StringEquals(have, want)) {        // 1800d373d..1800d3788
+                        if (StringEquals(entries[j].name, want)) {   // 1800d373d..1800d3788
                             relB = order.data[j];              // 1800d379c
                             break;
                         }
@@ -510,20 +495,88 @@ extern "C" void** RtUi_LayoutDescription_CreateInstance(const void* selfv, void*
         }
     }
 
-    *ret = elem;                                               // 1800d38cf
+    *reinterpret_cast<void**>(ret) = elem;                     // 1800d38cf
 
     // The order table's buffer is freed through MemoryAllocator::Free under the
     // allocator's own critical section (0x1800d38d7..0x1800d3906), the same
     // sequence ?MemFree@MemoryAllocator@System@@ is.
-    if (order.data != nullptr) {                               // 1800d38d2
-        using MemFreeFn = void (*)(void*);
-        RT_EXPORT_ONCE(MemFreeFn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(order.data);
-    }
+    if (order.data != nullptr) MemFree()(order.data);          // 1800d38d2
     order.data = nullptr;                                      // 1800d390c
     order.size = 0;                                            // 1800d3910
     order.capacity = 0;
 
     return ret;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// The DOORS — registered names and addresses unchanged, each a one-line
+// QUALIFIED delegation onto the member above.
+// ============================================================================
+using UI::LayoutDescription;
+
+extern "C" uint32_t RtUi_LayoutDescription_Type(const LayoutDescription* self) {
+    return self->UI::LayoutDescription::Type();
+}
+extern "C" const char* RtUi_LayoutDescription_TypeName(const LayoutDescription* self) {
+    return self->UI::LayoutDescription::TypeName();
+}
+extern "C" int32_t RtUi_LayoutDescription_GetFileVersion(const LayoutDescription* self) {
+    return self->UI::LayoutDescription::GetFileVersion();
+}
+extern "C" void* RtUi_LayoutDescription_Construct(LayoutDescription* self) {
+    if (self == nullptr) return nullptr;                       // 180043071
+    return self->UI::LayoutDescription::Construct();
+}
+extern "C" void* RtUi_LayoutDescription_Reconstruct(LayoutDescription* self) {
+    return self->UI::LayoutDescription::Reconstruct();
+}
+extern "C" void RtUi_LayoutDescription_Destruct(LayoutDescription* self) {
+    self->UI::LayoutDescription::Destruct();
+}
+extern "C" bool RtUi_LayoutDescription_Serialize(LayoutDescription* self, void* stream) {
+    return self->UI::LayoutDescription::Serialize(stream);
+}
+// RDX is the caller's slot; the member writes it and hands it back (B6-2).
+extern "C" void** RtUi_LayoutDescription_CreateInstance(const LayoutDescription* self,
+                                                        void** ret, const void* dialog) {
+    return reinterpret_cast<void**>(self->UI::LayoutDescription::CreateInstance(
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(ret),        // B.3.6 bridge
+        static_cast<const UI::Dialog*>(dialog)));
+}
+
+// ============================================================================
+// ??1LayoutDescription@UI@@UEAA@XZ   0x1800d3a10 — a DOOR (B4b-2)
+// ============================================================================
+// Restamp, destroy the entry Array through 0x180043a00 — the variant that DOES
+// visit the elements (three String releases each) — then the base's _textName
+// at +0x60 under the base vtable, then tail JMP.
+extern "C" void RtUi_LayoutDescription_Dtor(void* selfv) {
+    LayoutDescription* self = reinterpret_cast<LayoutDescription*>(selfv);   // B.3.6 bridge
+    void** v = reinterpret_cast<void**>(selfv);
+
+    *v = VtLayoutDescription();                                // 1800d3a26
+
+    using ArrayDtorFn = void* (*)(void*);
+    RtAddr<ArrayDtorFn>(0x180043a00ull)(&self->_entries);      // 1800d3a34
+
+    *v = VtElementDescription();                               // 1800d3a3a
+
+    char*& text = self->_textName;
+    if (text != nullptr) {                                     // 1800d3a48
+        --*reinterpret_cast<int32_t*>(text - 4);
+        if (*reinterpret_cast<int32_t*>(text - 4) == 0) {
+            text = text - 8;
+            MemFree()(text);
+        } else {
+            text = nullptr;                                    // 1800d3a66
+        }
+    }
+
+    using ExtDtorFn = void (*)(void*);
+    reinterpret_cast<ExtDtorFn>(AtomicExport(
+        g_externalDtor, "??1External@Object@@UEAA@XZ"))(selfv);   // 1800d3a76 JMP
 }
 
 int RtUiLayoutDescriptionRegister() {
