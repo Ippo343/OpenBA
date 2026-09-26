@@ -39,6 +39,7 @@
 #include "Work/LocationWork.h"
 #include "Work/MarketWork.h"
 #include "Work/PastureWork.h"
+#include "Work/Pickup.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -266,6 +267,13 @@ UNIT_TEST(wrk_leaf_pasturework) {
     WRK_LEAF_SHAPE(PastureWork, AutoPickupWork, 0x58);
     CHECK_EQ(offsetof(PastureWork, _field48), (size_t)0x48);
     CHECK_EQ(offsetof(PastureWork, _field50), (size_t)0x50);
+}
+
+UNIT_TEST(wrk_leaf_pickup) {
+    WRK_LEAF_SHAPE(Pickup, Work, 0x60);
+    CHECK_EQ(offsetof(Pickup, status), (size_t)0x48);
+    CHECK_EQ(offsetof(Pickup, citizenIBP), (size_t)0x50);
+    CHECK_EQ(offsetof(Pickup, candidateList), (size_t)0x58);
 }
 
 // ===========================================================================

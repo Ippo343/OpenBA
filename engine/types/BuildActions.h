@@ -19,6 +19,7 @@
 #include "Work/ClearArea.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 #include "Work/ConsumeProduce.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 #include "Work/GatherRawMaterials.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
+#include "Work/Pickup.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 
 // BuildRoad — the real class code/Game/Work/BuildRoad.h (ENDGAME B.3.8).
 // BuildStructure — the real class code/Game/Work/BuildStructure.h (ENDGAME B.3.8).
@@ -155,35 +156,4 @@ static_assert(offsetof(PlantOrchard, field_58) == 0x58, "");
 static_assert(offsetof(PlantOrchard, field_60) == 0x60, "");
 static_assert(offsetof(PlantOrchard, field_68) == 0x68, "");
 
-// ============================================================
-// Pickup — item pickup work. Size = 0x60.
-// Decompiled from: Pickup_Factory (0x14002bfc0) -> Pickup_Ctor
-// Inherits: Object::Internal -> Work (0x48) -> Pickup
-// ============================================================
-namespace PickupAddr {
-    constexpr uintptr_t Factory = 0x14002bfc0;
-}
-
-struct Pickup {
-    // --- Work base (0x48 bytes) ---
-    void*    vtable;             // +0x00
-    uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr
-    void*    field_18;           // +0x18: entity ptr
-    int32_t  field_20;           // +0x20: -1
-    int32_t  field_24;           // +0x24: 0
-    int32_t  field_28;           // +0x28: -1
-    int32_t  field_2c;           // +0x2C: 0
-    void*    field_30;           // +0x30: zeroed
-    void*    field_38;           // +0x38: zeroed
-    int32_t  field_40;           // +0x40: 0
-    uint8_t  _pad44[4];          // +0x44: padding
-
-    // --- Pickup fields ---
-    void*    field_48;           // +0x48: zeroed
-    void*    field_50;           // +0x50: zeroed
-    void*    field_58;           // +0x58: zeroed
-};
-
-static_assert(sizeof(Pickup) == 0x60, "Pickup size mismatch");
-static_assert(offsetof(Pickup, vtable) == 0x00, "");
+// Pickup — the real class code/Game/Work/Pickup.h (ENDGAME B.3.8).
