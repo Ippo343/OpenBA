@@ -53,6 +53,7 @@
 // not pinned, so no `ArraySpec` row can honestly be written for it yet. Slab
 // chains, free lists, node chains, the cell BST and the `MemFree` with no
 // header stores (a6720's [thread+0x158]) are not arrays and are untouched.
+#include "Game/PathfinderThread.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "collection/Collection.h"
@@ -310,15 +311,14 @@ extern "C" void GameDtor_SubObjDtor_a8570(int64_t param_1) {
 //     Thread::~Thread(thread)                         (tail-call)
 // 1:1 port of BuildStructure_impl_6720 (FUN_1400a6720).
 //
-// NOTE: writing &PTR_FUN_14015ef18 into [thread] stores an exe .rdata address. Nothing
-// reads it before the Thread/CS dtors run (they don't touch +0x00), so it is a faithful
-// but inert store in standalone.
+// ENDGAME B.3.8 LOOP: the restamp stores PathfinderThread's table (0x14015ef18 is
+// that class). Nothing reads it before the Thread/CS dtors run (they don't touch
+// +0x00); it was a null store while 0x14015ef18 was unregistered.
 // ============================================================================
 extern "C" void GameDtor_ThreadDtor_a6720(int64_t thread) {
     EnsureFns();
-    // [thread] = &PTR_FUN_14015ef18 (exe .rdata vtable pointer).
-    *reinterpret_cast<uintptr_t*>(thread) =
-        static_cast<uintptr_t>(ResolveAddr(Module::Exe, 0x14015ef18));
+    // [thread] = &PTR_FUN_14015ef18: PathfinderThread's table.
+    *reinterpret_cast<const void**>(thread) = PathfinderThread::Vtable();
 
     GameDtor_FreeArray18_1dac0(reinterpret_cast<int64_t*>(thread + 0x160));
 
