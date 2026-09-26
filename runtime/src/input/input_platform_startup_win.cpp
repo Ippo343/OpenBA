@@ -89,6 +89,7 @@
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/application/Application.h"
 #include "../../types/input/Input.h"
 
 // Declared locally rather than by including standalone/resolve.h, which drags
@@ -103,11 +104,11 @@ namespace {
 // `?_singleton@Configuration@Input@@0PEAV12@EA` @ 0x1801fe768 and
 // `?_singleton@Application@1@0PEAV11@EA` @ 0x1801fc678, both through the
 // port-aware door.
-void** InputConfigSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Configuration@Input@@0PEAV12@EA");
+Input::Configuration** InputConfigSlot() {
+    return RT_DATA_SLOT(Input::Configuration**, "?_singleton@Configuration@Input@@0PEAV12@EA");
 }
-void** AppSingletonSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Application@1@0PEAV11@EA");
+Application::Application** AppSingletonSlot() {
+    return RT_DATA_SLOT(Application::Application**, "?_singleton@Application@1@0PEAV11@EA");
 }
 
 void ErrorSetText(const char* text, bool flag) {
@@ -116,27 +117,15 @@ void ErrorSetText(const char* text, bool flag) {
     if (fn) fn(text, flag);
 }
 
-// Reached by NAME so our own port of it is used. Before this lane the name was
-// unregistered (see the correction above) and this door went to the DLL.
-void InputPlatformUpdate(void* self) {
-    using Fn = void (*)(void*);
-    Fn fn = RT_EXPORT_ONCE(Fn, "?PlatformUpdate@Device@Input@@AEAAXXZ");
-    if (fn) fn(self);
-}
+// ENDGAME B.3.7 B5: two by-NAME doors of this file became member calls.
+// `?PlatformUpdate@Device@Input@@AEAAXXZ` (RT_EXPORT_ONCE, input_win.cpp's
+// body) is now `Device::PlatformUpdate()`, and
+// `?RegisterMessageCallback@Application@1@...` (RT_EXPORT_ONCE, block B1's
+// message_callbacks.cpp body) is now
+// `Application::Application::RegisterMessageCallback`. Both doors resolved to
+// the same bodies the member calls reach; their `if (fn)` miss arms, which
+// could only fire with the port unregistered, go with them.
 
-// Lane VID2's port, reached by name.
-void RegisterMessageCallback(void* app, unsigned msg,
-                             int (*cb)(void*, unsigned, uint64_t, int64_t)) {
-    using Fn = void (*)(void*, unsigned, int (*)(void*, unsigned, uint64_t, int64_t));
-    Fn fn = RT_EXPORT_ONCE(
-        Fn, "?RegisterMessageCallback@Application@1@QEAAXIP6AHPEAUHWND__@@I_K_J@Z@Z");
-    if (fn) fn(app, msg, cb);
-}
-
-inline uint8_t* Bytes(void* p) { return static_cast<uint8_t*>(p); }
-inline void** SlotAt(void* p, size_t off) {
-    return reinterpret_cast<void**>(Bytes(p) + off);
-}
 inline void* const* VtblOf(void* obj) {
     return *reinterpret_cast<void* const* const*>(obj);
 }
@@ -145,15 +134,12 @@ inline Fn Slot(void* obj, size_t byteOffset) {
     return reinterpret_cast<Fn>(VtblOf(obj)[byteOffset / sizeof(void*)]);
 }
 
-// The two `Input::Device` offsets Input.h does not already name.
-//   +0x11D8  IDirectInput8W*   (`LEA R9,[RCX+0x11d8]` at 0x1800e18a3)
-constexpr int kDirectInputComOffset = 0x11D8;
-// `Input::Configuration` +0x08 / +0x09, the only two bytes this body reads of
-// it: +0x09 is the "skip DirectInput entirely" flag (`CMP byte [RAX+9],0` at
-// 0x1800e1899 jumps past ALL device creation) and +0x08 seeds the device's
-// mouse-clipping flag at 0x1800e1ac4.
-constexpr int kCfgNoDirectInputOffset = 0x09;
-constexpr int kCfgMouseClippingOffset = 0x08;
+// `Input::Configuration` +0x08 / +0x09 are the only two bytes this body reads
+// of it: +0x09 (`_legacy`) is the "skip DirectInput entirely" flag
+// (`CMP byte [RAX+9],0` at 0x1800e1899 jumps past ALL device creation) and
+// +0x08 (`_mouseClipping`) seeds the device's mouse-clipping flag at
+// 0x1800e1ac4. The device's +0x11D8 is `Device::_directInput`
+// (`LEA R9,[RCX+0x11d8]` at 0x1800e18a3).
 
 // DISCL_FOREGROUND | DISCL_NONEXCLUSIVE. Retail passes the literal 6
 // (`MOV R8D,0x6` at 0x1800e1965 and 0x1800e1a21).
@@ -176,30 +162,32 @@ using AcquireFn = HRESULT (STDMETHODCALLTYPE*)(void*);
 // DefWindowProcW, which is why WM_SETFOCUS still reaches Application's own
 // focus bookkeeping.
 namespace {
-void** InputDeviceSlot() {
-    return RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
+Input::Device** InputDeviceSlot() {
+    return RT_DATA_SLOT(Input::Device**, "?_singleton@Device@Input@@0PEAV12@EA");
 }
 }  // namespace
+
+namespace Input {
 
 // 0x1800e1800: `_singleton->_hasFocus = 1; PlatformUpdate(_singleton); return 0;`
 // Note it re-loads the singleton for the second use (0x1800e1812) instead of
 // keeping the first in a register. Kept.
-extern "C" int RtInput_Device_OnFocusMessage(void*, unsigned, uint64_t, int64_t) {
-    void** slot = InputDeviceSlot();
-    void* dev = slot ? *slot : nullptr;
-    Bytes(dev)[RtInput::kHasFocusOffset] = 1;      // 0x1800e180b, unguarded in retail
-    void* dev2 = slot ? *slot : nullptr;           // 0x1800e1812, retail re-reads
-    InputPlatformUpdate(dev2);
+int Device::OnFocusMessage(void*, uint32_t, uint64_t, int64_t) {
+    Device** slot = InputDeviceSlot();
+    Device* dev = slot ? *slot : nullptr;
+    dev->_hasFocus = 1;                            // 0x1800e180b, unguarded in retail
+    Device* dev2 = slot ? *slot : nullptr;         // 0x1800e1812, retail re-reads
+    dev2->PlatformUpdate();
     return 0;
 }
 
 // 0x1800e17d0: the same, with 0.
-extern "C" int RtInput_Device_OnLostFocusMessage(void*, unsigned, uint64_t, int64_t) {
-    void** slot = InputDeviceSlot();
-    void* dev = slot ? *slot : nullptr;
-    Bytes(dev)[RtInput::kHasFocusOffset] = 0;      // 0x1800e17db
-    void* dev2 = slot ? *slot : nullptr;
-    InputPlatformUpdate(dev2);
+int Device::OnLostFocusMessage(void*, uint32_t, uint64_t, int64_t) {
+    Device** slot = InputDeviceSlot();
+    Device* dev = slot ? *slot : nullptr;
+    dev->_hasFocus = 0;                            // 0x1800e17db
+    Device* dev2 = slot ? *slot : nullptr;
+    dev2->PlatformUpdate();
     return 0;
 }
 
@@ -212,15 +200,16 @@ extern "C" int RtInput_Device_OnLostFocusMessage(void*, unsigned, uint64_t, int6
 // -1 only when that 16-bit value is negative. A 32-bit test here would read the
 // wParam's upper half as part of the sign and be wrong for any wParam with bit
 // 31 set.
-extern "C" int RtInput_Device_OnMouseWheelMessage(void*, unsigned,
-                                                  uint64_t wParam, int64_t) {
+int Device::OnMouseWheelMessage(void*, uint32_t, uint64_t wParam, int64_t) {
     const int16_t delta = static_cast<int16_t>((wParam >> 16) & 0xFFFF);
     const int32_t sign = (delta < 0) ? -1 : 1;
-    void** slot = InputDeviceSlot();
-    void* dev = slot ? *slot : nullptr;
-    *reinterpret_cast<int32_t*>(Bytes(dev) + RtInput::kWheelAccumOffset) = sign;
+    Device** slot = InputDeviceSlot();
+    Device* dev = slot ? *slot : nullptr;
+    dev->_wheelAccum = sign;
     return 0;
 }
+
+}  // namespace Input
 
 // ============================================================================
 // ?PlatformStartup@Device@Input@@AEAA_NXZ              retail 0x1800e1880
@@ -263,22 +252,23 @@ extern "C" int RtInput_Device_OnMouseWheelMessage(void*, unsigned,
 // one substitution that is not a transcription — the data formats — is measured
 // separately and honestly by RtLanePlatInputFormatProbe().
 // ============================================================================
-extern "C" bool RtInput_Device_PlatformStartup(void* self) {
+namespace Input {
 
-    void** cfgSlot = InputConfigSlot();
-    void* cfg = cfgSlot ? *cfgSlot : nullptr;
-    void** appSlot = AppSingletonSlot();
-    void* app = appSlot ? *appSlot : nullptr;
+bool Device::PlatformStartup() {
+
+    Configuration** cfgSlot = InputConfigSlot();
+    Configuration* cfg = cfgSlot ? *cfgSlot : nullptr;
+    Application::Application** appSlot = AppSingletonSlot();
+    Application::Application* app = appSlot ? *appSlot : nullptr;
 
     // 0x1800e1899 — unguarded in retail, and a null here is an upstream fault
     // to find rather than one to paper over.
-    const bool skipDirectInput = Bytes(cfg)[kCfgNoDirectInputOffset] != 0;
+    const bool skipDirectInput = cfg->_legacy != 0;
 
-    void** di8Slot  = SlotAt(self, kDirectInputComOffset);
-    void** kbdSlot  = SlotAt(self, RtInput::kKeyboardComOffset);
-    void** mouseSlot = SlotAt(self, RtInput::kMouseComOffset);
+    void** di8Slot   = &_directInput;
+    void** kbdSlot   = &_keyboardDevice;
+    void** mouseSlot = &_mouseDevice;
 
-    bool createdDevices = false;
     if (!skipDirectInput) {
         // See the header: retail's first argument is Runtime-x64.dll's own
         // HINSTANCE, captured in its DllMain at a global with no export name.
@@ -304,7 +294,7 @@ extern "C" bool RtInput_Device_PlatformStartup(void* self) {
             return false;
         }
         // 0x1800e195e: the window handle comes from Application::_singleton[0].
-        HWND hwnd = app ? *reinterpret_cast<HWND*>(app) : nullptr;
+        HWND hwnd = app ? static_cast<HWND>(app->_windowHandle) : nullptr;
         hr = Slot<SetCoopFn>(kbd, 0x68)(kbd, hwnd, kCoopLevel);  // 0x1800e1971
         if (hr != 0) {
             ErrorSetText("InputDevice: The application failed to set the keyboard device cooperative level.", false);
@@ -327,30 +317,29 @@ extern "C" bool RtInput_Device_PlatformStartup(void* self) {
             ErrorSetText("InputDevice: The application failed to set the mouse device cooperative level.", false);
             return false;
         }
-        createdDevices = true;
     }
 
     // ---- the tail at 0x1800e1a75, reached both ways --------------------------
-    RegisterMessageCallback(app, WM_SETFOCUS,   &RtInput_Device_OnFocusMessage);
-    RegisterMessageCallback(app, WM_KILLFOCUS,  &RtInput_Device_OnLostFocusMessage);
-    RegisterMessageCallback(app, WM_MOUSEWHEEL, &RtInput_Device_OnMouseWheelMessage);
+    app->RegisterMessageCallback(WM_SETFOCUS,   &Device::OnFocusMessage);
+    app->RegisterMessageCallback(WM_KILLFOCUS,  &Device::OnLostFocusMessage);
+    app->RegisterMessageCallback(WM_MOUSEWHEEL, &Device::OnMouseWheelMessage);
 
     // 0x1800e1abd — retail RE-READS the configuration singleton here.
-    void* cfg2 = cfgSlot ? *cfgSlot : nullptr;
-    Bytes(self)[RtInput::kMouseClippingOffset] = Bytes(cfg2)[kCfgMouseClippingOffset];
+    Configuration* cfg2 = cfgSlot ? *cfgSlot : nullptr;
+    _mouseClipping = static_cast<uint8_t>(cfg2->_mouseClipping);
 
-    InputPlatformUpdate(self);                                   // 0x1800e1ad1
+    PlatformUpdate();                                            // 0x1800e1ad1
 
     POINT p;
     GetCursorPos(&p);                                            // 0x1800e1adb
-    ScreenToClient(app ? *reinterpret_cast<HWND*>(app) : nullptr, &p);  // 0x1800e1af0
-    *reinterpret_cast<int32_t*>(Bytes(self) + RtInput::kLastCursorXOffset) = p.x;
-    *reinterpret_cast<int32_t*>(Bytes(self) + RtInput::kLastCursorYOffset) = p.y;
+    ScreenToClient(app ? static_cast<HWND>(app->_windowHandle) : nullptr, &p);  // 0x1800e1af0
+    _lastCursorX = p.x;
+    _lastCursorY = p.y;
 
     // 0x1800e1b0a — the THIRD read of the configuration singleton, and it is a
     // separate read in retail rather than the entry value reused.
-    void* cfg3 = cfgSlot ? *cfgSlot : nullptr;
-    if (Bytes(cfg3)[kCfgNoDirectInputOffset] == 0) {
+    Configuration* cfg3 = cfgSlot ? *cfgSlot : nullptr;
+    if (cfg3->_legacy == 0) {
         void* kbd = *kbdSlot;
         Slot<AcquireFn>(kbd, 0x38)(kbd);                         // 0x1800e1b21
         void* mouse = *mouseSlot;
@@ -358,6 +347,25 @@ extern "C" bool RtInput_Device_PlatformStartup(void* self) {
     }
 
     return true;                                                 // 0x1800e1b3b
+}
+
+}  // namespace Input
+
+// ============================================================================
+// The registered DOORS (ENDGAME B.3.7 B5): name and address, one QUALIFIED
+// call each.
+// ============================================================================
+extern "C" bool RtInput_Device_PlatformStartup(void* self) {
+    return reinterpret_cast<Input::Device*>(self)->Input::Device::PlatformStartup();
+}
+extern "C" int RtInput_Device_OnFocusMessage(void* hwnd, unsigned msg, uint64_t wp, int64_t lp) {
+    return Input::Device::OnFocusMessage(hwnd, msg, wp, lp);
+}
+extern "C" int RtInput_Device_OnLostFocusMessage(void* hwnd, unsigned msg, uint64_t wp, int64_t lp) {
+    return Input::Device::OnLostFocusMessage(hwnd, msg, wp, lp);
+}
+extern "C" int RtInput_Device_OnMouseWheelMessage(void* hwnd, unsigned msg, uint64_t wp, int64_t lp) {
+    return Input::Device::OnMouseWheelMessage(hwnd, msg, wp, lp);
 }
 
 // ============================================================================

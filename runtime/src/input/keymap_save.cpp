@@ -130,8 +130,8 @@
 #include "../collection/set_avl_e24.h"
 #include "../system/string.h"
 
-using RtInput::Binding;
-using RtInput::BindingNode;
+using Input::Binding;
+using Input::BindingNode;
 
 enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
 uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
@@ -230,13 +230,15 @@ void EmitSetting(void* persistence, const char* key, int value) {
 // 0x1800a7541 `MOV R15,[0x1801fc6b8]`), BEFORE the empty-tree test — so an
 // empty KeyMap still reads it. Faithful, and harmless.
 // ============================================================================
-void RtInput_KeyMap_Save(void* selfPtr) {
+namespace Input {
+
+void KeyMap::Save() {
 
     void** persistenceSlot = RT_DATA_SLOT(void**, "?_singleton@Persistence@IO@@0PEAV12@EA");
     void*  persistence = persistenceSlot ? *persistenceSlot : nullptr;
 
     // KeyMap::_root is at +0x08 (0x1800a7548 `MOV RBX,[RCX+8]`).
-    auto* root = *reinterpret_cast<BindingNode**>(static_cast<uint8_t*>(selfPtr) + 0x08);
+    BindingNode* root = _root;
 
     int written = 0;
     for (BindingNode* n = FirstNode(root); n != nullptr; n = NextNode(n)) {
@@ -267,6 +269,14 @@ void RtInput_KeyMap_Save(void* selfPtr) {
     // every line of this function and emits nothing, while `calls=` still reads
     // 1 — count what the body actually did, inside the body
     // (reference_probe_needs_an_effectiveness_control.md).
+    (void)written;
+}
+
+}  // namespace Input
+
+// The registered door (ENDGAME B.3.7 B5): name and address, one QUALIFIED call.
+void RtInput_KeyMap_Save(void* selfPtr) {
+    reinterpret_cast<Input::KeyMap*>(selfPtr)->Input::KeyMap::Save();
 }
 
 // ============================================================================
