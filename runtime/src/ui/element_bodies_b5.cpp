@@ -91,19 +91,42 @@
 // EditElement.h describe fields those classes own in their OWN right.
 //
 // PORTABILITY: no <windows.h>, per PLAN §4.1 decision 1.
+//
+// ENDGAME B.3 step 6, FRAGMENT PASS F1 (2026-09-25): every non-ctor body below
+// now lives in its class's MEMBER (TableElement::GetRowHeight/GetColumnWidth,
+// SliderElement::UpdateNumber, RibbonElement::AddItem, ListElement::AddItem/
+// DrawHighlight, ScrollElement::GetBarLayout, TextDescription's non-virtual
+// CreateInstance applier, LayoutElement::GetChildLayout, EditElement::
+// SelectCharacter) and reaches fields by name; each registered door is a
+// one-line QUALIFIED delegation. `??0TextElement` STAYS a door (B4b-2: no real
+// ctor on a polymorphic class). The ButtonDescription and NumberElement notes
+// above are history: that applier moved to buttondescription.cpp in block C1,
+// and the NumberElement ctor/CacheText live in numberelement.cpp.
 // ============================================================================
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
+#include "../../types/ui/EditElement.h"
+#include "../../types/ui/LayoutElement.h"
+#include "../../types/ui/ListElement.h"
+#include "../../types/ui/NumberElement.h"
+#include "../../types/ui/RibbonElement.h"
+#include "../../types/ui/ScrollElement.h"
 #include "../../types/ui/SliderElement.h"
+#include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../../types/ui/StringTable.h"
 #include "../../types/ui/TableElement.h"
-
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+#include "../../types/ui/TextDescription.h"
+#include "../../types/ui/TextElement.h"
+// B6-5 door caches (AtomicExport) and the ResolveAddr declaration this file
+// used to spell for itself.
+#include "element_common.h"
 
 namespace {
 
@@ -166,12 +189,18 @@ void SetNeedsSizeCalcChain(void* elem) {
 }
 
 // ---- the DLL singletons these bodies read ---------------------------------
+// RULE B6-5: member bodies read them, so the slot caches are namespace-scope
+// atomics (a miss is retried), not RT_DATA_SLOT's function-local statics.
+std::atomic<void*> g_videoDeviceSlot{nullptr};
+std::atomic<void*> g_inputDeviceSlot{nullptr};
 void* VideoDeviceSingleton() {            // 0x1801fe7a8
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Video@@0PEAV12@EA");
+    void** slot = static_cast<void**>(rtuielem::AtomicExport(
+        g_videoDeviceSlot, "?_singleton@Device@Video@@0PEAV12@EA"));
     return slot ? *slot : nullptr;
 }
 void* InputDeviceSingleton() {            // 0x1801fe770
-    void** slot = RT_DATA_SLOT(void**, "?_singleton@Device@Input@@0PEAV12@EA");
+    void** slot = static_cast<void**>(rtuielem::AtomicExport(
+        g_inputDeviceSlot, "?_singleton@Device@Input@@0PEAV12@EA"));
     return slot ? *slot : nullptr;
 }
 // 0x1801facb8 — the FIRST DWORD of `?_typeInfo@NumberElement@UI@@0VBaseTypeInfo
@@ -179,9 +208,12 @@ void* InputDeviceSingleton() {            // 0x1801fe770
 // `MOV EDX,dword ptr [0x1801facb8]`. Reading the whole BaseTypeInfo would be
 // wrong; `IsDerivedFrom` takes an ID, not a reference
 // (runtime/src/achievement/achievement_manager.cpp records the same fact).
+// RULE B6-5: SliderElement::UpdateNumber reads it, so the cache is a
+// namespace-scope atomic, not a function-local static.
+std::atomic<void*> g_numberElementTypeInfo{nullptr};
 uint32_t NumberElementTypeId() {
-    const uint8_t* ti = RT_DATA_SLOT(const uint8_t*,
-                                     "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A");
+    const uint8_t* ti = static_cast<const uint8_t*>(rtuielem::AtomicExport(
+        g_numberElementTypeInfo, "?_typeInfo@NumberElement@UI@@0VBaseTypeInfo@Object@@A"));
     if (!ti) return 0;
     uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
 }
@@ -192,38 +224,19 @@ void* CallElementCtor(void* self) {        // 0x180115e50, runtime/src/ui/elemen
     return RT_EXPORT_ONCE(ElementCtorFn, "??0Element@UI@@QEAA@XZ")(self);
 }
 
-using IsDerivedFromFn = bool (*)(const void*, uint32_t);
-bool IsDerivedFrom(const void* obj, uint32_t typeId) {   // 0x1800c0390, Wave 3
-    return RT_EXPORT_ONCE(IsDerivedFromFn, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z")(obj, typeId);
-}
-
-using GetIndexFromNameFn = int32_t (*)(const void* table, const void* keyString);
-int32_t StringTableGetIndexFromName(const void* table, const void* key) {   // 0x180002470
-    return RT_EXPORT_ONCE(GetIndexFromNameFn,
-                          "?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z")(table, key);
-}
+// `?IsDerivedFrom@Base@Object@@QEBA_NI@Z` (0x1800c0390) is `Object::Base::
+// IsDerivedFrom`, and `?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@
+// System@@@Z` (0x180002470) is `UI::StringTable::GetIndexFromName`
+// (sprite.cpp): both are called as members by the bodies below. The unused
+// `DialogCreateElement` forwarder (ButtonDescription's, which moved to
+// buttondescription.cpp in block C1) is gone.
 
 // `?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@
 // Object@@@Z` (0x180115ad0) — the shared "apply the description's Element-level
-// fields to the new element" pass. Ported and registered by
-// runtime/src/ui/dialog.cpp; TWO arguments, the InternalPtr arriving by
-// address. Not a hidden slot: it returns void.
-using DescApplyFn = void (*)(const void* desc, void** elemPtr);
-void ElementDescriptionApply(const void* desc, void** elemPtr) {
-    RT_EXPORT_ONCE(DescApplyFn,
-        "?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z")(
-            desc, elemPtr);
-}
-
-// `?CreateElement@Dialog@UI@@` (0x180112ed0) — RETURNS A CLASS BY VALUE, so
-// RDX is the hidden return slot and the description is the THIRD register.
-// Ported and registered by runtime/src/ui/dialog.cpp (Wave 9 lane UIC).
-using DialogCreateElementFn = void** (*)(const void* dialog, void** retSlot, const void* desc);
-void** DialogCreateElement(const void* dialog, void** retSlot, const void* desc) {
-    return RT_EXPORT_ONCE(DialogCreateElementFn,
-        "?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@Object@@"
-        "PEBVElementDescription@2@@Z")(dialog, retSlot, desc);
-}
+// fields to the new element" pass — is `UI::ElementDescription::
+// CreateInstance(InternalPtr<Element>*)` (dialog.cpp, fragment pass F2), the
+// InternalPtr arriving by address. TextDescription's applier below calls it
+// QUALIFIED: the leaf's own two CreateInstance overloads hide the base name.
 
 // The three `Collection::Array<T>::SetSize(n)`-then-fill-the-new-tail helpers
 // retail inlines a call to. All three are ported in
@@ -285,10 +298,9 @@ extern "C" void* RtUi_TextElement_Ctor(void* selfv) {
     SetI32 (p, 0xf4, 0);                                           // 18011ebe9
     SetPtr (p, 0xf8, nullptr);                                     // 18011ebef
 
-    // ?CacheText@TextElement@UI@@AEAAXXZ — PORTED, runtime/src/ui/
-    // textelement_cachetext.cpp, registered under this same name.
-    using CacheTextFn = void (*)(void*);
-    RT_EXPORT_ONCE(CacheTextFn, "?CacheText@TextElement@UI@@AEAAXXZ")(p);   // 18011ebf9
+    // ?CacheText@TextElement@UI@@AEAAXXZ — `UI::TextElement::CacheText`
+    // (runtime/src/ui/textelement_cachetext.cpp), a member call.
+    reinterpret_cast<UI::TextElement*>(p)->UI::TextElement::CacheText();   // 18011ebf9  B.3.6 bridge
 
     return p;                                                      // 18011ebff
 }
@@ -328,14 +340,13 @@ extern "C" void* RtUi_TextElement_Ctor(void* selfv) {
 // which is 0x20/8 = 4. It takes `this` and nothing else.
 namespace {
 
-using ComputeSizeFn = void (*)(void*);
-
-int32_t TablePaddedExtent(uint8_t* cell,
+int32_t TablePaddedExtent(UI::Element* cellElem,
                           size_t   extentOff, size_t nearPadOff, size_t farPadOff,
                           size_t   minOff,    uint32_t screenBit, size_t deviceOff) {
     // slot 4 first: the extent it reads below is what this call computes.
-    void** vt = *reinterpret_cast<void***>(cell);
-    reinterpret_cast<ComputeSizeFn>(vt[4])(cell);                  // 18011e0f8 / 18011e1fe
+    cellElem->ComputeSize();                                       // 18011e0f8 / 18011e1fe  VIRTUAL
+    // B.3.6 bridge: the axis selector picks the fields by offset.
+    uint8_t* cell = reinterpret_cast<uint8_t*>(cellElem);
 
     const uint32_t flags = (uint32_t)I32(cell, kElemFlags);        // 18011e0fe / 18011e204
     int32_t v = I32(cell, extentOff) + I32(cell, farPadOff) + I32(cell, nearPadOff);
@@ -362,16 +373,17 @@ int32_t TablePaddedExtent(uint8_t* cell,
 
 }  // namespace
 
-extern "C" int32_t RtUi_TableElement_GetRowHeight(void* selfv, int32_t row) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
+namespace UI {
+
+int32_t TableElement::GetRowHeight(int32_t row) {
     int32_t best = 0;                                              // EDI
 
-    for (int32_t i = 0; i < I32(self, UI::TableElementOffsets::kColCount); ++i) {
-        void* const* cells = static_cast<void* const*>(Ptr(self, kElemChildren));
-        const int32_t idx  = I32(self, UI::TableElementOffsets::kColCount) * row + i;
-        uint8_t* cell = static_cast<uint8_t*>(cells[idx]);         // 18011e0df
+    for (int32_t i = 0; i < _columnCount; ++i) {
+        Element* const* cells = _children._data;
+        const int32_t idx  = _columnCount * row + i;
+        Element* cell = cells[idx];                                // 18011e0df
         if (cell == nullptr) continue;                             // 18011e0e6
-        if ((I32(cell, kElemFlags) & (int32_t)UI::kElementFlagHidden) != 0) continue; // 18011e0f0
+        if ((cell->_flags & kElementFlagHidden) != 0) continue;   // 18011e0f0
 
         const int32_t h = TablePaddedExtent(cell, kElemLayoutH, kElemTopPad, kElemBotPad,
                                             kElemMinH, 0x10u, 0x08);
@@ -380,16 +392,15 @@ extern "C" int32_t RtUi_TableElement_GetRowHeight(void* selfv, int32_t row) {
     return best;
 }
 
-extern "C" int32_t RtUi_TableElement_GetColumnWidth(void* selfv, int32_t col) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
+int32_t TableElement::GetColumnWidth(int32_t column) {
     int32_t best = 0;
 
-    for (int32_t i = 0; i < I32(self, UI::TableElementOffsets::kRowCount); ++i) {
-        void* const* cells = static_cast<void* const*>(Ptr(self, kElemChildren));
-        const int32_t idx  = i * I32(self, UI::TableElementOffsets::kColCount) + col;
-        uint8_t* cell = static_cast<uint8_t*>(cells[idx]);         // 18011e1e5
+    for (int32_t i = 0; i < _rowCount; ++i) {
+        Element* const* cells = _children._data;
+        const int32_t idx  = i * _columnCount + column;
+        Element* cell = cells[idx];                                // 18011e1e5
         if (cell == nullptr) continue;                             // 18011e1ec
-        if ((I32(cell, kElemFlags) & (int32_t)UI::kElementFlagHidden) != 0) continue; // 18011e1f6
+        if ((cell->_flags & kElementFlagHidden) != 0) continue;   // 18011e1f6
 
         const int32_t w = TablePaddedExtent(cell, kElemLayoutW, kElemLeftPad, kElemRightPad,
                                             kElemMinW, 0x20u, 0x04);
@@ -397,6 +408,8 @@ extern "C" int32_t RtUi_TableElement_GetColumnWidth(void* selfv, int32_t col) {
     }
     return best;
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?UpdateNumber@SliderElement@UI@@AEAAXXZ                    retail 0x1800d6c20
@@ -418,28 +431,28 @@ extern "C" int32_t RtUi_TableElement_GetColumnWidth(void* selfv, int32_t col) {
 // This body proves SliderElement has state of its own at +0x128, which
 // runtime/types/ui/SliderElement.h previously (and honestly) said no ported
 // function had shown. That header is corrected in this same commit.
-extern "C" void RtUi_SliderElement_UpdateNumber(void* selfv) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
+namespace UI {
 
-    void* const* children = static_cast<void* const*>(Ptr(self, kElemChildren));
-    uint8_t* child = static_cast<uint8_t*>(*children);             // 1800d6c34  children[0]
-    if (child == nullptr) return;                                  // 1800d6c3a
+void SliderElement::UpdateNumber() {
+    Element* const* children = _children._data;
+    Element* first = *children;                                    // 1800d6c34  children[0]
+    if (first == nullptr) return;                                  // 1800d6c3a
 
-    if (!IsDerivedFrom(child, NumberElementTypeId())) return;      // 1800d6c45 / 4c
+    if (!first->IsDerivedFrom(NumberElementTypeId())) return;      // 1800d6c45 / 4c
+    NumberElement* child = static_cast<NumberElement*>(first);
     if (child == nullptr) return;                                  // 1800d6c51  retail's second test
 
-    const float value = *reinterpret_cast<const float*>(self + UI::SliderElementOffsets::kValue);
+    const float value = _value;                                    // +0x128
 
-    if (I32(child, 0xc8) == 0) {                                   // 1800d6c53  _mode
-        using SetValueIntFn = void (*)(void*, int32_t);
-        RT_EXPORT_ONCE(SetValueIntFn, "?SetValue@NumberElement@UI@@QEAAXH@Z")(
-            child, (int32_t)value);                                // 1800d6c5f/71  TAIL JMP
+    // THE OVERLOAD IS CHOSEN BY THE CHILD'S MODE: `QEAAXH@Z` / `QEAAXM@Z`.
+    if (child->_mode == 0) {                                       // 1800d6c53  _mode
+        child->SetValue(static_cast<int32_t>(value));              // 1800d6c5f/71  TAIL JMP
     } else {
-        using SetValueFloatFn = void (*)(void*, float);
-        RT_EXPORT_ONCE(SetValueFloatFn, "?SetValue@NumberElement@UI@@QEAAXM@Z")(
-            child, value);                                         // 1800d6c7e
+        child->SetValue(value);                                    // 1800d6c7e
     }
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?AddItem@RibbonElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z
@@ -459,25 +472,25 @@ extern "C" void RtUi_SliderElement_UpdateNumber(void* selfv) {
 // separate int32 zero is byte-for-byte the same call; the reuse is recorded
 // here rather than reproduced, because reproducing it would mean a
 // deliberately-aliased local for no observable difference.
-extern "C" void RtUi_RibbonElement_AddItem(void* selfv, void** itemPtr) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
+namespace UI {
 
-    void* item = *itemPtr;                                         // 1800448e6
+void RibbonElement::AddItem(Object::InternalPtr<Element>* itemPtr) {
+    Element* item = itemPtr->Get();                                // 1800448e6
     if (item != nullptr) {                                         // 1800448f4
-        SetPtr(item, kElemParent, self);                           // 1800448f6
+        item->_parent = this;                                      // 1800448f6
     }
 
-    uint8_t* children = self + kElemChildren;                      // 1800448fd
-    ArrayGrow8Z(children, I32(children, 0x08) + 1, &item);         // 18004490e
+    ArrayGrow8Z(&_children, _children._size + 1, &item);           // 18004490e
 
-    SetNeedsSizeCalcChain(self);                                   // 180044920
+    SetNeedsSizeCalcChain(this);                                   // 180044920
 
     const int32_t zero = 0;                                        // 180044942 (see banner)
-    uint8_t* states = self + 0xc8;                                 // 180044936
-    ArrayGrow4(states, I32(states, 0x08) + 1, &zero);              // 18004494b
+    ArrayGrow4(&_extentsData, _extentsCount + 1, &zero);           // 18004494b  (+0xc8)
 
-    SetNeedsSizeCalcChain(self);                                   // 180044950
+    SetNeedsSizeCalcChain(this);                                   // 180044950
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?AddItem@ListElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@PEAX@Z
@@ -492,18 +505,20 @@ extern "C" void RtUi_RibbonElement_AddItem(void* selfv, void** itemPtr) {
 //
 // The `InternalPtr` handed to the ribbon is a fresh stack copy, not the
 // caller's slot — retail builds it at [RSP+0x30] and passes its address.
-extern "C" void RtUi_ListElement_AddItem(void* selfv, void** itemPtr, void* userData) {
-    uint8_t* self = static_cast<uint8_t*>(selfv);
+namespace UI {
 
-    void* local = *itemPtr;                                        // 1800d44ba
-    void* ribbon = Ptr(self, 0xf0);                                // 1800d44c0
-    RtUi_RibbonElement_AddItem(ribbon, &local);                    // 1800d44d1
+void ListElement::AddItem(Object::InternalPtr<Element>* itemPtr, void* userData) {
+    Object::InternalPtr<Element> local = *itemPtr;                 // 1800d44ba
+    // `_ribbon` is the RibbonElement ListDescription::CreateInstance found by
+    // its type test (ListElement.h).
+    static_cast<RibbonElement*>(_ribbon)->AddItem(&local);         // 1800d44c0 / 1800d44d1
 
-    uint8_t* userArray = self + 0xe0;                              // 1800d44d6
-    ArrayGrow8(userArray, I32(userArray, 0x08) + 1, &userData);    // 1800d44e7
+    ArrayGrow8(&_userData, _userData._size + 1, &userData);        // 1800d44e7  (+0xe0)
 
-    SetNeedsSizeCalcChain(Ptr(self, 0xf0));                        // 1800d44ec, re-read
+    SetNeedsSizeCalcChain(_ribbon);                                // 1800d44ec, re-read
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?DrawHighlight@ListElement@UI@@QEBAXAEAVSpriteContext@2@HI@Z
@@ -537,22 +552,25 @@ extern "C" void RtUi_ListElement_AddItem(void* selfv, void** itemPtr, void* user
 //
 // The colour argument survives in R14D across all of it (`MOV R14D,R9D` at
 // 0x1800d3f94) because R9D is reused for the rectangle's top edge.
-extern "C" void RtUi_ListElement_DrawHighlight(const void* selfv, void* ctx,
-                                               int32_t index, uint32_t color) {
+namespace UI {
+
+void ListElement::DrawHighlight(SpriteContext& context, int32_t index,
+                                uint32_t color) const {
     if (index < 0) return;                                         // 1800d3f73  JS
 
-    const uint8_t* self   = static_cast<const uint8_t*>(selfv);
-    const uint8_t* ribbon = static_cast<const uint8_t*>(Ptr(self, 0xf0));
+    const RibbonElement* ribbonElem = static_cast<const RibbonElement*>(_ribbon);
+    // B.3.6 bridge: the Element-level layout reads below keep their offsets.
+    const uint8_t* ribbon = reinterpret_cast<const uint8_t*>(ribbonElem);
 
-    const int32_t  spacing = I32(ribbon, 0xc4);
-    const int32_t* sizes   = static_cast<const int32_t*>(Ptr(ribbon, 0xc8));
+    const int32_t  spacing = ribbonElem->_spacing;                 // +0xc4
+    const int32_t* sizes   = ribbonElem->_extentsData;             // +0xc8
 
     int32_t offset = 0;
     for (int32_t i = 0; i < index; ++i) {                          // 1800d3fe0 / 1800d4031
         offset += sizes[i] + spacing;
     }
 
-    const bool vertical = U8(ribbon, 0xc0) != 0;                   // 1800d4042
+    const bool vertical = ribbonElem->_vertical != 0;              // 1800d4042  (+0xc0)
     int32_t left   = I32(ribbon, kElemLeft);                       // 1800d4049
     int32_t top    = I32(ribbon, kElemTop);                        // 1800d404d
     int32_t right;
@@ -567,7 +585,7 @@ extern "C" void RtUi_ListElement_DrawHighlight(const void* selfv, void* ctx,
         right  = sizes[index] + left;                              // 1800d4070/79
     }
 
-    const uint8_t* clip = static_cast<const uint8_t*>(Ptr(self, 0xf8));
+    const uint8_t* clip = reinterpret_cast<const uint8_t*>(_clip);   // +0xf8  B.3.6 bridge
     const int32_t clipLeft   = I32(clip, kElemLeft);               // 1800d4083
     const int32_t clipRight  = I32(clip, kElemRight);              // 1800d4087
     const int32_t clipTop    = I32(clip, kElemTop);                // 1800d408a
@@ -591,16 +609,14 @@ extern "C" void RtUi_ListElement_DrawHighlight(const void* selfv, void* ctx,
         bottom = clipBottom;
     }
 
-    // ?AddSprite@SpriteContext@UI@@ (0x18011d3c0): (ctx, Sprite*, l, t, r, b,
-    // color). Reached by address through the registry-first resolver. This
-    // line used to say "NOT PORTED anywhere in the tree"; that was true when
-    // it was written and stopped being true in the same batch —
-    // runtime/src/ui/spritecontext_add.cpp ports and registers all three
-    // AddSprite overloads, so this call now lands on our body.
-    using AddSpriteFn = void (*)(void* ctx, const void* sprite,
-                                 int32_t l, int32_t t, int32_t r, int32_t b, uint32_t c);
-    RtAddr<AddSpriteFn>(0x18011d3c0ull)(ctx, self + 0xc0, left, top, right, bottom, color);
+    // ?AddSprite@SpriteContext@UI@@ (0x18011d3c0): the RECT overload
+    // (Sprite const&, l, t, r, b, color) — `UI::SpriteContext::AddSprite`
+    // (runtime/src/ui/spritecontext_add.cpp), called as that member. The
+    // sprite is `_highlight`, this+0xc0.
+    context.AddSprite(_highlight, left, top, right, bottom, color);
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?GetBarLayout@ScrollElement@UI@@AEBAXAEAH000@Z             retail 0x18011a2d0
@@ -638,10 +654,10 @@ extern "C" void RtUi_ListElement_DrawHighlight(const void* selfv, void* ctx,
 // A NEGATIVE sprite index contributes ZERO and does not index the array.
 namespace {
 
-int32_t ScrollSpriteExtent(const uint8_t* self, size_t sheetOff, size_t indexOff, bool vertical) {
-    const int32_t idx = I32(self, indexOff);
+int32_t ScrollSpriteExtent(const ::Sprite& sprite, bool vertical) {
+    const int32_t idx = sprite.spriteIndex;
     if (idx < 0) return 0;                                         // 18011a3a8 JNS / else 0
-    const void* sheet = Ptr(self, sheetOff);
+    const void* sheet = sprite.spriteSheet;
     const uint8_t* infos = static_cast<const uint8_t*>(Ptr(sheet, 0x20));
     // `SpriteInfo` lives at GLOBAL scope in runtime/types/ui/SpriteSheet.h, not
     // in namespace UI, and its sizeof is static_asserted there to be 0x38 —
@@ -652,40 +668,41 @@ int32_t ScrollSpriteExtent(const uint8_t* self, size_t sheetOff, size_t indexOff
 
 }  // namespace
 
-extern "C" void RtUi_ScrollElement_GetBarLayout(const void* selfv,
-                                                int32_t* left, int32_t* top,
-                                                int32_t* right, int32_t* bottom) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+namespace UI {
 
-    *left   = I32(self, kElemLeft);                                // 18011a2e1
-    *right  = I32(self, kElemRight);                               // 18011a2e9
-    *top    = I32(self, kElemTop);                                 // 18011a2f2
-    *bottom = I32(self, kElemBottom);                              // 18011a2f8
+// `AEAH000`: four `int&` out-parameters — bare pointers in RDX, R8, R9 and the
+// fifth (stack) slot; the member takes them as references.
+void ScrollElement::GetBarLayout(int32_t& left, int32_t& top,
+                                 int32_t& right, int32_t& bottom) const {
+    left   = _layoutLeft;                                          // 18011a2e1
+    right  = _layoutRight;                                         // 18011a2e9
+    top    = _layoutTop;                                           // 18011a2f2
+    bottom = _layoutBottom;                                        // 18011a2f8
 
-    const bool    vertical = U8(self, 0x150) != 0;                 // 18011a2fa
-    const int32_t inset    = I32(self, 0x15c);                     // 18011a301
+    const bool    vertical = _vertical != 0;                       // 18011a2fa  (+0x150)
+    const int32_t inset    = _inset;                               // 18011a301  (+0x15c)
     if (vertical) {
-        *top    += inset;                                          // 18011a309
-        *bottom -= I32(self, 0x15c);                               // 18011a312  re-read
+        top    += inset;                                           // 18011a309
+        bottom -= _inset;                                          // 18011a312  re-read
     } else {
-        *left  += inset;                                           // 18011a316
-        *right -= I32(self, 0x15c);                                // 18011a31e  re-read
+        left  += inset;                                            // 18011a316
+        right -= _inset;                                           // 18011a31e  re-read
     }
 
-    const float total    = *reinterpret_cast<const float*>(self + 0x168);
-    const float fraction = *reinterpret_cast<const float*>(self + 0x164);
+    const float total    = _maxValue;                              // +0x168
+    const float fraction = _displayPercent;                        // +0x164
     if (total == 0.0f && fraction == 1.0f) return;                 // 18011a32c .. 18011a344
 
-    const float scale = *reinterpret_cast<const float*>(self + 0x160) / total;  // 18011a35f
+    const float scale = _currentValue / total;                     // 18011a35f  (+0x160)
 
-    const int32_t span = vertical ? (*bottom - *top) : (*right - *left);        // 18011a368/6f
+    const int32_t span = vertical ? (bottom - top) : (right - left);            // 18011a368/6f
     const float   spanF   = (float)span;                                        // CVTDQ2PS
     float         thumb   = spanF * fraction;                                   // 18011a395
     float         travel  = spanF - thumb;                                      // 18011a39d
 
-    const int32_t minThumb = ScrollSpriteExtent(self, 0xf0,  0xf8,  vertical)
-                           + ScrollSpriteExtent(self, 0x100, 0x108, vertical)
-                           + ScrollSpriteExtent(self, 0x110, 0x118, vertical);  // 18011a47a
+    const int32_t minThumb = ScrollSpriteExtent(_thumbStart,  vertical)
+                           + ScrollSpriteExtent(_thumbMiddle, vertical)
+                           + ScrollSpriteExtent(_thumbEnd,    vertical);        // 18011a47a
     const float minThumbF = (float)minThumb;
     if (minThumbF > thumb) {                                       // 18011a491 COMISS/JBE
         travel = spanF - minThumbF;                                // 18011a49c
@@ -694,13 +711,15 @@ extern "C" void RtUi_ScrollElement_GetBarLayout(const void* selfv,
 
     const int32_t offset = (int32_t)(travel * scale);              // 18011a4a0 / CVTTSS2SI
     if (vertical) {
-        *top    += offset;                                         // 18011a4b2
-        *bottom  = (int32_t)thumb + *top;                          // 18011a4b5/bc
+        top    += offset;                                          // 18011a4b2
+        bottom  = (int32_t)thumb + top;                            // 18011a4b5/bc
     } else {
-        *left  += offset;                                          // 18011a4c5
-        *right  = (int32_t)thumb + *left;                          // 18011a4c7/cd
+        left  += offset;                                           // 18011a4c5
+        right  = (int32_t)thumb + left;                            // 18011a4c7/cd
     }
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?CreateInstance@TextDescription@UI@@QEBAXV?$InternalPtr@VTextElement@UI@@@
@@ -722,44 +741,47 @@ extern "C" void RtUi_ScrollElement_GetBarLayout(const void* selfv,
 // WIDTH of the store is the faithful part — exactly the shape
 // runtime/src/ui/animatedimagedescription.cpp records for
 // AnimatedImageDescription::CreateInstance.
-extern "C" void RtUi_TextDescription_CreateInstance(const void* selfv, void** elemPtr,
-                                                    const void* /*dialog — never read*/) {
-    const uint8_t* self = static_cast<const uint8_t*>(selfv);
+namespace UI {
 
-    void* local = *elemPtr;                                        // 18011ef7f
-    ElementDescriptionApply(self, &local);                         // 18011ef92
+void TextDescription::CreateInstance(Object::InternalPtr<TextElement>* element,
+                                     const Dialog* /*dialog — never read*/) const {
+    Object::InternalPtr<Element> local(element->Get());            // 18011ef7f
+    ElementDescription::CreateInstance(&local);                    // 18011ef92
 
-    uint8_t* elem = static_cast<uint8_t*>(*elemPtr);               // 18011ef97, re-read
-    SetPtr(elem, 0xc0, Ptr(self, 0x68));                           // 18011ef9e  the font
+    TextElement* elem = element->Get();                            // 18011ef97, re-read
+    elem->_font = _font;                                           // 18011ef9e  +0xc0 <- +0x68
 
-    void* table = Ptr(self, 0x70);                                 // 18011efa5
+    StringTable* table = _stringTable2;                            // 18011efa5  +0x70
     uint64_t indexSlot;                                            // [RSP+0x28], see the banner
     if (table != nullptr) {                                        // 18011efac
-        const int32_t idx = StringTableGetIndexFromName(table, self + 0x78);  // 18011efb5
+        const int32_t idx = table->GetIndexFromName(               // 18011efb5
+            *reinterpret_cast<const System::String*>(&_name));     // +0x78  B.3.6 bridge
         __builtin_memcpy(&indexSlot, &idx, sizeof idx);            // 18011efba  DWORD store
     } else {
         const int32_t minusOne = -1;
         __builtin_memcpy(&indexSlot, &minusOne, sizeof minusOne);  // 18011efc0  DWORD store
     }
 
-    elem = static_cast<uint8_t*>(*elemPtr);                        // 18011efc8
-    SetPtr(elem, 0xd8, table);                                     // 18011efd0  UI::String.table
-    __builtin_memcpy(elem + 0xe0, &indexSlot, sizeof indexSlot);   // 18011efd7  QWORD store
+    elem = element->Get();                                         // 18011efc8
+    elem->_text.table = table;                                     // 18011efd0  UI::String.table +0xd8
+    // 18011efd7 QWORD store: +0xe0 index AND +0xe4 pad0C (the stack residue).
+    __builtin_memcpy(&elem->_text.index, &indexSlot, sizeof indexSlot);
 
     SetNeedsSizeCalcChain(elem);                                   // 18011efe1
 
-    using CacheTextFn = void (*)(void*);
-    RT_EXPORT_ONCE(CacheTextFn, "?CacheText@TextElement@UI@@AEAAXXZ")(elem);   // 18011eff7
+    elem->CacheText();                                             // 18011eff7
 
     // Five more stores, each through its own re-read of the slot, and note the
     // TWO SEPARATE BYTES at +0xe8 / +0xe9 (the ctor above writes them as one
     // word) and that +0xf4 is written BEFORE +0xf0.
-    elem = static_cast<uint8_t*>(*elemPtr); elem[0xe8] = U8(self, 0x84);   // 18011f00b
-    elem = static_cast<uint8_t*>(*elemPtr); elem[0xe9] = U8(self, 0x85);   // 18011f01b
-    elem = static_cast<uint8_t*>(*elemPtr); SetI32(elem, 0xec, I32(self, 0x88)); // 18011f02a
-    elem = static_cast<uint8_t*>(*elemPtr); SetI32(elem, 0xf4, I32(self, 0x80)); // 18011f039
-    elem = static_cast<uint8_t*>(*elemPtr); SetI32(elem, 0xf0, I32(self, 0x8c)); // 18011f04d
+    element->Get()->_drawShadow  = _b84;                           // 18011f00b  +0xe8 <- +0x84
+    element->Get()->_wrap        = _b85;                           // 18011f01b  +0xe9 <- +0x85
+    element->Get()->_lineSpacing = _i88;                           // 18011f02a  +0xec <- +0x88
+    element->Get()->_justify     = static_cast<int32_t>(_u80);     // 18011f039  +0xf4 <- +0x80
+    element->Get()->_maxWidth    = _i8c;                           // 18011f04d  +0xf0 <- +0x8c
 }
+
+}  // namespace UI
 
 
 // ============================================================================
@@ -831,52 +853,54 @@ inline int32_t AlignAxis(int32_t mode, int32_t nearEdge, int32_t farEdge, int32_
 
 }  // namespace
 
-extern "C" void RtUi_LayoutElement_GetChildLayout(void* selfv, int32_t index, int32_t pass,
-                                                  int32_t left, int32_t top,
-                                                  int32_t right, int32_t bottom,
-                                                  bool applyOffsets) {
-    uint8_t* base  = static_cast<uint8_t*>(Ptr(selfv, 0xc0));      // 1800d2dcd
-    uint8_t* entry = base + (size_t)(int64_t)index * 0x44;         // 1800d2de7
+namespace UI {
+
+void LayoutElement::GetChildLayout(int32_t index, int32_t pass, int32_t left, int32_t top,
+                                   int32_t right, int32_t bottom, bool applyOffsets) {
+    ChildRecord* base  = _childRecords._data;                      // 1800d2dcd  (+0xc0)
+    ChildRecord* entry = base + index;                             // 1800d2de7  stride 0x44
 
     // ---- X -----------------------------------------------------------------
-    const int32_t refX    = I32(entry, 0x08);                      // 1800d2df4
-    const int32_t sizeX   = I32(entry, 0x1c);
-    const int32_t alignX  = I32(entry, 0x00);
-    const int32_t offsetX = applyOffsets ? I32(entry, 0x10) : 0;   // 1800d2e05 / 1800d2e8a
+    const int32_t refX    = entry->refX;                           // 1800d2df4
+    const int32_t sizeX   = entry->sizeX;
+    const int32_t alignX  = entry->alignX;
+    const int32_t offsetX = applyOffsets ? entry->offsetX : 0;     // 1800d2e05 / 1800d2e8a
 
     int32_t solvedLeft;
     if (refX < 0) {                                                // 1800d2dfa  JNS
         solvedLeft = offsetX + AlignAxis(alignX, left, right, sizeX);
     } else {
-        const uint8_t* ref = base + (size_t)(int64_t)refX * 0x44;  // 1800d2e9d  IMUL 0x11, *4
-        const int32_t refLeft  = I32(ref, 0x24 + (size_t)pass * 4);  // 1800d2eab
-        const int32_t refRight = I32(ref, 0x34 + (size_t)pass * 4);  // 1800d2ea7
+        const ChildRecord* ref = base + refX;                      // 1800d2e9d  IMUL 0x11, *4
+        const int32_t refLeft  = ref->left[pass];                  // 1800d2eab
+        const int32_t refRight = ref->right[pass];                 // 1800d2ea7
         solvedLeft = offsetX + AlignAxis(alignX, refLeft, refRight, sizeX);
     }
-    SetI32(entry, 0x24 + (size_t)pass * 4, solvedLeft);            // 1800d2ef0
+    entry->left[pass] = solvedLeft;                                // 1800d2ef0
 
     // ---- Y -----------------------------------------------------------------
-    const int32_t refY    = I32(entry, 0x0c);                      // 1800d2ef5
-    const int32_t sizeY   = I32(entry, 0x20);
-    const int32_t alignY  = I32(entry, 0x04);
-    const int32_t offsetY = applyOffsets ? I32(entry, 0x14) : 0;   // 1800d2f07 / 1800d2f7b
+    const int32_t refY    = entry->refY;                           // 1800d2ef5
+    const int32_t sizeY   = entry->sizeY;
+    const int32_t alignY  = entry->alignY;
+    const int32_t offsetY = applyOffsets ? entry->offsetY : 0;     // 1800d2f07 / 1800d2f7b
 
     int32_t solvedTop;
     if (refY < 0) {                                                // 1800d2f00  JNS
         solvedTop = offsetY + AlignAxis(alignY, top, bottom, sizeY);
     } else {
         // 1800d2f8a RE-READS this+0xc0 rather than reusing the base above.
-        const uint8_t* base2 = static_cast<const uint8_t*>(Ptr(selfv, 0xc0));
-        const uint8_t* ref   = base2 + (size_t)(int64_t)refY * 0x44;
-        const int32_t refTop    = I32(ref, 0x2c + (size_t)pass * 4);  // 1800d2f9d
-        const int32_t refBottom = I32(ref, 0x3c + (size_t)pass * 4);  // 1800d2f98
+        const ChildRecord* base2 = _childRecords._data;
+        const ChildRecord* ref   = base2 + refY;
+        const int32_t refTop    = ref->top[pass];                  // 1800d2f9d
+        const int32_t refBottom = ref->bottom[pass];               // 1800d2f98
         solvedTop = offsetY + AlignAxis(alignY, refTop, refBottom, sizeY);
     }
-    SetI32(entry, 0x2c + (size_t)pass * 4, solvedTop);             // 1800d2fe6
+    entry->top[pass] = solvedTop;                                  // 1800d2fe6
 
-    SetI32(entry, 0x34 + (size_t)pass * 4, I32(entry, 0x1c) + solvedLeft);  // 1800d2feb/f6
-    SetI32(entry, 0x3c + (size_t)pass * 4, I32(entry, 0x20) + solvedTop);   // 1800d2ffb/3002
+    entry->right[pass]  = entry->sizeX + solvedLeft;               // 1800d2feb/f6
+    entry->bottom[pass] = entry->sizeY + solvedTop;                // 1800d2ffb/3002
 }
+
+}  // namespace UI
 
 // ============================================================================
 // ?SelectCharacter@EditElement@UI@@AEBADH@Z                  retail 0x1800cfd40
@@ -942,8 +966,9 @@ static_assert(sizeof(kKeyChars) / sizeof(kKeyChars[0]) == 0x5B,
 
 }  // namespace
 
-extern "C" char RtUi_EditElement_SelectCharacter(const void* /*this — never read*/,
-                                                 int32_t key) {
+namespace UI {
+
+char EditElement::SelectCharacter(int32_t key) const {   // `this` is never read
     const uint8_t* input = static_cast<const uint8_t*>(InputDeviceSingleton());
 
     bool shift = true;                                             // 1800cfd6c MOV DL,1
@@ -962,6 +987,65 @@ extern "C" char RtUi_EditElement_SelectCharacter(const void* /*this — never re
 
     const KeyChar& kc = kKeyChars[idx];
     return shift ? kc.shifted : kc.plain;
+}
+
+}  // namespace UI
+
+// ============================================================================
+// THE DOORS — each keeps its registered name and address and delegates with a
+// QUALIFIED non-virtual call. None of these retail bodies tests `this` for
+// null, so no door does.
+// ============================================================================
+extern "C" int32_t RtUi_TableElement_GetRowHeight(void* self, int32_t row) {
+    return reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::GetRowHeight(row);   // B.3.6 bridge
+}
+extern "C" int32_t RtUi_TableElement_GetColumnWidth(void* self, int32_t col) {
+    return reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::GetColumnWidth(col);   // B.3.6 bridge
+}
+extern "C" void RtUi_SliderElement_UpdateNumber(void* self) {
+    reinterpret_cast<UI::SliderElement*>(self)->UI::SliderElement::UpdateNumber();   // B.3.6 bridge
+}
+// The by-value InternalPtr<Element> arrives as the ADDRESS of the caller's copy
+// (RULE B6-11): `MOV RAX,[RDX]` at entry in both AddItem bodies.
+extern "C" void RtUi_RibbonElement_AddItem(void* self, void** itemPtr) {
+    reinterpret_cast<UI::RibbonElement*>(self)->UI::RibbonElement::AddItem(   // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(itemPtr));   // B.3.6 bridge
+}
+extern "C" void RtUi_ListElement_AddItem(void* self, void** itemPtr, void* userData) {
+    reinterpret_cast<UI::ListElement*>(self)->UI::ListElement::AddItem(   // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(itemPtr), userData);   // B.3.6 bridge
+}
+// `AEAVSpriteContext@2@` — a reference, a bare pointer in RDX.
+extern "C" void RtUi_ListElement_DrawHighlight(const void* self, void* ctx,
+                                               int32_t index, uint32_t color) {
+    reinterpret_cast<const UI::ListElement*>(self)->UI::ListElement::DrawHighlight(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), index, color);
+}
+extern "C" void RtUi_ScrollElement_GetBarLayout(const void* self,
+                                                int32_t* left, int32_t* top,
+                                                int32_t* right, int32_t* bottom) {
+    reinterpret_cast<const UI::ScrollElement*>(self)->UI::ScrollElement::GetBarLayout(   // B.3.6 bridge
+        *left, *top, *right, *bottom);
+}
+// The non-virtual applier: (this, InternalPtr<TextElement> by hidden pointer,
+// const Dialog*). THE DOOR DECIDES THE OVERLOAD — the qualified name finds both
+// CreateInstance members and the InternalPtr<TextElement>* argument selects
+// this one, not slot 8.
+extern "C" void RtUi_TextDescription_CreateInstance(const void* self, void** elemPtr,
+                                                    const void* dialog) {
+    reinterpret_cast<const UI::TextDescription*>(self)->UI::TextDescription::CreateInstance(   // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::TextElement>*>(elemPtr),   // B.3.6 bridge
+        static_cast<const UI::Dialog*>(dialog));
+}
+extern "C" void RtUi_LayoutElement_GetChildLayout(void* self, int32_t index, int32_t pass,
+                                                  int32_t left, int32_t top,
+                                                  int32_t right, int32_t bottom,
+                                                  bool applyOffsets) {
+    reinterpret_cast<UI::LayoutElement*>(self)->UI::LayoutElement::GetChildLayout(   // B.3.6 bridge
+        index, pass, left, top, right, bottom, applyOffsets);
+}
+extern "C" char RtUi_EditElement_SelectCharacter(const void* self, int32_t key) {
+    return reinterpret_cast<const UI::EditElement*>(self)->UI::EditElement::SelectCharacter(key);   // B.3.6 bridge
 }
 
 // ============================================================================

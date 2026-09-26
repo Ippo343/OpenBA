@@ -118,12 +118,14 @@ protected:
     // body is the door `RtUi_ComboElement_Dtor`.
     ~ComboElement();
 
-private:
+public:
     // `?UpdateText@ComboElement@UI@@AEAAXXZ` (0x180112180, `AEAA` = private —
-    // EXPORTED, not "unexported" as widgets_input.cpp's banner says). Body:
-    // widgets_input.cpp's door (fragment pass).
+    // EXPORTED, not "unexported" as widgets_input.cpp's banner says). PUBLIC
+    // here only because its registered door delegates to it (fragment pass F1;
+    // access is not part of the GCC ABI). Body: widgets_input.cpp.
     void UpdateText();
 
+private:
     static const char* _TypeName();                               // 0x180074ef0 -> "ComboElement"
     static const char* _ParentTypeName();                         // 0x180074f00 -> "ButtonElement"
     static Object::BaseTypeInfo _typeInfo;                        // 0x1801faa50 (minted)

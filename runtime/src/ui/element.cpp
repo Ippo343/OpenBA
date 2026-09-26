@@ -1103,14 +1103,9 @@ void RtUi_Element_Dtor(Element* self) {
     // carry the identical pointer (the argument at the top of this file).
     if (void* vt = ElementVTable()) *reinterpret_cast<void**>(self) = vt;
 
-    // 0x180115570 RemoveChildren, reached BY ADDRESS. ResolveAddr consults the
-    // port registry first (reference_resolveaddr_consults_port_registry_first
-    // .md), so this lands on lane B3's port, not the DLL.
-    {
-        using Fn = void (*)(void*);
-        static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x180115570));
-        if (fn) fn(self);
-    }
+    // 0x180115570 RemoveChildren — a member since fragment pass F1 (body in
+    // widgets_layout.cpp); called as one instead of by ADDRESS.
+    self->UI::Element::RemoveChildren();
 
     // The border element, destroyed through ITS OWN slot 0 with flag 1 —
     // scalar delete. Not `??1Element`: slot 0 is `??_E`, and picking the wrong

@@ -19,11 +19,26 @@
 // say explicitly which offsets are believed to belong to the shared Element/
 // ContainerElement base rather than to the widget class itself.
 // ============================================================================
+//
+// ENDGAME B.3 step 6, FRAGMENT PASS F1 (2026-09-25): every body below now
+// lives in its class's MEMBER — `Element::RemoveChildren` and the eight leaf
+// classes' non-virtual members declared in runtime/types/ui/{Element,
+// TableElement,ImageElement,LabelElement,TextElement,DocumentTextElement,
+// TabElement,PageElement,GraphElement}.h — and reaches the fields by name
+// instead of by raw offset. The registered doors keep their names and are
+// one-line QUALIFIED delegations at the bottom of the file. The retslot doors
+// (`GetSprite` ×2, `GetLink`) keep retail's `(this, ret, …)` shape and
+// placement-new the member's prvalue; the by-value 16-byte `UI::Sprite` /
+// `UI::String` and the `InternalPtr<Element>` arguments arrive by HIDDEN
+// POINTER (RULE B6-11), so those members take the pointer.
+// ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstddef>
 #include <cstdio>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
@@ -38,69 +53,37 @@
 #include "../../types/ui/PageElement.h"
 #include "../../types/ui/GraphElement.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_I32 etc.
-
-// ----------------------------------------------------------------------------
-// ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
-// (same reasoning as runtime/src/graphics/scene.cpp and rt_port.h itself: that
-// header drags in <windows.h>, which collides with engine type/member names).
-// This declaration must stay byte-identical to resolve.h's.
-// ----------------------------------------------------------------------------
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
+// B6-5 door caches (AtomicAddr / AtomicExport) and the ResolveAddr
+// declaration this file used to spell for itself.
+#include "element_common.h"
 
 namespace {
 
 inline uint8_t* B(void* p, int off) { return reinterpret_cast<uint8_t*>(p) + off; }
-inline uint32_t& DirtyFlags(void* p, int off) { return *reinterpret_cast<uint32_t*>(B(p, off)); }
 
 // Every mutator in this lane, having changed its own state, walks `this` then
 // its parent chain OR-ing this bit into the dirty-flags word at +0x34. This
 // lane found the field independently (eight bodies: TableElement::SetSize,
 // ImageElement::SetSprite/SetWidthHeight, TextElement::SetParameter/SetText,
 // DocumentTextElement::SetText x2, PageElement::SetActivePage) before lane A's
-// Element.h landed; it is now confirmed to be UI::Element::_flags /
-// kElementFlagNeedsSizeCalc and UI::Element::_parent.
-constexpr uint32_t kDirtyBit = UI::kElementFlagNeedsSizeCalc;
-constexpr int kDirtyFlags = offsetof(UI::Element, _flags);
-constexpr int kParent = offsetof(UI::Element, _parent);
-
-inline void WalkDirty(void* self) {
-    for (void* node = self; node; node = *reinterpret_cast<void**>(B(node, kParent)))
-        DirtyFlags(node, kDirtyFlags) |= kDirtyBit;
+// Element.h landed; it is UI::Element::_flags / kElementFlagNeedsSizeCalc and
+// UI::Element::_parent.
+inline void WalkDirty(UI::Element* self) {
+    for (UI::Element* node = self; node; node = node->_parent)
+        node->_flags |= UI::kElementFlagNeedsSizeCalc;
 }
 
 // ---- Helpers this lane calls through rather than reimplements --------------
 //
-// Each is either a genuine DLL export (resolved by mangled name, safe to call
-// on any run because RT_EXPORT_ONCE resolves only once per call site --
-// reference_rtoriginal_is_getprocaddress.md), or an internal, unexported
-// Collection::Array<T> template instantiation (resolved by address, same idiom
-// runtime/src/graphics/scene.cpp already uses for the same reason: these are
-// not exported at all, so ResolveExport cannot reach them).
-
-// ?RemoveChildren@Element@UI@@QEAAXXZ (0x180115570) -- PORTED by Wave 9 lane B3
-// as Element_RemoveChildren, near the end of this namespace. Wave 7 left it on
-// the DLL as shared behaviour it had no business reimplementing;
-// WAVE9_LANE_V.md §1b lists this call site (:84) as a REAL DEPENDENCY, i.e. a
-// call through null at cutover, so it had to be owned. This forwarder keeps the
-// name the rest of the file already uses; it is defined next to the port
-// because the port needs RtArrayCellsSetSize, declared further down.
-void RtRemoveChildren(void* self);
-
-// ?CacheText@TextElement@UI@@AEAAXXZ (0x18011ec10) -- private but exported.
-// Reformats the cached display string from the raw text + parameter array.
-// NOT reimplemented: it allocates/releases refcounted System::Strings through
-// String::FormatParamList, which is out of this lane's scope (Sprite/String
-// primitives are lane F's).
-void RtTextElementCacheText(void* self) {
-    using Fn = void (*)(void*);
-    RT_EXPORT_ONCE(Fn, "?CacheText@TextElement@UI@@AEAAXXZ")(self);
-}
-
-// ?UpdateContainers@TabElement@UI@@AEAAXXZ (0x1800d9710) -- private but
-// exported. Recomputes which tab container is visible. PORTED in Wave 10; the
-// body and its oracle argument are at TabElement_UpdateContainers below.
-void RtTabElementUpdateContainers(void* self);
+// ?RemoveChildren@Element@UI@@QEAAXXZ (0x180115570) is `UI::Element::
+// RemoveChildren`, defined near the end of this file; TableElement::SetSize
+// calls it as a member.
+//
+// ?CacheText@TextElement@UI@@AEAAXXZ (0x18011ec10) is `UI::TextElement::
+// CacheText` (textelement_cachetext.cpp); called as a member.
+//
+// ?UpdateContainers@TabElement@UI@@AEAAXXZ (0x1800d9710) is `UI::TabElement::
+// UpdateContainers` (tabelement.cpp); called as a member.
 
 // ??4String@System@@QEAAAEAV01@AEBV01@@Z -- System::String::operator=.
 //
@@ -112,16 +95,21 @@ void RtStringAssign(void* self, const void* other) {
         *reinterpret_cast<const System::String*>(other);
 }
 
+// RULE B6-5: the namespace-scope door caches the member bodies read through.
+std::atomic<void*> g_memFree{nullptr};          // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
+std::atomic<void*> g_graphArrayClear{nullptr};  // 0x1800416d0
+
 // ?MemFree@MemoryAllocator@System@@SAXPEAX@Z
 void RtMemFree(void* p) {
     using Fn = void (*)(void*);
-    RT_EXPORT_ONCE(Fn, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z")(p);
+    reinterpret_cast<Fn>(rtuielem::AtomicExport(
+        g_memFree, "?MemFree@MemoryAllocator@System@@SAXPEAX@Z"))(p);
 }
 
 // ENDGAME B.3.2 step 2 — the `RtArrayInt32SetSize`/`RtArrayCellsSetSize`
 // forwarders that used to sit here are GONE. `TableElement`'s row/col-size
-// and cell arrays are reached by raw offset (`B(self, k…)`) rather than a
-// typed field, so both bridge through their row with `rtcoll::AsArray`:
+// arrays and `Element::_children` bridge through their row with
+// `rtcoll::AsArray`:
 //
 //   0x18002fea0  kSpec_I32      TRAIT-EQUIVALENT for int32_t (tail left
 //                UNINITIALISED, matching `SpecFor<int32_t>()`'s empty `init`)
@@ -141,341 +129,13 @@ inline void RtArrayCellsSetSize(void* arrayHeader, int32_t n) {
 // off a `DestroySpec` (`kD_InnerArr_18`), a different type/dispatch from the
 // `rtcoll::ArraySpec` a `Collection::Array<T>::~Array()` would call, and no
 // `kSpec_*` row exists for it — per the batch rule, a "DtorElem" helper may
-// not be convertible at all.
+// not be convertible at all. Retry a miss rather than caching it.
 void RtGraphArrayClear(void* arrayHeader) {
     using Fn = void (*)(void*);
-    static Fn fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800416d0));
-    fn(arrayHeader);
+    reinterpret_cast<Fn>(rtuielem::AtomicAddr(g_graphArrayClear, 0x1800416d0))(arrayHeader);
 }
 
-// Scalar deleting destructor call through vtable slot 0 with flag 1 -- the
-// InternalPtr<T> "release and possibly delete" idiom already named in
-// runtime/types/object/Internal.h's kInternalVtblScalarDtor. TableElement::
-// SetChild uses this on the cell's previous occupant.
-void ReleaseElement(void* elem) {
-    if (!elem) return;
-    void* vt = *reinterpret_cast<void**>(elem);
-    using DtorFn = void* (*)(void*, int);
-    DtorFn dtor = *reinterpret_cast<DtorFn*>(vt);
-    dtor(elem, 1);
-}
-
-// ============================================================================
-// UI::TableElement
-// ============================================================================
-using namespace UI::TableElementOffsets;
-
-int32_t TableElement_GetColumnCount(const void* self) {
-    int32_t ours = *reinterpret_cast<const int32_t*>(B(const_cast<void*>(self), kColCount));
-    using Fn = int32_t (*)(const void*);
-    return ours;
-}
-
-int32_t TableElement_GetRowCount(const void* self) {
-    int32_t ours = *reinterpret_cast<const int32_t*>(B(const_cast<void*>(self), kRowCount));
-    using Fn = int32_t (*)(const void*);
-    return ours;
-}
-
-void TableElement_SetChild2(void* self, void** elemSlot, int32_t col) {
-    void* elem = *elemSlot;
-    if (elem) *reinterpret_cast<void**>(B(elem, kParent)) = self;
-
-    void* cellsData = *reinterpret_cast<void**>(B(self, kCells));
-    void** cellSlot = reinterpret_cast<void**>(cellsData) + col;
-    void* old = *cellSlot;
-    if (old != elem) {
-        if (old) {
-            ReleaseElement(old);
-            *cellSlot = nullptr;
-        }
-        WalkDirty(self);
-    }
-    *cellSlot = elem;
-
-    // NO ORACLE for the branch that matters. Calling retail for real a second
-    // time here is SAFE (after ours runs, `*cellSlot == elem`, so retail's own
-    // `puVar4 != *param_2` guard is false and it takes a no-op path) but that
-    // is exactly the problem: it means the interesting branch -- the one that
-    // calls ReleaseElement's scalar-deleting-destructor on the PREVIOUS
-    // occupant -- is never exercised by the comparison, whether or not our
-    // release logic is correct. And unlike the field-setters below, this one
-    // cannot be fixed by restoring the pristine cell value before calling
-    // retail: if `old` was actually released above, restoring the slot to
-    // point at it and letting retail dereference `*puVar4`'s vtable would be a
-    // use-after-free. Verifying the release path safely needs a disposable
-    // child object built and torn down by this function specifically for the
-    // diff, which was judged out of scope for this pass. Registered anyway --
-    // the logic runs correctly in every normal (non-diff) frame, it is only
-    // the A/B harness that cannot safely re-exercise the delete branch. See
-    // WAVE7_LANE_E.md sec4a.
-}
-
-void TableElement_SetChild3(void* self, void** elemSlot, int32_t col, int32_t row) {
-    int32_t colCount = *reinterpret_cast<int32_t*>(B(self, kColCount));
-    TableElement_SetChild2(self, elemSlot, colCount * col + row);
-    // Pure delegate to the function above (which has no oracle of its own --
-    // see its comment); nothing to add here.
-}
-
-void TableElement_SetSize(void* self, int32_t rows, int32_t cols) {
-    int32_t pristineRows = 0, pristineCols = 0;
-
-    *reinterpret_cast<int32_t*>(B(self, kRowCount)) = rows;
-    *reinterpret_cast<int32_t*>(B(self, kColCount)) = cols;
-    RtArrayInt32SetSize(B(self, kRowSizes), rows);
-    RtArrayInt32SetSize(B(self, kColSizes), cols);
-    RtRemoveChildren(self);
-    RtArrayCellsSetSize(B(self, kCells), rows * cols);
-    WalkDirty(self);
-
-    // Oracle, scoped to what it can safely re-verify: the two OWN scalar
-    // fields (+0xC0/+0xC4). Restoring them to their PRISTINE values before
-    // calling retail for real means retail's own field writes execute for
-    // real rather than silently agreeing with a value we already wrote --
-    // fixing the "always passes" defect a same-value comparison would have.
-    // The row/col-size Arrays and the cell array are NOT re-verified here:
-    // `ours` calls the SAME retail Array<T>::SetSize/RemoveChildren
-    // functions directly (by address, see the helpers above) rather than
-    // reimplementing them, so there is no second, independent
-    // implementation for a live compare to be checking against -- their
-    // correctness is a source-level fact (we call retail's own code), not
-    // something this harness re-derives. Restoring rows/cols alone does not
-    // perturb those arrays: their own internal SetSize early-out is driven
-    // by the array's own current _size field, which this restore does not
-    // touch, so calling retail's whole SetSize again on the restored fields
-    // is safe (same idempotent-array-resize argument as before) and does not
-    // double-run RemoveChildren over live children (the array is already
-    // empty by then, so a second call is genuinely a no-op, not a repaired
-    // one).
-}
-
-// ============================================================================
-// UI::ImageElement
-// ============================================================================
-
-// 16, not UI::Sprite.h's kSpriteWrittenBytes (0x0C): that constant bounds what
-// a Sprite CONSTRUCTOR writes, and this function is not one -- it is a COPY,
-// proven at the instruction level (0x1801182a0: two independent 8-byte
-// `MOV RAX,[..]`/`MOV [..],RAX` pairs, not a 12-byte-then-stop sequence), so
-// the full 16 bytes is the width retail itself moves and the width this
-// comparison is entitled to. See WAVE7_LANE_E.md sec4b.
-void* ImageElement_GetSprite(const void* self, void* retval) {
-    uint64_t* r = reinterpret_cast<uint64_t*>(retval);
-    const uint8_t* s = reinterpret_cast<const uint8_t*>(self);
-    r[0] = *reinterpret_cast<const uint64_t*>(s + 0xC0);
-    r[1] = *reinterpret_cast<const uint64_t*>(s + 0xC8);
-    return retval;
-}
-
-void ImageElement_SetRotation(void* self, float angle) {
-    *reinterpret_cast<float*>(B(self, 0xD0)) = angle;
-    // No dirty-flag walk in retail -- confirmed from the disassembly, not
-    // assumed by analogy with the other setters in this file.
-
-}
-
-// 16 bytes throughout (write, snapshot and compare), not Sprite.h's
-// kSpriteWrittenBytes: this function COPIES an existing Sprite value rather
-// than constructing one, and retail's own copy (0x180118600) is two
-// unconditional 8-byte `MOV RAX,[..]`/`MOV [..],RAX` pairs -- the full 16, not
-// a 12-then-stop. Matching that width is what makes this port's write
-// byte-faithful; narrowing it to 12 would leave retail's own +0xCC..+0xCF
-// unwritten by us. See WAVE7_LANE_E.md sec4b.
-void ImageElement_SetSprite(void* self, const void* spriteVal) {
-    uint8_t pristine[16];
-    uint32_t pristineDirty = 0;
-
-    const uint64_t* sv = reinterpret_cast<const uint64_t*>(spriteVal);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    bool differs = (*reinterpret_cast<uint64_t*>(s + 0xC0) != sv[0]) ||
-                   (*reinterpret_cast<int32_t*>(s + 0xC8) != static_cast<int32_t>(sv[1]));
-    if (differs) WalkDirty(self);
-    *reinterpret_cast<uint64_t*>(s + 0xC0) = sv[0];
-    *reinterpret_cast<uint64_t*>(s + 0xC8) = sv[1];
-
-}
-
-void ImageElement_SetWidthHeight(void* self, int32_t w, int32_t h) {
-    int32_t pristineW = 0, pristineH = 0;
-    uint32_t pristineDirty = 0;
-
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    bool differs = (*reinterpret_cast<int32_t*>(s + 0xD4) != w) ||
-                   (*reinterpret_cast<int32_t*>(s + 0xD8) != h);
-    if (differs) {
-        *reinterpret_cast<int32_t*>(s + 0xD4) = w;
-        *reinterpret_cast<int32_t*>(s + 0xD8) = h;
-        WalkDirty(self);
-    }
-
-}
-
-// ============================================================================
-// UI::LabelElement
-// ============================================================================
-
-// 16, not kSpriteWrittenBytes -- same "copy, not construction" reasoning as
-// ImageElement_GetSprite above; retail's copy (0x1800429d0) is likewise two
-// unconditional 8-byte MOV pairs.
-void* LabelElement_GetSprite(const void* self, void* retval) {
-    uint64_t* r = reinterpret_cast<uint64_t*>(retval);
-    const uint8_t* s = reinterpret_cast<const uint8_t*>(self);
-    r[0] = *reinterpret_cast<const uint64_t*>(s + 0x100);
-    r[1] = *reinterpret_cast<const uint64_t*>(s + 0x108);
-    char scratch[16] = {};
-    using Fn = void* (*)(const void*, void*);
-    return retval;
-}
-
-// 16, not kSpriteWrittenBytes -- same "copy, not construction" reasoning as
-// ImageElement_SetSprite above; retail's copy (0x180042980) is likewise two
-// unconditional 8-byte MOV pairs.
-void LabelElement_SetSprite(void* self, const void* spriteVal) {
-    uint8_t pristine[16];
-    uint32_t pristineDirty = 0;
-
-    const uint64_t* sv = reinterpret_cast<const uint64_t*>(spriteVal);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    bool differs = (*reinterpret_cast<uint64_t*>(s + 0x100) != sv[0]) ||
-                   (*reinterpret_cast<int32_t*>(s + 0x108) != static_cast<int32_t>(sv[1]));
-    if (differs) WalkDirty(self);
-    *reinterpret_cast<uint64_t*>(s + 0x100) = sv[0];
-    *reinterpret_cast<uint64_t*>(s + 0x108) = sv[1];
-
-}
-
-// ============================================================================
-// UI::TextElement
-// ============================================================================
-namespace TE = UI::TextElementOffsets;
-
-void TextElement_SetParameter(void* self, int32_t index, const void* strRef) {
-    int32_t count = *reinterpret_cast<int32_t*>(B(self, TE::kParamCount));
-    if (index >= 0 && index < count) {
-        WalkDirty(self);
-        void* data = *reinterpret_cast<void**>(B(self, TE::kParamArrayData));
-        RtStringAssign(reinterpret_cast<uint8_t*>(data) + static_cast<size_t>(index) * 8, strRef);
-        RtTextElementCacheText(self);
-    }
-
-    // NO ORACLE. This lane considered calling retail for real afterward
-    // (safe: with our write already applied, retail's own equality check
-    // inside System::String::operator= sees the slot already holding `str`
-    // and takes ITS OWN no-op path) and rejected it -- it is exactly the
-    // vacuous shape flagged in review: it can only ever pass, because
-    // retail's guard is satisfied by our own prior write before retail runs
-    // at all. Fixing that the way the field-setters above were fixed (snapshot
-    // the pristine slot, restore it, let retail run for real, compare) is NOT
-    // safe here: `str`'s assignment into the slot is a REAL refcount
-    // acquire/release on a shared System::String. If restoring the slot's
-    // raw pointer back to its pre-call value happens to be the LAST
-    // reference to a string ours already dropped a refcount on, retail's
-    // subsequent access is a use-after-free, not a diagnostic. Verifying this
-    // safely needs a disposable String this function owns end-to-end for the
-    // diff, which is lane F's territory (Sprite/String primitives), not
-    // reversed here. Registered anyway -- the logic is correct in every
-    // normal (non-diff) frame. See WAVE7_LANE_E.md sec4a.
-}
-
-void TextElement_SetText(void* self, const void* uiStringVal) {
-    const uint64_t* sv = reinterpret_cast<const uint64_t*>(uiStringVal);
-    *reinterpret_cast<uint64_t*>(B(self, TE::kTextString))     = sv[0];
-    *reinterpret_cast<uint64_t*>(B(self, TE::kTextString + 8)) = sv[1];
-    WalkDirty(self);
-    RtTextElementCacheText(self);
-
-    // NO ORACLE, same reasoning as SetParameter above: CacheText's own
-    // refcount management on the cached-text pointer at +0xF8 makes a
-    // restore-and-rerun unsafe, and running retail for real without
-    // restoring first is vacuous (retail's own CacheText sees the input we
-    // already wrote and re-derives the identical cached text). Registered
-    // anyway. See WAVE7_LANE_E.md sec4a.
-}
-
-// ============================================================================
-// UI::DocumentTextElement
-// ============================================================================
-namespace DTE = UI::DocumentTextElementOffsets;
-
-void* DocumentTextElement_GetLink(const void* self, void* retval, int32_t index) {
-    void* linkData = *reinterpret_cast<void* const*>(B(const_cast<void*>(self), DTE::kLinkArrayData));
-    *reinterpret_cast<uint64_t*>(retval) = 0;
-    void* entryStr = *reinterpret_cast<void**>(
-        reinterpret_cast<uint8_t*>(linkData) + static_cast<size_t>(index) * DTE::kLinkEntryStride);
-    if (entryStr) {
-        *reinterpret_cast<void**>(retval) = entryStr;
-        *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(entryStr) - 4) += 1;
-    }
-
-    return retval;
-}
-
-void DocumentTextElement_SetText_UiString(void* self, const void* uiStringVal) {
-    // UI::String is a POD, non-refcounted 16-byte value (Element.h's UiString,
-    // Sprite.h's Sprite -- same shape, same "no INC/DEC" evidence), so unlike
-    // the two functions below, restoring this field before calling retail for
-    // real carries no use-after-free risk.
-    //
-    // The 16-byte width used throughout (snapshot, write, and compare) is
-    // deliberate, not Element.h's UiString pad exclusion: this function COPIES
-    // an existing UI::String value, and retail's own copy (0x18003bfd0) is two
-    // unconditional 8-byte MOV pairs (`MOV RAX,[RDX]`/`[RCX+0xc0],RAX` then
-    // `+0x8`/`+0xc8`) -- the full 16, matching every Sprite-copy function
-    // above. Narrowing this one to 12 bytes because it happens to hold a
-    // UI::String rather than a UI::Sprite would drop 4 bytes retail itself
-    // writes. See WAVE7_LANE_E.md sec4b.
-    uint8_t pristine[16];
-
-    const uint64_t* sv = reinterpret_cast<const uint64_t*>(uiStringVal);
-    *reinterpret_cast<uint64_t*>(B(self, DTE::kUiStringValue))     = sv[0];
-    *reinterpret_cast<uint64_t*>(B(self, DTE::kUiStringValue + 8)) = sv[1];
-    WalkDirty(self);
-
-}
-
-void DocumentTextElement_SetText_StringRef(void* self, const void* strRef) {
-    // Reset the by-value UI::String slot: pointer=0, index=-1. Retail's own
-    // codegen (`CONCAT44(uStack_c, 0xffffffff)`) writes the qword's high
-    // dword from an UNINITIALIZED stack local -- i.e. retail's own value at
-    // +0xCC is non-deterministic. Reproducing a specific number there would
-    // be inventing a fact retail does not have; only the low dword (the
-    // actual -1 index reset) is written here. See WAVE7_LANE_E.md sec6.
-    *reinterpret_cast<uint64_t*>(B(self, DTE::kUiStringValue)) = 0;
-    *reinterpret_cast<int32_t*>(B(self, DTE::kUiStringValue + 8)) = -1;
-
-    void* oldStr = *reinterpret_cast<void**>(B(self, DTE::kContentString));
-    void* newStr = *reinterpret_cast<void* const*>(strRef);
-    if (oldStr != newStr) {
-        if (oldStr) {
-            int32_t* rc = reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(oldStr) - 4);
-            *rc -= 1;
-            if (*rc == 0) {
-                RtMemFree(reinterpret_cast<uint8_t*>(oldStr) - 8);
-            }
-            *reinterpret_cast<void**>(B(self, DTE::kContentString)) = nullptr;
-        }
-        *reinterpret_cast<void**>(B(self, DTE::kContentString)) = newStr;
-        if (newStr) *reinterpret_cast<int32_t*>(reinterpret_cast<uint8_t*>(newStr) - 4) += 1;
-    }
-    WalkDirty(self);
-
-    // NO ORACLE for the refcount swap. Same reasoning as TextElement::
-    // SetParameter above: `oldStr` may already have been freed by our own
-    // call above (refcount dropped to zero), so restoring +0x168 to `oldStr`
-    // and letting retail dereference it would be a use-after-free, and
-    // calling retail for real WITHOUT restoring is vacuous (its own
-    // `oldStr == newStr` guard is now satisfied by our prior write, so it
-    // takes its own no-op branch). Registered anyway -- correct in every
-    // normal frame. See WAVE7_LANE_E.md sec4a.
-}
-
-// ============================================================================
-// UI::TabElement / UI::PageElement
-// ============================================================================
 namespace TAE = UI::TabElementOffsets;
-namespace PGE = UI::PageElementOffsets;
-
 
 // ---- ?UpdateContainers@TabElement@UI@@AEAAXXZ  0x1800d9710 -----------------
 //
@@ -573,81 +233,259 @@ static void TabElement_UpdateContainers_Body(void* self, RtSink& out) {
     }
 }
 
-extern "C" void RtUi_TabElement_UpdateContainers(void* self);   // tabelement.cpp
 // The body that lived here was a second copy of ?UpdateContainers@TabElement@UI@@
 // (0x1800d9710); runtime/src/ui/tabelement.cpp owns it since vtable batch 4
-// (2026-09-12), registered with both doors there.
-void RtTabElementUpdateContainers(void* self) { RtUi_TabElement_UpdateContainers(self); }
+// (2026-09-12) as `UI::TabElement::UpdateContainers`, registered with both
+// doors there.
 
-void TabElement_SetActiveTab(void* self, int32_t tab) {
-    int32_t pristine = 0;
+}  // namespace
 
-    if (tab != *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab))) {
-        *reinterpret_cast<int32_t*>(B(self, TAE::kActiveTab)) = tab;
-        RtTabElementUpdateContainers(self);
+namespace UI {
+
+// ============================================================================
+// UI::TableElement
+// ============================================================================
+// GetRowCount / GetColumnCount are one instruction each and live inline in
+// TableElement.h; their doors are below.
+
+// ?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@H@Z
+// 0x18011daa0 — the handle arrives as the ADDRESS of the caller's copy.
+void TableElement::SetChild(Object::InternalPtr<Element>* child, int32_t index) {
+    Element* elem = child->Get();
+    if (elem) elem->_parent = this;
+
+    Element** cellSlot = _children._data + index;
+    Element* old = *cellSlot;
+    if (old != elem) {
+        if (old) {
+            // Slot 0 with flag 1 — the scalar deleting destructor, the
+            // InternalPtr<T> "release and possibly delete" idiom
+            // (runtime/types/object/Internal.h's kInternalVtblScalarDtor).
+            old->DeletingDtor(1);
+            *cellSlot = nullptr;
+        }
+        WalkDirty(this);
     }
+    *cellSlot = elem;
 
+    // NO ORACLE for the branch that matters: the release path destroys the
+    // previous occupant, and there is no safe way to re-exercise it against a
+    // second implementation. See WAVE7_LANE_E.md sec4a.
 }
 
-int32_t PageElement_GetActivePage(const void* self) {
-    int32_t ours = *reinterpret_cast<const int32_t*>(B(const_cast<void*>(self), PGE::kActivePage));
-    using Fn = int32_t (*)(const void*);
-    return ours;
+// ?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@HH@Z
+// 0x18011db50 — pure delegate to the overload above, `_colCount*col + row`.
+void TableElement::SetChild(Object::InternalPtr<Element>* child, int32_t column,
+                            int32_t row) {
+    SetChild(child, _columnCount * column + row);
 }
 
-void PageElement_SetActivePage(void* self, int32_t page) {
-    int32_t pristine = 0;
+// ?SetSize@TableElement@UI@@QEAAXHH@Z  0x18011db90
+void TableElement::SetSize(int32_t rows, int32_t columns) {
+    _rowCount = rows;
+    _columnCount = columns;
+    RtArrayInt32SetSize(&_rowSizes, rows);
+    RtArrayInt32SetSize(&_columnSizes, columns);
+    RemoveChildren();
+    RtArrayCellsSetSize(&_children, rows * columns);
+    WalkDirty(this);
+}
 
-    int32_t count = *reinterpret_cast<int32_t*>(B(self, PGE::kChildrenCount));
-    int32_t current = *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage));
+// ============================================================================
+// UI::ImageElement
+// ============================================================================
+
+// 16, not UI::Sprite.h's kSpriteWrittenBytes (0x0C): that constant bounds what
+// a Sprite CONSTRUCTOR writes, and this function is not one -- it is a COPY,
+// proven at the instruction level (0x1801182a0: two independent 8-byte
+// `MOV RAX,[..]`/`MOV [..],RAX` pairs, not a 12-byte-then-stop sequence). The
+// implicit copy of `UI::Sprite` moves all four fields, pad0C included.
+Sprite ImageElement::GetSprite() const {
+    return _sprite;
+}
+
+// ?SetRotation@ImageElement@UI@@QEAAXM@Z  0x1801182c0
+void ImageElement::SetRotation(float degrees) {
+    _rotation = degrees;
+    // No dirty-flag walk in retail -- confirmed from the disassembly, not
+    // assumed by analogy with the other setters in this file.
+}
+
+// ?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z  0x180118600. `VSprite@2@`
+// BY VALUE is a 16-byte class, which retail passes by HIDDEN POINTER (RULE
+// B6-11). 16 bytes throughout: this function COPIES an existing Sprite value
+// rather than constructing one, and retail's own copy is two unconditional
+// 8-byte `MOV RAX,[..]`/`MOV [..],RAX` pairs -- the full 16, not a 12-then-stop.
+void ImageElement::SetSprite(const Sprite* sprite) {
+    const bool differs = (_sprite.spriteSheet != sprite->spriteSheet) ||
+                         (_sprite.spriteIndex != sprite->spriteIndex);
+    if (differs) WalkDirty(this);
+    _sprite = *sprite;
+}
+
+// ?SetWidthHeight@ImageElement@UI@@QEAAXHH@Z  0x180118260
+void ImageElement::SetWidthHeight(int32_t width, int32_t height) {
+    const bool differs = (_width != width) || (_height != height);
+    if (differs) {
+        _width = width;
+        _height = height;
+        WalkDirty(this);
+    }
+}
+
+// ============================================================================
+// UI::LabelElement
+// ============================================================================
+
+// 16, not kSpriteWrittenBytes -- same "copy, not construction" reasoning as
+// ImageElement::GetSprite above; retail's copy (0x1800429d0) is likewise two
+// unconditional 8-byte MOV pairs.
+Sprite LabelElement::GetSprite() const {
+    return _sprite;
+}
+
+// 16, not kSpriteWrittenBytes -- same "copy, not construction" reasoning as
+// ImageElement::SetSprite above; retail's copy (0x180042980) is likewise two
+// unconditional 8-byte MOV pairs. The Sprite arrives by hidden pointer.
+void LabelElement::SetSprite(const Sprite* sprite) {
+    const bool differs = (_sprite.spriteSheet != sprite->spriteSheet) ||
+                         (_sprite.spriteIndex != sprite->spriteIndex);
+    if (differs) WalkDirty(this);
+    _sprite = *sprite;
+}
+
+// ============================================================================
+// UI::TextElement
+// ============================================================================
+
+// ?SetParameter@TextElement@UI@@QEAAXHAEBVString@System@@@Z  0x18011e9b0
+//
+// NO ORACLE. `str`'s assignment into the slot is a REAL refcount
+// acquire/release on a shared System::String, so restoring the slot and
+// re-running retail could be a use-after-free rather than a diagnostic, and
+// running retail after ours without restoring is vacuous. See
+// WAVE7_LANE_E.md sec4a.
+void TextElement::SetParameter(int32_t index, const System::String& value) {
+    if (index >= 0 && index < _params._size) {
+        WalkDirty(this);
+        RtStringAssign(&_params._data[index], &value);
+        CacheText();
+    }
+}
+
+// ?SetText@TextElement@UI@@QEAAXVString@2@@Z  0x180042070. The 0x10-byte
+// UI::String BY VALUE arrives by HIDDEN POINTER (RULE B6-11). NO ORACLE, same
+// reasoning as SetParameter above (CacheText's refcount management on the
+// cached-text pointer at +0xF8).
+void TextElement::SetText(const String* text) {
+    _text = *text;
+    WalkDirty(this);
+    CacheText();
+}
+
+// ============================================================================
+// UI::DocumentTextElement
+// ============================================================================
+
+// ?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z  0x18003c0c0 —
+// RETSLOT. The link array at +0x158 has 0x18-byte entries, the target String
+// at +0x00; the result is that String with its reference bumped, or an empty
+// String if the slot is null — exactly System::String's copy constructor
+// (Adopt: null stays null, non-null gets `++refcount`). No bounds check on
+// `index` (matches SpriteSheet::GetSpriteNameFromIndex's pattern).
+System::String DocumentTextElement::GetLink(int32_t index) const {
+    const Link* links = static_cast<const Link*>(_linksData);
+    return *reinterpret_cast<const System::String*>(&links[index].text);
+}
+
+// ?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z  0x18003bfd0. UI::String
+// is a POD, non-refcounted 16-byte value, passed by HIDDEN POINTER (RULE
+// B6-11). Retail's own copy is two unconditional 8-byte MOV pairs
+// (`MOV RAX,[RDX]`/`[RCX+0xc0],RAX` then `+0x8`/`+0xc8`) -- the full 16.
+void DocumentTextElement::SetText(const ::UIString* text) {
+    _text = *text;
+    WalkDirty(this);
+}
+
+// ?SetText@DocumentTextElement@UI@@QEAAXAEBVString@System@@@Z  0x18003c010
+void DocumentTextElement::SetText(const System::String& text) {
+    // Reset the by-value UI::String slot: table=0, index=-1. Retail's own
+    // codegen (`CONCAT44(uStack_c, 0xffffffff)`) writes the qword's high
+    // dword from an UNINITIALIZED stack local -- i.e. retail's own value at
+    // +0xCC is non-deterministic. Reproducing a specific number there would
+    // be inventing a fact retail does not have; only the low dword (the
+    // actual -1 index reset) is written here. See WAVE7_LANE_E.md sec6.
+    _text.table = nullptr;
+    _text.index = -1;
+
+    char* oldStr = _sourceText;
+    char* newStr = text._data;
+    if (oldStr != newStr) {
+        if (oldStr) {
+            int32_t* rc = reinterpret_cast<int32_t*>(oldStr - 4);
+            *rc -= 1;
+            if (*rc == 0) {
+                RtMemFree(oldStr - 8);
+            }
+            _sourceText = nullptr;
+        }
+        _sourceText = newStr;
+        if (newStr) *reinterpret_cast<int32_t*>(newStr - 4) += 1;
+    }
+    WalkDirty(this);
+
+    // NO ORACLE for the refcount swap (see TextElement::SetParameter above).
+}
+
+// ============================================================================
+// UI::TabElement / UI::PageElement
+// ============================================================================
+
+// ?SetActiveTab@TabElement@UI@@QEAAXH@Z  0x18004c890 — guard, store, then the
+// private (exported) UpdateContainers.
+void TabElement::SetActiveTab(int32_t tab) {
+    if (tab != _activeTab) {
+        _activeTab = tab;
+        UpdateContainers();
+    }
+}
+
+// ?SetActivePage@PageElement@UI@@QEAAXH@Z  0x1800d5110
+void PageElement::SetActivePage(int32_t page) {
+    const int32_t count = _children._size;
+    const int32_t current = _activePage;
     if (page > -2 && page < count && page != current) {
-        *reinterpret_cast<int32_t*>(B(self, PGE::kActivePage)) = page;
-        WalkDirty(self);
-        void* data = *reinterpret_cast<void**>(B(self, PGE::kChildrenData));
+        _activePage = page;
+        WalkDirty(this);
+        Element** data = _children._data;
         for (int32_t i = 0; i < count; ++i) {
-            void* child = reinterpret_cast<void**>(data)[i];
+            Element* child = data[i];
             if (!child) continue;
-            uint32_t flags = DirtyFlags(child, PGE::kDirtyFlags);
-            uint32_t updated = (i == page) ? (flags & ~PGE::kHiddenBit) : (flags | PGE::kHiddenBit);
+            const uint32_t flags = child->_flags;
+            const uint32_t updated = (i == page) ? (flags & ~kElementFlagHidden)
+                                                 : (flags | kElementFlagHidden);
             if (updated != flags) {
-                DirtyFlags(child, PGE::kDirtyFlags) = updated;
+                child->_flags = updated;
                 WalkDirty(child);
             }
         }
     }
-
 }
 
 // ============================================================================
 // UI::GraphElement
 // ============================================================================
-namespace GRE = UI::GraphElementOffsets;
 
-void GraphElement_RemoveGraphs(void* self) {
-    RtGraphArrayClear(B(self, GRE::kGraphsData));
-
-    // WEAK invariant check, not a comparative oracle -- worth being explicit
-    // about, since `ours` here IS retail's own destroy-and-free helper called
-    // directly (RtGraphArrayClear resolves 0x1800416d0 by address; there is no
-    // separate reimplementation of the teardown logic to compare against).
-    // Calling retail's whole RemoveGraphs a second time is safe regardless
-    // (it tail-calls the SAME helper, which is a documented no-op on an
-    // already-empty, already-zeroed header), so this just re-confirms the
-    // count reads back as zero -- it cannot detect a wrong `kGraphsData`
-    // offset the way GetRowCount's true replay would, because a wrong offset
-    // reading garbage that happens to be zero would still pass.
-    //
+// ?RemoveGraphs@GraphElement@UI@@QEAAXXZ  0x180040610 — tail-calls the
+// destroy-and-free helper on the series array.
+void GraphElement::RemoveGraphs() {
+    RtGraphArrayClear(&_seriesData);
 }
 
 // ============================================================================
 // ?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z  retail 0x180040690  ord 1561
 //                                                          (WAVE 9 LANE UIF)
 // ============================================================================
-//
-// Wave 7 lane E held this back; runtime/types/ui/GraphElement.h still carries
-// that note and the mechanism it worked out, which was right. What it lacked
-// was the one thing that decides admission now: whether the append helper is
-// ours yet. It is — so the hold-back is spent and the row closes.
 //
 // THE BODY, 12 instructions at 0x180040690:
 //
@@ -665,57 +503,25 @@ void GraphElement_RemoveGraphs(void* self) {
 // per-series point Array lives at record+8. `SetSize(size+1, &value)` is this
 // engine's APPEND idiom: grow by one and fill the new tail from `*fill`.
 //
-// THE MOVSXD IS REPRODUCED AS A SIGNED WIDENING, deliberately. Ghidra's
-// decompiled C prints MOVSXD as a zero extension and that misreading caused
-// three Wave 6 defects including a crash
-// (reference_ghidra_c_output_vs_disassembly.md), so `graph` is `int32_t` and is
-// widened by the C++ conversion, not masked. A negative `graph` therefore
-// indexes backwards exactly as retail does. NOT guarded: retail has no guard,
-// the port is byte-faithful, and inventing one here would hide a caller bug
-// rather than fix it (CLAUDE.md, "don't fix a faithful crash with a null check").
+// THE MOVSXD IS REPRODUCED AS A SIGNED WIDENING, deliberately (Ghidra's C
+// prints it as a zero extension — reference_ghidra_c_output_vs_disassembly.md).
+// A negative `graph` indexes backwards exactly as retail does. NOT guarded.
 //
-// EVERY CALLEE IS SATISFIED — one callee, and it is ours:
-//   * 0x180023830 Array<uint32>::SetSize(n, &fill) — PORTED, Wave 9 lane Q, as
-//     `RtColl_ArraySetSizeFill_180023830` (runtime/src/collection/array.cpp).
-//     Reached by ADDRESS, which lands on that port because ResolveAddr consults
-//     the port registry before the module handle. It is the SAME stride-4
-//     instantiation runtime/src/graphics/scene.cpp already calls through
-//     `RtArrayU32SetSize` for Graphics::Scene — an independent confirmation of
-//     the address that GraphElement.h had already noticed.
-// So this row CLOSES rather than moving one frame deeper.
-//
-// ORACLE: none, and the reason is specific rather than inherited. A replay
-// would append the point a SECOND time — the array is grown from its own
-// current size, so running the shipped body after ours yields size+2 with a
-// duplicated tail, which is a second side effect and not a comparison
-// (and it would also reallocate, invalidating the buffer).
-void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
-
-    uint8_t* seriesData = *reinterpret_cast<uint8_t**>(B(self, GRE::kGraphsData));
+// ORACLE: none — a replay would append the point a SECOND time.
+void GraphElement::AddGraphPoint(int32_t graph, int32_t value) {
+    uint8_t* seriesData = static_cast<uint8_t*>(_seriesData);
     // record = data + graph*0x18; the point Array header sits at record + 8.
     uint8_t* pointArray = seriesData + static_cast<int64_t>(graph) * 0x18 + 8;
 
-    // ENDGAME B.3.2 step 2 — the 0x180023830 forwarder is GONE. `kSpec_Fill4`
-    // is trait-equivalent for `int32_t` (same reasoning as
-    // runtime/src/graphics/scene.cpp's `_freeIds`), so the bridge is a plain
-    // `Array<int32_t>` view of the nested header.
+    // ENDGAME B.3.2 step 2 — `kSpec_Fill4` is trait-equivalent for `int32_t`,
+    // so the bridge is a plain `Array<int32_t>` view of the nested header.
     auto* points = reinterpret_cast<Collection::Array<int32_t>*>(pointArray);
     points->SetSize(points->GetSize() + 1, value);
-
 }
 
 // ============================================================================
 // ?AddGraph@GraphElement@UI@@QEAAXI@Z  retail 0x180040620  (WAVE 9 LANE UIW)
 // ============================================================================
-//
-// Held back twice: by Wave 7 lane E ("no oracle, and GraphSeries not reversed")
-// and again by Wave 9 lane UIF ("calls 0x1800417d0, an UNEXPORTED internal that
-// no lane has ported — porting it would MOVE the row one frame deeper"). Lane
-// UIF's verdict was right on its evidence and the fix was to go get that frame:
-// **0x1800417d0 is now ported** (runtime/src/collection/array.cpp,
-// `kSpec_GraphSeries`), together with the two helpers it needs
-// (`Array<int32>::operator=` 0x18001cdf0 and the destroy-range 0x1800419b0).
-// With those three landed this row closes rather than relocating a null.
 //
 // THE BODY, 0x180040620..0x18004068b:
 //
@@ -731,60 +537,35 @@ void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
 // THREE THINGS WORTH THE INK:
 //
 //  1. **`tmp + 0x00 .. 0x07` IS DELIBERATELY UNINITIALISED.** Retail's fill
-//     lives at `[RSP+0x28]` — the shadow-space slot — and only `[RSP+0x30]` and
-//     `[RSP+0x38]` are zeroed. So the colour dword copied into the new element
-//     by the assign is whatever the stack held, and the LAST line of the
-//     function overwrites it with the real `colour`. Nothing observable depends
-//     on those bytes; they are left uninitialised here rather than zeroed
-//     because zeroing them would be a different instruction sequence for a
-//     value that is dead either way, and a reader who found a `= {}` here would
-//     reasonably conclude retail initialised it.
-//  2. **The temp's nested Array IS destroyed afterwards, and it is empty.**
-//     `Array<int32>::operator=` copies FROM the temp INTO the new element, so
-//     the temp still owns nothing; the `~Array` is the compiler's RAII teardown
-//     of a local that was never grown. It is reproduced because it is a real
-//     call retail makes, through an address that is already ours (0x18001c750,
-//     a registered J1 row) — dropping it would be the `dirAlias` mistake
-//     (WAVE9.md: a local written, passed, released and never read is a
-//     side-effect carrier until proven otherwise). Here it IS provably inert,
-//     and it is kept anyway, because "provably inert" cost a paragraph to
-//     establish and costs one call to honour.
-//  3. **`old` IS TAKEN BEFORE THE APPEND AND SIGN-EXTENDED.** `MOVSXD RDI,
-//     [RCX+0xf8]` — Ghidra's C prints that as a zero extension and doing so
-//     caused three Wave 6 defects including a crash
-//     (reference_ghidra_c_output_vs_disassembly.md). The final store indexes
-//     `_data + old*0x18` with no bounds check, exactly as retail does.
+//     lives at `[RSP+0x28]` and only `[RSP+0x30]` and `[RSP+0x38]` are zeroed.
+//     The LAST line of the function overwrites the copied colour with the real
+//     `colour`, so nothing observable depends on those bytes.
+//  2. **The temp's nested Array IS destroyed afterwards, and it is empty.** It
+//     is reproduced because it is a real call retail makes.
+//  3. **`old` IS TAKEN BEFORE THE APPEND AND SIGN-EXTENDED.** The final store
+//     indexes `_data + old*0x18` with no bounds check, exactly as retail does.
 //
-// NO ORACLE, for the same reason as AddGraphPoint above: a replay APPENDS A
-// SECOND SERIES and reallocates the array, so it is a second side effect and
-// not a comparison. The shadow is an INDEPENDENT post-condition — the array
-// grew by exactly one and the new element carries the colour the CALLER passed,
-// which is a value this body did not derive from its own rule.
-void GraphElement_AddGraph(void* self, uint32_t colour) {
-
-    uint8_t* graphs = B(self, GRE::kGraphsData);          // &_graphs, the Array header
-    const int64_t old = *reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount));  // MOVSXD
+// NO ORACLE, for the same reason as AddGraphPoint above.
+void GraphElement::AddGraph(uint32_t colour) {
+    const int64_t old = _seriesCount;                      // MOVSXD
 
     uint8_t tmp[0x18];
     // tmp[0x00..0x07] intentionally left uninitialised — see (1) above.
     *reinterpret_cast<uint64_t*>(tmp + 0x08) = 0;
     *reinterpret_cast<uint64_t*>(tmp + 0x10) = 0;
 
-    // ENDGAME B.3.2 step 2 — both forwarders are GONE. `_graphs` is reached by
-    // raw offset (GraphElement.h's `Array<GraphSeries>`, NON-TRIVIAL
-    // `kSpec_GraphSeries`), so it bridges through the hand-derived row; the
-    // local `tmp+8` nested `Array<int32_t>` is a real stack object, so its
-    // teardown is a plain `.~Array()` (0x18001c750 is a J1, trait-equivalent
-    // for `int32_t`) — one destruction on this path, matching retail's single
-    // call.
-    rtcoll::AsArray<&rtcoll::kSpec_GraphSeries>(graphs)
-        ->SetSizeFill(*reinterpret_cast<int32_t*>(B(self, GRE::kGraphsCount)) + 1, tmp);
+    // ENDGAME B.3.2 step 2 — `_seriesData` is GraphElement.h's raw
+    // `Array<GraphSeries>` header (NON-TRIVIAL `kSpec_GraphSeries`), so it
+    // bridges through the hand-derived row; the local `tmp+8` nested
+    // `Array<int32_t>` is a real stack object, so its teardown is a plain
+    // `.~Array()` (0x18001c750 is a J1, trait-equivalent for `int32_t`).
+    rtcoll::AsArray<&rtcoll::kSpec_GraphSeries>(&_seriesData)
+        ->SetSizeFill(_seriesCount + 1, tmp);
 
     reinterpret_cast<Collection::Array<int32_t>*>(tmp + 8)->~Array();
 
-    uint8_t* data = *reinterpret_cast<uint8_t**>(graphs);
+    uint8_t* data = static_cast<uint8_t*>(_seriesData);
     *reinterpret_cast<uint32_t*>(data + old * 0x18) = colour;
-
 }
 
 // ============================================================
@@ -799,16 +580,12 @@ void GraphElement_AddGraph(void* self, uint32_t colour) {
 //
 // Slot 0 called with a flag of 1 is the scalar deleting destructor -- destroy
 // AND free -- the idiom runtime/types/object/Internal.h already names as
-// kInternalVtblScalarDtor. It is NOT `??1Element`: `??1` is not `??_G`, and the
-// wrong one of the two resolves null behind a guard
-// (reference_phantom_dtor_mangling_qeaa_vs_ueaa.md).
+// kInternalVtblScalarDtor. It is NOT `??1Element`.
 //
 // THE RE-READ OF `_children.data` INSIDE THE LOOP IS LOAD-BEARING, and is why
 // this is an index loop over a refetched base rather than the obvious cached
 // pointer: retail reloads `[RBP + 0xa0]` at 0x1801155a0 on every iteration,
-// after the previous child's destructor has run. A destructor that reallocated
-// or freed the parent's child array would leave a cached base dangling. Retail
-// does not assume that cannot happen and neither does this.
+// after the previous child's destructor has run.
 //
 // The loop bound, by contrast, IS hoisted in retail -- `_children.size` is read
 // into EBX's comparand from `[RBP+0xa8]` each iteration (0x1801155ca) but the
@@ -819,33 +596,127 @@ void GraphElement_AddGraph(void* self, uint32_t colour) {
 // place this port is not instruction-for-instruction.
 //
 // NO ORACLE, stated rather than glossed: the function DESTROYS the children.
-// Running ours and then the shipped body over the same object frees an already
-// freed list, and there is nothing to snapshot -- the children are separately
-// allocated objects with their own destructors, so "a copy of the state" is not
-// a thing that can be made. The shadow below asserts the post-condition retail
-// guarantees (the array is empty), which is a weaker claim than a diff and is
-// labelled as one.
-void Element_RemoveChildren(void* selfRaw) {
-
-    auto* self = static_cast<uint8_t*>(selfRaw);
-    uint8_t* childArray = self + 0xa0;              // Collection::Array<Element*>
-    const int32_t count = *reinterpret_cast<const int32_t*>(self + 0xa8);
+void Element::RemoveChildren() {
+    const int32_t count = _children._size;
 
     for (int32_t i = 0; i < count; ++i) {
-        auto** data = *reinterpret_cast<void***>(childArray);   // re-read, see above
-        void* child = data[i];
+        Element** data = _children._data;              // re-read, see above
+        Element* child = data[i];
         if (child == nullptr) continue;
-        void** vtbl = *static_cast<void***>(child);
-        reinterpret_cast<void (*)(void*, int)>(vtbl[0])(child, 1);
+        child->DeletingDtor(1);                        // slot 0, flag 1
         data[i] = nullptr;
     }
-    RtArrayCellsSetSize(childArray, 0);
-
-    const bool ok = *reinterpret_cast<const int32_t*>(self + 0xa8) == 0;
+    RtArrayCellsSetSize(&_children, 0);
 }
 
-// The forwarder declared at the top of this namespace.
-void RtRemoveChildren(void* self) { Element_RemoveChildren(self); }
+}  // namespace UI
+
+// ============================================================================
+// THE DOORS — each keeps its registered name (and, where it has one, its
+// address) and delegates with a QUALIFIED non-virtual call. None of these
+// retail bodies tests `this` for null, so no door does.
+// ============================================================================
+namespace {
+
+int32_t TableElement_GetColumnCount(const void* self) {
+    return reinterpret_cast<const UI::TableElement*>(self)->UI::TableElement::GetColumnCount();   // B.3.6 bridge
+}
+int32_t TableElement_GetRowCount(const void* self) {
+    return reinterpret_cast<const UI::TableElement*>(self)->UI::TableElement::GetRowCount();   // B.3.6 bridge
+}
+// The by-value InternalPtr<Element> arrives as the ADDRESS of the caller's copy.
+void TableElement_SetChild2(void* self, void** elemSlot, int32_t col) {
+    reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::SetChild(   // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemSlot), col);   // B.3.6 bridge
+}
+void TableElement_SetChild3(void* self, void** elemSlot, int32_t col, int32_t row) {
+    reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::SetChild(   // B.3.6 bridge
+        reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemSlot), col, row);   // B.3.6 bridge
+}
+void TableElement_SetSize(void* self, int32_t rows, int32_t cols) {
+    reinterpret_cast<UI::TableElement*>(self)->UI::TableElement::SetSize(rows, cols);   // B.3.6 bridge
+}
+
+// RETSLOT: (this, ret) — placement-new the member's prvalue into the slot.
+void* ImageElement_GetSprite(const void* self, void* retval) {
+    new (retval) UI::Sprite(
+        reinterpret_cast<const UI::ImageElement*>(self)->UI::ImageElement::GetSprite());   // B.3.6 bridge
+    return retval;
+}
+void ImageElement_SetRotation(void* self, float angle) {
+    reinterpret_cast<UI::ImageElement*>(self)->UI::ImageElement::SetRotation(angle);   // B.3.6 bridge
+}
+// `VSprite@2@` by value: RDX holds the ADDRESS of the caller's copy.
+void ImageElement_SetSprite(void* self, const void* spriteVal) {
+    reinterpret_cast<UI::ImageElement*>(self)->UI::ImageElement::SetSprite(   // B.3.6 bridge
+        static_cast<const UI::Sprite*>(spriteVal));
+}
+void ImageElement_SetWidthHeight(void* self, int32_t w, int32_t h) {
+    reinterpret_cast<UI::ImageElement*>(self)->UI::ImageElement::SetWidthHeight(w, h);   // B.3.6 bridge
+}
+
+void* LabelElement_GetSprite(const void* self, void* retval) {
+    new (retval) UI::Sprite(
+        reinterpret_cast<const UI::LabelElement*>(self)->UI::LabelElement::GetSprite());   // B.3.6 bridge
+    return retval;
+}
+void LabelElement_SetSprite(void* self, const void* spriteVal) {
+    reinterpret_cast<UI::LabelElement*>(self)->UI::LabelElement::SetSprite(   // B.3.6 bridge
+        static_cast<const UI::Sprite*>(spriteVal));
+}
+
+// `AEBVString@System@@` — a const reference, a bare pointer in R8.
+void TextElement_SetParameter(void* self, int32_t index, const void* strRef) {
+    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::SetParameter(   // B.3.6 bridge
+        index, *static_cast<const System::String*>(strRef));
+}
+// `VString@2@` by value: RDX holds the ADDRESS of the caller's UI::String.
+void TextElement_SetText(void* self, const void* uiStringVal) {
+    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::SetText(   // B.3.6 bridge
+        static_cast<const UI::String*>(uiStringVal));
+}
+
+// RETSLOT: (this, ret, index).
+void* DocumentTextElement_GetLink(const void* self, void* retval, int32_t index) {
+    new (retval) System::String(
+        reinterpret_cast<const UI::DocumentTextElement*>(self)->UI::DocumentTextElement::GetLink(index));   // B.3.6 bridge
+    return retval;
+}
+// THE DOOR DECIDES THE OVERLOAD: `QEAAXVString@2@@Z` (UI::String by hidden
+// pointer) vs `QEAAXAEBVString@System@@@Z` (a System::String const&).
+void DocumentTextElement_SetText_UiString(void* self, const void* uiStringVal) {
+    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::SetText(   // B.3.6 bridge
+        static_cast<const UI::String*>(uiStringVal));
+}
+void DocumentTextElement_SetText_StringRef(void* self, const void* strRef) {
+    reinterpret_cast<UI::DocumentTextElement*>(self)->UI::DocumentTextElement::SetText(   // B.3.6 bridge
+        *static_cast<const System::String*>(strRef));
+}
+
+void TabElement_SetActiveTab(void* self, int32_t tab) {
+    reinterpret_cast<UI::TabElement*>(self)->UI::TabElement::SetActiveTab(tab);   // B.3.6 bridge
+}
+
+int32_t PageElement_GetActivePage(const void* self) {
+    return reinterpret_cast<const UI::PageElement*>(self)->UI::PageElement::GetActivePage();   // B.3.6 bridge
+}
+void PageElement_SetActivePage(void* self, int32_t page) {
+    reinterpret_cast<UI::PageElement*>(self)->UI::PageElement::SetActivePage(page);   // B.3.6 bridge
+}
+
+void GraphElement_RemoveGraphs(void* self) {
+    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::RemoveGraphs();   // B.3.6 bridge
+}
+void GraphElement_AddGraphPoint(void* self, int32_t graph, int32_t value) {
+    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::AddGraphPoint(graph, value);   // B.3.6 bridge
+}
+void GraphElement_AddGraph(void* self, uint32_t colour) {
+    reinterpret_cast<UI::GraphElement*>(self)->UI::GraphElement::AddGraph(colour);   // B.3.6 bridge
+}
+
+void Element_RemoveChildren(void* self) {
+    reinterpret_cast<UI::Element*>(self)->UI::Element::RemoveChildren();   // B.3.6 bridge
+}
 
 }  // namespace
 
