@@ -68,11 +68,8 @@ Object::Base* ResourceLimitUIConfig::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [4] The tree's table answered 0 here; retail inherits External::Compile.
-// Kept as the tree had it until the titled behaviour commit.
-Object::External::CompileResult ResourceLimitUIConfig::Compile(const System::Filename& /*path*/) {
-    return 0;
-}
+// [4] not declared: retail's slot is the imported External::Compile, which
+// the class inherits.
 
 // [5] 0x140077b10 — read this row's resource index.
 bool ResourceLimitUIConfig::Serialize(void* stream) {
@@ -87,9 +84,9 @@ Object::External* ResourceLimitUIConfig::Reconstruct() {
     return new (this) ResourceLimitUIConfig();
 }
 
-// [7] PORT GAP (retail 0x140001640 = DeletingDtor(0)) — the tree's table held
-// `return 0` here; kept until the titled behaviour commit. B38 D9.
-void ResourceLimitUIConfig::Destruct() {}
+// [7] 0x140001640, the body shared by 119 exe tables:
+// `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
+void ResourceLimitUIConfig::Destruct() { DeletingDtor(0); }
 
 // [8] 0x1400137e0 — placement construction (MSVC folded it with createInPlace).
 Object::External* ResourceLimitUIConfig::Construct() { return new (this) ResourceLimitUIConfig(); }

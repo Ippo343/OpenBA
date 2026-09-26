@@ -54,11 +54,8 @@ Object::Base* UpgradeUIConfig::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [4] The tree's table answered 0 here; retail inherits External::Compile.
-// Kept as the tree had it until the titled behaviour commit.
-Object::External::CompileResult UpgradeUIConfig::Compile(const System::Filename& /*path*/) {
-    return 0;
-}
+// [4] not declared: retail's slot is the imported External::Compile, which
+// the class inherits.
 
 // [5] 0x140086fb0 — deserialize the target-template reference
 // (ExternalPtr<ComponentEntity>, the canonical ExternalPtrSerializeGeneric body).
@@ -75,9 +72,9 @@ Object::External* UpgradeUIConfig::Reconstruct() {
     return new (this) UpgradeUIConfig();
 }
 
-// [7] PORT GAP (retail 0x140001640 = DeletingDtor(0)) — the tree's table held
-// `return 0` here; kept until the titled behaviour commit. B38 D9.
-void UpgradeUIConfig::Destruct() {}
+// [7] 0x140001640, the body shared by 119 exe tables:
+// `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
+void UpgradeUIConfig::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140016c60 — placement construction (MSVC folded it with createInPlace).
 Object::External* UpgradeUIConfig::Construct() { return new (this) UpgradeUIConfig(); }

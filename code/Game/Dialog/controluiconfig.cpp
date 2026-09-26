@@ -62,11 +62,8 @@ Object::Base* ControlUIConfig::DeletingDtor(unsigned flags) {
     return this;
 }
 
-// [4] The tree's table answered 0 here; retail inherits External::Compile.
-// Kept as the tree had it until the titled behaviour commit.
-Object::External::CompileResult ControlUIConfig::Compile(const System::Filename& /*path*/) {
-    return 0;
-}
+// [4] not declared: retail's slot is the imported External::Compile, which
+// the class inherits.
 
 // [5] 0x14005fb70 — read the command id and the target component type.
 // Object::Type::Serialize is the exe import slot 0x1401516b0 (resolved per
@@ -88,9 +85,9 @@ Object::External* ControlUIConfig::Reconstruct() {
     return new (this) ControlUIConfig();
 }
 
-// [7] PORT GAP (retail 0x140001640 = DeletingDtor(0)) — the tree's table held
-// `return 0` here; kept until the titled behaviour commit. B38 D9.
-void ControlUIConfig::Destruct() {}
+// [7] 0x140001640, the body shared by 119 exe tables:
+// `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]` = destroy in place, no free.
+void ControlUIConfig::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140010d30 — placement construction (MSVC folded it with createInPlace).
 Object::External* ControlUIConfig::Construct() { return new (this) ControlUIConfig(); }

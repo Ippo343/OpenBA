@@ -13,7 +13,7 @@
 //   createInPlace 0x140010d30 = slot 8 (the same body, no alloc).
 //   [0] 0x140010dd0 scalar deleting dtor   [1] 0x140010cc0 TypeName
 //   [2] 0x140010cb0 Type                   [3] 0x14005fbd0 GetFileVersion -> 1
-//   [4] External::Compile (IMPORT, inherited)
+//   [4] External::Compile (IMPORT, inherited — not declared)
 //   [5] 0x14005fb70 Serialize   [6] 0x140010d80 Reconstruct
 //   [7] 0x140001640 Destruct (= DeletingDtor(0))   [8] 0x140010d30 Construct
 // ============================================================================
@@ -31,8 +31,6 @@ public:
 
     Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140010dd0
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x14005fbd0
-    // [4] TEMPORARY tree behaviour (answered 0); retail inherits External::Compile.
-    CompileResult     Compile(const System::Filename& path) override;
     bool              Serialize(void* stream) override;            // [5] 0x14005fb70
     Object::External* Reconstruct() override;                      // [6] 0x140010d80
     void              Destruct() override;                         // [7] 0x140001640

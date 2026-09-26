@@ -27,8 +27,6 @@ public:
 
     Object::Base*     DeletingDtor(unsigned flags) override;       // [0] 0x140013880
     int32_t           GetFileVersion() const override { return 1; }// [3] 0x140077b60
-    // [4] TEMPORARY tree behaviour (answered 0); retail inherits External::Compile.
-    CompileResult     Compile(const System::Filename& path) override;
     bool              Serialize(void* stream) override;            // [5] 0x140077b10
     Object::External* Reconstruct() override;                      // [6] 0x140013830
     void              Destruct() override;                         // [7] 0x140001640
