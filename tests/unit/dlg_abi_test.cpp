@@ -24,6 +24,8 @@
 
 #include "Dialog/MessageDialog.h"
 #include "Dialog/OptionInputBindDialog.h"
+#include "Dialog/EventNotifyDialog.h"
+#include "Dialog/EventPopupDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -93,4 +95,20 @@ UNIT_TEST(dlg_message_dialog_slots) {
     CHECK_EQ(SlotOffset(&MessageDialog::OnNo),             (uintptr_t)0x68);
     CHECK_EQ(SlotOffset(&OptionInputBindDialog::OnOk),     (uintptr_t)0x50);
     CHECK_EQ(SlotOffset(&OptionInputBindDialog::OnNo),     (uintptr_t)0x68);
+}
+
+// ===========================================================================
+// EventNotifyDialog (0x14015bca0, 10 slots, 0xf0), EventPopupDialog
+// (0x14015bd80, 10 slots, 0xc0)
+// ===========================================================================
+UNIT_TEST(dlg_event_dialogs) {
+    CHECK_EQ(sizeof(EventNotifyDialog), (size_t)0xf0);
+    CHECK_EQ(sizeof(EventPopupDialog),  (size_t)0xc0);
+    CHECK_EQ(offsetof(EventNotifyDialog, dataC4), (size_t)0xc4);
+    CHECK_EQ(offsetof(EventNotifyDialog, dataE8), (size_t)0xe8);
+    CHECK_EQ(offsetof(EventPopupDialog, eventIndex), (size_t)0xb8);
+    CheckShape<EventNotifyDialog>();
+    CheckShape<EventPopupDialog>();
+    CheckDialogInstanceSlots<EventNotifyDialog>();
+    CheckDialogInstanceSlots<EventPopupDialog>();
 }

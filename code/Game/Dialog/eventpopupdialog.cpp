@@ -6,34 +6,36 @@
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
-#include "Dialog/ui_dialogs.h"
+#include "Dialog/EventPopupDialog.h"
 #include "engine_funcs.h"
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 
-// EventPopupDialog::Slot4 (0x140068C20) — Setup
+// ENDGAME B.3.8 block DLG: EventPopupDialog is a real class (Dialog/EventPopupDialog.h).
+
+// [4] OnOpened (0x140068C20) — Setup
 // Finds imageIcon, textEvent, buttonOk elements.
 // Reads event entry from world event list using index at self+0xB8.
 // Sets imageIcon sprite to "EventIcon<N>", sets textEvent parameter 0
 // to event text, sets buttonOk element ID to 200.
-void EventPopupDialog_Slot4(EventPopupDialog* self) {
-    uintptr_t s = (uintptr_t)self;
+void EventPopupDialog::OnOpened() {
+    uintptr_t s = (uintptr_t)this;
 
     // Find imageIcon element
     uint8_t retBuf[16];
     { System::String nameStr("imageIcon");
-      ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr)); }  // B.3.6 bridge
+      ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr)); }  // B.3.6 bridge
     void* imageIcon = *(void**)retBuf;
 
     // Find textEvent element
     { System::String nameStr("textEvent");
-      ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr)); }  // B.3.6 bridge
+      ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr)); }  // B.3.6 bridge
     void* textEvent = *(void**)retBuf;
 
     // Find buttonOk element
     { System::String nameStr("buttonOk");
-      ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr)); }  // B.3.6 bridge
+      ::new (retBuf) Object::InternalPtr<UI::Element>(FindElement(nameStr)); }  // B.3.6 bridge
     void* buttonOk = *(void**)retBuf;
 
     // Get event entry from world event list
@@ -77,102 +79,65 @@ void EventPopupDialog_Slot4(EventPopupDialog* self) {
 }
 
 // ============================================================
-// EventPopupDialog::Slot8 (0x140068BD0) — vtable +0x40, OnCommand
+// [8] OnElementEvent (0x140068BD0) — vtable +0x40, OnCommand
 // ============================================================
 // When msg==0x12 (button click) and id==200 (buttonOk):
 //   Wraps self in InternalBasePtr, calls UserInterface::CloseDialog.
 //
 // Original: 0x140068BD0.
 
-void EventPopupDialog_Slot8(EventPopupDialog* self, void* /*param2*/, int param3, int param4) {
+void EventPopupDialog::OnElementEvent(Object::InternalPtr<UI::Element>* /*element*/,
+                                      int32_t param3, int32_t param4, int32_t /*c*/,
+                                      int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
     if (param3 == 0x12 && param4 == 200) {
         uint8_t selfIBP[16];
-        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
+        new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(this));   // B.3.3 bridge
+        static_cast<UI::UserInterface*>(_ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
 }
 
 // ============================================================
-// STANDALONE EXE: real EventPopupDialog vtable + ctor + registration
+// [5] / [6] / [7] PORT GAP (B38 D3.1): retail inherits DialogInstance's
+// OnClosed / OnUpdateLayout / OnUpdate. The hand-built table had a no-op in all
+// three; kept for this commit.
 // ============================================================
-// EventPopupDialog (DialogInstance, 0xC0 bytes, exe vtable 0x14015bd80) — the modal
-// popup shown for high-severity events (popup field >= 0). In standalone this was a
-// dormant UI_DIALOG_STUB. Promote it to a real per-class vtable + standalone ctor so
-// EventNotifyDialog::Slot7's popup path (and any direct opener) can raise it.
-//
-// DialogInstance slots: idx0 Dtor, idx2 GetTypeId, idx4 Setup (Slot4), idx8 OnCommand
-// (Slot8 -> close on buttonOk id=200); idx3/5/6/7/9 are base serialize/thunk no-ops.
-// The event index this popup displays is stored at +0xB8 (read by Slot4).
+void EventPopupDialog::OnClosed() {}
+void EventPopupDialog::OnUpdateLayout() {}
+void EventPopupDialog::OnUpdate(const System::Time& /*time*/) {}
+
+// ============================================================
+// Construction, destruction, reflection
+// ============================================================
+// EventPopupDialog (DialogInstance, 0xC0 bytes, exe vtable 0x14015bd80): the
+// DialogInstance base ctor, then the event index this popup displays at +0xB8
+// (OnOpened reads it). EventNotifyDialog's popup branch builds it.
 
 #include "Object/factory_registration.h"
 #include <cstddef>
 
-namespace eventpopup_sa {
+EventPopupDialog::EventPopupDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
+                                   Object::InternalPtr<UI::DialogInstance> parent,
+                                   int32_t index)
+    : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), eventIndex(index) {}
 
-void* GetVtable();  // fwd
-
-void StubNop(void*, ...) {}
-void* Slot1Getter(void*) { return nullptr; }
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("EventPopupDialog");
-    return c;
-}
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = GetVtable();
-    if (fn_DialogInstance_Dtor) fn_DialogInstance_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
-void W_Slot4(void* self) { if (self) EventPopupDialog_Slot4(reinterpret_cast<EventPopupDialog*>(self)); }
-void W_Slot8(void* self, void* e, int msg, int id) {
-    if (self) EventPopupDialog_Slot8(reinterpret_cast<EventPopupDialog*>(self), e, msg, id);
+// [0] 0x1400119b0: ~EventPopupDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
+Object::Base* EventPopupDialog::DeletingDtor(unsigned flags) {
+    this->~EventPopupDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_vt[10];
-struct Init {
-    Init() {
-        for (int i = 0; i < 10; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[1] = reinterpret_cast<void*>(&Slot1Getter);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
-        g_vt[8] = reinterpret_cast<void*>(&W_Slot8);
-    }
-} g_init;
-
-void* GetVtable() { return reinterpret_cast<void*>(g_vt); }
-
-// Standalone ctor: DialogInstance base ctor + our vtable + store the event index
-// at +0xB8 (Slot4 reads it to select the event entry to display).
-void* Ctor(void* self, void* ui, void* extRes, void* parentIBP, int eventIndex) {
-    if (!self) return nullptr;
-    uint64_t parentCopy = parentIBP ? *reinterpret_cast<uint64_t*>(parentIBP) : 0;
-    if (fn_DialogInstance_Ctor && extRes)
-        fn_DialogInstance_Ctor(self, ui, extRes, &parentCopy, nullptr, nullptr, 0);
-    *reinterpret_cast<void**>(self) = GetVtable();
-    *(int32_t*)((uintptr_t)self + 0xB8) = eventIndex;
-    return self;
-}
-
-void Zero(void* p) { for (size_t o = 0; o < (size_t)0xC0; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0xC0, 8);
+// create 0x140011920: MemAlloc(0xc0, 8), then the ctor.
+void* EventPopupDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EventPopupDialog), 8);
     if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
+    return static_cast<Object::Base*>(::new (p) EventPopupDialog());
 }
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
-
-}  // namespace eventpopup_sa
-
-REGISTER_TYPE(EventPopupDialog, "UI::DialogInstance",
-              &eventpopup_sa::Factory, &eventpopup_sa::InPlace);
-
-extern "C" void* EventPopupDialog_Ctor_Standalone(void* self, void* ui, void* extRes,
-                                                  void* parentIBP, int eventIndex) {
-    return eventpopup_sa::Ctor(self, ui, extRes, parentIBP, eventIndex);
+// createInPlace 0x140011970 (the tree's in-place build is kept, B8-13).
+void* EventPopupDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) EventPopupDialog());
 }
-extern "C" void* EventPopupDialog_GetStandaloneVtable() { return eventpopup_sa::GetVtable(); }
 
+DEFINE_EXE_VTABLE(EventPopupDialog, "_ZTV16EventPopupDialog")
+DEFINE_EXE_TYPE(EventPopupDialog, "UI::DialogInstance")

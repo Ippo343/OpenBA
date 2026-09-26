@@ -165,30 +165,11 @@ struct AutoSaveDialog {
 static_assert(sizeof(AutoSaveDialog) == 0xD0, "AutoSaveDialog size mismatch");
 static_assert(offsetof(AutoSaveDialog, dataB8) == 0xB8, "");
 
-// --- EventNotifyDialog (0xF0) ---
-// Ctor inits: +0xB8=0, +0xC0(u32)=0, +0xC4(u32)=0xFFFFFFFF, +0xC8..+0xE8=0
-struct EventNotifyDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint32_t dataC0;           // +0xC0: zeroed
-    int32_t  dataC4;           // +0xC4: initialized to -1
-    uint64_t dataC8;           // +0xC8: zeroed
-    uint64_t dataD0;           // +0xD0: zeroed
-    uint64_t dataD8;           // +0xD8: zeroed
-    uint64_t dataE0;           // +0xE0: zeroed
-    uint64_t dataE8;           // +0xE8: zeroed
-};
-static_assert(sizeof(EventNotifyDialog) == 0xF0, "EventNotifyDialog size mismatch");
-static_assert(offsetof(EventNotifyDialog, dataB8) == 0xB8, "");
-static_assert(offsetof(EventNotifyDialog, dataC4) == 0xC4, "");
+// --- EventNotifyDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/EventNotifyDialog.h"
 
-// --- EventPopupDialog (0xC0) ---
-// Factory: no subclass fields initialized (base only)
-struct EventPopupDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: uninitialized by factory
-};
-static_assert(sizeof(EventPopupDialog) == 0xC0, "EventPopupDialog size mismatch");
+// --- EventPopupDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/EventPopupDialog.h"
 
 // --- FollowDialog (0xD8) ---
 // Factory inits: +0xB8=0, +0xC0=0, +0xC8=0, +0xD0=0

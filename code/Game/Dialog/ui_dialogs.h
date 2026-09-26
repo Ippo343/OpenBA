@@ -6,17 +6,6 @@
 #include <cstdint>
 
 // ============================================================
-// EventPopupDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Finds imageIcon/textEvent/buttonOk elements,
-// sets event icon sprite and text parameter, assigns button ID 200.
-void EventPopupDialog_Slot4(EventPopupDialog* self);
-
-// Slot8 (vtable +0x40): OnCommand — close dialog on msg=0x12, id=200.
-void EventPopupDialog_Slot8(EventPopupDialog* self, void* param2, int param3, int param4);
-
-// ============================================================
 // LoaderDialog
 // ============================================================
 
@@ -331,34 +320,6 @@ int GoalDialog_Slot7(GoalDialog* self);
 
 // Slot8 (vtable +0x40): OnCommand — close dialog on msg=0x12, id=100.
 void GoalDialog_Slot8(GoalDialog* self, void* param2, int param3, int param4);
-
-// ============================================================
-// EventNotifyDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Startup — finds ribbonNotify, notifyContent,
-// builds notification entry array from children. Sets button IDs.
-void EventNotifyDialog_Slot4(EventNotifyDialog* self);
-
-// Slot5 (vtable +0x28): Shutdown — 3-byte no-op, returns 0.
-int EventNotifyDialog_Slot5(EventNotifyDialog* self);
-
-// Slot6 (vtable +0x30): Update — smoothly positions the notification ribbon
-// relative to the toolbar, updates per-slot sprites/flags/colors/text.
-// For active slots: sets icon sprite, toggles button/image visibility based on
-// popup state, sets color on button controller and its children.
-// For empty slots: clears color, hides image, shows button, clears text.
-void EventNotifyDialog_Update(EventNotifyDialog* self);
-
-// Slot7 (vtable +0x38): Event processing — decrements notification timers,
-// scans event log for new events, creates notification entries with icons/colors,
-// plays sound effect on new events.
-void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2);
-
-// OnEvent (vtable +0x40, exe 0x140068680): Handles notification button clicks.
-// eventType 0x12 (button): eventData in range [0x5DC, 0x5DC+activeCount) →
-//   navigate to event position on map (calls FUN_1400685a0).
-void EventNotifyDialog_OnEvent(EventNotifyDialog* self, void* element, int eventType, int eventData);
 
 // ============================================================
 // AchievementDialog
