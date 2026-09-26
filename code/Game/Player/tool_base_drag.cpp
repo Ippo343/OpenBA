@@ -16,6 +16,7 @@
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 
 // ============================================================
 // FindDescription (FUN_140005160) — closure-safe
@@ -119,7 +120,9 @@ void DragTool_PlayTickSound_ffbf0(uintptr_t param_1) {
             reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
         uint64_t soundId = *reinterpret_cast<uint64_t*>(
             reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x80);
-        if (fn_Audio_Scene_PlayEffect) fn_Audio_Scene_PlayEffect(scene, soundId, 1, timeBuf);
+        reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
+            reinterpret_cast<Audio::SoundEffect*>(soundId), static_cast<Audio::Scene::SoundType>(1),
+            *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.7 bridge
 
         // Re-set the throttle timer to 0.05s (DAT_1401720d4 == 0.05f).
         uint64_t throttle[4] = {0};
@@ -149,7 +152,9 @@ void DragTool_PlayPlaceSound_1000f0(uint64_t /*unused*/) {
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x88);
-    if (fn_Audio_Scene_PlayEffect) fn_Audio_Scene_PlayEffect(scene, soundId, 1, timeBuf);
+    reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
+        reinterpret_cast<Audio::SoundEffect*>(soundId), static_cast<Audio::Scene::SoundType>(1),
+        *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.7 bridge
 }
 
 // ============================================================
@@ -169,7 +174,9 @@ void DragTool_PlayErrorSound_100140(uint64_t /*unused*/) {
         reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0x78);
     uint64_t soundId = *reinterpret_cast<uint64_t*>(
         reinterpret_cast<uintptr_t>(*g_pKeyMapSingleton) + 0x90);
-    if (fn_Audio_Scene_PlayEffect) fn_Audio_Scene_PlayEffect(scene, soundId, 1, timeBuf);
+    reinterpret_cast<Audio::Scene*>(scene)->PlayEffect(
+        reinterpret_cast<Audio::SoundEffect*>(soundId), static_cast<Audio::Scene::SoundType>(1),
+        *reinterpret_cast<const System::Time*>(timeBuf));   // B.3.7 bridge
 }
 
 // ============================================================

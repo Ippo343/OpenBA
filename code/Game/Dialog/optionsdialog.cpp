@@ -19,6 +19,7 @@
 #include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
 #include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "engine/MainLoop.h"   // ENDGAME B.3.7 callers (K1)
+#include "audio/Audio.h"     // ENDGAME B.3.7 callers (K4)
 #include "Dialog/ui_dialogs.h"
 // ENDGAME B.3.5 batch K1: video/Device.h FIRST. It pulls no Volume.h itself, but the
 // house rule (a runtime type header ahead of anything that reaches <windows.h> through
@@ -1160,8 +1161,8 @@ void OptionsDialog_OnApply(OptionsDialog* self) {
     OptionsDialog_ApplyInputSettings(self);
 
     // Save audio configuration
-    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton && fn_AudioConfig_Save)
-        fn_AudioConfig_Save(*g_pAudioConfigSingleton);
+    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton)
+        reinterpret_cast<Audio::Configuration*>(*g_pAudioConfigSingleton)->Save();   // B.3.7 bridge
 
     OptionsDialog_ApplyGameSettings(self);
 
@@ -1217,8 +1218,8 @@ void OptionsDialog_OnCancel(OptionsDialog* self) {
         reinterpret_cast<IO::Persistence*>(*g_pPersistenceSingleton)->ReadSettings();   // B.3.4 bridge
 
     // Reinitialize audio from saved config
-    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton && fn_AudioConfig_Startup)
-        fn_AudioConfig_Startup(*g_pAudioConfigSingleton);
+    if (g_pAudioConfigSingleton && *g_pAudioConfigSingleton)
+        reinterpret_cast<Audio::Configuration*>(*g_pAudioConfigSingleton)->Startup();   // B.3.7 bridge
 
     // Restore video settings to pre-dialog state
     OptionsDialog_RestoreVideoSettings(self);
