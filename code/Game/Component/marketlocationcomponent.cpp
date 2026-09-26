@@ -106,7 +106,7 @@ void MarketLocationComponent_OnCreate(MarketLocationComponent* self) {
         return;
 
     // Build an InternalBasePtr on the stack with the owner entity
-    uint64_t entityPtr = (uint64_t)(uintptr_t)self->owner;
+    uint64_t entityPtr = (uint64_t)(uintptr_t)self->_entity;
 
     // Get the world manager from game state
     uintptr_t gameState = (uintptr_t)*g_pGameWorldSingleton;
@@ -129,68 +129,95 @@ void MarketLocationComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x48 (MarketLocationComponent_Factory MemAlloc), flags 0x82 (Ctor
-// 0x14004f060: Component base sets +0x20=0x80, leaf OR 0x2 => 0x82).
+// ============================================================================
+// ENDGAME B.3.8 MI-B — MarketLocationComponent as a REAL class with its retail
+// controller member (MarketLocationComponent.h; B38_RULES D1, D2, D6, D9 #8).
+//
+// Before: COMPONENT_INERT_FACTORY expanded by hand (48-slot table, slots 3/7
+// patched per create, Inert_ScalarDtor in slot 0) and NO controller: slots 16/17
+// were inert stubs, so the entity's StateMachineComponent never linked this node
+// and the market never entered state 2. After: the compiler's 18-slot vtable, a
+// real ctor/dtor chain, and retail's member at +0x28 over retail's state table.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/coll_bridge.h"
 
-// Hand-expanded from COMPONENT_INERT_FACTORY(MarketLocationComponent, 0x48, 0x82) so
-// slots 3 and 7 carry the two real bodies above instead of the shared inert stub. Both
-// have been ported since this file was written and were referenced by NOTHING outside
-// marketlocationcomponent_funcs.h — never registered, never in a vtable, dead code.
-//
-// The class needs no state machine, so this is the InteractComponent/PickingComponent
-// shape (a hand-expanded inert factory + FinishVtable), NOT CONTROLLER_LIVE_FACTORY*:
-// retail's slots 16/17 here are the shared 0x1400026c0 / 0x140004080 constants, but
-// nothing on the market-location entity links this node, and inventing a live node
-// would be a mechanism retail does not exercise.
-//
-// Byte-verified 2026-08-22 from vtable_MarketLocationComponent (0x140159dd0) — the
-// bytes, not the source comments, are the authority here because Ghidra mislabels
-// OnCreate/OnRemove off by one on this family:
-//   slot 3 = 0x14004efa0   MarketLocationComponent::Shutdown  (serialize)
-//   slot 7 = 0x14004ef60   the removal hook (Ghidra: "OnCreate")
-// The comments happened to have the indices right; they had the slot-7 SEMANTICS
-// backwards. See the note on the body above.
-//
-// Opt-in until measured (BANISHED_LIVE_MARKETLOC). Default (env off) => byte-for-byte
-// the previous inert factory.
-static uint32_t MarketLocationComponent_InertGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MarketLocationComponent");
-    return cached;
+using MarketLocationCtrlDispatch = ::ControllerLive::Dispatcher<MarketLocationCtrlTag>;
+
+// state-2 ENTER — retail 0x14004ef20. REGISTER the market: append the owner entity to
+// the town's market-location list at (gameState+0xf0)+0x10 —
+//   local = *(comp+0x10); list = *(gw+0xf0) + 0x10;
+//   Array<void*>::SetSize(list, list.count + 1, &local)       (0x140003110)
+// — then `XOR AL,AL` (0: the Tick's enter walk continues past this node). The slot-7
+// removal hook (0x14004ef60) and the state-3 enter below are the matching erase.
+static char MarketLoc_State2Enter(void* data, void* /*sm*/) {
+    if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return 0;
+    uint64_t entityPtr = *reinterpret_cast<uint64_t*>(reinterpret_cast<uintptr_t>(data) + 0x10);
+    const uintptr_t townMgr = *reinterpret_cast<uintptr_t*>(
+        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf0);
+    // B.3.2 bridge: 0x140003110 is Collection::Array<void*>::SetSize(n, fill).
+    const int count = *reinterpret_cast<int*>(townMgr + 0x18);
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(townMgr + 0x10))
+        .SetSizeFill(count + 1, &entityPtr);
+    return 0;
 }
-static void* MarketLocationComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
-static void MarketLocationComponent_ShutdownVSlot(void* self, void* stream) {
-    MarketLocationComponent_Shutdown(
-        reinterpret_cast<MarketLocationComponent*>(self), stream);
+
+// state-3 ENTER — retail 0x14004eee0: `local = *(comp+0x10);
+// DynArray8_EraseByValue(*(gw+0xf0) + 0x10, &local)` (0x140002cc0), then `XOR AL,AL`.
+// Byte-for-byte the slot-7 removal hook's body.
+static char MarketLoc_State3Enter(void* data, void* /*sm*/) {
+    MarketLocationComponent_OnCreate(reinterpret_cast<MarketLocationComponent*>(data));   // B.3.8 bridge
+    return 0;
 }
-static void MarketLocationComponent_RemoveVSlot(void* self) {
-    MarketLocationComponent_OnCreate(reinterpret_cast<MarketLocationComponent*>(self));
+
+// Retail's table, transcribed from MarketLocationDescription_SetupCrossRefs
+// (0x14014b220) call for call. Its RegisterState (0x140008980) stores only the id and
+// the enter handler (the other columns are zeroed); its AddTransition (0x140008a90)
+// has no handler. Built ONCE at static-init time (B38 D6/D7).
+static void MarketLocationComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = MarketLocationCtrlDispatch::table;
+    if (t.count != 0) return;                      // idempotent
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&MarketLoc_State2Enter),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 3, nullptr);
+    TableRegisterState(t, 3, reinterpret_cast<void*>(&MarketLoc_State3Enter),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 6, nullptr);
+    TableAddTransition(t, 4, nullptr);
+    TableAddTransition(t, 5, nullptr);
 }
-// Must run after every MakeInertTyped/InitInertTyped — those re-stub the shared
-// per-type vtable on each instance creation, so a one-shot install would be erased
-// by the next component created.
-static void MarketLocationComponent_FinishVtable() {
-    MarketLocationComponent_InertVtable[3] =
-        reinterpret_cast<void*>(&MarketLocationComponent_ShutdownVSlot);
-    MarketLocationComponent_InertVtable[7] =
-        reinterpret_cast<void*>(&MarketLocationComponent_RemoveVSlot);
+static const bool s_marketLocationStateTableBuilt = (MarketLocationComponent_PopulateStateTable(), true);
+
+// 0x14004f060. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer (+0x40); then `_flags |= 2` (0x82).
+MarketLocationComponent::MarketLocationComponent() : _controller(this) {
+    OrFlagsInCtor(0x2);
 }
-extern "C" void* MarketLocationComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x48, 0x82,
-        MarketLocationComponent_InertVtable,
-        reinterpret_cast<void*>(&MarketLocationComponent_InertGetTypeId));
-    MarketLocationComponent_FinishVtable();
-    return p;
+
+// [0] 0x140008900: restamps + ~Internal (the compiler chain), MemFree on &1.
+Object::Base* MarketLocationComponent::DeletingDtor(unsigned flags) {
+    this->~MarketLocationComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void* MarketLocationComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x48, 0x82,
-        MarketLocationComponent_InertVtable,
-        reinterpret_cast<void*>(&MarketLocationComponent_InertGetTypeId));
-    MarketLocationComponent_FinishVtable();
-    return mem;
+
+// create 0x1400086c0: MemAlloc(0x48, 8), then the ctor.
+void* MarketLocationComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MarketLocationComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) MarketLocationComponent());
 }
-REGISTER_TYPE(MarketLocationComponent, "ControllerComponent",
-              &MarketLocationComponent_Factory, &MarketLocationComponent_CreateInPlace);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* MarketLocationComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) MarketLocationComponent());
+}
+
+// [3] 0x14004efa0 (the body resolves at its top). [7] 0x14004ef60 — the removal hook.
+void MarketLocationComponent::Persist(void* stream) { MarketLocationComponent_Shutdown(this, stream); }
+void MarketLocationComponent::OnRemove() { MarketLocationComponent_OnCreate(this); }
+
+DEFINE_EXE_VTABLE(MarketLocationComponent, "_ZTV23MarketLocationComponent")
+DEFINE_EXE_TYPE(MarketLocationComponent, "ControllerComponent")

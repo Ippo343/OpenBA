@@ -14,7 +14,6 @@
 
 #include <cstdint>
 #include <cstddef>
-#include "ControllerComponent.h"
 
 namespace MarketLocationComponentAddr {
     constexpr uintptr_t Ctor              = 0x14004f060;
@@ -22,22 +21,7 @@ namespace MarketLocationComponentAddr {
     constexpr uintptr_t ControllerVtable  = 0x140159d80;
 }
 
-struct MarketLocationComponent {
-    // ControllerComponent base (0x48 bytes) — no additional fields
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10
-    void*    _unk18;            // +0x18
-    uint32_t flags;             // +0x20
-    uint8_t  _pad24[4];         // +0x24
-
-    void*    controllerVtable;  // +0x28
-    void*    controllerData0;   // +0x30
-    void*    controllerData1;   // +0x38
-    void*    selfPtr;           // +0x40
-};
-
-static_assert(sizeof(MarketLocationComponent) == 0x48, "MarketLocationComponent size mismatch");
-static_assert(offsetof(MarketLocationComponent, vtable) == 0x00, "");
-static_assert(offsetof(MarketLocationComponent, controllerVtable) == 0x28, "");
-static_assert(offsetof(MarketLocationComponent, selfPtr) == 0x40, "");
+// ENDGAME B.3.8 MI-B: the POD is gone — `MarketLocationComponent` is a real class now
+// (code/Game/Component/MarketLocationComponent.h, compiler vtable). This forwarder keeps the old
+// include spelling working until the closing pass deletes it (B8-4).
+#include "Component/MarketLocationComponent.h"

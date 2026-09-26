@@ -37,6 +37,7 @@
 #include "Component/StorageLocationComponent.h"
 #include "Component/TradeComponent.h"
 #include "Component/WorkPlaceComponent.h"
+#include "Component/MarketLocationComponent.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -186,6 +187,9 @@ UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
     CheckCtlLeaf<StorageLocationComponent>(0x28);  // slot 17 0x140004080
     CheckCtlLeaf<TradeComponent>(0x88);            // slot 17 0x14000dba0
     CheckCtlLeaf<WorkPlaceComponent>(0x28);        // slot 17 0x140004080
+    CheckCtlLeaf<MarketLocationComponent>(0x28);   // slot 17 0x140004080 (D9 #8: the tree had none)
+    CHECK_EQ(sizeof(MarketLocationComponent), (size_t)0x48);   // create 0x1400086c0
+    CHECK_EQ(SlotOffset(&MarketLocationComponent::OnRemove), S(7));   // 0x14004ef60
 }
 
 UNIT_TEST(mib_controller_member_fields) {
