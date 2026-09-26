@@ -62,7 +62,7 @@ void LivestockComponent_Update(LivestockComponent* self, int64_t deltaTime) {
     }
 
     // Get the related component from _unk18 and check its type
-    void* relatedComponent = self->_unk18;
+    void* relatedComponent = self->_description;
     bool isDerived = fn_IsDerivedFrom(relatedComponent, *s_pLivestockConfigTypeId);
 
     void* configComponent = isDerived ? relatedComponent : nullptr;
@@ -177,60 +177,52 @@ void LivestockComponent_OnRemove(LivestockComponent* self) {
     s_erase(reinterpret_cast<void*>(static_cast<uintptr_t>(self->data28) + 0x30), &ibp);
 }
 
-// ===== Standalone factory =====
-// Inert by default; BANISHED_LIVE_PASTURE graduates three slots (indices from the
-// retail vtable at 0x1401639b0): [6] OnAdd, [7] OnRemove, [9] Update. Size 0x38 and
-// flags 0x8b come from LivestockComponent_Ctor (0x140123ee0) — Component_Ctor's 0x80
-// OR'd with the leaf's 0x0b.
+// ===== ENDGAME B.3.8 CIT — LivestockComponent as a REAL class (LivestockComponent.h) =====
+// Before: a 48-slot hand-built LivestockComponent_LiveVtable filled at every
+// create (slots 3 Serialize, 6 OnAdd, 7 OnRemove, 9 Update), Inert_ScalarDtor in
+// slot 0. After: the compiler's 16-slot vtable and a real ctor/dtor chain
+// (B38_RULES D1, D2).
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/LivestockComponent.h"
 
-static uint32_t LivestockComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("LivestockComponent");
-    return cached;
-}
-static void* LivestockComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-
+// Retail 0x140123e10 (animalwave_serialize.cpp).
 extern "C" void LivestockComponent_Serialize(void* self, void* stream);
 
-static void LivestockComponent_OnAddVSlot(void* s) {
-    LivestockComponent_OnAdd(reinterpret_cast<LivestockComponent*>(s));
-}
-static void LivestockComponent_OnRemoveVSlot(void* s) {
-    LivestockComponent_OnRemove(reinterpret_cast<LivestockComponent*>(s));
-}
-static void LivestockComponent_UpdateVSlot(void* s, void* t) {
-    LivestockComponent_Update(reinterpret_cast<LivestockComponent*>(s),
-                              t ? *reinterpret_cast<int64_t*>(t) : 0);
-}
-static void LivestockComponent_SerializeVSlot(void* self, void* stream) {
-    LivestockComponent_Serialize(self, stream);
-}
-// Slot 3 (Serialize, retail 0x140123e10, body in animalwave_serialize.cpp) wired
-// UNCONDITIONALLY (save/load wave 2026-08-28): a loaded save's LivestockComponent
-// otherwise kept the base-Component serialize, so the assigned-pasture backref
-// (+0x28) and production timer (+0x30) reset to null/0 on load.
-static void LivestockComponent_InstallLive() {
-    LivestockComponent_LiveVtable[3] = reinterpret_cast<void*>(&LivestockComponent_SerializeVSlot);
-    LivestockComponent_LiveVtable[6] = reinterpret_cast<void*>(&LivestockComponent_OnAddVSlot);
-    LivestockComponent_LiveVtable[7] = reinterpret_cast<void*>(&LivestockComponent_OnRemoveVSlot);
-    LivestockComponent_LiveVtable[9] = reinterpret_cast<void*>(&LivestockComponent_UpdateVSlot);
-}
-extern "C" void* LivestockComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x38, 0x8b,
-        LivestockComponent_LiveVtable,
-        reinterpret_cast<void*>(&LivestockComponent_LiveGetTypeId));
-    LivestockComponent_InstallLive();
-    return p;
-}
-static void* LivestockComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x38, 0x8b,
-        LivestockComponent_LiveVtable,
-        reinterpret_cast<void*>(&LivestockComponent_LiveGetTypeId));
-    LivestockComponent_InstallLive();
-    return mem;
+// 0x140123ee0. Component() is the CALL 0x1401188b0; the 0x1401639b0 stamp is
+// the compiler's; +0x28 = +0x30 = 0; flags |= 0x0b (0x8b).
+LivestockComponent::LivestockComponent() : data28(0), data30(0) {
+    OrFlagsInCtor(0x0b);
 }
 
-REGISTER_TYPE(LivestockComponent, "Component",
-              &LivestockComponent_Factory, &LivestockComponent_CreateInPlace);
+// [0] 0x140035680: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* LivestockComponent::DeletingDtor(unsigned flags) {
+    this->~LivestockComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+void LivestockComponent::Persist(void* stream) { LivestockComponent_Serialize(this, stream); }   // [3] 0x140123e10
+void LivestockComponent::OnAdded()  { LivestockComponent_OnAdd(this); }                          // [6] 0x140123c70
+void LivestockComponent::OnRemove() { LivestockComponent_OnRemove(this); }                       // [7] 0x140123c00
+
+// [9] 0x140123b50. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af); the ported body takes the Time by value.
+void LivestockComponent::Update(void* time) {
+    LivestockComponent_Update(this, time ? *static_cast<int64_t*>(time) : 0);
+}
+
+// create 0x140035480: MemAlloc(0x38, 8), then the ctor.
+void* LivestockComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(LivestockComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) LivestockComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* LivestockComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) LivestockComponent());
+}
+
+DEFINE_EXE_VTABLE(LivestockComponent, "_ZTV18LivestockComponent")
+DEFINE_EXE_TYPE(LivestockComponent, "Component")

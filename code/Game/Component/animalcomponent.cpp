@@ -216,7 +216,7 @@ inline void* Rng() {
     return w ? *reinterpret_cast<void**>(w + 0xd8) : nullptr;
 }
 
-// Resolve self->_unk18 as an AnimalDescription (the retail IsDerivedFrom guard).
+// Resolve self->_description as an AnimalDescription (the retail IsDerivedFrom guard).
 inline void* AnimalDesc(AnimalComponent* self) {
     void* raw = At<void*>(self, 0x18);
     if (!raw || !fn_IsDerivedFrom || !s_pTid_AnimalDescription) return nullptr;
@@ -842,64 +842,63 @@ void AnimalComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory =====
-// Live under BANISHED_LIVE_ANIMAL_UPDATE, wiring the three retail slots this file
-// implements: [4] Startup, [6] OnAdded, [9] Update. Default (flag unset) is
-// byte-for-byte identical to the previous COMPONENT_INERT_FACTORY.
+// ============================================================================
+// ENDGAME B.3.8 CIT — AnimalComponent as a REAL class (AnimalComponent.h).
 //
-// hand-expanded (save/load wave 2026-08-28) from COMPONENT_LIVE_FACTORY_SOA to
-// ALSO wire slot 3 (Serialize, retail 0x140106e40, body in animalwave_serialize.cpp)
-// UNCONDITIONALLY. Ported but never installed: a loaded save's AnimalComponent kept
-// the base-Component serialize, so age/deathAge/wander state all reset to 0 on
-// load — deathAge=0 immediately reads as "already dead" (age > deathAge), which is
-// the animal-instant-death-after-load symptom.
+// Before: a 48-slot hand-built AnimalComponent_LiveVtable filled at every create
+// (slots 3 Serialize, 4 Startup, 6 OnAdded, 9 Update), Inert_ScalarDtor in slot
+// 0. After: the compiler's 16-slot vtable and a real ctor/dtor chain (B38_RULES
+// D1, D2).
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/AnimalComponent.h"
 
+// Retail 0x140106e40 (animalwave_serialize.cpp).
 extern "C" void AnimalComponent_Serialize(void* self, void* stream);
 
-static uint32_t AnimalComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("AnimalComponent");
-    return cached;
+// 0x140106fc0. Component() is the CALL 0x1401188b0; the 0x140162110 stamp is
+// the compiler's; +0x28 (dword), +0x30, +0x38, +0x40 (byte), +0x44 (qword),
+// +0x50 = 0; flags |= 0xc9.
+AnimalComponent::AnimalComponent()
+    : data28(0), _pad2C{}, data30(0), data38(0), data40(0), _pad41{},
+      data44(0), data48(0), _pad4C{}, data50(0) {
+    OrFlagsInCtor(0xc9);
 }
-static void* AnimalComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
-static void AnimalComponent_UpdateVSlot(void* s, void* t) {
-    AnimalComponent_Update(reinterpret_cast<AnimalComponent*>(s),
-                            reinterpret_cast<int64_t*>(t));
+
+// [0] 0x14002f170: restamp + ~Internal (no own work), MemFree on &1.
+Object::Base* AnimalComponent::DeletingDtor(unsigned flags) {
+    this->~AnimalComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
-static void AnimalComponent_StartupVSlot(void* s) {
-    AnimalComponent_Startup(reinterpret_cast<AnimalComponent*>(s));
+
+void AnimalComponent::Persist(void* stream) { AnimalComponent_Serialize(this, stream); }   // [3] 0x140106e40
+void AnimalComponent::Startup() { AnimalComponent_Startup(this); }                          // [4] 0x140106d50
+void AnimalComponent::OnAdded() { AnimalComponent_OnAdd(this); }                            // [6] 0x140106c20
+
+// [9] 0x140106420. RDX is a pointer to the elapsed System::Time (EntityList
+// bucket tick 0x1400c42af).
+void AnimalComponent::Update(void* time) {
+    AnimalComponent_Update(this, static_cast<int64_t*>(time));
 }
-static void AnimalComponent_OnAddedVSlot(void* s) {
-    AnimalComponent_OnAdd(reinterpret_cast<AnimalComponent*>(s));
+
+// [11] 0x140106dd0 (104 B). PORT GAP (retail 0x140106dd0) — B38 D9: not ported
+// (see "Deferred" at the top of this file); the tree's table held the inert
+// stub here, kept.
+void AnimalComponent::Slot11() {}
+
+// create 0x14002f020: MemAlloc(0x58, 8), then the ctor.
+void* AnimalComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AnimalComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AnimalComponent());
 }
-static void AnimalComponent_SerializeVSlot(void* self, void* stream) {
-    AnimalComponent_Serialize(self, stream);
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* AnimalComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AnimalComponent());
 }
-static void AnimalComponent_FinishLiveVtable() {
-    AnimalComponent_LiveVtable[4] =
-        reinterpret_cast<void*>(&AnimalComponent_StartupVSlot);
-    AnimalComponent_LiveVtable[9] =
-        reinterpret_cast<void*>(&AnimalComponent_UpdateVSlot);
-    AnimalComponent_LiveVtable[6] =
-        reinterpret_cast<void*>(&AnimalComponent_OnAddedVSlot);
-    AnimalComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&AnimalComponent_SerializeVSlot);
-}
-extern "C" void* AnimalComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x58, 0xC9,
-        AnimalComponent_LiveVtable,
-        reinterpret_cast<void*>(&AnimalComponent_LiveGetTypeId));
-    AnimalComponent_FinishLiveVtable();
-    return p;
-}
-static void* AnimalComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x58, 0xC9,
-        AnimalComponent_LiveVtable,
-        reinterpret_cast<void*>(&AnimalComponent_LiveGetTypeId));
-    AnimalComponent_FinishLiveVtable();
-    return mem;
-}
-REGISTER_TYPE(AnimalComponent, "Component",
-              &AnimalComponent_Factory, &AnimalComponent_CreateInPlace);
+
+DEFINE_EXE_VTABLE(AnimalComponent, "_ZTV15AnimalComponent")
+DEFINE_EXE_TYPE(AnimalComponent, "Component")

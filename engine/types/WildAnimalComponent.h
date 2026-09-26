@@ -24,22 +24,8 @@ namespace WildAnimalComponentAddr {
     // Draw = base no-op (0x140118820)
 }
 
-struct WildAnimalComponent {
-    // Component base (0x28 bytes)
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `WildAnimalComponent` is a real class now
+// (code/Game/Component/WildAnimalComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/WildAnimalComponent.h"
 
-    // WildAnimalComponent fields
-    uint64_t data28;       // +0x28: zeroed by ctor
-};
-
-static_assert(sizeof(WildAnimalComponent) == 0x30, "WildAnimalComponent size mismatch");
-static_assert(offsetof(WildAnimalComponent, vtable) == 0x00, "");
-static_assert(offsetof(WildAnimalComponent, next)   == 0x08, "");
-static_assert(offsetof(WildAnimalComponent, owner)  == 0x10, "");
-static_assert(offsetof(WildAnimalComponent, flags)  == 0x20, "");
-static_assert(offsetof(WildAnimalComponent, data28) == 0x28, "");
