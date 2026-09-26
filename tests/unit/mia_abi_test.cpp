@@ -25,6 +25,7 @@
 // ============================================================================
 #include "unit.h"
 
+#include "Component/AbsorbResourceComponent.h"
 #include "Component/AttendanceComponent.h"
 #include "Component/BoatComponent.h"
 #include "Component/BuildComponent.h"
@@ -61,6 +62,7 @@ constexpr uintptr_t S(int slot) { return static_cast<uintptr_t>(slot) * 8; }
 // PART A — LAYOUT
 // ===========================================================================
 UNIT_TEST(mia_component_sizes_match_retail) {
+    CHECK_EQ(sizeof(AbsorbResourceComponent),(size_t)0x48);   // create 0x14002ea20
     CHECK_EQ(sizeof(AttendanceComponent),    (size_t)0x58);   // create 0x140002670
     CHECK_EQ(sizeof(BoatComponent),          (size_t)0x98);   // create 0x1400036e0
     CHECK_EQ(sizeof(BuildComponent),         (size_t)0x78);   // create 0x14002f2b0
@@ -83,6 +85,7 @@ void CheckMember(size_t off) {
 }
 
 UNIT_TEST(mia_controller_member_at_retail_offset) {
+    CheckMember<AbsorbResourceComponent>(0x28);  // slot 17 0x140004080 (D9 #8: the tree had none)
     CheckMember<AttendanceComponent>(0x38);      // slot 17 0x1400026b0
     CheckMember<BoatComponent>(0x78);            // slot 17 0x140003720
     CheckMember<BuildComponent>(0x28);           // slot 17 0x140004080
@@ -143,6 +146,7 @@ void CheckLeafShape() {
 }
 
 UNIT_TEST(mia_component_class_shape_rules) {
+    CheckLeafShape<AbsorbResourceComponent>();
     CheckLeafShape<AttendanceComponent>();
     CheckLeafShape<BoatComponent>();
     CheckLeafShape<BuildComponent>();

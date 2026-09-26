@@ -143,20 +143,68 @@ void AbsorbResourceComponent_InitFuncs() {
 #endif
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// In standalone the original exe is not mapped, so Object::Factory::CreateObject
-// must resolve to a C++ factory here. Produces an inert-but-valid AbsorbResourceComponent
-// (size 0x48, +0x20 capability flags 0x80, Object::Internal base + shared stub
-// vtable, zeroed body). Size from AbsorbResourceComponent_Factory MemAlloc; flags from the
-// Component_Ctor (+0x20=0x80) chain OR'd with the leaf ctor bits.
+// ============================================================================
+// ENDGAME B.3.8 MI-A — AbsorbResourceComponent as a REAL class with its
+// controller member (AbsorbResourceComponent.h, B38_RULES D9 #8).
+//
+// Before: COMPONENT_INERT_FACTORY_SER — a 48-slot inert table re-filled at every
+// create, `Inert_ScalarDtor` in slot 0, and NO controller: slots 16/17 were inert
+// stubs, so the entity's StateMachineComponent never linked this component. After:
+// the compiler's 18-slot vtable, a real constructor and destructor chain, and the
+// retail controller member at +0x28 over its one-state table.
+// ============================================================================
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/AbsorbResourceComponent.h"
 
-// Slot 3 must be wired: retail 0x140105c00 is Component::Serialize plus TWO
-// empty Serializer scopes, and an empty scope still occupies 16 bytes in the
-// save encoding — the base-only fill read 32 bytes too few and desynced the
-// stream for every object after it.
-COMPONENT_INERT_FACTORY_SER(AbsorbResourceComponent, 0x48, 0x80,
-                            AbsorbResourceComponent_Shutdown)
-REGISTER_TYPE(AbsorbResourceComponent, "ControllerComponent",
-              &AbsorbResourceComponent_Factory, &AbsorbResourceComponent_CreateInPlace);
+using AbsorbResourceCtrlDispatch = ::ControllerLive::Dispatcher<AbsorbResourceCtrlTag>;
+
+// The retail table, transcribed from the static initializer 0x14014e4f0 ->
+// 0x14002ec70: ONE state, id 0, with only the per-frame TickAlt column (+0x18)
+// set (0x140105950); no enter, no update, no transition, no event. Built ONCE at
+// static-init time, as retail's initializer does (B38 D6/D7).
+// PORT GAP (B38 D3.2): the per-frame handler 0x140105950 has no port yet, so the
+// column holds null (the dispatcher's graceful 0); its transcription is its own
+// titled commit.
+static void AbsorbResourceComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = AbsorbResourceCtrlDispatch::table;
+    if (t.count != 0) return;                      // idempotent
+    TableRegisterState(t, 0, nullptr, nullptr, nullptr, nullptr);
+}
+static const bool s_absorbResourceStateTableBuilt = (AbsorbResourceComponent_PopulateStateTable(), true);
+
+// 0x140105cc0. Component() is the CALL 0x1401188b0; the 0x140162b80 and
+// 0x140162000 stamps and the member's 0x14015f070 / 0x140161fb0 stamps are the
+// compiler's; `_controller(this)` is the +0x40 back-pointer store and the +0x30 /
+// +0x38 zeroes. No flag OR (0x80).
+AbsorbResourceComponent::AbsorbResourceComponent() : _controller(this) {}
+
+// [0] 0x14002ebf0: the dtor 0x140105c60 inlined (restamps + ~Internal), MemFree on &1.
+Object::Base* AbsorbResourceComponent::DeletingDtor(unsigned flags) {
+    this->~AbsorbResourceComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x140105c60: restamp + ~Internal, no own work.
+AbsorbResourceComponent::~AbsorbResourceComponent() = default;
+
+// [3] 0x140105c00: Component::Persist plus TWO empty Serializer scopes — an
+// empty scope still occupies 16 bytes in the save encoding (the body resolves its
+// own helpers first: slot 3 is the first call on a load).
+void AbsorbResourceComponent::Persist(void* stream) { AbsorbResourceComponent_Shutdown(this, stream); }
+
+// create 0x14002ea20: MemAlloc(0x48, 8), then the ctor.
+void* AbsorbResourceComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(AbsorbResourceComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) AbsorbResourceComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* AbsorbResourceComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) AbsorbResourceComponent());
+}
+
+DEFINE_EXE_VTABLE(AbsorbResourceComponent, "_ZTV23AbsorbResourceComponent")
+DEFINE_EXE_TYPE(AbsorbResourceComponent, "ControllerComponent")
