@@ -177,11 +177,11 @@ void MultiObjectComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ===== Standalone factory (Foundation D — component instantiation) =====
-// size 0x60 (MultiObjectComponent_Factory MemAlloc), flags 0x82 (Ctor
-// 0x140125a70: Component base sets +0x20=0x80, leaf OR 0x2 => 0x82).
+// ===== ENDGAME B.3.8 MI-B — MultiObjectComponent's own slot bodies =====
+// The class (MultiObjectComponent.h) reaches the slot-12 body below through its
+// OnEvent member, at the bottom of this file.
 #include "Object/factory_registration.h"
-#include "Component/component_factory_base.h"
+#include "Component/controller_state_table.h"
 
 // -- slot 12 (+0x60) -- retail 0x140125490 -- the child-entity MESSAGE FORWARDER -----
 // Pure relay, no message filter: for every child entity in the array at +0x48 (count at
@@ -224,41 +224,118 @@ extern "C" void MultiObjectComponent_Slot12(void* selfV, int msgId) {
     }
 }
 
-static uint32_t MultiObjectComponent_LiveGetTypeId(void*) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("MultiObjectComponent");
-    return cached;
-}
-static void* MultiObjectComponent_LiveVtable[::ComponentFactory::kInertVtableSlots];
+// ============================================================================
+// ENDGAME B.3.8 MI-B — MultiObjectComponent as a REAL class with its retail
+// controller member (MultiObjectComponent.h; B38_RULES D1, D2, D6, D9 #8).
+//
+// Before: a hand-built 48-slot table (slots 3/12 patched per create,
+// Inert_ScalarDtor in slot 0) and NO controller: slots 16/17 were inert stubs, so
+// the entity's StateMachineComponent never linked this node. After: the compiler's
+// 18-slot vtable, a real ctor/dtor chain, and retail's member at +0x28 over retail's
+// state table.
+// ============================================================================
+extern void MapComponent_sub_41b0(int64_t mapComponent);   // keystone_a_map.cpp, 0x1401241b0
+extern void FloorComponent_SubF390(void* floorComponent);  // floorcomponent.cpp, 0x14011f390
 
-static void MultiObjectComponent_ShutdownVSlot(void* self, void* stream) {
-    MultiObjectComponent_Shutdown(reinterpret_cast<MultiObjectComponent*>(self), stream);
+using MultiObjectCtrlDispatch = ::ControllerLive::Dispatcher<MultiObjectCtrlTag>;
+
+// The first component of `entity` whose slot-2 type id is `tid`, kept only if it
+// IsDerivedFrom `tid` — retail's inlined FindComponent<T> shape (the scan breaks at
+// the FIRST id match, then re-validates). Component array at entity+0x30, count +0x38.
+static void* MultiObject_FindComponent(uintptr_t entity, uint32_t tid) {
+    const int n = *reinterpret_cast<int*>(entity + 0x38);
+    const uintptr_t comps = *reinterpret_cast<uintptr_t*>(entity + 0x30);
+    for (int i = 0; i < n; ++i) {
+        void* c = *reinterpret_cast<void**>(comps + static_cast<uintptr_t>(i) * 8);
+        typedef uint32_t (*GetTypeId_t)(void*);
+        const uint32_t id = reinterpret_cast<GetTypeId_t>(
+            *reinterpret_cast<uintptr_t*>(*reinterpret_cast<uintptr_t*>(c) + 0x10))(c);
+        if (id == tid)
+            return (fn_IsDerivedFrom && fn_IsDerivedFrom(c, tid)) ? c : nullptr;
+    }
+    return nullptr;
 }
 
-// Re-run per instance: InitInertTyped re-stubs the shared vtable on every spawn.
-static void MultiObjectComponent_InstallLive() {
-    // Slot 3 (stream Shutdown/Serialize, retail 0x140125880) wired UNCONDITIONALLY,
-    // save/load wave 2026-08-28 — previously the class fell through to base-only
-    // Component_SerializeReimpl and the child-entity array (+0x48/+0x50/+0x58)
-    // silently reset on load.
-    MultiObjectComponent_LiveVtable[3] =
-        reinterpret_cast<void*>(&MultiObjectComponent_ShutdownVSlot);
-    MultiObjectComponent_LiveVtable[12] = reinterpret_cast<void*>(&MultiObjectComponent_Slot12);
+// state-2 ENTER — retail 0x140125560. For every child entity in the list at +0x48
+// (count +0x50, re-read each pass):
+//   map   = FindComponent<MapComponent>(child)      (type 0x1401c79e0)
+//   MapComponent_sub_41b0(map)                      (0x1401241b0 — stamp the child's
+//                                                    footprint; guarded by its own
+//                                                    +0x20 bit 20, so idempotent)
+//   floor = FindComponent<FloorComponent>(child)    (type 0x1401c76d0)
+//   if (floor) FloorComponent_sub_f390(floor)       (0x14011f390)
+// then `XOR AL,AL`. Retail derefs the MapComponent unguarded: every child of a
+// multi-object structure carries one (a faithful crash if not, not a guard here).
+static char MultiObject_State2Enter(void* data, void* /*sm*/) {
+    const uintptr_t self = reinterpret_cast<uintptr_t>(data);
+    const uint32_t* pTidMap   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c79e0));
+    const uint32_t* pTidFloor = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c76d0));
+    if (!pTidMap || !pTidFloor) return 0;   // the registry is not up (never after boot)
+    for (int i = 0; i < *reinterpret_cast<int*>(self + 0x50); ++i) {
+        const uintptr_t child = *reinterpret_cast<uintptr_t*>(
+            *reinterpret_cast<uintptr_t*>(self + 0x48) + static_cast<uintptr_t>(i) * 8);
+        void* map = MultiObject_FindComponent(child, *pTidMap);
+        MapComponent_sub_41b0(reinterpret_cast<int64_t>(map));
+        void* floor = MultiObject_FindComponent(child, *pTidFloor);
+        if (floor) FloorComponent_SubF390(floor);
+    }
+    return 0;
 }
 
-extern "C" void* MultiObjectComponent_Factory(void) {
-    void* p = ::ComponentFactory::MakeInertTyped(0x60, 0x82,
-        MultiObjectComponent_LiveVtable,
-        reinterpret_cast<void*>(&MultiObjectComponent_LiveGetTypeId));
-    MultiObjectComponent_InstallLive();
-    return p;
+// Retail's table, transcribed from MultiObjectDescription_Setup (0x14014f530): its
+// RegisterState (0x1400360f0) registers state 2 with enter 0x140125560 and every other
+// column zeroed; its AddTransition (0x140036210) appends 3 with a null handler. State 3
+// is a transition target only. Built ONCE at static-init time (B38 D6/D7).
+static void MultiObjectComponent_PopulateStateTable() {
+    using namespace ::ControllerLive;
+    StateTable& t = MultiObjectCtrlDispatch::table;
+    if (t.count != 0) return;                      // idempotent
+    TableRegisterState(t, 2, reinterpret_cast<void*>(&MultiObject_State2Enter),
+                       nullptr, nullptr, nullptr);
+    TableAddTransition(t, 3, nullptr);
 }
-static void* MultiObjectComponent_CreateInPlace(void* mem) {
-    if (mem) ::ComponentFactory::InitInertTyped(mem, 0x60, 0x82,
-        MultiObjectComponent_LiveVtable,
-        reinterpret_cast<void*>(&MultiObjectComponent_LiveGetTypeId));
-    MultiObjectComponent_InstallLive();
-    return mem;
+static const bool s_multiObjectStateTableBuilt = (MultiObjectComponent_PopulateStateTable(), true);
+
+// 0x140125a70. Component() is the CALL 0x1401188b0; the stamps are the compiler's;
+// `_controller(this)` is the member's back-pointer (+0x40); +0x48 = +0x50 = 0;
+// +0x58 = 1; then `_flags |= 2` (0x82).
+// PORT GAP (retail 0x140125ad8 `MOV dword [RBX+0x58],1`) — B38 D9: the tree's factory
+// zero-filled the body, so +0x58 starts 0 here as before.
+MultiObjectComponent::MultiObjectComponent()
+    : _controller(this), field48(nullptr), field50(nullptr), multiCount(0), _pad5C{} {
+    OrFlagsInCtor(0x2);
 }
-REGISTER_TYPE(MultiObjectComponent, "ControllerComponent",
-              &MultiObjectComponent_Factory, &MultiObjectComponent_CreateInPlace);
+
+// [0] 0x1400360c0: ~MultiObjectComponent (0x140125a00), MemFree on &1.
+Object::Base* MultiObjectComponent::DeletingDtor(unsigned flags) {
+    this->~MultiObjectComponent();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+// 0x140125a00: MemFree(+0x48), +0x48 = +0x50 = 0, then the restamps and ~Internal
+// (the compiler chain).
+// PORT GAP (retail 0x140125a24 MemFree of the child list) — B38 D9: the tree's slot 0
+// (Inert_ScalarDtor) never freed it; kept that way here.
+MultiObjectComponent::~MultiObjectComponent() {}
+
+// create 0x140035ef0: MemAlloc(0x60, 8), then the ctor.
+void* MultiObjectComponent::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MultiObjectComponent), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) MultiObjectComponent());
+}
+// Retail's createInPlace is `Internal::CreateInPlaceObject` (returns null); the
+// tree's in-place entry built the object, and that is kept (B38 B8-13).
+void* MultiObjectComponent::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) MultiObjectComponent());
+}
+
+// [3] 0x140125880 — the child-entity list (+0x48/+0x50/+0x58); resolves at its top.
+void MultiObjectComponent::Persist(void* stream) { MultiObjectComponent_Shutdown(this, stream); }
+// [12] 0x140125490 — relay the event to every child's components (the body above,
+// also registered by address from standalone/reg_terraform_live.cpp).
+void MultiObjectComponent::OnEvent(int eventId) { MultiObjectComponent_Slot12(this, eventId); }
+
+DEFINE_EXE_VTABLE(MultiObjectComponent, "_ZTV20MultiObjectComponent")
+DEFINE_EXE_TYPE(MultiObjectComponent, "ControllerComponent")

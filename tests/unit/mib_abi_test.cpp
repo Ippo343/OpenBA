@@ -38,6 +38,7 @@
 #include "Component/TradeComponent.h"
 #include "Component/WorkPlaceComponent.h"
 #include "Component/MarketLocationComponent.h"
+#include "Component/MultiObjectComponent.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -190,6 +191,12 @@ UNIT_TEST(mib_controller_leaf_shape_and_member_offset) {
     CheckCtlLeaf<MarketLocationComponent>(0x28);   // slot 17 0x140004080 (D9 #8: the tree had none)
     CHECK_EQ(sizeof(MarketLocationComponent), (size_t)0x48);   // create 0x1400086c0
     CHECK_EQ(SlotOffset(&MarketLocationComponent::OnRemove), S(7));   // 0x14004ef60
+    CheckCtlLeaf<MultiObjectComponent>(0x28);      // slot 17 0x140004080 (D9 #8: the tree had none)
+    CHECK_EQ(sizeof(MultiObjectComponent), (size_t)0x60);      // create 0x140035ef0
+    CHECK_EQ(offsetof(MultiObjectComponent, field48),    (size_t)0x48);
+    CHECK_EQ(offsetof(MultiObjectComponent, multiCount), (size_t)0x58);
+    CHECK_EQ(SlotOffset(&MultiObjectComponent::OnRemove), S(7));      // 0x1401257c0
+    CHECK_EQ(SlotOffset(&MultiObjectComponent::OnEvent),  S(12));     // 0x140125490
 }
 
 UNIT_TEST(mib_controller_member_fields) {
