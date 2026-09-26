@@ -315,7 +315,7 @@ static uint32_t PickingComponent_InertGetTypeId(void*) {
 }
 static void* PickingComponent_InertVtable[::ComponentFactory::kInertVtableSlots];
 static void PickingComponent_DetachVSlot(void* s) {
-    PickingComponent_InitFuncs();   // ensure s_fn_RemoveMesh (dispatch 0x140152438) resolved
+    PickingComponent_InitFuncs();   // the file's exe-slot/type-id statics (RemoveMesh is a member call)
     PickingComponent_OnCreate(reinterpret_cast<PickingComponent*>(s));
 }
 // Slot 6 (+0x30) = OnAdded, retail 0x140128f50 — dispatched by ComponentEntity_OnAddedPass

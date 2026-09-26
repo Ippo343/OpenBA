@@ -24,7 +24,7 @@
 //      callback array through AddPostUpdate/AddPostDraw reads the capacity.
 //      The fields are renamed below; the old names are noted so the previous
 //      claim is recognisable if it is met elsewhere.
-//   2. `MainLoopAddr::IsRunning` was commented as a no-argument query. The
+//   2. `MainLoopAddr::IsRunning` (constant since removed) was commented as a no-argument query. The
 //      shipped export at 0x1800314b0 is
 //      `?IsRunning@MainLoop@Engine@@QEBA_NPEBVUpdateLoop@2@@Z` (ordinal 3158)
 //      and takes a `const UpdateLoop*`. The no-arg `IsRunning` belongs to
@@ -45,41 +45,8 @@
 #include "common.h"
 #include "UpdateLoop.h"
 
-// Ghidra addresses for MainLoop in Runtime-x64.dll
-namespace MainLoopAddr {
-    // Singleton pointer
-    constexpr uintptr_t Singleton       = 0x1801fe750;
-
-    // Methods (RVA in Runtime-x64.dll Ghidra space)
-    constexpr uintptr_t Get             = 0x180031570;
-    // Takes a `const UpdateLoop*` — ?IsRunning@MainLoop@Engine@@QEBA_NPEBVUpdateLoop@2@@Z
-    // (ord 3158). NOT the no-arg query; that one is UpdateLoop's, at 0x1800dd7b0.
-    constexpr uintptr_t IsRunning       = 0x1800314b0;
-    constexpr uintptr_t GetContext      = 0x1800314d0;
-    constexpr uintptr_t GetCurrentLoop  = 0x1800314e0;
-    constexpr uintptr_t GetDeltaTime    = 0x1800314f0;
-    constexpr uintptr_t GetFrameTime    = 0x180031500;
-    constexpr uintptr_t GetFrameStartTime = 0x180031510;
-    constexpr uintptr_t GetFrameUpdateTime = 0x180031520;
-    constexpr uintptr_t MarkFrameUpdateTime = 0x180031530;
-    constexpr uintptr_t Run             = 0x1800dd3c0;
-    constexpr uintptr_t Frame           = 0x1800dd100;
-    constexpr uintptr_t Update          = 0x1800dd070;
-    constexpr uintptr_t Draw            = 0x1800dcd40;
-    constexpr uintptr_t SetNextLoop     = 0x1800dd7a0;
-    constexpr uintptr_t Ctor            = 0x1800dd6b0;
-    constexpr uintptr_t Dtor            = 0x1800dd640;
-    constexpr uintptr_t CreateVideoCtx  = 0x1800dd500;
-    constexpr uintptr_t ReleaseVideoCtx = 0x1800dd5e0;
-    constexpr uintptr_t AddPostUpdate   = 0x1800dcf60;
-    constexpr uintptr_t AddPostDraw     = 0x1800dd040;
-    constexpr uintptr_t RemovePostUpdate = 0x1800dceb0;
-    constexpr uintptr_t RemovePostDraw  = 0x1800dcf90;
-    constexpr uintptr_t OnVideoError    = 0x1800dc5e0;
-    constexpr uintptr_t OnVideoRestart  = 0x1800dc3b0;
-    constexpr uintptr_t OnVideoError_static  = 0x1800dcd20;
-    constexpr uintptr_t OnVideoRestart_static = 0x1800dc5c0;
-}
+// The `MainLoopAddr` address constants that stood here (27, zero readers) went at
+// the B.3.7 close; runtime/types/engine/MainLoop.h keeps RtEngine::MainLoopAddr.
 
 struct MainLoop {
     // --- Resource tracking (used by OnVideoError/OnVideoRestart) ---

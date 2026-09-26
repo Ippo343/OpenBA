@@ -161,9 +161,6 @@
 #include "mainloop_internal.h"
 #include <atomic>
 
-enum class Module : int { Exe = 0, Runtime = 1, VideoDX11 = 2, COUNT = 3 };
-uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
-
 extern "C" __declspec(dllimport) int __stdcall QueryPerformanceCounter(int64_t*);
 
 // standalone/boot_state_watchdog.cpp -- the frozen-exe heartbeat. Declared
