@@ -41,6 +41,9 @@
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/ElementDescription.h"   // UI::ElementDescription (B.3.6)
+#include "../../types/ui/Dialog.h"               // UI::Dialog::CreateElement (fragment pass F2)
+#include "../../types/ui/SpriteSheet.h"          // UI::SpriteSheet::GetSpriteIndexFromName (F2)
+#include <new>
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — resolve.h drags in <windows.h> and PLAN.md §4.1 keeps it out of
@@ -193,13 +196,25 @@ inline void* ElementCtor(void* raw) {
     using ElementCtorFn = void* (*)(void*);
     return RtAddr<ElementCtorFn>(0x180115e50ull)(raw);   // ??0Element@UI@@QEAA@XZ
 }
+// ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
+// (0x180115ad0). Fragment pass F2 defined the member (dialog.cpp): a direct
+// QUALIFIED call instead of the by-address door. Kept for the callers whose
+// receiver is still a `void*`; a leaf member body calls
+// `UI::ElementDescription::CreateInstance(&slot)` itself.
 inline void ElementDescriptionApply(const void* self, void** elemPtr) {
-    using EdCreateInstanceFn = void (*)(const void*, void**);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(self, elemPtr);
+    reinterpret_cast<const UI::ElementDescription*>(self)                  // B.3.6 bridge
+        ->UI::ElementDescription::CreateInstance(
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr)); // B.3.6 bridge
 }
+// ?CreateElement@Dialog@UI@@ (0x180112ed0). Fragment pass F2: block B defined
+// the member; the RETSLOT is kept for the callers (placement-new of the
+// member's prvalue, exactly the door's shape in dialog.cpp).
 inline void** DialogCreateElement(const void* dialog, void** retSlot, void* desc) {
-    using CreateElementFn = void** (*)(const void*, void**, void*);
-    return RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, retSlot, desc);
+    new (retSlot) Object::InternalPtr<UI::Element>(
+        reinterpret_cast<const UI::Dialog*>(dialog)                         // B.3.6 bridge
+            ->UI::Dialog::CreateElement(Object::ExternalPtr<UI::ElementDescription>(
+                static_cast<UI::ElementDescription*>(desc))));
+    return retSlot;
 }
 // `?Serialize@ElementDescription@UI@@` (0x180116b00), the base half every
 // leaf's Serialize runs first. ENDGAME B.3.6 block A: a direct QUALIFIED member
@@ -210,10 +225,12 @@ inline void ElementDescriptionSerialize(void* self, Stream* stream) {
         ->UI::ElementDescription::Serialize(stream);
 }
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z, reached
-// by rel32 from every one of these appliers.
+// by rel32 from every one of these appliers. Fragment pass F2: block D's
+// member (sprite.cpp), called directly instead of by address.
 inline int32_t GetSpriteIndexFromName(const void* sheet, const void* nameStr) {
-    using GetIdxFn = int32_t (*)(const void*, const void*);
-    return RtAddr<GetIdxFn>(0x1800031f0ull)(sheet, nameStr);
+    return reinterpret_cast<const UI::SpriteSheet*>(sheet)                  // B.3.6 bridge
+        ->UI::SpriteSheet::GetSpriteIndexFromName(
+            *static_cast<const System::String*>(nameStr));
 }
 
 // *** THE SPRITE INDEX IS STORED AS A QWORD READ FROM A SLOT ONLY A DWORD WAS

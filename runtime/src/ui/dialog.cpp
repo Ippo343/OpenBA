@@ -1073,9 +1073,11 @@ void* RtUiElementDescription_Ctor(ElementDescription* self) {
 //   MOV EAX,0x4 / RET
 // The constant is the .rsc element-description file version and it is what
 // ?Serialize@ (held back) is written against.
+// ENDGAME B.3.6 fragment pass F2: the body is UI::ElementDescription::
+// GetFileVersion (member section below); the door delegates QUALIFIED.
 int32_t RtUiElementDescription_GetFileVersion(const ElementDescription* self) {
-    const int32_t ours = 4;
-    return ours;
+    return reinterpret_cast<const UI::ElementDescription*>(self)          // B.3.6 bridge
+        ->UI::ElementDescription::GetFileVersion();
 }
 
 // ============================================================================
@@ -1104,14 +1106,18 @@ int32_t RtUiElementDescription_GetFileVersion(const ElementDescription* self) {
 // What IS checked: the mint shadow compares every minted BaseTypeInfo's fields
 // against the loaded DLL's nodes, and that is the check that becomes
 // load-bearing the day this row is promoted. Stated, not hidden.
-extern "C" const char* RtUiElementDescription_TypeName(const void* /*self*/) {
-    return *reinterpret_cast<const char* const*>(
-        ElementDescriptionTypeInfo() + kBaseTypeInfoName);
+// ENDGAME B.3.6 fragment pass F2: the bodies are UI::ElementDescription::
+// TypeName / Type (member section below); the doors delegate QUALIFIED.
+// Neither member reads `this`, exactly as retail's two instructions do not
+// read RCX.
+extern "C" const char* RtUiElementDescription_TypeName(const void* self) {
+    return reinterpret_cast<const UI::ElementDescription*>(self)          // B.3.6 bridge
+        ->UI::ElementDescription::TypeName();
 }
 
-extern "C" uint32_t RtUiElementDescription_Type(const void* /*self*/) {
-    return *reinterpret_cast<const uint32_t*>(
-        ElementDescriptionTypeInfo() + kBaseTypeInfoTypeId);
+extern "C" uint32_t RtUiElementDescription_Type(const void* self) {
+    return reinterpret_cast<const UI::ElementDescription*>(self)          // B.3.6 bridge
+        ->UI::ElementDescription::Type();
 }
 
 // ============================================================================
@@ -1525,145 +1531,21 @@ void DialogTempCtor(uint8_t* p) {
 
 }
 
-void EdCreateInstanceBody(const ElementDescription* self, void** elemPtr) {
-    const uint8_t* d = reinterpret_cast<const uint8_t*>(self);
+// ENDGAME B.3.6 fragment pass F2: the body that stood here (the file-local
+// `EdCreateInstanceBody`) MOVED into UI::ElementDescription::CreateInstance(
+// InternalPtr<Element>*) in the member section below; the door delegates
+// QUALIFIED.
 
-    // ---- 1. elem->_name = this->GetPath().GetPathIdentifer() --------------
-    // Object::External::GetPath stays a name lookup (another batch's class);
-    // GetPathIdentifer is System::Filename's member.
-    using GetPathFn  = void* (*)(const void* self, void* out);
-    static GetPathFn  getPath  = reinterpret_cast<GetPathFn>(
-        ResolveExport("?GetPath@External@Object@@QEBA?AVFilename@System@@XZ"));
-
-    uint8_t* elem = static_cast<uint8_t*>(*elemPtr);
-
-    // The inner scope ends the two temporaries' lives where retail's two
-    // inlined releases are, in retail's order (identTmp, then pathTmp).
-    {
-        System::Filename pathTmp;
-        System::Filename identTmp;
-        if (getPath) {
-            getPath(self, &pathTmp);
-            identTmp = pathTmp.GetPathIdentifer();
-        }
-
-        char*    want = identTmp._data;
-        // B.3.1 bridge: Element::_name at +0x10 is a POD slot on UI::Element,
-        // which is not converted yet, so retail's inlined assign stays.
-        char*    old  = *reinterpret_cast<char**>(elem + 0x10);
-        if (old != want) {
-            if (old) {
-                if (--RtSystem::StringRefCount(old) == 0) {
-                    // Retail's asymmetry: the FREEING branch leaves the FIELD
-                    // holding `data - 8` and frees that; sharing nulls it.
-                    *reinterpret_cast<char**>(elem + 0x10) = old - 8;
-                    MemFreeStatic(*reinterpret_cast<char**>(elem + 0x10));
-                } else {
-                    *reinterpret_cast<char**>(elem + 0x10) = nullptr;
-                }
-            }
-            *reinterpret_cast<char**>(elem + 0x10) = want;
-            if (want) ++RtSystem::StringRefCount(want);
-        }
-    }
-
-    // ---- 2. the eleven scalar copies --------------------------------------
-    // `*elemPtr` is RE-READ before every store, exactly as retail does. Nothing
-    // in between can change it, but the re-read is what the shipped bytes do
-    // and transcribing it costs nothing.
-    #define ED_ELEM  (static_cast<uint8_t*>(*elemPtr))
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x30) = *reinterpret_cast<const int32_t*>(d + 0x40); // _elementType -> _alignment
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x18) = *reinterpret_cast<const int32_t*>(d + 0x20);
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x1c) = *reinterpret_cast<const int32_t*>(d + 0x24);
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x20) = *reinterpret_cast<const int32_t*>(d + 0x28);
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x24) = *reinterpret_cast<const int32_t*>(d + 0x2c);
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x28) = *reinterpret_cast<const int32_t*>(d + 0x30);
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x2c) = *reinterpret_cast<const int32_t*>(d + 0x34);
-    *reinterpret_cast<uint32_t*>(ED_ELEM + 0x34) |= *reinterpret_cast<const uint32_t*>(d + 0x44); // OR, never assign
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x38) = *reinterpret_cast<const int32_t*>(d + 0x3c);    // _id      -> +0x38
-    *reinterpret_cast<int32_t*>(ED_ELEM + 0x3c) = *reinterpret_cast<const int32_t*>(d + 0x38);    // _tabOrder-> +0x3c
-    *reinterpret_cast<uint64_t*>(ED_ELEM + 0x40) = *reinterpret_cast<const uint64_t*>(d + 0x50);
-
-    // ---- 3. the tool-tip UIString -----------------------------------------
-    void*   table = *reinterpret_cast<void* const*>(d + 0x58);
-    int32_t index = -1;
-    if (table) {
-        static GetIndexFromNameFn gifn = reinterpret_cast<GetIndexFromNameFn>(
-            ResolveExport("?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z"));
-        if (gifn) index = gifn(table, d + 0x60);
-    }
-    elem = ED_ELEM;
-    *reinterpret_cast<void**>(elem + 0x48)  = table;
-    // Fact (b): retail writes a QWORD here whose upper half is uninitialised
-    // stack. The port writes the DWORD only and the oracle excludes +0x54.
-    *reinterpret_cast<int32_t*>(elem + 0x50) = index;
-
-    // ---- 4. elem->_description = this -------------------------------------
-    *reinterpret_cast<const void**>(ED_ELEM + 0xb8) = self;
-
-    // ---- 5. the UI::Dialog temporary and the one virtual call -------------
-    alignas(16) uint8_t tempDialog[kDialogTempSize];
-    DialogTempCtor(tempDialog);
-
-    void*  slot = nullptr;
-    void** ret  = &slot;
-    if (void* child = *reinterpret_cast<void* const*>(d + 0x48)) {
-        using ChildFn = void** (*)(void* self, void** out, void* dialog);
-        ChildFn f = reinterpret_cast<ChildFn>(
-            (*reinterpret_cast<void***>(child))[8]);   // vtable +0x40
-        ret = f(child, &slot, tempDialog);
-    } else {
-        slot = nullptr;
-        ret  = &slot;
-    }
-    *reinterpret_cast<void**>(ED_ELEM + 0xb0) = *ret;
-
-    // ---- 6. the flags cascade (fact (c): the inner walk is unreachable) ---
-    elem = ED_ELEM;
-    if (*reinterpret_cast<void* const*>(elem + 0x40) != nullptr &&
-        *reinterpret_cast<void* const*>(elem + 0x48) != nullptr &&
-        *reinterpret_cast<const int32_t*>(elem + 0x50) >= 0 &&
-        (*reinterpret_cast<const uint32_t*>(elem + 0x34) & 0x800000u) == 0) {
-        const uint32_t before = *reinterpret_cast<uint32_t*>(elem + 0x34);
-        const uint32_t after  = before | 0x90000u;
-        *reinterpret_cast<uint32_t*>(elem + 0x34) = after;
-        if ((static_cast<uint8_t>(before ^ after) & 1u) != 0) {
-            uint8_t* w = elem;
-            do {
-                *reinterpret_cast<uint32_t*>(w + 0x34) |= 0x8000000u;
-                w = *reinterpret_cast<uint8_t**>(w + 0x98);
-            } while (w != nullptr);
-        }
-    }
-
-    #undef ED_ELEM
-
-    // ---- the temporary's destructor ---------------------------------------
-    DialogDtor(tempDialog);           // ~Dialog: see fact (a)
-}
-
-// ---- the replay oracle's storage ------------------------------------------
-// A live 0xC0-byte Element snapshot plus the two masked copies the compare is
-// made on. File scope for the same one-thread reason the rest of this file
-// gives; CreateInstance is called from the dialog build, on MainLoop's thread.
-alignas(16) uint8_t g_edCiScratch[0xC0];
-alignas(16) uint8_t g_edCiOurs[0xC0];
-alignas(16) uint8_t g_edCiTheirs[0xC0];
-
-// The population counters the diff message reports, so a green result cannot be
-// read as coverage it does not have
-// (reference_probe_needs_an_effectiveness_control.md).
-uint64_t g_edCiWithChild = 0;      // NOT replayed — see the oracle note
-uint64_t g_edCiNoChild   = 0;      // replayed
-uint64_t g_edCiWithTable = 0;      // reached StringTable::GetIndexFromName
+// (The replay oracle's storage that sat here — g_edCi* — had no reader since
+// the oracle was retired; removed with the body move.)
 
 } // namespace
 
 extern "C" void RtUiElementDescription_CreateInstance(const ElementDescription* self,
                                                       void** elemPtr) {
-
-    EdCreateInstanceBody(self, elemPtr);
-
+    reinterpret_cast<const UI::ElementDescription*>(self)                 // B.3.6 bridge
+        ->UI::ElementDescription::CreateInstance(
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr));
 }
 
 // ############################################################################
@@ -1695,6 +1577,14 @@ using GetPathFn = void* (*)(const void* self, void* out);
 inline GetPathFn ExternalGetPathFn() {
     return RT_EXPORT_ONCE(GetPathFn,
         "?GetPath@External@Object@@QEBA?AVFilename@System@@XZ");
+}
+
+// ?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z 0x180002470 --
+// block D's class, still a name door here. Fragment pass F2 moved the static
+// UI::ElementDescription::CreateInstance used to keep out to this helper.
+inline GetIndexFromNameFn StringTableGetIndexFromNameFn() {
+    return RT_EXPORT_ONCE(GetIndexFromNameFn,
+        "?GetIndexFromName@StringTable@UI@@QEBAHAEBVString@System@@@Z");
 }
 
 // ?AdjustUpperLeft@Element@UI@@ 0x180115840, reached through the seam
@@ -2226,11 +2116,10 @@ Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const
         // 0x180113045: matched but a null description — 0, no dispatch.
         result = Object::InternalPtr<Element>();
     } else {
-        // The description's slot 8 (CreateInstance, RETSLOT) — block A's
-        // class, still reached through its table.
-        void** vtbl = *reinterpret_cast<void***>(target);
-        reinterpret_cast<void* (*)(void*, void**, const Dialog*)>(vtbl[8])(
-            target, reinterpret_cast<void**>(&result), this);
+        // The description's slot 8 (CreateInstance, RETSLOT, B6-2) — a
+        // virtual on UI::ElementDescription, dispatched through the leaf's
+        // own table (fragment pass F2: was a hand-inlined vtbl[8]).
+        static_cast<const ElementDescription*>(target)->CreateInstance(&result, this);
     }
 
     if (name) ReleaseStringLocal(name);   // 0x180113061..0x180113087
@@ -2242,6 +2131,152 @@ Dialog::CreateElement(Object::ExternalPtr<ElementDescription> description) const
 // ============================================================================
 Object::InternalPtr<Element> DialogController::GetContainer() {  // 0x18003b700
     return Object::InternalPtr<Element>(static_cast<Element*>(_container));
+}
+
+// ============================================================================
+// UI::ElementDescription — ENDGAME B.3.6 fragment pass F2
+// ============================================================================
+// Block A declared these on the class and left them undefined because their
+// bodies were registered doors in THIS file. They moved here unchanged except
+// `self->x` / `d + 0x..` became member access; the doors above delegate
+// QUALIFIED. Per-body evidence (the retail disassembly) stays at each door.
+
+const char* ElementDescription::TypeName() const {                 // [1] 0x1800350f0
+    return *reinterpret_cast<const char* const*>(
+        ElementDescriptionTypeInfo() + kBaseTypeInfoName);
+}
+
+uint32_t ElementDescription::Type() const {                        // [2] 0x1800350d0
+    return *reinterpret_cast<const uint32_t*>(
+        ElementDescriptionTypeInfo() + kBaseTypeInfoTypeId);
+}
+
+// `MOV EAX,0x4 / RET` — the .rsc element-description file version.
+int32_t ElementDescription::GetFileVersion() const {               // [3] 0x180116af0
+    return 4;
+}
+
+// ??1ElementDescription@UI@@UEAA@XZ 0x180116100 — EMPTY on purpose, as every
+// other converted base's is. The retail teardown (vtable restamp, the one
+// String release at +0x60, ~External) is the door `RtUiElementDescription_Dtor`
+// above, reached through the minted slot 0. Definable now that `TypeName`
+// (the key function) is defined in this TU (fragment pass F2).
+ElementDescription::~ElementDescription() {}
+
+// ?CreateInstance@ElementDescription@UI@@QEBAXV?$InternalPtr@VElement@UI@@@Object@@@Z
+// 0x180115ad0. RULE B6-11: the handle arrives by HIDDEN POINTER (retail
+// dereferences RDX eleven times), so the member takes `InternalPtr<Element>*`.
+// The full evidence block (facts (a)..(c)) is at the door above.
+void ElementDescription::CreateInstance(Object::InternalPtr<Element>* element) const {
+    // ---- 1. elem->_name = this->GetPath().GetPathIdentifer() --------------
+    // Object::External::GetPath stays a name lookup (another batch's class);
+    // GetPathIdentifer is System::Filename's member.
+    const GetPathFn getPath = ExternalGetPathFn();
+
+    uint8_t* elem = reinterpret_cast<uint8_t*>(element->Get());
+
+    // The inner scope ends the two temporaries' lives where retail's two
+    // inlined releases are, in retail's order (identTmp, then pathTmp).
+    {
+        System::Filename pathTmp;
+        System::Filename identTmp;
+        if (getPath) {
+            getPath(this, &pathTmp);
+            identTmp = pathTmp.GetPathIdentifer();
+        }
+
+        char*    want = identTmp._data;
+        // B.3.1 bridge: Element::_name at +0x10, retail's inlined assign stays.
+        char*    old  = *reinterpret_cast<char**>(elem + 0x10);
+        if (old != want) {
+            if (old) {
+                if (--RtSystem::StringRefCount(old) == 0) {
+                    // Retail's asymmetry: the FREEING branch leaves the FIELD
+                    // holding `data - 8` and frees that; sharing nulls it.
+                    *reinterpret_cast<char**>(elem + 0x10) = old - 8;
+                    MemFreeStatic(*reinterpret_cast<char**>(elem + 0x10));
+                } else {
+                    *reinterpret_cast<char**>(elem + 0x10) = nullptr;
+                }
+            }
+            *reinterpret_cast<char**>(elem + 0x10) = want;
+            if (want) ++RtSystem::StringRefCount(want);
+        }
+    }
+
+    // ---- 2. the eleven scalar copies --------------------------------------
+    // The handle is RE-READ before every store, exactly as retail does. Nothing
+    // in between can change it, but the re-read is what the shipped bytes do
+    // and transcribing it costs nothing.
+    #define ED_ELEM  (reinterpret_cast<uint8_t*>(element->Get()))
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x30) = static_cast<int32_t>(_elementType); // -> _alignment
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x18) = _x;
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x1c) = _y;
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x20) = _width;
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x24) = _height;
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x28) = _minWidth;
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x2c) = _minHeight;
+    *reinterpret_cast<uint32_t*>(ED_ELEM + 0x34) |= _flags;      // OR, never assign
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x38) = _id;           // _id      -> +0x38
+    *reinterpret_cast<int32_t*>(ED_ELEM + 0x3c) = _tabOrder;     // _tabOrder-> +0x3c
+    *reinterpret_cast<uint64_t*>(ED_ELEM + 0x40) = _userData;
+
+    // ---- 3. the tool-tip UIString -----------------------------------------
+    void*   table = _stringTable;
+    int32_t index = -1;
+    if (table) {
+        if (const GetIndexFromNameFn gifn = StringTableGetIndexFromNameFn())
+            index = gifn(table, &_textName);
+    }
+    elem = ED_ELEM;
+    *reinterpret_cast<void**>(elem + 0x48)  = table;
+    // Fact (b): retail writes a QWORD here whose upper half is uninitialised
+    // stack. The port writes the DWORD only.
+    *reinterpret_cast<int32_t*>(elem + 0x50) = index;
+
+    // ---- 4. elem->_description = this -------------------------------------
+    *reinterpret_cast<const void**>(ED_ELEM + 0xb8) = this;
+
+    // ---- 5. the UI::Dialog temporary and the one virtual call -------------
+    alignas(16) uint8_t tempDialog[kDialogTempSize];
+    DialogTempCtor(tempDialog);
+
+    Object::InternalPtr<Element>  slot;
+    Object::InternalPtr<Element>* ret = &slot;
+    if (_childDesc != nullptr) {
+        // The child description's slot 8 (CreateInstance, RETSLOT, B6-2) — a
+        // virtual on this class, dispatched through the child's own table
+        // (was a hand-inlined vtable +0x40 call).
+        ret = static_cast<const ElementDescription*>(_childDesc)->CreateInstance(
+            &slot, reinterpret_cast<const Dialog*>(tempDialog));    // B.3.6 bridge
+    } else {
+        slot = Object::InternalPtr<Element>();
+        ret  = &slot;
+    }
+    *reinterpret_cast<void**>(ED_ELEM + 0xb0) = ret->Get();
+
+    // ---- 6. the flags cascade (fact (c): the inner walk is unreachable) ---
+    elem = ED_ELEM;
+    if (*reinterpret_cast<void* const*>(elem + 0x40) != nullptr &&
+        *reinterpret_cast<void* const*>(elem + 0x48) != nullptr &&
+        *reinterpret_cast<const int32_t*>(elem + 0x50) >= 0 &&
+        (*reinterpret_cast<const uint32_t*>(elem + 0x34) & 0x800000u) == 0) {
+        const uint32_t before = *reinterpret_cast<uint32_t*>(elem + 0x34);
+        const uint32_t after  = before | 0x90000u;
+        *reinterpret_cast<uint32_t*>(elem + 0x34) = after;
+        if ((static_cast<uint8_t>(before ^ after) & 1u) != 0) {
+            uint8_t* w = elem;
+            do {
+                *reinterpret_cast<uint32_t*>(w + 0x34) |= 0x8000000u;
+                w = *reinterpret_cast<uint8_t**>(w + 0x98);
+            } while (w != nullptr);
+        }
+    }
+
+    #undef ED_ELEM
+
+    // ---- the temporary's destructor ---------------------------------------
+    DialogDtor(tempDialog);           // ~Dialog: see fact (a)
 }
 
 }  // namespace UI

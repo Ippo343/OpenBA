@@ -247,10 +247,9 @@ bool GroupDescription::Serialize(void* streamv) {
 // `ElementDescription::CreateInstance` (which applies the description to it),
 // and is then REUSED as `Dialog::CreateElement`'s return slot inside the loop.
 //
-// `ElementDescription::CreateInstance` (0x180115ad0) is reached through its
-// registered door: its member is declared in ElementDescription.h but its body
-// is still dialog.cpp's door (fragment pass), so a member call would not link.
-// `??0Element` and `Dialog::CreateElement` are doors for the same reason.
+// `ElementDescription::CreateInstance` (0x180115ad0) is a QUALIFIED member
+// call since fragment pass F2 defined it (dialog.cpp). `??0Element` and
+// `Dialog::CreateElement` are still reached through their doors.
 //
 // The parent-chain walk at the end of each iteration is retail's: set
 // `kElementFlagNeedsSizeCalc` on the group and on every ancestor through
@@ -269,7 +268,8 @@ Object::InternalPtr<Element>* GroupDescription::CreateInstance(
     }
 
     void* slot = elem;                                         // 180117e4f [RSP+0x50]
-    rtdesc::ElementDescriptionApply(this, &slot);              // 180117e5c
+    UI::ElementDescription::CreateInstance(                   // 180117e5c
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 180117e61 / 180117ec9
