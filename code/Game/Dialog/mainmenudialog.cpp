@@ -10,6 +10,7 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/MainMenuDialog.h
 //                  Dialog\MainMenuDialog.cpp
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -461,7 +462,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     if (!fn_IsDerivedFrom ||
         !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
         !fn_DialogInstance_Ctor ||
-        !fn_TextElement_SetParameter || !fn_Configuration_CurrentVersion ||
+        !fn_Configuration_CurrentVersion ||
         !fn_Configuration_CurrentBuildId) {
         printf("[BuildId] missing engine fns, skipping\n");
         return false;
@@ -548,12 +549,12 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     // through the bridge cast rather than a real System::String local.
     uint8_t versionStr[16] = {};
     fn_Configuration_CurrentVersion(versionStr);
-    fn_TextElement_SetParameter(*(void**)textElemPtr, 0, versionStr);
+    reinterpret_cast<UI::TextElement*>(*(void**)textElemPtr)->SetParameter(0, *reinterpret_cast<const System::String*>(versionStr));  // B.3.6 bridge
     reinterpret_cast<System::String*>(versionStr)->~String();  // B.3.1 bridge
 
     uint8_t buildIdStr[16] = {};
     fn_Configuration_CurrentBuildId(buildIdStr);
-    fn_TextElement_SetParameter(*(void**)textElemPtr, 1, buildIdStr);
+    reinterpret_cast<UI::TextElement*>(*(void**)textElemPtr)->SetParameter(1, *reinterpret_cast<const System::String*>(buildIdStr));  // B.3.6 bridge
     reinterpret_cast<System::String*>(buildIdStr)->~String();  // B.3.1 bridge
 
     printf("[BuildId] child dialog attached, version + build id set\n");

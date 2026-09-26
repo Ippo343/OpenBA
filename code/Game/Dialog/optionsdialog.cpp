@@ -9,6 +9,9 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/OptionsDialog.h
 //                  Dialog\OptionsDialog.cpp
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/TabElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -220,7 +223,7 @@ static void SetInputBindButtonText(void* elementPtr, int deviceType, uint32_t ke
     uint8_t uiStr[16];
     GetInputKeyName(uiStr, deviceType, keyIndex);
 
-    fn_TextElement_SetText(foundObj, uiStr);
+    reinterpret_cast<UI::TextElement*>(foundObj)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
 }
 
 // Helper: set slider min/max/value (float fields at +0x118/+0x11c/+0x128)
@@ -347,7 +350,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    fn_ComboElement_RemoveAllItems(self->comboFilter);
+    reinterpret_cast<UI::ComboElement*>(self->comboFilter)->RemoveAllItems();  // B.3.6 bridge
 
     void* stringTable = LoadStringTable("Dialog/StringTable.rsc:textureFilter");
     if (!stringTable) return;
@@ -358,7 +361,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
         ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &textStr, (void*)(intptr_t)-1);
+        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)-1);  // B.3.6 bridge
     }
 
     // Item 1: "Bilinear" (filter 0)
@@ -367,7 +370,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
         ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(1));  // B.3.6 bridge
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &textStr, (void*)(intptr_t)0);
+        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)0);  // B.3.6 bridge
     }
 
     // Anisotropic filter levels: "Anisotropic 1x", "Anisotropic 2x", etc.
@@ -379,7 +382,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
         System::String fmtStr = System::String::Format("%s 1x", textStr._data);
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &fmtStr, (void*)(intptr_t)1);
+        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)1);  // B.3.6 bridge
     }
     // Higher levels: "Anisotropic 2x", "Anisotropic 4x", etc.
     for (int level = 2; level <= anisoLevels; level += 2) {
@@ -388,7 +391,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
         System::String fmtStr = System::String::Format("%s %ix", textStr._data, level);
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboFilter, spriteBuf, &fmtStr, (void*)(intptr_t)level);
+        reinterpret_cast<UI::ComboElement*>(self->comboFilter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)level);  // B.3.6 bridge
     }
 
     // Set current selection based on savedFilter
@@ -399,7 +402,7 @@ static void OptionsDialog_PopulateFilterCombo(OptionsDialog* self) {
     else if (filterVal == 1) selIdx = 2;
     else selIdx = (filterVal >> 1) + 2;
 
-    fn_ComboElement_SetCurrentItem(self->comboFilter, selIdx);
+    reinterpret_cast<UI::ComboElement*>(self->comboFilter)->SetCurrentItem(selIdx);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -410,7 +413,7 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    fn_ComboElement_RemoveAllItems(self->comboAntialias);
+    reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->RemoveAllItems();  // B.3.6 bridge
 
     void* stringTable = LoadStringTable("Dialog/StringTable.rsc:multiSample");
 
@@ -429,8 +432,7 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
             if (stringTable) ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(0));  // B.3.6 bridge
             uint8_t spriteBuf[16] = {};
             ::new (spriteBuf) UI::Sprite();
-            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, &textStr,
-                                               (void*)(intptr_t)0);
+            addedIdx = reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)0);  // B.3.6 bridge
         } else {
             // "Nx multisample" — e.g. "2x Multisample"
             System::String textStr;
@@ -438,12 +440,11 @@ static void OptionsDialog_PopulateAntialiasCombo(OptionsDialog* self) {
             System::String fmtStr = System::String::Format("%ix %s", i + 1, textStr._data);
             uint8_t spriteBuf[16] = {};
             ::new (spriteBuf) UI::Sprite();
-            addedIdx = fn_ComboElement_AddItem(self->comboAntialias, spriteBuf, &fmtStr,
-                                               (void*)(intptr_t)i);
+            addedIdx = reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)i);  // B.3.6 bridge
         }
 
         if ((int)self->savedAntialias == i) {
-            fn_ComboElement_SetCurrentItem(self->comboAntialias, addedIdx);
+            reinterpret_cast<UI::ComboElement*>(self->comboAntialias)->SetCurrentItem(addedIdx);  // B.3.6 bridge
         }
     }
 }
@@ -479,7 +480,7 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
     intptr_t refreshArray = *(intptr_t*)(modeEntry + 8);
     int refreshCount = *(int*)(modeEntry + 0x10);
 
-    fn_ComboElement_RemoveAllItems(self->comboRefresh);
+    reinterpret_cast<UI::ComboElement*>(self->comboRefresh)->RemoveAllItems();  // B.3.6 bridge
 
     int currentIdx = -1;
     for (int i = 0; i < refreshCount; i++) {
@@ -491,13 +492,13 @@ static void OptionsDialog_PopulateRefreshCombo(OptionsDialog* self) {
         System::String fmtStr = System::String::Format("%i", rate);
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboRefresh, spriteBuf, &fmtStr, (void*)(intptr_t)i);
+        reinterpret_cast<UI::ComboElement*>(self->comboRefresh)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)i);  // B.3.6 bridge
 
         if ((uint32_t)num == self->savedRefreshNum && (uint32_t)den == self->savedRefreshDen)
             currentIdx = i;
     }
 
-    fn_ComboElement_SetCurrentItem(self->comboRefresh, currentIdx);
+    reinterpret_cast<UI::ComboElement*>(self->comboRefresh)->SetCurrentItem(currentIdx);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -520,7 +521,7 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
            self->savedWidth, self->savedHeight, modeCount,
            self->savedRenderer, self->savedAdapter);
 
-    fn_ComboElement_RemoveAllItems(self->comboResolution);
+    reinterpret_cast<UI::ComboElement*>(self->comboResolution)->RemoveAllItems();  // B.3.6 bridge
 
     int currentIdx = -1;
     for (int i = 0; i < modeCount; i++) {
@@ -534,13 +535,13 @@ static void OptionsDialog_PopulateResolutionCombo(OptionsDialog* self) {
         System::String fmtStr = System::String::Format("%ix%i", w, h);
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboResolution, spriteBuf, &fmtStr, (void*)(intptr_t)i);
+        reinterpret_cast<UI::ComboElement*>(self->comboResolution)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), fmtStr, (void*)(intptr_t)i);  // B.3.6 bridge
 
         if (w == self->savedWidth && h == self->savedHeight)
             currentIdx = i;
     }
 
-    fn_ComboElement_SetCurrentItem(self->comboResolution, currentIdx);
+    reinterpret_cast<UI::ComboElement*>(self->comboResolution)->SetCurrentItem(currentIdx);  // B.3.6 bridge
 
     OptionsDialog_PopulateRefreshCombo(self);
 }
@@ -553,7 +554,7 @@ static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
     void* vidDev = g_pVideoDeviceSingleton ? *g_pVideoDeviceSingleton : nullptr;
     if (!vidDev) return;
 
-    fn_ComboElement_RemoveAllItems(self->comboAdapter);
+    reinterpret_cast<UI::ComboElement*>(self->comboAdapter)->RemoveAllItems();  // B.3.6 bridge
 
     void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(vidDev)
                          ->GetInterface((int)self->savedRenderer);   // B.3.5 bridge
@@ -565,10 +566,10 @@ static void OptionsDialog_PopulateAdapterCombo(OptionsDialog* self) {
         void* adapterName = (void*)(adapterArray + (intptr_t)i * 0x38);
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboAdapter, spriteBuf, adapterName, (void*)(intptr_t)i);
+        reinterpret_cast<UI::ComboElement*>(self->comboAdapter)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>(adapterName), (void*)(intptr_t)i);  // B.3.6 bridge
     }
 
-    fn_ComboElement_SetCurrentItem(self->comboAdapter, (int)self->savedAdapter);
+    reinterpret_cast<UI::ComboElement*>(self->comboAdapter)->SetCurrentItem((int)self->savedAdapter);  // B.3.6 bridge
 
     OptionsDialog_PopulateResolutionCombo(self);
     OptionsDialog_PopulateAntialiasCombo(self);
@@ -584,7 +585,7 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
     if (!vidDev) return;
 
     // --- Renderer combo ---
-    fn_ComboElement_RemoveAllItems(self->comboRenderer);
+    reinterpret_cast<UI::ComboElement*>(self->comboRenderer)->RemoveAllItems();  // B.3.6 bridge
 
     int ifaceCount = reinterpret_cast<const Video::Device*>(vidDev)
                          ->GetInterfaceCount();   // B.3.5 bridge
@@ -594,10 +595,10 @@ static void OptionsDialog_PopulateVideoComboBoxes(OptionsDialog* self) {
                              ->GetInterface(i);   // B.3.5 bridge
         uint8_t spriteBuf[16] = {};
         ::new (spriteBuf) UI::Sprite();
-        fn_ComboElement_AddItem(self->comboRenderer, spriteBuf, gfxIface, (void*)(intptr_t)i);
+        reinterpret_cast<UI::ComboElement*>(self->comboRenderer)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>(gfxIface), (void*)(intptr_t)i);  // B.3.6 bridge
     }
 
-    fn_ComboElement_SetCurrentItem(self->comboRenderer, (int)self->savedRenderer);
+    reinterpret_cast<UI::ComboElement*>(self->comboRenderer)->SetCurrentItem((int)self->savedRenderer);  // B.3.6 bridge
 
     // --- Adapter combo (also populates resolution/antialias/filter) ---
     OptionsDialog_PopulateAdapterCombo(self);
@@ -704,12 +705,9 @@ void OptionsDialog_Startup(OptionsDialog* self) {
         FIND_ELEMENT(self->comboShadowQuality,    "comboShadowQuality");
         FIND_ELEMENT(self->comboReflectionQuality,"comboReflectionQuality");
         if (vidCfg) {
-            fn_ComboElement_SetCurrentItem(self->comboShadowRes,
-                *(int32_t*)((uintptr_t)vidCfg + 0x2C));
-            fn_ComboElement_SetCurrentItem(self->comboShadowQuality,
-                *(int32_t*)((uintptr_t)vidCfg + 0x30));
-            fn_ComboElement_SetCurrentItem(self->comboReflectionQuality,
-                *(int32_t*)((uintptr_t)vidCfg + 0x34));
+            reinterpret_cast<UI::ComboElement*>(self->comboShadowRes)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x2C));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(self->comboShadowQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x30));  // B.3.6 bridge
+            reinterpret_cast<UI::ComboElement*>(self->comboReflectionQuality)->SetCurrentItem(*(int32_t*)((uintptr_t)vidCfg + 0x34));  // B.3.6 bridge
         }
     }
 
@@ -742,14 +740,13 @@ void OptionsDialog_Startup(OptionsDialog* self) {
                 ::new (&textStr) System::String(reinterpret_cast<const UI::StringTable*>(stringTable)->GetText(i));  // B.3.6 bridge
                 uint8_t spriteBuf[16] = {};
                 ::new (spriteBuf) UI::Sprite();
-                fn_ComboElement_AddItem(self->comboAutosave, spriteBuf, &textStr,
-                                        (void*)(intptr_t)i);
+                reinterpret_cast<UI::ComboElement*>(self->comboAutosave)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textStr, (void*)(intptr_t)i);  // B.3.6 bridge
             }
         }
         int autoSaveIdx = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[1] : 0;
         if (autoSaveIdx < 0) autoSaveIdx = 0;
         if (autoSaveIdx > 8) autoSaveIdx = 8;
-        if (self->comboAutosave) fn_ComboElement_SetCurrentItem(self->comboAutosave, autoSaveIdx);
+        if (self->comboAutosave) reinterpret_cast<UI::ComboElement*>(self->comboAutosave)->SetCurrentItem(autoSaveIdx);  // B.3.6 bridge
     }
 
     // --- UI scale slider ---
@@ -802,7 +799,7 @@ void OptionsDialog_Startup(OptionsDialog* self) {
             int lastTab = (g_pGameSettingsPtr && *g_pGameSettingsPtr) ? (*g_pGameSettingsPtr)[7] : 0;
             // Clamp to valid range — options dialog has 4 tabs (0-3)
             if (lastTab < 0 || lastTab > 3) lastTab = 0;
-            fn_TabElement_SetActiveTab(self->tabOptions, lastTab);
+            reinterpret_cast<UI::TabElement*>(self->tabOptions)->SetActiveTab(lastTab);  // B.3.6 bridge
         }
     }
 }
@@ -986,15 +983,15 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
     // Read new values from UI combos
     // Renderer
     int rendItem = *(int*)((uintptr_t)*(void**)&self->comboRenderer + 0x118);
-    int newRenderer = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboRenderer, rendItem);
+    int newRenderer = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboRenderer)->GetItemData(rendItem);  // B.3.6 bridge
 
     // Adapter
     int adpItem = *(int*)((uintptr_t)*(void**)&self->comboAdapter + 0x118);
-    int newAdapter = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboAdapter, adpItem);
+    int newAdapter = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboAdapter)->GetItemData(adpItem);  // B.3.6 bridge
 
     // Resolution
     int resItem = *(int*)((uintptr_t)*(void**)&self->comboResolution + 0x118);
-    void* resData = fn_ComboElement_GetItemData(*(void**)&self->comboResolution, resItem);
+    void* resData = reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboResolution)->GetItemData(resItem);  // B.3.6 bridge
 
     // Refresh
     int refItem = *(int*)((uintptr_t)*(void**)&self->comboRefresh + 0x118);
@@ -1016,11 +1013,11 @@ static void OptionsDialog_ApplyVideoSettings(OptionsDialog* self) {
 
     // Antialias
     int aaItem = *(int*)((uintptr_t)*(void**)&self->comboAntialias + 0x118);
-    int newAntialias = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboAntialias, aaItem);
+    int newAntialias = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboAntialias)->GetItemData(aaItem);  // B.3.6 bridge
 
     // Filter
     int fltItem = *(int*)((uintptr_t)*(void**)&self->comboFilter + 0x118);
-    int newFilter = (int)(intptr_t)fn_ComboElement_GetItemData(*(void**)&self->comboFilter, fltItem);
+    int newFilter = (int)(intptr_t)reinterpret_cast<const UI::ComboElement*>(*(void**)&self->comboFilter)->GetItemData(fltItem);  // B.3.6 bridge
 
     // Shadow res, shadow quality, reflection quality
     int newShadowRes = *(int*)((uintptr_t)*(void**)&self->comboShadowRes + 0x118);
@@ -1278,7 +1275,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         // --- Combo selection change ---
         if (eventData == kCombo_Renderer) {
             int curItem = *(int*)((uintptr_t)self->comboRenderer + 0x118);
-            void* data = fn_ComboElement_GetItemData(self->comboRenderer, curItem);
+            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboRenderer)->GetItemData(curItem);  // B.3.6 bridge
             self->savedRenderer = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
             OptionsDialog_PopulateAdapterCombo(self);
@@ -1286,7 +1283,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         }
         if (eventData == kCombo_Adapter) {
             int curItem = *(int*)((uintptr_t)self->comboAdapter + 0x118);
-            void* data = fn_ComboElement_GetItemData(self->comboAdapter, curItem);
+            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboAdapter)->GetItemData(curItem);  // B.3.6 bridge
             self->savedAdapter = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
             OptionsDialog_PopulateAntialiasCombo(self);
@@ -1296,7 +1293,7 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         }
         if (eventData == kCombo_Resolution) {
             int curItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
-            void* resData = fn_ComboElement_GetItemData(self->comboResolution, curItem);
+            void* resData = reinterpret_cast<const UI::ComboElement*>(self->comboResolution)->GetItemData(curItem);  // B.3.6 bridge
 
             int adapterIdx = self->savedAdapter;
             void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
@@ -1321,10 +1318,10 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         }
         if (eventData == kCombo_Refresh) {
             int resItem = *(int*)((uintptr_t)self->comboResolution + 0x118);
-            void* resData = fn_ComboElement_GetItemData(self->comboResolution, resItem);
+            void* resData = reinterpret_cast<const UI::ComboElement*>(self->comboResolution)->GetItemData(resItem);  // B.3.6 bridge
 
             int refItem = *(int*)((uintptr_t)self->comboRefresh + 0x118);
-            void* refData = fn_ComboElement_GetItemData(self->comboRefresh, refItem);
+            void* refData = reinterpret_cast<const UI::ComboElement*>(self->comboRefresh)->GetItemData(refItem);  // B.3.6 bridge
 
             int adapterIdx = self->savedAdapter;
             void* gfxIface = (void*)&reinterpret_cast<const Video::Device*>(*g_pVideoDeviceSingleton)
@@ -1352,14 +1349,14 @@ void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, in
         }
         if (eventData == kCombo_Antialias) {
             int curItem = *(int*)((uintptr_t)self->comboAntialias + 0x118);
-            void* data = fn_ComboElement_GetItemData(self->comboAntialias, curItem);
+            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboAntialias)->GetItemData(curItem);  // B.3.6 bridge
             self->savedAntialias = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
             return;
         }
         if (eventData == kCombo_Filter) {
             int curItem = *(int*)((uintptr_t)self->comboFilter + 0x118);
-            void* data = fn_ComboElement_GetItemData(self->comboFilter, curItem);
+            void* data = reinterpret_cast<const UI::ComboElement*>(self->comboFilter)->GetItemData(curItem);  // B.3.6 bridge
             self->savedFilter = (uint32_t)(intptr_t)data;
             OptionsDialog_ValidateVideoConfig(self);
             return;
@@ -1430,7 +1427,7 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self) {
                     uint64_t nameTable = *(uint64_t*)((uintptr_t)keyMapContainer + 0xC8);
                     uint8_t uiStr[16];
                     ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(nameTable)), inputId);  // B.3.6 bridge
-                    fn_TextElement_SetText(textObj, uiStr);
+                    reinterpret_cast<UI::TextElement*>(textObj)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
                 }
             }
         }
@@ -1517,7 +1514,7 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
         uint64_t textElem = 0;
         ::new (&textElem) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialogPtr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
         if (textElem) {
-            fn_TextElement_SetParameter((void*)textElem, 0, &inputNameStr);
+            reinterpret_cast<UI::TextElement*>((void*)textElem)->SetParameter(0, inputNameStr);  // B.3.6 bridge
         }
     }
 
@@ -1611,19 +1608,19 @@ void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bind
                 uint64_t textElem2 = 0;
                 ::new (&textElem2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
                 if (textElem2) {
-                    fn_TextElement_SetParameter((void*)textElem2, 0, &newKeyStr);
+                    reinterpret_cast<UI::TextElement*>((void*)textElem2)->SetParameter(0, newKeyStr);  // B.3.6 bridge
                 }
 
                 uint64_t textElem3 = 0;
                 ::new (&textElem3) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
                 if (textElem3) {
-                    fn_TextElement_SetParameter((void*)textElem3, 1, &conflictNameStr);
+                    reinterpret_cast<UI::TextElement*>((void*)textElem3)->SetParameter(1, conflictNameStr);  // B.3.6 bridge
                 }
 
                 uint64_t textElem4 = 0;
                 ::new (&textElem4) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>((void*)dialog2Ptr)->FindElementType(*g_TypeId_TextElement));  // B.3.6 bridge
                 if (textElem4) {
-                    fn_TextElement_SetParameter((void*)textElem4, 2, &inputNameStr);
+                    reinterpret_cast<UI::TextElement*>((void*)textElem4)->SetParameter(2, inputNameStr);  // B.3.6 bridge
                 }
             }
 

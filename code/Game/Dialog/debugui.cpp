@@ -14,6 +14,9 @@
 // The runtime type headers come FIRST: they pull runtime/types/volume/Volume.h,
 // whose global-scope `struct Rectangle` is hidden by <wingdi.h>'s `Rectangle()`
 // once <windows.h> has been seen through resolve.h.  ENDGAME B.3.5 batch I2.
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/ComboElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -152,7 +155,7 @@ static void DebugUI_OnDiseaseComboChanged_Impl(DebugUI* self) {
     if (selIdx > 3) {
         // Only take action if index > 3 (first 3 are non-disease entries)
         void* comboElem = *(void**)(s + 0x38);
-        void* itemData = fn_ComboElement_GetItemData(comboElem, selIdx);
+        void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(selIdx);  // B.3.6 bridge
         // Construct InternalBasePtr from item data — used internally by disease system
         uint8_t basePtrBuf[8];
         new (basePtrBuf) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(itemData));   // B.3.3 bridge
@@ -216,7 +219,7 @@ static void DebugUI_OnDrawComboChanged_Impl(DebugUI* self) {
     int selectedIdx = *(int*)(*(uintptr_t*)(s + 0x108) + 0x118);
 
     // Get item data (cast to int index into draw list)
-    void* itemData = fn_ComboElement_GetItemData(*(void**)(s + 0x108), selectedIdx);
+    void* itemData = reinterpret_cast<const UI::ComboElement*>(*(void**)(s + 0x108))->GetItemData(selectedIdx);  // B.3.6 bridge
     int selectedDrawIdx = (int)(intptr_t)itemData;
 
     // Get draw manager from game world
@@ -835,16 +838,16 @@ void DebugUI_Slot8(DebugUI* self) {
 
     // Read and display 4 debug counters from engine state
     void* numBatches = *(void**)(s + 0x58);
-    if (numBatches) fn_NumberElement_SetValueInt(numBatches, *(int*)(engineState + 0x2158));
+    if (numBatches) reinterpret_cast<UI::NumberElement*>(numBatches)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2158)));  // B.3.6 bridge
 
     void* numDrawCalls = *(void**)(s + 0x40);
-    if (numDrawCalls) fn_NumberElement_SetValueInt(numDrawCalls, *(int*)(engineState + 0x215C));
+    if (numDrawCalls) reinterpret_cast<UI::NumberElement*>(numDrawCalls)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x215C)));  // B.3.6 bridge
 
     void* numTriangles = *(void**)(s + 0x48);
-    if (numTriangles) fn_NumberElement_SetValueInt(numTriangles, *(int*)(engineState + 0x2150));
+    if (numTriangles) reinterpret_cast<UI::NumberElement*>(numTriangles)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2150)));  // B.3.6 bridge
 
     void* numVertices = *(void**)(s + 0x50);
-    if (numVertices) fn_NumberElement_SetValueInt(numVertices, *(int*)(engineState + 0x2154));
+    if (numVertices) reinterpret_cast<UI::NumberElement*>(numVertices)->SetValue(static_cast<int32_t>(*(int*)(engineState + 0x2154)));  // B.3.6 bridge
 
     // Read frame time and total time from engine object (NOT engineState)
     // Original: *(*(g_pEngineSingleton_exref) + 0x68) and + 0x58
@@ -868,13 +871,13 @@ void DebugUI_Slot8(DebugUI* self) {
 
     // Display smoothed values
     void* numFPS = *(void**)(s + 0x60);
-    if (numFPS) fn_NumberElement_SetValueInt(numFPS, (int)*smoothedFPS);
+    if (numFPS) reinterpret_cast<UI::NumberElement*>(numFPS)->SetValue(static_cast<int32_t>((int)*smoothedFPS));  // B.3.6 bridge
 
     void* numFrameMS = *(void**)(s + 0x68);
-    if (numFrameMS) fn_NumberElement_SetValueFloat(numFrameMS, *smoothedFrameMS * 1000.0f);
+    if (numFrameMS) reinterpret_cast<UI::NumberElement*>(numFrameMS)->SetValue(static_cast<float>(*smoothedFrameMS * 1000.0f));  // B.3.6 bridge
 
     void* numTotalMS = *(void**)(s + 0x70);
-    if (numTotalMS) fn_NumberElement_SetValueFloat(numTotalMS, *smoothedTotalMS * 1000.0f);
+    if (numTotalMS) reinterpret_cast<UI::NumberElement*>(numTotalMS)->SetValue(static_cast<float>(*smoothedTotalMS * 1000.0f));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -919,7 +922,7 @@ void DebugUI_Slot7(DebugUI* self) {
             uint64_t fmtRef = *(uint64_t*)((uintptr_t)textElem + 0xD8);
             *(uint64_t*)&uiStrBuf[8] = *(uint64_t*)((uintptr_t)textElem + 0xE0);
             ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(fmtRef)), (int)dayValue / 30);  // B.3.6 bridge
-            fn_TextElement_SetText(*(void**)textIBP, uiStrBuf);
+            reinterpret_cast<UI::TextElement*>(*(void**)textIBP)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
         }
     }
 
@@ -1235,9 +1238,9 @@ void DebugUI_Slot4(DebugUI* self) {
                                            (void*)((uintptr_t)disease + 0x28));
                 uint8_t spriteBuf[16];
                 ::new (spriteBuf) UI::Sprite();
-                fn_ComboElement_AddItem(self->diseaseCombo, spriteBuf, &textBuf, nullptr);
+                reinterpret_cast<UI::ComboElement*>(self->diseaseCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), textBuf, nullptr);  // B.3.6 bridge
             }
-            fn_ComboElement_SetCurrentItem(self->diseaseCombo, 0);
+            reinterpret_cast<UI::ComboElement*>(self->diseaseCombo)->SetCurrentItem(0);  // B.3.6 bridge
         }
     }
     DebugUI_FindAndSetId(parentElem, "diseaseButton", 0x147);
@@ -1308,8 +1311,7 @@ void DebugUI_Slot4(DebugUI* self) {
 
                 uint8_t spriteBuf[16];
                 ::new (spriteBuf) UI::Sprite();
-                fn_ComboElement_AddItem(self->drawCombo, spriteBuf,
-                    (void*)((uintptr_t)drawableDesc + 0x20), entry);
+                reinterpret_cast<UI::ComboElement*>(self->drawCombo)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), *reinterpret_cast<const System::String*>((void*)((uintptr_t)drawableDesc + 0x20)), entry);  // B.3.6 bridge
 
                 // Check if current entry matches the null/default internal ptr
                 uint8_t nullBuf[8];
@@ -1318,7 +1320,7 @@ void DebugUI_Slot4(DebugUI* self) {
                     selectedIndex = i + 4;
                 }
             }
-            fn_ComboElement_SetCurrentItem(self->drawCombo, selectedIndex);
+            reinterpret_cast<UI::ComboElement*>(self->drawCombo)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
         }
     }
 
@@ -1397,7 +1399,7 @@ void DebugUI_Slot4(DebugUI* self) {
             System::String noneBuf("None");
             uint8_t spriteBuf[16];
             ::new (spriteBuf) UI::Sprite();
-            fn_ComboElement_AddItem(self->comboWeather, spriteBuf, &noneBuf, (void*)(intptr_t)-1);
+            reinterpret_cast<UI::ComboElement*>(self->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), noneBuf, (void*)(intptr_t)-1);  // B.3.6 bridge
 
             // Populate from weather list at gameWorld+0x130.
             // STANDALONE: guard a null weather manager / list.
@@ -1416,8 +1418,7 @@ void DebugUI_Slot4(DebugUI* self) {
 
                 uint8_t spr[16];
                 ::new (spr) UI::Sprite();
-                fn_ComboElement_AddItem(self->comboWeather, spr, &filenameBuf,
-                    (void*)(intptr_t)i);
+                reinterpret_cast<UI::ComboElement*>(self->comboWeather)->AddItem(*reinterpret_cast<const UI::Sprite*>(spr), *reinterpret_cast<const System::String*>(&filenameBuf), (void*)(intptr_t)i);  // B.3.6 bridge
 
                 // Check if this weather is currently active
                 uintptr_t activeCheck = *(uintptr_t*)((uintptr_t)i * 8 +
@@ -1426,7 +1427,7 @@ void DebugUI_Slot4(DebugUI* self) {
                     selectedIndex = i + 1;
                 }
             }
-            fn_ComboElement_SetCurrentItem(self->comboWeather, selectedIndex);
+            reinterpret_cast<UI::ComboElement*>(self->comboWeather)->SetCurrentItem(selectedIndex);  // B.3.6 bridge
             reinterpret_cast<UI::Element*>(self->comboWeather)->SetElementId(0x163);  // B.3.6 bridge
         }
     }

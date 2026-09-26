@@ -12,6 +12,8 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/StatusBarUI.h
 //                  Dialog\StatusBarUI.cpp
 
+#include "ui/TextElement.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/NumberElement.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -171,7 +173,7 @@ void StatusBarUI_Draw(StatusBarUI* self) {
     void* gameWorld = *g_pGameWorldSingleton;
     System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
     if (self->labelTitleParam)
-        fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
+        reinterpret_cast<UI::TextElement*>(self->labelTitleParam)->SetParameter(0, mapName);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -322,7 +324,7 @@ found_happiness:
 
         // Set count text as parameter 0
         System::String countStr = System::String::Format("%i", (uint64_t)*pCounts);
-        fn_TextElement_SetParameter(*(void**)pNum, 0, &countStr);
+        reinterpret_cast<UI::TextElement*>(*(void**)pNum)->SetParameter(0, countStr);  // B.3.6 bridge
 
         mask = (mask << 1) | (uint32_t)((int32_t)mask < 0);  // rotate left
         pNum += 8;
@@ -333,21 +335,21 @@ found_happiness:
     // --- Update population text (3 params: adults, dying, building) ---
     {
         System::String str = System::String::Format("%i", (uint64_t)adultCount);
-        fn_TextElement_SetParameter(self->textPopulation, 0, &str);
+        reinterpret_cast<UI::TextElement*>(self->textPopulation)->SetParameter(0, str);  // B.3.6 bridge
     }
     {
         System::String str = System::String::Format("%i", (uint64_t)dyingCount);
-        fn_TextElement_SetParameter(self->textPopulation, 1, &str);
+        reinterpret_cast<UI::TextElement*>(self->textPopulation)->SetParameter(1, str);  // B.3.6 bridge
     }
     {
         System::String str = System::String::Format("%i", (uint64_t)buildingCount);
-        fn_TextElement_SetParameter(self->textPopulation, 2, &str);
+        reinterpret_cast<UI::TextElement*>(self->textPopulation)->SetParameter(2, str);  // B.3.6 bridge
     }
 
     // --- Update year ---
     int* timeData = *(int**)((uintptr_t)gameWorld + 0x128);
     int year = *timeData;
-    fn_NumberElement_SetValueInt(self->numberYear, year);
+    reinterpret_cast<UI::NumberElement*>(self->numberYear)->SetValue(static_cast<int32_t>(year));  // B.3.6 bridge
 
     // --- Update month/season ---
     float seconds = reinterpret_cast<const System::Time*>((void*)(timeData + 2))->AsSeconds();   // B.3.4 bridge
@@ -373,7 +375,7 @@ found_happiness:
             localUIStr[0] = pResult[0];
             localUIStr[1] = pResult[1];
 
-            fn_TextElement_SetText(self->textSeason, localUIStr);
+            reinterpret_cast<UI::TextElement*>(self->textSeason)->SetText(reinterpret_cast<const UI::String*>(localUIStr));  // B.3.6 bridge
         }
     }
 
@@ -389,7 +391,7 @@ found_happiness:
     if (settings && *(uint8_t*)((uintptr_t)settings + 0x15) != 0) {
         displayTemp = ((rawTemp - kFreezingF) * kFtoC_Num) / kFtoC_Den;
     }
-    fn_NumberElement_SetValueInt(self->numberTemperature, (int)displayTemp);
+    reinterpret_cast<UI::NumberElement*>(self->numberTemperature)->SetValue(static_cast<int32_t>((int)displayTemp));  // B.3.6 bridge
 
     // --- Update weather icons ---
     // Weather check uses displayTemp (after conversion), compared to freezing F
@@ -428,20 +430,20 @@ found_happiness:
     int valTextile  = piVar5[0x50];
 
     // Assignments match decompilation: SetValue(*(param_1 + offset), value)
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x58), iVar7_wood);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x60), iVar2_stone);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x68), iVar3_iron);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x78), iVar1_tool);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x70), iVar21_fw);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x80), iVar23_food);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x88), valHerbs);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x90), valClothes);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0x98), valAlcohol);
-    fn_NumberElement_SetValueInt(*(void**)(s + 0xA0), valCoal);
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x58))->SetValue(static_cast<int32_t>(iVar7_wood));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x60))->SetValue(static_cast<int32_t>(iVar2_stone));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x68))->SetValue(static_cast<int32_t>(iVar3_iron));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x78))->SetValue(static_cast<int32_t>(iVar1_tool));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x70))->SetValue(static_cast<int32_t>(iVar21_fw));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x80))->SetValue(static_cast<int32_t>(iVar23_food));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x88))->SetValue(static_cast<int32_t>(valHerbs));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x90))->SetValue(static_cast<int32_t>(valClothes));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0x98))->SetValue(static_cast<int32_t>(valAlcohol));  // B.3.6 bridge
+    reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0xA0))->SetValue(static_cast<int32_t>(valCoal));  // B.3.6 bridge
 
     // Textile (numberTextile at +0xA8) — may be null
     if (*(void**)(s + 0xA8) != nullptr) {
-        fn_NumberElement_SetValueInt(*(void**)(s + 0xA8), valTextile);
+        reinterpret_cast<UI::NumberElement*>(*(void**)(s + 0xA8))->SetValue(static_cast<int32_t>(valTextile));  // B.3.6 bridge
     }
 
     // Custom resources (numberCustom0..9 at +0xB0..+0xF8)
@@ -451,7 +453,7 @@ found_happiness:
     do {
         if (*(void**)pCustom != nullptr) {
             int value = *(int*)(resOffset + *(uintptr_t*)(popList + 0x170));
-            fn_NumberElement_SetValueInt(*(void**)pCustom, value);
+            reinterpret_cast<UI::NumberElement*>(*(void**)pCustom)->SetValue(static_cast<int32_t>(value));  // B.3.6 bridge
         }
         resOffset += 0x20;
         pCustom += 8;
@@ -460,7 +462,7 @@ found_happiness:
     // --- Update title text (map name) ---
     System::String mapName(*reinterpret_cast<const System::String*>((uintptr_t)gameWorld + 0x28));  // B.3.1 bridge; FUN_140011f90: copies gameWorld+0x28 String
     if (self->labelTitleParam)
-        fn_TextElement_SetParameter(self->labelTitleParam, 0, &mapName);
+        reinterpret_cast<UI::TextElement*>(self->labelTitleParam)->SetParameter(0, mapName);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -700,9 +702,7 @@ void EnsureGlobals() {
 // Every function/global the Draw+Startup+event paths dereference unguarded must
 // be live, or a null-deref faults (no SEH under MinGW).
 bool Ready() {
-    if (!(fn_TextElement_SetParameter &&
-          fn_TextElement_SetText && fn_NumberElement_SetValueInt &&
-          fn_IsDerivedFrom &&
+    if (!(fn_IsDerivedFrom &&
           fn_InternalBasePtr_Ctor &&
           fn_MemAlloc && fn_MemFreeStatic && g_pMemAllocSingleton))
         return false;
