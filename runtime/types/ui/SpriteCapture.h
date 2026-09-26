@@ -83,6 +83,7 @@
 #include <cstddef>
 
 #include "../object/External.h"
+#include "../object/Internal.h"   // ENDGAME B.3.8 RB: InternalMemFree (the concrete slot 0)
 
 namespace UI {
 
@@ -161,7 +162,15 @@ public:
     using CaptureEntry = ::UI::CaptureEntry;   // retail's nested spelling
                                                // (`Array<UI::SpriteCapture::CaptureEntry>`)
 
-    Object::Base* DeletingDtor(unsigned flags) override = 0;   // [0] 0x18003ccf0
+    // [0] CONCRETE (ENDGAME B.3.8 block RB, B38_RULES D1/D2): the exe
+    // instantiates the class itself (its table copy 0x14015d550, stamped by
+    // 0x1400792b0), whose slot 0 is the exe scalar deleting dtor 0x140013f80
+    // (~SpriteCapture; MemFree on flags & 1). 0x18003ccf0 stays the mint row.
+    Object::Base* DeletingDtor(unsigned flags) override {
+        this->~SpriteCapture();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
 
     const char* TypeName() const override;              // [1] 0x18003c810
     uint32_t    Type() const override;                  // [2] 0x18003c7f0
@@ -202,9 +211,30 @@ public:
     static Object::Base* CreateNewObject();                    // 0x18003c900  (factory door)
     static Object::Base* CreateInPlaceObject(void* place);     // 0x18003c9c0  (factory door)
 
+    // ??0SpriteCapture@UI@@QEAA@XZ 0x1800d9140 — the REAL constructor (ENDGAME
+    // B.3.8 block RB, RULE B8-1), PUBLIC: the class is concrete. External()
+    // and the stamps are the compiler's; the seven zero stores are ONE body
+    // with the factory ctor door `Ctor_SpriteCapture` (ui_factory_wave28.cpp).
+    SpriteCapture() { InitFields(); }
+
+    struct DoorBody {   // the doors' way onto the shared bodies
+        static void Init(SpriteCapture* s)    { s->InitFields(); }
+        static void Release(SpriteCapture* s) { s->ReleaseFields(); }
+    };
+
 protected:
-    SpriteCapture() = default;   // NOT retail's 0x1800d9140 — see the banner
-    ~SpriteCapture();            // 0x1800d91b0, empty (the door keeps the body)
+    // 0x1800d91b0. NON-VIRTUAL; its body (spritecapture_class.cpp) is
+    // `ReleaseFields`, ONE body with `RtUi_SpriteCapture_Dtor`.
+    ~SpriteCapture();
+
+private:
+    void InitFields() {
+        _sheets   = CaptureArray{};     // +0x20, +0x28
+        _entries  = CaptureArray{};     // +0x30, +0x38
+        _sprites  = CaptureArray{};     // +0x40, +0x48
+        _width = 0; _height = 0;        // +0x50 (one qword)
+    }
+    void ReleaseFields();   // the three ~Array calls of 0x1800d91b0 (spritecapture_class.cpp)
 
 public:
     // ---- the 0x38 bytes SpriteCapture adds (public: the doors reach them) --

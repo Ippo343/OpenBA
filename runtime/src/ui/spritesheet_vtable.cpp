@@ -224,9 +224,10 @@ Object::External* SpriteSheet::Reconstruct() {
     return this;
 }
 
-// ~SpriteSheet: NON-VIRTUAL and EMPTY; `RtUi_SpriteSheet_Dtor`
-// (spritesheet_new.cpp) is the registered door that does retail's release.
-SpriteSheet::~SpriteSheet() {}
+// ~SpriteSheet: NON-VIRTUAL. ENDGAME B.3.8 block RB: its body is
+// `ReleaseFields` (spritesheet_new.cpp), ONE body with the registered door
+// `RtUi_SpriteSheet_Dtor`; the restamp and ~External are the compiler's.
+SpriteSheet::~SpriteSheet() { ReleaseFields(); }
 
 }  // namespace UI
 
