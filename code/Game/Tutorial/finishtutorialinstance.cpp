@@ -17,6 +17,7 @@
 #include <cstdio>
 #include "Tutorial/FinishTutorialInstance.h"
 #include "Tutorial/FinishTutorialGoal.h"
+#include "Tutorial/TutorialInstance.h"
 #include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -123,38 +124,15 @@ void FinishTutorialInstance::Startup() {
     void* p3 = nullptr;
     uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
-    // Step 1-3: Allocate and initialize TutorialInstance (0x38 bytes)
-    void* newObj = nullptr;
-    if (fn_MemAlloc && g_pMemAllocSingleton) {
-        newObj = fn_MemAlloc(g_pMemAllocSingleton, 0x38, 8);
-    }
-
+    // Step 1-3: MemAlloc(0x38, 8) and the TutorialInstance ctor retail inlined
+    // here (Internal(), stamp 0x140160bf8, +0x10 = -1, two null
+    // InternalBasePtrs, +0x30 = 0). ENDGAME B.3.8: the real class's ctor —
+    // the tree stamped `g_TutorialInstanceVtable` only when the opt-in
+    // BANISHED_LIVE_TUTORIALINSTANCE_VT registration made 0x140160bf8 resolve,
+    // and otherwise left Object::Internal's minted table on the object.
+    void* newObj = Object::detail::InternalMemAlloc(sizeof(TutorialInstance), 8);
     if (newObj != nullptr) {
-        // Call Object::Internal::Internal constructor
-        if (fn_ObjectInternal_Ctor) {
-            fn_ObjectInternal_Ctor(newObj);
-        }
-
-        uintptr_t obj = (uintptr_t)newObj;
-
-        // Set vtable to TutorialInstance vtable (0x140160bf8)
-        if (g_TutorialInstanceVtable) {
-            *(void**)obj = g_TutorialInstanceVtable;
-        }
-
-        // Set field+0x10 = -1 (0xFFFFFFFF)
-        *(int32_t*)(obj + 0x10) = -1;
-
-        // InternalBasePtr::Ctor on fields +0x18 and +0x20 with NULL
-        if (fn_InternalBasePtr_Ctor) {
-            new ((void*)(obj + 0x18)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-            new ((void*)(obj + 0x20)) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
-        }
-
-        // Set field+0x30 = 0
-        *(uint64_t*)(obj + 0x30) = 0;
-    } else {
-        newObj = nullptr;  // allocation failed
+        newObj = static_cast<Object::Base*>(::new (newObj) TutorialInstance());
     }
 
     // Step 4: Create IBP from newObj, store in self+0x20

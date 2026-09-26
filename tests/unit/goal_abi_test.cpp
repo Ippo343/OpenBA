@@ -269,3 +269,19 @@ UNIT_TEST(tutorialimage_family_is_retail) {
     CHECK_EQ(offsetof(TutorialImage, imageWidth), (size_t)0x28);
     CHECK_EQ(offsetof(TutorialImageToolbarIcon, _toolbarRef), (size_t)0x40);
 }
+
+// ===========================================================================
+// TutorialInstance : Object::Internal — 4 slots, 0x38
+// ===========================================================================
+#include "Tutorial/TutorialInstance.h"
+
+UNIT_TEST(tutorialinstance_is_retail_4_slots_and_0x38) {
+    CHECK_EQ(sizeof(TutorialInstance), (size_t)0x38);
+    CHECK_EQ(offsetof(TutorialInstance, currentStep), (size_t)0x10);
+    CHECK_EQ(offsetof(TutorialInstance, tutorialDef), (size_t)0x30);
+    CHECK_EQ(SlotOffset(&TutorialInstance::DeletingDtor), (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&TutorialInstance::TypeName),     (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&TutorialInstance::Type),         (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&TutorialInstance::Persist),      (uintptr_t)0x18);
+    CheckShape<TutorialInstance, Object::Internal>(false);
+}
