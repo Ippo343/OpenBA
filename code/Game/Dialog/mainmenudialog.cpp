@@ -10,6 +10,13 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/MainMenuDialog.h
 //                  Dialog\MainMenuDialog.cpp
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Cursor.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "resolve.h"
@@ -29,7 +36,7 @@
 static void* FindElement(void* dialog, const char* name) {
     System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elem = *(void**)retBuf;
     return elem;
 }
@@ -104,7 +111,7 @@ static void* LoadDialogResource(const char* rscPath) {
 static void AddDialogToUI(MainMenuDialog* self, void* dlgObj) {
     uint8_t ibp[8];
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlgObj));   // B.3.3 bridge
-    fn_UI_AddDialog(*(void**)((uintptr_t)self + 0x10), ibp);
+    reinterpret_cast<UI::UserInterface*>(*(void**)((uintptr_t)self + 0x10))->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -274,14 +281,14 @@ void MainMenuDialog_ReturnToMenu(MainMenuDialog* self) {
     if (gameWorld == 0) {
         // No game: set on engine singleton (at +0xC0 = engine ptr)
         uintptr_t engPtr = *(uintptr_t*)(s + 0xC0);
-        fn_UI_SetFullscreenFade((void*)(engPtr + 0x40), true, 0xFF000000, false);
+        reinterpret_cast<UI::UserInterface*>((void*)(engPtr + 0x40))->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
         *(void**)(engPtr + 0xB68) = outerLoop;
     } else {
         // Game active: set cursor, fade, store at +0xC8
         void* ui = *(void**)(gameWorld + 0x98);
         uint64_t cursorVal = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
-        if (fn_UI_SetCursor) fn_UI_SetCursor(ui, cursorVal);
-        fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
+        reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));  // B.3.6 bridge
+        reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
         *(void**)(gameWorld + 0xC8) = outerLoop;
     }
 }
@@ -453,8 +460,7 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     }
     if (!fn_IsDerivedFrom ||
         !fn_MemAlloc || !fn_InternalBasePtr_Ctor ||
-        !fn_DialogInstance_Ctor || !fn_UI_AddDialog ||
-        !fn_DialogInstance_FindElement ||
+        !fn_DialogInstance_Ctor ||
         !fn_TextElement_SetParameter || !fn_Configuration_CurrentVersion ||
         !fn_Configuration_CurrentBuildId) {
         printf("[BuildId] missing engine fns, skipping\n");
@@ -508,14 +514,14 @@ static bool CreateBuildIdChildDialog(void* selfDialog, void* userInterfacePtr) {
     uint8_t childInternalPtr[16] = {};
     new (childInternalPtr) ::Object::InternalBasePtr(
         reinterpret_cast<RtObject::Internal*>(childDialog));   // B.3.3 bridge
-    fn_UI_AddDialog(userInterfacePtr, childInternalPtr);
+    reinterpret_cast<UI::UserInterface*>(userInterfacePtr)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(childInternalPtr));  // B.3.6 bridge
 
     // --- Find textBuildNotice inside the child dialog ---
     System::String nameStr("textBuildNotice");
 
     void* childDI = *(void**)childInternalPtr;
     uint8_t retBuf[16] = {};
-    fn_DialogInstance_FindElement(childDI, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(childDI)->FindElement(nameStr));  // B.3.6 bridge
     void* textElem = *(void**)retBuf;
 
     printf("[BuildId] childDI=%p textElem=%p\n", childDI, textElem);
@@ -592,45 +598,45 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
 
     // --- Assign element IDs (with CheckPtr safety) ---
     if (buttonNew) {
-        fn_Element_SetElementId(buttonNew, kButton_New);
+        reinterpret_cast<UI::Element*>(buttonNew)->SetElementId(kButton_New);  // B.3.6 bridge
     }
     if (buttonResume) {
-        fn_Element_SetElementId(buttonResume, kButton_Resume);
+        reinterpret_cast<UI::Element*>(buttonResume)->SetElementId(kButton_Resume);  // B.3.6 bridge
         // Set +0xC0 flag to 8 (command dispatch flag)
         *(uint32_t*)((uintptr_t)buttonResume + 0xC0) = 8;
     }
     if (buttonOptions) {
-        fn_Element_SetElementId(buttonOptions, kButton_Options);
+        reinterpret_cast<UI::Element*>(buttonOptions)->SetElementId(kButton_Options);  // B.3.6 bridge
     }
     if (buttonQuit) {
-        fn_Element_SetElementId(buttonQuit, kButton_Quit);
+        reinterpret_cast<UI::Element*>(buttonQuit)->SetElementId(kButton_Quit);  // B.3.6 bridge
     }
     if (buttonLoad) {
-        fn_Element_SetElementId(buttonLoad, kButton_Load);
+        reinterpret_cast<UI::Element*>(buttonLoad)->SetElementId(kButton_Load);  // B.3.6 bridge
     }
     if (buttonSave) {
-        fn_Element_SetElementId(buttonSave, kButton_Save);
+        reinterpret_cast<UI::Element*>(buttonSave)->SetElementId(kButton_Save);  // B.3.6 bridge
     }
     if (buttonMenu) {
-        fn_Element_SetElementId(buttonMenu, kButton_Menu);
+        reinterpret_cast<UI::Element*>(buttonMenu)->SetElementId(kButton_Menu);  // B.3.6 bridge
     }
     if (buttonAchievement) {
-        fn_Element_SetElementId(buttonAchievement, kButton_Achievement);
+        reinterpret_cast<UI::Element*>(buttonAchievement)->SetElementId(kButton_Achievement);  // B.3.6 bridge
     }
     if (buttonScenario) {
-        fn_Element_SetElementId(buttonScenario, kButton_Scenario);
+        reinterpret_cast<UI::Element*>(buttonScenario)->SetElementId(kButton_Scenario);  // B.3.6 bridge
     }
     if (buttonGoal) {
-        fn_Element_SetElementId(buttonGoal, kButton_Goal);
+        reinterpret_cast<UI::Element*>(buttonGoal)->SetElementId(kButton_Goal);  // B.3.6 bridge
     }
     if (buttonMap) {
-        fn_Element_SetElementId(buttonMap, kButton_Map);
+        reinterpret_cast<UI::Element*>(buttonMap)->SetElementId(kButton_Map);  // B.3.6 bridge
     }
     if (buttonTutorial) {
-        fn_Element_SetElementId(buttonTutorial, kButton_Tutorial);
+        reinterpret_cast<UI::Element*>(buttonTutorial)->SetElementId(kButton_Tutorial);  // B.3.6 bridge
     }
     if (buttonMod) {
-        fn_Element_SetElementId(buttonMod, kButton_Mod);
+        reinterpret_cast<UI::Element*>(buttonMod)->SetElementId(kButton_Mod);  // B.3.6 bridge
     }
 
     // --- If game is active: pause audio and conditionally hide buttons ---
@@ -647,11 +653,11 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
         int32_t scenarioIdx = *(int32_t*)((uintptr_t)world + 0x15C);
         if (scenarioIdx < 0) {
             if (buttonGoal) {
-                fn_Element_SetFlagsOnOff(buttonGoal, 1, 0); // hide
+                reinterpret_cast<UI::Element*>(buttonGoal)->SetFlagsOnOff(1, 0); // B.3.6 bridge; hide
             }
         } else {
             if (buttonMap) {
-                fn_Element_SetFlagsOnOff(buttonMap, 1, 0); // hide
+                reinterpret_cast<UI::Element*>(buttonMap)->SetFlagsOnOff(1, 0); // B.3.6 bridge; hide
             }
         }
 
@@ -660,14 +666,10 @@ void MainMenuDialog_Slot4(MainMenuDialog* self) {
         if (gameFlags & (1 << 10)) {
             if (buttonSave) {
                 // Call vtable[8] = SetEnabled(false)
-                void** vtable = *(void***)buttonSave;
-                typedef void (*fn_SetEnabled_t)(void*, int);
-                ((fn_SetEnabled_t)vtable[8])(buttonSave, 0);
+                reinterpret_cast<UI::Element*>(buttonSave)->Enable(0);  // B.3.6 bridge
             }
             if (buttonMod) {
-                void** vtable = *(void***)buttonMod;
-                typedef void (*fn_SetEnabled_t)(void*, int);
-                ((fn_SetEnabled_t)vtable[8])(buttonMod, 0);
+                reinterpret_cast<UI::Element*>(buttonMod)->Enable(0);  // B.3.6 bridge
             }
         }
     }
@@ -726,7 +728,7 @@ void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int pa
         // Close this dialog (return to gameplay)
         uint8_t selfPtr[16];
         new (selfPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
-        fn_UI_CloseDialog(*(void**)(s + 0x10), selfPtr);
+        reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfPtr));  // B.3.6 bridge
         break;
     }
 
@@ -852,23 +854,18 @@ void StandaloneStub_RuntimeThunk(void* self, ...) {
 // (cosmetic version overlay). What's left is just enough to make the OnCommand
 // dispatch work when the user clicks a button.
 void StandaloneStub_Slot4_Setup(void* self) {
-    if (!fn_DialogInstance_FindElement ||
-        !fn_Element_SetElementId) {
-        printf("[MainMenuDialog::Setup] missing engine fns, skipping element ID assign\n");
-        return;
-    }
     printf("[MainMenuDialog::Setup] self=%p assigning button element IDs\n", self);
 
     auto findAndAssign = [self](const char* name, int id) {
         System::String nameStr(name);
         // FindElement uses non-trivial return ABI: RCX=self, RDX=retbuf, R8=name
         uint8_t retBuf[16] = {};
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *reinterpret_cast<void**>(retBuf);
         if (elem) {
             // CheckPtr resolves any lazy/weak pointer inside the IBP, then
             // SetElementId writes the int into the element.
-            fn_Element_SetElementId(elem, id);
+            reinterpret_cast<UI::Element*>(elem)->SetElementId(id);  // B.3.6 bridge
             printf("[Setup]   %-20s -> id=%2d (elem=%p)\n", name, id, elem);
         } else {
             printf("[Setup]   %-20s -> NOT FOUND\n", name);
@@ -911,15 +908,9 @@ void StandaloneStub_Slot5_Shutdown(void* /*self*/) {}
 // elements (buttons, labels, panels) get their layout updated each frame.
 void StandaloneImpl_Slot6_OnUpdateLayout(void* self) {
     if (!self) return;
-    if (fn_DialogInstance_OnUpdateLayout) {
-        fn_DialogInstance_OnUpdateLayout(self);
-        return;
-    }
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[MainMenuDialog::Slot6] fn_DialogInstance_OnUpdateLayout NULL (mangled name?)\n");
-    }
+    // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch through this
+    // dialog's hand-built table straight back into this slot body.
+    reinterpret_cast<UI::DialogInstance*>(self)->UI::DialogInstance::OnUpdateLayout();  // B.3.6 bridge
 }
 
 // Slot 7 (OnUpdate) — DialogInstance virtual @ vtable +0x38.
@@ -932,15 +923,9 @@ void StandaloneImpl_Slot6_OnUpdateLayout(void* self) {
 // elements (buildId scroller, hover effects, etc.) get their update tick.
 void StandaloneImpl_Slot7_OnUpdate(void* self, const void* time) {
     if (!self) return;
-    if (fn_DialogInstance_OnUpdate) {
-        fn_DialogInstance_OnUpdate(self, time);
-        return;
-    }
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[MainMenuDialog::Slot7] fn_DialogInstance_OnUpdate NULL (mangled name?)\n");
-    }
+    // QUALIFIED (B36_RULES 3.2) -- see Slot6 above.
+    reinterpret_cast<UI::DialogInstance*>(self)->UI::DialogInstance::OnUpdate(  // B.3.6 bridge
+        *static_cast<const System::Time*>(time));
 }
 
 // Slot 8 (OnCommand) — button click dispatch. The runtime sends msg=0x12 with
@@ -971,8 +956,7 @@ void StandaloneStub_Slot8_OnCommand(void* self, void* /*p2*/, int msg, int id) {
         printf("[MainMenuDialog::OnCommand] -> Resume (CloseDialog)\n");
         uint8_t selfPtr[16];
         new (selfPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-        fn_UI_CloseDialog(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10),
-                          selfPtr);
+        reinterpret_cast<UI::UserInterface*>(*reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(self) + 0x10))->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfPtr));  // B.3.6 bridge
         break;
     }
     case kButton_Quit:
@@ -1177,7 +1161,7 @@ void* g_MapParamsDialog_Vtable_Standalone[20] = {
 static void StandaloneOpenMapParams_UI(void* ui) {
     if (!ui) { printf("[OpenMap] ui null\n"); return; }
     if (!fn_MemAlloc || !g_pMemAllocSingleton || !fn_DialogInstance_Ctor ||
-        !fn_InternalBasePtr_Ctor || !fn_UI_AddDialog) {
+        !fn_InternalBasePtr_Ctor) {
         printf("[OpenMap] core fns unresolved\n"); return;
     }
     void* extRes = LoadDialogResource("Dialog/MapParams.rsc");
@@ -1193,7 +1177,7 @@ static void StandaloneOpenMapParams_UI(void* ui) {
     *reinterpret_cast<void**>(dlgMem) = g_MapParamsDialog_Vtable_Standalone;
     uint8_t ibp[8] = {};
     new (ibp) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dlgMem));   // B.3.3 bridge
-    fn_UI_AddDialog(ui, ibp);
+    reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(ibp));  // B.3.6 bridge
     printf("[OpenMap] MapParamsDialog opened + AddDialog'd (dlg=%p)\n", dlgMem);
 }
 

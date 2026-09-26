@@ -16,6 +16,12 @@
 //   +0x70: conflict array pointer (Filename*[])
 //   +0x78: conflict count (int)
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -60,7 +66,7 @@ static void ModDetails_StringArrayPush_Impl(void* arrayBasePtr, System::String&&
 static void* FindElem(void* dialog, const char* name) {
     System::String nameStr(name);
     uint8_t retval[16];
-    fn_DialogInstance_FindElement(dialog, retval, &nameStr);
+    ::new (retval) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     return *(void**)retval;
 }
 
@@ -134,14 +140,14 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     // --- Find 12 UI elements ---
     void* buttonOk = FindElem(self, "buttonOk");
-    fn_Element_SetElementId(buttonOk, 0);
+    reinterpret_cast<UI::Element*>(buttonOk)->SetElementId(0);  // B.3.6 bridge
     *(uint32_t*)((uintptr_t)buttonOk + 0xC0) = 8;
 
     void* buttonCreate = FindElem(self, "buttonCreate");
-    fn_Element_SetElementId(buttonCreate, 1);
+    reinterpret_cast<UI::Element*>(buttonCreate)->SetElementId(1);  // B.3.6 bridge
 
     void* buttonUpdate = FindElem(self, "buttonUpdate");
-    fn_Element_SetElementId(buttonUpdate, 2);
+    reinterpret_cast<UI::Element*>(buttonUpdate)->SetElementId(2);  // B.3.6 bridge
 
     void* imageIcon       = FindElem(self, "imageIcon");
     void* textName        = FindElem(self, "textName");
@@ -161,8 +167,8 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     uintptr_t m = (uintptr_t)mod;
 
     // --- Hide create/update buttons ---
-    fn_Element_Hide(buttonCreate, true);
-    fn_Element_Hide(buttonUpdate, true);
+    reinterpret_cast<UI::Element*>(buttonCreate)->Hide(true);  // B.3.6 bridge
+    reinterpret_cast<UI::Element*>(buttonUpdate)->Hide(true);  // B.3.6 bridge
 
     // --- Set icon sprite from +0xB8 sprite handle ---
     // Retail (0x14006dca6) calls dispatch slot 0x140151898 =
@@ -170,7 +176,7 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
     // BY-INDEX ctor with index 0, same as ModDialog's row icon. The by-NAME
     // overload that used to be here dereferences its String* (READ of 0).
     uint8_t sprite[16];
-    fn_Sprite_Ctor_ByIndex(sprite, *(void**)(s + 0xB8), 0);
+    ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(void**)(s + 0xB8))), 0);  // B.3.6 bridge
     fn_ImageElement_SetSprite(imageIcon, sprite);
 
     // --- Set text parameters ---
@@ -235,8 +241,8 @@ void ModDetailsDialog_Slot4(ModDetailsDialog* self) {
 
     if (conflictCount == 0) {
         // Hide conflict title and list when no conflicts
-        fn_Element_SetFlagsOnOff(textConflictTitle, 1, 0);
-        fn_Element_SetFlagsOnOff(textConflictList, 1, 0);
+        reinterpret_cast<UI::Element*>(textConflictTitle)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+        reinterpret_cast<UI::Element*>(textConflictList)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
     } else {
         // Set conflict list text (DocumentTextElement)
         fn_DocumentTextElement_SetText(textConflictList, &conflictResult);
@@ -368,7 +374,7 @@ static void ModDetailsDialog_OpenDialog_Impl(void* self, const char* rscPath) {
     // Add to UI
     uint64_t dialogRef;
     new (&dialogRef) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(dialogInst));   // B.3.3 bridge
-    fn_UI_AddDialog(*(void**)(s + 0x10), &dialogRef);
+    reinterpret_cast<UI::UserInterface*>(*(void**)(s + 0x10))->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(&dialogRef));  // B.3.6 bridge
 }
 
 // ============================================================
@@ -385,7 +391,7 @@ void ModDetailsDialog_Slot8(ModDetailsDialog* self, uint64_t /*param2*/,
         uint8_t basePtr[16];
         new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
-        fn_UI_CloseDialog(ui, basePtr);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
     } else if (param4 == 1) {
         // OpenUpdateDialog — opens ModUpdate.rsc dialog
         ModDetailsDialog_OpenDialog_Impl(self, "Dialog/ModUpdate.rsc");

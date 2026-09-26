@@ -12,6 +12,11 @@
 // Original source: C:\Projects\Buildy\code\Game\Dialog/NewGameDialog.h
 //                  Dialog\NewGameDialog.cpp
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "options.h"
 #include "Dialog/dialog_exe_helpers.h"
@@ -35,7 +40,7 @@
 static void* FindElement(void* dialog, const char* name) {
     System::String nameStr(name);
     uint8_t retBuf[16];
-    fn_DialogInstance_FindElement(dialog, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialog)->FindElement(nameStr));  // B.3.6 bridge
     void* elem = *(void**)retBuf;
     return elem;
 }
@@ -132,12 +137,11 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
         if (typed && *(uint8_t*)((uintptr_t)typed + visibilityOffset) != 0) {
             // Build UI::String from resource name (at +0x20 stringTable, +0x28 stringName)
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)typed + 0x20),
-                              (void*)((uintptr_t)typed + 0x28));
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)typed + 0x20))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)typed + 0x28)));  // B.3.6 bridge
 
             // Convert UI::String to System::String
             System::String sysStr;
-            fn_UIString_ToSystemString(uiStr, &sysStr);
+            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
 
             void* combo = *comboFieldPtr;
 
@@ -301,8 +305,7 @@ static void UpdateDescription(NewGameDialog* self) {
 
     // Build UI::String from description (at +0x20 stringTable, +0x30 stringName)
     uint8_t uiStr[16];
-    fn_UIString_Ctor(uiStr, *(uint64_t*)((uintptr_t)mapGen + 0x20),
-                      (void*)((uintptr_t)mapGen + 0x30));
+    ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)mapGen + 0x20))), *reinterpret_cast<const System::String*>((void*)((uintptr_t)mapGen + 0x30)));  // B.3.6 bridge
 
     // Set on textDescription element
     fn_TextElement_SetText(self->textDescription, uiStr);
@@ -447,17 +450,17 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
 
     // --- Assign element IDs ---
     // buttonNewName = 0, buttonNewSeed = 1, buttonOk = 2, buttonCancel = 3, comboCondition = 4
-    fn_Element_SetElementId(buttonNewName, 0);
+    reinterpret_cast<UI::Element*>(buttonNewName)->SetElementId(0);  // B.3.6 bridge
 
-    fn_Element_SetElementId(buttonNewSeed, 1);
+    reinterpret_cast<UI::Element*>(buttonNewSeed)->SetElementId(1);  // B.3.6 bridge
 
     // Store buttonOk in struct at +0xF0
     self->buttonOk = buttonOk;
-    fn_Element_SetElementId(self->buttonOk, 2);
+    reinterpret_cast<UI::Element*>(self->buttonOk)->SetElementId(2);  // B.3.6 bridge
 
-    fn_Element_SetElementId(buttonCancel, 3);
+    reinterpret_cast<UI::Element*>(buttonCancel)->SetElementId(3);  // B.3.6 bridge
 
-    fn_Element_SetElementId(self->comboCondition, 4);
+    reinterpret_cast<UI::Element*>(self->comboCondition)->SetElementId(4);  // B.3.6 bridge
 
     // --- Generate random name (guarded: editName must be present) ---
     if (self->editName)
@@ -936,7 +939,7 @@ void NewGameDialog_OnEvent(NewGameDialog* self, void* /*element*/, int eventType
             void* ui = *(void**)(s + 0x10);
             uint64_t basePtr[2];
             new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-            fn_UI_CloseDialog(ui, basePtr);
+            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
             return;
         }
         if (eventData == 0) {
@@ -978,9 +981,7 @@ void NewGameDialog_Slot6(NewGameDialog* self) {
     }
 
     // Virtual call: vtable[8] = SetEnabled(bool)
-    void** vtable = *(void***)okBtn;
-    typedef void (*fn_SetEnabled_t)(void*, int);
-    ((fn_SetEnabled_t)vtable[8])(okBtn, len > 0 ? 1 : 0);
+    reinterpret_cast<UI::Element*>(okBtn)->Enable(len > 0 ? 1 : 0);  // B.3.6 bridge
 }
 
 
@@ -1057,15 +1058,10 @@ void NewGameStub_RuntimeThunk(void* self, ...) {
 // Delegate straight to the Runtime function so the dialog's controls tick.
 void NewGameImpl_Slot7_OnUpdate(void* self, const void* time) {
     if (!self) return;
-    if (fn_DialogInstance_OnUpdate) {
-        fn_DialogInstance_OnUpdate(self, time);
-        return;
-    }
-    static bool warned = false;
-    if (!warned) {
-        warned = true;
-        printf("[NewGameDialog::Slot7] fn_DialogInstance_OnUpdate NULL (mangled name?)\n");
-    }
+    // QUALIFIED (B36_RULES 3.2): an unqualified call would dispatch through this
+    // dialog's hand-built table straight back into this slot body.
+    reinterpret_cast<UI::DialogInstance*>(self)->UI::DialogInstance::OnUpdate(  // B.3.6 bridge
+        *static_cast<const System::Time*>(time));
 }
 
 void* g_NewGameDialog_Vtable_Standalone[10] = {
