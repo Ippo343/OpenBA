@@ -64,8 +64,8 @@ public:
     // ---- non-virtual members -----------------------------------------------
     int32_t GetWidth() const  { return _requestedWidth; }         // 0x180039ee0 MOV EAX,[RCX+0xc0]
     int32_t GetHeight() const { return _requestedHeight; }        // 0x180039ef0 MOV EAX,[RCX+0xc4]
-    // PORTED, body in ANOTHER BLOCK'S FILE (element.cpp, `RtUi_ContainerElement_
-    // SetOffsets`) — fragment pass; declared so no later block edits this header.
+    // Defined in ANOTHER BLOCK'S FILE (element.cpp, fragment pass F2); the
+    // door `RtUi_ContainerElement_SetOffsets` there delegates to it.
     void SetOffsets(int32_t x, int32_t y);                        // 0x1800cc1e0
     // Exported, not ported (inlined by ComboDialog's ctor): declared, undefined.
     void SetSize(int32_t w, int32_t h);                           // 0x180039eb0

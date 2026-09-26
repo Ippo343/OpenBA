@@ -185,7 +185,8 @@ Object::InternalPtr<Element>* BorderDescription::CreateInstance(
     }
 
     void* slot = static_cast<Element*>(elem);              // 18010ffb7  [RBP+0x20]
-    ElementDescriptionApply(this, &slot);                  // 18010ffc2
+    UI::ElementDescription::CreateInstance(                   // 18010ffc2
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     uint8_t* sprites = reinterpret_cast<uint8_t*>(elem) + offsetof(BorderElement, _topLeft);
     for (int i = 0; i < 9; ++i) {                          // 18010ffc7 .. 1801101a0

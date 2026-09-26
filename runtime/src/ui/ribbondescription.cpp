@@ -308,9 +308,9 @@ Object::InternalPtr<Element>* RibbonDescription::CreateInstance(
     void* slot = elem;                                                  // 1800d60ad [RSP+0x50]
 
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);            // 1800d60ba
+    // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 1800d60ba
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     elem->_vertical = _vertical;                                        // 1800d60bf
     elem->_spacing  = _spacing;                                         // 1800d60c9

@@ -115,6 +115,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/system/String.h"
 #include "../../types/ui/Element.h"
+#include "../../types/ui/ContainerElement.h"   // fragment pass F2: SetOffsets
 // `enum class Module` + `ResolveAddr` (declared once there, byte-identical to
 // standalone/resolve.h) and `rtuielem::AtomicExport`, the B6-5 door cache.
 #include "element_common.h"
@@ -239,11 +240,13 @@ MemFreeFn MemFreeAtomic() {
 // SetOffsets' type test. NOTE for whoever reads a crash log: this is the
 // function standalone/main.cpp:518's crash handler recognises by the offset
 // +0xC0390, because retail calls it on a possibly-null child (see SetOffsets).
+// B6-5 (fragment pass F2): an atomic retry-a-miss slot, not a first-call
+// static — ContainerElement::SetOffsets, a member, is its caller.
 using IsDerivedFromFn = bool (*)(const void*, uint32_t);
-IsDerivedFromFn IsDerivedFrom() {
-    static IsDerivedFromFn fn =
-        reinterpret_cast<IsDerivedFromFn>(ResolveExport("?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
-    return fn;
+std::atomic<void*> g_isDerivedFromSlot{nullptr};
+IsDerivedFromFn BaseIsDerivedFromFn() {
+    return reinterpret_cast<IsDerivedFromFn>(rtuielem::AtomicExport(
+        g_isDerivedFromSlot, "?IsDerivedFrom@Base@Object@@QEBA_NI@Z"));
 }
 
 // The static 17-argument overload the member GetAlignedPosition forwards to:
@@ -802,6 +805,39 @@ void Element::SetUserData(Object::Base* userData) {
 // C++ object; this exists so a probe subclass can derive (Material precedent).
 Element::~Element() {}
 
+// ---- ?SetOffsets@ContainerElement@UI@@QEAAXHH@Z  0x1800cc1e0 ---------------
+// ENDGAME B.3.6 fragment pass F2: block C4's class, its body in block A's file
+// (the evidence, the UNGUARDED first write and the re-load of `_children` per
+// read are documented at the door `RtUi_ContainerElement_SetOffsets` below).
+void ContainerElement::SetOffsets(int32_t x, int32_t y) {
+
+    IsDerivedFromFn isA = BaseIsDerivedFromFn();
+
+    Element* child0 = _children.GetData()[0];
+    Element* clip = (isA && isA(child0, ClipRegionTypeId())) ? child0 : nullptr;
+    uint8_t* clipBytes = reinterpret_cast<uint8_t*>(clip);
+    *reinterpret_cast<int32_t*>(clipBytes + 0xd0) = x;
+    *reinterpret_cast<int32_t*>(clipBytes + 0xd4) = y;
+
+    Element* child1 = _children.GetData()[1];
+    Element* vscroll = nullptr;
+    if (child1 && isA && isA(child1, ScrollTypeId())) vscroll = child1;
+
+    Element* child2 = _children.GetData()[2];
+    Element* hscroll = nullptr;
+    if (child2 && isA && isA(child2, ScrollTypeId())) hscroll = child2;
+
+    if (vscroll) {
+        *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(vscroll) + 0x160) =
+            static_cast<float>(y);
+    }
+    if (hscroll) {
+        *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(hscroll) + 0x160) =
+            static_cast<float>(x);
+    }
+
+}
+
 }  // namespace UI
 
 // ============================================================================
@@ -939,33 +975,11 @@ void RtUi_Element_SetUserData(Element* self, void* userData) {
 // a wrong constant and a wrong target object; it does NOT catch a write theirs
 // makes at an offset ours never touched. Stated as a limitation in
 // WAVE7_LANE_A.md §7 rather than dressed up.
+//
+// ENDGAME B.3.6 fragment pass F2: the body MOVED into UI::ContainerElement::
+// SetOffsets (member section above); the door delegates QUALIFIED.
 void RtUi_ContainerElement_SetOffsets(Element* self, int x, int y) {
-
-    IsDerivedFromFn isA = IsDerivedFrom();
-
-    Element* child0 = self->_children.GetData()[0];
-    Element* clip = (isA && isA(child0, ClipRegionTypeId())) ? child0 : nullptr;
-    uint8_t* clipBytes = reinterpret_cast<uint8_t*>(clip);
-    *reinterpret_cast<int32_t*>(clipBytes + 0xd0) = x;
-    *reinterpret_cast<int32_t*>(clipBytes + 0xd4) = y;
-
-    Element* child1 = self->_children.GetData()[1];
-    Element* vscroll = nullptr;
-    if (child1 && isA && isA(child1, ScrollTypeId())) vscroll = child1;
-
-    Element* child2 = self->_children.GetData()[2];
-    Element* hscroll = nullptr;
-    if (child2 && isA && isA(child2, ScrollTypeId())) hscroll = child2;
-
-    if (vscroll) {
-        *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(vscroll) + 0x160) =
-            static_cast<float>(y);
-    }
-    if (hscroll) {
-        *reinterpret_cast<float*>(reinterpret_cast<uint8_t*>(hscroll) + 0x160) =
-            static_cast<float>(x);
-    }
-
+    static_cast<UI::ContainerElement*>(self)->UI::ContainerElement::SetOffsets(x, y);
 }
 
 // ============================================================================

@@ -283,8 +283,8 @@ Object::InternalPtr<Element>* ListDescription::CreateInstance(
     }
 
     void* slot = elem;                                         // 1800d4674
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 1800d4681
+    UI::ElementDescription::CreateInstance(                   // 1800d4681
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     AddChild(dialog, &slot, elem, _partDescs[0]);              // 1800d4692
     AddChild(dialog, &slot, elem, _partDescs[1]);              // 1800d46e3

@@ -187,10 +187,8 @@ bool ButtonDescription::Serialize(void* streamv) {
 //    the re-reads into one variable would assert that nothing can change the
 //    caller's slot between them. Retail does not assert that.
 //
-// `ElementDescription::CreateInstance` (0x180115ad0) is still reached through
-// its registered door by address: its member is declared in
-// ElementDescription.h but its body is dialog.cpp's door (fragment pass), so a
-// member call would not link.
+// `ElementDescription::CreateInstance` (0x180115ad0) is a QUALIFIED member
+// call since fragment pass F2 defined it (dialog.cpp).
 //
 // THE FIFTH CHILD IS SPECIAL: `[RCX+0x20]` at 0x180110aa0 indexes the children
 // array by 0x20 bytes, i.e. element [4], the last one this loop pushed — and
@@ -200,7 +198,8 @@ void ButtonDescription::CreateInstance(Object::InternalPtr<ButtonElement>* eleme
     void** elemPtr = reinterpret_cast<void**>(element);
 
     void* local = *elemPtr;                                // 1801108f5
-    ElementDescriptionApply(this, &local);                 // 1801108fa
+    UI::ElementDescription::CreateInstance(                   // 1801108fa
+        reinterpret_cast<Object::InternalPtr<Element>*>(&local));  // B.3.6 bridge
 
     for (int i = 0; i < 5; ++i) {                          // 1801108ff .. 180110a94
         uint8_t* parent = *reinterpret_cast<uint8_t**>(elemPtr);

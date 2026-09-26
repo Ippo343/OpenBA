@@ -242,8 +242,9 @@ void DocumentTextDescription::CreateInstance(Object::InternalPtr<DocumentTextEle
                                              const Dialog* /*dialog*/) const {
     void* local = element->Get();                           // 1800cf548
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
-    ElementDescriptionApply(this, &local);                  // 1800cf550
+    // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 1800cf550
+        reinterpret_cast<Object::InternalPtr<Element>*>(&local));  // B.3.6 bridge
 
     {
         void* table = _documentStringTable;                 // 1800cf555

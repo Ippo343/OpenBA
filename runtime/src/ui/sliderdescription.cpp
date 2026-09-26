@@ -290,9 +290,9 @@ Object::InternalPtr<Element>* SliderDescription::CreateInstance(
 
     void* slot = elem;                                                  // 1800d76b0
     // The NON-virtual ElementDescription::CreateInstance(InternalPtr<Element>)
-    // (0x180115ad0): its body is still dialog.cpp's door (fragment pass).
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);            // 1800d76bb
+    // (0x180115ad0): a QUALIFIED member call since fragment pass F2.
+    UI::ElementDescription::CreateInstance(                   // 1800d76bb
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     {   // the single child, from +0x68. UI::Dialog::CreateElement — block B's door.
         using CreateElementFn = void** (*)(const void* dlg, void** ret, void* desc);

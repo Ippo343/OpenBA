@@ -43,7 +43,7 @@
 #include <cstdint>
 
 #include "ElementDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::DocumentTextDescription — cross-asserted below
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::DocumentTextDescription aliases this class
 
 namespace UI {
 
@@ -117,26 +117,25 @@ static_assert(sizeof(DocumentTextDescription) == 0xe8,
               "UI::DocumentTextDescription is 0xe8 (MOV EDX,0xe8 in 0x18003bd90)");
 static_assert(alignof(DocumentTextDescription) == 8, "UI::DocumentTextDescription aligns to 8");
 static_assert(offsetof(DocumentTextDescription, _documentStringTable) == sizeof(ElementDescription), "");
-// The class and DescriptionsBatch1.h's POD describe the same bytes.
-using RtDTD = RtUI::DocumentTextDescription;
-static_assert(sizeof(DocumentTextDescription) == sizeof(RtDTD), "");
-static_assert(offsetof(DocumentTextDescription, _documentStringTable) == offsetof(RtDTD, _stringTable), "");
-static_assert(offsetof(DocumentTextDescription, _documentTextName)    == offsetof(RtDTD, _textName), "");
-static_assert(offsetof(DocumentTextDescription, _spriteSheet)         == offsetof(RtDTD, _spriteSheet), "");
-static_assert(offsetof(DocumentTextDescription, _underlineSpriteName) == offsetof(RtDTD, _spriteName), "");
-static_assert(offsetof(DocumentTextDescription, _frameNamesData)      == offsetof(RtDTD, _names), "");
-static_assert(offsetof(DocumentTextDescription, _frameNamesCount)     == offsetof(RtDTD, _namesSize), "");
-static_assert(offsetof(DocumentTextDescription, _linkColor)           == offsetof(RtDTD, _word98), "");
-static_assert(offsetof(DocumentTextDescription, _linkHoverColor)      == offsetof(RtDTD, _word9c), "");
-static_assert(offsetof(DocumentTextDescription, _linkPressedColor)    == offsetof(RtDTD, _worda0), "");
-static_assert(offsetof(DocumentTextDescription, _tabWidth)            == offsetof(RtDTD, _worda4), "");
-static_assert(offsetof(DocumentTextDescription, _wrapWidth)           == offsetof(RtDTD, _worda8), "");
-static_assert(offsetof(DocumentTextDescription, _fontsData)           == offsetof(RtDTD, _arrayB0), "");
-static_assert(offsetof(DocumentTextDescription, _fontsCount)          == offsetof(RtDTD, _arrayB0Size), "");
-static_assert(offsetof(DocumentTextDescription, _sheetsData)          == offsetof(RtDTD, _arrayC0), "");
-static_assert(offsetof(DocumentTextDescription, _sheetsCount)         == offsetof(RtDTD, _arrayC0Size), "");
-static_assert(offsetof(DocumentTextDescription, _colorsData)          == offsetof(RtDTD, _arrayD0), "");
-static_assert(offsetof(DocumentTextDescription, _colorsCount)         == offsetof(RtDTD, _arrayD0Size), "");
-static_assert(offsetof(DocumentTextDescription, _resourceList)        == offsetof(RtDTD, _containerE0), "");
+// RtUI::DocumentTextDescription is an ALIAS of this class since fragment
+// pass F2; these are the offsets the POD pinned.
+static_assert(offsetof(DocumentTextDescription, _documentStringTable) == 0x68, "");
+static_assert(offsetof(DocumentTextDescription, _documentTextName)    == 0x70, "");
+static_assert(offsetof(DocumentTextDescription, _spriteSheet)         == 0x78, "");
+static_assert(offsetof(DocumentTextDescription, _underlineSpriteName) == 0x80, "");
+static_assert(offsetof(DocumentTextDescription, _frameNamesData)      == 0x88, "");
+static_assert(offsetof(DocumentTextDescription, _frameNamesCount)     == 0x90, "");
+static_assert(offsetof(DocumentTextDescription, _linkColor)           == 0x98, "");
+static_assert(offsetof(DocumentTextDescription, _linkHoverColor)      == 0x9c, "");
+static_assert(offsetof(DocumentTextDescription, _linkPressedColor)    == 0xa0, "");
+static_assert(offsetof(DocumentTextDescription, _tabWidth)            == 0xa4, "");
+static_assert(offsetof(DocumentTextDescription, _wrapWidth)           == 0xa8, "");
+static_assert(offsetof(DocumentTextDescription, _fontsData)           == 0xb0, "");
+static_assert(offsetof(DocumentTextDescription, _fontsCount)          == 0xb8, "");
+static_assert(offsetof(DocumentTextDescription, _sheetsData)          == 0xc0, "");
+static_assert(offsetof(DocumentTextDescription, _sheetsCount)         == 0xc8, "");
+static_assert(offsetof(DocumentTextDescription, _colorsData)          == 0xd0, "");
+static_assert(offsetof(DocumentTextDescription, _colorsCount)         == 0xd8, "");
+static_assert(offsetof(DocumentTextDescription, _resourceList)        == 0xe0, "");
 
 }  // namespace UI

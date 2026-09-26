@@ -367,8 +367,8 @@ Object::InternalPtr<Element>* LayoutDescription::CreateInstance(
     }
 
     void* slot = elem;                                         // 1800d344e
-    using EdCreateInstanceFn = void (*)(const void* self, void** elemPtr);
-    RtAddr<EdCreateInstanceFn>(0x180115ad0ull)(this, &slot);   // 1800d3459
+    UI::ElementDescription::CreateInstance(                   // 1800d3459
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     // The order table: one uint32 per entry, all -1.
     struct { int32_t* data; int32_t size; int32_t capacity; } order = { nullptr, 0, 0 };

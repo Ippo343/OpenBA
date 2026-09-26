@@ -38,7 +38,7 @@
 #include <type_traits>
 
 #include "ElementDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::ClipRegionDescription (the layout POD)
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::ClipRegionDescription aliases this class
 
 namespace UI {
 
@@ -94,9 +94,8 @@ static_assert(sizeof(ClipRegionDescription) == 0x78,
 static_assert(alignof(ClipRegionDescription) == 8, "UI::ClipRegionDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<ClipRegionDescription>::value, "ENDGAME decision 2");
 static_assert(offsetof(ClipRegionDescription, _width) == sizeof(ElementDescription), "");
-static_assert(sizeof(ClipRegionDescription) == sizeof(RtUI::ClipRegionDescription), "");
-static_assert(offsetof(ClipRegionDescription, _width)     == offsetof(RtUI::ClipRegionDescription, _width), "");
-static_assert(offsetof(ClipRegionDescription, _height)    == offsetof(RtUI::ClipRegionDescription, _height), "");
-static_assert(offsetof(ClipRegionDescription, _childDesc) == offsetof(RtUI::ClipRegionDescription, _childDesc), "");
+static_assert(offsetof(ClipRegionDescription, _width)     == 0x68, "");
+static_assert(offsetof(ClipRegionDescription, _height)    == 0x6c, "");
+static_assert(offsetof(ClipRegionDescription, _childDesc) == 0x70, "");
 
 }  // namespace UI

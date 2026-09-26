@@ -193,7 +193,8 @@ Object::InternalPtr<Element>* PageDescription::CreateInstance(
     }
 
     void* slot = elem;                                         // 1800d5350
-    rtdesc::ElementDescriptionApply(this, &slot);              // 1800d535d
+    UI::ElementDescription::CreateInstance(                   // 1800d535d
+        reinterpret_cast<Object::InternalPtr<Element>*>(&slot));  // B.3.6 bridge
 
     const int32_t count = _children._size;
     for (int32_t i = 0; i < count; ++i) {                      // 1800d5362 / 1800d53c9

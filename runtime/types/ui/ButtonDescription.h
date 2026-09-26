@@ -54,7 +54,7 @@
 #include <type_traits>
 
 #include "ElementDescription.h"
-#include "DescriptionsBatch1.h"   // RtUI::ButtonDescription (the layout POD)
+#include "DescriptionsBatch1.h"   // kVtbl* names; RtUI::ButtonDescription aliases this class
 
 namespace UI {
 
@@ -130,12 +130,11 @@ static_assert(sizeof(ButtonDescription) == 0xa0,
 static_assert(alignof(ButtonDescription) == 8, "UI::ButtonDescription aligns to 8");
 static_assert(!std::has_virtual_destructor<ButtonDescription>::value, "ENDGAME decision 2");
 static_assert(offsetof(ButtonDescription, _childDesc) == sizeof(ElementDescription), "");
-// The class and the POD describe the same bytes.
-static_assert(sizeof(ButtonDescription) == sizeof(RtUI::ButtonDescription), "");
-static_assert(offsetof(ButtonDescription, _childDesc) == offsetof(RtUI::ButtonDescription, _childDesc), "");
-static_assert(offsetof(ButtonDescription, _word90)    == offsetof(RtUI::ButtonDescription, _word90), "");
-static_assert(offsetof(ButtonDescription, _word94)    == offsetof(RtUI::ButtonDescription, _word94), "");
-static_assert(offsetof(ButtonDescription, _word98)    == offsetof(RtUI::ButtonDescription, _word98), "");
-static_assert(offsetof(ButtonDescription, _word9c)    == offsetof(RtUI::ButtonDescription, _word9c), "");
+// The POD offsets, absolute (RtUI::ButtonDescription is an ALIAS since fragment pass F2).
+static_assert(offsetof(ButtonDescription, _childDesc) == 0x68, "");
+static_assert(offsetof(ButtonDescription, _word90)    == 0x90, "");
+static_assert(offsetof(ButtonDescription, _word94)    == 0x94, "");
+static_assert(offsetof(ButtonDescription, _word98)    == 0x98, "");
+static_assert(offsetof(ButtonDescription, _word9c)    == 0x9c, "");
 
 }  // namespace UI

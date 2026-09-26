@@ -81,7 +81,6 @@ using SetSizeFn      = void  (*)(void* array, int32_t newSize, const void* fill)
 using OperatorNewFn  = void* (*)(uint64_t size);
 using DlgInstCtorFn  = void* (*)(void* self, void* ui, const void* dialog, void* parentPtr,
                                  void* dataSource, void* userData, int32_t userFlags);
-using GetTipStringFn = System::String* (*)(const void* element, System::String* ret);
 
 // ENDGAME B.3.6 (RULE B6-5): the two address doors used to be function-local
 // `static` first-call caches, and every other door this file still needs is a
@@ -93,7 +92,6 @@ std::atomic<void*> g_sptSlot{nullptr};
 std::atomic<void*> g_tipOperatorNewSlot{nullptr};
 std::atomic<void*> g_dlgInstCtorSlot{nullptr};
 std::atomic<void*> g_tipVtableSlot{nullptr};
-std::atomic<void*> g_getTipStringSlot{nullptr};
 
 SetSizeFn EventsSetSize() {
     return reinterpret_cast<SetSizeFn>(
@@ -103,13 +101,12 @@ SetSizeFn AddDialogsSetSize() {
     return reinterpret_cast<SetSizeFn>(
         rtuielem::AtomicAddr(g_addDialogsSetSizeSlot, kAddDialogsSetSizeAddr));
 }
-// `?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ` (0x1800356a0) — the
-// member is declared on the real class (block A) but its body is still the
-// door in tooltipdialog.cpp (the fragment pass's file), so it is reached by
-// name. RETSLOT door shape `(this, ret)`.
+// `?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ` (0x1800356a0) —
+// fragment pass F2 defined the member (tooltipdialog.cpp): a direct member
+// call now, its prvalue constructed straight into the caller's slot exactly
+// as retail's RETSLOT call writes it.
 void GetToolTipStringInto(const Element* elem, System::String* ret) {
-    reinterpret_cast<GetTipStringFn>(rtuielem::AtomicExport(
-        g_getTipStringSlot, "?GetToolTipString@Element@UI@@QEBA?AVString@System@@XZ"))(elem, ret);
+    new (ret) System::String(elem->GetToolTipString());
 }
 
 // ---------------------------------------------------------------------------
