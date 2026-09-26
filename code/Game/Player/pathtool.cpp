@@ -85,11 +85,31 @@ static inline uint64_t GetKeyMap() {
 // Tool tables read by address — Tool's UNREGISTERED, so it stored a NULL vptr
 // before ~Internal (B38 D9 #3). The compiler's dtor chain restamps the real
 // tables, then runs Object::Internal::~Internal. ~PathTool (0x1400de950) is
-// NOT empty in retail — see PathTool.h.
+// NOT empty in retail — see below.
 Object::Base* PathTool::DeletingDtor(unsigned flags) {
     this->~PathTool();
     if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
+}
+
+// 0x1400de950 — ~PathTool. After the leaf restamp (the compiler's), three
+// inlined Collection::Array<T>::~Array bodies, in this order:
+//   MemFree([+0x50]); +0x50 = +0x58 = 0     (segment list, 8-byte pairs)
+//   MemFree([+0x40]); +0x40 = +0x48 = 0     (point list, int32)
+//   MemFree([+0x30]); +0x30 = +0x38 = 0     (route list, 0x200c records)
+// through `[0x140152b68]` = System::MemoryAllocator::MemFree (the same static
+// InternalMemFree reaches; MemFree(null) is a no-op in retail, which calls it
+// unconditionally). Then Tool's restamp and `~Internal` (the compiler chain).
+PathTool::~PathTool() {
+    Object::detail::InternalMemFree(_field50);
+    _field50 = nullptr;
+    *reinterpret_cast<uint64_t*>(&_field58) = 0;   // size + capacity dwords
+    Object::detail::InternalMemFree(_field40);
+    _field40 = nullptr;
+    *reinterpret_cast<uint64_t*>(&_field48) = 0;
+    Object::detail::InternalMemFree(_field30);
+    _field30 = nullptr;
+    _field38 = nullptr;
 }
 
 // ============================================================

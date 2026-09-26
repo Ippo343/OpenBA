@@ -13,7 +13,7 @@
 //   dtor 0x1400de950 (Ghidra: "Tool_CopyCtor"): stamp 0x140160680;
 //     MemFree([+0x50]), +0x50 = +0x58 = 0; MemFree([+0x40]), +0x40 = +0x48 = 0;
 //     MemFree([+0x30]), +0x30 = +0x38 = 0; stamp 0x140161f10; tail-JMP
-//     `~Internal`. The tree's dtor never freed the three arrays (PORT GAP).
+//     `~Internal`. (The tree's hand-rolled dtor never freed the three arrays.)
 //   table 0x140160680, 14 slots:
 //     [0]  0x140026b70 scalar deleting dtor (CALL the dtor, MemFree on &1)
 //     [1]  0x140026b00 TypeName   [2] 0x140026af0 Type   [3] = parent
@@ -69,9 +69,10 @@ public:
     uint8_t  _pad5C[4];        // +0x5c
 
 protected:
-    // PORT GAP (retail 0x1400de950 frees +0x50/+0x40/+0x30) — B38 D9: the
-    // tree's dtor kept the arrays; the retail body is its own behaviour commit.
-    ~PathTool() = default;
+    // 0x1400de950: releases the three Collection::Array buffers (+0x50, +0x40,
+    // +0x30, in that order) — the inlined ~Array bodies. The hand-rolled tree
+    // dtor never did (it leaked them on every PathTool teardown).
+    ~PathTool();
 };
 
 namespace PathToolAddr {
