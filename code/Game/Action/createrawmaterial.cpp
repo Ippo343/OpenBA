@@ -216,30 +216,6 @@ static void* FindComponentOnEntity(int64_t entity, uint32_t typeId) {
 }
 
 // ============================================================
-// ScalarDtor (0x140022350)
-// Set vtables, delete entity ref, call ~Internal, optionally free.
-// ============================================================
-void* CreateRawMaterial_ScalarDtor_Impl(CreateRawMaterial* self, uint32_t flags) {
-    // Set CreateRawMaterial vtable
-    self->vtable = (void*)ResolveAddr(Module::Exe, CreateRawMaterialAddr::Vtable);
-    // Set Action base vtable 0x14015faa0 (retail store at 0x14002237e). B38 D9 #1: this
-    // stamped 0x14015f700, which is slot 6 of ResidenceUI's table 0x14015f6d0.
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x14015faa0);
-
-    // If entity ref at +0x10 is non-null, delete it
-    if (self->entity != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
-    }
-
-    fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
-}
-
-// ============================================================
 // Serialize (0x1400c6f30)
 // Versioned serialization with version 3 serializer.
 // Version gates at 0, 1, 2, and 3 control which fields are serialized.
@@ -552,42 +528,60 @@ int CreateRawMaterial_GetTarget_Impl(CreateRawMaterial* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fd10 (10 slots), size 0x58, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class CreateRawMaterial (CreateRawMaterial.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_CreateRawMaterial_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t CreateRawMaterial_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("CreateRawMaterial");
-    return c;
+// create 0x1400222d0 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+CreateRawMaterial::CreateRawMaterial()
+    : descEntity(nullptr),
+      sourceBuilding(nullptr),
+      secondaryEntity(nullptr),
+      tertiaryEntity(nullptr),
+      totalQuantity(0),
+      materialCellIdx(0),
+      placementFlags(0),
+      yieldMultiplier(0.0f),
+      naturalResFlag(0),
+      placeNearFlag(0),
+      _pad52{} {}
+
+// [0] 0x140022350
+Object::Base* CreateRawMaterial::DeletingDtor(unsigned flags) {
+    this->~CreateRawMaterial();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_CreateRawMaterial_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&CreateRawMaterial_GetTypeId,           // +0x10 GetTypeId
-    (void*)&CreateRawMaterial_Serialize_Impl,      // +0x18 Serialize
-    (void*)&CreateRawMaterial_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
-    (void*)&CreateRawMaterial_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c6f30
+void CreateRawMaterial::Persist(void* stream) { CreateRawMaterial_Serialize_Impl(this, stream); }
+// [4] 0x1400c6b40
+int  CreateRawMaterial::AbstractImpl(void* actionStack) { return CreateRawMaterial_AbstractImpl_Impl(this, actionStack); }
+// [9] 0x1400c6aa0
+bool CreateRawMaterial::GetTarget(void* param) { return CreateRawMaterial_GetTarget_Impl(this, param) != 0; }
 
-extern "C" void RegisterCreateRawMaterialVtable() {
-    RegisterExeAddr(0x14015fd10, (uintptr_t)g_CreateRawMaterial_Vtable);
-}
-extern "C" void* CreateRawMaterial_CreateInPlace(void* mem) {
+void* CreateRawMaterial::CreateNewObject() {
     CreateRawMaterial_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x58, g_CreateRawMaterial_Vtable);
+    void* p = Object::detail::InternalMemAlloc(sizeof(CreateRawMaterial), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CreateRawMaterial());
 }
-extern "C" void* CreateRawMaterial_Factory(void) {
+void* CreateRawMaterial::CreateInPlaceObject(void* storage) {
     CreateRawMaterial_ResolveFuncs();
-    return Action_Alloc(0x58, g_CreateRawMaterial_Vtable);
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CreateRawMaterial());
 }
-REGISTER_TYPE(CreateRawMaterial, "Action", &CreateRawMaterial_Factory, &CreateRawMaterial_CreateInPlace);
+
+DEFINE_EXE_VTABLE(CreateRawMaterial, "_ZTV17CreateRawMaterial")
+
+// B38 D5: every by-address reader of 0x14015fd10 was inside this block and now
+// builds the object with the real ctor, so the row is gone. The function stays
+// until the coordinator's address_registry hunk drops its call.
+extern "C" void RegisterCreateRawMaterialVtable() {}
+
+DEFINE_EXE_TYPE(CreateRawMaterial, "Action")

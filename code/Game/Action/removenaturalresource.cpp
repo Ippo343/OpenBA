@@ -64,10 +64,6 @@ static s_fn_RemoveNatRes_t s_fn_RemoveNatRes = nullptr;
 static uint32_t* s_typeId_1401c7158 = nullptr;  // entity type (CitizenAI/entity ref)
 static uint32_t* s_typeId_NatResDescription = nullptr;  // DAT_1401c7b68
 
-// Vtable addresses for dtor chain
-static uintptr_t s_vtable_RemoveNaturalResource = 0;
-static uintptr_t s_vtable_Action = 0;
-
 // TypeInfo for BaseDtor (slot 2)
 static uint32_t* s_typeInfo_RemoveNaturalResource = nullptr;  // DAT_1401c60c0
 
@@ -101,10 +97,6 @@ bool RemoveNaturalResource_ResolveFuncs() {
     s_typeId_NatResDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7b68));
 
-    // Vtable addresses
-    s_vtable_RemoveNaturalResource = ResolveAddr(Module::Exe, 0x140160050);
-    s_vtable_Action = ResolveAddr(Module::Exe, 0x14015faa0);  // Action base vtable
-
     // TypeInfo for BaseDtor
     s_typeInfo_RemoveNaturalResource = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c60c0));
@@ -114,7 +106,6 @@ bool RemoveNaturalResource_ResolveFuncs() {
               s_fn_NotifyEntityChanged && s_fn_RemoveNatRes &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
               s_typeId_NatResDescription &&
-              s_vtable_RemoveNaturalResource && s_vtable_Action &&
               s_typeInfo_RemoveNaturalResource &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && g_pGameWorldSingleton;
@@ -131,32 +122,6 @@ bool RemoveNaturalResource_ResolveFuncs() {
 
     s_funcs_resolved = ok;
     return ok;
-}
-
-// ============================================================
-// ScalarDtor (0x140022fe0)
-// Set vtables to RemoveNaturalResource then Action, cleanup entity ref, call ~Internal, optionally free.
-// ============================================================
-void* RemoveNaturalResource_ScalarDtor_Impl(RemoveNaturalResource* self, uint32_t flags) {
-    uint8_t* s = (uint8_t*)self;
-
-    // Set RemoveNaturalResource vtable (for correct virtual dispatch during destruction)
-    *(uintptr_t*)s = s_vtable_RemoveNaturalResource;
-    // Set Action vtable (base class destructor phase)
-    *(uintptr_t*)s = s_vtable_Action;
-
-    // If entity ref at +0x10 is non-null, delete it
-    if (*(void**)(s + 0x10) != nullptr) {
-        s_fn_IBP_DeletePtr(s + 0x10);
-    }
-
-    // Call Object::Internal::~Internal
-    s_fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
 }
 
 // ============================================================
@@ -324,42 +289,58 @@ bool RemoveNaturalResource_GetTarget_Impl(RemoveNaturalResource* self, void* par
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x140160050 (10 slots), size 0x38, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class RemoveNaturalResource (RemoveNaturalResource.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_RemoveNaturalResource_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t RemoveNaturalResource_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("RemoveNaturalResource");
-    return c;
+// create 0x140022f70 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+RemoveNaturalResource::RemoveNaturalResource()
+    : _field20(nullptr),
+      _field28(nullptr),
+      _field30(0),
+      _pad31{} {}
+
+// [0] 0x140022fe0
+Object::Base* RemoveNaturalResource::DeletingDtor(unsigned flags) {
+    this->~RemoveNaturalResource();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_RemoveNaturalResource_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&RemoveNaturalResource_GetTypeId,           // +0x10 GetTypeId
-    (void*)&RemoveNaturalResource_Serialize_Impl,      // +0x18 Serialize
-    (void*)&RemoveNaturalResource_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&RemoveNaturalResource_CheckEntity_Impl,  // +0x40 CheckEntity
-    (void*)&RemoveNaturalResource_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400cac50
+void RemoveNaturalResource::Persist(void* stream) { RemoveNaturalResource_Serialize_Impl(this, stream); }
+// [4] 0x1400cab10
+int  RemoveNaturalResource::AbstractImpl(void* actionStack) { return RemoveNaturalResource_AbstractImpl_Impl(this, actionStack); }
+// [8] 0x1400caaa0
+void RemoveNaturalResource::CheckEntity() { RemoveNaturalResource_CheckEntity_Impl(this); }
+// [9] 0x1400caa20
+bool RemoveNaturalResource::GetTarget(void* param) { return RemoveNaturalResource_GetTarget_Impl(this, param); }
 
+void* RemoveNaturalResource::CreateNewObject() {
+    RemoveNaturalResource_ResolveFuncs();
+    void* p = Object::detail::InternalMemAlloc(sizeof(RemoveNaturalResource), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) RemoveNaturalResource());
+}
+void* RemoveNaturalResource::CreateInPlaceObject(void* storage) {
+    RemoveNaturalResource_ResolveFuncs();
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) RemoveNaturalResource());
+}
+
+DEFINE_EXE_VTABLE(RemoveNaturalResource, "_ZTV21RemoveNaturalResource")
+
+// B38 D5: 0x140160050 is still read back BY ADDRESS outside this block
+// (work_act_clear.cpp:140),
+// so the row stays, serving the compiler table (every such reader builds the
+// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterRemoveNaturalResourceVtable() {
-    RegisterExeAddr(0x140160050, (uintptr_t)g_RemoveNaturalResource_Vtable);
+    RegisterExeAddr(0x140160050, reinterpret_cast<uintptr_t>(RemoveNaturalResource::Vtable()));
 }
-extern "C" void* RemoveNaturalResource_CreateInPlace(void* mem) {
-    RemoveNaturalResource_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x38, g_RemoveNaturalResource_Vtable);
-}
-extern "C" void* RemoveNaturalResource_Factory(void) {
-    RemoveNaturalResource_ResolveFuncs();
-    return Action_Alloc(0x38, g_RemoveNaturalResource_Vtable);
-}
-REGISTER_TYPE(RemoveNaturalResource, "Action", &RemoveNaturalResource_Factory, &RemoveNaturalResource_CreateInPlace);
+
+DEFINE_EXE_TYPE(RemoveNaturalResource, "Action")

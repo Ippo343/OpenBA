@@ -4,10 +4,7 @@
 
 #include <cstdint>
 
-struct RemoveNaturalResource;
-
-// RemoveNaturalResource::ScalarDtor — set vtables, call ~Internal, optionally free
-void* RemoveNaturalResource_ScalarDtor_Impl(RemoveNaturalResource* self, uint32_t flags);
+class RemoveNaturalResource;
 
 // RemoveNaturalResource::BaseDtor — returns TypeInfo (slot 2)
 uint32_t RemoveNaturalResource_BaseDtor_Impl();

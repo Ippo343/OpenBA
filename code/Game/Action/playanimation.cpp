@@ -191,16 +191,6 @@ int PlayAnimation_Execute_Impl(void* self, void* actionStack, void* time_ptr) {
 }
 
 // ============================================================
-// PlayAnimation::CheckEntity (0x1400423f0)
-// 3 bytes -- trivial return 0. Too small to hook.
-// Implemented for standalone exe completeness.
-// ============================================================
-int PlayAnimation_CheckEntity_Impl(void* /*self*/) {
-    PlayAnimation_ResolveFuncs();   // lazy-resolve (exe-ctor-built action)
-    return 0;
-}
-
-// ============================================================
 // PlayAnimation::GetTarget (0x1400423b0)
 // Returns true if param matches entity at +0x20.
 // ============================================================
@@ -211,37 +201,58 @@ bool PlayAnimation_GetTarget_Impl(void* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable (keystone for the Action family).
-// See action_base_standalone.{h,cpp} for the shared slot helpers.
-// Vtable @ 0x140158950 (10 slots), size 0x40, parent "Action".
+// class PlayAnimation (PlayAnimation.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_PlayAnimation_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static constexpr uintptr_t kPlayAnimation_VtableAddr = 0x140158950;
-static constexpr int       kPlayAnimation_Size       = 0x40;
+// create 0x1400011f0 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+PlayAnimation::PlayAnimation()
+    : _field20(nullptr),
+      _pad28{},
+      _field30(nullptr),
+      _field38(nullptr) {}
 
-// slot2 (+0x10) GetTypeId — exe returns TypeInfo_PlayAnimation.
-static uint32_t PlayAnimation_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PlayAnimation");
-    return cached;
+// [0] 0x140001260
+Object::Base* PlayAnimation::DeletingDtor(unsigned flags) {
+    this->~PlayAnimation();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_PlayAnimation_Vtable[10] = {
-    reinterpret_cast<void*>(&Action_ScalarDtor),               // +0x00 ScalarDtor
-    reinterpret_cast<void*>(&Action_Slot1),                    // +0x08 slot1
-    reinterpret_cast<void*>(&PlayAnimation_GetTypeId),         // +0x10 GetTypeId
-    reinterpret_cast<void*>(&PlayAnimation_Serialize_Impl),    // +0x18 Serialize
-    reinterpret_cast<void*>(&PlayAnimation_AbstractImpl_Impl), // +0x20 AbstractImpl
-    reinterpret_cast<void*>(&PlayAnimation_Execute_Impl),      // +0x28 Execute
-    reinterpret_cast<void*>(&Action_Enter),                    // +0x30 Enter
-    reinterpret_cast<void*>(&Action_Exit),                     // +0x38 Exit
-    reinterpret_cast<void*>(&PlayAnimation_CheckEntity_Impl),  // +0x40 CheckEntity
-    reinterpret_cast<void*>(&PlayAnimation_GetTarget_Impl),    // +0x48 GetTarget
-};
+// [3] 0x140042480
+void PlayAnimation::Persist(void* stream) { PlayAnimation_Serialize_Impl(this, stream); }
+// [4] 0x140042420
+int  PlayAnimation::AbstractImpl(void* actionStack) { return PlayAnimation_AbstractImpl_Impl(this, actionStack); }
+// [5] 0x140042400
+int  PlayAnimation::Execute(void* actionStack, void* time) { return PlayAnimation_Execute_Impl(this, actionStack, time); }
+// [8] 0x1400423f0 — the leaf's own `RET 0` (same bytes as the base body)
+void PlayAnimation::CheckEntity() {}
+// [9] 0x1400423b0
+bool PlayAnimation::GetTarget(void* param) { return PlayAnimation_GetTarget_Impl(this, param); }
 
+void* PlayAnimation::CreateNewObject() {
+    PlayAnimation_ResolveFuncs();
+    void* p = Object::detail::InternalMemAlloc(sizeof(PlayAnimation), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) PlayAnimation());
+}
+void* PlayAnimation::CreateInPlaceObject(void* storage) {
+    PlayAnimation_ResolveFuncs();
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PlayAnimation());
+}
+
+DEFINE_EXE_VTABLE(PlayAnimation, "_ZTV13PlayAnimation")
+
+// B38 D5: 0x140158950 is still read back BY ADDRESS outside this block
+// (work_base_actionctor.cpp:163, citizenai_actionctors.cpp:146, citizenai_handlers.cpp:81),
+// so the row stays, serving the compiler table (every such reader builds the
+// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterActionVtable();   // action.cpp — the Action base table 0x14015faa0
 
 extern "C" void RegisterPlayAnimationVtable() {
@@ -251,19 +262,7 @@ extern "C" void RegisterPlayAnimationVtable() {
     // so overrides it (last write wins) until the coordinator's address_registry
     // hunk calls RegisterActionVtable directly.
     RegisterActionVtable();
-    RegisterExeAddr(kPlayAnimation_VtableAddr,
-                    reinterpret_cast<uintptr_t>(g_PlayAnimation_Vtable));
+    RegisterExeAddr(0x140158950, reinterpret_cast<uintptr_t>(PlayAnimation::Vtable()));
 }
 
-extern "C" void* PlayAnimation_CreateInPlace(void* mem) {
-    PlayAnimation_ResolveFuncs();
-    return Action_InitInPlace(mem, kPlayAnimation_Size, g_PlayAnimation_Vtable);
-}
-
-extern "C" void* PlayAnimation_Factory(void) {
-    PlayAnimation_ResolveFuncs();
-    return Action_Alloc(kPlayAnimation_Size, g_PlayAnimation_Vtable);
-}
-
-REGISTER_TYPE(PlayAnimation, "Action", &PlayAnimation_Factory, &PlayAnimation_CreateInPlace);
-
+DEFINE_EXE_TYPE(PlayAnimation, "Action")

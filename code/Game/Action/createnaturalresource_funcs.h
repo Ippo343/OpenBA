@@ -4,10 +4,7 @@
 
 #include <cstdint>
 
-struct CreateNaturalResource;
-
-// CreateNaturalResource::ScalarDtor -- set vtables, call ~Internal, optionally free
-void* CreateNaturalResource_ScalarDtor_Impl(CreateNaturalResource* self, uint32_t flags);
+class CreateNaturalResource;
 
 // CreateNaturalResource::Serialize -- serialize status, typeRef, slot, entity
 void CreateNaturalResource_Serialize_Impl(CreateNaturalResource* self, void* stream);

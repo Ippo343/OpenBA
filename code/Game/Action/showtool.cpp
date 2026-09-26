@@ -357,15 +357,6 @@ int ShowTool_AbstractImpl_Impl(void* self, void* actionStack) {
 }
 
 // ============================================================
-// ShowTool::Exit (0x140042700)
-// 3 bytes -- trivial return 0. Too small to hook.
-// Implemented for standalone exe completeness.
-// ============================================================
-int ShowTool_Exit_Impl(void* /*self*/) {
-    return 0;
-}
-
-// ============================================================
 // ShowTool::CheckEntity (0x1400426d0)
 // Hides tool on the entity at +0x20.
 // ============================================================
@@ -391,42 +382,59 @@ bool ShowTool_GetTarget_Impl(void* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x1401589b0 (10 slots), size 0x30, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class ShowTool (ShowTool.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_ShowTool_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t ShowTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("ShowTool");
-    return c;
+// create 0x1400013b0 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+ShowTool::ShowTool()
+    : _field20(nullptr),
+      _field28(0),
+      _pad2C{} {}
+
+// [0] 0x140001420
+Object::Base* ShowTool::DeletingDtor(unsigned flags) {
+    this->~ShowTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_ShowTool_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&ShowTool_GetTypeId,           // +0x10 GetTypeId
-    (void*)&ShowTool_Serialize_Impl,      // +0x18 Serialize
-    (void*)&ShowTool_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&ShowTool_Exit_Impl,   // +0x38 Exit
-    (void*)&ShowTool_CheckEntity_Impl,  // +0x40 CheckEntity
-    (void*)&ShowTool_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x140042780
+void ShowTool::Persist(void* stream) { ShowTool_Serialize_Impl(this, stream); }
+// [4] 0x140042710
+int  ShowTool::AbstractImpl(void* actionStack) { return ShowTool_AbstractImpl_Impl(this, actionStack); }
+// [7] 0x140042700 — the leaf's own `RET 0` (same bytes as the base body)
+void ShowTool::Exit(void*) {}
+// [8] 0x1400426d0
+void ShowTool::CheckEntity() { ShowTool_CheckEntity_Impl(this); }
+// [9] 0x140042680
+bool ShowTool::GetTarget(void* param) { return ShowTool_GetTarget_Impl(this, param); }
 
+void* ShowTool::CreateNewObject() {
+    ShowTool_ResolveFuncs();
+    void* p = Object::detail::InternalMemAlloc(sizeof(ShowTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ShowTool());
+}
+void* ShowTool::CreateInPlaceObject(void* storage) {
+    ShowTool_ResolveFuncs();
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ShowTool());
+}
+
+DEFINE_EXE_VTABLE(ShowTool, "_ZTV8ShowTool")
+
+// B38 D5: 0x1401589b0 is still read back BY ADDRESS outside this block
+// (work_act_clear.cpp:141, work_act_hunt.cpp:128),
+// so the row stays, serving the compiler table (every such reader builds the
+// same bytes the ctor builds: Internal(), +0x10/+0x18 zeroed, the fields).
 extern "C" void RegisterShowToolVtable() {
-    RegisterExeAddr(0x1401589b0, (uintptr_t)g_ShowTool_Vtable);
+    RegisterExeAddr(0x1401589b0, reinterpret_cast<uintptr_t>(ShowTool::Vtable()));
 }
-extern "C" void* ShowTool_CreateInPlace(void* mem) {
-    ShowTool_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x30, g_ShowTool_Vtable);
-}
-extern "C" void* ShowTool_Factory(void) {
-    ShowTool_ResolveFuncs();
-    return Action_Alloc(0x30, g_ShowTool_Vtable);
-}
-REGISTER_TYPE(ShowTool, "Action", &ShowTool_Factory, &ShowTool_CreateInPlace);
+
+DEFINE_EXE_TYPE(ShowTool, "Action")
