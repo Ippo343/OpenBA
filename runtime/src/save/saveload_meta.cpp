@@ -328,7 +328,6 @@ using CommitFn      = void  (*)(void* self);
 using ReleaseFn     = void  (*)(void* self);
 // ENDGAME B.3.1 step 2: the String::Serialize and String::Set door typedefs
 // are gone with their call sites — both are class members now.
-using StoreFn       = void  (*)(void* savedState, RtIo::MemoryStream* stream);
 
 // The IO::Encoding factory slots. THREE arguments — the version stays live in
 // R8D across the whole inlined Serializer ctor; runtime/types/io/Serializer.h
@@ -371,9 +370,10 @@ inline void* ReadVtableSlot(const void* obj, int byteOffset) {
 // ============================================================================
 // Save::SaveLoad::SaveMetaData — the body.        retail 0x1800c1490
 // ============================================================================
-static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
-                                              int width, int height,
-                                              String* name, int nameMode) {
+// ENDGAME B.3.7 B2: the body is the member. `name` is the by-value String
+// (hidden pointer, callee-destroyed — RULE B7-5), spelled as the class.
+void Save::SaveLoad::SaveMetaData(void* pixels, int width, int height,
+                                  System::String* name, int nameMode) {
     // ---- inlined ??0CompressedMemoryStream + ?Create(memoryStream, 2) ------
     // Left DELIBERATELY uninitialised: retail's ctor does not touch
     // CompressedStream+0x18 or +0x24 (runtime/types/io/Stream.h records both as
@@ -429,7 +429,7 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     // ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
     // (0x1800c9930) is the class's own member now. `name` is the registered
     // entry point's POD parameter, so it comes through the one bridge.
-    RtSystem::Sys(name)->Serialize(&ser);
+    name->Serialize(&ser);
 
     // Retail serialises the ARGUMENT HOME SLOTS: it spills R8D/R9D at entry
     // (0x1800c1493/0x1800c1497) and hands their addresses to the scalar slot,
@@ -470,9 +470,11 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
             reinterpret_cast<uint8_t*>(mods->mods) + byteOffset);
         if (entry->enabled == 0) continue;
 
+        // ModInfo's real default ctor IS retail's two stores here (name and
+        // path zeroed, +0x10.. left as the stack held them), and its real
+        // destructor at the end of this iteration IS retail's two releases —
+        // path, then name — after the append (see the end of the loop).
         ModInfo tmp;
-        tmp.name = nullptr;
-        tmp.path = nullptr;
 
         // The display name, adopted straight off the Mod entry with an AddRef.
         if (entry->name != nullptr) {
@@ -515,9 +517,7 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
         // the array copy above does not copy it.
 
         ModInfoArraySetSize(&arr, arr.size + 1, &tmp);
-
-        ReleaseStringSlot(&tmp.path);
-        ReleaseStringSlot(&tmp.name);
+        // <- ~ModInfo(tmp): ReleaseStringSlot(path), then (name).
     }
 
     // ---- the mod block ----------------------------------------------------
@@ -569,8 +569,10 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     // ?UpdateSave builds SaveBlock entry 0 out of. A port that computed the
     // right bytes and did not publish them here would be invisible until a save
     // was loaded back (reference_port_must_reproduce_side_effects.md).
-    RT_EXPORT_ONCE(StoreFn, "?Store@SavedState@Save@@QEAAXAEAVMemoryStream@IO@@@Z")(
-        &self->_embeddedState, &cs.memoryStream);
+    //
+    // ENDGAME B.3.7 B2: `SavedState::Store` is a member of this block's class
+    // now, called directly (it was an RT_EXPORT_ONCE door onto our own port).
+    _embeddedState.Store(*reinterpret_cast<IO::MemoryStream*>(&cs.memoryStream));   // B.3.7 bridge
 
     // ---- inlined ~CompressedMemoryStream / ~CompressedStream / ~MemoryStream
     // Every one of these vtable re-stamps is a real store in retail (an object
@@ -630,7 +632,7 @@ static void RtSave_SaveLoad_SaveMetaData_Body(SaveLoad* self, void* pixels,
     // ---- destroy the BY-VALUE String argument ------------------------------
     // See the banner. This is the callee's half of a contract whose caller half
     // is already written down in saveload_update.cpp's UpdateSave.
-    ReleaseStringSlot(const_cast<const char**>(&name->data));
+    ReleaseStringSlot(const_cast<const char**>(&name->_data));
 }
 
 // ============================================================================
@@ -674,7 +676,7 @@ namespace {
 extern "C" void RtSave_SaveLoad_SaveMetaData(SaveLoad* self, void* pixels,
                                              int width, int height,
                                              String* name, int nameMode) {
-    RtSave_SaveLoad_SaveMetaData_Body(self, pixels, width, height, name, nameMode);
+    self->Save::SaveLoad::SaveMetaData(pixels, width, height, RtSystem::Sys(name), nameMode);
 }
 
 // ============================================================================

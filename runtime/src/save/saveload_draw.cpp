@@ -121,7 +121,7 @@
 //
 // AND IT CARRIES NO REFCOUNT SIDE EFFECT HERE. There is no increment on the way
 // in and no release on the way out — the exe's caller
-// (`code/Game/Game/gameupdateloop.cpp:2231`) passes `self->m_uiMaterial`, a
+// (`code/Game/Game/gameupdateloop.cpp:2231`) passes `m_uiMaterial`, a
 // borrowed pointer it keeps owning, and retail treats it as borrowed for the
 // life of the MaterialInstance it stamps it into. A port that retained or
 // released it would be wrong in the direction that does not crash.
@@ -185,6 +185,7 @@
 // with Wave 5's and Wave 13's Save ports still live.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -203,6 +204,7 @@
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
 #include "../../types/ui/SpriteCapture.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "../../types/object/External.h"   // Object::ExternalPtr<T> — Draw's by-value argument
 
 using RtSave::SaveLoad;
 using RtVideo::Context;
@@ -236,12 +238,6 @@ struct ArrayHeader {
 };
 static_assert(sizeof(ArrayHeader) == 0x10, "Collection::Array<T> is 0x10 bytes");
 
-void ArrayFreeAndZero(ArrayHeader* a) {
-    if (a->data != nullptr) MemFree(a->data);
-    a->data     = nullptr;
-    a->size     = 0;
-    a->capacity = 0;   // the second qword is cleared as ONE store; both halves.
-}
 
 // One element of `Graphics::MaterialInstance`'s parameter array at +0x50: a
 // refcounted `System::String` name and the borrowed object it binds to.
@@ -364,10 +360,19 @@ RtVideo::Configuration* ConfigurationSingleton() {
 // reminder that `AEAA`/private has nothing to do with exportedness: this DLL
 // exports 147 `??_7` symbols and four of them are exactly what Draw needs
 // (reference_aeaa_means_private_not_unexported.md).
-void* VtBase()             { static void* p = ResolveExport("??_7Base@Object@@6B@"); return p; }              // 1389
-void* VtExternal()         { static void* p = ResolveExport("??_7External@Object@@6B@"); return p; }          // 1432
-void* VtMaterialInstance() { static void* p = ResolveExport("??_7MaterialInstance@Graphics@@6B@"); return p; } // 1464
-void* VtSpriteSheet()      { static void* p = ResolveExport("??_7SpriteSheet@UI@@6B@"); return p; }            // 1504
+//
+// ENDGAME B.3.7 B2 (RULE B6-5): these were `static void* p = ResolveExport(...)`
+// guarded statics inside what is now a MEMBER body — the freeze-the-first-
+// answer shape B7-7 names. They are namespace-scope atomic slots with the
+// `RtResolveCached` shape now (saveload_internal.h `AtomicExport`).
+std::atomic<void*> g_vtBase{nullptr};
+std::atomic<void*> g_vtExternal{nullptr};
+std::atomic<void*> g_vtMaterialInstance{nullptr};
+std::atomic<void*> g_vtSpriteSheet{nullptr};
+void* VtBase()             { return RtSaveDetail::AtomicExport(g_vtBase,             "??_7Base@Object@@6B@"); }              // 1389
+void* VtExternal()         { return RtSaveDetail::AtomicExport(g_vtExternal,         "??_7External@Object@@6B@"); }          // 1432
+void* VtMaterialInstance() { return RtSaveDetail::AtomicExport(g_vtMaterialInstance, "??_7MaterialInstance@Graphics@@6B@"); } // 1464
+void* VtSpriteSheet()      { return RtSaveDetail::AtomicExport(g_vtSpriteSheet,      "??_7SpriteSheet@UI@@6B@"); }            // 1504
 
 // ============================================================================
 // 3. `Video::ImageBuffer::Width()` / `Height()`, inlined by retail at four
@@ -401,10 +406,18 @@ int32_t ImageBufferHeight(const ImageBuffer* ib) {
 // ============================================================================
 // 4. THE BODY.
 // ============================================================================
-void DrawBody(SaveLoad* self, Context* ctx, void* material) {
+}  // namespace
+
+// ENDGAME B.3.7 B2: the body is the member. `material` is the by-value
+// ExternalPtr that arrives as a bare register value (SaveLoad.h banner,
+// B37_RULES 13.1 closed); `ctx` names the context the way the transcription
+// below always has.
+void Save::SaveLoad::Draw(Video::Context& context,
+                          Object::ExternalPtr<Graphics::Material> material) {
+    Context* const ctx = &context;
     // `CMP byte ptr [RCX+0x7c],0x0` — a BYTE test, matching the byte stores
     // the ctor and UpdateSave make into the same field.
-    if (*reinterpret_cast<const uint8_t*>(&self->_captureFlags) == 0) return;
+    if (*reinterpret_cast<const uint8_t*>(&_captureFlags) == 0) return;
 
     RtVideo::Device* const device = DeviceSingleton();
 
@@ -488,7 +501,7 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     // `??0ImageBuffer@Video@@`), so this reaches ImageBuffer's own 0x1800f2680.
     reinterpret_cast<Video::ImageBuffer*>(target)->Create(
         0, 0, 5, 0u,
-        self->_captureWidth, self->_captureHeight,
+        _captureWidth, _captureHeight,
         1, 1, 1, 1, nullptr);                                // B.3.5 bridge
 
     // ---- the render buffer ------------------------------------------------
@@ -517,8 +530,8 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
 
     // The whole of retail's float arithmetic, in retail's order. `aspect` is
     // the CAPTURE aspect; the branch asks whether the device is wider than it.
-    const float aspect = static_cast<float>(self->_captureWidth) /
-                         static_cast<float>(self->_captureHeight);
+    const float aspect = static_cast<float>(_captureWidth) /
+                         static_cast<float>(_captureHeight);
     const float fDevW = static_cast<float>(devW);
     const float fDevH = static_cast<float>(devH);
 
@@ -566,7 +579,7 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     }
     // The by-value ExternalPtr<Material>, stored whole and borrowed. See the
     // banner: no retain, no release. Unguarded, as retail is.
-    *reinterpret_cast<void**>(static_cast<uint8_t*>(mat) + 0x28) = material;
+    *reinterpret_cast<void**>(static_cast<uint8_t*>(mat) + 0x28) = material.Get();
 
     {
         // ENDGAME B.3.1 step 2: a real `System::String` local. The zero-init is
@@ -659,15 +672,15 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
         ctx->_renderBuffer = renderBuffer;
     }
     if (ctx->_viewport.x != 0 || ctx->_viewport.y != 0 ||
-        ctx->_viewport.width != self->_captureWidth ||
-        ctx->_viewport.height != self->_captureHeight) {
+        ctx->_viewport.width != _captureWidth ||
+        ctx->_viewport.height != _captureHeight) {
         ctx->_dirty |= 0x200u;
         // `MOV qword ptr [RDI+0x1d0],R8` with R8 == 0 — x and y cleared as ONE
         // qword store, then the two dwords.
         ctx->_viewport.x      = 0;
         ctx->_viewport.y      = 0;
-        ctx->_viewport.width  = self->_captureWidth;
-        ctx->_viewport.height = self->_captureHeight;
+        ctx->_viewport.width  = _captureWidth;
+        ctx->_viewport.height = _captureHeight;
     }
 
     // Clear, through the backend: contextData->vtable[0x20](this, 1, 0xffff6000, 1.0f, 0).
@@ -692,8 +705,8 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     cameraToWorld.axisZ       = { 0.0f, 0.0f, 1.0f };
     cameraToWorld.translation = { 0.0f, 0.0f, 0.0f };
 
-    const float fCapW = static_cast<float>(self->_captureWidth);
-    const float fCapH = static_cast<float>(self->_captureHeight);
+    const float fCapW = static_cast<float>(_captureWidth);
+    const float fCapH = static_cast<float>(_captureHeight);
 
     Frustum frustum;
     frustum.planes[0] = { 0.0f,  1.0f,  0.0f,  0.0f  };
@@ -781,8 +794,8 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     draw.spriteIndex = 0;
     draw.x1          = 0;
     draw.y1          = 0;
-    draw.x2          = self->_captureWidth;
-    draw.y2          = self->_captureHeight;
+    draw.x2          = _captureWidth;
+    draw.y2          = _captureHeight;
     draw.rotation    = 0.0f;
     draw.color       = 0xffffffffu;
     draw.isLine      = 0;
@@ -822,9 +835,9 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     // 32 bits and only THEN sign-extended, so a capture large enough to overflow
     // an int would ask for a negative size. Reproduced rather than widened.
     {
-        const int32_t pixels = self->_captureWidth * self->_captureHeight;
+        const int32_t pixels = _captureWidth * _captureHeight;
         void* buffer = MemAlloc(static_cast<uint64_t>(static_cast<int64_t>(pixels) << 2), 4);
-        self->_capturePixels = buffer;
+        _capturePixels = buffer;
 
         // ImageBuffer+0x60 is the backend companion object; its vtable slot
         // 0x30 is slot INDEX 6, which dx11/types/VideoDX11Data.h already names
@@ -835,7 +848,7 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
         using ReadBackFn = void (*)(void*, void*, int32_t, int32_t);
         (*reinterpret_cast<ReadBackFn*>(
             reinterpret_cast<uint8_t*>(*reinterpret_cast<void**>(platform)) + 0x30))(
-                platform, buffer, self->_captureWidth, self->_captureHeight);
+                platform, buffer, _captureWidth, _captureHeight);
     }
 
     // ---- tear down --------------------------------------------------------
@@ -854,23 +867,24 @@ void DrawBody(SaveLoad* self, Context* ctx, void* material) {
     }
 
     // The handshake with UpdateSave state 1: a BYTE store, clearing the request.
-    *reinterpret_cast<uint8_t*>(&self->_captureFlags) = 0;
+    *reinterpret_cast<uint8_t*>(&_captureFlags) = 0;
 
-    // The SpriteContext destructor, also inlined: four Array<T> frees, in
-    // retail's order (+0x68, +0x58, +0x40, +0x10).
-    ArrayFreeAndZero(reinterpret_cast<ArrayHeader*>(reinterpret_cast<uint8_t*>(&sc) + 0x68));
-    ArrayFreeAndZero(reinterpret_cast<ArrayHeader*>(reinterpret_cast<uint8_t*>(&sc) + 0x58));
-    ArrayFreeAndZero(reinterpret_cast<ArrayHeader*>(&sc._deferred));
-    ArrayFreeAndZero(reinterpret_cast<ArrayHeader*>(&sc._draws));
+    // The SpriteContext destructor, also inlined by retail: four Array<T>
+    // frees in the order +0x68, +0x58, +0x40, +0x10 (0x1800c3acd..0x1800c3af8).
+    // ENDGAME B.3.7 B2: that IS `UI::SpriteContext`'s own member-wise
+    // destructor (SpriteContext.h: `~SpriteContext() = default` is retail's
+    // body) — reverse declaration order runs `_layout._lineWidths` (+0x68),
+    // `_layout._entries` (+0x58), `_deferred` (+0x40), `_draws` (+0x10), each
+    // `if (data) free; zero` — so `sc` is simply destroyed at the closing brace
+    // below, through the Collection allocator door its arrays were grown with.
 }
-
-}  // namespace
 
 // ============================================================================
 // 5. The export.
 // ============================================================================
 void RtSave_SaveLoad_Draw(SaveLoad* self, Context* ctx, void* material) {
-    DrawBody(self, ctx, material);
+    self->Save::SaveLoad::Draw(*ctx, Object::ExternalPtr<Graphics::Material>(
+                                         static_cast<Graphics::Material*>(material)));
 }
 
 // ============================================================================
