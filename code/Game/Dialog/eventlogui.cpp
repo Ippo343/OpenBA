@@ -341,26 +341,8 @@ void EventLogUI_Slot9(EventLogUI* self, void* param2, int msg, int id) {
 #include <cstddef>
 #include <cstdio>
 #include <cstdlib>
-#include "dialog_controller_vtable.h"
 
 namespace eventlogui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("EventLogUI");
-    return c;
-}
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 void W_Slot5(void* self) {
     if (!self) return;
@@ -374,42 +356,46 @@ void W_Slot7(void* self) {
 void W_Slot9(void* self, void* p2, int msg, int id) {
     if (self) EventLogUI_Slot9(reinterpret_cast<EventLogUI*>(self), p2, msg, id);
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[5] = reinterpret_cast<void*>(&W_Slot5);
-        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
-        // idx8 deliberately NOT overridden — inherited base OnUpdate, as in retail.
-        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's EventLogUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "EventLogUI", &StubNop);
-
-void Zero(void* p) { for (size_t o = 0; o < (size_t)0x80; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x80, 8);
-    if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
-}
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
-
 }  // namespace eventlogui_sa
 
-REGISTER_TYPE(EventLogUI, "UI::DialogController",
-              &eventlogui_sa::Factory, &eventlogui_sa::InPlace);
-
-// Expose the standalone vtable so the panel's open-trigger can bind it to a
-// manually-constructed instance (mirrors FollowDialog_GetStandaloneVtable).
-extern "C" void* EventLogUI_GetStandaloneVtable() {
-    return reinterpret_cast<void*>(eventlogui_sa::g_vt);
+// [5] 0x140067640
+void EventLogUI::OnOpened() {
+    eventlogui_sa::W_Slot5(this);
 }
+
+// [7] 0x140067440
+void EventLogUI::OnUpdateLayout() {
+    eventlogui_sa::W_Slot7(this);
+}
+
+// [9] 0x1400675d0
+void EventLogUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                                int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    eventlogui_sa::W_Slot9(this, element, a, b);
+}
+
+// [0] 0x1400114b0: ~EventLogUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* EventLogUI::DeletingDtor(unsigned flags) {
+    this->~EventLogUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400113e0: MemAlloc(0x80, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* EventLogUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EventLogUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) EventLogUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* EventLogUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) EventLogUI());
+}
+
+DEFINE_EXE_VTABLE(EventLogUI, "_ZTV10EventLogUI")
+DEFINE_EXE_TYPE(EventLogUI, "UI::DialogController")
 

@@ -462,7 +462,6 @@ static void ResidenceUI_GoToCitizen(ResidenceUI* self, int citizenIndex) {
                     *(uintptr_t*)(*(uintptr_t*)(storageComp + 0x50) + (uintptr_t)g * 0x10)
                     + (uintptr_t)r * 8);
 
-
                 // Get citizen's InternalBasePtr self-reference at +0x10
                 uint64_t citizenBP = *(uint64_t*)(citizenPtr + 0x10);
                 // Get parent dialog ptr from self+0x18
@@ -513,38 +512,13 @@ void ResidenceUI_Slot9(ResidenceUI* self, void* param2, int msg, int id) {
 #include "Object/factory_registration.h"
 #include <cstddef>
 #include <cstdlib>
-#include "dialog_controller_vtable.h"
 
 namespace residenceui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
 
 // Standalone-local fallbacks for exe-.rdata globals that resolve NULL in standalone.
 static uint32_t s_resTid = 0;       // ResidenceComponent type-id
 static uint32_t s_ceTid  = 0;       // ComponentEntity type-id
 static float    s_ageMul = 1.0f;    // matches citizenui.cpp's SA age-multiplier fallback
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("ResidenceUI");
-    return c;
-}
-
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    // Free the cached per-row element array at +0x30 (mirrors the exe ScalarDtor).
-    uintptr_t s = reinterpret_cast<uintptr_t>(self);
-    void* rows = *reinterpret_cast<void**>(s + 0x30);
-    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 void EnsureGlobals() {
     if (!g_TypeId_ComponentEntity) {
@@ -614,48 +588,65 @@ void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
     if (!self || !Ready() || !DataSourceAlive(self)) return;
     ResidenceUI_Slot9(reinterpret_cast<ResidenceUI*>(self), p2, msg, id);
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
-        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's ResidenceUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "ResidenceUI", &StubNop);
-
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x40); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
-}
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x40), 8);
-    if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
-}
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
-}
-
 }  // namespace residenceui_sa
 
-REGISTER_TYPE(ResidenceUI, "UI::DialogController",
-              &residenceui_sa::Factory, &residenceui_sa::InPlace);
+// ~ResidenceUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
+// WITHOUT ~DialogController); moved here unchanged. The compiler now chains
+// ~DialogController -> ~Internal after it.
+ResidenceUI::~ResidenceUI() {
+    void* self = this;
+    // Free the cached per-row element array at +0x30 (mirrors the exe ScalarDtor).
+    uintptr_t s = reinterpret_cast<uintptr_t>(self);
+    void* rows = *reinterpret_cast<void**>(s + 0x30);
+    if (rows && fn_MemFreeStatic) fn_MemFreeStatic(rows);
+    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
+    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
+}
 
+// [4] 0x1400b5850
+void ResidenceUI::OnCreated() {
+    residenceui_sa::W_Slot4(this);
+}
+
+// [7] 0x1400b51f0
+void ResidenceUI::OnUpdateLayout() {
+    residenceui_sa::W_Slot7(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void ResidenceUI::OnUpdate(const System::Time& time) {
+    residenceui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [9] 0x1400b5820
+void ResidenceUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                                 int32_t c, int32_t d, int32_t /*e*/, void* /*userData*/) {
+    residenceui_sa::W_Slot9(this, element, a, b, c, d);
+}
+
+// [0] 0x140020fc0: ~ResidenceUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* ResidenceUI::DeletingDtor(unsigned flags) {
+    this->~ResidenceUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140020f60: MemAlloc(0x40, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* ResidenceUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ResidenceUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) ResidenceUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* ResidenceUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ResidenceUI());
+}
+
+DEFINE_EXE_VTABLE(ResidenceUI, "_ZTV11ResidenceUI")
+DEFINE_EXE_TYPE(ResidenceUI, "UI::DialogController")
 
 // ============================================================

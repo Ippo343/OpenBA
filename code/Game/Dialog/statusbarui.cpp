@@ -206,7 +206,6 @@ void StatusBarUI_Startup(StatusBarUI* self) {
     for (int i = 0; i < citizenCount; i++) {
         uintptr_t citizen = *(uintptr_t*)(*(uintptr_t*)(popList + 0xA0) + (uintptr_t)i * 8);
 
-
         // Check citizen state: +0x3C = current health
         // *(+0x288) + 0x44 = max health from description
         // +0x208 = death/special status pointer
@@ -548,7 +547,6 @@ static void StatusBarUI_StatusIconHandler_Impl(StatusBarUI* self, int iconIndex)
             new (&happinessPtr) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>(happinessComp));   // B.3.3 bridge
 
-
             // Check status bits at HappinessComponent+0xF0
             uint32_t statusBits = happinessPtr ? *(uint32_t*)(happinessPtr + 0xF0) : 0;
 
@@ -662,20 +660,8 @@ void StatusBarUI_OnRemove(StatusBarUI* self, void* param2, int eventType, int ev
 // the town name String at gw+0x28 (title parameter).
 #include "Object/factory_registration.h"
 #include <cstddef>
-#include "dialog_controller_vtable.h"
 
 namespace statusbarui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("StatusBarUI");
-    return c;
-}
 
 // Backfill the exe-.rdata type-id globals the impl paths dereference:
 //  - DAT_1401c7e08 (g_TypeId_StatusIconComponent) is the StatusIconComponent type id
@@ -828,9 +814,13 @@ void W_OnEvent(void* self, void* param2, int msg, int id) {
 // Destructor: the only owned heap is the two GroupRating icon arrays built by
 // CitizenUI_BuildIconArray_Impl (whole+half InternalBasePtr[] each, at +0x108
 // and +0x128).
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *(void**)self = g_vt;
+}  // namespace statusbarui_sa
+
+// ~StatusBarUI: the tree's own teardown (its hand-built slot 0 ran this, then freed
+// WITHOUT ~DialogController); moved here unchanged. The compiler now chains
+// ~DialogController -> ~Internal after it.
+StatusBarUI::~StatusBarUI() {
+    void* self = this;
     uintptr_t s = (uintptr_t)self;
     if (fn_MemFreeStatic) {
         static const uintptr_t kIconArrays[4] = { 0x108, 0x118, 0x128, 0x138 };
@@ -839,51 +829,57 @@ void* Dtor(void* self, uint32_t flags) {
             *(uint64_t*)(s + off) = 0;
             *(uint64_t*)(s + off + 8) = 0;   // count/capacity pair
         }
-        if (flags & 1) fn_MemFreeStatic(self);
     }
-    return self;
 }
 
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Setup);
-        g_vt[5] = reinterpret_cast<void*>(&W_Setup);     // retail setup slot
-        g_vt[7] = reinterpret_cast<void*>(&W_Refresh);   // retail refresh slot
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-        g_vt[9] = reinterpret_cast<void*>(&W_OnEvent);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's StatusBarUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "StatusBarUI", &StubNop);
-
-void Zero(void* p) {
-    for (size_t o = 0; o < static_cast<size_t>(0x1D0); o += 8)
-        *reinterpret_cast<uint64_t*>(static_cast<char*>(p) + o) = 0;
+// [4] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void StatusBarUI::OnCreated() {
+    statusbarui_sa::W_Setup(this);
 }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, static_cast<uint64_t>(0x1D0), 8);
+
+// [5] 0x14007a3d0
+void StatusBarUI::OnOpened() {
+    statusbarui_sa::W_Setup(this);
+}
+
+// [7] 0x1400798d0
+void StatusBarUI::OnUpdateLayout() {
+    statusbarui_sa::W_Refresh(this);
+}
+
+// [8] STANDALONE DEVIATION (retail inherits the base slot) — the tree's wiring, kept.
+void StatusBarUI::OnUpdate(const System::Time& time) {
+    statusbarui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [9] 0x14007a3a0
+void StatusBarUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                                 int32_t /*c*/, int32_t /*d*/, int32_t /*e*/, void* /*userData*/) {
+    statusbarui_sa::W_OnEvent(this, element, a, b);
+}
+
+// [0] 0x140014130: ~StatusBarUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* StatusBarUI::DeletingDtor(unsigned flags) {
+    this->~StatusBarUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x1400140e0: MemAlloc(0x1d0, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* StatusBarUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(StatusBarUI), 8);
     if (!p) return nullptr;
-    Zero(p);
-    *reinterpret_cast<void**>(p) = g_vt;
-    return p;
+    return static_cast<Object::Base*>(new (p) StatusBarUI());
 }
-void* InPlace(void* m) {
-    if (!m) return nullptr;
-    Zero(m);
-    *reinterpret_cast<void**>(m) = g_vt;
-    return m;
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* StatusBarUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) StatusBarUI());
 }
 
-}  // namespace statusbarui_sa
-
-REGISTER_TYPE(StatusBarUI, "UI::DialogController",
-              &statusbarui_sa::Factory, &statusbarui_sa::InPlace);
+DEFINE_EXE_VTABLE(StatusBarUI, "_ZTV11StatusBarUI")
+DEFINE_EXE_TYPE(StatusBarUI, "UI::DialogController")
 
