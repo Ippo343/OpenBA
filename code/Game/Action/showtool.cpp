@@ -390,11 +390,12 @@ bool ShowTool_GetTarget_Impl(void* self, void* param) {
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// create 0x1400013b0 (inlined ctor). The tree's factory zeroed every field above
-// +0x10; kept (not a behaviour change of this step).
+// create 0x1400013b0. Retail's default ctor (inlined, 0x14000140c) stores +0x28 = -1;
+// the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the
+// fields retail leaves unwritten stay zero-filled (MemAlloc gives no guarantee).
 ShowTool::ShowTool()
     : _field20(nullptr),
-      _field28(0),
+      _field28(-1),
       _pad2C{} {}
 
 // [0] 0x140001420

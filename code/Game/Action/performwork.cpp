@@ -404,8 +404,9 @@ bool PerformWork_GetTarget_Impl(PerformWork* self, void* param) {
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// create 0x140022b90 (inlined ctor). The tree's factory zeroed every field above
-// +0x10; kept (not a behaviour change of this step).
+// create 0x140022b90. Retail's default ctor (0x1400c96b0) stores +0x44 = -1;
+// the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the
+// fields retail leaves unwritten stay zero-filled (MemAlloc gives no guarantee).
 PerformWork::PerformWork()
     : workTarget(nullptr),
       facingYaw(0.0f),
@@ -414,7 +415,7 @@ PerformWork::PerformWork()
       elapsedTime(0),
       useTool(0),
       _pad41{},
-      field44(0) {}
+      field44(-1) {}
 
 // [0] 0x140022bd0
 Object::Base* PerformWork::DeletingDtor(unsigned flags) {

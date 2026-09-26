@@ -270,13 +270,14 @@ bool SendComponentMessage_GetTarget_Impl(SendComponentMessage* self, void* param
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// create 0x140023070 (inlined ctor). The tree's factory zeroed every field above
-// +0x10; kept (not a behaviour change of this step).
+// create 0x140023070. Retail's default ctor (inlined, 0x1400230cc) stores +0x34 = -1;
+// the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the
+// fields retail leaves unwritten stay zero-filled (MemAlloc gives no guarantee).
 SendComponentMessage::SendComponentMessage()
     : _field20(nullptr),
       _field28(nullptr),
       _field30(0),
-      _field34(0),
+      _field34(-1),
       _field38(nullptr) {}
 
 // [0] 0x1400230f0

@@ -751,10 +751,11 @@ bool MoveTo_GetTarget_Impl(void* self, void* param) {
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// create 0x1400228c0 (inlined ctor). The tree's factory zeroed every field above
-// +0x10; kept (not a behaviour change of this step).
+// create 0x1400228c0. Retail's default ctor (0x1400c90e0) stores +0x20 = -1, +0x60 = -1, +0x478 = 1.0f;
+// the tree's factory zero-filled every field instead. B38 B8-1: the retail stores are kept; the
+// fields retail leaves unwritten stay zero-filled (MemAlloc gives no guarantee).
 MoveTo::MoveTo()
-    : targetId(0),
+    : targetId(-1),
       _field24(0),
       _field28(nullptr),
       _field30(nullptr),
@@ -763,12 +764,12 @@ MoveTo::MoveTo()
       _field48(nullptr),
       _field50(nullptr),
       _field58(nullptr),
-      _field60(0),
+      _field60(-1),
       _field64(0),
       _pathData{},
       _field474(0),
       _pad475{},
-      speedMultiplier(0.0f),
+      speedMultiplier(1.0f),
       _pad47C{} {}
 
 // [0] 0x140022900
