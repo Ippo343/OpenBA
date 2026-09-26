@@ -40,6 +40,7 @@
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+#include "../../types/ui/ElementDescription.h"   // UI::ElementDescription (B.3.6)
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — resolve.h drags in <windows.h> and PLAN.md §4.1 keeps it out of
@@ -200,9 +201,13 @@ inline void** DialogCreateElement(const void* dialog, void** retSlot, void* desc
     using CreateElementFn = void** (*)(const void*, void**, void*);
     return RtAddr<CreateElementFn>(0x180112ed0ull)(dialog, retSlot, desc);
 }
+// `?Serialize@ElementDescription@UI@@` (0x180116b00), the base half every
+// leaf's Serialize runs first. ENDGAME B.3.6 block A: a direct QUALIFIED member
+// call instead of the by-address door — qualified because the receiver wears
+// the LEAF's table, whose slot 5 is the leaf's own Serialize (the caller).
 inline void ElementDescriptionSerialize(void* self, Stream* stream) {
-    using BaseSerFn = void (*)(void*, void*);
-    RtAddr<BaseSerFn>(0x180116b00ull)(self, stream);
+    reinterpret_cast<UI::ElementDescription*>(self)                        // B.3.6 bridge
+        ->UI::ElementDescription::Serialize(stream);
 }
 // ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z, reached
 // by rel32 from every one of these appliers.

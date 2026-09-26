@@ -46,7 +46,7 @@
 namespace UI {
 
 struct EditElement {
-    Element  base;              // +0x00 .. +0xBF
+    RtUI::Element  base;              // +0x00 .. +0xBF
     uint8_t  _pad_c0_c8[0x08];  // +0xC0 .. +0xC7 — TextElement's own leading
                                  //   field(s); not reversed by this lane.
     char*    _text;              // +0xC8

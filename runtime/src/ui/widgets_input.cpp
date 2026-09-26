@@ -378,6 +378,17 @@ inline void MarkNeedsSizeCalcUpToRoot(Element* self) {
     }
 }
 
+// ENDGAME B.3.6 block A: the leaf PODs embed the `RtUI::Element` POD now
+// (`UI::Element` is the real, abstract class), so `&self->base` is an
+// `RtUI::Element*`. Same bytes; these two forward to the helpers above.
+template <typename T>
+inline T* FirstChildAs(RtUI::Element* self, uint32_t typeId) {
+    return FirstChildAs<T>(reinterpret_cast<Element*>(self), typeId);   // B.3.6 bridge
+}
+inline void MarkNeedsSizeCalcUpToRoot(RtUI::Element* self) {
+    MarkNeedsSizeCalcUpToRoot(reinterpret_cast<Element*>(self));   // B.3.6 bridge
+}
+
 // ---- Mangled names, for reference. Each registration site spells its own
 // literal: runtime_census.py cannot see through a named constant
 // (reference_census_cannot_see_nonliteral_registrations.md). ----------------

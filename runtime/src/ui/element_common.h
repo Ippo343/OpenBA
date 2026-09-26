@@ -35,10 +35,14 @@
 // PORTABILITY: no <windows.h> (PLAN.md §4.1 decision 1).
 // ============================================================================
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
 #include "../../funcs/rt_port.h"
+// ENDGAME B.3.6 block A: the real `UI::Element` class, so the two inline
+// helpers below dispatch slots 4/5 as member calls instead of raw slot reads.
+#include "../../types/ui/Element.h"
 
 // ResolveAddr, forward-declared rather than pulled in from standalone/resolve.h
 // — that header drags in <windows.h>, which PLAN.md §4.1 keeps out of
@@ -52,6 +56,32 @@ namespace rtuielem {
 template <typename Fn>
 inline Fn RtAddr(uintptr_t ghidra) {
     return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, ghidra));
+}
+
+// ---------------------------------------------------------------------------
+// RULE B6-5 door caches (ENDGAME B.3.6). UI is constructed on the LOADER
+// thread while the main thread draws, so a member body that needs another
+// class's door may not keep a function-local static first-call cache
+// (`RT_EXPORT_ONCE`'s shape). It keeps a namespace-scope `std::atomic<void*>`
+// slot instead and resolves through one of these. Same never-cache-a-null
+// contract as RT_EXPORT_ONCE: a miss is retried on the next call.
+// ---------------------------------------------------------------------------
+inline void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+inline void* AtomicAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
 }
 
 inline void* const* VTableOf(const void* o) {
@@ -220,7 +250,7 @@ inline uint8_t DimAlpha(const void* self, uint8_t alpha) {
 // identical to the already-ported out-of-line body in runtime/src/ui/element.cpp.
 // ---------------------------------------------------------------------------
 inline void PaddedSizeInline(void* e, int* outW, int* outH) {
-    VSlot<ComputeSizeFn>(e, kSlotComputeSize)(e);
+    reinterpret_cast<UI::Element*>(e)->ComputeSize();   // B.3.6 bridge — slot 4, virtual
 
     *outW = I32(e, kElemLayoutWidth)  + I32(e, kElemRightPad)  + I32(e, kElemLeftPad);
     *outH = I32(e, kElemLayoutHeight) + I32(e, kElemBottomPad) + I32(e, kElemTopPad);
@@ -270,9 +300,9 @@ inline void PaddedSizeInline(void* e, int* outW, int* outH) {
 inline void ElementComputeAlignedRect(void* self, int x, int y, int w, int h) {
     void* border = P(self, kElemBorder);
     if (border != nullptr)
-        VSlot<ComputeLayoutFn>(border, kSlotComputeLayout)(border, x, y, w, h);
+        reinterpret_cast<UI::Element*>(border)->ComputeLayout(x, y, w, h);   // B.3.6 bridge — slot 5
 
-    VSlot<ComputeSizeFn>(self, kSlotComputeSize)(self);
+    reinterpret_cast<UI::Element*>(self)->ComputeSize();   // B.3.6 bridge — slot 4
 
     int sw = I32(self, kElemLayoutWidth);
     int sh = I32(self, kElemLayoutHeight);
