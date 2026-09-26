@@ -32,6 +32,7 @@
 #include <cstdio>
 #include <cstring>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 
 // Vtable pointer for BuildingGoal (resolved at runtime)
 static void* s_vtable_BuildingGoal = nullptr;
@@ -66,10 +67,9 @@ void* BuildingGoal_Dtor(BuildingGoal* self, uint32_t flags) {
         fn_BuildingTypeArray_Dtor((void*)(s + 0x38));
     }
 
-    // Call Goal base destructor
-    if (fn_Goal_BaseDtor) {
-        fn_Goal_BaseDtor(self);
-    }
+    // Achievement::Goal::~Goal (0x18009edb0) — a QUALIFIED member call
+    // (B37_RULES B7-13): retail CALLs the base dtor unconditionally.
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
 
     // If bit 0 set, free memory
     if ((flags & 1) != 0) {
@@ -94,10 +94,9 @@ void* BuildingGoal_Dtor(BuildingGoal* self, uint32_t flags) {
 int BuildingGoal_Slot5(BuildingGoal* self, void* stream) {
     uintptr_t s = (uintptr_t)self;
 
-    // Call Goal base serialize
-    if (fn_Goal_BaseSerialize) {
-        fn_Goal_BaseSerialize(self, stream);
-    }
+    // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED: an
+    // unqualified call would dispatch through this exe table back into this slot.
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
 
     // Create Serializer on stack (24 bytes)
     alignas(8) uint8_t serializer[24];

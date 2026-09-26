@@ -16,26 +16,8 @@
 #include "resolve.h"
 #include <cstdint>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 #include <new>
-
-// ============================================================
-// Resolved helpers
-// ============================================================
-
-// Achievement::Goal::Serialize — dispatch slot at 0x140152840
-typedef void (*fn_GoalSerialize_t)(void* self, void* stream);
-static fn_GoalSerialize_t s_fn_GoalSerialize = nullptr;
-
-static bool s_helpersResolved = false;
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-
-    uintptr_t slotAddr = ResolveAddr(Module::Exe, 0x140152840);
-    if (slotAddr) s_fn_GoalSerialize = *reinterpret_cast<fn_GoalSerialize_t*>(slotAddr);
-
-    s_helpersResolved = true;
-}
 
 // ============================================================
 // TimeGoal::Slot5/Load (vtable +0x28, 0x1400dab20)
@@ -44,13 +26,11 @@ static void EnsureHelpers() {
 // then serializes requiredYears (int) and requireOtherGoalsMet (bool).
 
 void TimeGoal_Slot5(TimeGoal* self, void* stream) {
-    EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
-    // Call base class serialize
-    if (s_fn_GoalSerialize) {
-        s_fn_GoalSerialize(self, stream);
-    }
+    // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
+    // Was the exe import slot 0x140152840, which resolved to the same door.
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
 
     // Create serializer
     alignas(8) uint8_t serializerBuf[24];
@@ -108,31 +88,14 @@ void* TimeGoal_Slot11(void* self, uint32_t flags) {
         *(void**)self = (void*)vtableAddr;
     }
 
-    // Call base Achievement::GoalInstance::~GoalInstance
-    typedef void (*fn_GoalInstanceDtor_t)(void* self);
-    static fn_GoalInstanceDtor_t s_fn_GoalInstanceDtor = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        // UEAA, not QEAA -- GoalInstance is polymorphic (see the note in
-        // statgoal.cpp). Retail 0x18009ef40, whose whole body is
-        //   *(void**)this = &GoalInstance::_vftable_;
-        //   Object::Internal::~Internal(this);
-        // and that ~Internal IS the InternalFactory swap-remove. Resolving the
-        // non-existent QEAA spelling returned null, the guard below skipped the
-        // call, and the object was MemFree'd on the next line with its handle
-        // table entry still pointing at it -- exactly the landmine described in
-        // reference_internalfactory_swapremove_wild_write.md, and undetectable
-        // because CheckPtr is a bare RET in every shipped build. GoalList's
-        // dtor calls this slot for every element, so it fired on every tutorial
-        // teardown, quit-to-menu and achievement reset. Fixed 2026-09-06,
-        // Wave 5 lane A.
-        s_fn_GoalInstanceDtor = (fn_GoalInstanceDtor_t)ResolveExport(
-            "??1GoalInstance@Achievement@@UEAA@XZ");
-        s_resolved = true;
-    }
-    if (s_fn_GoalInstanceDtor) {
-        s_fn_GoalInstanceDtor(self);
-    }
+    // Achievement::GoalInstance::~GoalInstance (retail 0x18009ef40) — a
+    // QUALIFIED member call (B37_RULES B7-13): re-stamp + ~Internal, i.e. the
+    // InternalFactory swap-remove. Until 2026-09-06 this resolved the phantom
+    // QEAA spelling, got null, skipped the call and MemFree'd the object with
+    // its handle-table entry still pointing at it
+    // (reference_internalfactory_swapremove_wild_write.md). A member call
+    // cannot resolve to nothing.
+    reinterpret_cast<Achievement::GoalInstance*>(self)->Achievement::GoalInstance::~GoalInstance();   // B.3.7 bridge
 
     // Free memory if requested
     if ((flags & 1) != 0) {
@@ -156,19 +119,8 @@ void* TimeGoal_Dtor(TimeGoal* self, uint32_t flags) {
         *(void**)self = (void*)vtableAddr;
     }
 
-    // Call base Achievement::Goal::~Goal
-    typedef void (*fn_GoalDtor_t)(void* self);
-    static fn_GoalDtor_t s_fn_GoalDtor = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        // UEAA, not QEAA -- see the note in statgoal.cpp. Retail 0x18009edb0.
-        s_fn_GoalDtor = (fn_GoalDtor_t)ResolveExport(
-            "??1Goal@Achievement@@UEAA@XZ");
-        s_resolved = true;
-    }
-    if (s_fn_GoalDtor) {
-        s_fn_GoalDtor(self);
-    }
+    // Achievement::Goal::~Goal (retail 0x18009edb0) — a QUALIFIED member call (B7-13).
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
 
     // Free memory if requested
     if ((flags & 1) != 0) {
@@ -194,12 +146,18 @@ static uint32_t TimeGoal_GetTypeId(void* /*self*/) {
     return cached;
 }
 
-// Slot +0x48: Slot9 — returns TimeGoalInstance typeId via *retval.
+// Slot +0x48: Slot9 — the exe OVERRIDE of Achievement::Goal::GetInstanceType
+// (retail 0x1400267f0): returns TimeGoalInstance's type id BY VALUE.
 // Original: MOV EAX,[TypeInfo_TimeGoalInstance]; MOV [RDX],EAX; MOV RAX,RDX; RET.
-static void* TimeGoal_Slot9_Standalone(void* /*self*/, uint32_t* retval) {
+// RULE B7-4: the override takes the base's retslot shape
+// `Object::Type* (const Goal* this, Object::Type* ret)` — `this` first, the
+// hidden return slot second, the slot handed back in RAX — exactly what
+// `virtual Object::Type* Goal::GetInstanceType(Object::Type* ret) const`
+// compiles to, so GoalList::Initialize's virtual call lands here correctly.
+static Object::Type* TimeGoal_Slot9_Standalone(const Achievement::Goal* /*self*/, Object::Type* retval) {
     static uint32_t cached = 0;
     if (cached == 0) cached = ::Object::GetTypeIdByName("TimeGoalInstance");
-    if (retval) *retval = cached;
+    if (retval) retval->_type = cached;
     return retval;
 }
 
