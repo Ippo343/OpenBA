@@ -55,6 +55,8 @@
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/String.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TableElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 extern "C" void* GetTutorialHighlightDialogVtable();
 // Port of exe 0x1400E0D70 -- boots the next scenario when a tutorial finishes.
@@ -534,7 +536,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     if (!ui) return;   // no TutorialUI controller attached yet
 
     // 2/3. the two text elements
-    if (fn_TextElement_SetText) {
+    {
         uint64_t stringTable = *reinterpret_cast<uint64_t*>(step + 0x28);
         struct UIStr { uint64_t a, b; };
 
@@ -550,7 +552,8 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
             UIStr tmp = *reinterpret_cast<UIStr*>(r ? r : retbuf);
             void* elem = *reinterpret_cast<void**>(t.uiField);
             if (!elem) continue;
-            fn_TextElement_SetText(elem, &tmp);
+            reinterpret_cast<UI::TextElement*>(elem)->SetText(  // B.3.6 bridge
+                reinterpret_cast<const UI::String*>(&tmp));
         }
         for (const auto& t : texts) {
             void* elem = *reinterpret_cast<void**>(t.uiField);
@@ -567,10 +570,10 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     void* table = nullptr;
     {
         table = *reinterpret_cast<void**>(ui + 0x48);
-        if (table && fn_Element_RemoveChildren &&
+        if (table &&
             fn_InternalBasePtr_Ctor) {
             int n = reinterpret_cast<UI::Element*>(table)->ChildCount();  // B.3.6 bridge
-            fn_Element_RemoveChildren(table);
+            reinterpret_cast<UI::Element*>(table)->RemoveChildren();  // B.3.6 bridge
             for (int i = 0; i < n; ++i) {
                 uint64_t nullChild = 0;
                 new (&nullChild) ::Object::InternalBasePtr(nullptr);   // B.3.3 bridge
@@ -584,7 +587,7 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
     {
         int n = *reinterpret_cast<int32_t*>(step + 0x48);
         uintptr_t data = *reinterpret_cast<uintptr_t*>(step + 0x40);
-        if (n > 0 && data && table && fn_TableElement_SetChild3) {
+        if (n > 0 && data && table) {
             uintptr_t dlgIBP = *reinterpret_cast<uintptr_t*>(ui + 0x18);
             void* dialog = dlgIBP ? *reinterpret_cast<void**>(dlgIBP + 0x18) : nullptr;
             for (int i = 0; i < n; ++i) {
@@ -596,7 +599,9 @@ extern "C" void TutWave_RefreshStepUI(void* self) {
                 if (!vt || !vt[9]) continue;
                 uint8_t retbuf[16] = {};
                 void* elemPtr = reinterpret_cast<void* (*)(void*, void*, void*)>(vt[9])(img, retbuf, dialog);
-                fn_TableElement_SetChild3(table, elemPtr ? elemPtr : retbuf, row, col);
+                reinterpret_cast<UI::TableElement*>(table)->SetChild(  // B.3.6 bridge
+                    reinterpret_cast<Object::InternalPtr<UI::Element>*>(elemPtr ? elemPtr : retbuf),
+                    row, col);
             }
         }
     }

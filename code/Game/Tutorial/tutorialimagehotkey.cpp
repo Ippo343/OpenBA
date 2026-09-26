@@ -29,6 +29,7 @@
 #include "object/External.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/TextElement.h"    // ENDGAME B.3.6 UI callers (K4)
 
 // hotkeytooltipui.cpp - the existing byte-faithful port of exe 0x140099c20.
 namespace Game { void Hotkey_BuildKeyName(void* retval, int device, int keyIndex); }
@@ -280,8 +281,9 @@ void* TutorialImageHotKey_Slot9(void* self, void* retIBP, void* dialog) {
     Game::Hotkey_BuildKeyName(uiStr, deviceType, inputIndex);
 
     // 14. Set text on the TextElement
-    if (fn_TextElement_SetText && textRef)
-        fn_TextElement_SetText(textRef, uiStr);
+    if (textRef)
+        reinterpret_cast<UI::TextElement*>(textRef)->SetText(  // B.3.6 bridge
+            reinterpret_cast<const UI::String*>(uiStr));
 
     return retIBP;
 }

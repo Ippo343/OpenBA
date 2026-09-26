@@ -5,6 +5,7 @@
 #include "runtime/types/ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"                       // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Sprite.h"                        // ENDGAME B.3.6 UI callers (K4)
+#include "ui/ImageElement.h"                  // ENDGAME B.3.6 UI callers (K4)
 #include <new>
 #include <cstdint>
 
@@ -115,8 +116,8 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
     int height = *reinterpret_cast<int32_t*>(elem + 0x74) - top;
 
     void* glow = *reinterpret_cast<void**>(s + 0xC8);
-    if (glow && fn_ImageElement_SetWidthHeight)
-        fn_ImageElement_SetWidthHeight(glow, width + 0x1A, height + 0x1A);
+    if (glow)
+        reinterpret_cast<UI::ImageElement*>(glow)->SetWidthHeight(width + 0x1A, height + 0x1A);  // B.3.6 bridge
 
     int padLeft = left - 13;
     int padTop  = top  - 13;
@@ -153,10 +154,10 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
     // Arrow: corner + sign pair chosen by the rotation.
     void* arrowIBP = reinterpret_cast<void*>(s + 0xD0);
     void* arrow = *reinterpret_cast<void**>(arrowIBP);
-    if (!arrow || !fn_ImageElement_GetSprite) return;
+    if (!arrow) return;
 
     uint8_t sprite[16] = {};
-    fn_ImageElement_GetSprite(arrow, sprite);
+    ::new (sprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(arrow)->GetSprite());  // B.3.6 bridge
     int arrowW = reinterpret_cast<const UI::Sprite*>(sprite)->Width();  // B.3.6 bridge
 
     int rot = *reinterpret_cast<int32_t*>(s + 0xD8);
@@ -179,8 +180,7 @@ void TutorialHighlightDialog_UpdateElement(TutorialHighlightDialog* self) {
     reinterpret_cast<UI::Element*>(arrow)->SetPadding(  // B.3.6 bridge
                           static_cast<int>(static_cast<float>(signX) * bob + static_cast<float>(x)), 0,
                           static_cast<int>(static_cast<float>(signY) * bob + static_cast<float>(y)), 0);
-    if (fn_ImageElement_SetRotation)
-        fn_ImageElement_SetRotation(arrow, static_cast<float>(-rot));
+    reinterpret_cast<UI::ImageElement*>(arrow)->SetRotation(static_cast<float>(-rot));  // B.3.6 bridge
 }
 
 // ---------------------------------------------------------------------------
@@ -365,12 +365,10 @@ void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
     if (!arrow) return;
     reinterpret_cast<UI::Element*>(arrow)->SetFlagsOnOff(0, 1);                  // show  // B.3.6 bridge
 
-    if (!fn_ImageElement_GetSprite) return;
-
     uint8_t sprite[16] = {};
-    fn_ImageElement_GetSprite(arrow, sprite);
+    ::new (sprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(arrow)->GetSprite());  // B.3.6 bridge
     int arrowW = reinterpret_cast<const UI::Sprite*>(sprite)->Width();  // B.3.6 bridge
-    fn_ImageElement_GetSprite(arrow, sprite);
+    ::new (sprite) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(arrow)->GetSprite());  // B.3.6 bridge
     int arrowH = reinterpret_cast<const UI::Sprite*>(sprite)->Height();  // B.3.6 bridge
 
     // Rectangle is four floats: minX, minY, maxX, maxY.
@@ -385,8 +383,8 @@ void TutorialHighlightDialog_UpdateWorld(TutorialHighlightDialog* self) {
     reinterpret_cast<UI::Element*>(arrow)->SetPadding(  // B.3.6 bridge
                           static_cast<int>(static_cast<float>(static_cast<int>(centreX) - (arrowW >> 1)) + bob * 0.0f), 0,
                           static_cast<int>(static_cast<float>(static_cast<int>(centreY) - arrowH) + bob), 0);
-    if (fn_ImageElement_SetRotation)
-        fn_ImageElement_SetRotation(arrow, static_cast<float>(-*reinterpret_cast<int32_t*>(s + 0xD8)));
+    reinterpret_cast<UI::ImageElement*>(arrow)->SetRotation(  // B.3.6 bridge
+        static_cast<float>(-*reinterpret_cast<int32_t*>(s + 0xD8)));
 }
 
 // TutorialHighlightDialog::Draw (0x1400DFFE0) — vtable slot 6.

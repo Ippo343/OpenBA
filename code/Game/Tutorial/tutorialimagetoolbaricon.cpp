@@ -31,6 +31,7 @@
 #include "ui/Dialog.h"         // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Element.h"        // ENDGAME B.3.6 UI callers (K4)
 #include "ui/Sprite.h"         // ENDGAME B.3.6 UI callers (K4)
+#include "ui/ImageElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // Vtable pointers (resolved once)
@@ -317,8 +318,9 @@ void* TutorialImageToolbarIcon_Slot9(void* self, void* retIBP, void* dialog) {
 
 
     // 10. Set sprite on the ImageElement
-    if (fn_ImageElement_SetSprite && imageRef)
-        fn_ImageElement_SetSprite(imageRef, spriteBuf);
+    if (imageRef)
+        reinterpret_cast<UI::ImageElement*>(imageRef)->SetSprite(  // B.3.6 bridge
+            reinterpret_cast<const UI::Sprite*>(spriteBuf));
     return retIBP;
 }
 

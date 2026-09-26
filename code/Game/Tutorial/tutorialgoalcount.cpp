@@ -21,6 +21,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
 #include <new>
+#include "ui/SpinnerElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
 // Exe-internal helpers resolved at runtime
@@ -558,16 +559,14 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         if (!sliderIBP) { break; }
 
         // Create IBP and check if active
-        if (fn_SpinnerElement_IsActive && fn_SpinnerElement_IsActive((void*)sliderIBP)) {
+        if (reinterpret_cast<const UI::SpinnerElement*>(sliderIBP)->IsActive()) {  // B.3.6 bridge
             // Retail refuses to read a spinner mid-edit. If this never clears, the
             // goal stalls forever with the right number visible on screen.
             break;
         }
 
         // Read current value
-        if (fn_SpinnerElement_GetValue) {
-            count = fn_SpinnerElement_GetValue((void*)sliderIBP);
-        }
+        count = reinterpret_cast<const UI::SpinnerElement*>(sliderIBP)->GetValue();  // B.3.6 bridge
         break;
     }
 
