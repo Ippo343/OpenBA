@@ -236,8 +236,9 @@ Achievement::Goal* RtAch_Goal_Ctor(Achievement::Goal* self) {
     self->_refs._size    = 0;                              // +0x18 — one qword store over
     self->_refs._capacity = 0;                             //         size and capacity
     *reinterpret_cast<void**>(self) = GoalVtable();        // B.3.7 bridge
-    self->_stringTable._ptr = nullptr;                     // +0x20
-    self->_text._data       = nullptr;                     // +0x28 — raw bytes, not constructed
+    // ENDGAME B.3.8 block RB (RULE B8-1): +0x20 / +0x28 are ONE body with the
+    // real constructor `Goal()` (Goal.h, `InitFields`).
+    Achievement::Goal::DoorBody::Init(self);
     return self;   // retail returns `this` in RAX
 }
 
@@ -247,8 +248,8 @@ Achievement::Goal* RtAch_Goal_Ctor(Achievement::Goal* self) {
 Achievement::GoalInstance* RtAch_GoalInstance_Ctor(Achievement::GoalInstance* self) {
     CallInternalCtor(self);
     *reinterpret_cast<void**>(self) = GoalInstanceVtable();   // B.3.7 bridge — the minted vptr
-    self->_flags     = 0;
-    self->_goal._ptr = nullptr;
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `GoalInstance()`.
+    Achievement::GoalInstance::DoorBody::Init(self);
     return self;
 }
 

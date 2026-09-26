@@ -135,7 +135,17 @@ public:
     // (0x18001eee0's sibling for this class) and is defined in no translation
     // unit, so it stays PURE — see `Video::ImageBuffer`'s slot-0 banner for why
     // a non-pure declaration does not link.
-    Object::Base*     DeletingDtor(unsigned flags) override = 0;  // [ 0]
+    //
+    // ENDGAME B.3.8 block RB (B38_RULES D1/D2): the exe instantiates the class
+    // itself (its table copy 0x14015e370, ModDialog's 0x140095da0), so slot 0
+    // is CONCRETE: the exe copy's scalar deleting dtor 0x140019d50
+    // (~FrameCopyImageBuffer; MemFree on flags & 1). Inline, so the key
+    // function does not move; the mint's row still serves the doors.
+    Object::Base*     DeletingDtor(unsigned flags) override {      // [ 0]
+        this->~FrameCopyImageBuffer();
+        if (flags & 1) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*       TypeName() const override;                  // [ 1] 0x18001efb0
     uint32_t          Type() const override;                      // [ 2] 0x18001ef90
     int32_t           GetFileVersion() const override;             // [ 3] 0x1800a3c70 — 0x1007
@@ -159,9 +169,30 @@ public:
     void Render(void* renderer, const void* scene, const void* camera,
                 int32_t generation) const override;
 
+    // ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ 0x1800a3d10 — the REAL
+    // constructor (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is
+    // concrete. ImageBuffer(), the Generated stamp + `_generation = 0`
+    // (GeneratedImageBuffer()) and the FrameCopy stamp are the chain; the three
+    // nulls, the back-buffer alias and the RenderBuffer are ONE body with the
+    // door `RtGraphics_FrameCopyImageBuffer_Ctor` (wave23_lane_gfxbody.cpp).
+    FrameCopyImageBuffer() { InitFields(); }
+
+    struct DoorBody {   // the doors' way onto the shared bodies
+        static void Init(FrameCopyImageBuffer* f)    { f->InitFields(); }
+        static void Release(FrameCopyImageBuffer* f) { f->ReleaseFields(); }
+    };
+
 protected:
-    FrameCopyImageBuffer() = default;   // see "NOT CONSTRUCTIBLE"
-    ~FrameCopyImageBuffer();            // ??1… 0x1800a3c80 — body in wave23_lane_gfxbody.cpp
+    // ??1… 0x1800a3c80: restamp, release the two RenderBuffers and the
+    // back-buffer image (ONE body with `RtGraphics_FrameCopyImageBuffer_Dtor`),
+    // then ~GeneratedImageBuffer / ~ImageBuffer — the compiler's chain.
+    ~FrameCopyImageBuffer() { ReleaseFields(); }
+
+private:
+    void InitFields();      // wave23_lane_gfxbody.cpp
+    void ReleaseFields();   // wave23_lane_gfxbody.cpp
+
+protected:
 
     // RULE B5-15, both COPIED from B35_SLOTS section 3:
     //   0x18001ef70  ?_TypeName@       -> "FrameCopyImageBuffer"

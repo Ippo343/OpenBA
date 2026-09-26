@@ -241,16 +241,67 @@ extern "C" void* RtGraphics_FrameCopyImageBuffer_Ctor(void* self) {
 
     ImageBufferCtor(p);                              // 0x1800a3d2d
     p->base.vtable   = VtGenerated();                // 0x1800a3d3a — transient, see below
-    p->_generation   = 0;                            // 0x1800a3d3f
+    // ENDGAME B.3.8 block RB (RULE B8-1): `_generation = 0` (0x1800a3d3f) is
+    // GeneratedImageBuffer's shared body, the rest after the FrameCopy stamp
+    // is FrameCopyImageBuffer's (`InitFields`, below).
+    ::Graphics::GeneratedImageBuffer::DoorBody::Init(
+        reinterpret_cast<::Graphics::GeneratedImageBuffer*>(self));   // B.3.8 bridge
     p->base.vtable   = VtFrameCopy();                // 0x1800a3d49
-    p->_backBufferImage = nullptr;                   // 0x1800a3d4c
-    p->_sourceTarget    = nullptr;                   // 0x1800a3d50
-    p->_destTarget      = nullptr;                   // 0x1800a3d54
     // The first vptr store is overwritten seven instructions later with no
     // virtual dispatch in between, so it is observationally dead. It is kept
     // because it is what the bytes do, and because a future lane that inserts
     // anything between the two wants to see retail's own ordering rather than
     // this lane's opinion of it.
+    ::Graphics::FrameCopyImageBuffer::DoorBody::Init(
+        reinterpret_cast<::Graphics::FrameCopyImageBuffer*>(self));   // B.3.8 bridge
+
+    return self;                                     // MOV RAX,RSI
+}
+
+// ============================================================================
+// §2.  ??1FrameCopyImageBuffer@Graphics@@UEAA@XZ   retail 0x1800a3c80, ord 597
+// ============================================================================
+// 138 bytes / 37 instructions. Mirror of the ctor, plus the base-class handback.
+//
+// The `UEAA` spelling is the one that exists (see banner). This is the SCALAR
+// destructor; vtable slot 0 is the separate deleting destructor (0x18001f260),
+// which is not this row and is not ported here.
+//
+// The member at +0x70 is destroyed through ITS OWN vtable slot 0 with EDX=1 —
+// a DELETING destructor call, so it both destructs and frees. The two
+// RenderBuffers are destroyed the long way (`PlatformDestruct` then
+// `operator delete`) because RenderBuffer has no virtual destructor to reach.
+// Those are not the same idiom and swapping one for the other would leak or
+// double-free (reference_a_written_recipe_can_be_wrong.md is the general form).
+// ============================================================================
+extern "C" void RtGraphics_FrameCopyImageBuffer_Dtor(void* self) {
+    Attend("FrameCopyImageBuffer::dtor", g_dtorCalls);
+
+    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
+
+    p->base.vtable = VtFrameCopy();                  // 0x1800a3c9b
+
+    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `~FrameCopyImageBuffer()`.
+    ::Graphics::FrameCopyImageBuffer::DoorBody::Release(
+        reinterpret_cast<::Graphics::FrameCopyImageBuffer*>(self));   // B.3.8 bridge
+
+    p->base.vtable = VtGenerated();                  // 0x1800a3cee
+    ImageBufferDtor(p);                              // tail JMP 0x1800f2610
+}
+
+// ============================================================================
+// Graphics::FrameCopyImageBuffer::InitFields / ReleaseFields (ENDGAME B.3.8
+// block RB, RULE B8-1): 0x1800a3d10 after the FrameCopy stamp, and 0x1800a3c80
+// between its restamp and the Generated restamp. Shared by the real ctor/dtor
+// (FrameCopyImageBuffer.h) and the two doors above; MOVED VERBATIM through the
+// field-identical `RtGraphics::FrameCopyImageBuffer` POD view.
+// ============================================================================
+void Graphics::FrameCopyImageBuffer::InitFields() {
+    RtGraphics::FrameCopyImageBuffer* const p =
+        reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
+    p->_backBufferImage = nullptr;                   // 0x1800a3d4c
+    p->_sourceTarget    = nullptr;                   // 0x1800a3d50
+    p->_destTarget      = nullptr;                   // 0x1800a3d54
 
     // --- the back-buffer alias ---------------------------------------------
     void* const image = MemAlloc(0x68, 8);           // LEA EDX,[RBP+0x68] / LEA R8D,[RBP+8]
@@ -283,32 +334,11 @@ extern "C" void* RtGraphics_FrameCopyImageBuffer_Ctor(void* self) {
     p->_sourceTarget = rb;
 
     RenderBufferCreate(rb, p->_backBufferImage, nullptr);   // XOR R8D,R8D => depth = null
-
-    return self;                                     // MOV RAX,RSI
 }
 
-// ============================================================================
-// §2.  ??1FrameCopyImageBuffer@Graphics@@UEAA@XZ   retail 0x1800a3c80, ord 597
-// ============================================================================
-// 138 bytes / 37 instructions. Mirror of the ctor, plus the base-class handback.
-//
-// The `UEAA` spelling is the one that exists (see banner). This is the SCALAR
-// destructor; vtable slot 0 is the separate deleting destructor (0x18001f260),
-// which is not this row and is not ported here.
-//
-// The member at +0x70 is destroyed through ITS OWN vtable slot 0 with EDX=1 —
-// a DELETING destructor call, so it both destructs and frees. The two
-// RenderBuffers are destroyed the long way (`PlatformDestruct` then
-// `operator delete`) because RenderBuffer has no virtual destructor to reach.
-// Those are not the same idiom and swapping one for the other would leak or
-// double-free (reference_a_written_recipe_can_be_wrong.md is the general form).
-// ============================================================================
-extern "C" void RtGraphics_FrameCopyImageBuffer_Dtor(void* self) {
-    Attend("FrameCopyImageBuffer::dtor", g_dtorCalls);
-
-    FrameCopyImageBuffer* const p = static_cast<FrameCopyImageBuffer*>(self);
-
-    p->base.vtable = VtFrameCopy();                  // 0x1800a3c9b
+void Graphics::FrameCopyImageBuffer::ReleaseFields() {
+    RtGraphics::FrameCopyImageBuffer* const p =
+        reinterpret_cast<RtGraphics::FrameCopyImageBuffer*>(this);   // B.3.8 bridge (the POD view)
 
     if (p->_sourceTarget != nullptr) {               // +0x78
         RenderBufferPlatformDestruct(p->_sourceTarget);
@@ -323,9 +353,6 @@ extern "C" void RtGraphics_FrameCopyImageBuffer_Dtor(void* self) {
         // EDX = 1 -> the deleting destructor frees as well as destructs.
         reinterpret_cast<void (*)(void*, int)>(vt[0])(p->_backBufferImage, 1);
     }
-
-    p->base.vtable = VtGenerated();                  // 0x1800a3cee
-    ImageBufferDtor(p);                              // tail JMP 0x1800f2610
 }
 
 // ============================================================================

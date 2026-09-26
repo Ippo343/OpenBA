@@ -186,9 +186,22 @@ public:
     // entry, `~String` on `_text` (a class member), then `~External()`.
     ~Goal();
 
+    // The door's way onto the shared body (ENDGAME B.3.8 block RB, B38_RULES
+    // D1): `RtAch_Goal_Ctor` stamps the MINTED tables, then runs this.
+    struct DoorBody { static void Init(Goal* g) { g->InitFields(); } };
+
 protected:
-    // NOT retail's 0x18009ed50 — the ctor door stamps the minted tables (B4b-2).
-    Goal() = default;
+    // ??0Goal@Achievement@@QEAA@XZ 0x18009ed50 — the REAL constructor (ENDGAME
+    // B.3.8 block RB, RULE B8-1): External() and the stamps are the
+    // compiler's; the two zero stores are ONE body with the door.
+    Goal() { InitFields(); }
+
+private:
+    // Raw member writes: the door runs this over raw storage.
+    void InitFields() {
+        _stringTable._ptr = nullptr;                    // +0x20
+        *reinterpret_cast<void**>(&_text) = nullptr;    // +0x28
+    }
 
 private:
     // RULE B5-15 / B7-2, COPIED from B37_SLOTS.md §3 — recorded, not DEFINE_TYPE'd:
@@ -271,8 +284,19 @@ public:
     // the stamp and the `~Internal()` (InternalFactory swap-remove) itself.
     ~GoalInstance();
 
+    // The door's way onto the shared body (ENDGAME B.3.8 block RB).
+    struct DoorBody { static void Init(GoalInstance* g) { g->InitFields(); } };
+
 protected:
-    GoalInstance() = default;   // NOT retail's 0x18009ef00 — door (B4b-2)
+    // ??0GoalInstance@Achievement@@QEAA@XZ 0x18009ef00 — the REAL constructor
+    // (ENDGAME B.3.8 block RB, RULE B8-1); ONE body with `RtAch_GoalInstance_Ctor`.
+    GoalInstance() { InitFields(); }
+
+private:
+    void InitFields() {
+        _flags     = 0;         // +0x10 a DWORD — +0x14 is never written
+        _goal._ptr = nullptr;   // +0x18
+    }
 
 private:
     //   0x180001e20  ?_TypeName@GoalInstance@Achievement@@       -> "GoalInstance"

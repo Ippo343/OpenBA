@@ -480,6 +480,7 @@ public:
     // System::MemoryAllocator statics — B36_RULES 7 keeps them doors
     // (`??3DialogInstance@UI@@SAXPEAX@Z` is one, in spritesheet_new.cpp).
     static void* operator new(std::size_t bytes);                 // 0x180045410
+    // Declared, defined NOWHERE: construct in place with `::new (p) X(...)`.
     static void* operator new(std::size_t bytes, void* place);    // 0x180045480
     static void  operator delete(void* p);                        // 0x180045490
     static Object::Base* CreateNewObject();                       // 0x1800454f0

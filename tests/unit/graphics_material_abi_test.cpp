@@ -362,7 +362,7 @@ UNIT_TEST(graphics_materialinstance_layout) {
              (int)sizeof(Object::External));
     CHECK((std::is_base_of<Object::External, Graphics::MaterialInstance>::value));
     CHECK((!std::is_base_of<Object::CompiledExternal, Graphics::MaterialInstance>::value));
-    CHECK(std::is_abstract<Graphics::MaterialInstance>::value);
+    CHECK(!std::is_abstract<Graphics::MaterialInstance>::value);   // concrete since B.3.8 RB (exe table copy 0x14015c400)
 
     // The POD that still describes the same bytes, and has live users outside
     // block G's file set, so the two must not drift.
