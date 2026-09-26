@@ -11,7 +11,8 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Tutorial/tutorialgoalcount_funcs.h"
+#include "Tutorial/TutorialGoalCount.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "system/String.h"
@@ -24,55 +25,55 @@
 #include "ui/SpinnerElement.h"   // ENDGAME B.3.6 UI callers (K4)
 
 // ============================================================
-// Exe-internal helpers resolved at runtime
+// Exe-internal helpers, resolved PER CALL (ENDGAME B.3.8, B6-5: the
+// Serialize leg runs on the loader thread and IsComplete on the main thread,
+// so there is no first-call cache any more — each accessor is one registry
+// lookup of an address registered at boot).
 // ============================================================
 
 // FUN_1400265b0 — resolve External reference from String (lazy load)
 typedef void (*fn_ResolveExternalRef_t)(void* stringField);
-static fn_ResolveExternalRef_t s_fn_ResolveExternalRef = nullptr;
+static fn_ResolveExternalRef_t ResolveExternalRefFn() {
+    return (fn_ResolveExternalRef_t)ResolveAddr(Module::Exe, 0x1400265b0);
+}
 
 // FUN_140092010 — count buildings of a type in world BST at +0x160
 // BST keyed by type pointer, returns node[2] (count).
 typedef uint32_t (*fn_CountBuildingsByType_t)(uintptr_t worldData, uintptr_t typePtr);
-static fn_CountBuildingsByType_t s_fn_CountBuildingsByType = nullptr;
+static fn_CountBuildingsByType_t CountBuildingsByTypeFn() {
+    return (fn_CountBuildingsByType_t)ResolveAddr(Module::Exe, 0x140092010);
+}
 
 // FUN_1400910a0 — count professions of a type in world BST at +0x100
 typedef uint32_t (*fn_CountProfessionsByType_t)(uintptr_t worldData, uintptr_t typePtr);
-static fn_CountProfessionsByType_t s_fn_CountProfessionsByType = nullptr;
+static fn_CountProfessionsByType_t CountProfessionsByTypeFn() {
+    return (fn_CountProfessionsByType_t)ResolveAddr(Module::Exe, 0x1400910a0);
+}
 
 // FUN_14012fbb0 — get work capacity (available job slots) for a WorkPlaceComponent.
 // Internally: finds WorkComponent on the parent entity via IBP at wpComp+0x10,
 // reads cached capacity at WorkComponent+0x30, lazily computes via FUN_14012e5c0 if 0.
 typedef int (*fn_GetWorkCapacity_t)(uintptr_t workplaceComp);
-static fn_GetWorkCapacity_t s_fn_GetWorkCapacity = nullptr;
+static fn_GetWorkCapacity_t GetWorkCapacityFn() {
+    return (fn_GetWorkCapacity_t)ResolveAddr(Module::Exe, 0x14012fbb0);
+}
 
 // FUN_140013920 — cast element to SliderElement (returns null if wrong type)
 // IsDerivedFrom check against g_TypeId_SpinnerElement (0x140151cf0).
 typedef void* (*fn_CastToSliderElement_t)(void* element);
-static fn_CastToSliderElement_t s_fn_CastToSliderElement = nullptr;
+static fn_CastToSliderElement_t CastToSliderElementFn() {
+    return (fn_CastToSliderElement_t)ResolveAddr(Module::Exe, 0x140013920);
+}
 
-static uint32_t* s_TypeId_BuildingDesc = nullptr;      // 0x1401c7318 (cases 0, 7, 10)
-static uint32_t* s_TypeId_ProfessionDesc = nullptr;     // 0x1401c5a98 (cases 1, 3, 6)
-
-static bool s_helpersResolved = false;
-
-
-static void EnsureHelpers() {
-    if (s_helpersResolved) return;
-    s_fn_ResolveExternalRef = (fn_ResolveExternalRef_t)ResolveAddr(Module::Exe, 0x1400265b0);
-    s_fn_CountBuildingsByType = (fn_CountBuildingsByType_t)ResolveAddr(Module::Exe, 0x140092010);
-    s_fn_CountProfessionsByType = (fn_CountProfessionsByType_t)ResolveAddr(Module::Exe, 0x1400910a0);
-    s_fn_GetWorkCapacity = (fn_GetWorkCapacity_t)ResolveAddr(Module::Exe, 0x14012fbb0);
-    s_fn_CastToSliderElement = (fn_CastToSliderElement_t)ResolveAddr(Module::Exe, 0x140013920);
-
-    s_TypeId_BuildingDesc = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7318);
-    s_TypeId_ProfessionDesc = (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5a98);
-
-    s_helpersResolved = true;
+static uint32_t* TypeIdBuildingDesc() {       // 0x1401c7318 (cases 0, 7, 10)
+    return (uint32_t*)ResolveAddr(Module::Exe, 0x1401c7318);
+}
+static uint32_t* TypeIdProfessionDesc() {     // 0x1401c5a98 (cases 1, 3, 6)
+    return (uint32_t*)ResolveAddr(Module::Exe, 0x1401c5a98);
 }
 
 // ============================================================
-// BST lookup helper — searches a binary search tree keyed by pointer
+//BST lookup helper — searches a binary search tree keyed by pointer
 // ============================================================
 // BST node layout (8 bytes each slot):
 //   [0] = key (pointer value used as comparison key)
@@ -129,8 +130,8 @@ static uintptr_t* TradeOrderBSTFind(uintptr_t root, uintptr_t key) {
 // self->_field40 and checks IsDerivedFrom against the given type ID.
 // Returns the type pointer if it matches, or 0 if not.
 static uintptr_t ResolveTypePtr(uintptr_t self, uint32_t* typeId) {
-    if (s_fn_ResolveExternalRef) {
-        s_fn_ResolveExternalRef((void*)(self + 0x30));
+    if (ResolveExternalRefFn()) {
+        ResolveExternalRefFn()((void*)(self + 0x30));
     }
     uintptr_t typePtr = *(uintptr_t*)(self + 0x40);
     if (typePtr && fn_IsDerivedFrom && typeId) {
@@ -142,112 +143,84 @@ static uintptr_t ResolveTypePtr(uintptr_t self, uint32_t* typeId) {
 }
 
 // ============================================================
-// TutorialGoalCount::Dtor (vtable +0x00, 0x140027820)
+// TutorialGoalCount construction / destruction (ENDGAME B.3.8 block GOAL)
 // ============================================================
-// 1. Set vtable to TutorialGoalCount
-// 2. Destroy String at +0x48
-// 3. Destroy String at +0x30
-// 4. Set vtable to TutorialGoal
-// 5. Call External::~External
-// 6. Optionally free memory
-void* TutorialGoalCount_Dtor(void* self, uint32_t flags) {
-    uintptr_t s = (uintptr_t)self;
+// ctor 0x1400dfa60 (inlined in create 0x1400277b0; createInPlace 0x1400277f0
+// null-checks then runs it): External(), the TutorialGoal and
+// TutorialGoalCount stamps (the compiler's), then the fields.
+TutorialGoalCount::TutorialGoalCount()
+    : countMode(0), targetCount(0),          // one qword store at +0x20
+      greaterOrEqual(0), _pad29{},
+      typeName(0),                           // null string
+      _field38(-1),                          // generation sentinel
+      _pad3C{}, _field40(nullptr),
+      elementName(0) {}                      // null string
 
-    // Set vtable to TutorialGoalCount
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialGoalCountAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
+// The dtor inside [0] 0x140027820: ~String +0x48, ~String +0x30; the
+// compiler re-stamps TutorialGoal and runs ~External.
+TutorialGoalCount::~TutorialGoalCount() {
+    reinterpret_cast<System::String*>(&elementName)->~String();   // B.3.1 bridge
+    reinterpret_cast<System::String*>(&typeName)->~String();      // B.3.1 bridge
+}
 
-    // Destroy String at +0x48 (elementName)
-    reinterpret_cast<System::String*>(s + 0x48)->~String();
-
-    // Destroy String at +0x30 (typeName)
-    reinterpret_cast<System::String*>(s + 0x30)->~String();
-
-    // Set vtable to TutorialGoal base
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialGoalAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-
-    // Call External::~External
-    if (fn_External_Dtor) {
-        fn_External_Dtor(self);
-    }
-
-    // Conditional free
-    if ((flags & 1) != 0) {
-        if (fn_MemFreeStatic) {
-            fn_MemFreeStatic(self);
-        }
-    }
-
-    return self;
+// [0] 0x140027820: ~TutorialGoalCount, MemFree on &1.
+Object::Base* TutorialGoalCount::DeletingDtor(unsigned flags) {
+    this->~TutorialGoalCount();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
 // TutorialGoalCount::Serialize (vtable +0x28, 0x1400df900)
 // ============================================================
-// Serializes all fields. The ExternalPtr at +0x20 is serialized via the
-// serializer's vtable (+0x98), which handles ExternalPtr serialization.
-// After loading, if version==0 (load mode), resolves the external ref at +0x30.
-void TutorialGoalCount_Serialize(void* self, void* stream) {
-    uintptr_t s = (uintptr_t)self;
-    EnsureHelpers();
+// Serializes all fields. After loading (version == 0) resolves the external
+// ref at +0x30.
+bool TutorialGoalCount::Serialize(void* stream) {
+    uintptr_t s = reinterpret_cast<uintptr_t>(this);
 
-    // Base class serialize (empty)
-    alignas(8) uint8_t ser0[32];
-    ::new (static_cast<void*>(ser0)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser0)->~Serializer();   // B.3.4 bridge
+    TutorialGoal::Serialize(stream);   // QUALIFIED: the base body (an empty Serializer scope)
 
     // Create serializer for our fields
     alignas(8) uint8_t ser[32];
     ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
 
-    // +0x20 through the UINT door. `ser + 0x08` was the READERWRITER
-    // (IO::Serializer::_readerWriter), not "the serializer object", and its
-    // vtable +0x98 is rw_vtbl::kScalarUInt — a four-byte scalar, which is what
-    // the old two-argument call form actually reached (the missing third
-    // argument is the `const char* name` every retail body ignores).
+    // +0x20 through the UINT door (rw_vtbl::kScalarUInt, readerWriter +0x98).
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<unsigned int*>(s + 0x20), nullptr);   // B.3.4 bridge  (0x98 = uint door)
 
     // Serialize targetCount (+0x24) as int
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<int*>(s + 0x24), nullptr);   // B.3.4 bridge
 
     // Serialize typeName (+0x30) as String
-    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser);
+    reinterpret_cast<System::String*>(s + 0x30)->Serialize(ser);   // B.3.1 bridge
 
     // If loading (serializer version == 0), resolve the external ref
     int version = reinterpret_cast<IO::Serializer*>(ser)->GetVersion();   // B.3.4 bridge
-    if (version == 0 && s_fn_ResolveExternalRef) {
-        s_fn_ResolveExternalRef((void*)(s + 0x30));
+    if (version == 0 && ResolveExternalRefFn()) {
+        ResolveExternalRefFn()((void*)(s + 0x30));
     }
 
     // Serialize greaterOrEqual (+0x28) as bool
     reinterpret_cast<IO::Serializer*>(ser)->Serialize(*reinterpret_cast<bool*>(s + 0x28), nullptr);   // B.3.4 bridge
 
     // Serialize elementName (+0x48) as String
-    reinterpret_cast<System::String*>(s + 0x48)->Serialize(ser);
+    reinterpret_cast<System::String*>(s + 0x48)->Serialize(ser);   // B.3.1 bridge
 
     reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    return true;
 }
 
 // ============================================================
-// TutorialGoalCount::Cleanup (vtable +0x30, 0x140027800)
+// TutorialGoalCount::Reconstruct [6] 0x140027800 / Destruct [7] 0x140001640
 // ============================================================
-// Calls ScalarDtor(self, 0) via vtable, then re-initializes via Init.
-void TutorialGoalCount_Cleanup(void* self) {
-    uintptr_t s = (uintptr_t)self;
-
-    // Call ScalarDtor(self, 0) via vtable
-    uintptr_t* vtable = *(uintptr_t**)s;
-    typedef void* (*DtorFn)(void*, uint32_t);
-    DtorFn dtor = (DtorFn)vtable[0];
-    dtor(self, 0);
-
-    // Re-initialize via TutorialGoalCount_Init (the real ctor body at 0x1400dfa60)
-    TutorialGoalCount_Init(self);
+// DeletingDtor(0), then the ctor (0x1400dfa60) on `this`.
+Object::External* TutorialGoalCount::Reconstruct() {
+    DeletingDtor(0);
+    return ::new (static_cast<void*>(this)) TutorialGoalCount();
 }
+void TutorialGoalCount::Destruct() { DeletingDtor(0); }
 
 // ============================================================
-// TutorialGoalCount::Check (vtable +0x40, 0x1400df290)
+//TutorialGoalCount::Check (vtable +0x40, 0x1400df290)
 // ============================================================
 // 11-case switch on countMode (+0x20). Counts a game metric and
 // compares against targetCount (+0x24). If greaterOrEqual (+0x28),
@@ -271,10 +244,10 @@ void TutorialGoalCount_Cleanup(void* self) {
 // from it, so with CheckPtr deleted (B.3.3 step 6D) nothing here reads it. The
 // PARAMETER stays: this is retail's signature and the caller still passes it.
 //
-// Uses int return type (bug class 7 — upper EAX bits matter).
-int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
+// Uses int return type (bug class 7 — upper EAX bits matter). File-static
+// since ENDGAME B.3.8: the member IsComplete below is the slot.
+static int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     (void)param3;
-    EnsureHelpers();
 
     uintptr_t s = (uintptr_t)self;
     uint32_t mode = *(uint32_t*)(s + 0x20);
@@ -289,10 +262,10 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     // Case 0: Count buildings of a type
     // --------------------------------------------------------
     case 0: {
-        uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+        uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (s_fn_CountBuildingsByType && worldData) {
-            count = (int)s_fn_CountBuildingsByType(worldData, typePtr);
+        if (CountBuildingsByTypeFn() && worldData) {
+            count = (int)CountBuildingsByTypeFn()(worldData, typePtr);
         }
         break;
     }
@@ -331,7 +304,7 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             uintptr_t profType = *(uintptr_t*)(localCitizen + 0x1f0);
 
             // Resolve target profession type and compare
-            uintptr_t targetProf = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+            uintptr_t targetProf = ResolveTypePtr(s, TypeIdProfessionDesc());
             if (profType == targetProf) {
                 matched++;
             }
@@ -355,10 +328,10 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     // Case 3: Profession slot count by type
     // --------------------------------------------------------
     case 3: {
-        uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+        uintptr_t typePtr = ResolveTypePtr(s, TypeIdProfessionDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (s_fn_CountProfessionsByType && worldData) {
-            count = (int)s_fn_CountProfessionsByType(worldData, typePtr);
+        if (CountProfessionsByTypeFn() && worldData) {
+            count = (int)CountProfessionsByTypeFn()(worldData, typePtr);
         }
         break;
     }
@@ -412,16 +385,16 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     // its cached capacity field (+0x30), lazily computing it if needed.
     case 6: {
         // Resolve profession type (re-resolved inside loop to match original)
-        uintptr_t profType = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+        uintptr_t profType = ResolveTypePtr(s, TypeIdProfessionDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (!worldData || !s_fn_CountProfessionsByType) break;
+        if (!worldData || !CountProfessionsByTypeFn()) break;
 
-        int profCount = (int)s_fn_CountProfessionsByType(worldData, profType);
+        int profCount = (int)CountProfessionsByTypeFn()(worldData, profType);
         int total = 0;
 
         for (int i = 0; i < profCount; i++) {
             // Re-resolve profession type each iteration (matches original)
-            uintptr_t curProfType = ResolveTypePtr(s, s_TypeId_ProfessionDesc);
+            uintptr_t curProfType = ResolveTypePtr(s, TypeIdProfessionDesc());
 
             // BST lookup at worldData+0x100 for this profession type
             // Re-read worldData each iteration (matches original)
@@ -442,8 +415,8 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             uintptr_t workplace = workplaceIBP;
             if (workplace && *(uint8_t*)(workplace + 0x50) != 0) {
                 // Get work capacity (available job slots)
-                if (s_fn_GetWorkCapacity) {
-                    total += s_fn_GetWorkCapacity(workplaceIBP);
+                if (GetWorkCapacityFn()) {
+                    total += GetWorkCapacityFn()(workplaceIBP);
                 }
             }
         }
@@ -474,7 +447,7 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
             fn_FindComponent_Building((void*)localEntity, &buildingIBP);
 
             // Resolve building description type
-            uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+            uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
 
             // CheckPtr and get building component
             uintptr_t building = buildingIBP;
@@ -553,8 +526,8 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
         if (!element) { break; }
 
         // Cast to SliderElement (checks IsDerivedFrom SliderElement type)
-        if (!s_fn_CastToSliderElement) { break; }
-        void* slider = s_fn_CastToSliderElement((void*)element);
+        if (!CastToSliderElementFn()) { break; }
+        void* slider = CastToSliderElementFn()((void*)element);
         uintptr_t sliderIBP = (uintptr_t)slider;
         if (!sliderIBP) { break; }
 
@@ -577,17 +550,17 @@ int TutorialGoalCount_Check(void* self, void* param2, void* param3) {
     // finds the BuildStateComponent and checks occupancy flags.
     case 10: {
         // Get building description type
-        uintptr_t typePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+        uintptr_t typePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
         uintptr_t worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
-        if (!worldData || !s_fn_CountBuildingsByType) break;
+        if (!worldData || !CountBuildingsByTypeFn()) break;
 
-        int buildingCount = (int)s_fn_CountBuildingsByType(worldData, typePtr);
+        int buildingCount = (int)CountBuildingsByTypeFn()(worldData, typePtr);
         int occupied = 0;
 
         for (int i = 0; i < buildingCount; i++) {
             // Look up building type in BST at worldData+0x160
             // Need to re-resolve type each iteration (original code does this)
-            uintptr_t curTypePtr = ResolveTypePtr(s, s_TypeId_BuildingDesc);
+            uintptr_t curTypePtr = ResolveTypePtr(s, TypeIdBuildingDesc());
             worldData = *(uintptr_t*)((uintptr_t)*g_pGameWorldSingleton + 0xf0);
             uintptr_t bstRoot = *(uintptr_t*)(worldData + 0x160);
             uintptr_t* node = BSTFind(bstRoot, curTypePtr);
@@ -638,76 +611,29 @@ compare:
 }
 
 // ============================================================
-// TutorialGoalCount::Init (vtable +0x48, 0x1400dfa60)
+// TutorialGoalCount::IsComplete (vtable +0x40, 0x1400df290) / Construct [9]
 // ============================================================
-// Constructor body. Called from vtable slot 9 (wrapper at 0x1400277f0
-// which null-checks self then jumps here).
-void* TutorialGoalCount_Init(void* self) {
-    if (self == nullptr) {
-        return nullptr;
-    }
-
-    uintptr_t s = (uintptr_t)self;
-
-    // Call External::External base init
-    if (fn_External_External) {
-        fn_External_External(self);
-    }
-
-    // Set vtable chain: TutorialGoal -> TutorialGoalCount
-    uintptr_t baseVtable = ResolveAddr(Module::Exe, TutorialGoalAddr::Vtable);
-    *(uintptr_t*)s = baseVtable;
-    uintptr_t myVtable = ResolveAddr(Module::Exe, TutorialGoalCountAddr::Vtable);
-    *(uintptr_t*)s = myVtable;
-
-    // Zero/init all fields
-    *(uint64_t*)(s + 0x20) = 0;          // countMode=0, targetCount=0 (packed)
-    *(uint8_t*)(s + 0x28) = 0;           // greaterOrEqual = false
-    *(uint64_t*)(s + 0x30) = 0;          // typeName = null string
-    *(int32_t*)(s + 0x38) = -1;          // sentinel
-    *(uint64_t*)(s + 0x40) = 0;          // ExternalPtr = null
-    *(uint64_t*)(s + 0x48) = 0;          // elementName = null string
-
-    return self;
+// The 11-mode switch above answers 0/1; StepExecute reads AL.
+bool TutorialGoalCount::IsComplete(void* time, void* instance) {
+    return TutorialGoalCount_Check(this, time, instance) != 0;
 }
 
-// ============================================================
-// Standalone factory + vtable — External-resource family (factory cascade).
-// Vtable @ 0x140160950 (9 slots, Object::External base), size 0x50, parent "TutorialGoal".
-// GetFileVersion (+0x18) = 5. MusicList pattern (musiclist.cpp).
-// ============================================================
-#include "Object/factory_registration.h"
-#include "address_registry.h"
+// [9] 0x1400277f0: null-check, then the ctor (0x1400dfa60) on `this`.
+Object::External* TutorialGoalCount::Construct() {
+    return ::new (static_cast<void*>(this)) TutorialGoalCount();
+}
 
-static uint32_t TutorialGoalCount_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("TutorialGoalCount");
-    return c;
+// create 0x1400277b0: MemAlloc(0x50, 8), then the ctor.
+void* TutorialGoalCount::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(TutorialGoalCount), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) TutorialGoalCount());
 }
-static int TutorialGoalCount_GetFileVersion(void*) { return 5; }
+// createInPlace 0x1400277f0.
+void* TutorialGoalCount::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) TutorialGoalCount());
+}
 
-static void* g_TutorialGoalCount_Vtable[10] = {
-    (void*)&TutorialGoalCount_Dtor,            // +0x00 Dtor
-    nullptr,                      // +0x08 (base thunk)
-    (void*)&TutorialGoalCount_GetTypeId,       // +0x10 GetTypeId
-    (void*)&TutorialGoalCount_GetFileVersion,  // +0x18 GetFileVersion
-    nullptr,                      // +0x20 (shared base thunk 0x14003a912)
-    (void*)&TutorialGoalCount_Serialize,       // +0x28 Serialize
-    (void*)&TutorialGoalCount_Cleanup,         // +0x30 Cleanup
-    nullptr,                      // +0x38 (base 0x140001640)
-    (void*)&TutorialGoalCount_Check,   // +0x40 Check (0x1400df290)
-    (void*)&TutorialGoalCount_Init,   // +0x48 Ctor/CreateInPlace (0x1400277f0 -> 0x1400dfa60)
-};
-
-extern "C" void RegisterTutorialGoalCountVtable() {
-    RegisterExeAddr(0x140160950, (uintptr_t)g_TutorialGoalCount_Vtable);
-}
-extern "C" void* TutorialGoalCount_CreateInPlace(void* mem) {
-    return TutorialGoalCount_Init(mem);
-}
-extern "C" void* TutorialGoalCount_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
-    return p ? TutorialGoalCount_Init(p) : nullptr;
-}
-REGISTER_TYPE(TutorialGoalCount, "TutorialGoal", &TutorialGoalCount_Factory, &TutorialGoalCount_CreateInPlace);
+DEFINE_EXE_VTABLE(TutorialGoalCount, "_ZTV17TutorialGoalCount")
+DEFINE_EXE_TYPE(TutorialGoalCount, "TutorialGoal")

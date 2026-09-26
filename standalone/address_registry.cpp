@@ -124,9 +124,6 @@ extern "C" {
     // Factory cascade — External-resource family (Object::External, 9-slot
     // vtables w/ GetFileVersion @ +0x18; MusicList pattern). Tutorial types.
     void RegisterTutorialVtable();
-    void RegisterTutorialGoalButtonVtable();
-    void RegisterTutorialGoalGameSpeedVtable();
-    void RegisterTutorialGoalCountVtable();
     void RegisterTutorialImageVtable();
     void RegisterTutorialImageHotKeyVtable();
     void RegisterTutorialImageInputKeyVtable();
@@ -1792,9 +1789,6 @@ static void RegisterVtablesAndTypeIds() {
 
     // Factory cascade — External-resource family (MusicList pattern). Tutorial types.
     RegisterTutorialVtable();
-    RegisterTutorialGoalButtonVtable();
-    RegisterTutorialGoalGameSpeedVtable();
-    RegisterTutorialGoalCountVtable();
     RegisterTutorialImageVtable();
     RegisterTutorialImageHotKeyVtable();
     RegisterTutorialImageInputKeyVtable();

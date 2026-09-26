@@ -158,3 +158,46 @@ UNIT_TEST(scenario_is_retail_9_slots_and_0x90) {
     CHECK_EQ(SlotOffset(&Scenario::Construct),      (uintptr_t)0x40);
     CheckShape<Scenario, Achievement::Achievement>(false);
 }
+
+// ===========================================================================
+// TutorialGoal (abstract, 9 slots) and its leaves (10 slots)
+// ===========================================================================
+#include "Tutorial/TutorialGoal.h"
+#include "Tutorial/TutorialGoalButton.h"
+#include "Tutorial/TutorialGoalCount.h"
+#include "Tutorial/TutorialGoalGameSpeed.h"
+
+namespace {
+template <typename T>
+void CheckExternalSlots() {
+    CHECK_EQ(SlotOffset(&T::DeletingDtor),   (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&T::TypeName),       (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&T::Type),           (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&T::GetFileVersion), (uintptr_t)0x18);
+    CHECK_EQ(SlotOffset(&T::Compile),        (uintptr_t)0x20);
+    CHECK_EQ(SlotOffset(&T::Serialize),      (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&T::Reconstruct),    (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&T::Destruct),       (uintptr_t)0x38);
+}
+template <typename T>
+void CheckTutorialGoalLeaf() {
+    CheckExternalSlots<T>();
+    CHECK_EQ(SlotOffset(&T::IsComplete), (uintptr_t)0x40);
+    CHECK_EQ(SlotOffset(&T::Construct),  (uintptr_t)0x48);
+    CheckShape<T, TutorialGoal>(false);
+}
+}  // namespace
+
+UNIT_TEST(tutorialgoal_family_is_retail) {
+    CheckExternalSlots<TutorialGoal>();
+    CHECK_EQ(SlotOffset(&TutorialGoal::IsComplete), (uintptr_t)0x40);
+    CheckShape<TutorialGoal, Object::External>(true);
+    CHECK_EQ(sizeof(TutorialGoal), (size_t)0x20);
+    CheckTutorialGoalLeaf<TutorialGoalButton>();
+    CheckTutorialGoalLeaf<TutorialGoalCount>();
+    CheckTutorialGoalLeaf<TutorialGoalGameSpeed>();
+    CHECK_EQ(sizeof(TutorialGoalButton),    (size_t)0x30);
+    CHECK_EQ(sizeof(TutorialGoalCount),     (size_t)0x50);
+    CHECK_EQ(sizeof(TutorialGoalGameSpeed), (size_t)0x28);
+    CHECK_EQ(offsetof(TutorialGoalCount, elementName), (size_t)0x48);
+}
