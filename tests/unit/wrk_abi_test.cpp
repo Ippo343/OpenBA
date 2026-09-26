@@ -41,6 +41,7 @@
 #include "Work/PastureWork.h"
 #include "Work/Pickup.h"
 #include "Work/PlantArea.h"
+#include "Work/PlantOrchard.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -284,6 +285,16 @@ UNIT_TEST(wrk_leaf_plantarea) {
     CHECK_EQ(offsetof(PlantArea, field_58), (size_t)0x58);
     CHECK_EQ(offsetof(PlantArea, field_60), (size_t)0x60);
     CHECK_EQ(offsetof(PlantArea, field_68), (size_t)0x68);
+}
+
+UNIT_TEST(wrk_leaf_plantorchard) {
+    WRK_LEAF_SHAPE(PlantOrchard, Work, 0x70);
+    CHECK_EQ(offsetof(PlantOrchard, field_48), (size_t)0x48);
+    CHECK_EQ(offsetof(PlantOrchard, field_50), (size_t)0x50);
+    CHECK_EQ(offsetof(PlantOrchard, field_58), (size_t)0x58);
+    CHECK_EQ(offsetof(PlantOrchard, field_60), (size_t)0x60);
+    CHECK_EQ(offsetof(PlantOrchard, field_64), (size_t)0x64);
+    CHECK_EQ(offsetof(PlantOrchard, field_68), (size_t)0x68);
 }
 
 // ===========================================================================
