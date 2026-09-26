@@ -15,9 +15,8 @@
 //   stamped by 7 sites (GameMain, NewGameDialog, SaveLoadDialog_OnCreate,
 //   MainMenuDialog, the tutorial helpers) after `??0LoaderLoop@Engine@@`.
 //
-// Slots the tree still overrides although retail inherits the base body are
-// marked `(base in retail)`: the old hand-built table's stubs, moved here
-// unchanged; the titled behaviour commit after this one makes them inherited.
+// Every other slot is INHERITED from Engine::LoaderLoop / Engine::UpdateLoop,
+// as retail's table holds the base imports.
 // ============================================================================
 
 #include <cstdint>
@@ -30,10 +29,10 @@ public:
         : Engine::LoaderLoop(nextLoop, delay) {}
 
     Engine::UpdateLoop* DeletingDtor(unsigned flags) override;   // [0] 0x140001190
-    void Startup() override;                                     // [1] (base in retail)
-    bool Update(const System::Time& time) override;              // [3] (base in retail)
-    void Draw(float interpolation) override;                     // [4] (base in retail)
-    void Load() override;                                        // [6] (base in retail)
+    // [1] retail: LoaderLoop::Startup (Loader::Load(_nextLoop)). Overridden
+    // for the standalone's two loader options only — STANDALONE DIVERGENCE,
+    // see loader_loop_stubs.cpp.
+    void Startup() override;
 
     static const void* Vtable();
 

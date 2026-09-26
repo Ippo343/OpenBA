@@ -111,8 +111,16 @@ void WaitForEngineLoader() {
 // ============================================================
 // InnerLoaderLoop (vtable @ 0x140158870) — code/Game/Game/InnerLoaderLoop.h
 // ============================================================
-// ENDGAME B.3.8 block LOOP: the old hand-built `g_innerLoaderLoopVtable[12]`'s
-// stub bodies, moved into the real class's members unchanged.
+// ENDGAME B.3.8 block LOOP: the real class. Retail overrides [0], [6], [10];
+// every other slot is Engine::LoaderLoop's / Engine::UpdateLoop's (inherited).
+//
+// [1] Startup is overridden anyway — a STANDALONE DIVERGENCE, not a port: its
+// body IS retail's LoaderLoop::Startup (Loader::Load(_nextLoop) on the one
+// static loader) plus the two standalone loader options
+// (BANISHED_SKIP_ENGINE_LOADER skips the kick; BANISHED_SYNC_ENGINE_LOADER,
+// default on, blocks until the loader thread is done — loader exclusivity,
+// LOADER_READ_SPIN.md). The transition itself is the inherited
+// LoaderLoop::Update: next loop once the loader is idle and the delay passed.
 
 Engine::UpdateLoop* InnerLoaderLoop::DeletingDtor(unsigned flags) {
     printf("[InnerLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
@@ -145,35 +153,14 @@ void InnerLoaderLoop::Startup() {
     }
 }
 
-bool InnerLoaderLoop::Update(const System::Time& time) {
-    StallDebug::Tick("InnerLL::Update");
-    // Inner_Load is a noop in standalone (PlacementTool init is done lazily
-    // from elsewhere), so there is no async work to wait for. Transition
-    // immediately to next (ShiningRockSplash). The splash itself kicks the
-    // single Runtime Engine::Loader thread for its own next-loop load.
-    Engine::UpdateLoop* next = _nextLoop;
-    void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
-    printf("[InnerLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
-           (void*)this, (const void*)&time, (void*)next, mainLoop);
-    if (next && mainLoop) {
-        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(next);    // B.3.7 bridge
-    }
-    _loadBit = -1;
-    return false;
-}
-
-void InnerLoaderLoop::Draw(float alpha) {
-    static int draws = 0;
-    if (draws++ < 3) {
-        printf("[InnerLL::Draw] self=%p alpha=%f\n", (void*)this, alpha);
-    }
-}
-
 void InnerLoaderLoop::Load() {
     printf("[InnerLL::Load] self=%p (skipping PlacementTool init)\n", (void*)this);
-    // Real impl @ 0x140001120: PlacementTool_Ctor(KeyMap, _resourceList);
-    // _loadBit = -1;
-    // We skip the first — PlacementTool isn't reimplemented standalone yet.
+    // PORT GAP (retail 0x140001120) — B38 D3.2: retail runs
+    // PlacementTool_Ctor(*0x1401c3de8, _resourceList) (0x140099db0: the
+    // cursors, UI sounds and sprite sheet into the KeyMap container) and then
+    // drops this loop's bit so those stay resident. The tree skips the first
+    // (MenuDialogLoopT::Startup loads them lazily); ~MenuDialogLoopT's
+    // _loadBit = -1 depends on this gap.
     _loadBit = -1;
 }
 
@@ -185,8 +172,8 @@ const char* InnerLoaderLoop::GetResourceFilename() {
 // ============================================================
 // GameLoaderLoop (vtable @ 0x1401588d0) — code/Game/Game/GameLoaderLoop.h
 // ============================================================
-// All slots are pure thunks in the original — same shape as inner but with
-// no exe-internal Load/GetResourceFilename overrides.
+// Retail overrides only [0]; every other slot is the base's (inherited).
+// [1] Startup: the same STANDALONE DIVERGENCE as InnerLoaderLoop's.
 
 Engine::UpdateLoop* GameLoaderLoop::DeletingDtor(unsigned flags) {
     printf("[OuterLL::Destroy] self=%p flags=%u\n", (void*)this, flags);
@@ -214,32 +201,6 @@ void GameLoaderLoop::Startup() {
     } else {
         printf("[OuterLL::Startup] WARN: skipping Loader::Load (g_pLoader null)\n");
     }
-}
-
-bool GameLoaderLoop::Update(const System::Time& time) {
-    StallDebug::Tick("OuterLL::Update");
-    // Outer_Load is a noop, transition immediately to InnerLL.
-    Engine::UpdateLoop* next = _nextLoop;
-    void* mainLoop = (g_pMainLoopSingleton ? *g_pMainLoopSingleton : nullptr);
-    printf("[OuterLL::Update] self=%p time=%p next=%p mainLoop=%p -> transition\n",
-           (void*)this, (const void*)&time, (void*)next, mainLoop);
-    if (next && mainLoop) {
-        reinterpret_cast<Engine::MainLoop*>(mainLoop)->SetNextLoop(next);    // B.3.7 bridge
-    }
-    _loadBit = -1;
-    return false;
-}
-
-void GameLoaderLoop::Draw(float alpha) {
-    static int draws = 0;
-    if (draws++ < 3) {
-        printf("[OuterLL::Draw] self=%p alpha=%f\n", (void*)this, alpha);
-    }
-}
-
-void GameLoaderLoop::Load() {
-    printf("[OuterLL::Load] self=%p\n", (void*)this);
-    _loadBit = -1;
 }
 
 // B38_RULES D5: `X::Vtable()` is the COMPILER's table. The retail addresses
