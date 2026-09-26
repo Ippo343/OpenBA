@@ -25,7 +25,13 @@
 #include "Dialog/BuildRequirementUI.h"
 #include "Dialog/BuildUI.h"
 #include "Dialog/CemeteryUI.h"
+#include "Dialog/CitizenUI.h"
 #include "Dialog/ConsumeProduceUI.h"
+#include "Dialog/ControlUI.h"
+#include "Dialog/DebugUI.h"
+#include "Dialog/DestroyUI.h"
+#include "Dialog/EntityUI.h"
+#include "Dialog/EventLogUI.h"
 #include "Dialog/HelpUI.h"
 #include "Dialog/HotKeyToolTipUI.h"
 #include "Dialog/ImmigrationUI.h"
@@ -33,10 +39,19 @@
 #include "Dialog/PageToggleUI.h"
 #include "Dialog/ProductionUI.h"
 #include "Dialog/ProfessionUI.h"
+#include "Dialog/RadiusUI.h"
+#include "Dialog/ResidenceUI.h"
 #include "Dialog/ResourceLimitUI.h"
+#include "Dialog/StatusBarUI.h"
+#include "Dialog/StatusIconUI.h"
+#include "Dialog/StorageCapacityUI.h"
+#include "Dialog/StorageUI.h"
 #include "Dialog/TitleDescToolTipUI.h"
 #include "Dialog/ToolUI.h"
+#include "Dialog/TownHallUI.h"
 #include "Dialog/TradeUI.h"
+#include "Dialog/UpgradeUI.h"
+#include "Dialog/WorkPlaceUI.h"
 // @@PANEL-INCLUDES-END
 
 #include <cstdint>
@@ -149,11 +164,62 @@ UNIT_TEST(pnl_CemeteryUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&CemeteryUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14005ef50
 }
 
+UNIT_TEST(pnl_CitizenUI_layout_and_slots) {
+    CheckPanelShape<CitizenUI>((size_t)0xe8);
+    CHECK_EQ(SlotOffset(&CitizenUI::OnCreated), (uintptr_t)0x20);   // 0x1400651a0
+    CHECK_EQ(SlotOffset(&CitizenUI::OnClosed), (uintptr_t)0x30);   // 0x140065130
+    CHECK_EQ(SlotOffset(&CitizenUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140064ae0
+    CHECK_EQ(SlotOffset(&CitizenUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&CitizenUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400650f0
+}
+
 UNIT_TEST(pnl_ConsumeProduceUI_layout_and_slots) {
     CheckPanelShape<ConsumeProduceUI>((size_t)0x40);
     CHECK_EQ(SlotOffset(&ConsumeProduceUI::OnCreated), (uintptr_t)0x20);   // 0x14005f3d0
     CHECK_EQ(SlotOffset(&ConsumeProduceUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14005f1f0
     CHECK_EQ(SlotOffset(&ConsumeProduceUI::OnElementEvent), (uintptr_t)0x48);   // 0x14005f330
+}
+
+UNIT_TEST(pnl_ControlUI_layout_and_slots) {
+    CheckPanelShape<ControlUI>((size_t)0x40);
+    CHECK_EQ(SlotOffset(&ControlUI::OnCreated), (uintptr_t)0x20);   // 0x14005f9b0
+    CHECK_EQ(SlotOffset(&ControlUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14005f870
+    CHECK_EQ(SlotOffset(&ControlUI::OnElementEvent), (uintptr_t)0x48);   // 0x14005f7f0
+}
+
+UNIT_TEST(pnl_DebugUI_layout_and_slots) {
+    CheckPanelShape<DebugUI>((size_t)0x130);
+    CHECK_EQ(SlotOffset(&DebugUI::OnCreated), (uintptr_t)0x20);   // 0x1400619e0
+    CHECK_EQ(SlotOffset(&DebugUI::OnClosed), (uintptr_t)0x30);   // 0x1400645f0
+    CHECK_EQ(SlotOffset(&DebugUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140061280
+    CHECK_EQ(SlotOffset(&DebugUI::OnUpdate), (uintptr_t)0x40);   // 0x1400610c0
+    CHECK_EQ(SlotOffset(&DebugUI::OnElementEvent), (uintptr_t)0x48);   // 0x140060bc0
+}
+
+UNIT_TEST(pnl_DestroyUI_layout_and_slots) {
+    CheckPanelShape<DestroyUI>((size_t)0x78);
+    CHECK_EQ(SlotOffset(&DestroyUI::OnCreated), (uintptr_t)0x20);   // 0x140066150
+    CHECK_EQ(SlotOffset(&DestroyUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140065b00
+    CHECK_EQ(SlotOffset(&DestroyUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&DestroyUI::OnElementEvent), (uintptr_t)0x48);   // 0x140066080
+}
+
+UNIT_TEST(pnl_EntityUI_layout_and_slots) {
+    CheckPanelShape<EntityUI>((size_t)0x48);
+    CHECK_EQ(SlotOffset(&EntityUI::Persist), (uintptr_t)0x18);   // 0x1400672a0
+    CHECK_EQ(SlotOffset(&EntityUI::OnCreated), (uintptr_t)0x20);   // 0x1400670d0
+    CHECK_EQ(SlotOffset(&EntityUI::OnClosed), (uintptr_t)0x30);   // 0x140067090
+    CHECK_EQ(SlotOffset(&EntityUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140066d80
+    CHECK_EQ(SlotOffset(&EntityUI::OnUpdate), (uintptr_t)0x40);   // 0x140066ad0
+    CHECK_EQ(SlotOffset(&EntityUI::OnElementEvent), (uintptr_t)0x48);   // 0x140067050
+}
+
+UNIT_TEST(pnl_EventLogUI_layout_and_slots) {
+    CheckPanelShape<EventLogUI>((size_t)0x80);
+    CHECK_EQ(SlotOffset(&EventLogUI::OnOpened), (uintptr_t)0x28);   // 0x140067640
+    CHECK_EQ(SlotOffset(&EventLogUI::OnClosed), (uintptr_t)0x30);   // 0x140067630
+    CHECK_EQ(SlotOffset(&EventLogUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140067440
+    CHECK_EQ(SlotOffset(&EventLogUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400675d0
 }
 
 UNIT_TEST(pnl_HelpUI_layout_and_slots) {
@@ -206,11 +272,59 @@ UNIT_TEST(pnl_ProfessionUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&ProfessionUI::OnElementEvent), (uintptr_t)0x48);   // 0x140076c10
 }
 
+UNIT_TEST(pnl_RadiusUI_layout_and_slots) {
+    CheckPanelShape<RadiusUI>((size_t)0x38);
+    CHECK_EQ(SlotOffset(&RadiusUI::OnOpened), (uintptr_t)0x28);   // 0x140077650
+    CHECK_EQ(SlotOffset(&RadiusUI::OnClosed), (uintptr_t)0x30);   // 0x140077600
+}
+
+UNIT_TEST(pnl_ResidenceUI_layout_and_slots) {
+    CheckPanelShape<ResidenceUI>((size_t)0x40);
+    CHECK_EQ(SlotOffset(&ResidenceUI::Persist), (uintptr_t)0x18);   // 0x1400b5db0
+    CHECK_EQ(SlotOffset(&ResidenceUI::OnCreated), (uintptr_t)0x20);   // 0x1400b5850
+    CHECK_EQ(SlotOffset(&ResidenceUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400b51f0
+    CHECK_EQ(SlotOffset(&ResidenceUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&ResidenceUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400b5820
+}
+
 UNIT_TEST(pnl_ResourceLimitUI_layout_and_slots) {
     CheckPanelShape<ResourceLimitUI>((size_t)0x40);
     CHECK_EQ(SlotOffset(&ResourceLimitUI::OnCreated), (uintptr_t)0x20);   // 0x140077970
     CHECK_EQ(SlotOffset(&ResourceLimitUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400778d0
     CHECK_EQ(SlotOffset(&ResourceLimitUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400777e0
+}
+
+UNIT_TEST(pnl_StatusBarUI_layout_and_slots) {
+    CheckPanelShape<StatusBarUI>((size_t)0x1d0);
+    CHECK_EQ(SlotOffset(&StatusBarUI::OnCreated), (uintptr_t)0x20);   // standalone deviation
+    CHECK_EQ(SlotOffset(&StatusBarUI::OnOpened), (uintptr_t)0x28);   // 0x14007a3d0
+    CHECK_EQ(SlotOffset(&StatusBarUI::OnClosed), (uintptr_t)0x30);   // 0x14007a3c0
+    CHECK_EQ(SlotOffset(&StatusBarUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400798d0
+    CHECK_EQ(SlotOffset(&StatusBarUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&StatusBarUI::OnElementEvent), (uintptr_t)0x48);   // 0x14007a3a0
+}
+
+UNIT_TEST(pnl_StatusIconUI_layout_and_slots) {
+    CheckPanelShape<StatusIconUI>((size_t)0x40);
+    CHECK_EQ(SlotOffset(&StatusIconUI::OnCreated), (uintptr_t)0x20);   // 0x14007b270
+    CHECK_EQ(SlotOffset(&StatusIconUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14007b0a0
+    CHECK_EQ(SlotOffset(&StatusIconUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+}
+
+UNIT_TEST(pnl_StorageCapacityUI_layout_and_slots) {
+    CheckPanelShape<StorageCapacityUI>((size_t)0x38);
+    CHECK_EQ(SlotOffset(&StorageCapacityUI::Persist), (uintptr_t)0x18);   // 0x14007b6b0
+    CHECK_EQ(SlotOffset(&StorageCapacityUI::OnCreated), (uintptr_t)0x20);   // 0x14007b600
+    CHECK_EQ(SlotOffset(&StorageCapacityUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14007b4d0
+    CHECK_EQ(SlotOffset(&StorageCapacityUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+}
+
+UNIT_TEST(pnl_StorageUI_layout_and_slots) {
+    CheckPanelShape<StorageUI>((size_t)0x40);
+    CHECK_EQ(SlotOffset(&StorageUI::Persist), (uintptr_t)0x18);   // 0x1400b8ca0
+    CHECK_EQ(SlotOffset(&StorageUI::OnCreated), (uintptr_t)0x20);   // 0x1400b8820
+    CHECK_EQ(SlotOffset(&StorageUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x1400b8450
+    CHECK_EQ(SlotOffset(&StorageUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
 }
 
 UNIT_TEST(pnl_TitleDescToolTipUI_layout_and_slots) {
@@ -227,6 +341,15 @@ UNIT_TEST(pnl_ToolUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&ToolUI::OnElementEvent), (uintptr_t)0x48);   // 0x14007bc30
 }
 
+UNIT_TEST(pnl_TownHallUI_layout_and_slots) {
+    CheckPanelShape<TownHallUI>((size_t)0x1e8);
+    CHECK_EQ(SlotOffset(&TownHallUI::OnCreated), (uintptr_t)0x20);   // 0x140081000
+    CHECK_EQ(SlotOffset(&TownHallUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x14007d550
+    CHECK_EQ(SlotOffset(&TownHallUI::OnUpdate), (uintptr_t)0x40);   // 0x14007e550
+    CHECK_EQ(SlotOffset(&TownHallUI::OnElementEvent), (uintptr_t)0x48);   // 0x14007c180
+    CHECK_EQ(SlotOffset(&TownHallUI::OnSerializeSettings), (uintptr_t)0x50);   // 0x140080db0
+}
+
 UNIT_TEST(pnl_TradeUI_layout_and_slots) {
     CheckPanelShape<TradeUI>((size_t)0x148);
     CHECK_EQ(SlotOffset(&TradeUI::OnCreated), (uintptr_t)0x20);   // 0x140084dd0
@@ -236,6 +359,22 @@ UNIT_TEST(pnl_TradeUI_layout_and_slots) {
     CHECK_EQ(SlotOffset(&TradeUI::OnUpdate), (uintptr_t)0x40);   // 0x1400827b0
     CHECK_EQ(SlotOffset(&TradeUI::OnElementEvent), (uintptr_t)0x48);   // 0x140081f20
     CHECK_EQ(SlotOffset(&TradeUI::OnSerializeSettings), (uintptr_t)0x50);   // 0x1400868c0
+}
+
+UNIT_TEST(pnl_UpgradeUI_layout_and_slots) {
+    CheckPanelShape<UpgradeUI>((size_t)0x38);
+    CHECK_EQ(SlotOffset(&UpgradeUI::OnCreated), (uintptr_t)0x20);   // 0x140086d90
+    CHECK_EQ(SlotOffset(&UpgradeUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140086d80
+    CHECK_EQ(SlotOffset(&UpgradeUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&UpgradeUI::OnElementEvent), (uintptr_t)0x48);   // 0x140086c90
+}
+
+UNIT_TEST(pnl_WorkPlaceUI_layout_and_slots) {
+    CheckPanelShape<WorkPlaceUI>((size_t)0x68);
+    CHECK_EQ(SlotOffset(&WorkPlaceUI::OnCreated), (uintptr_t)0x20);   // 0x140087940
+    CHECK_EQ(SlotOffset(&WorkPlaceUI::OnUpdateLayout), (uintptr_t)0x38);   // 0x140087080
+    CHECK_EQ(SlotOffset(&WorkPlaceUI::OnUpdate), (uintptr_t)0x40);   // standalone deviation
+    CHECK_EQ(SlotOffset(&WorkPlaceUI::OnElementEvent), (uintptr_t)0x48);   // 0x1400877e0
 }
 // @@PANEL-TESTS-END
 

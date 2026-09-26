@@ -164,7 +164,6 @@ void EntityUI_SetEditMode_Impl(void* playerController, uint64_t mode)
 {
     uintptr_t pc = (uintptr_t)playerController;
 
-
     // Forward to the single implementation. int64_t vs uint64_t is a spelling
     // difference only - the field at +0x20 is one 8-byte slot either way.
     Toolbar_ShowGroup_Impl(playerController, (int64_t)mode);
@@ -491,7 +490,6 @@ void EntityUI_Slot7(EntityUI* self) {
         }
     }
 
-
     void* pagesElemFinal = *(void**)(s + 0x40);
     if (pagesElemFinal) {
         reinterpret_cast<UI::PageElement*>(pagesElemFinal)->SetActivePage(pageIdx);  // B.3.6 bridge
@@ -783,26 +781,8 @@ void EntityUI_Slot9(EntityUI* self, void* param2, int msg, int id) {
 #include <cstddef>
 #include <cstdlib>
 #include <cstdio>
-#include "dialog_controller_vtable.h"
 
 namespace entityui_sa {
-
-constexpr int kSlots = 48;
-static void* g_vt[kSlots];
-
-void StubNop(void*, ...) {}
-
-uint32_t GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("EntityUI");
-    return c;
-}
-void* Dtor(void* self, uint32_t flags) {
-    if (!self) return self;
-    *reinterpret_cast<void**>(self) = g_vt;
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
-}
 
 void EnsureGlobals() {
     static uint32_t s_ce = 0, s_tool = 0, s_uidesc = 0;
@@ -894,39 +874,58 @@ void W_Slot9(void* self, void* p2, int msg, int id, int /*mx*/, int /*my*/) {
     if (!SA_DialogEntityAlive(self)) return;
     EntityUI_Slot9(reinterpret_cast<EntityUI*>(self), p2, msg, id);
 }
-
-struct Init {
-    Init() {
-        for (int i = 0; i < kSlots; ++i) g_vt[i] = reinterpret_cast<void*>(&StubNop);
-        g_vt[0] = reinterpret_cast<void*>(&Dtor);
-        g_vt[2] = reinterpret_cast<void*>(&GetTypeId);
-        g_vt[4] = reinterpret_cast<void*>(&W_Slot4);
-        g_vt[6] = reinterpret_cast<void*>(&W_Slot6);
-        g_vt[7] = reinterpret_cast<void*>(&W_Slot7);
-        g_vt[8] = reinterpret_cast<void*>(&W_OnUpdate);
-        g_vt[9] = reinterpret_cast<void*>(&W_Slot9);
-    }
-} g_init;
-
-// Wave 10D lane VTFID: retail's EntityUI vtable INHERITS the base
-// entry in the slots it does not override; ours held a file-local
-// no-op. Fill exactly those slots (mask read from the exe), and only
-// where this file has not deliberately overridden them.
-DLGCTRL_VTABLE_INHERIT(g_vt, kSlots, "EntityUI", &StubNop);
-
-void Zero(void* p) { for (size_t o = 0; o < (size_t)0x48; o += 8) *reinterpret_cast<uint64_t*>((char*)p + o) = 0; }
-void* Factory() {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, (uint64_t)0x48, 8);
-    if (!p) return nullptr;
-    Zero(p); *reinterpret_cast<void**>(p) = g_vt; return p;
-}
-void* InPlace(void* m) { if (!m) return nullptr; Zero(m); *reinterpret_cast<void**>(m) = g_vt; return m; }
-
 }  // namespace entityui_sa
 
-REGISTER_TYPE(EntityUI, "UI::DialogController",
-              &entityui_sa::Factory, &entityui_sa::InPlace);
+// [4] 0x1400670d0
+void EntityUI::OnCreated() {
+    entityui_sa::W_Slot4(this);
+}
+
+// [6] 0x140067090
+void EntityUI::OnClosed() {
+    entityui_sa::W_Slot6(this);
+}
+
+// [7] 0x140066d80
+void EntityUI::OnUpdateLayout() {
+    entityui_sa::W_Slot7(this);
+}
+
+// [8] 0x140066ad0
+void EntityUI::OnUpdate(const System::Time& time) {
+    entityui_sa::W_OnUpdate(this, const_cast<System::Time*>(&time));
+}
+
+// [9] 0x140067050
+void EntityUI::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t a, int32_t b,
+                              int32_t c, int32_t d, int32_t /*e*/, void* /*userData*/) {
+    entityui_sa::W_Slot9(this, element, a, b, c, d);
+}
+
+// [0] 0x1400112d0: ~EntityUI (restamp, ~DialogController, ~Internal — the
+// compiler's chain), MemFree on &1.
+Object::Base* EntityUI::DeletingDtor(unsigned flags) {
+    this->~EntityUI();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140011270: MemAlloc(0x48, 8), then the ctor (DialogController ->
+// Internal: AddObject, the compiler's stamps, the field initialisers).
+void* EntityUI::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(EntityUI), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) EntityUI());
+}
+// Retail's createInPlace does not build a controller in place (B8-13); the
+// tree's in-place entry did, and that is kept.
+void* EntityUI::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) EntityUI());
+}
+
+DEFINE_EXE_VTABLE(EntityUI, "_ZTV8EntityUI")
+DEFINE_EXE_TYPE(EntityUI, "UI::DialogController")
 
 // (original comment header retained below)
 // ============================================================

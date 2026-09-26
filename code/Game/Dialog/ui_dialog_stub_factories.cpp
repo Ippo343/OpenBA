@@ -33,7 +33,6 @@
 // code/Game/Dialog/<type>.cpp; this file only supplies the standalone
 // construction/registration the exe ctors used to provide.
 
-
 #include "Object/factory_registration.h"
 #include "options.h"
 #include "engine_funcs.h"
@@ -268,11 +267,9 @@ DEFINE_EXE_TYPE(HotKeyToolTipUI, "UI::DialogController")
 // Every other slot is one of the shared 0x14003a9xx no-op thunks, so wiring
 // these two is full behavioural coverage for this class.
 
-
 extern void ConsumeProduceUI_Slot4(ConsumeProduceUI* self);
 extern void ConsumeProduceUI_Slot7(ConsumeProduceUI* self);
 extern void ConsumeProduceUI_Slot9(ConsumeProduceUI* self, uint64_t p2, int p3, int p4);
-
 
 extern void CemeteryUI_Slot4(CemeteryUI* self);
 extern void CemeteryUI_Slot7(CemeteryUI* self);
