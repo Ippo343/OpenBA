@@ -12,7 +12,6 @@
 #include "Goal/TimeGoalInstance.h"
 #include "Goal/TimeGoal.h"
 #include "engine_funcs.h"
-#include "resolve.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "object/TypeInfo.h"      // Object::Base::IsDerivedFrom
 #include "Object/factory_registration.h"
@@ -98,12 +97,11 @@ Achievement::Goal::GoalState TimeGoalInstance::CheckGoalState() const {
     const Object::Base* goal = reinterpret_cast<const Object::Base*>(_goal._ptr);
 
     // Cast to TimeGoal via IsDerivedFrom (import slot 0x140152a98) against the
-    // id in TypeInfo_TimeGoal (dword 0x1401c62e8). That cell is NOT registered
-    // in the tree, so the resolve answers 0 and the cast is skipped (kept as the
-    // tree had it; the fix is its own commit).
+    // id in TypeInfo_TimeGoal (dword 0x1401c62e8 = TimeGoal's own record, i.e.
+    // TimeGoal::TypeId()). The tree used to ResolveAddr that cell, which is
+    // not registered, so it answered 0 and the goal could never be met.
     const TimeGoal* timeGoal = nullptr;
-    const uint32_t* tidTimeGoal = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c62e8));
-    if (goal && tidTimeGoal && goal->IsDerivedFrom(*tidTimeGoal)) {
+    if (goal && goal->IsDerivedFrom(TimeGoal::TypeId())) {   // the tree's null test, kept
         timeGoal = static_cast<const TimeGoal*>(goal);
     }
 
