@@ -10,6 +10,7 @@
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
+#include "save/SaveLoad.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 
 // Captured by NewGameDialog_Ctor_Standalone (code/Game/Dialog/newgamedialog.cpp).
 extern "C" {
@@ -416,9 +417,9 @@ void TickMenu(void* menuDLT) {
         // Pick the save whose SaveInfo name (+0x38 String) matches s_loadName;
         // fall back to index 0.
         int pick = 0;
-        if (g_pSaveLoadSingleton && *g_pSaveLoadSingleton && fn_SaveLoad_GetSaveInfo) {
+        if (g_pSaveLoadSingleton && *g_pSaveLoadSingleton) {
             for (int i = 0; i < saveCount; i++) {
-                void* info = fn_SaveLoad_GetSaveInfo(*g_pSaveLoadSingleton, i);
+                const void* info = &reinterpret_cast<const Save::SaveLoad*>(*g_pSaveLoadSingleton)->GetSaveInfo(i);  // B.3.7 bridge
                 const char* nm = info ? *reinterpret_cast<const char* const*>(
                     reinterpret_cast<uintptr_t>(info) + 0x38) : nullptr;
                 if (nm && std::strcmp(nm, s_loadName) == 0) { pick = i; break; }

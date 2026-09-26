@@ -20,6 +20,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <windows.h>
+#include "save/SaveLoad.h"   // -Iruntime/types: ENDGAME B.3.7 callers (K5)
 
 // code/Game/Dialog/dialog_exe_helpers.cpp — ported retail autosave trigger.
 void Dialog_AutoSaveHandler(void* self, void* p2, int p3, int p4);
@@ -103,7 +104,7 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
                 (void*)fn_SaveLoad_GetOperation);
         fflush(stderr);
     }
-    if (!s_pSingleton || !*s_pSingleton || !fn_SaveLoad_GetOperation) return;
+    if (!s_pSingleton || !*s_pSingleton) return;
     void* saveLoad = *s_pSingleton;
 
     if (s_state == 0) {
@@ -119,7 +120,7 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
         fflush(stderr);
         Dialog_AutoSaveHandler(&fake, nullptr, 0x13, 0);
 
-        int op = fn_SaveLoad_GetOperation(saveLoad);
+        int op = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
         fprintf(stderr, "[SaveTest] handler returned; GetOperation()=%d "
                         "(4=save expected; 0=trigger was refused)\n", op);
         fflush(stderr);
@@ -129,7 +130,7 @@ extern "C" void SaveLoadHarness_Tick(void* gul, int frameNum) {
         return;
     }
 
-    int op = fn_SaveLoad_GetOperation(saveLoad);
+    int op = reinterpret_cast<const Save::SaveLoad*>(saveLoad)->GetOperation();  // B.3.7 bridge
     if (op != s_lastOp) {
         fprintf(stderr, "[SaveTest] frame %d: operation %d -> %d\n",
                 frameNum, s_lastOp, op);
