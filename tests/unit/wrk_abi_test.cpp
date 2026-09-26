@@ -37,6 +37,7 @@
 #include "Work/HerbalistWork.h"
 #include "Work/HuntWork.h"
 #include "Work/LocationWork.h"
+#include "Work/MarketWork.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -252,6 +253,12 @@ UNIT_TEST(wrk_leaf_huntwork) {
 UNIT_TEST(wrk_leaf_locationwork) {
     WRK_LEAF_SHAPE(LocationWork, Work, 0x50);
     CHECK_EQ(offsetof(LocationWork, _field48), (size_t)0x48);
+}
+
+UNIT_TEST(wrk_leaf_marketwork) {
+    WRK_LEAF_SHAPE(MarketWork, Work, 0x58);
+    CHECK_EQ(offsetof(MarketWork, _field48), (size_t)0x48);
+    CHECK_EQ(offsetof(MarketWork, _field50), (size_t)0x50);
 }
 
 // ===========================================================================

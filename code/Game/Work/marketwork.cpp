@@ -22,6 +22,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
+#include "Work/MarketWork.h"
 #include "Work/marketwork_funcs.h"
 #include "engine_funcs.h"
 #include "system/Filename.h"
@@ -84,7 +85,6 @@ typedef void  (*MW_Internal_Dtor_t)(void* self);
 // Slot4 original exe function (called directly for now)
 typedef int   (*MW_Slot4_Original_t)(void* self, void* param2, void* param3);
 
-static MW_Work_Serialize_t          s_fn_Work_Serialize = nullptr;
 static MW_BST_Serialize_Simple_t    s_fn_BST_Serialize_Simple = nullptr;
 static MW_MarketBST_Serialize_t     s_fn_MarketBST_Serialize = nullptr;
 static MW_MarketBST_InsertData_t    s_fn_MarketBST_InsertData = nullptr;
@@ -107,8 +107,6 @@ static MW_MemFreeStatic_t           s_fn_MemFreeStatic = nullptr;
 // This was previously 0x1401612e0, which is not a vtable at all: it is an INTERIOR
 // address of FireWork's vtable (starts 0x1401612a0, 13 slots, ends 0x140161308 at the
 // "FishingWork" name string) — i.e. slot 8. Ghidra reports ZERO xrefs to 0x1401612e0.
-static void** s_vtable_MarketWork = nullptr;   // 0x140161710
-static void** s_vtable_Work = nullptr;          // 0x140161a80
 
 static bool s_market_funcs_resolved = false;
 
@@ -119,8 +117,6 @@ bool MarketWork_ResolveFuncs() {
     if (s_market_funcs_resolved) return true;
 
     // Direct exe function addresses
-    s_fn_Work_Serialize = reinterpret_cast<MW_Work_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1400f7400));
     s_fn_BST_Serialize_Simple = reinterpret_cast<MW_BST_Serialize_Simple_t>(
         ResolveAddr(Module::Exe, 0x1400296b0));  // verified from original disasm
     s_fn_ValidateEntity = reinterpret_cast<MW_ValidateEntity_t>(
@@ -173,14 +169,9 @@ bool MarketWork_ResolveFuncs() {
     s_fn_MemFreeStatic = reinterpret_cast<MW_MemFreeStatic_t>(fn_MemFreeStatic);
 
     // Vtable pointers for dtor
-    s_vtable_MarketWork = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161710));
-    s_vtable_Work = reinterpret_cast<void**>(
-        ResolveAddr(Module::Exe, 0x140161a80));
 
     // Verify critical pointers
-    bool ok = s_fn_Work_Serialize &&
-              s_fn_BST_Serialize_Simple &&
+    bool ok = s_fn_BST_Serialize_Simple &&
               s_fn_MarketBST_Serialize &&
               s_fn_MarketBST_InsertData &&
               s_fn_MarketBST_EraseByKey &&
@@ -189,15 +180,13 @@ bool MarketWork_ResolveFuncs() {
               s_fn_ValidateEntity &&
               s_fn_CancelAllWork &&
               s_fn_FindSubEntity &&
-              s_fn_SimpleBSTCleanup &&
-              s_vtable_MarketWork && s_vtable_Work;
+              s_fn_SimpleBSTCleanup;
 
     s_market_funcs_resolved = ok;
 
 #ifdef _DEBUG
     printf("[MarketWork] ResolveFuncs: %s\n", ok ? "OK" : "FAILED");
     if (!ok) {
-        if (!s_fn_Work_Serialize) printf("  MISSING: Work_Serialize\n");
         if (!s_fn_BST_Serialize_Simple) printf("  MISSING: BST_Serialize_Simple\n");
         if (!s_fn_MarketBST_Serialize) printf("  MISSING: MarketBST_Serialize\n");
         if (!s_fn_MarketBST_InsertData) printf("  MISSING: MarketBST_InsertData\n");
@@ -208,8 +197,6 @@ bool MarketWork_ResolveFuncs() {
         if (!s_fn_CancelAllWork) printf("  MISSING: CancelAllWork\n");
         if (!s_fn_FindSubEntity) printf("  MISSING: FindSubEntity\n");
         if (!s_fn_SimpleBSTCleanup) printf("  MISSING: SimpleBSTCleanup\n");
-        if (!s_vtable_MarketWork) printf("  MISSING: vtable_MarketWork\n");
-        if (!s_vtable_Work) printf("  MISSING: vtable_Work (0x140161a80)\n");
     }
 #endif
 
@@ -226,8 +213,8 @@ bool MarketWork_ResolveFuncs() {
 // the old comment here said "Add entity to BST" purely because sub_aaa0 was
 // mis-named "insert". Verified 2026-08-22 by decompiling 0x1400eff60.
 //
-bool MarketWork_Slot6_Impl(MarketWork* self, void* param2) {
-    s_fn_MarketBST_EraseByKey((void*)((uintptr_t)self + 0x48), param2);
+int MarketWork::OnComplete(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_MarketBST_EraseByKey((void*)((uintptr_t)this + 0x48), param2);
     return false;
 }
 
@@ -244,8 +231,8 @@ bool MarketWork_Slot6_Impl(MarketWork* self, void* param2) {
 // off a key would have unlinked garbage and corrupted the tree.
 // Verified by decompiling 0x1400eff50 and 0x1400eff60 — both call 0x14002aaa0.
 //
-int MarketWork_Slot7_Impl(MarketWork* self, void* param2) {
-    s_fn_MarketBST_EraseByKey((void*)((uintptr_t)self + 0x48), param2);
+int MarketWork::OnCancel(void* param2, void* /*arg2*/, int /*arg3*/) {
+    s_fn_MarketBST_EraseByKey((void*)((uintptr_t)this + 0x48), param2);
     return 0;
 }
 
@@ -260,8 +247,8 @@ int MarketWork_Slot7_Impl(MarketWork* self, void* param2) {
 // - Left child at node+0x20 (not +0x10)
 // - node[4] in longlong* terms = byte offset 0x20
 //
-int MarketWork_Slot8_Impl(MarketWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
+int MarketWork::Cleanup() {
+    uintptr_t selfAddr = (uintptr_t)this;
     int count = *(int*)(selfAddr + 0x50);
 
     while (count > 0) {
@@ -299,9 +286,9 @@ int MarketWork_Slot8_Impl(MarketWork* self) {
 // - Parent:      +0x18 (not +0x08)
 // Uses MarketWork_sub_ac40 for BST removal (not CitizenAI_impl_a6e0).
 //
-bool MarketWork_Slot9_Impl(MarketWork* self, void* param2) {
-    uintptr_t selfAddr = (uintptr_t)self;
-    void** bstRootPtr = (void**)((uintptr_t)self + 0x48);
+int MarketWork::Validate(void* param2) {
+    uintptr_t selfAddr = (uintptr_t)this;
+    void** bstRootPtr = (void**)((uintptr_t)this + 0x48);
 
     void* root = *bstRootPtr;
     uintptr_t* removeArr = nullptr;
@@ -419,8 +406,8 @@ bool MarketWork_Slot9_Impl(MarketWork* self, void* param2) {
 // Returns entity from this->_field10's sub-object at +0x48.
 // IDENTICAL pattern to other Work classes.
 //
-void* MarketWork_Slot10_Impl(MarketWork* self, void* outPtr) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void* MarketWork::GetTarget(void* outPtr) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // CheckPtr on self+0x10
     uintptr_t entityRef = *(uintptr_t*)(selfAddr + 0x10);
@@ -453,11 +440,11 @@ void* MarketWork_Slot10_Impl(MarketWork* self, void* outPtr) {
 // Version 1+ (new format):
 //   Call MarketWork_helper_b290 directly on self+0x48.
 //
-void MarketWork_Serialize_Impl(MarketWork* self, void* stream) {
-    uintptr_t selfAddr = (uintptr_t)self;
+void MarketWork::Persist(void* stream) {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Call Work::Serialize base
-    s_fn_Work_Serialize(self, stream);
+    Work::Persist(stream);   // 0x1400f7400, a direct call in retail — QUALIFIED here
 
     // Create serializer with version=1
     alignas(8) uint8_t serializer[24] = {0};
@@ -894,13 +881,13 @@ static void MW_Stage2Teardown(int64_t* treeDesc, MW_ArrayDesc* records) {
 // ---- STAGE 1 (retail 0x1400eff80 .. 0x1400f021f) --------------------------
 // Returns 1 at two sites and 2 at one site, all faithful. Falls through to 0
 // ("keep walking") where stage 2 will begin.
-int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
+int MarketWork::Execute(void* citizenHolder, void* ctx, uint64_t /*arg3*/) {
     (void)ctx;   // sched+0x130; retail slot 4 never reads param_3 -- it is only a
                  // decompiler artefact of a caller-saved stack slot reused as a temp.
 
     MarketWork_Slot4_ResolveFuncs();
 
-    const uintptr_t a = reinterpret_cast<uintptr_t>(self);
+    const uintptr_t a = reinterpret_cast<uintptr_t>(this);
 
     // --- 0x1400effd0..0x1400efffc: hauler-slot cap ------------------------
     // EDI = MarketWork+0x50, the BST node count = citizens already claimed by
@@ -1401,8 +1388,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
             const int pathTypeAfter = *reinterpret_cast<int32_t*>(a + 0x20);
             const uintptr_t citizen3 = *reinterpret_cast<uintptr_t*>(citizenHolder);
             MW_GetTargetSlot10_t getTarget = *reinterpret_cast<MW_GetTargetSlot10_t*>(
-                *reinterpret_cast<uintptr_t*>(self) + 0x50);
-            int64_t* tgt = reinterpret_cast<int64_t*>(getTarget(self, &pathSrc));
+                *reinterpret_cast<uintptr_t*>(this) + 0x50);
+            int64_t* tgt = reinterpret_cast<int64_t*>(getTarget(this, &pathSrc));
             const int64_t tgtVal = *tgt;               // 0x1400f0e03 MOV RAX,[RAX]
             *reinterpret_cast<int32_t*>(citizen3 + 0x30)   = pathTypeAfter;
             *reinterpret_cast<uint32_t*>(citizen3 + 0x54) |= 4;
@@ -1756,8 +1743,8 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 
             const uintptr_t citizen5 = *reinterpret_cast<uintptr_t*>(citizenHolder);
             MW_GetTargetSlot10_t getTarget2 = *reinterpret_cast<MW_GetTargetSlot10_t*>(
-                *reinterpret_cast<uintptr_t*>(self) + 0x50);
-            int64_t* tgt2 = reinterpret_cast<int64_t*>(getTarget2(self, pathWinner));
+                *reinterpret_cast<uintptr_t*>(this) + 0x50);
+            int64_t* tgt2 = reinterpret_cast<int64_t*>(getTarget2(this, pathWinner));
             const int64_t tgtVal2 = *tgt2;
             *reinterpret_cast<int32_t*>(citizen5 + 0x30)   = pathType2;
             *reinterpret_cast<uint32_t*>(citizen5 + 0x54) |= 4;
@@ -1803,11 +1790,9 @@ int MarketWork_Execute_Impl(MarketWork* self, void* citizenHolder, void* ctx) {
 // TreeNodeCleanup used by HerbalistWork. FUN_14002af40 recurses
 // via left(+0x20) and right(+0x28), frees data at +0x08.
 //
-void MarketWork_DtorBody(MarketWork* self) {
-    uintptr_t selfAddr = (uintptr_t)self;
-
-    // Set vtable to MarketWork
-    *(void**)selfAddr = s_vtable_MarketWork;
+// MarketWork dtor (inlined in retail slot 0 0x14002a910). The stamps and the `~Internal` call are the compiler's chain.
+MarketWork::~MarketWork() {
+    uintptr_t selfAddr = (uintptr_t)this;
 
     // Free BST nodes at +0x48 using market-specific cleanup
     void* bstRoot = *(void**)(selfAddr + 0x48);
@@ -1830,23 +1815,17 @@ void MarketWork_DtorBody(MarketWork* self) {
     *(void**)(selfAddr + 0x48) = nullptr;
     *(uint32_t*)(selfAddr + 0x50) = 0;
 
-    // Set vtable to Work, then call Internal dtor
-    *(void**)selfAddr = s_vtable_Work;
-    fn_ObjectInternal_Dtor((void*)selfAddr);
 }
 
 
 // ============================================================
 // MarketWork::ScalarDtor (0x14002a910)
 // ============================================================
-void* MarketWork_ScalarDtor_Impl(MarketWork* self, uint32_t flags) {
-    MarketWork_DtorBody(self);
-    if (flags & 1) {
-        if (s_fn_MemFreeStatic) {
-            s_fn_MemFreeStatic(self);
-        }
-    }
-    return self;
+// [0] 0x14002a910: ~MarketWork, then MemFree on &1 (the compiler chains the base dtors).
+Object::Base* MarketWork::DeletingDtor(unsigned flags) {
+    this->~MarketWork();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 
@@ -1854,85 +1833,49 @@ void* MarketWork_ScalarDtor_Impl(MarketWork* self, uint32_t flags) {
 // MarketWork::Slot11 -- returns (this->_field50 > 0)
 // ============================================================
 // 9 bytes, too small to hook.
-bool MarketWork_Slot11_Impl(MarketWork* self) {
-    return *(int*)((uintptr_t)self + 0x50) > 0;
+int MarketWork::GetPriority() {
+    return *(int*)((uintptr_t)this + 0x50) > 0 ? 1 : 0;
 }
 
 
+
+// Ctor 0x1400f1f70: `??0Internal`, the Work base fields, the leaf fields zeroed (the
+// two stamps are the compiler's). MarketWork_ResolveFuncs wires the file's helper
+// pointers (the old factory did the same).
+MarketWork::MarketWork() : Work(), _field48(nullptr), _field50(0) {
+    MarketWork_ResolveFuncs();
+}
+
 // ============================================================
-// Standalone factory + vtable — Work family (factory cascade).
-// Vtable @ 0x140161710 (13 slots), size 0x58, parent "Work".
-// Shared slot helpers: work_base_standalone.{h,cpp}.
-//
-// NOTE: MarketWork's methods are named by slot number in this file
-// (MarketWork_SlotN_Impl), so they map directly onto the 13-slot layout:
-//   slot6 OnComplete = Slot6 (BST add), slot7 OnCancel = Slot7 (BST remove),
-//   slot8 Cleanup = Slot8 (CancelAll), slot9 Validate = Slot9 (RemoveInvalid),
-//   slot10 GetTarget = Slot10 (GetWorkEntity), slot11 GetPriority = Slot11.
+// Reflection, factory and the seam (ENDGAME B.3.8, B38_RULES D4/D5)
 // ============================================================
-#include "work_base_standalone.h"
+// Before: a hand-built 13-slot `g_MarketWork_Vtable` (slot 1 null, slot 2 a lazily
+// cached id), MarketWork_Ctor_Impl (the ctor with both stamps written by hand) and
+// REGISTER_TYPE over MarketWork_Factory / _CreateInPlace, plus two vtable-pointer
+// statics for the dtor's stamps.
+
+// create 0x14002a8d0: MemAlloc(sizeof, 8), then the ctor.
+void* MarketWork::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(MarketWork), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) MarketWork());
+}
+// Retail's createInPlace is the imported Internal::CreateInPlaceObject (returns null);
+// the tree's in-place entry built the object, and that is kept (B8-13).
+void* MarketWork::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) MarketWork());
+}
+
+DEFINE_EXE_VTABLE(MarketWork, "_ZTV10MarketWork")
+
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-// Constructor — port of MarketWork_Ctor (0x1400f1f70): Object::Internal::Internal
-// -> Work base fields -> MarketWork vtable + zero MarketWork fields.
-static void* MarketWork_Ctor_Impl(MarketWork* self) {
-    fn_ObjectInternal_Ctor(self);
-
-    uintptr_t a = (uintptr_t)self;
-    // Work base vtable (intermediate, immediately overwritten)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161a80);
-    *(void**)(a + 0x10) = nullptr;
-    *(void**)(a + 0x18) = nullptr;
-    *(int32_t*)(a + 0x20) = -1;
-    *(int32_t*)(a + 0x24) = 0;
-    *(int32_t*)(a + 0x28) = -1;
-    *(int32_t*)(a + 0x2c) = 0;
-    *(void**)(a + 0x30) = nullptr;
-    *(void**)(a + 0x38) = nullptr;
-    *(int32_t*)(a + 0x40) = 0;
-
-    // MarketWork vtable (our registered standalone table)
-    self->vtable = (void*)ResolveAddr(Module::Exe, 0x140161710);
-    *(void**)(a + 0x48) = nullptr;
-    *(uint32_t*)(a + 0x50) = 0;
-
-    return self;
-}
-
-static uint32_t MarketWork_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("MarketWork");
-    return c;
-}
-
-static void* g_MarketWork_Vtable[13] = {
-    (void*)&MarketWork_ScalarDtor_Impl,  // +0x00 ScalarDtor
-    (void*)&Work_Slot1,                  // +0x08 slot1 (null)
-    (void*)&MarketWork_GetTypeId,        // +0x10 GetTypeId
-    (void*)&MarketWork_Serialize_Impl,   // +0x18 Serialize
-    (void*)&MarketWork_Execute_Impl,     // +0x20 Execute (slot 4, retail 0x1400eff80)
-                                         //   int(self, citizenHolder, ctx) -> 2/1/0
-    (void*)&Work_Slot5,                  // +0x28 slot5 (returns 0)
-    (void*)&MarketWork_Slot6_Impl,       // +0x30 OnComplete (BST add)
-    (void*)&MarketWork_Slot7_Impl,       // +0x38 OnCancel (BST remove)
-    (void*)&MarketWork_Slot8_Impl,       // +0x40 Cleanup (CancelAll)
-    (void*)&MarketWork_Slot9_Impl,       // +0x48 Validate (RemoveInvalid)
-    (void*)&MarketWork_Slot10_Impl,      // +0x50 GetTarget (GetWorkEntity)
-    (void*)&MarketWork_Slot11_Impl,      // +0x58 GetPriority
-    (void*)&Work_Slot12,                 // +0x60 slot12 (void nop)
-};
-
+// B38 D5: 0x140161710 is still read back BY ADDRESS — MarketComponent's CreateWork
+// (resourceproduce_creatework.cpp, block MI-B) builds the work by hand and stamps it —
+// so the exe address serves the COMPILER's table.
 extern "C" void RegisterMarketWorkVtable() {
-    RegisterExeAddr(0x140161710, (uintptr_t)g_MarketWork_Vtable);
+    RegisterExeAddr(MarketWorkAddr::Vtable, reinterpret_cast<uintptr_t>(MarketWork::Vtable()));   // 0x140161710
 }
-extern "C" void* MarketWork_CreateInPlace(void* mem) {
-    MarketWork_ResolveFuncs();
-    return MarketWork_Ctor_Impl((MarketWork*)mem);
-}
-extern "C" void* MarketWork_Factory(void) {
-    MarketWork_ResolveFuncs();
-    void* p = Work_Alloc(0x58);
-    return p ? MarketWork_Ctor_Impl((MarketWork*)p) : nullptr;
-}
-REGISTER_TYPE(MarketWork, "Work", &MarketWork_Factory, &MarketWork_CreateInPlace);
+DEFINE_EXE_TYPE(MarketWork, "Work")
