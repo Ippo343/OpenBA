@@ -48,51 +48,10 @@ namespace TornadoComponentAddr {
     constexpr uintptr_t Update    = 0x140057cd0;  // slot 8 (+0x40), every frame
 }
 
-struct TornadoComponent {
-    void*    vtable;            // +0x00
-    void*    next;              // +0x08
-    void*    owner;             // +0x10  owning entity (InternalBasePtr storage)
-    void*    _unk18;            // +0x18  the TornadoDescription (house-wide name for
-                                //        this slot; kept for consistency with the
-                                //        ~70 sibling headers in engine/types/)
-    uint32_t flags;             // +0x20  0x84
-    uint8_t  _pad24[4];         // +0x24
-
-    int64_t  damageCountdown;   // +0x28  System::Time; reloaded from desc+0x28
-    float    waypointX;         // +0x30  current path target (Vector3)
-    float    waypointY;         // +0x34
-    float    waypointZ;         // +0x38
-    uint8_t  _pad3C[4];         // +0x3C
-
-    void*    pathData;          // +0x40  Vector3[] (12 bytes/elem)
-    int32_t  pathCount;         // +0x48
-    int32_t  pathCapacity;      // +0x4C
-    int32_t  pathIndex;         // +0x50  init -1; current waypoint index
-    uint8_t  _pad54[4];         // +0x54
-
-    float    posX;              // +0x58  live world position (Vector3)
-    float    posY;              // +0x5C
-    float    posZ;              // +0x60
-    uint8_t  _pad64[4];         // +0x64  padding to 0x68
-};
-
-static_assert(sizeof(TornadoComponent) == 0x68, "TornadoComponent size mismatch");
-static_assert(offsetof(TornadoComponent, vtable)          == 0x00, "");
-static_assert(offsetof(TornadoComponent, next)            == 0x08, "");
-static_assert(offsetof(TornadoComponent, owner)           == 0x10, "");
-static_assert(offsetof(TornadoComponent, _unk18)          == 0x18, "");
-static_assert(offsetof(TornadoComponent, flags)           == 0x20, "");
-static_assert(offsetof(TornadoComponent, damageCountdown) == 0x28, "");
-static_assert(offsetof(TornadoComponent, waypointX)       == 0x30, "");
-static_assert(offsetof(TornadoComponent, waypointY)       == 0x34, "");
-static_assert(offsetof(TornadoComponent, waypointZ)       == 0x38, "");
-static_assert(offsetof(TornadoComponent, pathData)        == 0x40, "");
-static_assert(offsetof(TornadoComponent, pathCount)       == 0x48, "");
-static_assert(offsetof(TornadoComponent, pathCapacity)    == 0x4C, "");
-static_assert(offsetof(TornadoComponent, pathIndex)       == 0x50, "");
-static_assert(offsetof(TornadoComponent, posX)            == 0x58, "");
-static_assert(offsetof(TornadoComponent, posY)            == 0x5C, "");
-static_assert(offsetof(TornadoComponent, posZ)            == 0x60, "");
+// ENDGAME B.3.8 CIT: the POD is gone — `TornadoComponent` is a real class now
+// (code/Game/Component/TornadoComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/TornadoComponent.h"
 
 // TornadoDescription (0x38 bytes) — the parameter block read by every function
 // above. Offsets verified against the ctor (0x140058e80) and Serialize

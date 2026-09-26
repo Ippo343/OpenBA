@@ -63,10 +63,6 @@ static uint32_t* s_typeInfo_RemoveAnimal = nullptr;
 // DAT_1401c6088 -- VectorDtor return value
 static uint64_t* s_dat_VectorDtorReturn = nullptr;
 
-// Vtable addresses for dtor chain
-static uintptr_t s_vtable_RemoveAnimal = 0;
-static uintptr_t s_vtable_Action = 0;
-
 static bool s_funcs_resolved = false;
 
 // ============================================================
@@ -96,16 +92,11 @@ bool RemoveAnimal_ResolveFuncs() {
     s_dat_VectorDtorReturn = reinterpret_cast<uint64_t*>(
         ResolveAddr(Module::Exe, 0x1401c6088));
 
-    // Vtable addresses
-    s_vtable_RemoveAnimal = ResolveAddr(Module::Exe, 0x14015ffe0);
-    s_vtable_Action = ResolveAddr(Module::Exe, 0x14015faa0);
-
     bool ok = s_fn_ObjectInternal_Dtor &&
               s_fn_MarkEntityRemoval &&
               s_fn_GetModelComp && s_fn_NotifyEntityChanged &&
               s_typeId_ComponentEntity && s_typeInfo_RemoveAnimal &&
               s_dat_VectorDtorReturn &&
-              s_vtable_RemoveAnimal && s_vtable_Action &&
               fn_InternalBasePtr_DeletePtr &&
               fn_IsDerivedFrom && fn_MemFreeStatic &&
               g_pGameWorldSingleton;
@@ -122,33 +113,6 @@ bool RemoveAnimal_ResolveFuncs() {
 
     s_funcs_resolved = ok;
     return ok;
-}
-
-// ============================================================
-// Slot 0: ScalarDeletingDtor (0x140022ee0)
-// Sets vtables to RemoveAnimal then Action, cleanup entity ref at +0x10,
-// calls ~Internal, optionally frees memory.
-// ============================================================
-void* RemoveAnimal_ScalarDtor_Impl(RemoveAnimal* self, uint32_t flags) {
-    uint8_t* s = (uint8_t*)self;
-
-    // Set RemoveAnimal vtable (for correct virtual dispatch during destruction)
-    *(uintptr_t*)s = s_vtable_RemoveAnimal;
-    // Set Action vtable (base class destructor phase)
-    *(uintptr_t*)s = s_vtable_Action;
-
-    // If entity ref at +0x10 is non-null, delete it
-    if (*(void**)(s + 0x10) != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(s + 0x10)->DeletePtr();   // B.3.3 bridge
-    }
-
-    // Call Object::Internal::~Internal
-    s_fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
 }
 
 // ============================================================
@@ -230,7 +194,6 @@ int RemoveAnimal_AbstractImpl_Impl(RemoveAnimal* self, void* actionStack) {
         // Copy to local for CheckPtr
         void* localRef = entityRef;
 
-
         // Check bit 10 of flags at entity+0x40 (already marked for removal?)
         uint32_t flags = *(uint32_t*)((uint8_t*)localRef + 0x40);
         if (((flags >> 10) & 1) == 0) {
@@ -291,42 +254,57 @@ bool RemoveAnimal_GetTarget_Impl(RemoveAnimal* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015ffe0 (10 slots), size 0x28, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class RemoveAnimal (RemoveAnimal.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_RemoveAnimal_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t RemoveAnimal_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("RemoveAnimal");
-    return c;
+// create 0x140022e70 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+RemoveAnimal::RemoveAnimal()
+    : _field20(nullptr) {}
+
+// Retail has no out-of-line RemoveAnimal ctor: 0x1400bbea0 inlines it
+// (Internal(), Action stamp, +0x10/+0x18 = 0, RemoveAnimal stamp, +0x20 = animal).
+RemoveAnimal::RemoveAnimal(uint64_t animal)
+    : _field20(reinterpret_cast<void*>(animal)) {}
+
+// [0] 0x140022ee0
+Object::Base* RemoveAnimal::DeletingDtor(unsigned flags) {
+    this->~RemoveAnimal();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_RemoveAnimal_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&RemoveAnimal_GetTypeId,           // +0x10 GetTypeId
-    (void*)&RemoveAnimal_Serialize_Impl,      // +0x18 Serialize
-    (void*)&RemoveAnimal_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&RemoveAnimal_CheckEntity_Impl,  // +0x40 CheckEntity
-    (void*)&RemoveAnimal_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400ca870
+void RemoveAnimal::Persist(void* stream) { RemoveAnimal_Serialize_Impl(this, stream); }
+// [4] 0x1400ca7f0
+int  RemoveAnimal::AbstractImpl(void* actionStack) { return RemoveAnimal_AbstractImpl_Impl(this, actionStack); }
+// [8] 0x1400ca760
+void RemoveAnimal::CheckEntity() { RemoveAnimal_CheckEntity_Impl(this); }
+// [9] 0x1400ca720
+bool RemoveAnimal::GetTarget(void* param) { return RemoveAnimal_GetTarget_Impl(this, param); }
 
-extern "C" void RegisterRemoveAnimalVtable() {
-    RegisterExeAddr(0x14015ffe0, (uintptr_t)g_RemoveAnimal_Vtable);
-}
-extern "C" void* RemoveAnimal_CreateInPlace(void* mem) {
+void* RemoveAnimal::CreateNewObject() {
     RemoveAnimal_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x28, g_RemoveAnimal_Vtable);
+    void* p = Object::detail::InternalMemAlloc(sizeof(RemoveAnimal), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) RemoveAnimal());
 }
-extern "C" void* RemoveAnimal_Factory(void) {
+void* RemoveAnimal::CreateInPlaceObject(void* storage) {
     RemoveAnimal_ResolveFuncs();
-    return Action_Alloc(0x28, g_RemoveAnimal_Vtable);
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) RemoveAnimal());
 }
-REGISTER_TYPE(RemoveAnimal, "Action", &RemoveAnimal_Factory, &RemoveAnimal_CreateInPlace);
+
+DEFINE_EXE_VTABLE(RemoveAnimal, "_ZTV12RemoveAnimal")
+
+// B38 D5: every by-address reader of 0x14015ffe0 was inside this block and now
+// builds the object with the real ctor, so the row is gone. The function stays
+// until the coordinator's address_registry hunk drops its call.
+extern "C" void RegisterRemoveAnimalVtable() {}
+
+DEFINE_EXE_TYPE(RemoveAnimal, "Action")

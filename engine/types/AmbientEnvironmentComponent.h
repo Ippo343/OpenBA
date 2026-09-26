@@ -19,23 +19,8 @@ namespace AmbientEnvironmentComponentAddr {
     constexpr uintptr_t Vtable = 0x140158b70;
 }
 
-struct AmbientEnvironmentComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `AmbientEnvironmentComponent` is a real class now
+// (code/Game/Component/AmbientEnvironmentComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/AmbientEnvironmentComponent.h"
 
-    void*    field28;      // +0x28: not initialized by ctor
-    void*    field30;      // +0x30: not initialized by ctor
-    void*    field38;      // +0x38: zeroed
-    uint32_t field40;      // +0x40: zeroed (dword)
-    uint8_t  _pad44[4];    // +0x44: padding to 0x48
-};
-
-static_assert(sizeof(AmbientEnvironmentComponent) == 0x48, "AmbientEnvironmentComponent size mismatch");
-static_assert(offsetof(AmbientEnvironmentComponent, vtable) == 0x00, "");
-static_assert(offsetof(AmbientEnvironmentComponent, flags) == 0x20, "");
-static_assert(offsetof(AmbientEnvironmentComponent, field38) == 0x38, "");
-static_assert(offsetof(AmbientEnvironmentComponent, field40) == 0x40, "");

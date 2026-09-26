@@ -1,0 +1,44 @@
+#pragma once
+// ============================================================================
+// code/Game/Component/TombstoneComponent.h — ENDGAME B.3.8 block CIT
+//
+// `TombstoneComponent` as a real C++ class with a compiler-generated vtable
+// (B38_RULES.md D1-D4). The engine/types POD is a forwarder to this file.
+//
+// RETAIL (Application-x64.exe, B38_SLOTS.md §6):
+//   reflected "TombstoneComponent", parent "Component", ti 0x1401c4a30
+//   create 0x14000d280: MemAlloc(0x30, 8) + ctor 0x1400579a0
+//   ctor   0x1400579a0: Component ctor, stamp 0x14015a980, +0x28 = 0, flags |= 0x88
+//   dtor   0x140057960: stamp 0x14015a980, stamp 0x140162920, ~Internal (no own work)
+//   table  0x14015a980, 16 slots:
+//     [0] 0x14000d480 scalar deleting dtor   [1]/[2] TypeName/Type
+//     [3] 0x1400578e0 Persist                [4] 0x140057860 Startup (lifetime roll)
+//     [9] 0x1400577d0 Update (countdown)     every other slot = Component's
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Component/Component.h"
+#include "Object/exe_type.h"
+
+class TombstoneComponent final : public Component {
+    DECLARE_EXE_TYPE(TombstoneComponent)
+
+public:
+    TombstoneComponent();                                         // 0x1400579a0
+
+    Object::Base* DeletingDtor(unsigned flags) override;          // [0] 0x14000d480
+    void Persist(void* stream) override;                          // [3] 0x1400578e0
+    void Startup() override;                                      // [4] 0x140057860
+    void Update(void* time) override;                             // [9] 0x1400577d0
+
+    // PUBLIC while the ported bodies read them (B38 decision 1).
+    void* field28;   // +0x28 System::Time countdown (lifetime remaining)
+
+protected:
+    ~TombstoneComponent() = default;                              // 0x140057960
+};
+
+static_assert(sizeof(TombstoneComponent) == 0x30, "TombstoneComponent is 0x30 (create 0x14000d280)");
+static_assert(alignof(TombstoneComponent) == 8, "TombstoneComponent alignment");
+static_assert(offsetof(TombstoneComponent, field28) == 0x28, "TombstoneComponent +0x28 timer");

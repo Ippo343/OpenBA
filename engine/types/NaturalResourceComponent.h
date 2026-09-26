@@ -19,21 +19,8 @@ namespace NaturalResourceComponentAddr {
     constexpr uintptr_t Vtable  = 0x140163e10;
 }
 
-struct NaturalResourceComponent {
-    void*    vtable;       // +0x00
-    void*    next;         // +0x08
-    void*    owner;        // +0x10
-    void*    _unk18;       // +0x18
-    uint32_t flags;        // +0x20
-    uint8_t  _pad24[4];    // +0x24
+// ENDGAME B.3.8 CIT: the POD is gone — `NaturalResourceComponent` is a real class now
+// (code/Game/Component/NaturalResourceComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/NaturalResourceComponent.h"
 
-    float    resourceScale; // +0x28: initialized to 1.0f
-    uint16_t resourceFlags; // +0x2C: initialized to 0x100
-    uint8_t  _pad2E[2];    // +0x2E: padding to 0x30
-};
-
-static_assert(sizeof(NaturalResourceComponent) == 0x30, "NaturalResourceComponent size mismatch");
-static_assert(offsetof(NaturalResourceComponent, vtable) == 0x00, "");
-static_assert(offsetof(NaturalResourceComponent, flags) == 0x20, "");
-static_assert(offsetof(NaturalResourceComponent, resourceScale) == 0x28, "");
-static_assert(offsetof(NaturalResourceComponent, resourceFlags) == 0x2C, "");

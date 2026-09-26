@@ -73,6 +73,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "Component/CitizenComponent.h"   // ENDGAME B.3.8 CIT (TypeId)
 
 namespace {
 
@@ -170,9 +171,8 @@ static inline uint32_t MsgId(const uint32_t* p) { return p ? *p : 0u; }
 static inline uint32_t MsgId7158() {
     uint32_t raw = MsgId(s_pMsgId_7158);
     if (raw != 0) return raw;
-    static uint32_t cached = 0;
-    if (!cached) cached = ::Object::GetTypeIdByName("CitizenComponent");
-    return cached;
+    // B.3.8 CIT (B6-5): the class's own record, no lazy first-use cache.
+    return CitizenComponent::TypeId();
 }
 static inline float    Fc(const float* p, float dflt) { return p ? *p : dflt; }
 static inline void*    MemA(uint64_t sz) {

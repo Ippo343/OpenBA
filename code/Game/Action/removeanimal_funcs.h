@@ -4,13 +4,10 @@
 
 #include <cstdint>
 
-struct RemoveAnimal;
+class RemoveAnimal;
 
 // Resolve all local function pointers (call once before any _Impl)
 bool RemoveAnimal_ResolveFuncs();
-
-// Slot 0: ScalarDeletingDtor (0x140022ee0)
-void* RemoveAnimal_ScalarDtor_Impl(RemoveAnimal* self, uint32_t flags);
 
 // Slot 1: VectorDeletingDtor (0x140022e60) -- returns DAT_1401c6088
 uint64_t RemoveAnimal_VectorDtor_Impl();

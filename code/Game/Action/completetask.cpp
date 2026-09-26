@@ -106,30 +106,6 @@ bool CompleteTask_ResolveFuncs() {
 }
 
 // ============================================================
-// ScalarDtor (vtable slot 0)
-// Sets vtables, calls DeletePtr on entity ref, ~Internal, optionally free.
-// ============================================================
-void* CompleteTask_ScalarDtor_Impl(CompleteTask* self, uint32_t flags) {
-    // Set CompleteTask vtable
-    self->vtable = (void*)ResolveAddr(Module::Exe, CompleteTaskAddr::Vtable);
-    // Set Action base vtable (destructor chain)
-    uintptr_t actionVtable = ResolveAddr(Module::Exe, 0x14015faa0);
-    self->vtable = (void*)actionVtable;
-
-    // DeletePtr on entity IBP at +0x10 if non-null
-    if (self->entity != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(&self->entity)->DeletePtr();   // B.3.3 bridge
-    }
-
-    fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
-}
-
-// ============================================================
 // Serialize (0x1400c5be0, vtable slot 3)
 // Serializes status, entity refs with type checks, task fields.
 // ============================================================
@@ -143,7 +119,7 @@ void CompleteTask_Serialize_Impl(CompleteTask* self, void* stream) {
 
     // Serialize status (version 0)
     ::new (static_cast<void*>(ser1)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->status), nullptr);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(ser1)->Serialize(*reinterpret_cast<bool*>(&self->_status), nullptr);   // B.3.4 bridge
     reinterpret_cast<IO::Serializer*>(ser1)->~Serializer();   // B.3.4 bridge
 
     // Serialize entity refs + task fields (version 1)
@@ -265,42 +241,55 @@ bool CompleteTask_GetTarget_Impl(CompleteTask* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fbd0 (10 slots), size 0x38, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class CompleteTask (CompleteTask.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_CompleteTask_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t CompleteTask_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("CompleteTask");
-    return c;
+// create 0x140021fc0 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+CompleteTask::CompleteTask()
+    : workEntity(nullptr),
+      targetEntity(nullptr),
+      taskIndex(0),
+      taskParam(0) {}
+
+// [0] 0x140022030
+Object::Base* CompleteTask::DeletingDtor(unsigned flags) {
+    this->~CompleteTask();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_CompleteTask_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&CompleteTask_GetTypeId,           // +0x10 GetTypeId
-    (void*)&CompleteTask_Serialize_Impl,      // +0x18 Serialize
-    (void*)&CompleteTask_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&CompleteTask_CheckEntity_Impl,  // +0x40 CheckEntity
-    (void*)&CompleteTask_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c5be0
+void CompleteTask::Persist(void* stream) { CompleteTask_Serialize_Impl(this, stream); }
+// [4] 0x1400c5b40
+int  CompleteTask::AbstractImpl(void* actionStack) { return CompleteTask_AbstractImpl_Impl(this, actionStack); }
+// [8] 0x1400c5ac0
+void CompleteTask::CheckEntity() { CompleteTask_CheckEntity_Impl(this); }
+// [9] 0x1400c5a50
+bool CompleteTask::GetTarget(void* param) { return CompleteTask_GetTarget_Impl(this, param); }
 
-extern "C" void RegisterCompleteTaskVtable() {
-    RegisterExeAddr(0x14015fbd0, (uintptr_t)g_CompleteTask_Vtable);
-}
-extern "C" void* CompleteTask_CreateInPlace(void* mem) {
+void* CompleteTask::CreateNewObject() {
     CompleteTask_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x38, g_CompleteTask_Vtable);
+    void* p = Object::detail::InternalMemAlloc(sizeof(CompleteTask), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) CompleteTask());
 }
-extern "C" void* CompleteTask_Factory(void) {
+void* CompleteTask::CreateInPlaceObject(void* storage) {
     CompleteTask_ResolveFuncs();
-    return Action_Alloc(0x38, g_CompleteTask_Vtable);
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) CompleteTask());
 }
-REGISTER_TYPE(CompleteTask, "Action", &CompleteTask_Factory, &CompleteTask_CreateInPlace);
+
+DEFINE_EXE_VTABLE(CompleteTask, "_ZTV12CompleteTask")
+
+// B38 D5: every by-address reader of 0x14015fbd0 was inside this block and now
+// builds the object with the real ctor, so the row is gone. The function stays
+// until the coordinator's address_registry hunk drops its call.
+extern "C" void RegisterCompleteTaskVtable() {}
+
+DEFINE_EXE_TYPE(CompleteTask, "Action")

@@ -57,34 +57,10 @@ namespace FireComponentAddr {
     constexpr uintptr_t MarkDanger  = 0x1400499c0;   // sub_99c0
 }
 
-struct FireComponent {
-    void*    vtable;        // +0x00
-    void*    next;          // +0x08  Object::Internal linkage
-    void*    owner;         // +0x10  owning entity InternalBasePtr
-    void*    _unk18;        // +0x18  FireDescription (the description sub-block)
-    uint32_t flags;         // +0x20
-    uint8_t  _pad24[4];     // +0x24
-
-    int32_t  bucketsApplied;    // +0x28 water buckets delivered since ignition
-    int32_t  bucketsAtSpread;   // +0x2c snapshot of +0x28 at the last spread pass
-    int64_t  fireTimer;         // +0x30 System::Time — burning while > 0
-    int64_t  spreadTimer;       // +0x38 System::Time — next spread pass when <= 0
-    int64_t  igniteAccum;       // +0x40 System::Time — idle accumulator for the roll
-};
-
-static_assert(sizeof(FireComponent) == 0x48, "FireComponent size mismatch");
-static_assert(offsetof(FireComponent, vtable)         == 0x00, "");
-static_assert(offsetof(FireComponent, next)           == 0x08, "");
-static_assert(offsetof(FireComponent, owner)          == 0x10, "");
-static_assert(offsetof(FireComponent, _unk18)         == 0x18, "");
-static_assert(offsetof(FireComponent, flags)          == 0x20, "");
-static_assert(offsetof(FireComponent, bucketsApplied) == 0x28, "");
-static_assert(offsetof(FireComponent, bucketsAtSpread)== 0x2c, "");
-static_assert(offsetof(FireComponent, fireTimer)      == 0x30, "");
-static_assert(offsetof(FireComponent, spreadTimer)    == 0x38, "");
-static_assert(offsetof(FireComponent, igniteAccum)    == 0x40, "");
-static_assert(sizeof(((FireComponent*)0)->bucketsApplied)  == 4, "");
-static_assert(sizeof(((FireComponent*)0)->bucketsAtSpread) == 4, "");
+// ENDGAME B.3.8 CIT: the POD is gone — `FireComponent` is a real class now
+// (code/Game/Component/FireComponent.h, compiler vtable). This forwarder keeps the
+// old include spelling working until the closing pass deletes it (B8-4).
+#include "Component/FireComponent.h"
 
 // ============================================================
 // FireDescription field map (the +0x18 description block, size 0x50).

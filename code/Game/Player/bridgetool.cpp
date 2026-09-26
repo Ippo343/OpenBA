@@ -17,70 +17,23 @@
 // Decompiled from Application-x64.exe.
 
 #include "Player/bridgetool_funcs.h"
-#include "Tool.h"
+#include "Player/dragtool.h"   // Tool + DragTool (ENDGAME B.3.8 TOOL)
 #include "engine_funcs.h"
 #include "resolve.h"
 #include <cstdint>
 #include <cstdio>
 
 // ============================================================
-// BridgeTool vtable addresses (for vtable chain in Dtor)
+// BridgeTool::DeletingDtor (vtable +0x00) — 0x14002d7f0
 // ============================================================
-static void* s_vtable_BridgeTool = nullptr;
-static void* s_vtable_DragTool   = nullptr;
-static void* s_vtable_Tool       = nullptr;
-
-static void EnsureVtables() {
-    if (!s_vtable_BridgeTool) {
-        s_vtable_BridgeTool = (void*)ResolveAddr(Module::Exe, BridgeToolAddr::Vtable);
-        s_vtable_DragTool   = (void*)ResolveAddr(Module::Exe, DragToolAddr::Vtable);
-        s_vtable_Tool       = (void*)ResolveAddr(Module::Exe, ToolAddr::Vtable);
-    }
-}
-
-// ============================================================
-// Object::Internal::~Internal — called from base dtor
-// Resolved via the function pointer slot at 0x140152770
-// ============================================================
-typedef void (*fn_Internal_Dtor_t)(void* self);
-static fn_Internal_Dtor_t s_fn_Internal_Dtor = nullptr;
-
-static void EnsureInternalDtor() {
-    if (!s_fn_Internal_Dtor) {
-        // The dtor calls through [0x140152770] which is a resolved func ptr slot
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x140152770);
-        if (slot) s_fn_Internal_Dtor = *(fn_Internal_Dtor_t*)slot;
-    }
-}
-
-// ============================================================
-// BridgeTool::Dtor (vtable +0x00) — Scalar deleting destructor
-// ============================================================
-// Resets vtable chain: BridgeTool -> DragTool -> Tool, then calls
-// Object::Internal::~Internal for base cleanup. If flags & 1,
-// frees the memory allocation.
-//
-// Original: 0x14002d7f0
-void* BridgeTool_Dtor(BridgeTool* self, uint32_t flags) {
-    EnsureVtables();
-    EnsureInternalDtor();
-
-    // Walk vtable chain down through inheritance (mirrors MSVC destructor pattern)
-    self->vtable = s_vtable_BridgeTool;
-    self->vtable = s_vtable_DragTool;
-    self->vtable = s_vtable_Tool;
-
-    // Call Object::Internal::~Internal
-    if (s_fn_Internal_Dtor) {
-        s_fn_Internal_Dtor(self);
-    }
-
-    // Conditionally free memory
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-
-    return self;
+// ENDGAME B.3.8 TOOL: the hand-rolled BridgeTool_Dtor restamped the Bridge,
+// DragTool and Tool tables read by address — the last two UNREGISTERED, so it
+// stored a NULL vptr before ~Internal (B38 D9 #3). The compiler's dtor chain
+// restamps the real tables, then runs Object::Internal::~Internal.
+Object::Base* BridgeTool::DeletingDtor(unsigned flags) {
+    this->~BridgeTool();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
 // ============================================================
@@ -262,65 +215,50 @@ uint64_t BridgeTool_CalcPath(BridgeTool* self, int startCell, int endCell) {
 }
 
 // ============================================================
-// Standalone factory + vtable (factory cascade). See
-// tool_base_standalone.h + notes/FACTORY_CASCADE_145_BRIEF.md.
-// BridgeTool: size 0x40, parent DragTool, 15-slot vtable @ 0x140161b00.
+// BridgeTool members (BridgeTool.h) — ENDGAME B.3.8 TOOL.
+// The hand-built g_BridgeTool_Vtable[15], its slot stubs, the _SA factories
+// and RegisterBridgeToolVtable are gone: the compiler builds the table, and
+// nothing in the tree reads 0x140161b00 back by address (the old dtor was the
+// only reader), so the exe address is no longer registered.
+// Inherited from the bases, as in retail: [6] DragTool::OnKey (0x1400fc6b0),
+// [9] DragTool::OnCancel (0x1400fc640), [10] false, [11] no setting
+// (0x140004950 `*ret = 0`: BridgeTool has no ToolSetting — SetEditMode
+// dereferences the returned slot), [12] cursor 5 (0x1400fc9d0).
 // ============================================================
-#include "tool_base_standalone.h"
-#include "Player/dragtool.h"
 #include "Object/factory_registration.h"
-#include "address_registry.h"
+#include <new>
 
-static uint32_t BridgeTool_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("BridgeTool");
-    return c;
-}
-// +0x58 (Slot11) GetToolSettingTypeId — retail BridgeTool slot 11 is 0x140004950, the
-// SAME shared `*ret = 0; return ret;` thunk RoadTool/RemovalTool/PathTool use (BridgeTool
-// has no tool-setting; only PlacementTool's RotationSetting does). SetEditMode
-// (FUN_140102b60 / Toolbar_ShowGroup_Impl) DEREFERENCES the returned pointer to decide
-// whether to build a ToolSetting, so the previous Tool_Ret0 stub (returns nullptr -> *0)
-// faulted the instant a bridge button click created the tool. This was the reason the
-// tool-mode tree node could not simply be added on its own.
-static uint32_t* BridgeTool_GetSettingType(void*, uint32_t* ret) {
-    if (ret) *ret = 0;
-    return ret;
-}
-// +0x60 (Slot12) cursor id — retail 0x1400fc9d0 `return 5`, shared with RoadTool/FencedTool.
-// EntityUI_ToolTick_SA feeds this to SetCursor, so Tool_Ret0 gave the wrong (id 0) cursor.
-static int BridgeTool_Slot12(void*) { return 5; }
-// +0x48 (Slot9) cancel/"can-deactivate?" — retail 0x1400fc640, the shared DragTool-family
-// right-click handler (cancels an active drag + closes the tool dialog, returns 1 to keep
-// the tool; 0 when idle so EntityUI proceeds with teardown). Same fn RoadTool slot 9 uses.
-extern "C" int DragTool_CancelDrag_Impl(void* self);
-// +0x40 (Slot8) Draw — retail 0x1400fadc0, the red/green drag preview. Ported in
-// bridgetool_draw.cpp. While this was Tool_Ret0 a bridge drag rendered NOTHING: the
-// placement worked and CalcCost reported valid=1 every frame, but the player had no
-// on-map feedback at all. The headless harness never renders, so it could not see it.
+// [4] 0x1400fb7a0.
+void BridgeTool::Startup() { BridgeTool_Startup(this); }
+
+// [8] 0x1400fadc0 — the red/green drag preview, ported in bridgetool_draw.cpp.
 extern "C" void BridgeTool_Draw_Impl(void* self, void* context, char skip);
-static void* g_BridgeTool_Vtable[15] = {
-    (void*)&BridgeTool_Dtor,      // +0x00 Dtor
-    (void*)&Tool_Slot1,           // +0x08 slot1 (null)
-    (void*)&BridgeTool_GetTypeId, // +0x10 GetTypeId
-    (void*)&Tool_Persist,         // +0x18 Serialize (base)
-    (void*)&BridgeTool_Startup,   // +0x20 Startup
-    (void*)&Tool_Ret0,            // +0x28
-    (void*)&DragTool_OnKey,       // +0x30 OnKey — retail 0x1400fc6b0 IS DragTool::OnKey (shared)
-    (void*)&Tool_Ret0,            // +0x38 retail 0x1400fb2c0 = empty `return;`
-    (void*)&BridgeTool_Draw_Impl, // +0x40 Draw — retail 0x1400fadc0 (red/green drag preview)
-    (void*)&DragTool_CancelDrag_Impl, // +0x48 Slot9 cancel drag / allow-teardown (0x1400fc640)
-    (void*)&Tool_Ret0,            // +0x50 retail 0x1400268a0 = shared `return 0`
-    (void*)&BridgeTool_GetSettingType, // +0x58 Slot11 GetToolSettingTypeId (*ret=0)
-    (void*)&BridgeTool_Slot12,    // +0x60 cursor id (retail returns 5)
-    (void*)&BridgeTool_CalcPath,  // +0x68 CalcPath
-    (void*)&BridgeTool_CalcCost,  // +0x70 CalcCost
-};
-extern "C" void RegisterBridgeToolVtable() {
-    RegisterExeAddr(0x140161b00, (uintptr_t)g_BridgeTool_Vtable);
+void BridgeTool::Draw(void* context, char active) { BridgeTool_Draw_Impl(this, context, active); }
+
+// [13] 0x1400f9cd0. AL is the result (DragTool::OnKey tests it).
+bool BridgeTool::CalcPath(int startCell, int endCell) {
+    return static_cast<uint8_t>(BridgeTool_CalcPath(this, startCell, endCell)) != 0;
 }
-extern "C" void* BridgeTool_CreateInPlace_SA(void* mem) {    return Tool_InitInPlace(mem, 0x40, g_BridgeTool_Vtable, 1);}
-extern "C" void* BridgeTool_Factory_SA(void) {
-    return Tool_Alloc(0x40, g_BridgeTool_Vtable, 1);
+
+// [14] 0x1400facf0.
+int BridgeTool::CalcCost(int startCell, int endCell, uint32_t* outValid,
+                         int* outCostB, int* outCostA, int* outLength) {
+    return static_cast<int>(BridgeTool_CalcCost(this, startCell, endCell,
+                                                outValid, outCostB, outCostA, outLength));
 }
-REGISTER_TYPE(BridgeTool, "DragTool", &BridgeTool_Factory_SA, &BridgeTool_CreateInPlace_SA);
+
+// create 0x14002d7a0: MemAlloc(0x40, 8), then the ctor 0x1400fb890.
+void* BridgeTool::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(BridgeTool), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) BridgeTool());
+}
+// createInPlace 0x14002d7e0: `TEST RCX,RCX; JNZ 0x1400fb890 (the ctor);
+// XOR EAX,EAX; RET` — the tools, unlike the components, DO build in place.
+void* BridgeTool::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) BridgeTool());
+}
+
+DEFINE_EXE_VTABLE(BridgeTool, "_ZTV10BridgeTool")
+DEFINE_EXE_TYPE(BridgeTool, "DragTool")

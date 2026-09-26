@@ -1,0 +1,45 @@
+#pragma once
+// ============================================================================
+// code/Game/Action/RemoveNaturalResource.h — ENDGAME B.3.8 block ACT (B38_RULES.md D1-D5)
+//
+// `RemoveNaturalResource`, an exe Action leaf, as a real C++ class with a compiler vtable.
+// RETAIL (Application-x64.exe, B38_SLOTS.md §6):
+//   reflected "RemoveNaturalResource", parent "Action", ti 0x1401c60b8
+//   create 0x140022f70: MemAlloc(0x38, 8) + the inlined ctor
+//   createInPlace = the IMPORTED `Internal::CreateInPlaceObject` (returns null);
+//     the tree's in-place entry builds the object and that is KEPT (B8-13).
+//   table 0x140160050, 10 slots; every slot not declared below is Action's (= parent)
+// ============================================================================
+
+#include <cstdint>
+#include <cstddef>
+#include "Action/Action.h"
+#include "Object/exe_type.h"
+
+class RemoveNaturalResource final : public Action {
+    DECLARE_EXE_TYPE(RemoveNaturalResource)
+
+public:
+    RemoveNaturalResource();                                                   // create 0x140022f70
+    RemoveNaturalResource(uint64_t* p2, uint64_t* p3, uint8_t flag);   // 0x1400cadf0
+    Object::Base* DeletingDtor(unsigned flags) override;       // [0] 0x140022fe0
+    void Persist(void* stream) override;                       // [3] 0x1400cac50
+    int  AbstractImpl(void* actionStack) override;             // [4] 0x1400cab10
+    void CheckEntity() override;                               // [8] 0x1400caaa0
+    bool GetTarget(void* param) override;                      // [9] 0x1400caa20
+
+    // ---- fields, retail order (PUBLIC: the slot bodies are C functions) ----
+    void*     _field20;          // +0x20 
+    void*     _field28;          // +0x28 
+    uint8_t   _field30;          // +0x30 flag
+    uint8_t   _pad31[7];         // +0x31 padding
+
+protected:
+    ~RemoveNaturalResource() = default;
+};
+
+static_assert(sizeof(RemoveNaturalResource) == 0x38, "RemoveNaturalResource is 0x38 (create 0x140022f70 MemAlloc)");
+static_assert(alignof(RemoveNaturalResource) == 8, "RemoveNaturalResource is 8-aligned");
+static_assert(offsetof(RemoveNaturalResource, _field20) == 0x20, "RemoveNaturalResource +0x20");
+static_assert(offsetof(RemoveNaturalResource, _field28) == 0x28, "RemoveNaturalResource +0x28");
+static_assert(offsetof(RemoveNaturalResource, _field30) == 0x30, "RemoveNaturalResource +0x30");
