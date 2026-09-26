@@ -65,10 +65,6 @@ static s_fn_DropAllInventory_t s_fn_DropAllInventory = nullptr;
 // Type IDs for IsDerivedFrom checks in Serialize
 static uint32_t* s_typeId_1401c7158 = nullptr;  // entity type ref for +0x30
 
-// Vtable addresses for dtor chain
-static uintptr_t s_vtable_DropOffRawMaterial = 0;
-static uintptr_t s_vtable_Action = 0;
-
 // TypeInfo for BaseDtor (slot 2) — DAT_1401c5f38
 static uint32_t* s_typeInfo_DropOffRawMaterial = nullptr;
 
@@ -97,10 +93,6 @@ bool DropOffRawMaterial_ResolveFuncs() {
     s_typeId_1401c7158 = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7158));
 
-    // Vtable addresses
-    s_vtable_DropOffRawMaterial = ResolveAddr(Module::Exe, 0x14015fd80);
-    s_vtable_Action = ResolveAddr(Module::Exe, 0x14015faa0);  // Action base vtable
-
     // TypeInfo for BaseDtor — read from [0x1401c5f38]
     s_typeInfo_DropOffRawMaterial = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5f38));
@@ -109,7 +101,6 @@ bool DropOffRawMaterial_ResolveFuncs() {
               s_fn_DropOffSub &&
               s_fn_DropAllInventory &&
               s_typeId_1401c7158 && g_TypeId_ComponentEntity &&
-              s_vtable_DropOffRawMaterial && s_vtable_Action &&
               s_typeInfo_DropOffRawMaterial &&
               fn_IsDerivedFrom &&
               fn_MemFreeStatic && fn_ExternalPtr_BuildSerialize;
@@ -126,32 +117,6 @@ bool DropOffRawMaterial_ResolveFuncs() {
 
     s_funcs_resolved = ok;
     return ok;
-}
-
-// ============================================================
-// ScalarDtor (0x140022670)
-// Set vtables, cleanup entity ref at +0x10, call ~Internal, optionally free.
-// ============================================================
-void* DropOffRawMaterial_ScalarDtor_Impl(DropOffRawMaterial* self, uint32_t flags) {
-    uint8_t* s = (uint8_t*)self;
-
-    // Set DropOffRawMaterial vtable (for correct virtual dispatch during destruction)
-    *(uintptr_t*)s = s_vtable_DropOffRawMaterial;
-    // Set Action vtable (base class destructor phase)
-    *(uintptr_t*)s = s_vtable_Action;
-
-    // If entity ref at +0x10 is non-null, delete it
-    if (*(void**)(s + 0x10) != nullptr) {
-        s_fn_IBP_DeletePtr(s + 0x10);
-    }
-
-    // Call Object::Internal::~Internal
-    s_fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
 }
 
 // ============================================================
@@ -373,42 +338,57 @@ bool DropOffRawMaterial_GetTarget_Impl(DropOffRawMaterial* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fd80 (10 slots), size 0x40, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class DropOffRawMaterial (DropOffRawMaterial.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_DropOffRawMaterial_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t DropOffRawMaterial_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("DropOffRawMaterial");
-    return c;
+// create 0x140022600 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+DropOffRawMaterial::DropOffRawMaterial()
+    : _field20(0),
+      _pad21{},
+      _field24(0),
+      _field28(nullptr),
+      _field30(nullptr),
+      _field38(nullptr) {}
+
+// [0] 0x140022670
+Object::Base* DropOffRawMaterial::DeletingDtor(unsigned flags) {
+    this->~DropOffRawMaterial();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_DropOffRawMaterial_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&DropOffRawMaterial_GetTypeId,           // +0x10 GetTypeId
-    (void*)&DropOffRawMaterial_Serialize_Impl,      // +0x18 Serialize
-    (void*)&DropOffRawMaterial_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&Action_BaseExecute,   // +0x28 Execute
-    (void*)&Action_Enter,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&DropOffRawMaterial_CheckEntity_Impl,  // +0x40 CheckEntity
-    (void*)&DropOffRawMaterial_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c7b10
+void DropOffRawMaterial::Persist(void* stream) { DropOffRawMaterial_Serialize_Impl(this, stream); }
+// [4] 0x1400c7300
+int  DropOffRawMaterial::AbstractImpl(void* actionStack) { return DropOffRawMaterial_AbstractImpl_Impl(this, actionStack); }
+// [8] 0x1400c72f0 (JMP 0x1400c7570)
+void DropOffRawMaterial::CheckEntity() { DropOffRawMaterial_CheckEntity_Impl(this); }
+// [9] 0x1400c7270
+bool DropOffRawMaterial::GetTarget(void* param) { return DropOffRawMaterial_GetTarget_Impl(this, param); }
 
-extern "C" void RegisterDropOffRawMaterialVtable() {
-    RegisterExeAddr(0x14015fd80, (uintptr_t)g_DropOffRawMaterial_Vtable);
-}
-extern "C" void* DropOffRawMaterial_CreateInPlace(void* mem) {
+void* DropOffRawMaterial::CreateNewObject() {
     DropOffRawMaterial_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x40, g_DropOffRawMaterial_Vtable);
+    void* p = Object::detail::InternalMemAlloc(sizeof(DropOffRawMaterial), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) DropOffRawMaterial());
 }
-extern "C" void* DropOffRawMaterial_Factory(void) {
+void* DropOffRawMaterial::CreateInPlaceObject(void* storage) {
     DropOffRawMaterial_ResolveFuncs();
-    return Action_Alloc(0x40, g_DropOffRawMaterial_Vtable);
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) DropOffRawMaterial());
 }
-REGISTER_TYPE(DropOffRawMaterial, "Action", &DropOffRawMaterial_Factory, &DropOffRawMaterial_CreateInPlace);
+
+DEFINE_EXE_VTABLE(DropOffRawMaterial, "_ZTV18DropOffRawMaterial")
+
+// B38 D5: every by-address reader of 0x14015fd80 was inside this block and now
+// builds the object with the real ctor, so the row is gone. The function stays
+// until the coordinator's address_registry hunk drops its call.
+extern "C" void RegisterDropOffRawMaterialVtable() {}
+
+DEFINE_EXE_TYPE(DropOffRawMaterial, "Action")

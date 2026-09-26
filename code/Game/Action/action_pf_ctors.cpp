@@ -23,19 +23,23 @@
 //   fn_ObjectInternal_Ctor, fn_Time_Ctor_Float.
 // Runtime export: System::Random::RandFloatTol (MoveTo speed default).
 //
-// Vtable globals written by the ctors (exe .rdata, resolved via ResolveAddr):
-//   vtable_Action               = 0x14015faa0
-//   vtable_CompleteTask         = 0x14015fbd0  (c5da0)
-//   vtable_CreateRawMaterial    = 0x14015fd10  (c71a0)
-//   vtable_MoveTo               = 0x14015fe40  (c9170)
-//   vtable_PerformWork          = 0x14015fea0  (c9720, already in performwork.cpp)
-//   vtable_SendComponentMessage = 0x1401600c0  (cb1d0)
+// ENDGAME B.3.8 ACT: the five action ctors (c5da0 CompleteTask, c71a0
+// CreateRawMaterial, c9170 MoveTo, c9720 PerformWork, cb1d0 SendComponentMessage)
+// are the classes' REAL constructors now, defined below next to their by-address
+// doors; the compiler stamps the vtables (no ResolveAddr'd table remains here).
 
+#include "Action/CompleteTask.h"
+#include "Action/CreateRawMaterial.h"
+#include "Action/MoveTo.h"
+#include "Action/PerformWork.h"
+#include "Action/SendComponentMessage.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "Component/coll_bridge.h"
 #include "system/Value.h"      // ENDGAME B.3.4b System callers
+#include <atomic>
 #include <cstdint>
+#include <new>
 #include <cstdio>
 #include <cstdlib>
 // For the BANISHED_LIVE_STORAGE eat-message typeid heal in the
@@ -52,12 +56,6 @@ static const uint32_t* s_pTid_c560_7cb8    = nullptr;  // DWORD_1401c7cb8
 // --- Float constants (exe .rdata) for MoveTo speed default. ---
 static const float* s_pDAT_1720e4 = nullptr;  // RandFloatTol scale
 static const float* s_pDAT_17214c = nullptr;  // bias
-// --- Vtable addresses (exe .rdata). ---
-static uintptr_t s_vt_Action  = 0;
-static uintptr_t s_vt_Complete = 0;
-static uintptr_t s_vt_CreateRaw = 0;
-static uintptr_t s_vt_MoveTo  = 0;
-static uintptr_t s_vt_SendMsg = 0;
 // --- Registered exe sub-callees, called via ResolveAddr. ---
 // 0x1400032e0 (Array<Ptr8>::SetSize) is the exe-side Collection::Array<T>
 // monomorphisation -- ENDGAME B.3.2 step 2 converted its one call site below to a
@@ -74,26 +72,24 @@ static fn_taskCleanup_t s_fn_taskCleanup = nullptr;
 static fn_findStorage_t s_fn_findStorage = nullptr;
 static fn_storageSub_t  s_fn_storageSub  = nullptr;
 
-static bool s_init = false;
+// ENDGAME B.3.8 ACT (B8-10): the class ctors below call EnsureInit and are
+// reached from the loader thread too, so the once-flag is an acquire/release
+// atomic (a racing second init stores the same resolved values).
+static std::atomic<bool> s_init{false};
 static void EnsureInit() {
-    if (s_init) return;
+    if (s_init.load(std::memory_order_acquire)) return;
     s_pTid_MoveTo_70b0 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c70b0));
     s_pTid_PerfWk_7190 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7190));
     s_pTid_123070_7938 = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7938));
     s_pTid_c560_7cb8   = reinterpret_cast<const uint32_t*>(ResolveAddr(Module::Exe, 0x1401c7cb8));
     s_pDAT_1720e4 = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x1401720e4));
     s_pDAT_17214c = reinterpret_cast<const float*>(ResolveAddr(Module::Exe, 0x14017214c));
-    s_vt_Action   = ResolveAddr(Module::Exe, 0x14015faa0);
-    s_vt_Complete = ResolveAddr(Module::Exe, 0x14015fbd0);
-    s_vt_CreateRaw = ResolveAddr(Module::Exe, 0x14015fd10);
-    s_vt_MoveTo   = ResolveAddr(Module::Exe, 0x14015fe40);
-    s_vt_SendMsg  = ResolveAddr(Module::Exe, 0x1401600c0);
     s_fn_notify      = reinterpret_cast<fn_notify_t>(ResolveAddr(Module::Exe, 0x1400c3470));
     s_fn_findFamily  = reinterpret_cast<fn_findFamily_t>(ResolveAddr(Module::Exe, 0x1400012d0));
     s_fn_taskCleanup = reinterpret_cast<fn_taskCleanup_t>(ResolveAddr(Module::Exe, 0x1400c5400));
     s_fn_findStorage = reinterpret_cast<fn_findStorage_t>(ResolveAddr(Module::Exe, 0x140006270));
     s_fn_storageSub  = reinterpret_cast<fn_storageSub_t>(ResolveAddr(Module::Exe, 0x14012d150));
-    s_init = true;
+    s_init.store(true, std::memory_order_release);
 }
 } // namespace
 
@@ -157,21 +153,17 @@ LAB_550e:
 // ============================================================
 void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* param_3,
                                    uint64_t* param_4, uint32_t param_5) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(param_1);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(param_1);
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18] = 0;
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_Complete;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = *param_3;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = *param_4;
-    *reinterpret_cast<uint32_t*>(s + 0x30) = param_2;
-    *reinterpret_cast<uint32_t*>(s + 0x34) = param_5;
-    return param_1;
+    // ENDGAME B.3.8 ACT: the real ctor (CompleteTask.h). A by-address door.
+    return static_cast<Object::Base*>(new (param_1) CompleteTask(param_2, param_3, param_4, param_5));
 }
+
+// 0x1400c5da0: +0x20 = *param_3 ; +0x28 = *param_4 ; +0x30 = param_2 ; +0x34 = param_5.
+CompleteTask::CompleteTask(uint32_t taskIndexArg, uint64_t* workEntityArg, uint64_t* targetEntityArg,
+                           uint32_t taskParamArg)
+    : workEntity(reinterpret_cast<void*>(*workEntityArg)),
+      targetEntity(reinterpret_cast<void*>(*targetEntityArg)),
+      taskIndex(static_cast<int32_t>(taskIndexArg)),
+      taskParam(static_cast<int32_t>(taskParamArg)) {}
 
 // ============================================================
 // FUN_1400c71a0 — CreateRawMaterial_Action CopyCtor
@@ -181,31 +173,30 @@ void* Pf_CompleteTaskCopyCtor_5da0(void* param_1, uint32_t param_2, uint64_t* pa
 // XMM2 arg stored via MOVSS), and two bytes (+0x50=param_9, +0x51=1).
 // ============================================================
 void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float param_3,
-                                        uint64_t* param_4, uint64_t* param_5, uint64_t /*param_6*/,
+                                        uint64_t* param_4, uint64_t* param_5, uint64_t param_6,
                                         uint32_t param_7, uint32_t param_8, uint8_t param_9,
                                         uint64_t* param_10, uint32_t param_11) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(param_1);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(param_1);
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18] = 0;
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_CreateRaw;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = param_2;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = *param_4;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x30) = *param_5;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x38) = *param_10;
-    *reinterpret_cast<uint32_t*>(s + 0x40) = param_7;
-    *reinterpret_cast<uint32_t*>(s + 0x44) = param_8;
-    *reinterpret_cast<uint32_t*>(s + 0x48) = param_11;
-    *reinterpret_cast<float*>(s + 0x4c) = param_3;   // MOVSS — +0x4c is a float (XMM2 arg)
-    s[0x50] = param_9;
-    s[0x51] = 1;
-    return param_1;
+    // ENDGAME B.3.8 ACT: the real ctor (CreateRawMaterial.h). A by-address door.
+    return static_cast<Object::Base*>(new (param_1) CreateRawMaterial(
+        param_2, param_3, param_4, param_5, param_6, param_7, param_8, param_9, param_10, param_11));
 }
+
+// 0x1400c71a0: +0x20 = param_2 (raw) ; +0x28/+0x30/+0x38 = *param_4 / *param_5 /
+// *param_10 ; +0x40/+0x44/+0x48 = param_7/8/11 ; +0x4c = param_3 (MOVSS, the XMM2
+// float) ; +0x50 = param_9 ; +0x51 = 1. param_6 is not read.
+CreateRawMaterial::CreateRawMaterial(uint64_t desc, float yield, uint64_t* source, uint64_t* secondary,
+                                     uint64_t /*unused6*/, uint32_t quantity, uint32_t cellIdx,
+                                     uint8_t naturalRes, uint64_t* tertiary, uint32_t placement)
+    : descEntity(reinterpret_cast<void*>(desc)),
+      sourceBuilding(reinterpret_cast<void*>(*source)),
+      secondaryEntity(reinterpret_cast<void*>(*secondary)),
+      tertiaryEntity(reinterpret_cast<void*>(*tertiary)),
+      totalQuantity(static_cast<int32_t>(quantity)),
+      materialCellIdx(static_cast<int32_t>(cellIdx)),
+      placementFlags(placement),
+      yieldMultiplier(yield),
+      naturalResFlag(naturalRes),
+      placeNearFlag(1) {}
 
 // ============================================================
 // FUN_1400c9170 — MoveTo_Action Ctor
@@ -218,13 +209,18 @@ void* Pf_CreateRawMaterialCopyCtor_71a0(void* param_1, uint64_t param_2, float p
 // ============================================================
 void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param_4,
                          float* destination, int param_6, int param_7, float speed) {
+    // ENDGAME B.3.8 ACT: the real ctor (MoveTo.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (self) MoveTo(param_2, pathType, param_4, destination, param_6, param_7, speed));
+}
+
+// 0x1400c9170 — the ctor body, moved from the door above; after Action() the
+// retail stores are kept verbatim at their raw offsets (the destination and the
+// path block have no named members yet).
+MoveTo::MoveTo(void* param_2, uint32_t pathType, int param_4, float* destination, int param_6,
+               int param_7, float speed) {
     EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18] = 0;
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_MoveTo;
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     *reinterpret_cast<uint32_t*>(s + 0x20) = 0xffffffff;
     *reinterpret_cast<uint32_t*>(s + 0x24) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
@@ -255,10 +251,10 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
     if (s_pTid_MoveTo_70b0 && *s_pTid_MoveTo_70b0 && *s_pTid_MoveTo_70b0 != 0xFFFFFFFF) {
         charDescTid = *s_pTid_MoveTo_70b0;
     } else {
-        static uint32_t s_fallbackTid = 0;
-        if (!s_fallbackTid || s_fallbackTid == 0xFFFFFFFF)
-            s_fallbackTid = ::Object::GetTypeIdByName("CharacterDescription");
-        if (s_fallbackTid != 0xFFFFFFFF) charDescTid = s_fallbackTid;
+        // ENDGAME B.3.8 ACT (B8-10): no function-local cache in a ctor — a plain
+        // registry read per construction (the record is written once at boot).
+        const uint32_t fallbackTid = ::Object::GetTypeIdByName("CharacterDescription");
+        if (fallbackTid != 0xFFFFFFFF) charDescTid = fallbackTid;
     }
     bool derived = charDescTid && fn_IsDerivedFrom && fn_IsDerivedFrom(obj, charDescTid);
     *reinterpret_cast<void**>(s + 0x30) = derived ? obj : nullptr;
@@ -271,7 +267,6 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
         *reinterpret_cast<float*>(s + 0x478) =
             r * (s_pDAT_1720e4 ? *s_pDAT_1720e4 : 0.0f) + (s_pDAT_17214c ? *s_pDAT_17214c : 0.0f);
     }
-    return self;
 }
 
 // ============================================================
@@ -284,14 +279,17 @@ void* Pf_MoveToCtor_9170(void* self, void* param_2, uint32_t pathType, int param
 // ============================================================
 void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32_t actionType,
                                int64_t time, uint8_t param_6, int param_7) {
+    // ENDGAME B.3.8 ACT: the real ctor (PerformWork.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (self) PerformWork(entity, animIndex, actionType, time, param_6, param_7));
+}
+
+// 0x1400c9720 — the ctor body, moved from the door above; after Action() the
+// retail stores are kept verbatim at their raw offsets.
+PerformWork::PerformWork(void* entity, float animIndex, uint32_t actionType, int64_t time,
+                         uint8_t param_6, int param_7) {
     EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(self);
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18] = 0;
-    // PerformWork vtable address — already published as performwork.cpp constant.
-    *reinterpret_cast<uintptr_t*>(s) = ResolveAddr(Module::Exe, 0x14015fea0);
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
     *reinterpret_cast<uint64_t*>(s + 0x20) = *reinterpret_cast<uint64_t*>(entity);
     *reinterpret_cast<float*>(s + 0x28) = animIndex;
@@ -322,7 +320,6 @@ void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32
             }
         }
     }
-    return self;
 }
 
 // ============================================================
@@ -332,17 +329,18 @@ void* Pf_PerformWorkCtor7_9720(void* self, void* entity, float animIndex, uint32
 // ============================================================
 void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uint32_t* param_3,
                                            uint32_t param_4, uint64_t* param_5, uint32_t param_6) {
-    EnsureInit();
-    uint8_t* s = reinterpret_cast<uint8_t*>(param_1);
-    if (fn_ObjectInternal_Ctor) fn_ObjectInternal_Ctor(param_1);
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_Action;
-    *reinterpret_cast<uint64_t*>(s + 0x10) = 0;
-    s[0x18] = 0;
-    *reinterpret_cast<uintptr_t*>(s) = s_vt_SendMsg;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x20) = *param_2;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = 0;
-    *reinterpret_cast<uint64_t*>(s + 0x28) = *param_5;
+    // ENDGAME B.3.8 ACT: the real ctor (SendComponentMessage.h). A by-address door.
+    return static_cast<Object::Base*>(
+        new (param_1) SendComponentMessage(param_2, param_3, param_4, param_5, param_6));
+}
+
+// 0x1400cb1d0 — the ctor body, moved from the door above: +0x20 = *param_2,
+// +0x28 = *param_5, then the retail stores (and the tree's typeid heal) verbatim.
+SendComponentMessage::SendComponentMessage(uint64_t* param_2, uint32_t* param_3, uint32_t param_4,
+                                           uint64_t* param_5, uint32_t param_6)
+    : _field20(reinterpret_cast<void*>(*param_2)),
+      _field28(reinterpret_cast<void*>(*param_5)) {
+    uint8_t* s = reinterpret_cast<uint8_t*>(this);
     uint32_t compTypeId = *param_3;
     // [ECONOMY M-D — BANISHED_LIVE_STORAGE typeid heal]
     // The eat push (PerformWork_Action_Ctor6, citizenai_actionctors.cpp) reads the
@@ -362,7 +360,6 @@ void* Pf_SendComponentMessageCopyCtor_b1d0(void* param_1, uint64_t* param_2, uin
     *reinterpret_cast<uint32_t*>(s + 0x34) = param_4;
     *reinterpret_cast<uint32_t*>(s + 0x38) = param_6;
     *reinterpret_cast<uint32_t*>(s + 0x3c) = 0;
-    return param_1;
 }
 
 // ============================================================

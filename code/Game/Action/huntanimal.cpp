@@ -100,10 +100,6 @@ static int* s_typeId_HuntAnimalSearch = nullptr;       // DAT_1401c8000 -- searc
 static uint64_t* s_dat_VectorDtorReturn = nullptr;    // DAT_1401c5f70
 static uint32_t* s_typeInfo_HuntAnimal = nullptr;      // DAT_1401c5f68
 
-// Vtable addresses for dtor chain
-static uintptr_t s_vtable_HuntAnimal = 0;
-static uintptr_t s_vtable_Action = 0;
-
 // Float constants
 static float* s_searchRadius = nullptr;     // DAT_1401721a8 = 8.0f
 static float* s_halfOffset = nullptr;       // DAT_140172114 = 0.5f
@@ -141,10 +137,6 @@ bool HuntAnimal_ResolveFuncs() {
     s_dat_VectorDtorReturn = reinterpret_cast<uint64_t*>(ResolveAddr(Module::Exe, 0x1401c5f70));
     s_typeInfo_HuntAnimal = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5f68));
 
-    // Vtable addresses
-    s_vtable_HuntAnimal = ResolveAddr(Module::Exe, 0x14015fde0);
-    s_vtable_Action = ResolveAddr(Module::Exe, 0x14015faa0);
-
     // Float constants
     s_searchRadius = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x1401721a8));
     s_halfOffset = reinterpret_cast<float*>(ResolveAddr(Module::Exe, 0x140172114));
@@ -157,7 +149,6 @@ bool HuntAnimal_ResolveFuncs() {
               s_typeId_AnimalEntity && s_typeId_HerdEntity &&
               s_typeId_ModelDesc && s_typeId_HuntAnimalSearch &&
               s_dat_VectorDtorReturn && s_typeInfo_HuntAnimal &&
-              s_vtable_HuntAnimal && s_vtable_Action &&
               s_searchRadius && s_halfOffset &&
               fn_InternalBasePtr_DeletePtr &&
               fn_InternalBasePtr_Ctor && fn_IsDerivedFrom &&
@@ -177,31 +168,6 @@ bool HuntAnimal_ResolveFuncs() {
 
     s_funcs_resolved = ok;
     return ok;
-}
-
-// ============================================================
-// Slot 0: ScalarDeletingDtor (0x140022770)
-// Same pattern as RemoveAnimal: set vtables, cleanup +0x10, ~Internal, free.
-// ============================================================
-void* HuntAnimal_ScalarDtor_Impl(HuntAnimal* self, uint32_t flags) {
-    uint8_t* s = (uint8_t*)self;
-
-    // Set HuntAnimal vtable then Action vtable for proper dtor dispatch
-    *(uintptr_t*)s = s_vtable_HuntAnimal;
-    *(uintptr_t*)s = s_vtable_Action;
-
-    // If entity ref at +0x10 is non-null, delete it
-    if (*(void**)(s + 0x10) != nullptr) {
-        reinterpret_cast< ::Object::InternalBasePtr*>(s + 0x10)->DeletePtr();   // B.3.3 bridge
-    }
-
-    // Call Object::Internal::~Internal
-    s_fn_ObjectInternal_Dtor(self);
-
-    if (flags & 1) {
-        fn_MemFreeStatic(self);
-    }
-    return self;
 }
 
 // ============================================================
@@ -512,42 +478,58 @@ bool HuntAnimal_GetTarget_Impl(HuntAnimal* self, void* param) {
 }
 
 // ============================================================
-// Standalone factory + vtable — Action family (notes/FACTORY_CASCADE_145_BRIEF.md).
-// Vtable @ 0x14015fde0 (10 slots), size 0x40, parent "Action".
-// Shared slot helpers live in action_base_standalone.{h,cpp}.
+// class HuntAnimal (HuntAnimal.h) — ENDGAME B.3.8 ACT.
+// The hand-built g_HuntAnimal_Vtable[10], its per-class type-id cache and the
+// Action_Alloc / Action_InitInPlace factories are gone: the compiler emits
+// the table, DECLARE_EXE_TYPE answers slots 1/2.
 // ============================================================
-#include "action_base_standalone.h"
 #include "Object/factory_registration.h"
 #include "address_registry.h"
 
-static uint32_t HuntAnimal_GetTypeId(void*) {
-    static uint32_t c = 0;
-    if (!c) c = ::Object::GetTypeIdByName("HuntAnimal");
-    return c;
+// create 0x140022700 (inlined ctor). The tree's factory zeroed every field above
+// +0x10; kept (not a behaviour change of this step).
+HuntAnimal::HuntAnimal()
+    : _field20(nullptr),
+      _field28(nullptr),
+      _field30(nullptr),
+      _field38(0),
+      _pad39{} {}
+
+// [0] 0x140022770
+Object::Base* HuntAnimal::DeletingDtor(unsigned flags) {
+    this->~HuntAnimal();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-static void* g_HuntAnimal_Vtable[10] = {
-    (void*)&Action_ScalarDtor,        // +0x00 ScalarDtor
-    (void*)&Action_Slot1,             // +0x08 slot1 (returns null)
-    (void*)&HuntAnimal_GetTypeId,           // +0x10 GetTypeId
-    (void*)&HuntAnimal_Serialize_Impl,      // +0x18 Serialize
-    (void*)&HuntAnimal_AbstractImpl_Impl,   // +0x20 AbstractImpl
-    (void*)&HuntAnimal_Execute_Impl,   // +0x28 Execute
-    (void*)&HuntAnimal_Enter_Impl,  // +0x30 Enter
-    (void*)&Action_Exit,   // +0x38 Exit
-    (void*)&Action_BaseCheckEntity,  // +0x40 CheckEntity
-    (void*)&HuntAnimal_GetTarget_Impl, // +0x48 GetTarget
-};
+// [3] 0x1400c8260
+void HuntAnimal::Persist(void* stream) { HuntAnimal_Serialize_Impl(this, stream); }
+// [4] 0x1400c8250
+int  HuntAnimal::AbstractImpl(void* actionStack) { return HuntAnimal_AbstractImpl_Impl(this, actionStack); }
+// [5] 0x1400c8240
+int  HuntAnimal::Execute(void* actionStack, void* time) { return HuntAnimal_Execute_Impl(this, actionStack, time); }
+// [6] 0x1400c7de0
+void HuntAnimal::Enter() { HuntAnimal_Enter_Impl(this); }
+// [9] 0x1400c7d60
+bool HuntAnimal::GetTarget(void* param) { return HuntAnimal_GetTarget_Impl(this, param); }
 
-extern "C" void RegisterHuntAnimalVtable() {
-    RegisterExeAddr(0x14015fde0, (uintptr_t)g_HuntAnimal_Vtable);
-}
-extern "C" void* HuntAnimal_CreateInPlace(void* mem) {
+void* HuntAnimal::CreateNewObject() {
     HuntAnimal_ResolveFuncs();
-    return Action_InitInPlace(mem, 0x40, g_HuntAnimal_Vtable);
+    void* p = Object::detail::InternalMemAlloc(sizeof(HuntAnimal), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(new (p) HuntAnimal());
 }
-extern "C" void* HuntAnimal_Factory(void) {
+void* HuntAnimal::CreateInPlaceObject(void* storage) {
     HuntAnimal_ResolveFuncs();
-    return Action_Alloc(0x40, g_HuntAnimal_Vtable);
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) HuntAnimal());
 }
-REGISTER_TYPE(HuntAnimal, "Action", &HuntAnimal_Factory, &HuntAnimal_CreateInPlace);
+
+DEFINE_EXE_VTABLE(HuntAnimal, "_ZTV10HuntAnimal")
+
+// B38 D5: every by-address reader of 0x14015fde0 was inside this block and now
+// builds the object with the real ctor, so the row is gone. The function stays
+// until the coordinator's address_registry hunk drops its call.
+extern "C" void RegisterHuntAnimalVtable() {}
+
+DEFINE_EXE_TYPE(HuntAnimal, "Action")

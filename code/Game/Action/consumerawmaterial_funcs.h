@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-struct ConsumeRawMaterial;
+class ConsumeRawMaterial;
 
 // ConsumeRawMaterial::Serialize -- versioned serialization with entity ref + material list
 void ConsumeRawMaterial_Serialize_Impl(ConsumeRawMaterial* self, void* stream);

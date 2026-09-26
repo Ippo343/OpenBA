@@ -4,7 +4,7 @@
 
 #include <cstdint>
 
-struct PickupStoredRawMaterial;
+class PickupStoredRawMaterial;
 
 // PickupStoredRawMaterial::Serialize -- serialize status, entity refs, material list, partial flag
 void PickupStoredRawMaterial_Serialize_Impl(PickupStoredRawMaterial* self, void* stream);
