@@ -1746,4 +1746,9 @@ extern "C" void RegisterOptionsDialogVtable() {
     RegisterExeAddr(0x140075150, reinterpret_cast<uintptr_t>(&OptionsDialog_Ctor_Standalone));
 }
 
-DEFINE_EXE_TYPE(OptionsDialog, "UI::DialogInstance")
+// Parent literal EXACTLY retail's (RegisterType_OptionsDialog 0x14014c440 passes
+// "public UI::DialogInstance" — an MSVC-era slip in Shining Rock's own macro use).
+// BaseTypeInfo::StripNamespace (runtime/src/object/type_reflection.cpp) keeps
+// what follows the LAST ':', so both spellings resolve the parent to
+// "DialogInstance" (B38_RULES D4, section 6 item 3).
+DEFINE_EXE_TYPE(OptionsDialog, "public UI::DialogInstance")
