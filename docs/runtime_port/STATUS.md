@@ -20,6 +20,92 @@ built them wrong, and callbacks stored in data.
 
 ## Endgame (2026-09-13)
 
+- **B.3.7 CLOSED (2026-09-26):** `Engine`, `Save`, `Achievement`, `Audio`, `Input`, `Pathfinding`,
+  `Picking` and `Application` are real C++ classes under retail's names — 15 polymorphic
+  (`UpdateLoop`/`LoaderLoop`/`DialogLoopT`/`DialogLoaderLoopT` as their OWN root, `Loader` and
+  `Audio::Stream` on the real `System::Thread`, `Achievement`/`Goal`/`SoundEffect`/`PointList`/
+  `PickingMesh` on `Object::External`, `SoundBuffer` on `CompiledExternal`, `AchievementInstance`/
+  `GoalInstance` on `Internal`, `IPathInfo`) + 17 non-polymorphic (`MainLoop` 0xa0, `Engine` 0x6f8
+  PINNED, `Application` 0x30, `SaveLoad` 0x90, `AchievementManager`, `GoalList`, `Audio::Scene`/
+  `Configuration`/`Device` 0x1298, `Input::KeyMap`/`Configuration`/`Device` 0x1200, `Picking::Scene`,
+  `Pathfinding::Scene` 0x90 …) + 19 nested value types, in `runtime/types/<ns>/` (list with parent,
+  slots, sizeof in `endgame_b/b37_session/CLOSE_NUMBERS.md` section 6: 14 of 14 checkable agree
+  with the retail dump). Bodies moved onto members, callers converted, dead doors deleted. 14 merge
+  gates + the close, each 0 problems (table in `B37_RULES.md` section 11); main `96b03474` ->
+  `db990145` + the close docs. Rule sheet `endgame_b/B37_RULES.md` (B7-1..13, corrections in 10 and
+  14, run log 11, what stays 12), retail dump `B37_SLOTS.md` (DLL + EXE modes), file map
+  `B37_FILEMAP.md`, kit `endgame_b/b37_session/` (BLOCK_BRIEF, CALLER_BATCH_BRIEF, CLOSING_BRIEF,
+  EXE_SUBCLASSES, CALLER_SURFACE, `ghidra/Step7Appendix.java`, CLOSE_NUMBERS, stepclose.sh). Plan
+  for step 8: `endgame_b/NEXT_SESSION.md`.
+  **Shape.** One question pass from the retail DLL and exe (30 classes / 618 exports; every vtable
+  terminated on the next symbol, sizeof from slot 0, parents from literals and base-ctor calls,
+  31 retslot exports, by-value-argument prologues, the five exe loop tables and the Goal family read
+  in the exe) plus a file map (six disjoint blocks, 116 files, ONE fragment body) and an exe-subclass
+  + caller-surface report (12 exe classes on 14 tables, 25 qualified-call sites, 451 call sites by
+  binding); wave 1 blocks B1 Engine+Application, B2 Save, B3 Achievement (+ the exe Goal family's
+  qualified calls), B6 Pathfinding+Picking; wave 2 B4 Audio, B5 Input, fragment F; caller round 1
+  K1 (code/Game/Dialog), K2 (rest of code/Game) for the merged namespaces, round 2 K3 (Input),
+  K4 (Audio), K5 (standalone/engine/runtime leftovers/dx11); one closing owner.
+  **Numbers** (`CLOSE_NUMBERS.md`). `engine_funcs`: 92 globals bound to the eight namespaces BY
+  INITIALISER (82 doors + 10 storage; the inventory's 63 was name-anchored) -> 17 (8 ctor/dtor
+  doors still called + 9 storage globals; `g_pEngineSingleton` folded into `g_pMainLoopSingleton`,
+  the same symbol; `g_pKeyMapObjectExref` renamed to what it is). Door CALLs 233 -> 30 (all
+  ctor/dtor); `ResolveExport` sites 177 -> 49 (registry rows, storage, ctor/dtor doors);
+  `RT_EXPORT_ONCE` 57 -> 13; exe import slots 47 -> 6 (storage exrefs); Runtime hex 21 -> 6; live
+  hex resolve lines tree-wide 66 -> 12; hand-inlined vtable calls 2 -> 0. 433 `// B.3.7 bridge`
+  (code 268, runtime 141). Census: 138 rows left `called` (214 -> 76) because member calls resolve
+  nothing. Unit tests 462 -> 516, 0 failures. B.4 cast metric **36,449** lines (+224: code +261
+  bridges, engine -93 deleted resolvers, runtime -33). Doors still registered: 285 names (238
+  one-line qualified delegations, 24 dtors, 22 ctors, 1 `operator=`) + 16 mint, 8 `_typeInfo`, 12
+  `RT_DELDTOR` rows and the 10 singleton storage slots (`SaveLoad::_singleton` has NO manifest row)
+  — end of B.3. dx11's import table is down to the `appSingleton` data row.
+  **Step-close routes:** merged-tree gate 0 problems (516 tests, 0 new warnings, newgame/tutorial/
+  loadgame clean, typetable == baseline, resave 3/3; Save merged with resave 5/5); Mods route with
+  `.pkm` mounted exit 0; front-end Quit, Options (id 4 -> Quit), Achievements (id 8 -> Quit) exit 0,
+  all `[RtResolve] 0 misses`, 0 `[RtMint] TRAP`; an in-game save through `Save::SaveLoad` (resave
+  gate file mode: SAVE OPERATION COMPLETE, 8.55 MB, crash log 0 — the whole-file diff is that
+  mode's expected result); `make sa-stress` exit 0, clean quit (800 citizens x3, speed 10, 6000
+  frames: update 2.01 ms/frame vs baseline 1.92, p95 2.87 vs 2.40 — recorded, not chased, per the
+  B rule; the B.3.6 close read 1.97 / 2.79; draw 1.21 vs 1.38); the new-game log has the same
+  `NOT IMPLEMENTED` stub SET as the baseline (39 -> 33 hits); `Audio::Device`/`Stream` construct on
+  the plain new-game route (Stream ctor=1, Stream::Run calls=2, Scene::Update 799). True release compile from a clean obj dir exit 0 (1,148 files, 7.8 MB exe), `make clean`, clean rebuild of debug/perf/unit, then the full gate again on the clean-built exe: 0 problems, 0 new warnings, 516 tests, typetable == baseline, resave 3/3.
+  **Found on the way, all retail-backed** (`B37_RULES.md` 10 and 14). (1) `Achievement::Achievement`
+  is polymorphic (9 slots, 0x58, `??_7Achievement@0@6B@` — the back-reference the inventory's regex
+  missed; 16 mint rows not 14) with the exe's `Scenario` on it; `GoalList` is a 0x10 value type.
+  (2) The four loops are NOT `Object::Base` (slot 1 `Startup`); `Goal` slot 8 is `CheckGoalState`
+  (0x18009f060 tail-calls `[RAX+0x40]`), not `Construct`; `GameUpdateLoop` has 12 slots, not 22;
+  retail's Scenario table has 9 slots (tree 13), Goal tables 11 (tree arrays run into the next
+  table). (3) `System::String` BY VALUE arrives by HIDDEN POINTER although it is 8 bytes;
+  `ExternalPtr` and `System::Time` in a register (B7-5); every copy ctor read is DEEP. (4)
+  `Application` has 27 exports (`@Application@1@`), not zero; `PointList` is LIVE
+  (`InteractDescription::Serialize` loads one every game and read +0x30/+0x38 raw — now named
+  fields); `Pathfinding::Scene`/`IPathInfo` dead in retail. (5) `Engine::Engine` 0x6f8 pinned by
+  `??4Engine@0@`; `Audio::Device::PlatformChannel` is the "unnamed" voice-callback record;
+  `SoundEffect` +0x20/+0x24/+0x28 and `SoundBuffer` +0x48/+0x50 named; `KeyMap` +0x00 is
+  `_suspendCount`; `ModInfo` 0x20; `UpdateList` writes +0x2c (the old header said not). (6) Binding
+  defects: `fn_KeyMap_Released` was bound ONLY to an unregistered exe slot (always null);
+  `finishtutorialinstance.cpp` resolved `Audio::Configuration::Save`'s slot as `IsDerivedFrom`;
+  `citizen_assignworkplace.cpp`'s five Audio emitter slots and `Vector3::operator==` (0x140152a70,
+  still unregistered) were never registered; `g_pEngineSingleton` was bound to `MainLoop`'s
+  singleton; five `MainLoop` members and `Input::Device::PlatformUpdate` were filed "not exported"
+  while exported. (7) Tooling: `gate.sh`'s argument order is `<label> <n> [mode]`; the K1/K2 hex
+  sweep dropped ordinary class-scoped names and K3's dropped back-references — anchor on the
+  demangled OWNER; `warn_ab2.sh` misreports when a header loses a name (compile the base in its own
+  worktree); three block agents went idle on background lock watchers (foreground only).
+  **Behaviour changes, each gated and retail-faithful:** the drag tool's key-release paths run
+  (K3); citizen emitter teardown/volume run (K4, own commit); the tutorial-instance type check runs
+  (K2, per retail 0x1400d7bf0); MenuDLT `Shutdown` runs retail's full 12-step teardown (B1,
+  carry-over 11 CLOSED); `PointList` and `Audio::Scene` allocate through the `rtcoll` door.
+  **Deliberately NOT converted (reasons in `B37_RULES.md` 12):** no polymorphic class has a C++
+  ctor; ctor/dtor doors, mint/`_typeInfo`/`RT_DELDTOR` rows and the singleton storage (end of B.3);
+  the exe-phase subclasses (five loop tables, Goal family, Scenario, the unregistered
+  `AchievementInstance` table) and the `RtEngine::` loop PODs they embed (95 `m_` uses in 7
+  files) — step 8; 105 exported members declared and not ported (`Pathfinding::Scene` 15 dead,
+  `MainLoop` 12, `Audio::Device` 11, `Input::Device` 10 …) + 8 undefined dtors; `KeyMap`'s split
+  fields vs `Collection::Set`; the 19 `rtpickgrid::` free functions; four defined non-polymorphic
+  dtor doors still called from `code/Game` (`Audio::Scene`, `Picking::Scene`, `SaveLoad`,
+  `SavedState` — decide with their holders in step 8); the `GoalDialog` and Options-change routes
+  still owed (the menu driver has no `OptionsDialog` token).
 - **B.3.6 CLOSED (2026-09-26):** `UI` is real C++ classes under retail's names — 68 polymorphic
   classes (28 `*Description`, 28 `*Element`, the six-class Dialog family, `CharacterSet`, `Cursor`,
   `Font`, `SpriteCapture`, `SpriteSheet`, `StringTable`) plus the value types `UserInterface`

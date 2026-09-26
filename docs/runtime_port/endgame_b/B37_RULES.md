@@ -743,6 +743,8 @@ a clean-rebuild baseline, unit, `dispatch_slot_map --check`, cutover manifest, `
 | K5 (standalone/engine/runtime/dx11 callers r2) ca222c0d | 516 | 0 problems |
 | K4 (Audio callers r2, incl. emitter slots live) 7ecd16cd | 516 | 0 problems |
 | K3 (Input callers r2 + dead caches) d5100882 | 516 | 0 problems |
+| close (b37-close commits 1-7) db990145 | 516 | 0 problems |
+| step close (b37_session/stepclose.sh on 6e8afd2d) | 516 | 0 problems (Mods, Quit, Options, Achievements routes; in-game save; sa-stress exit 0; true release compile; clean rebuild + full gate 0 problems) |
 | close (b37-close, commits 1–4, 6, 7) | 516 | static gate per commit (below); the step close is the coordinator's |
 
 The closing pass ran the static gate only, per commit: `standalone-debug`, `standalone-perf`, `unit`
