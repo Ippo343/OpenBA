@@ -123,6 +123,7 @@
 // PORTABILITY: no <windows.h>, per PLAN.md §4.1 decision 1.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
@@ -399,6 +400,9 @@ void* EntryAssign(void* dstV, const void* srcV) {
 // because ResolveAddr consults the registry first and lane P registered
 // 0x18001fcd0 under both doors. That is deliberate: routing our arithmetic
 // through the DLL's converter would make a divergence here unattributable.
+// `?AsTransform3@Transform@Math@@QEBA?AVTransform3@2@XZ` (0x18001fcd0).
+namespace { std::atomic<void*> g_asTransform3Slot{nullptr}; }
+
 void* BoxTransform(void* outV, const void* transformV, const void* inBoxV) {
     float* out = static_cast<float*>(outV);
     const float* b = static_cast<const float*>(inBoxV);
@@ -406,11 +410,16 @@ void* BoxTransform(void* outV, const void* transformV, const void* inBoxV) {
     // Math::Transform3 AsTransform3(const Math::Transform&) — hidden return
     // slot in RDX, `this` in RCX.
     float m[12];
+    // RULE B6-5 (ENDGAME B.3.7 block B6): a namespace-scope atomic slot, not a
+    // function-local first-call cache — this body is reached from the Scene
+    // members and from runtime/src/graphics (a shared row, see below).
     using AsT3Fn = void* (*)(const void*, void*);
-    static AsT3Fn asT3 = nullptr;   // retry a miss, never cache a null
-    if (!asT3) asT3 = reinterpret_cast<AsT3Fn>(
-        ResolveAddr(Module::Runtime, 0x18001fcd0));
-    asT3(transformV, m);
+    void* p = g_asTransform3Slot.load(std::memory_order_acquire);
+    if (p == nullptr) {            // retry a miss, never cache a null
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, 0x18001fcd0));
+        if (p != nullptr) g_asTransform3Slot.store(p, std::memory_order_release);
+    }
+    reinterpret_cast<AsT3Fn>(p)(transformV, m);
 
     const float ez = (b[5] - b[2]) * kHalf;
     const float ey = (b[4] - b[1]) * kHalf;

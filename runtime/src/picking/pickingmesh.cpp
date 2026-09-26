@@ -43,13 +43,28 @@
 //   _triangles (count, resize FUN_18007a790 stride 0xc align2,
 //               per elem: kArrayUShort(n=3) TWICE -- elem+0x00 and elem+0x06),
 //   _uvs       (count, resize FUN_18007a900 stride 4 align2, kArrayUShort(n=2) per elem).
+//
+// ENDGAME B.3 step 7, block B6: `Picking::PickingMesh` is a real
+// `Object::External` class now (runtime/types/picking/PickingMesh.h). The
+// anonymous-namespace `PickingMesh` this file used to declare (full Array
+// header, capacity at +0x44) and runtime/types/picking/Scene.h's POD (bare
+// `SubMesh* _nodes; int32 _nodeCount`) FOLD into that one class (RULE B7-6).
+// The slot bodies are its members; every registered door below is a one-line
+// QUALIFIED delegation. The fields are named by offset (_string20, _string28,
+// _flag30): no getter names them (B6-8).
+//
+// RULE B6-5: the four Array SetSize bodies and ~Array<SubMesh> are reached by
+// ADDRESS (registry-first) through namespace-scope atomic slots — this class
+// is deserialized on the LOADER thread, so the function-local first-call
+// caches these used to keep are gone. The two unused by-address
+// `MemAlloc`/`MemFree` helpers are deleted.
 // ============================================================================
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
 
 #include "../../funcs/rt_port.h"
-#include "../../types/system/String.h"
 // ResolveAddr, declared locally rather than via standalone/resolve.h -- that header
 // pulls in <windows.h>, which collides with names this file (or a header it
 // includes) uses -- see runtime/src/collection/array_internal.h for the same fix.
@@ -59,44 +74,18 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 #include "../../types/io/Serializer.h"
 #include "../../types/object/External.h"
 #include "../../types/system/String.h"
-#include "../../types/picking/Scene.h"
+#include "../../types/picking/PickingMesh.h"
 #include "../system/string.h"
 
 namespace {
 
-using RtObject::External;
 using RtSystem::String;
-using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
 using rt::io::Stream;
-using RtPicking::SubMesh;
-using RtPicking::Triangle;
-using RtPicking::UV16;
-
-// +0x38 is a FULL Collection::Array<SubMesh> header (data/size/capacity), not
-// a bare pointer+count: FUN_18007aa40 (the resize this class's Serialize
-// calls) is the same SetSize shape as every other Collection::Array<T> this
-// port has transcribed, reading/writing `param_1[1]` (size) and
-// `*(int*)(param_1+0xc)` (capacity) -- and Construct/Reconstruct zero
-// `this+0x40` as ONE qword, which is exactly "zero an Array's size+capacity
-// together". runtime/types/picking/Scene.h's PickingMesh (Wave 5 lane D) reads
-// the same two fields as a bare `SubMesh* _nodes; int32_t _nodeCount;` because
-// that lane never needed the capacity int32 at +0x44 -- byte-compatible with
-// this, just one field short.
-struct PickingMesh {
-    External                    base;    // +0x00
-    void*                       _name1;  // +0x20
-    void*                       _name2;  // +0x28
-    bool                        _flag;   // +0x30
-    uint8_t                     _pad31[7];  // +0x31
-    Collection::Array<SubMesh>  _nodes;  // +0x38  data, size@0x40, cap@0x44
-};
-static_assert(sizeof(PickingMesh) == 0x48, "Picking::PickingMesh is 0x48 bytes");
-static_assert(offsetof(PickingMesh, _name1) == 0x20, "+0x20");
-static_assert(offsetof(PickingMesh, _name2) == 0x28, "+0x28");
-static_assert(offsetof(PickingMesh, _flag)  == 0x30, "+0x30");
-static_assert(offsetof(PickingMesh, _nodes) == 0x38, "+0x38");
+using SubMesh  = Picking::PickingMesh::SubMesh;
+using Triangle = Picking::PickingMesh::Triangle;
+using UV16     = Picking::PickingMesh::UV16;
 
 void* BaseVTable()         { return RT_DATA_SLOT(void*, "??_7Base@Object@@6B@"); }
 void* ExternalVTable()     { return RT_DATA_SLOT(void*, "??_7External@Object@@6B@"); }
@@ -111,31 +100,21 @@ void CallSlot0(void* self, int flag) {
     reinterpret_cast<Slot0Fn>(vt[0])(self, flag);
 }
 
-void* MemAlloc(uint64_t bytes, int align) {
-    using Fn = void* (*)(uint64_t, int);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7a50ull));
-    return fn(bytes, align);
-}
-void MemFree(void* p) {
-    using Fn = void (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800c7ad0ull));
-    fn(p);
-}
-
-void ConstructBody(PickingMesh* self) {
+// The stores retail inlines into Construct (0x180071d40) and Reconstruct
+// (0x180071cd0): +0x20/+0x28 as qwords, +0x30 as ONE byte, +0x38/+0x40 as
+// qwords (the last covers _size and _capacity together).
+void InlineCtorStores(Picking::PickingMesh* self) {
     void** vp = reinterpret_cast<void**>(self);
     *vp = BaseVTable();
     *vp = ExternalVTable();
-    self->base._path.data      = nullptr;
-    self->base._refs._data     = nullptr;
-    self->base._refs._size     = 0;
-    self->base._refs._capacity = 0;
+    self->_path.data      = nullptr;
+    self->_refs._data     = nullptr;
+    self->_refs._size     = 0;
+    self->_refs._capacity = 0;
     *vp = PickingMeshVTable();
-    self->_name1 = nullptr;
-    self->_name2 = nullptr;
-    self->_flag = false;
+    self->_string20.data = nullptr;
+    self->_string28.data = nullptr;
+    self->_flag30 = false;
     self->_nodes._data = nullptr;
     self->_nodes._size = 0;
     self->_nodes._capacity = 0;
@@ -157,52 +136,56 @@ void ConstructBody(PickingMesh* self) {
 //     retail CALLs the copy ctor 0x1800734a0 -- which adopts the element's
 //     System::String with a refcount bump and runs `operator=` on all four
 //     inner Arrays, allocating fresh buffers.
-//   * It then skipped retail's per-element destroy on BOTH arms. The comment
-//     it carried -- "retail's shrink-tail path here does not free the
-//     truncated SubMeshes' nested arrays (FUN_18007aa40 has no such call on
-//     the reused-buffer arm)" -- IS WRONG, and is corrected here at its source
-//     per PLAN.md section 6 step 8: 0x18007aa40 CALLs 0x180073ee0 on the
-//     shrink tail AND on the whole old buffer before freeing it. Together with
-//     the shallow copy that made the old body a double-owner on grow and a
-//     leak on shrink.
+//   * It then skipped retail's per-element destroy on BOTH arms: 0x18007aa40
+//     CALLs 0x180073ee0 on the shrink tail AND on the whole old buffer before
+//     freeing it.
 //
-// Those copies are gone. Each body is ported ONCE, in
-// runtime/src/collection/array{,_destroy}.cpp with the rest of its family, and
-// reached here by address -- registry-first, so these call OUR bodies from the
-// moment RtCollectionPortInit runs, and at cutover they are all that exists.
-template <typename Fn>
-static Fn RtAddrFn(uintptr_t a) { return reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, a)); }
+// Each body is ported ONCE, in runtime/src/collection/array{,_destroy}.cpp with
+// the rest of its family, and reached here by address -- registry-first, so
+// these call OUR bodies from the moment RtCollectionPortInit runs.
+//
+// RULE B6-5: one namespace-scope atomic slot per address; a miss is retried,
+// a null is never cached (the element_common.h `AtomicAddr` contract).
+void* AtomicAddr(std::atomic<void*>& slot, uintptr_t ghidra) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, ghidra));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+std::atomic<void*> g_vecSetSize{nullptr};      // 0x18007a4d0
+std::atomic<void*> g_triSetSize{nullptr};      // 0x18007a790
+std::atomic<void*> g_uvSetSize{nullptr};       // 0x18007a900
+std::atomic<void*> g_subMeshSetSize{nullptr};  // 0x18007aa40
+std::atomic<void*> g_subMeshDtor{nullptr};     // 0x180073720
 
 using ArraySetSizeFn = void (*)(void*, int32_t);
 
 // 0x18007a4d0  Array<Vector3>::SetSize   (_vertices AND _normals: retail shares
 //              one body, stride 0xc, align 4, tail zeroed)
 void VecArraySetSize(Collection::Array<Vector3>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007a4d0ull);
-    fn(a, n);
+    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_vecSetSize, 0x18007a4d0ull))(a, n);
 }
 // 0x18007a790  Array<Triangle>::SetSize  (stride 0xc, align 2, tail UNTOUCHED)
 void TriArraySetSize(Collection::Array<Triangle>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007a790ull);
-    fn(a, n);
+    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_triSetSize, 0x18007a790ull))(a, n);
 }
 // 0x18007a900  Array<UV16>::SetSize      (stride 4, align 2, tail UNTOUCHED)
 void UvArraySetSize(Collection::Array<UV16>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007a900ull);
-    fn(a, n);
+    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_uvSetSize, 0x18007a900ull))(a, n);
 }
-
 // 0x18007aa40  Array<SubMesh>::SetSize. NON-TRIVIAL: element copy ctor
 // 0x1800734a0, per-element destroy 0x180073ee0 on the shrink tail and on the
-// abandoned buffer. See the banner above for what the old private copy got
-// wrong.
+// abandoned buffer.
 void SubMeshArraySetSize(Collection::Array<SubMesh>* a, int32_t n) {
-    static ArraySetSizeFn fn = nullptr;
-    if (!fn) fn = RtAddrFn<ArraySetSizeFn>(0x18007aa40ull);
-    fn(a, n);
+    reinterpret_cast<ArraySetSizeFn>(AtomicAddr(g_subMeshSetSize, 0x18007aa40ull))(a, n);
+}
+// 0x180073720  ~Array<SubMesh>: the element destroy 0x180073ee0, then the
+// plain `~Array`. Retail's ~PickingMesh CALLs exactly this at 0x1801228c4.
+void SubMeshArrayDtor(Collection::Array<SubMesh>* a) {
+    using Fn = void* (*)(void*);
+    reinterpret_cast<Fn>(AtomicAddr(g_subMeshDtor, 0x180073720ull))(a);
 }
 
 // ---- the two Serialize halves retail keeps out of line --------------------
@@ -243,7 +226,7 @@ void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
 
     for (int32_t i = 0; i < count; ++i) {
         SubMesh* s = &base[i];
-        // B.3.1 bridge: SubMesh::_name is a POD slot on a not-yet-converted struct.
+        // B.3.1 bridge: SubMesh::_name is a raw slot (PickingMesh.h says why).
         reinterpret_cast<System::String&>(s->_name).Serialize(ser);
         scalarInt(rw, &s->_parent, nullptr);
         arrayFloat(rw, 4, &s->_local.rotation, nullptr);
@@ -270,56 +253,46 @@ void SerializeSubMeshesBody(Serializer* ser, int32_t count, SubMesh* base) {
     }
 }
 
-// 0x180073720  ~Array<SubMesh>: the element destroy 0x180073ee0, then the
-// plain `~Array`. Retail's ~PickingMesh CALLs exactly this at 0x1801228c4.
-void SubMeshArrayDtor(Collection::Array<SubMesh>* a) {
-    using Fn = void* (*)(void*);
-    static Fn fn = nullptr;
-    if (!fn) fn = RtAddrFn<Fn>(0x180073720ull);
-    fn(a);
-}
-
 }  // namespace
 
-extern "C" uint32_t RtPicking_PickingMesh_Type(const void*) {
+// ############################################################################
+// Picking::PickingMesh's member bodies (ENDGAME B.3.7 block B6).
+// ############################################################################
+namespace Picking {
+
+// [2] 0x180071a90: `MOV EAX,[_typeInfo] ; RET`.
+uint32_t PickingMesh::Type() const {
     uint32_t v = 0; std::memcpy(&v, PickingMeshTypeInfo(), sizeof v); return v;
 }
-extern "C" const char* RtPicking_PickingMesh_TypeName(const void*) {
+// [1] 0x180071ab0: the same node at +8.
+const char* PickingMesh::TypeName() const {
     const char* v = nullptr; std::memcpy(&v, PickingMeshTypeInfo() + 8, sizeof v); return v;
 }
-extern "C" int32_t RtPicking_PickingMesh_GetFileVersion(const void*) { return 9; }
-extern "C" int32_t RtPicking_PickingMesh_Compile(void*, const void*) { return 1; }
+// [3] 0x180122940: `MOV EAX,9 ; RET`.
+int32_t PickingMesh::GetFileVersion() const { return 9; }
+// [4] 0x180122950: returns 1.
+Object::External::CompileResult PickingMesh::Compile(const System::Filename&) { return 1; }
 
-extern "C" void* RtPicking_PickingMesh_Construct(void* selfv) {
-    if (selfv == nullptr) return nullptr;
-    ConstructBody(static_cast<PickingMesh*>(selfv)); return selfv;
+// [8] 0x180071d40 — retail's null test is in the DOOR.
+Object::External* PickingMesh::Construct() {
+    InlineCtorStores(this);
+    return this;
 }
-extern "C" void* RtPicking_PickingMesh_Reconstruct(void* selfv) {
-    CallSlot0(selfv, 0);
-    ConstructBody(static_cast<PickingMesh*>(selfv)); return selfv;
+// [6] 0x180071cd0: slot0(this, 0) dispatched VIRTUALLY, then the same stores.
+Object::External* PickingMesh::Reconstruct() {
+    CallSlot0(this, 0);
+    InlineCtorStores(this);
+    return this;
 }
-extern "C" void RtPicking_PickingMesh_Destruct(void* selfv) { CallSlot0(selfv, 0); }
+// [7] 0x180071db0: `MOV RAX,[RCX] ; XOR EDX,EDX ; JMP [RAX]`.
+void PickingMesh::Destruct() { CallSlot0(this, 0); }
 
-// ??1PickingMesh@Picking@@UEAA@XZ (0x1801228a0)
-extern "C" void RtPicking_PickingMesh_Dtor(void* selfv) {
-    PickingMesh* self = static_cast<PickingMesh*>(selfv);
-    *reinterpret_cast<void**>(self) = PickingMeshVTable();
-    // Retail CALLs 0x180073720 here (at 0x1801228c4): the element destroy
-    // 0x180073ee0 over every SubMesh -- four inner buffers DESCENDING from
-    // +0x70 and then the String at +0x00 -- followed by the plain `~Array`.
-    // This used to be written out inline, with the four frees in the wrong
-    // order relative to retail and no header clear per element; it now goes
-    // through the ported bodies (batch D2, 2026-09-12).
-    SubMeshArrayDtor(&self->_nodes);
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name2));
-    RtSystem::RtString_ReleaseInline(reinterpret_cast<String*>(&self->_name1));
-    using ExtDtorFn = void (*)(void*);
-    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
-}
-
-// ?Serialize@PickingMesh@Picking@@UEAA_NAEAVStream@IO@@@Z (0x180122960)
-extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
-    PickingMesh* self = static_cast<PickingMesh*>(selfv);
+// ============================================================================
+// [5] ?Serialize@PickingMesh@Picking@@UEAA_NAEAVStream@IO@@@Z  0x180122960
+// ============================================================================
+// Order: _string20, _string28, _flag30 (kScalarBool), then the SubMesh array
+// (count @ +0x40, resize 0x18007aa40, walk 0x18007ac20).
+bool PickingMesh::Serialize(void* streamv) {
     Stream* stream = static_cast<Stream*>(streamv);
 
     Serializer ser = { stream, nullptr };
@@ -330,9 +303,9 @@ extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
     ReaderWriter* rw = reinterpret_cast<MakeRwFn>(encVt[slot / 8])(stream->encoding, &ser, 0);
     ser.readerWriter = rw;
 
-    // B.3.1 bridge: _name1/_name2 are POD slots on a not-yet-converted struct.
-    reinterpret_cast<System::String&>(self->_name1).Serialize(&ser);
-    reinterpret_cast<System::String&>(self->_name2).Serialize(&ser);
+    // B.3.1 bridge: the two Strings are the POD spelling (PickingMesh.h).
+    reinterpret_cast<System::String&>(_string20).Serialize(&ser);
+    reinterpret_cast<System::String&>(_string28).Serialize(&ser);
 
     using ScalarBoolFn   = void (*)(ReaderWriter*, bool*, const char*);
     using ScalarIntFn    = void (*)(ReaderWriter*, int32_t*, const char*);
@@ -340,22 +313,73 @@ extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
     auto scalarInt    = reinterpret_cast<ScalarIntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8]);
     const bool reading = (stream->direction == 0);
 
-    scalarBool(rw, &self->_flag, nullptr);
+    scalarBool(rw, &_flag30, nullptr);
 
-    int32_t nodeCount = self->_nodes._size;
+    int32_t nodeCount = _nodes._size;
     scalarInt(rw, &nodeCount, nullptr);
-    if (reading) SubMeshArraySetSize(&self->_nodes, nodeCount);
+    if (reading) SubMeshArraySetSize(&_nodes, nodeCount);
 
     // Retail CALLs 0x18007ac20 here rather than inlining the walk; so does
-    // this, through the ported body, so the registered function is the one
-    // that runs (batch D2, 2026-09-12).
-    SerializeSubMeshesBody(&ser, nodeCount, self->_nodes._data);
+    // this, through the ported body (batch D2, 2026-09-12).
+    SerializeSubMeshesBody(&ser, nodeCount, _nodes._data);
 
     if (rw != nullptr) {
         using DeleteFn = void (*)(ReaderWriter*, int);
         reinterpret_cast<DeleteFn>(rw->vtable[0])(rw, 1);
     }
     return true;
+}
+
+// ~PickingMesh: NON-VIRTUAL and EMPTY; the registered dtor door does retail's work.
+PickingMesh::~PickingMesh() {}
+
+}  // namespace Picking
+
+// ============================================================================
+// THE DOORS — qualified delegation (a live PickingMesh wears the MINTED table).
+// ============================================================================
+extern "C" uint32_t RtPicking_PickingMesh_Type(const void* selfv) {
+    return reinterpret_cast<const Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Type();           // B.3.7 bridge
+}
+extern "C" const char* RtPicking_PickingMesh_TypeName(const void* selfv) {
+    return reinterpret_cast<const Picking::PickingMesh*>(selfv)->Picking::PickingMesh::TypeName();       // B.3.7 bridge
+}
+extern "C" int32_t RtPicking_PickingMesh_GetFileVersion(const void* selfv) {
+    return reinterpret_cast<const Picking::PickingMesh*>(selfv)->Picking::PickingMesh::GetFileVersion(); // B.3.7 bridge
+}
+extern "C" int32_t RtPicking_PickingMesh_Compile(void* selfv, const void* pathv) {
+    return static_cast<int32_t>(reinterpret_cast<Picking::PickingMesh*>(selfv)                            // B.3.7 bridge
+        ->Picking::PickingMesh::Compile(*static_cast<const System::Filename*>(pathv)));
+}
+extern "C" void* RtPicking_PickingMesh_Construct(void* selfv) {
+    if (selfv == nullptr) return nullptr;                 // retail's null test
+    return reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Construct();          // B.3.7 bridge
+}
+extern "C" void* RtPicking_PickingMesh_Reconstruct(void* selfv) {
+    return reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Reconstruct();        // B.3.7 bridge
+}
+extern "C" void RtPicking_PickingMesh_Destruct(void* selfv) {
+    reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Destruct();                  // B.3.7 bridge
+}
+extern "C" bool RtPicking_PickingMesh_Serialize(void* selfv, void* streamv) {
+    return reinterpret_cast<Picking::PickingMesh*>(selfv)->Picking::PickingMesh::Serialize(streamv);   // B.3.7 bridge
+}
+
+// ============================================================================
+// ??1PickingMesh@Picking@@UEAA@XZ (0x1801228a0) — the dtor DOOR keeps its
+// body; the member destructor is empty (PickingMesh.h).
+// ============================================================================
+extern "C" void RtPicking_PickingMesh_Dtor(void* selfv) {
+    Picking::PickingMesh* self = reinterpret_cast<Picking::PickingMesh*>(selfv);   // B.3.7 bridge
+    *reinterpret_cast<void**>(self) = PickingMeshVTable();
+    // Retail CALLs 0x180073720 here (at 0x1801228c4): the element destroy
+    // 0x180073ee0 over every SubMesh -- four inner buffers DESCENDING from
+    // +0x70 and then the String at +0x00 -- followed by the plain `~Array`.
+    SubMeshArrayDtor(&self->_nodes);
+    RtSystem::RtString_ReleaseInline(&self->_string28);
+    RtSystem::RtString_ReleaseInline(&self->_string20);
+    using ExtDtorFn = void (*)(void*);
+    RT_EXPORT_ONCE(ExtDtorFn, "??1External@Object@@UEAA@XZ")(self);
 }
 
 // ---- CUTOVER CLOSURE BATCH D2: the two registered Serialize halves --------
