@@ -228,8 +228,8 @@ extern "C" {
     void RegisterTutorialSetupRestrictPlayerVtable();
     void RegisterTutorialStepVtable();
 
-    // Factory cascade — Tool family (Object::Internal -> Tool / DragTool /
-    // ToolSetting; shared base in code/Game/Player/tool_base_standalone.cpp).
+    // Tool family: real classes since ENDGAME B.3.8 (code/Game/Player/*Tool.h);
+    // no tool vtable is registered at its exe address any more.
     void RegisterPathToolSetSelected();   // dd710 route-builder (pathtool_setselected.cpp)
 }
 
@@ -1980,7 +1980,7 @@ static void RegisterVtablesAndTypeIds() {
     RegisterTutorialSetupRestrictPlayerVtable();
     RegisterTutorialStepVtable();
 
-    // Factory cascade — Tool family (shared base tool_base_standalone.cpp).
+    // Tool family (real classes since ENDGAME B.3.8): only the route-builder door.
     RegisterPathToolSetSelected();
 
     // Foundation C wave-2 array/ExternalPtr helper addrs (NULL in standalone until

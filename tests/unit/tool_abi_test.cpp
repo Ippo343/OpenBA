@@ -25,6 +25,14 @@
 #include "Player/RotationSetting.h"
 #include "Player/Tool.h"
 #include "Player/dragtool.h"
+#include "Player/BridgeTool.h"
+#include "Player/DragPlacementTool.h"
+#include "Player/EditTool.h"
+#include "Player/FencedTool.h"
+#include "Player/PathTool.h"
+#include "Player/PlacementTool.h"
+#include "Player/RemovalTool.h"
+#include "Player/RoadTool.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -119,6 +127,75 @@ UNIT_TEST(tool_base_shape) {
     CHECK(!std::has_virtual_destructor<DragTool>::value);
     CHECK((std::is_base_of<Object::Internal, Tool>::value));
     CHECK((std::is_base_of<Tool, DragTool>::value));
+}
+
+// ===========================================================================
+// The nine leaves
+// ===========================================================================
+UNIT_TEST(tool_leaf_sizes_match_retail_create) {
+    CHECK_EQ(sizeof(BridgeTool),        (size_t)0x40);   // 0x14002d7a0
+    CHECK_EQ(sizeof(DragPlacementTool), (size_t)0x48);   // 0x14002d8b0
+    CHECK_EQ(sizeof(EditTool),          (size_t)0x38);   // 0x14002daa0
+    CHECK_EQ(sizeof(FencedTool),        (size_t)0x70);   // 0x1400268d0
+    CHECK_EQ(sizeof(PathTool),          (size_t)0x60);   // 0x140026b10
+    CHECK_EQ(sizeof(PlacementTool),     (size_t)0x70);   // 0x14002dc40
+    CHECK_EQ(sizeof(RemovalTool),       (size_t)0x40);   // 0x14002e7a0
+    CHECK_EQ(sizeof(RoadTool),          (size_t)0x48);   // 0x14002e870
+    CHECK_EQ(offsetof(BridgeTool, bridgeDesc),           (size_t)0x38);
+    CHECK_EQ(offsetof(DragPlacementTool, areaDesc),      (size_t)0x40);
+    CHECK_EQ(offsetof(EditTool, lastEntityRef),          (size_t)0x30);
+    CHECK_EQ(offsetof(FencedTool, sceneObjectId),        (size_t)0x58);
+    CHECK_EQ(offsetof(FencedTool, meshInstance),         (size_t)0x68);
+    CHECK_EQ(offsetof(PathTool, selectedEntity),         (size_t)0x28);
+    CHECK_EQ(offsetof(PathTool, _field58),               (size_t)0x58);
+    CHECK_EQ(offsetof(PlacementTool, sceneObjectIdx),    (size_t)0x60);
+    CHECK_EQ(offsetof(PlacementTool, meshInstance),      (size_t)0x68);
+    CHECK_EQ(offsetof(RemovalTool, removalDesc),         (size_t)0x38);
+    CHECK_EQ(offsetof(RoadTool, modifierFlag),           (size_t)0x40);
+}
+
+UNIT_TEST(tool_leaf_overrides_land_on_retail_slots) {
+    CHECK_EQ(SlotOffset(&BridgeTool::DeletingDtor), (uintptr_t)0x00);   // 0x14002d7f0
+    CHECK_EQ(SlotOffset(&BridgeTool::Startup),      (uintptr_t)0x20);   // 0x1400fb7a0
+    CHECK_EQ(SlotOffset(&BridgeTool::Draw),         (uintptr_t)0x40);   // 0x1400fadc0
+    CHECK_EQ(SlotOffset(&BridgeTool::CalcPath),     (uintptr_t)0x68);   // 0x1400f9cd0
+    CHECK_EQ(SlotOffset(&BridgeTool::CalcCost),     (uintptr_t)0x70);   // 0x1400facf0
+    CHECK_EQ(SlotOffset(&RoadTool::OnKey),          (uintptr_t)0x30);   // 0x140105690
+    CHECK_EQ(SlotOffset(&FencedTool::Update),       (uintptr_t)0x38);   // 0x1400dcad0
+    CHECK_EQ(SlotOffset(&FencedTool::OnCancel),     (uintptr_t)0x48);   // 0x1400dcd10
+    CHECK_EQ(SlotOffset(&FencedTool::GetSettingType), (uintptr_t)0x58); // 0x140026920
+    CHECK_EQ(SlotOffset(&PlacementTool::Shutdown),  (uintptr_t)0x28);   // 0x1400fe4e0
+    CHECK_EQ(SlotOffset(&PlacementTool::GetSettingType), (uintptr_t)0x58);   // 0x140026920
+    CHECK_EQ(SlotOffset(&PlacementTool::GetCursor), (uintptr_t)0x60);   // 0x1400fe800
+    CHECK_EQ(SlotOffset(&EditTool::Shutdown),       (uintptr_t)0x28);   // 0x1400fd2e0
+    CHECK_EQ(SlotOffset(&EditTool::IsSelected),     (uintptr_t)0x50);   // 0x1400fd290
+    CHECK_EQ(SlotOffset(&PathTool::IsSelected),     (uintptr_t)0x50);   // 0x1400de8d0
+    CHECK_EQ(SlotOffset(&PathTool::GetCursor),      (uintptr_t)0x60);   // 0x1400de910
+    CHECK_EQ(SlotOffset(&RemovalTool::CalcPath),    (uintptr_t)0x68);   // 0x1401035e0
+    CHECK_EQ(SlotOffset(&DragPlacementTool::CalcCost), (uintptr_t)0x70);   // 0x1400fbae0
+}
+
+UNIT_TEST(tool_leaf_shape) {
+    CHECK(!std::is_abstract<BridgeTool>::value);
+    CHECK(!std::is_abstract<DragPlacementTool>::value);
+    CHECK(!std::is_abstract<EditTool>::value);
+    CHECK(!std::is_abstract<FencedTool>::value);
+    CHECK(!std::is_abstract<PathTool>::value);
+    CHECK(!std::is_abstract<PlacementTool>::value);
+    CHECK(!std::is_abstract<RemovalTool>::value);
+    CHECK(!std::is_abstract<RoadTool>::value);
+    CHECK(!std::has_virtual_destructor<BridgeTool>::value);
+    CHECK(!std::has_virtual_destructor<EditTool>::value);
+    CHECK(!std::has_virtual_destructor<PathTool>::value);
+    CHECK(!std::has_virtual_destructor<FencedTool>::value);
+    CHECK((std::is_base_of<DragTool, BridgeTool>::value));
+    CHECK((std::is_base_of<DragTool, DragPlacementTool>::value));
+    CHECK((std::is_base_of<DragTool, FencedTool>::value));
+    CHECK((std::is_base_of<DragTool, RemovalTool>::value));
+    CHECK((std::is_base_of<DragTool, RoadTool>::value));
+    CHECK(!(std::is_base_of<DragTool, EditTool>::value));
+    CHECK(!(std::is_base_of<DragTool, PathTool>::value));
+    CHECK(!(std::is_base_of<DragTool, PlacementTool>::value));
 }
 
 // ===========================================================================
