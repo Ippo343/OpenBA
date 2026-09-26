@@ -39,6 +39,8 @@
 #include "runtime/types/ui/SpinnerElement.h"
 #include "runtime/types/ui/SliderDescription.h"
 #include "runtime/types/ui/SliderElement.h"
+#include "runtime/types/ui/RibbonDescription.h"
+#include "runtime/types/ui/RibbonElement.h"
 
 #include <cstddef>
 #include <cstdint>
@@ -64,6 +66,7 @@ enum Cls : int {
     kProgressD, kProgressE,
     kSpinnerD, kSpinnerE,
     kSliderD, kSliderE,
+    kRibbonD, kRibbonE,
 };
 const void* g_self = nullptr;
 int         g_cls  = kNone;
@@ -440,4 +443,38 @@ UNIT_TEST(ui_c5_slider_slots) {
     e.SetMaximumValue(3.0f);  CHECK(e._maximum == 3.0f);    // 0x180049eb0
     e.SetCurrentValue(0.5f);  CHECK(e._value == 0.5f);      // 0x180049ec0
     CHECK(e.GetCurrentValue() == 0.5f);                     // 0x180049ed0
+}
+
+// ===========================================================================
+// Ribbon
+// ===========================================================================
+C5_DESCRIPTION_MARKERS(RibbonDescription, kRibbonD)
+C5_ELEMENT_MARKERS(RibbonElement, kRibbonE)
+
+namespace {
+struct RibbonDescriptionProbe final : UI::RibbonDescription {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+struct RibbonElementProbe final : UI::RibbonElement {
+    Object::Base* DeletingDtor(unsigned) override { return this; }
+};
+}  // namespace
+
+UNIT_TEST(ui_c5_ribbon_layout) {
+    CheckShape<UI::RibbonDescription, UI::ElementDescription>(0x80);   // 0x180044620
+    CheckShape<UI::RibbonElement, UI::Element>(0xd8);                  // 0x180044ac0
+    CHECK_EQ(offsetof(UI::RibbonDescription, _vertical), sizeof(UI::ElementDescription));
+    CHECK_EQ(offsetof(UI::RibbonDescription, _itemsData), (size_t)0x70);
+    CHECK_EQ(offsetof(UI::RibbonElement, _vertical), sizeof(UI::Element));
+    CHECK_EQ(offsetof(UI::RibbonElement, _extentsData), (size_t)0xc8);
+}
+
+UNIT_TEST(ui_c5_ribbon_slots) {
+    RibbonDescriptionProbe d;
+    CheckDescriptionSlots(&d, kRibbonD);
+    CheckCreateInstanceRetslot(&d);
+
+    FactoryScope scope;
+    RibbonElementProbe e{};
+    CheckElementSlots(&e, kRibbonE, kOwn456);      // Update inherited from Element
 }
