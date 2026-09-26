@@ -31,14 +31,11 @@
 #include <cstdint>
 #include <cstring>
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch D
+#include "achievement/Goal.h"   // ENDGAME B.3.7: QUALIFIED base calls
 
 // ============================================================
 // Resolved helpers
 // ============================================================
-
-// Achievement::Goal::Serialize — dispatch slot at 0x140152840
-typedef void (*fn_GoalSerialize_t)(void* self, void* stream);
-static fn_GoalSerialize_t s_fn_GoalSerialize = nullptr;
 
 // Achievement::Goal::Goal — constructor
 typedef void* (*fn_GoalCtor_t)(void* self);
@@ -62,10 +59,6 @@ static bool s_helpersResolved = false;
 static void EnsureHelpers() {
     if (s_helpersResolved) return;
 
-    // Goal::Serialize is a dispatch slot — read the function pointer at runtime
-    uintptr_t slotAddr = ResolveAddr(Module::Exe, 0x140152840);
-    if (slotAddr) s_fn_GoalSerialize = *reinterpret_cast<fn_GoalSerialize_t*>(slotAddr);
-
     s_fn_ResolveExternalPtr = (fn_ResolveExternalPtr_t)ResolveAddr(Module::Exe, 0x1400265b0);
     s_fn_StatValueDispatch = (fn_StatValueDispatch_t)ResolveAddr(Module::Exe, 0x1400da4e0);
 
@@ -83,10 +76,9 @@ void StatGoal_Slot5(StatGoal* self, void* stream) {
     EnsureHelpers();
     uintptr_t s = (uintptr_t)self;
 
-    // Call base class serialize
-    if (s_fn_GoalSerialize) {
-        s_fn_GoalSerialize(self, stream);
-    }
+    // Achievement::Goal::Serialize (slot 5, 0x18009ee20) — QUALIFIED (B7-13).
+    // Was the exe import slot 0x140152840, which resolved to the same door.
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::Serialize(stream);   // B.3.7 bridge
 
     // Create serializer (stack-local, 24 bytes: [0]=?, [8]=serializerPtr)
     alignas(8) uint8_t serializerBuf[24];
@@ -331,34 +323,13 @@ void* StatGoal_Dtor(StatGoal* self, uint32_t flags) {
     reinterpret_cast<System::String*>(s + 0x60)->~String();  // statBString
     reinterpret_cast<System::String*>(s + 0x48)->~String();  // statAString
 
-    // Call base Achievement::Goal::~Goal.
-    // This used to say "the base dtor is at a dispatch slot; we call it via the
-    // parent vtable". It is neither: it is a plain Runtime export (ordinal 600)
-    // resolved by name, with no slot and no vtable in the path.
-    typedef void (*fn_GoalDtor_t)(void* self);
-    static fn_GoalDtor_t s_fn_GoalDtor = nullptr;
-    static bool s_dtorResolved = false;
-    if (!s_dtorResolved) {
-        // Achievement::Goal::~Goal, retail 0x18009edb0.
-        //
-        // The mangling is UEAA, not QEAA: Goal is polymorphic, so MSVC exports
-        // the VIRTUAL destructor spelling. This resolved
-        // "??1Goal@Achievement@@QEAA@XZ" until 2026-09-06 (Wave 5 lane A) --
-        // a name the shipped DLL has never contained -- with a fallback to
-        // "?~Goal@Achievement@@QEAA@XZ", which is not a valid MSVC mangling in
-        // any build. Both returned null silently, the guard below skipped the
-        // call, and the caller went on to MemFree the object anyway: every
-        // StatGoal destruction leaked its text String (refcounted at +0x28) and
-        // skipped Object::External::~External. Control case that proves the
-        // rule: GoalList really IS non-virtual and really DOES export
-        // "??1GoalList@Achievement@@QEAA@XZ".
-        s_fn_GoalDtor = (fn_GoalDtor_t)ResolveExport(
-            "??1Goal@Achievement@@UEAA@XZ");
-        s_dtorResolved = true;
-    }
-    if (s_fn_GoalDtor) {
-        s_fn_GoalDtor(self);
-    }
+    // Achievement::Goal::~Goal (retail 0x18009edb0) — a QUALIFIED member call
+    // (B37_RULES B7-13), unconditional as retail's CALL is. History worth
+    // keeping: until 2026-09-06 this resolved the phantom QEAA spelling
+    // "??1Goal@Achievement@@QEAA@XZ" by name, got null, skipped the call and
+    // MemFree'd the object anyway — every StatGoal leaked its text String and
+    // skipped ~External. A member call cannot resolve to nothing.
+    reinterpret_cast<Achievement::Goal*>(self)->Achievement::Goal::~Goal();   // B.3.7 bridge
 
     // Free memory if requested
     if ((flags & 1) != 0) {

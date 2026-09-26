@@ -17,19 +17,21 @@
 
 namespace rtpickgrid {
 
-using RtPicking::Scene;
-using RtPicking::Entry;
-using RtPicking::Cell;
-using RtPicking::Link;
-using RtPicking::AddDesc;
+// ENDGAME B.3.7 block B6: the Wave 5 POD rows are the real class's nested
+// types now (runtime/types/picking/Scene.h); these spellings keep the
+// nineteen raw-byte bodies unchanged.
+using Scene   = Picking::Scene;
+using Entry   = Picking::Scene::Entry;
+using Cell    = Picking::Scene::Cell;
+using Link    = Picking::Scene::Link;
+using AddDesc = Picking::Scene::AddDesc;
 
 // ---------------------------------------------------------------------------
 // The cell-rectangle iterator `Picking::Scene::Intersect` drives.
 //
 // Layout pinned by Intersect's own frame at [RSP+0x30] and re-confirmed by
-// every displacement in 0x18007b6d0's disassembly. This is the same struct
-// scene.cpp declares for its forwarder; the two static_asserts below are the
-// contract between them.
+// every displacement in 0x18007b6d0's disassembly. ONE definition (B7-6):
+// scene.cpp's Intersect drives this very struct (it used to declare a copy).
 // ---------------------------------------------------------------------------
 struct CellIter {
     int32_t minX, minY;   // +0x00 +0x04

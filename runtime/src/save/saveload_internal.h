@@ -24,6 +24,7 @@
 // (reference_rtoriginal_is_getprocaddress.md).
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdlib>
 
@@ -165,5 +166,58 @@ inline void RetainInto(const char** slot, const char* src) {
     *slot = src;
     if (src != nullptr) *reinterpret_cast<int*>(const_cast<char*>(src) - 4) += 1;
 }
+
+// ENDGAME B.3.7 block B2. A by-value `System::String` a MEMBER returns
+// (GetAutoSaveName / GenerateSaveName), landed in a `const char*` slot the
+// unconverted body then manages by hand. Retail constructs the String straight
+// into the caller's slot (the member's hidden retslot IS `&slot`), so the
+// refcount is born at 1 and nothing is added or dropped on the way: this steals
+// the prvalue's pointer and leaves the temporary null, whose destructor is then
+// a no-op. The same refcount trace as retail's, with no AddRef/Release pair.
+inline void AdoptReturned(const char** slot, System::String&& s) {
+    *slot = s._data;
+    s._data = nullptr;
+}
+
+// ---- RULE B6-5 / B7-7: namespace-scope atomic resolve slots ------------------
+// A member of these classes can run on the LOADER thread (the ctor, via
+// GameUpdateLoop's slot-6 Load) and on the main thread. A function-local
+// `static Fn fn = Resolve…()` or a `static Fn fn; if (!fn) fn = …` first-call
+// cache is exactly what B6-5 forbids in a member body. These are
+// `element_common.h`'s `AtomicExport`/`AtomicAddr` shape after the B36_RULES
+// 14.4 fix: cache only what `RtResolveCached` itself would cache (a pre-init hit
+// is not frozen), and a by-address hit only once it is non-null.
+inline void* AtomicExport(std::atomic<void*>& slot, const char* mangled) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        void* scratch = nullptr;
+        p = RtResolveCached(mangled, &scratch);
+        if (scratch != nullptr) slot.store(scratch, std::memory_order_release);
+    }
+    return p;
+}
+// A template on the module enum so this header need not include
+// standalone/resolve.h (and <windows.h>): each file already declares
+// `enum class Module` / `ResolveAddr` itself, and the call below is found by
+// argument-dependent lookup when the caller passes `Module::Runtime`.
+template <class ModuleT>
+inline void* AtomicAddr(std::atomic<void*>& slot, ModuleT module, uintptr_t ghidra) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(module, ghidra));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
+
+// ---- the two unexported Array destructors saveload.cpp transcribes ----------
+// Retail CALLs both by address from other Save bodies (UpdateList state 0 and
+// ~SaveLoad call 0x1800329c0; ~SaveInfo calls 0x1800331f0). They stay
+// registered at those addresses (saveload.cpp); the callers inside this
+// directory call the transcriptions directly rather than through a door.
+//   0x1800329c0  Collection::Array<SaveInfo>::~Array  (stride 0x58)
+//   0x1800331f0  Collection::Array<ModInfo>::~Array   (stride 0x20)
+void ArraySaveInfoDtor(Save::SaveLoad::SaveInfoArray* arr);
+void ArrayModInfoDtor(Collection::Array<Save::SaveLoad::ModInfo>* arr);
 
 }  // namespace RtSaveDetail

@@ -40,7 +40,9 @@
 // every store goes through `out` and lands for real.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
+#include <new>
 #include <cstdio>
 #include <cstring>
 
@@ -149,7 +151,7 @@ void RetainIntoSink(const char** slot, const char* src, RtSink& out, const char*
 }
 
 SaveInfo* SaveInfoAt(const SaveLoad* self, RtSink& out, int32_t index) {
-    uint8_t* base = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData));
+    uint8_t* base = static_cast<uint8_t*>(out.ReadPtr(&self->_saves._data));
     // MOVSXD RSI,dword ptr [RCX+0x48]; IMUL RSI,RSI,0x58 — a SIGN-extended
     // index, which matters because -1/-2/-4 are live sentinel values in this
     // class and a zero-extension would index 4 billion elements in.
@@ -182,20 +184,24 @@ SaveInfo* SaveInfoAt(const SaveLoad* self, RtSink& out, int32_t index) {
 // from their pre-values on every real delete, so `changed=` is non-zero rather
 // than the vacuous green a body of no-op predictions would produce.
 // ============================================================================
-void UpdateDeleteBody(SaveLoad* self, RtSink& out) {
-    const uint32_t progress = out.ReadU32(&self->_progress);
+}  // namespace
+
+// ENDGAME B.3.7 B2: the body is the member (it was `UpdateDeleteBody(self, out)`).
+void Save::SaveLoad::UpdateDelete() {
+    RtSink out;                                                 // the live sink
+    const uint32_t progress = out.ReadU32(&_progress);
 
     if (progress == 0) {
-        const char* cur  = static_cast<const char*>(out.ReadPtr(&self->_string20));
-        const SaveInfo* si = SaveInfoAt(self, out, self->_selectedIndex);
+        const char* cur  = static_cast<const char*>(out.ReadPtr(&_string20));
+        const SaveInfo* si = SaveInfoAt(this, out, _selectedIndex);
         const char* want = si->name;
 
         // `CMP RAX,qword ptr [RSI+RBP*0x1+0x38]` / `JZ` — when the slot already
         // holds this exact pointer, retail skips BOTH halves of the idiom, so
         // the refcount is not bumped and not dropped.
         if (cur != want) {
-            ReleaseStringSlotSink(&self->_string20, out, "_string20 release");
-            RetainIntoSink(&self->_string20, want, out, "_string20 = saves[sel].name");
+            ReleaseStringSlotSink(&_string20, out, "_string20 release");
+            RetainIntoSink(&_string20, want, out, "_string20 = saves[sel].name");
         }
 
         void* persistence = PersistenceSingleton();
@@ -203,23 +209,25 @@ void UpdateDeleteBody(SaveLoad* self, RtSink& out) {
             RT_EXPORT_ONCE(BeginDeleteFn, "?BeginDelete@Persistence@IO@@QEAA_NAEBVString@System@@@Z");
         if (out.Call("IO::Persistence::BeginDelete", (const void*)beginDelete,
                      reinterpret_cast<int64_t>(persistence),
-                     reinterpret_cast<int64_t>(&self->_string20))) {
-            beginDelete(persistence, &self->_string20);
+                     reinterpret_cast<int64_t>(&_string20))) {
+            beginDelete(persistence, &_string20);
         }
 
-        out.U32(&self->_progress, 1, "_progress = 1");
+        out.U32(&_progress, 1, "_progress = 1");
         return;
     }
 
     if (progress == 1) {
         // Transcribed in retail's store order (0x1800c2e15 .. 0x1800c2e2e):
         // operation, progress, selectedIndex, then the converted time last.
-        out.U32(&self->_operation,     0,          "_operation = kOpNone");
-        out.U32(&self->_progress,      0,          "_progress = 0");
-        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
-        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&_operation,     0,          "_operation = kOpNone");
+        out.U32(&_progress,      0,          "_progress = 0");
+        out.U32(&_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+        out.U64(&_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
     }
 }
+
+namespace {
 
 // ============================================================================
 // Save::SaveLoad::OnVideoRestart()      retail 0x1800c0f10   ordinal 3296
@@ -260,10 +268,14 @@ void UpdateDeleteBody(SaveLoad* self, RtSink& out) {
 // is the honest reading: the argument trace is the evidence here, not the
 // post-state.
 // ============================================================================
-void OnVideoRestartBody(SaveLoad* self, RtSink& out) {
-    const int32_t count = self->_savesSize;
+}  // namespace
+
+// ENDGAME B.3.7 B2: the body is the member (it was `OnVideoRestartBody(self, out)`).
+void Save::SaveLoad::OnVideoRestart() {
+    RtSink out;                                                 // the live sink
+    const int32_t count = _saves._size;
     for (int32_t i = 0; i < count; ++i) {
-        uint8_t* row = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData))
+        uint8_t* row = static_cast<uint8_t*>(out.ReadPtr(&_saves._data))
                      + static_cast<int64_t>(i) * 0x58;
 
         void* buffer = *reinterpret_cast<void**>(row + 0x18);
@@ -284,7 +296,7 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out) {
         // Retail RE-READS `_savesData` here (0x1800c0f7d) rather than reusing
         // the pointer it loaded before the lock. Transcribed: Recreate can run
         // arbitrary code, and the re-read is what retail relies on.
-        uint8_t* row2 = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData))
+        uint8_t* row2 = static_cast<uint8_t*>(out.ReadPtr(&_saves._data))
                       + static_cast<int64_t>(i) * 0x58;
         void*  target = *reinterpret_cast<void**>(row2 + 0x18);
         void*  obj    = *reinterpret_cast<void**>(static_cast<uint8_t*>(target) + 0x60);
@@ -306,6 +318,8 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out) {
         RtVideoDeviceUnlock(device);
     }
 }
+
+namespace {
 
 
 // ============================================================================
@@ -332,15 +346,18 @@ void OnVideoRestartBody(SaveLoad* self, RtSink& out) {
 using WorkerEnqueueFn = void (*)(void* worker, const char** name, int count,
                                  const RtIo::SaveBlock* blocks);
 
+// ENDGAME B.3.7 B2 (RULE B6-5): these and the four accessors below were
+// function-local `static` initialisers inside what are now MEMBER bodies; they
+// are namespace-scope atomic slots with the `AtomicAddr` shape.
+std::atomic<void*> g_workerBeginLoad{nullptr};
+std::atomic<void*> g_workerBeginSave{nullptr};
 WorkerEnqueueFn WorkerBeginLoad() {
-    static WorkerEnqueueFn fn =
-        reinterpret_cast<WorkerEnqueueFn>(ResolveAddr(Module::Runtime, 0x1800b7460));
-    return fn;
+    return reinterpret_cast<WorkerEnqueueFn>(
+        RtSaveDetail::AtomicAddr(g_workerBeginLoad, Module::Runtime, 0x1800b7460));
 }
 WorkerEnqueueFn WorkerBeginSave() {
-    static WorkerEnqueueFn fn =
-        reinterpret_cast<WorkerEnqueueFn>(ResolveAddr(Module::Runtime, 0x1800b75c0));
-    return fn;
+    return reinterpret_cast<WorkerEnqueueFn>(
+        RtSaveDetail::AtomicAddr(g_workerBeginSave, Module::Runtime, 0x1800b75c0));
 }
 
 // ---- the rest of the exported dependency set --------------------------------
@@ -400,8 +417,12 @@ using GetSaveFilenameFn = const char** (*)(void* persistence, const char** ret,
 // Excluding it keeps the coverage control honest: the byte really is not
 // covered, and `excluded=` says so rather than a silent pass.
 // ============================================================================
-void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out) {
-    const uint32_t progress = out.ReadU32(&self->_progress);
+}  // namespace
+
+// ENDGAME B.3.7 B2: the body is the member (it was `UpdateLoadFromFileBody(self, out)`).
+void Save::SaveLoad::UpdateLoadFromFile() {
+    RtSink out;                                                 // the live sink
+    const uint32_t progress = out.ReadU32(&_progress);
 
     if (progress == 0) {
         uint8_t* persistence = PersistenceSingleton();
@@ -411,10 +432,10 @@ void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out) {
         // is 2, spelled that way by the compiler to reuse a zeroed register.
         if (out.Call("IO::Persistence::BeginGetSaveGameInfo", (const void*)begin,
                      reinterpret_cast<int64_t>(persistence),
-                     reinterpret_cast<int64_t>(&self->_saveName), 2)) {
-            begin(persistence, &self->_saveName, 2);
+                     reinterpret_cast<int64_t>(&_saveName), 2)) {
+            begin(persistence, &_saveName, 2);
         }
-        out.U32(&self->_progress, 1, "_progress = 1");
+        out.U32(&_progress, 1, "_progress = 1");
         return;
     }
 
@@ -430,17 +451,16 @@ void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out) {
                 fresh->_size = 0;
                 fresh->_data = nullptr;
             }
-            self->_saveState = fresh;
+            _saveState = fresh;
         }
 
         RtIo::SaveBlock block{};
-        SetupLoadFn setup = RT_EXPORT_ONCE(SetupLoadFn,
-            "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ");
-        if (out.Call("Save::SavedState::SetupLoad", (const void*)setup,
-                     reinterpret_cast<int64_t>(fresh),
-                     reinterpret_cast<int64_t>(&block))) {
-            setup(fresh, &block);
-        }
+        // ENDGAME B.3.7 B2: `SavedState::SetupLoad` is a member of this block's
+        // class, called directly (it was an RT_EXPORT_ONCE door onto our own
+        // port). Its SaveBlock return is the hidden slot `&block` in retail.
+        // `fresh` is NOT null-tested: retail calls SetupLoad on a failed
+        // allocation too (see the banner).
+        block = fresh->SetupLoad();
 
         uint8_t* persistence = PersistenceSingleton();
         if ((persistence[0x18] & 1) == 0) {
@@ -450,8 +470,8 @@ void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out) {
             if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
                          reinterpret_cast<int64_t>(persistence),
                          reinterpret_cast<int64_t>(&filename),
-                         reinterpret_cast<int64_t>(&self->_saveName))) {
-                getName(persistence, &filename, &self->_saveName);
+                         reinterpret_cast<int64_t>(&_saveName))) {
+                getName(persistence, &filename, &_saveName);
             }
             WorkerEnqueueFn enqueue = WorkerBeginLoad();
             if (out.Call("IO::Persistence worker enqueue [load, 0x1800b7460]",
@@ -464,7 +484,7 @@ void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out) {
             ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
         }
 
-        out.U32(&self->_progress, 2, "_progress = 2");
+        out.U32(&_progress, 2, "_progress = 2");
         return;
     }
 
@@ -472,12 +492,14 @@ void UpdateLoadFromFileBody(SaveLoad* self, RtSink& out) {
         // Retail's store order at 0x1800c2651..0x1800c2672: operation, elapsed,
         // progress, selectedIndex — note this is NOT UpdateDelete's order,
         // which puts elapsed last. Both are transcribed as written.
-        out.U32(&self->_operation, 0, "_operation = kOpNone");
-        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
-        out.U32(&self->_progress, 0, "_progress = 0");
-        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+        out.U32(&_operation, 0, "_operation = kOpNone");
+        out.U64(&_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&_progress, 0, "_progress = 0");
+        out.U32(&_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
     }
 }
+
+namespace {
 
 // ============================================================================
 // THE MOD-ENTRY LIFECYCLE TRIPLE — three unexported internals, called by
@@ -519,20 +541,20 @@ using ModCopyCtorFn = void* (*)(void* dst, const void* src);
 using ModAssignFn   = void* (*)(void* dst, const void* src);
 using ModDtorFn     = void  (*)(void* self);
 
+std::atomic<void*> g_modEntryCopyCtor{nullptr};
+std::atomic<void*> g_modEntryAssign{nullptr};
+std::atomic<void*> g_modEntryDtor{nullptr};
 ModCopyCtorFn ModEntryCopyCtor() {
-    static ModCopyCtorFn fn =
-        reinterpret_cast<ModCopyCtorFn>(ResolveAddr(Module::Runtime, 0x1800101e0));
-    return fn;
+    return reinterpret_cast<ModCopyCtorFn>(
+        RtSaveDetail::AtomicAddr(g_modEntryCopyCtor, Module::Runtime, 0x1800101e0));
 }
 ModAssignFn ModEntryAssign() {
-    static ModAssignFn fn =
-        reinterpret_cast<ModAssignFn>(ResolveAddr(Module::Runtime, 0x180026ef0));
-    return fn;
+    return reinterpret_cast<ModAssignFn>(
+        RtSaveDetail::AtomicAddr(g_modEntryAssign, Module::Runtime, 0x180026ef0));
 }
 ModDtorFn ModEntryDtor() {
-    static ModDtorFn fn =
-        reinterpret_cast<ModDtorFn>(ResolveAddr(Module::Runtime, 0x180011460));
-    return fn;
+    return reinterpret_cast<ModDtorFn>(
+        RtSaveDetail::AtomicAddr(g_modEntryDtor, Module::Runtime, 0x180011460));
 }
 
 // ============================================================================
@@ -737,12 +759,16 @@ ModDtorFn ModEntryDtor() {
 // reference_mods_off_breaks_save_loading.md, so it wants its own lane and its
 // own copy of the game directory, not a corner of this one.
 // ============================================================================
-void UpdateLoadBody(SaveLoad* self, RtSink& out) {
-    const uint32_t progress = out.ReadU32(&self->_progress);
+}  // namespace
+
+// ENDGAME B.3.7 B2: the body is the member (it was `UpdateLoadBody(self, out)`).
+void Save::SaveLoad::UpdateLoad() {
+    RtSink out;                                                 // the live sink
+    const uint32_t progress = out.ReadU32(&_progress);
 
     if (progress == 0) {
         uint8_t* persistence = RtSaveDetail::PersistenceSingleton();
-        SaveInfo* row = SaveInfoAt(self, out, self->_selectedIndex);
+        SaveInfo* row = SaveInfoAt(this, out, _selectedIndex);
         BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
             "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
         // `MOV R8D,0x2` — spelled as a plain immediate here, where
@@ -753,7 +779,7 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
                      reinterpret_cast<int64_t>(&row->name), 2)) {
             begin(persistence, &row->name, 2);
         }
-        out.U32(&self->_progress, 1, "_progress = 1");
+        out.U32(&_progress, 1, "_progress = 1");
         return;
     }
 
@@ -783,8 +809,8 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
         // and the `JS` at 0x1800c2741 skips the whole loop when the save
         // recorded no mods at all — which is every unmodded save, and the case
         // in which this body's predictions are verified end to end.
-        const SaveInfo* pickedRow = SaveInfoAt(self, out, self->_selectedIndex);
-        for (int32_t m = pickedRow->modsSize - 1; m >= 0; --m) {
+        const SaveInfo* pickedRow = SaveInfoAt(this, out, _selectedIndex);
+        for (int32_t m = pickedRow->mods._size - 1; m >= 0; --m) {
             // full = GetDataDirectory() + modInfo.path, then AdjustDelimiters.
             // The same four-step idiom Save::SaveLoad::CheckMod carries
             // (runtime/src/save/saveload.cpp), against the same two Strings —
@@ -811,8 +837,8 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
                         // placement-constructs into this hidden return slot.
                         reinterpret_cast<String*>(&dataDir));
 
-                SaveInfo* row = SaveInfoAt(self, out, self->_selectedIndex);
-                const RtSave::ModInfo* mi = row->modsData + m;
+                SaveInfo* row = SaveInfoAt(this, out, _selectedIndex);
+                const RtSave::ModInfo* mi = row->mods._data + m;
 
                 // The `??HSystem@@YA?AVString@0@AEBV10@0@Z` door IS
                 // System::operator+ (0x1800c9440). `mi->path` is a raw
@@ -904,19 +930,18 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
             // allocation publishes a NULL _saveState and SetupLoad is then
             // called on it. Retail's OOM path, reproduced: a guard here would
             // skip behaviour rather than restore it.
-            self->_saveState = fresh;
+            _saveState = fresh;
         }
 
         RtIo::SaveBlock block{};
-        SetupLoadFn setup = RT_EXPORT_ONCE(SetupLoadFn,
-            "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ");
-        if (out.Call("Save::SavedState::SetupLoad", (const void*)setup,
-                     reinterpret_cast<int64_t>(fresh),
-                     reinterpret_cast<int64_t>(&block))) {
-            setup(fresh, &block);
-        }
+        // ENDGAME B.3.7 B2: `SavedState::SetupLoad` is a member of this block's
+        // class, called directly (it was an RT_EXPORT_ONCE door onto our own
+        // port). Its SaveBlock return is the hidden slot `&block` in retail.
+        // `fresh` is NOT null-tested: retail calls SetupLoad on a failed
+        // allocation too (see the banner).
+        block = fresh->SetupLoad();
 
-        SaveInfo* nameRow = SaveInfoAt(self, out, self->_selectedIndex);
+        SaveInfo* nameRow = SaveInfoAt(this, out, _selectedIndex);
         uint8_t* persistence = RtSaveDetail::PersistenceSingleton();
         if ((persistence[0x18] & 1) == 0) {
             const char* filename = nullptr;
@@ -940,7 +965,7 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
             ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
         }
 
-        out.U32(&self->_progress, 2, "_progress = 2");
+        out.U32(&_progress, 2, "_progress = 2");
         return;
     }
 
@@ -949,16 +974,18 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
         // UpdateLoadFromFile do NOT have: `MOV RAX,[RCX+0x10]` /
         // `CMP [RCX+8],RAX` / `JLE`, i.e. proceed only while
         // _elapsed > _minOperationTime.
-        if (self->_elapsed <= self->_minOperationTime) return;
+        if (_elapsed <= _minOperationTime) return;
 
         // Store order at 0x1800c2a36..0x1800c2a51: operation, elapsed, progress,
         // selectedIndex — UpdateLoadFromFile's order, not UpdateDelete's.
-        out.U32(&self->_operation, 0, "_operation = kOpNone");
-        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
-        out.U32(&self->_progress, 0, "_progress = 0");
-        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+        out.U32(&_operation, 0, "_operation = kOpNone");
+        out.U64(&_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&_progress, 0, "_progress = 0");
+        out.U32(&_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
     }
 }
+
+namespace {
 
 // ============================================================================
 // Save::SaveLoad::UpdateSave()          retail 0x1800c2a80   ordinal 4526
@@ -1001,32 +1028,36 @@ void UpdateLoadBody(SaveLoad* self, RtSink& out) {
 // entire Serialize chain twice is exactly the "not idempotent" case that rules
 // FULL DIFF out for this file.
 // ============================================================================
-void UpdateSaveBody(SaveLoad* self, RtSink& out) {
-    const uint32_t progress = out.ReadU32(&self->_progress);
+}  // namespace
+
+// ENDGAME B.3.7 B2: the body is the member (it was `UpdateSaveBody(self, out)`).
+void Save::SaveLoad::UpdateSave() {
+    RtSink out;                                                 // the live sink
+    const uint32_t progress = out.ReadU32(&_progress);
 
     if (progress == 0) {
         // A BYTE store (`MOV byte ptr [RBX+0x7c],1`), matching the ctor's byte
         // store of 0 into the same field — the upper three bytes of
         // _captureFlags are never written by anything in this class.
-        out.U8(&self->_captureFlags, 1, "_captureFlags low byte = 1");
+        out.U8(&_captureFlags, 1, "_captureFlags low byte = 1");
 
         // `MOV RCX,[RBX+0x60]` (the sheet) then `MOV RAX,[RCX+0x20]` (its entry
         // array), indexed by the sprite index at +0x68 with stride 0x38.
         // Retail loads the index as a QWORD and truncates: `MOV RAX,[RBX+0x68]`
         // then uses EAX. The pad dword at +0x6c rides along in that load and is
         // discarded, so a 32-bit read here is equivalent and is what is written.
-        const int32_t spriteIndex = self->_saveSprite.spriteIndex;
+        const int32_t spriteIndex = _saveSprite.spriteIndex;
         uint32_t w = 0, h = 0;
         if (spriteIndex >= 0) {
-            uint8_t* sheet   = static_cast<uint8_t*>(self->_saveSprite.spriteSheet);
+            uint8_t* sheet   = static_cast<uint8_t*>(_saveSprite.spriteSheet);
             uint8_t* entries = *reinterpret_cast<uint8_t**>(sheet + 0x20);
             uint8_t* entry   = entries + static_cast<int64_t>(spriteIndex) * 0x38;
             w = *reinterpret_cast<const uint32_t*>(entry + 0x1c);
             h = *reinterpret_cast<const uint32_t*>(entry + 0x20);
         }
-        out.U32(&self->_captureWidth,  w, "_captureWidth = sprite.w");
-        out.U32(&self->_captureHeight, h, "_captureHeight = sprite.h");
-        out.U32(&self->_progress, 1, "_progress = 1");
+        out.U32(&_captureWidth,  w, "_captureWidth = sprite.w");
+        out.U32(&_captureHeight, h, "_captureHeight = sprite.h");
+        out.U32(&_progress, 1, "_progress = 1");
         return;
     }
 
@@ -1034,28 +1065,24 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
         // The capture has not landed yet — retail simply returns and retries
         // next tick. This is the handshake with Draw(), which is the function
         // that fills _capturePixels and which this project holds back.
-        void* pixels = out.ReadPtr(&self->_capturePixels);
+        void* pixels = out.ReadPtr(&_capturePixels);
         if (pixels == nullptr) return;
 
         // The by-value String argument: retained here, destroyed by the callee.
         const char* nameCopy = nullptr;
-        RetainIntoSink(&nameCopy, self->_saveName, out, "SaveMetaData name (by value)");
+        RetainIntoSink(&nameCopy, _saveName, out, "SaveMetaData name (by value)");
 
-        SaveMetaDataFn saveMeta = RT_EXPORT_ONCE(SaveMetaDataFn,
-            "?SaveMetaData@SaveLoad@Save@@QEAAXPEAXHHVString@System@@H@Z");
-        if (out.Call("Save::SaveLoad::SaveMetaData", (const void*)saveMeta,
-                     reinterpret_cast<int64_t>(self),
-                     reinterpret_cast<int64_t>(pixels),
-                     self->_captureWidth, self->_captureHeight)) {
-            saveMeta(self, pixels, self->_captureWidth, self->_captureHeight,
-                     &nameCopy, self->_saveNameMode);
-        }
+        // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE door).
+        // `&nameCopy` IS the by-value String's hidden pointer — the String's one
+        // field, the copy this body just AddRef'd — and the callee destroys it.
+        SaveMetaData(pixels, _captureWidth, _captureHeight,
+                     reinterpret_cast<System::String*>(&nameCopy), _saveNameMode);
 
         if (out.Call("System::MemoryAllocator::MemFree", (const void*)&MemFree,
                      reinterpret_cast<int64_t>(pixels))) {
             MemFree(pixels);
         }
-        out.Ptr(&self->_capturePixels, nullptr, "_capturePixels = null");
+        out.Ptr(&_capturePixels, nullptr, "_capturePixels = null");
 
         SavedState* fresh = nullptr;
         if (out.Call("System::MemoryAllocator::MemAlloc", (const void*)&MemAlloc, 0x10, 4)) {
@@ -1065,7 +1092,7 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
                 fresh->_size = 0;
                 fresh->_data = nullptr;
             }
-            self->_saveState = fresh;
+            _saveState = fresh;
         }
 
         // MainLoop::_singleton->_updateLoop->vtable[7] — the call that serialises
@@ -1091,7 +1118,7 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
         //     1800c2ba2  MOV    DL,0x1
         //     1800c2ba4  CALL   qword ptr [RAX+0x38]
         //
-        // The real signature is SaveRestore(self, save, savedState, outParam) —
+        // The real signature is SaveRestore(this, save, savedState, outParam) —
         // which this project's OWN `standalone/gameupdateloop_stubs.cpp` has
         // spelled out in a comment since the 2026-08-27 save/load wave,
         // naming UpdateSave as its caller. Reading that comment would have been
@@ -1131,45 +1158,38 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
 
         StringAssignFn assign =
             RT_EXPORT_ONCE(StringAssignFn, "??4String@System@@QEAAAEAV01@AEBV01@@Z");
-        const int32_t sel = self->_selectedIndex;
+        const int32_t sel = _selectedIndex;
         if (sel == -4) {
+            // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
+            // door). The returned String lands in `generated` exactly as
+            // retail's hidden slot does — born at refcount 1, nothing added.
             const char* generated = nullptr;
-            NameGetterFn getAuto = RT_EXPORT_ONCE(NameGetterFn,
-                "?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ");
-            if (out.Call("Save::SaveLoad::GetAutoSaveName", (const void*)getAuto,
-                         reinterpret_cast<int64_t>(self),
+            RtSaveDetail::AdoptReturned(&generated, GetAutoSaveName());
+            if (out.Call("System::String::operator=", (const void*)assign,
+                         reinterpret_cast<int64_t>(&_string20),
                          reinterpret_cast<int64_t>(&generated))) {
-                getAuto(self, &generated);
-                if (out.Call("System::String::operator=", (const void*)assign,
-                             reinterpret_cast<int64_t>(&self->_string20),
-                             reinterpret_cast<int64_t>(&generated))) {
-                    assign(&self->_string20, &generated);
-                }
-                ReleaseStringSlotSink(&generated, out, "GetAutoSaveName temporary");
+                assign(&_string20, &generated);
             }
+            ReleaseStringSlotSink(&generated, out, "GetAutoSaveName temporary");
         } else {
-            const SaveInfo* row = SaveInfoAt(self, out, sel);
+            const SaveInfo* row = SaveInfoAt(this, out, sel);
             if (row->saveIndex >= 0) {
                 if (out.Call("System::String::operator=", (const void*)assign,
-                             reinterpret_cast<int64_t>(&self->_string20),
+                             reinterpret_cast<int64_t>(&_string20),
                              reinterpret_cast<int64_t>(&row->name))) {
-                    assign(&self->_string20, &row->name);
+                    assign(&_string20, &row->name);
                 }
             } else {
+                // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE
+                // door); the returned String lands in `generated` as above.
                 const char* generated = nullptr;
-                NameGetterFn gen = RT_EXPORT_ONCE(NameGetterFn,
-                    "?GenerateSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ");
-                if (out.Call("Save::SaveLoad::GenerateSaveName", (const void*)gen,
-                             reinterpret_cast<int64_t>(self),
+                RtSaveDetail::AdoptReturned(&generated, GenerateSaveName());
+                if (out.Call("System::String::operator=", (const void*)assign,
+                             reinterpret_cast<int64_t>(&_string20),
                              reinterpret_cast<int64_t>(&generated))) {
-                    gen(self, &generated);
-                    if (out.Call("System::String::operator=", (const void*)assign,
-                                 reinterpret_cast<int64_t>(&self->_string20),
-                                 reinterpret_cast<int64_t>(&generated))) {
-                        assign(&self->_string20, &generated);
-                    }
-                    ReleaseStringSlotSink(&generated, out, "GenerateSaveName temporary");
+                    assign(&_string20, &generated);
                 }
+                ReleaseStringSlotSink(&generated, out, "GenerateSaveName temporary");
             }
         }
 
@@ -1178,11 +1198,11 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
         // differs from SavedState's own — see the SaveBlock banner in
         // runtime/types/io/Persistence.h.
         RtIo::SaveBlock blocks[2];
-        const SavedState* embedded = &self->_embeddedState;
+        const SavedState* embedded = &_embeddedState;
         blocks[0].data = embedded->_data;
         blocks[0].size = embedded->_size;
         blocks[0].id   = embedded->_id;
-        const SavedState* heap = static_cast<const SavedState*>(out.ReadPtr(&self->_saveState));
+        const SavedState* heap = static_cast<const SavedState*>(out.ReadPtr(&_saveState));
         blocks[1].data = heap->_data;
         blocks[1].size = heap->_size;
         blocks[1].id   = heap->_id;
@@ -1195,8 +1215,8 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
             if (out.Call("IO::Persistence::GetSaveFilename", (const void*)getName,
                          reinterpret_cast<int64_t>(persistence),
                          reinterpret_cast<int64_t>(&filename),
-                         reinterpret_cast<int64_t>(&self->_string20))) {
-                getName(persistence, &filename, &self->_string20);
+                         reinterpret_cast<int64_t>(&_string20))) {
+                getName(persistence, &filename, &_string20);
             }
             WorkerEnqueueFn enqueue = WorkerBeginSave();
             if (out.Call("IO::Persistence worker enqueue [save, 0x1800b75c0]",
@@ -1209,7 +1229,7 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
             ReleaseStringSlotSink(&filename, out, "GetSaveFilename temporary");
         }
 
-        out.U32(&self->_progress, 2, "_progress = 2");
+        out.U32(&_progress, 2, "_progress = 2");
         return;
     }
 
@@ -1218,13 +1238,13 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
         // UpdateLoadFromFile do not have: `CMP [RBX+0x8],[RBX+0x10]` / `JLE`,
         // i.e. proceed only while _elapsed > _minOperationTime. It exists so a
         // fast save still shows its spinner for a readable moment.
-        if (self->_elapsed <= self->_minOperationTime) return;
+        if (_elapsed <= _minOperationTime) return;
 
         // FUN_180032320 — `if (p->_data) MemFree(p->_data); MemFree(p);`, the
         // inlined `delete` of a SavedState. Spelled out rather than called by
         // address: both halves are MemFree, which this file already owns, so
         // there is nothing here an address door would buy.
-        SavedState* heap = static_cast<SavedState*>(out.ReadPtr(&self->_saveState));
+        SavedState* heap = static_cast<SavedState*>(out.ReadPtr(&_saveState));
         if (heap != nullptr) {
             if (heap->_data != nullptr &&
                 out.Call("System::MemoryAllocator::MemFree", (const void*)&MemFree,
@@ -1237,21 +1257,23 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
             }
         }
 
-        void* embeddedData = out.ReadPtr(&self->_embeddedState._data);
+        void* embeddedData = out.ReadPtr(&_embeddedState._data);
         if (embeddedData != nullptr &&
             out.Call("System::MemoryAllocator::MemFree", (const void*)&MemFree,
                      reinterpret_cast<int64_t>(embeddedData))) {
             MemFree(embeddedData);
         }
-        out.Ptr(&self->_embeddedState._data, nullptr, "_embeddedState._data = null");
-        out.U32(&self->_embeddedState._size, 0, "_embeddedState._size = 0");
+        out.Ptr(&_embeddedState._data, nullptr, "_embeddedState._data = null");
+        out.U32(&_embeddedState._size, 0, "_embeddedState._size = 0");
 
-        out.U32(&self->_operation, 0, "_operation = kOpNone");
-        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
-        out.U32(&self->_progress, 0, "_progress = 0");
-        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+        out.U32(&_operation, 0, "_operation = kOpNone");
+        out.U64(&_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&_progress, 0, "_progress = 0");
+        out.U32(&_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
     }
 }
+
+namespace {
 
 // ============================================================================
 // THE UpdateList DEPENDENCY SET — five unexported internals and one CRT entry.
@@ -1276,10 +1298,8 @@ void UpdateSaveBody(SaveLoad* self, RtSink& out) {
 // ============================================================================
 
 // 0x1800329c0 — Collection::Array<SaveInfo>::~Array. PORTED (saveload.cpp).
-using ArrayDtorFn = void (*)(void* array);
 
 // 0x1800c3f40 — Save::SaveLoad::~SaveInfo, one element. PORTED (saveload.cpp).
-using SaveInfoDtorFn = void (*)(SaveInfo* row);
 
 // 0x1800332d0 — Collection::Array<SaveInfo>::SetSize(newSize, const T& fill).
 // It compares `newSize` against `_size` (+0x08), grows `_capacity`
@@ -1302,7 +1322,7 @@ using SaveInfoDtorFn = void (*)(SaveInfo* row);
 // external linkage (namespace rtcoll, array.cpp) but is not declared `extern`
 // in array_internal.h; declared locally rather than editing that header.
 //
-// `self->_savesData`/`_savesSize`/`_savesCapacity` (SaveLoad.h +0x50/+0x58/
+// `self->_savesData`/`_saves._size`/`_savesCapacity` (SaveLoad.h +0x50/+0x58/
 // +0x5c) are still three raw fields, not a `Collection::Array<SaveInfo>`
 // member — SaveLoad.h is not one of this batch's files, so the member call
 // below reaches them through the transitional
@@ -1320,7 +1340,6 @@ using SaveInfoDtorFn = void (*)(SaveInfo* row);
 // storing pixels/w/h at row+0x28/+0x20/+0x24. Those three stores are the
 // independent confirmation that OnVideoRestart's upload arguments and this
 // header's thumbWidth/thumbHeight/thumbPixels names line up.
-using SetThumbnailFn = void (*)(SaveInfo* row, void* pixels, int w, int h);
 
 // 0x18002ac40 — destroys the Array at Persistence+0x80 and zeroes {data,size}.
 // Called only from state 0, immediately before the worker is signalled: it
@@ -1373,34 +1392,21 @@ using QsortFn = void (*)(void* base, size_t count, size_t size,
 // is what keeps an inconsistent comparator out of the sort.
 using ComparatorFn = int (*)(const void*, const void*);
 
-ArrayDtorFn ArraySaveInfoDtorFn() {
-    static ArrayDtorFn f =
-        reinterpret_cast<ArrayDtorFn>(ResolveAddr(Module::Runtime, 0x1800329c0));
-    return f;
-}
-SaveInfoDtorFn SaveInfoDtor() {
-    static SaveInfoDtorFn f =
-        reinterpret_cast<SaveInfoDtorFn>(ResolveAddr(Module::Runtime, 0x1800c3f40));
-    return f;
-}
+// ENDGAME B.3.7 B2: `ArraySaveInfoDtorFn()` / `SaveInfoDtor()` (the 0x1800329c0 /
+// 0x1800c3f40 address doors) are gone: both are this class's own bodies,
+// called directly (`RtSaveDetail::ArraySaveInfoDtor`, `SaveInfo::~SaveInfo`).
 // ENDGAME B.3.2 step 2: `ArraySaveInfoSetSize()`/`PersistenceClearSaveList()`
 // (the 0x1800332d0 / 0x18002ac40 address doors) are gone — their two call
 // sites below reach `rtcoll::AsArray<&rtcoll::kSpec_MetaData58>(...)` and
 // `rtcoll::RtColl_ArrayDtorElem_18002ac40(...)` directly. See the banners on
 // `kSpec_MetaData58` and `RtColl_ArrayDtorElem_18002ac40` above.
-SetThumbnailFn SaveInfoSetThumbnail() {
-    static SetThumbnailFn f =
-        reinterpret_cast<SetThumbnailFn>(ResolveAddr(Module::Runtime, 0x1800c3de0));
-    return f;
-}
+// ENDGAME B.3.7 B2: `SaveInfoSetThumbnail()` / `SaveInfoComparator()` (the
+// 0x1800c3de0 / 0x1800c3db0 address doors) are gone: `SaveInfo::SetThumbnail`
+// and `SaveInfo::Compare` are members, called / taken directly.
+std::atomic<void*> g_retailQsort{nullptr};
 QsortFn RetailQsort() {
-    static QsortFn f = reinterpret_cast<QsortFn>(ResolveAddr(Module::Runtime, 0x18007f050));
-    return f;
-}
-ComparatorFn SaveInfoComparator() {
-    static ComparatorFn f =
-        reinterpret_cast<ComparatorFn>(ResolveAddr(Module::Runtime, 0x1800c3db0));
-    return f;
+    return reinterpret_cast<QsortFn>(
+        RtSaveDetail::AtomicAddr(g_retailQsort, Module::Runtime, 0x18007f050));
 }
 
 // ---- the exported half ------------------------------------------------------
@@ -1467,8 +1473,11 @@ using LoadMetaDataFn = void (*)(SaveLoad* self, const char** description,
 //
 // 3. THE BLANK "NEW SAVE" ROW LEAVES TWO FIELDS UNINITIALISED, AND SO DO WE.
 //    Retail's stack template writes +0x00, +0x08, +0x10, +0x18, +0x28, +0x30,
-//    +0x38, +0x40, +0x44, +0x48, +0x50 — and never +0x0c, +0x20, +0x24 or
-//    +0x2c. Those bytes are copied into the array as whatever was on the stack.
+//    +0x38, +0x40, +0x44, +0x48, +0x50 — and never +0x0c, +0x20 or +0x24.
+//    (ENDGAME B.3.7 B2 CORRECTION: this line used to add "+0x2c" to that list.
+//    +0x28 is a QWORD store, 0x1800c1fc3 `MOV qword ptr [RBP-0x21],RSI`, so
+//    +0x2c IS written — and both the old port and the new ctor write it.)
+//    Those bytes are copied into the array as whatever was on the stack.
 //    Zeroing them would be a normalisation of retail's bytes, so this port
 //    leaves the local uninitialised and assigns exactly the fields retail
 //    assigns. Nothing reads +0x20/+0x24 unless +0x18 is non-null, and
@@ -1611,44 +1620,28 @@ void SaveSpriteDims(const SaveLoad* self, int32_t* w, int32_t* h) {
     *h = *reinterpret_cast<const int32_t*>(entry + 0x20);
 }
 
-// The stack template states 1 builds and appends. `saveIndex` is the only
-// field that differs between the blank row and a real one, which is why it is
-// the parameter: -1 for the "new save" slot (0x1800c1f55/0x1800c1f65), the
-// Persistence loop counter for a real save (0x1800c1fdf).
-//
-// `row` is deliberately left uninitialised by the caller — see point 3 of the
-// banner. This function assigns exactly the eleven fields retail assigns.
-void InitSaveInfoTemplate(SaveInfo* row, int32_t saveIndex) {
-    row->thumbnail.spriteSheet = nullptr;   // +0x00 qword 0
-    row->thumbnail.spriteIndex = -1;        // +0x08 dword -1  (+0x0c NOT written)
-    row->description     = nullptr;   // +0x10
-    row->imageBuffer     = nullptr;   // +0x18   (+0x20, +0x24 NOT written)
-    row->thumbPixels     = nullptr;   // +0x28   (+0x2c NOT written)
-    row->sortKey         = 0;         // +0x30
-    row->name            = nullptr;   // +0x38
-    row->saveIndex       = saveIndex; // +0x40
-    row->field44         = -1;        // +0x44
-    row->modsData        = nullptr;   // +0x48
-    row->modsSize        = 0;         // +0x50
-    row->modsCapacity    = 0;         // +0x54
-}
+// The stack template state 1 builds and appends is `SaveInfo`'s own template
+// constructor now (SaveLoad.h) — ENDGAME B.3.7 B2 moved `InitSaveInfoTemplate`
+// onto the class: the same eleven stores, +0x0c/+0x20/+0x24 unwritten.
 
-void UpdateListBody(SaveLoad* self, RtSink& out) {
+}  // namespace
+
+// ENDGAME B.3.7 B2: the body is the member (it was `UpdateListBody(self, out)`).
+void Save::SaveLoad::UpdateList() {
+    RtSink out;                                                 // the live sink
     // Retail loads the Persistence singleton ONCE, at 0x1800c1ec9, before it
     // looks at `_progress` — so every state below shares this one read even
     // though Ghidra's C re-materialises `IO::Persistence::_singleton` inside
     // states 3 and 4.
     uint8_t* const persistence = PersistenceSingleton();
-    const uint32_t progress = out.ReadU32(&self->_progress);
+    const uint32_t progress = out.ReadU32(&_progress);
 
     // ---- state 0 -----------------------------------------------------------
     if (progress == 0) {
-        ArrayDtorFn arrayDtor = ArraySaveInfoDtorFn();
-        if (out.Call("Collection::Array<SaveInfo>::~Array [0x1800329c0]",
-                     (const void*)arrayDtor,
-                     reinterpret_cast<int64_t>(&self->_savesData))) {
-            arrayDtor(&self->_savesData);
-        }
+        // 0x1800329c0, Array<SaveInfo>::~Array — ENDGAME B.3.7 B2: the
+        // transcription (saveload.cpp) called directly, not through its
+        // registered address door.
+        RtSaveDetail::ArraySaveInfoDtor(&_saves);
 
         if ((persistence[0x18] & 1) == 0) {
             // retail 0x18002ac40 — see the banner on
@@ -1662,7 +1655,7 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
             // eyes open. `+0x48` is the word the WORKER THREAD writes when it
             // finishes, so between retail's store of 0 and Verify()'s read the
             // worker can have already put 1 back. Observed exactly once, in the
-            // self-test run:
+            // this-test run:
             //
             //     MISMATCH ... Persistence+0x48 = 0 (result: pending)
             //     pre=0x1 ours=0x0 theirs=0x1
@@ -1692,25 +1685,25 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
             }
         }
 
-        out.U32(&self->_progress, 1, "_progress = 1");
+        out.U32(&_progress, 1, "_progress = 1");
         return;
     }
 
     // ---- state 1 -----------------------------------------------------------
     if (progress == 1) {
-        SaveInfoDtorFn rowDtor   = SaveInfoDtor();
-
         // The "new save" slot, pushed FIRST so it lands at index 0 — which is
         // what makes the sort's base+0x58 shift below able to exclude it.
-        if (self->_selectedIndex == -2) {
-            SaveInfo blank;                       // deliberately uninitialised
-            InitSaveInfoTemplate(&blank, -1);
+        if (_selectedIndex == -2) {
+            // ENDGAME B.3.7 B2: SaveInfo's real template ctor placement-newed
+            // into DELIBERATELY UNINITIALISED stack bytes — it writes exactly
+            // the eleven fields retail's stack template writes (SaveLoad.h).
+            alignas(SaveInfo) uint8_t blankStorage[sizeof(SaveInfo)];
+            SaveInfo& blank = *new (blankStorage) SaveInfo(-1);
             // retail 0x1800332d0 — see the banner on `kSpec_MetaData58` above
             // for the hand-derived-row reasoning and the `_savesData` bridge.
-            rtcoll::AsArray<&rtcoll::kSpec_MetaData58>(&self->_savesData)
-                ->SetSizeFill(self->_savesSize + 1, &blank);
+            _saves.SetSize(_saves._size + 1, blank);   // 0x1800332d0, the typed 3-arg form
             // Not suppressed: see the banner. Its footprint is this stack local.
-            rowDtor(&blank);
+            blank.~SaveInfo();                        // 0x1800c3f40
         }
 
         GetSaveCountFn getCount = RT_EXPORT_ONCE(GetSaveCountFn,
@@ -1723,8 +1716,8 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
         if (getCount(persistence) > 0) {
             int32_t i = 0;
             do {
-                SaveInfo row;                     // deliberately uninitialised
-                InitSaveInfoTemplate(&row, i);
+                alignas(SaveInfo) uint8_t rowStorage[sizeof(SaveInfo)];
+                SaveInfo& row = *new (rowStorage) SaveInfo(i);   // see `blank` above
 
                 // The by-value SaveGameInfo. Its String is retained into the
                 // template and the temporary is then destroyed — which is the
@@ -1762,11 +1755,11 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
 
                 // Skip the autosave row, but ONLY in "new save" mode.
                 bool skip = false;
-                if (self->_selectedIndex == -2) {
+                if (_selectedIndex == -2) {
+                    // ENDGAME B.3.7 B2: a direct member call (was an
+                    // RT_EXPORT_ONCE door); lands in `autoName` as retail's slot.
                     const char* autoName = nullptr;
-                    NameGetterFn getAuto = RT_EXPORT_ONCE(NameGetterFn,
-                        "?GetAutoSaveName@SaveLoad@Save@@QEBA?AVString@System@@XZ");
-                    getAuto(self, &autoName);
+                    RtSaveDetail::AdoptReturned(&autoName, GetAutoSaveName());
 
                     // The length words at data[-8], zero for a null String.
                     const uint32_t lenRow  = row.name  ? RtSystem::StringLength(
@@ -1785,10 +1778,9 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
                 if (!skip) {
                     // retail 0x1800332d0 — see the banner on `kSpec_MetaData58`
                     // above.
-                    rtcoll::AsArray<&rtcoll::kSpec_MetaData58>(&self->_savesData)
-                        ->SetSizeFill(self->_savesSize + 1, &row);
+                    _saves.SetSize(_saves._size + 1, row);   // 0x1800332d0
                 }
-                rowDtor(&row);
+                row.~SaveInfo();                          // 0x1800c3f40
 
                 ++i;
                 // Retail re-asks Persistence for the count EVERY iteration
@@ -1800,14 +1792,16 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
         // The sort. When a blank row is present it is at index 0 and is
         // EXCLUDED from the range — see the comparator's note above.
         {
-            uint8_t* base  = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData));
-            int32_t  count = self->_savesSize;
-            if (self->_selectedIndex == -2) {
+            uint8_t* base  = static_cast<uint8_t*>(out.ReadPtr(&_saves._data));
+            int32_t  count = _saves._size;
+            if (_selectedIndex == -2) {
                 count -= 1;
                 base  += 0x58;
             }
             QsortFn      sortFn = RetailQsort();
-            ComparatorFn cmp    = SaveInfoComparator();
+            // ENDGAME B.3.7 B2: the comparator is SaveInfo's static member,
+            // handed to qsort by address as retail hands 0x1800c3db0.
+            ComparatorFn cmp    = &SaveInfo::Compare;
             if (out.Call("qsort(saves, count, 0x58, cmp@0x1800c3db0)",
                          (const void*)sortFn,
                          reinterpret_cast<int64_t>(base), count, 0x58,
@@ -1819,49 +1813,49 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
         // Every row with no backing save inherits the placeholder sprite — the
         // two qwords SetSaveSprite wrote at +0x60/+0x68. Retail RE-READS
         // `_savesData` on every iteration (0x1800c2160); transcribed.
-        for (int32_t i = 0; i < self->_savesSize; ++i) {
-            uint8_t* row = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData))
+        for (int32_t i = 0; i < _saves._size; ++i) {
+            uint8_t* row = static_cast<uint8_t*>(out.ReadPtr(&_saves._data))
                          + static_cast<int64_t>(i) * 0x58;
             if (*reinterpret_cast<const int32_t*>(row + 0x40) < 0) {
                 out.U64(row + 0x00,
-                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.spriteSheet),
+                        *reinterpret_cast<const uint64_t*>(&_saveSprite.spriteSheet),
                         "row.thumbnail.spriteSheet = _saveSprite.spriteSheet");
                 out.U64(row + 0x08,
-                        *reinterpret_cast<const uint64_t*>(&self->_saveSprite.spriteIndex),
+                        *reinterpret_cast<const uint64_t*>(&_saveSprite.spriteIndex),
                         "row.thumbnail.spriteIndex = _saveSprite.spriteIndex");
             }
         }
 
-        out.U32(&self->field38, 0, "field38 = 0 (metadata cursor)");
-        out.U32(&self->_progress, 2, "_progress = 2");
+        out.U32(&field38, 0, "field38 = 0 (metadata cursor)");
+        out.U32(&_progress, 2, "_progress = 2");
         return;
     }
 
     // ---- state 2 -----------------------------------------------------------
     if (progress == 2) {
-        const int32_t count = self->_savesSize;
-        if (static_cast<int32_t>(out.ReadU32(&self->field38)) < count) {
-            uint8_t* base = static_cast<uint8_t*>(out.ReadPtr(&self->_savesData));
+        const int32_t count = _saves._size;
+        if (static_cast<int32_t>(out.ReadU32(&field38)) < count) {
+            uint8_t* base = static_cast<uint8_t*>(out.ReadPtr(&_saves._data));
             for (;;) {
-                const int32_t at = static_cast<int32_t>(out.ReadU32(&self->field38));
+                const int32_t at = static_cast<int32_t>(out.ReadU32(&field38));
                 // saveIndex >= 0 -> a real save, stop here and load it.
                 // saveIndex <  0 -> the blank "new save" row; step over it.
                 if (*reinterpret_cast<const int32_t*>(
                         base + static_cast<int64_t>(at) * 0x58 + 0x40) >= 0) break;
                 const int32_t next = at + 1;
-                out.U32(&self->field38, static_cast<uint32_t>(next),
+                out.U32(&field38, static_cast<uint32_t>(next),
                         "field38 += 1 (skipping a row with no save)");
                 if (next >= count) break;
             }
         }
 
-        const int32_t at = static_cast<int32_t>(out.ReadU32(&self->field38));
+        const int32_t at = static_cast<int32_t>(out.ReadU32(&field38));
         if (at == count) {
-            out.U32(&self->_progress, 5, "_progress = 5 (list complete)");
+            out.U32(&_progress, 5, "_progress = 5 (list complete)");
             return;
         }
 
-        SaveInfo* row = SaveInfoAt(self, out, at);
+        SaveInfo* row = SaveInfoAt(this, out, at);
         BeginGetInfoFn begin = RT_EXPORT_ONCE(BeginGetInfoFn,
             "?BeginGetSaveGameInfo@Persistence@IO@@QEAA_NAEBVString@System@@H@Z");
         // `MOV R8D,0x2` — the same `2` UpdateLoadFromFile passes, spelled there
@@ -1871,7 +1865,7 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
                      reinterpret_cast<int64_t>(&row->name), 2)) {
             begin(persistence, &row->name, 2);
         }
-        out.U32(&self->_progress, 3, "_progress = 3");
+        out.U32(&_progress, 3, "_progress = 3");
         return;
     }
 
@@ -1881,19 +1875,13 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
         if ((persistence[0x18] & 1) == 0 &&
             *reinterpret_cast<const int32_t*>(persistence + 0x48) == 1) {
             RtIo::SaveBlock block{};
-            SetupLoadFn setup = RT_EXPORT_ONCE(SetupLoadFn,
-                "?SetupLoad@SavedState@Save@@QEAA?AUSaveBlock@Persistence@IO@@XZ");
             // `ADD RCX,0x28` — the EMBEDDED SavedState, not the heap one at
             // +0x40 that UpdateSave allocates. Hidden return slot in RDX.
-            if (out.Call("Save::SavedState::SetupLoad [embedded, this+0x28]",
-                         (const void*)setup,
-                         reinterpret_cast<int64_t>(&self->_embeddedState),
-                         reinterpret_cast<int64_t>(&block))) {
-                setup(&self->_embeddedState, &block);
-            }
+            // ENDGAME B.3.7 B2: a direct member call (was an RT_EXPORT_ONCE door).
+            block = _embeddedState.SetupLoad();
 
-            SaveInfo* row = SaveInfoAt(self, out,
-                                        static_cast<int32_t>(out.ReadU32(&self->field38)));
+            SaveInfo* row = SaveInfoAt(this, out,
+                                        static_cast<int32_t>(out.ReadU32(&field38)));
             BeginLoadFn beginLoad = RT_EXPORT_ONCE(BeginLoadFn,
                 "?BeginLoad@Persistence@IO@@QEAA_NAEBVString@System@@HPEBUSaveBlock@12@@Z");
             if (out.Call("IO::Persistence::BeginLoad", (const void*)beginLoad,
@@ -1903,14 +1891,14 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
                 beginLoad(persistence, &row->name, 1, &block);
             }
         }
-        out.U32(&self->_progress, 4, "_progress = 4");
+        out.U32(&_progress, 4, "_progress = 4");
         return;
     }
 
     // ---- state 4 -----------------------------------------------------------
     if (progress == 4) {
-        const int32_t at  = static_cast<int32_t>(out.ReadU32(&self->field38));
-        SaveInfo*     row = SaveInfoAt(self, out, at);
+        const int32_t at  = static_cast<int32_t>(out.ReadU32(&field38));
+        SaveInfo*     row = SaveInfoAt(this, out, at);
 
 
         if ((persistence[0x18] & 1) == 0 &&
@@ -1920,35 +1908,26 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
             void*       pixels      = nullptr;
             int         w = 0, h = 0, field44 = 0;
 
-            LoadMetaDataFn loadMeta = RT_EXPORT_ONCE(LoadMetaDataFn,
-                "?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z");
-            if (out.Call("Save::SaveLoad::LoadMetaData (+3 stack args: &h, &field44, &row.mods)",
-                         (const void*)loadMeta,
-                         reinterpret_cast<int64_t>(self),
-                         reinterpret_cast<int64_t>(&description),
-                         reinterpret_cast<int64_t>(&pixels),
-                         reinterpret_cast<int64_t>(&w))) {
-                loadMeta(self, &description, &pixels, &w, &h, &field44, &row->modsData);
-            }
+            // ENDGAME B.3.7 B2: two direct member calls (were an RT_EXPORT_ONCE
+            // door and a by-address door onto our own ports). `description` is
+            // the out-String's single field, the String retail's reference
+            // names; `row->mods` is the row's own Array<ModInfo> (+0x48).
+            LoadMetaData(*reinterpret_cast<System::String*>(&description), &pixels,
+                         w, h, field44, row->mods);
 
-            SetThumbnailFn setThumb = SaveInfoSetThumbnail();
-            if (out.Call("SaveInfo::SetThumbnail [0x1800c3de0]", (const void*)setThumb,
-                         reinterpret_cast<int64_t>(row),
-                         reinterpret_cast<int64_t>(pixels), w, h)) {
-                setThumb(row, pixels, w, h);
-            }
+            row->SetThumbnail(pixels, w, h);
 
             // Retail RE-READS field38 and _savesData here (0x1800c22e8) rather
             // than reusing `row`: SetThumbnail can run arbitrary code.
-            SaveInfo* row2 = SaveInfoAt(self, out,
-                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            SaveInfo* row2 = SaveInfoAt(this, out,
+                                         static_cast<int32_t>(out.ReadU32(&field38)));
             if (row2->description != description) {
                 ReleaseStringSlotSink(&row2->description, out, "row.description release");
                 RetainIntoSink(&row2->description, description, out,
                                "row.description = LoadMetaData out-param 1");
             }
-            SaveInfo* row3 = SaveInfoAt(self, out,
-                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            SaveInfo* row3 = SaveInfoAt(this, out,
+                                         static_cast<int32_t>(out.ReadU32(&field38)));
             out.U32(&row3->field44, static_cast<uint32_t>(field44),
                     "row.field44 = LoadMetaData out-param 6");
 
@@ -1968,21 +1947,21 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
                 strSet(&empty, "");
             }
 
-            SaveInfo* row2 = SaveInfoAt(self, out,
-                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            SaveInfo* row2 = SaveInfoAt(this, out,
+                                         static_cast<int32_t>(out.ReadU32(&field38)));
             if (row2->description != empty) {
                 ReleaseStringSlotSink(&row2->description, out, "row.description release");
                 RetainIntoSink(&row2->description, empty, out, "row.description = \"\"");
             }
             ReleaseStringSlotSink(&empty, out, "empty-String temporary");
 
-            SaveInfo* row3 = SaveInfoAt(self, out,
-                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
+            SaveInfo* row3 = SaveInfoAt(this, out,
+                                         static_cast<int32_t>(out.ReadU32(&field38)));
             out.U32(&row3->field44, 0, "row.field44 = 0");
 
             // Three independent reads of the sprite dimensions — see point 5.
             int32_t w1 = 0, h1 = 0;
-            SaveSpriteDims(self, &w1, &h1);
+            SaveSpriteDims(this, &w1, &h1);
             // `IMUL EAX,R9D` then `MOVSXD RCX,EAX` then `SHL RCX,2`: the
             // product is computed in 32 bits and SIGN-extended before scaling.
             const int64_t bytes = static_cast<int64_t>(static_cast<int32_t>(h1 * w1)) << 2;
@@ -1993,7 +1972,7 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
             }
 
             int32_t w2 = 0, h2 = 0;
-            SaveSpriteDims(self, &w2, &h2);
+            SaveSpriteDims(this, &w2, &h2);
             const int64_t bytes2 = static_cast<int64_t>(static_cast<int32_t>(h2 * w2)) << 2;
             if (pixels != nullptr) {
                 // 0x1800881b0 is the DLL's own memset, called with (p, 0, n).
@@ -2004,21 +1983,16 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
             }
 
             int32_t w3 = 0, h3 = 0;
-            SaveSpriteDims(self, &w3, &h3);
-            SaveInfo* row4 = SaveInfoAt(self, out,
-                                         static_cast<int32_t>(out.ReadU32(&self->field38)));
-            SetThumbnailFn setThumb = SaveInfoSetThumbnail();
-            if (out.Call("SaveInfo::SetThumbnail [0x1800c3de0] (black)",
-                         (const void*)setThumb,
-                         reinterpret_cast<int64_t>(row4),
-                         reinterpret_cast<int64_t>(pixels), w3, h3)) {
-                setThumb(row4, pixels, w3, h3);
-            }
+            SaveSpriteDims(this, &w3, &h3);
+            SaveInfo* row4 = SaveInfoAt(this, out,
+                                         static_cast<int32_t>(out.ReadU32(&field38)));
+            // ENDGAME B.3.7 B2: a direct member call (was a by-address door).
+            row4->SetThumbnail(pixels, w3, h3);
         }
 
-        out.U32(&self->field38, out.ReadU32(&self->field38) + 1,
+        out.U32(&field38, out.ReadU32(&field38) + 1,
                 "field38 += 1 (next row)");
-        out.U32(&self->_progress, 2, "_progress = 2");
+        out.U32(&_progress, 2, "_progress = 2");
         return;
     }
 
@@ -2026,40 +2000,70 @@ void UpdateListBody(SaveLoad* self, RtSink& out) {
     if (progress == 5) {
         // The minimum-operation-time gate, the same one UpdateSave has and
         // UpdateDelete/UpdateLoadFromFile do not: `CMP [RCX+8],RAX / JLE`.
-        if (self->_elapsed <= self->_minOperationTime) return;
+        if (_elapsed <= _minOperationTime) return;
 
         // Retail's store order at 0x1800c2519..0x1800c2532 — operation,
         // elapsed, progress, selectedIndex. Same as UpdateLoadFromFile's,
         // NOT UpdateDelete's.
-        out.U32(&self->_operation, 0, "_operation = kOpNone");
-        out.U64(&self->_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
-        out.U32(&self->_progress, 0, "_progress = 0");
-        out.U32(&self->_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
+        out.U32(&_operation, 0, "_operation = kOpNone");
+        out.U64(&_elapsed, static_cast<uint64_t>(ZeroTime()), "_elapsed = Time(0.0f)");
+        out.U32(&_progress, 0, "_progress = 0");
+        out.U32(&_selectedIndex, 0xFFFFFFFFu, "_selectedIndex = -1");
     }
 }
+
+namespace {
 
 }  // namespace
 
 // ============================================================================
-// The registered entry points.
+// Save::SaveLoad::OnVideoError()        retail 0x1800c1000   (exported, NO caller)
+// ----------------------------------------------------------------------------
+// ENDGAME B.3.7 B2: defined so the class carries every export it declares; NOT
+// registered, because nothing reaches it — retail's own MainLoop::OnVideoError
+// INLINES this very walk (runtime/src/engine/mainloop_video.cpp, step 5).
+// Read whole from the retail bytes:
 //
-// Each is the same two lines: make a live sink and run the body through it.
+//   1800c1019  CMP [RCX+0x58],EBX / JLE      — count read, loop skipped if <= 0
+//   1800c1030  MOV RAX,[RBP+0x50]             — _saves._data RE-READ per row
+//   1800c1034  MOV RDI,[RAX+RSI+0x18]         — row.imageBuffer; null -> next
+//   1800c103e  CMP [RAX+RSI+0x40],R14D / JL   — row.saveIndex < 0 -> next
+//   1800c1045  MOV RCX,[RDI+0x60]             — its ImageBufferData; if non-null
+//   1800c1056  CALL [RAX] with EDX=1          —   scalar deleting dtor (slot 0)
+//   1800c1058  MOV [RDI+0x60],R14             — ALWAYS null the companion
+//   1800c1062  CMP EBX,[RBP+0x58] / JL        — count RE-READ per iteration
+// ============================================================================
+void Save::SaveLoad::OnVideoError() {
+    for (int32_t i = 0; i < _saves._size; ++i) {
+        uint8_t* const row = reinterpret_cast<uint8_t*>(_saves._data)
+                           + static_cast<int64_t>(i) * 0x58;
+        uint8_t* const img = *reinterpret_cast<uint8_t**>(row + 0x18);
+        if (img == nullptr) continue;
+        if (*reinterpret_cast<const int32_t*>(row + 0x40) < 0) continue;
+        void* const data = *reinterpret_cast<void**>(img + 0x60);
+        if (data != nullptr) {
+            using DeletingDtorFn = void (*)(void*, unsigned int);
+            reinterpret_cast<DeletingDtorFn>((*reinterpret_cast<void***>(data))[0])(data, 1u);
+        }
+        *reinterpret_cast<void**>(img + 0x60) = nullptr;
+    }
+}
+
+// ============================================================================
+// The registered entry points — one-line QUALIFIED delegations.
 // ============================================================================
 
 void RtSave_SaveLoad_UpdateDelete(SaveLoad* self) {
-    RtSink live;
-    UpdateDeleteBody(self, live);
+    self->Save::SaveLoad::UpdateDelete();
 }
 
 void RtSave_SaveLoad_OnVideoRestart(SaveLoad* self) {
-    RtSink live;
-    OnVideoRestartBody(self, live);
+    self->Save::SaveLoad::OnVideoRestart();
 }
 
 
 void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
-    RtSink live;
-    UpdateLoadFromFileBody(self, live);
+    self->Save::SaveLoad::UpdateLoadFromFile();
 }
 
 // UpdateLoad watches TWO objects, which none of its siblings do: the SaveLoad
@@ -2069,18 +2073,15 @@ void RtSave_SaveLoad_UpdateLoadFromFile(SaveLoad* self) {
 // banner). Watching 0x18 covers _dirty (+0x00), _mods (+0x08) and _count
 // (+0x10): the flag this body writes, plus the two fields it must NOT.
 void RtSave_SaveLoad_UpdateLoad(SaveLoad* self) {
-    RtSink live;
-    UpdateLoadBody(self, live);
+    self->Save::SaveLoad::UpdateLoad();
 }
 
 void RtSave_SaveLoad_UpdateSave(SaveLoad* self) {
-    RtSink live;
-    UpdateSaveBody(self, live);
+    self->Save::SaveLoad::UpdateSave();
 }
 
 void RtSave_SaveLoad_UpdateList(SaveLoad* self) {
-    RtSink live;
-    UpdateListBody(self, live);
+    self->Save::SaveLoad::UpdateList();
 }
 
 // ============================================================================

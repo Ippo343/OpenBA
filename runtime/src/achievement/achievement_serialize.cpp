@@ -76,17 +76,14 @@
 // plainly: the reading direction of both bodies is UNVERIFIED by this file.
 // ============================================================================
 
+#include <atomic>
 #include <cstdint>
 #include <cstdio>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/achievement/AchievementManager.h"
 #include "../../types/io/Serializer.h"
-#include "../system/pod_bridge.h"   // the one transitional POD<->class cast
-#include "../collection/array_internal.h"  // ENDGAME B.3.2 step 2: kSpec_U64Zero / kSpec_PtrZero bridges
 
-using RtAchievement::Achievement;
-using RtAchievement::AchievementManager;
 using rt::io::Encoding;
 using rt::io::ReaderWriter;
 using rt::io::Serializer;
@@ -98,11 +95,7 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 namespace {
 
 // ---------------------------------------------------------------------------
-// The shared prologue/epilogue, transcribed identically to
-// goal_serialize.cpp's MakeCodec/DestroyCodec. Deliberately duplicated rather
-// than hoisted into a header: these two files are gated by DIFFERENT env
-// switches (RT_GOAL vs RT_ACHMGR), and a shared helper would
-// make one lane's kill-switch silently affect the other's bodies.
+// The shared prologue/epilogue, transcribed identically to goal_serialize.cpp's.
 //
 //   Serializer ser{ &stream, nullptr };
 //   Encoding* enc = stream.encoding;                       // [stream+0x10]
@@ -110,9 +103,8 @@ namespace {
 //        ? enc->vtable[+0x18](enc, &ser, 0)                // CreateReader
 //        : enc->vtable[+0x20](enc, &ser, 0);               // CreateWriter
 //
-// The third argument is the save-format VERSION and it is ZERO: retail zeroes
-// R8D for the `CMP [stream+8],R8D` at 0x18009e094 / 0x18009e934 and never
-// reloads it before the factory call.
+// The version argument is ZERO: retail zeroes R8D at 0x18009e094 / 0x18009e934
+// and never reloads it before the factory call.
 // ---------------------------------------------------------------------------
 ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
     ser->stream = stream;
@@ -130,8 +122,7 @@ ReaderWriter* MakeCodec(Stream* stream, Serializer* ser) {
     return rw;
 }
 
-// `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor. Skipping it
-// leaks the codec the factory just allocated, once per Serialize.
+// `if (rw) rw->vtable[0](rw, 1)` — the scalar DELETING destructor.
 void DestroyCodec(ReaderWriter* rw) {
     if (!rw) return;
     using DtorFn = void (*)(ReaderWriter*, int);
@@ -139,60 +130,40 @@ void DestroyCodec(ReaderWriter* rw) {
 }
 
 // ---- the unexported internals, by address ---------------------------------
+// All four are REGISTERED by runtime/src/object/ (external_ptr_serialize.cpp,
+// internal_ptr_array_serialize.cpp); ResolveAddr consults the port registry
+// first. Module::Runtime is explicit: 0x180004590 is a DIFFERENT function in
+// VideoDX11-x64.dll (dialog_vtable.cpp's note).
+//   0x1800042a0  ExternalPtr<UI::StringTable>::Serialize      (+0x20)
+//   0x180004590  ExternalPtr<UI::SpriteSheet>::Serialize      (+0x38)
+//   0x180005220  serialize N ExternalPtr<Goal>                (+0x48)
+//   0x180009a20  serialize N InternalPtr<AchievementInstance>
+// ENDGAME B.3.7: namespace-scope ATOMIC caches (RULE B6-5 — both bodies run on
+// the LOADER thread on a save load, B37_RULES §5).
 using PtrSerializeFn   = void (*)(void*, Serializer*);
-using ArraySetSizeFn   = void (*)(void*, int);
 using ArraySerializeFn = void (*)(Serializer*, int, void*);
 
-// CALL 0x1800042a0 from Achievement::Serialize at 0x18009e0bd (over +0x20).
-PtrSerializeFn ExternalPtrSerialize_StringTable() {
-    static PtrSerializeFn f = nullptr;
-    if (!f) f = reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, 0x1800042a0));
-    return f;
-}
-// CALL 0x180004590 from Achievement::Serialize at 0x18009e0e6 (over +0x38).
-// Module::Runtime is explicit: dialog_vtable.cpp:168 records that this same
-// address is a DIFFERENT function inside VideoDX11-x64.dll.
-PtrSerializeFn ExternalPtrSerialize_SpriteSheet() {
-    static PtrSerializeFn f = nullptr;
-    if (!f) f = reinterpret_cast<PtrSerializeFn>(ResolveAddr(Module::Runtime, 0x180004590));
-    return f;
-}
-// ENDGAME B.3.2 step 2 — ArraySetSizeGoalPtrs (0x180005110, kSpec_U64Zero) and
-// ArraySetSizeInternalPtrs (0x180008d60, kSpec_PtrZero) are GONE: `Achievement
-// ::goals` and `AchievementManager::instances` are already real
-// `Collection::Array<T>` members (runtime/types/achievement/
-// AchievementManager.h), and neither spec is trait-equivalent for its element
-// type — see achievement_manager.cpp's banner on these same two rows for why
-// (Assign8/InitZero8 vs. an uninitialised trait tail, and Assign8Z's
-// double-write). Both call sites now go through `rtcoll::AsArray<&kSpec_X>`
-// bridges. The two rows stay registered in array.cpp.
-// The two N-element serializers. Signature (Serializer*, int count, T* data).
-ArraySerializeFn SerializeGoalPtrs() {
-    static ArraySerializeFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArraySerializeFn>(ResolveAddr(Module::Runtime, 0x180005220));
-    return f;
-}
-ArraySerializeFn SerializeInstancePtrs() {
-    static ArraySerializeFn f = nullptr;
-    if (!f) f = reinterpret_cast<ArraySerializeFn>(ResolveAddr(Module::Runtime, 0x180009a20));
-    return f;
-}
+std::atomic<void*> g_ptrSerStringTable{nullptr};
+std::atomic<void*> g_ptrSerSpriteSheet{nullptr};
+std::atomic<void*> g_serGoalPtrs{nullptr};
+std::atomic<void*> g_serInstancePtrs{nullptr};
 
-// ENDGAME B.3.1 step 2: `?Serialize@String@System@@QEAAXAEAVSerializer@IO@@@Z`
-// (0x1800c9930) is a member of `System::String` now, so the by-address door
-// that used to stand here is gone and the three call sites call it directly.
-// The registry row at that address registers the shim, and the shim is one line
-// over this member, so it is the same body either way.
+void* RuntimeAddr(std::atomic<void*>& slot, uintptr_t addr) {
+    void* p = slot.load(std::memory_order_acquire);
+    if (p == nullptr) {
+        p = reinterpret_cast<void*>(ResolveAddr(Module::Runtime, addr));
+        if (p != nullptr) slot.store(p, std::memory_order_release);
+    }
+    return p;
+}
 
 }  // namespace
 
+namespace Achievement {
+
 // ============================================================================
-// bool Achievement::Achievement::Serialize(IO::Stream&)
+// bool Achievement::Serialize(IO::Stream&) — SLOT 5
 // ?Serialize@Achievement@1@UEAA_NAEAVStream@IO@@@Z        retail 0x18009e070
-//
-// VIRTUAL (UEAA) — slot 5 of ??_7Achievement@0@6B@ (DLL 0x180154740).
-// RCX = this, RDX = the Stream. Always returns true (`MOV AL,1`); no failure
-// path.
 //
 // SIX RECORDS, in this exact order, and the order is the whole contract:
 //   +0x20 _stringTable  ExternalPtr<UI::StringTable>  -> 0x1800042a0
@@ -202,117 +173,84 @@ ArraySerializeFn SerializeInstancePtrs() {
 //   +0x40 _spriteName   System::String                -> String::Serialize
 //   +0x50 _goals._size  int                           -> ReaderWriter +0xA0
 //   then _goals._size elements of _goals._data        -> 0x180005220
-//
-// NOTE THE LAST PAIR CAREFULLY. The COUNT is read from +0x50 — that is
-// `_goals._size`, because `_goals` is the Array at +0x48 and an Array's _size
-// sits at +0x08 of it. The ELEMENTS come from the pointer at +0x48. Retail
-// spells these as two different offsets on two adjacent instructions and it is
-// easy to transcribe one of them as the other; this port reads them through the
-// named struct so the offsets are checked by the header's static_asserts.
-//
-// The SetSize at 0x180005110 fires only when `stream.direction == 0` (reading);
-// it grows the array to the count just read before the elements are filled in.
-//
-// ORACLE: the emission oracle, WRITING direction, two synthetic sinks,
-// stopAfter = 0 (whole body). Legitimate because every emission on the write
-// path is a pure read of this object: the three String::Serialize calls read,
-// the two ExternalPtr serializers take the GetReferenceId branch which
-// goal_serialize.cpp already proved const and idempotent (0x1800bf100 is QEBA,
-// a pure lookup, no insert and no counter), and 0x180005220's write path is the
-// same lookup per element. The `Encoding` slot +0x10 == 3 VISITOR branch — the
-// one that calls ExternalFactory::FindOrLoad for its side effect — is
-// unreachable under the sink, which binds every Encoding slot to a recording
-// thunk and never returns 3.
+// The SetSize (0x180005110) fires only when reading. Always `MOV AL,1`.
 // ============================================================================
-bool RtAch_Achievement_Serialize(Achievement* self, Stream* stream) {
+bool Achievement::Serialize(void* streamv) {
+    Stream* stream = static_cast<Stream*>(streamv);
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    // The three String fields are POD members of the unconverted
-    // `Achievement::Achievement`, so they reach their own member through the
-    // one bridge. The field ORDER is retail's, not declaration order.
-    ExternalPtrSerialize_StringTable()(&self->stringTable, &ser);   // +0x20
-    RtSystem::Sys(self->title).Serialize(&ser);                     // +0x28
-    RtSystem::Sys(self->description).Serialize(&ser);               // +0x30
-    ExternalPtrSerialize_SpriteSheet()(&self->spriteSheet, &ser);   // +0x38
-    RtSystem::Sys(self->spriteName).Serialize(&ser);                // +0x40
+    reinterpret_cast<PtrSerializeFn>(RuntimeAddr(g_ptrSerStringTable, 0x1800042a0))(
+        &_stringTable, &ser);                                       // +0x20
+    _title.Serialize(&ser);                                         // +0x28
+    _description.Serialize(&ser);                                   // +0x30
+    reinterpret_cast<PtrSerializeFn>(RuntimeAddr(g_ptrSerSpriteSheet, 0x180004590))(
+        &_spriteSheet, &ser);                                       // +0x38
+    _spriteName.Serialize(&ser);                                    // +0x40
 
-    int count = self->goals._size;                                  // +0x50
+    int count = _goals.GetSize();                                   // +0x50
     using IntFn = void (*)(ReaderWriter*, int*, const char*);
     reinterpret_cast<IntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
 
     if (stream->direction == rt::io::kDirectionReading) {
-        rtcoll::AsArray<&rtcoll::kSpec_U64Zero>(&self->goals)->SetSize(count);
+        _goals.SetSize(count);   // 0x180005110 — `GoalArray` names kSpec_U64Zero
     }
-    SerializeGoalPtrs()(&ser, count, self->goals._data);            // +0x48
+    reinterpret_cast<ArraySerializeFn>(RuntimeAddr(g_serGoalPtrs, 0x180005220))(
+        &ser, count, _goals.GetData());                             // +0x48
 
     DestroyCodec(rw);
     return true;
 }
 
 // ============================================================================
-// void Achievement::AchievementManager::Persist(IO::Stream&)
+// void AchievementManager::Persist(IO::Stream&)
 // ?Persist@AchievementManager@Achievement@@QEAAXAEAVStream@IO@@@Z
 //                                                         retail 0x18009e910
 //
-// NON-virtual (QEAA). RCX = this, RDX = the Stream. Returns nothing.
-//
-// Same prologue and epilogue; the middle is four steps, TWO of which fire only
-// when reading:
-//   READ ONLY:  RemoveAll(this)                  -- destroy every existing
-//                                                   instance before refilling
+// NON-virtual. Four steps, two of them read-only:
+//   READ ONLY:  RemoveAll()
 //   BOTH:       count = _instances._size   -> ReaderWriter +0xA0
-//   READ ONLY:  Array<InternalPtr>::SetSize(&_instances, count)
-//   BOTH:       serialize `count` instances from _instances._data
-//
-// THE ORDER OF THE FIRST TWO IS LOAD-BEARING AND IS EASY TO GET BACKWARDS.
-// `RemoveAll` zeroes `_instances._size`, and the count is read AFTER it. On the
-// reading side the value emitted into the codec is therefore ALWAYS 0 — but
-// that does not matter, because on the reading side the codec OVERWRITES the
-// variable with the value from the file. Transcribing `count` before
-// `RemoveAll` would be invisible on the write path and would corrupt nothing
-// on the read path either, yet it would emit a nonzero count from a manager
-// being loaded into. It is kept in retail's order because the bytes are the
-// specification, not because a test would catch it.
-//
-// ORACLE: PREFIX. See the banner — stopAfter = 1, covering the count record
-// only, because the element loop mutates the global Object::Factory.
+//   READ ONLY:  _instances.SetSize(count)  (0x180008d60, kSpec_PtrZero)
+//   BOTH:       serialize `count` instances
+// RemoveAll zeroes `_size` and the count is read AFTER it — retail's order.
 // ============================================================================
-void RtAch_AchievementManager_Persist(AchievementManager* self, Stream* stream) {
+void AchievementManager::Persist(IO::Stream& streamRef) {
+    // B.3.7 bridge: the ported body walks the stream through the `rt::io`
+    // view of retail's IO::Stream (runtime/types/io/Serializer.h), the same
+    // bytes; the IO classes' own members are not what this body calls.
+    Stream* stream = reinterpret_cast<Stream*>(&streamRef);   // B.3.7 bridge
     Serializer ser;
     ReaderWriter* rw = MakeCodec(stream, &ser);
 
-    if (stream->direction == rt::io::kDirectionReading) {
-        using RemoveAllFn = void (*)(void*);
-        auto removeAll = RT_EXPORT_ONCE(RemoveAllFn,
-            "?RemoveAll@AchievementManager@Achievement@@QEAAXXZ");
-        removeAll(self);
-    }
+    if (stream->direction == rt::io::kDirectionReading)
+        RemoveAll();
 
-    int count = self->instances._size;
+    int count = _instances.GetSize();
     using IntFn = void (*)(ReaderWriter*, int*, const char*);
     reinterpret_cast<IntFn>(rw->vtable[rt::io::rw_vtbl::kScalarInt / 8])(rw, &count, nullptr);
 
-    if (stream->direction == rt::io::kDirectionReading) {
-        rtcoll::AsArray<&rtcoll::kSpec_PtrZero>(&self->instances)->SetSize(count);
-    }
-    SerializeInstancePtrs()(&ser, count, self->instances._data);
+    if (stream->direction == rt::io::kDirectionReading)
+        _instances.SetSize(count);
+    reinterpret_cast<ArraySerializeFn>(RuntimeAddr(g_serInstancePtrs, 0x180009a20))(
+        &ser, count, _instances.GetData());
 
     DestroyCodec(rw);
 }
 
-// ---- Registration ----------------------------------------------------------
-// Gated by RT_ACHMGR with achievement_manager.cpp and
-// achievement_state.cpp — class atomicity (PLAN §4.1 decision 5).
-//
-// `?Persist@AchievementManager@…` is a LIVE door today:
-// code/Game/Game/gameupdateloop_serialize.cpp:165 resolves it by name on every
-// save and every load. `?Serialize@Achievement@1@` is slot 5 of a MINTED,
-// UNPROMOTED vtable, so registering it changes nothing until that table is
-// promoted — see the VTABLE section of the lane doc. It is registered anyway,
-// because an unregistered body is indistinguishable from an absent one
-// (reference_half_registered_port_reads_as_absent.md) and because the slot is
-// exactly what COMPLETE-ness of ??_7Achievement@0@6B@ is waiting on.
+}  // namespace Achievement
+
+// ---- The registered doors — QUALIFIED delegations --------------------------
+bool RtAch_Achievement_Serialize(Achievement::Achievement* self, void* stream) {
+    return self->Achievement::Achievement::Serialize(stream);
+}
+
+void RtAch_AchievementManager_Persist(Achievement::AchievementManager* self, IO::Stream* stream) {
+    self->Achievement::AchievementManager::Persist(*stream);
+}
+
+// ---- Registration (unchanged) ----------------------------------------------
+// `?Persist@AchievementManager@…` is a LIVE door: code/Game/Game/
+// gameupdateloop_serialize.cpp resolves it by name on every save and load.
 int RtAchSerializeRegister() {
     int n = 0;
 

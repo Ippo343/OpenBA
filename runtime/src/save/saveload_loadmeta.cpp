@@ -257,16 +257,10 @@ inline Fn VSlot(const void* obj, int byteOffset) {
         const_cast<void*>(vtbl[byteOffset / static_cast<int>(sizeof(void*))]));
 }
 
-// FUN_1800331f0 — Collection::Array<ModInfo>::~Array. saveload.cpp owns the
-// transcription and registers it at this address; ResolveAddr consults the PORT
-// REGISTRY FIRST (reference_resolveaddr_consults_port_registry_first), so this
-// reaches our body, not the DLL's. Only the oracle uses it, to tear down the
-// array the shipped body filled in our private scratch.
-void DestroyScratchModArray(ModArray* arr) {
-    using Fn = void (*)(ModArray*);
-    static Fn f = reinterpret_cast<Fn>(ResolveAddr(Module::Runtime, 0x1800331f0));
-    f(arr);
-}
+// ENDGAME B.3.7 B2: `DestroyScratchModArray`, the by-address door onto
+// FUN_1800331f0 (Array<ModInfo>::~Array) that only the retired oracle used, is
+// gone with its last caller; `RtSaveDetail::ArrayModInfoDtor` (saveload.cpp) is
+// that body, called directly where it is needed.
 
 // System::String equality by CONTENT. The two sides are two live allocations, so
 // the POINTERS differ by construction and comparing them would fail 100% of
@@ -286,13 +280,15 @@ bool StringContentEqual(const char* a, const char* b) {
 // ============================================================================
 // Save::SaveLoad::LoadMetaData   retail 0x1800c1b30   ordinal 3208
 // ============================================================================
-extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
-                                             const char** description,
-                                             void**       pixels,
-                                             int*         width,
-                                             int*         height,
-                                             int*         version,
-                                             ModArray*    mods) {
+// ENDGAME B.3.7 B2: the body is the member; the out-parameters are the
+// references retail's mangling spells (`AEAVString`, `AEAH` x3, `AEAV?$Array`).
+void Save::SaveLoad::LoadMetaData(System::String& description, void** pixels,
+                                  int& widthRef, int& heightRef, int& versionRef,
+                                  ModArray& modsRef) {
+    int* const width   = &widthRef;
+    int* const height  = &heightRef;
+    int* const version = &versionRef;
+    ModArray* const mods = &modsRef;
 
 
     // ---- 0x1800c1b6c : IO::CompressedMemoryStream cms; ---------------------
@@ -310,10 +306,10 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     // at 0x1800c1b95, after the Open call), and is transcribed with the same
     // second read. 0x18008a290 is memmove, not memcpy (runtime/src/system/error.cpp).
     RT_EXPORT_ONCE(MsOpenFn, "?Open@MemoryStream@IO@@QEAA_NH@Z")(
-        &cms->memoryStream, static_cast<int>(self->_embeddedState._size));
+        &cms->memoryStream, static_cast<int>(_embeddedState._size));
     std::memmove(cms->memoryStream.data,
-                 self->_embeddedState._data,
-                 self->_embeddedState._size);
+                 _embeddedState._data,
+                 _embeddedState._size);
 
     // ---- 0x1800c1bb5 : CompressedStream::Open(cms, cms._memoryStream, 1) ---
     // Retail calls the base directly with the embedded stream and a window count
@@ -348,7 +344,7 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     // the String's single field (`const char**`) because that is the shape the
     // registered entry point's callers spell, so it comes through a
     // transitional cast (B31_RULES, "not-yet-converted").
-    reinterpret_cast<System::String&>(*description).Serialize(&ser);
+    description.Serialize(&ser);
 
     // ---- 0x1800c1c1c / 0x1800c1c34 : out-params 3 and 4 --------------------
     // Both through the SIGNED scalar slot (+0xa0) with a null field name.
@@ -429,9 +425,9 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
     // agrees. They diverge only when `_data` is null and `_size` is NOT — which
     // is exactly what a round that skipped BeginLoad leaves behind. Written out
     // in retail's shape, and it stays that shape.
-    if (self->_embeddedState._data != nullptr) MemFree(self->_embeddedState._data);
-    self->_embeddedState._data = nullptr;
-    self->_embeddedState._size = 0;
+    if (_embeddedState._data != nullptr) MemFree(_embeddedState._data);
+    _embeddedState._data = nullptr;
+    _embeddedState._size = 0;
 
     // ---- 0x1800c1db6 : ~CompressedMemoryStream, inlined by retail ----------
     RT_EXPORT_ONCE(CmsVoidFn, "??1CompressedMemoryStream@IO@@UEAA@XZ")(cms);
@@ -452,6 +448,20 @@ extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
 // a second door costs one line. It does NOT get its own `++n`: `n` counts ported
 // FUNCTIONS, and this is a second door onto one function.
 // ============================================================================
+// The registered door: retail's references arrive as the pointers the
+// `LoadMetaDataFn`-shaped callers pass; `description` is the String's single
+// field (`const char**`), bridged to the class it overlays.
+extern "C" void RtSave_SaveLoad_LoadMetaData(SaveLoad* self,
+                                             const char** description,
+                                             void**       pixels,
+                                             int*         width,
+                                             int*         height,
+                                             int*         version,
+                                             ModArray*    mods) {
+    self->Save::SaveLoad::LoadMetaData(*reinterpret_cast<System::String*>(description),
+                                       pixels, *width, *height, *version, *mods);
+}
+
 int RtSaveLoadMetaDataRegister() {
     int n = 0;
     RegisterRuntimeExport("?LoadMetaData@SaveLoad@Save@@QEAAXAEAVString@System@@PEAPEAXAEAH22AEAV?$Array@UModInfo@SaveLoad@Save@@@Collection@@@Z", (void*)&RtSave_SaveLoad_LoadMetaData); ++n;

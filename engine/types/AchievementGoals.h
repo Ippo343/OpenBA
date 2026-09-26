@@ -163,3 +163,24 @@ struct TimeGoalInstance {
 };
 static_assert(sizeof(TimeGoalInstance) == 0x28, "TimeGoalInstance size mismatch");
 static_assert(offsetof(TimeGoalInstance, elapsedTime) == 0x20, "TimeGoalInstance::elapsedTime offset");
+
+// ============================================================================
+// ENDGAME B.3.7 — the Runtime bases are real classes now
+// (runtime/types/achievement/Goal.h). These seven exe structs STAY (step 8
+// converts them into C++ subclasses) and keep their opaque `_goalBase` /
+// `_instBase` blobs; what is pinned here is that each blob ends exactly where
+// the real base ends, so an exe field can never silently overlap a base field.
+// ============================================================================
+#include "achievement/Goal.h"
+
+static_assert(sizeof(void*) + sizeof(BuildingGoal::_goalBase) == sizeof(Achievement::Goal),
+              "the exe Goal prefix is Achievement::Goal (0x30)");
+static_assert(offsetof(BuildingGoal, _field30)          == sizeof(Achievement::Goal), "BuildingGoal extends Goal");
+static_assert(offsetof(PopulationGoal, targetPop)       == sizeof(Achievement::Goal), "PopulationGoal extends Goal");
+static_assert(offsetof(StatGoal, statTypeA)             == sizeof(Achievement::Goal), "StatGoal extends Goal");
+static_assert(offsetof(TimeGoal, requiredYears)         == sizeof(Achievement::Goal), "TimeGoal extends Goal");
+static_assert(offsetof(FinishTutorialGoal, _field30)    == sizeof(Achievement::Goal), "FinishTutorialGoal extends Goal");
+static_assert(offsetof(FinishTutorialInstance, _field20) == sizeof(Achievement::GoalInstance),
+              "FinishTutorialInstance extends GoalInstance (0x20)");
+static_assert(offsetof(TimeGoalInstance, elapsedTime)   == sizeof(Achievement::GoalInstance),
+              "TimeGoalInstance extends GoalInstance (0x20)");
