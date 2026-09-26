@@ -13,6 +13,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // StorageCapacityUI::Serialize (vtable +0x20) — Find progress element
@@ -105,7 +106,7 @@ void StorageCapacityUI_Startup(StorageCapacityUI* self) {
     System::String str = System::String::Format("%i", (uint64_t)(uint32_t)(int)displayVal);
 
     // Set on progress element
-    fn_ProgressElement_SetProgressTextParameter(progElem, 0, &str);
+    reinterpret_cast<UI::ProgressElement*>(progElem)->SetProgressTextParameter(0, str);  // B.3.6 bridge
 }
 
 // ============================================================
