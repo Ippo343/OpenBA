@@ -22,6 +22,7 @@
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // EventLogUI::Slot5 (vtable +0x28) — Setup event log display
@@ -195,12 +196,12 @@ void EventLogUI_Slot7(EventLogUI* self) {
             if (eventIdx < 0) {
                 // No event for this row — blank the text.
                 System::String emptyStr("");
-                fn_TextElement_SetParameter(textElem, 0, &emptyStr);
+                reinterpret_cast<UI::TextElement*>(textElem)->SetParameter(0, emptyStr);  // B.3.6 bridge
                 enabled = 0;
             } else {
                 uintptr_t eventEntry = eventArray + (uintptr_t)eventIdx * 0x28;
                 // Text = event entry +0x08.
-                fn_TextElement_SetParameter(textElem, 0, (void*)(eventEntry + 0x08));
+                reinterpret_cast<UI::TextElement*>(textElem)->SetParameter(0, *reinterpret_cast<const System::String*>(eventEntry + 0x08));  // B.3.6 bridge
                 // Colour = entry +0x00 via text element vtable[+0x50] (SetColor).
                 reinterpret_cast<UI::Element*>(textElem)->SetColor(*(uint32_t*)eventEntry);  // B.3.6 bridge: Element slot 10 SetColor
                 // The nav button is enabled only if the event has a map location

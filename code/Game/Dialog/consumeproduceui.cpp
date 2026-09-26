@@ -21,6 +21,8 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // ConsumeProduceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -169,7 +171,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(rd + 0x20))), *reinterpret_cast<const System::String*>(rd + 0x38));  // B.3.6 bridge
 
             // Add item to combo: sprite, string, null userData
-            fn_ComboElement_AddItem(comboElem, spriteBuf, &sysStr, nullptr);
+            reinterpret_cast<UI::ComboElement*>(comboElem)->AddItem(*reinterpret_cast<const UI::Sprite*>(spriteBuf), sysStr, nullptr);  // B.3.6 bridge
         }
 
         // Get current product index and set combo selection
@@ -181,7 +183,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             selIdx = 0;
         }
         void* comboFinal = (void*)*(uint64_t*)(s + 0x30);
-        fn_ComboElement_SetCurrentItem(comboFinal, selIdx);
+        reinterpret_cast<UI::ComboElement*>(comboFinal)->SetCurrentItem(selIdx);  // B.3.6 bridge
     }
 
     // Find "progressRemaining" element
@@ -265,7 +267,7 @@ void ConsumeProduceUI_Slot7(ConsumeProduceUI* self) {
     System::String str = System::String::Format("%i", (uint64_t)(uint32_t)percent);
 
     // Set on progress element
-    fn_ProgressElement_SetProgressTextParameter(progPtr, 0, &str);
+    reinterpret_cast<UI::ProgressElement*>(progPtr)->SetProgressTextParameter(0, str);  // B.3.6 bridge
 }
 
 // ============================================================
