@@ -12,6 +12,8 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // File-local helper: CemeteryGetBurialCount (FUN_140046dd0)
@@ -92,7 +94,7 @@ void CemeteryUI_Slot4(CemeteryUI* self) {
 
     // Find ProgressElement by type
     uint64_t result = 0;
-    fn_Element_FindElementType(dialogElem, &result, *g_TypeId_ProgressElement);
+    ::new (&result) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(*g_TypeId_ProgressElement));  // B.3.6 bridge
     void* foundElem = (void*)result;
 
     // Type-check and wrap as InternalBasePtr

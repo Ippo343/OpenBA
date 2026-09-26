@@ -13,6 +13,14 @@
 #include <cstdint>
 #include <cstdio>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // ConsumeProduceUI::Slot4 (vtable +0x20) — Setup/refresh
@@ -57,7 +65,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
     {
         System::String nameStr("comboProduct");
         uint64_t testBuf = 0;
-        fn_DialogInstance_FindElement(dialogInst, &testBuf, &nameStr);
+        ::new (&testBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         hasCombo = (testBuf != 0);
     }
     {
@@ -73,7 +81,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
         // Find "comboProduct" again, wrap as InternalBasePtr, check ComboElement type
         System::String nameStr("comboProduct");
         uint8_t elemBuf[16];
-        fn_DialogInstance_FindElement(dialogInst, elemBuf, &nameStr);
+        ::new (elemBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         void* foundElem = *(void**)elemBuf;
 
         // IsDerivedFrom ComboElement type check
@@ -84,7 +92,7 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
         *(uint64_t*)(s + 0x30) = comboBP;
 
         // Set element ID 22000
-        fn_Element_SetElementId((void*)*(uint64_t*)(s + 0x30), 22000);
+        reinterpret_cast<UI::Element*>(*(uint64_t*)(s + 0x30))->SetElementId(22000);  // B.3.6 bridge
 
         // Iterate description entries and populate combo
         // cpComp+0x28 = entries array ptr, cpComp+0x30 = entry count, stride 0x28
@@ -147,18 +155,18 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
             uintptr_t nameAddr = entriesBase + (uintptr_t)i * 0x28 + 0x20;
             uint64_t stringTable = *(uint64_t*)(cp + 0x20);
             uint8_t uiStrBuf[16];
-            fn_UIString_Ctor(uiStrBuf, stringTable, (void*)nameAddr);
+            ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), *reinterpret_cast<const System::String*>(nameAddr));  // B.3.6 bridge
 
             // Convert UI::String to System::String
             System::String sysStr;
-            fn_UIString_ToSystemString(uiStrBuf, &sysStr);
+            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStrBuf)->operator System::String());  // B.3.6 bridge
 
             // Create UI::Sprite from ResourceDescription
             // resourceDesc+0x20 = sprite sheet, resourceDesc+0x38 = sprite name
             void* comboElem = (void*)*(uint64_t*)(s + 0x30);
             uint8_t spriteBuf[32];
             uintptr_t rd = (uintptr_t)resourceDesc;
-            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(rd + 0x20), (void*)(rd + 0x38));
+            ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(rd + 0x20))), *reinterpret_cast<const System::String*>(rd + 0x38));  // B.3.6 bridge
 
             // Add item to combo: sprite, string, null userData
             fn_ComboElement_AddItem(comboElem, spriteBuf, &sysStr, nullptr);
@@ -181,14 +189,14 @@ void ConsumeProduceUI_Slot4(ConsumeProduceUI* self) {
     {
         System::String nameStr("progressRemaining");
         uint64_t testBuf2 = 0;
-        fn_DialogInstance_FindElement(dialogInst, &testBuf2, &nameStr);
+        ::new (&testBuf2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         hasProgress = (testBuf2 != 0);
     }
 
     if (hasProgress) {
         System::String nameStr("progressRemaining");
         uint8_t elemBuf2[16];
-        fn_DialogInstance_FindElement(dialogInst, elemBuf2, &nameStr);
+        ::new (elemBuf2) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(dialogInst)->FindElement(nameStr));  // B.3.6 bridge
         void* progElem = *(void**)elemBuf2;
 
         // Check ProgressElement type

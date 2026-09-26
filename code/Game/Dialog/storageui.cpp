@@ -22,6 +22,12 @@
 #include <cstdlib>
 #include "resolve.h"
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/Sprite.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // StorageUI::Startup is the per-frame content refresh (driven via the +0x40
 // W_OnUpdate hack in standalone). Its _DEBUG bring-up logs used to fire every
@@ -36,7 +42,7 @@
 static void* StorageUI_FindChildElem(void* parentElem, const char* name) {
     uint8_t retBuf[16];
     System::String nameStr(name);
-    fn_FindElement(parentElem, retBuf, &nameStr);
+    ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(parentElem)->FindElement(nameStr));  // B.3.6 bridge
     void* result = *(void**)retBuf;
     return result;
 }
@@ -69,7 +75,7 @@ void StorageUI_Serialize(StorageUI* self) {
     if (!tableRaw) {
         uint8_t retBuf[16];
         System::String nameBuf("storageTable2");
-        fn_FindElement(dialogElem, retBuf, &nameBuf);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameBuf));  // B.3.6 bridge
         tableRaw = *(void**)retBuf;
     }
 
@@ -98,7 +104,7 @@ void StorageUI_Serialize(StorageUI* self) {
 
     // Get template factory from first child element at +0xB8 (NOT vtable+0xB8)
     uint8_t childBuf[16];
-    fn_Element_Child((void*)tableElem, childBuf, 0);
+    ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(0));  // B.3.6 bridge
     void* firstChild = *(void**)childBuf;
     void* templateObj = *(void**)((uintptr_t)firstChild + 0xB8);
 
@@ -112,7 +118,7 @@ void StorageUI_Serialize(StorageUI* self) {
     fn_TableElement_SetSize((void*)tableElem, rowCount, colCount);
 
     // Clone template elements into each table cell
-    int totalCells = fn_Element_ChildCount((void*)tableElem);
+    int totalCells = reinterpret_cast<const UI::Element*>(tableElem)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalCells; i++) {
         // Get dialog resource reference: *(dialogInstance+0x18)
         void* dialogInst = *(void**)(s + 0x18);
@@ -129,10 +135,10 @@ void StorageUI_Serialize(StorageUI* self) {
     }
 
     // Iterate all cells, find "labelStorage" and "numberCount" sub-elements
-    totalCells = fn_Element_ChildCount((void*)tableElem);
+    totalCells = reinterpret_cast<const UI::Element*>(tableElem)->ChildCount();  // B.3.6 bridge
     for (int i = 0; i < totalCells; i++) {
         // Get child row element — CheckPtr before deref (matches original)
-        fn_Element_Child((void*)tableElem, childBuf, i);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(i));  // B.3.6 bridge
         void* rowElem = *(void**)childBuf;
 
         // Find "labelStorage" element
@@ -142,7 +148,7 @@ void StorageUI_Serialize(StorageUI* self) {
         uint64_t numberCount = StorageUI_FindElemAsBasePtr(rowElem, "numberCount");
 
         // Get raw child element ptr
-        fn_Element_Child((void*)tableElem, childBuf, i);
+        ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(tableElem)->Child(i));  // B.3.6 bridge
         uint64_t rawChild = *(uint64_t*)childBuf;
 
         // Build 0x18-byte entry {labelStorage, numberCount, rawChild} and push to
@@ -306,15 +312,15 @@ void StorageUI_Startup(StorageUI* self) {
 
             // Set sprite from resource type
             uint8_t spriteBuf[16];
-            fn_Sprite_Ctor(spriteBuf, *(uint64_t*)(resType + 0x20),
-                           (void*)(resType + 0x30));
+            ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(resType + 0x20))),
+                           *reinterpret_cast<const System::String*>(resType + 0x30));  // B.3.6 bridge
             void* labelElem = *(void**)rowBase;
             fn_LabelElement_SetSprite(labelElem, spriteBuf);
 
             // Set text from resource type
             uint8_t uiStrBuf[16];
-            fn_UIString_Ctor(uiStrBuf, *(uint64_t*)(resType + 0x28),
-                             (void*)(resType + 0x30));
+            ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(resType + 0x28))),
+                             *reinterpret_cast<const System::String*>(resType + 0x30));  // B.3.6 bridge
             labelElem = *(void**)rowBase;
             fn_TextElement_SetText(labelElem, uiStrBuf);
 
@@ -323,8 +329,8 @@ void StorageUI_Startup(StorageUI* self) {
             fn_NumberElement_SetValueInt(numberElem, count);
 
             // Show both elements (flags: hide=0, show=1)
-            fn_Element_SetFlagsOnOff(*(void**)rowBase, 0, 1);
-            fn_Element_SetFlagsOnOff(*(void**)(rowBase + 8), 0, 1);
+            reinterpret_cast<UI::Element*>(*(void**)rowBase)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
+            reinterpret_cast<UI::Element*>(*(void**)(rowBase + 8))->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
             rowIdx++;
             itemPtr += 0x18;
@@ -339,8 +345,8 @@ void StorageUI_Startup(StorageUI* self) {
             uintptr_t rowBase = *(uintptr_t*)(s + 0x30) + hideOffset;
 
             // Hide both elements (flags: hide=1, show=0) — CheckPtr before deref
-            fn_Element_SetFlagsOnOff(*(void**)rowBase, 1, 0);
-            fn_Element_SetFlagsOnOff(*(void**)(rowBase + 8), 1, 0);
+            reinterpret_cast<UI::Element*>(*(void**)rowBase)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
+            reinterpret_cast<UI::Element*>(*(void**)(rowBase + 8))->SetFlagsOnOff(1, 0);  // B.3.6 bridge
 
             hideOffset += 0x18;
         }
@@ -368,16 +374,16 @@ static bool StorageUI_CompareItems(const uint64_t* a, const uint64_t* b) {
 
     // Build UIString -> convert to System::String for item A
     uint8_t uiStrA[16];
-    fn_UIString_Ctor(uiStrA, *(uint64_t*)(resA + 0x28), (void*)(resA + 0x30));
+    ::new (uiStrA) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(resA + 0x28))), *reinterpret_cast<const System::String*>(resA + 0x30));  // B.3.6 bridge
     System::String tempA;
-    fn_UIString_ToSystemString(uiStrA, &tempA);  // UIString → System::String conversion
+    ::new (&tempA) System::String(reinterpret_cast<const UI::String*>(uiStrA)->operator System::String());  // B.3.6 bridge; UIString → System::String conversion
     System::String sysStrA(tempA);
 
     // Build UIString -> convert to System::String for item B
     uint8_t uiStrB[16];
-    fn_UIString_Ctor(uiStrB, *(uint64_t*)(resB + 0x28), (void*)(resB + 0x30));
+    ::new (uiStrB) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(resB + 0x28))), *reinterpret_cast<const System::String*>(resB + 0x30));  // B.3.6 bridge
     System::String tempB;
-    fn_UIString_ToSystemString(uiStrB, &tempB);  // UIString → System::String conversion
+    ::new (&tempB) System::String(reinterpret_cast<const UI::String*>(uiStrB)->operator System::String());  // B.3.6 bridge; UIString → System::String conversion
     System::String sysStrB(tempB);
 
     return sysStrA < sysStrB;

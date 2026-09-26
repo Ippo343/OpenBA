@@ -22,6 +22,8 @@
 #include <new>
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/UserInterface.h"  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // SpriteCaptureUI::Serialize (vtable +0x20, 0x140079640)
@@ -33,7 +35,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     uint64_t foundBuf[2] = {0, 0};
     {
         System::String nameStr("editCapture");
-        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
+        ::new (foundBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(nameStr));  // B.3.6 bridge
     }
 
     void* elem = *(void**)foundBuf;
@@ -52,7 +54,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     foundBuf[0] = 0; foundBuf[1] = 0;
     {
         System::String nameStr("buttonCapture");
-        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
+        ::new (foundBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(nameStr));  // B.3.6 bridge
     }
 
     elem = *(void**)foundBuf;
@@ -71,7 +73,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     foundBuf[0] = 0; foundBuf[1] = 0;
     {
         System::String nameStr("captureBox");
-        fn_FindElement(*(void**)(s + 0x20), foundBuf, &nameStr);
+        ::new (foundBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(*(void**)(s + 0x20))->FindElement(nameStr));  // B.3.6 bridge
     }
 
     elem = *(void**)foundBuf;
@@ -87,7 +89,7 @@ void SpriteCaptureUI_Serialize(SpriteCaptureUI* self) {
     *(uint64_t*)(s + 0x40) = tempIBP;
 
     // --- Set button element ID to 1000 ---
-    fn_Element_SetElementId(*(void**)(s + 0x38), 1000);
+    reinterpret_cast<UI::Element*>(*(void**)(s + 0x38))->SetElementId(1000);  // B.3.6 bridge
 
     // --- Set default capture path in edit element ---
     {
@@ -166,7 +168,7 @@ check_pressed:
             void* pIBP18 = (void*)((uintptr_t)self + 0x18);
             void* dialogInst = *(void**)pIBP18;
             void* ui = *(void**)((uintptr_t)dialogInst + 0x10);
-            fn_UI_EndSpriteCapture(ui);
+            reinterpret_cast<UI::UserInterface*>(ui)->EndSpriteCapture();  // B.3.6 bridge
 
             // b. Get source directory as System::String (non-trivial return: RCX=this, RDX=retval)
             void* fsInstance = g_pFileSystemSingleton ? *g_pFileSystemSingleton : nullptr;
@@ -217,7 +219,7 @@ check_pressed:
             // i. Hide captureBox element: SetFlagsOnOff(elem, hideFlags=0, showFlags=1)
             void* box = *(void**)&self->captureBox;
             if (box)
-                fn_Element_SetFlagsOnOff(box, 0, 1);
+                reinterpret_cast<UI::Element*>(box)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
 
             // j. filenameRsc/pathFilename release via their destructors (System::Filename).
         } else {

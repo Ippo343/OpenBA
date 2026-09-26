@@ -11,6 +11,8 @@
 #include "system/String.h"
 #include <cstdint>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // ============================================================
 // StorageCapacityUI::Serialize (vtable +0x20) — Find progress element
@@ -27,7 +29,7 @@ void StorageCapacityUI_Serialize(StorageCapacityUI* self) {
     // Find ProgressElement by type
     uint32_t typeId = g_TypeId_ProgressElement ? *g_TypeId_ProgressElement : 0;
     uint64_t findResult = 0;
-    fn_Element_FindElementType(dialogElem, &findResult, typeId);
+    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElementType(typeId));  // B.3.6 bridge
 
     // Dereference InternalPtr to get raw Element*, type check, wrap in InternalBasePtr
     void* rawElem = (void*)findResult;

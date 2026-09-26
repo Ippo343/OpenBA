@@ -15,6 +15,9 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/DialogInstance.h"  // ENDGAME B.3.6 UI callers (K3)
+#include <new>  // ENDGAME B.3.6 UI callers (K3)
 
 // By-name StatusIconComponent finder, defined in the STANDALONE promotion block at the
 // bottom of this file. StatusIconUI_Startup calls it as a fallback because the exe
@@ -59,7 +62,7 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
 
     uint64_t findResult = 0;
     // fn_FindElement: member with non-trivial return: RCX=this, RDX=retval, R8=name
-    fn_FindElement(dialogElem, &findResult, &nameBuf);
+    ::new (&findResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(dialogElem)->FindElement(nameBuf));  // B.3.6 bridge
 
     // Dereference InternalPtr result to get raw Element*
     // The original does IsDerivedFrom check here, but we skip it
@@ -70,7 +73,7 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     void* iconsElem = *(void**)iconsBuf;
 
     // Get child count
-    int childCount = fn_Element_ChildCount(iconsElem);
+    int childCount = reinterpret_cast<const UI::Element*>(iconsElem)->ChildCount();  // B.3.6 bridge
 
     // Resize the array at self+0x30 to hold childCount entries.
     // B.3.2: Collection::Array<T>::SetSize — retail 0x1400032e0, stride 8 align 8,
@@ -82,7 +85,7 @@ void StatusIconUI_Serialize(StatusIconUI* self) {
     for (int i = 0; i < storedCount; i++) {
         // Element::Child returns InternalPtr<Element> via non-trivial return
         uint64_t childResult = 0;
-        fn_Element_Child(iconsElem, &childResult, i);
+        ::new (&childResult) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(iconsElem)->Child(i));  // B.3.6 bridge
 
         // Copy 8-byte InternalPtr into array slot
         uint64_t* arrayBase = *(uint64_t**)((uintptr_t)self + 0x30);
@@ -150,7 +153,7 @@ void StatusIconUI_Startup(StatusIconUI* self) {
             // is how a 0 got here. With 0 the call returns nothing, the EntityUI narrow
             // below can never fire, and the page gate silently falls through to its
             // default — the same shape as the tutorial-panel bug in tutorial_wave.cpp.
-            fn_DialogInstance_GetController(dialogInst, &ctrlResult, s_tidEntityUI);
+            ::new (&ctrlResult) Object::InternalPtr<UI::DialogController>(reinterpret_cast<const UI::DialogInstance*>(dialogInst)->GetController(s_tidEntityUI));  // B.3.6 bridge
 
             void* entityUI = nullptr;
             if (ctrlResult != 0) {
@@ -202,10 +205,10 @@ void StatusIconUI_Startup(StatusIconUI* self) {
 
         if (bitSet && iconsActive) {
             // Show icon
-            fn_Element_SetFlagsOnOff(iconElem, 0, 1);
+            reinterpret_cast<UI::Element*>(iconElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
         } else {
             // Hide icon
-            fn_Element_SetFlagsOnOff(iconElem, 1, 0);
+            reinterpret_cast<UI::Element*>(iconElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge
         }
 
         // Rotate bit mask left
