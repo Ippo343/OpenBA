@@ -21,95 +21,84 @@
 //   int         @ +0x48
 // ToolKit fields: sprite / name / baseValue / weight.
 // Decompiled READ-ONLY from Application-x64.exe.
+//
+// ENDGAME B.3.8 K1: a REAL class (ValueDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015add0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/ValueDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "system/String.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kValueDescriptionVtable = 0x14015add0;
+// ctor (inlined into create 0x14000faa0 / createInPlace 0x14000fb10):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+ValueDescription::ValueDescription()
+    : Description(),
+      _sprite(nullptr),
+      _ref30(nullptr),
+      _i40(0),
+      _baseValue(100),
+      _weight(0) {}
 
-static void ValueDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kValueDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x20) = 0;   // ExternalPtr
-    *(uint64_t*)(s + 0x28) = 0;   // String
-    *(uint64_t*)(s + 0x30) = 0;   // ExternalPtr
-    *(uint64_t*)(s + 0x38) = 0;   // String
-    *(int32_t*) (s + 0x40) = 0;
-    *(int32_t*) (s + 0x44) = 100; // baseValue
-    *(int32_t*) (s + 0x48) = 0;   // weight
+// [0] 0x14000fbf0: ~ValueDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* ValueDescription::DeletingDtor(unsigned flags) {
+    this->~ValueDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void ValueDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalPtr_BuildSerialize) return;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    fn_ExternalPtr_BuildSerialize(s + 0x20, serializer);   // ExternalPtr +0x20
-    reinterpret_cast<System::String*>(s + 0x28)->Serialize(serializer);           // B.3.1 bridge: String      +0x28
-    fn_ExternalPtr_BuildSerialize(s + 0x30, serializer);   // ExternalPtr +0x30
-    reinterpret_cast<System::String*>(s + 0x38)->Serialize(serializer);           // B.3.1 bridge: String      +0x38
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x48), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();   // B.3.4 bridge
+// [5] 0x14005cd60: stream order as retail.
+bool ValueDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    fn_ExternalPtr_BuildSerialize(&_sprite, &ser);
+    _name.Serialize(&ser);
+    fn_ExternalPtr_BuildSerialize(&_ref30, &ser);
+    _s38.Serialize(&ser);
+    ser.Serialize(_i40, nullptr);
+    ser.Serialize(_baseValue, nullptr);
+    ser.Serialize(_weight, nullptr);
+    return true;
 }
 
-void* ValueDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kValueDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    reinterpret_cast<System::String*>(s + 0x28)->~String(); reinterpret_cast<System::String*>(s + 0x38)->~String();  // B.3.1 bridge
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x14000fb80 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* ValueDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void ValueDescription::Destruct() {}
+
+// [8] 0x140004950 (shared by 19 tables): `MOV dword [RDX],0; MOV RAX,RDX; RET` —
+// a data-only description builds no component.
+Object::Type* ValueDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = 0;
+    return ret;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t ValueDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("ValueDescription");
-    return cached;
+// [9] 0x14000fb10: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* ValueDescription::Construct() {
+    return new (static_cast<void*>(this)) ValueDescription();
 }
-static int   ValueDescription_Stub_Return3(void* /*self*/) { return 3; } // GetVersion
-static int   ValueDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* ValueDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* ValueDescription_CreateInPlace(void* memory);
 
-static void* g_ValueDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&ValueDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&ValueDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&ValueDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&ValueDescription_Stub_Return3),    // +0x18 GetVersion=3
-    reinterpret_cast<void*>(&ValueDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&ValueDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&ValueDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&ValueDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&ValueDescription_Stub_ReturnNull), // +0x40
-    reinterpret_cast<void*>(&ValueDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&ValueDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterValueDescriptionVtable() {
-    RegisterExeAddr(kValueDescriptionVtable, reinterpret_cast<uintptr_t>(g_ValueDescription_Vtable));
-}
-extern "C" void* ValueDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x50, 8);
+// create 0x14000faa0: MemAlloc(0x50, 8), then the (inlined) ctor.
+void* ValueDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ValueDescription), 8);
     if (!p) return nullptr;
-    ValueDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) ValueDescription());
 }
-static void* ValueDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    ValueDescription_Init(memory);
-    return memory;
+// createInPlace 0x14000fb10.
+void* ValueDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) ValueDescription());
 }
-REGISTER_TYPE(ValueDescription, "Description",
-              &ValueDescription_Factory, &ValueDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(ValueDescription, "_ZTV16ValueDescription")
+DEFINE_EXE_TYPE(ValueDescription, "Description")

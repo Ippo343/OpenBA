@@ -80,12 +80,10 @@ extern "C" {
     void RegisterComponentDescriptionVtable();
     void RegisterBuildDescriptionVtable();
     void RegisterWorkDescriptionVtable();
-    void RegisterMapDescriptionVtable();
     void RegisterCreatePlacedDescriptionVtable();
     void RegisterCreateDragDescriptionVtable();
     void RegisterUIDescriptionVtable();
     void RegisterToolbarDescriptionVtable();
-    void RegisterStatusIconDescriptionVtable();
     void RegisterAmbientEmitterDescriptionVtable();
     void RegisterInteractDescriptionVtable();
     void RegisterClearAreaDescriptionVtable();
@@ -97,7 +95,6 @@ extern "C" {
     void RegisterDecalDescriptionVtable();
     void RegisterParticleDescriptionVtable();
     void RegisterParticleComponentAddrs();   // building particle emitters (chimney smoke etc)
-    void RegisterPopulationDescriptionVtable();
     void RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
     void RegisterAmbientEnvironmentDescriptionVtable();
@@ -110,19 +107,13 @@ extern "C" {
     void RegisterEnvironmentDescriptionVtable();
     void RegisterWeatherParticleVtable();
     void Reimpl_WeatherArray_Resize(void* hdr, int newCount);
-    void RegisterFireDescriptionVtable();
     void RegisterFireComponentVtable();
     void RegisterFrustumOutlineDescriptionVtable();
-    void RegisterGrowthDescriptionVtable();
-    void RegisterHerbalistDescriptionVtable();
     void RegisterImmigrationDescriptionVtable();
-    void RegisterMarketDescriptionVtable();
-    void RegisterRadiusDescriptionVtable();
     void RegisterRawMaterialDescriptionVtable();
     void RegisterSelectDescriptionVtable();
     void RegisterSpawnDescriptionVtable();
     void RegisterTradeDescriptionVtable();
-    void RegisterValueDescriptionVtable();
     void RegisterWellDescriptionVtable();
     void RegisterAnimAudioEventVtable();
     void RegisterAmbientExternalPtrSerialize();
@@ -1780,12 +1771,10 @@ static void RegisterVtablesAndTypeIds() {
     RegisterComponentDescriptionVtable();
     RegisterBuildDescriptionVtable();
     RegisterWorkDescriptionVtable();
-    RegisterMapDescriptionVtable();
     RegisterCreatePlacedDescriptionVtable();
     RegisterCreateDragDescriptionVtable();
     RegisterUIDescriptionVtable();
     RegisterToolbarDescriptionVtable();
-    RegisterStatusIconDescriptionVtable();
     RegisterAmbientEmitterDescriptionVtable();
     RegisterInteractDescriptionVtable();
     RegisterClearAreaDescriptionVtable();
@@ -1797,7 +1786,6 @@ static void RegisterVtablesAndTypeIds() {
     RegisterDecalDescriptionVtable();
     RegisterParticleDescriptionVtable();
     RegisterParticleComponentAddrs();   // ParticleComponent helper closure (0x1400524xx-0x1400536xx)
-    RegisterPopulationDescriptionVtable();
     RegisterAnimalDescriptionVtable();
     // wave 2 (economy / farming / services / tools)
     RegisterAmbientEnvironmentDescriptionVtable();
@@ -1809,19 +1797,13 @@ static void RegisterVtablesAndTypeIds() {
     RegisterCreateRoadDescriptionVtable();
     RegisterEnvironmentDescriptionVtable();
     RegisterWeatherParticleVtable();   // weather particle Geometry vtable (0x140160240)
-    RegisterFireDescriptionVtable();
     RegisterFireComponentVtable();
     RegisterFrustumOutlineDescriptionVtable();
-    RegisterGrowthDescriptionVtable();
-    RegisterHerbalistDescriptionVtable();
     RegisterImmigrationDescriptionVtable();
-    RegisterMarketDescriptionVtable();
-    RegisterRadiusDescriptionVtable();
     RegisterRawMaterialDescriptionVtable();
     RegisterSelectDescriptionVtable();
     RegisterSpawnDescriptionVtable();
     RegisterTradeDescriptionVtable();
-    RegisterValueDescriptionVtable();
     RegisterWellDescriptionVtable();
 
     // M5 5c citizens — AnimAudioEvent (Graphics::AnimationEvent subclass) is part of

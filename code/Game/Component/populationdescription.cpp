@@ -18,110 +18,92 @@
 // Decompiled READ-ONLY from Application-x64.exe.
 //
 // Part of the PopulationDeer vertical slice (Foundation C keystone).
+//
+// ENDGAME B.3.8 K1: a REAL class (PopulationDescription.h) with a compiler-generated vtable;
+// the hand-built 11-slot table and its RegisterExeAddr(0x14015a3e0) row are gone
+// (nothing in the tree read that address back — B38_RULES D5).
 
+#include "Component/PopulationDescription.h"
+#include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
+#include "io/Serializer.h"
+#include "Object/factory_registration.h"
 #include "engine_funcs.h"
-#include "system/String.h"
-#include "resolve.h"
-#include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
 #include <cstdint>
 #include <new>
 
-static const uintptr_t kPopulationDescriptionVtable = 0x14015a3e0;
+// ctor (inlined into create 0x14000afb0 / createInPlace 0x14000aff0):
+// `??0External@Object@@` (Description()), the stamps (the compiler's), then
+// the defaults.
+PopulationDescription::PopulationDescription()
+    : Description(),
+      _i28(8),
+      _i2c(0x20),
+      _u30(0xe1f),
+      _u34(0),
+      _b38(true),
+      _i3c(4),
+      _i40(1),
+      _i44(1),
+      _b48(false),
+      _ref50(nullptr) {}
 
-static void PopulationDescription_Init(void* self) {
-    fn_External_External(self);
-    *(void**)self = (void*)ResolveAddr(Module::Exe, kPopulationDescriptionVtable);
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    *(uint64_t*)(s + 0x20) = 0;        // String (empty)
-    *(int32_t*) (s + 0x28) = 8;
-    *(int32_t*) (s + 0x2c) = 0x20;
-    *(int32_t*) (s + 0x30) = 0xe1f;    // enum
-    *(int32_t*) (s + 0x34) = 0;        // enum
-    *(uint8_t*) (s + 0x38) = 1;
-    *(int32_t*) (s + 0x3c) = 4;
-    *(int32_t*) (s + 0x40) = 1;
-    *(int32_t*) (s + 0x44) = 1;
-    *(uint8_t*) (s + 0x48) = 0;
-    *(uint64_t*)(s + 0x50) = 0;        // ExternalPtr (null)
+// [0] 0x14000b030: ~PopulationDescription -> ~Description -> ~External, MemFree on &1.
+Object::Base* PopulationDescription::DeletingDtor(unsigned flags) {
+    this->~PopulationDescription();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
 }
 
-void PopulationDescription_Serialize(void* self, void* stream) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    if (!fn_ExternalPtr_BuildSerialize) return;
-    alignas(8) uint8_t serializer[24];
-    ::new (static_cast<void*>(serializer)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x28), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x2c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)
-        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x30), nullptr);     // enum +0x30 // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)
-        ->Serialize(*reinterpret_cast<unsigned int*>(s + 0x34), nullptr);     // enum +0x34 // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x38), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x3c), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x40), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<int*>(s + 0x44), nullptr);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializer)->Serialize(*reinterpret_cast<bool*>(s + 0x48), nullptr);   // B.3.4 bridge
-    fn_ExternalPtr_BuildSerialize(s + 0x50, serializer);     // ExternalPtr +0x50
-    reinterpret_cast<System::String*>(s + 0x20)->Serialize(serializer);             // B.3.1 bridge: String +0x20
-    reinterpret_cast<IO::Serializer*>(serializer)->~Serializer();                                       // B.3.4 bridge
+// [5] 0x1400547e0: stream order as retail.
+bool PopulationDescription::Serialize(void* stream) {
+    if (!fn_ExternalPtr_BuildSerialize) return true;   // standalone: the door is unwired
+    IO::Serializer ser(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.8 bridge (External::Serialize takes void*)
+    ser.Serialize(_i28, nullptr);
+    ser.Serialize(_i2c, nullptr);
+    ser.Serialize(_u30, nullptr);
+    ser.Serialize(_u34, nullptr);
+    ser.Serialize(_b38, nullptr);
+    ser.Serialize(_i3c, nullptr);
+    ser.Serialize(_i40, nullptr);
+    ser.Serialize(_i44, nullptr);
+    ser.Serialize(_b48, nullptr);
+    fn_ExternalPtr_BuildSerialize(&_ref50, &ser);
+    _name.Serialize(&ser);
+    return true;
 }
 
-void* PopulationDescription_Dtor(void* self, uint32_t flags) {
-    uint8_t* s = reinterpret_cast<uint8_t*>(self);
-    uintptr_t vt = ResolveAddr(Module::Exe, kPopulationDescriptionVtable);
-    if (vt) *(void**)self = (void*)vt;
-    reinterpret_cast<System::String*>(s + 0x20)->~String();  // B.3.1 bridge
-    if (fn_External_Dtor) fn_External_Dtor(self);
-    if ((flags & 1) && fn_MemFreeStatic) fn_MemFreeStatic(self);
-    return self;
+// [6] 0x14000b000 — PORT GAP (retail: DeletingDtor(0), then the ctor again on
+// `this`, B38_RULES §2.2). The hand-built table had a `return 0` stub; kept so
+// this commit changes no behaviour. D9 #10 transcribes it for every description.
+Object::External* PopulationDescription::Reconstruct() { return nullptr; }
+
+// [7] 0x140001640 — PORT GAP (retail: the shared `DeletingDtor(0)` body). The
+// hand-built table had a `return 0` stub; kept until D9 #10's commit.
+void PopulationDescription::Destruct() {}
+
+// [8] 0x14000b020: PopulationComponent's type id through the hidden return slot.
+Object::Type* PopulationDescription::GetComponentType(Object::Type* ret) const {
+    ret->_type = ::Object::GetTypeIdByName("PopulationComponent");
+    return ret;
 }
 
-#include "Object/factory_registration.h"
-#include "address_registry.h"
-
-static uint32_t PopulationDescription_GetTypeId(void* /*self*/) {
-    static uint32_t cached = 0;
-    if (cached == 0) cached = ::Object::GetTypeIdByName("PopulationDescription");
-    return cached;
-}
-static int   PopulationDescription_Stub_Return3(void* /*self*/) { return 3; } // GetVersion
-static int   PopulationDescription_Stub_Return0(void* /*self*/) { return 0; }
-static void* PopulationDescription_Stub_ReturnNull(void*, ...)  { return nullptr; }
-static void* PopulationDescription_CreateInPlace(void* memory);
-
-// +0x40 GetComponentTypeId — CopyCtor reads this to know which component to make.
-static void* PopulationDescription_GetComponentTypeId(void*, void* out) {
-    return ::Object::WriteComponentTypeId(out, "PopulationComponent");
+// [9] 0x14000aff0: placement-new on `this` (folded with createInPlace). The old
+// table held the same construction in this slot.
+Object::External* PopulationDescription::Construct() {
+    return new (static_cast<void*>(this)) PopulationDescription();
 }
 
-static void* g_PopulationDescription_Vtable[11] = {
-    reinterpret_cast<void*>(&PopulationDescription_Dtor),            // +0x00
-    reinterpret_cast<void*>(&PopulationDescription_Stub_ReturnNull), // +0x08
-    reinterpret_cast<void*>(&PopulationDescription_GetTypeId),       // +0x10
-    reinterpret_cast<void*>(&PopulationDescription_Stub_Return3),    // +0x18 GetVersion=3
-    reinterpret_cast<void*>(&PopulationDescription_Stub_Return0),    // +0x20 Compile
-    reinterpret_cast<void*>(&PopulationDescription_Serialize),       // +0x28 Serialize
-    reinterpret_cast<void*>(&PopulationDescription_Stub_Return0),    // +0x30
-    reinterpret_cast<void*>(&PopulationDescription_Stub_Return0),    // +0x38
-    reinterpret_cast<void*>(&PopulationDescription_GetComponentTypeId), // +0x40 GetComponentTypeId
-    reinterpret_cast<void*>(&PopulationDescription_CreateInPlace),   // +0x48 CreateInPlace
-    reinterpret_cast<void*>(&PopulationDescription_Stub_ReturnNull), // +0x50 guard
-};
-
-extern "C" void RegisterPopulationDescriptionVtable() {
-    RegisterExeAddr(kPopulationDescriptionVtable, reinterpret_cast<uintptr_t>(g_PopulationDescription_Vtable));
-}
-extern "C" void* PopulationDescription_Factory(void) {
-    if (!fn_MemAlloc || !g_pMemAllocSingleton) return nullptr;
-    void* p = fn_MemAlloc(g_pMemAllocSingleton, 0x58, 8);
+// create 0x14000afb0: MemAlloc(0x58, 8), then the (inlined) ctor.
+void* PopulationDescription::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(PopulationDescription), 8);
     if (!p) return nullptr;
-    PopulationDescription_Init(p);
-    return p;
+    return static_cast<Object::Base*>(new (p) PopulationDescription());
 }
-static void* PopulationDescription_CreateInPlace(void* memory) {
-    if (!memory) return nullptr;
-    PopulationDescription_Init(memory);
-    return memory;
+// createInPlace 0x14000aff0.
+void* PopulationDescription::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(new (storage) PopulationDescription());
 }
-REGISTER_TYPE(PopulationDescription, "Description",
-              &PopulationDescription_Factory, &PopulationDescription_CreateInPlace);
+
+DEFINE_EXE_VTABLE(PopulationDescription, "_ZTV21PopulationDescription")
+DEFINE_EXE_TYPE(PopulationDescription, "Description")

@@ -62,6 +62,15 @@
 #include "Component/StorageLocationDescription.h"
 #include "Component/ResidenceDescription.h"
 #include "Component/WorkPlaceDescription.h"
+#include "Component/FireDescription.h"
+#include "Component/GrowthDescription.h"
+#include "Component/HerbalistDescription.h"
+#include "Component/MarketDescription.h"
+#include "Component/PopulationDescription.h"
+#include "Component/MapDescription.h"
+#include "Component/StatusIconDescription.h"
+#include "Component/RadiusDescription.h"
+#include "Component/ValueDescription.h"
 
 namespace {
 
@@ -145,6 +154,18 @@ UNIT_TEST(k1_scalar_description_leaves) {
     CHECK_EQ(CheckDescriptionLeaf<StorageLocationDescription>(0x28), 0);
     CHECK_EQ(CheckDescriptionLeaf<ResidenceDescription>(0x30), 0);
     CHECK_EQ(CheckDescriptionLeaf<WorkPlaceDescription>(0x30), 0);
+}
+
+UNIT_TEST(k1_array_and_string_description_leaves) {
+    CHECK_EQ(CheckDescriptionLeaf<FireDescription>(0x50), 0);
+    CHECK_EQ(CheckDescriptionLeaf<GrowthDescription>(0x68), 0);
+    CHECK_EQ(CheckDescriptionLeaf<HerbalistDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<MarketDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<PopulationDescription>(0x58), 0);
+    CHECK_EQ(CheckDescriptionLeaf<MapDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<StatusIconDescription>(0x38), 0);
+    CHECK_EQ(CheckDescriptionLeaf<RadiusDescription>(0x30), 0);
+    CHECK_EQ(CheckDescriptionLeaf<ValueDescription>(0x50), 0);
 }
 
 }  // namespace
