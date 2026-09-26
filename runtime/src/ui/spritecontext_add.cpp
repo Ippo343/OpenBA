@@ -138,6 +138,8 @@
 #include "../../types/ui/Sprite.h"
 #include "../../types/ui/SpriteContext.h"
 #include "../../types/ui/SpriteSheet.h"
+#include "../../types/object/External.h"
+#include "../../types/system/String.h"
 #include "../collection/array_internal.h" // ENDGAME B.3.2 step 2 — kSpec_SpriteDraw
 
 // Same forward declarations, same spelling, as spritecontext.cpp and
@@ -148,12 +150,8 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-using ::Sprite;          // Sprite.h declares it at GLOBAL scope, not in UI
-using UI::FontGlyph;
 using UI::SpriteContext;
 using UI::SpriteDraw;
-using ::SpriteInfo;      // SpriteSheet.h declares both at GLOBAL scope too
-using ::SpriteSheet;
 
 // ---- the mangled names, once -----------------------------------------------
 const char* const kAddSpritePoint =
@@ -166,71 +164,18 @@ const char* const kAddFont =
     "?AddFont@SpriteContext@UI@@QEAAXV?$ExternalPtr@VFont@UI@@@Object@@"
     "AEBVString@System@@_NHW4Justify@Font@2@HHHI@Z";
 
-// ---- the internals this file reaches ---------------------------------------
-typedef void (*FlushFn)(void* self);
-typedef void (*AddSpriteDrawFn)(void* self, const void* draw);
-// ComputeStringLayout (0x180116fd0). Read by address through the registry-first
-// resolver. This line used to say "NOT PORTED — this file's one opened door";
-// that was true when it was written and stopped being true in the same batch:
-// runtime/src/ui/font.cpp ports and registers it, so the call lands on ours.
-// Argument order is read off the nine stores at 0x18011ccfb..0x18011cd61, NOT
-// guessed from the callee's name: note that the `Justify` and the sixth AddFont
-// parameter arrive at the callee in the OPPOSITE order to the one AddFont
-// declares them in.
-typedef void (*ComputeStringLayoutFn)(void* font, const void* text, bool multiline,
-                                      int32_t layoutA, int32_t layoutB, int32_t justify,
-                                      int32_t* outWidth, int32_t* outAscent,
-                                      void* layout);
-
-// Each address is spelled as a LITERAL inside `ResolveAddr(Module::Runtime, …)`
-// exactly once, because that literal is what keeps the door VISIBLE to
-// `tools/addr_door_audit.py`, whose call-site half matches a literal and nothing
-// else (reference_literal_grep_blind_to_variables.md). None of these caches a
-// null — a miss during early boot must not freeze the answer for the process.
-inline FlushFn TheFlush() {
-    static FlushFn f = nullptr;
-    if (!f) f = reinterpret_cast<FlushFn>(ResolveAddr(Module::Runtime, 0x18011ba40));
-    return f;
-}
-inline AddSpriteDrawFn TheAddSpriteDraw() {
-    static AddSpriteDrawFn f = nullptr;
-    if (!f) f = reinterpret_cast<AddSpriteDrawFn>(ResolveAddr(Module::Runtime, 0x18011c890));
-    return f;
-}
-inline ComputeStringLayoutFn TheComputeStringLayout() {
-    static ComputeStringLayoutFn f = nullptr;
-    if (!f) f = reinterpret_cast<ComputeStringLayoutFn>(
-        ResolveAddr(Module::Runtime, 0x180116fd0));
-    return f;
-}
-
-template <typename T>
-inline T& Field(void* p, size_t off) {
-    return *reinterpret_cast<T*>(static_cast<uint8_t*>(p) + off);
-}
-
-// UI::Font — only two fields are touched by AddFont, and neither is named
-// beyond what one body proves. +0x50 is subtracted from the incoming y in both
-// scissor tests and is what the layout's second out-int is measured against, so
-// it is the glyph origin's vertical bias; +0x60 is the ExternalPtr<SpriteSheet>
-// every glyph is drawn from (it is handed straight to AddSprite as the sprite's
-// sheet). There is no runtime/types/ui/Font.h to extend, and one body is not
-// enough to write one.
-enum : size_t {
-    kFontOriginY = 0x50,
-    kFontSheet   = 0x60,
-};
-
 // The sheet rebind retail performs at the head of all three AddSprite bodies.
 // 0x18011cf3c..0x18011cf59 (and the identical blocks at 0x18011d3f4,
 // 0x18011cb44). Flushing only happens when a DIFFERENT non-null sheet is bound.
+// (`SetSpriteSheet` 0x18011c740 is retail's out-of-line copy; these bodies
+// inline it.)
 inline void BindSheet(SpriteContext* self, void* sheet) {
     if (self->_currentSheet == sheet) return;
     if (self->_currentSheet == nullptr) {
         self->_currentSheet = sheet;
         return;
     }
-    TheFlush()(self);
+    self->Flush();
     self->_currentSheet = sheet;
 }
 
@@ -238,10 +183,7 @@ inline void BindSheet(SpriteContext* self, void* sheet) {
 // Retail inlines this twice — once in the point overload (0x18011cf59..0x18011cf95)
 // and once in AddFont's deferred arm (0x18011ce1e..0x18011ce54) — and both
 // copies test the index with `TEST EAX,EAX / JNS`, a SIGNED test on the 32-bit
-// value, reading the table only when it is non-negative. The two reads are
-// EMITTED SEPARATELY, each re-loading the sheet and re-doing the `idx * 0x38`
-// index arithmetic; that is not reproduced instruction for instruction because
-// nothing observes it, but the guard and the zero default are.
+// value, reading the table only when it is non-negative.
 struct SpriteExtent { int32_t width; int32_t height; };
 
 inline SpriteExtent ExtentOf(void* sheetRaw, int32_t spriteIndex) {
@@ -256,9 +198,23 @@ inline SpriteExtent ExtentOf(void* sheetRaw, int32_t spriteIndex) {
 
 }  // namespace
 
+// Font::ComputeStringLayout (0x180116fd0), ported and registered in
+// runtime/src/ui/font.cpp. ENDGAME B.3.6 block D: this was a `ResolveAddr`
+// static cache (`TheComputeStringLayout`, RULE B6-5 removes it); it is the
+// registered body, called directly until `UI::Font` converts. Argument order is
+// read off the nine stores at 0x18011ccfb..0x18011cd61: the `Justify` and the
+// sixth AddFont parameter arrive at the callee in the OPPOSITE order to the one
+// AddFont declares them in.
+extern "C" void RtUi_Font_ComputeStringLayout(const void* selfv, const void* strRefv,
+                                              bool multiline, int32_t wrapWidth,
+                                              int32_t maxWidth, int32_t justify,
+                                              int32_t* outWidth, int32_t* outHeight,
+                                              void* layoutv);
+
 // ============================================================================
-// The ports
+// The ports — UI::SpriteContext's AddSprite/AddFont members
 // ============================================================================
+namespace UI {
 
 // ---- 0x18011cf00  ?AddSprite@SpriteContext@UI@@QEAAXAEBVSprite@2@HHI@Z -----
 //
@@ -270,20 +226,16 @@ inline SpriteExtent ExtentOf(void* sheetRaw, int32_t spriteIndex) {
 // a scrambled order — +0x00, rotation, x2, spriteIndex, y2, x1, y1, isLine,
 // color — which is easy to misread from the decompiler. The offsets, not the
 // order, are what is reproduced here.
-void RtUi_SpriteContext_AddSprite_Point(void* selfRaw, const void* spriteRaw,
-                                        int32_t x, int32_t y, uint32_t color) {
-    auto*       self   = static_cast<SpriteContext*>(selfRaw);
-    const auto* sprite = static_cast<const Sprite*>(spriteRaw);
-
+void SpriteContext::AddSprite(const Sprite& sprite, int32_t x, int32_t y, uint32_t color) {
     // 0x18011cf29 / 0x18011cf32: two independent early returns, the second a
     // SIGNED `< 0` on the index.
-    void* sheet = sprite->spriteSheet;
+    void* sheet = sprite.spriteSheet;
     if (sheet == nullptr) return;
-    if (sprite->spriteIndex < 0) return;
+    if (sprite.spriteIndex < 0) return;
 
-    BindSheet(self, sheet);
+    BindSheet(this, sheet);
 
-    const int32_t      idx = sprite->spriteIndex;
+    const int32_t      idx = sprite.spriteIndex;
     const SpriteExtent ext = ExtentOf(sheet, idx);
 
     SpriteDraw rec{};
@@ -297,28 +249,24 @@ void RtUi_SpriteContext_AddSprite_Point(void* selfRaw, const void* spriteRaw,
     rec.color       = color;
     rec.isLine      = 0;                // the literal 0 byte, 0x18011cfd3
 
-    TheAddSpriteDraw()(self, &rec);
+    AddSpriteDraw(rec);
 }
 
 // ---- 0x18011d3c0  ?AddSprite@…@QEAAXAEBVSprite@2@HHHHI@Z -------------------
 //
 // The RECT overload: both corners are given, so no sheet-table read happens at
 // all. Identical to the point overload in every other respect.
-void RtUi_SpriteContext_AddSprite_Rect(void* selfRaw, const void* spriteRaw,
-                                       int32_t x1, int32_t y1,
-                                       int32_t x2, int32_t y2, uint32_t color) {
-    auto*       self   = static_cast<SpriteContext*>(selfRaw);
-    const auto* sprite = static_cast<const Sprite*>(spriteRaw);
-
-    void* sheet = sprite->spriteSheet;
+void SpriteContext::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
+                              int32_t x2, int32_t y2, uint32_t color) {
+    void* sheet = sprite.spriteSheet;
     if (sheet == nullptr) return;
-    if (sprite->spriteIndex < 0) return;
+    if (sprite.spriteIndex < 0) return;
 
-    BindSheet(self, sheet);
+    BindSheet(this, sheet);
 
     SpriteDraw rec{};
     rec.sheet       = sheet;
-    rec.spriteIndex = sprite->spriteIndex;
+    rec.spriteIndex = sprite.spriteIndex;
     rec.x1          = x1;
     rec.y1          = y1;
     rec.x2          = x2;
@@ -327,7 +275,7 @@ void RtUi_SpriteContext_AddSprite_Rect(void* selfRaw, const void* spriteRaw,
     rec.color       = color;
     rec.isLine      = 0;
 
-    TheAddSpriteDraw()(self, &rec);
+    AddSpriteDraw(rec);
 }
 
 // ---- 0x18011cb10  ?AddSprite@…@QEAAXAEBVSprite@2@HHHHIM@Z ------------------
@@ -341,22 +289,17 @@ void RtUi_SpriteContext_AddSprite_Rect(void* selfRaw, const void* spriteRaw,
 // and is copied straight through with MOVSS. It is NOT converted, NOT compared,
 // and NOT normalised here, so a NaN or an infinity reaches Flush intact; that is
 // what selects Flush's rotated path for a NaN.
-void RtUi_SpriteContext_AddSprite_RectRotated(void* selfRaw, const void* spriteRaw,
-                                              int32_t x1, int32_t y1,
-                                              int32_t x2, int32_t y2,
-                                              uint32_t color, float rotation) {
-    auto*       self   = static_cast<SpriteContext*>(selfRaw);
-    const auto* sprite = static_cast<const Sprite*>(spriteRaw);
-
-    void* sheet = sprite->spriteSheet;
+void SpriteContext::AddSprite(const Sprite& sprite, int32_t x1, int32_t y1,
+                              int32_t x2, int32_t y2, uint32_t color, float rotation) {
+    void* sheet = sprite.spriteSheet;
     if (sheet == nullptr) return;
-    if (sprite->spriteIndex < 0) return;
+    if (sprite.spriteIndex < 0) return;
 
-    BindSheet(self, sheet);
+    BindSheet(this, sheet);
 
     SpriteDraw rec{};
     rec.sheet       = sheet;
-    rec.spriteIndex = sprite->spriteIndex;
+    rec.spriteIndex = sprite.spriteIndex;
     rec.x1          = x1;
     rec.y1          = y1;
     rec.x2          = x2;
@@ -365,7 +308,7 @@ void RtUi_SpriteContext_AddSprite_RectRotated(void* selfRaw, const void* spriteR
     rec.color       = color;
     rec.isLine      = 0;
 
-    TheAddSpriteDraw()(self, &rec);
+    AddSpriteDraw(rec);
 }
 
 // ---- 0x18011ccb0  ?AddFont@SpriteContext@UI@@QEAAX… ------------------------
@@ -376,20 +319,22 @@ void RtUi_SpriteContext_AddSprite_RectRotated(void* selfRaw, const void* spriteR
 //
 // `layoutA` and `layoutB` are deliberately NOT named beyond their position.
 // They are AddFont's fourth and sixth parameters, they are forwarded to
-// ComputeStringLayout as its fourth and fifth, and nothing in either body says
-// what they mean — naming them "width" and "height" would be a claim this port
-// cannot support (one body is not enough to name a field).
-void RtUi_SpriteContext_AddFont(void* selfRaw, void* fontRaw, const void* text,
-                                bool multiline, int32_t layoutA, int32_t justify,
-                                int32_t layoutB, int32_t x, int32_t y,
-                                uint32_t color) {
-    auto* self = static_cast<SpriteContext*>(selfRaw);
+// ComputeStringLayout as its fourth and fifth, and nothing in THIS body says
+// what they mean.
+//
+// The two Font fields read here are `Font.h`'s +0x50 (`_lineHeight`, which this
+// body subtracts from the incoming y in both culls) and +0x60 (`_spriteSheet`,
+// handed straight to AddSprite as every glyph's sheet).
+void SpriteContext::AddFont(Object::ExternalPtr<Font> font, const System::String& text,
+                            bool multiline, int32_t layoutA, int32_t justify,
+                            int32_t layoutB, int32_t x, int32_t y, uint32_t color) {
+    const RtUI::Font* f = reinterpret_cast<const RtUI::Font*>(font.Get());  // B.3.6 bridge
 
     // --- the first vertical cull, 0x18011ccd7..0x18011ccf5 ------------------
     // `font` is dereferenced here with no null test. Faithful.
-    const int32_t top = y - Field<int32_t>(fontRaw, kFontOriginY);
+    const int32_t top = y - f->_lineHeight;
     const float   scissorBottom =
-        static_cast<float>(self->_scissorY + self->_scissorH) * self->_scale;
+        static_cast<float>(_scissorY + _scissorH) * _scale;
     if (static_cast<float>(top) > scissorBottom) return;
 
     // --- the layout, 0x18011ccfb..0x18011cd64 -------------------------------
@@ -397,16 +342,15 @@ void RtUi_SpriteContext_AddFont(void* selfRaw, void* fontRaw, const void* text,
     // first act is to zero them (0x180117034/0x180117037). Kept.
     int32_t outWidth  = 0;
     int32_t outAscent = 0;
-    void*   layout    = reinterpret_cast<uint8_t*>(self) + UI::kSpriteContextLayout;
-    TheComputeStringLayout()(fontRaw, text, multiline, layoutA, layoutB, justify,
-                             &outWidth, &outAscent, layout);
+    RtUi_Font_ComputeStringLayout(f, &text, multiline, layoutA, layoutB, justify,
+                                  &outWidth, &outAscent, &_layout);
 
     // --- the second vertical cull, 0x18011cd69..0x18011cd98 -----------------
     // The font pointer is reloaded from its home slot; the sheet is read out of
     // it BEFORE the compare and is what every glyph below is drawn from.
-    void*         sheet  = Field<void*>(fontRaw, kFontSheet);
-    const int32_t bottom = (outAscent - Field<int32_t>(fontRaw, kFontOriginY)) + y;
-    const float   scissorTop = static_cast<float>(self->_scissorY) * self->_scale;
+    void*         sheet  = f->_spriteSheet;
+    const int32_t bottom = (outAscent - f->_lineHeight) + y;
+    const float   scissorTop = static_cast<float>(_scissorY) * _scale;
     if (scissorTop > static_cast<float>(bottom)) return;
 
     // --- the glyph walk, 0x18011cda8..0x18011cec1 ---------------------------
@@ -414,49 +358,89 @@ void RtUi_SpriteContext_AddFont(void* selfRaw, void* fontRaw, const void* text,
     // on every iteration (0x18011cde0, 0x18011cde4, 0x18011cebe). That is kept
     // rather than hoisted: both arms below can reallocate an array, and hoisting
     // would bake in an assumption retail does not make.
-    for (int32_t i = 0; i < Field<int32_t>(self, UI::kSpriteContextGlyphCount); ++i) {
-        const FontGlyph* glyphs =
-            Field<const FontGlyph*>(self, UI::kSpriteContextGlyphs);
-        const FontGlyph& g = glyphs[i];
+    for (int32_t i = 0; i < _layout._entries._size; ++i) {
+        const RtUI::FontLayoutEntry& g = _layout._entries._data[i];
 
-        if (self->_deferring == 0) {
+        if (_deferring == 0) {
             // 0x18011cdea..0x18011ce14. A bare {sheet, index} UI::Sprite on the
             // stack — +0x0c is never written, exactly as Sprite.h records — then
             // the point overload above, which does its own sheet rebind and its
             // own sheet-table read.
             Sprite s;
             s.spriteSheet = sheet;
-            s.spriteIndex = g.spriteIndex;
-            RtUi_SpriteContext_AddSprite_Point(self, &s, g.x + x, g.y + y, color);
+            s.spriteIndex = g._glyph;
+            AddSprite(s, g._x + x, g._y + y, color);
             continue;
         }
 
         // 0x18011ce1e..0x18011ceb3. The deferred arm builds the SpriteDraw
         // itself and appends straight to `_deferred`, bypassing both the sheet
-        // rebind and AddSpriteDraw's scissor cull — SpriteContext::FlushDeferred
-        // replays it through AddSpriteDraw later. Note it does NOT re-check the
-        // index for the record: a negative index yields a zero extent and is
-        // still queued.
-        const SpriteExtent ext = ExtentOf(sheet, g.spriteIndex);
+        // rebind and AddSpriteDraw's scissor cull — FlushDeferredFonts replays
+        // it through AddSpriteDraw later. Note it does NOT re-check the index
+        // for the record: a negative index yields a zero extent and is still
+        // queued.
+        const SpriteExtent ext = ExtentOf(sheet, g._glyph);
 
         SpriteDraw rec{};
         rec.sheet       = sheet;
-        rec.spriteIndex = g.spriteIndex;
-        rec.x1          = g.x + x;
-        rec.y1          = g.y + y;
-        rec.x2          = (g.x + ext.width)  + x;   // LEA / ADD, 0x18011ce84
-        rec.y2          = (g.y + ext.height) + y;   // LEA / ADD, 0x18011cea3
+        rec.spriteIndex = g._glyph;
+        rec.x1          = g._x + x;
+        rec.y1          = g._y + y;
+        rec.x2          = (g._x + ext.width)  + x;   // LEA / ADD, 0x18011ce84
+        rec.y2          = (g._y + ext.height) + y;   // LEA / ADD, 0x18011cea3
         rec.rotation    = 0.0f;
         rec.color       = color;
         rec.isLine      = 0;
 
         // retail 0x180078520 — kSpec_SpriteDraw, NON-TRIVIAL (partial-write
         // assign), same row spritecontext.cpp's AddSpriteDraw bridges through.
-        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_deferred)
-            ->SetSizeFill(self->_deferred._size + 1, &rec);
+        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&_deferred)
+            ->SetSizeFill(_deferred._size + 1, &rec);
     }
 }
 
+}  // namespace UI
+
+// ============================================================================
+// THE DOORS — each keeps its name and address and delegates. THE DOOR DECIDES
+// THE OVERLOAD: each AddSprite door names exactly one of the three members by
+// its argument list, which is its mangled name's.
+// ============================================================================
+void RtUi_SpriteContext_AddSprite_Point(void* selfRaw, const void* spriteRaw,
+                                        int32_t x, int32_t y, uint32_t color) {
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)                             // B.3.6 bridge
+        ->UI::SpriteContext::AddSprite(*static_cast<const UI::Sprite*>(spriteRaw),
+                                       x, y, color);
+}
+
+void RtUi_SpriteContext_AddSprite_Rect(void* selfRaw, const void* spriteRaw,
+                                       int32_t x1, int32_t y1,
+                                       int32_t x2, int32_t y2, uint32_t color) {
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)                             // B.3.6 bridge
+        ->UI::SpriteContext::AddSprite(*static_cast<const UI::Sprite*>(spriteRaw),
+                                       x1, y1, x2, y2, color);
+}
+
+void RtUi_SpriteContext_AddSprite_RectRotated(void* selfRaw, const void* spriteRaw,
+                                              int32_t x1, int32_t y1,
+                                              int32_t x2, int32_t y2,
+                                              uint32_t color, float rotation) {
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)                             // B.3.6 bridge
+        ->UI::SpriteContext::AddSprite(*static_cast<const UI::Sprite*>(spriteRaw),
+                                       x1, y1, x2, y2, color, rotation);
+}
+
+// `font` is an ExternalPtr<Font> passed BY VALUE — one raw pointer in RDX.
+void RtUi_SpriteContext_AddFont(void* selfRaw, void* fontRaw, const void* text,
+                                bool multiline, int32_t layoutA, int32_t justify,
+                                int32_t layoutB, int32_t x, int32_t y,
+                                uint32_t color) {
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)                             // B.3.6 bridge
+        ->UI::SpriteContext::AddFont(
+            Object::ExternalPtr<UI::Font>(static_cast<UI::Font*>(fontRaw)),
+            *static_cast<const System::String*>(text),
+            multiline, layoutA, justify, layoutB, x, y, color);
+}
 // ============================================================================
 int RtUiSpriteContextAddRegister() {
     int n = 0;

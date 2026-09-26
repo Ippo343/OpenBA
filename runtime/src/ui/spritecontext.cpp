@@ -109,6 +109,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <new>
 
 #include "../../funcs/rt_port.h"
 #include "../../types/ui/Sprite.h"
@@ -128,94 +129,10 @@ uintptr_t ResolveAddr(Module mod, uintptr_t ghidra_addr);
 
 namespace {
 
-using UI::ClipRect;
-using ::Sprite;   // Sprite.h declares it at GLOBAL scope, not in UI
 using UI::SpriteContext;
 using UI::SpriteDraw;
 
-// ---- the mangled names, once -----------------------------------------------
-const char* const kAddLine =
-    "?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z";
-const char* const kSetScissorVp =
-    "?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@AEBV34@@Z";
-const char* const kSetScissorInts =
-    "?SetScissor@SpriteContext@UI@@QEAA?AVViewport@Video@@HHHH@Z";
-
-// ---- the ABI, spelled out --------------------------------------------------
-// Note the second parameter on both SetScissor typedefs: the hidden return
-// slot. See the file header.
-typedef void* (*SetScissorVpFn)(void* self, void* ret, const void* viewport);
-typedef void* (*SetScissorIntsFn)(void* self, void* ret, int x, int y, int w, int h);
-typedef void  (*AddLineFn)(void* self, const void* sprite,
-                           int x1, int y1, int x2, int y2, uint32_t color);
-
-// ---- the internals reached by address ---------------------------------------
-// `Flush` drains `_draws` into the vertex buffer and clears `_currentSheet`.
-// One argument, `this` in RCX (0x18011ba5a: `MOV R13,RCX`, and every call site
-// in the class sets only RCX).
-typedef void (*FlushFn)(void* self);
-
-// The shipped AddSpriteDraw / FlushDeferred, for the two internal oracles
-// only — reached raw, never through ResolveAddr. See the oracle blocks in the
-// bodies for why the distinction is load-bearing.
-typedef void (*AddSpriteDrawFn)(void* self, const void* draw);
-typedef void (*FlushDeferredFn)(void* self);
-
-// UI::SpriteCapture, reached only when `_spriteCapture` is non-null — which it
-// is not unless a screenshot/capture UI is active. Argument orders read off
-// the two call sites, NOT guessed from the callee names:
-//   AddScissor  0x1800d8ef0  <- 0x18011d126..0x18011d146
-//   AddSprite   0x1800d8b20  <- 0x18011c8e4..0x18011c916
-typedef void (*CaptureAddScissorFn)(void* capture, int x, int y,
-                                    int right, int bottom, bool fullScreen);
-typedef void (*CaptureAddSpriteFn)(void* capture, const void* sprite,
-                                   int x1, int y1, int x2, int y2,
-                                   float rotation, uint32_t color);
-
-// ---- the five resolvers ----------------------------------------------------
-// Each one spells its address as a LITERAL inside `ResolveAddr(Module::Runtime,
-// …)`, once, and that spelling is not a style choice — it is what keeps these
-// doors VISIBLE to `tools/addr_door_audit.py`, whose call-site half matches a
-// literal and nothing else.
-//
-// This file first routed all five through one `RtAddr(slot, addr)` template
-// helper. It was shorter, it compiled, and it made every door in the file
-// INVISIBLE to the audit: base and branch both reported `UNREGISTERED 16`
-// while the doors sat in the `non-literal call sites 77 -> 80` line nobody
-// reads. That is the fifth instance of the blind spot in
-// reference_literal_grep_blind_to_variables.md — an instrument that greps for
-// a literal cannot see the same fact spelled through a variable, and it never
-// announces the blindness. Rewritten so the cost this lane adds shows up in
-// the number the wave is steering by.
-//
-// Each caches, and NONE caches a null (rt_port.h's contract): a miss during
-// early boot must not freeze the answer for the process.
-
-// The batch drain. NOT PORTED — this is the lane's one per-frame address door.
-inline FlushFn TheFlush() {
-    static FlushFn f = nullptr;
-    if (!f) f = reinterpret_cast<FlushFn>(ResolveAddr(Module::Runtime, 0x18011ba40));
-    return f;
-}
-// UI::SpriteCapture — both reached only when `_spriteCapture` is non-null.
-inline CaptureAddScissorFn TheCaptureAddScissor() {
-    static CaptureAddScissorFn f = nullptr;
-    if (!f) f = reinterpret_cast<CaptureAddScissorFn>(ResolveAddr(Module::Runtime, 0x1800d8ef0));
-    return f;
-}
-inline CaptureAddSpriteFn TheCaptureAddSprite() {
-    static CaptureAddSpriteFn f = nullptr;
-    if (!f) f = reinterpret_cast<CaptureAddSpriteFn>(ResolveAddr(Module::Runtime, 0x1800d8b20));
-    return f;
-}
-// ENDGAME B.3.2 step 2 — the `TheArrayAppend`/`TheArrayClear` forwarders that
-// used to sit here (0x180078520 / 0x1800783d0) are GONE: `_draws`/`_deferred`
-// are real `Collection::Array<SpriteDraw>` members and both call sites below
-// bridge through `kSpec_SpriteDraw` directly.
-
-inline void Flush(SpriteContext* self) { TheFlush()(self); }
-
-// ---- the two float helpers, kept honest ------------------------------------
+// ---- the float helpers, kept honest -----------------------------------------
 // Retail converts int -> float (CVTDQ2PS), divides or multiplies in SINGLE
 // precision (DIVSS / MULSS), and converts back with CVTTSS2SI, which truncates
 // TOWARD ZERO. `static_cast<int>` on a float does exactly that; the `float`
@@ -229,68 +146,78 @@ inline int ScaleUp(int v, float scale) {
 
 }  // namespace
 
+// UI::SpriteCapture's two recorders, reached only when `_spriteCapture` is
+// non-null — which it is not unless a screenshot/capture UI is active. Argument
+// orders read off the two call sites, NOT guessed from the callee names:
+//   AddScissor  0x1800d8ef0  <- 0x18011d126..0x18011d146
+//   AddSprite   0x1800d8b20  <- 0x18011c8e4..0x18011c916
+// ENDGAME B.3.6 block D: these were two `ResolveAddr` static caches
+// (`TheCaptureAddScissor` / `TheCaptureAddSprite`, RULE B6-5 removes them);
+// they are the registered bodies in runtime/src/ui/spritecapture.cpp, called
+// directly until `UI::SpriteCapture` converts.
+extern "C" void RtUi_SpriteCapture_AddScissor(void* selfRaw, int x, int y,
+                                              int right, int bottom, bool fullScreen);
+extern "C" void RtUi_SpriteCapture_AddSprite(void* selfRaw, const void* spriteRaw,
+                                             int x1, int y1, int x2, int y2,
+                                             float rotation, uint32_t color);
+
 // ============================================================================
-// The ports
+// The ports — UI::SpriteContext's members (ENDGAME B.3.6 block D)
 // ============================================================================
 // Every body is byte-faithful to the retail DISASSEMBLY, not to Ghidra's
 // decompiled C (reference_ghidra_c_output_vs_disassembly.md). No null guard
-// retail does not have.
+// retail does not have. The registered doors follow, each a one-line
+// delegation (SpriteContext is NOT polymorphic, so the `UI::SpriteContext::`
+// qualification is uniformity, not load-bearing).
+namespace UI {
 
 // ?Begin@SpriteContext@UI@@QEAAXMPEAVSpriteCapture@2@PEAVViewport@Video@@@Z
-// Retail 0x18011d2b0, ord 1632. UI leftovers batch
-// (docs/runtime_port/closure/WORKLIST.md). Read the scissor from the context's
-// CURRENT render target (this is the same read
-// runtime/src/save/saveload_draw.cpp's own SpriteContext construction already
-// makes, through `RtVideo::RenderBufferPrefix`); store the capture object and
-// the clip viewport; if a capture object was handed in, clear its `_entries`
-// and `_sprites` arrays to size 0 (0x18004ba90 / 0x1800370c0, array.cpp's
-// kSpec_CaptureEntryZ / kSpec_SpriteIndexZ — both zero SpriteCapture+0x50 as a
-// side effect of this same call site, per `SpriteCapture::BeginAddingSprites`'
-// own +0x50 clear noted in SpriteCapture.h); push an identity Matrix through
+// Retail 0x18011d2b0, ord 1632. Read the scissor from the context's CURRENT
+// render target (the same read runtime/src/save/saveload_draw.cpp's own
+// SpriteContext construction makes, through `RtVideo::RenderBufferPrefix`);
+// store the capture object and the clip viewport; if a capture object was
+// handed in, clear its `_entries` and `_sprites` arrays to size 0
+// (0x18004ba90 / 0x1800370c0, array.cpp's kSpec_CaptureEntryZ /
+// kSpec_SpriteIndexZ) and zero its +0x50 (`SpriteCapture::BeginAddingSprites`'
+// own clear, SpriteCapture.h); push an identity Matrix through
 // `Video::Context::SetTransform`; and finally store `_scale`.
-void RtUi_SpriteContext_Begin(UI::SpriteContext* self, float scale,
-                              void* spriteCapture, const UI::ClipRect* viewport) {
-    RtVideo::Context* ctx = static_cast<RtVideo::Context*>(self->_context);
+void SpriteContext::Begin(float scale, SpriteCapture* capture, Video::Viewport* clipRegion) {
+    RtVideo::Context* ctx = static_cast<RtVideo::Context*>(_context);
     const auto* rb = static_cast<const RtVideo::RenderBufferPrefix*>(ctx->_renderBuffer);
     const int32_t w = rb->width;
     const int32_t h = rb->height;
 
-    self->_spriteCapture = spriteCapture;
-    self->_clipRegion = viewport;
+    _spriteCapture = capture;
+    _clipRegion = clipRegion;
 
-    if (spriteCapture) {
-        uint8_t* cap = static_cast<uint8_t*>(spriteCapture);
+    if (capture) {
+        uint8_t* cap = reinterpret_cast<uint8_t*>(capture);  // B.3.6 bridge
         *reinterpret_cast<uint64_t*>(cap + 0x50) = 0;
 
-        // ENDGAME B.3.2 step 2 — both forwarders are GONE. `spriteCapture` is
-        // untyped here (only Sprite.h is included, not SpriteCapture.h), and
-        // both rows are NON-TRIVIAL (kSpec_SpriteIndexZ's tail-init sets each
+        // Both rows are NON-TRIVIAL (kSpec_SpriteIndexZ's tail-init sets each
         // new Sprite's index to -1; kSpec_CaptureEntryZ's destroy releases a
         // String), so the bridge stays byte-offset rather than retyping.
         rtcoll::AsArray<&rtcoll::kSpec_SpriteIndexZ>(cap + 0x40)->SetSize(0);   // 0x1800370c0
         rtcoll::AsArray<&rtcoll::kSpec_CaptureEntryZ>(cap + 0x30)->SetSize(0); // 0x18004ba90
     }
 
-    self->_currentSheet = nullptr;
-    self->_scissorX = 0;
-    self->_scissorY = 0;
-    self->_scissorW = w;
-    self->_scissorH = h;
+    _currentSheet = nullptr;
+    _scissorX = 0;
+    _scissorY = 0;
+    _scissorW = w;
+    _scissorH = h;
 
-    // Was `Matrix identity; memset(&identity, 0, sizeof(identity));`. ENDGAME
-    // B.3.1 made Math::Matrix a real class whose default ctor (retail
-    // 0x18001d770) zeroes all sixteen cells, so the declaration alone is the
-    // memset, and -Wclass-memaccess is not tripped.
+    // Math::Matrix's default ctor (retail 0x18001d770) zeroes all sixteen cells.
     Matrix identity;
     identity.m[0] = 1.0f; identity.m[5] = 1.0f; identity.m[10] = 1.0f; identity.m[15] = 1.0f;
     // THE DOOR DECIDES THE OVERLOAD: `?SetTransform@…QEAAXHAEBVMatrix@Math@@@Z`
     // (0x18001a6b0) — the (slot, Matrix&) pair, not `SetTransformScale`.
     reinterpret_cast<Video::Context*>(ctx)->SetTransform(0, identity);  // B.3.5 bridge
 
-    self->_scale = scale;
+    _scale = scale;
 }
 
-// ---- 0x18011c890  SpriteContext::AddSpriteDraw (internal) ------------------
+// ---- 0x18011c890  SpriteContext::AddSpriteDraw (private) -------------------
 //
 // Two independent halves, and retail runs them in this order:
 //   (a) if a capture is active AND the record lies wholly inside the clip
@@ -303,107 +230,73 @@ void RtUi_SpriteContext_Begin(UI::SpriteContext* self, float scale,
 // APPEND on unordered as well as on not-equal, so a NaN rotation skips the
 // cull — and `rot == 0.0f` is false for NaN in C++ too, which reproduces that
 // without a special case.
-void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
-    auto* self = static_cast<SpriteContext*>(selfRaw);
-    const auto* d = static_cast<const SpriteDraw*>(drawRaw);
+void SpriteContext::AddSpriteDraw(const SpriteDraw& draw) {
+    const SpriteDraw* d = &draw;
 
     // --- (a) the capture branch, 0x18011c89a..0x18011c916 -------------------
-    void* capture = self->_spriteCapture;
-    if (capture) {
-        const ClipRect* clip = self->_clipRegion;
-        if (d->x1 >= clip->x && d->x2 <= clip->x + clip->w &&
-            d->y1 >= clip->y && d->y2 <= clip->y + clip->h) {
+    if (SpriteCapture* capture = _spriteCapture) {
+        const Video::Viewport* clip = _clipRegion;
+        if (d->x1 >= clip->x && d->x2 <= clip->x + clip->width &&
+            d->y1 >= clip->y && d->y2 <= clip->y + clip->height) {
             // Retail rebuilds a bare {sheet, index} UI::Sprite on its own stack
             // (0x18011c8f1 / 0x18011c8fc) rather than passing the record.
             Sprite s;
             s.spriteSheet = d->sheet;
             s.spriteIndex = d->spriteIndex;
-            TheCaptureAddSprite()(capture, &s, d->x1, d->y1,
-                                             d->x2, d->y2, d->rotation, d->color);
+            RtUi_SpriteCapture_AddSprite(capture, &s, d->x1, d->y1,
+                                         d->x2, d->y2, d->rotation, d->color);
         }
     }
 
     // --- (b) the scissor cull, 0x18011c920..0x18011c9a1 ---------------------
     bool append = true;
     if (d->rotation == 0.0f) {
-        const float sc = self->_scale;
-        const int   sx = self->_scissorX;
-        const int   sy = self->_scissorY;
+        const float sc = _scale;
+        const int   sx = _scissorX;
+        const int   sy = _scissorY;
         if      (static_cast<float>(sx) * sc > static_cast<float>(d->x2))              append = false;
-        else if (static_cast<float>(d->x1) > static_cast<float>(sx + self->_scissorW) * sc) append = false;
+        else if (static_cast<float>(d->x1) > static_cast<float>(sx + _scissorW) * sc)  append = false;
         else if (static_cast<float>(sy) * sc > static_cast<float>(d->y2))              append = false;
-        else if (static_cast<float>(d->y1) > static_cast<float>(sy + self->_scissorH) * sc) append = false;
+        else if (static_cast<float>(d->y1) > static_cast<float>(sy + _scissorH) * sc)  append = false;
     }
 
     if (append) {
         // retail 0x180078520 — kSpec_SpriteDraw, NON-TRIVIAL (a partial-write
-        // assign), so `_draws` (a real `Collection::Array<SpriteDraw>` member)
-        // is bridged through the hand-derived row rather than its own
-        // trait-derived member functions.
-        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_draws)
-            ->SetSizeFill(self->_draws._size + 1, d);
-        return;
+        // assign), so `_draws` is bridged through the hand-derived row rather
+        // than its own trait-derived member functions.
+        rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&_draws)
+            ->SetSizeFill(_draws._size + 1, d);
     }
-
-    // --- the oracle, on the cull decision only ------------------------------
-    // Safe in BOTH outcomes (file header): we appended nothing, so if the
-    // shipped body appends, the batch gains the record retail wanted. Skipped
-    // when a capture is active, because then the shipped body would push a
-    // SECOND copy onto the capture, which nothing undoes.
-    //
-    // AddSpriteDraw has NO exported name, so the shipped body is reached by
-    // RAW ADDRESS. It MUST be the raw door and not `ResolveAddr`: this very
-    // function is registered at 0x18011c890, so `ResolveAddr` would hand back
-    // OUR OWN body and the comparison would be true by construction — the
-    // exact shape reference_recheck_must_match_its_own_proof.md records.
-    //
-    // The verdict is `_draws._size`, because "did the shipped body append"
-    // is the whole of what this branch decides.
 }
 
-// ---- 0x18011c6a0  SpriteContext::FlushDeferred (internal) ------------------
+// ---- 0x18011c6a0  ?FlushDeferredFonts@SpriteContext@UI@@AEAAXXZ -------------
 //
 // Replays the deferred batch through AddSpriteDraw, re-binding `_currentSheet`
 // (and flushing) whenever a record's sheet differs from the cursor, then
-// flushes once more and clears the deferred array.
+// flushes once more and clears the deferred array. A pure no-op when
+// `_deferring` is clear (`CMP byte [RCX+0x38],0 / JZ epilogue`, 0x18011c6a6).
 //
 // Both `_deferred._data` and `_deferred._size` are RE-READ every iteration
 // (0x18011c6d0 and 0x18011c70f), not hoisted. That is kept faithful rather
 // than tidied: AddSpriteDraw can reallocate `_draws`, and while it does not
 // touch `_deferred` today, hoisting would bake that in as an assumption.
-void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
-    auto* self = static_cast<SpriteContext*>(selfRaw);
+void SpriteContext::FlushDeferredFonts() {
+    if (_deferring == 0) return;
 
-    const bool deferring = self->_deferring != 0;
-    if (!deferring) {
-        // Retail's `CMP byte [RCX+0x38],0 / JZ epilogue` (0x18011c6a6) makes
-        // this branch a pure no-op, so a replay of the shipped body is exact.
-        // Reached RAW for the same reason as AddSpriteDraw's oracle: this
-        // function is registered at 0x18011c6a0, and `ResolveAddr` would
-        // return our own body and compare it against itself.
-        //
-        // The verdict is the 0x10-byte `_deferred` header plus the sheet
-        // cursor — everything this function can touch. Nothing outside that is
-        // compared, because comparing bytes neither side writes is how an
-        // oracle reports 100% divergence on unrelated noise
-        // (reference_oracle_must_not_compare_unwritten_bytes.md).
-        return;
-    }
-
-    for (int i = 0; i < self->_deferred.GetSize(); ++i) {
-        SpriteDraw* rec   = &self->_deferred.GetData()[i];
+    for (int i = 0; i < _deferred.GetSize(); ++i) {
+        SpriteDraw* rec   = &_deferred.GetData()[i];
         void*       sheet = rec->sheet;
-        if (self->_currentSheet != sheet) {
-            if (self->_currentSheet != nullptr) Flush(self);
-            self->_currentSheet = sheet;
+        if (_currentSheet != sheet) {
+            if (_currentSheet != nullptr) Flush();
+            _currentSheet = sheet;
         }
-        RtUi_SpriteContext_AddSpriteDraw(self, rec);
+        AddSpriteDraw(*rec);
     }
 
-    Flush(self);
+    Flush();
     // retail 0x1800783d0 — kSpec_SpriteDraw's SetSize(0) form; same
     // NON-TRIVIAL row as the append above, bridged the same way.
-    rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&self->_deferred)->SetSize(0);
+    rtcoll::AsArray<&rtcoll::kSpec_SpriteDraw>(&_deferred)->SetSize(0);
 }
 
 // ---- 0x18011cbe0  ?AddLine@SpriteContext@UI@@QEAAXAEBVSprite@2@HHHHI@Z -----
@@ -411,39 +304,28 @@ void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
 // Queues one line quad. The sheet cursor is rebound (flushing the previous
 // batch first, unless there was none) whenever the incoming sprite's sheet
 // differs, which is what groups draws into per-sheet batches.
-void RtUi_SpriteContext_AddLine(void* selfRaw, const void* spriteRaw,
-                                int x1, int y1, int x2, int y2, uint32_t color) {
-    auto* self   = static_cast<SpriteContext*>(selfRaw);
-    const auto* sprite = static_cast<const Sprite*>(spriteRaw);
-
+void SpriteContext::AddLine(const Sprite& sprite, int32_t x1, int32_t y1,
+                            int32_t x2, int32_t y2, uint32_t color) {
     // 0x18011cc09 / 0x18011cc0e: two independent early returns. Note the index
     // test is `< 0`, not `== -1` — `JL`, a SIGNED branch.
-    void* sheet = sprite->spriteSheet;
-    const bool queue = (sheet != nullptr) && (sprite->spriteIndex >= 0);
+    void* sheet = sprite.spriteSheet;
+    if (sheet == nullptr || sprite.spriteIndex < 0) return;
 
-    if (!queue) {
-        // Retail returns before its first store, so the replay is exact.
-        return;
-    }
-
-    if (self->_currentSheet != sheet) {
-        if (self->_currentSheet != nullptr) Flush(self);
-        self->_currentSheet = sheet;
+    if (_currentSheet != sheet) {
+        if (_currentSheet != nullptr) Flush();
+        _currentSheet = sheet;
     }
 
     // The record retail builds at RSP+0x20 (0x18011cc31..0x18011cc7c).
     //
-    // ONE DELIBERATE DIVERGENCE, and it is the only one in this file: retail
-    // leaves +0x25..+0x27 as whatever was on its stack, because the record is
-    // an uninitialised local it fills field by field. `SpriteDraw rec{}` zeroes
-    // them. Nothing reads those three bytes — Flush's record walk reads +0x00,
-    // +0x08, +0x0c, +0x10, +0x14, +0x18, +0x1c, +0x20 and the +0x24 BYTE and
-    // nothing else, and Array<SpriteDraw>'s assign arm copies them without
-    // interpreting them — so the difference is unobservable, and reading
-    // indeterminate bytes would be UB the compiler is entitled to exploit.
+    // ONE DELIBERATE DIVERGENCE: retail leaves +0x25..+0x27 as whatever was on
+    // its stack. `SpriteDraw rec{}` zeroes them. Nothing reads those three
+    // bytes — Flush's record walk reads +0x00, +0x08, +0x0c, +0x10, +0x14,
+    // +0x18, +0x1c, +0x20 and the +0x24 BYTE and nothing else — so the
+    // difference is unobservable, and reading indeterminate bytes would be UB.
     SpriteDraw rec{};
     rec.sheet       = sheet;
-    rec.spriteIndex = sprite->spriteIndex;
+    rec.spriteIndex = sprite.spriteIndex;
     rec.x1          = x1;
     rec.y1          = y1;
     rec.x2          = x2;
@@ -452,7 +334,7 @@ void RtUi_SpriteContext_AddLine(void* selfRaw, const void* spriteRaw,
     rec.color       = color;
     rec.isLine      = 1;      // 0x18011cc77, the literal 1
 
-    RtUi_SpriteContext_AddSpriteDraw(self, &rec);
+    AddSpriteDraw(rec);
 }
 
 // ---- 0x18011d050  ?SetScissor@…@QEAA?AVViewport@Video@@AEBV34@@Z -----------
@@ -461,20 +343,17 @@ void RtUi_SpriteContext_AddLine(void* selfRaw, const void* spriteRaw,
 // it. The incoming rect is in point space and is divided by `_scale` to reach
 // the device space the four fields hold; the returned rect is multiplied back
 // up — EXCEPT on the unchanged branch. See the note there.
-void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
-                                             const void* viewportRaw) {
-    auto* self = static_cast<SpriteContext*>(selfRaw);
-    auto* ret  = static_cast<ClipRect*>(retRaw);
-    const auto* v = static_cast<const ClipRect*>(viewportRaw);
+Video::Viewport SpriteContext::SetScissor(const Video::Viewport& v) {
+    Video::Viewport ret;
 
-    const float scale = self->_scale;
-    const int nx = ScaleDown(v->x, scale);
-    const int ny = ScaleDown(v->y, scale);
-    const int nw = ScaleDown(v->w, scale);
-    const int nh = ScaleDown(v->h, scale);
+    const float scale = _scale;
+    const int nx = ScaleDown(v.x, scale);
+    const int ny = ScaleDown(v.y, scale);
+    const int nw = ScaleDown(v.width, scale);
+    const int nh = ScaleDown(v.height, scale);
 
-    const bool changed = !(nx == self->_scissorX && ny == self->_scissorY &&
-                           nw == self->_scissorW && nh == self->_scissorH);
+    const bool changed = !(nx == _scissorX && ny == _scissorY &&
+                           nw == _scissorW && nh == _scissorH);
 
     if (!changed) {
         // 0x18011d0d8..0x18011d0ef. *** RETAIL RETURNS THE RAW FIELDS HERE,
@@ -487,79 +366,110 @@ void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
         // result and restores it later feeds it back through this same
         // function, and "fixing" the asymmetry would change what the restore
         // computes (CLAUDE.md — a faithful port does not repair retail).
-        ret->x = self->_scissorX;
-        ret->y = self->_scissorY;
-        ret->w = self->_scissorW;
-        ret->h = self->_scissorH;
-
-        // The oracle. Nothing above this line mutated anything, and the
-        // shipped body on this branch does not either, so the replay is exact
-        // — and it is what proves the hidden-return-slot arity, because it
-        // drives the DLL through the typedef the file header argues for.
+        ret.x      = _scissorX;
+        ret.y      = _scissorY;
+        ret.width  = _scissorW;
+        ret.height = _scissorH;
         return ret;
     }
 
-    Flush(self);
-    RtUi_SpriteContext_FlushDeferred(self);
+    Flush();
+    FlushDeferredFonts();
 
     // 0x18011d101..0x18011d146. `_context` -> +0x28 is the bound render target;
     // its +0x10/+0x14 are the target's width and height, and the flag says the
     // new scissor covers the whole target.
-    void* capture = self->_spriteCapture;
-    if (capture) {
+    if (SpriteCapture* capture = _spriteCapture) {
         auto* target = *reinterpret_cast<uint8_t**>(
-            reinterpret_cast<uint8_t*>(self->_context) + 0x28);
+            static_cast<uint8_t*>(_context) + 0x28);
         const int tw = *reinterpret_cast<const int32_t*>(target + 0x10);
         const int th = *reinterpret_cast<const int32_t*>(target + 0x14);
         const bool fullScreen = (nw == tw && nh == th);
-        TheCaptureAddScissor()(capture, v->x, v->y,
-                                          v->w + v->x, v->h + v->y, fullScreen);
+        RtUi_SpriteCapture_AddScissor(capture, v.x, v.y,
+                                      v.width + v.x, v.height + v.y, fullScreen);
     }
 
     // 0x18011d14b..0x18011d1b4. The OLD values are read before the new ones
     // are stored; the return is the old rect scaled back up to point space.
-    const int ox = self->_scissorX;
-    const int oy = self->_scissorY;
-    const int ow = self->_scissorW;
-    const int oh = self->_scissorH;
+    const int ox = _scissorX;
+    const int oy = _scissorY;
+    const int ow = _scissorW;
+    const int oh = _scissorH;
 
-    self->_scissorX = nx;
-    self->_scissorY = ny;
-    self->_scissorW = nw;
-    self->_scissorH = nh;
+    _scissorX = nx;
+    _scissorY = ny;
+    _scissorW = nw;
+    _scissorH = nh;
 
-    ret->x = ScaleUp(ox, scale);
-    ret->y = ScaleUp(oy, scale);
-    ret->w = ScaleUp(ow, scale);
-    ret->h = ScaleUp(oh, scale);
+    ret.x      = ScaleUp(ox, scale);
+    ret.y      = ScaleUp(oy, scale);
+    ret.width  = ScaleUp(ow, scale);
+    ret.height = ScaleUp(oh, scale);
     return ret;
 }
 
 // ---- 0x18011d010  ?SetScissor@…@QEAA?AVViewport@Video@@HHHH@Z --------------
 //
 // A forwarder: packs the four ints into a Viewport on its own stack and calls
-// the overload above with the SAME return slot, then returns that slot (RBX,
-// saved from RDX on entry) rather than the callee's RAX — the same value.
-//
-// The field order of the packed rect is read off the four stores at
-// 0x18011d01a..0x18011d033, which are emitted OUT OF ORDER (+0x20, +0x28,
-// +0x2c, +0x24) and are easy to misread from the decompiler: R8D -> +0x00,
-// R9D -> +0x04, arg5 -> +0x08, arg6 -> +0x0c.
-void* RtUi_SpriteContext_SetScissor_Ints(void* selfRaw, void* retRaw,
-                                         int x, int y, int w, int h) {
-    auto* self = static_cast<SpriteContext*>(selfRaw);
-
-    ClipRect v;
+// the overload above with the SAME return slot. The field order of the packed
+// rect is read off the four stores at 0x18011d01a..0x18011d033, which are
+// emitted OUT OF ORDER (+0x20, +0x28, +0x2c, +0x24) and are easy to misread
+// from the decompiler: R8D -> +0x00, R9D -> +0x04, arg5 -> +0x08, arg6 -> +0x0c.
+Video::Viewport SpriteContext::SetScissor(int32_t x, int32_t y,
+                                          int32_t width, int32_t height) {
+    Video::Viewport v;
     v.x = x;
     v.y = y;
-    v.w = w;
-    v.h = h;
+    v.width = width;
+    v.height = height;
+    return SetScissor(v);
+}
 
-    RtUi_SpriteContext_SetScissor_Viewport(self, retRaw, &v);
+}  // namespace UI
 
+// ============================================================================
+// THE DOORS. Each keeps its registered name and address and delegates.
+// The two SetScissor doors are hidden-retslot: `(this, ret, …)`, placement-new
+// of the member's prvalue into the caller's slot, slot returned in RAX.
+// ============================================================================
+void RtUi_SpriteContext_Begin(UI::SpriteContext* self, float scale,
+                              void* spriteCapture, Video::Viewport* viewport) {
+    self->UI::SpriteContext::Begin(
+        scale, reinterpret_cast<UI::SpriteCapture*>(spriteCapture), viewport);  // B.3.6 bridge
+}
+
+void RtUi_SpriteContext_AddSpriteDraw(void* selfRaw, const void* drawRaw) {
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)                             // B.3.6 bridge
+        ->UI::SpriteContext::AddSpriteDraw(*static_cast<const SpriteDraw*>(drawRaw));
+}
+
+void RtUi_SpriteContext_FlushDeferred(void* selfRaw) {
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)                             // B.3.6 bridge
+        ->UI::SpriteContext::FlushDeferredFonts();
+}
+
+void RtUi_SpriteContext_AddLine(void* selfRaw, const void* spriteRaw,
+                                int x1, int y1, int x2, int y2, uint32_t color) {
+    reinterpret_cast<UI::SpriteContext*>(selfRaw)                             // B.3.6 bridge
+        ->UI::SpriteContext::AddLine(*static_cast<const UI::Sprite*>(spriteRaw),
+                                     x1, y1, x2, y2, color);
+}
+
+void* RtUi_SpriteContext_SetScissor_Viewport(void* selfRaw, void* retRaw,
+                                             const void* viewportRaw) {
+    new (retRaw) Video::Viewport(
+        reinterpret_cast<UI::SpriteContext*>(selfRaw)                         // B.3.6 bridge
+            ->UI::SpriteContext::SetScissor(*static_cast<const Video::Viewport*>(viewportRaw)));
     return retRaw;
 }
 
+void* RtUi_SpriteContext_SetScissor_Ints(void* selfRaw, void* retRaw,
+                                         int x, int y, int w, int h) {
+    new (retRaw) Video::Viewport(
+        reinterpret_cast<UI::SpriteContext*>(selfRaw)                         // B.3.6 bridge
+            ->UI::SpriteContext::SetScissor(x, y, w, h));
+    return retRaw;
+}
 // ============================================================================
 int RtUiSpriteContextRegister() {
     int n = 0;

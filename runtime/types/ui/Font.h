@@ -87,7 +87,11 @@ static_assert(sizeof(FontGlyph) == 0x10, "UI::Font glyph stride 0x10 (SHL RBX,4)
 // 0x180076d10; the justify pass at the end of ComputeStringLayout re-reads
 // `_line` (0x1801174be) and adjusts `_x` (0x1801174d2 / 0x1801174de).
 struct FontLayoutEntry {
-    int32_t _codepoint;     // +0x00
+    int32_t _glyph;         // +0x00  the GLYPH (= sprite) index, NOT the
+                            //        codepoint: ComputeLineLayout stores the
+                            //        looked-up glyph (font.cpp: storing `cp`
+                            //        here drew "n" for "New"), and AddFont
+                            //        hands it to AddSprite as the sprite index
     int32_t _x;             // +0x04
     int32_t _y;             // +0x08
     int32_t _line;          // +0x0c  index into Layout::_lineWidths
