@@ -36,6 +36,7 @@
 #include "resolve.h"
 #include "perf_experimental.h"
 #include "Object/exe_type.h"   // DEFINE_EXE_VTABLE
+#include "object/Internal.h"   // Object::detail::InternalMemFree
 #include <atomic>
 #include <cstdint>
 #include <new>
@@ -66,15 +67,75 @@ std::atomic<bool> s_itemDrawLogged{false};
 DEFINE_EXE_VTABLE(WorldGeometry, "_ZTV13WorldGeometry")
 
 // ============================================================
-// Slot +0x00 — destructor
+// Slot +0x00 — destructor (B38 D9 #12)
 // ============================================================
 //
-// PORT GAP (B38 D9 #12): the original dtor (exe 0x14001ECC0) walks all the SoA
-// arrays at +0x140..+0x228, calls MemFree on each, runs the base dtor, then
-// MemFree(this) when the low bit of the flags arg is set. The tree's slot has
-// always been this empty body (no base dtor, no free); kept here unchanged until
-// the titled D9 #12 commit.
-Graphics::Geometry* WorldGeometry::DeletingDtor(unsigned /*flags*/) {
+// Callees, each the body registered at its retail address.
+extern "C" void Reimpl_Struct60B_DtorRange(void* unused, void* first, int count);  // 0x14001fb80
+extern "C" void ArrayOfArrays_Clear_175d0(void* hdr);                               // 0x1400175d0
+void WorkBase_TreeNodeFree_14c30(void* root, void* node);                           // 0x140014c30
+
+namespace {
+// `MemFree(h.data); h = {}` — one of retail's free-and-zero pairs.
+void FreeHeader(WorldGeometry::Header& h) {
+    Object::detail::InternalMemFree(h.data);   // MemFree is null-tolerant, as retail relies on
+    h.data = nullptr;
+    h.sizeCap = 0;
+}
+}  // namespace
+
+// Body 0x1400aed50, transcribed in retail's order (read in Ghidra). The vptr
+// restamp on entry and the tail JMP to Graphics::Geometry::~Geometry are the
+// compiler's.
+WorldGeometry::~WorldGeometry() {
+    // +0x148: the height ImageBuffer, deleted through its own slot 0 with
+    // flags 1 (retail: MOV RAX,[RCX]; MOV EDX,1; CALL [RAX]). Bridge: the
+    // pointer is untyped and the call is the raw dispatch retail makes.
+    if (_heightImage) {
+        using DeletingDtorFn = void* (*)(void*, unsigned);
+        (*reinterpret_cast<DeletingDtorFn* const*>(_heightImage))[0](_heightImage, 1);
+    }
+    Object::detail::InternalMemFree(_heightBytes);          // +0x140 (not zeroed)
+
+    FreeHeader(_arrays[8]);                                 // +0x220 ints
+    FreeHeader(_arrays[7]);                                 // +0x210 External* refs
+    Reimpl_Struct60B_DtorRange(nullptr, _arrays[6].data,    // +0x200 decal elements
+                               static_cast<int>(_arrays[6].sizeCap));
+    FreeHeader(_arrays[6]);
+    Reimpl_Struct60B_DtorRange(nullptr, _arrays[5].data,    // +0x1f0 decal elements
+                               static_cast<int>(_arrays[5].sizeCap));
+    FreeHeader(_arrays[5]);
+    ArrayOfArrays_Clear_175d0(&_arrays[4]);                 // +0x1e0 array of arrays
+    FreeHeader(_arrays[3]);                                 // +0x1d0
+    FreeHeader(_arrays[2]);                                 // +0x1c0
+    FreeHeader(_arrays[1]);                                 // +0x1b0
+    FreeHeader(_arrays[0]);                                 // +0x1a0
+
+    // ~IndexBuffer / ~VertexBuffer are `JMP PlatformDestruct` in retail
+    // (0x1800f3480 / 0x1800f55e0).
+    _waterIndexBuffer.PlatformDestruct();                   // +0x180
+    _waterVertexBuffer.PlatformDestruct();                  // +0x160
+    _indexBuffer.PlatformDestruct();                        // +0x120
+    _vertexBuffer.PlatformDestruct();                       // +0x100
+
+    // +0xe8: the dirty-chunk tree — free both subtrees, then the root node.
+    if (void* root = _dirtyTreeRoot) {
+        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x10));
+        WorkBase_TreeNodeFree_14c30(&_dirtyTreeRoot, *reinterpret_cast<void**>(static_cast<uint8_t*>(root) + 0x18));
+        Object::detail::InternalMemFree(root);
+    }
+    _dirtyTreeRoot = nullptr;
+    _dirtyTreeCount = 0;
+
+    Object::detail::InternalMemFree(_arrayD8);              // +0xd8
+    _arrayD8 = nullptr;
+    _arrayD8Size = 0;
+}
+
+// 0x14001ecc0: the body above, then MemFree(this) on flags & 1.
+Graphics::Geometry* WorldGeometry::DeletingDtor(unsigned flags) {
+    this->~WorldGeometry();
+    if (flags & 1) Object::detail::InternalMemFree(this);
     return this;
 }
 

@@ -39,7 +39,7 @@ public:
     static const void* Vtable();
 
 protected:
-    ~WorldGeometry() = default;   // PORT GAP: retail's body 0x1400aed50 frees the arrays (D9 #12)
+    ~WorldGeometry();                                                 // body 0x1400aed50
 
 public:
     int32_t  _gridSize;           // +0xC0  heightmap edge (cells)
