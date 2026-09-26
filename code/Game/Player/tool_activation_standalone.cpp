@@ -40,6 +40,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 // Registered AVL retrace/rebalance for 0x38-byte nodes (reg_keystone_a_restree.cpp).
 extern "C" void TradeWork_impl_4b40(int64_t* root, int64_t* newNode);
@@ -390,7 +391,7 @@ extern "C" int EntityUI_ToolTick_SA(void* entityUI, int activeFlag, int64_t time
     // would freeze the ghost mesh on any frame OnKey returned 0.
     if (onKeyResult != 0 && activeFlag != 0 && *(char*)(pc + 0x80) == 0) {
         void* km = ToolKeyMap();
-        if (km && fn_KeyMap_Pressed && fn_KeyMap_Pressed(km, 0, 6)) {
+        if (km && reinterpret_cast<const Input::KeyMap*>(km)->Pressed(0, 6)) {  // B.3.7 bridge
             void* t2 = *(void**)toolSlot;
             int canStay = 1;
             if (t2) { void** vt2 = *(void***)t2; typedef int (*Slot9_t)(void*); canStay = ((Slot9_t)vt2[9])(t2); }

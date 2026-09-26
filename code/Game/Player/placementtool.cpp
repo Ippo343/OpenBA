@@ -32,6 +32,7 @@
 #include <cstring>
 #include "object/Internal.h"    // ENDGAME B.3.6 UI callers (K4)
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K4)
+#include "input/Input.h"        // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
 // Locally resolved function pointers (exe addresses)
@@ -47,9 +48,6 @@ static fn_HighlightRemove_t s_fn_HighlightRemove = nullptr;
 typedef void* (*fn_IBP_Ctor_t)(void* self, void* internal);
 static fn_IBP_Ctor_t s_fn_IBP_Ctor = nullptr;
 
-// KeyMap::Pressed — IAT dispatch slot [0x140151758]
-typedef bool (*fn_KeyMapPressed_t)(void* keyMap, int slot, int keyId);
-static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
 
 // 🔑 Returns Math::Transform BY VALUE (member fn, hidden retbuf ABI: RCX=this,
 // RDX=retbuf). MUST be called with a retbuf — calling it (mesh) with no retbuf leaves
@@ -143,13 +141,7 @@ static void EnsureFuncs() {
     // IBP_Ctor silently makes an IBP wrapping a NON-null object come out 0 — e.g. the
     // rotation setting → rotationIBP(+0x48) null → sub_da00 reads rot+0x10 = crash.
     if (!s_fn_IBP_Ctor)     s_fn_IBP_Ctor     = reinterpret_cast<fn_IBP_Ctor_t>(fn_InternalBasePtr_Ctor);
-    s_fn_KeyMapPressed     = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
-    // Standalone: the raw IAT slot 0x140151758 is unfilled → null, which would make
-    // EVERY key check (rotate/flip AND the key-5 place-confirm) no-op — the "can't place
-    // the building" symptom. Fall back to the export-resolved engine_funcs global (the
-    // same one the working camera-input path uses).
-    if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
-        s_fn_KeyMapPressed = reinterpret_cast<fn_KeyMapPressed_t>(fn_KeyMap_Pressed);
+
 
     // Direct exe function addresses
     s_fn_HighlightRemove   = (fn_HighlightRemove_t)ResolveAddr(Module::Exe, 0x1400b0d00);
@@ -368,7 +360,7 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
     void* keyMap = GetKeyMap();
 
     // Key 0x13: Rotate counter-clockwise
-    bool rotCCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x13) : false;
+    bool rotCCW = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x13);  // B.3.7 bridge
     if (rotCCW) {
         // Access rotationIBP at self+0x48, CheckPtr, then decrement value at +0x10
         uintptr_t rotSetting = *(uintptr_t*)(selfAddr + 0x48);
@@ -383,7 +375,7 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
         }
     } else {
         // Key 0x14: Rotate clockwise
-        bool rotCW = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x14) : false;
+        bool rotCW = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x14);  // B.3.7 bridge
         if (rotCW) {
             uintptr_t rotSetting = *(uintptr_t*)(selfAddr + 0x48);
             int* pRot = (int*)(rotSetting + 0x10);
@@ -397,7 +389,7 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
             }
         } else {
             // Key 0x15: Flip/Mirror
-            bool flip = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 0x15) : false;
+            bool flip = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 0x15);  // B.3.7 bridge
             if (flip) {
                 if (s_fn_sub_d960) {
                     s_fn_sub_d960(self);
@@ -408,7 +400,7 @@ uint64_t PlacementTool_OnKey_Impl(PlacementTool* self, char param2) {
 
     // --- Placement confirmation (key 5, only when active) ---
     if (param2 != 0) {
-        bool placeKey = s_fn_KeyMapPressed ? s_fn_KeyMapPressed(keyMap, 0, 5) : false;
+        bool placeKey = reinterpret_cast<const Input::KeyMap*>(keyMap)->Pressed(0, 5);  // B.3.7 bridge
         if (placeKey) {
             // Calculate placement position
             int startCol = 0, startRow = 0, endCol = 0, endRow = 0;

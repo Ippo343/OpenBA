@@ -22,6 +22,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cmath>
+#include "input/Input.h"       // ENDGAME B.3.7 callers (K3)
 
 // ============================================================
 // Locally-resolved dispatch-slot helpers (Runtime exports behind exe .rdata slots)
@@ -230,8 +231,8 @@ extern "C" uint8_t PlayerRay_GetMouseRay_1005a0(void* /*param_1*/, float* outOri
         g_pGameWorldSingleton ? *reinterpret_cast<void**>(GameWorld() + 0xe0) : nullptr);
     if (!keyMap || !display || !camHolder) return 0;
 
-    short mouseX = fn_KeyMap_GetValue ? fn_KeyMap_GetValue(keyMap, 0, 0) : 0;
-    short mouseY = fn_KeyMap_GetValue ? fn_KeyMap_GetValue(keyMap, 0, 1) : 0;
+    short mouseX = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 0);  // B.3.7 bridge
+    short mouseY = reinterpret_cast<const Input::KeyMap*>(keyMap)->GetValue(0, 1);  // B.3.7 bridge
 
     int screenW = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 4);
     int screenH = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(display) + 8);
