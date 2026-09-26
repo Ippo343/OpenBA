@@ -271,6 +271,7 @@ namespace System { class Time; }
 namespace Video  { class Context; struct Viewport; }
 namespace Audio  { class Scene; class SoundEffect; }
 namespace RtEngine { struct DialogLoopT; struct DialogLoaderLoopT; }
+namespace Engine { class DialogLoopT; class DialogLoaderLoopT; }   // ENDGAME B.3.8 RB
 
 namespace UI {
 
@@ -386,6 +387,10 @@ protected:
     UserInterface() = default;
     friend struct RtEngine::DialogLoopT;
     friend struct RtEngine::DialogLoaderLoopT;
+    // ENDGAME B.3.8 block RB: the two real loop classes' constructors
+    // default-construct the member, then run the ctor door on it (InitFields).
+    friend class Engine::DialogLoopT;
+    friend class Engine::DialogLoaderLoopT;
 
 public:
     // ---- the 0x128 bytes, evidence per field in the FIELD EVIDENCE table ----
