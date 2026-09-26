@@ -439,7 +439,49 @@ Not a block's: `standalone/{reg_element_typeids,reg_unreg_lane2,address_registry
 `runtime/src/object/deleting_dtor*.cpp`, `standalone/reg_mint_promoted.cpp`,
 `runtime/src/save/{saveload,saveload_draw}.cpp` (cross-namespace CALLERS: round 1).
 
-## 10–12. (reserved: coordinator's dated corrections from the blocks go here, as in B35_RULES)
+## 10. Coordinator's dated corrections from the blocks
+
+> **RULE B6-11 (block A, 2026-09-25) — an `InternalPtr<T>` ARGUMENT is passed by HIDDEN POINTER.**
+> A retail signature that takes `Object::InternalPtr<T>` BY VALUE receives the ADDRESS of the
+> caller's temporary in the argument register: `Element::Update`'s caller at 0x1801162c6 is
+> `MOV RAX,[R12] / LEA R9,[RBP+0x50] / MOV [RBP+0x50],RAX / CALL [RAX+0x38]`. GCC would pass the
+> trivially-copyable 8-byte class in the register itself. Every such parameter — virtual or not —
+> is declared `Object::InternalPtr<T>* p` in retail order (`Element::Update`, `DialogInstance::
+> OnElementEvent` slot 8 / `DialogController` slot 9 / `ComboDialog` slot 8, `UserInterface::
+> AddDialog`, `CloseDialog`, `BringDialogToFront`, `IsDialogOpen`, `ShowDialog`, `BeginToolTip`,
+> `EndToolTip`, `BeginDragDrop`, `PostEvent`, `Dialog::CreateElement`'s `ExternalPtr`…) and pinned
+> by a raw retail-order call in the unit test. This is the argument-side twin of B5-12's amendment
+> (return-side: GCC puts the retslot BEFORE `this`). `ExternalPtr<T>` arguments were measured as
+> bare register pointers in step 5 (`EdgeMesh::SetMaterials`); re-read the prologue per member
+> rather than assuming either way.
+
+> **CORRECTION to B6-4.1 (block A) and B6-4.3 (block B), 2026-09-25 — an ABSTRACT class cannot be
+> an alias target for an EMBEDDED POD.** Seven leaf element headers embed `Element base;` by value
+> and 60 `engine/types/ui/{Dialogs,Panels}.h` structs embed `DialogInstance base;` /
+> `DialogController base;`; a member of abstract type is ill-formed. So the old `UI::Element`
+> struct moved to `RtUI::Element` (cross-asserted field for field against the class), and the
+> engine headers became one-line aliases of the `RtUI::DialogInstance` / `RtUI::DialogController`
+> PODs, not of the classes. The alias-onto-the-class shape stays right for PODs nobody embeds.
+
+> **CLOSED (block A): §13 item 3 — `Element::UpdateState` is 0x30.** `??4UpdateState` (0x180035880)
+> copies six qwords; the ctor (0x180115600) leaves +0x0a/+0x0b, +0x14 and +0x21..+0x2f unwritten.
+> **CLOSED (block D): §13 item 2 — `sizeof(SpriteContext)` is 0x88** (block D commit `c11f740b`).
+
+> **FOUND (block A):** `ElementDescription` +0x40 is the ALIGNMENT, not an element type: the ctor
+> seeds it with 3 and `CreateInstance` (0x180115ad0) copies it into `Element::_alignment` (+0x30).
+> The header records this; the field is not renamed this step. **Name-hiding:** the non-virtual
+> `ElementDescription::CreateInstance(InternalPtr<Element>)` is hidden by every leaf's slot-8
+> override — qualify it from a leaf body.
+
+> **FOUND (block B):** `ToolTipDialog`'s 8 bytes past `DialogInstance` are two dwords at +0xb8/+0xbc
+> (copied by `??0ToolTipDialog(const&)` 0x18004d180, written by nothing else read). The ported
+> `ComboDialog::OnUpdate` called the root's `Contains` with `this` only; retail 0x180111c50 passes
+> `(mx, my, _ui)` — fixed as a faithful correction. `Dialog::GetController` returns
+> `Dialog::ElementController`, aliased to the 0x20 config entry from the export shapes (inferred).
+> `combodialog` +0x10 is `_ui`, +0xb8 is `_list` (old comments said otherwise). `DialogTimer`'s
+> `_remaining`/`_period` names are swapped per dialog.cpp's own notes; unrenamed.
+
+## 11–12. (reserved for the fragment passes and caller rounds)
 
 ## 13. NOT VERIFIED — read this before citing anything above
 
