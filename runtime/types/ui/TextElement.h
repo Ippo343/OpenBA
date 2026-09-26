@@ -56,7 +56,9 @@
 // both readings were right. See runtime/src/ui/textelement.cpp.
 
 #include <cstdint>
+#include <cstddef>
 #include "Element.h"
+#include "String.h"
 
 namespace UI { namespace TextElementOffsets {
 
@@ -81,3 +83,138 @@ constexpr int kParent         = offsetof(UI::Element, _parent); // 0x98, confirm
 constexpr uint32_t kDirtyBit  = UI::kElementFlagNeedsSizeCalc;
 
 } } // namespace UI::TextElementOffsets
+
+// ############################################################################
+// ENDGAME B.3 step 6 (block C3) — `UI::TextElement`, the REAL C++ class
+// ############################################################################
+//
+// PARENT `UI::Element` — READ (B36_SLOTS.md section 3), RECORDED, NOT USED:
+//     ?_TypeName@TextElement@UI@@CAPEBDXZ       @0x180041eb0 -> "TextElement"
+//     ?_ParentTypeName@TextElement@UI@@CAPEBDXZ @0x180041ec0 -> "Element"
+//
+// `??_7TextElement@UI@@6B@` @ 0x180156b80, TWELVE slots:
+//   [0] 0x1800422f0 vector deleting dtor (deleting_dtor.cpp row)
+//   [1] 0x180041ef0 TypeName · [2] 0x180041ed0 Type · [3] Element::Persist
+//   [4] 0x18011f060 ComputeSize · [5] 0x18011f120 ComputeLayout
+//   [6] 0x18011f280 Draw · [7..11] Element's, inherited
+//
+// SIZE 0x100 (`MOV EDX,0x100` at 0x18004230f). THE LAYOUT, every field a store
+// of `??0TextElement@UI@@QEAA@XZ` (0x18011eb80, read as DISASSEMBLY by block C3):
+//     +0xc0 qword 0      _font        ExternalPtr<UI::Font> (ComputeSize/Draw)
+//     +0xc8 qword 0      _params      Array<System::String> {data +0xc8,
+//     +0xd0 qword 0                   size +0xd0, capacity +0xd4} (SetParameter)
+//     +0xd8 qword 0      _text        UI::String {table +0xd8,
+//     +0xe0 dword -1                  index +0xe0}; +0xe4 NOT written
+//     +0xe8 WORD  0      _drawShadow +0xe8, _wrap +0xe9 (one store)
+//     +0xea ..+0xeb      NOT written
+//     +0xec dword 100    _lineSpacing
+//     +0xf0 dword -1     _maxWidth
+//     +0xf4 dword 0      _justify     UI::Font::Justify
+//     +0xf8 qword 0      _cachedText  System::String, owned by CacheText
+// then `CALL 0x18011ec10` (CacheText). The names are the ones this header's
+// banner and textelement.cpp already carried; `TextElementOffsets` above is now
+// asserted against these fields.
+//
+// ABSTRACT in C++ (slot 0 `= 0`); no real ctor: live TextElements are built by
+// the `??0TextElement` door (element_bodies_b5.cpp) and wear the MINTED table,
+// so every door delegates with a QUALIFIED call.
+// ############################################################################
+namespace UI {
+
+class Font;
+class Dialog;
+
+class TextElement : public Element {
+public:
+    // Retail's `Array<System::String>` header, spelled as its three fields so
+    // this class holds no non-trivial member (the resize goes through the
+    // hand-derived `kSpec_StringRefZ` row, textelement_cachetext.cpp).
+    struct ParamArray {
+        char**  _data;       // +0x00  System::String[] (each one char*)
+        int32_t _size;       // +0x08  SetParameter's bound
+        int32_t _capacity;   // +0x0c
+    };
+
+    // ---- the twelve slots (own ones declared) ------------------------------
+    Object::Base* DeletingDtor(unsigned flags) override = 0;     // [0] 0x1800422f0
+    const char* TypeName() const override;                       // [1] 0x180041ef0
+    uint32_t    Type() const override;                           // [2] 0x180041ed0
+    void ComputeSize() override;                                 // [4] 0x18011f060
+    void ComputeLayout(int32_t x, int32_t y,
+                       int32_t w, int32_t h) override;           // [5] 0x18011f120
+    void Draw(SpriteContext& context, uint8_t alpha) const override; // [6] 0x18011f280
+
+    // ---- ported non-virtual members (textelement_cachetext.cpp) -------------
+    // Both are `AEAA` (PRIVATE) in retail; PUBLIC here because their registered
+    // doors delegate to them (access is not part of the GCC ABI).
+    void CacheText();                                            // 0x18011ec10
+    void SetParameterCount();                                    // 0x18011e8e0
+
+    // ---- exported; the body is ANOTHER FILE'S door (widgets_layout.cpp) -----
+    // Declared, left undefined until the fragment pass moves them.
+    // ?SetParameter@TextElement@UI@@QEAAXHAEBVString@System@@@Z  0x18011e9b0
+    //   (`AEBV` — a const reference.)
+    void SetParameter(int32_t index, const System::String& value);
+    // ?SetText@TextElement@UI@@QEAAXVString@2@@Z  0x180042070. `VString@2@` is
+    //   the 0x10-byte UI::String BY VALUE, which MSVC passes by HIDDEN POINTER
+    //   (the RULE B6-11 shape): the retail register holds the ADDRESS of the
+    //   caller's copy, so the member takes the pointer, in retail order.
+    void SetText(const String* text);
+
+    // ?GetText@TextElement@UI@@QEBA?AVString@2@XZ  0x1800420b0 — RETSLOT in
+    // retail (`MOV RAX,[RCX+0xd8] / MOV [RDX],RAX / MOV RAX,[RCX+0xe0] /
+    // MOV [RDX+8],RAX / MOV RAX,RDX`): the whole body, so inline and by value.
+    String GetText() const { return _text; }
+
+    TextElement(const TextElement& src);                         // 0x1800420d0  not ported
+    TextElement& operator=(const TextElement& src);              // 0x1800421c0  not ported
+    static uint32_t TypeId();                                    // 0x180041ee0  not ported
+    static Object::Base* CreateNewObject();                      // 0x180041fe0  ui_factory_wave28.cpp door
+    static Object::Base* CreateInPlaceObject(void* place);       // 0x180042060  ui_factory_wave28.cpp door
+    static void* operator new(std::size_t bytes);                // 0x180041f00  not ported
+    static void* operator new(std::size_t bytes, void* place);   // 0x180041f70  not ported
+    static void  operator delete(void* p);                       // 0x180041f80  not ported
+
+protected:
+    TextElement() = default;   // NOT retail's 0x18011eb80 (element_bodies_b5.cpp door)
+    ~TextElement();            // 0x18011eda0 — empty; the door keeps the body
+
+private:
+    static const char* _TypeName();                              // 0x180041eb0 -> "TextElement"
+    static const char* _ParentTypeName();                        // 0x180041ec0 -> "Element"
+    static Object::BaseTypeInfo _typeInfo;                       // 0x1801faee8 (minted)
+
+public:
+    // ---- the 0x40 bytes TextElement adds ------------------------------------
+    Font*      _font;          // +0xc0  ExternalPtr<UI::Font>
+    ParamArray _params;        // +0xc8  Array<System::String>
+    String     _text;          // +0xd8  UI::String
+    uint8_t    _drawShadow;    // +0xe8
+    uint8_t    _wrap;          // +0xe9
+    uint8_t    _padEA[2];      // +0xea  never written
+    int32_t    _lineSpacing;   // +0xec  ctor 100
+    int32_t    _maxWidth;      // +0xf0  ctor -1
+    int32_t    _justify;       // +0xf4  UI::Font::Justify
+    char*      _cachedText;    // +0xf8  System::String (refcounted char*)
+};
+
+static_assert(sizeof(TextElement) == 0x100,
+              "UI::TextElement is 0x100 (MOV EDX,0x100 at 0x18004230f)");
+static_assert(alignof(TextElement) == 8, "UI::TextElement aligns to 8");
+static_assert(offsetof(TextElement, _font) == sizeof(Element),
+              "TextElement's own fields begin at the end of Element");
+static_assert(offsetof(TextElement, _font)        == 0xc0, "");
+static_assert(offsetof(TextElement, _params)      == TextElementOffsets::kParamArrayData, "");
+static_assert(offsetof(TextElement, _params) + offsetof(TextElement::ParamArray, _size)
+              == TextElementOffsets::kParamCount, "");
+static_assert(offsetof(TextElement, _params) + offsetof(TextElement::ParamArray, _capacity)
+              == TextElementOffsets::kParamCapacity, "");
+static_assert(offsetof(TextElement, _text)        == TextElementOffsets::kTextString, "");
+static_assert(offsetof(TextElement, _drawShadow)  == 0xe8, "");
+static_assert(offsetof(TextElement, _wrap)        == 0xe9, "");
+static_assert(offsetof(TextElement, _lineSpacing) == 0xec, "");
+static_assert(offsetof(TextElement, _maxWidth)    == 0xf0, "");
+static_assert(offsetof(TextElement, _justify)     == 0xf4, "");
+static_assert(offsetof(TextElement, _cachedText)  == TextElementOffsets::kCachedText, "");
+
+}  // namespace UI

@@ -4,47 +4,26 @@
 //
 // `??_7TextElement@UI@@6B@` (retail 0x180156b80):
 //
-//   0  vector deleting dtor  0x1800422f0  -> deleting_dtor.cpp row (this batch)
+//   0  vector deleting dtor  0x1800422f0  -> deleting_dtor.cpp row
 //   1  TypeName              0x180041ef0  here
 //   2  Type                  0x180041ed0  here
 //   4  ComputeSize           0x18011f060  here
 //   5  ComputeLayout         0x18011f120  here
 //   6  Draw                  0x18011f280  here
 //
-// plus ??1TextElement@UI@@UEAA@XZ (0x18011eda0), here.
+// plus ??1TextElement@UI@@UEAA@XZ (0x18011eda0), here (a DOOR body).
+//
+// ENDGAME B.3.6 block C3: the five slot bodies are `UI::TextElement` members
+// (runtime/types/ui/TextElement.h carries the layout, pinned from the ctor
+// 0x18011eb80). The registered doors delegate with a QUALIFIED call. Calls onto
+// `UI::Font` and `UI::SpriteContext` are direct member calls now (block D made
+// both real classes); the border and slot-4 dispatches are C++ virtual calls
+// (they read the object's MINTED table, exactly as retail's `CALL [RAX+..]`).
 //
 // NOT HERE, and deliberately:
-//   * `??0TextElement@UI@@QEAA@XZ` (0x18011eb80) — being ported for the
-//     cutover boot wall by the Description-B batch; this file reaches it by
-//     NAME nowhere and by address nowhere, so there is no second owner.
-//   * `?CacheText@TextElement@UI@@AEAAXXZ` (0x18011ec10) — already ported,
-//     runtime/src/ui/textelement_cachetext.cpp.
-//   * `?SetParameter@` / `?SetParameterCount@` / `?SetText@` — lane E's, in
-//     widgets_layout.cpp.
-//   * `?ComputeStringLayout@Font@UI@@` (0x180116fd0) and
-//     `?AddFont@SpriteContext@UI@@` (0x18011ccb0) — the UI-text agent's;
-//     reached by address.
-//
-// ---------------------------------------------------------------------------
-// LAYOUT. sizeof == 0x100 (deleting dtor `MOV EDX,0x100`).
-// runtime/types/ui/TextElement.h already pinned +0xC8/+0xD0/+0xD4 (the
-// Array<System::String> of format parameters), +0xD8 (the UI::String source
-// text) and +0xF8 (the cached System::String). This port adds the rest, from
-// ComputeSize (0x18011F060), Draw (0x18011F280) and ~TextElement (0x18011EDA0):
-//
-//   +0xC0  _font        ExternalPtr<UI::Font>.  TextElement.h says "+0xC0..0xC8
-//                       is read by neither of this lane's two functions and is
-//                       NOT claimed here (LabelElement.h's old table guessed
-//                       'font ptr'; that guess is unverified)". IT IS VERIFIED
-//                       NOW, and LabelElement.h's guess was right: ComputeSize
-//                       loads it into RCX for ComputeStringLayout and Draw
-//                       reads its +0x50/+0x54 line metrics.
-//   +0xE8  _drawShadow  bool — Draw emits a second, black, +1/+1 pass first
-//   +0xE9  _wrap        bool — ComputeStringLayout / AddFont argument 3
-//   +0xEC  _lineSpacing int32 — argument 4
-//   +0xF0  _maxWidth    int32 — argument 5, AND the clamp ComputeSize applies
-//                       to the measured width when it is positive
-//   +0xF4  _justify     UI::Font::Justify
+//   * `??0TextElement@UI@@QEAA@XZ` (0x18011eb80) — element_bodies_b5.cpp.
+//   * `?CacheText@` / `?SetParameterCount@` — textelement_cachetext.cpp.
+//   * `?SetParameter@` / `?SetText@` — widgets_layout.cpp's doors (fragment pass).
 //
 // ~TextElement releases the cached string at +0xF8 and then destroys the
 // parameter array at +0xC8 through 0x180010ab0 — the `~Array` variant that
@@ -53,149 +32,169 @@
 // That address is already registered by runtime/src/collection/array_destroy.cpp.
 // ============================================================================
 
-#include "widget_common.h"
-#include "../../types/ui/TextElement.h"
+#include <atomic>
+#include <cstddef>
+#include <cstdint>
 
-using namespace rtui;
+#include "element_common.h"   // rtuielem::AtomicExport / ComputeColor, ResolveAddr
+#include "../../types/ui/TextElement.h"
+#include "../../types/ui/Font.h"
+#include "../../types/ui/SpriteContext.h"
+#include "../../types/system/String.h"
 
 namespace {
 
-constexpr int kFont        = 0xC0;
-constexpr int kParams      = 0xC8;
-constexpr int kDrawShadow  = 0xE8;
-constexpr int kWrap        = 0xE9;
-constexpr int kLineSpacing = 0xEC;
-constexpr int kMaxWidth    = 0xF0;
-constexpr int kJustify     = 0xF4;
-constexpr int kCachedText  = 0xF8;
-
-static_assert(kParams     == UI::TextElementOffsets::kParamArrayData, "");
-static_assert(kCachedText == UI::TextElementOffsets::kCachedText, "");
-
-constexpr int kFontLineHeight = 0x50;
-constexpr int kFontBaseline   = 0x54;
+std::atomic<void*> g_typeInfoSlot{nullptr};   // RULE B6-5
 
 const uint8_t* TypeInfo() {
-    return RT_DATA_SLOT(const uint8_t*,
-                        "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A");
+    return static_cast<const uint8_t*>(rtuielem::AtomicExport(
+        g_typeInfoSlot, "?_typeInfo@TextElement@UI@@0VBaseTypeInfo@Object@@A"));
 }
 void* Vtable() { return RT_DATA_SLOT(void*, "??_7TextElement@UI@@6B@"); }
 
-// `?ComputeStringLayout@Font@UI@@QEBAXAEBVString@System@@_NHHW4Justify@12@AEAH3PEAULayout@12@@Z`
-using ComputeStringLayoutFn = void (*)(void* font, const void* str, uint8_t wrap,
-                                       int32_t lineSpacing, int32_t maxWidth,
-                                       int32_t justify, int32_t* w, int32_t* h,
-                                       void* layout);
+using ArrayDtorFn = void (*)(void* hdr);
+using ElementDtorFn = void (*)(void* self);
+using MemFreeFn = void (*)(void* p);
+
+// System::String is ONE char* (runtime/types/system/String.h): the member
+// fields are spelled `char*`, so the Font/SpriteContext calls see them as the
+// String they are.
+const System::String& AsString(char* const& field) {
+    return *reinterpret_cast<const System::String*>(&field);
+}
 
 }  // namespace
 
-extern "C" uint32_t RtUi_TextElement_Type(const void*) {
-    const uint8_t* ti = TypeInfo();
-    uint32_t v = 0; __builtin_memcpy(&v, ti, sizeof v); return v;
-}
-extern "C" const char* RtUi_TextElement_TypeName(const void*) {
-    const uint8_t* ti = TypeInfo();
-    const char* v = nullptr; __builtin_memcpy(&v, ti + 8, sizeof v); return v;
-}
+namespace UI {
 
-// ??1TextElement@UI@@UEAA@XZ   0x18011eda0
-extern "C" void RtUi_TextElement_Dtor(void* self) {
-    PTR(self, 0x00) = Vtable();
-    ReleaseStringField(self, kCachedText);
-    RtAddr<ArrayDtorFn>(0x180010ab0ull)(B(self, kParams));
-    ElementDtor(self);
-}
+// slot 2 — 0x180041ed0 / slot 1 — 0x180041ef0: the minted BaseTypeInfo's first
+// dword and its +8 name. TypeName is the key function (GCC emits the table here;
+// nothing stamps it).
+uint32_t TextElement::Type() const { return rtuielem::TypeIdOf(TypeInfo()); }
+const char* TextElement::TypeName() const { return rtuielem::TypeNameOf(TypeInfo()); }
+
+// Non-virtual, EMPTY: the dtor door below keeps retail's body.
+TextElement::~TextElement() {}
 
 // slot 4 — 0x18011f060
-extern "C" void RtUi_TextElement_ComputeSize(void* self) {
-    if ((U32(self, kElFlags) & kFlagNeedsSizeCalc) == 0) return;
+void TextElement::ComputeSize() {
+    if ((_flags & kElementFlagNeedsSizeCalc) == 0) return;
 
-    RtAddr<ComputeStringLayoutFn>(0x180116fd0ull)(
-        PTR(self, kFont), B(self, kCachedText), U8(self, kWrap),
-        I32(self, kLineSpacing), I32(self, kMaxWidth), I32(self, kJustify),
-        reinterpret_cast<int32_t*>(B(self, kElLayoutWidth)),
-        reinterpret_cast<int32_t*>(B(self, kElLayoutHeight)),
-        nullptr);
+    _font->ComputeStringLayout(AsString(_cachedText), _wrap != 0, _lineSpacing,
+                               _maxWidth, _justify, _layoutWidth, _layoutHeight,
+                               nullptr);
 
-    if (I32(self, kElLayoutWidth)  < I32(self, kElMinWidth))
-        I32(self, kElLayoutWidth)  = I32(self, kElMinWidth);
-    if (I32(self, kElLayoutHeight) < I32(self, kElMinHeight))
-        I32(self, kElLayoutHeight) = I32(self, kElMinHeight);
+    if (_layoutWidth  < _minWidth)  _layoutWidth  = _minWidth;
+    if (_layoutHeight < _minHeight) _layoutHeight = _minHeight;
 
-    const int32_t cap = I32(self, kMaxWidth);
-    if (cap > 0 && cap < I32(self, kElLayoutWidth))
-        I32(self, kElLayoutWidth) = cap;
+    const int32_t cap = _maxWidth;
+    if (cap > 0 && cap < _layoutWidth) _layoutWidth = cap;
 
-    U32(self, kElFlags) &= ~kFlagNeedsSizeCalc;
+    _flags &= ~kElementFlagNeedsSizeCalc;
 }
 
 // slot 5 — 0x18011f120
-extern "C" void RtUi_TextElement_ComputeLayout(void* self, int32_t x, int32_t y,
-                                               int32_t right, int32_t bottom) {
-    if (void* border = PTR(self, kElBorder))
-        reinterpret_cast<ComputeLayoutSlotFn>(VTable(border)[kVtComputeLayout / 8])(
-            border, x, y, right, bottom);
+void TextElement::ComputeLayout(int32_t x, int32_t y, int32_t right, int32_t bottom) {
+    if (Element* border = static_cast<Element*>(_border))
+        border->ComputeLayout(x, y, right, bottom);            // virtual, slot 5
 
-    reinterpret_cast<ComputeSizeSlotFn>(VTable(self)[kVtComputeSize / 8])(self);
+    ComputeSize();                                             // virtual, slot 4
 
-    int32_t w = I32(self, kElLayoutWidth);
-    int32_t h = I32(self, kElLayoutHeight);
-    const int32_t align = I32(self, kElAlignment);
+    int32_t w = _layoutWidth;
+    int32_t h = _layoutHeight;
+    const int32_t align = _alignment;
 
     if (right  < w + x) x = right  - w;
     if (bottom < h + y) y = bottom - h;
 
-    int32_t px = x + I32(self, kElLeftPad);
-    int32_t py = y + I32(self, kElTopPad);
-    const int32_t aw = (right  - I32(self, kElRightPad))  - px;
-    const int32_t ah = (bottom - I32(self, kElBottomPad)) - py;
+    int32_t px = x + _leftPad;
+    int32_t py = y + _topPad;
+    const int32_t aw = (right  - _rightPad)  - px;
+    const int32_t ah = (bottom - _bottomPad) - py;
 
-    if ((U32(self, kElFlags) & kFlagStretchX) != 0) w = aw;
-    if ((U32(self, kElFlags) & kFlagStretchY) != 0) h = ah;
+    if ((_flags & kElementFlagAlignArg1) != 0) w = aw;
+    if ((_flags & kElementFlagAlignArg2) != 0) h = ah;
 
     switch (align) {
         case 1: case 4: case 7: px = ((aw >> 1) - (w >> 1)) + px; break;
-        case 2: case 5: case 8: px = (right - I32(self, kElRightPad)) - w; break;
+        case 2: case 5: case 8: px = (right - _rightPad) - w; break;
         default: break;
     }
     if (align > 2) {
         if (align < 6)      py = ((ah >> 1) - (h >> 1)) + py;
-        else if (align < 9) py = (bottom - I32(self, kElBottomPad)) - h;
+        else if (align < 9) py = (bottom - _bottomPad) - h;
     }
 
-    I32(self, kElLayoutRight)  = px + w;
-    I32(self, kElLayoutTop)    = py;
-    I32(self, kElLayoutLeft)   = px;
-    I32(self, kElLayoutBottom) = py + h;
+    _layoutRight  = px + w;
+    _layoutTop    = py;
+    _layoutLeft   = px;
+    _layoutBottom = py + h;
 }
 
 // slot 6 — 0x18011f280
-extern "C" void RtUi_TextElement_Draw(const void* self, void* ctx, uint8_t alpha) {
-    void* me = const_cast<void*>(self);
-    if (void* border = PTR(me, kElBorder))
-        reinterpret_cast<DrawSlotFn>(VTable(border)[kVtDraw / 8])(border, ctx, alpha);
+void TextElement::Draw(SpriteContext& ctx, uint8_t alpha) const {
+    if (Element* border = static_cast<Element*>(_border))
+        border->Draw(ctx, alpha);                              // virtual, slot 6
 
-    const uint32_t raw = U32(me, kElColor);
-    if ((U32(me, kElFlags) & kFlagDimColor) != 0) alpha >>= 1;
+    const uint32_t raw = _color;
+    if ((_flags & kElementFlagDimColor) != 0) alpha >>= 1;
 
-    void* font = PTR(me, kFont);
-    const int32_t baseline = I32(font, kFontLineHeight) - I32(font, kFontBaseline);
+    Font* font = _font;
+    const int32_t baseline = font->_lineHeight - font->_baseLine;
 
-    if (U8(me, kDrawShadow) != 0) {
-        RtAddr<AddFontFn>(0x18011ccb0ull)(
-            ctx, font, B(me, kCachedText), U8(me, kWrap),
-            I32(me, kLineSpacing), I32(me, kJustify), I32(me, kMaxWidth),
-            I32(me, kElLayoutLeft) + 1,
-            I32(me, kElLayoutTop) + 1 + baseline,
-            0xff000000u);
+    if (_drawShadow != 0) {
+        ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+                    _lineSpacing, _justify, _maxWidth,
+                    _layoutLeft + 1, _layoutTop + 1 + baseline,
+                    0xff000000u);
     }
 
-    RtAddr<AddFontFn>(0x18011ccb0ull)(
-        ctx, font, B(me, kCachedText), U8(me, kWrap),
-        I32(me, kLineSpacing), I32(me, kJustify), I32(me, kMaxWidth),
-        I32(me, kElLayoutLeft),
-        baseline + I32(me, kElLayoutTop),
-        ModulateColor(raw, alpha));
+    ctx.AddFont(Object::ExternalPtr<Font>(font), AsString(_cachedText), _wrap != 0,
+                _lineSpacing, _justify, _maxWidth,
+                _layoutLeft, baseline + _layoutTop,
+                rtuielem::ComputeColor(raw, alpha));
+}
+
+}  // namespace UI
+
+// ??1TextElement@UI@@UEAA@XZ   0x18011eda0 — a DOOR BODY (no real dtor).
+extern "C" void RtUi_TextElement_Dtor(void* selfv) {
+    UI::TextElement* self = reinterpret_cast<UI::TextElement*>(selfv);   // B.3.6 bridge
+    *reinterpret_cast<void**>(selfv) = Vtable();
+
+    char*& cached = self->_cachedText;                         // retail's asymmetric release
+    if (cached != nullptr) {
+        int32_t* rc = reinterpret_cast<int32_t*>(cached - 4);
+        if (--*rc == 0) {
+            cached = cached - 8;
+            rtuielem::RtAddr<MemFreeFn>(0x1800c7ad0ull)(cached);
+        } else {
+            cached = nullptr;
+        }
+    }
+    rtuielem::RtAddr<ArrayDtorFn>(0x180010ab0ull)(&self->_params);
+    rtuielem::RtAddr<ElementDtorFn>(0x1801161a0ull)(selfv);    // ??1Element
+}
+
+// ============================================================================
+// The registered doors — one QUALIFIED delegation each.
+// ============================================================================
+extern "C" uint32_t RtUi_TextElement_Type(const void* self) {
+    return reinterpret_cast<const UI::TextElement*>(self)->UI::TextElement::Type();   // B.3.6 bridge
+}
+extern "C" const char* RtUi_TextElement_TypeName(const void* self) {
+    return reinterpret_cast<const UI::TextElement*>(self)->UI::TextElement::TypeName();   // B.3.6 bridge
+}
+extern "C" void RtUi_TextElement_ComputeSize(void* self) {
+    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::ComputeSize();   // B.3.6 bridge
+}
+extern "C" void RtUi_TextElement_ComputeLayout(void* self, int32_t x, int32_t y,
+                                               int32_t right, int32_t bottom) {
+    reinterpret_cast<UI::TextElement*>(self)->UI::TextElement::ComputeLayout(x, y, right, bottom);   // B.3.6 bridge
+}
+extern "C" void RtUi_TextElement_Draw(const void* self, void* ctx, uint8_t alpha) {
+    reinterpret_cast<const UI::TextElement*>(self)->UI::TextElement::Draw(   // B.3.6 bridge
+        *static_cast<UI::SpriteContext*>(ctx), alpha);
 }
 
 // ============================================================================
