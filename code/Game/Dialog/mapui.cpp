@@ -60,9 +60,9 @@ void MapUI_SetupImage(void* self, void* imageBuffer, void** spriteSheetOut,
     if (!imageBuffer || !fn_MemAlloc || !g_pMemAllocSingleton ||
         !fn_MaterialInstance_Ctor || !fn_SpriteSheet_Ctor) {
         if (trc) printf("[SetupImg] GUARD-RETURN elem=%s imgBuf=%p MemAlloc=%p Alloc*=%p "
-               "MatCtor=%p SSCtor=%p FindElem=%p\n", elementName, imageBuffer,
+               "MatCtor=%p SSCtor=%p\n", elementName, imageBuffer,
                (void*)fn_MemAlloc, g_pMemAllocSingleton, (void*)fn_MaterialInstance_Ctor,
-               (void*)fn_SpriteSheet_Ctor, (void*)fn_FindElement);
+               (void*)fn_SpriteSheet_Ctor);
         *materialOut = nullptr;
         *spriteSheetOut = nullptr;
         return;

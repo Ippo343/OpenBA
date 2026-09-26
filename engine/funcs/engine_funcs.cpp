@@ -65,15 +65,6 @@ fn_Loader_Load_t fn_Loader_Load = nullptr;
 // Application::Application::SleepThread
 fn_App_SleepThread_t fn_App_SleepThread = nullptr;
 
-// UI::UserInterface::Update
-fn_UI_Update_t fn_UI_Update = nullptr;
-
-// UI::UserInterface::Draw
-fn_UI_Draw_t fn_UI_Draw = nullptr;
-
-// UI::UserInterface::CloseDialog
-fn_UI_CloseDialog_t fn_UI_CloseDialog = nullptr;
-
 // PostDraw/PostUpdate callback array push helpers
 fn_DynArrayPush_t fn_PostDrawPush = nullptr;
 fn_DynArrayPush_t fn_PostUpdatePush = nullptr;
@@ -117,13 +108,8 @@ fn_ParseValue_t fn_ParseValue = nullptr;
 // Persistence
 void** g_pPersistenceSingleton = nullptr;
 
-// UI infrastructure (existing)
-fn_DialogController_Dtor_t fn_DialogController_Dtor = nullptr;
 fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor = nullptr;
 fn_MemFreeStatic_t fn_MemFreeStatic = nullptr;
-fn_FindElement_t fn_FindElement = nullptr;
-fn_TextElement_SetParameter_t fn_TextElement_SetParameter = nullptr;
-fn_Element_GetUserData_t fn_Element_GetUserData = nullptr;
 fn_InternalBasePtr_Ctor_t fn_InternalBasePtr_Ctor = nullptr;
 fn_KeyMap_GetInputForId_t fn_KeyMap_GetInputForId = nullptr;
 fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId = nullptr;
@@ -131,68 +117,6 @@ fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId = nullptr;
 // ============================================================
 // UI Widget Functions (Phase A1)
 // ============================================================
-
-// Element
-fn_Element_SetFlagsOnOff_t fn_Element_SetFlagsOnOff = nullptr;
-fn_Element_SetElementId_t fn_Element_SetElementId = nullptr;
-fn_Element_SetName_t fn_Element_SetName = nullptr;
-fn_Element_SetToolTip_t fn_Element_SetToolTip = nullptr;
-fn_Element_SetToolTipString_t fn_Element_SetToolTipString = nullptr;
-fn_Element_Child_t fn_Element_Child = nullptr;
-fn_Element_ChildCount_t fn_Element_ChildCount = nullptr;
-fn_Element_FindElementType_t fn_Element_FindElementType = nullptr;
-fn_Element_RemoveChildren_t fn_Element_RemoveChildren = nullptr;
-fn_Element_AddChild_t fn_Element_AddChild = nullptr;
-
-// DialogInstance
-fn_DialogInstance_FindElement_t fn_DialogInstance_FindElement = nullptr;
-fn_Element_FindElement_t fn_Element_FindElement = nullptr;
-fn_DialogController_GetContainer_t fn_DialogController_GetContainer = nullptr;
-fn_DialogInstance_GetController_t fn_DialogInstance_GetController = nullptr;
-fn_DialogInstance_FindElementType_t fn_DialogInstance_FindElementType = nullptr;
-fn_DialogInstance_SetFlagsOnOff_t fn_DialogInstance_SetFlagsOnOff = nullptr;
-
-// ComboElement
-fn_ComboElement_AddItem_t fn_ComboElement_AddItem = nullptr;
-fn_ComboElement_SetCurrentItem_t fn_ComboElement_SetCurrentItem = nullptr;
-fn_ComboElement_GetItemCount_t fn_ComboElement_GetItemCount = nullptr;
-fn_ComboElement_GetCurrentItem_t fn_ComboElement_GetCurrentItem = nullptr;
-fn_ComboElement_GetItemData_t fn_ComboElement_GetItemData = nullptr;
-fn_ComboElement_RemoveAllItems_t fn_ComboElement_RemoveAllItems = nullptr;
-
-// ProgressElement
-fn_ProgressElement_SetProgressTextParameter_t fn_ProgressElement_SetProgressTextParameter = nullptr;
-fn_ProgressElement_SetMaximumValue_t fn_ProgressElement_SetMaximumValue = nullptr;
-fn_ProgressElement_SetCurrentValue_t fn_ProgressElement_SetCurrentValue = nullptr;
-
-// TableElement
-fn_TableElement_SetSize_t fn_TableElement_SetSize = nullptr;
-fn_TableElement_SetChild3_t fn_TableElement_SetChild3 = nullptr;
-fn_TableElement_SetChild2_t fn_TableElement_SetChild2 = nullptr;
-fn_TableElement_GetRowCount_t fn_TableElement_GetRowCount = nullptr;
-fn_TableElement_GetColumnCount_t fn_TableElement_GetColumnCount = nullptr;
-
-// NumberEditElement
-fn_NumberEditElement_SetValue_t fn_NumberEditElement_SetValue = nullptr;
-fn_NumberEditElement_SetMinMax_t fn_NumberEditElement_SetMinMax = nullptr;
-fn_NumberEditElement_GetValue_t fn_NumberEditElement_GetValue = nullptr;
-
-// NumberElement
-fn_NumberElement_SetValueInt_t fn_NumberElement_SetValueInt = nullptr;
-fn_NumberElement_SetValueFloat_t fn_NumberElement_SetValueFloat = nullptr;
-
-// SpinnerElement
-fn_SpinnerElement_SetElementId_t fn_SpinnerElement_SetElementId = nullptr;
-fn_SpinnerElement_SetValue_t fn_SpinnerElement_SetValue = nullptr;
-fn_SpinnerElement_SetMinMax_t fn_SpinnerElement_SetMinMax = nullptr;
-fn_SpinnerElement_GetValue_t fn_SpinnerElement_GetValue = nullptr;
-fn_SpinnerElement_GetMaxValue_t fn_SpinnerElement_GetMaxValue = nullptr;
-fn_SpinnerElement_SetIncrement_t fn_SpinnerElement_SetIncrement = nullptr;
-fn_SpinnerElement_IsActive_t fn_SpinnerElement_IsActive = nullptr;
-
-// PageElement
-fn_PageElement_GetActivePage_t fn_PageElement_GetActivePage = nullptr;
-fn_PageElement_SetActivePage_t fn_PageElement_SetActivePage = nullptr;
 
 // CheckboxElement type ID (exref)
 uint32_t* g_TypeId_CheckboxElement = nullptr;
@@ -214,16 +138,6 @@ uint32_t* g_TypeId_ControlComponent = nullptr;
 // EntityTrackingSet_BST_Delete (AVL node deleter, sub-function of _Remove)
 fn_EntityTrackingSet_BST_Delete_t fn_EntityTrackingSet_BST_Delete = nullptr;
 
-// ImageElement
-fn_ImageElement_SetSprite_t fn_ImageElement_SetSprite = nullptr;
-fn_ImageElement_SetWidthHeight_t fn_ImageElement_SetWidthHeight = nullptr;
-
-// LabelElement
-fn_LabelElement_SetSprite_t fn_LabelElement_SetSprite = nullptr;
-
-// TextElement
-fn_TextElement_SetText_t fn_TextElement_SetText = nullptr;
-fn_Dialog_CreateElement_t fn_Dialog_CreateElement = nullptr;
 fn_GetInputKeyName_t fn_GetInputKeyName = nullptr;
 
 // ============================================================
@@ -328,10 +242,6 @@ fn_OrchardGetGrowth_t fn_OrchardGetGrowth = nullptr;
 // ============================================================
 fn_ImageBuffer_Ctor_t fn_ImageBuffer_Ctor = nullptr;
 
-// ============================================================
-// Phase F: Dialog/UI Runtime functions
-// ============================================================
-fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation = nullptr;
 fn_SaveLoad_Dtor_t fn_SaveLoad_Dtor = nullptr;
 fn_SaveLoad_GetOperation_t fn_SaveLoad_GetOperation = nullptr;
 void** g_pSaveLoadSingleton = nullptr;
@@ -341,20 +251,10 @@ fn_SaveLoad_SetOperation_t fn_SaveLoad_SetOperation = nullptr;
 fn_SaveLoad_GetSaveCount_t fn_SaveLoad_GetSaveCount = nullptr;
 fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo = nullptr;
 fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState = nullptr;
-fn_Sprite_IsValid_t fn_Sprite_IsValid = nullptr;
-fn_Sprite_Width_t fn_Sprite_Width = nullptr;
-fn_Sprite_Height_t fn_Sprite_Height = nullptr;
-fn_UI_Play_t fn_UI_Play = nullptr;
 fn_DateTime_AsString_t fn_DateTime_AsString = nullptr;
 // fn_SaveLoadDialog_PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
-fn_EditElement_SetText_t fn_EditElement_SetText = nullptr;
-fn_EditElement_SetText_SysStr_t fn_EditElement_SetText_SysStr = nullptr;
 fn_Input_Device_Released_t fn_Input_Device_Released = nullptr;
 void** g_pInputDeviceSingleton = nullptr;
-fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite = nullptr;
-fn_LabelElement_GetSprite_t fn_LabelElement_GetSprite = nullptr;
-fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName = nullptr;
-fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter = nullptr;
 fn_Audio_Scene_Pause_t fn_Audio_Scene_Pause = nullptr;
 fn_Audio_Scene_Update_t fn_Audio_Scene_Update = nullptr;
 // fn_ScenarioDialog_LoadSelected — REMOVED, now reimplemented in scenariodialog.cpp
@@ -400,7 +300,6 @@ fn_AVL_Rebalance_0x38_t fn_AVL_Rebalance_0x38 = nullptr;
 // fn_MapParamsDialog_OnOk — inlined in mapparamsdialog.cpp
 // fn_MapParamsDialog_OnNewName — inlined in mapparamsdialog.cpp
 // fn_GameWorld_GetMapName — inlined in mapparamsdialog.cpp
-fn_Element_SetUserData_t fn_Element_SetUserData = nullptr;
 // fn_UpgradeUI_Serialize — inlined as UpgradeUI_Serialize in upgradeui.cpp
 // fn_UpgradeUI_OnRemove — inlined as UpgradeUI_OnRemove in upgradeui.cpp
 fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4 = nullptr;
@@ -411,7 +310,6 @@ fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4 = nullptr;
 // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
 // ============================================================
 fn_GoalList_GetGoalCount_t fn_GoalList_GetGoalCount = nullptr;
-fn_Dialog_GetTemplate_t fn_Dialog_GetTemplate = nullptr;
 fn_Goal_GetText_t fn_Goal_GetText = nullptr;
 fn_Achievement_GetTitle_t fn_Achievement_GetTitle = nullptr;
 fn_Achievement_GetDescription_t fn_Achievement_GetDescription = nullptr;
@@ -423,14 +321,7 @@ fn_AchievementManager_GetAchievement_t fn_AchievementManager_GetAchievement = nu
 // fn_ScenarioDialog_ArrayPush — now inline as ScenarioDialog_ArrayPush_Impl in scenariodialog.cpp
 fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount = nullptr;
 uint32_t* g_TypeId_Scenario = nullptr;
-fn_Element_SetPadding_t fn_Element_SetPadding = nullptr;
 // fn_EventNotifyDialog_ArrayRemove — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
-fn_Sprite_Ctor_t fn_Sprite_Ctor = nullptr;
-fn_UIString_Ctor_t fn_UIString_Ctor = nullptr;
-fn_UIString_ToSystemString_t fn_UIString_ToSystemString = nullptr;
-fn_UI_AddDialog_t fn_UI_AddDialog = nullptr;
-fn_Element_GetPaddedSize_t fn_Element_GetPaddedSize = nullptr;
-fn_RadioElement_SetActiveRadio_t fn_RadioElement_SetActiveRadio = nullptr;
 fn_ToolbarDialog_Ctor_t fn_ToolbarDialog_Ctor = nullptr;
 fn_Toolbar_ShowGroup_t fn_Toolbar_ShowGroup = nullptr;
 fn_Toolbar_Utility_t fn_Toolbar_Utility = nullptr;
@@ -441,7 +332,6 @@ uintptr_t g_ToolUI_ChildDialog_Vtable = 0; // PTR_FUN_14015f5a0
 // fn_Factory_CreateObject, g_TypeId_ToolController, g_TypeId_ToolSetting — defined above (entityui section)
 uint32_t* g_TypeId_ToolbarExternal = nullptr;
 uint32_t* g_TypeId_ToolbarItem = nullptr;
-fn_RadioElement_FindCheckBoxes_t fn_RadioElement_FindCheckBoxes = nullptr;
 fn_FindDialogByControllerType_t fn_FindDialogByControllerType = nullptr;
 // fn_Toolbar_FindEntity — inlined as Toolbar_FindEntity_Impl in toolbardialog.cpp
 // fn_Toolbar_CenterOnEntity — inlined as Toolbar_CenterOnEntity_Impl in engine_funcs.h
@@ -461,22 +351,12 @@ fn_External_Dtor_t fn_External_Dtor = nullptr;
 
 // Phase F Wave 2C: EntityUI::Slot8, ResidenceUI::Slot7, EventNotifyDialog::Slot7
 fn_KeyMap_GetValue_t fn_KeyMap_GetValue = nullptr;
-fn_UI_GetFirstContainedDialog_t fn_UI_GetFirstContainedDialog = nullptr;
 fn_EditTool_SelectEntity_t fn_EditTool_SelectEntity = nullptr;
 float* g_pAgeMultiplier = nullptr;
 float* g_pNotifyTimerDuration = nullptr;
 fn_Time_Ctor_Float_t fn_Time_Ctor_Float = nullptr;
-fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry = nullptr;
-fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor = nullptr;
-fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor = nullptr;
 // fn_Dialog_GetReference removed — see engine_funcs.h (Wave 7 lane B)
 fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect = nullptr;
-fn_StringTable_GetText_t fn_StringTable_GetText = nullptr;
-fn_DocumentTextElement_GetLink_t fn_DocumentTextElement_GetLink = nullptr;
-fn_DocumentTextElement_SetText_UIString_t fn_DocumentTextElement_SetText_UIString = nullptr;
-fn_DocumentTextElement_SetText_t fn_DocumentTextElement_SetText = nullptr;
-fn_ContainerElement_SetOffsets_t fn_ContainerElement_SetOffsets = nullptr;
-fn_UIString_Ctor_Index_t fn_UIString_Ctor_Index = nullptr;
 uint32_t* g_TypeId_StringTable = nullptr;
 uint32_t* g_TypeId_HelpFirstElem = nullptr;
 uint32_t* g_TypeId_HelpComboElem = nullptr;
@@ -502,8 +382,6 @@ uint32_t* g_TypeId_TerrainGenerator = nullptr;
 // fn_OptionsDialog_PopulateInputBindList — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
 // fn_OptionsDialog_OnInputBindClick — REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp
 
-// ShowDialog, DeletePtr, KeyMap input functions, dialog ctors
-fn_UI_ShowDialog_t fn_UI_ShowDialog = nullptr;
 fn_InternalBasePtr_DeletePtr_t fn_InternalBasePtr_DeletePtr = nullptr;
 fn_KeyMap_SetInput_t fn_KeyMap_SetInput = nullptr;
 fn_KeyMap_ClearInput2_t fn_KeyMap_ClearInput2 = nullptr;
@@ -517,8 +395,6 @@ fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor = nullptr;
 
 void** g_pAudioConfigSingleton = nullptr;
 void** g_pVideoConfigSingleton = nullptr;
-fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor = nullptr;
-fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab = nullptr;
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 int32_t** g_pGameSettingsPtr = nullptr;
 
@@ -530,18 +406,11 @@ int32_t** g_pGameSettingsPtr = nullptr;
 // fn_MapUI_HandleClick — now MapUI_HandleClick()
 fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround = nullptr;
 
-// ToolUI support
-fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft = nullptr;
-fn_UI_BringDialogToFront_t fn_UI_BringDialogToFront = nullptr;
 // fn_UIDesc_AddControllers removed — reimplemented as UIDesc_AddControllers_Impl()
 uint32_t* g_TypeId_UIDescription = nullptr;
-fn_TabElement_AddTab_t fn_TabElement_AddTab = nullptr;
-fn_DialogInstance_AddControllerTab_t fn_DialogInstance_AddControllerTab = nullptr;
-fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6 = nullptr;
 
 // DragTool support
 fn_KeyMap_Released_t fn_KeyMap_Released = nullptr;
-fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot = nullptr;
 
 // Player/Tool module — shared engine APIs
 fn_SceneAddObject_t fn_SceneAddObject = nullptr;
@@ -561,8 +430,6 @@ fn_TileValidityCheck_t fn_TileValidityCheck = nullptr;
 fn_FencedPlacementParams_t fn_FencedPlacementParams = nullptr;
 fn_HighlightRemove_t fn_HighlightRemove = nullptr;
 
-// ModDetailsDialog support
-fn_Element_Hide_t fn_Element_Hide = nullptr;
 fn_Configuration_GetVersionString_t fn_Configuration_GetVersionString = nullptr;
 // ModDetails_StringArrayPush — now static inline in moddetailsdialog.cpp
 
@@ -600,10 +467,7 @@ void** g_GoalDialog_Vtable = nullptr;
 
 // ModDialog support
 void** g_ppModificationSingleton = nullptr;
-fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent = nullptr;
 // fn_DialogInstance_AddController removed — see engine_funcs.h (Wave 7 lane B)
-fn_DialogInstance_OnUpdateLayout_t fn_DialogInstance_OnUpdateLayout = nullptr;
-fn_DialogInstance_OnUpdate_t fn_DialogInstance_OnUpdate = nullptr;
 // fn_ModDialog_RefreshDisplay — REPLACED with static ModDialog_RefreshDisplay_Impl() in moddialog.cpp
 // fn_ModDialog_ToggleMod — REPLACED with inline impl in moddialog.cpp
 // fn_ModDialog_MoveToTop — REPLACED with inline impl in moddialog.cpp
@@ -634,12 +498,6 @@ void** g_pGameSingleton = nullptr;
 // GroupRating helpers
 fn_GroupRating_Init_t fn_GroupRating_Init = nullptr;
 fn_GroupRating_Update_t fn_GroupRating_Update = nullptr;
-// GraphElement functions
-fn_GraphElement_RemoveGraphs_t fn_GraphElement_RemoveGraphs = nullptr;
-fn_GraphElement_AddGraph_t fn_GraphElement_AddGraph = nullptr;
-fn_GraphElement_AddGraphPoint_t fn_GraphElement_AddGraphPoint = nullptr;
-// StringTable
-fn_StringTable_GetCount_t fn_StringTable_GetCount = nullptr;
 // Production stat query
 fn_QueryProductionStat_t fn_QueryProductionStat = nullptr;
 // Citizen assignment (spinner)
@@ -664,8 +522,6 @@ fn_InventorySort_Desc_t fn_InventorySort_Desc = nullptr;
 uint32_t* g_TypeId_EditElement = nullptr;
 uint32_t* g_TypeId_CaptureBoxElement = nullptr;
 
-// TradeUI support
-fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc = nullptr;
 uint32_t* g_TypeInfo_ValueDescription = nullptr;
 uint32_t* g_TypeInfo_TradeDescription = nullptr;
 fn_DynArray_Clear_0x18_t fn_DynArray_Clear_0x18 = nullptr;
@@ -700,9 +556,6 @@ fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate = nullptr;
 // --- ModDialog::Slot4 support ---
 fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor = nullptr;
 fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor = nullptr;
-fn_SpriteSheet_AddSpriteInfo_t fn_SpriteSheet_AddSpriteInfo = nullptr;
-fn_SpriteSheet_SetSpriteInfo_t fn_SpriteSheet_SetSpriteInfo = nullptr;
-fn_Sprite_Ctor_ByIndex_t fn_Sprite_Ctor_ByIndex = nullptr;
 uintptr_t g_ModDialog_MaterialInstanceVtable = 0;
 uintptr_t g_ModDialog_SpriteSheetVtable = 0;
 fn_ModDialog_ArrayPush_t fn_ModDialog_ArrayPush = nullptr;
@@ -710,8 +563,6 @@ uint32_t* g_TypeId_BrowserController = nullptr;
 uint32_t* g_TypeId_Material = nullptr;
 float* g_fUVScale = nullptr;
 fn_Weather_ResetTime_t fn_Weather_ResetTime = nullptr;
-fn_UI_SetCursor_t fn_UI_SetCursor = nullptr;
-fn_UI_SetFullscreenFade_t fn_UI_SetFullscreenFade = nullptr;
 fn_DebugUI_SetDayLighting_t fn_DebugUI_SetDayLighting = nullptr;
 uint32_t* g_TypeId_DiseaseDescription = nullptr;
 uint32_t* g_TypeId_DrawableType = nullptr;
@@ -799,7 +650,6 @@ void** g_MenuDialogLoopT_Vtable = nullptr;
 // --- SpriteCaptureUI helpers ---
 fn_Input_Device_GetValue_t fn_Input_Device_GetValue = nullptr;
 fn_Input_Device_Pressed_t  fn_Input_Device_Pressed  = nullptr;
-fn_UI_EndSpriteCapture_t   fn_UI_EndSpriteCapture   = nullptr;
 void** g_pFileSystemSingleton = nullptr;
 
 // ============================================================
@@ -835,8 +685,6 @@ fn_MainLoop_OnVideoRestart_t fn_MainLoop_OnVideoRestart = nullptr;
 fn_MainLoop_SetNextLoop_t fn_MainLoop_SetNextLoop = nullptr;
 fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor = nullptr;
 void** g_pMainLoopSingleton = nullptr;
-fn_UI_EnableCursor_t fn_UI_EnableCursor = nullptr;
-fn_UI_SetFullscreenFadeSprite_t fn_UI_SetFullscreenFadeSprite = nullptr;
 fn_SaveGameSettings_t fn_SaveGameSettings = nullptr;
 fn_ReadGameSettings_t fn_ReadGameSettings = nullptr;
 fn_ApplyKeyMapToUI_t fn_ApplyKeyMapToUI = nullptr;
@@ -844,24 +692,11 @@ fn_UpdateAutoSaveTimer_t fn_UpdateAutoSaveTimer = nullptr;
 uint32_t* g_TypeId_AutoSaveDialogType = nullptr;
 fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings = nullptr;
 
-// CaptureBoxElement / FrustumOutlineElement support
-fn_ElementDescription_GetFileVersion_t fn_ElementDescription_GetFileVersion = nullptr;
-fn_Element_Draw_t fn_Element_Draw = nullptr;
-fn_SpriteContext_AddLine_t fn_SpriteContext_AddLine = nullptr;
-fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4 = nullptr;
-fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP = nullptr;
 fn_FrustumProject_t fn_FrustumProject = nullptr;
 
-fn_ElementDescription_Serialize_t fn_ElementDescription_Serialize = nullptr;
 fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor = nullptr;
 fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor = nullptr;
-fn_ElementDescription_CreateInstance_t fn_ElementDescription_CreateInstance = nullptr;
 fn_Element_Ctor_t fn_Element_Ctor = nullptr;
-fn_Element_Dtor_t fn_Element_Dtor = nullptr;
-fn_Element_ComputeLayout_t fn_Element_ComputeLayout = nullptr;
-fn_Element_GetAlignedPosition_t fn_Element_GetAlignedPosition = nullptr;
-fn_Sprite_Sprite_t fn_Sprite_Sprite = nullptr;
-fn_Sprite_DefaultCtor2_t fn_Sprite_DefaultCtor2 = nullptr;
 fn_ExternalPtr_Serialize_t fn_ExternalPtr_Serialize = nullptr;
 fn_ExternalPtr_Serialize2_t fn_ExternalPtr_Serialize2 = nullptr;
 fn_ExternalPtr_Serialize3_t fn_ExternalPtr_Serialize3 = nullptr;
@@ -887,7 +722,6 @@ fn_SetEditMode_t fn_SetEditMode = nullptr;
 // Phase G Wave 1: SaveLoadDialog + EventNotifyDialog
 fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod = nullptr;
 fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName = nullptr;
-uint32_t* g_TypeId_DialogInstance = nullptr;
 fn_MapGetTerrainPos_t fn_MapGetTerrainPos = nullptr;
 
 // Phase H: Sub-dependency blockers
@@ -1200,31 +1034,6 @@ bool EngineFuncsInit() {
     fn_App_SleepThread = reinterpret_cast<fn_App_SleepThread_t>(
         ResolveExport("?SleepThread@Application@1@QEAAXH@Z"));
 
-    // UI::UserInterface::Update(Time const&) -> int — resolve by name.
-    // The export is QEAAH...: it RETURNS INT (the cursor id), not void.
-    // We resolved it as QEAAX for a long time, a mangling the DLL does not
-    // contain, and only a ResolveAddr fallback kept it non-null. That fallback
-    // is GONE (Wave 9 lane F): the correct name below is now the only path.
-    fn_UI_Update = reinterpret_cast<fn_UI_Update_t>(
-        ResolveExport("?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z"));
-
-    // UI::UserInterface::Draw(Context&) — resolve by name
-    fn_UI_Draw = reinterpret_cast<fn_UI_Draw_t>(
-        ResolveExport("?Draw@UserInterface@UI@@QEAAXAEAVContext@Video@@@Z"));
-
-    // UI::UserInterface::CloseDialog(InternalPtr<DialogInstance>) — resolve by name.
-    // The DLL exports the BY-VALUE spelling (`V?$InternalPtr@…`) only. We asked
-    // for the by-reference one (`AEAV…`) for a long time; that name does not
-    // exist, ResolveExport returned NULL in silence, and only an address
-    // fallback kept this non-null (Wave 7 lane C,
-    // reference_resolveexport_phantom_names.md). Same ABI either way —
-    // InternalPtr<T> has a non-trivial copy ctor, so MSVC x64 passes it by
-    // address in both spellings — so the call has always reached the right
-    // function; the name was simply a phantom the fallback hid. That fallback
-    // is GONE (Wave 9 lane F): the corrected name below is the only path.
-    fn_UI_CloseDialog = reinterpret_cast<fn_UI_CloseDialog_t>(
-        ResolveExport("?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
-
     // PostDraw/PostUpdate callback array push (16-byte element template instantiations)
     fn_PostDrawPush = reinterpret_cast<fn_DynArrayPush_t>(
         ResolveAddr(Module::Runtime, 0x18004f790));
@@ -1289,10 +1098,6 @@ bool EngineFuncsInit() {
 
     // --- UI infrastructure ---
 
-    // UI::DialogController::~DialogController — virtual base dtor
-    fn_DialogController_Dtor = reinterpret_cast<fn_DialogController_Dtor_t>(
-        ResolveExport("??1DialogController@UI@@UEAA@XZ"));
-
     // UI::DialogInstance::~DialogInstance — virtual base dtor
     fn_DialogInstance_Dtor = reinterpret_cast<fn_DialogInstance_Dtor_t>(
         ResolveExport("??1DialogInstance@UI@@UEAA@XZ"));
@@ -1310,18 +1115,6 @@ bool EngineFuncsInit() {
         if (fn_MemFreeStatic) fn_MemFreeStatic(ptr);
     };
 
-    // UI::Element::FindElement — non-trivial return ABI
-    fn_FindElement = reinterpret_cast<fn_FindElement_t>(
-        ResolveExport("?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
-
-    // UI::TextElement::SetParameter
-    fn_TextElement_SetParameter = reinterpret_cast<fn_TextElement_SetParameter_t>(
-        ResolveExport("?SetParameter@TextElement@UI@@QEAAXHAEBVString@System@@@Z"));
-
-    // UI::Element::GetUserData
-    fn_Element_GetUserData = reinterpret_cast<fn_Element_GetUserData_t>(
-        ResolveExport("?GetUserData@Element@UI@@QEAAPEAVBase@Object@@XZ"));
-
     // Object::InternalBasePtr::InternalBasePtr(Internal*)
     fn_InternalBasePtr_Ctor = reinterpret_cast<fn_InternalBasePtr_Ctor_t>(
         ResolveExport("??0InternalBasePtr@Object@@QEAA@PEAVInternal@1@@Z"));
@@ -1337,169 +1130,6 @@ bool EngineFuncsInit() {
     // ================================================================
     // Phase A1: UI Widget Functions (Runtime DLL exports)
     // ================================================================
-
-    // --- Element ---
-    fn_Element_SetFlagsOnOff = reinterpret_cast<fn_Element_SetFlagsOnOff_t>(
-        ResolveExport("?SetFlagsOnOff@Element@UI@@QEAAXII@Z"));
-
-    fn_Element_SetElementId = reinterpret_cast<fn_Element_SetElementId_t>(
-        ResolveExport("?SetElementId@Element@UI@@QEAAXH@Z"));
-
-    fn_Element_SetName = reinterpret_cast<fn_Element_SetName_t>(
-        ResolveExport("?SetName@Element@UI@@QEAAXAEBVString@System@@@Z"));
-
-    fn_Element_SetToolTip = reinterpret_cast<fn_Element_SetToolTip_t>(
-        ResolveExport("?SetToolTip@Element@UI@@QEAAXVString@2@@Z"));
-
-    fn_Element_SetToolTipString = reinterpret_cast<fn_Element_SetToolTipString_t>(
-        ResolveExport("?SetToolTipString@Element@UI@@QEAAXAEBVString@System@@@Z"));
-
-    fn_Element_Child = reinterpret_cast<fn_Element_Child_t>(
-        ResolveExport("?Child@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@H@Z"));
-
-    fn_Element_ChildCount = reinterpret_cast<fn_Element_ChildCount_t>(
-        ResolveExport("?ChildCount@Element@UI@@QEBAHXZ"));
-
-    fn_Element_FindElementType = reinterpret_cast<fn_Element_FindElementType_t>(
-        ResolveExport("?FindElementType@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z"));
-
-    fn_Element_RemoveChildren = reinterpret_cast<fn_Element_RemoveChildren_t>(
-        ResolveExport("?RemoveChildren@Element@UI@@QEAAXXZ"));
-
-    fn_Element_AddChild = reinterpret_cast<fn_Element_AddChild_t>(
-        ResolveExport("?AddChild@Element@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@@Z"));
-
-    // --- DialogInstance ---
-    fn_DialogInstance_FindElement = reinterpret_cast<fn_DialogInstance_FindElement_t>(
-        ResolveExport("?FindElement@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
-
-    fn_DialogInstance_GetController = reinterpret_cast<fn_DialogInstance_GetController_t>(
-        ResolveExport("?GetController@DialogInstance@UI@@QEBA?AV?$InternalPtr@VDialogController@UI@@@Object@@I@Z"));
-
-    fn_DialogInstance_FindElementType = reinterpret_cast<fn_DialogInstance_FindElementType_t>(
-        ResolveExport("?FindElementType@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@I@Z"));
-
-    fn_DialogInstance_SetFlagsOnOff = reinterpret_cast<fn_DialogInstance_SetFlagsOnOff_t>(
-        ResolveExport("?SetFlagsOnOff@DialogInstance@UI@@QEAAXII@Z"));
-
-    // --- ComboElement ---
-    fn_ComboElement_AddItem = reinterpret_cast<fn_ComboElement_AddItem_t>(
-        ResolveExport("?AddItem@ComboElement@UI@@QEAAHAEBVSprite@2@AEBVString@System@@PEAX@Z"));
-
-    fn_ComboElement_SetCurrentItem = reinterpret_cast<fn_ComboElement_SetCurrentItem_t>(
-        ResolveExport("?SetCurrentItem@ComboElement@UI@@QEAAXH@Z"));
-
-    fn_ComboElement_GetItemCount = reinterpret_cast<fn_ComboElement_GetItemCount_t>(
-        ResolveExport("?GetItemCount@ComboElement@UI@@QEBAHXZ"));
-
-    fn_ComboElement_GetCurrentItem = reinterpret_cast<fn_ComboElement_GetCurrentItem_t>(
-        ResolveExport("?GetCurrentItem@ComboElement@UI@@QEBAHXZ"));
-
-    fn_ComboElement_GetItemData = reinterpret_cast<fn_ComboElement_GetItemData_t>(
-        ResolveExport("?GetItemData@ComboElement@UI@@QEBAPEAXH@Z"));
-
-    fn_ComboElement_RemoveAllItems = reinterpret_cast<fn_ComboElement_RemoveAllItems_t>(
-        ResolveExport("?RemoveAllItems@ComboElement@UI@@QEAAXXZ"));
-
-    // --- ProgressElement ---
-    fn_ProgressElement_SetProgressTextParameter = reinterpret_cast<fn_ProgressElement_SetProgressTextParameter_t>(
-        ResolveExport("?SetProgressTextParameter@ProgressElement@UI@@QEAAXHAEBVString@System@@@Z"));
-
-    fn_ProgressElement_SetMaximumValue = reinterpret_cast<fn_ProgressElement_SetMaximumValue_t>(
-        ResolveExport("?SetMaximumValue@ProgressElement@UI@@QEAAXM@Z"));
-
-    fn_ProgressElement_SetCurrentValue = reinterpret_cast<fn_ProgressElement_SetCurrentValue_t>(
-        ResolveExport("?SetCurrentValue@ProgressElement@UI@@QEAAXM@Z"));
-
-    // --- TableElement ---
-    fn_TableElement_SetSize = reinterpret_cast<fn_TableElement_SetSize_t>(
-        ResolveExport("?SetSize@TableElement@UI@@QEAAXHH@Z"));
-
-    fn_TableElement_SetChild3 = reinterpret_cast<fn_TableElement_SetChild3_t>(
-        ResolveExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@HH@Z"));
-
-    fn_TableElement_SetChild2 = reinterpret_cast<fn_TableElement_SetChild2_t>(
-        ResolveExport("?SetChild@TableElement@UI@@QEAAXV?$InternalPtr@VElement@UI@@@Object@@H@Z"));
-
-    fn_TableElement_GetRowCount = reinterpret_cast<fn_TableElement_GetRowCount_t>(
-        ResolveExport("?GetRowCount@TableElement@UI@@QEBAHXZ"));
-
-    fn_TableElement_GetColumnCount = reinterpret_cast<fn_TableElement_GetColumnCount_t>(
-        ResolveExport("?GetColumnCount@TableElement@UI@@QEBAHXZ"));
-
-    // --- NumberEditElement ---
-    fn_NumberEditElement_SetValue = reinterpret_cast<fn_NumberEditElement_SetValue_t>(
-        ResolveExport("?SetValue@NumberEditElement@UI@@QEAAXH@Z"));
-
-    fn_NumberEditElement_SetMinMax = reinterpret_cast<fn_NumberEditElement_SetMinMax_t>(
-        ResolveExport("?SetMinMax@NumberEditElement@UI@@QEAAXHH@Z"));
-
-    fn_NumberEditElement_GetValue = reinterpret_cast<fn_NumberEditElement_GetValue_t>(
-        ResolveExport("?GetValue@NumberEditElement@UI@@QEBAHXZ"));
-
-    // --- NumberElement ---
-    fn_NumberElement_SetValueInt = reinterpret_cast<fn_NumberElement_SetValueInt_t>(
-        ResolveExport("?SetValue@NumberElement@UI@@QEAAXH@Z"));
-
-    fn_NumberElement_SetValueFloat = reinterpret_cast<fn_NumberElement_SetValueFloat_t>(
-        ResolveExport("?SetValue@NumberElement@UI@@QEAAXM@Z"));
-
-    // --- SpinnerElement ---
-    fn_SpinnerElement_SetElementId = reinterpret_cast<fn_SpinnerElement_SetElementId_t>(
-        ResolveExport("?SetElementId@SpinnerElement@UI@@QEAAXH@Z"));
-
-    fn_SpinnerElement_SetValue = reinterpret_cast<fn_SpinnerElement_SetValue_t>(
-        ResolveExport("?SetValue@SpinnerElement@UI@@QEAAXH@Z"));
-
-    fn_SpinnerElement_SetMinMax = reinterpret_cast<fn_SpinnerElement_SetMinMax_t>(
-        ResolveExport("?SetMinMax@SpinnerElement@UI@@QEAAXHH@Z"));
-
-    fn_SpinnerElement_GetValue = reinterpret_cast<fn_SpinnerElement_GetValue_t>(
-        ResolveExport("?GetValue@SpinnerElement@UI@@QEBAHXZ"));
-
-    fn_SpinnerElement_GetMaxValue = reinterpret_cast<fn_SpinnerElement_GetMaxValue_t>(
-        ResolveExport("?GetMaxValue@SpinnerElement@UI@@QEBAHXZ"));
-
-    fn_SpinnerElement_SetIncrement = reinterpret_cast<fn_SpinnerElement_SetIncrement_t>(
-        ResolveExport("?SetIncrement@SpinnerElement@UI@@QEAAXH@Z"));
-
-    fn_SpinnerElement_IsActive = reinterpret_cast<fn_SpinnerElement_IsActive_t>(
-        ResolveExport("?IsActive@SpinnerElement@UI@@QEBA_NXZ"));
-
-    // --- PageElement ---
-    fn_PageElement_GetActivePage = reinterpret_cast<fn_PageElement_GetActivePage_t>(
-        ResolveExport("?GetActivePage@PageElement@UI@@QEBAHXZ"));
-
-    fn_PageElement_SetActivePage = reinterpret_cast<fn_PageElement_SetActivePage_t>(
-        ResolveExport("?SetActivePage@PageElement@UI@@QEAAXH@Z"));
-
-    // --- ImageElement ---
-    fn_ImageElement_SetSprite = reinterpret_cast<fn_ImageElement_SetSprite_t>(
-        ResolveExport("?SetSprite@ImageElement@UI@@QEAAXVSprite@2@@Z"));
-
-    fn_ImageElement_SetWidthHeight = reinterpret_cast<fn_ImageElement_SetWidthHeight_t>(
-        ResolveExport("?SetWidthHeight@ImageElement@UI@@QEAAXHH@Z"));
-
-    // --- LabelElement ---
-    fn_LabelElement_SetSprite = reinterpret_cast<fn_LabelElement_SetSprite_t>(
-        ResolveExport("?SetSprite@LabelElement@UI@@QEAAXVSprite@2@@Z"));
-
-    // --- TextElement ---
-    fn_TextElement_SetText = reinterpret_cast<fn_TextElement_SetText_t>(
-        ResolveExport("?SetText@TextElement@UI@@QEAAXVString@2@@Z"));
-
-    // --- UI::Dialog ---
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401528c0));
-        if (d && *d) fn_Dialog_CreateElement = reinterpret_cast<fn_Dialog_CreateElement_t>(*d);
-        // Direct-export fallback: the slot read above only works if the dispatch slot
-        // was registered BEFORE engine-func resolution. Resolving the export as well
-        // makes this independent of that ordering.
-        if (!fn_Dialog_CreateElement)
-            fn_Dialog_CreateElement = reinterpret_cast<fn_Dialog_CreateElement_t>(
-                ResolveExport("?CreateElement@Dialog@UI@@QEBA?AV?$InternalPtr@VElement@UI@@@"
-                              "Object@@V?$ExternalPtr@VElementDescription@UI@@@4@@Z"));
-    }
 
     // --- GetInputKeyName (exe 0x140099c20) ---
     fn_GetInputKeyName = reinterpret_cast<fn_GetInputKeyName_t>(
@@ -1700,10 +1330,6 @@ bool EngineFuncsInit() {
     fn_ImageBuffer_Ctor = reinterpret_cast<fn_ImageBuffer_Ctor_t>(
         ResolveExport("??0ImageBuffer@Video@@QEAA@XZ"));
 
-    // --- Phase F: Dialog/UI Runtime functions ---
-    fn_ImageElement_SetRotation = reinterpret_cast<fn_ImageElement_SetRotation_t>(
-        ResolveExport("?SetRotation@ImageElement@UI@@QEAAXM@Z"));
-
     fn_SaveLoad_Dtor = reinterpret_cast<fn_SaveLoad_Dtor_t>(
         ResolveExport("??1SaveLoad@Save@@QEAA@XZ"));
 
@@ -1747,40 +1373,10 @@ bool EngineFuncsInit() {
     fn_SaveLoad_GetSaveState = reinterpret_cast<fn_SaveLoad_GetSaveState_t>(
         ResolveExport("?GetSaveState@SaveLoad@Save@@QEAAPEAVSavedState@2@XZ"));
 
-    fn_Sprite_IsValid = reinterpret_cast<fn_Sprite_IsValid_t>(
-        ResolveExport("?IsValid@Sprite@UI@@QEBA_NXZ"));
-
-    fn_Sprite_Width = reinterpret_cast<fn_Sprite_Width_t>(
-        ResolveExport("?Width@Sprite@UI@@QEBAHXZ"));
-
-    fn_Element_FindElement = reinterpret_cast<fn_Element_FindElement_t>(
-        ResolveExport("?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z"));
-    fn_DialogController_GetContainer = reinterpret_cast<fn_DialogController_GetContainer_t>(
-        ResolveExport("?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ"));
-    fn_Sprite_Height = reinterpret_cast<fn_Sprite_Height_t>(
-        ResolveExport("?Height@Sprite@UI@@QEBAHXZ"));
-
-    fn_UI_Play = reinterpret_cast<fn_UI_Play_t>(
-        ResolveExport("?Play@UserInterface@UI@@QEAAXH@Z"));
-
     fn_DateTime_AsString = reinterpret_cast<fn_DateTime_AsString_t>(
         ResolveExport("?AsString@DateTime@System@@QEBA?AVString@2@XZ"));
 
     // SaveLoadDialog::PopulateFileList — REMOVED, now reimplemented in saveloaddialog.cpp
-
-    // Wave 7 lane D phantom-name fix: `?SetText@EditElement@UI@@QEAAXVString@2@@Z`
-    // is not in the shipped export table (reference_resolveexport_phantom_names.md);
-    // ResolveExport always returned null here and the OLD fallback address
-    // (0x180042070) was UI::TextElement::SetText, not EditElement's (that
-    // fallback is GONE, Wave 9 lane F) — see the
-    // header comment above fn_EditElement_SetText_t for the full story. Resolve
-    // the real by-reference EditElement::SetText directly; same raw ABI, so
-    // spritecaptureui.cpp:100's call site is unaffected.
-    fn_EditElement_SetText = reinterpret_cast<fn_EditElement_SetText_t>(
-        ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
-
-    fn_EditElement_SetText_SysStr = reinterpret_cast<fn_EditElement_SetText_SysStr_t>(
-        ResolveExport("?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z"));
 
     fn_Input_Device_Released = reinterpret_cast<fn_Input_Device_Released_t>(
         ResolveExport("?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
@@ -1799,19 +1395,6 @@ bool EngineFuncsInit() {
             if (p) g_pInputDeviceSingleton = p;
         }
     }
-
-    fn_ImageElement_GetSprite = reinterpret_cast<fn_ImageElement_GetSprite_t>(
-        ResolveExport("?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ"));
-
-    fn_LabelElement_GetSprite = reinterpret_cast<fn_LabelElement_GetSprite_t>(
-        ResolveExport("?GetSprite@LabelElement@UI@@QEBA?AVSprite@2@XZ"));
-
-    fn_SpriteSheet_GetSpriteIndexFromName = reinterpret_cast<fn_SpriteSheet_GetSpriteIndexFromName_t>(
-        ResolveExport("?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z"));
-
-    // SliderElement::SetParameter
-    fn_SliderElement_SetParameter = reinterpret_cast<fn_SliderElement_SetParameter_t>(
-        ResolveExport("?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z"));
 
     // Audio::Scene::Pause — resolved from exe dispatch table (indirect pointer)
     fn_Audio_Scene_Pause = reinterpret_cast<fn_Audio_Scene_Pause_t>(
@@ -1933,8 +1516,6 @@ bool EngineFuncsInit() {
     // fn_MapParamsDialog_OnOk (0x14006b690) — inlined in mapparamsdialog.cpp
     // fn_MapParamsDialog_OnNewName (0x14006b700) — inlined in mapparamsdialog.cpp
     // fn_GameWorld_GetMapName (0x140011f90) — inlined in mapparamsdialog.cpp
-    fn_Element_SetUserData = reinterpret_cast<fn_Element_SetUserData_t>(
-        ResolveAddr(Module::Runtime, 0x180115560));
     // fn_UpgradeUI_Serialize (0x140086d90) — inlined in upgradeui.cpp
     // fn_UpgradeUI_OnRemove (0x140086c90) — inlined in upgradeui.cpp
     fn_ConsumeProduceUI_Slot4 = reinterpret_cast<fn_ConsumeProduceUI_Slot4_t>(
@@ -1944,8 +1525,6 @@ bool EngineFuncsInit() {
     // Phase F Wave 2A: GoalDialog / EventNotifyDialog / ScenarioDialog
     fn_GoalList_GetGoalCount = reinterpret_cast<fn_GoalList_GetGoalCount_t>(
         ResolveExport("?GetGoalCount@GoalList@Achievement@@QEBAHXZ"));
-    fn_Dialog_GetTemplate = reinterpret_cast<fn_Dialog_GetTemplate_t>(
-        ResolveExport("?GetTemplate@Dialog@UI@@QEBA?AV?$ExternalPtr@VElementDescription@UI@@@Object@@H@Z"));
     fn_Goal_GetText = reinterpret_cast<fn_Goal_GetText_t>(
         ResolveExport("?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ"));
     fn_Achievement_GetTitle = reinterpret_cast<fn_Achievement_GetTitle_t>(
@@ -1974,36 +1553,12 @@ bool EngineFuncsInit() {
     // now inline in their respective .cpp files
     fn_ExternalList_GetResourceCount = reinterpret_cast<fn_ExternalList_GetResourceCount_t>(
         ResolveExport("?GetResourceCount@ExternalList@Object@@QEBAHXZ"));
-    fn_Element_SetPadding = reinterpret_cast<fn_Element_SetPadding_t>(
-        ResolveExport("?SetPadding@Element@UI@@QEAAXHHHH@Z"));
     // fn_EventNotifyDialog_ArrayRemove (0x140011670) — inlined as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
 
     // Scenario type ID: direct uint32_t in .data at 0x1401c5b08
     // (Original Slot4 at 0x140078248: MOV EDX, dword ptr [0x1401c5b08])
     g_TypeId_Scenario = reinterpret_cast<uint32_t*>(ResolveAddr(Module::Exe, 0x1401c5b08));
 
-    fn_Sprite_Ctor = reinterpret_cast<fn_Sprite_Ctor_t>(
-        ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z"));
-    if (!fn_Sprite_Ctor) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401514c8));
-        if (d && *d) fn_Sprite_Ctor = reinterpret_cast<fn_Sprite_Ctor_t>(*d);
-    }
-    fn_UIString_Ctor = reinterpret_cast<fn_UIString_Ctor_t>(
-        ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z"));
-    if (!fn_UIString_Ctor) {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151300));
-        if (d && *d) fn_UIString_Ctor = reinterpret_cast<fn_UIString_Ctor_t>(*d);
-    }
-    fn_UIString_ToSystemString = reinterpret_cast<fn_UIString_ToSystemString_t>(
-        ResolveExport("??BString@UI@@QEBA?AV0System@@XZ"));
-
-    // Phase F Wave 2B: ToolbarDialog
-    fn_UI_AddDialog = reinterpret_cast<fn_UI_AddDialog_t>(
-        ResolveExport("?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
-    fn_Element_GetPaddedSize = reinterpret_cast<fn_Element_GetPaddedSize_t>(
-        ResolveExport("?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z"));
-    fn_RadioElement_SetActiveRadio = reinterpret_cast<fn_RadioElement_SetActiveRadio_t>(
-        ResolveExport("?SetActiveRadio@RadioElement@UI@@QEAAXH@Z"));
     fn_ToolbarDialog_Ctor = reinterpret_cast<fn_ToolbarDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x1400b9910));
     // fn_Toolbar_ShowGroup — must call original (15+ direct callers share state)
@@ -2044,8 +1599,6 @@ bool EngineFuncsInit() {
     // That is why "is the fallback address an entry point" was never a
     // sufficient check (docs/runtime_port/WAVE9_LANE_D.md, and the docstring of
     // tools/resolve_fallback_audit.py, which both keep the full story).
-    fn_RadioElement_FindCheckBoxes = reinterpret_cast<fn_RadioElement_FindCheckBoxes_t>(
-        ResolveExport("?FindCheckBoxes@RadioElement@UI@@QEAAXXZ"));
     // FUN_140100270: Find dialog by controller type
     fn_FindDialogByControllerType = reinterpret_cast<fn_FindDialogByControllerType_t>(
         ResolveAddr(Module::Exe, 0x140100270));
@@ -2106,8 +1659,6 @@ bool EngineFuncsInit() {
     // fallback (Wave 7 lane C, deleted by Wave 9 lane F). Const-ness has no
     // ABI, so the call has always been correct — the name was a phantom the
     // fallback hid.
-    fn_UI_GetFirstContainedDialog = reinterpret_cast<fn_UI_GetFirstContainedDialog_t>(
-        ResolveExport("?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z"));
     fn_EditTool_SelectEntity = reinterpret_cast<fn_EditTool_SelectEntity_t>(
         ResolveAddr(Module::Exe, 0x1400fd3b0));
     // fn_FindComponent_Residence — inline in engine_funcs.h (uses g_TypeId_StorageComponent_FC, same as Storage)
@@ -2117,29 +1668,6 @@ bool EngineFuncsInit() {
         ResolveAddr(Module::Exe, 0x1401721cc));
     fn_Time_Ctor_Float = reinterpret_cast<fn_Time_Ctor_Float_t>(
         ResolveExport("??0Time@System@@QEAA@M@Z"));
-    // UI::String::String(ExternalPtr<StringTable>) — single-arg ctor, dispatch at 0x140151300
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151300));
-        if (dispatch && *dispatch) {
-            fn_UIString_Ctor_Entry = reinterpret_cast<fn_UIString_Ctor_Entry_t>(*dispatch);
-        }
-    }
-    // UI::String::String() — default ctor, dispatch at 0x140151ca8
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151ca8));
-        if (dispatch && *dispatch) {
-            fn_UIString_DefaultCtor = reinterpret_cast<fn_UIString_DefaultCtor_t>(*dispatch);
-        }
-    }
-    // Standalone: the exe dispatch slot above may be unpopulated (the runtime name-resolution
-    // that fills it doesn't run for our reimplemented callers) -> resolve straight from the
-    // Runtime DLL export instead, exactly like fn_Sprite_Default_Ctor below. Used by BuildUI/
-    // TradeUI/ProductionUI to blank surplus table rows with an empty UI::String.
-    if (!fn_UIString_DefaultCtor)
-        fn_UIString_DefaultCtor = reinterpret_cast<fn_UIString_DefaultCtor_t>(
-            ResolveExport("??0String@UI@@QEAA@XZ"));
-    fn_Sprite_Default_Ctor = reinterpret_cast<fn_Sprite_Default_Ctor_t>(
-        ResolveExport("??0Sprite@UI@@QEAA@XZ"));
     // fn_Dialog_GetReference resolve removed 2026-09-07 (Wave 7 lane B): the
     // mangled name was not an export and the pointer had no callers. The real
     // function is ?GetReference@Dialog@UI@@QEBA?AV?$ExternalPtr@VExternal@Object@@@Object@@H@Z
@@ -2155,19 +1683,6 @@ bool EngineFuncsInit() {
     fn_Audio_Scene_PlayEffect = reinterpret_cast<fn_Audio_Scene_PlayEffect_t>(
         ResolveExport("?PlayEffect@Scene@Audio@@QEAAIV?$ExternalPtr@VSoundEffect@Audio@@@Object@@W4SoundType@12@AEBVTime@System@@@Z"));
 
-    // --- HelpUI support functions ---
-    fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
-        ResolveExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z"));
-    fn_DocumentTextElement_GetLink = reinterpret_cast<fn_DocumentTextElement_GetLink_t>(
-        ResolveExport("?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z"));
-    fn_DocumentTextElement_SetText_UIString = reinterpret_cast<fn_DocumentTextElement_SetText_UIString_t>(
-        ResolveExport("?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z"));
-    fn_DocumentTextElement_SetText = reinterpret_cast<fn_DocumentTextElement_SetText_t>(
-        ResolveExport("?SetText@DocumentTextElement@UI@@QEAAXAEBVString@System@@@Z"));
-    fn_ContainerElement_SetOffsets = reinterpret_cast<fn_ContainerElement_SetOffsets_t>(
-        ResolveExport("?SetOffsets@ContainerElement@UI@@QEAAXHH@Z"));
-    fn_UIString_Ctor_Index = reinterpret_cast<fn_UIString_Ctor_Index_t>(
-        ResolveExport("??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z"));
     // HelpUI_ArrayResize now inline as HelpUI_ArrayResize_Impl in helpui.cpp
 
     // --- OptionsDialog support — Runtime DLL exports ---
@@ -2175,12 +1690,6 @@ bool EngineFuncsInit() {
     // --- OptionsDialog exe helpers — all REIMPLEMENTED in code/Game/Dialog/optionsdialog.cpp ---
     // fn_OptionsDialog_PopulateInputBindList — reimplemented
     // fn_OptionsDialog_OnInputBindClick — reimplemented
-    fn_Sprite_DefaultCtor = reinterpret_cast<fn_Sprite_DefaultCtor_t>(
-        ResolveExport("??0Sprite@UI@@QEAA@XZ"));
-    fn_StringTable_GetText = reinterpret_cast<fn_StringTable_GetText_t>(
-        ResolveExport("?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z"));
-    fn_TabElement_SetActiveTab = reinterpret_cast<fn_TabElement_SetActiveTab_t>(
-        ResolveExport("?SetActiveTab@TabElement@UI@@QEAAXH@Z"));
     // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call)
     g_pGameSettingsPtr = reinterpret_cast<int32_t**>(ResolveAddr(Module::Exe, 0x1401c3de0));
     // Audio::Configuration singleton: exe exref at 0x140151b78 -> pointer to singleton
@@ -2337,88 +1846,15 @@ bool EngineFuncsInit() {
     g_TypeId_TerrainGenerator = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c5b40));
 
-    // --- ToolUI support ---
-    fn_DialogInstance_SetUpperLeft = reinterpret_cast<fn_DialogInstance_SetUpperLeft_t>(
-        ResolveExport("?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z"));
-    // By-VALUE spelling: the by-reference `AEAV…` name we used to ask for does
-    // not exist in the DLL and resolved NULL in silence, leaving this on an
-    // address fallback (Wave 7 lane C, deleted by Wave 9 lane F). Same ABI,
-    // same target.
-    fn_UI_BringDialogToFront = reinterpret_cast<fn_UI_BringDialogToFront_t>(
-        ResolveExport("?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     // fn_UIDesc_AddControllers — REIMPLEMENTED as UIDesc_AddControllers_Impl()
     g_TypeId_UIDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c7f90));
-    // TabElement::AddTab.
-    //
-    // *** ResolveExport FIRST, THE DISPATCH SLOT ONLY AS A FALLBACK. WAVE 10
-    // LANE UIORACLE — THIS ORDER WAS THE OTHER WAY ROUND AND IT WAS A LIVE
-    // PORT BYPASS. *** Slot 0x1401529c8 is a PE import slot, so `*dispatch` is
-    // the RAW address inside Runtime-x64.dll and the port registry is never
-    // consulted (reference_bypassed_port_needs_a_source_checker.md). With
-    // AddTab ported this wave, the exe's ONLY caller
-    // (UIDesc_AddControllers_Impl, code/Game/Dialog/toolui.cpp) was still
-    // running the DLL's copy — and the symptom was not a crash but a SILENCE:
-    // the predictive oracle reported the site with ZERO ROUNDS, which reads
-    // exactly like "no route exists" (reference_uncalled_port_is_not_verified.md).
-    // RuntimePortInit() runs BEFORE EngineFuncsInit (standalone/main.cpp §2c
-    // says so in as many words), so ResolveExport here reaches the port.
-    fn_TabElement_AddTab = reinterpret_cast<fn_TabElement_AddTab_t>(
-        ResolveExport("?AddTab@TabElement@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@"
-                      "V?$ExternalPtr@VElementDescription@UI@@@4@0@Z"));
-    if (!fn_TabElement_AddTab) {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529c8));
-        if (dispatch) fn_TabElement_AddTab = reinterpret_cast<fn_TabElement_AddTab_t>(*dispatch);
-    }
-    // DialogInstance::AddController (5-arg, tab) — dispatch table at 0x1401529d0
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401529d0));
-        if (dispatch) fn_DialogInstance_AddControllerTab =
-            reinterpret_cast<fn_DialogInstance_AddControllerTab_t>(*dispatch);
-    }
-    // DialogInstance::AddController (6-arg, non-tab) — dispatch table at 0x140151a90
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a90));
-        if (dispatch) fn_DialogInstance_AddController6 =
-            reinterpret_cast<fn_DialogInstance_AddController6_t>(*dispatch);
-    }
-    // Standalone: the three exe IAT dispatch slots above are unregistered → null,
-    // so the UIDescription controller-injection (ToolUI::Slot4 →
-    // UIDesc_AddControllers_Impl) EXEC-faulted on a null fn ptr. Resolve them by
-    // Runtime RVA directly (verified addresses / signatures):
-    //   TabElement::AddTab                                    = 0x1800da130
-    //   DialogInstance::AddController(…,InternalPtr<Element>)  = 0x1801133b0  (tab page)
-    //   DialogInstance::AddController(…,ExternalPtr<ElementDescription>,String&)
-    //                                                         = 0x180113470  (non-tab:
-    //     finds the _insertAt element, builds the ElementDescription via its
-    //     vtable+0x40, inserts it as a child, then creates the controller).
-    if (!fn_TabElement_AddTab)
-        fn_TabElement_AddTab = reinterpret_cast<fn_TabElement_AddTab_t>(
-            ResolveAddr(Module::Runtime, 0x1800da130));
-    if (!fn_DialogInstance_AddControllerTab)
-        fn_DialogInstance_AddControllerTab = reinterpret_cast<fn_DialogInstance_AddControllerTab_t>(
-            ResolveAddr(Module::Runtime, 0x1801133b0));
-    if (!fn_DialogInstance_AddController6)
-        fn_DialogInstance_AddController6 = reinterpret_cast<fn_DialogInstance_AddController6_t>(
-            ResolveAddr(Module::Runtime, 0x180113470));
 
     // --- DragTool support ---
     // KeyMap::Released — dispatch table at 0x1401528f0
     {
         void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401528f0));
         if (dispatch) fn_KeyMap_Released = reinterpret_cast<fn_KeyMap_Released_t>(*dispatch);
-    }
-    // DialogInstance::GetRoot — dispatch table at 0x1401527f8
-    {
-        void** dispatch = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x1401527f8));
-        if (dispatch && *dispatch)
-            fn_DialogInstance_GetRoot = reinterpret_cast<fn_DialogInstance_GetRoot_t>(*dispatch);
-    }
-    // Fallback (standalone: the dispatch slot above is unfilled → null, which stalled the
-    // CreateBar repositioner in tool_base_createbar.cpp). Resolve the Runtime export directly.
-    if (!fn_DialogInstance_GetRoot) {
-        fn_DialogInstance_GetRoot = reinterpret_cast<fn_DialogInstance_GetRoot_t>(
-            ResolveExport("?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ"));
     }
 
     // --- Player/Tool module: shared engine APIs ---
@@ -2502,9 +1938,6 @@ bool EngineFuncsInit() {
     printf("  HighlightRemove           = %p\n", (void*)fn_HighlightRemove);
 #endif
 
-    // --- ModDetailsDialog support ---
-    fn_Element_Hide = reinterpret_cast<fn_Element_Hide_t>(
-        ResolveExport("?Hide@Element@UI@@QEAAX_N@Z"));
     fn_Configuration_GetVersionString = reinterpret_cast<fn_Configuration_GetVersionString_t>(
         ResolveExport("?GetVersionString@Configuration@System@@SA?AVString@2@I_N@Z"));
 
@@ -2534,39 +1967,12 @@ bool EngineFuncsInit() {
     // reached 0 CALLs. The ported bodies stay registered by address in
     // runtime/src/io/modification.cpp — only these two readers died.
 
-    // --- DialogInstance::OnElementEvent (exe dispatch table) ---
-    // TWO overloads exist. The exe's dispatch slot 0x140151a30 (tools/dispatch_slot_map.py)
-    // is the 8-arg one, (InternalPtr<Element>, int, int, int, int, int, void*), which is
-    // what every ported Slot8 tail-calls with 8 args. The 2-arg (const ElementEvent&)
-    // overload was resolved here FIRST for a long time: called with the 8-arg shape it
-    // reinterprets the args, and it ends in a virtual call at vtable+0x50 -- one slot
-    // past the end of ModDialog's 10-slot table, so the Mods dialog EXEC'd 0 on its
-    // first real UI event.
-    fn_DialogInstance_OnElementEvent = reinterpret_cast<fn_DialogInstance_OnElementEvent_t>(
-        ResolveExport("?OnElementEvent@DialogInstance@UI@@UEAAXV?$InternalPtr@VElement@UI@@@Object@@HHHHHPEAX@Z"));
-    if (!fn_DialogInstance_OnElementEvent) {
-        // Fallback: resolve from exe dispatch table pointer
-        void** dispatchPtr = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151a30));
-        if (dispatchPtr) fn_DialogInstance_OnElementEvent =
-            reinterpret_cast<fn_DialogInstance_OnElementEvent_t>(*dispatchPtr);
-    }
-
     // fn_DialogInstance_AddController resolve removed 2026-09-07 (Wave 7 lane B).
     // The mangled name was not an export, so this ALWAYS fell through to exe
     // dispatch slot 0x140151a60 — which is ?AddChild@Element@UI@@…, not
-    // AddController. The correctly-named six-argument overload is already
-    // resolved as fn_DialogInstance_AddController6 above. See engine_funcs.h.
-
-    // --- DialogInstance::OnUpdateLayout / OnUpdate (dispatch slots 0x1401517b0/0x1401517b8) ---
-    // These back the 6-byte JMP-thunks at exe 0x14003a98a (slot +0x30) and
-    // 0x14003a990 (slot +0x38). In standalone we wire them directly so the
-    // MainMenuDialog vtable (and any other dialog) can dispatch child layout
-    // / per-frame updates through the Runtime DLL.
-    fn_DialogInstance_OnUpdateLayout = reinterpret_cast<fn_DialogInstance_OnUpdateLayout_t>(
-        ResolveExport("?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ"));
-
-    fn_DialogInstance_OnUpdate = reinterpret_cast<fn_DialogInstance_OnUpdate_t>(
-        ResolveExport("?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z"));
+    // AddController. (The correctly-named six-argument overload was resolved as
+    // fn_DialogInstance_AddController6 until the ENDGAME B.3.6 closing pass, which
+    // retired it with zero callers; UIDesc_AddControllers_Impl calls the member.)
 
     // --- ModDialog helper functions ---
     // fn_ModDialog_RefreshDisplay — REPLACED with static impl in moddialog.cpp
@@ -2640,18 +2046,6 @@ bool EngineFuncsInit() {
     fn_GroupRating_Update = reinterpret_cast<fn_GroupRating_Update_t>(
         ResolveAddr(Module::Exe, 0x14006aed0));
 
-    // --- GraphElement functions (Runtime DLL exports) ---
-    fn_GraphElement_RemoveGraphs = reinterpret_cast<fn_GraphElement_RemoveGraphs_t>(
-        ResolveExport("?RemoveGraphs@GraphElement@UI@@QEAAXXZ"));
-    fn_GraphElement_AddGraph = reinterpret_cast<fn_GraphElement_AddGraph_t>(
-        ResolveExport("?AddGraph@GraphElement@UI@@QEAAXI@Z"));
-    fn_GraphElement_AddGraphPoint = reinterpret_cast<fn_GraphElement_AddGraphPoint_t>(
-        ResolveExport("?AddGraphPoint@GraphElement@UI@@QEAAXHH@Z"));
-
-    // --- StringTable::GetCount (Runtime DLL) ---
-    fn_StringTable_GetCount = reinterpret_cast<fn_StringTable_GetCount_t>(
-        ResolveExport("?GetCount@StringTable@UI@@QEBAHXZ"));
-
     // --- Production stat query ---
     fn_QueryProductionStat = reinterpret_cast<fn_QueryProductionStat_t>(
         ResolveAddr(Module::Exe, 0x140090f20));
@@ -2706,8 +2100,6 @@ bool EngineFuncsInit() {
 
     // TradeUI support
     // fn_FindComponent_Building — inline in engine_funcs.h (uses g_TypeId_TradeComponent_FC)
-    fn_Element_SetNeedsSizeCalc = reinterpret_cast<fn_Element_SetNeedsSizeCalc_t>(
-        ResolveExport("?SetNeedsSizeCalc@Element@UI@@QEAAXXZ"));
     g_TypeInfo_ValueDescription = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c4bf0));
     g_TypeInfo_TradeDescription = reinterpret_cast<uint32_t*>(
@@ -2790,21 +2182,6 @@ bool EngineFuncsInit() {
         void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151848));
         if (d && *d) fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(*d);
     }
-    // SpriteSheet::AddSpriteInfo: dispatch at 0x140151978
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151978));
-        if (d && *d) fn_SpriteSheet_AddSpriteInfo = reinterpret_cast<fn_SpriteSheet_AddSpriteInfo_t>(*d);
-    }
-    // SpriteSheet::SetSpriteInfo: dispatch at 0x140151970
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151970));
-        if (d && *d) fn_SpriteSheet_SetSpriteInfo = reinterpret_cast<fn_SpriteSheet_SetSpriteInfo_t>(*d);
-    }
-    // Sprite ctor by index: dispatch at 0x140151898
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140151898));
-        if (d && *d) fn_Sprite_Ctor_ByIndex = reinterpret_cast<fn_Sprite_Ctor_ByIndex_t>(*d);
-    }
     // ImageBuffer::Width / Height — resolved by export name from Runtime
     // Custom vtables for mod thumbnail objects
     g_ModDialog_MaterialInstanceVtable = ResolveAddr(Module::Exe, 0x14015c400);
@@ -2834,15 +2211,6 @@ bool EngineFuncsInit() {
     if (!fn_SpriteSheet_Ctor)
         fn_SpriteSheet_Ctor = reinterpret_cast<fn_SpriteSheet_Ctor_t>(
             ResolveExport("??0SpriteSheet@UI@@QEAA@XZ"));
-    if (!fn_Sprite_Ctor_ByIndex)
-        fn_Sprite_Ctor_ByIndex = reinterpret_cast<fn_Sprite_Ctor_ByIndex_t>(
-            ResolveExport("??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@H@Z"));
-    if (!fn_SpriteSheet_SetSpriteInfo)
-        fn_SpriteSheet_SetSpriteInfo = reinterpret_cast<fn_SpriteSheet_SetSpriteInfo_t>(
-            ResolveExport("?SetSpriteInfo@SpriteSheet@UI@@QEAAXHHHMMMM@Z"));
-    if (!fn_SpriteSheet_AddSpriteInfo)
-        fn_SpriteSheet_AddSpriteInfo = reinterpret_cast<fn_SpriteSheet_AddSpriteInfo_t>(
-            ResolveExport("?AddSpriteInfo@SpriteSheet@UI@@QEAAXAEBVString@System@@0HHHH@Z"));
 
     // --- NoiseUI helpers ---
     g_NoiseUI_ImageBufferVtable = ResolveAddr(Module::Exe, 0x14015c8c0);
@@ -2859,12 +2227,6 @@ bool EngineFuncsInit() {
     // Weather_ResetTime (exe 0x1400944e0)
     fn_Weather_ResetTime = reinterpret_cast<fn_Weather_ResetTime_t>(
         ResolveAddr(Module::Exe, 0x1400944e0));
-    // UI::UserInterface::SetCursor — ordinal 3865
-    fn_UI_SetCursor = reinterpret_cast<fn_UI_SetCursor_t>(
-        ResolveExport("?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z"));
-    // UI::UserInterface::SetFullscreenFade — ordinal 3887
-    fn_UI_SetFullscreenFade = reinterpret_cast<fn_UI_SetFullscreenFade_t>(
-        ResolveExport("?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z"));
     fn_DebugUI_SetDayLighting = reinterpret_cast<fn_DebugUI_SetDayLighting_t>(
         ResolveAddr(Module::Exe, 0x140061780));
     // DiseaseDescription type ID (DAT_1401c5948)
@@ -3067,9 +2429,6 @@ bool EngineFuncsInit() {
     printf("  App::PlatformUpdate       = %p\n", (void*)fn_App_PlatformUpdate);
     printf("  Loader::Load              = %p\n", (void*)fn_Loader_Load);
     printf("  App::SleepThread          = %p\n", (void*)fn_App_SleepThread);
-    printf("  UI::Update                = %p\n", (void*)fn_UI_Update);
-    printf("  UI::Draw                  = %p\n", (void*)fn_UI_Draw);
-    printf("  UI::CloseDialog           = %p\n", (void*)fn_UI_CloseDialog);
     printf("  PostDrawPush              = %p\n", (void*)fn_PostDrawPush);
     printf("  PostUpdatePush            = %p\n", (void*)fn_PostUpdatePush);
     printf("  MemAlloc                  = %p\n", (void*)fn_MemAlloc);
@@ -3090,42 +2449,11 @@ bool EngineFuncsInit() {
     printf("  Persistence::_singleton   = %p -> %p\n", (void*)g_pPersistenceSingleton,
            g_pPersistenceSingleton ? *g_pPersistenceSingleton : nullptr);
     printf("[EngineFuncs] UI infrastructure:\n");
-    printf("  DialogController::~Dtor   = %p\n", (void*)fn_DialogController_Dtor);
     printf("  MemFreeStatic             = %p\n", (void*)fn_MemFreeStatic);
-    printf("  FindElement               = %p\n", (void*)fn_FindElement);
-    printf("  TextElement::SetParameter = %p\n", (void*)fn_TextElement_SetParameter);
-    printf("  Element::GetUserData      = %p\n", (void*)fn_Element_GetUserData);
     printf("  InternalBasePtr::Ctor     = %p\n", (void*)fn_InternalBasePtr_Ctor);
     printf("  KeyMap::GetInputForId     = %p\n", (void*)fn_KeyMap_GetInputForId);
     printf("  KeyMap::GetDeviceForId    = %p\n", (void*)fn_KeyMap_GetDeviceForId);
     printf("[EngineFuncs] Phase A1 — UI Widget Functions:\n");
-    printf("  Elem::SetFlagsOnOff       = %p\n", (void*)fn_Element_SetFlagsOnOff);
-    printf("  Elem::SetElementId        = %p\n", (void*)fn_Element_SetElementId);
-    printf("  Elem::SetName             = %p\n", (void*)fn_Element_SetName);
-    printf("  Elem::SetToolTip          = %p\n", (void*)fn_Element_SetToolTip);
-    printf("  Elem::Child               = %p\n", (void*)fn_Element_Child);
-    printf("  Elem::ChildCount          = %p\n", (void*)fn_Element_ChildCount);
-    printf("  Elem::FindElementType     = %p\n", (void*)fn_Element_FindElementType);
-    printf("  DI::FindElement           = %p\n", (void*)fn_DialogInstance_FindElement);
-    printf("  DI::GetController         = %p\n", (void*)fn_DialogInstance_GetController);
-    printf("  DI::FindElementType       = %p\n", (void*)fn_DialogInstance_FindElementType);
-    printf("  DI::SetFlagsOnOff         = %p\n", (void*)fn_DialogInstance_SetFlagsOnOff);
-    printf("  Combo::AddItem            = %p\n", (void*)fn_ComboElement_AddItem);
-    printf("  Combo::SetCurrentItem     = %p\n", (void*)fn_ComboElement_SetCurrentItem);
-    printf("  Combo::GetItemCount       = %p\n", (void*)fn_ComboElement_GetItemCount);
-    printf("  Combo::GetCurrentItem     = %p\n", (void*)fn_ComboElement_GetCurrentItem);
-    printf("  Combo::RemoveAllItems     = %p\n", (void*)fn_ComboElement_RemoveAllItems);
-    printf("  Progress::SetTextParam    = %p\n", (void*)fn_ProgressElement_SetProgressTextParameter);
-    printf("  Progress::SetMaxValue     = %p\n", (void*)fn_ProgressElement_SetMaximumValue);
-    printf("  Progress::SetCurValue     = %p\n", (void*)fn_ProgressElement_SetCurrentValue);
-    printf("  Table::SetSize            = %p\n", (void*)fn_TableElement_SetSize);
-    printf("  Table::SetChild(3)        = %p\n", (void*)fn_TableElement_SetChild3);
-    printf("  NumEdit::SetValue         = %p\n", (void*)fn_NumberEditElement_SetValue);
-    printf("  NumElem::SetValue(int)    = %p\n", (void*)fn_NumberElement_SetValueInt);
-    printf("  Spinner::SetElementId     = %p\n", (void*)fn_SpinnerElement_SetElementId);
-    printf("  Image::SetSprite          = %p\n", (void*)fn_ImageElement_SetSprite);
-    printf("  Label::SetSprite          = %p\n", (void*)fn_LabelElement_SetSprite);
-    printf("  Text::SetText             = %p\n", (void*)fn_TextElement_SetText);
     printf("[EngineFuncs] Phase A2 — Type IDs:\n");
     printf("  ComponentDescription      = %p -> 0x%x\n", (void*)g_TypeId_ComponentDescription_FC,
            g_TypeId_ComponentDescription_FC ? *g_TypeId_ComponentDescription_FC : 0);
@@ -3166,9 +2494,6 @@ bool EngineFuncsInit() {
 
     fn_Input_Device_Pressed = reinterpret_cast<fn_Input_Device_Pressed_t>(
         ResolveExport("?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z"));
-
-    fn_UI_EndSpriteCapture = reinterpret_cast<fn_UI_EndSpriteCapture_t>(
-        ResolveExport("?EndSpriteCapture@UserInterface@UI@@QEAAXXZ"));
 
     // FileSystem singleton: exe exref at 0x140151d18 -> pointer to _singleton in Runtime
     {
@@ -3235,12 +2560,6 @@ bool EngineFuncsInit() {
             g_pMainLoopSingleton = p;
     }
 
-    // UI::UserInterface
-    fn_UI_EnableCursor = reinterpret_cast<fn_UI_EnableCursor_t>(
-        ResolveExport("?EnableCursor@UserInterface@UI@@QEAAX_N@Z"));
-    fn_UI_SetFullscreenFadeSprite = reinterpret_cast<fn_UI_SetFullscreenFadeSprite_t>(
-        ResolveExport("?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z"));
-
     // Stage 3: OptionsDialog exe helpers
     fn_SaveGameSettings = reinterpret_cast<fn_SaveGameSettings_t>(
         ResolveAddr(Module::Exe, 0x140098970));
@@ -3255,9 +2574,6 @@ bool EngineFuncsInit() {
     fn_RegisterDefaultInputBindings = reinterpret_cast<fn_RegisterDefaultInputBindings_t>(
         ResolveAddr(Module::Exe, 0x1400992f0));
 
-    // ShowDialog, DeletePtr — Runtime DLL exports
-    fn_UI_ShowDialog = reinterpret_cast<fn_UI_ShowDialog_t>(
-        ResolveExport("?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z"));
     fn_InternalBasePtr_DeletePtr = reinterpret_cast<fn_InternalBasePtr_DeletePtr_t>(
         ResolveExport("?DeletePtr@InternalBasePtr@Object@@QEAAXXZ"));
 
@@ -3287,37 +2603,15 @@ bool EngineFuncsInit() {
     fn_MessageDialog_Ctor = reinterpret_cast<fn_MessageDialog_Ctor_t>(
         ResolveAddr(Module::Exe, 0x14006d300));
 
-    // CaptureBoxElement / FrustumOutlineElement — read from exe dispatch table
-    // These slots are already filled by the runtime at startup.
-    fn_ElementDescription_GetFileVersion = *reinterpret_cast<fn_ElementDescription_GetFileVersion_t*>(
-        ResolveAddr(Module::Exe, 0x1401518c0));
-    fn_Element_Draw = *reinterpret_cast<fn_Element_Draw_t*>(
-        ResolveAddr(Module::Exe, 0x1401518f8));
-    fn_SpriteContext_AddLine = *reinterpret_cast<fn_SpriteContext_AddLine_t*>(
-        ResolveAddr(Module::Exe, 0x140151908));
-    fn_SpriteContext_SetScissor4 = *reinterpret_cast<fn_SpriteContext_SetScissor4_t*>(
-        ResolveAddr(Module::Exe, 0x140151900));
-    fn_SpriteContext_SetScissorVP = *reinterpret_cast<fn_SpriteContext_SetScissorVP_t*>(
-        ResolveAddr(Module::Exe, 0x140151910));
     fn_FrustumProject = reinterpret_cast<fn_FrustumProject_t>(
         ResolveAddr(Module::Exe, 0x14006c5b0));
 
-    fn_ElementDescription_Serialize = *reinterpret_cast<fn_ElementDescription_Serialize_t*>(
-        ResolveAddr(Module::Exe, 0x1401518c8));
     fn_ElementDescription_Dtor = *reinterpret_cast<fn_ElementDescription_Dtor_t*>(
         ResolveAddr(Module::Exe, 0x1401518b8));
     fn_ElementDescription_Ctor = *reinterpret_cast<fn_ElementDescription_Ctor_t*>(
         ResolveAddr(Module::Exe, 0x1401518b0));
-    fn_ElementDescription_CreateInstance = *reinterpret_cast<fn_ElementDescription_CreateInstance_t*>(
-        ResolveAddr(Module::Exe, 0x1401518d0));
     fn_Element_Ctor = *reinterpret_cast<fn_Element_Ctor_t*>(
         ResolveAddr(Module::Exe, 0x1401518d8));
-    fn_Element_Dtor = *reinterpret_cast<fn_Element_Dtor_t*>(
-        ResolveAddr(Module::Exe, 0x1401518e0));
-    fn_Element_ComputeLayout = *reinterpret_cast<fn_Element_ComputeLayout_t*>(
-        ResolveAddr(Module::Exe, 0x1401518e8));
-    fn_Element_GetAlignedPosition = *reinterpret_cast<fn_Element_GetAlignedPosition_t*>(
-        ResolveAddr(Module::Exe, 0x1401518f0));
     // fn_Serializer_SerializeBulk read slot 0x140152400 here until ENDGAME
     // B.3.4a closing 2d; it was 0-CALL. The slot row itself stays registered.
 
@@ -3397,18 +2691,9 @@ bool EngineFuncsInit() {
         fn_SaveLoad_SetSaveName = *reinterpret_cast<fn_SaveLoad_SetSaveName_t*>(
             ResolveAddr(Module::Exe, 0x140151650));
     }
-    // DialogInstance type ID — _typeInfo_exref at 0x140151728
-    g_TypeId_DialogInstance = reinterpret_cast<uint32_t*>(
-        ResolveAddr(Module::Exe, 0x140151728));
     // FUN_14009f3e0 — terrain/scene pick from 2D map position (exe-only)
     fn_MapGetTerrainPos = reinterpret_cast<fn_MapGetTerrainPos_t>(
         ResolveAddr(Module::Exe, 0x14009f3e0));
-
-    // Sprite ctors — dispatch table
-    fn_Sprite_Sprite = *reinterpret_cast<fn_Sprite_Sprite_t*>(
-        ResolveAddr(Module::Exe, 0x1401514c8));
-    fn_Sprite_DefaultCtor2 = *reinterpret_cast<fn_Sprite_DefaultCtor2_t*>(
-        ResolveAddr(Module::Exe, 0x140152b48));
 
     // --- Phase H: Sub-dependency blockers ---
     // Factory singleton — dispatch table at 0x140152760 (double-indirect)

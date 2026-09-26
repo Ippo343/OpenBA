@@ -16,6 +16,11 @@
 #include "system/Value.h"      // ::System::Random — the inline bodies below were
                                // the last callers of the fn_Random_* door pointers.
 #include "ui/UserInterface.h"   // UI::UserInterface::_dialogs (LinkedList walk below)
+// ENDGAME B.3.6 closing pass: the inline bodies below were the last callers of
+// the `fn_UI_SetCursor` / `fn_UI_SetFullscreenFade` / `fn_DialogInstance_GetController`
+// door pointers; they call the real classes now. Spelled by path: `ui/DialogInstance.h`
+// is ALSO the name of the engine-side alias header.
+#include "../../runtime/types/ui/DialogInstance.h"   // UI::DialogInstance::GetController
 // ENDGAME B.3.3 step 7: the inline bodies below were the last callers of the
 // `fn_ExternalFactory_*` / `fn_Factory_*` / `fn_InternalBasePtr_Ctor` pointers.
 // They call the real classes now. GLOBAL SCOPE, and never inside an #if —
@@ -87,27 +92,6 @@ extern fn_Loader_Load_t fn_Loader_Load;
 // Application::Application::SleepThread(this, int ms)
 typedef void (*fn_App_SleepThread_t)(void* self, int ms);
 extern fn_App_SleepThread_t fn_App_SleepThread;
-
-// UI::UserInterface::Update(this, Time const&)
-// Returns INT (the cursor id the UI wants this frame), not void — the export is
-// ?Update@UserInterface@UI@@QEAAHAEBVTime@System@@@Z. This was declared void for a
-// long time and gameupdateloop.cpp worked around it with a local return-int cast.
-typedef int (*fn_UI_Update_t)(void* self, void* time);
-extern fn_UI_Update_t fn_UI_Update;
-
-// UI::UserInterface::Draw(this, Context&)
-typedef void (*fn_UI_Draw_t)(void* self, void* context);
-extern fn_UI_Draw_t fn_UI_Draw;
-
-// UI::UserInterface::CloseDialog(this, InternalPtr<DialogInstance> BY VALUE)
-// ?CloseDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
-// (0x180120f20, ordinal 1725). Previously documented — and resolved — as
-// `AEAV…`, by reference; that name is NOT in the export table. Passing a
-// pointer is right either way: InternalPtr<T> has a non-trivial copy ctor, so
-// MSVC x64 passes it by address in both spellings, and this callee only READS
-// the slot. Wave 7 lane C.
-typedef void (*fn_UI_CloseDialog_t)(void* self, void* dialogPtr);
-extern fn_UI_CloseDialog_t fn_UI_CloseDialog;
 
 // Generic dynamic array push (FUN_18007a0d0) — used for dialog pending lists.
 // The generic `fn_DynArrayPush` itself went with the B.3.2 closing pass (zero
@@ -315,11 +299,6 @@ extern void** g_pAppSingleton;
 // UI infrastructure (DialogController, Element, TextElement)
 // ============================================================
 
-// UI::DialogController::~DialogController(this) — virtual base dtor
-// Resets vtable to DialogController, calls Internal::~Internal
-typedef void (*fn_DialogController_Dtor_t)(void* self);
-extern fn_DialogController_Dtor_t fn_DialogController_Dtor;
-
 // UI::DialogInstance::~DialogInstance(this) — virtual base dtor
 // Resets vtable to DialogInstance, cleans up dialog fields, calls Internal::~Internal
 typedef void (*fn_DialogInstance_Dtor_t)(void* self);
@@ -329,24 +308,6 @@ extern fn_DialogInstance_Dtor_t fn_DialogInstance_Dtor;
 // Used by scalar deleting destructors for conditional free
 typedef void (*fn_MemFreeStatic_t)(void* ptr);
 extern fn_MemFreeStatic_t fn_MemFreeStatic;
-
-// UI::Element::FindElement(this, retval, stringName) — member with non-trivial return
-// RCX=this(Element*), RDX=retval(InternalPtr<Element>*), R8=name(String const&)
-// Recursively searches element tree by name. Returns InternalPtr to found element.
-typedef void* (*fn_FindElement_t)(void* thisElement, void* retval, const void* stringName);
-extern fn_FindElement_t fn_FindElement;
-
-// UI::TextElement::SetParameter(this, index, string) — set text param by index
-typedef void (*fn_TextElement_SetParameter_t)(void* self, int index, const void* str);
-extern fn_TextElement_SetParameter_t fn_TextElement_SetParameter;
-
-// UI::Element::GetUserData(this) -> Base* — returns *(Base**)(this + 0x80)
-typedef void* (*fn_Element_GetUserData_t)(void* self);
-extern fn_Element_GetUserData_t fn_Element_GetUserData;
-
-// UI::Element::SetUserData(this, data) — sets *(Base**)(this + 0x80) = data
-typedef void (*fn_Element_SetUserData_t)(void* self, void* data);
-extern fn_Element_SetUserData_t fn_Element_SetUserData;
 
 // Object::InternalBasePtr::InternalBasePtr(this, Internal*) — stores ptr
 typedef void* (*fn_InternalBasePtr_Ctor_t)(void* self, void* internal);
@@ -362,252 +323,12 @@ extern fn_KeyMap_GetDeviceForId_t fn_KeyMap_GetDeviceForId;
 
 // ============================================================
 // UI Widget Functions (Phase A1 — Runtime DLL exports)
+// ENDGAME B.3.6 closing pass: every UI::* door pointer that stood here reached
+// zero references and was deleted; callers use the real UI classes
+// (runtime/types/ui/*.h). The ctor/dtor doors the exe subclasses still
+// construct through (fn_DialogInstance_Ctor/_Dtor, fn_Element_Ctor,
+// fn_ElementDescription_Ctor/_Dtor, fn_SpriteSheet_Ctor) stay — B36_RULES 7.
 // ============================================================
-
-// --- UI::Element ---
-
-// Element::SetFlagsOnOff(this, setFlags, clearFlags)   retail 0x180116160
-//
-// The body is `_flags = (_flags | setFlags) & ~clearFlags`, i.e. (bits to SET,
-// bits to CLEAR) — NOT (hideFlags, showFlags), which is what this typedef said
-// until Wave 7 lane A reversed it. That old name reads correctly only by
-// accident: flag BIT 0 MEANS "HIDDEN" (?IsVisible@ 0x1800354e0 is
-// `NOT EAX; AND EAX,1`), so the ubiquitous (1,0) call sets the hidden bit and
-// (0,1) clears it. Every other bit inverts that intuition. Retail then runs the
-// parent dirty walk only when BIT 0 changed — no other bit triggers it.
-// The full bit map is UI::ElementFlag in runtime/types/ui/Element.h.
-typedef void (*fn_Element_SetFlagsOnOff_t)(void* self, uint32_t setFlags, uint32_t clearFlags);
-extern fn_Element_SetFlagsOnOff_t fn_Element_SetFlagsOnOff;
-
-// Element::SetElementId(this, id)
-typedef void (*fn_Element_SetElementId_t)(void* self, int id);
-extern fn_Element_SetElementId_t fn_Element_SetElementId;
-
-// Element::SetName(this, String const&)
-typedef void (*fn_Element_SetName_t)(void* self, const void* str);
-extern fn_Element_SetName_t fn_Element_SetName;
-
-// Element::SetToolTip(this, UI::String) — by value, 0x10 bytes, so MSVC passes
-// a POINTER to the caller's temporary.   retail 0x180035740
-//
-// The argument is a UI::String, not a Sprite — this typedef called it `sprite`
-// until Wave 7 lane A reversed the function. The mangled name says so:
-// ?SetToolTip@Element@UI@@QEAAXVString@2@@Z, where `String@2` back-references
-// UI. So does every call site: buildui.cpp, professionui.cpp, toolbardialog.cpp
-// and townhallui.cpp all build one with fn_UIString_Ctor into a uint8_t[16] and
-// pass that. The body copies 0x10 bytes to Element+0x48 and touches no refcount
-// (UI::String is a POD {StringTable*, int index, int pad}); contrast
-// fn_Element_SetToolTipString below, whose argument IS a refcounted
-// System::String. Layout: UI::UiString in runtime/types/ui/Element.h.
-typedef void (*fn_Element_SetToolTip_t)(void* self, void* uiString);
-extern fn_Element_SetToolTip_t fn_Element_SetToolTip;
-
-// Element::SetToolTipString(this, String const&)
-typedef void (*fn_Element_SetToolTipString_t)(void* self, const void* str);
-extern fn_Element_SetToolTipString_t fn_Element_SetToolTipString;
-
-// Element::Child(this, retval, index) -> InternalPtr<Element> (member, non-trivial return)
-// RCX=this, RDX=retval, R8=index
-typedef void* (*fn_Element_Child_t)(void* self, void* retval, int index);
-extern fn_Element_Child_t fn_Element_Child;
-
-// Element::ChildCount(this) -> int
-typedef int (*fn_Element_ChildCount_t)(const void* self);
-extern fn_Element_ChildCount_t fn_Element_ChildCount;
-
-// Element::FindElementType(this, retval, typeId) -> InternalPtr<Element> (member, non-trivial return)
-// RCX=this, RDX=retval, R8=typeId
-typedef void* (*fn_Element_FindElementType_t)(void* self, void* retval, uint32_t typeId);
-extern fn_Element_FindElementType_t fn_Element_FindElementType;
-
-// Element::RemoveChildren(this)
-typedef void (*fn_Element_RemoveChildren_t)(void* self);
-extern fn_Element_RemoveChildren_t fn_Element_RemoveChildren;
-
-// Element::AddChild(this, InternalPtr<Element>)
-typedef void (*fn_Element_AddChild_t)(void* self, void* childPtr);
-extern fn_Element_AddChild_t fn_Element_AddChild;
-
-// --- UI::DialogInstance ---
-
-// DialogInstance::FindElement(this, retval, name) -> InternalPtr<Element> (member, non-trivial return)
-// RCX=this, RDX=retval, R8=name
-typedef void* (*fn_DialogInstance_FindElement_t)(void* self, void* retval, const void* name);
-extern fn_DialogInstance_FindElement_t fn_DialogInstance_FindElement;
-
-// Element::FindElement(this, retIBP, String const& name) — the Element-level twin of
-// DialogInstance::FindElement. Exe dispatch slot 0x140151538.
-// ?FindElement@Element@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@AEBVString@System@@@Z
-typedef void* (*fn_Element_FindElement_t)(void* self, void* retval, const void* name);
-extern fn_Element_FindElement_t fn_Element_FindElement;
-
-// DialogController::GetContainer(this, retIBP) — the controller's root Element.
-// Exe dispatch slot 0x1401528d0.
-// ?GetContainer@DialogController@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
-typedef void* (*fn_DialogController_GetContainer_t)(void* self, void* retval);
-extern fn_DialogController_GetContainer_t fn_DialogController_GetContainer;
-
-// DialogInstance::GetController(this, retval, typeId) -> InternalPtr<DialogController> (member, non-trivial return)
-// RCX=this, RDX=retval, R8=typeId
-// THE THIRD ARGUMENT IS A TYPE ID, NOT AN INDEX (corrected 2026-09-07, Wave 7
-// lane B). Retail 0x180113320 walks the whole controller array and compares the
-// argument against each controller's own type id — vtable slot +0x10, the
-// Object::Internal Type slot — and returns null when nothing matches. Calling
-// it with 0 asks for "the controller whose type id is 0", not "the first one".
-typedef void* (*fn_DialogInstance_GetController_t)(const void* self, void* retval, uint32_t typeId);
-extern fn_DialogInstance_GetController_t fn_DialogInstance_GetController;
-
-// DialogInstance::FindElementType(this, retval, typeId) -> InternalPtr<Element> (member, non-trivial return)
-// RCX=this, RDX=retval, R8=typeId
-typedef void* (*fn_DialogInstance_FindElementType_t)(void* self, void* retval, uint32_t typeId);
-extern fn_DialogInstance_FindElementType_t fn_DialogInstance_FindElementType;
-
-// DialogInstance::SetFlagsOnOff(this, hideFlags, showFlags)
-typedef void (*fn_DialogInstance_SetFlagsOnOff_t)(void* self, uint32_t hideFlags, uint32_t showFlags);
-extern fn_DialogInstance_SetFlagsOnOff_t fn_DialogInstance_SetFlagsOnOff;
-
-// --- UI::ComboElement ---
-
-// ComboElement::AddItem(this, Sprite const&, String const&, userData) -> int
-typedef int (*fn_ComboElement_AddItem_t)(void* self, const void* sprite, const void* str, void* userData);
-extern fn_ComboElement_AddItem_t fn_ComboElement_AddItem;
-
-// ComboElement::SetCurrentItem(this, index)
-typedef void (*fn_ComboElement_SetCurrentItem_t)(void* self, int index);
-extern fn_ComboElement_SetCurrentItem_t fn_ComboElement_SetCurrentItem;
-
-// ComboElement::GetItemCount(this) -> int
-typedef int (*fn_ComboElement_GetItemCount_t)(const void* self);
-extern fn_ComboElement_GetItemCount_t fn_ComboElement_GetItemCount;
-
-// ComboElement::GetCurrentItem(this) -> int
-typedef int (*fn_ComboElement_GetCurrentItem_t)(const void* self);
-extern fn_ComboElement_GetCurrentItem_t fn_ComboElement_GetCurrentItem;
-
-// ComboElement::GetItemData(this, index) -> void*
-typedef void* (*fn_ComboElement_GetItemData_t)(const void* self, int index);
-extern fn_ComboElement_GetItemData_t fn_ComboElement_GetItemData;
-
-// ComboElement::RemoveAllItems(this)
-typedef void (*fn_ComboElement_RemoveAllItems_t)(void* self);
-extern fn_ComboElement_RemoveAllItems_t fn_ComboElement_RemoveAllItems;
-
-// --- UI::ProgressElement ---
-
-// ProgressElement::SetProgressTextParameter(this, index, String const&)
-typedef void (*fn_ProgressElement_SetProgressTextParameter_t)(void* self, int index, const void* str);
-extern fn_ProgressElement_SetProgressTextParameter_t fn_ProgressElement_SetProgressTextParameter;
-
-// ProgressElement::SetMaximumValue(this, float)
-typedef void (*fn_ProgressElement_SetMaximumValue_t)(void* self, float value);
-extern fn_ProgressElement_SetMaximumValue_t fn_ProgressElement_SetMaximumValue;
-
-// ProgressElement::SetCurrentValue(this, float)
-typedef void (*fn_ProgressElement_SetCurrentValue_t)(void* self, float value);
-extern fn_ProgressElement_SetCurrentValue_t fn_ProgressElement_SetCurrentValue;
-
-// --- UI::TableElement ---
-
-// TableElement::SetSize(this, rows, cols)
-typedef void (*fn_TableElement_SetSize_t)(void* self, int rows, int cols);
-extern fn_TableElement_SetSize_t fn_TableElement_SetSize;
-
-// TableElement::SetChild(this, elem, col, row)
-typedef void (*fn_TableElement_SetChild3_t)(void* self, void* elemPtr, int col, int row);
-extern fn_TableElement_SetChild3_t fn_TableElement_SetChild3;
-
-// TableElement::SetChild(this, elem, col) — single-index overload
-typedef void (*fn_TableElement_SetChild2_t)(void* self, void* elemPtr, int col);
-extern fn_TableElement_SetChild2_t fn_TableElement_SetChild2;
-
-// TableElement::GetRowCount(this) -> int
-typedef int (*fn_TableElement_GetRowCount_t)(const void* self);
-extern fn_TableElement_GetRowCount_t fn_TableElement_GetRowCount;
-
-// TableElement::GetColumnCount(this) -> int
-typedef int (*fn_TableElement_GetColumnCount_t)(const void* self);
-extern fn_TableElement_GetColumnCount_t fn_TableElement_GetColumnCount;
-
-// --- UI::NumberEditElement ---
-
-// NumberEditElement::SetValue(this, int)
-typedef void (*fn_NumberEditElement_SetValue_t)(void* self, int value);
-extern fn_NumberEditElement_SetValue_t fn_NumberEditElement_SetValue;
-
-// NumberEditElement::SetMinMax(this, min, max)
-typedef void (*fn_NumberEditElement_SetMinMax_t)(void* self, int minVal, int maxVal);
-extern fn_NumberEditElement_SetMinMax_t fn_NumberEditElement_SetMinMax;
-
-// NumberEditElement::GetValue(this) -> int
-typedef int (*fn_NumberEditElement_GetValue_t)(const void* self);
-extern fn_NumberEditElement_GetValue_t fn_NumberEditElement_GetValue;
-
-// --- UI::NumberElement ---
-
-// NumberElement::SetValue(this, int)
-typedef void (*fn_NumberElement_SetValueInt_t)(void* self, int value);
-extern fn_NumberElement_SetValueInt_t fn_NumberElement_SetValueInt;
-
-// NumberElement::SetValue(this, float)
-typedef void (*fn_NumberElement_SetValueFloat_t)(void* self, float value);
-extern fn_NumberElement_SetValueFloat_t fn_NumberElement_SetValueFloat;
-
-// --- UI::SpinnerElement ---
-
-// SpinnerElement::SetElementId(this, int)
-typedef void (*fn_SpinnerElement_SetElementId_t)(void* self, int id);
-extern fn_SpinnerElement_SetElementId_t fn_SpinnerElement_SetElementId;
-
-// SpinnerElement::SetValue(this, int)
-typedef void (*fn_SpinnerElement_SetValue_t)(void* self, int value);
-extern fn_SpinnerElement_SetValue_t fn_SpinnerElement_SetValue;
-
-// SpinnerElement::SetMinMax(this, min, max) — reads +0xa0 field, ONLY for SpinnerElement.
-// WARNING: Do NOT call on SliderElement — use fn_NumberEditElement_SetMinMax instead.
-// SpinnerElement::SetMinMax dereferences +0xa0 which is NULL on SliderElements → crash.
-typedef void (*fn_SpinnerElement_SetMinMax_t)(void* self, int minVal, int maxVal);
-extern fn_SpinnerElement_SetMinMax_t fn_SpinnerElement_SetMinMax;
-
-// SpinnerElement::GetValue(this) -> int
-typedef int (*fn_SpinnerElement_GetValue_t)(const void* self);
-extern fn_SpinnerElement_GetValue_t fn_SpinnerElement_GetValue;
-
-// SpinnerElement::GetMaxValue(this) -> int
-typedef int (*fn_SpinnerElement_GetMaxValue_t)(const void* self);
-extern fn_SpinnerElement_GetMaxValue_t fn_SpinnerElement_GetMaxValue;
-
-// SpinnerElement::SetIncrement(this, int)
-typedef void (*fn_SpinnerElement_SetIncrement_t)(void* self, int increment);
-extern fn_SpinnerElement_SetIncrement_t fn_SpinnerElement_SetIncrement;
-
-// --- UI::ImageElement ---
-
-// ImageElement::SetSprite(this, Sprite) — by value
-typedef void (*fn_ImageElement_SetSprite_t)(void* self, void* sprite);
-extern fn_ImageElement_SetSprite_t fn_ImageElement_SetSprite;
-
-// ImageElement::SetWidthHeight(this, w, h)
-typedef void (*fn_ImageElement_SetWidthHeight_t)(void* self, int w, int h);
-extern fn_ImageElement_SetWidthHeight_t fn_ImageElement_SetWidthHeight;
-
-// --- UI::LabelElement ---
-
-// LabelElement::SetSprite(this, Sprite) — by value
-typedef void (*fn_LabelElement_SetSprite_t)(void* self, void* sprite);
-extern fn_LabelElement_SetSprite_t fn_LabelElement_SetSprite;
-
-// --- UI::TextElement ---
-
-// TextElement::SetText(this, String) — by value (UI::String wrapper)
-typedef void (*fn_TextElement_SetText_t)(void* self, void* str);
-extern fn_TextElement_SetText_t fn_TextElement_SetText;
-
-// --- UI::Dialog ---
-
-// Dialog::CreateElement(dialog, retInternalBasePtr, imageExternalRef)
-// Dispatch slot 0x1401528c0. Creates a UI element from an external resource ref.
-typedef void (*fn_Dialog_CreateElement_t)(void* dialog, void* retIBP, void* imageExternalRef);
-extern fn_Dialog_CreateElement_t fn_Dialog_CreateElement;
 
 // --- Input key name helper (exe 0x140099c20) ---
 
@@ -953,20 +674,6 @@ extern fn_GetActiveProductIndex_t fn_GetActiveProductIndex; // FUN_140119470
 
 // CemeteryGetBurialCount — now inline in cemeteryui.cpp (CemeteryGetBurialCount_Impl)
 
-// SpinnerElement::IsActive(this) -> bool
-typedef bool (*fn_SpinnerElement_IsActive_t)(const void* self);
-extern fn_SpinnerElement_IsActive_t fn_SpinnerElement_IsActive;
-
-// --- UI::PageElement ---
-
-// PageElement::GetActivePage(this) -> int
-typedef int (*fn_PageElement_GetActivePage_t)(const void* self);
-extern fn_PageElement_GetActivePage_t fn_PageElement_GetActivePage;
-
-// PageElement::SetActivePage(this, page)
-typedef void (*fn_PageElement_SetActivePage_t)(void* self, int page);
-extern fn_PageElement_SetActivePage_t fn_PageElement_SetActivePage;
-
 // --- UI::Element type IDs (exref, double-indirect) ---
 
 // CheckboxElement type ID at exref 0x1401516a8
@@ -1035,11 +742,6 @@ extern fn_OrchardGetGrowth_t fn_OrchardGetGrowth;
 // Phase F: Dialog/UI Runtime functions
 // ============================================================
 
-// ImageElement::SetRotation(this, angle) — sets rotation in degrees
-// ?SetRotation@ImageElement@UI@@QEAAXM@Z (0x1801182c0, ordinal 3952)
-typedef void (*fn_ImageElement_SetRotation_t)(void* self, float angle);
-extern fn_ImageElement_SetRotation_t fn_ImageElement_SetRotation;
-
 // Time::AsSeconds — REMOVED, ENDGAME B.3.4b System closing (0 CALLs).
 // Callers use System::Time::AsSeconds(); the Runtime export
 // ?AsSeconds@Time@System@@QEBAMXZ (0x180007900, ordinal 1620) stays registered.
@@ -1088,40 +790,6 @@ extern fn_SaveLoad_GetSaveInfo_t fn_SaveLoad_GetSaveInfo;
 typedef void* (*fn_SaveLoad_GetSaveState_t)(void* saveLoad);
 extern fn_SaveLoad_GetSaveState_t fn_SaveLoad_GetSaveState;
 
-// Sprite::IsValid(this) -> bool
-// ?IsValid@Sprite@UI@@QEBA_NXZ
-//
-// ⚠ THIS DECLARATION IS CORRECT — do not "fix" it. Ghidra USED to label the exe
-// dispatch slot 0x1401514d0 as fn_Sprite_IsValid, which is wrong: that slot is
-// ExternalFactory::FindNext(self, typeId, prev) -> void*, which is now reached as
-// ::Object::ExternalFactory::FindNext. The mislabel cost real time on 2026-07-31 because it
-// made the decompiler type the iterator's return as `bool`, which turned the cursor
-// walk in Building_GetBuyEntries (0x140059670) into an apparent infinite loop. The
-// Ghidra data label has since been renamed to Object_ExternalFactory_FindNext.
-//
-// Tell them apart: this one resolves by MANGLED EXPORT from the Runtime DLL
-// (engine_funcs.cpp: ResolveExport("?IsValid@Sprite@UI@@QEBA_NXZ")) and has nothing to
-// do with any exe .rdata slot. Its real callers are saveloaddialog.cpp:248 and
-// toolbardialog.cpp:1373. If a decompile shows "fn_Sprite_IsValid" being called twice
-// per loop with a cursor argument, you are looking at the factory iterator, not a
-// sprite check.
-typedef bool (*fn_Sprite_IsValid_t)(void* sprite);
-extern fn_Sprite_IsValid_t fn_Sprite_IsValid;
-
-// Sprite::Width(this) / Sprite::Height(this) -> int (pixel size of the sprite cell)
-// ?Width@Sprite@UI@@QEBAHXZ / ?Height@Sprite@UI@@QEBAHXZ
-// Used by TutorialHighlightDialog's two arrow-positioning helpers (exe dispatch
-// slots 0x1401528b8 / 0x1401528b0).
-typedef int (*fn_Sprite_Width_t)(const void* sprite);
-extern fn_Sprite_Width_t fn_Sprite_Width;
-typedef int (*fn_Sprite_Height_t)(const void* sprite);
-extern fn_Sprite_Height_t fn_Sprite_Height;
-
-// UserInterface::Play(this, soundId) — play a UI sound effect
-// ?Play@UserInterface@UI@@QEAAXH@Z
-typedef void (*fn_UI_Play_t)(void* ui, int soundId);
-extern fn_UI_Play_t fn_UI_Play;
-
 // DateTime::AsString(this, retval) -> String — format date+time as string (non-trivial return)
 // ?AsString@DateTime@System@@QEBA?AVString@2@XZ
 typedef void* (*fn_DateTime_AsString_t)(void* dateTime, void* retval);
@@ -1135,33 +803,6 @@ extern fn_DateTime_AsString_t fn_DateTime_AsString;
 struct SaveLoadDialog;
 void SaveLoadDialog_PopulateFileList(SaveLoadDialog* self);
 
-// FORMERLY resolved to the WRONG function. `?SetText@EditElement@UI@@QEAAXVString@2@@Z`
-// (a by-value overload) is Wave 7 lane D's phantom name #6 — it is NOT IN THE
-// SHIPPED EXPORT TABLE (confirmed by pefile query,
-// reference_resolveexport_phantom_names.md) — so ResolveExport always failed
-// and the code fell back to a hardcoded address, 0x180042070, which is NOT
-// EditElement at all: it is `UI::TextElement::SetText(UI::String)`, a base
-// class taking an unrelated 16-byte UI::String and writing to TextElement's
-// OWN cached-display-text field at this+0xd8/+0xe0 (see CacheText). Called on
-// an EditElement (which has a DIFFERENT, dedicated System::String field at
-// +0xc8, guarded by a readonly check EditElement::SetText itself performs),
-// this corrupted TextElement's base string field with raw bytes from a
-// System::String and never touched the field the edit box actually displays
-// or the readonly guard — the one live caller, spritecaptureui.cpp:100 (the
-// sprite-capture dev tool's "default capture path" edit box), silently never
-// worked: its typed default text never stuck, and TextElement::CacheText ran
-// over garbage. Retargeted to the real, by-reference EditElement::SetText
-// (0x1800d0db0, exported) below — identical raw ABI (self, pointer-to-String),
-// so the existing caller needs no change.
-// ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z (0x1800d0db0)
-typedef void (*fn_EditElement_SetText_t)(void* self, void* str);
-extern fn_EditElement_SetText_t fn_EditElement_SetText;
-
-// EditElement::SetText(this, System::String const&) — sets edit field text (takes System::String, 8 bytes)
-// ?SetText@EditElement@UI@@QEAAXAEBVString@System@@@Z (0x1800d0db0)
-typedef void (*fn_EditElement_SetText_SysStr_t)(void* self, void* sysStr);
-extern fn_EditElement_SetText_SysStr_t fn_EditElement_SetText_SysStr;
-
 // Input::Device::Released(this, InputDevice, 0, keyIndex) -> bool
 // ?Released@Device@Input@@QEBA_NW4InputDevice@12@HH@Z
 // InputDevice: 1=keyboard, 2=mouse
@@ -1170,27 +811,6 @@ extern fn_Input_Device_Released_t fn_Input_Device_Released;
 
 // Input::Device singleton — accessed via exe exref at 0x140151b80 (double-indirect)
 extern void** g_pInputDeviceSingleton;
-
-// ImageElement::GetSprite(this, retval) — member, non-trivial return ABI
-// RCX=this, RDX=retval(Sprite*). Copies 16 bytes from +0xC0/+0xC8.
-// ?GetSprite@ImageElement@UI@@QEBA?AVSprite@2@XZ (0x1801182a0, ordinal 2926)
-typedef void (*fn_ImageElement_GetSprite_t)(void* self, void* retval);
-extern fn_ImageElement_GetSprite_t fn_ImageElement_GetSprite;
-
-// LabelElement::GetSprite — returns Sprite via hidden return pointer
-// Address: 0x1800429d0, Ordinal: 2927
-typedef void (*fn_LabelElement_GetSprite_t)(void* self, void* retval);
-extern fn_LabelElement_GetSprite_t fn_LabelElement_GetSprite;
-
-// SpriteSheet::GetSpriteIndexFromName(this, name) -> int
-// ?GetSpriteIndexFromName@SpriteSheet@UI@@QEBAHAEBVString@System@@@Z (0x1800031f0, ordinal 2930)
-typedef int (*fn_SpriteSheet_GetSpriteIndexFromName_t)(void* sheet, void* name);
-extern fn_SpriteSheet_GetSpriteIndexFromName_t fn_SpriteSheet_GetSpriteIndexFromName;
-
-// SliderElement::SetParameter(this, index, String const&)
-// ?SetParameter@SliderElement@UI@@QEAAXHAEBVString@System@@@Z
-typedef void (*fn_SliderElement_SetParameter_t)(void* self, int index, const void* str);
-extern fn_SliderElement_SetParameter_t fn_SliderElement_SetParameter;
 
 // Audio::Scene::Pause(this, channel, pause) — unpauses audio scene channels
 // Resolved from exe dispatch table at 0x140152030
@@ -1439,13 +1059,6 @@ extern fn_ConsumeProduceUI_Slot4_t fn_ConsumeProduceUI_Slot4;
 typedef int (*fn_GoalList_GetGoalCount_t)(void* self);
 extern fn_GoalList_GetGoalCount_t fn_GoalList_GetGoalCount;
 
-// UI::Dialog::GetTemplate(this, retval, index) -> ExternalPtr<ElementDescription>
-// Member, non-trivial return: RCX=this, RDX=retval, R8=index
-// ?GetTemplate@Dialog@UI@@QEBA?AV?$ExternalPtr@VElementDescription@UI@@@Object@@H@Z
-// (0x1800388b0, ordinal 2956)
-typedef void (*fn_Dialog_GetTemplate_t)(void* self, void* retval, int index);
-extern fn_Dialog_GetTemplate_t fn_Dialog_GetTemplate;
-
 // Goal::GetText(this, retval) -> String — non-trivial return
 // RCX=this, RDX=retval(String*). Copies string at this+0x28 with refcount.
 // ?GetText@Goal@Achievement@@QEBA?AVString@System@@XZ (0x180001ba0, ordinal 2958)
@@ -1493,62 +1106,7 @@ extern fn_ExternalList_GetResourceCount_t fn_ExternalList_GetResourceCount;
 // Scenario type ID pointer (for IsDerivedFrom check in ScenarioDialog)
 extern uint32_t* g_TypeId_Scenario;  // from exref in ScenarioDialog::Slot4
 
-// UI::Element::SetPadding(this, left, RIGHT, TOP, bottom)
-// ?SetPadding@Element@UI@@QEAAXHHHH@Z   retail 0x180115480
-//
-// *** THE 2nd AND 3rd ARGUMENTS ARE (right, top), NOT (top, right). ***
-// This typedef said (left, top, right, bottom) until Wave 7 lane A reversed the
-// function; if you meet that order anywhere else, it is the old wrong claim.
-// Retail stores EDX->+0x18, R8D->+0x1c, R9D->+0x20, [RSP+0x28]->+0x24, and the
-// four one-line exported accessors settle which offset is which field:
-//   ?GetLeftPad@   0x1800355e0  MOV EAX,[RCX+0x18]
-//   ?GetRightPad@  0x180035600  MOV EAX,[RCX+0x1c]
-//   ?GetTopPad@    0x1800355f0  MOV EAX,[RCX+0x20]
-//   ?GetBottomPad@ 0x180035610  MOV EAX,[RCX+0x24]
-// Corroborated by ?GetPaddedSize@ (0x180115f10), which computes
-// width = _layoutWidth + [+0x1c] + [+0x18] and height = _layoutHeight + [+0x24] + [+0x20].
-// Field names and offsets: runtime/types/ui/Element.h. Write-up:
-// docs/runtime_port/WAVE7_LANE_A.md §6.
-//
-// The defect was LATENT when it was found — no caller outside engine_funcs.cpp —
-// so nothing in the tree needed fixing alongside it.
-typedef void (*fn_Element_SetPadding_t)(void* self, int left, int right, int top, int bottom);
-extern fn_Element_SetPadding_t fn_Element_SetPadding;
-
-// UI::Sprite::Sprite(retval, ExternalPtr<SpriteSheet>, String const&) — non-trivial return
-// RCX=retval(Sprite*), RDX=spriteSheet, R8=spriteName(String const&)
-// ??0Sprite@UI@@QEAA@V?$ExternalPtr@VSpriteSheet@UI@@@Object@@AEBVString@System@@@Z
-typedef void* (*fn_Sprite_Ctor_t)(void* retval, uint64_t spriteSheet, const void* spriteName);
-extern fn_Sprite_Ctor_t fn_Sprite_Ctor;
-
-// UI::String::String(retval, ExternalPtr<StringTable>, String const&) — non-trivial return
-// RCX=retval(UIString*), RDX=stringTable, R8=stringName(String const&)
-// ??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@AEBV0System@@@Z
-typedef void* (*fn_UIString_Ctor_t)(void* retval, uint64_t stringTable, const void* stringName);
-extern fn_UIString_Ctor_t fn_UIString_Ctor;
-
-// UI::String::operator System::String() — converts UI::String to System::String
-// Member, non-trivial return: RCX=this(UIString*), RDX=retval(System::String*)
-// ??BString@UI@@QEBA?AV0System@@XZ (ordinal 1307)
-typedef void (*fn_UIString_ToSystemString_t)(void* self, void* retval);
-extern fn_UIString_ToSystemString_t fn_UIString_ToSystemString;
-
 // fn_EventNotifyDialog_ArrayRemove — now inline as EventNotifyDialog_ArrayRemove_Impl in eventnotifydialog.cpp
-
-// UI::UserInterface::AddDialog(this, InternalPtr<DialogInstance>)
-// ?AddDialog@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
-typedef void (*fn_UI_AddDialog_t)(void* self, void* dialogPtr);
-extern fn_UI_AddDialog_t fn_UI_AddDialog;
-
-// UI::Element::GetPaddedSize(this, int& width, int& height) — member function
-// ?GetPaddedSize@Element@UI@@QEAAXAEAH0@Z
-typedef void (*fn_Element_GetPaddedSize_t)(void* self, int* outWidth, int* outHeight);
-extern fn_Element_GetPaddedSize_t fn_Element_GetPaddedSize;
-
-// UI::RadioElement::SetActiveRadio(this, int index)
-// ?SetActiveRadio@RadioElement@UI@@QEAAXH@Z
-typedef void (*fn_RadioElement_SetActiveRadio_t)(void* self, int index);
-extern fn_RadioElement_SetActiveRadio_t fn_RadioElement_SetActiveRadio;
 
 // ToolbarDialog constructor (FUN_1400b9910 in retail exe)
 // FULLY REIMPLEMENTED: ToolbarDialog_Ctor_Impl() in code/Game/Dialog/toolbardialog.cpp
@@ -1599,14 +1157,6 @@ extern uint32_t* g_TypeId_ToolbarExternal;
 // Toolbar type ID at DAT_1401c6128 — used by ExternalFactory::FindNext and IsDerivedFrom
 // in ToolbarDialog_Ctor to iterate all Toolbar items matching a group
 extern uint32_t* g_TypeId_ToolbarItem;
-
-// RadioElement::FindCheckBoxes(this) — scans children for checkboxes and registers them
-// ?FindCheckBoxes@RadioElement@UI@@QEAAXXZ (0x1800d5750)
-typedef void (*fn_RadioElement_FindCheckBoxes_t)(void* self);
-extern fn_RadioElement_FindCheckBoxes_t fn_RadioElement_FindCheckBoxes;
-
-// Sprite constructor taking spriteSheet + spriteName (same as fn_Sprite_Ctor but used in toolbar)
-// Already available as fn_Sprite_Ctor
 
 // FUN_140100270: Find open dialog by controller type matching group ID
 // Searches all open dialogs for one whose controller matches a specific type
@@ -1733,16 +1283,6 @@ extern fn_External_Dtor_t fn_External_Dtor;
 typedef short (*fn_KeyMap_GetValue_t)(void* self, int slot, int axis);
 extern fn_KeyMap_GetValue_t fn_KeyMap_GetValue;
 
-// UI::UserInterface::GetFirstContainedDialog(this, x, y) -> InternalPtr<DialogInstance>
-// Member, non-trivial return: RCX=this, RDX=retval, R8=x, R9=y
-// ?GetFirstContainedDialog@UserInterface@UI@@QEBA?AV?$InternalPtr@VDialogInstance@UI@@@Object@@HH@Z
-// (0x18011fb00, ordinal 2669). The export is QEBA (const); this line used to
-// say QEAA, a name the DLL does not contain, and the resolve fell through to
-// the address form. Const-ness has no ABI, so nothing about the call changes.
-// Wave 7 lane C. PORTED: runtime/src/ui/userinterface.cpp.
-typedef void* (*fn_UI_GetFirstContainedDialog_t)(void* self, void* retval, int x, int y);
-extern fn_UI_GetFirstContainedDialog_t fn_UI_GetFirstContainedDialog;
-
 // EditTool_SelectEntity (FUN_1400fd3b0 in exe)
 // Selects an entity in the edit tool, opens entity dialog if needed.
 // RCX=editTool*, RDX=entityInternalBasePtr*
@@ -1762,23 +1302,6 @@ extern float* g_pNotifyTimerDuration;
 // ??0Time@System@@QEAA@M@Z
 typedef void* (*fn_Time_Ctor_Float_t)(void* retval, float seconds);
 extern fn_Time_Ctor_Float_t fn_Time_Ctor_Float;
-
-// UI::String::String(retval, ExternalPtr<StringTable>) — single-arg ctor from string table entry
-// Non-trivial return: RCX=retval(UIString*, 16 bytes), RDX=externalPtr(8 bytes)
-// Resolved from exe dispatch table at 0x140151300.
-typedef void* (*fn_UIString_Ctor_Entry_t)(void* retval, uint64_t externalPtr);
-extern fn_UIString_Ctor_Entry_t fn_UIString_Ctor_Entry;
-
-// UI::String::String(retval) — default ctor, produces empty UI::String
-// Non-trivial return: RCX=retval(UIString*, 16 bytes)
-// Resolved from exe dispatch table at 0x140151ca8.
-typedef void* (*fn_UIString_DefaultCtor_t)(void* retval);
-extern fn_UIString_DefaultCtor_t fn_UIString_DefaultCtor;
-
-// UI::Sprite default ctor — UI::Sprite::Sprite(this)
-// ??0Sprite@UI@@QEAA@XZ
-typedef void* (*fn_Sprite_Default_Ctor_t)(void* retval);
-extern fn_Sprite_Default_Ctor_t fn_Sprite_Default_Ctor;
 
 // fn_Dialog_GetReference — REMOVED 2026-09-07 (Wave 7 lane B,
 // docs/runtime_port/WAVE7_LANE_B.md §5). It was declared as
@@ -1803,50 +1326,11 @@ extern fn_Audio_Scene_PlayEffect_t fn_Audio_Scene_PlayEffect;
 
 // EventNotifyDialog_ArrayPush — now inline as EventNotifyDialog_ArrayPush_Impl in eventnotifydialog.cpp
 
-// UI::DialogInstance::DialogInstance ctor — creates a dialog from parent+template
-// FUN_140067c30 uses this to create EventPopupDialog instances
-// Already available through fn_UI_AddDialog and MemAlloc.
-
 // EventPopupDialog vtable pointer (PTR_FUN_14015bd80)
 
 // ============================================================
 // HelpUI support functions
 // ============================================================
-
-// UI::StringTable::GetText(this, retval, textIndex) — member, non-trivial return
-// RCX=this(StringTable*), RDX=retval(String*), R8D=textIndex
-// ?GetText@StringTable@UI@@QEBA?AVString@System@@H@Z
-typedef void (*fn_StringTable_GetText_t)(void* self, void* retval, int textIndex);
-extern fn_StringTable_GetText_t fn_StringTable_GetText;
-
-// UI::DocumentTextElement::GetLink(this, retval, linkIndex) — member, non-trivial return
-// RCX=this(DocumentTextElement*), RDX=retval(String*), R8D=linkIndex
-// ?GetLink@DocumentTextElement@UI@@QEBA?AVString@System@@H@Z
-typedef void (*fn_DocumentTextElement_GetLink_t)(void* self, void* retval, int linkIndex);
-extern fn_DocumentTextElement_GetLink_t fn_DocumentTextElement_GetLink;
-
-// UI::DocumentTextElement::SetText(this, UI::String) — takes UI::String (16 bytes) by value
-// RCX=this(DocumentTextElement*), RDX=uiString (pointer to 16-byte UI::String)
-// ?SetText@DocumentTextElement@UI@@QEAAXVString@2@@Z
-typedef void (*fn_DocumentTextElement_SetText_UIString_t)(void* self, const void* uiString);
-extern fn_DocumentTextElement_SetText_UIString_t fn_DocumentTextElement_SetText_UIString;
-
-// UI::DocumentTextElement::SetText(this, System::String const&)
-// RCX=this(DocumentTextElement*), RDX=text(String const&)
-// ?SetText@DocumentTextElement@UI@@QEAAXAEBVString@System@@@Z
-typedef void (*fn_DocumentTextElement_SetText_t)(void* self, const void* text);
-extern fn_DocumentTextElement_SetText_t fn_DocumentTextElement_SetText;
-
-// UI::ContainerElement::SetOffsets(this, offsetX, offsetY)
-// ?SetOffsets@ContainerElement@UI@@QEAAXHH@Z
-typedef void (*fn_ContainerElement_SetOffsets_t)(void* self, int offsetX, int offsetY);
-extern fn_ContainerElement_SetOffsets_t fn_ContainerElement_SetOffsets;
-
-// UI::String::String(this, ExternalPtr<StringTable>, int textIndex) — ctor by index
-// RCX=this(UIString*, 16 bytes), RDX=stringTable(ExternalPtr), R8D=textIndex
-// ??0String@UI@@QEAA@V?$ExternalPtr@VStringTable@UI@@@Object@@H@Z
-typedef void* (*fn_UIString_Ctor_Index_t)(void* self, uint64_t stringTable, int textIndex);
-extern fn_UIString_Ctor_Index_t fn_UIString_Ctor_Index;
 
 // StringTable type ID — resolved from _typeInfo_exref at 0x140151488
 // Used for IsDerivedFrom checks on ExternalList entries
@@ -2180,14 +1664,6 @@ extern void** g_pAudioConfigSingleton;  // resolved from _singleton_exref in sli
 // Video::Configuration singleton — contains current video settings
 extern void** g_pVideoConfigSingleton;  // resolved from _singleton_exref in Startup
 
-// UI::Sprite::Sprite() — default constructor, zeroes 16 bytes
-typedef void* (*fn_Sprite_DefaultCtor_t)(void* self);
-extern fn_Sprite_DefaultCtor_t fn_Sprite_DefaultCtor;
-
-// UI::TabElement::SetActiveTab(this, tabIndex)
-typedef void (*fn_TabElement_SetActiveTab_t)(void* self, int tabIndex);
-extern fn_TabElement_SetActiveTab_t fn_TabElement_SetActiveTab;
-
 // fn_Element_GetParent — now inline in optionsdialog.cpp (vtable call at +0x48)
 
 // OptionsDialog game settings global — DAT_1401c3de0 in exe
@@ -2226,18 +1702,6 @@ extern fn_MapUI_ProjectCornersToGround_t fn_MapUI_ProjectCornersToGround;
 // ToolUI support functions
 // ============================================================
 
-// UI::DialogInstance::SetUpperLeft(this, x, y, animate)
-// ?SetUpperLeft@DialogInstance@UI@@QEAAXHH_N@Z
-typedef void (*fn_DialogInstance_SetUpperLeft_t)(void* self, int x, int y, bool animate);
-extern fn_DialogInstance_SetUpperLeft_t fn_DialogInstance_SetUpperLeft;
-
-// UI::UserInterface::BringDialogToFront(this, InternalPtr<DialogInstance> BY VALUE)
-// ?BringDialogToFront@UserInterface@UI@@QEAAXV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
-// (0x180120440, ordinal 1672). The `AEAV…` by-reference spelling this line
-// used to carry is not in the export table; same ABI, same target. Wave 7 lane C.
-typedef void (*fn_UI_BringDialogToFront_t)(void* self, void* dialogPtr);
-extern fn_UI_BringDialogToFront_t fn_UI_BringDialogToFront;
-
 // FUN_14012e100: UIDescription_AddControllers — REIMPLEMENTED in code/Game/Dialog/toolui.cpp
 // Iterates UIDescription controller entries, checks for TabElement targets,
 // and calls the appropriate AddController overload for each entry.
@@ -2246,26 +1710,6 @@ void UIDesc_AddControllers_Impl(void* uiDesc, void* dialogInstPtr, void* dataSou
 
 // TypeId for UIDescription — DAT_1401c7f90
 extern uint32_t* g_TypeId_UIDescription;
-
-// UI::TabElement::AddTab(this, retval, tabDesc, elementDesc) -> InternalPtr<Element>
-// Non-trivial return ABI: RCX=this, RDX=retval, R8=tabDesc, R9=elementDesc
-// Resolved from exe dispatch table at 0x1401529c8
-typedef void* (*fn_TabElement_AddTab_t)(void* self, void* retval, void* tabDesc, void* elementDesc);
-extern fn_TabElement_AddTab_t fn_TabElement_AddTab;
-
-// UI::DialogInstance::AddController (5-arg, tab variant)
-// (this, typeId, dataSource, controllerConfig, tabPageElement)
-// Resolved from exe dispatch table at 0x1401529d0
-typedef void (*fn_DialogInstance_AddControllerTab_t)(void* self, uint32_t typeId,
-    void* dataSource, void* controllerConfig, void* tabPageElement);
-extern fn_DialogInstance_AddControllerTab_t fn_DialogInstance_AddControllerTab;
-
-// UI::DialogInstance::AddController (6-arg, non-tab variant)
-// (this, typeId, dataSource, controllerConfig, elementDesc, nameStr)
-// Resolved from exe dispatch table at 0x140151a90
-typedef void (*fn_DialogInstance_AddController6_t)(void* self, uint32_t typeId,
-    void* dataSource, void* controllerConfig, void* elementDesc, void* nameStr);
-extern fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6;
 
 // ============================================================
 // DragTool support functions
@@ -2276,13 +1720,6 @@ extern fn_DialogInstance_AddController6_t fn_DialogInstance_AddController6;
 // Dispatch table at 0x1401528f0
 typedef bool (*fn_KeyMap_Released_t)(void* self, int slot, int keyId);
 extern fn_KeyMap_Released_t fn_KeyMap_Released;
-
-// UI::DialogInstance::GetRoot(this) -> InternalBasePtr<Element>* (returns ptr to root element IBP)
-// ?GetRoot@DialogInstance@UI@@QEAA?AV?$InternalPtr@VElement@UI@@@Object@@XZ
-// Dispatch table at 0x1401527f8. Returns InternalPtr<Element> BY VALUE (hidden
-// retbuf: RCX=this, RDX=&retbuf; returns retbuf in RAX). Caller supplies retbuf.
-typedef void* (*fn_DialogInstance_GetRoot_t)(void* self, void* retbuf);
-extern fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot;
 
 // REMOVED at Wave 8 integration: fn_AudioScene_PlayEffect.
 // It was a vestigial resolve under a WRONG NAME. Slot 0x140152830 is NOT any
@@ -2302,11 +1739,6 @@ extern fn_DialogInstance_GetRoot_t fn_DialogInstance_GetRoot;
 // ============================================================
 // ModDetailsDialog support functions
 // ============================================================
-
-// UI::Element::Hide(this, hide) — sets/clears hidden flag
-// ?Hide@Element@UI@@QEAAX_N@Z
-typedef void (*fn_Element_Hide_t)(void* self, bool hide);
-extern fn_Element_Hide_t fn_Element_Hide;
 
 // System::Configuration::GetVersionString(retval, version, isBeta) -> String
 // Static with hidden return: RCX=retval(String*), RDX=version(uint), R8B=isBeta(bool)
@@ -2333,12 +1765,6 @@ extern void** g_ppModificationSingleton;
 // UI::DialogInstance::OnElementEvent
 // ============================================================
 
-// DialogInstance::OnElementEvent(this, elementPtr, msg, id, p5, p6, p7, p8)
-// Base class event handler — exe dispatch at [0x140151a30]
-typedef void (*fn_DialogInstance_OnElementEvent_t)(void* self, void* elementPtr,
-    int msg, int id, uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8);
-extern fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent;
-
 // fn_DialogInstance_AddController — REMOVED 2026-09-07 (Wave 7 lane B,
 // docs/runtime_port/WAVE7_LANE_B.md §5). It was declared as
 //   AddController(this, typeId, int p3, int p4, void* external, void* nameStr)
@@ -2349,8 +1775,9 @@ extern fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent;
 //    ExternalPtr<ElementDescription>, System::String const&)
 // — the two `int`s were pointer arguments (the exact
 // reference_hidden_retval_and_int_pointer_args.md failure). That overload is
-// ALREADY resolved correctly, right below, as fn_DialogInstance_AddController6,
-// so this was a duplicate as well as a wrong name.
+// ALREADY resolved correctly as fn_DialogInstance_AddController6 (itself retired
+// with zero callers by the ENDGAME B.3.6 closing pass), so this was a duplicate
+// as well as a wrong name.
 //
 // Worse than dead: its ResolveExport returned null, so its fallback fired and
 // read exe dispatch slot 0x140151a60, which tools/dispatch_slot_map.py says is
@@ -2358,20 +1785,6 @@ extern fn_DialogInstance_OnElementEvent_t fn_DialogInstance_OnElementEvent;
 // standalone/reg_unreg_lane2.cpp's note claiming that branch "never fires
 // because the ResolveExport already succeeds" was wrong for the same reason.
 // Deleted rather than repaired because it had ZERO callers tree-wide.
-
-// UI::DialogInstance::OnUpdateLayout(this) — virtual, slot +0x30
-// Iterates child elements at +0x78 (count at +0x80) and dispatches their
-// OnUpdateLayout virtual (child vtable +0x38). Mangled:
-//   ?OnUpdateLayout@DialogInstance@UI@@UEAAXXZ — Runtime DLL @ 0x1801153a0
-typedef void (*fn_DialogInstance_OnUpdateLayout_t)(void* self);
-extern fn_DialogInstance_OnUpdateLayout_t fn_DialogInstance_OnUpdateLayout;
-
-// UI::DialogInstance::OnUpdate(this, Time const&) — virtual, slot +0x38
-// Iterates child elements at +0x78 (count at +0x80) and dispatches their
-// OnUpdate virtual (child vtable +0x40) with the time pointer. Mangled:
-//   ?OnUpdate@DialogInstance@UI@@UEAAXAEBVTime@System@@@Z — Runtime DLL @ 0x180115400
-typedef void (*fn_DialogInstance_OnUpdate_t)(void* self, const void* time);
-extern fn_DialogInstance_OnUpdate_t fn_DialogInstance_OnUpdate;
 
 // ============================================================
 // ModDialog helper functions (exe-local)
@@ -2480,20 +1893,6 @@ extern fn_GroupRating_Init_t fn_GroupRating_Init;    // FUN_14006abf0
 typedef void (*fn_GroupRating_Update_t)(void* ratingArrayBase, float value, float maxValue);
 extern fn_GroupRating_Update_t fn_GroupRating_Update; // FUN_14006aed0
 
-// --- GraphElement functions (resolved from Runtime DLL) ---
-typedef void (*fn_GraphElement_RemoveGraphs_t)(void* self);
-extern fn_GraphElement_RemoveGraphs_t fn_GraphElement_RemoveGraphs;
-
-typedef void (*fn_GraphElement_AddGraph_t)(void* self, uint32_t color);
-extern fn_GraphElement_AddGraph_t fn_GraphElement_AddGraph;
-
-typedef void (*fn_GraphElement_AddGraphPoint_t)(void* self, int graphIndex, int value);
-extern fn_GraphElement_AddGraphPoint_t fn_GraphElement_AddGraphPoint;
-
-// --- StringTable functions (resolved from Runtime DLL) ---
-typedef int (*fn_StringTable_GetCount_t)(void* self);
-extern fn_StringTable_GetCount_t fn_StringTable_GetCount;
-
 // --- Production stat query (exe) ---
 // FUN_140090f20: Query production stats for a resource over a time range.
 // Returns accumulated production/consumption count.
@@ -2576,11 +1975,6 @@ extern uint32_t* g_TypeId_CaptureBoxElement;
 // ============================================================
 // TradeUI support functions
 // ============================================================
-
-// UI::Element::SetNeedsSizeCalc(this) — marks element for layout recalculation
-// ?SetNeedsSizeCalc@Element@UI@@QEAAXXZ
-typedef void (*fn_Element_SetNeedsSizeCalc_t)(void* self);
-extern fn_Element_SetNeedsSizeCalc_t fn_Element_SetNeedsSizeCalc;
 
 // TradeUI::RefreshSortedDisplay (FUN_1400846b0) — REPLACED with TradeUI_RefreshDisplay in tradeui.cpp
 // fn_TradeUI_RefreshDisplay pointer kept for reference / fallback only.
@@ -2750,16 +2144,6 @@ extern fn_PerlinNoise_Generate_t fn_PerlinNoise_Generate;
 // RCX=weatherMgrPtr(longlong*), RDX=timePtr(longlong*)
 typedef void (*fn_Weather_ResetTime_t)(void* weatherMgrPtr, void* timePtr);
 extern fn_Weather_ResetTime_t fn_Weather_ResetTime;
-
-// UI::UserInterface::SetCursor(this, ExternalPtr<Cursor>) — sets active cursor
-// Ordinal 3865: ?SetCursor@UserInterface@UI@@QEAAXV?$ExternalPtr@VCursor@UI@@@Object@@@Z
-typedef void (*fn_UI_SetCursor_t)(void* self, uint64_t cursorPtr);
-extern fn_UI_SetCursor_t fn_UI_SetCursor;
-
-// UI::UserInterface::SetFullscreenFade(this, fadeIn, color, reverse) — controls fade overlay
-// Ordinal 3887: ?SetFullscreenFade@UserInterface@UI@@QEAAX_NI0@Z
-typedef void (*fn_UI_SetFullscreenFade_t)(void* self, bool fadeIn, uint32_t color, bool reverse);
-extern fn_UI_SetFullscreenFade_t fn_UI_SetFullscreenFade;
 
 // DebugUI_SetDayLighting (FUN_140061780) — reads lighting data from weather table
 // for given month index, sets slider values on sun/amb/fog color elements.
@@ -3234,9 +2618,10 @@ inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
     void* ui = *(void**)(enginePtr + 0x98);
     // Set cursor to default (cursor ptr from KeyMap singleton+0x38)
     uint64_t cursorVal = *(uint64_t*)((uintptr_t)(*g_pKeyMapSingleton) + 0x38);
-    if (fn_UI_SetCursor) fn_UI_SetCursor(ui, cursorVal);
+    reinterpret_cast<UI::UserInterface*>(ui)->SetCursor(  // B.3.6 bridge
+        ::Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(cursorVal)));
     // Fade to black (fadeIn=true, color=0xFF000000=opaque black, reverse=false)
-    if (fn_UI_SetFullscreenFade) fn_UI_SetFullscreenFade(ui, true, 0xFF000000, false);
+    reinterpret_cast<UI::UserInterface*>(ui)->SetFullscreenFade(true, 0xFF000000, false);  // B.3.6 bridge
     // Store next loop pointer at engine+0xC8
     *(void**)(enginePtr + 0xC8) = loaderLoop;
 }
@@ -3247,7 +2632,8 @@ inline void SetEngineNextLoop(uintptr_t enginePtr, void* loaderLoop) {
 // typedef void (*fn_SetDialogLoaderNextLoop_t)(uintptr_t dialogLoaderLoop, void* loaderLoop);
 // extern fn_SetDialogLoaderNextLoop_t fn_SetDialogLoaderNextLoop;
 inline void SetDialogLoaderNextLoop(uintptr_t dialogLoaderLoop, void* loaderLoop) {
-    fn_UI_SetFullscreenFade((void*)(dialogLoaderLoop + 0x40), true, 0xFF000000, false);
+    reinterpret_cast<UI::UserInterface*>(dialogLoaderLoop + 0x40)->SetFullscreenFade(  // B.3.6 bridge
+        true, 0xFF000000, false);
     *(void**)(dialogLoaderLoop + 0xb68) = loaderLoop;
 }
 
@@ -3290,25 +2676,6 @@ extern fn_MaterialInstance_Ctor_t fn_MaterialInstance_Ctor;
 typedef void* (*fn_SpriteSheet_Ctor_t)(void* self);
 extern fn_SpriteSheet_Ctor_t fn_SpriteSheet_Ctor;
 
-// UI::SpriteSheet::AddSpriteInfo(this, name, groupName, x, y, w, h)
-// Dispatch table at 0x140151978
-typedef void (*fn_SpriteSheet_AddSpriteInfo_t)(void* self, void* nameStr, void* groupStr,
-                                                int x, int y, int w, int h);
-extern fn_SpriteSheet_AddSpriteInfo_t fn_SpriteSheet_AddSpriteInfo;
-
-// UI::SpriteSheet::SetSpriteInfo(this, index, w, h, u0, v0, u1, v1)
-// Dispatch table at 0x140151970
-typedef void (*fn_SpriteSheet_SetSpriteInfo_t)(void* self, int index,
-                                                int w, int h,
-                                                float u0, float v0, float u1, float v1);
-extern fn_SpriteSheet_SetSpriteInfo_t fn_SpriteSheet_SetSpriteInfo;
-
-// UI::Sprite::Sprite(retval, SpriteSheet*, int index) — by-index ctor
-// Dispatch table at 0x140151898
-// Returns retval (16-byte Sprite struct)
-typedef void* (*fn_Sprite_Ctor_ByIndex_t)(void* retval, void* spriteSheet, int index);
-extern fn_Sprite_Ctor_ByIndex_t fn_Sprite_Ctor_ByIndex;
-
 // Custom vtables set on per-mod thumbnail objects (exe .rdata)
 // ModDialog MaterialInstance vtable (0x14015c400)
 extern uintptr_t g_ModDialog_MaterialInstanceVtable;  // 0x14015c400
@@ -3345,11 +2712,6 @@ extern fn_Input_Device_GetValue_t fn_Input_Device_GetValue;
 // ?Pressed@Device@Input@@QEBA_NW4InputDevice@12@HH@Z (0x1800e16c0, ordinal 3431)
 typedef bool (*fn_Input_Device_Pressed_t)(void* self, int device, int slot, int key);
 extern fn_Input_Device_Pressed_t fn_Input_Device_Pressed;
-
-// UI::UserInterface::EndSpriteCapture(this) — clears capture state
-// ?EndSpriteCapture@UserInterface@UI@@QEAAXXZ (0x18011f4a0, ordinal 2316)
-typedef void (*fn_UI_EndSpriteCapture_t)(void* self);
-extern fn_UI_EndSpriteCapture_t fn_UI_EndSpriteCapture;
 
 // IO::FileSystem singleton — exref at 0x140151d18 (ordinal 0x161 _singleton)
 extern void** g_pFileSystemSingleton;
@@ -3455,13 +2817,6 @@ extern fn_BaseTypeInfo_Ctor_t fn_BaseTypeInfo_Ctor;
 // Engine::MainLoop::_singleton (protected)
 extern void** g_pMainLoopSingleton;
 
-// --- UI::UserInterface ---
-
-// UI::UserInterface::EnableCursor(this, bool)
-// ?EnableCursor@UserInterface@UI@@QEAAX_N@Z
-typedef void (*fn_UI_EnableCursor_t)(void* self, bool enable);
-extern fn_UI_EnableCursor_t fn_UI_EnableCursor;
-
 // Object::Internal type ID — exref at 0x140151660 in exe .rdata
 // Used for IsDerivedFrom checks before InternalBasePtr wrapping / GetUserData
 extern uint32_t* g_TypeId_ObjectInternal;
@@ -3474,11 +2829,6 @@ extern uint32_t* g_TypeId_ObjectInternal;
 // pointer here: its last consumer, FindDialogByName_Impl below, walks
 // `ui->_dialogs` directly, which is that function's whole body
 // (`*retval = this->_dialogs._head`).
-
-// UI::UserInterface::SetFullscreenFadeSprite(this, Sprite*) — sets fade sprite (16 bytes)
-// ?SetFullscreenFadeSprite@UserInterface@UI@@QEAAXVSprite@2@@Z (0x18011f560, ordinal 3888)
-typedef void (*fn_UI_SetFullscreenFadeSprite_t)(void* self, void* sprite);
-extern fn_UI_SetFullscreenFadeSprite_t fn_UI_SetFullscreenFadeSprite;
 
 // SaveGameSettings(gameSettings) — persists all game settings to IO::Persistence
 // FUN_140098970 in exe (calls Persistence::Set for 16 entries)
@@ -3511,12 +2861,6 @@ extern uint32_t* g_TypeId_AutoSaveDialogType;
 // FUN_1400992f0 in exe (standalone function, no parameters)
 typedef void (*fn_RegisterDefaultInputBindings_t)();
 extern fn_RegisterDefaultInputBindings_t fn_RegisterDefaultInputBindings;
-
-// UI::UserInterface::ShowDialog(this, InternalPtr<DialogInstance>) -> int
-// ?ShowDialog@UserInterface@UI@@QEAAHV?$InternalPtr@VDialogInstance@UI@@@Object@@@Z
-// ABI: RCX=this, RDX=ptr to InternalPtr (non-trivial by-value), returns int result code
-typedef int (*fn_UI_ShowDialog_t)(void* self, void* dialogPtr);
-extern fn_UI_ShowDialog_t fn_UI_ShowDialog;
 
 // Object::InternalBasePtr::DeletePtr(this) — destroys internal object, nulls pointer
 // ?DeletePtr@InternalBasePtr@Object@@QEAAXXZ
@@ -3575,62 +2919,6 @@ extern fn_MessageDialog_Ctor_t fn_MessageDialog_Ctor;
 // (dispatch table reads from Application-x64.exe .rdata)
 // ============================================================
 
-// UI::ElementDescription::GetFileVersion(this) -> uint
-// Called via exe dispatch table at 0x1401518c0 (Runtime export)
-typedef uint32_t (*fn_ElementDescription_GetFileVersion_t)(void* self);
-extern fn_ElementDescription_GetFileVersion_t fn_ElementDescription_GetFileVersion;
-
-// UI::Element::Draw(this, SpriteContext*, byte alpha)
-// Called via exe dispatch table at 0x1401518f8
-typedef void (*fn_Element_Draw_t)(void* self, void* spriteCtx, uint8_t alpha);
-extern fn_Element_Draw_t fn_Element_Draw;
-
-// UI::SpriteContext::AddLine(this, Sprite*, x1, y1, x2, y2, color)
-// Called via exe dispatch table at 0x140151908
-typedef void (*fn_SpriteContext_AddLine_t)(void* self, void* sprite, int x1, int y1, int x2, int y2, uint32_t color);
-extern fn_SpriteContext_AddLine_t fn_SpriteContext_AddLine;
-
-// UI::SpriteContext::SetScissor(this, RET SLOT, x, y, w, h) — 4-param overload
-// Called via exe dispatch table at 0x140151900
-//
-// *** THE SECOND PARAMETER IS THE HIDDEN RETURN SLOT AND IT IS NOT OPTIONAL. ***
-// Both overloads return `Video::Viewport` BY VALUE, which under the MSVC x64
-// ABI is not a register return: the caller passes a pointer to a 16-byte slot
-// it owns, and for a member function that pointer is the SECOND argument, in
-// RDX, after `this`. A typedef that omits it is a WILD WRITE that still returns
-// the right answer — the callee writes 16 bytes through whatever happened to be
-// in RDX and hands that same address back in RAX, so a caller that only reads
-// the result looks correct while unrelated memory is gone. Here it would have
-// written through a sign-extended `int`.
-//
-// Settled from the shipped bytes, not from the mangled name (Runtime-x64.dll):
-//   0x18011d010  MOV RBX,RDX   ; the 4-int overload saves arg 2 …
-//   0x18011d03d  MOV RAX,RBX   ; … and returns it
-//   0x18011d050  MOV RDI,RDX   ; the Viewport overload saves arg 2 …
-//   0x18011d1c6  MOV RAX,RDI   ; … and returns it
-// and independently: the 4-int overload's frame is `PUSH RBX; SUB RSP,0x30` and
-// it reads its 5th and 6th arguments at RSP+0x60 / RSP+0x68 — caller-frame +0x28
-// and +0x30, i.e. the FIFTH stack slot. Four register arguments precede `w`:
-// this, the slot, x, y.
-//
-// Both of these were declared without the slot until WAVE 9 LANE FLUSH. Nothing
-// called them (code/Game/Component/frustumoutlineelement.cpp:184 declares its
-// own correct typedefs and says why), so the defect was LATENT — but two
-// correctly named, wrongly shaped pointers sitting beside a correct one are a
-// trap for the next reader, and `tools/abi_retslot_audit.py` scans this file.
-// The same defect shipped live for a whole wave as the Math::Transform3::Identity
-// pointer (deleted with the rest of the C seam in ENDGAME B.3.1).
-typedef void* (*fn_SpriteContext_SetScissor4_t)(void* self, void* retSlot,
-                                                int x, int y, int w, int h);
-extern fn_SpriteContext_SetScissor4_t fn_SpriteContext_SetScissor4;
-
-// UI::SpriteContext::SetScissor(this, RET SLOT, Viewport*) — restore overload
-// Called via exe dispatch table at 0x140151910
-// The slot is the same hazard; see the block above.
-typedef void* (*fn_SpriteContext_SetScissorVP_t)(void* self, void* retSlot,
-                                                 const void* viewport);
-extern fn_SpriteContext_SetScissorVP_t fn_SpriteContext_SetScissorVP;
-
 // FrustumOutlineElement frustum-to-screen projection helper (exe function)
 // FUN_14006c5b0(outVec3Array) — reads camera frustum, projects 4 corners to screen-space
 typedef void (*fn_FrustumProject_t)(void* outVec3Array);
@@ -3640,10 +2928,6 @@ extern fn_FrustumProject_t fn_FrustumProject;
 // Description class reimpl support (shared serialization helpers)
 // ============================================================
 
-// UI::ElementDescription::Serialize(this, Stream*) — base class serialize
-typedef void (*fn_ElementDescription_Serialize_t)(void* self, void* stream);
-extern fn_ElementDescription_Serialize_t fn_ElementDescription_Serialize;
-
 // UI::ElementDescription::~ElementDescription(this) — base destructor
 typedef void (*fn_ElementDescription_Dtor_t)(void* self);
 extern fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor;
@@ -3652,36 +2936,9 @@ extern fn_ElementDescription_Dtor_t fn_ElementDescription_Dtor;
 typedef void (*fn_ElementDescription_Ctor_t)(void* self);
 extern fn_ElementDescription_Ctor_t fn_ElementDescription_Ctor;
 
-// UI::ElementDescription::CreateInstance(this, InternalBasePtr*) — create element instance
-typedef void (*fn_ElementDescription_CreateInstance_t)(void* self, void* ptrRef);
-extern fn_ElementDescription_CreateInstance_t fn_ElementDescription_CreateInstance;
-
 // UI::Element::Element(this) — Element base constructor
 typedef void (*fn_Element_Ctor_t)(void* self);
 extern fn_Element_Ctor_t fn_Element_Ctor;
-
-// UI::Element::~Element(this) — Element base destructor (dispatch 0x1401518e0)
-typedef void (*fn_Element_Dtor_t)(void* self);
-extern fn_Element_Dtor_t fn_Element_Dtor;
-
-// UI::Element::ComputeLayout(this, x, y, w, h) — base layout (dispatch 0x1401518e8)
-typedef void (*fn_Element_ComputeLayout_t)(void* self, int x, int y, int w, int h);
-extern fn_Element_ComputeLayout_t fn_Element_ComputeLayout;
-
-// UI::Element::GetAlignedPosition(this, x, y, w, h, 0, 0, &outX, &outY, &outW, &outH, false, false)
-// (dispatch 0x1401518f0)
-typedef void (*fn_Element_GetAlignedPosition_t)(void* self, int x, int y, int w, int h,
-    int p6, int p7, int* outX, int* outY, int* outW, int* outH, bool p11, bool p12);
-extern fn_Element_GetAlignedPosition_t fn_Element_GetAlignedPosition;
-
-// UI::Sprite::Sprite(retval, spriteSheet, spriteName) — Sprite ctor from sheet+name (16 bytes)
-// Dispatch 0x1401514c8
-typedef void* (*fn_Sprite_Sprite_t)(void* retval, uint64_t spriteSheet, const void* spriteName);
-extern fn_Sprite_Sprite_t fn_Sprite_Sprite;
-
-// UI::Sprite::Sprite(self) — default ctor (dispatch 0x140152b48)
-typedef void (*fn_Sprite_DefaultCtor2_t)(void* self);
-extern fn_Sprite_DefaultCtor2_t fn_Sprite_DefaultCtor2;
 
 // SerializerEncodingVCall — REMOVED, ENDGAME B.3.4a closing 2d. It hand-rolled
 // a virtual dispatch through the 24-byte Serializer's encoding sub-object at
@@ -3821,10 +3078,6 @@ extern fn_SaveLoad_CheckMod_t fn_SaveLoad_CheckMod;
 // _singleton at 0x140151650 (Runtime export).
 typedef void (*fn_SaveLoad_SetSaveName_t)(void* saveLoad, void* nameStr, int mode);
 extern fn_SaveLoad_SetSaveName_t fn_SaveLoad_SetSaveName;
-
-// DialogInstance type ID — used for IsDerivedFrom checks on loaded External resources
-// to verify they are DialogInstance (or subclass). _typeInfo_exref at 0x140151728.
-extern uint32_t* g_TypeId_DialogInstance;
 
 // FUN_14009f3e0(mapGrid, outPos3, inXY2, flag, outTri) — terrain/scene pick from 2D position.
 // Casts a ray from a 2D map position and returns the 3D terrain-intersection point.
@@ -4112,9 +3365,10 @@ inline void* FindDialogByName_Impl(void* retval, void* nameStr) {
                 //   MOV R8D,EBX(=controllerTypeId); LEA RDX,[retbuf]; MOV RCX,[RSI]; CALL GetController
                 // GetController takes controllerTypeId as R8 — it does the type matching
                 // internally and returns a matching controller or null.
-                if (fn_DialogInstance_GetController) {
+                {
                     uintptr_t controllerBuf[2] = {};
-                    fn_DialogInstance_GetController(*(void**)node, controllerBuf, controllerTypeId);
+                    ::new (static_cast<void*>(controllerBuf)) ::Object::InternalPtr<UI::DialogController>(
+                        reinterpret_cast<UI::DialogInstance*>(*(void**)node)->GetController(controllerTypeId));  // B.3.6 bridge
                     if (controllerBuf[0] != 0) {
                         // Controller matched — return this dialog
                         *(uintptr_t*)ret = (uintptr_t)*(void**)node;
@@ -4476,7 +3730,8 @@ inline void Toolbar_CenterOnEntity_Impl(void* toolController, void* parentDialog
 
         // Get the EntityUI controller from the dialog instance.
         uint8_t controllerBuf[16] = {};
-        fn_DialogInstance_GetController(*(void**)parentDialogPtr, controllerBuf, tidEntityUI);
+        ::new (static_cast<void*>(controllerBuf)) ::Object::InternalPtr<UI::DialogController>(
+            reinterpret_cast<UI::DialogInstance*>(*(void**)parentDialogPtr)->GetController(tidEntityUI));  // B.3.6 bridge
 
         uintptr_t controllerRaw = *(uintptr_t*)controllerBuf;
         void* panelController = nullptr;

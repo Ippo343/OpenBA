@@ -1367,7 +1367,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
             reinterpret_cast<UI::Element*>((void*)buttonRef)->SetElementId(buttonIndex);  // B.3.6 bridge
 
             void* userData = *(void**)(item + 0x58);
-            fn_Element_SetUserData((void*)buttonRef, userData);
+            reinterpret_cast<UI::Element*>((void*)buttonRef)->SetUserData(static_cast<Object::Base*>(userData));  // B.3.6 bridge
 
             uint8_t tooltipData[16];
             *(uint64_t*)tooltipData = *(uint64_t*)uiString;

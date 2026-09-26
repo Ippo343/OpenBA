@@ -568,13 +568,8 @@ namespace uistub_HelpUI {
         return g_TypeId_HelpFirstElem && g_TypeId_HelpComboElem &&
                g_TypeId_HelpDocTextElem && g_TypeId_HelpContainerElem &&
                g_TypeId_HelpButtonElem && g_TypeId_StringTable &&
-               fn_Element_FindElementType && fn_FindElement && fn_IsDerivedFrom &&
-               fn_InternalBasePtr_Ctor && fn_Element_SetElementId &&
-               fn_ExternalList_GetResourceCount && fn_StringTable_GetText &&
-               fn_Sprite_Default_Ctor && fn_ComboElement_AddItem &&
-               fn_ComboElement_SetCurrentItem && fn_ComboElement_GetItemData &&
-               fn_UIString_Ctor_Index && fn_DocumentTextElement_SetText_UIString &&
-               fn_ContainerElement_SetOffsets &&
+               fn_IsDerivedFrom && fn_InternalBasePtr_Ctor &&
+               fn_ExternalList_GetResourceCount &&
                fn_MemAlloc && g_pMemAllocSingleton;
     }
     // Report the OUTCOME of the readiness test, once, naming what is missing.
@@ -869,10 +864,7 @@ namespace uistub_PageToggleUI {
     // Every slot below dereferences the checkbox / "pages" element unguarded, and
     // Slot4 cannot populate either without the type id. Report the outcome once.
     bool Ready() {
-        bool ok = PageToggleUI_TypeIdsReady()
-                  && fn_Element_FindElementType && fn_Element_SetElementId
-                  && fn_DialogInstance_FindElement
-                  && fn_PageElement_GetActivePage && fn_PageElement_SetActivePage;
+        bool ok = PageToggleUI_TypeIdsReady();
         static bool s_logged = false;
         if (!s_logged) {
             s_logged = true;
@@ -955,8 +947,7 @@ namespace uistub_ProductionUI {
                   && g_TypeId_RawMaterialDescription && *g_TypeId_RawMaterialDescription != 0
                   && g_TypeId_TrackerComponent && *g_TypeId_TrackerComponent != 0
                   && ProductionUI_TypeIdsReady()
-                  && g_pGameWorldSingleton
-                  && fn_FindElement && fn_Element_Child && fn_Element_ChildCount;
+                  && g_pGameWorldSingleton;
         static bool s_logged = false;
         if (!s_logged) {
             s_logged = true;
@@ -1347,7 +1338,7 @@ namespace uistub_ToolUI {
     // exref + the Runtime fns the drag path dereferences unconditionally.
     void Slot8(void* self, void* /*time*/) {
         if (!self || !g_pKeyMapObjectExref || !*g_pKeyMapObjectExref
-            || !fn_KeyMap_GetValue || !fn_DialogInstance_SetUpperLeft
+            || !fn_KeyMap_GetValue
             || !g_pGameWorldSingleton || !*g_pGameWorldSingleton) return;
         ToolUI_Slot8(reinterpret_cast<ToolUI*>(self));
     }
@@ -1450,10 +1441,6 @@ namespace uistub_TradeUI {
             // branch, which null-guards it at the call site (tradeui.cpp). Including it
             // here would mean the panel could not open until Wave D landed — the opposite
             // of the intent, since rendering the panel needs none of the checkout.
-            { "fn_Element_SetNeedsSizeCalc",                 (const void*)fn_Element_SetNeedsSizeCalc },
-            { "fn_TabElement_SetActiveTab",                  (const void*)fn_TabElement_SetActiveTab },
-            { "fn_UIString_Ctor",                            (const void*)fn_UIString_Ctor },
-            { "fn_Sprite_Ctor",                              (const void*)fn_Sprite_Ctor },
         };
         int missing = 0;
         for (const Dep& d : deps) if (!d.fn) ++missing;

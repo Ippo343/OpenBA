@@ -3,15 +3,19 @@
 // These are NOT hooks or trampolines. They are call-site wrappers that log
 // parameters and results, then delegate to the real engine function via the
 // existing function pointers in engine_funcs.h.
+// ENDGAME B.3.6 closing pass: UI::Sprite is a real value type (RULE B6-10), so
+// the wrappers construct / test it as C++ instead of calling the engine_funcs
+// ctor doors, which are retired.
 //
 // Usage: In debug builds, call Debug_Sprite_* instead of fn_Sprite_* to get
 // printf logging of sprite construction and validation calls.
 
 #include "sprite_debug.h"
-#include "../../../engine/funcs/engine_funcs.h"
+#include "../../types/object/External.h"
 #include "../../types/ui/Sprite.h"
 #include <cstdio>
 #include <cstdint>
+#include <new>
 
 // ============================================================
 // Debug wrapper for UI::Sprite::Sprite(ExternalPtr<SpriteSheet>, const String&)
@@ -29,7 +33,10 @@ void* Debug_Sprite_Ctor(void* retval, uint64_t spriteSheet, const void* spriteNa
     printf("[Sprite::Ctor] sheet=%p name=\"%s\" retval=%p\n",
            (void*)(uintptr_t)spriteSheet, nameStr, retval);
 #endif
-    void* result = fn_Sprite_Ctor(retval, spriteSheet, spriteName);
+    new (retval) UI::Sprite(
+        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
+        *static_cast<const System::String*>(spriteName));
+    void* result = retval;
 #ifdef _DEBUG
     Sprite* s = (Sprite*)retval;
     printf("[Sprite::Ctor] done -> sheet=%p index=%d valid=%s\n",
@@ -47,7 +54,8 @@ void* Debug_Sprite_DefaultCtor(void* retval) {
 #ifdef _DEBUG
     printf("[Sprite::DefaultCtor] retval=%p\n", retval);
 #endif
-    void* result = fn_Sprite_Default_Ctor(retval);
+    new (retval) UI::Sprite();
+    void* result = retval;
 #ifdef _DEBUG
     Sprite* s = (Sprite*)retval;
     printf("[Sprite::DefaultCtor] done -> sheet=%p index=%d\n",
@@ -66,7 +74,10 @@ void* Debug_Sprite_CtorByIndex(void* retval, void* spriteSheet, int index) {
     printf("[Sprite::CtorByIndex] sheet=%p index=%d retval=%p\n",
            spriteSheet, index, retval);
 #endif
-    void* result = fn_Sprite_Ctor_ByIndex(retval, spriteSheet, index);
+    new (retval) UI::Sprite(
+        Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)),  // B.3.6 bridge
+        index);
+    void* result = retval;
 #ifdef _DEBUG
     Sprite* s = (Sprite*)retval;
     printf("[Sprite::CtorByIndex] done -> sheet=%p index=%d valid=%s\n",
@@ -83,11 +94,11 @@ void* Debug_Sprite_CtorByIndex(void* retval, void* spriteSheet, int index) {
 bool Debug_Sprite_IsValid(void* sprite) {
 #ifdef _DEBUG
     Sprite* s = (Sprite*)sprite;
-    bool result = fn_Sprite_IsValid(sprite);
+    bool result = s->IsValid();
     printf("[Sprite::IsValid] sprite=%p sheet=%p index=%d -> %s\n",
            sprite, s->spriteSheet, s->spriteIndex, result ? "true" : "false");
     return result;
 #else
-    return fn_Sprite_IsValid(sprite);
+    return reinterpret_cast<const UI::Sprite*>(sprite)->IsValid();  // B.3.6 bridge
 #endif
 }

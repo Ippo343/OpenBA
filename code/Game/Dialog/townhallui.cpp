@@ -1464,7 +1464,9 @@ void TownHallUI_UpdateProduction(TownHallUI* self) {
 
             // Empty string
             uint8_t emptyStr[16];
-            fn_UIString_Ctor(emptyStr, 0, nullptr);
+            // String(ExternalPtr<StringTable>(null), name) stores {null, -1} without
+            // reading the name (sprite.cpp, retail 0x18011da60) == the default ctor.
+            ::new (static_cast<void*>(emptyStr)) UI::String();  // B.3.6 bridge
             void* labelElem2 = *(void**)(*(uintptr_t*)(s + 0x118) + elemOff);
             reinterpret_cast<UI::TextElement*>(labelElem2)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
 
@@ -2210,8 +2212,7 @@ bool Ready() {
     if (!(fn_GroupRating_Init && fn_GroupRating_Update && fn_ProfArrayPush &&
           fn_ProdArrayPush && fn_BST_Rebalance_0x30 && fn_BST_Rebalance_0x28 &&
           fn_BST_Insert_0x14 && fn_BST_FreeNodes && fn_QueryProductionStat &&
-          fn_InventorySort_Asc && fn_InventorySort_Desc && fn_DynArray_Resize &&
-          fn_StringTable_GetCount))
+          fn_InventorySort_Asc && fn_InventorySort_Desc && fn_DynArray_Resize))
         return false;
     if (!(g_pExternalFactorySingleton && *g_pExternalFactorySingleton)) return false;
     return true;
@@ -2270,7 +2271,6 @@ void DiagPrint(const char* where, void* self) {
         {"fn_InventorySort_Asc",  (void*)fn_InventorySort_Asc},
         {"fn_InventorySort_Desc", (void*)fn_InventorySort_Desc},
         {"fn_DynArray_Resize",    (void*)fn_DynArray_Resize},
-        {"fn_StringTable_GetCount", (void*)fn_StringTable_GetCount},
     };
     const N tids[] = {
         {"TabElement", g_TypeId_TabElement}, {"TableElement", g_TypeId_TableElement},

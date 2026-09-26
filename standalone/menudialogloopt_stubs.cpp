@@ -346,8 +346,7 @@ void Stub_Startup(UpdateLoop* self, int64_t remainder) {
             Object::ExternalPtr<UI::Cursor>(reinterpret_cast<UI::Cursor*>(arrowCursor)));
         printf("[MenuDLT::Startup] UI::SetCursor(ui=%p, arrow=%p)\n", ui, arrowCursor);
     } else {
-        printf("[MenuDLT::Startup] WARN: skipping SetCursor (fn=%p arrow=%p)\n",
-               (void*)fn_UI_SetCursor, arrowCursor);
+        printf("[MenuDLT::Startup] WARN: skipping SetCursor (arrow=%p)\n", arrowCursor);
     }
     reinterpret_cast<UI::UserInterface*>(ui)->EnableCursor(true);  // B.3.6 bridge
     printf("[MenuDLT::Startup] UI::EnableCursor(true) called on ui=%p\n", ui);
@@ -617,8 +616,7 @@ void Stub_Draw(UpdateLoop* self, float alpha) {
     if (context) {
         reinterpret_cast<UI::UserInterface*>(ui)->Draw(*reinterpret_cast<Video::Context*>(context));  // B.3.6 bridge
     } else if (trace) {
-        printf("[MenuDLT::Draw] WARN: skipping UI::Draw (fn_UI_Draw=%p ctx=%p)\n",
-               (void*)fn_UI_Draw, context);
+        printf("[MenuDLT::Draw] WARN: skipping UI::Draw (ctx=%p)\n", context);
     }
 
     // Auto-trigger a RenderDoc capture on draw 10 if RenderDoc is attached.

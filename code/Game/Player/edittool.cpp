@@ -185,10 +185,6 @@ static fn_IsDerived_t s_fn_IsDerived = nullptr;
 typedef void* (*fn_IBPCtor_t)(void* self, void* internal);
 static fn_IBPCtor_t s_fn_IBPCtor = nullptr;
 
-// DialogInstance::SetUpperLeft — IAT dispatch slot [0x140151dd0]
-typedef void (*fn_SetUpperLeft_t)(void* dialog, int x, int y, bool animate);
-static fn_SetUpperLeft_t s_fn_SetUpperLeft = nullptr;
-
 // KeyMap::Pressed — IAT dispatch slot [0x140151758]
 typedef bool (*fn_KeyMapPressed_t)(uintptr_t keyMap, int slot, int keyId);
 static fn_KeyMapPressed_t s_fn_KeyMapPressed = nullptr;
@@ -213,7 +209,6 @@ static void EnsureEditFuncs() {
     s_fn_IsDerived        = (fn_IsDerived_t)resolveIAT(0x140152a98);
     s_fn_IBPCtor          = (fn_IBPCtor_t)resolveIAT(0x140152a90);
     s_fn_RectangleCtor    = (fn_RectangleCtor_t)resolveIAT(0x1401528a8);
-    s_fn_SetUpperLeft     = (fn_SetUpperLeft_t)resolveIAT(0x140151dd0);
     s_fn_KeyMapPressed    = (fn_KeyMapPressed_t)resolveIAT(0x140151758);
     s_fn_PickingIntersect = (fn_PickingIntersect_t)resolveIAT(0x140152428);
     s_fn_PickingGetUserData = (fn_PickingGetUserData_t)resolveIAT(0x140152890);
@@ -240,8 +235,6 @@ static void EnsureEditFuncs() {
         s_fn_IsDerived = (fn_IsDerived_t)fn_IsDerivedFrom;
     if (!s_fn_IBPCtor && fn_InternalBasePtr_Ctor)
         s_fn_IBPCtor = (fn_IBPCtor_t)fn_InternalBasePtr_Ctor;
-    if (!s_fn_SetUpperLeft && fn_DialogInstance_SetUpperLeft)
-        s_fn_SetUpperLeft = (fn_SetUpperLeft_t)fn_DialogInstance_SetUpperLeft;
     if (!s_fn_KeyMapPressed && fn_KeyMap_Pressed)
         s_fn_KeyMapPressed = (fn_KeyMapPressed_t)fn_KeyMap_Pressed;
     // Picking::Scene::Intersect / GetUserData — Runtime exports, resolved by mangled name.
@@ -658,8 +651,8 @@ void EditTool_Startup_Impl(EditTool* self) {
 
     dialogPtr = *(uintptr_t*)entityIBP;
     REPO_DIAG("[Repos] SETPOS midX=%.1f rectTop=%.1f dlgW=%d dlgH=%d uiScale=%.3f "
-              "-> scaled=(%d,%d) SetUpperLeft=%p\n", midX, rectTop, dialogWidth,
-              dialogHeight, uiScale, scaledX, scaledY, (void*)s_fn_SetUpperLeft);
+              "-> scaled=(%d,%d)\n", midX, rectTop, dialogWidth,
+              dialogHeight, uiScale, scaledX, scaledY);
     reinterpret_cast<UI::DialogInstance*>(dialogPtr)->SetUpperLeft(scaledX, scaledY, true);  // B.3.6 bridge
 
     // If game world flag bit 10 is set and pageToggle controller exists, call helper

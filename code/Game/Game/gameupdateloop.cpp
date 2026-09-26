@@ -2151,10 +2151,10 @@ void GameUpdateLoop_Startup(GameUpdateLoop* self) {
             s_diag = true;
             void* rl = self->m_resourceList;
             fprintf(stderr, "[HUD-DIAG] probe: m_resourceList=%p Find=%p "
-                    "DialogTypeId=%p(val=%u) ToolbarCtor=%p UI_AddDialog=%p IsDerivedFrom=%p\n",
+                    "DialogTypeId=%p(val=%u) ToolbarCtor=%p IsDerivedFrom=%p\n",
                     rl, (void*)fn_ExternalList_Find, (void*)g_pDialogTypeId,
                     g_pDialogTypeId ? *g_pDialogTypeId : 0u,
-                    (void*)fn_ToolbarDialog_Ctor, (void*)fn_UI_AddDialog, (void*)fn_IsDerivedFrom);
+                    (void*)fn_ToolbarDialog_Ctor, (void*)fn_IsDerivedFrom);
             fflush(stderr);
             if (rl && fn_ExternalList_Find) {
                 System::Filename fnbuf("Dialog/Toolbar.rsc");

@@ -488,9 +488,8 @@ extern "C" void UpdateToolUI_fc60(void* param_1, int param_2, int param_3, void*
     {
         static bool s_rootLogged = false;
         if (!s_rootLogged) { s_rootLogged = true;
-            fprintf(stderr, "[fc60] post-fe960: GetRoot=%p SetUpperLeft=%p rect=(%.0f,%.0f,%.0f,%.0f) "
-                    "rootIBP=%p rootElem=%p\n", (void*)fn_DialogInstance_GetRoot,
-                    (void*)fn_DialogInstance_SetUpperLeft, rect[0], rect[1], rect[2], rect[3],
+            fprintf(stderr, "[fc60] post-fe960: rect=(%.0f,%.0f,%.0f,%.0f) "
+                    "rootIBP=%p rootElem=%p\n", rect[0], rect[1], rect[2], rect[3],
                     rootIBP, rootElem);
             fflush(stderr);
         }

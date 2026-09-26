@@ -152,7 +152,9 @@ static void PopulateGeneratorCombo(void** comboFieldPtr, void* externalList,
 
             // Create empty sprite
             uint8_t sprite[16];
-            fn_Sprite_Ctor(sprite, 0, nullptr);
+            // Sprite(ExternalPtr<SpriteSheet>(null), name) stores {null, -1} without
+            // reading the name (sprite.cpp, retail 0x18011b9c0) == the default ctor.
+            ::new (static_cast<void*>(sprite)) UI::Sprite();  // B.3.6 bridge
 
             reinterpret_cast<UI::ComboElement*>(combo)->AddItem(*reinterpret_cast<const UI::Sprite*>(sprite), sysStr, (void*)(intptr_t)i);  // B.3.6 bridge
         }
@@ -586,7 +588,7 @@ void NewGameDialog_Slot4(NewGameDialog* self) {
         for (auto& c : combos) {
             if (!c.combo) { fprintf(stderr, "[NewGameDialog] %s MISSING\n", c.name); continue; }
             fprintf(stderr, "[NewGameDialog] %s items=%d selected=%d\n", c.name,
-                    fn_ComboElement_GetItemCount(c.combo),
+                    reinterpret_cast<const UI::ComboElement*>(c.combo)->GetItemCount(),  // B.3.6 bridge
                     *(int*)((uintptr_t)c.combo + 0x118));
         }
         fflush(stderr);

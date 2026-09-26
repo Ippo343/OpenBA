@@ -13,7 +13,7 @@
 #include "element_sprite_debug.h"
 #include "../../types/ui/ImageElement.h"
 #include "../../types/ui/LabelElement.h"
-#include "../../../engine/funcs/engine_funcs.h"
+#include <new>
 
 // ============================================================
 // Sprite data interpretation helpers
@@ -57,10 +57,8 @@ void Debug_ImageElement_SetSprite(void* self, void* spriteData) {
     printf("  flags@+0x34 before: 0x%08X\n", flagsBefore);
 #endif
 
-    // Call the real function
-    if (fn_ImageElement_SetSprite) {
-        fn_ImageElement_SetSprite(self, spriteData);
-    }
+    // Call the real member (ENDGAME B.3.6 closing pass: was the engine_funcs door)
+    reinterpret_cast<UI::ImageElement*>(self)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteData));  // B.3.6 bridge
 
 #ifdef _DEBUG
     uint32_t flagsAfter = *(uint32_t*)((uint8_t*)self + 0x34);
@@ -81,9 +79,7 @@ void Debug_ImageElement_GetSprite(void* self, void* retval) {
     printf("[ImageElement::GetSprite] this=%p\n", self);
 #endif
 
-    if (fn_ImageElement_GetSprite) {
-        fn_ImageElement_GetSprite(self, retval);
-    }
+    new (retval) UI::Sprite(reinterpret_cast<const UI::ImageElement*>(self)->GetSprite());  // B.3.6 bridge
 
 #ifdef _DEBUG
     PrintSpriteFromPtr("  RESULT", reinterpret_cast<const uint8_t*>(retval));
@@ -109,9 +105,7 @@ void Debug_LabelElement_SetSprite(void* self, void* spriteData) {
     printf("  flags@+0x34 before: 0x%08X\n", flagsBefore);
 #endif
 
-    if (fn_LabelElement_SetSprite) {
-        fn_LabelElement_SetSprite(self, spriteData);
-    }
+    reinterpret_cast<UI::LabelElement*>(self)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteData));  // B.3.6 bridge
 
 #ifdef _DEBUG
     uint32_t flagsAfter = *(uint32_t*)((uint8_t*)self + 0x34);
@@ -125,24 +119,14 @@ void Debug_LabelElement_SetSprite(void* self, void* spriteData) {
 }
 
 // Debug wrapper: log LabelElement::GetSprite result
-// Uses fn_LabelElement_GetSprite when available, falls back to direct struct read.
+// ENDGAME B.3.6 closing pass: the real member; the old "door unresolved -> read
+// the struct" fallback arm described a state that cannot occur and is gone.
 void Debug_LabelElement_GetSprite(void* self, void* retval) {
 #ifdef _DEBUG
     printf("[LabelElement::GetSprite] this=%p\n", self);
 #endif
 
-    if (fn_LabelElement_GetSprite) {
-        fn_LabelElement_GetSprite(self, retval);
-    } else {
-        // Fallback: read directly from struct at +0x100/+0x108
-        RtUI::LabelElement* elem = reinterpret_cast<RtUI::LabelElement*>(self);
-        uint64_t* out = reinterpret_cast<uint64_t*>(retval);
-        out[0] = reinterpret_cast<uint64_t>(elem->spriteSheet);
-        uint64_t second = 0;
-        second |= (uint32_t)elem->spriteIndex;
-        second |= ((uint64_t)elem->spriteFlags) << 32;
-        out[1] = second;
-    }
+    new (retval) UI::Sprite(reinterpret_cast<const UI::LabelElement*>(self)->GetSprite());  // B.3.6 bridge
 
 #ifdef _DEBUG
     PrintSpriteFromPtr("  RESULT", reinterpret_cast<const uint8_t*>(retval));
