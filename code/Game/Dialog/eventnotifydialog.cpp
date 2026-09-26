@@ -17,6 +17,11 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Component/coll_bridge.h"
 #include "engine_funcs.h"
@@ -87,7 +92,7 @@ static void* EventNotifyDialog_CreatePopup(EventNotifyDialog* self, int eventInd
 
     int64_t dialogPtr[1];
     new (dialogPtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(popup));   // B.3.3 bridge
-    fn_UI_AddDialog(ui, dialogPtr);
+    reinterpret_cast<UI::UserInterface*>(ui)->AddDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(dialogPtr));  // B.3.6 bridge
     return popup;
 }
 
@@ -266,7 +271,7 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
     {
         System::String nameStr("ribbonNotify");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         *(uint64_t*)(s + 0xE8) = *(uint64_t*)retBuf;
     }
 
@@ -275,12 +280,12 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
     {
         System::String nameStr("notifyContent");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         notifyContent = *(void**)retBuf;
     }
 
     // Iterate children of notifyContent
-    int childCount = fn_Element_ChildCount(notifyContent);
+    int childCount = reinterpret_cast<const UI::Element*>(notifyContent)->ChildCount();  // B.3.6 bridge
 
     for (int i = 0; i < childCount; i++) {
         // Initialize entry: {group, image, button}
@@ -289,7 +294,7 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
         // Get child[i] -> entry[0] (group element)
         {
             uint8_t retBuf[16];
-            fn_Element_Child(notifyContent, retBuf, i);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(notifyContent)->Child(i));  // B.3.6 bridge
             entry[0] = *(uint64_t*)retBuf;
         }
 
@@ -299,11 +304,11 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
 
             // Get child[i] again for the FindElement base
             uint8_t childBuf[16];
-            fn_Element_Child(notifyContent, childBuf, i);
+            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(notifyContent)->Child(i));  // B.3.6 bridge
             void* child = *(void**)childBuf;
 
             uint8_t retBuf[16];
-            fn_FindElement(child, retBuf, &nameStr);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(child)->FindElement(nameStr));  // B.3.6 bridge
             void* found = *(void**)retBuf;
 
             entry[1] = (uint64_t)found;
@@ -314,18 +319,18 @@ void EventNotifyDialog_Slot4(EventNotifyDialog* self) {
             System::String nameStr("notifyButton");
 
             uint8_t childBuf[16];
-            fn_Element_Child(notifyContent, childBuf, i);
+            ::new (childBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(notifyContent)->Child(i));  // B.3.6 bridge
             void* child = *(void**)childBuf;
 
             uint8_t retBuf[16];
-            fn_FindElement(child, retBuf, &nameStr);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(child)->FindElement(nameStr));  // B.3.6 bridge
             void* found = *(void**)retBuf;
 
             entry[2] = (uint64_t)found;
         }
 
         // Set button element ID to 1500 + i (0x5DC + i)
-        fn_Element_SetElementId((void*)entry[2], i + 0x5DC);
+        reinterpret_cast<UI::Element*>((void*)entry[2])->SetElementId(i + 0x5DC);  // B.3.6 bridge
 
         // Push entry into dynamic array at +0xC8 (0x18-byte stride, no Strings).
         // This is an INLINE push — NOT EventNotifyDialog_ArrayPush_Impl which is
@@ -467,7 +472,7 @@ void EventNotifyDialog_Slot7(EventNotifyDialog* self, void* param2) {
 
                         // Create sprite with icon name (copies sprite sheet, sets index)
                         uint8_t newSprite[32];
-                        fn_Sprite_Ctor(newSprite, *(uint64_t*)spriteBuf, &iconNameStr);
+                        ::new (newSprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)spriteBuf)), iconNameStr);  // B.3.6 bridge
                         *(uint64_t*)(notifyEntry + 0x10) = *(uint64_t*)newSprite;
                         *(uint64_t*)(notifyEntry + 0x18) = *(uint64_t*)(newSprite + 8);
 
@@ -642,7 +647,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
     // Apply as top padding on self root: floor(smoothedY + 0.5f)
     // DAT_140172114 = 0.5f (rounding)
-    fn_Element_SetPadding(selfRoot, 0, (int)(smoothedY + 0.5f), 0, 2);
+    reinterpret_cast<UI::Element*>(selfRoot)->SetPadding(0, (int)(smoothedY + 0.5f), 0, 2);  // B.3.6 bridge
 
     // -------------------------------------------------------
     // Step 4: Show ribbonNotify element
@@ -655,7 +660,7 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
     if (!eventArray) return;
 
     void* ribbonElem = *(void**)(s + 0xE8);
-    if (ribbonElem) fn_Element_SetFlagsOnOff(ribbonElem, 0, 1);  // clear flag 1 = show
+    if (ribbonElem) reinterpret_cast<UI::Element*>(ribbonElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; clear flag 1 = show
 
     // -------------------------------------------------------
     // Steps 5 & 6: Sync notification slots
@@ -688,7 +693,8 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Get child[4] of button element — may be an ImageElement for embedded icon
         uint8_t childBuf[16];
-        void* child4 = *(void**)fn_Element_Child(buttonElem, childBuf, 4);
+        void* child4 = (::new (childBuf) Object::InternalPtr<UI::Element>(
+            reinterpret_cast<UI::Element*>(buttonElem)->Child(4)))->Get();  // B.3.6 bridge
 
         // Check if child4 is an ImageElement; if so, copy sprite to it as well
         {
@@ -715,12 +721,12 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         if (noPopup) {
             // No popup: hide button, show image
-            fn_Element_SetFlagsOnOff(buttonElem, 1, 0);  // set flag 1 = hide
-            fn_Element_SetFlagsOnOff(imageElem,  0, 1);  // clear flag 1 = show
+            reinterpret_cast<UI::Element*>(buttonElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; set flag 1 = hide
+            reinterpret_cast<UI::Element*>(imageElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; clear flag 1 = show
         } else {
             // Popup active: show button, hide image
-            fn_Element_SetFlagsOnOff(buttonElem, 0, 1);  // clear flag 1 = show
-            fn_Element_SetFlagsOnOff(imageElem,  1, 0);  // set flag 1 = hide
+            reinterpret_cast<UI::Element*>(buttonElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; clear flag 1 = show
+            reinterpret_cast<UI::Element*>(imageElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; set flag 1 = hide
         }
 
         // Color from active_entry+0x28
@@ -731,16 +737,13 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         // vtable[11] = vtable offset 0x58 = GetController / GetPressColor sub-object.
         // vtable[10] = vtable offset 0x50 = SetColor(uint32_t).
         {
-            uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
-            typedef void* (*GetController_t)(void* self, void* retBuf);
-            GetController_t getCtrl = (GetController_t)(btnVtable[0x58 / 8]);
+            // (slot 11 of every UI::Element table is GetBorder, RETSLOT per B6-2)
             uint8_t ctrlBuf[16];
-            void* ctrl = getCtrl(buttonElem, ctrlBuf);
+            void* ctrl = reinterpret_cast<UI::Element*>(buttonElem)->GetBorder(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ctrlBuf));
             void* ctrlResolved = *(void**)ctrl;
             if (ctrlResolved) {
-                uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
-                typedef void (*SetColor_t)(void* self, uint32_t c);
-                ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, color);
+                reinterpret_cast<UI::Element*>(ctrlResolved)->SetColor(color);  // B.3.6 bridge
             }
         }
 
@@ -748,12 +751,11 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
         // Each child's SetColor is at vtable offset 0x50.
         for (int c = 0; c < 4; c++) {
             uint8_t kidBuf[16];
-            void* kid = *(void**)fn_Element_Child(buttonElem, kidBuf, c);
+            void* kid = (::new (kidBuf) Object::InternalPtr<UI::Element>(
+                reinterpret_cast<UI::Element*>(buttonElem)->Child(c)))->Get();  // B.3.6 bridge
             void* kidResolved = *(void**)&kid;
             if (!kidResolved) continue;
-            uintptr_t* kidVtable = *(uintptr_t**)kidResolved;
-            typedef void (*SetColor_t)(void* self, uint32_t c);
-            ((SetColor_t)(kidVtable[0x50 / 8]))(kidResolved, color);
+            reinterpret_cast<UI::Element*>(kidResolved)->SetColor(color);  // B.3.6 bridge
         }
 
         // Copy event text string to the group element's embedded string at +0x58.
@@ -778,24 +780,19 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Reset button controller color to 0xFFFFFFFF (white = no tint)
         {
-            uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
-            typedef void* (*GetController_t)(void* self, void* retBuf);
-            GetController_t getCtrl = (GetController_t)(btnVtable[0x58 / 8]);
+            // (slot 11 of every UI::Element table is GetBorder, RETSLOT per B6-2)
             uint8_t ctrlBuf[16];
-            void* ctrl = getCtrl(buttonElem, ctrlBuf);
+            void* ctrl = reinterpret_cast<UI::Element*>(buttonElem)->GetBorder(  // B.3.6 bridge
+                reinterpret_cast<Object::InternalPtr<UI::Element>*>(ctrlBuf));
             void* ctrlResolved = *(void**)ctrl;
             if (ctrlResolved) {
-                uintptr_t* ctrlVtable = *(uintptr_t**)ctrlResolved;
-                typedef void (*SetColor_t)(void* self, uint32_t c);
-                ((SetColor_t)(ctrlVtable[0x50 / 8]))(ctrlResolved, 0xFFFFFFFFu);
+                reinterpret_cast<UI::Element*>(ctrlResolved)->SetColor(0xFFFFFFFFu);  // B.3.6 bridge
             }
         }
 
         // Also reset color on button element itself (direct vtable[10] call)
         {
-            uintptr_t* btnVtable = *(uintptr_t**)buttonElem;
-            typedef void (*SetColor_t)(void* self, uint32_t c);
-            ((SetColor_t)(btnVtable[0x50 / 8]))(buttonElem, 0xFFFFFFFFu);
+            reinterpret_cast<UI::Element*>(buttonElem)->SetColor(0xFFFFFFFFu);  // B.3.6 bridge
         }
 
         // Clear group element's embedded string at +0x58 (assign null = empty string)
@@ -808,8 +805,8 @@ void EventNotifyDialog_Update(EventNotifyDialog* self) {
 
         // Show image element (clear flag 1), hide button element (set flag 1).
         // Empty image slots display nothing (no sprite set); button hidden to prevent clicks.
-        fn_Element_SetFlagsOnOff(imageElem,  0, 1);  // clear flag = show
-        fn_Element_SetFlagsOnOff(buttonElem, 1, 0);  // set flag = hide
+        reinterpret_cast<UI::Element*>(imageElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge; clear flag = show
+        reinterpret_cast<UI::Element*>(buttonElem)->SetFlagsOnOff(1, 0);  // B.3.6 bridge; set flag = hide
     }
 }
 

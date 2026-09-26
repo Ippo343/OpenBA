@@ -8,6 +8,13 @@
 //
 // Decompiled from Application-x64.exe.
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "object/External.h"   // ENDGAME B.3.6 UI callers (K2)
+#include <new>   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "engine_funcs.h"
 #include "system/String.h"
@@ -70,11 +77,11 @@ void FollowDialog_Slot4(FollowDialog* self) {
     {
         System::String nameStr("buttonClose");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
 
         if (elem) {
-            fn_Element_SetElementId(elem, 100);
+            reinterpret_cast<UI::Element*>(elem)->SetElementId(100);  // B.3.6 bridge
         }
     }
 
@@ -82,7 +89,7 @@ void FollowDialog_Slot4(FollowDialog* self) {
     {
         System::String nameStr("textFollow");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
 
         *(void**)(s + 0xC8) = elem;
@@ -98,7 +105,7 @@ void FollowDialog_Slot4(FollowDialog* self) {
     {
         System::String nameStr("textAction");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* elem = *(void**)retBuf;
 
         *(void**)(s + 0xD0) = elem;
@@ -161,9 +168,9 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
         void* textFollow = *(void**)(s + 0xC8);
         if (FD_OkPtr(profEntry) && FD_OkPtr(*(uint64_t*)(profEntry + 0x20)) && textFollow) {
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, *(uint64_t*)(profEntry + 0x20), (void*)(profEntry + 0x30));
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(profEntry + 0x20))), *reinterpret_cast<const System::String*>((void*)(profEntry + 0x30)));  // B.3.6 bridge
             System::String sysStr;
-            fn_UIString_ToSystemString(uiStr, &sysStr);
+            ::new (&sysStr) System::String(reinterpret_cast<const UI::String*>(uiStr)->operator System::String());  // B.3.6 bridge
 
             fn_TextElement_SetParameter(textFollow, 1, &sysStr);
         }
@@ -214,7 +221,7 @@ void FollowDialog_Slot6(FollowDialog* self, void* /*p2*/, void* /*p3*/, void* /*
         uintptr_t elemPtr = (uintptr_t)textAction;
         uint64_t stringTable = *(uint64_t*)(elemPtr + 0xD8);
         uint8_t uiStr[16];
-        fn_UIString_Ctor_Index(uiStr, stringTable, actionIndex);
+        ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), actionIndex);  // B.3.6 bridge
         uint8_t textVal[16];
         *(uint64_t*)textVal = *(uint64_t*)uiStr;
         *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
@@ -267,7 +274,7 @@ void FollowDialog_Slot8(FollowDialog* self, void* /*param2*/, int param3, int pa
         uint8_t selfIBP[8];
         new (selfIBP) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
         void* ui = *(void**)(s + 0x10);
-        fn_UI_CloseDialog(ui, selfIBP);
+        reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
     }
 }
 
@@ -342,7 +349,7 @@ void FollowDialog_Slot7(FollowDialog* self) {
             new (selfIBP) ::Object::InternalBasePtr(
                 reinterpret_cast<RtObject::Internal*>((void*)self));   // B.3.3 bridge
             void* ui = *(void**)(s + 0x10);
-            fn_UI_CloseDialog(ui, selfIBP);
+            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(selfIBP));  // B.3.6 bridge
         }
     }
 }

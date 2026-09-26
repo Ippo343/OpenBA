@@ -5,6 +5,14 @@
 // Layout: +0xC8 = selected index (int32), +0xD8 = scenario array,
 //         +0xE0 = scenario count
 
+#include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Sprite.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/SpriteSheet.h"   // ENDGAME B.3.6 UI callers (K2)
+#include "ui/Dialog.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/ui_dialogs.h"
 #include "Dialog/dialog_exe_helpers.h"
 #include "Component/coll_bridge.h"
@@ -51,9 +59,9 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     {
         System::String nameStr("buttonCancel");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* cancelBtn = *(void**)retBuf;
-        fn_Element_SetElementId(cancelBtn, 100);
+        reinterpret_cast<UI::Element*>(cancelBtn)->SetElementId(100);  // B.3.6 bridge
         *(uint32_t*)((uintptr_t)cancelBtn + 0xC0) = 8;
     }
 
@@ -61,16 +69,14 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     {
         System::String nameStr("buttonOk");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         void* okBtn = *(void**)retBuf;
 
         *(void**)(s + 0xD0) = okBtn;
-        fn_Element_SetElementId(okBtn, 0x65);
+        reinterpret_cast<UI::Element*>(okBtn)->SetElementId(0x65);  // B.3.6 bridge
 
         // Disable via vtable[8]: SetEnabled(false)
-        void** vtable = *(void***)okBtn;
-        typedef void (*fn_SetEnabled_t)(void*, bool);
-        ((fn_SetEnabled_t)vtable[8])(okBtn, false);
+        reinterpret_cast<UI::Element*>(okBtn)->Enable(false);  // B.3.6 bridge
     }
 
     // --- Get scenario list from singleton at *g_pKeyMapSingleton + 8 ---
@@ -84,7 +90,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
     {
         System::String nameStr("tableScenario");
         uint8_t retBuf[16];
-        fn_DialogInstance_FindElement(self, retBuf, &nameStr);
+        ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::DialogInstance*>(self)->FindElement(nameStr));  // B.3.6 bridge
         table = *(void**)retBuf;
     }
 
@@ -126,14 +132,15 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         // --- Clone template element from Dialog ---
         // GetTemplate(dialog, retval, 0)
         uint8_t templateBuf[8];
-        fn_Dialog_GetTemplate(*(void**)(s + 0x18), templateBuf, 0);
+        ::new (templateBuf) Object::ExternalPtr<UI::ElementDescription>(reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18))->GetTemplate(0));  // B.3.6 bridge
 
         // Clone via vtable[8]: templateObj->Clone(&cloneBuf, dialog)
+        // (= UI::ElementDescription slot 8 CreateInstance, RETSLOT per B6-2)
         void* templateObj = *(void**)templateBuf;
-        void** templateVt = *(void***)templateObj;
-        typedef void (*fn_Clone_t)(void*, void*, void*);
         uint8_t cloneBuf[16];
-        ((fn_Clone_t)templateVt[8])(templateObj, cloneBuf, *(void**)(s + 0x18));
+        reinterpret_cast<const UI::ElementDescription*>(templateObj)->CreateInstance(  // B.3.6 bridge
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(*(void**)(s + 0x18)));
         void* clonedElem = *(void**)cloneBuf;
 
         // --- Insert clone into table ---
@@ -153,10 +160,10 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         *(void**)entry = clonedElem;
 
         // Set element hidden initially (flags 0x10000 = hidden)
-        fn_Element_SetFlagsOnOff(clonedElem, 0x10000, 0);
+        reinterpret_cast<UI::Element*>(clonedElem)->SetFlagsOnOff(0x10000, 0);  // B.3.6 bridge
 
         // Set element ID = entryIndex + 1000
-        fn_Element_SetElementId(clonedElem, entryIndex + 1000);
+        reinterpret_cast<UI::Element*>(clonedElem)->SetElementId(entryIndex + 1000);  // B.3.6 bridge
 
         // --- Find sub-elements in the clone ---
 
@@ -164,7 +171,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         {
             System::String nameStr("imageIcon");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, &nameStr);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
             *(void**)(entry + 0x10) = *(void**)retBuf;
         }
 
@@ -172,7 +179,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         {
             System::String nameStr("textTitle");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, &nameStr);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
             *(void**)(entry + 0x18) = *(void**)retBuf;
         }
 
@@ -180,7 +187,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         {
             System::String nameStr("textDescription");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, &nameStr);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
             *(void**)(entry + 0x20) = *(void**)retBuf;
         }
 
@@ -188,7 +195,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
         {
             System::String nameStr("selectSave");
             uint8_t retBuf[16];
-            fn_FindElement(clonedElem, retBuf, &nameStr);
+            ::new (retBuf) Object::InternalPtr<UI::Element>(reinterpret_cast<UI::Element*>(clonedElem)->FindElement(nameStr));  // B.3.6 bridge
             *(void**)(entry + 0x08) = *(void**)retBuf;
         }
 
@@ -206,7 +213,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
             // spriteSheet = *(scenario + 0x38)
             uint64_t spriteSheet = *(uint64_t*)((uintptr_t)scenario + 0x38);
             uint8_t sprite[16];
-            fn_Sprite_Ctor(sprite, spriteSheet, &spriteNameStr);
+            ::new (sprite) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(spriteSheet)), spriteNameStr);  // B.3.6 bridge
 
             // SetSprite on imageIcon
             void* imageIcon = *(void**)(entry + 0x10);
@@ -222,7 +229,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
             // stringTable = *(scenario + 0x20)
             uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, stringTable, &titleStr);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), titleStr);  // B.3.6 bridge
 
             // SetText on textTitle
             void* textTitle = *(void**)(entry + 0x18);
@@ -237,7 +244,7 @@ void ScenarioDialog_Slot4(ScenarioDialog* self) {
             // Create UI::String(retval, stringTable, descStr)
             uint64_t stringTable = *(uint64_t*)((uintptr_t)scenario + 0x20);
             uint8_t uiStr[16];
-            fn_UIString_Ctor(uiStr, stringTable, &descStr);
+            ::new (uiStr) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(stringTable)), descStr);  // B.3.6 bridge
 
             // SetText on textDescription
             void* textDesc = *(void**)(entry + 0x20);
@@ -312,14 +319,12 @@ void ScenarioDialog_Slot6(ScenarioDialog* self) {
     for (int i = 0; i < count; i++) {
         void* elem = *(void**)(entryArray + 8 + (uintptr_t)i * 0x38);
         bool isNotSelected = (i != selected);
-        fn_Element_SetFlagsOnOff(elem, isNotSelected ? 1 : 0, isNotSelected ? 0 : 1);
+        reinterpret_cast<UI::Element*>(elem)->SetFlagsOnOff(isNotSelected ? 1 : 0, isNotSelected ? 0 : 1);  // B.3.6 bridge
     }
 
     // Enable/disable confirm button based on valid selection
     void* confirmBtn = (void*)*(uint64_t*)(s + 0xD0);
-    void** vtable = *(void***)confirmBtn;
-    typedef void (*fn_SetEnabled_t)(void*, bool);
-    ((fn_SetEnabled_t)vtable[8])(confirmBtn, selected >= 0);
+    reinterpret_cast<UI::Element*>(confirmBtn)->Enable(selected >= 0);  // B.3.6 bridge
 }
 
 // ============================================================
@@ -517,7 +522,7 @@ void ScenarioDialog_Slot8(ScenarioDialog* self, uint64_t param2,
             uint8_t basePtr[16];
             new (basePtr) ::Object::InternalBasePtr(reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
             void* ui = *(void**)(s + 0x10);
-            fn_UI_CloseDialog(ui, basePtr);
+            reinterpret_cast<UI::UserInterface*>(ui)->CloseDialog(reinterpret_cast<Object::InternalPtr<UI::DialogInstance>*>(basePtr));  // B.3.6 bridge
         } else if (param4 == 0x65) {
             // Confirm/load button — reimpl of FUN_140077cb0
             ScenarioDialog_LoadSelected(self);
