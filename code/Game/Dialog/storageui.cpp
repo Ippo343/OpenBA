@@ -28,6 +28,11 @@
 #include "runtime/types/ui/SpriteSheet.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TableElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/ElementDescription.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // StorageUI::Startup is the per-frame content refresh (driven via the +0x40
 // W_OnUpdate hack in standalone). Its _DEBUG bring-up logs used to fire every
@@ -115,7 +120,7 @@ void StorageUI_Serialize(StorageUI* self) {
     }
 
     // Resize the table
-    fn_TableElement_SetSize((void*)tableElem, rowCount, colCount);
+    reinterpret_cast<UI::TableElement*>(tableElem)->SetSize(rowCount, colCount);  // B.3.6 bridge
 
     // Clone template elements into each table cell
     int totalCells = reinterpret_cast<const UI::Element*>(tableElem)->ChildCount();  // B.3.6 bridge
@@ -124,14 +129,16 @@ void StorageUI_Serialize(StorageUI* self) {
         void* dialogInst = *(void**)(s + 0x18);
         void* dialogResource = *(void**)((uintptr_t)dialogInst + 0x18);
 
-        // Clone via template vtable[8]: Clone(this, retBuf, dialogResource)
-        void** templateVt = *(void***)templateObj;
-        typedef void* (*fn_Clone_t)(void*, void*, void*);
+        // Clone via template vtable[8]: `templateObj` is the first child's Element+0xB8
+        // `_description` (ExternalPtr<UI::ElementDescription>), so this is ElementDescription
+        // slot 8 CreateInstance(ret, dialog) -- a RETSLOT virtual (RULE B6-2).
         uint8_t cloneBuf[16];
-        ((fn_Clone_t)templateVt[8])(templateObj, cloneBuf, dialogResource);
+        reinterpret_cast<UI::ElementDescription*>(templateObj)->CreateInstance(
+            reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf),
+            reinterpret_cast<const UI::Dialog*>(dialogResource));  // B.3.6 bridge: ElementDescription slot 8
 
         // Set cloned element as child of table
-        fn_TableElement_SetChild2((void*)tableElem, cloneBuf, i);
+        reinterpret_cast<UI::TableElement*>(tableElem)->SetChild(reinterpret_cast<Object::InternalPtr<UI::Element>*>(cloneBuf), i);  // B.3.6 bridge
     }
 
     // Iterate all cells, find "labelStorage" and "numberCount" sub-elements
@@ -315,18 +322,18 @@ void StorageUI_Startup(StorageUI* self) {
             ::new (spriteBuf) UI::Sprite(Object::ExternalPtr<UI::SpriteSheet>(reinterpret_cast<UI::SpriteSheet*>(*(uint64_t*)(resType + 0x20))),
                            *reinterpret_cast<const System::String*>(resType + 0x30));  // B.3.6 bridge
             void* labelElem = *(void**)rowBase;
-            fn_LabelElement_SetSprite(labelElem, spriteBuf);
+            reinterpret_cast<UI::LabelElement*>(labelElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
             // Set text from resource type
             uint8_t uiStrBuf[16];
             ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(resType + 0x28))),
                              *reinterpret_cast<const System::String*>(resType + 0x30));  // B.3.6 bridge
             labelElem = *(void**)rowBase;
-            fn_TextElement_SetText(labelElem, uiStrBuf);
+            reinterpret_cast<UI::TextElement*>(labelElem)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
             // Set count
             void* numberElem = *(void**)(rowBase + 8);
-            fn_NumberElement_SetValueInt(numberElem, count);
+            reinterpret_cast<UI::NumberElement*>(numberElem)->SetValue(static_cast<int32_t>(count));  // B.3.6 bridge
 
             // Show both elements (flags: hide=0, show=1)
             reinterpret_cast<UI::Element*>(*(void**)rowBase)->SetFlagsOnOff(0, 1);  // B.3.6 bridge

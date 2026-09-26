@@ -30,6 +30,8 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/ContainerElement.h"  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ComboElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/DocumentTextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // File-local helpers
@@ -71,7 +73,7 @@ static void HelpUI_LoadPage(HelpUI* self) {
     if (!extList || !comboElem || !*(void**)(s + 0x38) || !*(void**)(s + 0x58))
         return;
     int currentItem = *(int*)((uintptr_t)comboElem + 0x118);
-    void* itemData = fn_ComboElement_GetItemData(comboElem, currentItem);
+    void* itemData = reinterpret_cast<const UI::ComboElement*>(comboElem)->GetItemData(currentItem);  // B.3.6 bridge
     int pageResIndex = (int)(intptr_t)itemData;
 
     // Look up StringTable resource from ExternalList
@@ -88,7 +90,7 @@ static void HelpUI_LoadPage(HelpUI* self) {
 
     // Set document text
     void* docElem = *(void**)(s + 0x38);
-    fn_DocumentTextElement_SetText_UIString(docElem, uiString);
+    reinterpret_cast<UI::DocumentTextElement*>(docElem)->SetText(reinterpret_cast<const UI::String*>(uiString));  // B.3.6 bridge
 
     // Reset scroll offsets to (0, 0)
     void* containerElem = *(void**)(s + 0x58);
@@ -279,7 +281,7 @@ void HelpUI_Slot4(HelpUI* self) {
             ::new (sprite) UI::Sprite();  // B.3.6 bridge
 
             // Add item to combo: (sprite, name, userData=index)
-            fn_ComboElement_AddItem(comboElem, sprite, &topicName, (void*)(intptr_t)i);
+            reinterpret_cast<UI::ComboElement*>(comboElem)->AddItem(*reinterpret_cast<const UI::Sprite*>(sprite), topicName, (void*)(intptr_t)i);  // B.3.6 bridge
         }
 
         // Re-check count each iteration (matches original)
@@ -288,7 +290,7 @@ void HelpUI_Slot4(HelpUI* self) {
     }
 
     // Select first item and load its content
-    fn_ComboElement_SetCurrentItem(comboElem, 0);
+    reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(0);  // B.3.6 bridge
     HelpUI_LoadPage(self);
 }
 
@@ -366,7 +368,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
 
         // Get the clicked link's text (non-trivial return)
         System::String linkStr;
-        fn_DocumentTextElement_GetLink(docElem, &linkStr, linkIndex);
+        ::new (&linkStr) System::String(reinterpret_cast<const UI::DocumentTextElement*>(docElem)->GetLink(linkIndex));  // B.3.6 bridge
 
         // FindLinkTarget takes its own copy (by value) and destroys it; returns
         // the matching index or -1.
@@ -382,7 +384,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
 
             // Navigate to target page
             void* comboElem = *(void**)(s + 0x40);
-            fn_ComboElement_SetCurrentItem(comboElem, targetIdx);
+            reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(targetIdx);  // B.3.6 bridge
             HelpUI_LoadPage(self);
         }
 
@@ -419,7 +421,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
         ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
 
         void* docElem = *(void**)(s + 0x38);
-        fn_DocumentTextElement_SetText_UIString(docElem, uiString);
+        reinterpret_cast<UI::DocumentTextElement*>(docElem)->SetText(reinterpret_cast<const UI::String*>(uiString));  // B.3.6 bridge
 
         // Restore scroll position from history
         histArray = *(void**)(s + 0x68);
@@ -431,7 +433,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
         // Update combo to show current page
         int comboIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
         void* comboElem = *(void**)(s + 0x40);
-        fn_ComboElement_SetCurrentItem(comboElem, comboIdx);
+        reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(comboIdx);  // B.3.6 bridge
         return;
     }
 
@@ -465,7 +467,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
         ::new (uiString) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>((uint64_t)validTable)), 2);  // B.3.6 bridge
 
         void* docElem = *(void**)(s + 0x38);
-        fn_DocumentTextElement_SetText_UIString(docElem, uiString);
+        reinterpret_cast<UI::DocumentTextElement*>(docElem)->SetText(reinterpret_cast<const UI::String*>(uiString));  // B.3.6 bridge
 
         // Restore scroll position from history
         histArray = *(void**)(s + 0x68);
@@ -477,7 +479,7 @@ void HelpUI_Slot9(HelpUI* self, uint64_t param2, int msg, int id,
         // Update combo to show current page
         int comboIdx = *(int*)((uintptr_t)histArray + (int64_t)histIdx * 8);
         void* comboElem = *(void**)(s + 0x40);
-        fn_ComboElement_SetCurrentItem(comboElem, comboIdx);
+        reinterpret_cast<UI::ComboElement*>(comboElem)->SetCurrentItem(comboIdx);  // B.3.6 bridge
         return;
     }
 }

@@ -28,6 +28,7 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ResidenceUI::Slot7 is the per-frame roster refresh (driven via the +0x40 W_OnUpdate
 // hack in standalone). Its _DEBUG bring-up logs used to fflush an unbuffered log once
@@ -298,13 +299,13 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                     // would fault on garbage. 0 (empty String) is fine.
                     uintptr_t nameBuf = *(uintptr_t*)(citizen + 0x28);
                     if (textName && (nameBuf == 0 || RUI_OkPtr(nameBuf)))
-                        fn_TextElement_SetParameter(textName, 0, (void*)(citizen + 0x28));
+                        reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, *reinterpret_cast<const System::String*>(citizen + 0x28));  // B.3.6 bridge
 
                     // Set age text: (int)(age * 5.0f) formatted as "%i"
                     int ageYears = (int)(*(float*)(citizen + 0x3c) * ageMul);
                     System::String ageStr = System::String::Format("%i", (uint64_t)(uint32_t)ageYears);
                     void* textAge = *(void**)(rowBase + 0x18);
-                    if (textAge) fn_TextElement_SetParameter(textAge, 0, &ageStr);
+                    if (textAge) reinterpret_cast<UI::TextElement*>(textAge)->SetParameter(0, ageStr);  // B.3.6 bridge
 
                     // Determine profession text. Faithful to retail 0x1400B51F0:
                     //   if (age < desc.childThreshold(+0x44) || job(+0x208) != 0):
@@ -351,7 +352,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                             builtProf = true;
                         }
                     }
-                    if (textProfession && builtProf) fn_TextElement_SetText(textProfession, uiStr);
+                    if (textProfession && builtProf) reinterpret_cast<UI::TextElement*>(textProfession)->SetText(reinterpret_cast<const UI::String*>(uiStr));  // B.3.6 bridge
 
                     // Activate buttonGoto: vtable[8](this)
                     void* buttonGoto = *(void**)(rowBase + 0x28);
@@ -384,14 +385,14 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
             {
                 System::String emptyStr1("");
                 void* textName = *(void**)(rowBase + 0x10);
-                if (textName) fn_TextElement_SetParameter(textName, 0, &emptyStr1);
+                if (textName) reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, emptyStr1);  // B.3.6 bridge
             }
 
             // Clear age text
             {
                 System::String emptyStr2("");
                 void* textAge = *(void**)(rowBase + 0x18);
-                if (textAge) fn_TextElement_SetParameter(textAge, 0, &emptyStr2);
+                if (textAge) reinterpret_cast<UI::TextElement*>(textAge)->SetParameter(0, emptyStr2);  // B.3.6 bridge
             }
 
             // Reset profession text: fn_UIString_Ctor(retbuf, externalPtr from +0xD8, empty string)
@@ -401,7 +402,7 @@ void ResidenceUI_Slot7(ResidenceUI* self) {
                 uint64_t origUIStr[2];
                 ::new (origUIStr) UI::String(
                     Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)((uintptr_t)textProfession + 0xD8))), emptyStr3);  // B.3.6 bridge
-                fn_TextElement_SetText(textProfession, origUIStr);
+                reinterpret_cast<UI::TextElement*>(textProfession)->SetText(reinterpret_cast<const UI::String*>(origUIStr));  // B.3.6 bridge
             }
 
             // Deactivate buttonGoto: vtable[8](this, 0)

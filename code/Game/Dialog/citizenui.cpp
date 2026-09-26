@@ -34,6 +34,8 @@
 #include "runtime/types/ui/String.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 #if defined(_DEBUG)
 #include <cstdio>
 #include <cstdlib>
@@ -337,7 +339,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
     bool okName = CitUI_OkString((void*)(ai + 0x28));
     bool okParam = CitUI_OkTextParam(textName);
     if (okName && okParam)
-        fn_TextElement_SetParameter(textName, 0, (void*)(ai + 0x28));
+        reinterpret_cast<UI::TextElement*>(textName)->SetParameter(0, *reinterpret_cast<const System::String*>(ai + 0x28));  // B.3.6 bridge
 #if defined(_DEBUG)
     {
     }
@@ -347,7 +349,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
     float ageFloat = *(float*)(ai + 0x3c);
     int ageYears = (int)(ageFloat * *g_pAgeMultiplier);
     void* numberAge = (void*)*(uint64_t*)(s + 0x48);
-    if (numberAge) fn_NumberElement_SetValueInt(numberAge, ageYears);
+    if (numberAge) reinterpret_cast<UI::NumberElement*>(numberAge)->SetValue(static_cast<int32_t>(ageYears));  // B.3.6 bridge
 
     // --- Clothing text (string table lookup) ---
     {
@@ -362,7 +364,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             uint8_t textVal[16];
             *(uint64_t*)textVal = *(uint64_t*)uiStr;
             *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-            fn_TextElement_SetText(clothingElem, textVal);
+            reinterpret_cast<UI::TextElement*>(clothingElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
         }
     }
 
@@ -393,7 +395,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             uint8_t textVal[16];
             *(uint64_t*)textVal = *(uint64_t*)uiStr;
             *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-            fn_TextElement_SetText(toolElem, textVal);
+            reinterpret_cast<UI::TextElement*>(toolElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
         }
     }
 
@@ -447,7 +449,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
                     haveText = true;
                 }
             }
-            if (haveText) fn_TextElement_SetText(profElem, textVal);
+            if (haveText) reinterpret_cast<UI::TextElement*>(profElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
         }
     }
 
@@ -543,7 +545,7 @@ void CitizenUI_Slot7(CitizenUI* self) {
             uint8_t textVal[16];
             *(uint64_t*)textVal = *(uint64_t*)uiStr;
             *(uint64_t*)(textVal + 8) = *(uint64_t*)(uiStr + 8);
-            fn_TextElement_SetText(actionElem, textVal);
+            reinterpret_cast<UI::TextElement*>(actionElem)->SetText(reinterpret_cast<const UI::String*>(textVal));  // B.3.6 bridge
         }
     }
     }  // if (profCompRef != 0)

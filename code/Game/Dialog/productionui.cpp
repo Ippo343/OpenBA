@@ -25,6 +25,9 @@
 #include "runtime/types/ui/StringTable.h"  // ENDGAME B.3.6 UI callers (K3)
 #include "object/External.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/LabelElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/NumberElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
+#include "runtime/types/ui/TextElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // ProductionUI struct layout:
@@ -320,18 +323,18 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
 
         // Set sprite on label element
         void* labelElem = (void*)*(uint64_t*)elemPair;
-        fn_LabelElement_SetSprite(labelElem, spriteBuf);
+        reinterpret_cast<UI::LabelElement*>(labelElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(spriteBuf));  // B.3.6 bridge
 
         // Create UI::String from ResourceDescription
         uint8_t uiStrBuf[16];
         ::new (uiStrBuf) UI::String(Object::ExternalPtr<UI::StringTable>(reinterpret_cast<UI::StringTable*>(*(uint64_t*)(rd + 0x28))), *reinterpret_cast<const System::String*>(rd + 0x30));  // B.3.6 bridge
 
         // Set text on label element
-        fn_TextElement_SetText(labelElem, uiStrBuf);
+        reinterpret_cast<UI::TextElement*>(labelElem)->SetText(reinterpret_cast<const UI::String*>(uiStrBuf));  // B.3.6 bridge
 
         // Set count on number element
         void* numberElem = (void*)*(uint64_t*)(elemPair + 8);
-        fn_NumberElement_SetValueInt(numberElem, count);
+        reinterpret_cast<UI::NumberElement*>(numberElem)->SetValue(static_cast<int32_t>(count));  // B.3.6 bridge
 
         // Show both elements
         reinterpret_cast<UI::Element*>(labelElem)->SetFlagsOnOff(0, 1);  // B.3.6 bridge
@@ -348,12 +351,12 @@ static void UpdateProductionList(uintptr_t self, int listIndex) {
         uint8_t emptySprite[16];
         ::new (emptySprite) UI::Sprite();  // B.3.6 bridge
         void* labelElem = (void*)*(uint64_t*)elemPair;
-        fn_LabelElement_SetSprite(labelElem, emptySprite);
+        reinterpret_cast<UI::LabelElement*>(labelElem)->SetSprite(reinterpret_cast<const UI::Sprite*>(emptySprite));  // B.3.6 bridge
 
         // Set empty text on label element
         uint8_t emptyStr[16];
         ::new (emptyStr) UI::String();  // B.3.6 bridge
-        fn_TextElement_SetText(labelElem, emptyStr);
+        reinterpret_cast<UI::TextElement*>(labelElem)->SetText(reinterpret_cast<const UI::String*>(emptyStr));  // B.3.6 bridge
 
         // Hide number element
         void* numberElem = (void*)*(uint64_t*)(elemPair + 8);

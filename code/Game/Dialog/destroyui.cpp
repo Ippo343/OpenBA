@@ -19,6 +19,7 @@
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
 #include "runtime/types/ui/Element.h"  // ENDGAME B.3.6 UI callers (K3)
 #include <new>  // ENDGAME B.3.6 UI callers (K3)
+#include "runtime/types/ui/ProgressElement.h"  // ENDGAME B.3.6 UI callers round 2 (K3)
 
 // ============================================================
 // DestroyComponent_CanReclaim (0x14011e690)
@@ -375,7 +376,7 @@ void DestroyUI_Slot7(DestroyUI* self) {
 
             // Format and set percentage text
             System::String strObj = System::String::Format("%i", (uint64_t)(uint32_t)(int)fillPercent);
-            fn_ProgressElement_SetProgressTextParameter(progressRemove, 0, &strObj);
+            reinterpret_cast<UI::ProgressElement*>(progressRemove)->SetProgressTextParameter(0, strObj);  // B.3.6 bridge
         }
 
         // --- Update destruction progress bar ---
@@ -394,7 +395,7 @@ void DestroyUI_Slot7(DestroyUI* self) {
         *(float*)((uintptr_t)progressDestruct + 0x128) = destroyRatio;
 
         System::String strObj2 = System::String::Format("%i", (uint64_t)(uint32_t)(int)destroyPercent);
-        fn_ProgressElement_SetProgressTextParameter(progressDestruct, 0, &strObj2);
+        reinterpret_cast<UI::ProgressElement*>(progressDestruct)->SetProgressTextParameter(0, strObj2);  // B.3.6 bridge
 
         // --- Show/hide progress bars based on destruction state ---
         bool isDestroying = (destroyRatio != 0.0f);
