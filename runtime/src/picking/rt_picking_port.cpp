@@ -23,7 +23,9 @@ void RtPickingPortInit() {
     int n = 0;
     n += RtPickingSceneRegister();
 
-    int grid = 0;
-    grid = RtPickingGridRegister();
+    // [[maybe_unused]]: the perf build strips printf's arguments (B5-11), which
+    // leaves `grid` read by nothing there. The registration call stays OUTSIDE
+    // the printf for exactly that reason.
+    [[maybe_unused]] int grid = RtPickingGridRegister();
     printf("[RtPort] Picking: %d exports + %d grid addresses registered\n", n, grid);
 }
