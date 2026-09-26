@@ -368,10 +368,13 @@ AchievementDialog::AchievementDialog(UI::UserInterface* ui, const UI::Dialog* di
              Object::InternalPtr<UI::DialogInstance> parent)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0), dataC8(0) {}
 
-// PORT GAP (B38 D2): retail's dtor 0x1400103f0 also frees the entry array at
-// +0xc0 and zeroes its header; the hand-built slot 0 did not (it leaked the
-// array). Kept for this commit; the retail body is a separate titled commit.
-AchievementDialog::~AchievementDialog() {}
+// Retail's dtor (inside [0] 0x1400103f0): MemFree the entry array at +0xc0 and
+// zero its header (+0xc0 data, +0xc8 count/capacity), then ~DialogInstance.
+AchievementDialog::~AchievementDialog() {
+    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dataC0));
+    dataC0 = 0;
+    dataC8 = 0;
+}
 
 // [0] 0x1400103f0: ~AchievementDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
 Object::Base* AchievementDialog::DeletingDtor(unsigned flags) {

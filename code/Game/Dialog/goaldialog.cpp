@@ -293,10 +293,13 @@ GoalDialog::GoalDialog(UI::UserInterface* ui, const UI::Dialog* dialog,
              Object::InternalPtr<UI::DialogInstance> parent)
     : UI::DialogInstance(ui, dialog, parent, nullptr, nullptr, 0), dataB8(0), dataC0(0) {}
 
-// PORT GAP (B38 D2): retail's dtor 0x140011c10 also frees the entry array at
-// +0xb8 and zeroes its header; the hand-built slot 0 did not (it leaked the
-// array). Kept for this commit; the retail body is a separate titled commit.
-GoalDialog::~GoalDialog() {}
+// Retail's dtor (inside [0] 0x140011c10): MemFree the entry array at +0xb8 and
+// zero its header (+0xb8 data, +0xc0 count/capacity), then ~DialogInstance.
+GoalDialog::~GoalDialog() {
+    if (fn_MemFreeStatic) fn_MemFreeStatic(reinterpret_cast<void*>(dataB8));
+    dataB8 = 0;
+    dataC0 = 0;
+}
 
 // [0] 0x140011c10: ~GoalDialog -> ~DialogInstance -> ~Internal, MemFree on &1.
 Object::Base* GoalDialog::DeletingDtor(unsigned flags) {
