@@ -201,6 +201,8 @@
 #include "../../types/engine/Engine.h"
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformStartup / PlatformShutdown
 #include "../../types/achievement/AchievementManager.h"   // ENDGAME B.3.7 fragment: the ctor door's named fields
+#include "../../types/input/Input.h"    // ENDGAME B.3.7 callers (K5): Input::Configuration
+#include "../../types/input/Device.h"   // ENDGAME B.3.7 callers (K5): Input::Device
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
@@ -232,6 +234,10 @@ using EngineT = ::Engine::Engine;
 // forward-declares a GLOBAL `struct MemoryAllocator`, and the using-declaration
 // collides with it. Spelled out at each use instead.
 typedef rt::system::MemoryAllocator RtMemoryAllocator;
+
+// The unexported Input::KeyMap scalar deleting destructor 0x180053440, ported
+// and registered by address in runtime/src/input/keymap_save.cpp (block B5).
+void* RtInput_KeyMap_DeletingDtor(void* selfPtr);
 
 namespace {
 
@@ -666,8 +672,8 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (inputConfiguration)
         RT_EXPORT_ONCE(CtorFn, "??0Configuration@Input@@QEAA@XZ")(inputConfiguration);
     _inputConfiguration = inputConfiguration;
-    if (!RT_EXPORT_ONCE(BoolThisFn, "?Startup@Configuration@Input@@QEAA_NXZ")(
-            inputConfiguration)) {
+    if (!reinterpret_cast< ::Input::Configuration*>(inputConfiguration)
+             ->Startup()) {                                  // B.3.7 bridge
         g_startupFailAt = 9;
         return 0;
     }
@@ -710,8 +716,8 @@ uint32_t Engine::Engine::Startup(const char* cmdLine, uint32_t minRangeMB,
     if (inputDevice)
         RT_EXPORT_ONCE(CtorFn, "??0Device@Input@@QEAA@XZ")(inputDevice);
     _inputDevice = inputDevice;
-    if (!RT_EXPORT_ONCE(BoolThisFn, "?PlatformStartup@Device@Input@@AEAA_NXZ")(
-            inputDevice)) {
+    if (!reinterpret_cast< ::Input::Device*>(inputDevice)
+             ->PlatformStartup()) {                          // B.3.7 bridge
         g_startupFailAt = 13;
         return 0;
     }
@@ -773,24 +779,23 @@ void Engine::Engine::Shutdown() {
         *static_cast<uint8_t*>(videoCfg) = (_startupComplete == 0) ? 1 : 0;
 
     if (void* p = _achievementManager) {
-        RT_EXPORT_ONCE(VoidThisFn,
-            "?RemoveAll@AchievementManager@Achievement@@QEAAXXZ")(p); ++steps;
+        reinterpret_cast< ::Achievement::AchievementManager*>(p)->RemoveAll(); ++steps;  // B.3.7 bridge
     }
     if (void* p = _inputDevice) {
-        RT_EXPORT_ONCE(VoidThisFn,
-            "?PlatformShutdown@Device@Input@@AEAAXXZ")(p); ++steps;
+        reinterpret_cast< ::Input::Device*>(p)->PlatformShutdown(); ++steps;  // B.3.7 bridge
     }
     if (void* p = _inputConfiguration) {
-        RT_EXPORT_ONCE(VoidThisFn, "?Save@Configuration@Input@@QEAAXXZ")(p);
+        reinterpret_cast< ::Input::Configuration*>(p)->Save();  // B.3.7 bridge
         // 0x1800db55d: destroy the object hanging off the config's first field.
         // 0x180053440 is an unnamed scalar deleting destructor (a two-node BST
         // teardown plus MemFree) with NO export in either build, so it can only
-        // be reached by address. That address is unmapped at cutover — one of
-        // exactly two such sites in this file, and both are in the body nothing
-        // calls.
+        // be reached by address. ENDGAME B.3.7 callers (K5): that address door
+        // resolved (registry-first) to `RtInput_KeyMap_DeletingDtor`, ported in
+        // runtime/src/input/keymap_save.cpp and registered there BY ADDRESS, so
+        // it is a direct call now — the same conversion block B5 made in
+        // Input::Configuration::Startup's re-entry arm.
         if (void* inner = *static_cast<void**>(p)) {
-            if (uintptr_t fn = ResolveAddr(Module::Runtime, 0x180053440))
-                reinterpret_cast<VoidThisFn>(fn)(inner);
+            RtInput_KeyMap_DeletingDtor(inner);
         }
         ++steps;
     }
@@ -868,8 +873,10 @@ void Engine::Engine::Shutdown() {
     // Modification, Persistence, FileSystem, in that order. Kept as written.
 
     if (void* p = _achievementManager) {
-        RT_EXPORT_ONCE(VoidThisFn,
-            "??1AchievementManager@Achievement@@QEAA@XZ")(p);
+        // ~AchievementManager is a REAL non-virtual member (the null store at
+        // 0x1801fc670, then the three Array dtors); the door was its export.
+        reinterpret_cast< ::Achievement::AchievementManager*>(p)
+            ->Achievement::AchievementManager::~AchievementManager();  // B.3.7 bridge
         MemFree(p);
     }
     if (void* p = _inputDevice) {

@@ -156,6 +156,7 @@
 #include "../../types/engine/UpdateLoop.h"         // ENDGAME B.3.7: the loop classes
 #include "../../types/engine/Engine.h"             // ENDGAME B.3.7: Engine::Engine
 #include "../../types/application/Application.h"   // ENDGAME B.3.7: PlatformUpdate
+#include "../../types/input/Device.h"              // ENDGAME B.3.7 callers (K5): Input::Device
 #include "mainloop_internal.h"
 #include <atomic>
 
@@ -297,10 +298,10 @@ void Engine::MainLoop::Run(UpdateLoop* loop) {
     ::Engine::Engine* engine = _engine;
     const void* deltaTime = &_deltaTime;                    // the `Time&` retail passes
 
-    // Input::Device::Update — NOT ported. By NAME, so the miss at cutover
-    // prints [RtUnresolved] and is counted, instead of being a silent null.
-    RT_EXPORT_ONCE(DeviceUpdateFn, "?Update@Device@Input@@QEAAXAEBVTime@System@@@Z")(
-        engine->_inputDevice, deltaTime);                                // +0x6e0
+    // Input::Device::Update — ENDGAME B.3.7 callers (K5): a member of the real
+    // class (was the name door).
+    reinterpret_cast< ::Input::Device*>(engine->_inputDevice)->Update(   // +0x6e0, B.3.7 bridge
+        *reinterpret_cast<const System::Time*>(deltaTime));
 
     audioUpdate(engine->_audioDevice, deltaTime);                        // +0x6d0
     // Application::PlatformUpdate (0x18009fdf0, AEAA): was reached BY ADDRESS

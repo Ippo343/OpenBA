@@ -192,6 +192,7 @@
 #include "../../funcs/rt_port.h"
 #include "../../types/engine/MainLoop.h"
 #include "../../types/engine/UpdateLoop.h"   // ENDGAME B.3.7: slots 8/9 as virtual calls
+#include "../../types/save/SaveLoad.h"       // ENDGAME B.3.7 callers (K5): Save::SaveLoad
 #include "../../types/system/String.h"
 #include "../../types/system/Filename.h"
 #include "../collection/array_internal.h"
@@ -727,12 +728,7 @@ void Engine::MainLoop::OnVideoRestart() {
     // ---- 2 + 3 -------------------------------------------------------------------
     _currentLoop->OnVideoRestart();    // slot 9 (+0x48), ENDGAME B.3.7
 
-    {
-        using SaveLoadOnVideoRestartFn = void (*)(void*);
-        SaveLoadOnVideoRestartFn f = RT_EXPORT_ONCE(
-            SaveLoadOnVideoRestartFn, "?OnVideoRestart@SaveLoad@Save@@QEAAXXZ");
-        f(*SaveLoadSlot());
-    }
+    reinterpret_cast< ::Save::SaveLoad*>(*SaveLoadSlot())->OnVideoRestart();  // B.3.7 bridge
 
     // ---- 4 + 5: re-register each resource with its type, restore its path -------
     {
