@@ -23,6 +23,7 @@
 
 #include "Work/Work.h"
 #include "Work/AutoPickupWork.h"
+#include "Work/BuildRoad.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -96,6 +97,37 @@ UNIT_TEST(wrk_base_class_shape_rules) {
     CHECK(!std::has_virtual_destructor<AutoPickupWork>::value);
     CHECK((std::is_base_of<Object::Internal, Work>::value));
     CHECK((std::is_base_of<Work, AutoPickupWork>::value));
+}
+
+// ===========================================================================
+// PART E — the leaves: size against retail's create MemAlloc (B38_RULES §1.3),
+// concrete, no virtual destructor, and every override on retail's slot index.
+// ===========================================================================
+#define WRK_LEAF_SHAPE(Class, Parent, Size)                                     \
+    CHECK_EQ(sizeof(Class), (size_t)(Size));                                    \
+    CHECK_EQ(alignof(Class), (size_t)8);                                        \
+    CHECK(!std::is_abstract<Class>::value);                                     \
+    CHECK(!std::has_virtual_destructor<Class>::value);                          \
+    CHECK((std::is_base_of<Parent, Class>::value));                             \
+    CHECK_EQ(SlotOffset(&Class::DeletingDtor), (uintptr_t)0x00);                \
+    CHECK_EQ(SlotOffset(&Class::TypeName),     (uintptr_t)0x08);                \
+    CHECK_EQ(SlotOffset(&Class::Type),         (uintptr_t)0x10);                \
+    CHECK_EQ(SlotOffset(&Class::Persist),      (uintptr_t)0x18);                \
+    CHECK_EQ(SlotOffset(&Class::Execute),      (uintptr_t)0x20);                \
+    CHECK_EQ(SlotOffset(&Class::Slot5),        (uintptr_t)0x28);                \
+    CHECK_EQ(SlotOffset(&Class::OnComplete),   (uintptr_t)0x30);                \
+    CHECK_EQ(SlotOffset(&Class::OnCancel),     (uintptr_t)0x38);                \
+    CHECK_EQ(SlotOffset(&Class::Cleanup),      (uintptr_t)0x40);                \
+    CHECK_EQ(SlotOffset(&Class::Validate),     (uintptr_t)0x48);                \
+    CHECK_EQ(SlotOffset(&Class::GetTarget),    (uintptr_t)0x50);                \
+    CHECK_EQ(SlotOffset(&Class::GetPriority),  (uintptr_t)0x58);                \
+    CHECK_EQ(SlotOffset(&Class::Slot12),       (uintptr_t)0x60)
+
+UNIT_TEST(wrk_leaf_buildroad) {
+    WRK_LEAF_SHAPE(BuildRoad, Work, 0x70);   // create 0x140029560, table 0x140161020
+    CHECK_EQ(offsetof(BuildRoad, field_48), (size_t)0x48);
+    CHECK_EQ(offsetof(BuildRoad, field_58), (size_t)0x58);
+    CHECK_EQ(offsetof(BuildRoad, field_68), (size_t)0x68);
 }
 
 // ===========================================================================

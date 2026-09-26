@@ -14,61 +14,9 @@
 
 #include <cstdint>
 #include <cstddef>
+#include "Work/BuildRoad.h"   // ENDGAME B.3.8 (WRK): the real class; its POD is gone (B8-4)
 
-// ============================================================
-// BuildRoad — road construction work. Size = 0x70.
-// Ctor: 0x1400e4ad0, Vtable: 0x140161020, Factory: 0x140029560
-// Inherits: Object::Internal -> Work (0x48) -> BuildRoad
-// ============================================================
-namespace BuildRoadAddr {
-    constexpr uintptr_t Ctor         = 0x1400e4ad0;
-    constexpr uintptr_t Factory      = 0x140029560;
-    constexpr uintptr_t Vtable       = 0x140161020;
-    constexpr uintptr_t ScalarDtor   = 0x1400295b0;
-    constexpr uintptr_t Serialize    = 0x1400e4980;
-    constexpr uintptr_t Execute      = 0x1400e4190;
-    constexpr uintptr_t OnComplete   = 0x1400e4150;
-    constexpr uintptr_t OnCancel     = 0x1400e4120;
-    constexpr uintptr_t Cleanup      = 0x1400e4910;
-    constexpr uintptr_t Validate     = 0x1400e40c0;
-    constexpr uintptr_t GetTarget    = 0x1400e4960;
-    constexpr uintptr_t GetPriority  = 0x1400295a0;
-    constexpr uintptr_t WorkVtable   = 0x140161a80;
-    constexpr uintptr_t TypeInfo     = 0x1401c6860;
-}
-
-struct BuildRoad {
-    // --- Work base (0x48 bytes) ---
-    void*    vtable;             // +0x00: -> 0x140161020
-    uint8_t  _base08[8];         // +0x08: Object::Internal base
-    void*    field_10;           // +0x10: entity ptr (citizen InternalBasePtr)
-    void*    field_18;           // +0x18: entity ptr (zeroed)
-    int32_t  field_20;           // +0x20: work ID (-1 sentinel)
-    int32_t  field_24;           // +0x24: priority (0)
-    int32_t  field_28;           // +0x28: -1 sentinel
-    int32_t  field_2c;           // +0x2C: 0
-    void*    field_30;           // +0x30: zeroed
-    void*    field_38;           // +0x38: zeroed
-    int32_t  field_40;           // +0x40: 0
-    uint8_t  _pad44[4];          // +0x44: padding
-
-    // --- BuildRoad fields ---
-    void*    field_48;           // +0x48: InternalBasePtr — target entity (zeroed)
-    void*    field_50;           // +0x50: ExternalPtr — building description (zeroed)
-    int32_t  field_58;           // +0x58: map cell index (-1 sentinel)
-    int32_t  field_5c;           // +0x5C: road type (2 = default)
-    int32_t  field_60;           // +0x60: material type (0xff default if version < 1)
-    int32_t  field_64;           // +0x64: field (serialized, version >= 1)
-    int32_t  field_68;           // +0x68: material count (2 default if version < 1)
-    uint8_t  _pad6c[4];          // +0x6C: padding
-};
-
-static_assert(sizeof(BuildRoad) == 0x70, "BuildRoad size mismatch");
-static_assert(offsetof(BuildRoad, vtable) == 0x00, "");
-static_assert(offsetof(BuildRoad, field_48) == 0x48, "");
-static_assert(offsetof(BuildRoad, field_58) == 0x58, "");
-static_assert(offsetof(BuildRoad, field_60) == 0x60, "");
-static_assert(offsetof(BuildRoad, field_68) == 0x68, "");
+// BuildRoad — the real class code/Game/Work/BuildRoad.h (ENDGAME B.3.8).
 
 // ============================================================
 // BuildStructure — structure construction work. Size = 0x70.
