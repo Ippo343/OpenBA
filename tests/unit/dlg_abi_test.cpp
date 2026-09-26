@@ -35,6 +35,7 @@
 #include "Dialog/ScenarioDialog.h"
 #include "Dialog/FollowDialog.h"
 #include "Dialog/NewGameDialog.h"
+#include "Dialog/OptionsDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -192,4 +193,14 @@ UNIT_TEST(dlg_newgame_dialog) {
     CHECK_EQ(offsetof(NewGameDialog, worldSetup), (size_t)0xae0);
     CheckShape<NewGameDialog>();
     CheckDialogInstanceSlots<NewGameDialog>();
+}
+
+UNIT_TEST(dlg_options_dialog) {
+    CHECK_EQ(sizeof(OptionsDialog), (size_t)0x1c0);
+    CHECK_EQ(offsetof(OptionsDialog, comboRenderer), (size_t)0xb8);
+    CHECK_EQ(offsetof(OptionsDialog, savedRenderer), (size_t)0x190);
+    CHECK_EQ(offsetof(OptionsDialog, checkMouseClip), (size_t)0x1b0);
+    CHECK_EQ(offsetof(OptionsDialog, tabOptions), (size_t)0x1b8);
+    CheckShape<OptionsDialog>();
+    CheckDialogInstanceSlots<OptionsDialog>();
 }

@@ -81,16 +81,9 @@ void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
 // OptionsDialog
 // ============================================================
 
-// Slot4 (vtable +0x20): Startup — finds all UI elements (sliders, combos,
-// checkboxes), assigns IDs, copies current video/audio/input settings,
-// populates combo boxes with available renderers/adapters/resolutions.
-void OptionsDialog_Startup(OptionsDialog* self);
-
-// Slot8 (vtable +0x40): OnEvent — handles option changes.
-// msg 0x12: button clicks (OK=10, Cancel=11, Apply=12)
-// msg 0x14: combo selection changes (renderer/adapter/resolution/refresh/antialias/filter)
-// msg 0x17: slider value changes (UI/Music/Ambient/Effect volumes)
-void OptionsDialog_OnEvent(OptionsDialog* self, void* element, int eventType, int eventData);
+// ENDGAME B.3.8 DLG: OptionsDialog is a real class (Dialog/OptionsDialog.h);
+// its slots [4] OnOpened, [5] OnClosed and [8] OnElementEvent are members.
+// The non-virtual helpers below stay free functions.
 
 // OnOk: Applies all settings, saves to disk, closes dialog.
 void OptionsDialog_OnOk(OptionsDialog* self);
@@ -106,9 +99,6 @@ void OptionsDialog_PopulateInputBindList(OptionsDialog* self);
 
 // OnInputBindClick: Shows input bind dialog, handles key rebinding.
 void OptionsDialog_OnInputBindClick(OptionsDialog* self, void* element, int bindIndex, int slot);
-
-// Shutdown (vtable +0x28, exe 0x140073480): RET 0 no-op (3 bytes).
-int OptionsDialog_Shutdown(OptionsDialog* self);
 
 // ============================================================
 // SaveLoadDialog
