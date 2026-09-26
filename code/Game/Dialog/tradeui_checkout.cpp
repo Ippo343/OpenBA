@@ -72,6 +72,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "runtime/types/ui/SpinnerElement.h"    // ENDGAME B.3.6 UI callers round 2 (K1)
 
 // ── Cross-module reimpls this calls ──────────────────────────────────────────
 // 0x140091e60 — appends into townMgr+0x110 (code/Game/Component/rawmaterialcomponent.cpp)
@@ -302,7 +303,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             // Zero the row's spinner and its pending quantity.
             uintptr_t uiRow = *reinterpret_cast<uintptr_t*>(s + 0x60)
                             + static_cast<uintptr_t>(i) * 0x20 + 0x18;
-            fn_SpinnerElement_SetValue(*reinterpret_cast<void**>(uiRow), 0);
+            reinterpret_cast<UI::SpinnerElement*>(*reinterpret_cast<void**>(uiRow))->SetValue(0);  // B.3.6 bridge
             *reinterpret_cast<int*>(
                 *reinterpret_cast<uintptr_t*>(s + 0x30)
                 + static_cast<uintptr_t>(i) * 0x20 + 0x18) = 0;
@@ -382,7 +383,7 @@ extern "C" void TradeUI_OnTradeButton(TradeUI* self, void* /*p2*/, void* /*p3*/,
             // Zero the row's spinner and its pending quantity.
             uintptr_t uiRow = *reinterpret_cast<uintptr_t*>(s + 0x70)
                             + static_cast<uintptr_t>(i) * 0x20 + 0x10;
-            fn_SpinnerElement_SetValue(*reinterpret_cast<void**>(uiRow), 0);
+            reinterpret_cast<UI::SpinnerElement*>(*reinterpret_cast<void**>(uiRow))->SetValue(0);  // B.3.6 bridge
             *reinterpret_cast<int*>(
                 *reinterpret_cast<uintptr_t*>(s + 0x40)
                 + static_cast<uintptr_t>(i) * 0x18 + 0x10) = 0;
