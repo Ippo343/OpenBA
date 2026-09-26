@@ -79,7 +79,9 @@ namespace ModDetailsDialogAddr {
 namespace ModDialogAddr {
     constexpr uintptr_t Factory = 0x140012900;
     constexpr uintptr_t Vtable  = 0x14015c870;
-    constexpr uintptr_t SecondaryVtable = 0x14015c8C0; // vtable+0x50 (ImageBuffer secondary interface)
+    // (SecondaryVtable = 0x14015c8c0 deleted, ENDGAME B.3.8: that is the exe copy
+    //  of Video::ImageBuffer's table, stamped on the separately allocated
+    //  thumbnail objects; ModDialog has no second vptr. 0 readers.)
 }
 
 namespace ModUploadDialogAddr {
@@ -174,26 +176,11 @@ namespace TutorialSetupDialogAddr {
 // --- MessageDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/MessageDialog.h"
 
-// --- ModDetailsDialog (0xC8) ---
-// Factory: no subclass fields initialized
-struct ModDetailsDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: uninitialized
-    uint64_t dataC0;           // +0xC0: uninitialized
-};
-static_assert(sizeof(ModDetailsDialog) == 0xC8, "ModDetailsDialog size mismatch");
+// --- ModDetailsDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/ModDetailsDialog.h"
 
-// --- ModDialog (0xD8) ---
-// Factory inits: +0xB8=0, +0xC0=0, +0xC8=0, +0xD0=0
-struct ModDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0: zeroed
-    uint64_t dataC8;           // +0xC8: zeroed
-    uint64_t dataD0;           // +0xD0: zeroed
-};
-static_assert(sizeof(ModDialog) == 0xD8, "ModDialog size mismatch");
-static_assert(offsetof(ModDialog, dataB8) == 0xB8, "");
+// --- ModDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/ModDialog.h"
 
 // --- ModUploadDialog (0xB8) ---
 // Factory: no subclass fields (size == base DialogInstance)

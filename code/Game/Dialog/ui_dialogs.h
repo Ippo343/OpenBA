@@ -50,34 +50,6 @@ void MainMenuDialog_Slot5(MainMenuDialog* self);
 void MainMenuDialog_Slot8(MainMenuDialog* self, void* param2, int param3, int param4);
 
 // ============================================================
-// ModDetailsDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — finds 12 UI elements, gets mod data from
-// Modification singleton, populates name/author/path/version/description,
-// builds conflict list and resource list markup strings.
-void ModDetailsDialog_Slot4(ModDetailsDialog* self);
-
-// Slot8 (vtable +0x40): OnCommand — close(0), upload(1), delete(2) dispatch.
-void ModDetailsDialog_Slot8(ModDetailsDialog* self, uint64_t param2,
-                            int param3, int param4);
-
-// ============================================================
-// ModDialog
-// ============================================================
-
-// Slot4 (vtable +0x20): Setup — populates mod list table with cloned template
-// rows, creates per-mod ImageBuffer/MaterialInstance/SpriteSheet thumbnail
-// objects, attaches browser controller from "Dialog/Mod.rsc:browser".
-void ModDialog_Slot4(ModDialog* self);
-
-// Slot8 (vtable +0x40): OnCommand — dispatches mod list button clicks.
-// Handles cancel(100), apply(101), toggle(1000+), up(2000+), down(3000+),
-// top(4000+), details(5000+). Always calls base OnElementEvent.
-void ModDialog_Slot8(ModDialog* self, void* param2, int msg, int id,
-                     uint32_t p5, uint32_t p6, uint32_t p7, uint64_t p8);
-
-// ============================================================
 // OptionsDialog
 // ============================================================
 

@@ -37,6 +37,8 @@
 #include "Dialog/NewGameDialog.h"
 #include "Dialog/OptionsDialog.h"
 #include "Dialog/SaveLoadDialog.h"
+#include "Dialog/ModDialog.h"
+#include "Dialog/ModDetailsDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -217,4 +219,17 @@ UNIT_TEST(dlg_saveload_dialog) {
     CHECK_EQ(offsetof(SaveLoadDialog, dataF0), (size_t)0xf0);
     CheckShape<SaveLoadDialog>();
     CheckDialogInstanceSlots<SaveLoadDialog>();
+}
+
+UNIT_TEST(dlg_mod_dialogs) {
+    CHECK_EQ(sizeof(ModDialog), (size_t)0xd8);
+    CHECK_EQ(offsetof(ModDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(ModDialog, dataD0), (size_t)0xd0);
+    CheckShape<ModDialog>();
+    CheckDialogInstanceSlots<ModDialog>();
+    CHECK_EQ(sizeof(ModDetailsDialog), (size_t)0xc8);
+    CHECK_EQ(offsetof(ModDetailsDialog, dataB8), (size_t)0xb8);
+    CHECK_EQ(offsetof(ModDetailsDialog, modIndex), (size_t)0xc0);
+    CheckShape<ModDetailsDialog>();
+    CheckDialogInstanceSlots<ModDetailsDialog>();
 }
