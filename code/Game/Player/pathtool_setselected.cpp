@@ -40,6 +40,7 @@
 #include <cstdio>
 #include "Object/factory_registration.h"   // ::Object::GetTypeIdByName / ResolveTypeIdByNameLazy
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "application/Application.h"   // ENDGAME B.3.7 callers (K2)
 
 namespace {
 
@@ -52,7 +53,6 @@ typedef void     (*fn_ListFree_t)(void* listHdr, int flag);                     
 typedef void     (*fn_AvlErase_t)(void** root, void* node);                          // 0x140014c30
 typedef void     (*fn_AvlRotate_t)(int64_t* root, int64_t node);                     // 0x140014c70 / 0x140014da0
 typedef void*    (*fn_ResolvePos_t)(int64_t ent, void* outVec3, int a, int b, float* p5); // 0x140122e20
-typedef void     (*fn_Yield_t)(void* app);                                            // Application::YieldToThreads
 
 static fn_HighlightRefresh_t s_c4a0   = nullptr;
 static fn_FindComp_t         s_2e10   = nullptr;   // WorkPlace-ish finder
@@ -67,7 +67,6 @@ static fn_AvlErase_t         s_14c30  = nullptr;
 static fn_AvlRotate_t        s_14c70  = nullptr;
 static fn_AvlRotate_t        s_14da0  = nullptr;
 static fn_ResolvePos_t       s_122e20 = nullptr;
-static fn_Yield_t            s_yield  = nullptr;
 
 static const uint32_t* s_pTid_Highlight = nullptr;  // DAT_1401c4410 = HighlightComponent type-id
 static bool s_init = false;
@@ -84,7 +83,6 @@ static void EnsureFns() {
     s_14c70  = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x140014c70));
     s_14da0  = reinterpret_cast<fn_AvlRotate_t>(ResolveAddr(Module::Exe, 0x140014da0));
     s_122e20 = reinterpret_cast<fn_ResolvePos_t>(ResolveAddr(Module::Exe, 0x140122e20));
-    s_yield  = reinterpret_cast<fn_Yield_t>(ResolveExport("?YieldToThreads@Application@1@QEAAXXZ"));
     // DAT_1401c4410 (HighlightComponent type-id) is raw exe .rdata -> NULL in standalone.
     static uint32_t s_tidHi = 0;
     if (s_tidHi == 0) s_tidHi = ::Object::GetTypeIdByName("HighlightComponent");
@@ -562,7 +560,7 @@ static void PathSel_BuildRoutes_d770(int64_t param_1) {
             if (qIdx < cap &&
                 *(int*)(table + 4 + (int64_t)qIdx * 0x18) == qId &&
                 *(char*)(table + (int64_t)qIdx * 0x18) != '\0') { ready = true; break; }
-            if (s_yield && g_pAppSingleton) s_yield(*g_pAppSingleton);
+            if (g_pAppSingleton) reinterpret_cast< ::Application::Application*>(*g_pAppSingleton)->YieldToThreads();   // B.3.7 bridge
             else break;
         }
         if (!ready) {

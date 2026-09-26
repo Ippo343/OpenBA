@@ -20,6 +20,7 @@
 #include <cstdio>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 // ============================================================
 // Resolved vtable pointers (set once on first call)
@@ -67,17 +68,6 @@ static fn_RaycastTerrain_t s_fn_RaycastTerrain = nullptr;
 typedef void* (*fn_GetEntityAtCell_t)(uint64_t mapData, void* retIBP, int cellIndex);
 static fn_GetEntityAtCell_t s_fn_GetEntityAtCell = nullptr;
 
-// Picking::Scene::Intersect — ray vs picking scene intersection.
-// Dispatch slot at 0x140152428.
-typedef uint32_t (*fn_PickingIntersect_t)(void* scene, void* rayOrigin, void* rayDir,
-    void* distance, void* outNormal, void* outPos);
-static fn_PickingIntersect_t s_fn_PickingIntersect = nullptr;
-
-// Picking::Scene::GetUserData — get user data for picking result.
-// Dispatch slot at 0x140152890.
-typedef void* (*fn_PickingGetUserData_t)(void* scene, uint32_t hitIndex);
-static fn_PickingGetUserData_t s_fn_PickingGetUserData = nullptr;
-
 // PathTool_helper_d710: SetSelectedEntity — sets the selected entity with highlighting.
 // Args: (self, entityIBP)
 typedef void (*fn_PathToolSetSelected_t)(uint64_t self, void* entityIBP);
@@ -104,15 +94,6 @@ static void ResolvePathToolFuncs() {
     s_fn_PathToolSetSelected = reinterpret_cast<fn_PathToolSetSelected_t>(
         ResolveAddr(Module::Exe, 0x1400dd710));
 
-    // Dispatch-table resolved function pointers
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152428));
-        if (d) s_fn_PickingIntersect = reinterpret_cast<fn_PickingIntersect_t>(*d);
-    }
-    {
-        void** d = reinterpret_cast<void**>(ResolveAddr(Module::Exe, 0x140152890));
-        if (d) s_fn_PickingGetUserData = reinterpret_cast<fn_PickingGetUserData_t>(*d);
-    }
     s_dispatchSlot_KeyMapPressed = reinterpret_cast<void**>(
         ResolveAddr(Module::Exe, 0x140151758));
 
@@ -243,11 +224,15 @@ uint64_t PathTool_OnKey(PathTool* self, char key) {
     float hitNormal[3] = {0};
     float hitPos[3] = {0};
     void* pickingScene = *(void**)(((uintptr_t)*g_pGameWorldSingleton) + 0x70);
-    if (s_fn_PickingIntersect && pickingScene) {
-        uint32_t hitIdx = s_fn_PickingIntersect(pickingScene, rayDir, rayOrigin,
-            distance, hitNormal, hitPos);
-        if ((int)hitIdx >= 0 && s_fn_PickingGetUserData) {
-            void* userData = s_fn_PickingGetUserData(pickingScene, hitIdx);
+    if (pickingScene) {
+        // Picking::Scene::Intersect / GetUserData (import slots 0x140152428 /
+        // 0x140152890), arguments in the door's positional order.
+        uint32_t hitIdx = static_cast<uint32_t>(reinterpret_cast<const Picking::Scene*>(pickingScene)->Intersect(   // B.3.7 bridge
+            *reinterpret_cast<const Vector3*>(rayDir), *reinterpret_cast<const Vector3*>(rayOrigin),
+            *reinterpret_cast<const Math::Scalar*>(distance),
+            *reinterpret_cast<Vector3*>(hitNormal), *reinterpret_cast<Vector3*>(hitPos)));
+        if ((int)hitIdx >= 0) {
+            void* userData = reinterpret_cast<const Picking::Scene*>(pickingScene)->GetUserData(hitIdx);   // B.3.7 bridge
             if (fn_InternalBasePtr_Ctor) {
                 uint64_t tmpIBP = 0;
                 new (&tmpIBP) ::Object::InternalBasePtr(

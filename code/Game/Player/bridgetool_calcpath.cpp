@@ -56,6 +56,7 @@
 #include <cstdlib>
 #include <cstring>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 extern "C" int      BridgeTool_SnapEndCell_Impl(void* self, int endCell);
 extern "C" uint32_t BridgeTool_ValidatePath_Impl(void* self, int startCell, int endCell,
@@ -206,9 +207,6 @@ void ApplyYaw(void* model, float yawDeg, const float offset[3]) {
 // This is the fix behind the edittool.cpp:833 guard: a segment whose +0x30 was never
 // seated registers (or leaves) garbage user data, and EditTool's pick deref faults on
 // it. Slot 0x1401529a0 is registered in standalone/address_registry.cpp.
-typedef void (*fn_SetMeshUserData_t)(void* scene, uint32_t meshId, void* userData,
-                                     int a, int b, void* callback);
-
 void SeatSegmentPickOwner(void* segIBPSlot, void* masterEntity, uint32_t tidPicking,
                           void* gameWorld) {
     void* pc = FindComponentOn(segIBPSlot, tidPicking);
@@ -219,17 +217,10 @@ void SeatSegmentPickOwner(void* segIBPSlot, void* masterEntity, uint32_t tidPick
     const int meshId = *reinterpret_cast<int32_t*>(p + 0x28);
     if (meshId < 0) return;              // no mesh yet — OnAdded/RegisterMesh reads +0x30
 
-    static fn_SetMeshUserData_t s_setUserData = nullptr;
-    static bool s_resolved = false;
-    if (!s_resolved) {
-        s_resolved = true;
-        uintptr_t slot = ResolveAddr(Module::Exe, 0x1401529a0);
-        if (slot) s_setUserData = *reinterpret_cast<fn_SetMeshUserData_t*>(slot);
-    }
     void* scene = gameWorld ? *reinterpret_cast<void**>(
                                   reinterpret_cast<uintptr_t>(gameWorld) + 0x70) : nullptr;
-    if (s_setUserData && scene)
-        s_setUserData(scene, static_cast<uint32_t>(meshId),
+    if (scene)
+        reinterpret_cast<Picking::Scene*>(scene)->SetMeshUserData(static_cast<uint32_t>(meshId),   // B.3.7 bridge
                       *reinterpret_cast<void**>(p + 0x30), 0, 0, nullptr);
 }
 

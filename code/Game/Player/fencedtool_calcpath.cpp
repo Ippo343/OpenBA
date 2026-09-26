@@ -49,6 +49,7 @@
 #include <cstring>
 #include <cstdlib>
 #include "object/Internal.h"   // ENDGAME B.3.3 step 6B
+#include "picking/Scene.h"     // ENDGAME B.3.7 callers (K2)
 
 // ---- resolved deps ------------------------------------------------------------
 namespace {
@@ -62,8 +63,6 @@ typedef void  (*fn_clearEnts_t)(int64_t entity, int x0, int y0, int x1, int y1,
 typedef uint64_t (*fn_anchorCalc_t)(void* tool, uint32_t* shMinX, uint32_t* shMinY,
                                     uint32_t* shMaxX, uint32_t* shMaxY,
                                     float* pos, float* yaw);                  // 0x1400dbf90
-typedef void  (*fn_setMeshUserData_t)(void* scene, uint32_t meshId, void* userData,
-                                      int a, int b, void* callback);          // slot 0x1401529a0
 
 fn_ctorFromDesc_t    s_ctorFromDesc = nullptr;
 fn_findComp_t        s_findMap      = nullptr;   // 0x140004680
@@ -74,7 +73,6 @@ fn_appendIBP_t       s_append       = nullptr;   // 0x140003110
 fn_registerEnt_t     s_registerEnt  = nullptr;   // 0x1400c48a0
 fn_clearEnts_t       s_clearEnts    = nullptr;   // 0x1401018d0
 fn_anchorCalc_t      s_anchorCalc   = nullptr;   // 0x1400dbf90
-fn_setMeshUserData_t s_setUserData  = nullptr;   // via slot 0x1401529a0
 
 bool s_resolved = false;
 void EnsureFuncs() {
@@ -89,8 +87,6 @@ void EnsureFuncs() {
     s_registerEnt  = reinterpret_cast<fn_registerEnt_t>(ResolveAddr(Module::Exe, 0x1400c48a0));
     s_clearEnts    = reinterpret_cast<fn_clearEnts_t>(ResolveAddr(Module::Exe, 0x1401018d0));
     s_anchorCalc   = reinterpret_cast<fn_anchorCalc_t>(ResolveAddr(Module::Exe, 0x1400dbf90));
-    uintptr_t slot = ResolveAddr(Module::Exe, 0x1401529a0);
-    if (slot) s_setUserData = *reinterpret_cast<fn_setMeshUserData_t*>(slot);
 }
 
 
@@ -141,8 +137,8 @@ void SeatPickOwner_1290d0(void* pickComp, void** masterIBPSlot) {
     if (*reinterpret_cast<int32_t*>(p + 0x28) < 0) return;
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     void* scene = gw ? *reinterpret_cast<void**>(reinterpret_cast<uintptr_t>(gw) + 0x70) : nullptr;
-    if (s_setUserData && scene)
-        s_setUserData(scene, *reinterpret_cast<uint32_t*>(p + 0x28),
+    if (scene)
+        reinterpret_cast<Picking::Scene*>(scene)->SetMeshUserData(*reinterpret_cast<uint32_t*>(p + 0x28),   // B.3.7 bridge
                       *reinterpret_cast<void**>(p + 0x30), 0, 0, nullptr);
 }
 
