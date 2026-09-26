@@ -136,3 +136,25 @@ UNIT_TEST(goal_classes_shape) {
     CheckShape<TimeGoalInstance, Achievement::GoalInstance>(false);
     CheckShape<FinishTutorialInstance, Achievement::GoalInstance>(false);
 }
+
+// ===========================================================================
+// Scenario : Achievement::Achievement — 9 slots, 0x90 (B38_RULES D8)
+// ===========================================================================
+#include "Game/Scenario.h"
+
+UNIT_TEST(scenario_is_retail_9_slots_and_0x90) {
+    CHECK_EQ(sizeof(Scenario), (size_t)0x90);
+    CHECK_EQ(offsetof(Scenario, scenarioName), (size_t)0x58);
+    CHECK_EQ(offsetof(Scenario, _field68), (size_t)0x68);
+    CHECK_EQ(offsetof(Scenario, _field88), (size_t)0x88);
+    CHECK_EQ(SlotOffset(&Scenario::DeletingDtor),   (uintptr_t)0x00);
+    CHECK_EQ(SlotOffset(&Scenario::TypeName),       (uintptr_t)0x08);
+    CHECK_EQ(SlotOffset(&Scenario::Type),           (uintptr_t)0x10);
+    CHECK_EQ(SlotOffset(&Scenario::GetFileVersion), (uintptr_t)0x18);
+    CHECK_EQ(SlotOffset(&Scenario::Compile),        (uintptr_t)0x20);
+    CHECK_EQ(SlotOffset(&Scenario::Serialize),      (uintptr_t)0x28);
+    CHECK_EQ(SlotOffset(&Scenario::Reconstruct),    (uintptr_t)0x30);
+    CHECK_EQ(SlotOffset(&Scenario::Destruct),       (uintptr_t)0x38);
+    CHECK_EQ(SlotOffset(&Scenario::Construct),      (uintptr_t)0x40);
+    CheckShape<Scenario, Achievement::Achievement>(false);
+}
