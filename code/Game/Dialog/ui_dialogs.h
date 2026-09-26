@@ -114,22 +114,3 @@ void TutorialSetupDialog_Slot7(void* self);
 // constructs the object if non-null (sets vtables, zeros fields).
 void* TutorialSetupDialog_Slot11(void* self);
 
-// ============================================================
-// ToolbarDialog
-// ============================================================
-
-// Startup (vtable +0x20, exe 0x1400b97c0): RET 0 no-op (3 bytes).
-int ToolbarDialog_Startup(void* self);
-
-// Shutdown (vtable +0x28, exe 0x1400b97b0): JMP to CloseSubDialog.
-void ToolbarDialog_Shutdown(void* self);
-
-// Slot6 (vtable +0x30): Update — syncs toolbar button states with game state.
-// Iterates items, updates checked/enabled based on speed, pause, group visibility.
-void ToolbarDialog_Update(void* self, uint64_t param2, uint64_t param3, uint64_t param4);
-
-// Slot8 (vtable +0x40): OnEvent — handles toolbar button clicks.
-// Dispatches to game actions: open sub-toolbar, toggle groups, change speed, etc.
-void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventData,
-                           uint64_t p5, uint64_t p6, int p7);
-

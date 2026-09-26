@@ -200,25 +200,8 @@ namespace TutorialSetupDialogAddr {
 // --- ScenarioDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
 #include "Dialog/ScenarioDialog.h"
 
-// --- ToolbarDialog (0x108) ---
-// Ctor inits: +0xB8..+0xE8=0, +0xF4(u32)=0, +0xF8=0, +0x100=0
-struct ToolbarDialog {
-    DialogInstance base;        // +0x00
-    uint64_t dataB8;           // +0xB8: zeroed
-    uint64_t dataC0;           // +0xC0
-    uint64_t dataC8;           // +0xC8
-    uint64_t dataD0;           // +0xD0
-    uint64_t dataD8;           // +0xD8
-    uint64_t dataE0;           // +0xE0
-    uint64_t dataE8;           // +0xE8
-    uint8_t  _padF0[4];        // +0xF0: gap
-    uint32_t dataF4;           // +0xF4: zeroed (u32 write)
-    uint64_t dataF8;           // +0xF8: zeroed
-    uint64_t data100;          // +0x100: zeroed
-};
-static_assert(sizeof(ToolbarDialog) == 0x108, "ToolbarDialog size mismatch");
-static_assert(offsetof(ToolbarDialog, dataB8) == 0xB8, "");
-static_assert(offsetof(ToolbarDialog, dataF4) == 0xF4, "");
+// --- ToolbarDialog --- ENDGAME B.3.8 DLG: a real class now (B8-4 forwarder)
+#include "Dialog/ToolbarDialog.h"
 
 // --- TutorialGoalDialog (0x40) ---
 // NOT DialogInstance-based. Extends Object::External (base ~0x20).

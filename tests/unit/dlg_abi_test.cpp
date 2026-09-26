@@ -40,6 +40,7 @@
 #include "Dialog/ModDialog.h"
 #include "Dialog/ModDetailsDialog.h"
 #include "Dialog/ModUploadDialog.h"
+#include "Dialog/ToolbarDialog.h"
 
 #include <cstdint>
 #include <cstddef>
@@ -239,4 +240,17 @@ UNIT_TEST(dlg_modupload_dialog) {
     CHECK_EQ(sizeof(ModUploadDialog), (size_t)0xb8);
     CheckShape<ModUploadDialog>();
     CheckDialogInstanceSlots<ModUploadDialog>();
+}
+
+UNIT_TEST(dlg_toolbar_dialog) {
+    CHECK_EQ(sizeof(ToolbarDialog), (size_t)0x108);
+    CHECK_EQ(offsetof(ToolbarDialog, radioElement), (size_t)0xb8);
+    CHECK_EQ(offsetof(ToolbarDialog, buttonElements), (size_t)0xc0);
+    CHECK_EQ(offsetof(ToolbarDialog, toolbarItems), (size_t)0xd0);
+    CHECK_EQ(offsetof(ToolbarDialog, subDialog), (size_t)0xe8);
+    CHECK_EQ(offsetof(ToolbarDialog, openSubIndex), (size_t)0xf0);
+    CHECK_EQ(offsetof(ToolbarDialog, speedValues), (size_t)0xf8);
+    CHECK_EQ(offsetof(ToolbarDialog, speedValueCount), (size_t)0x100);
+    CheckShape<ToolbarDialog>();
+    CheckDialogInstanceSlots<ToolbarDialog>();
 }

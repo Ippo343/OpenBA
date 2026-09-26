@@ -35,6 +35,7 @@
 #include "ui/Element.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/DialogInstance.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "Dialog/MainMenuDialog.h"
+#include "Dialog/ToolbarDialog.h"
 #include "ui/UserInterface.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/String.h"   // ENDGAME B.3.6 UI callers (K2)
 #include "ui/StringTable.h"   // ENDGAME B.3.6 UI callers (K2)
@@ -143,17 +144,14 @@ static void* Toolbar_FindEntity_Impl(void* entityList, void* retBuf, uint64_t ty
 // ToolbarDialog::Startup (vtable +0x20, exe 0x1400b97c0): RET 0 (3 bytes)
 // ============================================================
 // No-op startup; all initialization happens in the constructor (Ctor_Impl).
-int ToolbarDialog_Startup(void* self) {
-    (void)self;
-    return 0;
-}
+void ToolbarDialog::OnOpened() {}
 
 // ============================================================
 // ToolbarDialog::Shutdown (vtable +0x28, exe 0x1400b97b0): JMP rel to FUN_1400b9730
 // ============================================================
 // Thunk to CloseSubDialog: closes any open sub-toolbar dialog.
-void ToolbarDialog_Shutdown(void* self) {
-    ToolbarDialog_CloseSubDialog_Impl(self);
+void ToolbarDialog::OnClosed() {
+    ToolbarDialog_CloseSubDialog_Impl(this);
 }
 
 // ============================================================
@@ -1069,16 +1067,13 @@ static void DynArray4_Push(void** pData, int32_t* pCount, int32_t* pCapacity, in
 //
 // Returns: self (constructed ToolbarDialog)
 // ============================================================
-void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
-                               void* parentPtr, void* toolbarData) {
-    uintptr_t s = (uintptr_t)self;
-    uint64_t groupId = (uint64_t)toolbarData;
-
-    // --- Step 1: Call base DialogInstance constructor ---
-    fn_DialogInstance_Ctor(self, userInterface, dialog, parentPtr, nullptr, nullptr, 0);
-
-    // --- Step 2: Patch vtable to ToolbarDialog ---
-    *(uintptr_t*)s = g_ToolbarDialog_Vtable;
+// ENDGAME B.3.8 DLG: the real constructor. Steps 1-2 (the DialogInstance ctor, then
+// the table store) are the init list and the compiler's vtable store.
+ToolbarDialog::ToolbarDialog(UI::UserInterface* userInterface, const UI::Dialog* dialog,
+                             Object::InternalPtr<UI::DialogInstance> parent,
+                             uint64_t groupId)
+    : UI::DialogInstance(userInterface, dialog, parent, nullptr, nullptr, 0) {
+    uintptr_t s = (uintptr_t)this;
 
     // --- Step 3: Initialize ToolbarDialog-specific fields ---
     *(uint64_t*)(s + 0xB8) = 0;         // radioElement
@@ -1100,7 +1095,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     {
         System::String strStr("toolbarContent");
         void* retPtr = ::new (elemBuf) Object::InternalPtr<UI::Element>(
-            reinterpret_cast<UI::DialogInstance*>(self)->FindElement(strStr));  // B.3.6 bridge
+            FindElement(strStr));
         tableElement = *(void**)retPtr;
     }
 
@@ -1108,7 +1103,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
     {
         System::String strStr("toolBar");
         void* retPtr = ::new (elemBuf) Object::InternalPtr<UI::Element>(
-            reinterpret_cast<UI::DialogInstance*>(self)->FindElement(strStr));  // B.3.6 bridge
+            FindElement(strStr));
         *(uint64_t*)(s + 0xB8) = *(uint64_t*)retPtr;
     }
 
@@ -1231,7 +1226,7 @@ void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
 
         // Clone the template: virtual call at vtable[8] (offset 0x40)
         // Element::Clone(this, retBuf, dialog) — member, non-trivial return
-        typedef void* (*CloneFn)(void* self, void* retBuf, void* dialog);
+        typedef void* (*CloneFn)(void* self, void* retBuf, const void* dialog);
         uint8_t cloneBuf[16];
         uintptr_t vtable = *(uintptr_t*)templateElem;
         CloneFn cloneFn = (CloneFn)(*(uintptr_t*)(vtable + 0x40));
@@ -1454,8 +1449,19 @@ found_speed:
     // --- Cleanup ---
     fn_MemFreeStatic(shortcutIds);
     fn_MemFreeStatic(itemList);
+}
 
-    return self;
+// The door at 0x1400b9910 (address_registry.cpp; fn_ToolbarDialog_Ctor in
+// GameUpdateLoop::Startup): placement-news the class. parentPtr is an
+// InternalBasePtr* the ctor copies, as retail does.
+void* ToolbarDialog_Ctor_Impl(void* self, void* userInterface, void* dialog,
+                              void* parentPtr, void* toolbarData) {
+    Object::InternalPtr<UI::DialogInstance> parent;
+    if (parentPtr)
+        parent = *static_cast<const Object::InternalPtr<UI::DialogInstance>*>(parentPtr);
+    return ::new (self) ToolbarDialog(static_cast<UI::UserInterface*>(userInterface),
+                                      static_cast<const UI::Dialog*>(dialog), parent,
+                                      reinterpret_cast<uint64_t>(toolbarData));
 }
 
 // ============================================================
@@ -1467,8 +1473,8 @@ found_speed:
 //
 // Original: 0x1400b8d40.
 
-void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, uint64_t /*param4*/) {
-    uintptr_t s = (uintptr_t)self;
+void ToolbarDialog::OnUpdateLayout() {
+    uintptr_t s = (uintptr_t)this;
 
     // Get game subsystem at gameWorld->+0x120
     void* gameWorld = *g_pGameWorldSingleton;
@@ -1593,7 +1599,7 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
     }
 
     // Call secondary update helper — handles ShowGroup and FocusEntity button enable states
-    ToolbarDialog_UpdateButtons_Impl(self);
+    ToolbarDialog_UpdateButtons_Impl(this);
 }
 
 // ============================================================
@@ -1610,9 +1616,8 @@ void ToolbarDialog_Update(void* self, uint64_t /*param2*/, uint64_t /*param3*/, 
 extern "C" int g_TutUndoDepth;
 extern "C" int g_TutUndoIndex;
 
-void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventData,
-                           uint64_t /*p5*/, uint64_t /*p6*/, int p7) {
-    uintptr_t s = (uintptr_t)self;
+void ToolbarDialog::OnElementEvent(Object::InternalPtr<UI::Element>* element, int32_t eventType, int32_t eventData, int32_t /*c*/, int32_t /*d*/, int32_t p7, void* /*userData*/) {
+    uintptr_t s = (uintptr_t)this;
 
     // Get game subsystem
     void* gameWorld = *g_pGameWorldSingleton;
@@ -1663,19 +1668,11 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
                 void* newDialog = fn_MemAlloc(g_pMemAllocSingleton, 0x108, 8);
                 void* childDialog = nullptr;
                 if (newDialog) {
-                    // Create InternalPtr to self for parent reference
-                    int64_t selfRef;
-                    new (&selfRef) ::Object::InternalBasePtr(
-                        reinterpret_cast<RtObject::Internal*>(self));   // B.3.3 bridge
-
-                    // Construct child ToolbarDialog (recursive call)
-                    childDialog = ToolbarDialog_Ctor_Impl(
-                        newDialog,
-                        *(void**)(s + 0x10),    // UserInterface
-                        *(void**)(s + 0x18),    // Dialog
-                        &selfRef,               // parent InternalPtr
-                        (void*)item             // toolbar item (group parent)
-                    );
+                    // Construct child ToolbarDialog (recursive), parented to this one.
+                    childDialog = ::new (newDialog) ToolbarDialog(
+                        static_cast<UI::UserInterface*>(_ui), _dialog,
+                        Object::InternalPtr<UI::DialogInstance>(this),
+                        (uint64_t)item);        // toolbar item (group parent)
                 }
 
                 // Store child dialog reference
@@ -1697,7 +1694,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
                 void* parentRadio = *(void**)(s + 0xB8);
                 int parentBottom = *(int32_t*)((uintptr_t)parentRadio + 100); // +0x64
 
-                void* selfRoot = *(void**)((uintptr_t)self + 0x50); // GetRoot inlined
+                void* selfRoot = *(void**)((uintptr_t)this + 0x50); // GetRoot inlined
                 int selfTop = *(int32_t*)((uintptr_t)selfRoot + 0x24);
 
                 // Get element position for centering
@@ -1802,16 +1799,16 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
             bool isDerivedParent = fn_IsDerivedFrom(parentDialog, *g_TypeId_ToolbarDialogParent);
             void* typedParent = isDerivedParent ? parentDialog : nullptr;
             // No null guard: retail's FUN_1400b9730 derefs param_1+0xe8 unguarded, so
-            // this cast is expected to always succeed. It used to fail because our
-            // ToolbarDialog vtable's GetTypeId slot forwarded to the DialogInstance
-            // base, making every ToolbarDialog report as its own base class — fixed at
-            // the source in toolbar_vtable_standalone.cpp.
+            // this cast is expected to always succeed. It used to fail because the
+            // hand-built ToolbarDialog table's Type slot forwarded to the DialogInstance
+            // base, making every ToolbarDialog report as its own base class. Since
+            // B.3.8 the compiler table's Type() answers ToolbarDialog's own id.
             ToolbarDialog_CloseSubDialog_Impl(typedParent);
             break;
         }
         case 6: {
             // SpeedDown
-            ToolbarDialog_ChangeSpeed_Impl(self, -1);
+            ToolbarDialog_ChangeSpeed_Impl(this, -1);
             break;
         }
         case 7: {
@@ -1826,7 +1823,7 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         }
         case 9: {
             // SpeedUp
-            ToolbarDialog_ChangeSpeed_Impl(self, 1);
+            ToolbarDialog_ChangeSpeed_Impl(this, 1);
             break;
         }
         }
@@ -1863,3 +1860,59 @@ void ToolbarDialog_OnEvent(void* self, void* element, int eventType, int eventDa
         }
     }
 }
+
+// ============================================================
+// ENDGAME B.3.8 DLG: construction and teardown of the real class.
+// ============================================================
+
+// 0x1400b9890 (create 0x140021710's ctor): DialogInstance(), the table, then
+// +0xB8..+0xE8 and +0xF8/+0x100 zeroed as qwords and +0xF4 as a dword. +0xF0
+// (openSubIndex) is left as allocated, as retail leaves it.
+ToolbarDialog::ToolbarDialog() {
+    radioElement = 0;
+    buttonElements = 0;
+    buttonCount = 0;
+    buttonCapacity = 0;
+    toolbarItems = 0;
+    itemCount = 0;
+    itemCapacity = 0;
+    toolbarGroupId = 0;
+    subDialog = 0;
+    currentSpeedIndex = 0;
+    speedValues = 0;
+    speedValueCount = 0;
+    speedValueCapacity = 0;
+}
+
+// The ~ToolbarDialog body [0] 0x140021760 calls: the three arrays, then ~DialogInstance.
+ToolbarDialog::~ToolbarDialog() {
+    uintptr_t s = (uintptr_t)this;
+    if (fn_MemFreeStatic) {
+        fn_MemFreeStatic(*(void**)(s + 0xF8)); *(uint64_t*)(s + 0xF8) = 0; *(uint64_t*)(s + 0x100) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xD0)); *(uint64_t*)(s + 0xD0) = 0; *(uint64_t*)(s + 0xD8) = 0;
+        fn_MemFreeStatic(*(void**)(s + 0xC0)); *(uint64_t*)(s + 0xC0) = 0; *(uint64_t*)(s + 0xC8) = 0;
+    }
+}
+
+// [0] 0x140021760: the body above, MemFree on &1.
+Object::Base* ToolbarDialog::DeletingDtor(unsigned flags) {
+    this->~ToolbarDialog();
+    if (flags & 1) Object::detail::InternalMemFree(this);
+    return this;
+}
+
+// create 0x140021710: MemAlloc(0x108, 8), then the default ctor.
+void* ToolbarDialog::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(ToolbarDialog), 8);
+    if (!p) return nullptr;
+    return static_cast<Object::Base*>(::new (p) ToolbarDialog());
+}
+// createInPlace (the tree's in-place build is kept, B8-13).
+void* ToolbarDialog::CreateInPlaceObject(void* storage) {
+    if (!storage) return nullptr;
+    return static_cast<Object::Base*>(::new (storage) ToolbarDialog());
+}
+
+// The reflection record stays at the TU position of the UI_DIALOG_STUB row it
+// replaces (ui_dialog_stub_factories.cpp, B38 D4).
+DEFINE_EXE_VTABLE(ToolbarDialog, "_ZTV13ToolbarDialog")
