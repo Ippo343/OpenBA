@@ -783,10 +783,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // (ENDGAME B.3.9: the Object::ExtensionCompiler 0x18002c300 and
     // Object::ExternalCompiler 0x18002c180 rows retired with their minted
     // tables -- retail's factories for both return null, nothing built one.)
-    //   0x180007800  LEA R9,[0x1800076c0]  MOV EDX,0x30   ~ExternalList
-    //     (own body: Array<ExternalPtr<External>>::~Array at +0x20 (0x180009460,
-    //     already ported), then ~External -- already ported)
-    RT_DELDTOR(0x180007800, 0x1800076c0, 0x030, "Object::ExternalList"),
     // (ENDGAME B.3.9: the IO::CompressedCopyFileStream 0x1800245f0 row retired
     // with its minted table: no class, no stamper, and its ~Class 0x1800a92a0
     // was never registered, so the row called a NULL dtor -- INVENTORY_B
@@ -1290,10 +1286,6 @@ void* RtDelDtor_ComboDialog(void* self, unsigned flags) {
 void* RtDelDtor_DialogControllerConfig(void* self, unsigned flags) {
     return DeletingDtorCore(self, flags, Row<0x18003b600>());
 }
-// Object::ExternalList      ~ExternalList = 0x1800076c0           (PORTED, runtime/src/object/external_list.cpp)
-void* RtDelDtor_ExternalList(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180007800>());
-}
 // Vtable batch 8 (2026-09-12): Collision2D::CollisionMesh/Surface,
 // Pathfinding::PointList, Picking::PickingMesh. Indices 67-70 (renumbered at
 // the merge: batch 9 took 61-66 on main first).
@@ -1435,7 +1427,6 @@ void RtObjectDeletingDtorPortInit() {
     // Rows 57-60, the UI::*Description four (wrappers above).
     RegisterRuntimeAddr(0x180074a10, (void*)&RtDelDtor_ComboDialog);
     RegisterRuntimeAddr(0x18003b600, (void*)&RtDelDtor_DialogControllerConfig);
-    RegisterRuntimeAddr(0x180007800, (void*)&RtDelDtor_ExternalList);
 
     // 2026-09-12 VTABLE BATCH 1 — ten UI::*Description classes, rows 71..80.
     // Every address a LITERAL, for the reason the banner above gives.

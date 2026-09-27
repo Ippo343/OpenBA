@@ -692,6 +692,12 @@ static_assert(offsetof(External, _refs) == 0x10, "External::_refs @ +0x10 (~Exte
 class CompiledExternal : public External {
 public:
     CompiledExternal() = default;
+    // ?TypeId@CompiledExternal@Object@@SAIXZ 0x18000b6a0 — `MOV EAX,[_typeInfo]`
+    // over the (still minted) record, through the Object accessor slot
+    // (external_class.cpp; B39_RULES D6 step 1). Slots 1/2 of the class
+    // (0x18000b6b0 / 0x18000b690) stay the registered doors on the minted
+    // table until the W3 row conversion.
+    static uint32_t TypeId();
 protected:
     ~CompiledExternal();     // 0x1800bb980
 };
@@ -710,12 +716,46 @@ static_assert(sizeof(CompiledExternal) == 0x20,
 //   [7] 0x180007640 Destruct        [8] 0x1800075e0 Construct
 // so `Construct` is ExternalList's OWN new virtual: External's table stops at
 // eight. sizeof is 0x30 (the deleting dtor's `MOV EDX,0x30`).
+//
+// ENDGAME B.3.9 OBJ (B39_RULES D1/D2): CONCRETE, and every live ExternalList
+// wears the COMPILER's table. `CreateNewObject` / `CreateInPlaceObject`
+// (retail's factory pair, registered by name and VA from external_list.cpp)
+// are MemAlloc + `::new (p) ExternalList()`, replacing the FACTREST step
+// table that stamped the minted `??_7ExternalList@Object@@6B@`. The minted
+// row, its RT_DELDTOR row 0x180007800, the ??1 door and the seven slot doors
+// are retired (tools/rt_mint_retired/obj.txt).
 // ============================================================
 class ExternalList : public External {
 public:
-    ExternalList();
+    // ??0ExternalList — retail's stores (the inlined half of the factory pair
+    // 0x1800074c3..f4 / Construct 0x1800075e0): Base's and External's vptr and
+    // +0x08/+0x10/+0x18 zero (External(), the compiler's), ExternalList's vptr
+    // (the compiler's), then +0x20 and +0x28 zero as two qwords (the member
+    // initialisers).
+    ExternalList() : External(), _resources(nullptr), _count(0), _pad2c(0) {}
 
-    Base*           DeletingDtor(unsigned flags) override;   // [0]
+    // [0] 0x180007800 — MSVC's VECTOR deleting destructor, both arms exactly
+    // as the retired RT_DELDTOR row ran them (deleting_dtor.cpp
+    // DeletingDtorCore; `MOV EDX,0x30` = the element size, `LEA R9,
+    // [0x1800076c0]` = ~ExternalList): `flags & 2` reads the SIGNED int32
+    // count at `this - 8`, destroys the elements DOWNWARD, frees `this - 8` on
+    // `flags & 1` and returns it; otherwise ~ExternalList, free on `flags & 1`.
+    // Nothing `new[]`s an ExternalList, so the array arm is the faithful
+    // unreachable it is in Object::Internal's. INLINE so `make unit` can drive
+    // both arms; the key function is TypeName (external_class_doors.cpp).
+    Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<ExternalList*>(self + static_cast<int64_t>(i) * 0x30)->~ExternalList();
+            if (flags & 1u) TypeTreeFree(self - 8);
+            return reinterpret_cast<Base*>(self - 8);
+        }
+        this->~ExternalList();
+        if (flags & 1u) TypeTreeFree(this);
+        return this;
+    }
     const char*     TypeName() const override;               // [1] 0x180007370
     uint32_t        Type() const override;                   // [2] 0x180007350
     int32_t         GetFileVersion() const override;         // [3] 0x1800bfa10
@@ -732,9 +772,18 @@ public:
     //   dead in the whole body. Kept because the slot's signature demands it.
     ExternalPtr<External> Find(const System::Filename& path, uint32_t type) const;
 
+    // ?TypeId@ExternalList@Object@@SAIXZ 0x180007360 — `MOV EAX,[_typeInfo]`
+    // over the (still minted) record, through the Object accessor slot
+    // (external_class.cpp; B39_RULES D6 step 1).
     static uint32_t TypeId();
 
+    // Retail's factory pair (B39_RULES D2), defined in external_list.cpp.
+    static Base* CreateNewObject();                    // 0x180007460
+    static Base* CreateInPlaceObject(void* place);     // 0x180007510
+
 protected:
+    // ??1ExternalList 0x1800076c0. NON-VIRTUAL (no virtual dtor until the
+    // normal-virtual cutover); the compiler chains ~External.
     ~ExternalList();        // 0x1800076c0
 
 public:

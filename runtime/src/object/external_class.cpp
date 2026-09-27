@@ -27,8 +27,8 @@
 // NOTHING HERE IS REGISTERED. No `RegisterRuntimeExport`, no
 // `RegisterRuntimeAddr`, no `RT_DELDTOR` row added or retired. Every existing
 // entry point keeps working and keeps its address; the minted
-// `??_7External@Object@@6B@` and `??_7ExternalList@Object@@6B@` tables stay,
-// because they are what ~80 unconverted files stamp into live objects and
+// `??_7External@Object@@6B@` table stays (ExternalList's was retired by
+// ENDGAME B.3.9 OBJ), because it is what ~80 unconverted files stamp into live objects and
 // because the `RT_DELDTOR(0x180006640, …)` row is what FILLS slot 0 of the
 // minted table (B33_RULES §6.1). A converted object and a minted-vtable object
 // are slot-for-slot interchangeable — tests/unit/object_vtable_abi_test.cpp
@@ -41,6 +41,7 @@
 // and unit-tested rather than asserted in a comment.
 // ============================================================================
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 
@@ -88,17 +89,56 @@ const BaseTypeInfo* ExternalTypeInfoRecord()         { return g_unitExternalType
 const BaseTypeInfo* ExternalListTypeInfoRecord()     { return g_unitExternalListTypeInfo; }
 const BaseTypeInfo* CompiledExternalTypeInfoRecord() { return g_unitCompiledExternalTypeInfo; }
 #else
+// ############################################################################
+// ENDGAME B.3.9 OBJ — THE RUNTIME `TypeId()` ACCESSOR PATTERN (B39_RULES D6
+// step 1), the one every Object class with a MINTED record uses until the W3
+// fold gives it a `DEFINE_TYPE`:
+//
+//   * one NAMESPACE-SCOPE `std::atomic<const BaseTypeInfo*>` per record — no
+//     function-local static, no `RT_DATA_SLOT` lambda cache (B9-10 / B6-5);
+//   * filled by the FIRST reader through `ResolveExport(<the record's exact
+//     mangled name>)`, which never caches a miss: a null answer is returned
+//     and NOT stored, so a read before the mint registers the record (none
+//     exists — B39_RULES D6 "Timing") is not frozen. It cannot be filled at
+//     port init: the mint, which registers the record, runs after every
+//     *PortInit. The store is idempotent (every thread resolves the same
+//     pointer), so the loader thread and the main thread may race it freely;
+//   * read as the real `BaseTypeInfo` (`->typeId`, `->name`), never by
+//     memcpy off raw bytes;
+//   * `X::TypeId()` returns `->typeId`; slot 2 `Type()` returns `TypeId()`;
+//     slot 1 `TypeName()` returns `->name` (content-only, never compared by
+//     pointer). At the W3 fold the accessor body becomes `_typeInfo` and the
+//     slot disappears with the minted row; no caller changes.
+// ############################################################################
+namespace {
+
+std::atomic<const BaseTypeInfo*> g_externalTypeInfo{nullptr};          // 0x1801f9b38
+std::atomic<const BaseTypeInfo*> g_externalListTypeInfo{nullptr};      // 0x1801f9be0
+std::atomic<const BaseTypeInfo*> g_compiledExternalTypeInfo{nullptr};  // 0x1801f9b00
+
+const BaseTypeInfo* MintedRecord(std::atomic<const BaseTypeInfo*>& slot,
+                                 const char* mangled) {
+    const BaseTypeInfo* ti = slot.load(std::memory_order_acquire);
+    if (ti == nullptr) {
+        ti = static_cast<const BaseTypeInfo*>(ResolveExport(mangled));
+        if (ti != nullptr) slot.store(ti, std::memory_order_release);
+    }
+    return ti;
+}
+
+}  // namespace
+
 const BaseTypeInfo* ExternalTypeInfoRecord() {
-    return RT_DATA_SLOT(const BaseTypeInfo*,
-                        "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");   // 0x1801f9b38
+    return MintedRecord(g_externalTypeInfo,
+                        "?_typeInfo@External@Object@@0VBaseTypeInfo@2@A");
 }
 const BaseTypeInfo* ExternalListTypeInfoRecord() {
-    return RT_DATA_SLOT(const BaseTypeInfo*,
-                        "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A"); // 0x1801f9be0
+    return MintedRecord(g_externalListTypeInfo,
+                        "?_typeInfo@ExternalList@Object@@0VBaseTypeInfo@2@A");
 }
 const BaseTypeInfo* CompiledExternalTypeInfoRecord() {
-    return RT_DATA_SLOT(const BaseTypeInfo*,
-                        "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A"); // 0x1801f9b00
+    return MintedRecord(g_compiledExternalTypeInfo,
+                        "?_typeInfo@CompiledExternal@Object@@0VBaseTypeInfo@2@A");
 }
 #endif
 
@@ -222,6 +262,9 @@ System::Filename External::GetPath() const {
 // ============================================================================
 // Object::CompiledExternal
 // ============================================================================
+
+// ?TypeId@CompiledExternal@Object@@SAIXZ  0x18000b6a0 — `MOV EAX,[0x1801f9b00]`.
+uint32_t CompiledExternal::TypeId() { return CompiledExternalTypeInfoRecord()->typeId; }
 
 // ??1CompiledExternal@Object@@UEAA@XZ   retail 0x1800bb980
 //

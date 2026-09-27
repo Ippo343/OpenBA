@@ -1,0 +1,5 @@
+# ENDGAME B.3 step 9 -- the rows block OBJ retired (B39_RULES.md D3).
+# Format: <mangled symbol | 0xVA>   <owner block>   <proof>
+
+# -- W1: Object::ExternalList (INVENTORY_A row 57, RT_DELDTOR row 65) --
+??_7ExternalList@Object@@6B@   OBJ   concrete (inline ctor + vector DeletingDtor), factory pair the class's own; FACTREST row, RT_DELDTOR row 0x180007800, ??1 door + 7 slot doors deleted
