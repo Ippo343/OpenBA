@@ -3,8 +3,8 @@
 // harvest of Runtime-x64.dll) re-verified against the DLL at generation
 // time. Regenerate with:
 //   tools/ghidra_mcp/.venv/Scripts/python.exe tools/rt_mint_gen.py
-// Counts: 22 vtables, 104 BaseTypeInfo, 34 storage symbols.
-// Retired (ENDGAME B.3 step 9): 144 row(s), listed in tools/rt_mint_retired/*.txt.
+// Counts: 21 vtables, 104 BaseTypeInfo, 34 storage symbols.
+// Retired (ENDGAME B.3 step 9): 145 row(s), listed in tools/rt_mint_retired/*.txt.
 
 // ---- Per-slot traps. One function per (vtable, slot) so an unreachable
 // slot that DOES get called names itself instead of aborting anonymously.
@@ -163,15 +163,13 @@ RT_MINT_TRAP(18,8)
 RT_MINT_TRAP(18,9)
 RT_MINT_TRAP(19,0)
 RT_MINT_TRAP(19,1)
+RT_MINT_TRAP(19,2)
+RT_MINT_TRAP(19,3)
+RT_MINT_TRAP(19,4)
+RT_MINT_TRAP(19,5)
+RT_MINT_TRAP(19,6)
 RT_MINT_TRAP(20,0)
 RT_MINT_TRAP(20,1)
-RT_MINT_TRAP(20,2)
-RT_MINT_TRAP(20,3)
-RT_MINT_TRAP(20,4)
-RT_MINT_TRAP(20,5)
-RT_MINT_TRAP(20,6)
-RT_MINT_TRAP(21,0)
-RT_MINT_TRAP(21,1)
 
 // (unexported, carried by address)  DLL 0x180155860  2 slots  [tail-not-a-pointer]
 static const RtMintVSlot kVSlots0[] = {
@@ -440,16 +438,8 @@ static const RtMintVSlot kVSlots18[] = {
 static void* kVTable18[10];
 static const RtMintTrapFn kVTraps18[] = { &RtMintTrapStub_18_0, &RtMintTrapStub_18_1, &RtMintTrapStub_18_2, &RtMintTrapStub_18_3, &RtMintTrapStub_18_4, &RtMintTrapStub_18_5, &RtMintTrapStub_18_6, &RtMintTrapStub_18_7, &RtMintTrapStub_18_8, &RtMintTrapStub_18_9 };
 
-// ??_7Stream@Audio@@6B@  DLL 0x180154950  2 slots  [adjacent-export:??_7FileStream@IO@@6B@]
-static const RtMintVSlot kVSlots19[] = {
-    { "?Run@Stream@Audio@@UEAAXXZ", 0x1800a0f60ull, RT_MINT_NAMED },
-    { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
-};
-static void* kVTable19[2];
-static const RtMintTrapFn kVTraps19[] = { &RtMintTrapStub_19_0, &RtMintTrapStub_19_1 };
-
 // ??_7Stream@IO@@6B@  DLL 0x1801549a0  7 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots20[] = {
+static const RtMintVSlot kVSlots19[] = {
     { nullptr, 0x18000c610ull, RT_MINT_UNNAMED },
     { "?GetSource@Stream@IO@@UEBA?AVString@System@@XZ", 0x18000c6a0ull, RT_MINT_NAMED },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
@@ -458,16 +448,16 @@ static const RtMintVSlot kVSlots20[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
 };
-static void* kVTable20[7];
-static const RtMintTrapFn kVTraps20[] = { &RtMintTrapStub_20_0, &RtMintTrapStub_20_1, &RtMintTrapStub_20_2, &RtMintTrapStub_20_3, &RtMintTrapStub_20_4, &RtMintTrapStub_20_5, &RtMintTrapStub_20_6 };
+static void* kVTable19[7];
+static const RtMintTrapFn kVTraps19[] = { &RtMintTrapStub_19_0, &RtMintTrapStub_19_1, &RtMintTrapStub_19_2, &RtMintTrapStub_19_3, &RtMintTrapStub_19_4, &RtMintTrapStub_19_5, &RtMintTrapStub_19_6 };
 
 // ??_7Thread@System@@6B@  DLL 0x180155f20  2 slots  [tail-not-a-pointer]
-static const RtMintVSlot kVSlots21[] = {
+static const RtMintVSlot kVSlots20[] = {
     { nullptr, 0x18007ec28ull, RT_MINT_PURECALL },
     { "?OnCompleted@Thread@System@@UEAAXXZ", 0x18000c590ull, RT_MINT_NAMED },
 };
-static void* kVTable21[2];
-static const RtMintTrapFn kVTraps21[] = { &RtMintTrapStub_21_0, &RtMintTrapStub_21_1 };
+static void* kVTable20[2];
+static const RtMintTrapFn kVTraps20[] = { &RtMintTrapStub_20_0, &RtMintTrapStub_20_1 };
 
 static RtMintVtable kMintVtables[] = {
     { nullptr, 0x180155860ull, 2, kVSlots0, kVTable0, kVTraps0, "tail-not-a-pointer" },
@@ -489,9 +479,8 @@ static RtMintVtable kMintVtables[] = {
     { "??_7MeshInstance@Graphics@@6B@", 0x180154dc0ull, 9, kVSlots16, kVTable16, kVTraps16, "tail-not-a-pointer" },
     { "??_7ParticleInstance@Graphics@@6B@", 0x1801550e0ull, 10, kVSlots17, kVTable17, kVTraps17, "adjacent-export:??_7Particle@Graphics@@6B@" },
     { "??_7ParticleSystemInstance@Graphics@@6B@", 0x180155040ull, 10, kVSlots18, kVTable18, kVTraps18, "adjacent-export:??_7ParticleSystem@Graphics@@6B@" },
-    { "??_7Stream@Audio@@6B@", 0x180154950ull, 2, kVSlots19, kVTable19, kVTraps19, "adjacent-export:??_7FileStream@IO@@6B@" },
-    { "??_7Stream@IO@@6B@", 0x1801549a0ull, 7, kVSlots20, kVTable20, kVTraps20, "tail-not-a-pointer" },
-    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots21, kVTable21, kVTraps21, "tail-not-a-pointer" },
+    { "??_7Stream@IO@@6B@", 0x1801549a0ull, 7, kVSlots19, kVTable19, kVTraps19, "tail-not-a-pointer" },
+    { "??_7Thread@System@@6B@", 0x180155f20ull, 2, kVSlots20, kVTable20, kVTraps20, "tail-not-a-pointer" },
 };
 
 // ---- Object::BaseTypeInfo. Fields are link-time constants copied from

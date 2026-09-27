@@ -205,6 +205,7 @@
 #include "../../types/input/Device.h"   // ENDGAME B.3.7 callers (K5): Input::Device
 #include "../../types/video/Device.h"      // ENDGAME B.3.5: Video::Device / Configuration
 #include "../../types/audio/Audio.h"       // ENDGAME B.3.7 callers (K4): Audio::Configuration / Device
+#include "../../types/audio/Stream.h"      // ENDGAME B.3.9 ENG W2: ~Stream in Shutdown
 #include "../../types/system/MemoryAllocator.h"
 #include "../../types/system/String.h"
 #include "../../types/system/Error.h"      // ENDGAME B.3.9 SYS: Error::_hideDisplay
@@ -886,8 +887,9 @@ void Engine::Engine::Shutdown() {
     if (void* p = _audioDevice) {
         // 0x1800db6fe: only the Audio::Stream sub-object at +0xa00 is destroyed;
         // ??1Device@Audio@@ (0x1800de4f0) is NOT called. Faithful.
-        RT_EXPORT_ONCE(VoidThisFn, "??1Stream@Audio@@QEAA@XZ")(
-            static_cast<uint8_t*>(p) + 0xa00);
+        // ENDGAME B.3.9 ENG W2: the class's real (public, QEAA) ~Stream.
+        reinterpret_cast< ::Audio::Stream*>(static_cast<uint8_t*>(p) + 0xa00)
+            ->~Stream();                                         // B.3.9 bridge
         MemFree(p);
     }
     if (void* p = _audioConfiguration) {

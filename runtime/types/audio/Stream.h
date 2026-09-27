@@ -25,11 +25,11 @@
 // `??1Stream@Audio@@QEAA@XZ` (0x1800a0d90) is a NON-virtual `QEAA` export that
 // re-stamps the Stream table and then runs the inlined `~Thread`.
 //
-// NO REAL CONSTRUCTOR (B4b-2, B7-12): the one live Stream is built inside
-// `Audio::Device` by `Ctor_AudioDevice` (runtime/src/engine/singleton_ctors.cpp)
-// through the registered `??0Stream@Audio@@QEAA@XZ` DOOR
-// (runtime/src/audio/audio_stream_win.cpp), and torn down by
-// `Engine::Shutdown` through the `??1` door. The Device is a POD in this step
+// REAL CONSTRUCTOR since ENDGAME B.3.9 ENG W2: the one live Stream is built
+// inside `Audio::Device` by `Ctor_AudioDevice` (runtime/src/engine/
+// singleton_ctors.cpp) as `::new (dev + 0xa00) Audio::Stream()`, and torn down
+// by `Engine::Shutdown` with `~Stream()`. The `??0` / `??1` doors, the minted
+// `??_7Stream@Audio@@6B@` and the `?Run@` slot door are retired. The Device is a POD in this step
 // and holds the `RtAudio::Stream` POD below (B4b-3), cross-asserted field for
 // field against the class. The same shape as `Engine::Loader`
 // (runtime/types/engine/UpdateLoop.h).
@@ -111,12 +111,18 @@ private:
     void PlatformConstruct();                      // 0x1800a0ed0  (AEAA)
     void PlatformDestruct();                       // 0x1800a0f10  (AEAA)
 
-protected:
-    // `??0Stream@Audio@@QEAA@XZ` 0x1800a0e30 / `??1Stream@Audio@@QEAA@XZ`
-    // 0x1800a0d90 are the DOORS (audio_stream_win.cpp); neither is a C++
-    // constructor here (B4b-2). Non-virtual (ENDGAME B.2).
-    Stream() = default;
-    ~Stream() = default;
+public:
+    // `??0Stream@Audio@@QEAA@XZ` 0x1800a0e30 — the REAL constructor (ENDGAME
+    // B.3.9 ENG W2): `System::Thread(0x10000)` in the init list (retail's
+    // `CALL ??0Thread` with EDX = 0x10000), the vptr the compiler's, then the
+    // array header, the critical section and the two events (audio_stream_win.cpp).
+    // Built in place inside Audio::Device (+0xa00) by Ctor_AudioDevice.
+    Stream();
+    // `??1Stream@Audio@@QEAA@XZ` 0x1800a0d90 — NON-virtual (ENDGAME B.2) and
+    // PUBLIC like retail's QEAA export: Engine::Shutdown calls it directly on
+    // Device+0xa00 (it never runs ~Device). The two events, the lock, the
+    // block array; the compiler chains ~Thread (retail inlines it).
+    ~Stream();
 
 public:
     // One block of the streaming ring: `[0x40 bytes: 16 cumulative packet
