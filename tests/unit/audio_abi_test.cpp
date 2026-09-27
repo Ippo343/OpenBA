@@ -42,6 +42,7 @@
 #include <cstring>
 #include <type_traits>
 #include <new>
+#include "system_abi_stubs.h"   // the recording Thread InitFields / ReleaseFields
 
 namespace {
 
@@ -116,6 +117,10 @@ Object::External* SoundEffect::Construct() { Note(this, 8); return this; }
 SoundEffect::~SoundEffect() { NoteDtor(this); }
 
 void Stream::Run() { Note(this, 50); }
+// ENDGAME B.3.9 ENG W2: the real ctor / dtor (audio_stream_win.cpp, not in the
+// unit binary) as markers; the Thread base runs system_abi_stubs.cpp's bodies.
+Stream::Stream() : System::Thread(0x10000u) { Note(this, 51); }
+Stream::~Stream() { Note(this, 52); }
 
 Configuration::~Configuration() { Note(this, 90); }
 }  // namespace Audio
@@ -223,7 +228,8 @@ UNIT_TEST(audio_stream_layout_and_shape) {
     CHECK((std::is_base_of<System::Thread, Audio::Stream>::value));
     CHECK(std::is_polymorphic<Audio::Stream>::value);
     CHECK(!std::is_abstract<Audio::Stream>::value);
-    CHECK(!std::is_default_constructible<Audio::Stream>::value);   // protected (B4b-2)
+    CHECK(std::is_default_constructible<Audio::Stream>::value);    // real public ctor (B.3.9 ENG W2)
+    CHECK(!std::has_virtual_destructor<Audio::Stream>::value);
     CHECK_EQ((int)offsetof(Audio::Stream, _buffers),      0x30);
     CHECK_EQ((int)offsetof(Audio::Stream, _wakeEvent),    0x40);
     CHECK_EQ((int)offsetof(Audio::Stream, _bufferEvent),  0x48);
@@ -564,4 +570,26 @@ UNIT_TEST(b39_eng_platformchannel_ctor_makes_loop2_stores) {
     // A raw COM-shaped call through slot 2 lands in the member with `this`.
     using VoidFn = void (*)(void*);
     Reset(); SlotAt<VoidFn>(a, 0x10)(a); CHECK_EQ(g_lastMark, 62); CHECK(g_lastSelf == a);
+}
+
+// ENDGAME B.3.9 ENG W2: Audio::Stream is built by its REAL ctor on
+// `System::Thread(0x10000)` (retail 0x1800a0e55, EDX = 0x10000): the base body
+// runs once, with that stack size, while the object wears THREAD's table; the
+// Stream's own body then runs under the Stream table. ~Stream runs its body,
+// then the compiler's ~Thread chain (retail inlines it).
+UNIT_TEST(b39_eng_audio_stream_real_ctor_on_thread_0x10000) {
+    g_systemStub_InitFields    = {};
+    g_systemStub_ReleaseFields = {};
+    alignas(8) unsigned char buf[sizeof(StreamProbe)];
+    Reset();
+    StreamProbe* s = ::new (static_cast<void*>(buf)) StreamProbe();
+    CHECK_EQ(g_systemStub_InitFields.calls, 1);
+    CHECK(g_systemStub_InitFields.self == static_cast<const void*>(s));
+    CHECK_EQ(g_systemStub_InitFields.stackSize, 0x10000u);
+    CHECK(g_systemStub_InitFields.vptrAtCall != *reinterpret_cast<void* const*>(s));
+    CHECK_EQ(g_lastMark, 51);            // the Stream body, after the base
+    s->~StreamProbe();
+    CHECK_EQ(g_lastMark, 52);
+    CHECK_EQ(g_systemStub_ReleaseFields.calls, 1);
+    CHECK(g_systemStub_ReleaseFields.vptrAtCall == g_systemStub_InitFields.vptrAtCall);
 }

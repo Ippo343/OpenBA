@@ -750,7 +750,6 @@ void* Ctor_AudioConfiguration(void* self) {
 // by-address read of the minted unnamed row (a function-local lazy cache, B9-10)
 // is gone with that row.
 void* Ctor_AudioDevice(void* self) {
-    using StreamCtorFn = void* (*)(void*);
     Audio::Device* const dev = static_cast<Audio::Device*>(self);
 
     for (int i = 0; i < 64; ++i) {
@@ -761,8 +760,9 @@ void* Ctor_AudioDevice(void* self) {
         W32(self, base + 0x18, 0);
         W64(self, base + 0x20, 0);
     }
-    RT_EXPORT_ONCE(StreamCtorFn, "??0Stream@Audio@@QEAA@XZ")(
-        static_cast<uint8_t*>(self) + 0xa00);
+    // ENDGAME B.3.9 ENG W2: `??0Stream` is the class's real ctor now (it was
+    // the door, by name); built in place at +0xa00 as retail's LEA/CALL does.
+    ::new (static_cast<void*>(static_cast<uint8_t*>(self) + 0xa00)) Audio::Stream();
     for (int i = 0; i < 64; ++i)
         ::new (static_cast<void*>(&dev->_platformChannels[i])) Audio::Device::PlatformChannel();
     Publish(SlotAudioDevice(), self);

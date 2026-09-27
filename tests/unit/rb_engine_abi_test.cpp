@@ -4,8 +4,8 @@
 // B38_RULES D1 / RULE B8-1 on the four loop bases LOOP derives its five exe
 // loops from (GameUpdateLoop : UpdateLoop, MenuDialogLoopT : DialogLoopT, the
 // splash : DialogLoaderLoopT, two : LoaderLoop). Each real ctor/dtor shares
-// ONE body with its door (`InitFields` / `ReleaseFields`, reached by the doors
-// through `X::DoorBody`).
+// ONE body (`InitFields` / `ReleaseFields`). ENDGAME B.3.9 ENG W2: the doors
+// and `X::DoorBody` are gone; PART B pins the bases' own concrete slot 0.
 //
 // PART A — STAMP ORDER through test subclasses: every shared body runs under
 //   ITS class's compiler table (base -> derived on the way in, derived -> base
@@ -13,7 +13,8 @@
 //   `_dialogFilename` String copy (a member initialiser) is already in place
 //   when InitFields runs, and ~String runs AFTER ReleaseFields and BEFORE the
 //   base's teardown — retail's ~DialogLoopT order (UI, String, base).
-// PART B — THE DOOR REACHES THE SAME BODY with a stand-in minted table.
+// PART B — each base's concrete DeletingDtor: scalar arm (free on &1) and the
+//   VECTOR arm (count at this-8, destroy downward, return this-8).
 //
 // NOT PROVEN HERE: the bodies (runtime/src/engine/loops.cpp stands on the
 // registry). They are RECORDING MARKERS below, as are the loops' virtuals (so
@@ -28,6 +29,7 @@
 #include <cstdint>
 #include <cstddef>
 #include <cstring>
+#include <cstdlib>
 #include <new>
 #include <type_traits>
 
@@ -46,18 +48,16 @@ const void* VptrOf(const void* obj) { return *static_cast<const void* const*>(ob
 
 // An ordered log of (event, vptr) pairs.
 enum Ev { kUlInit = 1, kLlInit, kDlInit, kDllInit, kUlRel, kDlRel, kDllRel };
-struct Entry { int ev; const void* vptr; const char* filename; };
+struct Entry { int ev; const void* vptr; const char* filename; const void* self; };
 Entry g_log[16];
 int   g_n = 0;
 void Log(int ev, const void* self, const char* fn = nullptr) {
-    if (g_n < 16) g_log[g_n++] = Entry{ev, VptrOf(self), fn};
+    if (g_n < 16) g_log[g_n++] = Entry{ev, VptrOf(self), fn, self};
 }
 void Clear() { g_n = 0; }
 
 int64_t g_delaySeen = 0;
 void*   g_nextSeen  = nullptr;
-
-const void* const kFakeMinted[4] = {};
 
 }  // namespace
 
@@ -214,33 +214,85 @@ UNIT_TEST(rb_dialogloaderloopt_ctor_dtor_order_is_retails) {
 }
 
 // ===========================================================================
-// PART B
+// PART B -- ENDGAME B.3.9 ENG W2: the doors are gone; slot 0 is each base's own
+// concrete DeletingDtor with the retired RT_DELDTOR rows' VECTOR arms.
 // ===========================================================================
-UNIT_TEST(rb_loop_doors_reach_the_same_bodies) {
-    alignas(8) unsigned char raw[sizeof(Engine::DialogLoaderLoopT)] = {};
-    *reinterpret_cast<const void**>(raw) = kFakeMinted;
+UNIT_TEST(b39_eng_loaderloop_is_concrete_and_its_ctor_public) {
     Clear();
-    Engine::UpdateLoop::DoorBody::Init(reinterpret_cast<Engine::UpdateLoop*>(raw));
-    Engine::LoaderLoop::DoorBody::Init(reinterpret_cast<Engine::LoaderLoop*>(raw), nullptr, 3);
-    Engine::DialogLoaderLoopT::DoorBody::Init(reinterpret_cast<Engine::DialogLoaderLoopT*>(raw));
-    Engine::DialogLoaderLoopT::DoorBody::Release(reinterpret_cast<Engine::DialogLoaderLoopT*>(raw));
-    Engine::UpdateLoop::DoorBody::Release(reinterpret_cast<Engine::UpdateLoop*>(raw));
-    Engine::DialogLoopT::DoorBody::Init(reinterpret_cast<Engine::DialogLoopT*>(raw));
-    Engine::DialogLoopT::DoorBody::Release(reinterpret_cast<Engine::DialogLoopT*>(raw));
-    CHECK_EQ(g_n, 7);
-    const int want[7] = {kUlInit, kLlInit, kDllInit, kDllRel, kUlRel, kDlInit, kDlRel};
-    for (int i = 0; i < 7; ++i) {
-        CHECK_EQ(g_log[i].ev, want[i]);
-        CHECK(g_log[i].vptr == static_cast<const void*>(kFakeMinted));
+    const int64_t delay = 3;
+    void* mem = std::malloc(sizeof(Engine::LoaderLoop));
+    Engine::LoaderLoop* l = ::new (mem) Engine::LoaderLoop(nullptr, TimeOf(delay));
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kUlInit);  CHECK(g_log[0].vptr == UlVt());
+    CHECK_EQ(g_log[1].ev, (int)kLlInit);  CHECK(g_log[1].vptr == LlVt());
+    CHECK(VptrOf(l) == LlVt());           // the COMPILER's table, not a minted one
+    CHECK_EQ(g_delaySeen, delay);
+    // DeletingDtor(0): destroy, no free, returns this.
+    CHECK(l->DeletingDtor(0) == static_cast<Engine::UpdateLoop*>(l));
+    CHECK_EQ(g_n, 3);
+    CHECK_EQ(g_log[2].ev, (int)kUlRel);   CHECK(g_log[2].vptr == UlVt());
+    // DeletingDtor(1): destroy and free (the host MemFree is std::free).
+    l = ::new (mem) Engine::LoaderLoop(nullptr, TimeOf(delay));
+    Clear();
+    CHECK(l->DeletingDtor(1) == static_cast<Engine::UpdateLoop*>(l));
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kUlRel);
+}
+
+UNIT_TEST(b39_eng_loaderloop_deletingdtor_vector_arm) {
+    // MSVC's new[] block: int32 count at -8, then the 0x48-byte elements.
+    unsigned char* block = static_cast<unsigned char*>(std::malloc(8 + 3 * 0x48));
+    *reinterpret_cast<int32_t*>(block) = 3;
+    const int64_t delay = 1;
+    Engine::LoaderLoop* e[3];
+    for (int i = 0; i < 3; ++i)
+        e[i] = ::new (block + 8 + i * 0x48) Engine::LoaderLoop(nullptr, TimeOf(delay));
+    Clear();
+    // flags 3: destroy all three DOWNWARD, free the block, return this - 8.
+    CHECK(e[0]->DeletingDtor(3) == reinterpret_cast<Engine::UpdateLoop*>(block));
+    CHECK_EQ(g_n, 3);
+    for (int i = 0; i < 3; ++i) {
+        CHECK_EQ(g_log[i].ev, (int)kUlRel);
+        CHECK(g_log[i].self == static_cast<const void*>(e[2 - i]));
     }
-    CHECK_EQ(g_delaySeen, (int64_t)3);
+}
+
+UNIT_TEST(b39_eng_loop_bases_deletingdtor_runs_the_whole_chain) {
+    System::String name("Dialog/MainMenu.rsc");
+    alignas(8) unsigned char buf[sizeof(RbMenuLoop)];
+    RbMenuLoop* m = ::new (static_cast<void*>(buf)) RbMenuLoop(name);
+    Clear();
+    // The BASE's slot 0 body (qualified: RbMenuLoop has its own).
+    CHECK(m->Engine::DialogLoopT::DeletingDtor(0) == static_cast<Engine::UpdateLoop*>(m));
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kDlRel);   CHECK(g_log[0].vptr == DlVt());
+    CHECK_EQ(g_log[1].ev, (int)kUlRel);   CHECK(g_log[1].vptr == UlVt());
+
+    const int64_t delay = 9;
+    alignas(8) unsigned char buf2[sizeof(RbSplashLoop)];
+    RbSplashLoop* s = ::new (static_cast<void*>(buf2)) RbSplashLoop(name, nullptr, TimeOf(delay));
+    Clear();
+    CHECK(s->Engine::DialogLoaderLoopT::DeletingDtor(0) == static_cast<Engine::UpdateLoop*>(s));
+    CHECK_EQ(g_n, 2);
+    CHECK_EQ(g_log[0].ev, (int)kDllRel);  CHECK(g_log[0].vptr == DllVt());
+    CHECK_EQ(g_log[1].ev, (int)kUlRel);   CHECK(g_log[1].vptr == UlVt());
+
+    alignas(8) unsigned char buf3[sizeof(RbGameLoop)];
+    RbGameLoop* g = ::new (static_cast<void*>(buf3)) RbGameLoop;
+    Clear();
+    CHECK(g->Engine::UpdateLoop::DeletingDtor(0) == static_cast<Engine::UpdateLoop*>(g));
+    CHECK_EQ(g_n, 1);
+    CHECK_EQ(g_log[0].ev, (int)kUlRel);
 }
 
 UNIT_TEST(rb_loop_bases_shape) {
-    CHECK(std::is_abstract<Engine::UpdateLoop>::value);
-    CHECK(std::is_abstract<Engine::LoaderLoop>::value);
-    CHECK(std::is_abstract<Engine::DialogLoopT>::value);
+    CHECK(std::is_abstract<Engine::UpdateLoop>::value);          // pure 1,2,3,4,6 (retail)
+    CHECK(!std::is_abstract<Engine::LoaderLoop>::value);         // concrete, as in retail
+    CHECK(std::is_abstract<Engine::DialogLoopT>::value);         // pure 12 (retail)
     CHECK(std::is_abstract<Engine::DialogLoaderLoopT>::value);
+    CHECK(!std::is_destructible<Engine::LoaderLoop>::value);     // protected dtor
+    CHECK(!std::has_virtual_destructor<Engine::LoaderLoop>::value);
+    CHECK(!std::has_virtual_destructor<Engine::DialogLoopT>::value);
     CHECK(!std::has_virtual_destructor<Engine::UpdateLoop>::value);
     CHECK(!std::has_virtual_destructor<Engine::DialogLoaderLoopT>::value);
     CHECK_EQ(sizeof(RbGameLoop), (size_t)0x28);     // a subclass adds nothing by itself

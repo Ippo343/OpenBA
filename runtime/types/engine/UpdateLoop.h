@@ -246,8 +246,9 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 // `Engine::DialogLoaderLoopT` and `Engine::Loader` under retail's names. The
 // `RtEngine::` PODs above STAY, field-identical and cross-asserted below
 // (B37_RULES B7-6): `UI::UserInterface` names the two dialog PODs as friends,
-// `tests/unit/ui_userinterface_abi_test.cpp` pins them, and the ctor / dtor DOORS
-// in runtime/src/engine/loops.cpp stamp vtables through them. An abstract class
+// `tests/unit/ui_userinterface_abi_test.cpp` pins them, and loops.cpp's remaining
+// name doors take them as `self` (the ctor / dtor doors that stamped vtables
+// through them are gone since ENDGAME B.3.9 ENG W2). An abstract class
 // cannot be the alias target of a POD that is embedded or stamped (B36_RULES
 // section 10 correction). ENDGAME B.3.8 (block LOOP, B38_RULES D8): the exe-side
 // mirrors are gone — engine/types/{UpdateLoop,LoaderLoop,DialogLoaderLoopT}.h are
@@ -274,21 +275,21 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 //   [11]  0x180031790 AllowsModChanges (UL)                   (UL)                     (UL)
 //   [12]  --                          --                      _purecall (new)          _purecall (new)
 //
-// ABSTRACT-BY-POLICY (RULE B7-13). REAL CONSTRUCTORS since ENDGAME B.3.8
-// block RB (B38_RULES D1), each ONE body with its door, for LOOP's classes. The exe builds
-// five hand-made tables on these bases (GameUpdateLoop, MenuDialogLoopT, the
-// splash loop, two LoaderLoop subclasses: b37_session/EXE_SUBCLASSES.md), all
-// through the ctor DOORS, and every live loop wears one of those tables. So
-// slot 0 is `DeletingDtor(unsigned) = 0` on all four (the `RT_DELDTOR` rows are
-// not retired), `LoaderLoop` (concrete in retail) is abstract here too, and a
-// call from an exe slot body to a member that is VIRTUAL on the base is
-// QUALIFIED (`->Engine::DialogLoopT::Load()`), or it would dispatch back
-// through the exe table into itself.
+// ENDGAME B.3.9 ENG W2 (B39_RULES D1): the four minted tables, their
+// `RT_DELDTOR` rows and every ctor / dtor / slot DOOR are RETIRED. The exe's
+// five loops (GameUpdateLoop, MenuDialogLoopT, the splash loop, two LoaderLoop
+// subclasses) are real subclasses built by their own real ctors (EXE-1), so
+// every live loop wears a COMPILER table. Slot 0 is a concrete `DeletingDtor`
+// with the retired row's VECTOR arms on all four; `LoaderLoop` is CONCRETE as
+// in retail; `UpdateLoop` (pure 1,2,3,4,6) and the two Dialog loops (pure 12)
+// stay abstract, as in retail. A call from an exe slot body to a member that
+// is VIRTUAL on the base is QUALIFIED (`->Engine::DialogLoopT::Load()`), or it
+// would dispatch back into itself.
 //
 // NO VIRTUAL DESTRUCTOR (ENDGAME B.2): GCC spends two slots on one, which would
 // push `Startup` off slot 1. The destructors here are protected and
-// non-virtual; each shares its body with its registered `??1` DOOR, which still
-// does the teardown on the minted/exe-table objects.
+// non-virtual; every destroyable subclass declares its own `DeletingDtor`
+// (B9-4).
 //
 // THREADS (RULE B7-7): `Loader::Run` runs on the LOADER thread and dispatches
 // the loop's slot 6 `Load` there, so every `Load` body and everything it calls
@@ -298,6 +299,11 @@ static_assert(offsetof(DialogLoaderLoopT, _ui)             == 0x60, "DialogLoade
 namespace System { class Time; class String; }
 namespace Save   { class SavedState; }
 namespace UI     { class DialogInstance; }
+// `?MemFree@MemoryAllocator@System@@SAXPEAX@Z` (0x1800c7ad0), the free every
+// loop `DeletingDtor` arm below makes (the retired RT_DELDTOR rows' MemFree).
+// Declared, not included: runtime/types/object/Internal.h drags Value.h's
+// global `struct Time` (see the banner above) into the exe tree.
+namespace Object { namespace detail { void InternalMemFree(void* p); } }
 
 namespace Engine {
 
@@ -306,8 +312,25 @@ namespace Engine {
 // ============================================================================
 class UpdateLoop {
 public:
-    // [0] 0x180031900 (unexported vector deleting dtor) -- pure on purpose.
-    virtual UpdateLoop* DeletingDtor(unsigned flags) = 0;
+    // [0] 0x180031900 (unexported) -- MSVC's VECTOR deleting destructor, both
+    // arms exactly as the retired RT_DELDTOR row ran them (DeletingDtorCore,
+    // element 0x28): `flags & 2` reads the SIGNED int32 count at `this - 8`,
+    // destroys the elements DOWNWARD, frees `this - 8` on `flags & 1` and
+    // returns it; otherwise ~UpdateLoop, free on `flags & 1`. Every exe loop
+    // declares its own slot 0 (B9-4), so this runs only for a bare base.
+    virtual UpdateLoop* DeletingDtor(unsigned flags) {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<UpdateLoop*>(self + static_cast<int64_t>(i) * 0x28)->~UpdateLoop();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<UpdateLoop*>(self - 8);
+        }
+        this->~UpdateLoop();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     virtual void Startup() = 0;                                    // [1] _purecall
     virtual void Shutdown() = 0;                                   // [2] _purecall
     virtual bool Update(const System::Time& time) = 0;             // [3] _purecall
@@ -334,25 +357,20 @@ public:
     UpdateLoop(const UpdateLoop& other);                           // 0x1800317d0
     UpdateLoop& operator=(const UpdateLoop& other);                // 0x180031840
 
-    // The doors' way onto the shared bodies (ENDGAME B.3.8 block RB, B38_RULES
-    // D1): the loops.cpp ctor/dtor doors stamp the MINTED table themselves,
-    // for the still-unconverted exe loop tables, then call these.
-    struct DoorBody {
-        static void Init(UpdateLoop* l)    { l->InitFields(); }
-        static void Release(UpdateLoop* l) { l->ReleaseFields(); }
-    };
-
 protected:
     // `??0UpdateLoop@Engine@@QEAA@XZ` 0x1800ddd30 — the REAL constructor
-    // (ENDGAME B.3.8 block RB, RULE B8-1); ONE body with the door
-    // `RtEngine_UpdateLoop_Ctor` (the ExternalFactory clean-bit allocation).
+    // (ENDGAME B.3.8 block RB, RULE B8-1): the ExternalFactory clean-bit
+    // allocation. The `??0` door is gone (ENDGAME B.3.9 ENG W2): every loop is
+    // built by a subclass's real ctor.
     UpdateLoop() { InitFields(); }
     // `??1UpdateLoop@Engine@@UEAA@XZ` 0x1800dddb0. NON-VIRTUAL; the compiler
-    // restamps on entry. ONE body with the door `RtEngine_UpdateLoop_Dtor`
-    // (bit hand-back, ExternalFactory::Clean, the list cleanup tail).
+    // restamps on entry. Bit hand-back, ExternalFactory::Clean, the list
+    // cleanup tail. Its `??1` door died with the RT_DELDTOR row (B.3.9 ENG W2).
     ~UpdateLoop() { ReleaseFields(); }
 
 private:
+    // The bodies live in loops.cpp; tests/unit/rb_engine_abi_test.cpp links
+    // recording markers in their place (the unit binary links no loops.cpp).
     void InitFields();      // 0x1800ddd30 minus the vptr store (loops.cpp)
     void ReleaseFields();   // 0x1800dddb0 minus the restamp (loops.cpp)
 
@@ -392,12 +410,35 @@ public:
 };
 
 // ============================================================================
-// Engine::LoaderLoop -- 0x48, 12 slots; concrete in retail, ABSTRACT-BY-POLICY
+// Engine::LoaderLoop -- 0x48, 12 slots; CONCRETE, as in retail (B.3.9 ENG W2)
 // ============================================================================
 class LoaderLoop : public UpdateLoop {
 public:
-    // [0] 0x18004d4f0 -- pure on purpose (B7-13).
-    UpdateLoop* DeletingDtor(unsigned flags) override = 0;
+    // `??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z`
+    // 0x1800dc1e0 — the REAL constructor (ENDGAME B.3.8 block RB, B8-1):
+    // UpdateLoop() then the stamp are the compiler's. PUBLIC since the class is
+    // concrete (B39_RULES D1.1); the door is gone. `Time` is by reference in
+    // retail too. `System::Time` is incomplete here on purpose (the banner's
+    // Value.h note); it is ONE int64 tick count at +0x00 (Value.h asserts it).
+    LoaderLoop(UpdateLoop* nextLoop, const System::Time& delay) {
+        InitFields(nextLoop, *reinterpret_cast<const int64_t*>(&delay));
+    }
+
+    // [0] 0x18004d4f0 -- the VECTOR deleting destructor (element 0x48), both
+    // arms as the retired RT_DELDTOR row ran them; see UpdateLoop's.
+    UpdateLoop* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<LoaderLoop*>(self + static_cast<int64_t>(i) * 0x48)->~LoaderLoop();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<UpdateLoop*>(self - 8);
+        }
+        this->~LoaderLoop();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Startup() override;                                       // [1] 0x1800dc260
     void Shutdown() override;                                      // [2] 0x1800dc280
     bool Update(const System::Time& time) override;                // [3] 0x1800dc2a0
@@ -415,22 +456,7 @@ public:
     // static in retail) STAYS a data slot until the end of B.3 (carry-over 5):
     // loops.cpp reads it through `RT_DATA_SLOT`, never as a C++ static member.
 
-    struct DoorBody {   // see UpdateLoop::DoorBody
-        static void Init(LoaderLoop* l, UpdateLoop* nextLoop, int64_t delayTicks) {
-            l->InitFields(nextLoop, delayTicks);
-        }
-    };
-
 protected:
-    // `??0LoaderLoop@Engine@@QEAA@PEAVUpdateLoop@1@AEBVTime@System@@@Z`
-    // 0x1800dc1e0 — the REAL constructor (ENDGAME B.3.8 block RB, B8-1):
-    // UpdateLoop() then the stamp are the compiler's; ONE body with the door
-    // `RtEngine_LoaderLoop_Ctor`. `Time` is by reference in retail too.
-    // `System::Time` is incomplete here on purpose (the banner's Value.h
-    // note); it is ONE int64 tick count at +0x00 (Value.h asserts it).
-    LoaderLoop(UpdateLoop* nextLoop, const System::Time& delay) {
-        InitFields(nextLoop, *reinterpret_cast<const int64_t*>(&delay));
-    }
     // `??1LoaderLoop@Engine@@UEAA@XZ` 0x1800dc170: its own restamp, then
     // ~UpdateLoop folded in — both the compiler's chain. Nothing of its own.
     ~LoaderLoop() {}
@@ -451,8 +477,21 @@ public:
 // ============================================================================
 class DialogLoopT : public UpdateLoop {
 public:
-    // [0] 0x18004d8b0 -- pure on purpose (B7-13).
-    UpdateLoop* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x18004d8b0 -- the VECTOR deleting destructor (element 0x168), both
+    // arms as the retired RT_DELDTOR row ran them; see UpdateLoop's.
+    UpdateLoop* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<DialogLoopT*>(self + static_cast<int64_t>(i) * 0x168)->~DialogLoopT();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<UpdateLoop*>(self - 8);
+        }
+        this->~DialogLoopT();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Startup() override;                                       // [1] 0x1800db2f0
     void Shutdown() override;                                      // [2] 0x1800db2c0
     bool Update(const System::Time& time) override;                // [3] 0x1800db270
@@ -477,18 +516,12 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     DialogLoopT(const DialogLoopT& other);                         // 0x18004d7d0
 
-    struct DoorBody {   // see UpdateLoop::DoorBody
-        static void Init(DialogLoopT* l)    { l->InitFields(); }
-        static void Release(DialogLoopT* l) { l->ReleaseFields(); }
-    };
-
 protected:
     // `??0DialogLoopT@Engine@@QEAA@AEBVString@System@@@Z` 0x1800db3f0 — the
     // REAL constructor (ENDGAME B.3.8 block RB, B8-1). Retail: UpdateLoop(),
     // stamp, String copy ctor (0x180006cb0) into +0x28, two nulls, the
-    // UserInterface ctor on +0x40. The String copy is the member initialiser
-    // (the door placement-copies it); the rest is ONE body with the door
-    // `RtEngine_DialogLoopT_Ctor`.
+    // UserInterface ctor on +0x40. The String copy is the member initialiser.
+    // Protected: slot 12 is `_purecall`, so the class stays abstract.
     explicit DialogLoopT(const System::String& filename) : _dialogFilename(filename) {
         InitFields();
     }
@@ -516,8 +549,21 @@ public:
 // Inherits `LoaderLoop::OnVideoError` (slot 8, 0x1800dc360), B7-1.3.
 class DialogLoaderLoopT : public LoaderLoop {
 public:
-    // [0] 0x18004d670 -- pure on purpose (B7-13).
-    UpdateLoop* DeletingDtor(unsigned flags) override = 0;
+    // [0] 0x18004d670 -- the VECTOR deleting destructor (element 0x188), both
+    // arms as the retired RT_DELDTOR row ran them; see UpdateLoop's.
+    UpdateLoop* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<DialogLoaderLoopT*>(self + static_cast<int64_t>(i) * 0x188)->~DialogLoaderLoopT();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<UpdateLoop*>(self - 8);
+        }
+        this->~DialogLoaderLoopT();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     void Startup() override;                                       // [1] 0x1800db000
     void Shutdown() override;                                      // [2] 0x1800dafc0
     bool Update(const System::Time& time) override;                // [3] 0x1800daf20
@@ -530,16 +576,11 @@ public:
     // ---- exported, NOT PORTED, no caller: declared, deliberately undefined --
     DialogLoaderLoopT(const DialogLoaderLoopT& other);             // 0x18004d570
 
-    struct DoorBody {   // see UpdateLoop::DoorBody
-        static void Init(DialogLoaderLoopT* l)    { l->InitFields(); }
-        static void Release(DialogLoaderLoopT* l) { l->ReleaseFields(); }
-    };
-
 protected:
     // `??0DialogLoaderLoopT@Engine@@QEAA@AEBVString@System@@PEAVUpdateLoop@1@AEBVTime@3@@Z`
     // 0x1800db0d0 — the REAL constructor (ENDGAME B.3.8 block RB, B8-1):
-    // LoaderLoop(next, delay), stamp, String copy, then ONE body with the door
-    // `RtEngine_DialogLoaderLoopT_Ctor`.
+    // LoaderLoop(next, delay), stamp, String copy, then the two nulls and the
+    // UserInterface ctor. Protected: slot 12 is `_purecall` (abstract).
     DialogLoaderLoopT(const System::String& filename, UpdateLoop* nextLoop,
                       const System::Time& delay)
         : LoaderLoop(nextLoop, delay), _dialogFilename(filename) {
@@ -572,7 +613,7 @@ static_assert(alignof(UpdateLoop) == 8 && alignof(Loader) == 8 && alignof(Loader
               "qword-aligned (the vptr)");
 static_assert(std::is_polymorphic<UpdateLoop>::value && std::is_abstract<UpdateLoop>::value,
               "UpdateLoop is abstract: retail slots 1,2,3,4,6 are _purecall");
-static_assert(std::is_abstract<LoaderLoop>::value, "B7-13: abstract-by-policy");
+static_assert(!std::is_abstract<LoaderLoop>::value, "LoaderLoop is concrete, as in retail (B.3.9 ENG W2)");
 static_assert(std::is_abstract<DialogLoopT>::value && std::is_abstract<DialogLoaderLoopT>::value,
               "slot 12 is _purecall in retail");
 static_assert(!std::is_abstract<Loader>::value && std::is_polymorphic<Loader>::value,

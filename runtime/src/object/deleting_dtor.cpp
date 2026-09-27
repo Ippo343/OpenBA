@@ -290,10 +290,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     RT_DELDTOR(0x180006640, 0x1800bc950, 0x020, "Object::External"),
     RT_DELDTOR(0x18000b7e0, 0x1800bb980, 0x020, "Object::CompiledExternal"),
     RT_DELDTOR(0x18001ed20, 0x1800f2610, 0x068, "Video::ImageBuffer"),
-    RT_DELDTOR(0x180031900, 0x1800dddb0, 0x028, "Engine::UpdateLoop"),
-    RT_DELDTOR(0x18004d4f0, 0x1800dc170, 0x048, "Engine::LoaderLoop"),
-    RT_DELDTOR(0x18004d670, 0x1800db060, 0x188, "Engine::DialogLoaderLoopT"),
-    RT_DELDTOR(0x18004d8b0, 0x1800db340, 0x168, "Engine::DialogLoopT"),
     // ---- WAVE 10C lane DLG8 -------------------------------------------------
     // Slot 0 of `??_7Dialog@UI@@6B@`, the last of that vtable's eight abort
     // traps and the only one that is not a UI body. It is this family's shape
@@ -1066,22 +1062,6 @@ void* RtDelDtor_ImageBuffer(void* self, unsigned flags) {
 // Graphics::ParticleSystemInstance ~ParticleSystemInstance = 0x1800a5520  (PORTED,
 //                          BATCH C 2026-09-12, graphics/batchc_gfx_leaves.cpp;
 //                          was "still the DLL's")
-// Engine::UpdateLoop       ~UpdateLoop = 0x1800dddb0  (PORTED)
-void* RtDelDtor_UpdateLoop(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x180031900>());
-}
-// Engine::LoaderLoop       ~LoaderLoop = 0x1800dc170  (PORTED, BATCH 8)
-void* RtDelDtor_LoaderLoop(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d4f0>());
-}
-// Engine::DialogLoaderLoopT ~DialogLoaderLoopT = 0x1800db060  (PORTED, BATCH 8)
-void* RtDelDtor_DialogLoaderLoopT(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d670>());
-}
-// Engine::DialogLoopT      ~DialogLoopT = 0x1800db340  (PORTED, BATCH 8)
-void* RtDelDtor_DialogLoopT(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18004d8b0>());
-}
 
 
 
@@ -1168,10 +1148,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x180006640, (void*)&RtDelDtor_External);
     RegisterRuntimeAddr(0x18000b7e0, (void*)&RtDelDtor_CompiledExternal);
     RegisterRuntimeAddr(0x18001ed20, (void*)&RtDelDtor_ImageBuffer);
-    RegisterRuntimeAddr(0x180031900, (void*)&RtDelDtor_UpdateLoop);
-    RegisterRuntimeAddr(0x18004d4f0, (void*)&RtDelDtor_LoaderLoop);
-    RegisterRuntimeAddr(0x18004d670, (void*)&RtDelDtor_DialogLoaderLoopT);
-    RegisterRuntimeAddr(0x18004d8b0, (void*)&RtDelDtor_DialogLoopT);
 
 
 

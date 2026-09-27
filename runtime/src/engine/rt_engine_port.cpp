@@ -63,9 +63,8 @@ void RtEnginePortInit() {
     // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
     // static from here on (name door, address door, manifest publish).
     RtMintRedirectStorage("?_singleton@MainLoop@Engine@@1PEAV12@EA", &::Engine::MainLoop::_singleton);
-    // ENDGAME B.3.9 ENG (B39_RULES D7): the minted storage row IS the class
-    // static from here on (name door, address door, manifest publish).
-    RtMintRedirectStorage("?_singleton@Engine@1@0PEAV11@EA", &::Engine::Engine::_singleton);
+    // ENDGAME B.3.9 ENG W2: `?_singleton@Engine@1@` is RETIRED (eng.txt): its last
+    // reader was this redirect; every site reads Engine::Engine::_singleton.
     int loops = 0, core = 0, life = 0, mlrun = 0, mlvid = 0, mlframe = 0;
     loops = RtEngineLoopsRegister();
     core  = RtEngineCoreRegister();

@@ -528,16 +528,6 @@ void Stream::Run() {
 
 }  // namespace Audio
 
-extern "C" void RtAudio_Stream_Run(void* selfPtr) {
-    reinterpret_cast<Audio::Stream*>(selfPtr)->Audio::Stream::Run();   // B.3.7 bridge
-}
-
-// ============================================================================
-// Registration — unconditional, BOTH doors (DIRECTION.md §2).
-// ============================================================================
-int RtAudioStreamRunRegister() {
-    int n = 0;
-    RegisterRuntimeExport("?Run@Stream@Audio@@UEAAXXZ", (void*)&RtAudio_Stream_Run);
-    RegisterRuntimeAddr(0x1800a0f60ull, (void*)&RtAudio_Stream_Run); ++n;
-    return n;
-}
+// ENDGAME B.3.9 ENG W2: the `?Run@Stream@Audio@@UEAAXXZ` slot door and its
+// registration are gone with the minted `??_7Stream@Audio@@6B@`: the live
+// Stream wears the compiler table, whose slot 0 is Audio::Stream::Run above.
