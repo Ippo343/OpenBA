@@ -107,7 +107,6 @@ const char* ReadTypeName(const uint8_t* node) {
 // ARE the work, so they must reach our ports where ports exist.
 // ---------------------------------------------------------------------------
 using VoidThisFn = void  (*)(void*);
-using PtrThisFn  = void* (*)(void*);
 using NewFn      = void* (*)(uint64_t);
 using SerializeFn = bool (*)(void*, void*);
 
@@ -118,9 +117,6 @@ using SerializeFn = bool (*)(void*, void*);
 // reference_hidden_retslot_wild_write.md's family).
 void ImageBufferCtor(void* p) {
     RT_EXPORT_ONCE(VoidThisFn, "??0ImageBuffer@Video@@QEAA@XZ")(p);
-}
-void ImageBufferDtor(void* p) {
-    RT_EXPORT_ONCE(VoidThisFn, "??1ImageBuffer@Video@@UEAA@XZ")(p);
 }
 // ENDGAME B.3.5 block C — the `?Serialize@ImageBuffer@Video@@` (0x1800f26f0)
 // name door is GONE from this file. All three bodies below reach it as their
@@ -157,24 +153,10 @@ bool RenderBufferCreate(void* rb, const void* colour, const void* depth) {
         reinterpret_cast<const Video::ImageBuffer*>(depth));          // B.3.5 bridge
 }
 
-// `??0FrameCopyImageBuffer@Graphics@@QEAA@XZ` 0x1800a3d10 — PORTED
-// (wave23_lane_gfxbody.cpp, registered BY NAME ONLY; there is no address door
-// for it anywhere in the tree, which is why this is a name call and not a
-// ResolveAddr one).
-void* FrameCopyCtor(void* p) {
-    return RT_EXPORT_ONCE(PtrThisFn, "??0FrameCopyImageBuffer@Graphics@@QEAA@XZ")(p);
-}
-
-// The three vtables these bodies stamp, rebased. `ResolveAddr` on a DATA
-// address is the rebase plus a registry lookup, so if a later change MINTS one
-// of these rows the stamp follows the minted table — which is the right answer
-// for a promoted row and the reason this is not a raw `base + 0x...`.
-void* VtGenerated() {
-    static void* v = nullptr;
-    if (!v) v = reinterpret_cast<void*>(
-        ResolveAddr(Module::Runtime, RtGraphics::kVtGeneratedImageBuffer));
-    return v;
-}
+// ENDGAME B.3.9 block GFX: `FrameCopyCtor` (the ??0 name door), `VtGenerated`
+// (the minted table's rebased address) and `DeleteThrough` (a raw slot-0 read
+// for objects wearing a minted table) are gone: the three classes are real, and
+// Construct / Reconstruct / Destruct spell placement new and `DeletingDtor`.
 
 // ---------------------------------------------------------------------------
 // ENDGAME B.3.5 block C — `MakeCodec`, `DestroyCodec` and `EmitFloatArray` are
@@ -193,19 +175,6 @@ void* VtGenerated() {
 // forwarder that reaches +0x28.
 // ---------------------------------------------------------------------------
 
-// The object's OWN vtable slot 0, the vector deleting destructor, with the
-// flags byte spelled out at each call site. Read through the object rather than
-// through a resolved symbol because a derived class must reach ITS OWN slot 0 —
-// and because the live object wears the MINTED table, so the call has to go
-// through its vptr rather than through a C++ vtable GCC would resolve against
-// its own. Kept as a raw read for exactly that reason; where the receiver IS a
-// typed `Video::ImageBuffer*` the virtual call `p->DeletingDtor(flags)` says the
-// same thing with the slot index checked by the compiler, and the two owned-image
-// teardowns below use that form.
-void DeleteThrough(void* obj, unsigned flags) {
-    void** vt = *reinterpret_cast<void***>(obj);
-    reinterpret_cast<void* (*)(void*, unsigned)>(vt[0])(obj, flags);
-}
 
 }  // namespace
 
@@ -312,28 +281,38 @@ bool FrameCopyImageBuffer::Serialize(void* stream) {
 
 // slot 7 — ?Destruct@ ... retail 0x18001f160.  `MOV RAX,[RCX]; XOR EDX,EDX; JMP [RAX]`
 void FrameCopyImageBuffer::Destruct() {
-    DeleteThrough(this, 0u);                      // flags 0 = destroy, DO NOT free
+    DeletingDtor(0u);                             // flags 0 = destroy, DO NOT free
 }
 
 // slot 8 — ?Construct@ ... retail 0x18001f150.
 // `TEST RCX,RCX; JNZ 0x1800a3d10; XOR EAX,EAX; RET` — MSVC's placement-new
-// codegen. The null test looks unreachable for a virtual and is transcribed
-// anyway: "obviously unreachable" is not a licence to drop a branch. It lives in
-// the DOOR below rather than here, because `this == nullptr` inside a member is a
-// comparison GCC folds and warns about, and the door is where retail's test is
-// observable.
+// codegen: placement new of the class. (ENDGAME B.3.9 GFX: the null-`this`
+// arm sat in the retired slot door; a virtual is never entered with null.)
 Object::External* FrameCopyImageBuffer::Construct() {
-    FrameCopyCtor(this);
-    return this;                                  // the ctor's `MOV RAX,RSI`
+    return ::new (this) FrameCopyImageBuffer();
 }
 
 // slot 6 — ?Reconstruct@ ... retail 0x18001f130. Destroy in place through slot
 // 0 with flags 0, then tail-jump the constructor onto the SAME storage: the
 // device-lost recovery primitive.
 Object::External* FrameCopyImageBuffer::Reconstruct() {
-    DeleteThrough(this, 0u);
-    FrameCopyCtor(this);
-    return this;
+    DeletingDtor(0u);
+    return ::new (this) FrameCopyImageBuffer();
+}
+
+// ?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ
+// 0x18001f0a0 -- `??2FrameCopyImageBuffer` (MemAlloc 0x88, align 8), retail's
+// null branch, then the ctor. Replaces the FACTREST row (B39_RULES D2).
+Object::Base* FrameCopyImageBuffer::CreateNewObject() {
+    void* p = Object::detail::InternalMemAlloc(sizeof(FrameCopyImageBuffer), 8);
+    if (p == nullptr) return nullptr;
+    return ::new (p) FrameCopyImageBuffer();
+}
+// ?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z
+// 0x18001f120
+Object::Base* FrameCopyImageBuffer::CreateInPlaceObject(void* place) {
+    if (place == nullptr) return nullptr;
+    return ::new (place) FrameCopyImageBuffer();
 }
 
 // ============================================================================
@@ -355,107 +334,24 @@ void FrameCopyImageBuffer::Render(void* renderer, const void* scene,
 }  // namespace Graphics
 
 // ############################################################################
-// The registered doors for the two classes above — every one a QUALIFIED
-// non-virtual delegation. Names and addresses UNCHANGED.
+// ENDGAME B.3.9 block GFX: the registered doors of the two classes above are
+// RETIRED. `??0GeneratedImageBuffer` (0x1800a3e70) / `??1GeneratedImageBuffer`
+// (0x1800a3e40) stamped the MINTED `??_7GeneratedImageBuffer`; the real
+// `GeneratedImageBuffer()` / `~GeneratedImageBuffer()` (GeneratedImageBuffer.h)
+// are the only ones now, and nothing but the retired RT_DELDTOR rows and the
+// FrameCopy ctor door reached them. The four GeneratedImageBuffer and eight
+// FrameCopyImageBuffer slot doors had one reader each, the minted tables
+// `??_7GeneratedImageBuffer@` / `??_7FrameCopyImageBuffer@` (retired).
 // ############################################################################
 
-// ============================================================================
-// ??0GeneratedImageBuffer@Graphics@@QEAA@XZ          retail 0x1800a3e70
-//
-//     CALL 0x1800f2580              ; ??0ImageBuffer@Video@@
-//     LEA RAX,[0x180154f60]         ; ??_7GeneratedImageBuffer@Graphics@@6B@
-//     MOV [RBX],RAX
-//     MOV dword [RBX+0x68],0
-//     MOV RAX,RBX                   ; returns `this`
-//
-// STAYS A DOOR, not a real constructor (B4b-2 / B35_RULES 11): the LEA operand is
-// the MINTED vtable address, which a C++ constructor chain cannot write — it
-// would stamp GCC's table on an object the rest of the tree reads through the
-// minted one. So the vptr store stays explicit and last, exactly as retail's is.
-// ============================================================================
-extern "C" void* RtGraphics_GeneratedImageBuffer_Ctor(void* self) {
-    Graphics::GeneratedImageBuffer* const p =
-        reinterpret_cast<Graphics::GeneratedImageBuffer*>(self);   // B.3.5 bridge
-    ImageBufferCtor(p);
-    *reinterpret_cast<void**>(p) = VtGenerated();
-    // ENDGAME B.3.8 block RB (RULE B8-1): ONE body with `GeneratedImageBuffer()`.
-    Graphics::GeneratedImageBuffer::DoorBody::Init(p);
-    return self;
-}
-
-// ============================================================================
-// ??1GeneratedImageBuffer@Graphics@@UEAA@XZ          retail 0x1800a3e40
-//
-//     LEA RAX,[0x180154f60] ; MOV [RCX],RAX ; JMP 0x1800f2610
-//
-// Restamp and hand back to the base. Nothing of its own to release: +0x68 is a
-// plain int. STAYS A DOOR for two reasons at once: the restamp is the MINTED
-// address, and `??1ImageBuffer@Video@@` is still a door in block D2's
-// `buffers.cpp`, so a real `~GeneratedImageBuffer()` would need a
-// `Video::ImageBuffer::~ImageBuffer()` that is defined nowhere.
-// ============================================================================
-extern "C" void RtGraphics_GeneratedImageBuffer_Dtor(void* self) {
-    Graphics::GeneratedImageBuffer* const p =
-        reinterpret_cast<Graphics::GeneratedImageBuffer*>(self);   // B.3.5 bridge
-    *reinterpret_cast<void**>(p) = VtGenerated();
-    ImageBufferDtor(p);                          // tail JMP ??1ImageBuffer
-}
-
-extern "C" uint32_t RtGraphics_GeneratedImageBuffer_Type(const void* self) {
-    return reinterpret_cast<const Graphics::GeneratedImageBuffer*>(self)
-        ->Graphics::GeneratedImageBuffer::Type();                  // B.3.5 bridge
-}
-extern "C" const char* RtGraphics_GeneratedImageBuffer_TypeName(const void* self) {
-    return reinterpret_cast<const Graphics::GeneratedImageBuffer*>(self)
-        ->Graphics::GeneratedImageBuffer::TypeName();              // B.3.5 bridge
-}
-extern "C" int32_t RtGraphics_GeneratedImageBuffer_GetFileVersion(const void* self) {
-    return reinterpret_cast<const Graphics::GeneratedImageBuffer*>(self)
-        ->Graphics::GeneratedImageBuffer::GetFileVersion();        // B.3.5 bridge
-}
-extern "C" bool RtGraphics_GeneratedImageBuffer_Serialize(void* self, void* stream) {
-    return reinterpret_cast<Graphics::GeneratedImageBuffer*>(self)
-        ->Graphics::GeneratedImageBuffer::Serialize(stream);       // B.3.5 bridge
-}
-
-extern "C" uint32_t RtGraphics_FrameCopyImageBuffer_Type(const void* self) {
-    return reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::Type();                  // B.3.5 bridge
-}
-extern "C" const char* RtGraphics_FrameCopyImageBuffer_TypeName(const void* self) {
-    return reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::TypeName();              // B.3.5 bridge
-}
-extern "C" int32_t RtGraphics_FrameCopyImageBuffer_GetFileVersion(const void* self) {
-    return reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::GetFileVersion();        // B.3.5 bridge
-}
-extern "C" bool RtGraphics_FrameCopyImageBuffer_Serialize(void* self, void* stream) {
-    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::Serialize(stream);       // B.3.5 bridge
-}
-extern "C" void RtGraphics_FrameCopyImageBuffer_Destruct(void* self) {
-    reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::Destruct();              // B.3.5 bridge
-}
-// The retail null-`this` test lives HERE. See the member's banner.
-extern "C" void* RtGraphics_FrameCopyImageBuffer_Construct(void* self) {
-    if (self == nullptr) return nullptr;
-    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::Construct();             // B.3.5 bridge
-}
-extern "C" void* RtGraphics_FrameCopyImageBuffer_Reconstruct(void* self) {
-    return reinterpret_cast<Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::Reconstruct();           // B.3.5 bridge
-}
-extern "C" void RtGraphics_FrameCopyImageBuffer_Render(const void* self, void* renderer,
-                                                       const void* scene, const void* camera,
-                                                       int generation) {
-    reinterpret_cast<const Graphics::FrameCopyImageBuffer*>(self)
-        ->Graphics::FrameCopyImageBuffer::Render(renderer, scene, camera,
-                                                generation);      // B.3.5 bridge
-}
-
+namespace Graphics {
+// ?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ      0x18001edf0
+// ?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z 0x18001ee00
+// Retail's ABSTRACT pair: both bodies are `XOR EAX,EAX ; RET` (read at both
+// VAs). Replaces the FACTREST row (B39_RULES D2).
+Object::Base* GeneratedImageBuffer::CreateNewObject() { return nullptr; }
+Object::Base* GeneratedImageBuffer::CreateInPlaceObject(void* place) { (void)place; return nullptr; }
+}  // namespace Graphics
 // ############################################################################
 // Graphics::ReflectionImageBuffer
 // ############################################################################
@@ -861,65 +757,23 @@ void ReflectionImageBuffer::Render(void* renderer, const void* scene,
 int RtGraphicsImageBufferDerivedRegister() {
     int n = 0;
 
-    // ---- Graphics::GeneratedImageBuffer ------------------------------------
-    RegisterRuntimeExport("??0GeneratedImageBuffer@Graphics@@QEAA@XZ",
-                          (void*)&RtGraphics_GeneratedImageBuffer_Ctor); ++n;
-    RegisterRuntimeAddr(0x1800a3e70ull, (void*)&RtGraphics_GeneratedImageBuffer_Ctor);
-
-    RegisterRuntimeExport("??1GeneratedImageBuffer@Graphics@@UEAA@XZ",
-                          (void*)&RtGraphics_GeneratedImageBuffer_Dtor); ++n;
-    RegisterRuntimeAddr(0x1800a3e40ull, (void*)&RtGraphics_GeneratedImageBuffer_Dtor);
-
-    RegisterRuntimeExport("?Type@GeneratedImageBuffer@Graphics@@UEBAIXZ",
-                          (void*)&RtGraphics_GeneratedImageBuffer_Type); ++n;
-    RegisterRuntimeAddr(0x18001edc0ull, (void*)&RtGraphics_GeneratedImageBuffer_Type);
-
-    RegisterRuntimeExport("?TypeName@GeneratedImageBuffer@Graphics@@UEBAPEBDXZ",
-                          (void*)&RtGraphics_GeneratedImageBuffer_TypeName); ++n;
-    RegisterRuntimeAddr(0x18001ede0ull, (void*)&RtGraphics_GeneratedImageBuffer_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@GeneratedImageBuffer@Graphics@@UEBAHXZ",
-                          (void*)&RtGraphics_GeneratedImageBuffer_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x1800a3eb0ull,
-                        (void*)&RtGraphics_GeneratedImageBuffer_GetFileVersion);
-
-    RegisterRuntimeExport("?Serialize@GeneratedImageBuffer@Graphics@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtGraphics_GeneratedImageBuffer_Serialize); ++n;
-    RegisterRuntimeAddr(0x1800a3ec0ull, (void*)&RtGraphics_GeneratedImageBuffer_Serialize);
-
-    // ---- Graphics::FrameCopyImageBuffer ------------------------------------
-    RegisterRuntimeExport("?Type@FrameCopyImageBuffer@Graphics@@UEBAIXZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Type); ++n;
-    RegisterRuntimeAddr(0x18001ef90ull, (void*)&RtGraphics_FrameCopyImageBuffer_Type);
-
-    RegisterRuntimeExport("?TypeName@FrameCopyImageBuffer@Graphics@@UEBAPEBDXZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_TypeName); ++n;
-    RegisterRuntimeAddr(0x18001efb0ull, (void*)&RtGraphics_FrameCopyImageBuffer_TypeName);
-
-    RegisterRuntimeExport("?GetFileVersion@FrameCopyImageBuffer@Graphics@@UEBAHXZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_GetFileVersion); ++n;
-    RegisterRuntimeAddr(0x1800a3c70ull,
-                        (void*)&RtGraphics_FrameCopyImageBuffer_GetFileVersion);
-
-    RegisterRuntimeExport("?Serialize@FrameCopyImageBuffer@Graphics@@UEAA_NAEAVStream@IO@@@Z",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Serialize); ++n;
-    RegisterRuntimeAddr(0x1800a3c40ull, (void*)&RtGraphics_FrameCopyImageBuffer_Serialize);
-
-    RegisterRuntimeExport("?Reconstruct@FrameCopyImageBuffer@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Reconstruct); ++n;
-    RegisterRuntimeAddr(0x18001f130ull, (void*)&RtGraphics_FrameCopyImageBuffer_Reconstruct);
-
-    RegisterRuntimeExport("?Destruct@FrameCopyImageBuffer@Graphics@@UEAAXXZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Destruct); ++n;
-    RegisterRuntimeAddr(0x18001f160ull, (void*)&RtGraphics_FrameCopyImageBuffer_Destruct);
-
-    RegisterRuntimeExport("?Construct@FrameCopyImageBuffer@Graphics@@UEAAPEAVExternal@Object@@XZ",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Construct); ++n;
-    RegisterRuntimeAddr(0x18001f150ull, (void*)&RtGraphics_FrameCopyImageBuffer_Construct);
-
-    RegisterRuntimeExport("?Render@FrameCopyImageBuffer@Graphics@@UEBAXAEAVRenderer@2@AEBVScene@2@AEBVCamera@2@H@Z",
-                          (void*)&RtGraphics_FrameCopyImageBuffer_Render); ++n;
-    RegisterRuntimeAddr(0x1800a3b10ull, (void*)&RtGraphics_FrameCopyImageBuffer_Render);
+    // ---- Graphics::GeneratedImageBuffer / FrameCopyImageBuffer -------------
+    // ENDGAME B.3.9 block GFX: the ctor / dtor / slot doors are retired (see the
+    // banner above the Reflection section). The factory pairs (B39_RULES D2) are
+    // the classes' own statics, by name AND address; the minted `?_typeInfo@`
+    // records resolve them.
+    RegisterRuntimeExport("?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&Graphics::GeneratedImageBuffer::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x18001edf0ull, (void*)&Graphics::GeneratedImageBuffer::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Graphics::GeneratedImageBuffer::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x18001ee00ull, (void*)&Graphics::GeneratedImageBuffer::CreateInPlaceObject);
+    RegisterRuntimeExport("?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ",
+                          (void*)&Graphics::FrameCopyImageBuffer::CreateNewObject); ++n;
+    RegisterRuntimeAddr(0x18001f0a0ull, (void*)&Graphics::FrameCopyImageBuffer::CreateNewObject);
+    RegisterRuntimeExport("?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z",
+                          (void*)&Graphics::FrameCopyImageBuffer::CreateInPlaceObject); ++n;
+    RegisterRuntimeAddr(0x18001f120ull, (void*)&Graphics::FrameCopyImageBuffer::CreateInPlaceObject);
 
     // ---- Graphics::ReflectionImageBuffer -----------------------------------
     // The factory pair (B39_RULES D2), the class's own statics, by name AND

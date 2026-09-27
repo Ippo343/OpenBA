@@ -29,6 +29,7 @@
 #include "runtime/types/graphics/SunLight.h"
 #include "runtime/types/graphics/Material.h"
 #include "runtime/types/graphics/GeneratedImageBuffer.h"
+#include "runtime/types/graphics/FrameCopyImageBuffer.h"   // B.3.9 GFX
 
 #include <cstdint>
 #include <cstddef>
@@ -638,6 +639,124 @@ UNIT_TEST(b39_gfx_reflectionimagebuffer_ctor_stores_and_both_slot0_arms) {
     CHECK(g_riRelOrder[0] == e[2]);
     CHECK(g_riRelOrder[1] == e[1]);
     CHECK(g_riRelOrder[2] == e[0]);
+}
+
+}  // namespace
+
+// ===========================================================================
+// ENDGAME B.3.9 block GFX -- FrameCopyImageBuffer CONCRETE (its real ctor / dtor
+// are the only builders now; moved here from rb_video_abi_test.cpp's PART D) and
+// GeneratedImageBuffer's own VECTOR slot 0 (the class stays abstract).
+// Video::ImageBuffer's and GeneratedImageBuffer's markers are
+// rb_video_abi_test's; FrameCopy's out-of-line members are markers here.
+// ===========================================================================
+namespace {
+int         g_fcCtor = 0, g_fcDtor = 0;
+const void* g_fcCtorVptr = nullptr;
+const void* g_fcDtorVptr = nullptr;
+int32_t     g_fcGenSeen = -1;
+const void* FcVptrOf(const void* p) { return *static_cast<const void* const*>(p); }
+}  // namespace
+namespace Graphics {
+const char*       FrameCopyImageBuffer::TypeName() const { return "FrameCopyImageBuffer"; }
+uint32_t          FrameCopyImageBuffer::Type() const { return 0; }
+int32_t           FrameCopyImageBuffer::GetFileVersion() const { return 0x1007; }
+bool              FrameCopyImageBuffer::Serialize(void*) { return true; }
+Object::External* FrameCopyImageBuffer::Reconstruct() { return this; }
+void              FrameCopyImageBuffer::Destruct() {}
+Object::External* FrameCopyImageBuffer::Construct() { return this; }
+bool FrameCopyImageBuffer::Create(ImageType, Usage, Format, uint32_t, int32_t, int32_t,
+                                  FilterMode, AddressMode, AddressMode, AddressMode, LevelArray*) {
+    return false;
+}
+void FrameCopyImageBuffer::Generate(void*, int32_t) const {}
+void FrameCopyImageBuffer::Render(void*, const void*, const void*, int32_t) const {}
+FrameCopyImageBuffer::FrameCopyImageBuffer() {
+    ++g_fcCtor; g_fcCtorVptr = FcVptrOf(this); g_fcGenSeen = _generation;
+    _backBufferImage = nullptr; _sourceTarget = nullptr; _destTarget = nullptr;
+}
+FrameCopyImageBuffer::~FrameCopyImageBuffer() { ++g_fcDtor; g_fcDtorVptr = FcVptrOf(this); }
+}  // namespace Graphics
+
+extern const void* const g_rbFcVtGroup[] __asm__("_ZTVN8Graphics20FrameCopyImageBufferE");
+
+namespace {
+
+struct RbGeneratedLeaf final : Graphics::GeneratedImageBuffer {   // slot 0 NOT overridden
+    void Generate(void*, int32_t) const override {}
+    void Render(void*, const void*, const void*, int32_t) const override {}
+};
+
+UNIT_TEST(b39_gfx_framecopy_concrete_ctor_dtor_and_exe_scalar_slot0) {
+    using F = Graphics::FrameCopyImageBuffer;
+    CHECK(!std::is_abstract<F>::value);
+    CHECK(!std::is_destructible<F>::value);            // ~F protected
+    CHECK(!std::has_virtual_destructor<F>::value);
+    CHECK_EQ(GfxSlotOffset(&F::DeletingDtor),   (uintptr_t)0x00);   // exe copy 0x140019d50
+    CHECK_EQ(GfxSlotOffset(&F::TypeName),       (uintptr_t)0x08);   // 0x18001efb0
+    CHECK_EQ(GfxSlotOffset(&F::Type),           (uintptr_t)0x10);   // 0x18001ef90
+    CHECK_EQ(GfxSlotOffset(&F::GetFileVersion), (uintptr_t)0x18);   // 0x1800a3c70
+    CHECK_EQ(GfxSlotOffset(&F::Serialize),      (uintptr_t)0x28);   // 0x1800a3c40
+    CHECK_EQ(GfxSlotOffset(&F::Reconstruct),    (uintptr_t)0x30);   // 0x18001f130
+    CHECK_EQ(GfxSlotOffset(&F::Destruct),       (uintptr_t)0x38);   // 0x18001f160
+    CHECK_EQ(GfxSlotOffset(&F::Construct),      (uintptr_t)0x40);   // 0x18001f150
+    CHECK_EQ(GfxSlotOffset(&F::Create),         (uintptr_t)0x48);   // 0x1800a3b70
+    CHECK_EQ(GfxSlotOffset(&F::Generate),       (uintptr_t)0x50);   // 0x1800a3b20
+    CHECK_EQ(GfxSlotOffset(&F::Render),         (uintptr_t)0x58);   // 0x1800a3b10
+
+    // The chain: ImageBuffer() -> GeneratedImageBuffer() (`_generation = 0`)
+    // -> the FrameCopy body under FrameCopy's (compiler) table.
+    g_fcCtor = g_fcDtor = 0; g_fcGenSeen = -1;
+    void* mem = Object::detail::InternalMemAlloc(sizeof(F), 8);
+    std::memset(mem, 0xCD, sizeof(F));
+    F* f = ::new (mem) F();
+    CHECK_EQ(g_fcCtor, 1);
+    CHECK(g_fcCtorVptr == &g_rbFcVtGroup[2]);
+    CHECK_EQ(g_fcGenSeen, 0);
+    CHECK(FcVptrOf(f) == &g_rbFcVtGroup[2]);
+
+    // Slot 0 is the exe copy's SCALAR deleting dtor: ~F, then free on flags & 1.
+    CHECK(static_cast<void*>(f->DeletingDtor(1u)) == mem);
+    CHECK_EQ(g_fcDtor, 1);
+    CHECK(g_fcDtorVptr == &g_rbFcVtGroup[2]);
+
+    alignas(8) unsigned char buf[sizeof(F)];
+    F* g = ::new (static_cast<void*>(buf)) F();
+    CHECK(static_cast<void*>(g->DeletingDtor(0u)) == static_cast<void*>(buf));   // no free
+    CHECK_EQ(g_fcDtor, 2);
+}
+
+// GeneratedImageBuffer: abstract (slots 10 / 11 `_purecall`), protected
+// non-virtual dtor, slot 0 its own VECTOR deleting dtor (`MOV EDX,0x70`).
+UNIT_TEST(b39_gfx_generatedimagebuffer_slot0_is_the_classs_own_both_arms) {
+    using G = Graphics::GeneratedImageBuffer;
+    CHECK(std::is_abstract<G>::value);
+    CHECK(!std::is_destructible<G>::value);
+    CHECK(!std::has_virtual_destructor<G>::value);
+    CHECK_EQ(sizeof(RbGeneratedLeaf), (size_t)0x70);
+    CHECK_EQ(GfxSlotOffset(&G::DeletingDtor), (uintptr_t)0x00);   // 0x18001eee0
+    CHECK_EQ(GfxSlotOffset(&G::Generate),     (uintptr_t)0x50);
+    CHECK_EQ(GfxSlotOffset(&G::Render),       (uintptr_t)0x58);
+
+    alignas(8) unsigned char buf[sizeof(RbGeneratedLeaf)];
+    std::memset(buf, 0xCD, sizeof buf);
+    RbGeneratedLeaf* g = ::new (static_cast<void*>(buf)) RbGeneratedLeaf;   // no value-init
+    uint32_t gen; std::memcpy(&gen, buf + 0x68, 4);
+    CHECK_EQ(gen, 0u);                                             // the ctor's one store
+    uint32_t pad; std::memcpy(&pad, buf + 0x6c, 4);
+    CHECK_EQ(pad, 0xCDCDCDCDu);                                    // never written
+    CHECK(static_cast<void*>(g->DeletingDtor(0u)) == static_cast<void*>(buf));
+
+    void* m = Object::detail::InternalMemAlloc(sizeof(RbGeneratedLeaf), 8);
+    RbGeneratedLeaf* h = ::new (m) RbGeneratedLeaf();
+    CHECK(static_cast<void*>(h->DeletingDtor(1u)) == m);
+
+    uint8_t* block = static_cast<uint8_t*>(Object::detail::InternalMemAlloc(8 + 2 * 0x70, 8));
+    const int64_t cookie = 2;
+    std::memcpy(block, &cookie, sizeof cookie);
+    RbGeneratedLeaf* e0 = ::new (block + 8) RbGeneratedLeaf();
+    ::new (block + 8 + 0x70) RbGeneratedLeaf();
+    CHECK(reinterpret_cast<uint8_t*>(e0->DeletingDtor(3u)) == block);   // stride 0x70, freed
 }
 
 }  // namespace

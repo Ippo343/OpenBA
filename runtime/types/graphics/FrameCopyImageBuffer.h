@@ -86,8 +86,9 @@ static_assert(offsetof(FrameCopyImageBuffer, _destTarget) == 0x80, "_destTarget 
 // doing the same job. The hierarchy is
 // Video::ImageBuffer -> GeneratedImageBuffer -> {FrameCopy, Reflection}.
 // ----------------------------------------------------------------------------
-constexpr uintptr_t kVtFrameCopyImageBuffer = 0x180154f00ull;
-constexpr uintptr_t kVtGeneratedImageBuffer = 0x180154f60ull;
+// ENDGAME B.3.9 block GFX: `kVtFrameCopyImageBuffer` (0x180154f00) and
+// `kVtGeneratedImageBuffer` (0x180154f60) are gone with the minted tables they
+// named; the real classes' ctors stamp the compiler's.
 
 }  // namespace RtGraphics
 
@@ -140,7 +141,9 @@ public:
     // itself (its table copy 0x14015e370, ModDialog's 0x140095da0), so slot 0
     // is CONCRETE: the exe copy's scalar deleting dtor 0x140019d50
     // (~FrameCopyImageBuffer; MemFree on flags & 1). Inline, so the key
-    // function does not move; the mint's row still serves the doors.
+    // function does not move. ENDGAME B.3.9 GFX: the minted table and its
+    // RT_DELDTOR row 0x18001f260 are retired; the class keeps the exe's SCALAR
+    // arm (B39_RULES D1.2 -- the two differ only on flags & 2, never passed).
     Object::Base*     DeletingDtor(unsigned flags) override {      // [ 0]
         this->~FrameCopyImageBuffer();
         if (flags & 1) Object::detail::InternalMemFree(this);
@@ -170,27 +173,18 @@ public:
                 int32_t generation) const override;
 
     // ??0FrameCopyImageBuffer@Graphics@@QEAA@XZ 0x1800a3d10 — the REAL
-    // constructor (ENDGAME B.3.8 block RB, RULE B8-1), PUBLIC: the class is
-    // concrete. ImageBuffer(), the Generated stamp + `_generation = 0`
-    // (GeneratedImageBuffer()) and the FrameCopy stamp are the chain; the three
-    // nulls, the back-buffer alias and the RenderBuffer are ONE body with the
-    // door `RtGraphics_FrameCopyImageBuffer_Ctor` (wave23_lane_gfxbody.cpp).
-    FrameCopyImageBuffer() { InitFields(); }
-
-    struct DoorBody {   // the doors' way onto the shared bodies
-        static void Init(FrameCopyImageBuffer* f)    { f->InitFields(); }
-        static void Release(FrameCopyImageBuffer* f) { f->ReleaseFields(); }
-    };
+    // constructor, PUBLIC: the class is concrete. ImageBuffer(), the Generated
+    // stamp + `_generation = 0` (GeneratedImageBuffer()) and the FrameCopy stamp
+    // are the chain; the three nulls, the back-buffer alias and the RenderBuffer
+    // are the body (wave23_lane_gfxbody.cpp). ENDGAME B.3.9 GFX: the ??0 / ??1
+    // doors and `DoorBody` are retired; every builder spells `::new (p) X()`.
+    FrameCopyImageBuffer();
 
 protected:
-    // ??1… 0x1800a3c80: restamp, release the two RenderBuffers and the
-    // back-buffer image (ONE body with `RtGraphics_FrameCopyImageBuffer_Dtor`),
-    // then ~GeneratedImageBuffer / ~ImageBuffer — the compiler's chain.
-    ~FrameCopyImageBuffer() { ReleaseFields(); }
-
-private:
-    void InitFields();      // wave23_lane_gfxbody.cpp
-    void ReleaseFields();   // wave23_lane_gfxbody.cpp
+    // ??1… 0x1800a3c80: release the two RenderBuffers and the back-buffer image
+    // (wave23_lane_gfxbody.cpp); the restamps and ~GeneratedImageBuffer /
+    // ~ImageBuffer are the compiler's chain. Non-virtual; slot 0 reaches it.
+    ~FrameCopyImageBuffer();
 
 protected:
 
@@ -202,8 +196,8 @@ protected:
 
 public:
     static uint32_t      TypeId();                              // ?TypeId@
-    static Object::Base* CreateNewObject();                     // rt_factories_*.inc
-    static Object::Base* CreateInPlaceObject(void* storage);     // rt_factories_*.inc
+    static Object::Base* CreateNewObject();                     // 0x18001f0a0 (B.3.9 GFX)
+    static Object::Base* CreateInPlaceObject(void* storage);     // 0x18001f120 (B.3.9 GFX)
     static void*         operator new(size_t size);             // ??2 — reached by name
     static void*         operator new(size_t size, void* storage);
     static void          operator delete(void* p);              // ??3

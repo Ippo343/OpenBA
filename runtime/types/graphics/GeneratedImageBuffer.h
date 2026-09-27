@@ -151,13 +151,32 @@ namespace Graphics {
 // MINTED `??_7GeneratedImageBuffer` address, and the dtor has to reach
 // `??1ImageBuffer@Video@@` which is still a door in block D2's `buffers.cpp`.
 // ============================================================
+//
+// ENDGAME B.3 step 9 (block GFX, B39_RULES D1/D2): slot 0 is the class's OWN
+// vector deleting dtor; the class stays ABSTRACT (slots 10 / 11 `_purecall`, as
+// retail). The ctor / dtor doors, the four slot doors, the FACTREST row, the
+// RT_DELDTOR row 0x18001eee0 and the minted `??_7GeneratedImageBuffer@Graphics@@6B@`
+// are retired (tools/rt_mint_retired/gfx.txt); the "stay registered DOORS"
+// paragraph above is history. The factory pair is retail's abstract one.
 class GeneratedImageBuffer : public Video::ImageBuffer {
 public:
-    // Slot 0's body (0x18001eee0) is a `runtime/src/object/deleting_dtor.cpp`
-    // table row and is defined in no translation unit, so it stays PURE — see
-    // `Video::ImageBuffer`'s slot-0 banner for why a non-pure declaration does
-    // not link.
-    Object::Base* DeletingDtor(unsigned flags) override = 0;  // [ 0] 0x18001eee0
+    // [0] 0x18001eee0 -- MSVC's VECTOR deleting destructor, both arms exactly as
+    // the retired RT_DELDTOR row ran them (`MOV EDX,0x70` = the element size).
+    // Both subclasses declare their own (B9-4).
+    Object::Base* DeletingDtor(unsigned flags) override {
+        if (flags & 2u) {
+            uint8_t* const self = reinterpret_cast<uint8_t*>(this);
+            const int32_t count = *reinterpret_cast<const int32_t*>(self - 8);
+            for (int32_t i = count; --i >= 0;)
+                reinterpret_cast<GeneratedImageBuffer*>(self + static_cast<int64_t>(i) * 0x70)
+                    ->~GeneratedImageBuffer();
+            if (flags & 1u) Object::detail::InternalMemFree(self - 8);
+            return reinterpret_cast<Object::Base*>(self - 8);
+        }
+        this->~GeneratedImageBuffer();
+        if (flags & 1u) Object::detail::InternalMemFree(this);
+        return this;
+    }
     const char*   TypeName() const override;                  // [ 1] 0x18001ede0
     uint32_t      Type() const override;                      // [ 2] 0x18001edc0
     int32_t       GetFileVersion() const override;            // [ 3] 0x1800a3eb0 — `MOV EAX,0x7`
@@ -178,23 +197,15 @@ public:
     virtual void Render(void* renderer, const void* scene, const void* camera,
                         int32_t generation) const = 0;                    // [11]
 
-    // The ctor door's way onto the shared body (ENDGAME B.3.8 block RB).
-    struct DoorBody { static void Init(GeneratedImageBuffer* g) { g->InitFields(); } };
-
 protected:
     // ??0GeneratedImageBuffer@Graphics@@QEAA@XZ 0x1800a3e70 — the REAL
-    // constructor (ENDGAME B.3.8 block RB, RULE B8-1), needed by the concrete
-    // FrameCopyImageBuffer below it: ImageBuffer() and the stamp are the
-    // compiler's; `MOV dword [RBX+0x68],0` is ONE body with the door
-    // `RtGraphics_GeneratedImageBuffer_Ctor` (imagebuffer_derived.cpp).
-    GeneratedImageBuffer() { InitFields(); }
+    // constructor, protected (abstract): ImageBuffer() and the stamp are the
+    // compiler's; `MOV dword [RBX+0x68],0` is the body. +0x6c is never written.
+    // (ENDGAME B.3.9 GFX: the door and `DoorBody` are retired.)
+    GeneratedImageBuffer() { _generation = 0; }
     // ??1… 0x1800a3e40 is `restamp; JMP ~ImageBuffer` — both the compiler's
-    // chain, so the body is empty. Its door (imagebuffer_derived.cpp) keeps
-    // the minted restamp for the minted objects.
+    // chain, so the body is empty.
     ~GeneratedImageBuffer() {}
-
-private:
-    void InitFields() { _generation = 0; }   // +0x6c is never written
 
 protected:
 

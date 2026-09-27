@@ -190,6 +190,7 @@
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <new>          // ENDGAME B.3.9 GFX: placement new of FrameCopyImageBuffer
 
 #include "saveload_internal.h"
 #include "../../types/math/Math.h"
@@ -449,7 +450,8 @@ void Save::SaveLoad::Draw(Video::Context& context,
     {
         void* p = RT_EXPORT_ONCE(OpNewFn, "??2FrameCopyImageBuffer@Graphics@@SAPEAX_K@Z")(0x88);
         if (p != nullptr) {
-            RT_EXPORT_ONCE(VoidThisFn, "??0FrameCopyImageBuffer@Graphics@@QEAA@XZ")(p);
+            // ENDGAME B.3.9 GFX (B9-13): the real class's ctor, not the ??0 door.
+            ::new (p) Graphics::FrameCopyImageBuffer();
             frameCopy = static_cast<ImageBuffer*>(p);
         }
     }

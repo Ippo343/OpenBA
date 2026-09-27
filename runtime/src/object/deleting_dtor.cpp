@@ -941,8 +941,6 @@ static constexpr DelDtorSpec kSpecs[] = {
     // name, TriangleList's name) or destroys GPU objects through a platform
     // companion pointer. A fabricated subject would decrement a refcount nothing
     // incremented and hand the driver a garbage handle.
-    RT_DELDTOR(0x18001eee0, 0x1800a3e40, 0x070, "Graphics::GeneratedImageBuffer"),
-    RT_DELDTOR(0x18001f260, 0x1800a3c80, 0x088, "Graphics::FrameCopyImageBuffer"),
     // VTABLE BATCH 3 (2026-09-12): the UI::*Element widget runtime, first
     // half. Thirteen slot-0 rows, appended AFTER every batch on main at
     // merge time -- the table is POSITIONAL and each wrapper below passes
@@ -1339,12 +1337,6 @@ void* RtDelDtor_SpriteCapture(void* self, unsigned flags) {
 // took 71-88 and batch 4 elem_B took 89-102 while this branch held them. That
 // is the positional-merge hazard the banner and kSpecCount describe, and it has
 // now bitten this one batch twice. RE-COUNT after every merge, never before.
-void* RtDelDtor_GeneratedImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18001eee0>());
-}
-void* RtDelDtor_FrameCopyImageBuffer(void* self, unsigned flags) {
-    return DeletingDtorCore(self, flags, Row<0x18001f260>());
-}
 
 
 // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12), rows 85..98 ------------
@@ -1450,8 +1442,6 @@ void RtObjectDeletingDtorPortInit() {
     RegisterRuntimeAddr(0x1800378a0, (void*)&RtDelDtor_CharacterSet);
     RegisterRuntimeAddr(0x18003b3a0, (void*)&RtDelDtor_Cursor);
     RegisterRuntimeAddr(0x18003ccf0, (void*)&RtDelDtor_SpriteCapture);
-    RegisterRuntimeAddr(0x18001eee0, (void*)&RtDelDtor_GeneratedImageBuffer);  // vtable batch 6
-    RegisterRuntimeAddr(0x18001f260, (void*)&RtDelDtor_FrameCopyImageBuffer);  // vtable batch 6
 
     // ---- CUTOVER VTABLE BATCH 4 "elem_B" (2026-09-12) --------------------
 

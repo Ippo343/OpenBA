@@ -34,42 +34,6 @@ extern "C" void* RtFactNew_Graphics_EdgeMesh()          { return RtFactoryNew(kC
 extern "C" void* RtFactIP_Graphics_EdgeMesh(void* p)    { return RtFactoryInPlace(kClsGraphics_EdgeMesh, p); }
 
 // --------------------------------------------------------------------------
-// Graphics::FrameCopyImageBuffer
-//   ?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ  0x18001f0a0
-//   ?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x18001f120
-// --------------------------------------------------------------------------
-static const RtCtorStep kStepsGraphics_FrameCopyImageBuffer_New[] = {
-    { RtFactOp::Call, 8, 0, 0, "??0FrameCopyImageBuffer@Graphics@@QEAA@XZ", 0x18001f0ffull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static const RtCtorStep kStepsGraphics_FrameCopyImageBuffer_IP[] = {
-    { RtFactOp::Call, 8, 0, 0, "??0FrameCopyImageBuffer@Graphics@@QEAA@XZ", 0x18001f123ull },
-    { RtFactOp::End, 0, 0, 0, nullptr, 0 },
-};
-static uint64_t kCountGraphics_FrameCopyImageBuffer[3];
-static const RtFactoryClass kClsGraphics_FrameCopyImageBuffer = {
-    "Graphics::FrameCopyImageBuffer", 0x88, 8,
-    kStepsGraphics_FrameCopyImageBuffer_New, kStepsGraphics_FrameCopyImageBuffer_IP,
-    0x18001f0a0ull, 0x18001f120ull, kCountGraphics_FrameCopyImageBuffer,
-};
-extern "C" void* RtFactNew_Graphics_FrameCopyImageBuffer()          { return RtFactoryNew(kClsGraphics_FrameCopyImageBuffer); }
-extern "C" void* RtFactIP_Graphics_FrameCopyImageBuffer(void* p)    { return RtFactoryInPlace(kClsGraphics_FrameCopyImageBuffer, p); }
-
-// --------------------------------------------------------------------------
-// Graphics::GeneratedImageBuffer
-//   ?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ  0x18001edf0
-//   ?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x18001ee00
-// --------------------------------------------------------------------------
-static uint64_t kCountGraphics_GeneratedImageBuffer[3];
-static const RtFactoryClass kClsGraphics_GeneratedImageBuffer = {
-    "Graphics::GeneratedImageBuffer", 0x0, 0,
-    nullptr, nullptr,
-    0x18001edf0ull, 0x18001ee00ull, kCountGraphics_GeneratedImageBuffer,
-};
-extern "C" void* RtFactNew_Graphics_GeneratedImageBuffer()          { return RtFactoryNew(kClsGraphics_GeneratedImageBuffer); }
-extern "C" void* RtFactIP_Graphics_GeneratedImageBuffer(void* p)    { return RtFactoryInPlace(kClsGraphics_GeneratedImageBuffer, p); }
-
-// --------------------------------------------------------------------------
 // Graphics::MaterialInstance
 //   ?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ  0x180002900
 //   ?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z  0x1800029d0
@@ -122,10 +86,6 @@ extern "C" void* RtFactIP_Graphics_MaterialInstance(void* p)    { return RtFacto
 static const RtFactoryReg kRegs[] = {
     { "?CreateNewObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@XZ", 0x180012d80ull, (void*)&RtFactNew_Graphics_EdgeMesh,
       "?CreateInPlaceObject@EdgeMesh@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x180012e00ull, (void*)&RtFactIP_Graphics_EdgeMesh, &kClsGraphics_EdgeMesh },
-    { "?CreateNewObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001f0a0ull, (void*)&RtFactNew_Graphics_FrameCopyImageBuffer,
-      "?CreateInPlaceObject@FrameCopyImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001f120ull, (void*)&RtFactIP_Graphics_FrameCopyImageBuffer, &kClsGraphics_FrameCopyImageBuffer },
-    { "?CreateNewObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@XZ", 0x18001edf0ull, (void*)&RtFactNew_Graphics_GeneratedImageBuffer,
-      "?CreateInPlaceObject@GeneratedImageBuffer@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x18001ee00ull, (void*)&RtFactIP_Graphics_GeneratedImageBuffer, &kClsGraphics_GeneratedImageBuffer },
     { "?CreateNewObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@XZ", 0x180002900ull, (void*)&RtFactNew_Graphics_MaterialInstance,
       "?CreateInPlaceObject@MaterialInstance@Graphics@@SAPEAVBase@Object@@PEAX@Z", 0x1800029d0ull, (void*)&RtFactIP_Graphics_MaterialInstance, &kClsGraphics_MaterialInstance },
 };
