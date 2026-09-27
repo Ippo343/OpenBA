@@ -44,6 +44,8 @@
 //   0x1400b04d0 (WorldGeometry).
 
 #include "Game/GameUpdateLoop.h"   // caller batch CB6: SaveRestoreOut, the named fields
+#include "Entity/ComponentEntity.h"   // caller batch CB6: TypeId()
+#include "Component/Component.h"      // caller batch CB6: slot 11
 #include "engine_funcs.h"
 #include "options.h"
 #include "resolve.h"
@@ -52,7 +54,6 @@
 #include "Component/coll_bridge.h"
 #include <new>
 #include "address_registry.h"
-#include "Object/factory_registration.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -456,8 +457,7 @@ extern "C" void GoalRefTree_Serialize_e2e0(void* treeVoid, void* serializer) {
 extern "C" void IbpTree_Serialize_e470(void* treeVoid, void* serializer) {
     EnsureResolved();
     uintptr_t tree = (uintptr_t)treeVoid;
-    static uint32_t s_tidCompEnt = 0;
-    if (!s_tidCompEnt) s_tidCompEnt = ::Object::GetTypeIdByName("ComponentEntity");
+    const uint32_t s_tidCompEnt = ComponentEntity::TypeId();   // caller batch CB6: was a lazy by-name cache
 
     int count = *(int*)(tree + 0x8);
     reinterpret_cast<IO::Serializer*>(serializer)->Serialize(count, nullptr);   // B.3.4 bridge
@@ -645,8 +645,9 @@ extern "C" void EntityList_PostLoad_c4730(void* elVoid, void* stream) {
         for (int j = 0; j < compCount; j++) {
             void** compSlot = (void**)(*(uintptr_t*)(ent + 0x30) + (size_t)j * 8);
             uintptr_t comp = (uintptr_t)*compSlot;
-            typedef void (*fn_postload_t)(void* self);
-            (*(fn_postload_t*)(*(uintptr_t*)comp + 0x58))((void*)comp);
+            // Caller batch CB6: slot 11 (vtable +0x58) of an entity component-array
+            // element (a proved Component).
+            reinterpret_cast<Component*>(comp)->Slot11();   // B.3.8 bridge
         }
 
         *(void**)((uintptr_t)*entSlot + 0x10) = elVoid;
@@ -683,8 +684,7 @@ extern "C" void EntityList_PostLoad_c4730(void* elVoid, void* stream) {
 // serialize with a ComponentEntity IsDerivedFrom filter.
 extern "C" void BucketTree_Serialize_21ba0(void* serializer, void* /*unused*/,
                                            void* bucketsPtr) {
-    static uint32_t s_tidCompEnt = 0;
-    if (!s_tidCompEnt) s_tidCompEnt = ::Object::GetTypeIdByName("ComponentEntity");
+    const uint32_t s_tidCompEnt = ComponentEntity::TypeId();   // caller batch CB6: was a lazy by-name cache
 
     uintptr_t hdr = (uintptr_t)bucketsPtr;
     for (int b = 0; b < 5; b++, hdr += 0x10) {

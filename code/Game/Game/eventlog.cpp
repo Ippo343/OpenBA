@@ -24,6 +24,7 @@
 //   TileIndex         0x140095030  — entity -> map tile index (null entity => -1)
 
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "resolve.h"
 #include "system/String.h"
 #include "collection/Collection.h"
@@ -122,7 +123,7 @@ extern "C" void EventLog_EventArray_Destroy(void* arrBase) {
 
 // YearString (0x1400951d0): String::Format("%i", *(int*)clock), clock = *(gw+0x128).
 static System::String EventLog_YearString(void* gameWorld) {
-    void* clock = *(void**)((uintptr_t)gameWorld + 0x128);
+    void* clock = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_dayCounter;   // B.3.8 bridge
     int year = clock ? *(int*)clock : 0;
     return System::String::Format("%i", year);
 }
@@ -130,7 +131,7 @@ static System::String EventLog_YearString(void* gameWorld) {
 // SeasonString (0x140095230): monthIdx = (int)(AsSeconds(clock+8) / 3600 * 12);
 // if monthIdx >= 12 -> 0. seasons table = *(eventlog+0x08). GetText(table, ret, idx).
 static System::String EventLog_SeasonString(void* gameWorld, void* eventLog) {
-    void* clock = *(void**)((uintptr_t)gameWorld + 0x128);
+    void* clock = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_dayCounter;   // B.3.8 bridge
     int idx = 0;
     if (clock) {
         float secs = reinterpret_cast<const System::Time*>((char*)clock + 8)->AsSeconds();   // B.3.4b bridge
@@ -176,7 +177,7 @@ static int EventLog_TileIndex(void* entityIBP) {
     if (!entityIBP || *(int64_t*)entityIBP == 0) return -1;
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return -1;
-    int* game = *(int**)((uintptr_t)gameWorld + 0xF8);
+    int* game = static_cast<int*>(reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_game);   // B.3.8 bridge
     if (!game) return -1;
 
     typedef void* (*fn_FindCompMember_t)(int64_t self, void* outIBP);
@@ -310,7 +311,7 @@ static void EventLog_AddEventCore(void* eventLog, int eventType, int severity,
     if (eventType > 0xa && (eventType < 0xd || (unsigned)(eventType - 0x1e) < 2u)) {
         if (g_pGameSettingsPtr && *g_pGameSettingsPtr &&
             *((const char*)*g_pGameSettingsPtr + 0x17) != 0) {
-            void* speedObj = *(void**)((uintptr_t)gameWorld + 0x120);
+            void* speedObj = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_entityUI;   // B.3.8 bridge
             if (speedObj) *(int32_t*)((uintptr_t)speedObj + 0x34) = 1;
         }
     }
@@ -361,7 +362,7 @@ extern "C" void EventLog_AddCitizenEvent(void* eventLog, int eventType, int seve
 extern "C" void EventLog_AddSimple(int eventType, int severity) {
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
-    void* eventLog = *(void**)((uintptr_t)gameWorld + 0x138);
+    void* eventLog = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_eventNotifier;   // B.3.8 bridge
     EventLog_AddEvent(eventLog, eventType, severity, nullptr);
 }
 
@@ -389,7 +390,7 @@ extern "C" void EventLog_CheckResourceShortages(void* townMgr, void* timeDelta) 
     if (!townMgr || !timeDelta) return;
     void* gameWorld = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
     if (!gameWorld) return;
-    void* eventLog = *(void**)((uintptr_t)gameWorld + 0x138);
+    void* eventLog = reinterpret_cast<GameUpdateLoop*>(gameWorld)->m_eventNotifier;   // B.3.8 bridge
     if (!eventLog) return;
     int64_t tick = *(int64_t*)timeDelta;
 

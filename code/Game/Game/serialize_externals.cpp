@@ -20,6 +20,7 @@
 #include "system/String.h"
 #include "resolve.h"
 #include "Object/factory_registration.h"
+#include "Component/EnvironmentDescription.h"   // caller batch CB6: TypeId()
 #include "Game/serialize_externals.h"
 #include "object/External.h"   // ENDGAME B.3.3 step 6A — Object::External / ExternalFactory
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch B
@@ -254,8 +255,9 @@ extern "C" void Reimpl_ExternalPtr_Serialize_Toolbar(
 // ============================================================
 extern "C" void Reimpl_ExternalPtr_Serialize_EnvironmentDesc(
     void* refField, void* serializer) {
-    static uint32_t s_tid = 0;
-    if (!s_tid) s_tid = ::Object::GetTypeIdByName("EnvironmentDescription");
+    // Caller batch CB6: the class's TypeId() (was a lazy by-name cache: this
+    // runs on the loader thread, so the function-local latch was a race, B6-5).
+    const uint32_t tid = EnvironmentDescription::TypeId();
     ExternalPtrSerializeGeneric(reinterpret_cast<void**>(refField), serializer,
-                                s_tid ? &s_tid : nullptr, "EnvironmentDescription");
+                                tid ? &tid : nullptr, "EnvironmentDescription");
 }

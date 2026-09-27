@@ -6,7 +6,8 @@
 
 #include "force_work.h"
 #include "engine_funcs.h"
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
+#include "Component/MapComponent.h"   // caller batch CB6: TypeId()
 #include <cstdio>
 #include <cstdlib>
 #include <climits>
@@ -109,12 +110,10 @@ void* FindComp(void* entity, uint32_t tid) {
 
 int WorkAreaCenterCell(void* area) {
     if (!g_pGameWorldSingleton || !*g_pGameWorldSingleton) return -1;
-    static uint32_t tidMap = 0;
-    if (!tidMap) tidMap = ::Object::GetTypeIdByName("MapComponent");
+    const uint32_t tidMap = MapComponent::TypeId();   // caller batch CB6: was a lazy by-name cache
     void* mc = FindComp(area, tidMap);
     if (!mc || !Readable(mc, 0x30)) return -1;
-    uintptr_t game = *reinterpret_cast<uintptr_t*>(
-        reinterpret_cast<uintptr_t>(*g_pGameWorldSingleton) + 0xf8);
+    uintptr_t game = reinterpret_cast<uintptr_t>(reinterpret_cast<GameUpdateLoop*>(*g_pGameWorldSingleton)->m_game);   // B.3.8 bridge
     if (!game) return -1;
     int dim = *reinterpret_cast<int*>(game);
     if (dim <= 0) return -1;

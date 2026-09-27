@@ -41,7 +41,8 @@
 #include "options.h"
 #include "resolve.h"
 #include "force_work.h"                     // generic ForceWork core (probes + drive)
-#include "Object/factory_registration.h"   // ::Object::GetTypeIdByName
+#include "Component/ForesterComponent.h"     // caller batch CB6: TypeId()
+#include "Component/ForesterDescription.h"
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -85,9 +86,9 @@ using ForceWork::FindComp;
 // Dump the lodge component set + locate a usable ForesterComponent (once). Returns the
 // ForesterComponent whose description derives from ForesterDescription, or null.
 static void* VerifyLodgeForester(void* lodge, bool dump) {
-    static uint32_t tidForesterComp = 0, tidForesterDesc = 0;
-    if (!tidForesterComp) tidForesterComp = ::Object::GetTypeIdByName("ForesterComponent");
-    if (!tidForesterDesc) tidForesterDesc = ::Object::GetTypeIdByName("ForesterDescription");
+    // Caller batch CB6: the classes' TypeId() (was a lazy by-name cache).
+    const uint32_t tidForesterComp = ForesterComponent::TypeId();
+    const uint32_t tidForesterDesc = ForesterDescription::TypeId();
 
     if (dump) {
         int count = Readable(lodge, 0x40) ? *reinterpret_cast<int*>((uintptr_t)lodge + ForceWork::kEntCompCnt) : 0;

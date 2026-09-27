@@ -23,6 +23,7 @@
 // name inside Volume.h's own static_asserts (Geometry.h includes Volume.h).
 #include "graphics/Scene.h"
 #include "engine_funcs.h"
+#include "Game/GameUpdateLoop.h"   // caller batch CB6: the world's named fields
 #include "system/Filename.h"
 #include "system/String.h"
 #include "collection/Collection.h"
@@ -224,7 +225,7 @@ void Game_WeatherDtor(void* self) {
     int count = *reinterpret_cast<int*>(b + 0x58);
     void** arr = *reinterpret_cast<void***>(b + 0x50);
     void* gw = g_pGameWorldSingleton ? *g_pGameWorldSingleton : nullptr;
-    void* scene = gw ? *reinterpret_cast<void**>(reinterpret_cast<uint8_t*>(gw) + 0x60) : nullptr;
+    void* scene = gw ? reinterpret_cast<GameUpdateLoop*>(gw)->m_graphicsScene : nullptr;   // B.3.8 bridge
     if (arr && count > 0) {
         for (int i = 0; i < count; ++i) {
             void* geom = arr[i];
