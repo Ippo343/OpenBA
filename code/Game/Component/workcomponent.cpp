@@ -23,10 +23,6 @@
 // Resolved helpers
 // ============================================================
 
-// Component_Serialize at 0x1401189b0
-typedef void (*fn_Component_Serialize_t)(void* self, void* stream);
-static fn_Component_Serialize_t s_fn_Component_Serialize = nullptr;
-
 // FUN_14012e5c0 — compute work capacity for this component
 typedef int (*fn_ComputeWorkCapacity_t)(void* self);
 static fn_ComputeWorkCapacity_t s_fn_ComputeWorkCapacity = nullptr;
@@ -44,9 +40,6 @@ static bool s_initialized = false;
 static void EnsureHelpers() {
     if (s_initialized) return;
 
-    s_fn_Component_Serialize = reinterpret_cast<fn_Component_Serialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
-
     s_fn_ComputeWorkCapacity = reinterpret_cast<fn_ComputeWorkCapacity_t>(
         ResolveAddr(Module::Exe, 0x14012e5c0));
 
@@ -59,57 +52,6 @@ static void EnsureHelpers() {
     s_initialized = true;
 }
 
-// ============================================================
-// WorkComponent::Shutdown (vtable slot [3], 0x14012e710)
-// ============================================================
-// Versioned serialization:
-//   - Always: serialize workId (+0x28)
-//   - Version < 3: serialize a legacy bool (discarded)
-//   - Version >= 1: serialize workState (+0x30)
-//   - Version >= 2: serialize workFlags (+0x2c)
-
-void WorkComponent_Shutdown(WorkComponent* self, void* stream) {
-    EnsureHelpers();
-
-    if (s_fn_Component_Serialize) {
-        s_fn_Component_Serialize(self, stream);
-    }
-
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
-
-    // Always serialize workId
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workId, nullptr);   // B.3.4 bridge
-
-    // Legacy: version < 3 had a bool field (no longer used).
-    // ⚠ It is a BOOL, so it must go through the bool overload
-    // (?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z), which moves ONE byte.
-    // Casting a bool* to int* and using the int overload reads FOUR, and the
-    // extra 3 bytes desync every object serialized after this component.
-    // Measured on the packaged tutorial save (which is version < 3, so this
-    // branch is live there): our reader ended 3 bytes PAST the start of the
-    // next record. Our own saves hid it because the save leg wrote the same 4
-    // bytes it read back -- only a retail-authored save can catch this.
-    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-    if (version < 3) {
-        bool legacyBool = false;
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(legacyBool, nullptr);   // B.3.4 bridge
-    }
-
-    // Version >= 1: serialize workState
-    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-    if (version >= 1) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(self->workState, nullptr);   // B.3.4 bridge
-    }
-
-    // Version >= 2: serialize workFlags
-    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
-    if (version >= 2) {
-        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&self->workFlags), nullptr);   // B.3.4 bridge
-    }
-
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-}
 
 // ============================================================
 // WorkComponent::Draw (vtable slot [6], 0x14012e6f0)
@@ -125,43 +67,6 @@ void WorkComponent_Draw(WorkComponent* self) {
     }
 }
 
-// ============================================================
-// WorkComponent slot [7] = +0x38, 0x14012e6c0 — CANCEL MY WORK ON REMOVAL
-// ============================================================
-// Ghidra names this "OnCreate"; it is the REMOVE hook (the documented
-// OnCreate/OnRemove off-by-one). ComponentEntity::MarkForRemoval
-// (0x1400c2ea0) broadcasts vtable +0x38 to every component whose +0x20
-// flags have bit 1 — retail's ctor sets +0x20 |= 3, so WorkComponent is in
-// that broadcast — and it fires BEFORE the 0x400 removal bit, i.e. while the
-// entity is still fully alive.
-//
-// Retail body: `if (ead0(self)) eb50(self)` — "if the work I posted is still
-// in the goals tree, cancel it", and eb50 is what calls Goals::RemoveWork
-// (0x1400f8e30). This is the ONLY route by which a raw-material pile's Pickup
-// leaves the goals trees: Pickup::OnComplete (0x1400f2ec0) returns false in
-// retail too, so CompleteTask never removes it. A pile is created by
-// RawMaterialComponent (0x1401291d0, which posts the Pickup through this
-// component) and dies on an expiry timer in RawMaterialComponent::Update.
-//
-// UNWIRED until 2026-08-29: the body was ported but nothing installed it in
-// slot 7, so EVERY Pickup ever posted stayed in the goals trees with a freed
-// target entity. The next save walked one and faulted in Work::Serialize
-// (0x1400f7400) dereferencing the dead target — measured as work ids 3..22,
-// one per haul, zero exceptions. See [[reference_ported_registered_but_unwired]].
-
-void WorkComponent_OnRemove_CancelWork(WorkComponent* self) {
-    EnsureHelpers();
-
-
-    if (!self) return;
-
-    if (s_fn_CheckWorkSlot && s_fn_RegisterWorkSlot) {
-        bool available = s_fn_CheckWorkSlot(self);
-        if (available) {
-            s_fn_RegisterWorkSlot(self);
-        }
-    }
-}
 
 // ============================================================
 // Reimpl helpers for the work-slot BST functions
@@ -273,9 +178,8 @@ void WorkComponent_RegisterWorkSlot(void* selfP) {
 void WorkComponent_InitFuncs() {
     EnsureHelpers();
 #ifdef _DEBUG
-    printf("[WorkComponent] Funcs resolved: Component_Serialize=%p "
+    printf("[WorkComponent] Funcs resolved: "
            "ComputeWorkCapacity=%p CheckWorkSlot=%p RegisterWorkSlot=%p\n",
-           (void*)s_fn_Component_Serialize,
            (void*)s_fn_ComputeWorkCapacity, (void*)s_fn_CheckWorkSlot,
            (void*)s_fn_RegisterWorkSlot);
 #endif
@@ -302,8 +206,55 @@ WorkComponent::WorkComponent()
     OrFlagsInCtor(0x3);
 }
 
-// [3] 0x14012e710
-void WorkComponent::Persist(void* stream) { WorkComponent_Shutdown(this, stream); }
+// ============================================================
+// WorkComponent::Persist (vtable slot [3], 0x14012e710)
+// ============================================================
+// Versioned serialization:
+//   - Always: serialize workId (+0x28)
+//   - Version < 3: serialize a legacy bool (discarded)
+//   - Version >= 1: serialize workState (+0x30)
+//   - Version >= 2: serialize workFlags (+0x2c)
+
+void WorkComponent::Persist(void* stream) {
+    EnsureHelpers();
+
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 3);   // B.3.4 bridge
+
+    // Always serialize workId
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(workId, nullptr);   // B.3.4 bridge
+
+    // Legacy: version < 3 had a bool field (no longer used).
+    // ⚠ It is a BOOL, so it must go through the bool overload
+    // (?Serialize@Serializer@IO@@QEAAXAEA_NPEBD@Z), which moves ONE byte.
+    // Casting a bool* to int* and using the int overload reads FOUR, and the
+    // extra 3 bytes desync every object serialized after this component.
+    // Measured on the packaged tutorial save (which is version < 3, so this
+    // branch is live there): our reader ended 3 bytes PAST the start of the
+    // next record. Our own saves hid it because the save leg wrote the same 4
+    // bytes it read back -- only a retail-authored save can catch this.
+    int version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version < 3) {
+        bool legacyBool = false;
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(legacyBool, nullptr);   // B.3.4 bridge
+    }
+
+    // Version >= 1: serialize workState
+    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version >= 1) {
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(workState, nullptr);   // B.3.4 bridge
+    }
+
+    // Version >= 2: serialize workFlags
+    version = reinterpret_cast<IO::Serializer*>(serializerBuf)->GetVersion();   // B.3.4 bridge
+    if (version >= 2) {
+        reinterpret_cast<IO::Serializer*>(serializerBuf)->Serialize(*reinterpret_cast<int*>(&workFlags), nullptr);   // B.3.4 bridge
+    }
+
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+}
 
 // [6] 0x14012e6f0. PORT GAP (retail 0x14012e6f0) — B38 D9: the body is ported
 // above (WorkComponent_Draw, capacity -> +0x30) but the tree's table never
@@ -311,8 +262,40 @@ void WorkComponent::Persist(void* stream) { WorkComponent_Shutdown(this, stream)
 // commit.
 void WorkComponent::OnAdded() {}
 
-// [7] 0x14012e6c0 — cancel the work this component posted, on removal.
-void WorkComponent::OnRemove() { WorkComponent_OnRemove_CancelWork(this); }
+// ============================================================
+// WorkComponent slot [7] = +0x38, 0x14012e6c0 — CANCEL MY WORK ON REMOVAL
+// ============================================================
+// Ghidra names this "OnCreate"; it is the REMOVE hook (the documented
+// OnCreate/OnRemove off-by-one). ComponentEntity::MarkForRemoval
+// (0x1400c2ea0) broadcasts vtable +0x38 to every component whose +0x20
+// flags have bit 1 — retail's ctor sets +0x20 |= 3, so WorkComponent is in
+// that broadcast — and it fires BEFORE the 0x400 removal bit, i.e. while the
+// entity is still fully alive.
+//
+// Retail body: `if (ead0(self)) eb50(self)` — "if the work I posted is still
+// in the goals tree, cancel it", and eb50 is what calls Goals::RemoveWork
+// (0x1400f8e30). This is the ONLY route by which a raw-material pile's Pickup
+// leaves the goals trees: Pickup::OnComplete (0x1400f2ec0) returns false in
+// retail too, so CompleteTask never removes it. A pile is created by
+// RawMaterialComponent (0x1401291d0, which posts the Pickup through this
+// component) and dies on an expiry timer in RawMaterialComponent::Update.
+//
+// UNWIRED until 2026-08-29: the body was ported but nothing installed it in
+// slot 7, so EVERY Pickup ever posted stayed in the goals trees with a freed
+// target entity. The next save walked one and faulted in Work::Serialize
+// (0x1400f7400) dereferencing the dead target — measured as work ids 3..22,
+// one per haul, zero exceptions. See [[reference_ported_registered_but_unwired]].
+
+void WorkComponent::OnRemove() {
+    EnsureHelpers();
+
+    if (s_fn_CheckWorkSlot && s_fn_RegisterWorkSlot) {
+        bool available = s_fn_CheckWorkSlot(this);
+        if (available) {
+            s_fn_RegisterWorkSlot(this);
+        }
+    }
+}
 
 // [13] 0x14012e6b0 / [14] 0x14012e6a0 — the class's own trivial bodies.
 uint32_t WorkComponent::CommandMask(int) { return 0; }

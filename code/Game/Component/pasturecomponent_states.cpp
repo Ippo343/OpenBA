@@ -208,7 +208,7 @@ void* FindCompOnEntity(uintptr_t entity, uint32_t tid) {
         void** slot = reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
         void* comp = *slot;
         if (!comp) continue;
-        uint32_t t = reinterpret_cast<uint32_t(*)(void*)>((*(void***)comp)[2])(comp);
+        uint32_t t = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
         if (t != tid) continue;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, tid)) ? comp : nullptr;
     }
@@ -224,7 +224,7 @@ void* FindDescOnTemplate(uintptr_t tmpl, uint32_t tid) {
     for (int i = 0; i < n; ++i) {
         void* d = *reinterpret_cast<void**>(arr + (uintptr_t)i * 8);
         if (!d) continue;
-        uint32_t t = reinterpret_cast<uint32_t(*)(void*)>((*(void***)d)[2])(d);
+        uint32_t t = reinterpret_cast<Object::Base*>(d)->Type();   // B.3.8 bridge
         if (t != tid) continue;
         return (fn_IsDerivedFrom && fn_IsDerivedFrom(d, tid)) ? d : nullptr;
     }
@@ -391,13 +391,13 @@ extern "C" void Pasture_Reproduce(void* pasture) {
 // The `(new ^ old) & 0xffff` notify can never fire here (bit 23 is above the
 // mask); kept for fidelity like the identical dead test in helper_7400.
 // ============================================================
-extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
+void PastureComponent::OnMessage(int msg, void* /*data*/, uint32_t /*arg0*/, uint32_t /*arg1*/) {
     Resolve();
-    if (!pasture || msg != 0) return;
-    const int count = PastureCount(pasture);
+    if (msg != 0) return;
+    const int count = PastureCount(this);
     if (count == 0) return;
     uintptr_t w = World();
-    uintptr_t arr = PastureAnimals(pasture);
+    uintptr_t arr = PastureAnimals(this);
     if (!w || !arr) return;
 
     void* rng = *reinterpret_cast<void**>(w + 0xd8);
@@ -417,6 +417,13 @@ extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
     if (((newF ^ oldF) & 0xffffu) != 0 && *reinterpret_cast<int64_t*>(an + 0x10) != 0) {
         if (s_FlagNotify) s_FlagNotify(*reinterpret_cast<void**>(an + 0x10));
     }
+}
+
+// 0x140127720 door: registered by address (standalone/reg_pasture_live.cpp) and
+// called by name from standalone/pasture_harness.cpp.
+extern "C" void Pasture_MsgReceive(void* pasture, int msg) {
+    if (!pasture) return;
+    reinterpret_cast<PastureComponent*>(pasture)->PastureComponent::OnMessage(msg, nullptr, 0, 0);   // B.3.8 bridge
 }
 
 // ============================================================
@@ -755,9 +762,8 @@ extern "C" void* PastureWork_CreateForEntity(void* entityRefSlot);
 // The cmd 0/1 results are additionally masked by hasType (uVar5 in retail).
 // Slot 14 dispatches this through the vtable and tests only bit 0.
 // ============================================================
-extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
+uint32_t PastureComponent::CommandMask(int cmd) {
     Resolve();
-    if (!pasture) return 0;
 
     int freeElsewhere = 0;
     uintptr_t gs = GameState();
@@ -765,31 +771,37 @@ extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
     uintptr_t list = gs ? *reinterpret_cast<uintptr_t*>(gs + 0x90) : 0;
     for (int i = 0; i < n && list; ++i) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
-        if (!p || p == pasture) continue;
-        if (PastureType(p) != PastureType(pasture)) continue;
+        if (!p || p == this) continue;
+        if (PastureType(p) != PastureType(this)) continue;
         freeElsewhere += static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
                          - PastureCount(p);
     }
 
-    const uint64_t hasType = (PastureType(pasture) != nullptr) ? 1u : 0u;
+    const uint64_t hasType = (PastureType(this) != nullptr) ? 1u : 0u;
     if (cmd == 0) {
-        const int cnt = PastureCount(pasture);
+        const int cnt = PastureCount(this);
         return (cnt > 0 && cnt <= freeElsewhere) ? hasType : 0;
     }
     if (cmd == 1) {
-        if (PastureCount(pasture) > 9)
+        if (PastureCount(this) > 9)
             return (freeElsewhere < 5) ? 0 : hasType;
         return 0;
     }
     if (cmd == 2) {
         uint64_t wpcIBP = 0;
         if (s_FindWorkplace)
-            s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)pasture + 0x10), &wpcIBP);
+            s_FindWorkplace(*reinterpret_cast<int64_t*>((uintptr_t)this + 0x10), &wpcIBP);
         uint64_t r = hasType;
         if (wpcIBP && *reinterpret_cast<char*>(wpcIBP + 0x50) != 0) r |= 2;
         return r;
     }
     return 0;
+}
+
+// 0x140127dd0 door: registered by address (standalone/reg_pasture_live.cpp).
+extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
+    if (!pasture) return 0;
+    return reinterpret_cast<PastureComponent*>(pasture)->PastureComponent::CommandMask(cmd);   // B.3.8 bridge
 }
 
 // ============================================================
@@ -811,26 +823,23 @@ extern "C" uint64_t Pasture_CanCommand(void* pasture, int cmd) {
 //     the FIRST animal of our slot array each step via Pasture_BindAnimal
 //     (which erases it from our array, so the loop advances).
 // ============================================================
-extern "C" void Pasture_Command(void* pasture, int cmd) {
+void PastureComponent::Command(int cmd) {
     Resolve();
-    if (!pasture) return;
 
-    void** vt = *reinterpret_cast<void***>(pasture);
-    const uint64_t can = (vt && vt[13])
-        ? reinterpret_cast<uint64_t (*)(void*, int)>(vt[13])(pasture, cmd) : 0;
+    const uint64_t can = CommandMask(cmd);   // slot 13, a virtual dispatch in retail
     if ((can & 1) == 0) {
         return;
     }
 
     if (cmd == 2) {
-        uint8_t* selfB = reinterpret_cast<uint8_t*>(pasture);
+        uint8_t* selfB = reinterpret_cast<uint8_t*>(this);
         uint64_t wcIBP = 0, wpcIBP = 0;
         if (s_FindWork)      s_FindWork(*reinterpret_cast<int64_t*>(selfB + 0x10), &wcIBP);
         if (s_FindWorkplace) s_FindWorkplace(*reinterpret_cast<int64_t*>(selfB + 0x10), &wpcIBP);
         if (!wcIBP || !wpcIBP || !s_ActivateWP) {   // standalone guard; retail assumes both
             std::fprintf(stderr, "[Pasture] cmd 2: missing %s%s on %p — herder toggle skipped\n",
                          wcIBP ? "" : "WorkComponent ", wpcIBP ? "" : "WorkPlaceComponent",
-                         pasture);
+                         this);
             std::fflush(stderr);
             return;
         }
@@ -855,14 +864,14 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
     const int n = gs ? *reinterpret_cast<int*>(gs + 0x98) : 0;
     uintptr_t list = gs ? *reinterpret_cast<uintptr_t*>(gs + 0x90) : 0;
     const int keep = (cmd != 0)
-        ? PastureCount(pasture) - (PastureCount(pasture) >> 1) : 0;
+        ? PastureCount(this) - (PastureCount(this) >> 1) : 0;
 
     void* best = nullptr;
     int bestFree = 0;
     for (int i = 0; i < n && list; ++i) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
-        if (!p || p == pasture) continue;
-        if (PastureType(p) != PastureType(pasture)) continue;
+        if (!p || p == this) continue;
+        if (PastureType(p) != PastureType(this)) continue;
         const int freeN = static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)p) : 0)
                           - PastureCount(p);
         if (freeN > bestFree) { bestFree = freeN; best = p; }
@@ -870,10 +879,10 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
 
     int moved = 0;
     auto transferInto = [&](void* dst) {
-        while (keep < PastureCount(pasture)) {
+        while (keep < PastureCount(this)) {
             if (static_cast<int>(s_Capacity ? s_Capacity((uintptr_t)dst) : 0)
                     <= PastureCount(dst)) break;
-            uintptr_t arr = PastureAnimals(pasture);
+            uintptr_t arr = PastureAnimals(this);
             if (!arr) break;                        // standalone guard
             void** first = reinterpret_cast<void**>(arr);
             if (!*first) break;                     // standalone guard
@@ -885,10 +894,16 @@ extern "C" void Pasture_Command(void* pasture, int cmd) {
     if (best) transferInto(best);
     for (int i = 0; i < n && list; ++i) {
         void* p = *reinterpret_cast<void**>(list + (uintptr_t)i * 8);
-        if (!p || p == pasture || p == best) continue;
-        if (PastureType(p) != PastureType(pasture)) continue;
+        if (!p || p == this || p == best) continue;
+        if (PastureType(p) != PastureType(this)) continue;
         transferInto(p);
     }
+}
+
+// 0x140127a60 door: registered by address (standalone/reg_pasture_live.cpp).
+extern "C" void Pasture_Command(void* pasture, int cmd) {
+    if (!pasture) return;
+    reinterpret_cast<PastureComponent*>(pasture)->PastureComponent::Command(cmd);   // B.3.8 bridge
 }
 
 // ============================================================

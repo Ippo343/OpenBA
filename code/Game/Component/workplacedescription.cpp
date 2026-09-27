@@ -29,6 +29,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/WorkPlaceDescription.h"
+#include "Component/WorkPlaceComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -72,7 +73,7 @@ void WorkPlaceDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14003a1b0: WorkPlaceComponent's type id through the hidden return slot.
 Object::Type* WorkPlaceDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("WorkPlaceComponent");
+    ret->_type = WorkPlaceComponent::TypeId();
     return ret;
 }
 

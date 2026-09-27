@@ -20,6 +20,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/SpawnDescription.h"
+#include "Component/SpawnComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -96,7 +97,7 @@ void SpawnDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x14000c2d0: SpawnComponent's type id through the hidden return slot.
 Object::Type* SpawnDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("SpawnComponent");
+    ret->_type = SpawnComponent::TypeId();
     return ret;
 }
 

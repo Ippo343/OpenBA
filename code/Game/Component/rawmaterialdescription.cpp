@@ -28,6 +28,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/RawMaterialDescription.h"
+#include "Component/RawMaterialComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -95,7 +96,7 @@ void RawMaterialDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140037340: RawMaterialComponent's type id through the hidden return slot.
 Object::Type* RawMaterialDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("RawMaterialComponent");
+    ret->_type = RawMaterialComponent::TypeId();
     return ret;
 }
 

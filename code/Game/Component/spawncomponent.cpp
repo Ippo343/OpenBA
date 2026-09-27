@@ -48,17 +48,10 @@ static uint32_t* s_pSpawnTemplateTypeId = nullptr;    // DAT_1401c77e8 = GrowthD
 // zero-tail as Collection::Array<void*>::SetSize).
 
 // ---- stream-serialize helpers (vtable slot [3], see SpawnComponent_Serialize) ----
-typedef void (*fn_ComponentSerialize_t)(void* self, void* stream);
 typedef bool (*fn_IsDerived_t)(void* obj, uint32_t typeId);
-static fn_ComponentSerialize_t s_fn_ComponentSerialize = nullptr;  // 0x1401189b0
 static fn_IsDerived_t          s_fn_IsDerived           = nullptr;  // slot 0x140152a98
 
 static bool s_initialized = false;
-
-// Step-2 body-init (vtable slot [4], +0x20, original SpawnComponent_Serialize/OnCreate
-// 0x140055e90). Forward-declared so the Update guard can lazily invoke it if
-// ComponentEntity_StartupComponents did not run it at spawn.
-void SpawnComponent_Startup(SpawnComponent* self);
 
 // ============================================================
 // SpawnComponent::Update (0x140055ad0)
@@ -72,129 +65,6 @@ bool g_worldgenDone = false;
 
 }  // namespace
 
-void SpawnComponent_Update(SpawnComponent* self, int64_t* pDeltaTime) {
-    SpawnComponent_InitFuncs();
-
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-
-    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
-    // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array at
-    // +0x28 (data ptr) / +0x30 (count) is allocated by SpawnComponent_Startup (step
-    // 2 of the recipe), which the spawn pipeline invokes via vtable+0x20 in
-    // ComponentEntity_StartupComponents. As belt-and-suspenders, if +0x28 is still
-    // null but the description(+0x18) is present, run the body-init now (idempotent).
-    // The loop below indexes *(self+0x28) unconditionally, so bail if still unset.
-    if (*(uintptr_t*)(comp + 0x28) == 0) {
-        if (*(uintptr_t*)(comp + 0x18) != 0)
-            SpawnComponent_Startup(self);
-        if (*(uintptr_t*)(comp + 0x28) == 0) {
-            return;
-        }
-    }
-
-    // CheckPtr on owner IBP, then get linked object
-    uintptr_t ownerIBP = (uintptr_t)self + 0x10;
-    uintptr_t linkedObjPtr = 0;
-    if (s_fn_GetLinkedObject)
-        s_fn_GetLinkedObject(*(void**)ownerIBP, &linkedObjPtr);
-
-    // Get resource data via IsDerivedFrom check on _unk18
-    void* baseObj = self->_description;
-    if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) {
-        return;
-    }
-    bool isDerived = fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId);
-    void* resourceData = isDerived ? baseObj : nullptr;
-    // [STANDALONE TRUST] The factory tree can be incomplete in standalone, making
-    // IsDerivedFrom on a description unreliable (see growthcomponent.cpp Startup).
-    // _unk18 is the SpawnDescription the copy-ctor stored at +0x18 — trust it.
-    if (!resourceData && baseObj) resourceData = baseObj;
-    if (!resourceData) {
-        return;
-    }
-
-    // CheckPtr on linked object IBP before reading growth
-    // [BRING-UP GUARD] The owner needs a sibling NaturalResourceComponent (found by
-    // GetLinkedObject 0x1400052c0) for the growth read; bail rather than null-deref
-    // if a spawner lacks one in standalone.
-    if (linkedObjPtr == 0) {
-        return;
-    }
-    float currentGrowth = *(float*)(linkedObjPtr + 0x28);
-
-
-    // Get spawn entry count from resourceData+0x28
-    int entryCount = *(int*)((uintptr_t)resourceData + 0x28);
-    if (entryCount <= 0) {
-        return;
-    }
-
-    uintptr_t entryArrayBase = *(uintptr_t*)((uintptr_t)resourceData + 0x20);
-
-    for (int i = 0; i < entryCount; i++) {
-        uintptr_t entry = entryArrayBase + (uintptr_t)i * 0x10;
-
-        float minGrowth = *(float*)(entry + 0x08);
-        float maxGrowth = *(float*)(entry + 0x0C);
-
-        if (currentGrowth < minGrowth || currentGrowth > maxGrowth) {
-            continue;
-        }
-
-        // Accumulate delta time
-        int64_t byteOffset = (int64_t)i * 8;
-        int64_t* pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
-        *pTimer += *pDeltaTime;
-
-
-        // Get spawn template data from the entry
-        uintptr_t templateData = *(uintptr_t*)entry;
-
-        // Search template's component list for the spawn interval component
-        int componentCount = *(int*)(templateData + 0x30);
-        void* spawnIntervalComp = nullptr;
-
-        for (int j = 0; j < componentCount; j++) {
-            void* comp = *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8);
-            typedef uint32_t (*fn_GetTypeId_t)(void*);
-            uint32_t typeId = ((fn_GetTypeId_t)(*(void***)(comp))[2])(comp);
-
-            if (typeId == *s_pSpawnTemplateTypeId) {
-                if (fn_IsDerivedFrom(comp, *s_pSpawnTemplateTypeId)) {
-                    spawnIntervalComp = comp;
-                }
-                break;
-            }
-        }
-
-        if (!spawnIntervalComp) {
-            continue;
-        }
-
-        // Convert spawn interval to ticks
-        float intervalSecs = *(float*)((uintptr_t)spawnIntervalComp + 0x28) * SECS_PER_SEASON;
-        int64_t intervalTicks = (int64_t)((double)intervalSecs / *g_Timer_secondsPerTick);
-
-        pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
-        while (intervalTicks > 0 && *pTimer >= intervalTicks) {
-            *pTimer -= intervalTicks;
-            if (s_fn_DoSpawn) {
-                // Positive assertion: only the per-tick arm can print this,
-                // one-shot.
-                if (g_worldgenDone) {
-                    static bool s_firstTick = true;
-                    if (s_firstTick) {
-                        s_firstTick = false;
-                        fprintf(stderr, "[SpawnLive] first PER-TICK DoSpawn dispatch\n");
-                        fflush(stderr);
-                    }
-                }
-                s_fn_DoSpawn(self, resourceData, i, 0);
-            }
-            pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)self + 0x28) + byteOffset);
-        }
-    }
-}
 
 // ============================================================
 // SpawnComponent initial seed — ComponentEntity_impl_5cc0 (0x140055cc0)
@@ -264,8 +134,7 @@ void SpawnComponent_InitialSpawn(SpawnComponent* self) {
         for (int j = 0; j < compCount && compArr; ++j) {
             void* c = *(void**)(compArr + (int64_t)j * 8);
             if (!c) continue;
-            typedef uint32_t (*GetTypeId_t)(void*);
-            const uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)c + 0x10)))(c);
+            const uint32_t tid = reinterpret_cast<Object::Base*>(c)->Type();   // B.3.8 bridge
             if (tid == *s_pSpawnTemplateTypeId) {
                 growthDesc = c;   // trust it; IsDerivedFrom is unreliable here
                 break;
@@ -297,8 +166,6 @@ void SpawnComponent_InitFuncs() {
     s_pSpawnTemplateTypeId = reinterpret_cast<uint32_t*>(
         ResolveAddr(Module::Exe, 0x1401c77e8));
 
-    s_fn_ComponentSerialize = reinterpret_cast<fn_ComponentSerialize_t>(
-        ResolveAddr(Module::Exe, 0x1401189b0));
     {
         uintptr_t slot;
         slot = ResolveAddr(Module::Exe, 0x140152a98);
@@ -308,91 +175,13 @@ void SpawnComponent_InitFuncs() {
     s_initialized = true;
 }
 
-// ============================================================
-// SpawnComponent::Startup (vtable slot [4], +0x20, original SpawnComponent_Serialize
-// / OnCreate 0x140055e90)
-// ============================================================
-// Body-init: size the per-entry timer array at self+0x28 to the SpawnDescription's
-// entry count (desc+0x28), via the registered stride-8 Time-array resizer
-// (FUN_140001bb0). The array descriptor occupies self+0x28 (data ptr) / +0x30
-// (count) / +0x34 (capacity) — the two pointers the Ctor zeroes. Called at spawn
-// by ComponentEntity_StartupComponents (SpawnComponent flags 0x88 have bit 7).
-//
-// The original gates the count on IsDerivedFrom(_unk18, SpawnDescription); in
-// standalone that can be unreliable, so we trust comp+0x18 (the description the
-// copy-ctor stored), matching growthcomponent.cpp's documented precedent.
-void SpawnComponent_Startup(SpawnComponent* self) {
-    SpawnComponent_InitFuncs();
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
 
-    void* desc = *reinterpret_cast<void**>(comp + 0x18);   // _unk18 = SpawnDescription
-    if (!desc) return;                                     // not yet wired to a description
-
-    int entryCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
-    if (entryCount <= 0) return;
-
-    // Resize the timer array (descriptor at comp+0x28). Zero-initialised entries.
-    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(comp + 0x28)).SetSize(entryCount);
-}
-
-// ============================================================
-// SpawnComponent::Serialize (vtable slot [3], +0x18, original 0x140055ee0 —
-// Ghidra mislabels it SpawnComponent_Shutdown; the body is a stream
-// serializer, not a dtor).
-// ============================================================
-// Fields (verified against retail decompile/disassembly at 0x140055ee0):
-//   +0x30  int             per-entry timer count (also written BACK by the
-//                           resize helper itself, not by an explicit store).
-//   +0x28  Time[count]     per-entry accumulation timers, stride 8 (see
-//                           SpawnComponent_Startup / SpawnComponent_Update),
-//                           load-side resized via the same stride-8 resizer
-//                           (0x140001bb0, GameColl::AsArray<GameColl::Ptr8>::SetSize)
-//                           used by Startup's body-init.
-//   On load only, retail then reconciles the restored count against the LIVE
-//   SpawnDescription's entry count (desc+0x28, desc validated by
-//   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918, already
-//   resolved as s_pSpawnResourceTypeId): if they differ, resize again to
-//   match the description currently in effect.
+// 0x140055ee0 door: registered by address (standalone/reg_growth_spawn_serialize.cpp).
 extern "C" void SpawnComponent_Serialize(void* self, void* stream) {
-    SpawnComponent_InitFuncs();
-    if (!self || !stream) return;
-    if (s_fn_ComponentSerialize) s_fn_ComponentSerialize(self, stream);
-
-    uint8_t* comp = reinterpret_cast<uint8_t*>(self);
-    alignas(8) uint8_t ser[24];
-    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-
-    // True when the serializer is READING (retail reads the stream's own +8
-    // field for this component, equivalent to the serializer's first field).
-    auto Loading = [](void* s) {
-        return static_cast<int>(reinterpret_cast<IO::Serializer*>(s)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
-    };
-
-    int count = *reinterpret_cast<int*>(comp + 0x30);
-    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
-    if (Loading(ser))
-        GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(count);  // also writes comp+0x30 = count
-
-    uint8_t* timer = *reinterpret_cast<uint8_t**>(comp + 0x28);
-    int n = *reinterpret_cast<int*>(comp + 0x30);
-    for (int i = 0; i < n && timer; ++i, timer += 8)
-        reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
-
-    if (Loading(stream)) {
-        void* desc = *reinterpret_cast<void**>(comp + 0x18);
-        void* validated = nullptr;
-        if (desc && s_fn_IsDerived && s_pSpawnResourceTypeId && *s_pSpawnResourceTypeId &&
-            s_fn_IsDerived(desc, *s_pSpawnResourceTypeId))
-            validated = desc;
-        int descCount = validated
-            ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(validated) + 0x28)
-            : 0;
-        if (*reinterpret_cast<int*>(comp + 0x30) != descCount)
-            GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(descCount);
-    }
-
-    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+    if (!self) return;
+    reinterpret_cast<SpawnComponent*>(self)->SpawnComponent::Persist(stream);   // B.3.8 bridge
 }
+
 
 // ============================================================
 // Reimpl of FUN_140055780 (ComponentEntity_impl_5780: probabilistically spawn one
@@ -508,8 +297,7 @@ void SpawnComponent_DoSpawn(void* selfP, void* resourceData, int entryIndex, cha
         int64_t arr = *(int64_t*)(host + 0x28);
         for (int i = 0; i < count; i++) {
             void* comp = *(void**)(arr + (int64_t)i * 8);
-            typedef uint32_t (*GetTypeId_t)(void*);
-            uint32_t tid = ((GetTypeId_t)(*(uintptr_t*)(*(uintptr_t*)comp + 0x10)))(comp);
+            uint32_t tid = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
             if (tid == *s_pSpawnTemplateTypeId) {
                 if (fn_IsDerivedFrom && fn_IsDerivedFrom(comp, *s_pSpawnTemplateTypeId)) templ = comp;
                 break;
@@ -624,13 +412,215 @@ Object::Base* SpawnComponent::DeletingDtor(unsigned flags) {
     return this;
 }
 
-void SpawnComponent::Persist(void* stream) { SpawnComponent_Serialize(this, stream); }   // [3] 0x140055ee0
-void SpawnComponent::Startup() { SpawnComponent_Startup(this); }                          // [4] 0x140055e90
+// ============================================================
+// SpawnComponent::Serialize (vtable slot [3], +0x18, original 0x140055ee0 —
+// Ghidra mislabels it SpawnComponent_Shutdown; the body is a stream
+// serializer, not a dtor).
+// ============================================================
+// Fields (verified against retail decompile/disassembly at 0x140055ee0):
+//   +0x30  int             per-entry timer count (also written BACK by the
+//                           resize helper itself, not by an explicit store).
+//   +0x28  Time[count]     per-entry accumulation timers, stride 8 (see
+//                           SpawnComponent_Startup / SpawnComponent_Update),
+//                           load-side resized via the same stride-8 resizer
+//                           (0x140001bb0, GameColl::AsArray<GameColl::Ptr8>::SetSize)
+//                           used by Startup's body-init.
+//   On load only, retail then reconciles the restored count against the LIVE
+//   SpawnDescription's entry count (desc+0x28, desc validated by
+//   IsDerivedFrom(desc, SpawnDescription typeid) — DAT_1401c4918, already
+//   resolved as s_pSpawnResourceTypeId): if they differ, resize again to
+//   match the description currently in effect.
+void SpawnComponent::Persist(void* stream) {
+    SpawnComponent_InitFuncs();
+    if (!stream) return;
+    Component::Persist(stream);   // retail: CALL 0x1401189b0 (qualified)
+
+    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+    alignas(8) uint8_t ser[24];
+    ::new (static_cast<void*>(ser)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+
+    // True when the serializer is READING (retail reads the stream's own +8
+    // field for this component, equivalent to the serializer's first field).
+    auto Loading = [](void* s) {
+        return static_cast<int>(reinterpret_cast<IO::Serializer*>(s)->GetDirection()) == 0;   // B.3.4 bridge  (IO::Serializer::GetDirection, retail 0x180006210)
+    };
+
+    int count = *reinterpret_cast<int*>(comp + 0x30);
+    reinterpret_cast<IO::Serializer*>(ser)->Serialize(count, nullptr);   // B.3.4 bridge
+    if (Loading(ser))
+        GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(count);  // also writes comp+0x30 = count
+
+    uint8_t* timer = *reinterpret_cast<uint8_t**>(comp + 0x28);
+    int n = *reinterpret_cast<int*>(comp + 0x30);
+    for (int i = 0; i < n && timer; ++i, timer += 8)
+        reinterpret_cast<System::Time*>(timer)->Serialize(*reinterpret_cast<IO::Serializer*>(ser));   // B.3.4b bridge
+
+    if (Loading(stream)) {
+        void* desc = *reinterpret_cast<void**>(comp + 0x18);
+        void* validated = nullptr;
+        if (desc && s_fn_IsDerived && s_pSpawnResourceTypeId && *s_pSpawnResourceTypeId &&
+            s_fn_IsDerived(desc, *s_pSpawnResourceTypeId))
+            validated = desc;
+        int descCount = validated
+            ? *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(validated) + 0x28)
+            : 0;
+        if (*reinterpret_cast<int*>(comp + 0x30) != descCount)
+            GameColl::AsArray<GameColl::Ptr8>(comp + 0x28).SetSize(descCount);
+    }
+
+    reinterpret_cast<IO::Serializer*>(ser)->~Serializer();   // B.3.4 bridge
+}
+// ============================================================
+// SpawnComponent::Startup (vtable slot [4], +0x20, original SpawnComponent_Serialize
+// / OnCreate 0x140055e90)
+// ============================================================
+// Body-init: size the per-entry timer array at self+0x28 to the SpawnDescription's
+// entry count (desc+0x28), via the registered stride-8 Time-array resizer
+// (FUN_140001bb0). The array descriptor occupies self+0x28 (data ptr) / +0x30
+// (count) / +0x34 (capacity) — the two pointers the Ctor zeroes. Called at spawn
+// by ComponentEntity_StartupComponents (SpawnComponent flags 0x88 have bit 7).
+//
+// The original gates the count on IsDerivedFrom(_unk18, SpawnDescription); in
+// standalone that can be unreliable, so we trust comp+0x18 (the description the
+// copy-ctor stored), matching growthcomponent.cpp's documented precedent.
+void SpawnComponent::Startup() {
+    SpawnComponent_InitFuncs();
+    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+
+    void* desc = *reinterpret_cast<void**>(comp + 0x18);   // _unk18 = SpawnDescription
+    if (!desc) return;                                     // not yet wired to a description
+
+    int entryCount = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(desc) + 0x28);
+    if (entryCount <= 0) return;
+
+    // Resize the timer array (descriptor at comp+0x28). Zero-initialised entries.
+    GameColl::AsArray<GameColl::Ptr8>(reinterpret_cast<void*>(comp + 0x28)).SetSize(entryCount);
+}
 
 // [9] 0x140055ad0. RDX is a pointer to the elapsed System::Time (EntityList
 // bucket tick 0x1400c42af).
-void SpawnComponent::Update(void* time) {
-    SpawnComponent_Update(this, static_cast<int64_t*>(time));
+void SpawnComponent::Update(void* timeV) {
+    int64_t* pDeltaTime = static_cast<int64_t*>(timeV);
+    SpawnComponent_InitFuncs();
+
+    uint8_t* comp = reinterpret_cast<uint8_t*>(this);
+
+    // [LIVE-COMPONENT BRING-UP GUARD] On an inert-spawned standalone component the
+    // body is zeroed unless the OnCreate/Startup ran. The per-entry timer array at
+    // +0x28 (data ptr) / +0x30 (count) is allocated by SpawnComponent_Startup (step
+    // 2 of the recipe), which the spawn pipeline invokes via vtable+0x20 in
+    // ComponentEntity_StartupComponents. As belt-and-suspenders, if +0x28 is still
+    // null but the description(+0x18) is present, run the body-init now (idempotent).
+    // The loop below indexes *(self+0x28) unconditionally, so bail if still unset.
+    if (*(uintptr_t*)(comp + 0x28) == 0) {
+        if (*(uintptr_t*)(comp + 0x18) != 0)
+            SpawnComponent::Startup();
+        if (*(uintptr_t*)(comp + 0x28) == 0) {
+            return;
+        }
+    }
+
+    // CheckPtr on owner IBP, then get linked object
+    uintptr_t ownerIBP = (uintptr_t)this + 0x10;
+    uintptr_t linkedObjPtr = 0;
+    if (s_fn_GetLinkedObject)
+        s_fn_GetLinkedObject(*(void**)ownerIBP, &linkedObjPtr);
+
+    // Get resource data via IsDerivedFrom check on _unk18
+    void* baseObj = _description;
+    if (!fn_IsDerivedFrom || !s_pSpawnResourceTypeId || !s_pSpawnTemplateTypeId) {
+        return;
+    }
+    bool isDerived = fn_IsDerivedFrom(baseObj, *s_pSpawnResourceTypeId);
+    void* resourceData = isDerived ? baseObj : nullptr;
+    // [STANDALONE TRUST] The factory tree can be incomplete in standalone, making
+    // IsDerivedFrom on a description unreliable (see growthcomponent.cpp Startup).
+    // _unk18 is the SpawnDescription the copy-ctor stored at +0x18 — trust it.
+    if (!resourceData && baseObj) resourceData = baseObj;
+    if (!resourceData) {
+        return;
+    }
+
+    // CheckPtr on linked object IBP before reading growth
+    // [BRING-UP GUARD] The owner needs a sibling NaturalResourceComponent (found by
+    // GetLinkedObject 0x1400052c0) for the growth read; bail rather than null-deref
+    // if a spawner lacks one in standalone.
+    if (linkedObjPtr == 0) {
+        return;
+    }
+    float currentGrowth = *(float*)(linkedObjPtr + 0x28);
+
+
+    // Get spawn entry count from resourceData+0x28
+    int entryCount = *(int*)((uintptr_t)resourceData + 0x28);
+    if (entryCount <= 0) {
+        return;
+    }
+
+    uintptr_t entryArrayBase = *(uintptr_t*)((uintptr_t)resourceData + 0x20);
+
+    for (int i = 0; i < entryCount; i++) {
+        uintptr_t entry = entryArrayBase + (uintptr_t)i * 0x10;
+
+        float minGrowth = *(float*)(entry + 0x08);
+        float maxGrowth = *(float*)(entry + 0x0C);
+
+        if (currentGrowth < minGrowth || currentGrowth > maxGrowth) {
+            continue;
+        }
+
+        // Accumulate delta time
+        int64_t byteOffset = (int64_t)i * 8;
+        int64_t* pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
+        *pTimer += *pDeltaTime;
+
+
+        // Get spawn template data from the entry
+        uintptr_t templateData = *(uintptr_t*)entry;
+
+        // Search template's component list for the spawn interval component
+        int componentCount = *(int*)(templateData + 0x30);
+        void* spawnIntervalComp = nullptr;
+
+        for (int j = 0; j < componentCount; j++) {
+            void* comp = *(void**)(*(uintptr_t*)(templateData + 0x28) + (uintptr_t)j * 8);
+            uint32_t typeId = reinterpret_cast<Object::Base*>(comp)->Type();   // B.3.8 bridge
+
+            if (typeId == *s_pSpawnTemplateTypeId) {
+                if (fn_IsDerivedFrom(comp, *s_pSpawnTemplateTypeId)) {
+                    spawnIntervalComp = comp;
+                }
+                break;
+            }
+        }
+
+        if (!spawnIntervalComp) {
+            continue;
+        }
+
+        // Convert spawn interval to ticks
+        float intervalSecs = *(float*)((uintptr_t)spawnIntervalComp + 0x28) * SECS_PER_SEASON;
+        int64_t intervalTicks = (int64_t)((double)intervalSecs / *g_Timer_secondsPerTick);
+
+        pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
+        while (intervalTicks > 0 && *pTimer >= intervalTicks) {
+            *pTimer -= intervalTicks;
+            if (s_fn_DoSpawn) {
+                // Positive assertion: only the per-tick arm can print this,
+                // one-shot.
+                if (g_worldgenDone) {
+                    static bool s_firstTick = true;
+                    if (s_firstTick) {
+                        s_firstTick = false;
+                        fprintf(stderr, "[SpawnLive] first PER-TICK DoSpawn dispatch\n");
+                        fflush(stderr);
+                    }
+                }
+                s_fn_DoSpawn(this, resourceData, i, 0);
+            }
+            pTimer = (int64_t*)(*(uintptr_t*)((uintptr_t)this + 0x28) + byteOffset);
+        }
+    }
 }
 
 // create 0x14000c170: MemAlloc(0x38, 8), then the ctor.

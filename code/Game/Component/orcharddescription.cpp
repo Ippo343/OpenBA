@@ -17,6 +17,7 @@
 // (nothing in the tree read that address back — B38_RULES D5).
 
 #include "Component/OrchardDescription.h"
+#include "Component/OrchardComponent.h"
 #include "object/Internal.h"      // Object::detail::InternalMemAlloc / InternalMemFree
 #include "io/Serializer.h"
 #include "Object/factory_registration.h"
@@ -62,7 +63,7 @@ void OrchardDescription::Destruct() { DeletingDtor(0); }
 
 // [8] 0x140009a00: OrchardComponent's type id through the hidden return slot.
 Object::Type* OrchardDescription::GetComponentType(Object::Type* ret) const {
-    ret->_type = ::Object::GetTypeIdByName("OrchardComponent");
+    ret->_type = OrchardComponent::TypeId();
     return ret;
 }
 

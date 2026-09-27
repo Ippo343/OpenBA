@@ -7,7 +7,7 @@
 //
 // Decompiled from Application-x64.exe using Ghidra.
 
-#include "Component/marketcomponent_funcs.h"
+#include "Component/MarketComponent.h"
 #include "engine_funcs.h"
 #include "resolve.h"
 #include "io/Serializer.h"   // ENDGAME B.3.4 caller batch A
@@ -15,32 +15,6 @@
 #include <cstdio>
 #include <new>
 
-// ============================================================
-// MarketComponent::Shutdown (vtable slot [3], 0x14004ead0)
-// ============================================================
-// Calls parent ResourceProduceComponent_Shutdown, then creates/destroys
-// an empty Serializer block (version 0). This empty block exists for
-// binary format compatibility (versioned sub-section with no fields).
-//
-// Original disassembly:
-//   CALL ResourceProduceComponent_Shutdown (0x14012b4a0)
-//   CALL Serializer_Ctor(local, stream, 0)
-//   CALL Serializer_Dtor(local)
-
-void MarketComponent_Shutdown(MarketComponent* self, void* stream) {
-    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
-    self->ResourceProduceComponent::Persist(stream);
-
-    // Empty serializer block (version 0)
-    alignas(8) uint8_t serializerBuf[24];
-    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
-    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
-}
-
-// ============================================================
-// Init: nothing left to resolve (the base Persist is a direct member call now)
-// ============================================================
-void MarketComponent_InitFuncs() {}
 
 // ============================================================================
 // ENDGAME B.3.8 MI-B — MarketComponent as a REAL class (MarketComponent.h).
@@ -52,8 +26,6 @@ void MarketComponent_InitFuncs() {}
 // real ctor/dtor chain, the controller the base's member (B38_RULES D1, D2, D6).
 // ============================================================================
 #include "Object/factory_registration.h"
-
-extern "C" uintptr_t* MarketComponent_CreateWork(void* self, uintptr_t* out);   // resourceproduce_creatework.cpp
 
 // 0x14004eb70: the RP ctor (CALL 0x14012b3d0) and the compiler's stamp. Nothing else.
 MarketComponent::MarketComponent() : ResourceProduceComponent() {}
@@ -78,8 +50,29 @@ void* MarketComponent::CreateInPlaceObject(void* storage) {
     return static_cast<Object::Base*>(new (storage) MarketComponent());
 }
 
-void       MarketComponent::Persist(void* stream)     { MarketComponent_Shutdown(this, stream); }        // [3]  0x14004ead0
-uintptr_t* MarketComponent::CreateWork(uintptr_t* out) { return MarketComponent_CreateWork(this, out); } // [18] 0x14004ea40
+// ============================================================
+// MarketComponent::Shutdown (vtable slot [3], 0x14004ead0)
+// ============================================================
+// Calls parent ResourceProduceComponent_Shutdown, then creates/destroys
+// an empty Serializer block (version 0). This empty block exists for
+// binary format compatibility (versioned sub-section with no fields).
+//
+// Original disassembly:
+//   CALL ResourceProduceComponent_Shutdown (0x14012b4a0)
+//   CALL Serializer_Ctor(local, stream, 0)
+//   CALL Serializer_Dtor(local)
+
+void MarketComponent::Persist(void* stream) {
+    // Base ResourceProduceComponent::Shutdown (0x14012b4a0), a direct call in retail.
+    ResourceProduceComponent::Persist(stream);
+
+    // Empty serializer block (version 0)
+    alignas(8) uint8_t serializerBuf[24];
+    ::new (static_cast<void*>(serializerBuf)) IO::Serializer(*reinterpret_cast<IO::Stream*>(stream), 0);   // B.3.4 bridge
+    reinterpret_cast<IO::Serializer*>(serializerBuf)->~Serializer();   // B.3.4 bridge
+}
+
+// [18] 0x14004ea40 MarketComponent::CreateWork lives in resourceproduce_creatework.cpp.
 
 DEFINE_EXE_VTABLE(MarketComponent, "_ZTV15MarketComponent")
 DEFINE_EXE_TYPE(MarketComponent, "ResourceProduceComponent")
